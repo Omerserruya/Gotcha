@@ -46,6 +46,38 @@ describe("§9 no standalone Business Policies tab in AI Studio", () => {
   });
 });
 
+describe("§9 governance surface holds ONLY tool-attached config; workspace-wide rules live in Settings → Your Business", () => {
+  const governance = read("app/ai-studio/page.tsx");
+  const actionPanel = read("components/ai-studio/ActionPoliciesPanel.tsx");
+  const businessPage = read("app/settings/business/page.tsx");
+
+  it("the workspace-wide conversation guardrails (PolicyAdmin) are NOT rendered in the AI Studio Tools surface", () => {
+    // PolicyAdmin = escalation keywords / blocked topics / quiet hours / blanket
+    // discount ceiling - not attached to a specific executable tool. It must not
+    // be imported or rendered anywhere in the governance surface (a doc-comment
+    // pointer to its new home is fine).
+    expect(actionPanel).not.toContain("<PolicyAdmin");
+    expect(actionPanel).not.toMatch(/import\s+PolicyAdmin/);
+    expect(governance).not.toContain("<PolicyAdmin");
+    expect(governance).not.toMatch(/import\s+PolicyAdmin/);
+  });
+
+  it("PolicyAdmin now lives in Settings → Your Business", () => {
+    expect(businessPage).toContain('import PolicyAdmin from "@/components/PolicyAdmin"');
+    expect(businessPage).toContain("<PolicyAdmin token={token} />");
+  });
+
+  it("what stays in the governance surface is tool-attached: the per-tool matrix + per-action limits only", () => {
+    // ToolPermissionsPanel = enable / employee assignment / AUTO-HITL / approval
+    // recipient / provider scopes. ActionPoliciesPanel = action-specific limits
+    // (compensation/coupon/refund/cancel). Both are tool-attached.
+    expect(governance).toContain("<ToolPermissionsPanel />");
+    expect(governance).toContain("<ActionPoliciesPanel />");
+    // The action panel is now scoped to per-action caps only (no PolicyAdmin).
+    expect(actionPanel).toContain("ACTION_KINDS");
+  });
+});
+
 describe("§9 legacy policy routes still resolve (no orphaned config path)", () => {
   it("/settings/policy and /settings/business-rules land on the governance surface", () => {
     // Canonical owner is still AI Studio's Tools tab (per the Settings IA),

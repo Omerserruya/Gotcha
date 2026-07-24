@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import en from "../../../i18n/en.json";
 import he from "../../../i18n/he.json";
 import { nodeRequirement } from "../NodeInfoIcon";
+import { NODE_REGISTRY, PROVIDER_CONNECTIONS } from "../node-registry";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const read = (rel: string) => readFileSync(join(HERE, rel), "utf8");
@@ -65,5 +66,34 @@ describe("§4 integration-dependency: node stays visible but states its requirem
   it("ordinary nodes carry no external requirement", () => {
     expect(nodeRequirement("send_message_text")).toBeNull();
     expect(nodeRequirement("condition_group")).toBeNull();
+  });
+
+  it("§4 the requirement is METADATA-DRIVEN: it comes from the node's `requires` key, not a type-name branch", () => {
+    // Every node that declares `requires` resolves via PROVIDER_CONNECTIONS, and
+    // every node that does not returns null - no special-casing of type names.
+    for (const [type, entry] of Object.entries(NODE_REGISTRY)) {
+      const req = nodeRequirement(type);
+      if (entry.requires) {
+        expect(req, `${type} declares requires="${entry.requires}"`).not.toBeNull();
+        expect(req!.connectHref).toBe(PROVIDER_CONNECTIONS[entry.requires].connectHref);
+      } else {
+        expect(req, `${type} declares no provider`).toBeNull();
+      }
+    }
+  });
+
+  it("§4 is PROVIDER-GENERIC: a future Shopify/CRM/calendar node inherits the behavior with no code branch", () => {
+    // The mechanism already resolves providers that ship no node yet, purely
+    // from the data table - proving no provider-specific rewrite is needed.
+    for (const p of ["voice", "shopify", "crm", "calendar"] as const) {
+      const conn = PROVIDER_CONNECTIONS[p];
+      expect(conn, `PROVIDER_CONNECTIONS.${p}`).toBeTruthy();
+      expect((en as any).aiStudio.nodeReq[conn.capabilityKey.split(".").pop()!], `en ${conn.capabilityKey}`).toBeTruthy();
+      expect((he as any).aiStudio.nodeReq[conn.capabilityKey.split(".").pop()!], `he ${conn.capabilityKey}`).toBeTruthy();
+    }
+    // nodeRequirement contains no per-provider / type-prefix branching.
+    const src = read("../NodeInfoIcon.tsx");
+    expect(src).not.toContain('startsWith("voice_")');
+    expect(src).toContain("NODE_REGISTRY[type]?.requires");
   });
 });

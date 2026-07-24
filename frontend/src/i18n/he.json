@@ -2856,7 +2856,11 @@
     },
     "nodeReq": {
       "voiceChannel": "נדרש ערוץ קולי מחובר כדי לפעול.",
-      "connectVoice": "חברו אותו בהגדרות ← ערוצים ← Twilio."
+      "connectVoice": "חברו אותו בהגדרות ← ערוצים ← Twilio.",
+      "shopify": "נדרשת חנות Shopify מחוברת כדי לפעול.",
+      "crm": "נדרשת מערכת CRM מחוברת כדי לפעול.",
+      "calendar": "נדרש יומן מחובר כדי לפעול.",
+      "connectProvider": "חברו אותו בהגדרות לפני הפרסום."
     },
     "nodeCategories": {
       "triggers": "טריגרים",

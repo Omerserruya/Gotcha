@@ -2,7 +2,7 @@
 
 import React from "react";
 import { useI18n } from "@/context/I18nContext";
-import { NODE_REGISTRY } from "./node-registry";
+import { NODE_REGISTRY, PROVIDER_CONNECTIONS } from "./node-registry";
 import { getNodePorts } from "./connection-rules";
 import { nodeLabel, nodeDesc } from "./node-i18n";
 
@@ -22,21 +22,26 @@ function portTypeLabel(type: string, t: (k: string) => string): string {
   return v && v !== k ? v : type;
 }
 
-// §4 A node may depend on an external connection to actually execute. It stays
-// visible in the catalog regardless (so the capability is discoverable), but
-// the info surfaces WHAT is required and WHERE to connect it. Derived from the
-// type so no per-node annotation is needed. Voice nodes need a voice channel
-// (Settings → Channels → Twilio); the Connect destination is the canonical
-// location, never a duplicate flow.
+// §4 A node may depend on an external provider connection to actually execute.
+// It stays visible in the catalog regardless (so the capability is
+// discoverable), but the info surfaces WHAT is required and WHERE to connect it.
+//
+// This is METADATA-DRIVEN and PROVIDER-GENERIC: the node declares its provider
+// via `NodeRegistryEntry.requires`, and we resolve it against the single
+// PROVIDER_CONNECTIONS table. There is NO per-provider branch here - a future
+// Shopify / CRM / calendar node inherits the same connected / missing-scope /
+// Connect-CTA behavior purely by setting `requires` and having its provider row
+// in that table. Voice is just the first provider to ship a node.
 export function nodeRequirement(type: string): { capabilityKey: string; connectHref: string; connectLabelKey: string } | null {
-  if (type.startsWith("voice_")) {
-    return {
-      capabilityKey: "aiStudio.nodeReq.voiceChannel",
-      connectHref: "/settings/channels/twilio",
-      connectLabelKey: "aiStudio.nodeReq.connectVoice",
-    };
-  }
-  return null;
+  const provider = NODE_REGISTRY[type]?.requires;
+  if (!provider) return null;
+  const conn = PROVIDER_CONNECTIONS[provider];
+  if (!conn) return null;
+  return {
+    capabilityKey: conn.capabilityKey,
+    connectHref: conn.connectHref,
+    connectLabelKey: conn.connectLabelKey,
+  };
 }
 
 export function NodeInfoIcon({ type, className }: { type: string; className?: string }) {

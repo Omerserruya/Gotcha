@@ -2855,7 +2855,11 @@
     },
     "nodeReq": {
       "voiceChannel": "Requires a connected voice channel to run.",
-      "connectVoice": "Connect it in Settings → Channels → Twilio."
+      "connectVoice": "Connect it in Settings → Channels → Twilio.",
+      "shopify": "Requires a connected Shopify store to run.",
+      "crm": "Requires a connected CRM to run.",
+      "calendar": "Requires a connected calendar to run.",
+      "connectProvider": "Connect it in Settings before publishing."
     },
     "nodeCategories": {
       "triggers": "Triggers",

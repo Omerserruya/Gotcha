@@ -11,6 +11,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import { BusinessTwin, RecommendationsHub } from "@/components/business/BusinessTwin";
+import PolicyAdmin from "@/components/PolicyAdmin";
 import ConfirmModal from "@/components/ConfirmModal";
 import { track } from "@/lib/analytics";
 import {
@@ -235,6 +236,18 @@ export default function SettingsBusinessPage() {
 
       <BusinessTwin he={he} disc={disc} health={health} gaps={gaps} token={token || ""} onCorrect={onCorrect} onTeach={onTeach} onSaveProfile={onSaveProfile} />
       <RecommendationsHub he={he} recs={recs} onResolve={(id) => resolveRec(id, "complete")} onDismiss={(id) => resolveRec(id, "dismiss")} onReopen={(id) => resolveRec(id, "reopen")} />
+
+      {/* Workspace-wide business policy: conversation guardrails (escalation
+          keywords, blocked topics), the blanket discount ceiling, refund-approval
+          default and outbound quiet hours. These are NOT attached to any single
+          executable tool, so they live here in Your Business - not in AI Studio's
+          per-tool "Permissions & Policies" governance surface (which keeps only
+          tool-attached config: enable/HITL/approval recipient/action limits). */}
+      {token && (
+        <div className="pt-2">
+          <PolicyAdmin token={token} />
+        </div>
+      )}
     </div>
   );
 }

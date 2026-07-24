@@ -107,7 +107,56 @@ export interface NodeRegistryEntry {
   // source; no output when sources is empty). Declare this only for nodes
   // that carry real type constraints beyond plain control flow.
   ports?: NodePorts;
+  // §4 Provider dependency (metadata-driven, provider-GENERIC). A node that can
+  // only execute when an external provider is connected declares that provider
+  // key here; the resolver (nodeRequirement) is a pure lookup against
+  // PROVIDER_CONNECTIONS below - NO per-provider branching. A future Shopify,
+  // CRM or calendar node inherits the connected / missing-scope / Connect-CTA
+  // behavior by setting `requires: "shopify"` (etc.) and adding one
+  // PROVIDER_CONNECTIONS row - never a rewrite of the requirement logic.
+  requires?: ProviderKey;
 }
+
+// The set of external providers a node can depend on. Extend this union + the
+// PROVIDER_CONNECTIONS table to onboard a new provider; nodes then opt in via
+// `requires`. Kept as data so the behavior is uniform across every provider.
+export type ProviderKey = "voice" | "shopify" | "crm" | "calendar";
+
+export interface ProviderRequirement {
+  // i18n key describing WHAT capability the node needs.
+  capabilityKey: string;
+  // i18n key for the Connect CTA label.
+  connectLabelKey: string;
+  // Canonical location to connect the provider (never a duplicated flow).
+  connectHref: string;
+}
+
+// ONE table: provider key → how to describe + where to connect it. This is the
+// single extension point for integration-dependent nodes. Voice ships today;
+// the others are declared so the mechanism is demonstrably provider-generic and
+// a node can start requiring them the moment such a node is added.
+export const PROVIDER_CONNECTIONS: Record<ProviderKey, ProviderRequirement> = {
+  voice: {
+    capabilityKey: "aiStudio.nodeReq.voiceChannel",
+    connectLabelKey: "aiStudio.nodeReq.connectVoice",
+    connectHref: "/settings/channels/twilio",
+  },
+  shopify: {
+    capabilityKey: "aiStudio.nodeReq.shopify",
+    connectLabelKey: "aiStudio.nodeReq.connectProvider",
+    connectHref: "/settings/business-systems",
+  },
+  crm: {
+    capabilityKey: "aiStudio.nodeReq.crm",
+    connectLabelKey: "aiStudio.nodeReq.connectProvider",
+    connectHref: "/settings/business-systems",
+  },
+  calendar: {
+    capabilityKey: "aiStudio.nodeReq.calendar",
+    connectLabelKey: "aiStudio.nodeReq.connectProvider",
+    connectHref: "/settings/channels",
+  },
+};
 
 // ─── Tailwind color tokens ───────────────────────────────────────
 // Keep canvas + inspector visually consistent - every node in this color
@@ -677,7 +726,7 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
   // voice-flow-runner matches against. See
   // services/ai/src/services/voice-flow/voice-flow-runner.ts.
   "voice_trigger:call.incoming": {
-    type: "voice_trigger:call.incoming", label: "Voice: Incoming call", color: "emerald", icon: ICONS.phone, category: "Voice Triggers",
+    type: "voice_trigger:call.incoming", label: "Voice: Incoming call", color: "emerald", icon: ICONS.phone, category: "Voice Triggers", requires: "voice",
     handles: { sources: [{ position: "bottom" }] },
     defaultData: () => ({}),
     validate: () => "ok",
@@ -685,7 +734,7 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
     Body: () => <p className="text-xs text-gray-500">Fires for every inbound call on this channel.</p>,
   },
   "voice_trigger:call.answered": {
-    type: "voice_trigger:call.answered", label: "Voice: Call answered", color: "emerald", icon: ICONS.phone, category: "Voice Triggers",
+    type: "voice_trigger:call.answered", label: "Voice: Call answered", color: "emerald", icon: ICONS.phone, category: "Voice Triggers", requires: "voice",
     handles: { sources: [{ position: "bottom" }] },
     defaultData: () => ({}),
     validate: () => "ok",
@@ -693,7 +742,7 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
     Body: () => <p className="text-xs text-gray-500">Fires when the call transitions to ACTIVE.</p>,
   },
   "voice_trigger:call.missed": {
-    type: "voice_trigger:call.missed", label: "Voice: Missed call", color: "emerald", icon: ICONS.phoneEnd, category: "Voice Triggers",
+    type: "voice_trigger:call.missed", label: "Voice: Missed call", color: "emerald", icon: ICONS.phoneEnd, category: "Voice Triggers", requires: "voice",
     handles: { sources: [{ position: "bottom" }] },
     defaultData: () => ({}),
     validate: () => "ok",
@@ -701,7 +750,7 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
     Body: () => <p className="text-xs text-gray-500">Fires when state transitions to MISSED.</p>,
   },
   "voice_trigger:call.hangup_customer": {
-    type: "voice_trigger:call.hangup_customer", label: "Voice: Customer hung up", color: "emerald", icon: ICONS.phoneEnd, category: "Voice Triggers",
+    type: "voice_trigger:call.hangup_customer", label: "Voice: Customer hung up", color: "emerald", icon: ICONS.phoneEnd, category: "Voice Triggers", requires: "voice",
     handles: { sources: [{ position: "bottom" }] },
     defaultData: () => ({}),
     validate: () => "ok",
@@ -709,7 +758,7 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
     Body: () => <p className="text-xs text-gray-500">Fires when the call ends and the customer disconnected first.</p>,
   },
   "voice_trigger:call.hangup_agent": {
-    type: "voice_trigger:call.hangup_agent", label: "Voice: Agent hung up", color: "emerald", icon: ICONS.phoneEnd, category: "Voice Triggers",
+    type: "voice_trigger:call.hangup_agent", label: "Voice: Agent hung up", color: "emerald", icon: ICONS.phoneEnd, category: "Voice Triggers", requires: "voice",
     handles: { sources: [{ position: "bottom" }] },
     defaultData: () => ({}),
     validate: () => "ok",
@@ -717,7 +766,7 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
     Body: () => <p className="text-xs text-gray-500">Fires when the call ends and the agent disconnected first.</p>,
   },
   "voice_trigger:call.intent_detected": {
-    type: "voice_trigger:call.intent_detected", label: "Voice: Intent detected", color: "emerald", icon: ICONS.ai, category: "Voice Triggers",
+    type: "voice_trigger:call.intent_detected", label: "Voice: Intent detected", color: "emerald", icon: ICONS.ai, category: "Voice Triggers", requires: "voice",
     handles: { sources: [{ position: "bottom" }] },
     defaultData: () => ({ intent: "", minConfidence: 0.6 }),
     validate: (d) => (d.intent && String(d.intent).trim()) ? "ok" : "missing",
@@ -737,7 +786,7 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
     ),
   },
   "voice_trigger:call.keyword_spoken": {
-    type: "voice_trigger:call.keyword_spoken", label: "Voice: Keyword spoken", color: "emerald", icon: ICONS.search, category: "Voice Triggers",
+    type: "voice_trigger:call.keyword_spoken", label: "Voice: Keyword spoken", color: "emerald", icon: ICONS.search, category: "Voice Triggers", requires: "voice",
     handles: { sources: [{ position: "bottom" }] },
     defaultData: () => ({ keywords: [] }),
     validate: (d) => (Array.isArray(d.keywords) && d.keywords.length > 0) ? "ok" : "missing",
@@ -757,7 +806,7 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
 
   // ── Voice actions ─────────────────────────────────────────────
   voice_add_participant: {
-    type: "voice_add_participant", label: "Voice: Add participant", color: "indigo", icon: ICONS.phone, category: "Voice Actions",
+    type: "voice_add_participant", label: "Voice: Add participant", color: "indigo", icon: ICONS.phone, category: "Voice Actions", requires: "voice",
     handles: { target: "top", sources: [{ position: "bottom" }] },
     defaultData: () => ({ to: "", label: "" }),
     validate: (d) => (d.to && String(d.to).trim()) ? "ok" : "missing",

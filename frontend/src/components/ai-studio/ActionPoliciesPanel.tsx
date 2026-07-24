@@ -1,12 +1,16 @@
 "use client";
 
 /**
- * Action policies - moved into AI Studio's Skills tab (view=policies).
+ * Action policies - the TOOL-ATTACHED half of the AI Studio Tools "Permissions
+ * & Policies" governance surface (view=permissions).
  *
- * Combines the former /settings/business-rules page (versioned, per-action
- * policies enforced deterministically by the backend policy engine) with the
- * former /settings/policy page's <PolicyAdmin> (conversation guardrails -
- * discounts/refunds/escalation/quiet hours), unmodified.
+ * Scope is deliberately narrow: these are per-ACTION limits (versioned,
+ * enforced deterministically by the backend policy engine) for the executable
+ * compensation / coupon / refund / cancel tools - i.e. "action-specific limits"
+ * that belong WITH the tool. Workspace-wide conversation guardrails that are
+ * NOT attached to a specific executable tool (escalation keywords, blocked
+ * topics, outbound quiet hours, the blanket discount ceiling) live in
+ * Settings → Your Business, not here - see PolicyAdmin mounted there.
  */
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
@@ -17,7 +21,6 @@ import {
   previewBusinessPolicy,
   type BusinessPolicyRow,
 } from "@/lib/gotcha-api";
-import PolicyAdmin from "@/components/PolicyAdmin";
 
 const ACTION_KINDS = ["COMPENSATION", "COUPON", "REFUND", "CANCEL_ORDER"] as const;
 const REASONS = ["late_delivery", "damaged_or_wrong_item", "confirmed_business_error"] as const;
@@ -272,11 +275,6 @@ export default function ActionPoliciesPanel() {
           </div>
           {preview.result && <div className="text-sm text-slate-700">{preview.result}</div>}
         </div>
-      </div>
-
-      <div className="pt-6 border-t border-gray-200">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">{t("settings.policy.title")}</h2>
-        <PolicyAdmin token={token} />
       </div>
     </div>
   );
