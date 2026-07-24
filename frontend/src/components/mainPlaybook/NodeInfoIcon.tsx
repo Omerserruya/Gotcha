@@ -22,6 +22,23 @@ function portTypeLabel(type: string, t: (k: string) => string): string {
   return v && v !== k ? v : type;
 }
 
+// §4 A node may depend on an external connection to actually execute. It stays
+// visible in the catalog regardless (so the capability is discoverable), but
+// the info surfaces WHAT is required and WHERE to connect it. Derived from the
+// type so no per-node annotation is needed. Voice nodes need a voice channel
+// (Settings → Channels → Twilio); the Connect destination is the canonical
+// location, never a duplicate flow.
+export function nodeRequirement(type: string): { capabilityKey: string; connectHref: string; connectLabelKey: string } | null {
+  if (type.startsWith("voice_")) {
+    return {
+      capabilityKey: "aiStudio.nodeReq.voiceChannel",
+      connectHref: "/settings/channels/twilio",
+      connectLabelKey: "aiStudio.nodeReq.connectVoice",
+    };
+  }
+  return null;
+}
+
 export function NodeInfoIcon({ type, className }: { type: string; className?: string }) {
   const { t } = useI18n();
   const entry = NODE_REGISTRY[type];
@@ -36,6 +53,7 @@ export function NodeInfoIcon({ type, className }: { type: string; className?: st
   // surface the "no message input" rule explicitly when it applies.
   const limitationKey = `aiStudio.nodes.${type.split(".").join(".")}.limitation`;
   const limitation = (() => { const v = t(limitationKey); return v && v !== limitationKey ? v : null; })();
+  const requirement = nodeRequirement(type);
 
   return (
     <span className={`relative inline-flex group/info ${className ?? ""}`}>
@@ -70,6 +88,12 @@ export function NodeInfoIcon({ type, className }: { type: string; className?: st
             : t("aiStudio.nodeInfo.noOutput")}
         </span>
         {limitation && <span className="mt-1 block text-amber-300">{limitation}</span>}
+        {requirement && (
+          <span className="mt-1.5 block border-t border-white/10 pt-1.5 text-amber-200">
+            {t(requirement.capabilityKey)}
+            <span className="block text-gray-400">{t(requirement.connectLabelKey)}</span>
+          </span>
+        )}
       </span>
     </span>
   );

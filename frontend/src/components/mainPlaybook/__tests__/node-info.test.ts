@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import en from "../../../i18n/en.json";
 import he from "../../../i18n/he.json";
+import { nodeRequirement } from "../NodeInfoIcon";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const read = (rel: string) => readFileSync(join(HERE, rel), "utf8");
@@ -47,5 +48,22 @@ describe("§6 port-type + tooltip strings are localized (business language, no e
       expect((en as any).aiStudio.nodeInfo[k], `en nodeInfo.${k}`).toBeTruthy();
       expect((he as any).aiStudio.nodeInfo[k], `he nodeInfo.${k}`).toBeTruthy();
     }
+  });
+});
+
+describe("§4 integration-dependency: node stays visible but states its requirement", () => {
+  it("§17 voice nodes require a voice channel and point at the canonical Connect location", () => {
+    const req = nodeRequirement("voice_add_participant");
+    expect(req).not.toBeNull();
+    expect(req!.connectHref).toBe("/settings/channels/twilio"); // reuse the Settings connection, no duplicate
+    expect((en as any).aiStudio.nodeReq.voiceChannel).toBeTruthy();
+    expect((he as any).aiStudio.nodeReq.voiceChannel).toBeTruthy();
+  });
+  it("a voice trigger subtype also carries the requirement", () => {
+    expect(nodeRequirement("voice_trigger:call.incoming")).not.toBeNull();
+  });
+  it("ordinary nodes carry no external requirement", () => {
+    expect(nodeRequirement("send_message_text")).toBeNull();
+    expect(nodeRequirement("condition_group")).toBeNull();
   });
 });

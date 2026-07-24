@@ -2853,6 +2853,10 @@
       "noInput": "Starting step - receives nothing.",
       "noOutput": "Terminal step - produces nothing."
     },
+    "nodeReq": {
+      "voiceChannel": "Requires a connected voice channel to run.",
+      "connectVoice": "Connect it in Settings → Channels → Twilio."
+    },
     "nodeCategories": {
       "triggers": "Triggers",
       "flow_control": "Flow Control",

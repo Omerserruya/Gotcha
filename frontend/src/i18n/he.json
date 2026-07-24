@@ -2854,6 +2854,10 @@
       "noInput": "שלב פתיחה - אינו מקבל דבר.",
       "noOutput": "שלב סופי - אינו מפיק דבר."
     },
+    "nodeReq": {
+      "voiceChannel": "נדרש ערוץ קולי מחובר כדי לפעול.",
+      "connectVoice": "חברו אותו בהגדרות ← ערוצים ← Twilio."
+    },
     "nodeCategories": {
       "triggers": "טריגרים",
       "flow_control": "בקרת זרימה",
