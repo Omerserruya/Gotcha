@@ -303,6 +303,62 @@ export type { PlanKey, PlanDef } from "./lib/plans";
 // Billing · Subscription · AI Units (pricing engine, wallet, entitlement layering).
 export * from "./lib/billing";
 export { encryptCredentials, decryptCredentials, isEncrypted } from "./lib/encryption";
+
+// BFF app-session infrastructure (additive; inert until cookie flags enabled).
+// See docs/security/bff-session-migration-map.md §A18 commit 1.
+export {
+  sealSessionSecret,
+  openSessionSecret,
+  loadSessionKeyring,
+  assertSessionEncryptionReady,
+  SessionCryptoError,
+  type SessionCryptoContext,
+} from "./lib/session-crypto";
+export {
+  generateSessionToken,
+  hashSessionToken,
+  isWellFormedSessionToken,
+  isWellFormedTokenHash,
+} from "./lib/session-token";
+export {
+  parseSessionCookie,
+  serializeSessionCookie,
+  serializeClearedSessionCookie,
+  resolveSessionCookieContract,
+  SessionCookieError,
+  PROD_SESSION_COOKIE_NAME,
+  DEV_SESSION_COOKIE_NAME,
+  type SessionCookieContract,
+} from "./lib/session-cookie";
+export {
+  normalizeOrigin,
+  loadOriginPolicy,
+  isAllowedOrigin,
+  assertAppOriginReady,
+  AppOriginError,
+  type OriginPolicy,
+} from "./lib/app-origins";
+export {
+  readSessionFlags,
+  sessionInfraEnabled,
+  type SessionFlags,
+} from "./lib/session-flags";
+export {
+  REVOCATION_REASON,
+  readSessionTtl,
+  expiredSessionsWhere,
+  revokedSessionsWhere,
+  identitySessionsWhere,
+  staleVersionSessionsWhere,
+  membershipSessionsWhere,
+  isSessionUsable,
+  toSafeSessionView,
+  assertSessionInfraReady,
+  SESSION_SECRET_FIELDS,
+  type RevocationReason,
+  type SafeSessionView,
+  type SessionTtl,
+} from "./lib/session-store";
 export { redact, safeLogger } from "./lib/log-redact";
 export {
   incomingMessageQueue,

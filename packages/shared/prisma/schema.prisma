@@ -172,10 +172,10 @@ model Tenant {
   consentRecords          ConsentRecord[]
   retentionPolicies       DataRetentionPolicy[]
   dataSubjectRequests     DataSubjectRequest[]
+  approvalRecipients      ApprovalRecipient[]
 
   @@index([status])
   @@map("tenants")
-  approvalRecipients ApprovalRecipient[]
 }
 
 // ─── GDPR: Consent Records (Art. 6/7) ──────────────────────────
@@ -368,12 +368,89 @@ model Identity {
   // preselects and the tenant a hint-less API call resolves to. Soft
   // reference (no FK): a deleted tenant must not break the identity.
   lastTenantId     String?   @map("last_tenant_id")
+  // Global session generation for this Identity. The BFF app-session migration
+  // (docs/security/bff-session-migration-map.md) snapshots this onto every
+  // UserSession at creation; a bump here (logout-all, credential/MFA reset,
+  // identity disabled, forced re-auth) makes every session with an older
+  // snapshot invalid - the "global reauthentication" mechanism. Additive and
+  // inert until cookie sessions are enabled by feature flag.
+  sessionVersion   Int       @default(0) @map("session_version")
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
 
   memberships User[]
+  sessions    UserSession[]
 
   @@map("identities")
+}
+
+/// Server-side application session for the BFF/HttpOnly-cookie auth model.
+/// The browser holds only an opaque random identifier in an HttpOnly cookie;
+/// the raw value is NEVER stored - only its SHA-256 hash (sessionTokenHash) is,
+/// so a database leak does not yield forgeable cookies. OIDC access/refresh
+/// tokens live here encrypted with SESSION_ENCRYPTION_KEY (see
+/// lib/session-crypto.ts), never in plaintext and never in the browser.
+/// A session belongs to an IDENTITY, not a tenant; the active tenant is
+/// resolved through activeMembership (a per-tenant User row), never a raw
+/// tenantId. Additive infrastructure: no runtime path reads this until the
+/// cookie feature flags are enabled in a later commit.
+model UserSession {
+  id String @id @default(cuid())
+
+  // Ownership: the Identity this session authenticates. Global re-auth compares
+  // sessionVersion against Identity.sessionVersion.
+  identityId     String @map("identity_id")
+  sessionVersion Int    @default(0) @map("session_version")
+
+  // Active membership = the per-tenant User row this session currently acts as.
+  // Nullable: a multi-workspace identity with no selection yet is gated behind
+  // the tenant picker. SetNull on membership delete forces re-selection rather
+  // than leaving a dangling tenant reference (never coupled directly to Tenant).
+  activeMembershipId String? @map("active_membership_id")
+
+  // Lookup key: SHA-256 of the opaque cookie identifier. Unique + indexed.
+  // The raw identifier is never persisted or logged.
+  sessionTokenHash String @unique @map("session_token_hash")
+
+  // Provider tokens, sealed by lib/session-crypto (AES-256-GCM, versioned,
+  // AAD-bound to purpose + owner). Never plaintext.
+  encryptedAccessToken  String    @map("encrypted_access_token")
+  encryptedRefreshToken String?   @map("encrypted_refresh_token")
+  tokenExpiresAt        DateTime? @map("token_expires_at")
+  oidcSessionId         String?   @map("oidc_session_id")
+
+  // CSRF binding secret (double-submit HMAC). Server-side only; never sent to
+  // the browser and never logged.
+  csrfSecret String @map("csrf_secret")
+
+  // Lifecycle.
+  rememberMe       Boolean   @default(false) @map("remember_me")
+  lastActivityAt   DateTime  @default(now()) @map("last_activity_at")
+  expiresAt        DateTime  @map("expires_at")
+  revokedAt        DateTime? @map("revoked_at")
+  revocationReason String?   @map("revocation_reason")
+
+  // Session metadata for the session-list UI + audit (no secrets). IP is stored
+  // as a salted hash only where retained, never raw.
+  browser         String?
+  device          String?
+  operatingSystem String? @map("operating_system")
+  userAgentHash   String? @map("user_agent_hash")
+  ipHash          String? @map("ip_hash")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  identity         Identity @relation(fields: [identityId], references: [id], onDelete: Cascade)
+  activeMembership User?    @relation("ActiveMembershipSessions", fields: [activeMembershipId], references: [id], onDelete: SetNull)
+
+  // sessionTokenHash is already uniquely indexed (cookie -> hash -> record).
+  @@index([identityId]) // identity session listing + global invalidation
+  @@index([identityId, sessionVersion]) // stale-version invalidation
+  @@index([activeMembershipId]) // membership-context invalidation
+  @@index([expiresAt]) // expiry cleanup
+  @@index([revokedAt]) // revocation queries
+  @@map("user_sessions")
 }
 
 // A User row is ONE TENANT MEMBERSHIP of an Identity: the person's role,
@@ -415,6 +492,9 @@ model User {
   updatedAt                DateTime  @updatedAt @map("updated_at")
 
   identity                Identity             @relation(fields: [identityId], references: [id], onDelete: Cascade)
+  // Sessions currently acting as THIS membership (BFF app-session model). Used
+  // for membership-context invalidation when a membership is suspended/removed.
+  activeSessions          UserSession[]        @relation("ActiveMembershipSessions")
   tenant                  Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   conversations           Conversation[]       @relation("AssignedAgent")
   departmentMembers       DepartmentMember[]
@@ -427,6 +507,7 @@ model User {
   agentFirstVoiceChannels VoiceChannel[]       @relation("VoiceChannelAgentFirstAgent")
   roleAssignments         UserRoleAssignment[]
   featureGrants           UserFeatureGrant[]
+  approvalRecipients      ApprovalRecipient[]
 
   @@unique([tenantId, email])
   // One membership per identity per tenant - the same person cannot hold two
@@ -435,7 +516,6 @@ model User {
   @@index([tenantId])
   @@index([identityId])
   @@map("users")
-  approvalRecipients ApprovalRecipient[]
 }
 
 // ─── Conversations ───────────────────────────────────────────
@@ -1471,36 +1551,36 @@ model ApprovalRequest {
   // are needed: without this, a dispatch that failed left an APPROVED row
   // indistinguishable from one that succeeded, nothing could retry it, and
   // the customer was simply never told anything.
-  executionState   ExecutionState @default(NOT_STARTED) @map("execution_state")
-  executionStartedAt DateTime?    @map("execution_started_at")
-  executionEndedAt   DateTime?    @map("execution_ended_at")
+  executionState      ExecutionState @default(NOT_STARTED) @map("execution_state")
+  executionStartedAt  DateTime?      @map("execution_started_at")
+  executionEndedAt    DateTime?      @map("execution_ended_at")
   /// Provider/tool result summary. NEVER the raw credential-bearing payload.
-  executionResult  Json?          @map("execution_result")
-  executionError   String?        @map("execution_error")
-  executionAttempts Int           @default(0) @map("execution_attempts")
+  executionResult     Json?          @map("execution_result")
+  executionError      String?        @map("execution_error")
+  executionAttempts   Int            @default(0) @map("execution_attempts")
   /// Set once the customer has been told the outcome. Presence of this value
   /// is the once-only guard for the continuation message: delivery may be
   /// retried, but the business action behind it is never re-run.
-  customerNotifiedAt DateTime?    @map("customer_notified_at")
+  customerNotifiedAt  DateTime?      @map("customer_notified_at")
   /// Id of the OUTBOUND message that carried the outcome to the customer.
-  customerMessageId  String?      @map("customer_message_id")
+  customerMessageId   String?        @map("customer_message_id")
   /// How the decision arrived - web UI, WhatsApp button, API. Audit trail.
-  decisionChannel  String?        @map("decision_channel")
+  decisionChannel     String?        @map("decision_channel")
   /// Ties every log line of one approval together across services.
-  correlationId    String?        @map("correlation_id")
+  correlationId       String?        @map("correlation_id")
   /// Out-of-band (WhatsApp) manager notification: "sent" | "skipped" | "failed".
   /// `skipped` is a FIRST-CLASS state - the inbox renders the reason so an
   /// unconfigured tenant sees an actionable setup prompt rather than silence.
-  managerNotifyState String?      @map("manager_notify_state")
-  managerNotifyReason String?     @map("manager_notify_reason")
-  managerNotifiedAt DateTime?     @map("manager_notified_at")
+  managerNotifyState  String?        @map("manager_notify_state")
+  managerNotifyReason String?        @map("manager_notify_reason")
+  managerNotifiedAt   DateTime?      @map("manager_notified_at")
   /// Deterministic fingerprint of the BUSINESS operation (tool + normalized
   /// identifying args, e.g. "shopify.process_refund:order=1004"). Row-level
   /// guards are not enough when TWO rows describe the SAME operation - the
   /// customer got two "your refund is done" messages that way. This key dedups
   /// HITL creation (an open sibling wins) and the completion notification
   /// (any notified sibling wins).
-  operationKey     String?        @map("operation_key")
+  operationKey        String?        @map("operation_key")
 
   @@index([tenantId, operationKey])
   @@index([tenantId, status])
@@ -1522,23 +1602,23 @@ model ApprovalRequest {
 /// tenant, and carry a validated E.164 number - otherwise the request simply
 /// stays in the in-app approval inbox and says why it was not sent.
 model ApprovalRecipient {
-  id        String   @id @default(cuid())
-  tenantId  String   @map("tenant_id")
+  id           String   @id @default(cuid())
+  tenantId     String   @map("tenant_id")
   /// The GOTCHA membership authorised to decide. Authorisation is re-checked
   /// at decision time, never trusted from the notification itself.
-  userId    String   @map("user_id")
+  userId       String   @map("user_id")
   /// Delivery channel. Only "whatsapp" today; the column exists so adding
   /// SMS/Telegram later does not need a migration.
-  channel   String   @default("whatsapp")
+  channel      String   @default("whatsapp")
   /// E.164, validated on write (normalised, digits only, leading +).
-  phoneE164 String   @map("phone_e164")
+  phoneE164    String   @map("phone_e164")
   /// OFF by default - a tenant must deliberately turn this on.
-  enabled   Boolean  @default(false)
+  enabled      Boolean  @default(false)
   /// Cap what may be decided from a phone. HIGH-risk actions can be forced to
   /// the web UI ("Open in GOTCHA") instead of one-tap approval.
-  maxRiskLevel String @default("medium") @map("max_risk_level")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  maxRiskLevel String   @default("medium") @map("max_risk_level")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -4484,28 +4564,28 @@ model DiscoverySession {
 }
 
 model DiscoveryFact {
-  id                 String   @id @default(cuid())
-  sessionId          String   @map("session_id")
-  tenantId           String   @map("tenant_id")
-  key                String
+  id                   String   @id @default(cuid())
+  sessionId            String   @map("session_id")
+  tenantId             String   @map("tenant_id")
+  key                  String
   /// Canonical semantic key (deduped across languages/synonyms).
-  normalizedKey      String   @map("normalized_key")
-  valueType          String   @map("value_type") // string|number|boolean|enum|range
-  valueJson          Json     @map("value_json")
-  normalizedValueJson Json?   @map("normalized_value_json")
+  normalizedKey        String   @map("normalized_key")
+  valueType            String   @map("value_type") // string|number|boolean|enum|range
+  valueJson            Json     @map("value_json")
+  normalizedValueJson  Json?    @map("normalized_value_json")
   /// customer_explicit | customer_correction | provider | tenant_configuration | knowledge_base | model_inference
-  source             String
-  confidence         Float    @default(0.9)
+  source               String
+  confidence           Float    @default(0.9)
   /// active | superseded | rejected
-  status             String   @default("active")
-  sourceMessageId    String?  @map("source_message_id")
-  explicitlyConfirmed Boolean @default(false) @map("explicitly_confirmed")
-  requiresConfirmation Boolean @default(false) @map("requires_confirmation")
+  status               String   @default("active")
+  sourceMessageId      String?  @map("source_message_id")
+  explicitlyConfirmed  Boolean  @default(false) @map("explicitly_confirmed")
+  requiresConfirmation Boolean  @default(false) @map("requires_confirmation")
   /// Sensitivity class for retention/promotion decisions: normal|sensitive.
-  sensitivity        String   @default("normal")
-  supersedesFactId   String?  @map("supersedes_fact_id")
-  createdAt          DateTime @default(now()) @map("created_at")
-  updatedAt          DateTime @updatedAt @map("updated_at")
+  sensitivity          String   @default("normal")
+  supersedesFactId     String?  @map("supersedes_fact_id")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
 
   session DiscoverySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
@@ -4515,21 +4595,21 @@ model DiscoveryFact {
 }
 
 model DiscoveryQuestion {
-  id                  String    @id @default(cuid())
-  sessionId           String    @map("session_id")
-  tenantId            String    @map("tenant_id")
+  id                    String    @id @default(cuid())
+  sessionId             String    @map("session_id")
+  tenantId              String    @map("tenant_id")
   /// The fact/requirement this question is trying to fill.
-  requirementKey      String    @map("requirement_key")
-  normalizedQuestionKey String  @map("normalized_question_key")
+  requirementKey        String    @map("requirement_key")
+  normalizedQuestionKey String    @map("normalized_question_key")
   /// planned | asked | answered | skipped | no_longer_required
-  status              String    @default("planned")
-  askedMessageId      String?   @map("asked_message_id")
-  answeredMessageId   String?   @map("answered_message_id")
-  askedAt             DateTime? @map("asked_at")
-  answeredAt          DateTime? @map("answered_at")
-  attemptCount        Int       @default(0) @map("attempt_count")
-  createdAt           DateTime  @default(now()) @map("created_at")
-  updatedAt           DateTime  @updatedAt @map("updated_at")
+  status                String    @default("planned")
+  askedMessageId        String?   @map("asked_message_id")
+  answeredMessageId     String?   @map("answered_message_id")
+  askedAt               DateTime? @map("asked_at")
+  answeredAt            DateTime? @map("answered_at")
+  attemptCount          Int       @default(0) @map("attempt_count")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
 
   session DiscoverySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
@@ -4539,21 +4619,21 @@ model DiscoveryQuestion {
 }
 
 model DiscoveryActionAttempt {
-  id             String   @id @default(cuid())
-  sessionId      String   @map("session_id")
-  tenantId       String   @map("tenant_id")
-  actionKey      String   @map("action_key")
+  id               String   @id @default(cuid())
+  sessionId        String   @map("session_id")
+  tenantId         String   @map("tenant_id")
+  actionKey        String   @map("action_key")
   /// Snapshot of the criteria/facts the action ran with (for reproducibility).
-  criteriaJson   Json     @map("criteria_json")
-  toolName       String?  @map("tool_name")
-  executionId    String?  @map("execution_id")
+  criteriaJson     Json     @map("criteria_json")
+  toolName         String?  @map("tool_name")
+  executionId      String?  @map("execution_id")
   /// pending | succeeded | failed | no_results | blocked
-  resultStatus   String   @map("result_status")
+  resultStatus     String   @map("result_status")
   /// Provider result references (order/product ids, refund id, …) - atoms only.
-  resultRefs     Json?    @map("result_refs")
+  resultRefs       Json?    @map("result_refs")
   /// Product/resource ids actually SHOWN to the customer (dedupe re-shows).
-  shownResourceIds Json?  @map("shown_resource_ids")
-  createdAt      DateTime @default(now()) @map("created_at")
+  shownResourceIds Json?    @map("shown_resource_ids")
+  createdAt        DateTime @default(now()) @map("created_at")
 
   session DiscoverySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
