@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import en from "../../../i18n/en.json";
 import he from "../../../i18n/he.json";
+import { canonicalDocType } from "@/lib/knowledge-source-type";
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 const read = (rel: string) => readFileSync(join(SRC, rel), "utf8");
@@ -48,6 +49,26 @@ describe("§8 Knowledge tab shows real mapped sources, not a generic repository"
       expect(h.statusLabels[sl], `he statusLabel ${sl}`).toBeTruthy();
     }
   });
+});
+
+describe("§8 every real ingestion sourceType maps to a localized TYPE label (no raw keys)", () => {
+  const k = (en as any).aiStudio.knowledge.typeLabels;
+  // The values ingestion actually writes (services/ai routes + drive/confluence
+  // services + seed docs), plus an unknown, must all land on a label key that
+  // exists - so the TYPE column never renders "aiStudio.knowledge.typeLabels.x".
+  const cases: Record<string, string> = {
+    file: "file", text: "text", url: "url",
+    google_drive: "drive", confluence: "confluence",
+    document: "file", manual: "text", website: "url", pdf: "file",
+    something_unknown: "file",
+  };
+  for (const [raw, expected] of Object.entries(cases)) {
+    it(`${raw} → ${expected} (a defined label)`, () => {
+      const key = canonicalDocType(raw);
+      expect(key).toBe(expected);
+      expect(k[key], `typeLabels.${key} must exist`).toBeTruthy();
+    });
+  }
 });
 
 describe("§8 the manage page opens the correct focused add flow (?add=)", () => {

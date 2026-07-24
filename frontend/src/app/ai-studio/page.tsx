@@ -17,6 +17,7 @@ import ActionPoliciesPanel from "@/components/ai-studio/ActionPoliciesPanel";
 import { MainPlaybookEditor } from "@/components/mainPlaybook/MainPlaybookEditor";
 import { FlowEditor } from "@/components/chatbot/FlowEditor";
 import { AI_STUDIO_TABS, normalizeAiStudioTab, type AiStudioTab } from "@/lib/ai-studio-tabs";
+import { canonicalDocType } from "@/lib/knowledge-source-type";
 
 // ─── Tab types ────────────────────────────────────────────────
 // The tab contract lives in one shared module (URL = source of truth). Old
@@ -536,7 +537,7 @@ function KnowledgeTab({ t }: { t: (key: string) => string }) {
           // "Document"/"synced" placeholder.
           const docs: any[] = Array.isArray(src.documents) ? src.documents : [];
           const items = docs.length;
-          const typeSet = new Set(docs.map((d) => d.sourceType).filter(Boolean));
+          const typeSet = new Set(docs.map((d) => d.sourceType).filter(Boolean).map((s: string) => canonicalDocType(s)));
           const typeKey = typeSet.size === 0 ? "empty" : typeSet.size > 1 ? "mixed" : String(Array.from(typeSet)[0]);
           const lc = (s: any) => String(s || "").toLowerCase();
           const anyError = docs.some((d) => ["error", "failed"].includes(lc(d.status)));
