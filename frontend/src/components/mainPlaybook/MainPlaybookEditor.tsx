@@ -880,6 +880,8 @@ function loadLayout(): { nodes: any[]; edges: any[] } | null {
 // ─── Main Component ────────────────────────────────────────────
 interface Props {
   onBack?: () => void;
+  /** Embedded in a tab (fills its container) rather than owning the viewport. */
+  embedded?: boolean;
 }
 
 export function MainPlaybookEditor(props: Props) {
@@ -893,7 +895,7 @@ export function MainPlaybookEditor(props: Props) {
   );
 }
 
-function MainPlaybookEditorInner({ onBack }: Props) {
+function MainPlaybookEditorInner({ onBack, embedded }: Props) {
   const { token } = useAuth();
   const { t } = useI18n();
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
@@ -1441,7 +1443,7 @@ function MainPlaybookEditorInner({ onBack }: Props) {
     // Editor must own its own height: AppLayout's <main> is `flex-1` with no
     // explicit height, so `h-full` (= 100% of parent) collapses to auto.
     // Use viewport units, subtracting AppLayout's 8px top + 8px bottom padding.
-    <div className="h-screen md:h-[calc(100vh-1rem)] flex flex-col overflow-hidden">
+    <div className={embedded ? "h-full flex flex-col overflow-hidden" : "h-screen md:h-[calc(100vh-1rem)] flex flex-col overflow-hidden"}>
       {/* Toolbar - breadcrumb left, secondary actions middle, primary CTA right */}
       <div className="bg-white border-b border-[var(--border-hairline)] px-2 md:px-4 h-14 flex items-center gap-2 md:gap-3 z-10">
         {onBack && (

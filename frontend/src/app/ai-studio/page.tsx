@@ -6,7 +6,7 @@ import Link from "next/link";
 import { AppLayout } from "@/components/AppLayout";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
-import { getMarketplaceIntegrations, getAIAgents, getChatbotFlows, getFlowCanvas, getKnowledgeBases, deleteChatbotFlow, deleteAIAgent, deleteKnowledgeBase } from "@/lib/api";
+import { getMarketplaceIntegrations, getAIAgents, getChatbotFlows, getKnowledgeBases, deleteAIAgent, deleteKnowledgeBase } from "@/lib/api";
 import { INTEGRATION_LOGOS, logoForIntegration } from "@/lib/integration-logos";
 import clsx from "clsx";
 import TestChatModal from "@/components/TestChatModal";
@@ -14,6 +14,8 @@ import { ReadinessReportModal, readinessBadgeTone } from "@/components/Readiness
 import { builderReadinessTest, type ReadinessReport } from "@/lib/gotcha-api";
 import ToolPermissionsPanel from "@/components/ai-studio/ToolPermissionsPanel";
 import ActionPoliciesPanel from "@/components/ai-studio/ActionPoliciesPanel";
+import { MainPlaybookEditor } from "@/components/mainPlaybook/MainPlaybookEditor";
+import { FlowEditor } from "@/components/chatbot/FlowEditor";
 import { AI_STUDIO_TABS, normalizeAiStudioTab, type AiStudioTab } from "@/lib/ai-studio-tabs";
 
 // ─── Tab types ────────────────────────────────────────────────
@@ -347,194 +349,80 @@ function TeamTab({ t }: { t: (key: string) => string }) {
 
 function PlaybooksTab({ t }: { t: (key: string) => string }) {
   const { token } = useAuth();
-  const router = useRouter();
   const [flows, setFlows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  // Main Playbook node count - surfaces actual flow-canvas content rather
-  // than the legacy RouterRule count (those are a separate, sibling system).
-  // Excludes the synthetic `trigger_section_header` decorations.
-  const [mainPlaybookNodeCount, setMainPlaybookNodeCount] = useState(0);
+  // Canvas-first: the selected process opens DIRECTLY in the embedded editor -
+  // no card, no intermediate Enter/Edit step. "main" = the Main Playbook,
+  // "new" = a fresh unsaved process, otherwise an existing flow id.
+  const [selected, setSelected] = useState<string>("main");
+  const [newNonce, setNewNonce] = useState(0);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     if (!token) return;
-    Promise.all([
-      getChatbotFlows(token).then((r) => (Array.isArray(r) ? r : (r as any).data || [])),
-      getFlowCanvas(token).then((r) => (r.data || { nodes: [] })),
-    ])
-      .then(([flowsData, canvas]) => {
-        setFlows(flowsData);
-        const nodes = Array.isArray((canvas as any).nodes) ? (canvas as any).nodes : [];
-        setMainPlaybookNodeCount(
-          nodes.filter((n: any) => n?.type !== "trigger_section_header").length,
-        );
-      })
+    getChatbotFlows(token)
+      .then((r) => setFlows(Array.isArray(r) ? r : (r as any).data || []))
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [token]);
+  useEffect(() => { load(); }, [load]);
 
-  function toggleFlow(id: string) {
-    setFlows((prev) => prev.map((f) => f.id === id ? { ...f, isActive: !f.isActive } : f));
-  }
-
-  async function handleDeleteFlow(id: string) {
-    if (!token) return;
-    if (!confirm("Are you sure you want to delete this flow?")) return;
-    try {
-      await deleteChatbotFlow(token, id);
-      setFlows((prev) => prev.filter((f) => f.id !== id));
-    } catch {
-      // silently ignore
-    }
-  }
+  const selectedFlow = flows.find((f) => f.id === selected) || null;
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-5">
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900">{t("aiStudio.playbooks.title")}</h2>
-          <p className="text-sm text-gray-400 mt-0.5">{t("aiStudio.playbooks.subtitle")}</p>
-        </div>
+    <div className="flex flex-col" style={{ height: "calc(100vh - 250px)", minHeight: 520 }} data-tour="new-workflow">
+      {/* Compact process selector - NOT a card grid. Switch, create, template. */}
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <label className="text-xs font-semibold text-gray-500">{t("aiStudio.playbooks.process")}</label>
+        <select
+          value={selected}
+          onChange={(e) => setSelected(e.target.value)}
+          className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:ring-2 focus:ring-violet-200 focus:border-violet-300 outline-none min-w-[180px]"
+        >
+          <option value="main">{t("aiStudio.playbooks.mainPlaybook")}</option>
+          {flows.map((f) => (
+            <option key={f.id} value={f.id}>{f.name}</option>
+          ))}
+          {selected === "new" && <option value="new">{t("aiStudio.playbooks.newProcessOption")}</option>}
+        </select>
+
+        {selected !== "main" && selected !== "new" && selectedFlow && (
+          <span className={clsx(
+            "text-[11px] px-2 py-0.5 rounded-full font-medium",
+            selectedFlow.isActive ? "bg-green-50 text-green-600" : "bg-gray-100 text-gray-500",
+          )}>
+            {selectedFlow.isActive ? t("aiStudio.playbooks.statusPublished") : t("aiStudio.playbooks.statusDraft")}
+          </span>
+        )}
+
+        <button
+          onClick={() => { setNewNonce((n) => n + 1); setSelected("new"); }}
+          className="ms-auto flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 transition"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+          </svg>
+          {t("aiStudio.playbooks.newProcess")}
+        </button>
         <Link
           href="/ai-studio/router?templates=open"
-          className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 hover:border-gray-300 transition shadow-sm mr-2"
+          className="px-3 py-1.5 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 hover:border-gray-300 transition"
         >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25a2.25 2.25 0 01-2.25-2.25v-2.25z" />
-          </svg>
-          Templates
-        </Link>
-        {/* "New playbook" used to sit here, beside "edit the main workflow",
-            with nothing to say which one a new user should press. Authoring now
-            has ONE entrance - the main workflow - and sub-flows are created from
-            the route node that needs them. `data-tour` stays on the main
-            workflow card so the guided tour still has its anchor. */}
-        <Link
-          href="/ai-studio/router"
-          data-tour="new-workflow"
-          className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-xl text-sm font-medium hover:bg-violet-700 transition shadow-sm"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
-          </svg>
-          {t("aiStudio.playbooks.editMainPlaybook")}
+          {t("aiStudio.playbooks.templates")}
         </Link>
       </div>
 
-      {/* Main Playbook Card */}
-      <div
-        onClick={() => router.push("/ai-studio/router")}
-        className="bg-white rounded-2xl shadow-card border-2 border-violet-100 overflow-hidden mb-6 cursor-pointer hover:shadow-md hover:border-violet-200 transition group"
-      >
-        <div className="flex items-center justify-between px-5 py-5 bg-gradient-to-r from-violet-50 to-violet-50/30">
-          <div className="flex items-center gap-4">
-            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-violet-500 to-violet-700 flex items-center justify-center shadow-sm">
-              <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5" />
-              </svg>
-            </div>
-            <div>
-              <h3 className="text-base font-bold text-gray-900">{t("aiStudio.playbooks.mainPlaybook")}</h3>
-              <p className="text-xs text-gray-400 mt-0.5">{t("aiStudio.playbooks.mainPlaybookSub")}</p>
-              {mainPlaybookNodeCount > 0 && (
-                <p className="text-xs text-violet-500 mt-1 font-medium">{mainPlaybookNodeCount} node{mainPlaybookNodeCount !== 1 ? "s" : ""} configured</p>
-              )}
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-violet-600 font-medium group-hover:text-violet-700 transition hidden sm:block">
-              {t("aiStudio.playbooks.editMainPlaybook")}
-            </span>
-            <svg className="w-5 h-5 text-violet-400 group-hover:text-violet-600 group-hover:translate-x-0.5 transition" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-            </svg>
-          </div>
-        </div>
+      {/* The selected process opens DIRECTLY in the canvas - no Edit step. */}
+      <div className="flex-1 min-h-0 rounded-2xl border border-gray-200 overflow-hidden bg-white">
+        {loading ? (
+          <div className="h-full flex items-center justify-center text-sm text-gray-400">{t("common.loading")}</div>
+        ) : selected === "main" ? (
+          <MainPlaybookEditor embedded />
+        ) : selected === "new" ? (
+          <FlowEditor key={`new-${newNonce}`} flowId="new" embedded onCreated={(id) => { load(); setSelected(id); }} />
+        ) : (
+          <FlowEditor key={selected} flowId={selected} embedded onCreated={(id) => { load(); setSelected(id); }} />
+        )}
       </div>
-
-      {/* Sub-flows are deliberately NOT listed as a sibling of the main
-          workflow. Presented side by side they read as two things the user must
-          author, with no way to tell which one to start in or what belongs in
-          each. A sub-flow only means anything as the target of a route node, so
-          it is created and opened from that node inside the main workflow.
-          The list below stays available behind a disclosure for tenants who
-          already built sub-flows and need to reach one directly. */}
-      {!loading && flows.length > 0 && (
-        <details className="group">
-          <summary className="flex items-center gap-2 mb-3 cursor-pointer list-none text-sm font-semibold text-gray-500 hover:text-gray-700 transition">
-            <svg className="w-3.5 h-3.5 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-            </svg>
-            {t("aiStudio.playbooks.subPlaybooks")}
-            <span className="text-xs font-normal text-gray-400">({flows.length})</span>
-          </summary>
-
-      <div className="bg-white rounded-2xl shadow-card border border-gray-100 overflow-hidden">
-        {flows.map((flow, i) => (
-          <div
-            key={flow.id}
-            className={clsx(
-              "flex items-center gap-4 px-5 py-4 hover:bg-gray-50/60 transition",
-              i < flows.length - 1 && "border-b border-gray-50"
-            )}
-          >
-            <div className="w-9 h-9 rounded-lg bg-violet-50 flex items-center justify-center shrink-0">
-              <svg className="w-4 h-4 text-violet-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
-              </svg>
-            </div>
-
-            <div
-              className="flex-1 min-w-0 cursor-pointer"
-              onClick={() => router.push(`/ai-studio/flows/${flow.id}`)}
-            >
-              <p className="text-sm font-semibold text-gray-900 hover:text-violet-700 transition">{flow.name}</p>
-              <p className="text-xs text-gray-400 mt-0.5">{t("aiStudio.flows.trigger")}: {flow.trigger}</p>
-            </div>
-
-            <div className="text-right hidden sm:block">
-              <p className="text-sm font-semibold text-gray-800">{flow.runCount ?? 0}</p>
-              <p className="text-xs text-gray-400">{t("aiStudio.playbooks.runs")}</p>
-            </div>
-
-            <button
-              onClick={() => toggleFlow(flow.id)}
-              className={clsx(
-                "relative w-10 h-5.5 rounded-full transition-colors shrink-0",
-                flow.isActive ? "bg-violet-500" : "bg-gray-200"
-              )}
-              style={{ width: 40, height: 22 }}
-            >
-              <span
-                className={clsx(
-                  "absolute top-0.5 left-0.5 w-[18px] h-[18px] bg-white rounded-full shadow transition-transform",
-                  flow.isActive && "translate-x-[18px]"
-                )}
-              />
-            </button>
-
-            <Link
-              href={`/ai-studio/flows/${flow.id}`}
-              className="p-1.5 rounded-lg text-gray-400 hover:text-violet-600 hover:bg-violet-50 transition"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
-              </svg>
-            </Link>
-
-            <button
-              onClick={() => handleDeleteFlow(flow.id)}
-              className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition"
-              title="Delete flow"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-              </svg>
-            </button>
-          </div>
-        ))}
-      </div>
-        </details>
-      )}
     </div>
   );
 }

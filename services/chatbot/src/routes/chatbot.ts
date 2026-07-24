@@ -12,6 +12,9 @@ const flowSchema = z.object({
   nodes: z.array(z.any()).default([]),
   edges: z.array(z.any()).default([]),
   isActive: z.boolean().optional(),
+  // Optimistic concurrency token: the editor sends the updatedAt it loaded so a
+  // concurrent edit is rejected (409) instead of being silently overwritten.
+  expectedUpdatedAt: z.string().optional(),
 });
 
 router.get("/", async (req: Request, res: Response) => {
@@ -50,7 +53,13 @@ router.put("/:id", requireRole("ADMIN"), validate(flowSchema), async (req: Reque
   try {
     const existing = await prisma.chatbotFlow.findFirst({ where: { id: req.params.id as string, tenantId: req.tenantId! } });
     if (!existing) { res.status(404).json({ error: "Flow not found" }); return; }
-    const { name, description, nodes, edges, isActive } = req.body;
+    const { name, description, nodes, edges, isActive, expectedUpdatedAt } = req.body;
+    // Stale-version guard: if the caller loaded an older revision than what is
+    // on disk, reject with 409 rather than clobbering the newer edit.
+    if (expectedUpdatedAt && new Date(expectedUpdatedAt).getTime() !== new Date(existing.updatedAt).getTime()) {
+      res.status(409).json({ error: "stale_version_conflict: this process changed since you opened it; reload before saving." });
+      return;
+    }
     const flow = await prisma.chatbotFlow.update({
       where: { id: req.params.id as string },
       data: { name, description, nodes, edges, isActive: isActive ?? existing.isActive },
