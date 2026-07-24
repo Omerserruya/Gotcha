@@ -3187,6 +3187,32 @@
       "status": "Status",
       "lastSync": "Last Synced",
       "manageKnowledge": "Manage Knowledge",
+      "explain": "Every knowledge source your AI employees learn from, including websites, documents, FAQs, and connected sources.",
+      "activeSources": "Active sources",
+      "itemsCol": "Items",
+      "cardFilesDesc": "Upload PDFs, docs and more.",
+      "cardWebsiteDesc": "Crawl a page or a whole site.",
+      "cardDriveDesc": "Sync files from Google Drive.",
+      "cardFaqDesc": "Write questions and answers.",
+      "cardConfluence": "Confluence",
+      "cardConfluenceDesc": "Sync spaces and pages.",
+      "typeLabels": {
+        "file": "Files",
+        "url": "Website",
+        "text": "Manual",
+        "mixed": "Mixed",
+        "empty": "Empty",
+        "drive": "Google Drive",
+        "confluence": "Confluence"
+      },
+      "statusLabels": {
+        "ready": "Ready",
+        "processing": "Processing",
+        "error": "Error",
+        "empty": "Empty",
+        "synced": "Synced",
+        "syncing": "Syncing"
+      },
       "page": {
         "backToStudio": "Back to AI Studio",
         "title": "Knowledge Sources",

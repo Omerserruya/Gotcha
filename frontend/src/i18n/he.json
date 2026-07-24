@@ -3188,6 +3188,32 @@
       "status": "סטטוס",
       "lastSync": "סנכרון אחרון",
       "manageKnowledge": "נהל ידע",
+      "explain": "כל מקור ידע שעובדי ה-AI שלכם לומדים ממנו, כולל אתרים, מסמכים, שאלות נפוצות ומקורות מחוברים.",
+      "activeSources": "מקורות פעילים",
+      "itemsCol": "פריטים",
+      "cardFilesDesc": "העלו PDF, מסמכים ועוד.",
+      "cardWebsiteDesc": "סרקו עמוד או אתר שלם.",
+      "cardDriveDesc": "סנכרנו קבצים מ-Google Drive.",
+      "cardFaqDesc": "כתבו שאלות ותשובות.",
+      "cardConfluence": "Confluence",
+      "cardConfluenceDesc": "סנכרנו מרחבים ועמודים.",
+      "typeLabels": {
+        "file": "קבצים",
+        "url": "אתר",
+        "text": "ידני",
+        "mixed": "מעורב",
+        "empty": "ריק",
+        "drive": "Google Drive",
+        "confluence": "Confluence"
+      },
+      "statusLabels": {
+        "ready": "מוכן",
+        "processing": "מעבד",
+        "error": "שגיאה",
+        "empty": "ריק",
+        "synced": "מסונכרן",
+        "syncing": "מסנכרן"
+      },
       "page": {
         "backToStudio": "חזרה לסטודיו AI",
         "title": "מקורות ידע",

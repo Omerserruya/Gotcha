@@ -53,7 +53,7 @@ function StatCard({ icon, label, value, sub, color }: {
 }
 
 // ─── Status badge ─────────────────────────────────────────────
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge({ status, label }: { status: string; label?: string }) {
   const map: Record<string, string> = {
     active: "bg-green-100 text-green-700",
     draft: "bg-gray-100 text-gray-500",
@@ -61,10 +61,14 @@ function StatusBadge({ status }: { status: string }) {
     synced: "bg-green-100 text-green-700",
     syncing: "bg-blue-100 text-blue-700",
     connected: "bg-green-100 text-green-700",
+    ready: "bg-green-100 text-green-700",
+    processing: "bg-blue-100 text-blue-700",
+    error: "bg-red-100 text-red-700",
+    empty: "bg-gray-100 text-gray-400",
   };
   return (
     <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium capitalize", map[status] || "bg-gray-100 text-gray-500")}>
-      {status}
+      {label ?? status}
     </span>
   );
 }
@@ -482,10 +486,37 @@ function KnowledgeTab({ t }: { t: (key: string) => string }) {
         </Link>
       </div>
 
+      {/* §8 What Knowledge is + how to add real, mapped sources. */}
+      <p className="text-sm text-gray-500 mb-4 -mt-2 max-w-2xl">{t("aiStudio.knowledge.explain")}</p>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
+        {[
+          { mode: "file", labelKey: "addFiles", descKey: "cardFilesDesc", color: "violet", d: "M9 13.5l3 3m0 0l3-3m-3 3v-6m1.06-4.19l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" },
+          { mode: "url", labelKey: "addUrl", descKey: "cardWebsiteDesc", color: "blue", d: "M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" },
+          { mode: "drive", labelKey: "addDrive", descKey: "cardDriveDesc", color: "emerald", d: "M2.25 15a4.5 4.5 0 004.5 4.5H18a3.75 3.75 0 001.332-7.257 3 3 0 00-3.758-3.848 5.25 5.25 0 00-10.233 2.33A4.502 4.502 0 002.25 15z" },
+          { mode: "text", labelKey: "addAnswer", descKey: "cardFaqDesc", color: "amber", d: "M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" },
+          { mode: "confluence", labelKey: "cardConfluence", descKey: "cardConfluenceDesc", color: "sky", d: "M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" },
+        ].map((c) => (
+          <Link
+            key={c.mode}
+            href={`/ai-studio/knowledge?add=${c.mode}`}
+            className="group flex flex-col gap-2 rounded-2xl border border-gray-200 bg-white p-4 hover:border-violet-300 hover:shadow-md transition"
+          >
+            <span className={clsx("w-9 h-9 rounded-xl flex items-center justify-center",
+              c.color === "violet" ? "bg-violet-50 text-violet-600" : c.color === "blue" ? "bg-blue-50 text-blue-600" : c.color === "emerald" ? "bg-emerald-50 text-emerald-600" : c.color === "amber" ? "bg-amber-50 text-amber-600" : "bg-sky-50 text-sky-600")}>
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}><path strokeLinecap="round" strokeLinejoin="round" d={c.d} /></svg>
+            </span>
+            <span className="text-sm font-semibold text-gray-900">{t(`aiStudio.knowledge.${c.labelKey}`)}</span>
+            <span className="text-[11px] text-gray-400 leading-snug">{t(`aiStudio.knowledge.${c.descKey}`)}</span>
+          </Link>
+        ))}
+      </div>
+
+      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">{t("aiStudio.knowledge.activeSources")}</p>
       <div className="bg-white rounded-2xl shadow-card border border-gray-100 overflow-hidden">
-        <div className="grid grid-cols-[1fr_100px_100px_120px_40px] gap-3 px-5 py-3 bg-gray-50/60 border-b border-gray-100">
+        <div className="grid grid-cols-[1fr_90px_70px_90px_110px_40px] gap-3 px-5 py-3 bg-gray-50/60 border-b border-gray-100">
           <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">{t("aiStudio.knowledge.source")}</span>
           <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">{t("aiStudio.knowledge.type")}</span>
+          <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">{t("aiStudio.knowledge.itemsCol")}</span>
           <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">{t("aiStudio.knowledge.status")}</span>
           <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">{t("aiStudio.knowledge.lastSync")}</span>
           <span />
@@ -500,13 +531,25 @@ function KnowledgeTab({ t }: { t: (key: string) => string }) {
             <p className="text-sm">No knowledge sources yet</p>
           </div>
         ) : knowledgeBases.map((src, i) => {
-          const status = src.status?.toLowerCase() || "synced";
-          const lastSync = src.updatedAt ? new Date(src.updatedAt).toLocaleDateString() : "-";
+          // Real per-source facts derived from the KB's documents (the API
+          // returns them with status/sourceType/createdAt) - never a fixed
+          // "Document"/"synced" placeholder.
+          const docs: any[] = Array.isArray(src.documents) ? src.documents : [];
+          const items = docs.length;
+          const typeSet = new Set(docs.map((d) => d.sourceType).filter(Boolean));
+          const typeKey = typeSet.size === 0 ? "empty" : typeSet.size > 1 ? "mixed" : String(Array.from(typeSet)[0]);
+          const lc = (s: any) => String(s || "").toLowerCase();
+          const anyError = docs.some((d) => ["error", "failed"].includes(lc(d.status)));
+          const anyPending = docs.some((d) => ["pending", "processing", "syncing"].includes(lc(d.status)));
+          const status = anyError ? "error" : anyPending ? "processing" : items > 0 ? "ready" : "empty";
+          const lastTs = docs.reduce<string | null>((max, d) => (d.createdAt && (!max || d.createdAt > max) ? d.createdAt : max), src.updatedAt ?? null);
+          const lastSync = lastTs ? new Date(lastTs).toLocaleDateString() : "-";
+          const typeLabel = t(`aiStudio.knowledge.typeLabels.${typeKey}`);
           return (
           <div
             key={src.id}
             className={clsx(
-              "grid grid-cols-[1fr_100px_100px_120px_76px] gap-3 items-center px-5 py-3.5 hover:bg-gray-50/60 transition",
+              "grid grid-cols-[1fr_90px_70px_90px_110px_76px] gap-3 items-center px-5 py-3.5 hover:bg-gray-50/60 transition",
               i < knowledgeBases.length - 1 && "border-b border-gray-50"
             )}
           >
@@ -516,10 +559,11 @@ function KnowledgeTab({ t }: { t: (key: string) => string }) {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
                 </svg>
               </div>
-              <span className="text-sm font-medium text-gray-800">{src.name}</span>
+              <span className="text-sm font-medium text-gray-800 truncate">{src.name}</span>
             </div>
-            <span className="text-xs text-gray-500">{src.type || "Document"}</span>
-            <StatusBadge status={status} />
+            <span className="text-xs text-gray-500 truncate">{typeLabel}</span>
+            <span className="text-xs text-gray-500 tabular-nums">{items}</span>
+            <StatusBadge status={status} label={t(`aiStudio.knowledge.statusLabels.${status}`)} />
             <span className="text-xs text-gray-400">{lastSync}</span>
             {/* This tab is a read-only overview. Editing a knowledge base lives
                 in one place - the Manage Knowledge page - so this opens that KB

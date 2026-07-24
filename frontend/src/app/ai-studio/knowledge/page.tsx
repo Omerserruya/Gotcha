@@ -194,6 +194,35 @@ function KnowledgePageInner() {
     setDetailTab("documents");
   }, [deepLinkKb, knowledgeBases]);
 
+  // §8 Deep link from the Knowledge tab's source-type cards (?add=file|url|text|
+  // drive|confluence): open the correct focused flow. file/url/text open the
+  // upload modal in that mode against the first (or a newly created) KB;
+  // drive/confluence route into the connected-source browse via the integrations
+  // tab. Runs once after KBs load.
+  const addMode = searchParams.get("add");
+  const addHandledRef = useRef(false);
+  useEffect(() => {
+    if (!addMode || addHandledRef.current || loading) return;
+    addHandledRef.current = true;
+    const firstKb = knowledgeBases[0]?.id ?? null;
+    if (addMode === "drive" || addMode === "confluence") {
+      if (firstKb) { setSelectedKb(firstKb); setDetailTab("integrations"); }
+      else { setShowCreateModal(true); }
+      return;
+    }
+    if (["file", "url", "text"].includes(addMode)) {
+      if (firstKb) {
+        setSelectedKb(firstKb);
+        setDetailTab("documents");
+        setUploadMode(addMode as "file" | "url" | "text");
+        setShowUploadModal(true);
+      } else {
+        // No KB yet - the upload needs a home; open the create flow first.
+        setShowCreateModal(true);
+      }
+    }
+  }, [addMode, loading, knowledgeBases]);
+
   const loadIntegrations = useCallback(async () => {
     if (!token || !selectedKb) return;
     try {
