@@ -3,6 +3,8 @@
 import React from "react";
 import { Handle, Position, NodeProps } from "reactflow";
 import { NODE_REGISTRY, COLOR_TOKENS, SharedData, NodeStatus } from "./node-registry";
+import { useI18n } from "@/context/I18nContext";
+import { nodeLabel } from "./node-i18n";
 
 // Single canvas card used by EVERY node type. Reads from NODE_REGISTRY,
 // shows: title (data.name || registry label), short summary, status pip,
@@ -30,6 +32,7 @@ const FALLBACK_ACCENT = { bg: "bg-gray-50", text: "text-gray-600", ring: "ring-g
 
 export function CollapsedNode(props: NodeProps) {
   const { type, data, selected } = props;
+  const { t } = useI18n();
   const entry = type ? NODE_REGISTRY[type] : undefined;
   if (!entry) {
     return (
@@ -48,7 +51,7 @@ export function CollapsedNode(props: NodeProps) {
   };
   const summary = safeSummary(entry.summary, data, shared);
   const status: NodeStatus = entry.validate ? entry.validate(data || {}) : "ok";
-  const title = (typeof data?.name === "string" && data.name.trim()) ? data.name : entry.label;
+  const title = (typeof data?.name === "string" && data.name.trim()) ? data.name : nodeLabel(type, t);
 
   const hasTarget = entry.handles.target;
   const dynamicSources = entry.getSources?.(data || {});

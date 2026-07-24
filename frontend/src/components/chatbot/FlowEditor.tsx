@@ -55,6 +55,7 @@ import { NodeInspector } from "../mainPlaybook/NodeInspector";
 import { NODE_REGISTRY } from "../mainPlaybook/node-registry";
 import { validateConnection, leftBoundaryX, type ConnectionError } from "../mainPlaybook/connection-rules";
 import { validateFlow } from "../mainPlaybook/flow-validator";
+import { nodeLabel, nodeDesc, nodeCategoryLabel } from "../mainPlaybook/node-i18n";
 
 const nodeTypes: NodeTypes = {
   // Legacy types - still supported for existing flows
@@ -1135,7 +1136,7 @@ function FlowEditorInner({ flowId, onBack, onCreated, embedded }: Props) {
             {/* Categories */}
             {NODE_PALETTE.map((cat) => (
               <div key={cat.category}>
-                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-1 mb-1.5">{cat.category}</p>
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-1 mb-1.5">{nodeCategoryLabel(cat.category, t)}</p>
                 <div className="space-y-1.5">
                   {cat.items.map((item) => (
                     <div
@@ -1149,8 +1150,8 @@ function FlowEditorInner({ flowId, onBack, onCreated, embedded }: Props) {
                         {item.icon}
                       </div>
                       <div className="min-w-0">
-                        <p className={`text-xs font-semibold ${item.text} leading-tight`}>{item.label}</p>
-                        <p className="text-[10px] text-gray-400 leading-tight mt-0.5 truncate">{item.desc}</p>
+                        <p className={`text-xs font-semibold ${item.text} leading-tight`}>{nodeLabel(item.type, t, item.label)}</p>
+                        <p className="text-[10px] text-gray-400 leading-tight mt-0.5 truncate">{nodeDesc(item.type, t, item.desc)}</p>
                       </div>
                       <div className={`ms-auto w-1.5 h-1.5 rounded-full ${item.dot} opacity-60 shrink-0`} />
                     </div>
