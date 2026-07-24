@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { prisma, authenticate, resolveTenant, requireRole, validate } from "@chatcenter/shared";
+import { validateGraph } from "../lib/graph-validator";
 
 const router = Router();
 router.use(authenticate, resolveTenant);
@@ -81,9 +82,28 @@ router.post("/:id/activate", requireRole("ADMIN"), async (req: Request, res: Res
   try {
     const existing = await prisma.chatbotFlow.findFirst({ where: { id: req.params.id as string, tenantId: req.tenantId! } });
     if (!existing) { res.status(404).json({ error: "Flow not found" }); return; }
+    // Authoritative gate (§3): publishing is BLOCKED by validation errors. The
+    // frontend validates for UX, but this is the check that cannot be bypassed.
+    const { errors, warnings } = validateGraph((existing.nodes as any) ?? [], (existing.edges as any) ?? []);
+    if (errors.length > 0) {
+      res.status(422).json({ error: "validation_failed", errors, warnings });
+      return;
+    }
     const flow = await prisma.chatbotFlow.update({ where: { id: req.params.id as string }, data: { isActive: true } });
     res.json(flow);
   } catch (err) { console.error("Activate flow error:", err); res.status(500).json({ error: "Failed to activate flow" }); }
+});
+
+// Advisory validation for the editor's validation panel - same authoritative
+// rules, without mutating anything.
+router.post("/:id/validate", async (req: Request, res: Response) => {
+  try {
+    const existing = await prisma.chatbotFlow.findFirst({ where: { id: req.params.id as string, tenantId: req.tenantId! } });
+    if (!existing) { res.status(404).json({ error: "Flow not found" }); return; }
+    const nodes = Array.isArray(req.body?.nodes) ? req.body.nodes : (existing.nodes as any) ?? [];
+    const edges = Array.isArray(req.body?.edges) ? req.body.edges : (existing.edges as any) ?? [];
+    res.json(validateGraph(nodes, edges));
+  } catch (err) { console.error("Validate flow error:", err); res.status(500).json({ error: "Failed to validate flow" }); }
 });
 
 export default router;

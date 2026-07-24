@@ -55,6 +55,7 @@ import { ScheduleTriggerNode } from "./ScheduleTriggerNode";
 import { VoiceAddParticipantNode } from "./VoiceAddParticipantNode";
 import { TemplateGalleryModal } from "./TemplateGalleryModal";
 import { validateFlow } from "./flow-validator";
+import { validateConnection, type ConnectionError } from "./connection-rules";
 import { FlowIssuesPill } from "./FlowIssuesPill";
 import { NodeInspector } from "./NodeInspector";
 import { TRIGGER_TYPES, isTriggerNode } from "./trigger-types";
@@ -917,6 +918,7 @@ function MainPlaybookEditorInner({ onBack, embedded }: Props) {
     if (params.get("templates") === "open") setTemplateGalleryOpen(true);
   }, []);
   const [savedToast, setSavedToast] = useState<string | null>(null);
+  const [connError, setConnError] = useState<ConnectionError | null>(null);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
   // Per the Flow Builder UX spec: nodes are read-only on canvas and ALL
@@ -1075,6 +1077,18 @@ function MainPlaybookEditorInner({ onBack, embedded }: Props) {
 
   const onConnect = useCallback(
     (params: Connection) => {
+      // §3 semantic validation - reject invalid drops, don't create the edge.
+      const res = validateConnection(
+        params,
+        nodes.map((n) => ({ id: n.id, type: n.type as string, data: n.data })),
+        edges.map((e) => ({ id: e.id, source: e.source, target: e.target, sourceHandle: e.sourceHandle, targetHandle: (e as any).targetHandle })),
+      );
+      if (!res.ok) {
+        setConnError(res.code ?? "incompatible");
+        window.setTimeout(() => setConnError(null), 4500);
+        return;
+      }
+      setConnError(null);
       setEdges((eds) =>
         addEdge({
           ...params,
@@ -1085,7 +1099,7 @@ function MainPlaybookEditorInner({ onBack, embedded }: Props) {
         }, eds)
       );
     },
-    [setEdges]
+    [setEdges, nodes, edges]
   );
 
   function addNode(type: string) {
@@ -1538,7 +1552,12 @@ function MainPlaybookEditorInner({ onBack, embedded }: Props) {
 
         {/* ReactFlow Canvas - triggers are pinned at the left as static
             (non-draggable) nodes, connected by bezier edges to the entry node. */}
-        <div className="flex-1" ref={reactFlowWrapper}>
+        <div className="flex-1 relative" ref={reactFlowWrapper}>
+          {connError && (
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 max-w-md rounded-xl bg-red-600 text-white text-xs font-medium px-3.5 py-2 shadow-lg">
+              {t(`chatbot.connErrors.${connError}`)}
+            </div>
+          )}
           <ReactFlow
             nodes={nodes}
             edges={edges}

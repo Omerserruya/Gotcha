@@ -53,6 +53,8 @@ import { ChannelEntryNode } from "../mainPlaybook/ChannelEntryNode";
 import { SendCommentReplyNode } from "../mainPlaybook/SendCommentReplyNode";
 import { NodeInspector } from "../mainPlaybook/NodeInspector";
 import { NODE_REGISTRY } from "../mainPlaybook/node-registry";
+import { validateConnection, type ConnectionError } from "../mainPlaybook/connection-rules";
+import { validateFlow } from "../mainPlaybook/flow-validator";
 
 const nodeTypes: NodeTypes = {
   // Legacy types - still supported for existing flows
@@ -731,7 +733,25 @@ function FlowEditorInner({ flowId, onBack, onCreated, embedded }: Props) {
   // it server-side makes our save a 409 instead of a silent clobber.
   const loadedUpdatedAtRef = useRef<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // Last rejected connection (§3) - surfaced as a concise, localized toast.
+  const [connError, setConnError] = useState<ConnectionError | null>(null);
+  const [showIssues, setShowIssues] = useState(false);
+  const [activateError, setActivateError] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(true);
+  // Live validation summary for the panel (UX). The backend re-runs the
+  // authoritative rules and is what actually gates publish.
+  const issues = validateFlow(
+    nodes.map((n) => ({ id: n.id, type: n.type as string, data: n.data })),
+    edges.map((e) => ({ id: e.id, source: e.source, target: e.target, sourceHandle: e.sourceHandle })),
+  );
+  const errorCount = issues.filter((i) => i.severity === "error").length;
+  const warnCount = issues.filter((i) => i.severity === "warning").length;
+  const focusNode = (nodeId?: string) => {
+    if (!nodeId) return;
+    setSelectedNodeId(nodeId);
+    const n = nodes.find((x) => x.id === nodeId);
+    if (n && reactFlowInstance) reactFlowInstance.setCenter(n.position.x + 120, n.position.y + 40, { zoom: 1, duration: 400 });
+  };
   // Full-screen editing: the editor fills the page (canvas maximised) while
   // keeping its own toolbar (Back + save + Exit) so navigation is never lost.
   const [fullscreen, setFullscreen] = useState(false);
@@ -836,6 +856,17 @@ function FlowEditorInner({ flowId, onBack, onCreated, embedded }: Props) {
 
   const onConnect = useCallback(
     (params: Connection) => {
+      // Validate the connection semantically (§3): reject invalid drops, keep
+      // the edge from being created, and explain why in business language.
+      const graphNodes = nodes.map((n) => ({ id: n.id, type: n.type as string, data: n.data }));
+      const graphEdges = edges.map((e) => ({ id: e.id, source: e.source, target: e.target, sourceHandle: e.sourceHandle, targetHandle: (e as any).targetHandle }));
+      const res = validateConnection(params, graphNodes, graphEdges);
+      if (!res.ok) {
+        setConnError(res.code ?? "incompatible");
+        window.setTimeout(() => setConnError(null), 4500);
+        return;
+      }
+      setConnError(null);
       setEdges((eds) =>
         addEdge({
           ...params,
@@ -846,7 +877,7 @@ function FlowEditorInner({ flowId, onBack, onCreated, embedded }: Props) {
         }, eds)
       );
     },
-    [setEdges]
+    [setEdges, nodes, edges]
   );
 
   function addNode(type: string) {
@@ -869,16 +900,28 @@ function FlowEditorInner({ flowId, onBack, onCreated, embedded }: Props) {
 
   async function handleToggleActive() {
     if (!token || !flow || isNew) return;
+    setActivateError(null);
     try {
       if (flowActive) {
         await deactivateChatbotFlow(token, flowId);
         setFlowActive(false);
       } else {
+        // Client-side pre-block for immediate feedback; the backend re-checks
+        // authoritatively and rejects (422) regardless.
+        if (errorCount > 0) {
+          setActivateError(t("chatbot.publishBlocked"));
+          setShowIssues(true);
+          return;
+        }
         await activateChatbotFlow(token, flowId);
         setFlowActive(true);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Toggle active error:", err);
+      if (/validation_failed/i.test(String(err?.message || ""))) {
+        setActivateError(t("chatbot.publishBlocked"));
+        setShowIssues(true);
+      }
     }
   }
 
@@ -977,13 +1020,35 @@ function FlowEditorInner({ flowId, onBack, onCreated, embedded }: Props) {
           </svg>
           <span className="hidden sm:inline">Layout</span>
         </button>
+        {/* Validation summary pill (§3) - opens the issues panel. */}
+        {issues.length > 0 && (
+          <button
+            onClick={() => setShowIssues((v) => !v)}
+            className={`px-2 md:px-3 py-2 rounded-xl text-xs font-medium transition flex items-center gap-1.5 shrink-0 ${
+              errorCount > 0 ? "bg-red-50 text-red-600 ring-1 ring-red-200" : "bg-amber-50 text-amber-600 ring-1 ring-amber-200"
+            }`}
+            title={t("chatbot.validation")}
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+            </svg>
+            <span className="hidden sm:inline">
+              {errorCount > 0
+                ? `${errorCount} ${errorCount === 1 ? t("chatbot.errorOne") : t("chatbot.errorMany")}`
+                : `${warnCount} ${warnCount === 1 ? t("chatbot.warnOne") : t("chatbot.warnMany")}`}
+            </span>
+          </button>
+        )}
+
         <button
           onClick={handleToggleActive}
-          className={`px-2 md:px-3 py-2 rounded-xl text-xs font-medium transition flex items-center gap-1.5 shrink-0 ${
+          disabled={!flowActive && errorCount > 0}
+          className={`px-2 md:px-3 py-2 rounded-xl text-xs font-medium transition flex items-center gap-1.5 shrink-0 disabled:opacity-40 disabled:cursor-not-allowed ${
             flowActive
               ? "bg-green-50 text-green-600 hover:bg-green-100 ring-1 ring-green-200"
               : "bg-gray-100 text-gray-500 hover:bg-gray-200"
           }`}
+          title={!flowActive && errorCount > 0 ? t("chatbot.publishBlocked") : undefined}
         >
           <span className={`w-2 h-2 rounded-full ${flowActive ? "bg-green-500" : "bg-gray-400"}`} />
           <span className="hidden sm:inline">{flowActive ? t("chatbot.deactivate") : t("chatbot.activate")}</span>
@@ -1096,7 +1161,51 @@ function FlowEditorInner({ flowId, onBack, onCreated, embedded }: Props) {
         </div>
 
         {/* Canvas */}
-        <div className="flex-1" ref={reactFlowWrapper}>
+        <div className="flex-1 relative" ref={reactFlowWrapper}>
+          {connError && (
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 max-w-md rounded-xl bg-red-600 text-white text-xs font-medium px-3.5 py-2 shadow-lg">
+              {t(`chatbot.connErrors.${connError}`)}
+            </div>
+          )}
+          {activateError && (
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 max-w-md rounded-xl bg-red-600 text-white text-xs font-medium px-3.5 py-2 shadow-lg">
+              {activateError}
+            </div>
+          )}
+          {/* Validation panel (§3): grouped issues, click focuses the node. */}
+          {showIssues && issues.length > 0 && (
+            <div className="absolute top-3 right-3 z-20 w-72 max-h-[75%] overflow-y-auto rounded-xl bg-white border border-gray-200 shadow-lg">
+              <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 sticky top-0 bg-white">
+                <span className="text-xs font-semibold text-gray-700">{t("chatbot.validation")}</span>
+                <button onClick={() => setShowIssues(false)} className="text-gray-400 hover:text-gray-600" aria-label={t("chatbot.close")}>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+              <div className="p-2 space-y-1">
+                {(["error", "warning"] as const).map((sev) => {
+                  const group = issues.filter((i) => i.severity === sev);
+                  if (group.length === 0) return null;
+                  return (
+                    <div key={sev}>
+                      <p className={`text-[10px] font-semibold uppercase tracking-wider px-1.5 mt-1 mb-0.5 ${sev === "error" ? "text-red-500" : "text-amber-500"}`}>
+                        {sev === "error" ? t("chatbot.errorMany") : t("chatbot.warnMany")} ({group.length})
+                      </p>
+                      {group.map((iss) => (
+                        <button
+                          key={iss.id}
+                          onClick={() => focusNode(iss.nodeId)}
+                          className={`w-full text-start px-2 py-1.5 rounded-lg text-xs transition ${iss.nodeId ? "hover:bg-gray-50 cursor-pointer" : "cursor-default"} ${sev === "error" ? "text-red-700" : "text-amber-700"}`}
+                        >
+                          <span className="font-medium">{iss.title}</span>
+                          <span className="block text-[11px] text-gray-400 mt-0.5">{iss.message}</span>
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <ReactFlow
             nodes={nodes}
             edges={edges}

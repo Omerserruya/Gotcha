@@ -48,6 +48,35 @@ export interface HandleSpec {
   color?: NodeColor;
 }
 
+// ─── Semantic ports (§3) ─────────────────────────────────────────
+// Connections are validated by PORT TYPE, not just by the presence of a visual
+// handle. Today the flow model is control-flow, so most ports are "flow"; the
+// taxonomy leaves room for genuinely typed ports (e.g. a participant_event
+// output that must not land on a message-content input). A node's ports are
+// DERIVED from its `handles` unless it declares an explicit `ports` override.
+export type PortType =
+  | "flow"              // ordinary control-flow step edge
+  | "branch"            // a labelled decision exit (condition true/false)
+  | "participant"       // a participant reference input
+  | "participant_event" // a participant lifecycle event output
+  | "message"           // message-content input
+  | "any";              // wildcard - accepts/produces anything
+
+export interface NodePort {
+  id: string;
+  type: PortType;
+  label?: string;
+  /** A single-input port rejects a second incoming edge unless multiple=true. */
+  multiple?: boolean;
+  /** An input that must be connected for the node to be valid. */
+  required?: boolean;
+}
+
+export interface NodePorts {
+  inputs: NodePort[];
+  outputs: NodePort[];
+}
+
 export interface NodeRegistryEntry {
   type: string;
   label: string;
@@ -73,6 +102,11 @@ export interface NodeRegistryEntry {
   // of the static `handles.sources`. Lets node types render one exit per
   // user-configured option (e.g. one exit per quick-reply button).
   getSources?: (data: any) => HandleSpec[];
+  // Optional explicit semantic ports (§3). When omitted, ports are DERIVED
+  // from `handles` (input iff a target handle exists; one flow output per
+  // source; no output when sources is empty). Declare this only for nodes
+  // that carry real type constraints beyond plain control flow.
+  ports?: NodePorts;
 }
 
 // ─── Tailwind color tokens ───────────────────────────────────────
