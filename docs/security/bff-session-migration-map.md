@@ -628,7 +628,18 @@ Sequence (each stage reversible, see A16):
 
 _Update: item 2 resolved by the commit-2 policy in §A21 below; commit 1 lands its
 primitives. Item 3 resolved: accept the +1 hop, no caching in Phase 2, with
-resolver instrumentation from the start. Item 1 remains open._
+resolver instrumentation from the start. Item 1: prod origin = app.gotcha.co.il
+(pending live confirmation)._
+
+**Commit-2 input — Authentik client type (verified from `scripts/authentik/bootstrap.mjs`):**
+the `gotcha-app` client is `client_type: "public"` (PKCE, NO client secret;
+`bootstrap.mjs:604` + "it cannot hold a client secret"). Consequence for the
+server-side callback (A5): the BFF can perform the Authorization Code exchange
+**server-side with the existing public client** by relocating the PKCE verifier
+from the browser into the server login-state record — **no Authentik change
+required**. Optional hardening: convert the client to `confidential` (adds a
+client secret to bind the exchange) — an Authentik/bootstrap change, a user
+decision for commit 2. Either way the browser never sees tokens._
 
 ## A21. sessionVersion & revocation policy table (approved)
 
