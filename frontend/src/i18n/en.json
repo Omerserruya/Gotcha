@@ -2838,6 +2838,21 @@
       "processes": "Processes",
       "tools": "Tools & Integrations"
     },
+    "portTypes": {
+      "flow": "flow",
+      "branch": "branch",
+      "participant": "participant",
+      "participant_event": "participant event",
+      "message": "message",
+      "any": "anything"
+    },
+    "nodeInfo": {
+      "about": "About {node}",
+      "receives": "Receives: {types}",
+      "produces": "Produces: {types}",
+      "noInput": "Starting step - receives nothing.",
+      "noOutput": "Terminal step - produces nothing."
+    },
     "nodeCategories": {
       "triggers": "Triggers",
       "flow_control": "Flow Control",
@@ -2873,7 +2888,7 @@
       "keyword_trigger": { "label": "Trigger: Keyword", "desc": "Start when a message matches a keyword." },
       "schedule_trigger": { "label": "Trigger: Schedule", "desc": "Start on a schedule." },
       "webhook_trigger": { "label": "Trigger: Webhook", "desc": "Start when an external webhook fires." },
-      "voice_add_participant": { "label": "Voice: Add participant", "desc": "Add a participant to the live call. Its output is a participant event and can't feed a message-content input." },
+      "voice_add_participant": { "label": "Voice: Add participant", "desc": "Add a participant to the live call.", "limitation": "Its output is a participant event and can't connect to a message-content input." },
       "route_target": { "label": "Route Target", "desc": "Route the conversation to an agent, flow or department." },
       "voice_trigger:call": {
         "incoming": { "label": "Voice: Incoming call", "desc": "Start when an inbound call arrives." },

@@ -2839,6 +2839,21 @@
       "processes": "תהליכים",
       "tools": "כלים ואינטגרציות"
     },
+    "portTypes": {
+      "flow": "זרימה",
+      "branch": "הסתעפות",
+      "participant": "משתתף",
+      "participant_event": "אירוע משתתף",
+      "message": "הודעה",
+      "any": "כל דבר"
+    },
+    "nodeInfo": {
+      "about": "אודות {node}",
+      "receives": "מקבל: {types}",
+      "produces": "מפיק: {types}",
+      "noInput": "שלב פתיחה - אינו מקבל דבר.",
+      "noOutput": "שלב סופי - אינו מפיק דבר."
+    },
     "nodeCategories": {
       "triggers": "טריגרים",
       "flow_control": "בקרת זרימה",
@@ -2874,7 +2889,7 @@
       "keyword_trigger": { "label": "טריגר: מילת מפתח", "desc": "התחלה כשהודעה תואמת מילת מפתח." },
       "schedule_trigger": { "label": "טריגר: תזמון", "desc": "התחלה לפי לוח זמנים." },
       "webhook_trigger": { "label": "טריגר: Webhook", "desc": "התחלה כשמתקבל webhook חיצוני." },
-      "voice_add_participant": { "label": "קול: הוספת משתתף", "desc": "הוספת משתתף לשיחה החיה. הפלט הוא אירוע משתתף ולא יכול להזין קלט של תוכן הודעה." },
+      "voice_add_participant": { "label": "קול: הוספת משתתף", "desc": "הוספת משתתף לשיחה החיה.", "limitation": "הפלט הוא אירוע משתתף ולא יכול להתחבר לקלט של תוכן הודעה." },
       "route_target": { "label": "יעד ניתוב", "desc": "ניתוב השיחה לנציג, תהליך או מחלקה." },
       "voice_trigger:call": {
         "incoming": { "label": "קול: שיחה נכנסת", "desc": "התחלה כשמתקבלת שיחה נכנסת." },

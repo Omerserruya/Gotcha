@@ -1,0 +1,51 @@
+import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import en from "../../../i18n/en.json";
+import he from "../../../i18n/he.json";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const read = (rel: string) => readFileSync(join(HERE, rel), "utf8");
+
+describe("§6 node info uses ONE canonical metadata source", () => {
+  const src = read("../NodeInfoIcon.tsx");
+  it("derives the tooltip from the registry + node-i18n + derived ports (not a separate description)", () => {
+    expect(src).toContain('from "./node-registry"');
+    expect(src).toContain("getNodePorts");
+    expect(src).toContain("nodeDesc");
+    expect(src).toContain("nodeLabel");
+  });
+
+  it("§20 the tooltip works by hover AND keyboard focus, and is accessible", () => {
+    expect(src).toContain("group-hover/info:opacity-100");
+    expect(src).toContain("group-focus-within/info:opacity-100");
+    expect(src).toContain('role="tooltip"');
+    expect(src).toContain("aria-label");
+  });
+
+  it("does not require clicking the node (the icon stops click propagation)", () => {
+    expect(src).toContain("e.stopPropagation()");
+  });
+});
+
+describe("§6 port-type + tooltip strings are localized (business language, no enums)", () => {
+  const enPorts = (en as any).aiStudio.portTypes;
+  const hePorts = (he as any).aiStudio.portTypes;
+  it("all port types have EN + HE labels", () => {
+    for (const p of ["flow", "branch", "participant", "participant_event", "message", "any"]) {
+      expect(enPorts[p], `en portType ${p}`).toBeTruthy();
+      expect(hePorts[p], `he portType ${p}`).toBeTruthy();
+    }
+  });
+  it("the voice add-participant limitation is stated in both languages", () => {
+    expect((en as any).aiStudio.nodes.voice_add_participant.limitation).toBeTruthy();
+    expect((he as any).aiStudio.nodes.voice_add_participant.limitation).toBeTruthy();
+  });
+  it("nodeInfo tooltip labels exist in EN + HE", () => {
+    for (const k of ["about", "receives", "produces", "noInput", "noOutput"]) {
+      expect((en as any).aiStudio.nodeInfo[k], `en nodeInfo.${k}`).toBeTruthy();
+      expect((he as any).aiStudio.nodeInfo[k], `he nodeInfo.${k}`).toBeTruthy();
+    }
+  });
+});
