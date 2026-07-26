@@ -1,21 +1,32 @@
 /**
  * Subscription lifecycle.
  *
- *   Trial:    signup → TRIALING (card already tokenized) → first charge → ACTIVE
- *   Upgrade:  immediate, prorated, included Units topped up now
+ *   Trial:     signup → TRIALING (card already tokenized) → first charge → ACTIVE
+ *   Upgrade:   immediate, prorated, included credits topped up now
  *   Downgrade: DEFERRED via PendingSubscriptionChange (never mutate active sub)
- *   Cancel:   deferred to period end (resume clears it)
- *   Renew:    charge at period end → roll period + reset included Units
- *   Dunning:  charge fail → PAST_DUE → (handled by dunning.service) → SUSPENDED
+ *   Volume:    a selector change on the same plan - up is immediate, down defers
+ *   Cancel:    deferred to period end (resume clears it)
+ *   Renew:     charge at period end → roll period + reset included credits
+ *   Dunning:   charge fail → PAST_DUE → (handled by dunning.service) → SUSPENDED
+ *
+ * Commercial snapshot
+ * -------------------
+ * Renewal charges the SNAPSHOT price and grants the SNAPSHOT credit allowance,
+ * not whatever the live Plan row currently says. That is what makes plan
+ * versioning real: publishing a new version of `ai_workforce` changes what new
+ * subscribers pay and leaves every existing subscription on the terms it agreed
+ * to, until it is explicitly migrated. Subscriptions predating the snapshot
+ * columns fall back to the live plan, so nothing breaks mid-migration.
  *
  * Entitlements are recomputed via materializeEntitlements() (plan defaults ⊕
- * overrides → TenantFeature). Included Units use rolloverIncluded() (expire old
- * period, grant new). Purchased Units are NEVER touched here.
+ * overrides → TenantFeature). Included credits use rolloverIncluded() (expire
+ * the old period, grant the new). Purchased credits are NEVER touched here.
  */
-import { prisma, materializeEntitlements, rolloverIncluded, grantUnits, getBalance } from "@chatcenter/shared";
+import { prisma, materializeEntitlements, rolloverIncluded, grantUnits, getBalance, expireDueLots, refreshUsdIlsRate } from "@chatcenter/shared";
 import type { Subscription, SubscriptionStatus } from "@prisma/client";
 import { ensureBillableEntity, getEntityIdForTenant, tenantsForEntity } from "./billable-entity.service";
-import { getPlan, isUpgrade } from "./plan.service";
+import { getPlan, getActivePlanVersion, isUpgrade, assertSelectable } from "./plan.service";
+import { quote, snapshotFor } from "./pricing.service";
 import { currentPeriod, nextPeriod, periodKeyFor } from "../lib/period";
 import { emitBillingEvent } from "../lib/events";
 import { chargeFor } from "./invoice.service";
@@ -46,16 +57,47 @@ async function materializeForEntity(entityId: string, actor?: string): Promise<v
   for (const t of tenants) await materializeEntitlements(t, actor);
 }
 
+/**
+ * The recurring price this subscription is actually on.
+ *
+ * The snapshot wins. A subscription created before the snapshot columns existed
+ * has none, and falls back to its pinned plan version's price - which is still
+ * its own version, not the newest one.
+ */
+function contractedPrice(sub: { snapshotPrice: unknown }, plan: { basePrice: unknown } | null): number {
+  if (sub.snapshotPrice != null) return Number(sub.snapshotPrice);
+  return plan?.basePrice != null ? Number(plan.basePrice) : 0;
+}
+
+/** The recurring credit allowance this subscription is actually on. */
+function contractedCredits(sub: { snapshotIncludedCredits: number | null }, plan: { includedAiUnits: number } | null): number {
+  if (sub.snapshotIncludedCredits != null) return sub.snapshotIncludedCredits;
+  return plan?.includedAiUnits ?? 0;
+}
+
+/** The default volume option keys for a plan, used when the customer picks none. */
+async function defaultVolumeKeys(planId: string, plan: { chatVolumeEnabled: boolean; voiceVolumeEnabled: boolean }) {
+  const options = await prisma.planVolumeOption.findMany({ where: { planId, isDefault: true, enabled: true } });
+  return {
+    chatVolumeOptionKey: plan.chatVolumeEnabled ? options.find((o) => o.channel === "CHAT")?.key ?? null : null,
+    voiceVolumeOptionKey: plan.voiceVolumeEnabled ? options.find((o) => o.channel === "VOICE")?.key ?? null : null,
+  };
+}
+
 // ── Trial ───────────────────────────────────────────────────────────────────
 
 export async function createTrialSubscription(input: {
   tenantId: string;
   planKey: string;
   billingProfileId?: string;
+  chatVolumeOptionKey?: string | null;
+  voiceVolumeOptionKey?: string | null;
   actor?: string;
 }): Promise<Subscription> {
   const entityId = await ensureBillableEntity(input.tenantId);
-  const plan = await getPlan(input.planKey);
+  // New subscribers always land on the plan key's ACTIVE version. Falling back
+  // to version 1 would silently sign someone up to a retired revision.
+  const plan = (await getActivePlanVersion(input.planKey)) ?? (await getPlan(input.planKey));
   if (!plan) throw new Error(`unknown plan ${input.planKey}`);
 
   // Mandatory card-on-file (tokenized + J5-verified on the PayPage) BEFORE the
@@ -77,6 +119,18 @@ export async function createTrialSubscription(input: {
   const trialEndsAt = new Date(now.getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
   const periodKey = periodKeyFor(now);
 
+  // Default the volume selectors the plan actually offers, then price the whole
+  // selection SERVER-SIDE and freeze it as the commercial snapshot.
+  const defaults = await defaultVolumeKeys(plan.id, plan);
+  const q = await quote({
+    planKey: plan.key,
+    planVersion: plan.version,
+    chatVolumeOptionKey: input.chatVolumeOptionKey ?? defaults.chatVolumeOptionKey,
+    voiceVolumeOptionKey: input.voiceVolumeOptionKey ?? defaults.voiceVolumeOptionKey,
+    tenantId: input.tenantId,
+  });
+  const snapshot = snapshotFor(q);
+
   const sub = await prisma.subscription.upsert({
     where: { billableEntityId: entityId },
     create: {
@@ -89,6 +143,8 @@ export async function createTrialSubscription(input: {
       trialEndsAt,
       currentPeriodStart: now,
       currentPeriodEnd: trialEndsAt,
+      billingInterval: plan.billingInterval,
+      ...snapshot,
     },
     update: {
       billingProfileId: input.billingProfileId,
@@ -99,12 +155,14 @@ export async function createTrialSubscription(input: {
       trialEndsAt,
       currentPeriodStart: now,
       currentPeriodEnd: trialEndsAt,
+      billingInterval: plan.billingInterval,
+      ...snapshot,
     },
   });
 
   await materializeForEntity(entityId, input.actor);
-  await grantIncludedForEntity(entityId, plan.includedAiUnits, periodKey, trialEndsAt, `trial:${plan.key}`);
-  await recordEvent(sub.id, "trial_started", null, "TRIALING", input.actor, { planKey: plan.key, trialEndsAt });
+  await grantIncludedForEntity(entityId, q.includedCredits, periodKey, trialEndsAt, `trial:${plan.key}`);
+  await recordEvent(sub.id, "trial_started", null, "TRIALING", input.actor, { planKey: plan.key, planVersion: plan.version, trialEndsAt });
   await emitBillingEvent({ type: "subscription.trial_started", tenantId: input.tenantId, data: { planKey: plan.key, trialEndsAt } });
   return sub;
 }
@@ -122,15 +180,18 @@ export async function activateOrRenew(subscriptionId: string, opts: { reason: "t
   const periodStart = new Date();
   const period = currentPeriod(periodStart);
 
-  // Sales-only / grandfathered plans (no public price) skip charging.
-  const price = plan.basePrice ? Number(plan.basePrice) : 0;
+  // Charge the CONTRACTED price - the snapshot the customer agreed to, not
+  // whatever the live plan row says today. Sales-only / grandfathered plans
+  // (no price) skip charging entirely.
+  const price = contractedPrice(sub, plan);
+  const currency = sub.snapshotCurrency ?? plan.currency;
   if (price > 0) {
     const res = await chargeFor({
       entityId: sub.billableEntityId,
       tenantId,
       type: "SUBSCRIPTION",
       amount: price,
-      currency: plan.currency,
+      currency,
       description: `${plan.name} subscription (${period.key})`,
       idempotencyKey: `sub:${subscriptionId}:${period.key}`,
     });
@@ -149,8 +210,9 @@ export async function activateOrRenew(subscriptionId: string, opts: { reason: "t
   await unsuspendTenants(sub.billableEntityId);
   // Roll the period: EXPIRE the prior period's INCLUDED remainder (use-it-or-
   // lose-it, with an explicit EXPIRE ledger entry for auditability) and grant
-  // the new period's allowance. Purchased Units are untouched.
-  await rolloverIncluded(tenantId, period.key, plan.includedAiUnits, period.end, `plan:${plan.key}`);
+  // the new period's allowance. Purchased credits are untouched, because they
+  // are the customer's property and do not reset with the billing period.
+  await rolloverIncluded(tenantId, period.key, contractedCredits(sub, plan), period.end, `plan:${plan.key}`);
   await recordEvent(subscriptionId, opts.reason === "trial_end" ? "activated" : "renewed", sub.status, "ACTIVE", "scheduler");
   await emitBillingEvent({ type: "subscription.activated", tenantId, data: { planKey: plan.key, periodEnd: period.end } });
   return { success: true };
@@ -158,66 +220,180 @@ export async function activateOrRenew(subscriptionId: string, opts: { reason: "t
 
 // ── Plan change ──────────────────────────────────────────────────────────────
 
-export async function changePlan(input: { tenantId: string; targetPlanKey: string; actor?: string }): Promise<{ applied: "immediate" | "scheduled" }> {
+export interface ChangePlanInput {
+  tenantId: string;
+  targetPlanKey: string;
+  /** Volume selector keys. Prices and credits are NEVER accepted from a client. */
+  chatVolumeOptionKey?: string | null;
+  voiceVolumeOptionKey?: string | null;
+  actor?: string;
+}
+
+export interface ChangePlanResult {
+  applied: "immediate" | "scheduled";
+  effectiveAt?: Date | null;
+  monthlyPrice: string;
+  currency: string;
+  includedCredits: number;
+}
+
+/**
+ * Change plan and/or volume selection.
+ *
+ * The client sends KEYS only. `quote()` re-derives price, credits and estimate
+ * server-side from the catalog, so a tampered payload cannot buy AI Voice at
+ * Foundation's price.
+ *
+ * Direction decides timing: anything that RAISES what the customer pays applies
+ * immediately with a prorated charge; anything that LOWERS it is deferred to
+ * period end, so a downgrade never takes away capability the customer has
+ * already paid for.
+ */
+export async function changePlan(input: ChangePlanInput): Promise<ChangePlanResult> {
   const entityId = await getEntityIdForTenant(input.tenantId);
   if (!entityId) throw new Error("no billable entity");
   const sub = await prisma.subscription.findUnique({ where: { billableEntityId: entityId } });
   if (!sub) throw new Error("no subscription");
-  const target = await getPlan(input.targetPlanKey);
+
+  await assertSelectable(input.targetPlanKey, input.tenantId);
+  const target = (await getActivePlanVersion(input.targetPlanKey)) ?? (await getPlan(input.targetPlanKey));
   if (!target) throw new Error(`unknown plan ${input.targetPlanKey}`);
 
-  if (isUpgrade(sub.planKey, target.key)) {
-    // Immediate, prorated. Top up included Units to the new allowance for the
-    // current period; recompute entitlements now.
+  const samePlan = sub.planKey === target.key;
+  const defaults = await defaultVolumeKeys(target.id, target);
+  // On the SAME plan, keep the current selection unless the caller changes it.
+  // On a DIFFERENT plan, an unspecified selector falls back to that plan's
+  // default rather than carrying over a key that may not exist there.
+  const chatKey =
+    input.chatVolumeOptionKey !== undefined
+      ? input.chatVolumeOptionKey
+      : samePlan
+        ? sub.chatVolumeOptionKey
+        : defaults.chatVolumeOptionKey;
+  const voiceKey =
+    input.voiceVolumeOptionKey !== undefined
+      ? input.voiceVolumeOptionKey
+      : samePlan
+        ? sub.voiceVolumeOptionKey
+        : defaults.voiceVolumeOptionKey;
+
+  const q = await quote({
+    planKey: target.key,
+    planVersion: target.version,
+    chatVolumeOptionKey: chatKey,
+    voiceVolumeOptionKey: voiceKey,
+    tenantId: input.tenantId,
+  });
+
+  const fromPlan = await getPlan(sub.planKey, sub.planVersion);
+  const currentPrice = contractedPrice(sub, fromPlan);
+  const newPrice = Number(q.monthlyPrice.minor) / 100;
+
+  // "Up" means the customer will pay more - whether that came from a higher
+  // tier or from a bigger volume selector on the same tier.
+  const tierUp = samePlan ? false : await isUpgrade(sub.planKey, target.key, sub.planVersion, target.version);
+  const goingUp = newPrice > currentPrice || (tierUp && newPrice >= currentPrice);
+
+  const snapshot = snapshotFor(q);
+  const priceString = snapshot.snapshotPrice;
+
+  if (goingUp) {
     const periodKey = sub.currentPeriodStart ? periodKeyFor(sub.currentPeriodStart) : periodKeyFor(new Date());
     const periodEnd = sub.currentPeriodEnd ?? new Date();
     const tenantId = input.tenantId;
 
-    // Charge the prorated difference FIRST. We must NOT grant the new plan's
-    // features/units on a failed charge - otherwise an upgrade with a declined
-    // (or missing) card silently hands out paid entitlements. A TRIALING
-    // subscription has no money due yet, so it upgrades without an immediate
-    // charge (the higher price lands at trial-end activation).
-    const fromPlan = await getPlan(sub.planKey, sub.planVersion);
-    const proration = Math.max(0, (target.basePrice ? Number(target.basePrice) : 0) - (fromPlan?.basePrice ? Number(fromPlan.basePrice) : 0));
+    // Charge the prorated difference FIRST. Granting the new plan's features and
+    // credits on a failed charge would hand out paid entitlements to a declined
+    // card. A TRIALING subscription has no money due yet, so it upgrades without
+    // an immediate charge and the higher price lands at trial-end activation.
+    const proration = Math.max(0, newPrice - currentPrice);
     const chargeDue = proration > 0 && sub.status !== "TRIALING";
     if (chargeDue) {
       // Scope the idempotency key to the payment method that will be charged.
-      // A failed attempt (e.g. no/declined card) must not permanently block a
-      // retry after the customer adds a valid card; a double-click on the SAME
-      // card stays idempotent because the key is identical.
-      const billingProfile = await prisma.billingProfile.findUnique({ where: { billableEntityId: entityId }, include: { paymentMethods: { where: { status: "ACTIVE" }, orderBy: { isDefault: "desc" }, take: 1 } } });
+      // A failed attempt (no/declined card) must not permanently block a retry
+      // after the customer adds a valid card; a double-click on the SAME card
+      // stays idempotent because the key is identical.
+      const billingProfile = await prisma.billingProfile.findUnique({
+        where: { billableEntityId: entityId },
+        include: { paymentMethods: { where: { status: "ACTIVE" }, orderBy: { isDefault: "desc" }, take: 1 } },
+      });
       const pmKey = billingProfile?.paymentMethods[0]?.id ?? "nocard";
-      const res = await chargeFor({ entityId, tenantId, type: "SUBSCRIPTION", amount: proration, currency: target.currency, description: `Upgrade to ${target.name} (prorated)`, idempotencyKey: `upgrade:${sub.id}:${periodKey}:${target.key}:${pmKey}` });
+      const selection = [chatKey, voiceKey].filter(Boolean).join("+") || "base";
+      const res = await chargeFor({
+        entityId,
+        tenantId,
+        type: "SUBSCRIPTION",
+        amount: proration,
+        currency: q.currency,
+        description: samePlan ? `${target.name} volume change (prorated)` : `Upgrade to ${target.name} (prorated)`,
+        idempotencyKey: `upgrade:${sub.id}:${periodKey}:${target.key}:${target.version}:${selection}:${pmKey}`,
+      });
       if (!res.success) {
         await emitBillingEvent({ type: "payment.failed", tenantId, data: { invoiceId: res.invoiceId, reason: res.failureCode, context: "upgrade", targetPlan: target.key } });
         throw new Error(`upgrade_payment_failed:${res.failureCode ?? "charge_failed"}`);
       }
     }
 
-    // Payment settled (or nothing due) → now it's safe to flip the plan,
-    // recompute entitlements, and top up included Units.
-    await prisma.subscription.update({ where: { id: sub.id }, data: { planKey: target.key, planVersion: target.version } });
+    // Payment settled (or nothing due) → now it is safe to flip the plan, write
+    // the new commercial snapshot, recompute entitlements and top up credits.
+    await prisma.subscription.update({
+      where: { id: sub.id },
+      data: { planKey: target.key, planVersion: target.version, billingInterval: target.billingInterval, ...snapshot },
+    });
     await materializeForEntity(entityId, input.actor);
     const bal = await getBalance(tenantId);
-    const delta = Math.max(0, target.includedAiUnits - bal.includedAllowance);
+    const delta = Math.max(0, q.includedCredits - bal.includedAllowance);
     if (delta > 0) {
-      await grantUnits({ tenantId, bucket: "INCLUDED", grantType: "PLAN", units: delta, periodKey, expiresAt: periodEnd, source: `upgrade:${target.key}`, includedAllowance: target.includedAiUnits });
+      await grantUnits({
+        tenantId, bucket: "INCLUDED", grantType: "PLAN", units: delta, periodKey,
+        expiresAt: periodEnd, source: `upgrade:${target.key}`, includedAllowance: q.includedCredits,
+      });
     }
-    await recordEvent(sub.id, "plan_changed", sub.status, sub.status, input.actor, { from: sub.planKey, to: target.key, kind: "upgrade" });
+    await recordEvent(sub.id, "plan_changed", sub.status, sub.status, input.actor, {
+      from: sub.planKey, to: target.key, version: target.version, chatKey, voiceKey, kind: samePlan ? "volume_up" : "upgrade",
+    });
     await emitBillingEvent({ type: "subscription.plan_changed", tenantId, data: { from: sub.planKey, to: target.key, when: "immediate" } });
-    return { applied: "immediate" };
+    return { applied: "immediate", monthlyPrice: priceString, currency: q.currency, includedCredits: q.includedCredits };
   }
 
-  // Downgrade → deferred to period end via a pending change.
+  // Going down → deferred to period end. The current plan, its features, its
+  // limits and its credits all stay exactly as they are until then.
+  const effectiveAt = sub.currentPeriodEnd ?? new Date();
+  const changeType = samePlan ? "VOLUME_CHANGE" : "DOWNGRADE";
   await prisma.pendingSubscriptionChange.upsert({
     where: { subscriptionId: sub.id },
-    create: { subscriptionId: sub.id, changeType: "DOWNGRADE", targetPlanKey: target.key, targetPlanVersion: target.version, effectiveAt: sub.currentPeriodEnd ?? new Date(), createdBy: input.actor },
-    update: { changeType: "DOWNGRADE", targetPlanKey: target.key, targetPlanVersion: target.version, effectiveAt: sub.currentPeriodEnd ?? new Date(), createdBy: input.actor, appliedAt: null },
+    create: {
+      subscriptionId: sub.id, changeType, targetPlanKey: target.key, targetPlanVersion: target.version,
+      targetChatVolumeKey: chatKey, targetVoiceVolumeKey: voiceKey, effectiveAt, createdBy: input.actor,
+    },
+    update: {
+      changeType, targetPlanKey: target.key, targetPlanVersion: target.version,
+      targetChatVolumeKey: chatKey, targetVoiceVolumeKey: voiceKey, effectiveAt, createdBy: input.actor, appliedAt: null,
+    },
   });
-  await recordEvent(sub.id, "downgrade_scheduled", sub.status, sub.status, input.actor, { to: target.key, effectiveAt: sub.currentPeriodEnd });
-  await emitBillingEvent({ type: "subscription.plan_changed", tenantId: input.tenantId, data: { from: sub.planKey, to: target.key, when: "period_end", effectiveAt: sub.currentPeriodEnd } });
-  return { applied: "scheduled" };
+  await recordEvent(sub.id, samePlan ? "volume_change_scheduled" : "downgrade_scheduled", sub.status, sub.status, input.actor, {
+    to: target.key, chatKey, voiceKey, effectiveAt,
+  });
+  await emitBillingEvent({
+    type: "subscription.plan_changed",
+    tenantId: input.tenantId,
+    data: { from: sub.planKey, to: target.key, when: "period_end", effectiveAt },
+  });
+  return { applied: "scheduled", effectiveAt, monthlyPrice: priceString, currency: q.currency, includedCredits: q.includedCredits };
+}
+
+/** Change only the chat/voice volume selection on the current plan. */
+export async function changeVolume(input: {
+  tenantId: string;
+  chatVolumeOptionKey?: string | null;
+  voiceVolumeOptionKey?: string | null;
+  actor?: string;
+}): Promise<ChangePlanResult> {
+  const entityId = await getEntityIdForTenant(input.tenantId);
+  if (!entityId) throw new Error("no billable entity");
+  const sub = await prisma.subscription.findUnique({ where: { billableEntityId: entityId } });
+  if (!sub) throw new Error("no subscription");
+  return changePlan({ ...input, targetPlanKey: sub.planKey });
 }
 
 // ── Cancel / resume (deferred to period end) ─────────────────────────────────
@@ -250,24 +426,53 @@ export async function resumeSubscription(input: { tenantId: string; actor?: stri
 
 // ── Scheduler entrypoints ────────────────────────────────────────────────────
 
-/** Apply downgrades/cancels whose effectiveAt has passed. */
+/** Apply downgrades / volume changes / cancels whose effectiveAt has passed. */
 export async function applyDuePendingChanges(now = new Date()): Promise<number> {
-  const due = await prisma.pendingSubscriptionChange.findMany({ where: { appliedAt: null, effectiveAt: { lte: now } }, include: { subscription: true } });
+  const due = await prisma.pendingSubscriptionChange.findMany({
+    where: { appliedAt: null, effectiveAt: { lte: now } },
+    include: { subscription: true },
+  });
   let applied = 0;
   for (const change of due) {
     const sub = change.subscription;
     const tenantId = (await tenantsForEntity(sub.billableEntityId))[0];
+
     if (change.changeType === "CANCEL") {
       await prisma.subscription.update({ where: { id: sub.id }, data: { status: "CANCELED" } });
       await recordEvent(sub.id, "canceled", sub.status, "CANCELED", "scheduler");
-    } else if (change.changeType === "DOWNGRADE" && change.targetPlanKey) {
+    } else if (
+      (change.changeType === "DOWNGRADE" || change.changeType === "VOLUME_CHANGE" || change.changeType === "UPGRADE") &&
+      change.targetPlanKey
+    ) {
       const target = await getPlan(change.targetPlanKey, change.targetPlanVersion ?? 1);
       if (target) {
         const period = currentPeriod(sub.currentPeriodEnd ?? now);
-        await prisma.subscription.update({ where: { id: sub.id }, data: { planKey: target.key, planVersion: target.version, currentPeriodStart: period.start, currentPeriodEnd: period.end } });
+        // Re-quote at application time and write a FRESH snapshot: the terms
+        // that take effect now are the ones the subscription is contracted to
+        // from here on, and they must be recorded, not recomputed later.
+        const q = await quote({
+          planKey: target.key,
+          planVersion: target.version,
+          chatVolumeOptionKey: change.targetChatVolumeKey,
+          voiceVolumeOptionKey: change.targetVoiceVolumeKey,
+          tenantId,
+        });
+        await prisma.subscription.update({
+          where: { id: sub.id },
+          data: {
+            planKey: target.key,
+            planVersion: target.version,
+            currentPeriodStart: period.start,
+            currentPeriodEnd: period.end,
+            billingInterval: target.billingInterval,
+            ...snapshotFor(q),
+          },
+        });
         await materializeForEntity(sub.billableEntityId, "scheduler");
-        await grantIncludedForEntity(sub.billableEntityId, target.includedAiUnits, period.key, period.end, `downgrade:${target.key}`);
-        await recordEvent(sub.id, "downgrade_applied", sub.status, sub.status, "scheduler", { to: target.key });
+        await grantIncludedForEntity(sub.billableEntityId, q.includedCredits, period.key, period.end, `${change.changeType.toLowerCase()}:${target.key}`);
+        await recordEvent(sub.id, `${change.changeType.toLowerCase()}_applied`, sub.status, sub.status, "scheduler", {
+          to: target.key, chatKey: change.targetChatVolumeKey, voiceKey: change.targetVoiceVolumeKey,
+        });
       }
     }
     await prisma.pendingSubscriptionChange.update({ where: { id: change.id }, data: { appliedAt: now } });
@@ -277,7 +482,13 @@ export async function applyDuePendingChanges(now = new Date()): Promise<number> 
 }
 
 /** Charge trials whose window ended; renew active subs whose period ended. */
-export async function runBillingCycle(now = new Date()): Promise<{ trials: number; renewals: number; pending: number; pocsExpired: number }> {
+export async function runBillingCycle(now = new Date()): Promise<{
+  trials: number;
+  renewals: number;
+  pending: number;
+  pocsExpired: number;
+  lotsExpired: number;
+}> {
   const pending = await applyDuePendingChanges(now);
 
   const trials = await prisma.subscription.findMany({ where: { status: "TRIALING", trialEndsAt: { lte: now } } });
@@ -290,5 +501,17 @@ export async function runBillingCycle(now = new Date()): Promise<{ trials: numbe
   // above); expiring them is their entire lifecycle.
   const pocsExpired = await expireDuePocs(now);
 
-  return { trials: trials.length, renewals: renewals.length, pending, pocsExpired };
+  // Credit lots carrying their own expiry - a package with a DAYS_AFTER_PURCHASE
+  // or PERIOD_END policy, and trial/POC grants. `rolloverIncluded` only handles
+  // the previous period's included allowance, so without this sweep an expiring
+  // purchased lot would keep counting toward the balance forever.
+  const { expiredLots } = await expireDueLots(now);
+
+  // Refresh the representative FX rate on the schedule, so a pricing page never
+  // triggers an outbound request while rendering.
+  await refreshUsdIlsRate(now).catch((err) =>
+    console.warn("[billing][cycle] FX refresh failed:", err?.message ?? err),
+  );
+
+  return { trials: trials.length, renewals: renewals.length, pending, pocsExpired, lotsExpired: expiredLots };
 }

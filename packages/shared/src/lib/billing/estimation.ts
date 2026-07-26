@@ -18,7 +18,7 @@
  * version.
  */
 import { prisma } from "../prisma";
-import { type Money, money, zero, toNumber, multiplyMoney } from "./money";
+import { type Money, zero, multiplyMoney } from "./money";
 
 export interface EstimationRatios {
   chatCreditsPerEstimatedConversation: number;
@@ -294,6 +294,3 @@ export const ESTIMATE_DISCLAIMER = {
   en: "Conversation estimates are based on the plan configuration. Actual credit consumption varies by conversation length, channel, AI actions, enabled features and voice duration.",
   he: "הערכות השיחות מבוססות על תצורת התוכנית. צריכת הקרדיטים בפועל משתנה לפי אורך השיחה, הערוץ, פעולות ה-AI, היכולות שהופעלו ומשך שיחות הקול.",
 };
-
-export { money, toNumber };
-export type { Money };

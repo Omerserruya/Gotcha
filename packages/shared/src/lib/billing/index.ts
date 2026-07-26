@@ -23,6 +23,7 @@ export {
   consumeUnits,
   rolloverIncluded,
   refundUnitsForReference,
+  expireDueLots,
 } from "./wallet";
 export type { BalanceView, ConsumeResult, GrantInput, UsageThreshold } from "./wallet";
 
@@ -88,7 +89,9 @@ export {
   formatMoney,
   minorUnitScale,
 } from "./money";
-export type { Money, CurrencyCode, RoundingMode } from "./money";
+// Exported as BillingMoney: the shared barrel already carries an unrelated
+// commerce-context `Money` (a { amount, currency } display shape).
+export type { Money as BillingMoney, CurrencyCode, RoundingMode } from "./money";
 
 // Public commercial estimation (layer B) - manually configured, never derived.
 export {

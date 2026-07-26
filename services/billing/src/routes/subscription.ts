@@ -5,14 +5,16 @@
 import { Router } from "express";
 import { authenticate, resolveTenant, requirePermission } from "@chatcenter/shared";
 import { getSubscriptionForTenant } from "../services/billable-entity.service";
-import { changePlan, cancelSubscription, resumeSubscription } from "../services/subscription.service";
+import { changePlan, changeVolume, cancelSubscription, resumeSubscription } from "../services/subscription.service";
 import { listActivePlans } from "../services/plan.service";
 import { migrateFromGrandfathered } from "../services/grandfather.service";
 
 const router = Router();
 
-router.get("/billing/plans", authenticate, async (_req, res) => {
-  res.json({ plans: await listActivePlans() });
+// Tenant-scoped so an organization sees its OWN custom plan alongside the
+// public catalog - and never another organization's negotiated terms.
+router.get("/billing/plans", authenticate, resolveTenant, async (req, res) => {
+  res.json({ plans: await listActivePlans(req.tenantId ?? null) });
 });
 
 router.get("/billing/subscription", authenticate, resolveTenant, async (req, res) => {
@@ -21,13 +23,37 @@ router.get("/billing/subscription", authenticate, resolveTenant, async (req, res
 });
 
 router.post("/billing/subscription/change-plan", authenticate, resolveTenant, requirePermission("settings:billing:manage"), async (req, res) => {
-  const { planKey } = req.body ?? {};
+  const { planKey, chatVolumeOptionKey, voiceVolumeOptionKey } = req.body ?? {};
   if (!planKey) return res.status(400).json({ error: "planKey required" });
   try {
-    const result = await changePlan({ tenantId: req.tenantId!, targetPlanKey: planKey, actor: req.user?.userId });
+    // Volume selectors are passed through as KEYS. `undefined` means "leave the
+    // current selection alone"; an explicit null means "clear it".
+    const result = await changePlan({
+      tenantId: req.tenantId!,
+      targetPlanKey: planKey,
+      chatVolumeOptionKey: chatVolumeOptionKey === undefined ? undefined : chatVolumeOptionKey,
+      voiceVolumeOptionKey: voiceVolumeOptionKey === undefined ? undefined : voiceVolumeOptionKey,
+      actor: req.user?.userId,
+    });
     return res.json({ ok: true, ...result });
   } catch (err: any) {
     return res.status(400).json({ error: err?.message ?? "change_plan_failed" });
+  }
+});
+
+/** Change only the chat/voice volume selection, staying on the same plan. */
+router.post("/billing/subscription/change-volume", authenticate, resolveTenant, requirePermission("settings:billing:manage"), async (req, res) => {
+  const { chatVolumeOptionKey, voiceVolumeOptionKey } = req.body ?? {};
+  try {
+    const result = await changeVolume({
+      tenantId: req.tenantId!,
+      chatVolumeOptionKey: chatVolumeOptionKey === undefined ? undefined : chatVolumeOptionKey,
+      voiceVolumeOptionKey: voiceVolumeOptionKey === undefined ? undefined : voiceVolumeOptionKey,
+      actor: req.user?.userId,
+    });
+    return res.json({ ok: true, ...result });
+  } catch (err: any) {
+    return res.status(400).json({ error: err?.message ?? "change_volume_failed" });
   }
 });
 

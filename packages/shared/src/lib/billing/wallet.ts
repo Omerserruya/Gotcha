@@ -298,6 +298,55 @@ export async function rolloverIncluded(
 }
 
 /**
+ * Expire any lot whose `expiresAt` has passed, in ANY bucket.
+ *
+ * `rolloverIncluded` only expires the previous period's INCLUDED lots. Purchased
+ * credits default to never expiring, but a credit package may configure
+ * DAYS_AFTER_PURCHASE or PERIOD_END, and trial/POC grants always carry an
+ * expiry - this is the sweep that honours them. Writes an EXPIRE ledger entry
+ * per lot so an expiring balance is auditable rather than a silent decrement.
+ *
+ * Idempotent: a lot already at zero remaining is skipped.
+ */
+export async function expireDueLots(
+  now = new Date(),
+  opts: { tenantId?: string } = {},
+  client: FullClient = prisma,
+): Promise<{ expiredLots: number; expiredUnits: number }> {
+  const due = await client.aiUnitLot.findMany({
+    where: {
+      ...(opts.tenantId ? { tenantId: opts.tenantId } : {}),
+      expiresAt: { not: null, lte: now },
+      unitsRemaining: { gt: 0 },
+    },
+    take: 500,
+  });
+  let expiredUnits = 0;
+  for (const lot of due) {
+    const rem = dec(lot.unitsRemaining);
+    if (rem <= 0) continue;
+    await client.$transaction(async (tx) => {
+      await tx.aiUnitLot.update({ where: { id: lot.id }, data: { unitsRemaining: "0" } });
+      await tx.aiUnitLedgerEntry.create({
+        data: {
+          tenantId: lot.tenantId,
+          lotId: lot.id,
+          entryType: "EXPIRE",
+          bucket: lot.bucket,
+          units: (-rem).toFixed(6),
+          periodKey: lot.periodKey,
+          source: "lot_expiry",
+          referenceId: lot.referenceId,
+        },
+      });
+      await refreshSnapshot(lot.tenantId, lot.periodKey, undefined, tx);
+    });
+    expiredUnits += rem;
+  }
+  return { expiredLots: due.length, expiredUnits };
+}
+
+/**
  * Claw back PURCHASED units from a refunded/charged-back purchase. Reduces the
  * lots granted under `referenceId` (the purchase invoice id) by whatever is
  * still REMAINING - already-consumed units cannot be un-spent, and balance never

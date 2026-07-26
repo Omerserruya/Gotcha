@@ -4,7 +4,17 @@
  * and policy changes are owner-gated.
  */
 import { Router } from "express";
-import { authenticate, resolveTenant, requirePermission, prisma, getBalance } from "@chatcenter/shared";
+import {
+  authenticate,
+  resolveTenant,
+  requirePermission,
+  prisma,
+  getBalance,
+  resolveEstimation,
+  ratiosFromSnapshot,
+  estimateRemainingConversations,
+  ESTIMATE_DISCLAIMER,
+} from "@chatcenter/shared";
 import { ensureBillableEntity, getEntityIdForTenant, getSubscriptionForTenant } from "../services/billable-entity.service";
 import { listActivePlans } from "../services/plan.service";
 import { buyCredits } from "../services/purchase.service";
@@ -40,11 +50,49 @@ router.get("/billing/credit-summary", authenticate, resolveTenant, async (req, r
   const spentAmount =
     policy && policy.monthSpendKey === currentMonthKey ? Number(policy.monthSpentAmount) : 0;
 
-  const includedCredits = plan
-    ? Math.round((plan as any).includedAiUnits ?? 0)
-    : Math.round(balance.includedAllowance);
+  // The CONTRACTED allowance, from the subscription's own snapshot. Reading the
+  // live plan here would restate an existing customer's included credits the
+  // moment a new plan version is published.
+  const includedCredits =
+    (sub as any)?.snapshotIncludedCredits ??
+    (plan ? Math.round((plan as any).includedAiUnits ?? 0) : Math.round(balance.includedAllowance));
   const consumedCredits = Math.max(0, balance.includedAllowance - balance.includedRemaining);
   const periodEnd = (sub as any)?.currentPeriodEnd ?? null;
+
+  // Public commercial ratios, snapshotted for this subscription where present so
+  // the remaining-conversation estimate matches what was advertised at signup.
+  const planRow = (sub as any)?.planKey
+    ? await prisma.plan.findUnique({
+        where: { key_version: { key: (sub as any).planKey, version: (sub as any).planVersion } },
+        select: { id: true, kind: true },
+      })
+    : null;
+  const liveRatios = await resolveEstimation({ planId: planRow?.id ?? null });
+  const ratios = ratiosFromSnapshot((sub as any)?.snapshotEstimation, liveRatios);
+
+  // Credit-bucket breakdown, derived from the lots rather than guessed.
+  const lots = await prisma.aiUnitLot.findMany({
+    where: { tenantId, unitsRemaining: { gt: 0 } },
+    select: { bucket: true, grantType: true, unitsRemaining: true, expiresAt: true },
+  });
+  const bucketTotals: Record<string, number> = { PLAN: 0, PURCHASE: 0, AUTO: 0, PROMO: 0, TRIAL: 0 };
+  for (const lot of lots) bucketTotals[lot.grantType] = (bucketTotals[lot.grantType] ?? 0) + Number(lot.unitsRemaining);
+  const sources = {
+    plan: Math.round(bucketTotals.PLAN),
+    purchased: Math.round(bucketTotals.PURCHASE + bucketTotals.AUTO),
+    promotional: Math.round(bucketTotals.PROMO),
+    trialOrPoc: Math.round(bucketTotals.TRIAL),
+  };
+
+  const evaluation =
+    planRow?.kind === "POC" || planRow?.kind === "TRIAL"
+      ? {
+          kind: planRow.kind,
+          expiresAt: periodEnd,
+          creditCap: includedCredits,
+          selfRenew: false,
+        }
+      : null;
 
   res.json({
     period: {
@@ -69,14 +117,38 @@ router.get("/billing/credit-summary", authenticate, resolveTenant, async (req, r
       balance: Math.round(balance.purchasedRemaining),
     },
     totalAvailableCredits: Math.round(balance.total),
+    // Where the remaining credits came from. The ledger is the source of truth
+    // for the numbers; this is the breakdown behind the single total.
+    creditSources: sources,
+    // Capacity the balance still buys, using the PUBLIC commercial ratio. The
+    // credit balance itself stays authoritative - this is an estimate of what it
+    // buys, not a second balance.
+    estimatedRemaining: {
+      chats: estimateRemainingConversations(balance.total, ratios, "chat"),
+      calls: estimateRemainingConversations(balance.total, ratios, "voice"),
+      ratios: {
+        chatCreditsPerEstimatedConversation: ratios.chatCreditsPerEstimatedConversation,
+        voiceCreditsPerEstimatedCall: ratios.voiceCreditsPerEstimatedCall,
+        businessDaysPerMonth: ratios.businessDaysPerMonth,
+      },
+    },
+    disclaimer: ESTIMATE_DISCLAIMER,
+    // Evaluation access, when this is a POC or Trial rather than a paid plan.
+    evaluation: evaluation,
     usageCredits: {
       enabled: Boolean(policy?.enabled),
       spentAmount: spentAmount.toFixed(2),
-      currency: policy?.currency ?? "ILS",
+      currency: policy?.currency ?? "USD",
       // Normalized money string ("500.00"): a raw Prisma Decimal JSON-encodes
       // as "500", which is not a stable money format for clients.
       monthlySpendLimit: policy?.maxMonthlySpend != null ? Number(policy.maxMonthlySpend).toFixed(2) : null,
       thresholdPct: policy?.thresholdPct ?? null,
+      warningThresholdPct: policy?.warningThresholdPct ?? null,
+      incrementCredits: policy?.incrementCredits ?? null,
+      pricePerCredit: policy?.pricePerCredit != null ? Number(policy.pricePerCredit).toFixed(6) : null,
+      // What actually happens at the limit, so the customer sees the configured
+      // behaviour instead of guessing.
+      limitBehavior: policy?.limitBehavior ?? "STOP_AI",
       resetsAt: periodEnd,
     },
   });
@@ -103,9 +175,16 @@ router.get("/billing/credits/packages", authenticate, async (_req, res) => {
 });
 
 router.post("/billing/credits/buy", authenticate, resolveTenant, requirePermission("settings:billing:manage"), async (req, res) => {
-  const { packageKey } = req.body ?? {};
+  const { packageKey, quantity } = req.body ?? {};
   if (!packageKey) return res.status(400).json({ error: "packageKey required" });
-  const result = await buyCredits({ tenantId: req.tenantId!, packageKey, actor: req.user?.userId });
+  // Only the package KEY and a quantity are accepted. Price and credit amount
+  // are read from the catalog inside buyCredits(), never from the request.
+  const result = await buyCredits({
+    tenantId: req.tenantId!,
+    packageKey,
+    quantity: quantity != null ? Number(quantity) : 1,
+    actor: req.user?.userId,
+  });
   return res.status(result.success ? 200 : 402).json(result);
 });
 
@@ -115,28 +194,60 @@ router.get("/billing/auto-purchase", authenticate, resolveTenant, requirePermiss
   res.json({ policy });
 });
 
+const LIMIT_BEHAVIORS = ["STOP_AI", "HUMAN_ONLY", "REQUIRE_APPROVAL", "PREPAID_ONLY"] as const;
+
 router.put("/billing/auto-purchase", authenticate, resolveTenant, requirePermission("settings:billing:manage"), async (req, res) => {
-  const { enabled, thresholdPct, packageKey, maxMonthlySpend, currency } = req.body ?? {};
+  const {
+    enabled, thresholdPct, packageKey, maxMonthlySpend, currency,
+    warningThresholdPct, incrementCredits, pricePerCredit, limitBehavior,
+  } = req.body ?? {};
+
+  // Auto-purchase eligibility is a PLAN property, so a client that flips the
+  // toggle on a plan that does not allow it is refused server-side rather than
+  // silently accepted and then ignored at purchase time.
+  const sub = await getSubscriptionForTenant(req.tenantId!);
+  if (enabled && sub) {
+    const plan = await prisma.plan.findUnique({
+      where: { key_version: { key: (sub as any).planKey, version: (sub as any).planVersion } },
+      select: { autoPurchaseEligible: true },
+    });
+    if (plan && !plan.autoPurchaseEligible) {
+      return res.status(402).json({
+        code: "PLAN_FEATURE_REQUIRED",
+        feature: "billing.auto_purchase",
+        currentPlan: (sub as any).planKey,
+        upgradePath: "/settings/billing/plan",
+      });
+    }
+  }
+
+  if (limitBehavior != null && !LIMIT_BEHAVIORS.includes(limitBehavior)) {
+    return res.status(400).json({ error: "invalid_limit_behavior" });
+  }
+
   const entityId = await ensureBillableEntity(req.tenantId!);
+  const clampPct = (v: unknown, fallback: number) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.min(100, Math.max(1, Math.round(n))) : fallback;
+  };
+  const fields = {
+    enabled: Boolean(enabled),
+    thresholdPct: clampPct(thresholdPct, 10),
+    warningThresholdPct: clampPct(warningThresholdPct, 80),
+    packageKey: packageKey ?? null,
+    incrementCredits: incrementCredits != null ? Math.max(0, Math.floor(Number(incrementCredits))) : null,
+    pricePerCredit: pricePerCredit != null ? Number(pricePerCredit).toFixed(6) : null,
+    // A null ceiling means unlimited, which is a decision the customer has to
+    // make explicitly rather than get by omitting a field.
+    maxMonthlySpend: maxMonthlySpend != null ? Number(maxMonthlySpend).toFixed(2) : null,
+    ...(limitBehavior ? { limitBehavior } : {}),
+    updatedBy: req.user?.userId,
+  };
+
   const policy = await prisma.autoPurchasePolicy.upsert({
     where: { billableEntityId: entityId },
-    create: {
-      billableEntityId: entityId,
-      enabled: Boolean(enabled),
-      thresholdPct: thresholdPct ?? 10,
-      packageKey: packageKey ?? null,
-      maxMonthlySpend: maxMonthlySpend != null ? Number(maxMonthlySpend).toFixed(2) : null,
-      currency: currency ?? "ILS",
-      updatedBy: req.user?.userId,
-    },
-    update: {
-      enabled: Boolean(enabled),
-      thresholdPct: thresholdPct ?? 10,
-      packageKey: packageKey ?? null,
-      maxMonthlySpend: maxMonthlySpend != null ? Number(maxMonthlySpend).toFixed(2) : null,
-      ...(currency ? { currency } : {}),
-      updatedBy: req.user?.userId,
-    },
+    create: { billableEntityId: entityId, currency: currency ?? "USD", ...fields },
+    update: { ...(currency ? { currency } : {}), ...fields },
   });
   res.json({ ok: true, policy });
 });
