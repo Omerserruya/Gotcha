@@ -4460,5 +4460,192 @@
     "profileSaveFailed": "Saving failed. Try again.",
     "save": "Save",
     "cancel": "Cancel"
+  },
+  "pricing": {
+    "recommended": "Recommended",
+    "currentPlan": "Current plan",
+    "custom": {
+      "label": "Custom plan",
+      "title": "Built around how your business actually runs",
+      "body": "If your volumes, channels, limits or contract terms do not fit these plans, we will configure one that does. A custom plan sets its own capabilities, numeric limits, credit allocation and chat and voice volumes, on commercial terms agreed with you.",
+      "cta": "Talk to us",
+      "i1": "Feature selection and numeric limits set per organization",
+      "i2": "Credit allocation and chat and voice volumes agreed up front",
+      "i3": "Monthly or annual terms with a defined contract period",
+      "i4": "Priced for your business rather than a published tier"
+    },
+    "month": "month",
+    "perMonth": "a month",
+    "perDayShort": "a business day",
+    "perBusinessDay": "per business day",
+    "included": "Included",
+    "includedCredits": "Included credits",
+    "creditsWord": "credits",
+    "chatsWord": "conversations",
+    "estimatedChats": "Estimated conversations",
+    "estimatedCalls": "Estimated calls",
+    "perConversation": "Per conversation",
+    "perCall": "Per call",
+    "blended": "Per interaction",
+    "everythingIn": "Everything in {plan}, plus",
+    "seeDetails": "See details",
+    "configureVolume": "Configure volume",
+    "managePlan": "Manage plan",
+    "currencyLabel": "Prices in",
+    "plansHeading": "Plans",
+    "configureHeading": "Configure your plan",
+    "approxIn": "Approximately, in {display}. Charged in {charged}:",
+    "hero": {
+      "label": "Pricing",
+      "title": "Pricing that follows how much you talk to customers",
+      "subtitle": "Every plan includes the shared inbox, the connected channels and the AI that understands your business. You choose the conversation capacity.",
+      "creditsNote": "One unit runs through the whole product: credits. Each plan includes a monthly credit allowance, and a conversation draws on it as the AI reads, replies and acts. Buy more at any time, or set an automatic top-up with a monthly spending limit."
+    },
+    "cta": {
+      "getStarted": "Get started",
+      "managePlan": "Manage plan",
+      "contactSales": "Contact sales"
+    },
+    "configureTitle": "Configure {plan}",
+    "configureSubtitle": "Set the volume you expect. The credit allowance and the price move together.",
+    "fixedAllowance": "This plan comes with a fixed monthly credit allowance. Buy extra credits whenever you need them, or move up a plan for a larger recurring allowance.",
+    "chatVolume": "Chat conversations",
+    "voiceVolume": "Voice calls",
+    "yourPlan": "Your plan",
+    "planCredits": "Plan credits",
+    "addedCredits": "Added by your selection",
+    "totalCredits": "Total monthly credits",
+    "extraCredits": "Extra credits",
+    "extraCreditsAvailable": "Available",
+    "autoTopUp": "Automatic top-up",
+    "autoTopUpAvailable": "Available",
+    "fxNote": "{display} prices are an estimated conversion at the official representative rate. You are charged in {charged}.",
+    "a11y": {
+      "totalChanged": "{plan}: {total} per month, {credits} credits included.",
+      "skipToPlans": "Skip to plans"
+    },
+    "comparison": {
+      "label": "Compare",
+      "title": "What each plan includes",
+      "subtitle": "The differences that matter, in full. Capabilities not listed are not part of the product yet.",
+      "caption": "Capability comparison across GOTCHA plans",
+      "capability": "Capability",
+      "included": "Included",
+      "notIncluded": "Not included",
+      "unlimited": "Unlimited",
+      "compareA": "Compare",
+      "compareB": "With",
+      "differences": "{n} differ",
+      "category": {
+        "COMMUNICATION": "Communication",
+        "AI": "AI workforce",
+        "VOICE": "Voice",
+        "MANAGEMENT": "Management and reporting",
+        "LIMITS": "Limits"
+      },
+      "limit": {
+        "users": "Team members",
+        "ai_employees": "AI employees",
+        "channels": "Connected channels",
+        "departments": "Departments",
+        "knowledge_sources": "Knowledge sources",
+        "workflows": "Automations"
+      }
+    },
+    "credits": {
+      "label": "Credits",
+      "title": "One unit, across the whole product",
+      "intro": "Credits are how GOTCHA measures AI work. A conversation consumes credits as the AI reads it, drafts a reply, retrieves knowledge, updates your CRM and summarises the outcome. Longer conversations, voice calls and more AI actions consume more.",
+      "p1": {
+        "title": "Included every month",
+        "body": "Each plan includes a monthly allowance. It resets on your renewal date and does not roll over."
+      },
+      "p2": {
+        "title": "Buy more at any time",
+        "body": "Prepaid credit packages are added to your balance and stay there until you use them. Plan credits are consumed first."
+      },
+      "p3": {
+        "title": "Automatic top-up, on your terms",
+        "body": "Turn on automatic top-up and set a monthly spending limit. Nothing is charged beyond the limit you set."
+      },
+      "p4": {
+        "title": "When credits run out",
+        "body": "AI actions stop until credits are added. Your inbox, history and human agents keep working, and nothing is deleted."
+      }
+    },
+    "faq": {
+      "label": "Questions",
+      "title": "Before you decide",
+      "items": [
+        {
+          "q": "What is a credit?",
+          "a": "A credit is how GOTCHA measures AI work. Reading a message, drafting a reply, retrieving knowledge, updating your CRM and summarising a conversation all draw on your balance. You are never billed in model tokens."
+        },
+        {
+          "q": "How are conversation estimates calculated?",
+          "a": "Each plan is configured with a commercial assumption about how many credits an average conversation uses, and how many business days a month contains. The estimate divides the plan's credit allowance by that assumption. It describes the plan configuration, not a measurement of anyone's usage."
+        },
+        {
+          "q": "Will my usage match the estimate?",
+          "a": "Not exactly. Actual credit consumption varies by conversation length, channel, AI actions, enabled features and voice duration. The estimate is there to size a plan, not to predict a bill."
+        },
+        {
+          "q": "What happens when credits run out?",
+          "a": "AI actions stop until credits are added. Your shared inbox, conversation history and human agents keep working, and no data is removed. You can buy credits or enable automatic top-up."
+        },
+        {
+          "q": "How does automatic top-up work?",
+          "a": "You choose when it triggers, how much it buys, and a monthly spending limit. Once the limit is reached nothing further is charged, and you are notified so you can decide what to do."
+        },
+        {
+          "q": "Can I buy extra credits without changing plan?",
+          "a": "Yes. Prepaid credit packages are added to your balance and stay there until consumed. Included plan credits are always used first."
+        },
+        {
+          "q": "What happens when I upgrade?",
+          "a": "An upgrade starts immediately. You are charged the prorated difference for the rest of the current billing period, and the larger credit allowance is available straight away."
+        },
+        {
+          "q": "What happens when I downgrade?",
+          "a": "Your current plan stays exactly as it is until your renewal date. Nothing is removed before then, and the smaller plan starts at renewal."
+        },
+        {
+          "q": "What happens if I cancel?",
+          "a": "Cancellation takes effect at the end of the current billing period. You keep full access until your renewal date, and you can resume before it. Your data is not deleted when the subscription ends."
+        },
+        {
+          "q": "Why are prices shown in dollars?",
+          "a": "Prices are set in US dollars. Shekel amounts are a display conversion at the official representative rate, rounded up, and are marked as an estimate. The currency you will actually be charged in is shown before you confirm."
+        },
+        {
+          "q": "Do you offer a trial or a pilot?",
+          "a": "Trials and pilots are arranged with our team rather than started self-serve, so the credit budget and duration can be set to match what you want to evaluate. Ask us when you get in touch."
+        },
+        {
+          "q": "Can we get a custom plan?",
+          "a": "Yes. Custom plans set their own capabilities, limits, credit allocation and volumes, with commercial terms agreed with you."
+        }
+      ]
+    },
+    "closing": {
+      "title": "Start with a conversation",
+      "body": "Tell us how your team handles customers today and we will show you what GOTCHA changes."
+    },
+    "state": {
+      "disabled": {
+        "title": "Pricing is not published yet",
+        "body": "We are finalising public pricing. Join early access and we will get in touch with plans and pricing directly."
+      },
+      "empty": {
+        "title": "Pricing is not available right now",
+        "body": "There are no published plans to show. Join early access and we will be in touch."
+      },
+      "error": {
+        "title": "We could not load pricing",
+        "body": "Something went wrong on our side. Try again in a moment, or join early access and we will get in touch."
+      },
+      "retry": "Try again",
+      "earlyAccess": "Get early access"
+    }
   }
 }
