@@ -4536,7 +4536,8 @@
     "fxNote": "מחירי {display} הם המרה משוערת לפי השער היציג הרשמי. החיוב בפועל מתבצע ב-{charged}.",
     "a11y": {
       "totalChanged": "{plan}: {total} לחודש, {credits} קרדיטים כלולים.",
-      "skipToPlans": "דילוג לתוכניות"
+      "skipToPlans": "דילוג לתוכניות",
+      "volumeValue": "{volume} {hint}, {cost}"
     },
     "comparison": {
       "label": "השוואה",
@@ -4660,6 +4661,7 @@
       },
       "retry": "נסו שוב",
       "earlyAccess": "לגישה מוקדמת"
-    }
+    },
+    "volumeHint": "גררו את הסרגל או השתמשו במקשי החיצים."
   }
 }

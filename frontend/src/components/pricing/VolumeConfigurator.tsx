@@ -81,7 +81,7 @@ export function VolumeConfigurator({
         </p>
 
         {hasSelectors ? (
-          <div className="mt-7 space-y-8">
+          <div className="mt-7 space-y-11">
             {plan.chatVolumeEnabled && (
               <VolumeRow
                 legend={t("pricing.chatVolume")}
@@ -89,7 +89,6 @@ export function VolumeConfigurator({
                 options={plan.chatOptions}
                 value={selection.chat}
                 onChange={(k) => onChange("chat", k)}
-                currency={currencyMeta.display}
                 t={t}
               />
             )}
@@ -100,7 +99,6 @@ export function VolumeConfigurator({
                 options={plan.voiceOptions}
                 value={selection.voice}
                 onChange={(k) => onChange("voice", k)}
-                currency={currencyMeta.display}
                 t={t}
               />
             )}
@@ -291,67 +289,144 @@ function Fact({ label, value }: { label: string; value: string }) {
 }
 
 /**
- * One channel's volume options.
+ * One channel's volume, as an adjustment bar with milestones.
  *
- * A real radiogroup: arrow keys move between options, the selected one is
- * exposed, and each option states the volume AND what it adds, so the price
- * change is never a surprise.
+ * The volumes are a short ordered ladder, so a bar reads the way the decision
+ * actually feels: more conversations to the right, more money. Each configured
+ * option is a milestone on the track rather than a free-scrolling number, so the
+ * visitor can only land on a volume the plan actually sells.
+ *
+ * The control is a native `<input type="range">` stepping between option
+ * indexes, kept transparent over the drawn track. That is deliberate: arrow
+ * keys, Home/End, page keys and touch dragging all come from the platform, and
+ * `aria-valuetext` reads the volume and its cost instead of "3 out of 4".
  */
 function VolumeRow({
-  legend, hint, options, value, onChange, currency, t,
+  legend, hint, options, value, onChange, t,
 }: {
   legend: string;
   hint: string;
   options: PublicVolumeOption[];
   value: string | null;
   onChange: (key: string) => void;
-  currency: string;
   t: (k: string) => string;
 }) {
+  const [focused, setFocused] = useState(false);
   if (options.length === 0) return null;
+
+  const index = Math.max(0, options.findIndex((o) => o.key === value));
+  const max = options.length - 1;
+  const current = options[index];
+  const pct = max > 0 ? (index / max) * 100 : 0;
+  const free = current.additionalPrice.amount === "0.00";
+
+  const cost = free
+    ? t("pricing.included")
+    : `+${current.additionalPrice.formatted} / ${t("pricing.month")}`;
+
   return (
     <fieldset>
-      <legend className="mb-3 flex flex-wrap items-baseline gap-2">
-        <span className="text-[14px] font-medium text-gray-900">{legend}</span>
-        <span className="text-[12px] text-gray-400">{hint}</span>
-      </legend>
-      <div role="radiogroup" aria-label={legend} className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-        {options.map((o) => {
-          const selected = value === o.key;
-          const free = o.additionalPrice.amount === "0.00";
-          return (
-            <button
-              key={o.key}
-              type="button"
-              role="radio"
-              aria-checked={selected}
-              onClick={() => onChange(o.key)}
-              className={`rounded-xl border px-3 py-3 text-start transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:ring-offset-2 ${
-                selected
-                  ? "border-gray-900 bg-gray-900 text-white"
-                  : "border-gray-200 bg-white text-gray-900 hover:border-gray-400"
-              }`}
-            >
-              <span className="block text-[17px] font-semibold tabular-nums" dir="ltr">
-                {o.dailyVolume}
+      {/* The unit lives on the reading below, not here as well: stating "per
+          business day" twice within one control reads as a mistake. */}
+      <legend className="mb-4 text-[14px] font-medium text-gray-900">{legend}</legend>
+
+      {/* Capped width. Stretched across a 1,200px column the bar reads as a
+          progress indicator rather than something to grab. */}
+      <div className="max-w-xl">
+
+        {/* The current reading, stated before the control so the number is the
+            headline and the bar is the way to change it. */}
+        <div className="mb-4 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+          <p className="flex items-baseline gap-1.5">
+            <span className="text-[26px] font-semibold leading-none tracking-[-0.02em] tabular-nums text-gray-900" dir="ltr">
+              {current.dailyVolume}
+            </span>
+            <span className="text-[12.5px] text-gray-500">{hint}</span>
+          </p>
+          <p className="text-[12.5px] tabular-nums text-gray-500" dir="ltr">
+            <span className={free ? "" : "font-medium text-gray-900"}>{cost}</span>
+            {!free && (
+              <span className="text-gray-400">
+                {" · "}+{current.additionalCredits.toLocaleString()} {t("pricing.creditsWord")}
               </span>
+            )}
+          </p>
+        </div>
+
+        {/* Forced LTR: a quantity ladder runs low to high left to right in Hebrew
+            too, and mirroring it makes "more" point the wrong way. */}
+        <div className="px-2.5" dir="ltr">
+          <div className="relative h-6">
+            <div className="absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-gray-200" />
+            <div
+              className="absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-gray-900 transition-[width] duration-200 motion-reduce:transition-none"
+              style={{ width: `${pct}%` }}
+            />
+
+            {options.map((o, i) => (
               <span
-                className={`mt-0.5 block text-[11px] tabular-nums ${selected ? "text-white/70" : "text-gray-400"}`}
-                dir="ltr"
-              >
-                {free ? t("pricing.included") : `+${o.additionalPrice.formatted}`}
-              </span>
-              {!free && (
-                <span
-                  className={`mt-0.5 block text-[10px] tabular-nums ${selected ? "text-white/50" : "text-gray-400"}`}
-                  dir="ltr"
+                key={o.key}
+                aria-hidden="true"
+                className={`absolute top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full ${
+                  i <= index ? "bg-white/70" : "bg-gray-300"
+                }`}
+                style={{ left: `${max > 0 ? (i / max) * 100 : 0}%` }}
+              />
+            ))}
+
+            <span
+              aria-hidden="true"
+              className={`pointer-events-none absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-gray-900 bg-white shadow-sm transition-[left] duration-200 motion-reduce:transition-none ${
+                focused ? "ring-2 ring-primary-400 ring-offset-2" : ""
+              }`}
+              style={{ left: `${pct}%` }}
+            />
+
+            <input
+              type="range"
+              min={0}
+              max={max}
+              step={1}
+              value={index}
+              onChange={(e) => onChange(options[Number(e.target.value)].key)}
+              onFocus={() => setFocused(true)}
+              onBlur={() => setFocused(false)}
+              aria-label={legend}
+              aria-valuetext={t("pricing.a11y.volumeValue")
+                .replace("{volume}", String(current.dailyVolume))
+                .replace("{hint}", hint)
+                .replace("{cost}", cost)}
+              className="absolute inset-0 h-full w-full cursor-pointer appearance-none bg-transparent opacity-0"
+            />
+          </div>
+
+          {/* Milestone labels. Clickable for a mouse, but hidden from assistive
+              tech: the range input above is the one accessible control, and a
+              second set of five buttons would only add noise to it. */}
+          <div className="relative mt-2.5 h-5">
+            {options.map((o, i) => {
+              const p = max > 0 ? (i / max) * 100 : 0;
+              const align = i === 0 ? "translate-x-0" : i === max ? "-translate-x-full" : "-translate-x-1/2";
+              return (
+                <button
+                  key={o.key}
+                  type="button"
+                  tabIndex={-1}
+                  aria-hidden="true"
+                  onClick={() => onChange(o.key)}
+                  className={`absolute top-0 ${align} rounded px-1 text-[11.5px] tabular-nums transition-colors duration-200 ${
+                    i === index ? "font-semibold text-gray-900" : "text-gray-400 hover:text-gray-700"
+                  }`}
+                  style={{ left: `${p}%` }}
                 >
-                  +{o.additionalCredits.toLocaleString()} {t("pricing.creditsWord")}
-                </span>
-              )}
-            </button>
-          );
-        })}
+                  {o.dailyVolume}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <p className="mt-3 text-[11.5px] text-gray-400">{t("pricing.volumeHint")}</p>
       </div>
     </fieldset>
   );

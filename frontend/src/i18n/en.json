@@ -4535,7 +4535,8 @@
     "fxNote": "{display} prices are an estimated conversion at the official representative rate. You are charged in {charged}.",
     "a11y": {
       "totalChanged": "{plan}: {total} per month, {credits} credits included.",
-      "skipToPlans": "Skip to plans"
+      "skipToPlans": "Skip to plans",
+      "volumeValue": "{volume} {hint}, {cost}"
     },
     "comparison": {
       "label": "Compare",
@@ -4659,6 +4660,7 @@
       },
       "retry": "Try again",
       "earlyAccess": "Get early access"
-    }
+    },
+    "volumeHint": "Drag the bar, or use the arrow keys."
   }
 }
