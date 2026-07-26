@@ -453,6 +453,33 @@ model UserSession {
   @@map("user_sessions")
 }
 
+/// Short-lived, single-use OIDC login handshake state for the server-side
+/// Authorization-Code + PKCE flow (BFF migration §A5). Created when the browser
+/// starts login (GET /api/auth/login) and consumed exactly once on the backend
+/// callback (GET /api/auth/callback). The PKCE `codeVerifier` never reaches the
+/// browser - it lives here and is presented at token exchange server-side.
+/// Rows are single-use (consumedAt) and TTL-bounded (~10 min); expired/consumed
+/// rows are safe to purge. Additive infra, inert until SESSION_COOKIE_CREATE.
+model OidcLoginState {
+  id           String    @id @default(cuid())
+  // CSRF/replay guard echoed by the IdP; unique so a state can be consumed once.
+  state        String    @unique
+  // Replay-binding for the id_token.
+  nonce        String
+  // PKCE verifier (single-use, ~10 min). Presented at token exchange; never sent
+  // to the browser.
+  codeVerifier String    @map("code_verifier")
+  // Validated relative return path (defaults to root).
+  returnTo     String    @default("/") @map("return_to")
+  rememberMe   Boolean   @default(false) @map("remember_me")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  expiresAt    DateTime  @map("expires_at")
+  consumedAt   DateTime? @map("consumed_at")
+
+  @@index([expiresAt])
+  @@map("oidc_login_states")
+}
+
 // A User row is ONE TENANT MEMBERSHIP of an Identity: the person's role,
 // department, permissions, feature grants, and activity inside that single
 // tenant. All business authorization keys off this row; the Identity above

@@ -1,5 +1,6 @@
 import { createServiceApp, startService, seedAllTenantsRbac } from "@chatcenter/shared";
 import authRoutes from "./routes/auth";
+import sessionAuthRoutes from "./routes/session-auth";
 import agentRoutes from "./routes/agents";
 import departmentRoutes from "./routes/departments";
 import channelRoutes from "./routes/channels";
@@ -33,6 +34,10 @@ app.use("/api/channels/connect", oauthLimiter);
 app.use("/api/waitlist", authLimiter);
 
 // Routes
+// BFF server-side login/callback/logout (migration §A5). Mounted before the
+// legacy auth routes; every route 404s unless SESSION_COOKIE_CREATE is on, so
+// this is inert by default.
+app.use("/api/auth", sessionAuthRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/agents", agentRoutes);
 app.use("/api/departments", departmentRoutes);

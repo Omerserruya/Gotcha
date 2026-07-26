@@ -74,11 +74,15 @@ export interface SessionCookieContract {
  */
 export function resolveSessionCookieContract(env: NodeJS.ProcessEnv = process.env): SessionCookieContract {
   const isProd = env.NODE_ENV === "production";
+  // The contract is keyed on SECURE (HTTPS), not NODE_ENV: every HTTPS
+  // deployment - production AND dev.gotcha.co.il - uses the host-only
+  // `__Host-gotcha_session`. Secure is the DEFAULT; only an explicit
+  // `SESSION_COOKIE_SECURE=false` (localhost HTTP development) opts out to the
+  // distinct non-`__Host-` dev cookie. Production can never opt out.
+  const secure = isProd ? true : env.SESSION_COOKIE_SECURE !== "false";
   const configuredName = env.SESSION_COOKIE_NAME?.trim();
-  const name = configuredName || (isProd ? PROD_SESSION_COOKIE_NAME : DEV_SESSION_COOKIE_NAME);
+  const name = configuredName || (secure ? PROD_SESSION_COOKIE_NAME : DEV_SESSION_COOKIE_NAME);
   const isHostPrefixed = name.startsWith("__Host-");
-  // SESSION_COOKIE_SECURE overrides only DOWN in non-prod; prod is always secure.
-  const secure = isProd ? true : env.SESSION_COOKIE_SECURE === "true";
 
   if (isProd) {
     if (!isHostPrefixed) throw new SessionCookieError("prod_requires_host_prefix");

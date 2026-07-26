@@ -44,8 +44,14 @@ describe("cookie contract by environment", () => {
     expect(c.httpOnly).toBe(true);
   });
 
-  it("local dev uses a distinct non-__Host- name, Secure optional", () => {
+  it("HTTPS dev (e.g. dev.gotcha.co.il) uses __Host- + Secure by DEFAULT (keyed on secure, not NODE_ENV)", () => {
     const c = resolveSessionCookieContract({ NODE_ENV: "development" } as any);
+    expect(c.name).toBe(PROD_SESSION_COOKIE_NAME);
+    expect(c.secure).toBe(true);
+  });
+
+  it("localhost HTTP (SESSION_COOKIE_SECURE=false) opts out to the distinct non-__Host- dev cookie", () => {
+    const c = resolveSessionCookieContract({ NODE_ENV: "development", SESSION_COOKIE_SECURE: "false" } as any);
     expect(c.name).toBe(DEV_SESSION_COOKIE_NAME);
     expect(c.name.startsWith("__Host-")).toBe(false);
     expect(c.secure).toBe(false);

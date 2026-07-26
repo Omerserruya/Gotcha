@@ -103,6 +103,31 @@ export async function verifyAccessToken(token: string): Promise<VerifiedIdentity
   return { subject: claims.sub, email: claims.email, name: claims.name };
 }
 
+/**
+ * Verify an Authentik-issued **ID token** during the server-side login callback
+ * (BFF migration §A5). Same JWKS + RS256 pinning as the access token, but the
+ * audience is the OIDC client id and the `nonce` MUST match the one this flow
+ * generated - the replay defence binding the id_token to a login this backend
+ * started. Throws on any failure; the caller must abort the login.
+ */
+export async function verifyIdToken(
+  idToken: string,
+  opts: { nonce: string; clientId: string },
+): Promise<VerifiedIdentity> {
+  if (!opts?.clientId) throw new Error("[jwt] verifyIdToken requires a clientId (audience)");
+  const { payload } = await jwtVerify(idToken, getJwks(), {
+    issuer: getIssuer(),
+    algorithms: ["RS256"],
+    audience: opts.clientId,
+  });
+  const claims = payload as JWTPayload & { email?: string; name?: string; nonce?: string };
+  if (!claims.sub) throw new Error("[jwt] id_token has no subject claim");
+  if (!claims.nonce || claims.nonce !== opts.nonce) {
+    throw new Error("[jwt] id_token nonce mismatch - possible replay");
+  }
+  return { subject: claims.sub, email: claims.email, name: claims.name };
+}
+
 /** Reset cached JWKS/issuer. Tests only. */
 export function __resetJwtCaches(): void {
   jwks = null;

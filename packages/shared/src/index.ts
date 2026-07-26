@@ -172,7 +172,7 @@ export {
   DAY_KEYS,
 } from "./lib/business-hours";
 export type { BusinessHoursConfig, BusinessOpenState, DayKey, DaySchedule } from "./lib/business-hours";
-export { verifyAccessToken } from "./lib/jwt";
+export { verifyAccessToken, verifyIdToken } from "./lib/jwt";
 export { resolvePrincipal, AuthError } from "./lib/principal";
 export { getOAuthStateSecret } from "./lib/oauth-state";
 export { mintOAuthState, consumeOAuthState, returnPathForFlow } from "./lib/oauth-state-store";
