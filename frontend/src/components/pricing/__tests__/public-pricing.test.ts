@@ -366,13 +366,21 @@ describe("localization", () => {
 // ── Accessibility ───────────────────────────────────────────────────────────
 
 describe("accessibility", () => {
-  it("volume selectors are a real radiogroup", () => {
+  it("the volume bar is a native range input, so keyboard support is the platform's", () => {
     const code = read("components/pricing/VolumeConfigurator.tsx");
-    expect(code).toContain('role="radiogroup"');
-    expect(code).toContain('role="radio"');
-    expect(code).toContain("aria-checked");
+    expect(code).toContain('type="range"');
     expect(code).toContain("<fieldset");
     expect(code).toContain("<legend");
+    // "3 out of 4" is useless; the volume and its cost are the information.
+    expect(code).toContain("aria-valuetext");
+    expect(code).toContain("aria-label={legend}");
+  });
+
+  it("the clickable milestones do not duplicate the slider for assistive tech", () => {
+    const code = read("components/pricing/VolumeConfigurator.tsx");
+    // Convenience for a mouse, noise for a screen reader: the range input is
+    // the single accessible control.
+    expect(code).toMatch(/tabIndex=\{-1\}[\s\S]{0,80}aria-hidden="true"/);
   });
 
   it("price changes are announced to assistive technology", () => {
@@ -456,5 +464,143 @@ describe("loading and failure states", () => {
 
   it("drops stale responses so a slow request cannot overwrite a newer one", () => {
     expect(read("components/pricing/usePublicPricing.ts")).toContain("seq.current");
+  });
+});
+
+// ── Separated plan cards, adjustment bar, landing CTA and worked example ────
+
+describe("plans read as separate cards", () => {
+  it("the plan grid is three bordered cards, not one continuous surface", () => {
+    const code = read("components/pricing/PlanGrid.tsx");
+    // `gap-px` over a grey background was the old single-surface construction.
+    expect(code).not.toContain("gap-px");
+    expect(code).toContain("rounded-2xl border");
+  });
+
+  it("the loading skeleton matches the separated construction", () => {
+    const code = read("components/pricing/PricingPrimitives.tsx");
+    expect(code).not.toMatch(/PlanSkeleton[\s\S]{0,400}gap-px/);
+  });
+
+  it("the landing preview uses the same separated cards", () => {
+    const code = read("components/landing/PricingSection.tsx");
+    expect(code).not.toContain("gap-px");
+    expect(code).toContain("rounded-2xl border");
+  });
+
+  it("columns stay aligned without the shared surface", () => {
+    const code = read("components/pricing/PlanGrid.tsx");
+    // h-full stretches every card, grow pins every CTA to the same baseline.
+    expect(code).toContain("h-full");
+    expect(code).toContain("grow");
+  });
+});
+
+describe("volume adjustment bar", () => {
+  const code = read("components/pricing/VolumeConfigurator.tsx");
+
+  it("steps between configured options only, never a free number", () => {
+    // min/max/step are indexes into the option list, so an unsellable volume
+    // cannot be reached by dragging.
+    expect(code).toContain("min={0}");
+    expect(code).toContain("max={max}");
+    expect(code).toContain("step={1}");
+    expect(code).toContain("options[Number(e.target.value)].key");
+  });
+
+  it("renders a milestone per configured option", () => {
+    expect(code).toMatch(/options\.map\(\(o, i\)/);
+  });
+
+  it("runs low to high left to right even in Hebrew", () => {
+    // A quantity ladder that mirrors makes "more" point the wrong way.
+    expect(code).toMatch(/dir="ltr"[\s\S]{0,200}h-6/);
+  });
+
+  it("states the selected volume and what it costs", () => {
+    expect(code).toContain("current.dailyVolume");
+    expect(code).toContain("current.additionalPrice.formatted");
+    expect(code).toContain("current.additionalCredits");
+  });
+
+  it("respects reduced motion on the bar and thumb", () => {
+    expect(code).toContain("motion-reduce:transition-none");
+  });
+});
+
+describe("first plan feature list", () => {
+  const code = read("components/pricing/PlanGrid.tsx");
+
+  it("shows the entry plan's full included list rather than a truncated one", () => {
+    // Only the compact landing variant slices.
+    expect(code).toContain("compact ? ticked.slice(0, 3) : ticked");
+  });
+
+  it("still leads the higher plans with what they add", () => {
+    expect(code).toContain("const added = included.filter");
+    expect(code).toContain("pricing.everythingIn");
+  });
+
+  it("states the inherited capabilities instead of hiding them", () => {
+    expect(code).toContain("pricing.alsoIncludes");
+    expect(code).toContain("inherited.map((f) => f.name).join");
+  });
+});
+
+describe("landing pricing section", () => {
+  const code = read("components/landing/PricingSection.tsx");
+
+  it("gives every plan a CTA", () => {
+    expect(code).toContain('href="/early-access"');
+    expect(code).toContain("pricing.cta.getStarted");
+  });
+
+  it("shows a feature list per plan", () => {
+    expect(code).toContain("<Check");
+    expect(code).toContain("plan.features.filter((f) => f.included)");
+  });
+
+  it("turns the credit figure into a worked example", () => {
+    expect(code).toContain("landing.pricing.exampleChats");
+    expect(code).toContain("landing.pricing.exampleBoth");
+  });
+
+  it("skips the example rather than claiming zero conversations a day", () => {
+    expect(code).toContain("chatsDaily >= 1");
+  });
+
+  it("derives the example from catalog figures, never a hardcoded number", () => {
+    expect(code).toContain("q.estimatedChatsDaily");
+    expect(code).toContain("q.estimatedChatsMonthly");
+    expect(code).not.toMatch(/example[\s\S]{0,200}"\d{2,}"/);
+  });
+});
+
+describe("footer social profiles", () => {
+  const component = read("components/landing/SocialLinks.tsx");
+  const lib = read("lib/social-links.ts");
+
+  it("takes every profile URL from deployment config", () => {
+    expect(lib).toContain("NEXT_PUBLIC_SOCIAL_INSTAGRAM_URL");
+    expect(lib).toContain("NEXT_PUBLIC_SOCIAL_FACEBOOK_URL");
+    expect(lib).toContain("NEXT_PUBLIC_SOCIAL_WHATSAPP_URL");
+  });
+
+  it("hardcodes no profile URL", () => {
+    expect(component).not.toMatch(/https:\/\/(www\.)?(instagram|facebook|wa\.me)/);
+  });
+
+  it("opens externally without handing over the window", () => {
+    expect(component).toContain('rel="noopener noreferrer"');
+    expect(component).toContain('target="_blank"');
+  });
+
+  it("labels each icon, since the glyph alone says nothing to a screen reader", () => {
+    expect(component).toContain("aria-label={t(`landing.social.");
+    expect(component).toContain('aria-hidden="true"');
+  });
+
+  it("renders nothing at all when no profile is configured", () => {
+    expect(component).toContain("if (links.length === 0) return null");
   });
 });
