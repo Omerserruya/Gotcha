@@ -150,7 +150,7 @@ function AdjustPlanInner() {
     return (
       <div className="mx-auto max-w-6xl space-y-6 p-6">
         <div className="h-9 w-64 animate-pulse rounded-xl bg-gray-100" />
-        <div className="grid gap-4 lg:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {[0, 1, 2].map((i) => (
             <div key={i} className="h-96 animate-pulse rounded-2xl bg-gray-50" />
           ))}
@@ -203,11 +203,12 @@ function AdjustPlanInner() {
       )}
 
       {/* ── Plan cards ─────────────────────────────────────────── */}
-      <div className="grid gap-4 lg:grid-cols-3">
-        {(catalog?.plans ?? []).map((p) => (
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {(catalog?.plans ?? []).map((p, idx) => (
           <PlanCard
             key={p.key}
             plan={p}
+            previous={idx > 0 ? catalog!.plans[idx - 1] : null}
             isHe={isHe}
             active={p.key === activeKey}
             current={isCurrent(p)}
@@ -356,9 +357,11 @@ function CurrencyToggle({
 // ─── Plan card ──────────────────────────────────────────────────────────────
 
 function PlanCard({
-  plan, active, current, onSelect, isHe, t,
+  plan, previous, active, current, onSelect, isHe, t,
 }: {
   plan: CatalogPlan;
+  /** The next cheaper plan, used to show what THIS one adds. */
+  previous: CatalogPlan | null;
   active: boolean;
   current: boolean;
   onSelect: () => void;
@@ -367,8 +370,16 @@ function PlanCard({
 }) {
   const name = isHe ? plan.nameHe ?? plan.name : plan.name;
   const description = isHe ? plan.descriptionHe ?? plan.description : plan.description;
-  // Progressive disclosure: the card shows what the plan ADDS, not every feature.
-  const headline = plan.features.filter((f) => f.included).slice(-4);
+
+  // Show what this plan ADDS over the one below it. Listing the same four
+  // management features on every card - which is what slicing the tail gave -
+  // makes three different products look identical and hides the actual reason
+  // to move up.
+  const included = plan.features.filter((f) => f.included);
+  const prevKeys = new Set((previous?.features ?? []).filter((f) => f.included).map((f) => f.key));
+  const added = included.filter((f) => !prevKeys.has(f.key));
+  const headline = (added.length > 0 ? added : included).slice(0, 4);
+  const isDelta = added.length > 0 && previous != null;
 
   return (
     <button
@@ -383,22 +394,26 @@ function PlanCard({
         </span>
       )}
 
-      <div className="flex items-baseline justify-between gap-2">
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
         <h3 className="text-lg font-semibold text-gray-900">{name}</h3>
         {current && (
-          <span className="rounded-full bg-primary-50 px-2 py-0.5 text-[11px] font-medium text-primary-700">
+          <span className="whitespace-nowrap rounded-full bg-primary-50 px-2 py-0.5 text-[11px] font-medium text-primary-700">
             {t("settings.billing.currentPlan")}
           </span>
         )}
       </div>
 
-      {description && <p className="mt-1.5 min-h-[2.5rem] text-sm leading-relaxed text-gray-500">{description}</p>}
+      {/* Fixed height so price, credits and feature rows line up across cards
+          regardless of how many lines each description takes. */}
+      {description && <p className="mt-1.5 min-h-[4rem] text-sm leading-relaxed text-gray-500">{description}</p>}
 
-      <div className="mt-4 flex items-baseline gap-1.5" dir="ltr">
+      <div className="mt-4 flex flex-wrap items-baseline gap-x-1.5" dir="ltr">
         <span className="text-3xl font-bold tracking-tight text-gray-900">
           {plan.salesOnly ? t("settings.billing.custom") : plan.basePrice?.display.formatted ?? "-"}
         </span>
-        {!plan.salesOnly && <span className="text-sm text-gray-400">/ {t("settings.billing.pricing.month")}</span>}
+        {!plan.salesOnly && (
+          <span className="whitespace-nowrap text-sm text-gray-400">/ {t("settings.billing.pricing.month")}</span>
+        )}
       </div>
 
       <dl className="mt-4 space-y-1.5 border-t border-gray-100 pt-4 text-sm">
@@ -420,7 +435,12 @@ function PlanCard({
         )}
       </dl>
 
-      <ul className="mt-4 space-y-1.5 border-t border-gray-100 pt-4">
+      <ul className="mt-4 grow space-y-1.5 border-t border-gray-100 pt-4">
+        {isDelta && (
+          <li className="pb-0.5 text-[11px] font-medium uppercase tracking-wide text-gray-400">
+            {t("settings.billing.pricing.everythingIn").replace("{plan}", isHe ? previous!.nameHe ?? previous!.name : previous!.name)}
+          </li>
+        )}
         {headline.map((f) => (
           <li key={f.key} className="flex items-start gap-2 text-sm text-gray-600">
             <svg className="mt-0.5 h-4 w-4 shrink-0 text-gray-900" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>

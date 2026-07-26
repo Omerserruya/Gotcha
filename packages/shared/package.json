@@ -11,6 +11,7 @@
     "db:seed-billing": "tsx prisma/seed-billing.ts",
     "db:seed-pricing": "tsx prisma/seed-pricing.ts",
     "db:migrate-pricing": "tsx prisma/migrate-pricing.ts",
+    "db:seed-pricing-demo": "tsx prisma/seed-pricing-demo.ts",
     "db:reset": "prisma migrate reset --force",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"

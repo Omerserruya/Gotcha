@@ -322,13 +322,29 @@ function PlansTab({
 
             {p.volumeOptions.length > 0 && (
               <div className="mt-4 border-t border-gray-100 pt-3">
+                {/* Options are seeded for every plan; whether a customer can
+                    PICK one is the plan's selector toggle. Saying so stops this
+                    list reading as "Foundation offers five chat tiers". */}
+                {(!p.chatVolumeEnabled || !p.voiceVolumeEnabled) && (
+                  <p className="mb-1.5 text-[11px] text-gray-400">
+                    {!p.chatVolumeEnabled && !p.voiceVolumeEnabled
+                      ? "Configured but not offered - both selectors are off for this plan."
+                      : !p.voiceVolumeEnabled
+                        ? "Voice options are configured but not offered on this plan."
+                        : "Chat options are configured but not offered on this plan."}
+                  </p>
+                )}
                 <div className="flex flex-wrap gap-1.5">
                   {p.volumeOptions.map((o) => (
                     <span
                       key={o.id}
                       className={clsx(
                         "rounded-lg border px-2 py-1 text-[11px]",
-                        o.enabled ? "border-gray-200 text-gray-600" : "border-gray-100 text-gray-300 line-through",
+                        !o.enabled
+                          ? "border-gray-100 text-gray-300 line-through"
+                          : (o.channel === "CHAT" && !p.chatVolumeEnabled) || (o.channel === "VOICE" && !p.voiceVolumeEnabled)
+                            ? "border-dashed border-gray-200 text-gray-400"
+                            : "border-gray-200 text-gray-600",
                       )}
                       dir="ltr"
                     >

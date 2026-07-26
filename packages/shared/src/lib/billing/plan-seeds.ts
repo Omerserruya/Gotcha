@@ -145,7 +145,7 @@ export const PLANS: PlanSeed[] = [
     nameEn: "AI Voice",
     nameHe: "קול AI",
     descriptionEn: "Everything in AI Workforce, on the phone as well as in chat.",
-    descriptionHe: "כל מה שיש ב-AI Workforce, גם בטלפון וגם בצ'אט.",
+    descriptionHe: "כל היכולות של כוח עבודה AI, גם בטלפון וגם בצ'אט.",
     monthlyPriceUsd: "1499.00",
     // 2,000 chat credits (10 chats/day) + 5,000 voice credits (10 calls/day).
     // The base allowance is the SUM, because 2,000 credits alone cannot fund

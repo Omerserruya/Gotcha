@@ -412,6 +412,40 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
+        # ─── Platform (Sysadmin) pricing administration + actual-cost
+        #     analytics. Billing service, SYSTEM_ADMIN-gated in-app.
+        #     Deliberately specific prefixes rather than a blanket /api/admin,
+        #     so this does not claim a namespace another service may want.
+        location /api/admin/pricing {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://billing_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location /api/admin/analytics {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://billing_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location /api/admin/evaluation {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://billing_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
         # ─── Chatbot Service ─────────────────────────────
         location /api/chatbot-flows {
             limit_req zone=api burst=20 nodelay;

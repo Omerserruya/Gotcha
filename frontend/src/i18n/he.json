@@ -1442,7 +1442,8 @@
           "ai_employees": "עובדי AI",
           "channels": "ערוצים מחוברים",
           "knowledge_sources": "מקורות ידע"
-        }
+        },
+        "everythingIn": "כל היכולות של {plan}, ובנוסף"
       }
     }
   },

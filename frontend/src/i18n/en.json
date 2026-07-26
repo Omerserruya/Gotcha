@@ -1442,7 +1442,8 @@
           "ai_employees": "AI employees",
           "channels": "Connected channels",
           "knowledge_sources": "Knowledge sources"
-        }
+        },
+        "everythingIn": "Everything in {plan}, plus"
       }
     }
   },
