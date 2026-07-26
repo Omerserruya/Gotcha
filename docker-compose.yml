@@ -632,6 +632,10 @@ services:
       # Mirrors the server flag so nav/section render correctly on first paint.
       # This is presentation only - nginx and the billing service are the gate.
       NEXT_PUBLIC_PRICING_ENABLED: ${PUBLIC_PRICING_ENABLED:-false}
+      # Footer social profiles. Unset means the icon is not rendered at all.
+      NEXT_PUBLIC_SOCIAL_INSTAGRAM_URL: ${SOCIAL_INSTAGRAM_URL:-}
+      NEXT_PUBLIC_SOCIAL_FACEBOOK_URL: ${SOCIAL_FACEBOOK_URL:-}
+      NEXT_PUBLIC_SOCIAL_WHATSAPP_URL: ${SOCIAL_WHATSAPP_URL:-}
     # Bind-mount source for hot reload; keep container's node_modules/.next.
     volumes:
       - ./frontend:/app

@@ -2451,6 +2451,11 @@
       "viewAll": "See full pricing",
       "adds": "Adds {feature}",
       "note": "Conversation estimates are based on the plan configuration. Actual credit consumption varies by conversation length, channel, AI actions, enabled features and voice duration."
+    },
+    "social": {
+      "instagram": "GOTCHA on Instagram",
+      "facebook": "GOTCHA on Facebook",
+      "whatsapp": "Message GOTCHA on WhatsApp"
     }
   },
   "earlyAccess": {

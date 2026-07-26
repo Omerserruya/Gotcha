@@ -8,6 +8,7 @@ import type { Locale } from "@/i18n";
 import JsonLd from "@/components/JsonLd";
 import CustomerStorySection from "@/components/landing/CustomerStorySection";
 import PricingSection from "./PricingSection";
+import SocialLinks from "./SocialLinks";
 import { publicPricingEnabled } from "@/lib/api-public-pricing";
 import SolutionsSection from "@/components/landing/SolutionsSection";
 import CtaForm from "@/components/landing/CtaForm";
@@ -1130,6 +1131,7 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
               <p className="mt-4 text-[13px] text-[#b0b0b0] leading-relaxed">
                 {t("landing.hero.title1")}
               </p>
+              <SocialLinks t={t as (key: string) => string} className="mt-5" />
             </div>
 
             <div className="grid grid-cols-3 gap-8 sm:gap-12 text-sm">
