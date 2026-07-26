@@ -9,12 +9,12 @@
  */
 import { describe, it, expect } from "vitest";
 import {
-  PRICING_PLAN_SEEDS,
+  PLANS as PRICING_PLAN_SEEDS,
   CHAT_OPTIONS,
   VOICE_OPTIONS,
   CREDIT_PACKAGES,
   ESTIMATION,
-} from "../../../../prisma/seed-pricing";
+} from "../plan-seeds";
 import { estimateChannel, estimatePlanCapacity, type EstimationRatios } from "../estimation";
 import { money, toMinor } from "../money";
 import { FEATURE_CATALOG, getFeatureDef } from "../feature-catalog";
