@@ -16,7 +16,12 @@ const navItems = [
   { href: "/system/onboarding", icon: OnboardingIcon, label: "Onboarding Guide" },
   { href: "/system/chat", icon: ChatIcon, label: "AI Chat" },
   { href: "/system/usage", icon: UsageIcon, label: "Platform Usage" },
-  { href: "/system/pricing", icon: PricingIcon, label: "Pricing Model" },
+  { href: "/system/pricing", icon: PricingIcon, label: "Unit Economics" },
+  // Plans & Pricing is the commercial CONFIGURATION surface (layer B + the
+  // catalog). "Unit Economics" above is the internal COST view (layer A). They
+  // are deliberately separate entries because they answer different questions.
+  { href: "/system/plans", icon: PricingIcon, label: "Plans & Pricing" },
+  { href: "/system/conversation-costs", icon: UsageIcon, label: "Conversation Cost" },
 ];
 
 export function SystemLayout({ children }: { children: React.ReactNode }) {
