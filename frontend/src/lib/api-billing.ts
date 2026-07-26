@@ -74,12 +74,27 @@ export interface CreditSummary {
   usage: { consumedCredits: number; remainingPlanCredits: number; consumedPct: number };
   purchasedCredits: { balance: number };
   totalAvailableCredits: number;
+  /** Where the remaining balance came from. The ledger owns the numbers. */
+  creditSources?: { plan: number; purchased: number; promotional: number; trialOrPoc: number };
+  /** Capacity the balance still buys, at the PUBLIC commercial ratio. */
+  estimatedRemaining?: {
+    chats: number;
+    calls: number;
+    ratios: { chatCreditsPerEstimatedConversation: number; voiceCreditsPerEstimatedCall: number; businessDaysPerMonth: number };
+  };
+  disclaimer?: { en: string; he: string };
+  /** Present only while the workspace is on POC or Trial access. */
+  evaluation?: { kind: "POC" | "TRIAL"; expiresAt: string | null; creditCap: number; selfRenew: boolean } | null;
   usageCredits: {
     enabled: boolean;
     spentAmount: string;
     currency: string;
     monthlySpendLimit: string | null;
     thresholdPct: number | null;
+    warningThresholdPct?: number | null;
+    incrementCredits?: number | null;
+    pricePerCredit?: string | null;
+    limitBehavior?: "STOP_AI" | "HUMAN_ONLY" | "REQUIRE_APPROVAL" | "PREPAID_ONLY";
     resetsAt: string | null;
   };
 }
@@ -100,6 +115,129 @@ export interface AutoPurchasePolicy {
   maxMonthlySpend: string | null;
   currency: string;
   monthSpentAmount: string;
+  warningThresholdPct?: number | null;
+  incrementCredits?: number | null;
+  pricePerCredit?: string | null;
+  /** What happens once credits run out and no further top-up is possible. */
+  limitBehavior?: "STOP_AI" | "HUMAN_ONLY" | "REQUIRE_APPROVAL" | "PREPAID_ONLY";
+}
+
+// ─── Pricing catalog ─────────────────────────────────────────
+// Every price the UI renders comes from the server. The client sends option
+// KEYS and never a price, so a tampered payload cannot buy a plan cheaply.
+
+/** A price rendered in both the canonical and the requested display currency. */
+export interface DisplayPrice {
+  base: { amount: string; currency: string; formatted: string };
+  display: { amount: string; currency: string; formatted: string };
+  /** True when `display` is a converted estimate, not the charged amount. */
+  isEstimatedConversion: boolean;
+  chargedCurrency: string;
+  fx: { rate: string; source: string; rateDate: string; isFallback: boolean } | null;
+}
+
+export interface QuoteEstimate {
+  chat: { credits: number; monthly: number; daily: number };
+  voice: { credits: number; monthly: number; daily: number };
+  totalInteractions: number;
+  pricePerChat: string | null;
+  pricePerCall: string | null;
+  pricePerInteraction: string | null;
+  currency: string;
+  ratios: {
+    chatCreditsPerEstimatedConversation: number;
+    voiceCreditsPerEstimatedCall: number;
+    businessDaysPerMonth: number;
+  };
+}
+
+export interface VolumeOption {
+  key: string;
+  channel: "CHAT" | "VOICE";
+  dailyVolume: number;
+  monthlyVolume: number;
+  additionalCredits: number;
+  additionalPrice: DisplayPrice;
+  isDefault: boolean;
+  totalChannelCredits: number;
+}
+
+export interface PlanFeature {
+  key: string;
+  nameEn: string;
+  nameHe: string;
+  included: boolean;
+  category: string;
+}
+
+export interface CatalogPlan {
+  key: string;
+  version: number;
+  name: string;
+  nameHe: string | null;
+  description: string | null;
+  descriptionHe: string | null;
+  kind: string;
+  recommended: boolean;
+  sortOrder: number;
+  salesOnly: boolean;
+  billingInterval: string;
+  basePrice: DisplayPrice | null;
+  includedCredits: number;
+  creditSplit: { chat: number; voice: number };
+  supportLevel: string | null;
+  chatVolumeEnabled: boolean;
+  voiceVolumeEnabled: boolean;
+  autoPurchaseEligible: boolean;
+  creditPackagesEligible: boolean;
+  features: PlanFeature[];
+  limits: Record<string, number>;
+  chatOptions: VolumeOption[];
+  voiceOptions: VolumeOption[];
+  estimate: QuoteEstimate;
+}
+
+export interface PricingCatalog {
+  plans: CatalogPlan[];
+  currentPlanKey: string | null;
+  currentPlanVersion: number | null;
+  currency: {
+    base: string;
+    display: string;
+    available: string[];
+    isEstimatedConversion: boolean;
+    chargedCurrency: string;
+    fx: { rate: string; source: string; rateDate: string; isFallback: boolean } | null;
+  };
+  disclaimer: { en: string; he: string };
+}
+
+export interface Quote {
+  planKey: string;
+  planVersion: number;
+  chatVolumeOptionKey: string | null;
+  voiceVolumeOptionKey: string | null;
+  monthlyPrice: DisplayPrice;
+  includedCredits: number;
+  estimate: QuoteEstimate;
+  disclaimer: { en: string; he: string };
+}
+
+/** The current subscription rendered from its stored commercial snapshot. */
+export interface CurrentSubscriptionView {
+  planKey: string;
+  planVersion: number;
+  planName: string;
+  planNameHe: string | null;
+  planKind: string;
+  monthlyPrice: DisplayPrice;
+  includedCredits: number;
+  chatVolumeOptionKey: string | null;
+  voiceVolumeOptionKey: string | null;
+  chatDailyVolume: number | null;
+  voiceDailyVolume: number | null;
+  estimate: QuoteEstimate;
+  fromSnapshot: boolean;
 }
 
 export interface PaymentMethod {
@@ -189,3 +327,60 @@ export const removePaymentMethod = (token: string, id: string) =>
 
 export const getInvoices = (token: string) =>
   apiFetch<{ invoices: Invoice[] }>("/api/billing/invoices", { token });
+
+// ─── Pricing ─────────────────────────────────────────────────
+
+export const getPricingCatalog = (token: string, currency = "USD") =>
+  apiFetch<PricingCatalog>(`/api/billing/pricing?currency=${encodeURIComponent(currency)}`, { token });
+
+/**
+ * Price a selection server-side. Only KEYS are sent; the server recomputes the
+ * price, the credit allocation and the estimate from the catalog.
+ */
+export const getQuote = (
+  token: string,
+  input: { planKey: string; chatVolumeOptionKey?: string | null; voiceVolumeOptionKey?: string | null; currency?: string },
+) =>
+  apiFetch<Quote>("/api/billing/pricing/quote", {
+    token,
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+
+export const getCurrentPricing = (token: string, currency = "USD") =>
+  apiFetch<{ subscription: CurrentSubscriptionView | null; disclaimer: { en: string; he: string } }>(
+    `/api/billing/pricing/current?currency=${encodeURIComponent(currency)}`,
+    { token },
+  );
+
+export interface PricingPackage {
+  key: string;
+  name: string;
+  nameHe: string | null;
+  credits: number;
+  price: DisplayPrice;
+  discountLabel: string | null;
+  maxPurchaseQuantity: number | null;
+  expiryPolicy: string;
+  expiryDays: number | null;
+}
+
+export const getPricingPackages = (token: string, currency = "USD") =>
+  apiFetch<{ packages: PricingPackage[]; eligible: boolean }>(
+    `/api/billing/pricing/packages?currency=${encodeURIComponent(currency)}`,
+    { token },
+  );
+
+/** Apply a plan and/or volume change. Priced server-side, provider-confirmed. */
+export const applyPlanChange = (
+  token: string,
+  input: { planKey: string; chatVolumeOptionKey?: string | null; voiceVolumeOptionKey?: string | null },
+) =>
+  apiFetch<{
+    ok: boolean;
+    applied: "immediate" | "scheduled";
+    effectiveAt?: string | null;
+    monthlyPrice: string;
+    currency: string;
+    includedCredits: number;
+  }>("/api/billing/pricing/change", { token, method: "POST", body: JSON.stringify(input) });

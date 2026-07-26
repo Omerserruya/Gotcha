@@ -43,8 +43,40 @@ describe("Billing IA - compact reference hierarchy", () => {
 
   it("Adjust Plan flow reports success only after the provider call (navigates on await)", () => {
     const plan = read("app/settings/billing/plan/page.tsx");
-    expect(plan).toMatch(/await\s*\(migrate\s*\?\s*migratePlan|await\s+changePlan|await\s*\(/);
+    // The configurator applies a change through applyPlanChange and navigates
+    // only after that await resolves - never on the click.
+    expect(plan).toMatch(/await\s+applyPlanChange\(/);
     expect(plan).toContain('router.push("/settings/billing")');
+  });
+
+  it("Adjust Plan sends only KEYS - price and credits are recomputed server-side", () => {
+    const plan = read("app/settings/billing/plan/page.tsx");
+    // The request body carries plan and volume keys. A price or credit total in
+    // the payload would mean the client could choose what it pays.
+    const body = plan.slice(plan.indexOf("applyPlanChange(token, {"), plan.indexOf("applyPlanChange(token, {") + 320);
+    expect(body).toContain("planKey");
+    expect(body).toContain("chatVolumeOptionKey");
+    expect(body).not.toMatch(/\bprice\b|\bamount\b|includedCredits/);
+  });
+
+  it("Adjust Plan renders the server-supplied estimate disclaimer", () => {
+    const plan = read("app/settings/billing/plan/page.tsx");
+    // The wording comes from the server rather than being written into the page,
+    // so one disclaimer serves every surface and cannot drift per screen.
+    expect(plan).toContain("disclaimer");
+  });
+
+  it("no customer-facing pricing copy claims the estimate comes from other customers", () => {
+    // Every string the customer reads comes from i18n, so that is where the
+    // claim would have to live. Checking the page source instead would flag
+    // developer comments and miss the copy that actually ships.
+    const en = JSON.stringify(JSON.parse(read("i18n/en.json")).settings.billing.pricing);
+    const he = JSON.stringify(JSON.parse(read("i18n/he.json")).settings.billing.pricing);
+    for (const copy of [en, he]) {
+      expect(copy).not.toMatch(/platform average|other customers|average usage|ממוצע הפלטפורמה|לקוחות אחרים/i);
+    }
+    // And the estimate is labelled as one.
+    expect(en).toMatch(/estimated/i);
   });
 });
 

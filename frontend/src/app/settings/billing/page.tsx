@@ -24,10 +24,12 @@ import {
   resumeSubscription,
   getPaymentMethods,
   getInvoices,
+  getCurrentPricing,
   type Subscription,
   type Plan,
   type PaymentMethod,
   type Invoice,
+  type CurrentSubscriptionView,
 } from "@/lib/api-billing";
 
 const STATUS_STYLES: Record<string, string> = {
@@ -89,6 +91,10 @@ export default function BillingSettingsPage() {
   const { can } = usePermissions();
   const [sub, setSub] = useState<Subscription | null>(null);
   const [plans, setPlans] = useState<Plan[]>([]);
+  // The subscription's own commercial snapshot. Rendering from this rather than
+  // the live plan row is what stops a published price change from restating what
+  // an existing customer sees on their own billing page.
+  const [current, setCurrent] = useState<CurrentSubscriptionView | null>(null);
   const [methods, setMethods] = useState<PaymentMethod[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
@@ -115,14 +121,16 @@ export default function BillingSettingsPage() {
     if (!token) return;
     setLoading(true);
     try {
-      const [s, p, pm, inv] = await Promise.all([
+      const [s, p, pm, inv, cur] = await Promise.all([
         getSubscription(token),
         getPlans(token),
         getPaymentMethods(token).catch(() => ({ paymentMethods: [] as PaymentMethod[] })),
         getInvoices(token).catch(() => ({ invoices: [] as Invoice[] })),
+        getCurrentPricing(token).catch(() => ({ subscription: null as CurrentSubscriptionView | null })),
       ]);
       setSub(s.subscription);
       setPlans(p.plans);
+      setCurrent(cur.subscription);
       setMethods(pm.paymentMethods);
       setInvoices(inv.invoices);
     } catch (e: any) {
@@ -225,7 +233,20 @@ export default function BillingSettingsPage() {
               </div>
               {planDesc && <p className="mt-0.5 text-sm text-gray-500">{planDesc}</p>}
               <div className="mt-2 space-y-0.5 text-sm text-gray-600">
-                {currentPlan && (
+                {/* Contracted terms, from the snapshot when there is one. */}
+                {current ? (
+                  <div>
+                    {current.includedCredits > 0 && (
+                      <span>{t("settings.billing.includedCredits").replace("{n}", current.includedCredits.toLocaleString())}</span>
+                    )}
+                    <span className="text-gray-400">
+                      {current.includedCredits > 0 ? " · " : ""}
+                      <span dir="ltr">{current.monthlyPrice.display.formatted}</span>
+                      {" / "}
+                      {t("settings.billing.interval.MONTHLY")}
+                    </span>
+                  </div>
+                ) : currentPlan ? (
                   <div>
                     {currentPlan.includedAiUnits > 0 && (
                       <span>{t("settings.billing.includedCredits").replace("{n}", Math.round(currentPlan.includedAiUnits).toLocaleString())}</span>
@@ -236,6 +257,44 @@ export default function BillingSettingsPage() {
                         <span dir="ltr">{money(currentPlan.basePrice, currentPlan.currency)}</span>
                         {" / "}
                         {t(`settings.billing.interval.${(currentPlan as any).billingInterval ?? "MONTHLY"}`)}
+                      </span>
+                    )}
+                  </div>
+                ) : null}
+
+                {/* Selected recurring volume, when the plan offers a selector. */}
+                {current && (current.chatDailyVolume != null || current.voiceDailyVolume != null) && (
+                  <div className="text-gray-500">
+                    {current.chatDailyVolume != null && (
+                      <span>
+                        {t("settings.billing.pricing.chatVolume")}:{" "}
+                        <span dir="ltr">{current.chatDailyVolume}</span> {t("settings.billing.pricing.perBusinessDay")}
+                      </span>
+                    )}
+                    {current.chatDailyVolume != null && current.voiceDailyVolume != null && " · "}
+                    {current.voiceDailyVolume != null && (
+                      <span>
+                        {t("settings.billing.pricing.voiceVolume")}:{" "}
+                        <span dir="ltr">{current.voiceDailyVolume}</span> {t("settings.billing.pricing.perBusinessDay")}
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* Estimated capacity, using the plan's PUBLIC commercial ratio. */}
+                {current && (current.estimate.chat.monthly > 0 || current.estimate.voice.monthly > 0) && (
+                  <div className="text-gray-500">
+                    {current.estimate.chat.monthly > 0 && (
+                      <span>
+                        {t("settings.billing.pricing.estimatedChats")}:{" "}
+                        <span dir="ltr">~{current.estimate.chat.monthly.toLocaleString()}</span>
+                      </span>
+                    )}
+                    {current.estimate.chat.monthly > 0 && current.estimate.voice.monthly > 0 && " · "}
+                    {current.estimate.voice.monthly > 0 && (
+                      <span>
+                        {t("settings.billing.pricing.estimatedCalls")}:{" "}
+                        <span dir="ltr">~{current.estimate.voice.monthly.toLocaleString()}</span>
                       </span>
                     )}
                   </div>

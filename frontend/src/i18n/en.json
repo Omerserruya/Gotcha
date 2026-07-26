@@ -1391,6 +1391,58 @@
         "PENDING": "Pending",
         "PAUSED": "Paused",
         "scheduledCancel": "Scheduled to cancel"
+      },
+      "pricing": {
+        "title": "Choose your plan",
+        "subtitle": "Every plan includes the shared inbox and the AI that understands your business. Pick the capacity that matches how much you talk to customers.",
+        "currencyLabel": "Show prices in",
+        "month": "month",
+        "recommended": "Recommended",
+        "choose": "Select",
+        "configuring": "Configuring",
+        "includedCredits": "Included credits",
+        "creditsWord": "credits",
+        "estimatedChats": "Estimated conversations",
+        "estimatedCalls": "Estimated calls",
+        "perDayShort": "a business day",
+        "perBusinessDay": "per business day",
+        "included": "Included",
+        "customizeTitle": "Customize {plan}",
+        "customizeSubtitle": "Set the volume you expect. The credit allowance and the price update together.",
+        "noVolumeSelector": "This plan has a fixed monthly credit allowance. You can buy extra credits at any time, or move up a plan for a larger recurring allowance.",
+        "chatVolume": "Chat conversations",
+        "voiceVolume": "Voice calls",
+        "summary": "Your plan",
+        "updating": "updating…",
+        "pricePerChat": "Per conversation",
+        "pricePerCall": "Per call",
+        "blended": "Per interaction",
+        "monthlyTotal": "Monthly total",
+        "continue": "Continue",
+        "currentSelection": "This is your current plan",
+        "showCompare": "Compare all capabilities",
+        "hideCompare": "Hide comparison",
+        "capability": "Capability",
+        "customTitle": "Need something different?",
+        "customBody": "If your volumes, channels or contract terms do not fit these plans, we will build one that does - with the same capabilities and limits, priced for your business.",
+        "customCta": "Talk to us about a custom plan",
+        "confirmUp": "This starts today. You will be charged the difference for the rest of the current billing period, and the new credit allowance is available immediately.",
+        "confirmDown": "Your current plan stays exactly as it is until your renewal date. Nothing is removed before then, and the new plan starts at renewal.",
+        "chargedIn": "Charged in {currency}:",
+        "fxNote": "{display} prices are an estimated conversion at the official representative rate. You will be charged in {charged}.",
+        "category": {
+          "COMMUNICATION": "Communication",
+          "AI": "AI and data",
+          "VOICE": "Voice",
+          "MANAGEMENT": "Management",
+          "LIMITS": "Limits"
+        },
+        "limit": {
+          "users": "Team members",
+          "ai_employees": "AI employees",
+          "channels": "Connected channels",
+          "knowledge_sources": "Knowledge sources"
+        }
       }
     }
   },
@@ -2765,7 +2817,9 @@
       "planAllowance": "Plan allowance",
       "purchased": "Purchased package balance",
       "total": "Total available",
-      "order": "Credits are consumed in order: monthly plan credits first, then your purchased balance."
+      "order": "Credits are consumed in order: monthly plan credits first, then your purchased balance.",
+      "promotional": "Promotional",
+      "trialOrPoc": "Trial / pilot"
     },
     "usageCredits": {
       "title": "Usage credits",
@@ -2808,6 +2862,17 @@
       "capNote": "The cap is enforced by the billing service before every automatic charge. Once reached, no more automatic purchases happen this month.",
       "save": "Save",
       "saved": "Auto-purchase settings saved"
+    },
+    "estimatedRemaining": {
+      "chats": "Estimated conversations left:",
+      "calls": "Estimated calls left:"
+    },
+    "evaluation": {
+      "trialTitle": "You are on a trial",
+      "pocTitle": "You are on a pilot",
+      "expires": "Ends {date}",
+      "body": "Every capability is unlocked, with {credits} credits for the evaluation. You have {remaining} left.",
+      "convertCta": "Choose a plan"
     }
   },
   "aiStudio": {

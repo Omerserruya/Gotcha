@@ -116,10 +116,63 @@ export function UsageContent() {
           <div className="mt-3 text-xs text-gray-500">
             {t("usage.planCredits.remaining").replace("{n}", fmt(remainingPlan))}
           </div>
+
+          {/* What the remaining balance still buys, using the plan's PUBLIC
+              commercial ratio. The credit balance above stays authoritative -
+              this is an estimate of capacity, not a second balance. */}
+          {s?.estimatedRemaining && (s.estimatedRemaining.chats > 0 || s.estimatedRemaining.calls > 0) && (
+            <div className="mt-4 rounded-xl bg-gray-50 px-4 py-3">
+              <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
+                {s.estimatedRemaining.chats > 0 && (
+                  <span className="text-gray-600">
+                    {t("usage.estimatedRemaining.chats")}{" "}
+                    <span className="font-semibold text-gray-900 tabular-nums" dir="ltr">
+                      ~{s.estimatedRemaining.chats.toLocaleString()}
+                    </span>
+                  </span>
+                )}
+                {s.estimatedRemaining.calls > 0 && (
+                  <span className="text-gray-600">
+                    {t("usage.estimatedRemaining.calls")}{" "}
+                    <span className="font-semibold text-gray-900 tabular-nums" dir="ltr">
+                      ~{s.estimatedRemaining.calls.toLocaleString()}
+                    </span>
+                  </span>
+                )}
+              </div>
+              <p className="mt-2 text-[11px] leading-relaxed text-gray-400">
+                {locale === "he" ? s.disclaimer?.he : s.disclaimer?.en}
+              </p>
+            </div>
+          )}
         </div>
 
+        {/* ── POC / Trial banner ── */}
+        {s?.evaluation && (
+          <div className="rounded-2xl border border-primary-200 bg-primary-50/60 p-5">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h3 className="font-semibold text-primary-900">
+                {t(`usage.evaluation.${s.evaluation.kind === "POC" ? "poc" : "trial"}Title`)}
+              </h3>
+              {s.evaluation.expiresAt && (
+                <span className="text-xs text-primary-700">
+                  {t("usage.evaluation.expires").replace("{date}", dateFmt(s.evaluation.expiresAt))}
+                </span>
+              )}
+            </div>
+            <p className="mt-1.5 text-sm leading-relaxed text-primary-800">
+              {t("usage.evaluation.body")
+                .replace("{credits}", fmt(s.evaluation.creditCap))
+                .replace("{remaining}", fmt(s.totalAvailableCredits))}
+            </p>
+            <Link href="/settings/billing/plan" className="mt-3 inline-flex text-sm font-medium text-primary-700 hover:text-primary-900">
+              {t("usage.evaluation.convertCta")}
+            </Link>
+          </div>
+        )}
+
         {/* ── 2. Available-credit breakdown (only when >1 source) ── */}
-        {s && s.purchasedCredits.balance > 0 && (
+        {s && (s.purchasedCredits.balance > 0 || (s.creditSources && s.creditSources.promotional + s.creditSources.trialOrPoc > 0)) && (
           <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-5">
             <h3 className="font-semibold text-gray-900 mb-3">{t("usage.breakdown.title")}</h3>
             <dl className="space-y-1.5 text-sm">
@@ -131,6 +184,21 @@ export function UsageContent() {
                 <dt className="text-gray-500">{t("usage.breakdown.purchased")}</dt>
                 <dd className="font-medium text-emerald-700 tabular-nums" dir="ltr">{fmt(s.purchasedCredits.balance)}</dd>
               </div>
+              {/* Promotional and evaluation credits are separate buckets with
+                  their own expiry, so they are shown separately rather than
+                  folded into "purchased". */}
+              {s.creditSources && s.creditSources.promotional > 0 && (
+                <div className="flex items-center justify-between">
+                  <dt className="text-gray-500">{t("usage.breakdown.promotional")}</dt>
+                  <dd className="font-medium text-gray-800 tabular-nums" dir="ltr">{fmt(s.creditSources.promotional)}</dd>
+                </div>
+              )}
+              {s.creditSources && s.creditSources.trialOrPoc > 0 && (
+                <div className="flex items-center justify-between">
+                  <dt className="text-gray-500">{t("usage.breakdown.trialOrPoc")}</dt>
+                  <dd className="font-medium text-gray-800 tabular-nums" dir="ltr">{fmt(s.creditSources.trialOrPoc)}</dd>
+                </div>
+              )}
               <div className="flex items-center justify-between border-t border-gray-100 pt-1.5">
                 <dt className="font-medium text-gray-700">{t("usage.breakdown.total")}</dt>
                 <dd className="font-semibold text-gray-900 tabular-nums" dir="ltr">{fmt(s.totalAvailableCredits)}</dd>
