@@ -23,6 +23,9 @@ const ENTRY_TYPES = new Set([
 const TERMINAL_TYPES = new Set(["end", "route_target", "default_fallback"]);
 // Branch nodes whose exits are labelled (true/false) rather than a single flow.
 const BRANCH_TYPES = new Set(["condition_group"]);
+// Static nodes that may appear AT MOST ONCE in a process (duplicates are a
+// modelling error - two starts / two default fallbacks are ambiguous).
+const SINGLETON_TYPES = new Set(["start", "default_fallback"]);
 
 function hasInput(type: string): boolean { return !ENTRY_TYPES.has(type); }
 function hasOutput(type: string): boolean { return !TERMINAL_TYPES.has(type); }
@@ -44,10 +47,8 @@ function missingConfig(n: GNode): { key: string; label: string }[] {
     case "set_variable": if (empty(d.variable)) out.push({ key: "variable", label: "variable name" }); break;
     case "http_request": if (empty(d.url)) out.push({ key: "url", label: "URL" }); break;
     case "ai_generate": if (empty(d.prompt)) out.push({ key: "prompt", label: "prompt" }); break;
-    case "wait":
-      if (d.durationMs != null && (typeof d.durationMs !== "number" || d.durationMs < 0))
-        out.push({ key: "durationMs", label: "delay duration" });
-      break;
+    // `wait` delay validity is handled separately (invalid_delay) so a bad
+    // duration is a precise error rather than a generic missing-config one.
   }
   return out;
 }
@@ -141,6 +142,40 @@ export function validateGraph(nodes: GNode[], edges: GEdge[]): { errors: GraphIs
   for (const n of nodes) {
     for (const m of missingConfig(n)) {
       errors.push({ severity: "error", code: "missing_config", nodeId: n.id, message: `A ${n.type.replace(/_/g, " ")} step is missing its ${m.label}.` });
+    }
+  }
+
+  // 8. Duplicate singleton static nodes (e.g. two starts).
+  const singletonCounts = new Map<string, number>();
+  for (const n of nodes) {
+    if (SINGLETON_TYPES.has(n.type)) singletonCounts.set(n.type, (singletonCounts.get(n.type) ?? 0) + 1);
+  }
+  for (const [type, c] of singletonCounts) {
+    if (c > 1) errors.push({ severity: "error", code: "duplicate_entry", message: `The process has ${c} "${type.replace(/_/g, " ")}" steps; only one is allowed.` });
+  }
+
+  // 9. Delay/time validity: a `wait` duration, when present, must be a finite
+  // positive number of ms. A `wait` with no duration set defaults (warning).
+  const outAdj = new Map<string, number>();
+  for (const e of edges) outAdj.set(e.source, (outAdj.get(e.source) ?? 0) + 1);
+  for (const n of nodes) {
+    if (n.type !== "wait") continue;
+    const dur = (n.data || {}).durationMs;
+    if (dur == null) {
+      warnings.push({ severity: "warning", code: "invalid_delay", nodeId: n.id, message: "A wait step has no delay set; it will not pause." });
+    } else if (typeof dur !== "number" || !Number.isFinite(dur) || dur <= 0) {
+      errors.push({ severity: "error", code: "invalid_delay", nodeId: n.id, message: "A wait step has an invalid delay; it must be a positive duration." });
+    }
+  }
+
+  // 10. Branch completeness: a REACHABLE condition/branch node should connect
+  // both of its exits. One (or zero) connected branch means a path falls
+  // through - a soft issue (warning), not a publish blocker.
+  for (const n of nodes) {
+    if (!BRANCH_TYPES.has(n.type) || !reach.has(n.id)) continue;
+    const outCount = outAdj.get(n.id) ?? 0;
+    if (outCount < 2) {
+      warnings.push({ severity: "warning", code: "branch_incomplete", nodeId: n.id, message: "A condition step has an unconnected branch; that path falls through." });
     }
   }
 
