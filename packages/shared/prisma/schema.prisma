@@ -2285,6 +2285,8 @@ enum BillingInterval {
 enum PendingChangeType {
   DOWNGRADE
   CANCEL
+  UPGRADE // scheduled (non-immediate) upgrade
+  VOLUME_CHANGE // chat/voice volume selector change only, same plan
 }
 
 enum AiUnitBucket {
@@ -2312,6 +2314,13 @@ enum EntitlementValueType {
   BOOLEAN
   COUNTER // numeric limit (max users, AI employees, channels, storage…)
   CONFIG // arbitrary JSON config
+  // Added by the pricing round. COUNTER remains the integer limit type (the
+  // catalog's "Integer"); these cover the remaining entitlement shapes.
+  DECIMAL // fractional limit (e.g. storage GB with a decimal component)
+  ENUM // one of a fixed option set (e.g. support level: standard|priority)
+  LIST // an allow-list of string values (e.g. permitted channels)
+  UNLIMITED // explicitly unbounded - beats any numeric limit
+  METERED // consumption-metered, enforced by the credit ledger, not a cap
 }
 
 enum EntitlementSource {
@@ -2321,6 +2330,9 @@ enum EntitlementSource {
   TRIAL
   ADDON
   BETA
+  // Added by the pricing round.
+  VOLUME_OPTION // granted by the selected chat/voice volume option
+  COMPLIANCE_DENY // security/compliance kill switch - always wins, always denies
 }
 
 // ─── Billable Entity (the payer abstraction) ───────────────
@@ -2361,9 +2373,20 @@ model BillableEntityTenant {
 
 // ─── Plan & Pricing Catalog ────────────────────────────────
 
+// A `Plan` row IS a PlanVersion: `key` groups the versions of one commercial
+// product and `version` identifies the immutable commercial revision. Editing a
+// price/feature/limit means publishing a NEW version - never mutating an ACTIVE
+// one - so existing subscriptions (which pin key+version) keep their terms.
+//
+//   Draft → Active → Retired → Archived
+//
+// `kind` separates the self-serve catalog (PUBLIC) from negotiated
+// organization-specific plans (CUSTOM, scoped by tenantId), Sysadmin-only
+// evaluation plans (POC / TRIAL), and pre-existing rows preserved for
+// grandfathering (LEGACY).
 model Plan {
   id              String          @id @default(cuid())
-  key             String // light | pro | business | enterprise | grandfathered
+  key             String // foundation | ai_workforce | ai_voice | custom_* | poc | legacy keys
   name            String
   version         Int             @default(1)
   billingInterval BillingInterval @default(MONTHLY) @map("billing_interval")
@@ -2375,11 +2398,64 @@ model Plan {
   createdAt       DateTime        @default(now()) @map("created_at")
   updatedAt       DateTime        @updatedAt @map("updated_at")
 
-  entitlements PlanEntitlement[]
+  // ── Lifecycle & catalog presentation (pricing round) ──
+  status        PlanStatus @default(ACTIVE)
+  kind          PlanKind   @default(PUBLIC)
+  // CUSTOM plans only: the single organization this negotiated plan belongs to.
+  // NULL for every catalog plan. Enforced in application code, not by FK
+  // cascade, so deleting a tenant never silently drops commercial history.
+  tenantId      String?    @map("tenant_id")
+  nameHe        String?    @map("name_he")
+  descriptionEn String?    @map("description_en")
+  descriptionHe String?    @map("description_he")
+  sortOrder     Int        @default(0) @map("sort_order") // also the upgrade/downgrade rank
+  recommended   Boolean    @default(false)
+  effectiveFrom DateTime?  @map("effective_from")
+  effectiveTo   DateTime?  @map("effective_to")
+  publishedAt   DateTime?  @map("published_at")
+  publishedBy   String?    @map("published_by")
+  internalNote  String?    @map("internal_note")
+
+  // ── Commercial configuration (all data, never code) ──
+  supportLevel          String? @map("support_level") // standard | priority | dedicated
+  dataRetentionDays     Int?    @map("data_retention_days")
+  autoPurchaseEligible  Boolean @default(true) @map("auto_purchase_eligible")
+  creditPackagesEligible Boolean @default(true) @map("credit_packages_eligible")
+  // Whether the customer may pick a recurring chat / voice volume. Foundation
+  // ships with both OFF; flipping either ON is a data change.
+  chatVolumeEnabled     Boolean @default(false) @map("chat_volume_enabled")
+  voiceVolumeEnabled    Boolean @default(false) @map("voice_volume_enabled")
+  // Contract terms for CUSTOM plans.
+  contractStart         DateTime? @map("contract_start")
+  contractEnd           DateTime? @map("contract_end")
+  approvalState         String?   @map("approval_state") // PENDING | APPROVED | REJECTED
+  approvedBy            String?   @map("approved_by")
+  approvedAt            DateTime? @map("approved_at")
+
+  entitlements  PlanEntitlement[]
+  volumeOptions PlanVolumeOption[]
+  estimations   PublicEstimationConfig[]
 
   @@unique([key, version])
   @@index([key])
+  @@index([status, kind])
+  @@index([tenantId])
   @@map("plans")
+}
+
+enum PlanStatus {
+  DRAFT // editable; never resolvable by a subscription
+  ACTIVE // the version new subscribers receive
+  RETIRED // no new subscribers; existing subscriptions keep running on it
+  ARCHIVED // historical only
+}
+
+enum PlanKind {
+  PUBLIC // self-serve catalog
+  CUSTOM // negotiated, scoped to one organization
+  POC // Sysadmin-provisioned proof of concept
+  TRIAL // Sysadmin-provisioned trial
+  LEGACY // pre-existing plan preserved for grandfathering
 }
 
 model PlanEntitlement {
@@ -2408,7 +2484,34 @@ model CreditPackage {
   active           Boolean  @default(true)
   createdAt        DateTime @default(now()) @map("created_at")
 
+  // ── Catalog configuration (pricing round) ──
+  nameHe          String?            @map("name_he")
+  status          PlanStatus         @default(ACTIVE) // Draft → Active → Retired
+  // NULL = every plan. Otherwise an array of plan keys, e.g. ["ai_workforce"].
+  eligiblePlanKeys Json?             @map("eligible_plan_keys")
+  activeFrom      DateTime?          @map("active_from")
+  activeTo        DateTime?          @map("active_to")
+  expiryPolicy    CreditExpiryPolicy @default(NEVER) @map("expiry_policy")
+  expiryDays      Int?               @map("expiry_days") // DAYS_AFTER_PURCHASE only
+  customerVisible Boolean            @default(true) @map("customer_visible")
+  maxPurchaseQuantity Int?           @map("max_purchase_quantity")
+  discountLabel   String?            @map("discount_label")
+  sortOrder       Int                @default(0) @map("sort_order")
+  // A future price that takes effect on its own date without touching `price`
+  // until then - so scheduling a price change is not a live price change.
+  scheduledPrice     Decimal?  @map("scheduled_price") @db.Decimal(12, 2)
+  scheduledPriceFrom DateTime? @map("scheduled_price_from")
+  internalNote    String?            @map("internal_note")
+  updatedAt       DateTime           @default(now()) @updatedAt @map("updated_at")
+
+  @@index([status, sortOrder])
   @@map("credit_packages")
+}
+
+enum CreditExpiryPolicy {
+  NEVER // purchased credits persist until consumed
+  DAYS_AFTER_PURCHASE // expire `expiryDays` after the grant
+  PERIOD_END // expire with the billing period (like INCLUDED)
 }
 
 // Cost-driven pricing engine. AI Units are an abstraction over real provider
@@ -2595,6 +2698,27 @@ model Subscription {
   createdAt               DateTime           @default(now()) @map("created_at")
   updatedAt               DateTime           @updatedAt @map("updated_at")
 
+  // ── Commercial snapshot (pricing round) ──
+  // What the customer actually agreed to, captured at subscribe / plan-change /
+  // renewal time. Read for display, invoicing and estimation INSTEAD of the live
+  // Plan row, so publishing a new plan version can never retroactively rewrite an
+  // existing customer's price, included credits, or conversation estimate.
+  billingInterval         BillingInterval @default(MONTHLY) @map("billing_interval")
+  snapshotPrice           Decimal?        @map("snapshot_price") @db.Decimal(12, 2)
+  snapshotCurrency        String?         @map("snapshot_currency")
+  snapshotIncludedCredits Int?            @map("snapshot_included_credits")
+  // { chatCreditsPerEstimatedConversation, voiceCreditsPerEstimatedCall,
+  //   businessDaysPerMonth, version, configId } - the PUBLIC commercial
+  //   assumption in force when this subscription was priced.
+  snapshotEstimation      Json?           @map("snapshot_estimation")
+  snapshotAt              DateTime?       @map("snapshot_at")
+  // Selected recurring volume presets (PlanVolumeOption.key), null when the
+  // plan's selector is disabled or the base option is in effect.
+  chatVolumeOptionKey     String?         @map("chat_volume_option_key")
+  voiceVolumeOptionKey    String?         @map("voice_volume_option_key")
+  // Sysadmin-provisioned evaluation subscriptions.
+  trialPocTemplateKey     String?         @map("trial_poc_template_key")
+
   entity        BillableEntity             @relation(fields: [billableEntityId], references: [id], onDelete: Cascade)
   pendingChange PendingSubscriptionChange?
   events        SubscriptionEvent[]
@@ -2616,6 +2740,10 @@ model PendingSubscriptionChange {
   createdBy         String?           @map("created_by")
   createdAt         DateTime          @default(now()) @map("created_at")
   appliedAt         DateTime?         @map("applied_at")
+  // Scheduled volume-selector change (pricing round). Applied together with the
+  // plan change, or on its own for changeType = VOLUME_CHANGE.
+  targetChatVolumeKey  String? @map("target_chat_volume_key")
+  targetVoiceVolumeKey String? @map("target_voice_volume_key")
 
   subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
 
@@ -2700,9 +2828,32 @@ model AutoPurchasePolicy {
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
 
+  // ── Pricing round ──
+  // Notify the owner at this consumption %, ahead of the purchase threshold.
+  warningThresholdPct Int      @default(80) @map("warning_threshold_pct")
+  // Increment-based top-up: buy `incrementCredits` at `pricePerCredit` instead
+  // of a fixed package. Takes precedence over packageKey when both are set.
+  incrementCredits    Int?     @map("increment_credits")
+  pricePerCredit      Decimal? @map("price_per_credit") @db.Decimal(12, 6)
+  // What happens once the monthly ceiling is reached (or auto-purchase is off)
+  // and the balance hits zero. Enforced server-side by the AI runtime gate.
+  limitBehavior       AutoPurchaseLimitBehavior @default(STOP_AI) @map("limit_behavior")
+  // Single-flight lock. A purchase attempt CAS-claims the policy row; a stale
+  // lock (older than the TTL) is reclaimable so a crashed worker cannot wedge
+  // auto-purchase permanently.
+  lockedAt            DateTime? @map("locked_at")
+  lockToken           String?   @map("lock_token")
+
   entity BillableEntity @relation(fields: [billableEntityId], references: [id], onDelete: Cascade)
 
   @@map("auto_purchase_policies")
+}
+
+enum AutoPurchaseLimitBehavior {
+  STOP_AI // block AI execution at zero credits (default)
+  HUMAN_ONLY // AI stops, human agents keep working
+  REQUIRE_APPROVAL // each further AI action needs an authorized approval
+  PREPAID_ONLY // never auto-purchase; consume prepaid balance only
 }
 
 model DunningState {
@@ -2741,6 +2892,296 @@ model BillingWebhookEvent {
   @@index([tenantId])
   @@index([receivedAt])
   @@map("billing_webhook_events")
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// PRICING · FEATURE CATALOG · PUBLIC ESTIMATION · VOLUME · CURRENCY
+//
+// Three layers that must never bleed into each other:
+//
+//   A. ACTUAL INTERNAL USAGE  - UsageLog + ConversationUsageAggregate.
+//      Real tokens, real provider cost, real credits. SYSADMIN ONLY. Never
+//      crosses a tenant-facing API boundary.
+//
+//   B. PUBLIC COMMERCIAL ESTIMATION - PublicEstimationConfig. A MANUALLY set
+//      commercial assumption ("8 credits ≈ one chat"). Versioned, Sysadmin-
+//      edited, NEVER derived from layer A, and used only to render capacity
+//      estimates and price-per-conversation. Changing it never writes to the
+//      ledger, an invoice, or an existing subscription's snapshot.
+//
+//   C. ACTUAL CREDIT ACCOUNTING - AiUnitLot / AiUnitLedgerEntry (unchanged).
+//      The source of truth for granted / consumed / purchased / expired /
+//      refunded / remaining credits.
+// ════════════════════════════════════════════════════════════════════════
+
+// ─── Feature catalog ───────────────────────────────────────
+// The canonical list of sellable capabilities, keyed by STABLE keys (never
+// translated labels). A plan entitles a subset; the entitlement resolver reads
+// this catalog to know each key's type, default and customer visibility.
+//
+// `implemented=false` means the capability exists in the catalog but is NOT
+// built yet - it can never be entitled, sold, or shown on a pricing page.
+model FeatureDefinition {
+  id              String               @id @default(cuid())
+  key             String               @unique // "ai.employee", "voice.call_pilot"
+  nameEn          String               @map("name_en")
+  nameHe          String               @map("name_he")
+  descriptionEn   String?              @map("description_en")
+  descriptionHe   String?              @map("description_he")
+  category        FeatureCategory
+  entitlementType EntitlementValueType @default(BOOLEAN) @map("entitlement_type")
+  // Applied when no plan or override supplies a value. { bool } | { count } | …
+  defaultValue    Json?                @map("default_value")
+  // Free-form list of where this key is enforced server-side, e.g.
+  // ["services/ai:employee.create", "packages/shared:assertFeature"]. Kept as
+  // data so the Sysadmin console can show the enforcement surface honestly.
+  enforcementLocations Json?           @map("enforcement_locations")
+  customerVisible Boolean              @default(true) @map("customer_visible")
+  sysadminOnly    Boolean              @default(false) @map("sysadmin_only")
+  implemented     Boolean              @default(true)
+  sortOrder       Int                  @default(0) @map("sort_order")
+  createdAt       DateTime             @default(now()) @map("created_at")
+  updatedAt       DateTime             @default(now()) @updatedAt @map("updated_at")
+
+  @@index([category, sortOrder])
+  @@map("feature_definitions")
+}
+
+enum FeatureCategory {
+  COMMUNICATION
+  AI
+  VOICE
+  MANAGEMENT
+}
+
+// ─── Recurring volume options (commercial presets) ─────────
+// A business-friendly selector ("50 chats per business day") that maps to a
+// recurring credit allocation and an added monthly price. The SELECTOR is
+// presentation; the CREDIT ALLOCATION is what actually gets granted, and the
+// ledger remains the billing source of truth.
+model PlanVolumeOption {
+  id                   String        @id @default(cuid())
+  planId               String        @map("plan_id")
+  key                  String // "chat_50" | "voice_25"
+  channel              VolumeChannel
+  dailyVolume          Int           @map("daily_volume") // 50
+  businessDaysPerMonth Int           @default(25) @map("business_days_per_month")
+  monthlyVolume        Int           @map("monthly_volume") // 1250 (denormalized presentation value)
+  // The PUBLIC commercial assumption this option was priced against. Snapshotted
+  // here so re-pointing the global estimation config never silently restates a
+  // published option's advertised capacity.
+  creditsPerUnit       Decimal       @map("credits_per_unit") @db.Decimal(12, 4)
+  // Recurring credits this option ADDS on top of the plan's base allowance.
+  additionalCredits    Int           @default(0) @map("additional_credits")
+  // Fixed commercial price - NOT derived from a formula unless the operator
+  // chooses to enter a derived number.
+  additionalPrice      Decimal       @default(0) @map("additional_price") @db.Decimal(12, 2)
+  currency             String        @default("USD")
+  isDefault            Boolean       @default(false) @map("is_default")
+  sortOrder            Int           @default(0) @map("sort_order")
+  enabled              Boolean       @default(true)
+  activeFrom           DateTime?     @map("active_from")
+  activeTo             DateTime?     @map("active_to")
+  internalNote         String?       @map("internal_note")
+  createdAt            DateTime      @default(now()) @map("created_at")
+  updatedAt            DateTime      @default(now()) @updatedAt @map("updated_at")
+
+  plan        Plan                     @relation(fields: [planId], references: [id], onDelete: Cascade)
+  estimations PublicEstimationConfig[]
+
+  @@unique([planId, key])
+  @@index([planId, channel, sortOrder])
+  @@map("plan_volume_options")
+}
+
+enum VolumeChannel {
+  CHAT
+  VOICE
+}
+
+// ─── Public commercial estimation (layer B) ────────────────
+// MANUALLY configured. Never derived from analytics, never auto-updated. The
+// Sysadmin console may WARN that actual usage diverges; only an explicit
+// operator action creates and publishes a new version.
+model PublicEstimationConfig {
+  id             String          @id @default(cuid())
+  scope          EstimationScope @default(GLOBAL)
+  planId         String?         @map("plan_id") // scope = PLAN
+  volumeOptionId String?         @map("volume_option_id") // scope = VOLUME_OPTION
+  version        Int             @default(1)
+
+  chatCreditsPerEstimatedConversation Decimal @map("chat_credits_per_estimated_conversation") @db.Decimal(12, 4)
+  voiceCreditsPerEstimatedCall        Decimal @map("voice_credits_per_estimated_call") @db.Decimal(12, 4)
+  businessDaysPerMonth                Int     @default(25) @map("business_days_per_month")
+
+  effectiveFrom DateTime  @default(now()) @map("effective_from")
+  active        Boolean   @default(true)
+  internalNote  String?   @map("internal_note")
+  createdBy     String?   @map("created_by")
+  publishedAt   DateTime? @map("published_at")
+  publishedBy   String?   @map("published_by")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  plan         Plan?             @relation(fields: [planId], references: [id], onDelete: Cascade)
+  volumeOption PlanVolumeOption? @relation(fields: [volumeOptionId], references: [id], onDelete: Cascade)
+
+  @@index([scope, active, effectiveFrom])
+  @@index([planId, active])
+  @@index([volumeOptionId, active])
+  @@map("public_estimation_configs")
+}
+
+enum EstimationScope {
+  GLOBAL
+  PLAN
+  VOLUME_OPTION
+}
+
+// ─── Currency display ──────────────────────────────────────
+// USD is the canonical public pricing currency. ILS is a DISPLAY conversion
+// using an official representative rate, rounded upward by a configurable
+// increment. Display currency and charged currency are different things and the
+// UI must say so.
+model PricingCurrencyConfig {
+  id                   String   @id @default(cuid())
+  baseCurrency         String   @default("USD") @map("base_currency")
+  displayCurrencies    Json     @map("display_currencies") // ["USD","ILS"]
+  ilsRoundingIncrement Int      @default(5) @map("ils_rounding_increment") // ₪1 | ₪5 | ₪10 | ₪50
+  roundingMode         String   @default("UP") @map("rounding_mode")
+  fxSource             String   @default("boi") @map("fx_source") // Bank of Israel representative rate
+  fxRefreshHours       Int      @default(24) @map("fx_refresh_hours")
+  fallbackUsdIls       Decimal  @default(3.700000) @map("fallback_usd_ils") @db.Decimal(18, 6)
+  // When true, checkout charges the display currency; when false (default) ILS
+  // is labelled as an estimate and the charge happens in `baseCurrency`.
+  chargeInDisplayCurrency Boolean @default(false) @map("charge_in_display_currency")
+  active               Boolean  @default(true)
+  updatedBy            String?  @map("updated_by")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("pricing_currency_configs")
+}
+
+// Server-side daily cache of the representative rate. Never client-supplied.
+model FxRateSnapshot {
+  id            String   @id @default(cuid())
+  baseCurrency  String   @default("USD") @map("base_currency")
+  quoteCurrency String   @default("ILS") @map("quote_currency")
+  rate          Decimal  @db.Decimal(18, 8)
+  source        String // "boi" | "fallback" | "manual"
+  rateDate      String   @map("rate_date") // "2026-07-26" - the rate's own date, not fetch time
+  fetchedAt     DateTime @default(now()) @map("fetched_at")
+
+  @@unique([baseCurrency, quoteCurrency, rateDate, source])
+  @@index([baseCurrency, quoteCurrency, fetchedAt])
+  @@map("fx_rate_snapshots")
+}
+
+// ─── POC / Trial templates (Sysadmin-only) ─────────────────
+// Operator-editable defaults for evaluation access. POC and Trial share the
+// infrastructure but keep separate labels and configuration.
+model TrialPocTemplate {
+  id                   String   @id @default(cuid())
+  key                  String   @unique // "trial" | "poc"
+  nameEn               String   @map("name_en")
+  nameHe               String   @map("name_he")
+  durationDays         Int      @map("duration_days")
+  creditCap            Int      @map("credit_cap")
+  allFeatures          Boolean  @default(true) @map("all_features")
+  autoRenew            Boolean  @default(false) @map("auto_renew")
+  autoPurchaseEnabled  Boolean  @default(false) @map("auto_purchase_enabled")
+  customerSelfActivate Boolean  @default(false) @map("customer_self_activate")
+  // Optional restrictions applied to the evaluation tenant, e.g.
+  // { "providers": ["shopify"], "limits": { "limit:ai_employees": 2 } }.
+  restrictions         Json?
+  // Whether unused evaluation credits survive conversion to a paid plan.
+  transferRemainingCredits Boolean @default(false) @map("transfer_remaining_credits")
+  bannerKind           String   @default("TRIAL") @map("banner_kind") // TRIAL | POC
+  active               Boolean  @default(true)
+  updatedBy            String?  @map("updated_by")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("trial_poc_templates")
+}
+
+// ─── Actual per-conversation usage (layer A · SYSADMIN ONLY) ──
+// Rolls every attributable AI job for one conversation - replies, employee
+// execution, summaries, CRM writeback, sentiment, classification, routing,
+// retrieval, tool selection, voice transcription/synthesis, post-close jobs -
+// into one settleable record. Never exposed through a tenant-facing API.
+model ConversationUsageAggregate {
+  id               String  @id @default(cuid())
+  conversationId   String  @unique @map("conversation_id")
+  tenantId         String  @map("tenant_id")
+  channel          String // ChannelType as text - voice sessions have no ChannelType row
+  conversationType String  @map("conversation_type") // CHAT | VOICE
+  planKey          String? @map("plan_key") // plan in force at finalization
+  aiAgentId        String? @map("ai_agent_id")
+  primaryModel     String? @map("primary_model") // highest-cost model in the window
+
+  startedAt   DateTime  @map("started_at")
+  resolvedAt  DateTime? @map("resolved_at") // conversation closed / call ended
+  finalizedAt DateTime? @map("finalized_at") // settlement window elapsed
+
+  totalCredits      Decimal @default(0) @map("total_credits") @db.Decimal(16, 6)
+  totalInputTokens  Int     @default(0) @map("total_input_tokens")
+  totalOutputTokens Int     @default(0) @map("total_output_tokens")
+  totalTokens       Int     @default(0) @map("total_tokens")
+  modelCostUsd      Decimal @default(0) @map("model_cost_usd") @db.Decimal(16, 8)
+  eventCount        Int     @default(0) @map("event_count")
+
+  summaryIncluded Boolean @default(false) @map("summary_included")
+  voiceIncluded   Boolean @default(false) @map("voice_included")
+
+  status             ConversationUsageStatus @default(OPEN)
+  // Bumped when the attribution rules change, so historical rows stay
+  // interpretable and a recalculation is explicit rather than silent.
+  calculationVersion Int                     @default(1) @map("calculation_version")
+  excludedReason     String?                 @map("excluded_reason") // "test" | "merged_into:<id>" | …
+  mergedIntoId       String?                 @map("merged_into_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  links ConversationUsageEventLink[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, conversationType, finalizedAt])
+  @@index([status, resolvedAt])
+  @@index([finalizedAt])
+  @@index([tenantId, planKey, finalizedAt])
+  @@map("conversation_usage_aggregates")
+}
+
+enum ConversationUsageStatus {
+  OPEN // conversation live; usage still accruing
+  SETTLING // closed, waiting out the late-job settlement window
+  FINALIZED // counted in averages
+  REOPENED // reopened after finalization; excluded until re-settled
+  EXCLUDED // test / merged / not attributable
+}
+
+// One row per attributed UsageLog event. `usageLogId` is UNIQUE, which is what
+// makes aggregation idempotent: replaying the roll-up, or a late event arriving
+// twice, can never double-count.
+model ConversationUsageEventLink {
+  id           String   @id @default(cuid())
+  aggregateId  String   @map("aggregate_id")
+  usageLogId   String   @unique @map("usage_log_id")
+  credits      Decimal  @default(0) @db.Decimal(16, 6)
+  inputTokens  Int      @default(0) @map("input_tokens")
+  outputTokens Int      @default(0) @map("output_tokens")
+  costUsd      Decimal  @default(0) @map("cost_usd") @db.Decimal(16, 8)
+  feature      String?
+  model        String?
+  occurredAt   DateTime @map("occurred_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  aggregate ConversationUsageAggregate @relation(fields: [aggregateId], references: [id], onDelete: Cascade)
+
+  @@index([aggregateId])
+  @@map("conversation_usage_event_links")
 }
 
 // PERMANENT, provider-neutral evaluation corpus: one row per turn comparing the
