@@ -2812,6 +2812,8 @@
   },
   "aiStudio": {
     "title": "AI Studio",
+    "nodePaletteTitle": "Node Palette",
+    "nodePaletteHint": "Drag onto canvas, or click to add",
     "subtitle": "Create AI employees, define what they know, and manage how they handle conversations",
     "wizard": {
       "title": "Create AI Employee",
@@ -2871,55 +2873,188 @@
       "customer_data": "Customer Data",
       "voice_actions": "Voice Actions",
       "voice_triggers": "Voice Triggers",
-      "routing": "Routing"
+      "routing": "Routing",
+      "data": "Data",
+      "destinations": "Destinations"
     },
     "nodes": {
-      "channel_entry": { "label": "Channel Entry", "desc": "Where messages from a channel enter the process." },
-      "start": { "label": "Start", "desc": "The starting point of the process." },
-      "end": { "label": "End", "desc": "Ends this branch of the process." },
-      "wait": { "label": "Wait", "desc": "Pause for a set time before the next step." },
-      "condition_group": { "label": "Condition", "desc": "Branch based on a rule (match / no match)." },
-      "send_message_text": { "label": "Send Text", "desc": "Send a text message to the customer." },
-      "send_message_interactive": { "label": "Send Interactive (Link)", "desc": "Send a message with a link button." },
-      "send_message_quick_reply": { "label": "Send Quick Reply", "desc": "Show tappable reply buttons." },
-      "send_message_image": { "label": "Send Image", "desc": "Send an image." },
-      "send_message_file": { "label": "Send File", "desc": "Send a file or document." },
-      "send_message_template": { "label": "Send WhatsApp Template", "desc": "Send an approved WhatsApp template." },
-      "send_comment_reply": { "label": "Reply to Comment", "desc": "Reply publicly to a social comment." },
-      "collect_input": { "label": "Collect Input", "desc": "Ask a question and store the answer." },
-      "set_variable": { "label": "Set Variable", "desc": "Store or compute a value for later steps." },
-      "http_request": { "label": "HTTP Request", "desc": "Call an external API." },
-      "ai_generate": { "label": "AI Generate", "desc": "Generate text with the AI." },
-      "update_customer": { "label": "Update Customer", "desc": "Set a tag or attribute on the customer." },
-      "bring_user_data": { "label": "Bring User Data", "desc": "Load customer fields from the source of truth." },
-      "comment_trigger": { "label": "Trigger: Comment", "desc": "Start when a social comment arrives." },
-      "keyword_trigger": { "label": "Trigger: Keyword", "desc": "Start when a message matches a keyword." },
-      "schedule_trigger": { "label": "Trigger: Schedule", "desc": "Start on a schedule." },
-      "webhook_trigger": { "label": "Trigger: Webhook", "desc": "Start when an external webhook fires." },
-      "voice_add_participant": { "label": "Voice: Add participant", "desc": "Add a participant to the live call.", "limitation": "Its output is a participant event and can't connect to a message-content input." },
-      "route_target": { "label": "Route Target", "desc": "Route the conversation to an agent, flow or department." },
+      "channel_entry": {
+        "label": "Channel Entry",
+        "desc": "Where messages from a channel enter the process."
+      },
+      "start": {
+        "label": "Start",
+        "desc": "The starting point of the process."
+      },
+      "end": {
+        "label": "End",
+        "desc": "Ends this branch of the process."
+      },
+      "wait": {
+        "label": "Wait",
+        "desc": "Pause for a set time before the next step."
+      },
+      "condition_group": {
+        "label": "Condition",
+        "desc": "Branch based on a rule (match / no match)."
+      },
+      "send_message_text": {
+        "label": "Send Text",
+        "desc": "Send a text message to the customer."
+      },
+      "send_message_interactive": {
+        "label": "Send Interactive (Link)",
+        "desc": "Send a message with a link button."
+      },
+      "send_message_quick_reply": {
+        "label": "Send Quick Reply",
+        "desc": "Show tappable reply buttons."
+      },
+      "send_message_image": {
+        "label": "Send Image",
+        "desc": "Send an image."
+      },
+      "send_message_file": {
+        "label": "Send File",
+        "desc": "Send a file or document."
+      },
+      "send_message_template": {
+        "label": "Send WhatsApp Template",
+        "desc": "Send an approved WhatsApp template."
+      },
+      "send_comment_reply": {
+        "label": "Reply to Comment",
+        "desc": "Reply publicly to a social comment."
+      },
+      "collect_input": {
+        "label": "Collect Input",
+        "desc": "Ask a question and store the answer."
+      },
+      "set_variable": {
+        "label": "Set Variable",
+        "desc": "Store or compute a value for later steps."
+      },
+      "http_request": {
+        "label": "HTTP Request",
+        "desc": "Call an external API."
+      },
+      "ai_generate": {
+        "label": "AI Generate",
+        "desc": "Generate text with the AI."
+      },
+      "update_customer": {
+        "label": "Update Customer",
+        "desc": "Set a tag or attribute on the customer."
+      },
+      "bring_user_data": {
+        "label": "Bring User Data",
+        "desc": "Load customer fields from the source of truth."
+      },
+      "comment_trigger": {
+        "label": "Trigger: Comment",
+        "desc": "Start when a social comment arrives."
+      },
+      "keyword_trigger": {
+        "label": "Trigger: Keyword",
+        "desc": "Start when a message matches a keyword."
+      },
+      "schedule_trigger": {
+        "label": "Trigger: Schedule",
+        "desc": "Start on a schedule."
+      },
+      "webhook_trigger": {
+        "label": "Trigger: Webhook",
+        "desc": "Start when an external webhook fires."
+      },
+      "voice_add_participant": {
+        "label": "Voice: Add participant",
+        "desc": "Add a participant to the live call.",
+        "limitation": "Its output is a participant event and can't connect to a message-content input."
+      },
+      "route_target": {
+        "label": "Route Target",
+        "desc": "Route the conversation to an agent, flow or department."
+      },
       "voice_trigger:call": {
-        "incoming": { "label": "Voice: Incoming call", "desc": "Start when an inbound call arrives." },
-        "answered": { "label": "Voice: Call answered", "desc": "Start when a call is answered." },
-        "missed": { "label": "Voice: Missed call", "desc": "Start when a call is missed." },
-        "hangup_customer": { "label": "Voice: Customer hung up", "desc": "Start when the customer hangs up." },
-        "hangup_agent": { "label": "Voice: Agent hung up", "desc": "Start when the agent hangs up." },
-        "intent_detected": { "label": "Voice: Intent detected", "desc": "Start when the AI detects an intent during the call." },
-        "keyword_spoken": { "label": "Voice: Keyword spoken", "desc": "Start when a keyword is spoken during the call." }
+        "incoming": {
+          "label": "Voice: Incoming call",
+          "desc": "Start when an inbound call arrives."
+        },
+        "answered": {
+          "label": "Voice: Call answered",
+          "desc": "Start when a call is answered."
+        },
+        "missed": {
+          "label": "Voice: Missed call",
+          "desc": "Start when a call is missed."
+        },
+        "hangup_customer": {
+          "label": "Voice: Customer hung up",
+          "desc": "Start when the customer hangs up."
+        },
+        "hangup_agent": {
+          "label": "Voice: Agent hung up",
+          "desc": "Start when the agent hangs up."
+        },
+        "intent_detected": {
+          "label": "Voice: Intent detected",
+          "desc": "Start when the AI detects an intent during the call."
+        },
+        "keyword_spoken": {
+          "label": "Voice: Keyword spoken",
+          "desc": "Start when a keyword is spoken during the call."
+        }
+      },
+      "default_fallback": {
+        "label": "Default Fallback",
+        "desc": "Catch-all for unmatched"
       }
     },
     "templates": {
-      "welcome": { "name": "Welcome new contact", "desc": "Greet every new message, ask for their name, and use it in the reply." },
-      "faq_menu": { "name": "FAQ menu", "desc": "Show the most common questions as tappable buttons, each with a canned answer." },
-      "human_handoff": { "name": "Talk to human (keyword)", "desc": "When someone types \"agent\", \"human\" or \"help\", route to a live teammate." },
-      "lead_qualification": { "name": "Lead qualification", "desc": "Capture email + company, tag the contact as a lead, then hand off to sales." },
-      "drip_followup": { "name": "Delayed follow-up", "desc": "Answer now, then follow up later with a link - handy for pricing nudges." },
-      "comment_to_dm_lead_magnet": { "name": "Comment → DM lead magnet", "desc": "A keyword on a post → public reply + DM the resource + capture email." },
-      "giveaway_entry": { "name": "Giveaway entry capture", "desc": "Comment to enter → DM confirmation + email capture + giveaway tag." },
-      "appointment_booking": { "name": "Appointment booking", "desc": "Pick a time slot, capture name + phone, route to a teammate to confirm." },
-      "support_triage": { "name": "Support triage", "desc": "Pick a category and route to the right team." },
-      "ai_first_response": { "name": "AI auto-reply", "desc": "Let the AI answer first from your knowledge base; fall through to a human." },
-      "order_status_lookup": { "name": "Order status lookup", "desc": "Collect the order ID, fetch status from your API, and reply." }
+      "welcome": {
+        "name": "Welcome new contact",
+        "desc": "Greet every new message, ask for their name, and use it in the reply."
+      },
+      "faq_menu": {
+        "name": "FAQ menu",
+        "desc": "Show the most common questions as tappable buttons, each with a canned answer."
+      },
+      "human_handoff": {
+        "name": "Talk to human (keyword)",
+        "desc": "When someone types \"agent\", \"human\" or \"help\", route to a live teammate."
+      },
+      "lead_qualification": {
+        "name": "Lead qualification",
+        "desc": "Capture email + company, tag the contact as a lead, then hand off to sales."
+      },
+      "drip_followup": {
+        "name": "Delayed follow-up",
+        "desc": "Answer now, then follow up later with a link - handy for pricing nudges."
+      },
+      "comment_to_dm_lead_magnet": {
+        "name": "Comment → DM lead magnet",
+        "desc": "A keyword on a post → public reply + DM the resource + capture email."
+      },
+      "giveaway_entry": {
+        "name": "Giveaway entry capture",
+        "desc": "Comment to enter → DM confirmation + email capture + giveaway tag."
+      },
+      "appointment_booking": {
+        "name": "Appointment booking",
+        "desc": "Pick a time slot, capture name + phone, route to a teammate to confirm."
+      },
+      "support_triage": {
+        "name": "Support triage",
+        "desc": "Pick a category and route to the right team."
+      },
+      "ai_first_response": {
+        "name": "AI auto-reply",
+        "desc": "Let the AI answer first from your knowledge base; fall through to a human."
+      },
+      "order_status_lookup": {
+        "name": "Order status lookup",
+        "desc": "Collect the order ID, fetch status from your API, and reply."
+      }
     },
     "stats": {
       "teamMembers": "Team Members",

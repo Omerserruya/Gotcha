@@ -21,6 +21,7 @@ import ReactFlow, {
 import "reactflow/dist/style.css";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
+import { nodeLabel, nodeDesc, nodeCategoryLabel } from "./node-i18n";
 import {
   getAIAgents,
   getChatbotFlows,
@@ -1519,13 +1520,13 @@ function MainPlaybookEditorInner({ onBack, embedded }: Props) {
         >
           <div className="p-4 space-y-5 w-[260px]">
             <div className="px-1">
-              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-[0.08em]">Node Palette</p>
-              <p className="text-[11px] text-gray-400 mt-1">Drag onto canvas, or click to add</p>
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-[0.08em]">{t("aiStudio.nodePaletteTitle")}</p>
+              <p className="text-[11px] text-gray-400 mt-1">{t("aiStudio.nodePaletteHint")}</p>
             </div>
 
             {NODE_PALETTE.map((cat) => (
               <div key={cat.category}>
-                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-[0.08em] px-1 mb-1.5">{cat.category}</p>
+                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-[0.08em] px-1 mb-1.5">{nodeCategoryLabel(cat.category, t)}</p>
                 <div className="space-y-0.5">
                   {cat.items.map((item) => (
                     <div
@@ -1539,8 +1540,8 @@ function MainPlaybookEditorInner({ onBack, embedded }: Props) {
                         {item.icon}
                       </div>
                       <div className="min-w-0">
-                        <p className="text-[13px] font-medium text-gray-800 truncate">{item.label}</p>
-                        <p className="text-[11px] text-gray-400 truncate">{item.desc}</p>
+                        <p className="text-[13px] font-medium text-gray-800 truncate">{nodeLabel(item.type, t, item.label)}</p>
+                        <p className="text-[11px] text-gray-400 truncate">{nodeDesc(item.type, t, item.desc)}</p>
                       </div>
                     </div>
                   ))}
