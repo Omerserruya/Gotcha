@@ -6,11 +6,13 @@
  * ENTITLEMENT read models live in @chatcenter/shared and are consumed in-process
  * by other services; only WRITES (charge/grant/lifecycle) go through this API.
  */
-import { createServiceApp, startService } from "@chatcenter/shared";
+import { createServiceApp, startService, settleDueConversations } from "@chatcenter/shared";
 import subscriptionRoutes from "./routes/subscription";
 import paymentMethodRoutes from "./routes/payment-methods";
 import creditsRoutes from "./routes/credits";
 import pricingRoutes from "./routes/pricing";
+import adminPricingRoutes from "./routes/admin-pricing";
+import adminAnalyticsRoutes from "./routes/admin-analytics";
 import invoicesRoutes from "./routes/invoices";
 import webhookRoutes from "./routes/webhooks";
 import internalRoutes from "./routes/internal";
@@ -24,6 +26,9 @@ app.use("/api", subscriptionRoutes);
 app.use("/api", paymentMethodRoutes);
 app.use("/api", creditsRoutes);
 app.use("/api", pricingRoutes);
+// Platform (Sysadmin) tier. Never reachable by a tenant ADMIN.
+app.use("/api", adminPricingRoutes);
+app.use("/api", adminAnalyticsRoutes);
 app.use("/api", invoicesRoutes);
 app.use("/api", webhookRoutes);
 app.use("/api", internalRoutes);
@@ -38,8 +43,16 @@ if (schedulerEnabled) {
     try {
       const cycle = await runBillingCycle();
       const dunning = await runDunning();
-      if (cycle.trials || cycle.renewals || cycle.pending || dunning.retried || dunning.suspended) {
-        console.log("[billing][cycle]", { cycle, dunning });
+      // Sysadmin cost analytics: discover conversations that closed since the
+      // last tick and settle the ones whose late-job window has elapsed. Runs
+      // here rather than on conversation close so the AI hot path never waits
+      // on aggregation.
+      const usage = await settleDueConversations().catch((err: any) => {
+        console.warn("[billing][usage] settle failed:", err?.message ?? err);
+        return { settled: 0, discovered: 0 };
+      });
+      if (cycle.trials || cycle.renewals || cycle.pending || dunning.retried || dunning.suspended || usage.settled || usage.discovered) {
+        console.log("[billing][cycle]", { cycle, dunning, usage });
       }
     } catch (err: any) {
       console.warn("[billing][cycle] failed:", err?.message ?? err);

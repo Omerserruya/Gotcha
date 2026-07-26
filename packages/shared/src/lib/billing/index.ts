@@ -71,7 +71,9 @@ export {
   isUnsellable,
   featuresByCategory,
 } from "./feature-catalog";
-export type { FeatureDef, FeatureCategory } from "./feature-catalog";
+// FeatureCategory is exported as BillingFeatureCategory: the shared barrel
+// already carries an unrelated `FeatureCategory` from lib/features.
+export type { FeatureDef, FeatureCategory as BillingFeatureCategory } from "./feature-catalog";
 
 // Money as integer minor units - no floating point anywhere in pricing.
 export {
@@ -127,6 +129,28 @@ export {
   DEFAULT_CURRENCY_CONFIG,
 } from "./currency";
 export type { CurrencyConfig, FxRate, DisplayPrice } from "./currency";
+
+// ACTUAL per-conversation usage (layer A) - SYSADMIN ONLY. Never referenced by
+// estimation.ts, and never surfaced through a tenant-facing route.
+export {
+  aggregateConversation,
+  settleDueConversations,
+  sweepClosedConversations,
+  excludeConversation,
+  computeStats,
+  getUsageStats,
+  getStatsByTenant,
+  compareEstimateToActual,
+  conversationIdOf,
+  CALCULATION_VERSION,
+  SETTLEMENT_WINDOW_MS,
+} from "./conversation-usage";
+export type {
+  AggregateResult,
+  UsageStats,
+  UsageStatsFilter,
+  EstimateComparison,
+} from "./conversation-usage";
 
 export {
   getEnforcementMode,

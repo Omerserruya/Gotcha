@@ -302,6 +302,13 @@ export type { PlanKey, PlanDef } from "./lib/plans";
 
 // Billing · Subscription · AI Units (pricing engine, wallet, entitlement layering).
 export * from "./lib/billing";
+export {
+  PLATFORM_PERMISSIONS,
+  PLATFORM_PERMISSION_CATALOG,
+  ALL_PLATFORM_PERMISSION_KEYS,
+  isPlatformPermission,
+} from "./lib/platform-permissions";
+export type { PlatformPermission, PlatformPermissionDef } from "./lib/platform-permissions";
 export { encryptCredentials, decryptCredentials, isEncrypted } from "./lib/encryption";
 
 // BFF app-session infrastructure (additive; inert until cookie flags enabled).
@@ -413,6 +420,7 @@ export { resolveTenant, assertTenantId } from "./middleware/tenant";
 export { requireActiveTenant, requireOnboardingOrActiveTenant } from "./middleware/tenant-status";
 export { validate } from "./middleware/validate";
 export { requireEntitlement, requireCapacity, handleEntitlementError } from "./middleware/entitlement";
+export { requirePlatformPermission } from "./middleware/platform-permission";
 
 // Shared CRM client - used by AI tools, outbound, broadcast, and any
 // caller that needs CRM lookup/segmentation. Provider-agnostic.
