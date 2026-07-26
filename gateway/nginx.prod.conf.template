@@ -1340,11 +1340,13 @@ http {
         # Both /pricing and /pricing/ are gated: the static export emits the
         # trailing-slash form.
         location = /pricing {
+            absolute_redirect off;
             if ($public_pricing_enabled != "true") { return 302 /early-access; }
             try_files $uri $uri/index.html $uri.html /index.html;
         }
 
         location = /pricing/ {
+            absolute_redirect off;
             if ($public_pricing_enabled != "true") { return 302 /early-access; }
             try_files $uri $uri/index.html $uri.html /index.html;
         }

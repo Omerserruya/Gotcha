@@ -10,7 +10,7 @@
 // categories comparing exactly those two. That is the interaction someone
 // actually performs on a phone.
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { planCopy } from "./usePublicPricing";
 import { Check, NotIncluded } from "./PricingPrimitives";
 import type { PublicPlan } from "@/lib/api-public-pricing";
@@ -44,10 +44,21 @@ export function ComparisonTable({
   t: (k: string) => string;
 }) {
   const groups = useMemo(() => buildGroups(plans, t), [plans, t]);
-  const [mobilePair, setMobilePair] = useState<[string, string]>(() => [
-    plans[0]?.key ?? "",
-    (plans.find((p) => p.recommended) ?? plans[1] ?? plans[0])?.key ?? "",
-  ]);
+  const [mobilePair, setMobilePair] = useState<[string, string]>(["", ""]);
+
+  // The pair must be derived AFTER plans arrive. Seeding it from an empty list
+  // on first render left it as ["",""], and opening a category then looked up a
+  // plan that does not exist - which crashed the page on mobile.
+  useEffect(() => {
+    if (plans.length === 0) return;
+    setMobilePair((cur) => {
+      const valid = (k: string) => plans.some((p) => p.key === k);
+      if (valid(cur[0]) && valid(cur[1])) return cur;
+      const a = plans[0].key;
+      const b = (plans.find((p) => p.recommended && p.key !== a) ?? plans[1] ?? plans[0]).key;
+      return [a, b];
+    });
+  }, [plans]);
 
   if (plans.length === 0) return null;
 
@@ -112,6 +123,8 @@ export function ComparisonTable({
 
       {/* ── Narrow: choose two plans, compare by category ── */}
       <div className="md:hidden">
+        {mobilePair[0] && mobilePair[1] && (
+          <>
         <PairPicker plans={plans} pair={mobilePair} onChange={setMobilePair} isHe={isHe} t={t} />
         <div className="mt-4 space-y-2">
           {groups.map((g) => (
@@ -126,6 +139,8 @@ export function ComparisonTable({
             />
           ))}
         </div>
+          </>
+        )}
       </div>
     </>
   );
@@ -237,11 +252,14 @@ function MobileCategory({
                 <th scope="col" className="px-4 py-2 text-start text-[11px] font-medium uppercase tracking-[0.12em] text-gray-400">
                   {t("pricing.comparison.capability")}
                 </th>
-                {pair.map((k) => (
-                  <th key={k} scope="col" className="px-3 py-2 text-center text-[12px] font-semibold text-gray-700">
-                    {planCopy(plans.find((p) => p.key === k)!, isHe).name}
-                  </th>
-                ))}
+                {pair.map((k) => {
+                  const p = plans.find((x) => x.key === k);
+                  return (
+                    <th key={k} scope="col" className="px-3 py-2 text-center text-[12px] font-semibold text-gray-700">
+                      {p ? planCopy(p, isHe).name : "-"}
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>

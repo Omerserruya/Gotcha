@@ -145,14 +145,11 @@ function PlanColumn({
             </dd>
           </div>
         )}
-        {!compact && q.pricePerChatMinor != null && (
-          <div className="flex items-baseline justify-between gap-3">
-            <dt className="text-gray-500">{t("pricing.perConversation")}</dt>
-            <dd className="font-medium tabular-nums text-gray-900" dir="ltr">
-              {formatMinor(q.pricePerChatMinor, q.currency, 2)}
-            </dd>
-          </div>
-        )}
+        {/* Per-conversation price deliberately does NOT appear here. Across
+            tiers it invites a comparison that misrepresents what is being
+            bought: AI Workforce costs more per conversation than Foundation
+            because it adds AI employees, not because conversations cost more.
+            It belongs in the configurator, where volume gives it context. */}
       </dl>
 
       <div className="mt-5 grow border-t border-gray-100 pt-5">

@@ -216,7 +216,7 @@ describe("publication flag", () => {
 
   it("every landing pricing link is flag-gated", () => {
     const code = read("components/landing/LandingPage.tsx");
-    const links = [...code.matchAll(/landing\.nav\.pricing/g)];
+    const links = Array.from(code.matchAll(/landing\.nav\.pricing/g));
     expect(links.length).toBeGreaterThanOrEqual(3); // desktop, mobile, footer
     // Each occurrence sits inside a publicPricingEnabled guard.
     for (const m of links) {

@@ -268,6 +268,7 @@ http {
         # Disabled: send visitors to early access rather than a dead end, and
         # never reveal that a pricing route exists.
         location = /pricing {
+            absolute_redirect off;
             if ($public_pricing_enabled != "true") { return 302 /early-access; }
             proxy_pass http://frontend;
             proxy_http_version 1.1;
@@ -282,6 +283,7 @@ http {
 
         # Static export emits /pricing/ (trailingSlash) - gate both forms.
         location = /pricing/ {
+            absolute_redirect off;
             if ($public_pricing_enabled != "true") { return 302 /early-access; }
             proxy_pass http://frontend;
             proxy_http_version 1.1;

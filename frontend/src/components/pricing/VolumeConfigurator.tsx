@@ -11,7 +11,7 @@
 // Narrow: it becomes a compact fixed bar so the total is never scrolled away.
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { planCopy } from "./usePublicPricing";
 import { Price, Rule, PriceAnnouncer } from "./PricingPrimitives";
 import {
@@ -45,6 +45,20 @@ export function VolumeConfigurator({
 }: Props) {
   const q = useMemo(() => quoteSelection(plan, selection), [plan, selection]);
   const { name } = planCopy(plan, isHe);
+
+  // The narrow summary is FIXED, so without scoping it floats over the hero and
+  // the plan cards - announcing a plan the visitor has not chosen yet and
+  // covering the content they are reading. Show it only while the configurator
+  // is actually on screen.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [inView, setInView] = useState(false);
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(([e]) => setInView(e.isIntersecting), { threshold: 0 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
   const hasSelectors = plan.chatVolumeEnabled || plan.voiceVolumeEnabled;
 
   const total = formatMinor(q.monthlyMinor, q.currency);
@@ -56,7 +70,7 @@ export function VolumeConfigurator({
     .replace("{credits}", q.includedCredits.toLocaleString());
 
   return (
-    <div className="grid gap-10 lg:grid-cols-[1fr_20rem] lg:gap-12">
+    <div ref={rootRef} className="grid gap-10 lg:grid-cols-[1fr_20rem] lg:gap-12">
       {/* ── Selectors ── */}
       <div>
         <h3 className="text-[19px] font-semibold tracking-[-0.02em] text-gray-900">
@@ -125,7 +139,12 @@ export function VolumeConfigurator({
         </div>
 
         {/* Narrow: fixed bar so the total is always visible while configuring. */}
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white/95 px-4 py-3 backdrop-blur-md sm:hidden">
+        <div
+          aria-hidden={!inView}
+          className={`fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white/95 px-4 py-3 backdrop-blur-md transition-[opacity,transform] duration-300 sm:hidden motion-reduce:transition-none ${
+            inView ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-full opacity-0"
+          }`}
+        >
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <p className="truncate text-[11px] uppercase tracking-[0.12em] text-gray-400">{name}</p>

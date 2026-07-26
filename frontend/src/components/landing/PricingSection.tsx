@@ -106,8 +106,8 @@ export default function PricingSection({ t, isRtl }: Props) {
               /pricing so the two read as one product, at lower density. */}
           <div className="mt-12 grid gap-px overflow-hidden rounded-2xl bg-gray-200/70 md:grid-cols-3">
             {plans
-              ? plans.map((plan, i) => (
-                  <PreviewColumn key={plan.key} plan={plan} previous={i > 0 ? plans[i - 1] : null} isRtl={isRtl} t={t} />
+              ? plans.map((plan) => (
+                  <PreviewColumn key={plan.key} plan={plan} isRtl={isRtl} t={t} />
                 ))
               : [0, 1, 2].map((i) => <PreviewSkeleton key={i} />)}
           </div>
@@ -134,20 +134,20 @@ export default function PricingSection({ t, isRtl }: Props) {
  * differentiator. Anything more belongs on /pricing.
  */
 function PreviewColumn({
-  plan, previous, isRtl, t,
+  plan, isRtl, t,
 }: {
   plan: PublicPlan;
-  previous: PublicPlan | null;
   isRtl: boolean;
   t: (key: string, vars?: Record<string, string>) => string;
 }) {
   const name = isRtl ? plan.nameHe ?? plan.name : plan.name;
   const q = quoteSelection(plan, defaultSelection(plan));
 
-  // The single most meaningful capability this plan adds over the one below.
-  const prevKeys = new Set((previous?.features ?? []).filter((f) => f.included).map((f) => f.key));
-  const added = plan.features.filter((f) => f.included && !prevKeys.has(f.key));
-  const differentiator = added[added.length - 1] ?? plan.features.find((f) => f.included);
+  // The plan's own one-sentence positioning, written for exactly this purpose
+  // and owned by the plan configuration. Deriving a "headline feature" from
+  // catalog order instead produced "Configurable data retention" for the base
+  // plan, which is a poor thing to lead with.
+  const summary = isRtl ? plan.descriptionHe ?? plan.description : plan.description;
 
   return (
     <div className="relative flex flex-col bg-white p-7">
@@ -186,12 +186,8 @@ function PreviewColumn({
         )}
       </dl>
 
-      {differentiator && (
-        <p className="mt-4 border-t border-gray-100 pt-4 text-[13px] leading-[1.55] text-gray-600">
-          {previous && added.length > 0
-            ? t("landing.pricing.adds").replace("{feature}", differentiator.name)
-            : differentiator.name}
-        </p>
+      {summary && (
+        <p className="mt-4 border-t border-gray-100 pt-4 text-[13px] leading-[1.55] text-gray-600">{summary}</p>
       )}
     </div>
   );
