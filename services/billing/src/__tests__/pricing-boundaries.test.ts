@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 
 /**
  * The boundaries this round must not leak across, asserted against the source
@@ -14,7 +13,9 @@ import { fileURLToPath } from "node:url";
  * written by a pricing change.
  */
 
-const SRC = join(dirname(fileURLToPath(import.meta.url)), "..");
+// __dirname rather than import.meta.url: this package compiles as CommonJS, so
+// import.meta fails `tsc --noEmit` even though vitest resolves it fine.
+const SRC = join(__dirname, "..");
 const SHARED = join(SRC, "../../../packages/shared/src");
 const read = (p: string) => readFileSync(p, "utf8");
 

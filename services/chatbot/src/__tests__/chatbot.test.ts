@@ -27,6 +27,11 @@ vi.mock("@chatcenter/shared", () => {
     },
     requireRole: (..._roles: string[]) => (_req: any, _res: any, next: any) => next(),
     requirePermissionOrRole: (_perm: string, ..._roles: string[]) => (_req: any, _res: any, next: any) => next(),
+    // Plan-entitlement gates. Pass-through here: what they DENY is covered by
+    // the resolver's own suite and the billing boundary tests, not by mocking
+    // them into always-allow in a route test.
+    requireEntitlement: (_feature: string) => (_req: any, _res: any, next: any) => next(),
+    requireCapacity: (..._args: any[]) => (_req: any, _res: any, next: any) => next(),
     validate: (_schema: any) => (_req: any, _res: any, next: any) => next(),
     createServiceApp: (config: any) => {
       const app = express();
