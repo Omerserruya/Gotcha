@@ -72,6 +72,59 @@ export {
 } from "./feature-catalog";
 export type { FeatureDef, FeatureCategory } from "./feature-catalog";
 
+// Money as integer minor units - no floating point anywhere in pricing.
+export {
+  money,
+  zero,
+  toMinor,
+  toDecimalString,
+  toNumber,
+  addMoney,
+  sumMoney,
+  subtractMoney,
+  multiplyMoney,
+  roundToIncrement,
+  convertMoney,
+  formatMoney,
+  minorUnitScale,
+} from "./money";
+export type { Money, CurrencyCode, RoundingMode } from "./money";
+
+// Public commercial estimation (layer B) - manually configured, never derived.
+export {
+  getGlobalEstimation,
+  resolveEstimation,
+  estimateChannel,
+  estimatePlanCapacity,
+  estimatePricePerInteraction,
+  estimateRemainingConversations,
+  snapshotEstimation,
+  ratiosFromSnapshot,
+  invalidateEstimationCache,
+  FALLBACK_ESTIMATION,
+  ESTIMATE_DISCLAIMER,
+  ESTIMATE_DISCLAIMER_KEY,
+} from "./estimation";
+export type {
+  EstimationRatios,
+  ChannelEstimate,
+  PlanEstimate,
+  PriceBreakdown,
+  EstimationSnapshot,
+} from "./estimation";
+
+// USD canonical / ILS display conversion.
+export {
+  getCurrencyConfig,
+  getUsdIlsRate,
+  refreshUsdIlsRate,
+  toDisplayPrice,
+  resolveChargeAmount,
+  invalidateCurrencyCache,
+  DEFAULT_CURRENCY_CONFIG,
+} from "./currency";
+export type { CurrencyConfig, FxRate, DisplayPrice } from "./currency";
+
 export {
   getEnforcementMode,
   checkAiAllowed,
