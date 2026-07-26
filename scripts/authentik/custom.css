@@ -138,6 +138,25 @@
   line-height: 1.2 !important;
 }
 
+/* Flow subtitle ("Log in to continue to <app>") + other stage text live in a
+ * NESTED shadow root that custom.css is not injected into, and they take their
+ * colour from PatternFly's --pf-global--Color--* variables. Under OS dark-mode
+ * Authentik sets those to near-white (#fafafa), so the subtitle renders
+ * white-on-white and vanishes on the light form. CSS custom properties DO
+ * inherit across shadow boundaries, so pin the text variables to the
+ * light-design values at the document root; every shadow descendant inherits
+ * them. (The left gradient panel uses explicit white colours, not these vars,
+ * so it is unaffected.) */
+:root,
+html,
+.pf-c-login {
+  --pf-global--Color--100: #111827 !important;
+  --pf-global--Color--200: #4b5563 !important;
+  --pf-global--Color--300: #6b7280 !important;
+  --pf-global--Color--dark-100: #111827 !important;
+  --pf-global--Color--dark-200: #4b5563 !important;
+}
+
 /* ── Inputs ── */
 .pf-c-form-control {
   border: 1px solid #d1d5db !important;

@@ -325,8 +325,35 @@
     return false;
   }
 
+  // Under OS dark-mode, PatternFly sets its text variables (--pf-global--Color--*)
+  // to near-white on the flow's NESTED shadow roots via `:host` rules. The
+  // GOTCHA login is a fixed LIGHT design (white form on a purple panel), so that
+  // dark text (e.g. the "Log in to continue to GOTCHA" subtitle) renders
+  // white-on-white and vanishes. custom.css lives at document scope and cannot
+  // reach those nested roots, so inject a small light-design correction directly
+  // INTO each shadow root - a `:host` rule here beats PatternFly's on equal
+  // specificity (later + !important). Idempotent per root.
+  function fixDarkText(root) {
+    if (!root || !root.querySelectorAll) return;
+    // A `:host` <style> injected here loses to PatternFly's own dark `:host`
+    // rules on cascade timing, so set the colour INLINE with !important on each
+    // element - that beats any stylesheet, guaranteed, and re-applies on every
+    // 500ms sweep so a stage re-render can never leave text invisible. Only the
+    // white form side has real <p>/label elements (the purple panel copy is
+    // CSS pseudo-elements), so this never touches the panel.
+    try {
+      root.querySelectorAll("p,.pf-c-form__label,.pf-c-form__helper-text,.pf-c-login__main-body,.pf-c-login__main-footer").forEach(function (el) {
+        el.style.setProperty("color", "#4b5563", "important");
+      });
+      root.querySelectorAll(".pf-c-title,h1,h2").forEach(function (el) {
+        el.style.setProperty("color", "#111827", "important");
+      });
+    } catch (e) {}
+  }
+
   function scan(root) {
     if (!root || !root.querySelectorAll) return;
+    fixDarkText(root);
     root.querySelectorAll("input[type=password]").forEach(enhance);
     root.querySelectorAll("input[name=code]").forEach(enhanceOtp);
     enhancePwPolicy(root);
