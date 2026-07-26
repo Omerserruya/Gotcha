@@ -26,6 +26,15 @@ export interface OidcConfig {
   redirectUri: string;
   /** Optional override for the discovery URL (e.g. internal DNS). */
   discoveryUrl?: string;
+  /**
+   * Optional internal base (e.g. http://authentik-server:9000) for the
+   * SERVER-SIDE token exchange. Discovery returns the PUBLIC token endpoint
+   * (the host the browser used), which is not always container-reachable - the
+   * same reason OIDC_JWKS_URI uses internal DNS. When set, only the token
+   * endpoint's ORIGIN is swapped to this base for the back-channel POST; the
+   * `iss` and authorize URL the browser sees stay public.
+   */
+  tokenInternalBase?: string;
 }
 
 /** Read the server OIDC config from the environment. Throws if incomplete. */
@@ -40,7 +49,17 @@ export function oidcConfig(env: NodeJS.ProcessEnv = process.env): OidcConfig {
   if (!issuer) throw new Error("[oidc] OIDC_ISSUER is required");
   if (!clientId) throw new Error("[oidc] OIDC_CLIENT_ID is required");
   if (!redirectUri) throw new Error("[oidc] APP_ORIGIN (or OIDC_SERVER_REDIRECT_URI) is required for the callback");
-  return { issuer, clientId, redirectUri, discoveryUrl: env.OIDC_DISCOVERY_URL };
+  return {
+    issuer,
+    clientId,
+    redirectUri,
+    discoveryUrl: env.OIDC_DISCOVERY_URL,
+    // Exchange at the PUBLIC token endpoint by default so the id_token's `iss`
+    // matches OIDC_ISSUER. Only override to internal DNS when the container
+    // genuinely cannot reach the public host AND Authentik is configured to
+    // stamp the public issuer (X-Forwarded-Host) - not the common case.
+    tokenInternalBase: env.OIDC_TOKEN_INTERNAL_BASE,
+  };
 }
 
 let discoveryCache: { key: string; value: Promise<Discovery> } | null = null;
@@ -76,12 +95,22 @@ export function generatePkce(): { verifier: string; challenge: string } {
 export const randomState = () => b64url(crypto.randomBytes(16));
 export const randomNonce = () => b64url(crypto.randomBytes(16));
 
-/** Build the authorize URL (pure). */
+/** Build the authorize URL (pure). The authorize endpoint is forced to the
+ * PUBLIC issuer origin so the BROWSER can reach it, even when discovery ran
+ * against internal DNS (which would otherwise return an internal authorize
+ * host). The token endpoint is handled separately (internal, server-side). */
 export function buildAuthorizeUrl(
   disco: Discovery,
   cfg: OidcConfig,
   args: { state: string; nonce: string; challenge: string; loginHint?: string },
 ): string {
+  let publicOrigin: string | undefined;
+  try {
+    publicOrigin = new URL(cfg.issuer).origin;
+  } catch {
+    publicOrigin = undefined;
+  }
+  const authorizeUrl = internalizeEndpoint(disco.authorization_endpoint, publicOrigin);
   const params = new URLSearchParams({
     client_id: cfg.clientId,
     redirect_uri: cfg.redirectUri,
@@ -93,7 +122,7 @@ export function buildAuthorizeUrl(
     nonce: args.nonce,
   });
   if (args.loginHint) params.set("login_hint", args.loginHint);
-  return `${disco.authorization_endpoint}?${params.toString()}`;
+  return `${authorizeUrl}?${params.toString()}`;
 }
 
 export interface TokenResponse {
@@ -105,13 +134,27 @@ export interface TokenResponse {
 }
 
 /** Exchange the authorization code for tokens (server-side, public client + PKCE). */
+/** Replace an endpoint's ORIGIN with `base` (scheme://host[:port]), keeping the
+ * original path/query. Unambiguous - never leaves a stray port from the source. */
+export function internalizeEndpoint(publicUrl: string, base?: string): string {
+  if (!base) return publicUrl;
+  try {
+    const u = new URL(publicUrl);
+    const origin = new URL(base).origin; // normalizes: drops default ports
+    return `${origin}${u.pathname}${u.search}${u.hash}`;
+  } catch {
+    return publicUrl;
+  }
+}
+
 export async function exchangeCode(
   disco: Discovery,
   cfg: OidcConfig,
   args: { code: string; verifier: string },
   fetchImpl: typeof fetch = fetch,
 ): Promise<TokenResponse> {
-  const res = await fetchImpl(disco.token_endpoint, {
+  const tokenUrl = internalizeEndpoint(disco.token_endpoint, cfg.tokenInternalBase);
+  const res = await fetchImpl(tokenUrl, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
     body: new URLSearchParams({

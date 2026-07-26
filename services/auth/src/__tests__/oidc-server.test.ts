@@ -6,6 +6,7 @@ import {
   buildAuthorizeUrl,
   exchangeCode,
   discover,
+  internalizeEndpoint,
   safeReturnTo,
   __resetOidcDiscoveryCache,
   type Discovery,
@@ -65,6 +66,15 @@ describe("safeReturnTo (open-redirect guard)", () => {
     for (const bad of ["", "//evil.com", "https://evil.com", "http://x", "\\evil", 42 as any, null as any]) {
       expect(safeReturnTo(bad)).toBe("/");
     }
+  });
+});
+
+describe("internalizeEndpoint (server-side token exchange via internal DNS)", () => {
+  it("swaps only the origin, keeping the path; no-op without a base", () => {
+    expect(internalizeEndpoint("https://auth-dev.gotcha.co.il/application/o/token/", "http://authentik-server:9000"))
+      .toBe("http://authentik-server:9000/application/o/token/");
+    expect(internalizeEndpoint("https://auth-dev.gotcha.co.il/application/o/token/", undefined))
+      .toBe("https://auth-dev.gotcha.co.il/application/o/token/");
   });
 });
 
