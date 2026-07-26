@@ -8,6 +8,7 @@ import {
   authenticate,
   resolveTenant,
   requirePermission,
+  requireCapacity,
   validate,
   getRedis,
   encryptCredentials,
@@ -18,6 +19,19 @@ import {
 } from "@chatcenter/shared";
 
 const router = Router();
+
+/**
+ * Plan channel limit.
+ *
+ * Counts the organization's CONNECTED channel accounts, so a disconnected
+ * account frees its seat rather than permanently consuming one. Applied to
+ * every direct-connect route; OAuth callbacks re-check through the same helper
+ * at the point they create the account.
+ */
+const requireChannelCapacity = requireCapacity("limit:channels", (tenantId) =>
+  prisma.channelAccount.count({ where: { tenantId, connectionStatus: { not: "DISCONNECTED" } } }),
+);
+
 
 const META_APP_ID = process.env.META_APP_ID || "";
 const META_APP_SECRET = process.env.META_APP_SECRET || "";
@@ -257,7 +271,7 @@ const whatsappConnectSchema = z.object({
   phoneNumberId: z.string().optional(), // From Embedded Signup session info
 });
 
-router.post("/connect/whatsapp", authenticate, resolveTenant, requirePermission("channels:manage:update"), validate(whatsappConnectSchema), async (req: Request, res: Response) => {
+router.post("/connect/whatsapp", authenticate, resolveTenant, requirePermission("channels:manage:update"), requireChannelCapacity, validate(whatsappConnectSchema), async (req: Request, res: Response) => {
   try {
     const { code, wabaId: sessionWabaId, phoneNumberId: sessionPhoneNumberId } = req.body;
     console.log("[WA-CONNECT] Starting. Session WABA:", sessionWabaId, "Session Phone:", sessionPhoneNumberId);
@@ -480,7 +494,7 @@ const whatsappSessionSchema = z.object({
   phoneNumberId: z.string().optional(),
 });
 
-router.post("/connect/whatsapp-session", authenticate, resolveTenant, requirePermission("channels:manage:update"), validate(whatsappSessionSchema), async (req: Request, res: Response) => {
+router.post("/connect/whatsapp-session", authenticate, resolveTenant, requirePermission("channels:manage:update"), requireChannelCapacity, validate(whatsappSessionSchema), async (req: Request, res: Response) => {
   try {
     const { wabaId, phoneNumberId } = req.body;
     const redis = getRedis();
@@ -1834,7 +1848,7 @@ const connectEmailSchema = z.object({
   imapPass: z.string().optional(),
 });
 
-router.post("/connect/email", authenticate, resolveTenant, requirePermission("channels:manage:update"), validate(connectEmailSchema), async (req: Request, res: Response) => {
+router.post("/connect/email", authenticate, resolveTenant, requirePermission("channels:manage:update"), requireChannelCapacity, validate(connectEmailSchema), async (req: Request, res: Response) => {
   try {
     const { emailAddress, displayName, smtpHost, smtpPort, smtpUser, smtpPass, imapHost, imapPort, imapUser, imapPass } = req.body;
 
@@ -1875,7 +1889,7 @@ router.post("/connect/email", authenticate, resolveTenant, requirePermission("ch
 
 // ─── Create Embedded Chat Widget ─────────────────────────────
 
-router.post("/webchat/create", authenticate, resolveTenant, requirePermission("channels:manage:update"), async (req: Request, res: Response) => {
+router.post("/webchat/create", authenticate, resolveTenant, requirePermission("channels:manage:update"), requireChannelCapacity, async (req: Request, res: Response) => {
   try {
     const widgetId = `widget_${crypto.randomBytes(12).toString("hex")}`;
 

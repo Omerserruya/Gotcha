@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
-import { prisma, authenticate, resolveTenant, requirePermissionOrRole, validate } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requirePermissionOrRole, validate, requireEntitlement, requireCapacity } from "@chatcenter/shared";
 import { validateGraph } from "../lib/graph-validator";
 
 const router = Router();
@@ -40,7 +40,13 @@ router.get("/:id", async (req: Request, res: Response) => {
   } catch (err) { console.error("Get flow error:", err); res.status(500).json({ error: "Failed to get flow" }); }
 });
 
-router.post("/", requirePermissionOrRole("ai:workflows:update", "ADMIN"), validate(flowSchema), async (req: Request, res: Response) => {
+router.post(
+  "/",
+  requirePermissionOrRole("ai:workflows:update", "ADMIN"),
+  requireEntitlement("communication.automations"),
+  requireCapacity("limit:workflows", (tenantId) => prisma.chatbotFlow.count({ where: { tenantId } })),
+  validate(flowSchema),
+  async (req: Request, res: Response) => {
   try {
     const { name, description, channel, nodes, edges, isActive } = req.body;
     const flow = await prisma.chatbotFlow.create({

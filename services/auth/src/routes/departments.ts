@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
-import { prisma, authenticate, resolveTenant, requireRole, requirePermission, requireDepartmentRole, enforceMfaEnrollment, validate } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireRole, requirePermission, requireDepartmentRole, enforceMfaEnrollment, validate, requireCapacity } from "@chatcenter/shared";
 
 const router = Router();
 router.use(authenticate, resolveTenant, enforceMfaEnrollment());
@@ -96,7 +96,13 @@ const createDepartmentSchema = z.object({
   parentId: z.string().optional(),
 });
 
-router.post("/", requireRole("ADMIN"), validate(createDepartmentSchema), async (req: Request, res: Response) => {
+// Plan limit enforced before the create runs, not after.
+router.post(
+  "/",
+  requireRole("ADMIN"),
+  requireCapacity("limit:departments", (tenantId) => prisma.department.count({ where: { tenantId } })),
+  validate(createDepartmentSchema),
+  async (req: Request, res: Response) => {
   try {
     const { name, description, queueMode, parentId } = req.body;
     const existing = await prisma.department.findUnique({

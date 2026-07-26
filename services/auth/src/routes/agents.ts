@@ -8,6 +8,7 @@ import {
   requirePermissionOrRole,
   enforceMfaEnrollment,
   validate,
+  requireCapacity,
   getRedis,
   resolveEffectiveLocale,
   isSupportedLocale,
@@ -104,7 +105,14 @@ const inviteAgentSchema = z.object({
   departmentIds: z.array(z.string().min(1)).max(20).optional(),
 });
 
-router.post("/", requirePermissionOrRole("settings:members:manage", "ADMIN"), validate(inviteAgentSchema), async (req: Request, res: Response) => {
+// Seat limit. Counts ACTIVE members only, so deactivating someone frees their
+// seat rather than permanently consuming it.
+router.post(
+  "/",
+  requirePermissionOrRole("settings:members:manage", "ADMIN"),
+  requireCapacity("limit:users", (tenantId) => prisma.user.count({ where: { tenantId, isActive: true } })),
+  validate(inviteAgentSchema),
+  async (req: Request, res: Response) => {
   try {
     const { email, name, departmentIds } = req.body as { email: string; name: string; departmentIds?: string[] };
     // Validate EVERY requested department against the active tenant first -

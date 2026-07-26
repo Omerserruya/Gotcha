@@ -9,6 +9,7 @@ import {
   requireRole,
   resolveConversationLocale,
   resolveEffectiveLocale,
+  requireEntitlement,
 } from "@chatcenter/shared";
 import * as aiService from "../services/ai-assist.service";
 import { runDeduped } from "../services/copilot-dedup.service";
@@ -360,7 +361,9 @@ router.post("/compose", async (req: Request, res: Response) => {
   }
 });
 
-router.get("/:conversationId/suggestions", async (req: Request, res: Response) => {
+// Chat Copilot is sold separately from the core inbox, so the suggestion
+// endpoint is gated rather than merely hidden in the UI.
+router.get("/:conversationId/suggestions", requireEntitlement("ai.copilot"), async (req: Request, res: Response) => {
   // Request-instance ID - accepted from the client to dedup retries and
   // double-fires. Falls back to a server-generated id so legacy clients
   // (no header / no query param) still get concurrency dedup, just not

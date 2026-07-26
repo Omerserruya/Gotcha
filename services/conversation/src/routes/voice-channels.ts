@@ -36,6 +36,8 @@ import {
   decryptCredentials,
   getRedis,
   CopilotConfigSchema,
+  requireEntitlement,
+  requireCapacity,
 } from "@chatcenter/shared";
 
 const router = Router();
@@ -405,7 +407,16 @@ async function provisionOutboundResources(
 // in step 3 of the wizard via /numbers/:numberId/activate.
 // apiKeySid / apiKeySecret / twimlAppSid are now auto-provisioned - legacy
 // clients may still send them, but they are ignored.
-router.post("/", async (req: Request, res: Response) => {
+router.post(
+  "/",
+  // Voice is a paid capability and a counted resource. Both gates are
+  // server-side; the wizard hiding itself is presentation only.
+  requireEntitlement("voice.call_pilot"),
+  // VoiceChannel hangs off CommunicationChannel, which is where tenantId lives.
+  requireCapacity("limit:voice_channels", (tenantId) =>
+    prisma.communicationChannel.count({ where: { tenantId, channelType: "VOICE" } }),
+  ),
+  async (req: Request, res: Response) => {
   try {
     const body = (req.body || {}) as Record<string, unknown>;
     const friendlyName = String(body.friendlyName ?? "").trim();

@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { prisma, authenticate, resolveTenant, requireActiveTenant, requirePermissionOrRole } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireActiveTenant, requirePermissionOrRole, requireEntitlement, requireCapacity } from "@chatcenter/shared";
 import { sandboxEmployeeChat } from "../services/agent-sandbox-chat.service";
 import { computeCalendarCapability } from "../services/calendar-capability.service";
 import { generateResponse, getDefaultModel } from "../services/ai.service";
@@ -316,7 +316,23 @@ function requiresFunnel(role: string | undefined | null): boolean {
 }
 
 // ─── Create AI Agent ─────────────────────────────────────────
-router.post("/", authenticate, resolveTenant, requireActiveTenant(), requirePermissionOrRole("ai:employees:create", "ADMIN"), async (req: Request, res: Response) => {
+// Plan gates run BEFORE the handler:
+//   requireEntitlement("ai.employee")     - is this capability sold on the plan?
+//   requireCapacity("limit:ai_employees") - is there headroom under the limit?
+// Both return a structured 402 the frontend can act on. Hiding the "New
+// employee" button is not enforcement; this is.
+router.post(
+  "/",
+  authenticate,
+  resolveTenant,
+  requireActiveTenant(),
+  requirePermissionOrRole("ai:employees:create", "ADMIN"),
+  requireEntitlement("ai.employee"),
+  // Every employee counts, including DRAFT and PAUSED: a draft can be activated
+  // at any moment, so excluding it would let an organization stage its way past
+  // the limit and then flip them all on.
+  requireCapacity("limit:ai_employees", (tenantId) => prisma.aIAgent.count({ where: { tenantId } })),
+  async (req: Request, res: Response) => {
   try {
     const {
       name, role, description, avatarColor, status,

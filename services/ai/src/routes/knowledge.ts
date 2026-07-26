@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { prisma, authenticate, resolveTenant, requireOnboardingOrActiveTenant, requirePermissionOrRole, safeFetch } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireOnboardingOrActiveTenant, requirePermissionOrRole, safeFetch, requireEntitlement, requireCapacity } from "@chatcenter/shared";
 import { processDocument } from "../services/embedding.service";
 import { deleteByDocumentId, deleteByKnowledgeBaseId } from "../services/qdrant.service";
 import { parseFile, isAllowedMimeType, resolveMimeType } from "../services/file-parser.service";
@@ -37,7 +37,12 @@ router.get("/", async (req: Request, res: Response) => {
 });
 
 // Create knowledge base
-router.post("/", requirePermissionOrRole("ai:knowledge:write", "ADMIN"), async (req: Request, res: Response) => {
+router.post(
+  "/",
+  requirePermissionOrRole("ai:knowledge:write", "ADMIN"),
+  requireEntitlement("ai.knowledge_base"),
+  requireCapacity("limit:knowledge_sources", (tenantId) => prisma.knowledgeBase.count({ where: { tenantId } })),
+  async (req: Request, res: Response) => {
   try {
     const { name, description } = req.body;
     if (!name) {
