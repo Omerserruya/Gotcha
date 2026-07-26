@@ -9,6 +9,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:seed-packs": "tsx prisma/seed-packs.ts",
     "db:seed-billing": "tsx prisma/seed-billing.ts",
+    "db:seed-pricing": "tsx prisma/seed-pricing.ts",
     "db:reset": "prisma migrate reset --force",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
