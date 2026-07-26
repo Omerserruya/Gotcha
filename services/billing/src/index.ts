@@ -11,6 +11,7 @@ import subscriptionRoutes from "./routes/subscription";
 import paymentMethodRoutes from "./routes/payment-methods";
 import creditsRoutes from "./routes/credits";
 import pricingRoutes from "./routes/pricing";
+import publicPricingRoutes from "./routes/public-pricing";
 import adminPricingRoutes from "./routes/admin-pricing";
 import adminAnalyticsRoutes from "./routes/admin-analytics";
 import invoicesRoutes from "./routes/invoices";
@@ -26,6 +27,8 @@ app.use("/api", subscriptionRoutes);
 app.use("/api", paymentMethodRoutes);
 app.use("/api", creditsRoutes);
 app.use("/api", pricingRoutes);
+// Unauthenticated, cacheable marketing catalog. Gated by PUBLIC_PRICING_ENABLED.
+app.use("/api", publicPricingRoutes);
 // Platform (Sysadmin) tier. Never reachable by a tenant ADMIN.
 app.use("/api", adminPricingRoutes);
 app.use("/api", adminAnalyticsRoutes);

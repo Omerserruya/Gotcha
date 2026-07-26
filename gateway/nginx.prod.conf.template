@@ -74,6 +74,15 @@ http {
 
     # WebSocket upgrade: "upgrade" when the client asked for it, "close"
     # otherwise. A hardcoded Connection: upgrade breaks plain HTTP requests.
+    # Public pricing kill switch. Server-controlled, so the gate does not depend
+    # on the browser running any JavaScript: nginx refuses /pricing and the
+    # billing service 404s /api/public/pricing from the same flag. Defaults to
+    # "false" when the variable is unset, because provisional prices must never
+    # become publicly reachable by omission.
+    map $host $public_pricing_enabled {
+        default "${PUBLIC_PRICING_ENABLED}";
+    }
+
     map $http_upgrade $connection_upgrade {
         default upgrade;
         ''      close;
@@ -403,6 +412,17 @@ http {
         # match /api/internal/billing/* - those are internal-key only and must
         # never be reachable from the internet, so they stay off the gateway.
         location /api/billing {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://billing_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # ─── Public pricing catalog (billing, no auth, cacheable) ──
+        location /api/public/pricing {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://billing_service;
             proxy_set_header Host $host;
@@ -1315,6 +1335,20 @@ http {
         # Next.js export with trailingSlash:true: /foo resolves to /foo/index.html.
         # Unknown URLs fall back to /index.html so the SPA client router can mount
         # the matching route at runtime.
+        # ─── Public pricing page (flag-gated, no auth) ────
+        # Placed before the static try_files fallback so a disabled flag wins.
+        # Both /pricing and /pricing/ are gated: the static export emits the
+        # trailing-slash form.
+        location = /pricing {
+            if ($public_pricing_enabled != "true") { return 302 /early-access; }
+            try_files $uri $uri/index.html $uri.html /index.html;
+        }
+
+        location = /pricing/ {
+            if ($public_pricing_enabled != "true") { return 302 /early-access; }
+            try_files $uri $uri/index.html $uri.html /index.html;
+        }
+
         location / {
             try_files $uri $uri/index.html $uri.html /index.html;
         }

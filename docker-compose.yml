@@ -149,11 +149,13 @@ services:
       VOICE_COPILOT_PORT: ${VOICE_COPILOT_PORT:-4007}
       NOTIFICATIONS_PORT: ${NOTIFICATIONS_PORT:-4008}
       BILLING_PORT: ${BILLING_PORT:-4009}
+      # Public pricing kill switch (see nginx template). Default false.
+      PUBLIC_PRICING_ENABLED: ${PUBLIC_PRICING_ENABLED:-false}
       # envsubst uses an allowlist - a var missing from the list below stays a
       # literal in the rendered config and nginx refuses to start.
       AUTHENTIK_PORT: ${AUTHENTIK_PORT:-9000}
     command: >
-      sh -c "envsubst '$$AUTH_PORT $$CONVERSATION_PORT $$WEBHOOK_PORT $$ANALYTICS_PORT $$CHATBOT_PORT $$AI_PORT $$FRONTEND_PORT $$VOICE_COPILOT_PORT $$NOTIFICATIONS_PORT $$BILLING_PORT $$AUTHENTIK_PORT'
+      sh -c "envsubst '$$AUTH_PORT $$CONVERSATION_PORT $$WEBHOOK_PORT $$ANALYTICS_PORT $$CHATBOT_PORT $$AI_PORT $$FRONTEND_PORT $$VOICE_COPILOT_PORT $$NOTIFICATIONS_PORT $$BILLING_PORT $$AUTHENTIK_PORT $$PUBLIC_PRICING_ENABLED'
       < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
       && nginx -g 'daemon off;'"
     depends_on:
@@ -481,6 +483,11 @@ services:
       BILLING_DUNNING_DAYS: ${BILLING_DUNNING_DAYS:-0,3,7}
       BILLING_SCHEDULER_ENABLED: ${BILLING_SCHEDULER_ENABLED:-true}
       BILLING_CYCLE_INTERVAL_MS: ${BILLING_CYCLE_INTERVAL_MS:-3600000}
+      # Public marketing catalog. Default FALSE everywhere - provisional prices
+      # must never become publicly reachable by omission. nginx enforces the
+      # same flag for the page, so the gate holds without JavaScript.
+      PUBLIC_PRICING_ENABLED: ${PUBLIC_PRICING_ENABLED:-false}
+      PUBLIC_PRICING_CACHE_SECONDS: ${PUBLIC_PRICING_CACHE_SECONDS:-120}
       # iCount (mock by default; set ICOUNT_MODE=live + creds for production)
       ICOUNT_MODE: ${ICOUNT_MODE:-mock}
       ICOUNT_API_BASE: ${ICOUNT_API_BASE:-https://api.icount.co.il/api/v3.php}
@@ -622,6 +629,9 @@ services:
       NEXT_PUBLIC_OIDC_ISSUER: ${NEXT_PUBLIC_OIDC_ISSUER}
       NEXT_PUBLIC_OIDC_CLIENT_ID: ${NEXT_PUBLIC_OIDC_CLIENT_ID:-gotcha-app}
       NEXT_PUBLIC_OIDC_REDIRECT_URI: ${NEXT_PUBLIC_OIDC_REDIRECT_URI:-}
+      # Mirrors the server flag so nav/section render correctly on first paint.
+      # This is presentation only - nginx and the billing service are the gate.
+      NEXT_PUBLIC_PRICING_ENABLED: ${PUBLIC_PRICING_ENABLED:-false}
     # Bind-mount source for hot reload; keep container's node_modules/.next.
     volumes:
       - ./frontend:/app

@@ -62,6 +62,15 @@ http {
         "~.+"   $http_x_forwarded_proto;
     }
 
+    # Public pricing kill switch. Server-controlled, so the gate does not depend
+    # on the browser running any JavaScript: nginx refuses /pricing and the
+    # billing service 404s /api/public/pricing from the same flag. Defaults to
+    # "false" when the variable is unset, because provisional prices must never
+    # become publicly reachable by omission.
+    map $host $public_pricing_enabled {
+        default "${PUBLIC_PRICING_ENABLED}";
+    }
+
     map $http_upgrade $connection_upgrade {
         default upgrade;
         ''      close;
@@ -255,6 +264,47 @@ http {
         # Routes used by the /join page: GET /invite/:token and POST
         # /invite/accept. Auth header is intentionally NOT required -
         # invites are validated by the signed-random token instead.
+        # ─── Public pricing page (flag-gated, no auth) ────
+        # Disabled: send visitors to early access rather than a dead end, and
+        # never reveal that a pricing route exists.
+        location = /pricing {
+            if ($public_pricing_enabled != "true") { return 302 /early-access; }
+            proxy_pass http://frontend;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Static export emits /pricing/ (trailingSlash) - gate both forms.
+        location = /pricing/ {
+            if ($public_pricing_enabled != "true") { return 302 /early-access; }
+            proxy_pass http://frontend;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # ─── Public pricing catalog (billing, no auth, cacheable) ──
+        location /api/public/pricing {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://billing_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
         location /api/public/onboarding {
             limit_req zone=api burst=10 nodelay;
             proxy_pass http://auth_service;
