@@ -101,6 +101,7 @@ export default function PricingPage() {
               selections={p.selections}
               activeKey={p.activeKey}
               onSelect={p.setActiveKey}
+              onVolumeChange={p.setVolume}
               isHe={isHe}
               t={t}
               ctaHref={ctaHref}

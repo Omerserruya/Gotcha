@@ -8,16 +8,21 @@
 //
 // It shares the public catalog with /pricing, so a published price change moves
 // both surfaces at once and they cannot drift.
+//
+// Columns on one surface, split by full-strength dividers, matching /pricing.
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Check } from "@/components/pricing/PricingPrimitives";
+import { MilestoneBar } from "@/components/pricing/MilestoneBar";
 import {
   getPublicPricing,
   quoteSelection,
   defaultSelection,
+  formatMinor,
   publicPricingEnabled,
   type PublicPlan,
+  type Selection,
 } from "@/lib/api-public-pricing";
 
 interface Props {
@@ -27,6 +32,7 @@ interface Props {
 
 export default function PricingSection({ t, isRtl }: Props) {
   const [plans, setPlans] = useState<PublicPlan[] | null>(null);
+  const [selections, setSelections] = useState<Record<string, Selection>>({});
   const [failed, setFailed] = useState(false);
   const [shown, setShown] = useState(false);
   const ref = useRef<HTMLElement>(null);
@@ -35,12 +41,27 @@ export default function PricingSection({ t, isRtl }: Props) {
     if (!publicPricingEnabled) return;
     const ac = new AbortController();
     getPublicPricing({ locale: isRtl ? "he" : "en", signal: ac.signal })
-      .then((c) => setPlans(c.plans))
+      .then((c) => {
+        setPlans(c.plans);
+        // Seeded after the catalog arrives, and only for plans not already
+        // configured, so switching language cannot discard a chosen volume.
+        setSelections((prev) => {
+          const next = { ...prev };
+          for (const p of c.plans) if (!next[p.key]) next[p.key] = defaultSelection(p);
+          return next;
+        });
+      })
       .catch((e: any) => {
         if (e?.name !== "AbortError") setFailed(true);
       });
     return () => ac.abort();
   }, [isRtl]);
+
+  const setVolume = (planKey: string, channel: "chat" | "voice", optionKey: string) =>
+    setSelections((s) => ({
+      ...s,
+      [planKey]: { ...(s[planKey] ?? { chat: null, voice: null }), [channel]: optionKey },
+    }));
 
   // One gentle entrance, matching the rest of the landing page.
   useEffect(() => {
@@ -94,7 +115,7 @@ export default function PricingSection({ t, isRtl }: Props) {
             </div>
             <Link
               href="/pricing"
-              className="hidden shrink-0 items-center gap-2 text-[14px] font-medium text-gray-900 underline-offset-4 transition-colors hover:text-primary-600 hover:underline lg:inline-flex focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:ring-offset-2 rounded"
+              className="hidden shrink-0 items-center gap-2 rounded text-[14px] font-medium text-gray-900 underline-offset-4 transition-colors hover:text-primary-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:ring-offset-2 lg:inline-flex"
             >
               {t("landing.pricing.viewAll")}
               <svg className="h-4 w-4 rtl:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true">
@@ -103,15 +124,17 @@ export default function PricingSection({ t, isRtl }: Props) {
             </Link>
           </div>
 
-          {/* Plans: three separate cards, same construction as /pricing so the
-              two surfaces read as one product, at lower density. */}
-          <div className="mt-12 grid gap-5 md:grid-cols-3 lg:gap-6">
+          {/* Plans: columns on one surface, same construction as /pricing so
+              the two surfaces read as one product, at lower density. */}
+          <div className="mt-12 grid gap-px overflow-hidden rounded-2xl bg-gray-300 ring-1 ring-gray-300 md:grid-cols-3">
             {plans
               ? plans.map((plan, i) => (
                   <PreviewColumn
                     key={plan.key}
                     plan={plan}
                     previous={i > 0 ? plans[i - 1] : null}
+                    selection={selections[plan.key] ?? { chat: null, voice: null }}
+                    onVolumeChange={setVolume}
                     isRtl={isRtl}
                     t={t}
                   />
@@ -125,7 +148,7 @@ export default function PricingSection({ t, isRtl }: Props) {
             </p>
             <Link
               href="/pricing"
-              className="inline-flex shrink-0 items-center gap-2 rounded-full border border-gray-200 px-5 py-2.5 text-[13.5px] font-medium text-gray-900 transition-colors hover:border-gray-900 lg:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:ring-offset-2"
+              className="inline-flex shrink-0 items-center gap-2 rounded-full border border-gray-200 px-5 py-2.5 text-[13.5px] font-medium text-gray-900 transition-colors hover:border-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:ring-offset-2 lg:hidden"
             >
               {t("landing.pricing.viewAll")}
             </Link>
@@ -137,20 +160,23 @@ export default function PricingSection({ t, isRtl }: Props) {
 }
 
 /**
- * A single preview column: price, credits, estimated capacity, what the plan
- * includes, a worked example of what that buys, and a CTA. The full comparison,
- * the configurator and the limits belong on /pricing.
+ * A single preview column: a live price, what it includes, what a conversation
+ * costs, a worked example, and a CTA. The full comparison, the credits
+ * breakdown and the limits belong on /pricing.
  */
 function PreviewColumn({
-  plan, previous, isRtl, t,
+  plan, previous, selection, onVolumeChange, isRtl, t,
 }: {
   plan: PublicPlan;
   previous: PublicPlan | null;
+  selection: Selection;
+  onVolumeChange: (planKey: string, channel: "chat" | "voice", optionKey: string) => void;
   isRtl: boolean;
   t: (key: string, vars?: Record<string, string>) => string;
 }) {
   const name = isRtl ? plan.nameHe ?? plan.name : plan.name;
-  const q = quoteSelection(plan, defaultSelection(plan));
+  const q = quoteSelection(plan, selection);
+  const priced = !plan.salesOnly && !!plan.price;
 
   // The plan's own one-sentence positioning, written for exactly this purpose
   // and owned by the plan configuration. Deriving a "headline feature" from
@@ -184,14 +210,10 @@ function PreviewColumn({
             .replace("{monthly}", q.estimatedChatsMonthly.toLocaleString())
         : null;
 
+  const adjustable = plan.chatVolumeEnabled || plan.voiceVolumeEnabled;
+
   return (
-    <div
-      className={`relative flex flex-col rounded-2xl border bg-white p-7 transition-[border-color,box-shadow] duration-300 motion-reduce:transition-none ${
-        plan.recommended
-          ? "border-gray-900/70 hover:shadow-panel"
-          : "border-gray-200 hover:border-gray-300 hover:shadow-panel"
-      }`}
-    >
+    <div className="relative flex flex-col bg-white p-7 transition-colors duration-300 hover:bg-[#fcfcfd] motion-reduce:transition-none">
       <div className="flex min-h-[1.75rem] flex-wrap items-center gap-x-2 gap-y-1.5">
         <h3 className="text-[16px] font-semibold tracking-[-0.01em] text-gray-900">{name}</h3>
         {plan.recommended && (
@@ -203,27 +225,52 @@ function PreviewColumn({
 
       <div className="mt-5 flex flex-wrap items-baseline gap-x-1.5" dir="ltr">
         <span className="text-[2rem] font-semibold leading-none tracking-[-0.03em] tabular-nums text-gray-900">
-          {plan.salesOnly || !plan.price ? t("pricing.custom") : plan.price.formatted}
+          {priced ? formatMinor(q.monthlyMinor, q.currency) : t("pricing.custom")}
         </span>
-        {plan.price && !plan.salesOnly && (
-          <span className="whitespace-nowrap text-[13px] text-gray-400">/ {t("pricing.month")}</span>
-        )}
+        {priced && <span className="whitespace-nowrap text-[13px] text-gray-400">/ {t("pricing.month")}</span>}
       </div>
 
-      <dl className="mt-5 space-y-1.5 border-t border-gray-100 pt-4 text-[13px]">
-        <div className="flex items-baseline justify-between gap-3">
-          <dt className="text-gray-500">{t("pricing.includedCredits")}</dt>
-          <dd className="font-medium tabular-nums text-gray-900" dir="ltr">
-            {plan.includedCredits.toLocaleString()}
-          </dd>
+      {/* Adjust the volume here, next to the price it moves. */}
+      {adjustable && (
+        <div className="mt-5 space-y-4 border-t border-gray-100 pt-4">
+          {plan.chatVolumeEnabled && (
+            <MilestoneBar
+              size="compact"
+              legend={t("pricing.chatVolume")}
+              hint={t("pricing.perBusinessDay")}
+              options={plan.chatOptions}
+              value={selection.chat}
+              onChange={(k) => onVolumeChange(plan.key, "chat", k)}
+              t={t as (k: string) => string}
+            />
+          )}
+          {plan.voiceVolumeEnabled && (
+            <MilestoneBar
+              size="compact"
+              legend={t("pricing.voiceVolume")}
+              hint={t("pricing.perBusinessDay")}
+              options={plan.voiceOptions}
+              value={selection.voice}
+              onChange={(k) => onVolumeChange(plan.key, "voice", k)}
+              t={t as (k: string) => string}
+            />
+          )}
         </div>
+      )}
+
+      <dl className="mt-5 space-y-1.5 border-t border-gray-100 pt-4 text-[13px]">
+        <Row label={t("pricing.includedCredits")} value={q.includedCredits.toLocaleString()} />
         {q.estimatedChatsMonthly > 0 && (
-          <div className="flex items-baseline justify-between gap-3">
-            <dt className="text-gray-500">{t("pricing.estimatedChats")}</dt>
-            <dd className="font-medium tabular-nums text-gray-900" dir="ltr">
-              ~{q.estimatedChatsMonthly.toLocaleString()}
-            </dd>
-          </div>
+          <Row label={t("pricing.estimatedChats")} value={`~${q.estimatedChatsMonthly.toLocaleString()}`} />
+        )}
+        {q.estimatedCallsMonthly > 0 && (
+          <Row label={t("pricing.estimatedCalls")} value={`~${q.estimatedCallsMonthly.toLocaleString()}`} />
+        )}
+        {priced && q.pricePerChatMinor != null && (
+          <Row label={t("pricing.perConversation")} value={formatMinor(q.pricePerChatMinor, q.currency, 2)} muted />
+        )}
+        {priced && q.pricePerCallMinor != null && (
+          <Row label={t("pricing.perCall")} value={formatMinor(q.pricePerCallMinor, q.currency, 2)} muted />
         )}
       </dl>
 
@@ -268,10 +315,21 @@ function PreviewColumn({
   );
 }
 
+function Row({ label, value, muted = false }: { label: string; value: string; muted?: boolean }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <dt className="text-gray-500">{label}</dt>
+      <dd className={`font-medium tabular-nums ${muted ? "text-gray-500" : "text-gray-900"}`} dir="ltr">
+        {value}
+      </dd>
+    </div>
+  );
+}
+
 /** No numerals while loading: a flash of "$0" would be a lie about the price. */
 function PreviewSkeleton() {
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-7">
+    <div className="bg-white p-7">
       <div className="h-4 w-24 animate-pulse rounded bg-gray-100" />
       <div className="mt-6 h-8 w-28 animate-pulse rounded bg-gray-100" />
       <div className="mt-6 space-y-2 border-t border-gray-100 pt-4">

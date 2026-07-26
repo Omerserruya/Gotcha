@@ -150,6 +150,17 @@ export interface Quote {
   addedCredits: number;
   monthlyMinor: number;
   currency: string;
+  /**
+   * The same total in the currency actually charged.
+   *
+   * Needed because the plan columns now price a live selection: showing
+   * "approximately X, charged in USD" against the plan's BASE price while the
+   * displayed total includes chosen volume would understate what is charged.
+   */
+  monthlyBaseMinor: number;
+  baseCurrency: string;
+  isEstimatedConversion: boolean;
+  chargedCurrency: string;
   chatOption: PublicVolumeOption | null;
   voiceOption: PublicVolumeOption | null;
   estimatedChatsMonthly: number;
@@ -203,6 +214,13 @@ export function quoteSelection(plan: PublicPlan, selection: Selection): Quote {
     toMinor(chatOption?.additionalPrice.amount ?? "0") +
     toMinor(voiceOption?.additionalPrice.amount ?? "0");
 
+  // The same sum in the charged currency, so the "estimated conversion" note
+  // can quote the real total rather than the plan's base price.
+  const monthlyBaseMinor =
+    toMinor(plan.price?.base.amount ?? "0") +
+    toMinor(chatOption?.additionalPrice.base.amount ?? "0") +
+    toMinor(voiceOption?.additionalPrice.base.amount ?? "0");
+
   const r = plan.estimate.ratios;
   const days = r.businessDaysPerMonth > 0 ? r.businessDaysPerMonth : 1;
   const chatsMonthly = r.chatCreditsPerEstimatedConversation > 0 ? chatCredits / r.chatCreditsPerEstimatedConversation : 0;
@@ -222,6 +240,10 @@ export function quoteSelection(plan: PublicPlan, selection: Selection): Quote {
     addedCredits: (chatOption?.additionalCredits ?? 0) + (voiceOption?.additionalCredits ?? 0),
     monthlyMinor,
     currency,
+    monthlyBaseMinor,
+    baseCurrency: plan.price?.base.currency ?? currency,
+    isEstimatedConversion: plan.price?.isEstimatedConversion ?? false,
+    chargedCurrency: plan.price?.chargedCurrency ?? currency,
     chatOption,
     voiceOption,
     estimatedChatsMonthly: Math.round(chatsMonthly),
