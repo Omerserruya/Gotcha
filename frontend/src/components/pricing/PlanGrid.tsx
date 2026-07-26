@@ -2,10 +2,11 @@
 
 // The three-plan comparison.
 //
-// Composed as ONE bordered surface split by hairline gaps (`gap-px` over a grey
-// background) rather than three floating cards. That is what makes it read as a
-// considered comparison instead of a template card grid, and it keeps the price
-// baselines, credit blocks and CTAs aligned across columns by construction.
+// Each plan is its own card, clearly separated, so the three products read as
+// three distinct choices rather than one continuous table. Alignment across
+// columns is preserved by construction instead: `h-full` columns, a fixed-height
+// description block, and a `grow` spacer that pins every CTA to the same
+// baseline no matter how many features a plan lists.
 
 import Link from "next/link";
 import { planCopy } from "./usePublicPricing";
@@ -32,9 +33,9 @@ export function PlanGrid({
   plans, selections, activeKey, onSelect, isHe, t, currentPlanKey, ctaHref, ctaLabel, compact = false,
 }: PlanGridProps) {
   return (
-    <div className="grid gap-px overflow-hidden rounded-2xl bg-gray-200/70 md:grid-cols-2 xl:grid-cols-3">
+    <div className="grid gap-5 md:grid-cols-2 lg:gap-6 xl:grid-cols-3">
       {plans.map((plan, i) => (
-        <Reveal key={plan.key} delay={i * 70}>
+        <Reveal key={plan.key} delay={i * 70} className="h-full">
           <PlanColumn
             plan={plan}
             previous={i > 0 ? plans[i - 1] : null}
@@ -72,19 +73,30 @@ function PlanColumn({
   const { name, description } = planCopy(plan, isHe);
   const q = quoteSelection(plan, selection);
 
-  // Show what this plan ADDS over the one below it. Repeating the shared
-  // capabilities on every column makes three products look identical and hides
-  // the actual reason to move up.
+  // The entry plan lists everything it includes: it is the one column where the
+  // full list IS the story, and truncating it made the cheapest plan look
+  // thinner than it is.
+  //
+  // The plans above it lead with what they ADD, because repeating twenty shared
+  // capabilities on every column makes three products look identical and buries
+  // the actual reason to move up. The inherited set still appears underneath, as
+  // a dense muted line, so nothing is hidden.
   const included = plan.features.filter((f) => f.included);
   const prevKeys = new Set((previous?.features ?? []).filter((f) => f.included).map((f) => f.key));
   const added = included.filter((f) => !prevKeys.has(f.key));
+  const inherited = included.filter((f) => prevKeys.has(f.key));
   const isDelta = previous != null && added.length > 0;
-  const headline = (isDelta ? added : included).slice(0, compact ? 3 : 5);
+  const ticked = isDelta ? added : included;
+  const headline = compact ? ticked.slice(0, 3) : ticked;
 
   return (
     <div
-      className={`relative flex h-full flex-col bg-white p-6 sm:p-7 transition-shadow duration-300 ${
-        active ? "shadow-[inset_0_0_0_1.5px_rgb(17,24,39)]" : "hover:shadow-panel"
+      className={`relative flex h-full flex-col rounded-2xl border bg-white p-6 sm:p-7 transition-[border-color,box-shadow] duration-300 motion-reduce:transition-none ${
+        active
+          ? "border-gray-900 shadow-panel"
+          : plan.recommended
+            ? "border-gray-900/70 hover:shadow-panel"
+            : "border-gray-200 hover:border-gray-300 hover:shadow-panel"
       }`}
     >
       {/* Header: name, then badges on their own line so a long Hebrew name and
@@ -166,6 +178,15 @@ function PlanColumn({
             </li>
           ))}
         </ul>
+
+        {/* Everything carried up from the plan below, stated in full but set
+            quietly so it does not compete with what this plan adds. */}
+        {!compact && isDelta && inherited.length > 0 && (
+          <p className="mt-4 text-[12px] leading-[1.6] text-gray-400">
+            <span className="font-medium text-gray-500">{t("pricing.alsoIncludes")} </span>
+            {inherited.map((f) => f.name).join(", ")}
+          </p>
+        )}
       </div>
 
       {/* CTA pinned to the bottom of every column by the grow above it. */}

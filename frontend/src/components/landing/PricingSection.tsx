@@ -11,6 +11,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { Check } from "@/components/pricing/PricingPrimitives";
 import {
   getPublicPricing,
   quoteSelection,
@@ -102,12 +103,18 @@ export default function PricingSection({ t, isRtl }: Props) {
             </Link>
           </div>
 
-          {/* Plans: one surface, hairline dividers. Same construction as
-              /pricing so the two read as one product, at lower density. */}
-          <div className="mt-12 grid gap-px overflow-hidden rounded-2xl bg-gray-200/70 md:grid-cols-3">
+          {/* Plans: three separate cards, same construction as /pricing so the
+              two surfaces read as one product, at lower density. */}
+          <div className="mt-12 grid gap-5 md:grid-cols-3 lg:gap-6">
             {plans
-              ? plans.map((plan) => (
-                  <PreviewColumn key={plan.key} plan={plan} isRtl={isRtl} t={t} />
+              ? plans.map((plan, i) => (
+                  <PreviewColumn
+                    key={plan.key}
+                    plan={plan}
+                    previous={i > 0 ? plans[i - 1] : null}
+                    isRtl={isRtl}
+                    t={t}
+                  />
                 ))
               : [0, 1, 2].map((i) => <PreviewSkeleton key={i} />)}
           </div>
@@ -130,13 +137,15 @@ export default function PricingSection({ t, isRtl }: Props) {
 }
 
 /**
- * A single preview column: price, credits, estimated capacity, and ONE
- * differentiator. Anything more belongs on /pricing.
+ * A single preview column: price, credits, estimated capacity, what the plan
+ * includes, a worked example of what that buys, and a CTA. The full comparison,
+ * the configurator and the limits belong on /pricing.
  */
 function PreviewColumn({
-  plan, isRtl, t,
+  plan, previous, isRtl, t,
 }: {
   plan: PublicPlan;
+  previous: PublicPlan | null;
   isRtl: boolean;
   t: (key: string, vars?: Record<string, string>) => string;
 }) {
@@ -149,8 +158,40 @@ function PreviewColumn({
   // plan, which is a poor thing to lead with.
   const summary = isRtl ? plan.descriptionHe ?? plan.description : plan.description;
 
+  // Same delta logic as /pricing: the entry plan shows what it includes, the
+  // ones above it show what they add. Capped here, because this is a preview.
+  const included = plan.features.filter((f) => f.included);
+  const prevKeys = new Set((previous?.features ?? []).filter((f) => f.included).map((f) => f.key));
+  const added = included.filter((f) => !prevKeys.has(f.key));
+  const isDelta = previous != null && added.length > 0;
+  const headline = (isDelta ? added : included).slice(0, 4);
+  const previousName = previous ? (isRtl ? previous.nameHe ?? previous.name : previous.name) : "";
+
+  // A worked example, so "12,000 credits" turns into something a business owner
+  // can picture. Skipped when the rounded daily figure would read as zero.
+  const chatsDaily = Math.round(q.estimatedChatsDaily);
+  const callsDaily = Math.round(q.estimatedCallsDaily);
+  const example =
+    callsDaily >= 1 && chatsDaily >= 1
+      ? t("landing.pricing.exampleBoth")
+          .replace("{chatsDaily}", chatsDaily.toLocaleString())
+          .replace("{callsDaily}", callsDaily.toLocaleString())
+          .replace("{chatsMonthly}", q.estimatedChatsMonthly.toLocaleString())
+          .replace("{callsMonthly}", q.estimatedCallsMonthly.toLocaleString())
+      : chatsDaily >= 1
+        ? t("landing.pricing.exampleChats")
+            .replace("{daily}", chatsDaily.toLocaleString())
+            .replace("{monthly}", q.estimatedChatsMonthly.toLocaleString())
+        : null;
+
   return (
-    <div className="relative flex flex-col bg-white p-7">
+    <div
+      className={`relative flex flex-col rounded-2xl border bg-white p-7 transition-[border-color,box-shadow] duration-300 motion-reduce:transition-none ${
+        plan.recommended
+          ? "border-gray-900/70 hover:shadow-panel"
+          : "border-gray-200 hover:border-gray-300 hover:shadow-panel"
+      }`}
+    >
       <div className="flex min-h-[1.75rem] flex-wrap items-center gap-x-2 gap-y-1.5">
         <h3 className="text-[16px] font-semibold tracking-[-0.01em] text-gray-900">{name}</h3>
         {plan.recommended && (
@@ -189,6 +230,40 @@ function PreviewColumn({
       {summary && (
         <p className="mt-4 border-t border-gray-100 pt-4 text-[13px] leading-[1.55] text-gray-600">{summary}</p>
       )}
+
+      {/* What you get. Grows so every CTA lands on the same baseline. */}
+      <div className="mt-4 grow">
+        {isDelta && (
+          <p className="mb-2.5 text-[11px] font-medium uppercase tracking-[0.12em] text-gray-400">
+            {t("pricing.everythingIn").replace("{plan}", previousName)}
+          </p>
+        )}
+        <ul className="space-y-2">
+          {headline.map((f) => (
+            <li key={f.key} className="flex items-start gap-2.5 text-[13px] leading-snug text-gray-700">
+              <Check className="mt-[2px] text-gray-900" />
+              <span>{f.name}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {example && (
+        <p className="mt-5 rounded-xl bg-[#fafafa] px-3.5 py-3 text-[12px] leading-[1.6] text-gray-500">
+          {example}
+        </p>
+      )}
+
+      <Link
+        href="/early-access"
+        className={`mt-5 flex w-full items-center justify-center rounded-xl px-4 py-2.5 text-[13.5px] font-semibold transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:ring-offset-2 ${
+          plan.recommended
+            ? "bg-gray-900 text-white hover:bg-gray-800"
+            : "border border-gray-200 text-gray-900 hover:border-gray-900"
+        }`}
+      >
+        {t("pricing.cta.getStarted")}
+      </Link>
     </div>
   );
 }
@@ -196,14 +271,19 @@ function PreviewColumn({
 /** No numerals while loading: a flash of "$0" would be a lie about the price. */
 function PreviewSkeleton() {
   return (
-    <div className="bg-white p-7">
+    <div className="rounded-2xl border border-gray-200 bg-white p-7">
       <div className="h-4 w-24 animate-pulse rounded bg-gray-100" />
       <div className="mt-6 h-8 w-28 animate-pulse rounded bg-gray-100" />
       <div className="mt-6 space-y-2 border-t border-gray-100 pt-4">
         <div className="h-3 w-full animate-pulse rounded bg-gray-50" />
         <div className="h-3 w-2/3 animate-pulse rounded bg-gray-50" />
       </div>
-      <div className="mt-4 h-3 w-4/5 animate-pulse rounded bg-gray-50" />
+      <div className="mt-4 space-y-2">
+        <div className="h-3 w-4/5 animate-pulse rounded bg-gray-50" />
+        <div className="h-3 w-3/5 animate-pulse rounded bg-gray-50" />
+        <div className="h-3 w-2/3 animate-pulse rounded bg-gray-50" />
+      </div>
+      <div className="mt-5 h-10 w-full animate-pulse rounded-xl bg-gray-100" />
     </div>
   );
 }

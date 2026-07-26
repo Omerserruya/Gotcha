@@ -269,9 +269,9 @@ export function CurrencyToggle({
  */
 export function PlanSkeleton() {
   return (
-    <div className="grid gap-px overflow-hidden rounded-2xl bg-gray-200/70 md:grid-cols-2 xl:grid-cols-3">
+    <div className="grid gap-5 md:grid-cols-2 lg:gap-6 xl:grid-cols-3">
       {[0, 1, 2].map((i) => (
-        <div key={i} className="bg-white p-7">
+        <div key={i} className="rounded-2xl border border-gray-200 bg-white p-7">
           <div className="h-4 w-24 animate-pulse rounded bg-gray-100" />
           <div className="mt-3 h-3 w-full animate-pulse rounded bg-gray-50" />
           <div className="mt-1.5 h-3 w-4/5 animate-pulse rounded bg-gray-50" />

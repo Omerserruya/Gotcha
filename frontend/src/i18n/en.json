@@ -2449,8 +2449,9 @@
       "title": "Priced around your conversation volume",
       "subtitle": "Every plan includes the shared inbox, the connected channels and the AI that understands your business. Choose the capacity that matches how much you talk to customers.",
       "viewAll": "See full pricing",
-      "adds": "Adds {feature}",
-      "note": "Conversation estimates are based on the plan configuration. Actual credit consumption varies by conversation length, channel, AI actions, enabled features and voice duration."
+      "note": "Conversation estimates are based on the plan configuration. Actual credit consumption varies by conversation length, channel, AI actions, enabled features and voice duration.",
+      "exampleChats": "For example, around {daily} conversations a day comes to about {monthly} a month.",
+      "exampleBoth": "For example, around {chatsDaily} chat conversations and {callsDaily} calls a day comes to about {chatsMonthly} conversations and {callsMonthly} calls a month."
     },
     "social": {
       "instagram": "GOTCHA on Instagram",
@@ -4661,6 +4662,7 @@
       "retry": "Try again",
       "earlyAccess": "Get early access"
     },
-    "volumeHint": "Drag the bar, or use the arrow keys."
+    "volumeHint": "Drag the bar, or use the arrow keys.",
+    "alsoIncludes": "Also includes:"
   }
 }
