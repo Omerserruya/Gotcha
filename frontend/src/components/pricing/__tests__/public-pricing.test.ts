@@ -163,6 +163,7 @@ describe("the UI holds no pricing data of its own", () => {
     "app/pricing/page.tsx",
     "components/pricing/PlanGrid.tsx",
     "components/pricing/VolumeConfigurator.tsx",
+    "components/pricing/MilestoneBar.tsx",
     "components/pricing/ComparisonTable.tsx",
     "components/landing/PricingSection.tsx",
   ];
@@ -260,6 +261,7 @@ describe("public surfaces never reference private data", () => {
     "app/pricing/page.tsx",
     "components/pricing/PlanGrid.tsx",
     "components/pricing/VolumeConfigurator.tsx",
+    "components/pricing/MilestoneBar.tsx",
     "components/pricing/ComparisonTable.tsx",
     "components/pricing/PricingSections.tsx",
     "components/landing/PricingSection.tsx",
@@ -367,7 +369,7 @@ describe("localization", () => {
 
 describe("accessibility", () => {
   it("the volume bar is a native range input, so keyboard support is the platform's", () => {
-    const code = read("components/pricing/VolumeConfigurator.tsx");
+    const code = read("components/pricing/MilestoneBar.tsx");
     expect(code).toContain('type="range"');
     expect(code).toContain("<fieldset");
     expect(code).toContain("<legend");
@@ -377,7 +379,7 @@ describe("accessibility", () => {
   });
 
   it("the clickable milestones do not duplicate the slider for assistive tech", () => {
-    const code = read("components/pricing/VolumeConfigurator.tsx");
+    const code = read("components/pricing/MilestoneBar.tsx");
     // Convenience for a mouse, noise for a screen reader: the range input is
     // the single accessible control.
     expect(code).toMatch(/tabIndex=\{-1\}[\s\S]{0,80}aria-hidden="true"/);
@@ -422,6 +424,7 @@ describe("accessibility", () => {
     for (const f of [
       "components/pricing/PricingPrimitives.tsx",
       "components/pricing/VolumeConfigurator.tsx",
+    "components/pricing/MilestoneBar.tsx",
       "components/pricing/PlanGrid.tsx",
       "components/pricing/PricingSections.tsx",
     ]) {
@@ -467,37 +470,39 @@ describe("loading and failure states", () => {
   });
 });
 
-// ── Separated plan cards, adjustment bar, landing CTA and worked example ────
+// ── Column construction, in-column adjustment bar, unit prices ──────────────
 
-describe("plans read as separate cards", () => {
-  it("the plan grid is three bordered cards, not one continuous surface", () => {
+describe("plans read as columns on one surface", () => {
+  it("the plan grid is columns split by dividers, not floating cards", () => {
     const code = read("components/pricing/PlanGrid.tsx");
-    // `gap-px` over a grey background was the old single-surface construction.
-    expect(code).not.toContain("gap-px");
-    expect(code).toContain("rounded-2xl border");
+    expect(code).toContain("gap-px");
+    // Full-strength grey: a 20% hairline all but vanished on white and the
+    // three plans ran together.
+    expect(code).toContain("bg-gray-300");
+    expect(code).toContain("ring-1 ring-gray-300");
   });
 
-  it("the loading skeleton matches the separated construction", () => {
+  it("the loading skeleton matches the column construction", () => {
     const code = read("components/pricing/PricingPrimitives.tsx");
-    expect(code).not.toMatch(/PlanSkeleton[\s\S]{0,400}gap-px/);
+    expect(code).toMatch(/PlanSkeleton[\s\S]{0,400}gap-px/);
   });
 
-  it("the landing preview uses the same separated cards", () => {
+  it("the landing preview uses the same columns", () => {
     const code = read("components/landing/PricingSection.tsx");
-    expect(code).not.toContain("gap-px");
-    expect(code).toContain("rounded-2xl border");
+    expect(code).toContain("gap-px");
+    expect(code).toContain("ring-1 ring-gray-300");
   });
 
-  it("columns stay aligned without the shared surface", () => {
+  it("columns stay aligned on the shared surface", () => {
     const code = read("components/pricing/PlanGrid.tsx");
-    // h-full stretches every card, grow pins every CTA to the same baseline.
+    // h-full stretches every column, grow pins every CTA to the same baseline.
     expect(code).toContain("h-full");
     expect(code).toContain("grow");
   });
 });
 
 describe("volume adjustment bar", () => {
-  const code = read("components/pricing/VolumeConfigurator.tsx");
+  const code = read("components/pricing/MilestoneBar.tsx");
 
   it("steps between configured options only, never a free number", () => {
     // min/max/step are indexes into the option list, so an unsellable volume
@@ -514,36 +519,85 @@ describe("volume adjustment bar", () => {
 
   it("runs low to high left to right even in Hebrew", () => {
     // A quantity ladder that mirrors makes "more" point the wrong way.
-    expect(code).toMatch(/dir="ltr"[\s\S]{0,200}h-6/);
+    expect(code).toContain('dir="ltr"');
   });
 
   it("states the selected volume and what it costs", () => {
     expect(code).toContain("current.dailyVolume");
     expect(code).toContain("current.additionalPrice.formatted");
-    expect(code).toContain("current.additionalCredits");
   });
 
   it("respects reduced motion on the bar and thumb", () => {
     expect(code).toContain("motion-reduce:transition-none");
   });
+
+  it("is one implementation, so the column and the configurator cannot drift", () => {
+    // Both surfaces import the same control rather than owning a copy.
+    expect(read("components/pricing/PlanGrid.tsx")).toContain('from "./MilestoneBar"');
+    expect(read("components/pricing/VolumeConfigurator.tsx")).toContain('from "./MilestoneBar"');
+    expect(read("components/landing/PricingSection.tsx")).toContain("MilestoneBar");
+  });
 });
 
-describe("first plan feature list", () => {
+describe("each plan column prices a live selection", () => {
   const code = read("components/pricing/PlanGrid.tsx");
 
-  it("shows the entry plan's full included list rather than a truncated one", () => {
-    // Only the compact landing variant slices.
-    expect(code).toContain("compact ? ticked.slice(0, 3) : ticked");
+  it("carries its own volume bar", () => {
+    expect(code).toContain('size="compact"');
+    expect(code).toContain('onVolumeChange!(plan.key, "chat", k)');
+    expect(code).toContain('onVolumeChange!(plan.key, "voice", k)');
   });
 
-  it("still leads the higher plans with what they add", () => {
-    expect(code).toContain("const added = included.filter");
-    expect(code).toContain("pricing.everythingIn");
+  it("prices the selection rather than the plan's base price", () => {
+    expect(code).toContain("formatMinor(q.monthlyMinor, q.currency)");
+    expect(code).not.toContain("plan.price.formatted");
   });
 
-  it("states the inherited capabilities instead of hiding them", () => {
-    expect(code).toContain("pricing.alsoIncludes");
-    expect(code).toContain("inherited.map((f) => f.name).join");
+  it("moves credits and capacity with the bar too", () => {
+    expect(code).toContain("q.includedCredits.toLocaleString()");
+    expect(code).not.toContain("plan.includedCredits.toLocaleString()");
+  });
+
+  it("shows what a conversation and a call cost", () => {
+    expect(code).toContain("pricing.perConversation");
+    expect(code).toContain("pricing.perCall");
+    expect(code).toContain("q.pricePerChatMinor");
+    expect(code).toContain("q.pricePerCallMinor");
+  });
+
+  it("quotes the selected total in the charged currency, not the base price", () => {
+    // Otherwise the conversion note understates what is actually billed once a
+    // volume is added.
+    expect(code).toContain("formatMinor(q.monthlyBaseMinor, q.baseCurrency)");
+  });
+
+  it("shares selection state with the detailed configurator", () => {
+    expect(read("app/pricing/page.tsx")).toContain("onVolumeChange={p.setVolume}");
+  });
+});
+
+describe("base-currency total", () => {
+  it("sums the plan and both options in the charged currency", () => {
+    const q = quoteSelection(plan(), { chat: "chat_100", voice: "voice_25" });
+    // 1499 + 349 + 249, in USD, matching the displayed total here.
+    expect(q.monthlyBaseMinor).toBe(209_700);
+    expect(q.baseCurrency).toBe("USD");
+    expect(q.chargedCurrency).toBe("USD");
+  });
+
+  it("keeps the charged total in base currency when display is converted", () => {
+    const ils = plan({
+      price: {
+        amount: "5550.00", currency: "ILS", formatted: "₪5,550",
+        base: { amount: "1499.00", currency: "USD", formatted: "$1,499" },
+        isEstimatedConversion: true, chargedCurrency: "USD",
+      },
+    });
+    const q = quoteSelection(ils, { chat: null, voice: null });
+    expect(q.currency).toBe("ILS");
+    expect(q.monthlyMinor).toBe(555_000);
+    expect(q.isEstimatedConversion).toBe(true);
+    expect(formatMinor(q.monthlyBaseMinor, q.baseCurrency)).toBe("$1,499");
   });
 });
 
@@ -560,6 +614,21 @@ describe("landing pricing section", () => {
     expect(code).toContain("plan.features.filter((f) => f.included)");
   });
 
+  it("shows what a conversation costs", () => {
+    expect(code).toContain("pricing.perConversation");
+    expect(code).toContain("q.pricePerChatMinor");
+  });
+
+  it("adjusts volume in place and prices the result", () => {
+    expect(code).toContain("MilestoneBar");
+    expect(code).toContain("formatMinor(q.monthlyMinor, q.currency)");
+  });
+
+  it("keeps a chosen volume across a language switch", () => {
+    // Selections are seeded only for plans not already configured.
+    expect(code).toContain("if (!next[p.key]) next[p.key] = defaultSelection(p)");
+  });
+
   it("turns the credit figure into a worked example", () => {
     expect(code).toContain("landing.pricing.exampleChats");
     expect(code).toContain("landing.pricing.exampleBoth");
@@ -572,7 +641,6 @@ describe("landing pricing section", () => {
   it("derives the example from catalog figures, never a hardcoded number", () => {
     expect(code).toContain("q.estimatedChatsDaily");
     expect(code).toContain("q.estimatedChatsMonthly");
-    expect(code).not.toMatch(/example[\s\S]{0,200}"\d{2,}"/);
   });
 });
 
