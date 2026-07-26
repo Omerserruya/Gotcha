@@ -35,6 +35,43 @@ export {
 } from "./entitlements";
 export type { EffectiveEntitlement } from "./entitlements";
 
+// The canonical entitlement resolver + the feature catalog it reads.
+export {
+  resolveEntitlements,
+  entitledIn,
+  isEntitled,
+  assertEntitled,
+  resolveLimit,
+  resolveLimits,
+  limitIn,
+  isUnlimited,
+  assertWithinLimit,
+  overLimitDisposition,
+  entitlementErrorResponse,
+  EntitlementDeniedError,
+  asBool,
+  asNumber,
+  asString,
+} from "./entitlement-resolver";
+export type {
+  ResolvedEntitlement,
+  EntitlementSet,
+  EntitlementErrorBody,
+  LimitBreachBehavior,
+} from "./entitlement-resolver";
+
+export {
+  FEATURE_CATALOG,
+  BOOLEAN_FEATURE_KEYS,
+  LIMIT_KEYS,
+  UNLIMITED_LIMIT,
+  getFeatureDef,
+  sellableFeatureKeys,
+  isUnsellable,
+  featuresByCategory,
+} from "./feature-catalog";
+export type { FeatureDef, FeatureCategory } from "./feature-catalog";
+
 export {
   getEnforcementMode,
   checkAiAllowed,

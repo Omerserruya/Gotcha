@@ -412,6 +412,7 @@ export { requirePermission, requirePermissionOrRole } from "./middleware/permiss
 export { resolveTenant, assertTenantId } from "./middleware/tenant";
 export { requireActiveTenant, requireOnboardingOrActiveTenant } from "./middleware/tenant-status";
 export { validate } from "./middleware/validate";
+export { requireEntitlement, requireCapacity, handleEntitlementError } from "./middleware/entitlement";
 
 // Shared CRM client - used by AI tools, outbound, broadcast, and any
 // caller that needs CRM lookup/segmentation. Provider-agnostic.
