@@ -130,6 +130,12 @@ export const PERMISSIONS: readonly PermissionDef[] = [
   // ── AI Workflows (configuration) ────────────────────────────
   p("ai:workflows:read", "ai", "configuration", false, "View Workflows", "View automation workflows and flows."),
   p("ai:workflows:update", "ai", "configuration", false, "Edit Workflows", "Create and edit automation workflows and flows."),
+  p("ai:workflows:publish", "ai", "configuration", false, "Publish Workflows", "Activate/publish a workflow so it runs live (subject to graph validation)."),
+
+  // ── AI Tools (configuration) - executable tool assignment + AUTO/HITL ──
+  p("ai:tools:read", "ai", "configuration", false, "View AI Tools", "View executable AI tools, their assignments and AUTO/HITL settings."),
+  p("ai:tools:manage", "ai", "configuration", false, "Manage AI Tools", "Enable/disable tools and configure AUTO/HITL, approval recipients and limits."),
+  p("ai:tools:assign", "ai", "configuration", false, "Assign AI Tools", "Assign executable tools to AI employees."),
 
   // ── Approvals ───────────────────────────────────────────────
   p("approvals:requests:view", "approvals", "runtime", true, "View Approval Requests", "View pending AI/agent approval requests."),

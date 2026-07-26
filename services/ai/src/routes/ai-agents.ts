@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { prisma, authenticate, resolveTenant, requireActiveTenant, requireRole } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireActiveTenant, requirePermissionOrRole } from "@chatcenter/shared";
 import { sandboxEmployeeChat } from "../services/agent-sandbox-chat.service";
 import { computeCalendarCapability } from "../services/calendar-capability.service";
 import { generateResponse, getDefaultModel } from "../services/ai.service";
@@ -60,7 +60,7 @@ function normalizeSalesContext(raw: unknown): Record<string, unknown> | null {
 }
 
 // ─── List AI Agents ──────────────────────────────────────────
-router.get("/", authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.get("/", authenticate, resolveTenant, requireActiveTenant(), requirePermissionOrRole("ai:employees:read", "ADMIN"), async (req: Request, res: Response) => {
   try {
     const agents = await prisma.aIAgent.findMany({
       where: { tenantId: req.tenantId! as string },
@@ -92,7 +92,7 @@ router.get("/", authenticate, resolveTenant, requireActiveTenant(), requireRole(
 });
 
 // ─── Generate AI Employee Config from Wizard Answers ────────
-router.post("/generate", authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.post("/generate", authenticate, resolveTenant, requireActiveTenant(), requirePermissionOrRole("ai:employees:update", "ADMIN"), async (req: Request, res: Response) => {
   try {
     const { answers, departmentId } = req.body;
     if (!answers || typeof answers !== "object") {
@@ -227,7 +227,7 @@ router.post("/generate", authenticate, resolveTenant, requireActiveTenant(), req
 });
 
 // ─── Get AI Agent by ID ──────────────────────────────────────
-router.get("/:id", authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.get("/:id", authenticate, resolveTenant, requireActiveTenant(), requirePermissionOrRole("ai:employees:read", "ADMIN"), async (req: Request, res: Response) => {
   try {
     const agent = await prisma.aIAgent.findFirst({
       where: { id: req.params.id as string, tenantId: req.tenantId! as string },
@@ -316,7 +316,7 @@ function requiresFunnel(role: string | undefined | null): boolean {
 }
 
 // ─── Create AI Agent ─────────────────────────────────────────
-router.post("/", authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.post("/", authenticate, resolveTenant, requireActiveTenant(), requirePermissionOrRole("ai:employees:create", "ADMIN"), async (req: Request, res: Response) => {
   try {
     const {
       name, role, description, avatarColor, status,
@@ -443,7 +443,7 @@ router.post("/", authenticate, resolveTenant, requireActiveTenant(), requireRole
 });
 
 // ─── Update AI Agent ─────────────────────────────────────────
-router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), requirePermissionOrRole("ai:employees:update", "ADMIN"), async (req: Request, res: Response) => {
   try {
     const existing = await prisma.aIAgent.findFirst({
       where: { id: req.params.id as string, tenantId: req.tenantId! as string },
@@ -658,7 +658,7 @@ router.put(
   authenticate,
   resolveTenant,
   requireActiveTenant(),
-  requireRole("ADMIN"),
+  requirePermissionOrRole("ai:tools:assign", "ADMIN"),
   async (req: Request, res: Response) => {
     try {
       const tenantId = req.tenantId! as string;
@@ -726,7 +726,7 @@ router.put(
 // Runtime routing is exclusively the FlowCanvas graph: an ACTIVE employee
 // with no agent-node targeting it NEVER receives a conversation. This
 // endpoint tells the UI the truth so "go live" can't be a broken promise.
-router.get("/:id/reachability", authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.get("/:id/reachability", authenticate, resolveTenant, requireActiveTenant(), requirePermissionOrRole("ai:employees:read", "ADMIN"), async (req: Request, res: Response) => {
   try {
     const agent = await prisma.aIAgent.findFirst({
       where: { id: req.params.id as string, tenantId: req.tenantId! as string },
@@ -758,7 +758,7 @@ router.get("/:id/reachability", authenticate, resolveTenant, requireActiveTenant
 // capability is live (CONNECTED / bookable / KB attached) AND (for tool-governed
 // domains) an AgentToolPermission grants it. Reuses the exact permissions bridge
 // + capability world the kernel uses, so the UI never disagrees with the runtime.
-router.get("/:id/effective-permissions", authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.get("/:id/effective-permissions", authenticate, resolveTenant, requireActiveTenant(), requirePermissionOrRole("ai:employees:read", "ADMIN"), async (req: Request, res: Response) => {
   try {
     const tenantId = req.tenantId! as string;
     const agentId = req.params.id as string;
@@ -801,7 +801,7 @@ router.get("/:id/effective-permissions", authenticate, resolveTenant, requireAct
 });
 
 // ─── Test Chat ───────────────────────────────────────────────
-router.post("/:id/test-chat", authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.post("/:id/test-chat", authenticate, resolveTenant, requireActiveTenant(), requirePermissionOrRole("ai:employees:read", "ADMIN"), async (req: Request, res: Response) => {
   try {
     const agent = await prisma.aIAgent.findFirst({
       where: { id: req.params.id as string, tenantId: req.tenantId! as string },
@@ -836,7 +836,7 @@ router.post("/:id/test-chat", authenticate, resolveTenant, requireActiveTenant()
 });
 
 // ─── Delete AI Agent ─────────────────────────────────────────
-router.delete("/:id", authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.delete("/:id", authenticate, resolveTenant, requireActiveTenant(), requirePermissionOrRole("ai:employees:delete", "ADMIN"), async (req: Request, res: Response) => {
   try {
     const existing = await prisma.aIAgent.findFirst({
       where: { id: req.params.id as string, tenantId: req.tenantId! as string },

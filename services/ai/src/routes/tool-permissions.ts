@@ -4,7 +4,7 @@ import {
   authenticate,
   resolveTenant,
   requireActiveTenant,
-  requireRole,
+  requirePermissionOrRole,
   getDefaultHighRiskTools,
 } from "@chatcenter/shared";
 import { getAvailableTools, TOOL_REGISTRY } from "../services/tool-registry";
@@ -31,7 +31,7 @@ router.use(
   authenticate,
   resolveTenant,
   requireActiveTenant(),
-  requireRole("ADMIN"),
+  requirePermissionOrRole("ai:tools:read", "ADMIN"),
 );
 
 interface MergedToolRow {
@@ -159,7 +159,7 @@ router.get("/", async (req: Request, res: Response) => {
   }
 });
 
-router.put("/:toolName", async (req: Request, res: Response) => {
+router.put("/:toolName", requirePermissionOrRole("ai:tools:manage", "ADMIN"), async (req: Request, res: Response) => {
   try {
     const tenantId = req.tenantId!;
     const toolName = req.params.toolName as string;

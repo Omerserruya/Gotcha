@@ -26,6 +26,7 @@ vi.mock("@chatcenter/shared", () => {
       next();
     },
     requireRole: (..._roles: string[]) => (_req: any, _res: any, next: any) => next(),
+    requirePermissionOrRole: (_perm: string, ..._roles: string[]) => (_req: any, _res: any, next: any) => next(),
     validate: (_schema: any) => (_req: any, _res: any, next: any) => next(),
     createServiceApp: (config: any) => {
       const app = express();

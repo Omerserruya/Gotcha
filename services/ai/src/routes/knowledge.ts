@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { prisma, authenticate, resolveTenant, requireOnboardingOrActiveTenant, requireRole, safeFetch } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireOnboardingOrActiveTenant, requirePermissionOrRole, safeFetch } from "@chatcenter/shared";
 import { processDocument } from "../services/embedding.service";
 import { deleteByDocumentId, deleteByKnowledgeBaseId } from "../services/qdrant.service";
 import { parseFile, isAllowedMimeType, resolveMimeType } from "../services/file-parser.service";
@@ -14,7 +14,7 @@ const upload = multer({
 
 // PENDING_ONBOARDING is allowed: Movement 6 of onboarding uploads files and
 // creates the first knowledge base BEFORE the tenant flips ACTIVE.
-router.use(authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"));
+router.use(authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requirePermissionOrRole("ai:knowledge:read", "ADMIN"));
 
 // List knowledge bases
 router.get("/", async (req: Request, res: Response) => {
@@ -37,7 +37,7 @@ router.get("/", async (req: Request, res: Response) => {
 });
 
 // Create knowledge base
-router.post("/", async (req: Request, res: Response) => {
+router.post("/", requirePermissionOrRole("ai:knowledge:write", "ADMIN"), async (req: Request, res: Response) => {
   try {
     const { name, description } = req.body;
     if (!name) {
@@ -60,7 +60,7 @@ router.post("/", async (req: Request, res: Response) => {
 });
 
 // Update knowledge base
-router.patch("/:id", async (req: Request, res: Response) => {
+router.patch("/:id", requirePermissionOrRole("ai:knowledge:write", "ADMIN"), async (req: Request, res: Response) => {
   try {
     const kb = await prisma.knowledgeBase.findFirst({
       where: { id: String(req.params.id), tenantId: req.tenantId! },
@@ -84,7 +84,7 @@ router.patch("/:id", async (req: Request, res: Response) => {
 });
 
 // Delete knowledge base
-router.delete("/:id", async (req: Request, res: Response) => {
+router.delete("/:id", requirePermissionOrRole("ai:knowledge:write", "ADMIN"), async (req: Request, res: Response) => {
   try {
     const kb = await prisma.knowledgeBase.findFirst({
       where: { id: String(req.params.id), tenantId: req.tenantId! },
@@ -101,7 +101,7 @@ router.delete("/:id", async (req: Request, res: Response) => {
 });
 
 // Upload document to knowledge base
-router.post("/:id/documents", async (req: Request, res: Response) => {
+router.post("/:id/documents", requirePermissionOrRole("ai:knowledge:write", "ADMIN"), async (req: Request, res: Response) => {
   try {
     const kb = await prisma.knowledgeBase.findFirst({
       where: { id: String(req.params.id), tenantId: req.tenantId! },
@@ -170,7 +170,7 @@ router.post("/:id/documents", async (req: Request, res: Response) => {
 });
 
 // Delete document
-router.delete("/:id/documents/:docId", async (req: Request, res: Response) => {
+router.delete("/:id/documents/:docId", requirePermissionOrRole("ai:knowledge:write", "ADMIN"), async (req: Request, res: Response) => {
   try {
     const doc = await prisma.knowledgeDocument.findFirst({
       where: { id: String(req.params.docId), knowledgeBaseId: String(req.params.id), tenantId: req.tenantId! },
@@ -187,7 +187,7 @@ router.delete("/:id/documents/:docId", async (req: Request, res: Response) => {
 });
 
 // Upload file document to knowledge base
-router.post("/:id/documents/upload", upload.single("file"), async (req: Request, res: Response) => {
+router.post("/:id/documents/upload", requirePermissionOrRole("ai:knowledge:write", "ADMIN"), upload.single("file"), async (req: Request, res: Response) => {
   try {
     const kb = await prisma.knowledgeBase.findFirst({
       where: { id: String(req.params.id), tenantId: req.tenantId! },
@@ -240,7 +240,7 @@ router.post("/:id/documents/upload", upload.single("file"), async (req: Request,
 });
 
 // Trigger document processing (embedding generation)
-router.post("/:id/documents/:docId/process", async (req: Request, res: Response) => {
+router.post("/:id/documents/:docId/process", requirePermissionOrRole("ai:knowledge:write", "ADMIN"), async (req: Request, res: Response) => {
   try {
     const doc = await prisma.knowledgeDocument.findFirst({
       where: { id: String(req.params.docId), knowledgeBaseId: String(req.params.id), tenantId: req.tenantId! },

@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
-import { prisma, authenticate, resolveTenant, requireRole, validate } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requirePermissionOrRole, validate } from "@chatcenter/shared";
 import { validateGraph } from "../lib/graph-validator";
 
 const router = Router();
@@ -40,7 +40,7 @@ router.get("/:id", async (req: Request, res: Response) => {
   } catch (err) { console.error("Get flow error:", err); res.status(500).json({ error: "Failed to get flow" }); }
 });
 
-router.post("/", requireRole("ADMIN"), validate(flowSchema), async (req: Request, res: Response) => {
+router.post("/", requirePermissionOrRole("ai:workflows:update", "ADMIN"), validate(flowSchema), async (req: Request, res: Response) => {
   try {
     const { name, description, channel, nodes, edges, isActive } = req.body;
     const flow = await prisma.chatbotFlow.create({
@@ -50,7 +50,7 @@ router.post("/", requireRole("ADMIN"), validate(flowSchema), async (req: Request
   } catch (err) { console.error("Create flow error:", err); res.status(500).json({ error: "Failed to create flow" }); }
 });
 
-router.put("/:id", requireRole("ADMIN"), validate(flowSchema), async (req: Request, res: Response) => {
+router.put("/:id", requirePermissionOrRole("ai:workflows:update", "ADMIN"), validate(flowSchema), async (req: Request, res: Response) => {
   try {
     const existing = await prisma.chatbotFlow.findFirst({ where: { id: req.params.id as string, tenantId: req.tenantId! } });
     if (!existing) { res.status(404).json({ error: "Flow not found" }); return; }
@@ -69,7 +69,7 @@ router.put("/:id", requireRole("ADMIN"), validate(flowSchema), async (req: Reque
   } catch (err) { console.error("Update flow error:", err); res.status(500).json({ error: "Failed to update flow" }); }
 });
 
-router.delete("/:id", requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.delete("/:id", requirePermissionOrRole("ai:workflows:update", "ADMIN"), async (req: Request, res: Response) => {
   try {
     const existing = await prisma.chatbotFlow.findFirst({ where: { id: req.params.id as string, tenantId: req.tenantId! } });
     if (!existing) { res.status(404).json({ error: "Flow not found" }); return; }
@@ -78,7 +78,7 @@ router.delete("/:id", requireRole("ADMIN"), async (req: Request, res: Response) 
   } catch (err) { console.error("Delete flow error:", err); res.status(500).json({ error: "Failed to delete flow" }); }
 });
 
-router.post("/:id/activate", requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.post("/:id/activate", requirePermissionOrRole("ai:workflows:publish", "ADMIN"), async (req: Request, res: Response) => {
   try {
     const existing = await prisma.chatbotFlow.findFirst({ where: { id: req.params.id as string, tenantId: req.tenantId! } });
     if (!existing) { res.status(404).json({ error: "Flow not found" }); return; }
