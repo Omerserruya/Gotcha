@@ -2443,6 +2443,14 @@
       "privacy": "Privacy Policy",
       "terms": "Terms of Service",
       "copyright": "All rights reserved."
+    },
+    "pricing": {
+      "label": "Pricing",
+      "title": "Priced around your conversation volume",
+      "subtitle": "Every plan includes the shared inbox, the connected channels and the AI that understands your business. Choose the capacity that matches how much you talk to customers.",
+      "viewAll": "See full pricing",
+      "adds": "Adds {feature}",
+      "note": "Conversation estimates are based on the plan configuration. Actual credit consumption varies by conversation length, channel, AI actions, enabled features and voice duration."
     }
   },
   "earlyAccess": {

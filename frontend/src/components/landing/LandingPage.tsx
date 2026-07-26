@@ -7,6 +7,8 @@ import { useI18n } from "@/context/I18nContext";
 import type { Locale } from "@/i18n";
 import JsonLd from "@/components/JsonLd";
 import CustomerStorySection from "@/components/landing/CustomerStorySection";
+import PricingSection from "./PricingSection";
+import { publicPricingEnabled } from "@/lib/api-public-pricing";
 import SolutionsSection from "@/components/landing/SolutionsSection";
 import CtaForm from "@/components/landing/CtaForm";
 import FeaturesSection from "@/components/landing/FeaturesSection";
@@ -520,6 +522,11 @@ function MobileMenu({
             ))}
           </div>
           <div className="h-px bg-gray-100 my-2" />
+          {publicPricingEnabled && (
+            <Link href="/pricing" onClick={onClose} className="px-4 py-3 text-[15px] font-medium text-gray-700 hover:bg-gray-50 rounded-xl transition-colors">
+              {t("landing.nav.pricing")}
+            </Link>
+          )}
           <Link href="/login" onClick={onClose} className="px-4 py-3 text-[15px] font-medium text-gray-700 hover:bg-gray-50 rounded-xl transition-colors">
             {t("landing.nav.login")}
           </Link>
@@ -922,6 +929,13 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
               }`}>
                 {t("landing.nav.howItWorks")}
               </a>
+              {publicPricingEnabled && (
+                <Link href="/pricing" className={`px-3.5 py-1.5 text-[13px] font-medium rounded-full transition-all ${
+                  navDark ? "text-white/60 hover:text-white hover:bg-white/10" : "text-gray-500 hover:text-black hover:bg-gray-100/80"
+                }`}>
+                  {t("landing.nav.pricing")}
+                </Link>
+              )}
               <a href="#product-features" className={`px-3.5 py-1.5 text-[13px] font-medium rounded-full transition-all ${
                 navDark ? "text-white/60 hover:text-white hover:bg-white/10" : "text-gray-500 hover:text-black hover:bg-gray-100/80"
               }`}>
@@ -1083,6 +1097,9 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
       <SolutionsSection t={t as (key: string) => string} isRtl={isRtl} />
 
       {/* ───── FAQ ───── */}
+      {/* ───── Pricing preview (flag-gated; renders nothing when off) ───── */}
+      <PricingSection t={t as (key: string, vars?: Record<string, string>) => string} isRtl={isRtl} />
+
       <section className="py-20 sm:py-36 px-4 sm:px-12 lg:px-20 bg-[#fafafa]">
         <div className="max-w-[720px] mx-auto">
           <div className="text-center mb-10 sm:mb-14">
@@ -1121,6 +1138,9 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
                 <ul className="space-y-2.5 text-[#b0b0b0]">
                   <li><a href="#how-it-works" className="hover:text-gray-900 transition-colors duration-200 text-[13px]">{t("landing.nav.howItWorks")}</a></li>
                   <li><a href="#product-features" className="hover:text-gray-900 transition-colors duration-200 text-[13px]">{t("landing.nav.features")}</a></li>
+                  {publicPricingEnabled && (
+                    <li><Link href="/pricing" className="hover:text-gray-900 transition-colors duration-200 text-[13px]">{t("landing.nav.pricing")}</Link></li>
+                  )}
                 </ul>
               </div>
               <div>
