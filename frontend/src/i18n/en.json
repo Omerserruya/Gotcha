@@ -4476,7 +4476,7 @@
       "label": "Custom plan",
       "title": "Built around how your business actually runs",
       "body": "If your volumes, channels, limits or contract terms do not fit these plans, we will configure one that does. A custom plan sets its own capabilities, numeric limits, credit allocation and chat and voice volumes, on commercial terms agreed with you.",
-      "cta": "Talk to us",
+      "cta": "Contact sales",
       "i1": "Feature selection and numeric limits set per organization",
       "i2": "Credit allocation and chat and voice volumes agreed up front",
       "i3": "Monthly or annual terms with a defined contract period",
@@ -4587,7 +4587,7 @@
       "items": [
         {
           "q": "What is a credit?",
-          "a": "A credit is how GOTCHA measures AI work. Reading a message, drafting a reply, retrieving knowledge, updating your CRM and summarising a conversation all draw on your balance. You are never billed in model tokens."
+          "a": "A credit is how GOTCHA measures AI work. Reading a message, drafting a reply, retrieving knowledge, updating your CRM and summarising a conversation all draw on your balance. Credits are the only unit you are billed in."
         },
         {
           "q": "How are conversation estimates calculated?",
