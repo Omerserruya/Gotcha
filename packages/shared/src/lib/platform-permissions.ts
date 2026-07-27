@@ -21,6 +21,14 @@ export const PLATFORM_PERMISSIONS = {
   PLANS_MANAGE: "platform:plans:manage",
   CUSTOM_PLANS_MANAGE: "platform:custom-plans:manage",
   POC_CREATE: "platform:poc:create",
+  TENANTS_CREATE: "platform:tenants:create",
+  BILLING_PROVISION: "platform:billing:provision",
+  /// Strictly stronger than BILLING_PROVISION: this one activates a paid
+  /// subscription without any payment processor involved.
+  BILLING_MANUAL_ACTIVATE: "platform:billing:manual-activate",
+  BILLING_PAYMENT_LINK_CREATE: "platform:billing:payment-link:create",
+  BILLING_PAYMENT_LINK_RESEND: "platform:billing:payment-link:resend",
+  BILLING_READ: "platform:billing:read",
   USAGE_ANALYTICS_READ: "platform:usage-analytics:read",
 } as const;
 

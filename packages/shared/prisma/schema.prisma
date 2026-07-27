@@ -2939,6 +2939,10 @@ model PaymentAttempt {
   providerChargeRef String? @map("provider_charge_ref")
   failureCode       String? @map("failure_code")
 
+  /// Set when an activation has consumed this attempt. The conditional update
+  /// on this column is what makes duplicate activation grant credits once.
+  consumedByActivationAt DateTime? @map("consumed_by_activation_at")
+
   /// Reconciliation bookkeeping, for resolving an UNKNOWN outcome.
   reconciledAt   DateTime? @map("reconciled_at")
   candidateCount Int?      @map("candidate_count")
