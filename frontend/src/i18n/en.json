@@ -2819,7 +2819,8 @@
       "back": "Back to Usage",
       "processing": "Processing...",
       "noPackages": "No credit packages are available right now.",
-      "receiptNote": "Payment is processed by our provider. Your balance updates only after the payment is confirmed, and a receipt becomes available on the Billing page."
+      "receiptNote": "Payment is processed by our provider. Your balance updates only after the payment is confirmed, and a receipt becomes available on the Billing page.",
+      "checking": "We are confirming this payment with your bank. Your credits will appear here shortly - please do not pay again."
     },
     "planCredits": {
       "title": "Plan credits",

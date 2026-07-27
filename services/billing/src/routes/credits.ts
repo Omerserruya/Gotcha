@@ -175,16 +175,24 @@ router.get("/billing/credits/packages", authenticate, async (_req, res) => {
 });
 
 router.post("/billing/credits/buy", authenticate, resolveTenant, requirePermission("settings:billing:manage"), async (req, res) => {
-  const { packageKey, quantity } = req.body ?? {};
+  const { packageKey, quantity, intentKey } = req.body ?? {};
   if (!packageKey) return res.status(400).json({ error: "packageKey required" });
-  // Only the package KEY and a quantity are accepted. Price and credit amount
-  // are read from the catalog inside buyCredits(), never from the request.
+  // Only the package KEY, a quantity and an intent key are accepted. Price and
+  // credit amount are read from the catalog inside buyCredits(), never from the
+  // request. The intent key identifies ONE purchase the customer decided on, so
+  // a double-click is one charge - it cannot be used to change what is bought.
   const result = await buyCredits({
     tenantId: req.tenantId!,
     packageKey,
     quantity: quantity != null ? Number(quantity) : 1,
+    intentKey: typeof intentKey === "string" ? intentKey.slice(0, 64) : undefined,
     actor: req.user?.userId,
   });
+  if (result.outcomeUnknown) {
+    // 409, not 402. A payment-required response invites the customer to try
+    // again, and they may already have been charged.
+    return res.status(409).json({ ...result, error: "payment_outcome_unknown" });
+  }
   return res.status(result.success ? 200 : 402).json(result);
 });
 

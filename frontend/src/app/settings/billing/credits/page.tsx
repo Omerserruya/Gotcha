@@ -6,7 +6,7 @@
 // Kept off the Usage page so the catalog appears only when the user chooses to
 // buy, and so Usage stays a status surface, not a storefront.
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
@@ -57,13 +57,30 @@ function BuyCreditsInner() {
 
   useEffect(() => { load(); }, [load]);
 
+  // One identity per visit to this page. Generated on mount rather than on
+  // click, which is what makes a double-click a single purchase.
+  const intentRef = useRef(
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+  );
+
   const purchase = async (pkg: CreditPackage) => {
     if (!token) return;
     setBusy(pkg.key);
     setMsg(null);
     try {
       // Success only after the provider confirms; then refresh the balance.
-      const r = await buyCredits(token, pkg.key);
+      // The intent key is per page load and per package, so clicking twice in
+      // quick succession is one purchase rather than two charges.
+      const r = await buyCredits(token, pkg.key, `${intentRef.current}:${pkg.key}`);
+      if (r.outcomeUnknown) {
+        // Deliberately not an error, and deliberately not a retry prompt: they
+        // may already have been charged.
+        setMsg({ kind: "ok", text: t("usage.buy.checking") });
+        await load();
+        return;
+      }
       if (!r.success) throw new Error(r.failureCode || t("usage.buy.failed"));
       track("credits_purchase_confirmed", { package: pkg.key });
       setMsg({ kind: "ok", text: t("usage.buy.done").replace("{n}", fmt(pkg.units)) });

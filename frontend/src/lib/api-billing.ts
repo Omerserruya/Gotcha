@@ -323,10 +323,19 @@ export const getCreditSummary = (token: string) =>
 export const getPackages = (token: string) =>
   apiFetch<{ packages: CreditPackage[] }>("/api/billing/credits/packages", { token });
 
-export const buyCredits = (token: string, packageKey: string) =>
-  apiFetch<{ success: boolean; units?: number; failureCode?: string }>("/api/billing/credits/buy", {
-    token, method: "POST", body: JSON.stringify({ packageKey }),
-  });
+/**
+ * Buy a credit package.
+ *
+ * `intentKey` identifies ONE purchase the customer decided on. It is generated
+ * when the page loads, not when the button is clicked, so a double-click is one
+ * charge rather than two. It cannot influence what is bought - price and credit
+ * amount are read from the catalog server-side.
+ */
+export const buyCredits = (token: string, packageKey: string, intentKey: string) =>
+  apiFetch<{ success: boolean; units?: number; failureCode?: string; outcomeUnknown?: boolean }>(
+    "/api/billing/credits/buy",
+    { token, method: "POST", body: JSON.stringify({ packageKey, intentKey }) },
+  );
 
 export const getAutoPurchase = (token: string) =>
   apiFetch<{ policy: AutoPurchasePolicy | null }>("/api/billing/auto-purchase", { token });

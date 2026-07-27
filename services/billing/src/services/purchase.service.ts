@@ -35,6 +35,11 @@ export interface PurchaseResult {
   failureCode?: string;
   /** Present when the attempt was refused before any money moved. */
   detail?: Record<string, unknown>;
+  /**
+   * The charge may or may not have gone through. Nothing was granted, and
+   * nothing may retry - reconciliation settles it.
+   */
+  outcomeUnknown?: boolean;
 }
 
 /** How long a purchase lock is honoured before another worker may reclaim it. */
@@ -109,6 +114,16 @@ export async function buyCredits(input: {
   packageKey: string;
   quantity?: number;
   actor?: string;
+  /**
+   * A caller-supplied key identifying this ONE purchase intent, generated when
+   * the customer opened the buy dialog rather than when they clicked.
+   *
+   * Without it, a double-click is two purchases. Everything else in billing
+   * derives its key from what is being paid for; this path could not, because a
+   * customer may legitimately buy the same package twice - so the intent has to
+   * come from the caller.
+   */
+  intentKey?: string;
 }): Promise<PurchaseResult> {
   const entityId = await getEntityIdForTenant(input.tenantId);
   if (!entityId) return { success: false, failureCode: "no_billable_entity" };
@@ -135,7 +150,12 @@ export async function buyCredits(input: {
   const amount = unitPrice * quantity;
   const units = pkg.units * quantity;
 
-  const idempotencyKey = `buy:${entityId}:${pkg.key}:${quantity}:${Date.now()}`;
+  // Prefer the caller's intent key. The fallback is bucketed to the minute
+  // rather than the millisecond: it will not distinguish two deliberate
+  // purchases a few seconds apart, but it does stop a double-click - and
+  // charging twice is the worse failure of the two.
+  const bucket = input.intentKey ?? `t${Math.floor(Date.now() / 60_000)}`;
+  const idempotencyKey = `buy:${entityId}:${pkg.key}:${quantity}:${bucket}`;
   const res = await chargeFor({
     entityId,
     tenantId: input.tenantId,
@@ -145,7 +165,17 @@ export async function buyCredits(input: {
     description: quantity > 1 ? `${pkg.name} x${quantity}` : pkg.name,
     idempotencyKey,
   });
-  if (!res.success) return { success: false, invoiceId: res.invoiceId, failureCode: res.failureCode };
+  if (!res.success) {
+    // An unknown outcome grants nothing - the customer may have been charged
+    // without receiving credits, which reconciliation resolves. Granting on a
+    // maybe would be giving away credits for a charge that never landed.
+    return {
+      success: false,
+      invoiceId: res.invoiceId,
+      failureCode: res.failureCode,
+      outcomeUnknown: res.outcomeUnknown,
+    };
+  }
 
   // Credits are granted ONLY after the provider confirms.
   await grantUnits({
@@ -281,6 +311,16 @@ export async function triggerAutoPurchase(input: { tenantId: string; reason?: st
       idempotencyKey,
     });
 
+    if (res.outcomeUnknown) {
+      // Not "failed" - that would tell the customer they were not charged, and
+      // would invite the next tick to top up again. Left for reconciliation.
+      await emitBillingEvent({
+        type: "payment.reconciliation_required",
+        tenantId: input.tenantId,
+        data: { invoiceId: res.invoiceId, context: "auto_purchase", amount: topUp.amount },
+      });
+      return { success: false, invoiceId: res.invoiceId, failureCode: res.failureCode, outcomeUnknown: true };
+    }
     if (!res.success) {
       await emitBillingEvent({ type: "credit.auto_purchase_failed", tenantId: input.tenantId, data: { reason: res.failureCode, amount: topUp.amount } });
       return { success: false, invoiceId: res.invoiceId, failureCode: res.failureCode };
