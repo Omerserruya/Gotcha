@@ -188,18 +188,25 @@ It renders no markup into the theme's layout. The widget mounts itself
 into a Shadow DOM host it creates, so no theme CSS can reach in and none
 of ours can leak out.
 
-**Performance budget, measured:**
+**Measured** (Chromium, desktop, local harness):
 
 | | Raw | Gzipped |
 |---|---|---|
-| Bootstrap (every page) | 11.9 KB | 4.4 KB |
-| Chat app (after interaction) | 53 KB | ~15 KB |
-| socket.io client (with chat app) | 46.8 KB | ~14 KB |
+| Bootstrap (every page) | 11.9 KB | **4.4 KB** |
+| Chat app (after interaction) | 57.2 KB | 16.5 KB |
+| socket.io client (with chat app) | 46.8 KB | 14.7 KB |
 
-One network request on page load (`POST /bootstrap`). The chat app and
-socket.io load only when a shopper opens the widget, or during idle time
-for a returning shopper who already has a conversation open. Product
-images are lazy and restricted to Shopify's CDN.
+| | |
+|---|---|
+| Widget requests on page load | **2** (bootstrap script + `POST /bootstrap`) |
+| Launcher visible after | ~0.6 s from navigation start |
+| Widget open (click to panel painted) | **40 ms** |
+| Carousel of 3 cards, repaint | < 1 ms |
+
+The chat app and socket.io load only when a shopper opens the widget, or
+during idle time for a returning shopper who already has a conversation
+open. A visitor who never opens the widget downloads 4.4 KB and makes one
+API call. Product images are lazy and restricted to Shopify's CDN.
 
 ---
 
