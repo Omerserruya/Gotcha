@@ -411,6 +411,20 @@ http {
         # at /api/billing/webhooks/icount (HMAC-verified in-service). Does NOT
         # match /api/internal/billing/* - those are internal-key only and must
         # never be reachable from the internet, so they stay off the gateway.
+        # ─── Customer checkout status. Billing service, read-only.
+        #     Authorization is a continuation token, a session with membership,
+        #     or platform admin - never the opaque reference alone. X-Internal-Key
+        #     is stripped so a caller cannot forge internal-service auth.
+        location /api/checkout {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://billing_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
         location /api/billing {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://billing_service;
