@@ -204,6 +204,18 @@ linked rather than charge-linked:
 - It cancels the **whole** document. A partial refund request is refused rather
   than approximated, because approximating would return more than was asked.
 
+A refund returns the **shekel** amount that was actually taken, not the dollar
+figure on the invoice. Both are written to the audit entry, along with who asked.
+
+`POST /internal/billing/refund` (internal key required) takes `chargeId`,
+optional `amount` and `reason`, and an `actor` — pass a real person, otherwise
+the audit entry records the refund as "system".
+
+A charge in `UNKNOWN` **cannot** be refunded. Returning money for a charge we
+cannot confirm happened could refund something that was never taken; reconcile
+it first. That refusal is audited too — it is what someone reconstructs when a
+customer says they were promised their money back.
+
 ---
 
 ## Manual contracts

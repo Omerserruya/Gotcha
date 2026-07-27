@@ -6,7 +6,7 @@
  * clawback reclaims whatever is still unspent - consumed Units can't be undone,
  * balance never goes negative.
  */
-import { prisma, refundUnitsForReference } from "@chatcenter/shared";
+import { prisma, refundUnitsForReference, writeAudit, AuditAction } from "@chatcenter/shared";
 import { getProvider } from "../providers";
 import { tenantsForEntity } from "./billable-entity.service";
 import { suspendTenants } from "./tenant-status.service";
@@ -58,27 +58,93 @@ async function reverse(opts: {
 }
 
 /** Merchant-initiated refund: call the provider, then reverse our state. */
-export async function refundCharge(input: { chargeId: string; amount?: number; reason?: string }): Promise<{ ok: boolean; reclaimed: number; failureCode?: string }> {
+export async function refundCharge(input: {
+  chargeId: string;
+  amount?: number;
+  reason?: string;
+  /** Who asked for this. Recorded in the audit trail. */
+  actor?: string | null;
+}): Promise<{ ok: boolean; reclaimed: number; failureCode?: string }> {
   const charge = await prisma.charge.findUnique({ where: { id: input.chargeId }, include: { invoice: true } });
   if (!charge) return { ok: false, reclaimed: 0, failureCode: "charge_not_found" };
-  if (charge.status !== "SUCCEEDED") return { ok: false, reclaimed: 0, failureCode: "charge_not_refundable" };
+
+  const tenantId = charge.invoice ? await tenantForInvoice(charge.invoice) : undefined;
+
+  if (charge.status !== "SUCCEEDED") {
+    // UNKNOWN lands here too, and should: refunding a charge we cannot confirm
+    // happened could return money that was never taken. Reconcile first.
+    await audit(tenantId, AuditAction.REFUND_REFUSED, charge, input.actor, {
+      reason: "charge_not_refundable",
+      chargeStatus: charge.status,
+    });
+    return { ok: false, reclaimed: 0, failureCode: "charge_not_refundable" };
+  }
+
+  // Refund what was actually TAKEN. The charge moved shekels; the invoice was
+  // agreed in dollars, and sending the dollar figure to a refund would describe
+  // the wrong amount everywhere it is recorded.
+  const settledAmount = charge.chargeAmount != null ? Number(charge.chargeAmount) : Number(charge.amount);
+  const settledCurrency = charge.chargeCurrency ?? charge.currency;
 
   const provider = getProvider(charge.provider);
   const res = await provider.refund({
     providerChargeRef: charge.providerChargeRef ?? "",
-    amount: input.amount ?? Number(charge.amount),
-    currency: charge.currency,
+    amount: input.amount ?? settledAmount,
+    currency: settledCurrency,
     reason: input.reason ?? "merchant_refund",
     idempotencyKey: `refund:${charge.id}`,
     // iCount cancels a DOCUMENT, not a charge, so the issued document
-    // reference is what the refund actually needs. Passing the full charge
+    // reference is what the refund actually needs. Passing the full settled
     // amount lets the provider refuse a partial refund it cannot honour
     // instead of silently returning the whole thing.
     providerInvoiceRef: charge.invoice?.providerInvoiceRef ?? undefined,
-    expectedFullAmount: Number(charge.amount),
+    expectedFullAmount: settledAmount,
   });
-  if (!res.success) return { ok: false, reclaimed: 0, failureCode: res.failureCode };
-  return reverse({ chargeId: charge.id, kind: "refund", reason: input.reason ?? "merchant_refund" });
+
+  if (!res.success) {
+    await audit(tenantId, AuditAction.REFUND_REFUSED, charge, input.actor, {
+      reason: res.failureCode ?? "provider_refused",
+    });
+    return { ok: false, reclaimed: 0, failureCode: res.failureCode };
+  }
+
+  const reversed = await reverse({ chargeId: charge.id, kind: "refund", reason: input.reason ?? "merchant_refund" });
+  await audit(tenantId, AuditAction.REFUND_ISSUED, charge, input.actor, {
+    reason: input.reason ?? "merchant_refund",
+    unitsReclaimed: reversed.reclaimed,
+  });
+  return reversed;
+}
+
+/**
+ * Record a refund decision.
+ *
+ * Both outcomes are audited, not just the successful one. A refund that was
+ * attempted and refused is exactly what someone reconstructs afterwards when a
+ * customer says they were promised their money back.
+ */
+async function audit(
+  tenantId: string | undefined,
+  action: string,
+  charge: { id: string; amount: unknown; currency: string; chargeAmount: unknown; chargeCurrency: string | null; invoiceId: string },
+  actor: string | null | undefined,
+  metadata: Record<string, unknown>,
+): Promise<void> {
+  await writeAudit({
+    tenantId: tenantId ?? "platform",
+    actorType: actor ? "user" : "system",
+    actorId: actor ?? null,
+    action,
+    targetType: "charge",
+    targetId: charge.id,
+    metadata: {
+      invoiceId: charge.invoiceId,
+      agreed: `${String(charge.amount)} ${charge.currency}`,
+      // What actually leaves or returns to the customer's card.
+      settled: charge.chargeAmount == null ? null : `${String(charge.chargeAmount)} ${charge.chargeCurrency ?? ""}`.trim(),
+      ...metadata,
+    },
+  });
 }
 
 /** Bank-initiated chargeback (from a provider webhook): reverse state only. */

@@ -81,9 +81,11 @@ router.post("/internal/billing/grandfather", async (req, res) => {
 
 /** Ops-initiated refund of a successful charge (claws back purchased Units). */
 router.post("/internal/billing/refund", async (req, res) => {
-  const { chargeId, amount, reason } = req.body ?? {};
+  const { chargeId, amount, reason, actor } = req.body ?? {};
   if (!chargeId) return res.status(400).json({ error: "chargeId required" });
-  const result = await refundCharge({ chargeId, amount, reason });
+  // `actor` is who asked for the refund. Passed through so the audit entry
+  // names a person rather than recording every refund as "system".
+  const result = await refundCharge({ chargeId, amount, reason, actor });
   res.status(result.ok ? 200 : 400).json(result);
 });
 

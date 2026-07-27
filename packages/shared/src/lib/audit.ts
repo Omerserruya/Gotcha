@@ -114,6 +114,10 @@ export const AuditAction = {
   EXCHANGE_RATE_PROPOSED: "billing.exchange_rate_proposed",
   EXCHANGE_RATE_APPROVED: "billing.exchange_rate_approved",
   EXCHANGE_RATE_RETIRED: "billing.exchange_rate_retired",
+  // Money going back out. Audited for the same reason money coming in is: it is
+  // an irreversible action on a customer's account taken by an operator.
+  REFUND_ISSUED: "billing.refund_issued",
+  REFUND_REFUSED: "billing.refund_refused",
   // ── GDPR data-subject actions ──
   DSR_EXPORT_REQUESTED: "gdpr.export_requested",
   DSR_EXPORT_COMPLETED: "gdpr.export_completed",
