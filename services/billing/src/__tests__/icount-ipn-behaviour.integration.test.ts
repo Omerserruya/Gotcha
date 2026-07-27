@@ -44,7 +44,9 @@ async function session(opts: { status?: any } = {}) {
   return s;
 }
 
-const post = (body: unknown) => request(app).post("/api/billing/providers/icount/ipn").send(body);
+// `object`, not `unknown`: supertest's send() is typed, and a test file that
+// runs under vitest but fails tsc breaks the build without failing a test.
+const post = (body: object) => request(app).post("/api/billing/providers/icount/ipn").send(body);
 
 /**
  * Verification attempts across EVERY session in the database.

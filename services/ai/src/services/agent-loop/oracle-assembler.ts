@@ -129,13 +129,39 @@ export async function assembleOracleFacts(opts: AssembleOracleOptions): Promise<
 function billingStatusFor(reason: DenyReason | undefined): KernelSignals["billing"]["status"] {
   if (!reason) return "active";
   switch (reason) {
+    // The organization is stopped, and no payment on its own resumes it.
     case "suspended":
     case "canceled":
     case "tenant_suspended":
+    case "subscription_suspended":
+    case "subscription_canceled":
       return "suspended";
+
+    // Something is owed, or something ran out. Distinguished from "suspended"
+    // because it is the state a customer can act on.
     case "units_exhausted":
+    case "credits_exhausted":
     case "payment_required":
+    case "past_due_grace_expired":
       return "past_due";
+
+    // An arrangement ended or never started. Not "suspended" - nobody was cut
+    // off for conduct - and the reasoning layer must not describe it that way
+    // to a customer whose trial simply ran out.
+    case "no_subscription":
+    case "subscription_pending":
+    case "subscription_paused":
+    case "trial_expired":
+    case "poc_expired":
+      return "past_due";
+
+    // The organization's billing is FINE. This one is not a billing problem at
+    // all - they are in good standing and reaching for something their plan
+    // does not include - so reporting it as past_due would tell the reasoning
+    // layer to talk about money when the answer is a different plan.
+    case "feature_not_in_plan":
+      return "active";
+
     default: {
       const never: never = reason;
       return never;
