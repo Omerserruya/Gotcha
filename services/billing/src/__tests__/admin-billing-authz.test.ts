@@ -130,6 +130,16 @@ describe("the internal surface stays internal", () => {
     expect(guardAt).toBeLessThan(firstRoute);
   });
 
+  it("keeps a way to record a chargeback", () => {
+    // Removing the webhook handler left applyChargeback with no caller at all -
+    // intact but unreachable, which is not the same as preserved. Dispute
+    // windows are short, so there has to be a door, just not one strangers can
+    // open.
+    expect(internal).toContain('/internal/billing/chargeback"');
+    expect(internal).toContain("applyChargeback");
+    expect(internal).toContain('/internal/billing/refund-confirmation"');
+  });
+
   it("declares every route under the guarded prefix", () => {
     const paths = Array.from(internal.matchAll(/router\.(?:get|post|put|delete)\("([^"]+)"/g), (m) => m[1]);
     expect(paths.length).toBeGreaterThan(10);

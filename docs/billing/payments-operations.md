@@ -354,9 +354,17 @@ iCount, and a decision about what a chargeback should do. Until then, a human
 reviews the event log. Losing a few hours before reacting to a real dispute is
 recoverable; suspending a paying customer because someone posted JSON is not.
 
-Chargebacks and refunds can still be applied deliberately — `applyChargeback`
-and `refundCharge` are intact and audited; they are simply no longer reachable
-from the internet.
+Chargebacks and refunds are still recordable, deliberately and behind the
+internal key:
+
+| Endpoint | For |
+|---|---|
+| `POST /internal/billing/chargeback` | a dispute you have seen in iCount — reverses state, claws back unspent purchased credits, suspends the subscription |
+| `POST /internal/billing/refund-confirmation` | a refund issued directly in iCount — reverses state without calling the provider again |
+| `POST /internal/billing/refund` | a refund GOTCHA should issue — calls the provider, then reverses |
+
+All three take `providerChargeRef` (or `chargeId` for the last) and answer 404
+if no charge matches, rather than a silent success.
 
 ---
 

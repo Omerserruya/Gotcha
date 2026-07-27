@@ -12,7 +12,7 @@ import { triggerAutoPurchase } from "../services/purchase.service";
 import { backfillAllTenants, grandfatherTenant } from "../services/grandfather.service";
 import { runBillingCycle } from "../services/subscription.service";
 import { runDunning } from "../services/dunning.service";
-import { refundCharge } from "../services/refund.service";
+import { refundCharge, applyChargeback, applyRefundConfirmation } from "../services/refund.service";
 import { setupPoc } from "../services/poc.service";
 import {
   provisionPaidTenant,
@@ -87,6 +87,40 @@ router.post("/internal/billing/refund", async (req, res) => {
   // names a person rather than recording every refund as "system".
   const result = await refundCharge({ chargeId, amount, reason, actor });
   res.status(result.ok ? 200 : 400).json(result);
+});
+
+/**
+ * Record a chargeback the bank has already made.
+ *
+ * Deliberately operator-initiated. The webhook that used to call this was
+ * removed because it acted on invented event names from an unverified contract,
+ * and could be triggered by anyone able to reach it - a stranger could suspend
+ * a paying organization by posting JSON. Taking that away left no way to record
+ * a real chargeback at all, which is its own problem: dispute windows are short.
+ *
+ * So it lives here instead, behind the internal key, where a person invokes it
+ * after seeing the dispute in iCount. Same effect, no strangers.
+ */
+router.post("/internal/billing/chargeback", async (req, res) => {
+  const { providerChargeRef, reason } = req.body ?? {};
+  if (!providerChargeRef) return res.status(400).json({ error: "providerChargeRef required" });
+  const result = await applyChargeback({ providerChargeRef: String(providerChargeRef), reason });
+  // ok:false means no matching charge - worth a 404 rather than a silent 200,
+  // since the operator has just told us something they believe happened.
+  res.status(result.ok ? 200 : 404).json(result);
+});
+
+/**
+ * Record a refund the provider made outside GOTCHA.
+ *
+ * For a refund issued directly in iCount. Reverses our state without calling
+ * the provider again, which would attempt a second refund.
+ */
+router.post("/internal/billing/refund-confirmation", async (req, res) => {
+  const { providerChargeRef, reason } = req.body ?? {};
+  if (!providerChargeRef) return res.status(400).json({ error: "providerChargeRef required" });
+  const result = await applyRefundConfirmation({ providerChargeRef: String(providerChargeRef), reason });
+  res.status(result.ok ? 200 : 404).json(result);
 });
 
 /** Ops/scheduler hook - process trials, renewals, pending changes, dunning. */
