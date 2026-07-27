@@ -182,6 +182,13 @@ what the previous one cannot:
 3. **A single-use payment quote,** bound atomically to one attempt.
 4. **Reconciliation** for anything still unresolved.
 
+Verified as a composition, not just piece by piece: eight simultaneous
+`advance` calls on one checkout - two tabs, a phone, a laptop, some impatient
+refreshes - produce one attempt, one consumed quote, one subscription and one
+credit grant. A decline burst produces one failed attempt; a timeout burst
+produces exactly one UNKNOWN, which is the result that matters most, because a
+second attempt there could take the money again.
+
 ### UNKNOWN is not FAILED
 
 The most important distinction in the system.
