@@ -367,6 +367,7 @@ export {
   type SessionTtl,
 } from "./lib/session-store";
 export { redact, safeLogger } from "./lib/log-redact";
+export * from "./lib/tenant-access-policy";
 export {
   incomingMessageQueue,
   outgoingMessageQueue,
@@ -417,7 +418,7 @@ export { enforceMfaEnrollment } from "./middleware/mfa-guard";
 export { requireFeature, requireTenantFeature } from "./middleware/feature-gate";
 export { requirePermission, requirePermissionOrRole } from "./middleware/permission-gate";
 export { resolveTenant, assertTenantId } from "./middleware/tenant";
-export { requireActiveTenant, requireOnboardingOrActiveTenant } from "./middleware/tenant-status";
+export { requireActiveTenant, requireOnboardingOrActiveTenant, requirePaymentSetupAccess } from "./middleware/tenant-status";
 export { validate } from "./middleware/validate";
 export { requireEntitlement, requireCapacity, handleEntitlementError } from "./middleware/entitlement";
 export { requirePlatformPermission } from "./middleware/platform-permission";
