@@ -94,8 +94,8 @@ function deny(
  * Older spellings are accepted so a deployment mid-rollout does not silently
  * fall to `off` - which is the one wrong answer, because it fails open.
  */
-export function getEnforcementMode(): EnforcementMode {
-  const raw = String(process.env.BILLING_ENFORCEMENT_MODE || "").toLowerCase().trim();
+export function getEnforcementMode(env: NodeJS.ProcessEnv = process.env): EnforcementMode {
+  const raw = String(env.BILLING_ENFORCEMENT_MODE || "").toLowerCase().trim();
   switch (raw) {
     case "enforce":
     case "hard":
@@ -151,7 +151,11 @@ export function assertEnforcementConfigured(env: NodeJS.ProcessEnv = process.env
     );
   }
 
-  if (getEnforcementMode() === "off" && env.BILLING_ALLOW_UNENFORCED !== "true") {
+  // Resolved from the SAME env that was passed in. This used to consult
+  // process.env regardless, so the function half-ignored its own argument: any
+  // caller supplying an explicit environment got the mode from somewhere else,
+  // and a perfectly valid "ENFORCE" was reported as "off in production".
+  if (getEnforcementMode(env) === "off" && env.BILLING_ALLOW_UNENFORCED !== "true") {
     // Deliberately hard to do by accident. Running production unenforced is a
     // decision someone should have to write down.
     throw new Error(
