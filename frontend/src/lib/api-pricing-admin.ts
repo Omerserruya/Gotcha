@@ -132,6 +132,18 @@ export interface PublishPreview {
   impact: { organizationsOnPreviousVersion: number; grandfathering: string; migrationRequired: boolean };
 }
 
+/** Discard a draft. Refused for published versions - see the route. */
+export const deleteDraftPlan = (token: string, id: string) =>
+  req<{ ok: boolean }>(`/api/admin/pricing/plans/${id}`, token, { method: "DELETE" });
+
+/** Create a plan that does not exist yet. Always DRAFT. */
+export const createPlan = (token: string, body: Record<string, unknown>) =>
+  req<{ ok: boolean; plan: { id: string; key: string; version: number; kind: string } }>(
+    "/api/admin/pricing/plans",
+    token,
+    { method: "POST", body: JSON.stringify(body) },
+  );
+
 export const previewPublish = (token: string, id: string) =>
   req<PublishPreview>(`/api/admin/pricing/plans/${id}/preview`, token);
 
@@ -234,6 +246,15 @@ export interface CurrencyAdmin {
   };
   fx: { rate: string; source: string; rateDate: string; fetchedAt: string } | null;
 }
+
+/**
+ * Remove a package.
+ *
+ * Refused when a tenant's automatic top-up points at it, or when it has ever
+ * been bought - the row is what explains those charges. Retire it instead.
+ */
+export const deletePackage = (token: string, key: string) =>
+  req<{ ok: boolean }>(`/api/admin/pricing/packages/${encodeURIComponent(key)}`, token, { method: "DELETE" });
 
 export const getCurrencyAdmin = (token: string) => req<CurrencyAdmin>("/api/admin/pricing/currency", token);
 export const saveCurrencyAdmin = (token: string, body: Record<string, unknown>) =>

@@ -27,6 +27,10 @@ import {
   listAdminFeatures,
   listEstimationConfigs,
   listAdminPackages,
+  savePackage,
+  deletePackage,
+  deleteDraftPlan,
+  createPlan,
   getCurrencyAdmin,
   listEvaluationTemplates,
   createPlanVersion,
@@ -103,6 +107,43 @@ export default function SystemPlansPage() {
   useEffect(() => {
     reload();
   }, [reload]);
+
+  const doDiscardDraft = async (id: string, key: string, version: number) => {
+    if (!token) return;
+    // A draft has never been sold, so discarding it destroys nothing anyone
+    // agreed to. The confirmation names which one.
+    if (!confirm(`Discard draft ${key} v${version}? It has never been published.`)) return;
+    try {
+      await deleteDraftPlan(token, id);
+      setMsg({ kind: "ok", text: `Draft ${key} v${version} discarded.` });
+      reload();
+    } catch (e: any) {
+      setMsg({
+        kind: "err",
+        text:
+          e?.message === "plan_version_immutable"
+            ? "Only a draft can be discarded. A published version defines what paying organizations agreed to."
+            : e?.message ?? "Could not discard that draft.",
+      });
+    }
+  };
+
+  const doCreatePlan = async (key: string, kind: string, name: string) => {
+    if (!token) return;
+    try {
+      const r = await createPlan(token, { key, kind, name });
+      setMsg({ kind: "ok", text: `${kind} plan ${r.plan.key} created as a draft. Edit it, preview, then publish.` });
+      reload();
+    } catch (e: any) {
+      setMsg({
+        kind: "err",
+        text:
+          e?.message === "plan_key_exists"
+            ? "A plan with that key already exists. Create a new version of it instead."
+            : e?.message ?? "Could not create that plan.",
+      });
+    }
+  };
 
   const doCreateVersion = async (key: string) => {
     if (!token) return;
@@ -194,12 +235,19 @@ export default function SystemPlansPage() {
         ) : (
           <>
             {tab === "plans" && (
-              <PlansTab plans={plans} features={features} onCreateVersion={doCreateVersion} onPreview={doPreview} />
+              <PlansTab plans={plans} features={features} onCreateVersion={doCreateVersion} onPreview={doPreview} onDiscard={doDiscardDraft} onCreatePlan={doCreatePlan} />
             )}
             {tab === "estimation" && (
               <EstimationTab token={token!} configs={estimations} onPublished={() => { setMsg({ kind: "ok", text: "New estimation version published. Existing subscriptions keep their snapshot." }); reload(); }} />
             )}
-            {tab === "packages" && <PackagesTab packages={packages} />}
+            {tab === "packages" && (
+              <PackagesTab
+                packages={packages}
+                token={token!}
+                onChanged={(text) => { setMsg({ kind: "ok", text }); reload(); }}
+                onError={(text) => setMsg({ kind: "err", text })}
+              />
+            )}
             {tab === "currency" && (
               <CurrencyTab
                 data={currency}
@@ -226,17 +274,71 @@ export default function SystemPlansPage() {
 // ─── Plans ──────────────────────────────────────────────────────────────────
 
 function PlansTab({
-  plans, features, onCreateVersion, onPreview,
+  plans, features, onCreateVersion, onPreview, onDiscard, onCreatePlan,
 }: {
   plans: AdminPlan[];
   features: AdminFeature[];
   onCreateVersion: (key: string) => void;
   onPreview: (id: string) => void;
+  onDiscard: (id: string, key: string, version: number) => void;
+  onCreatePlan: (key: string, kind: string, name: string) => void;
 }) {
   const unbuilt = features.filter((f) => !f.implemented);
+  const [creating, setCreating] = useState(false);
+  const [nk, setNk] = useState({ key: "", name: "", kind: "PUBLIC" });
 
   return (
     <div className="space-y-6">
+      <div className="flex justify-end">
+        <button
+          onClick={() => setCreating((v) => !v)}
+          className="rounded-lg bg-gray-900 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-gray-800"
+        >
+          {creating ? "Cancel" : "New plan"}
+        </button>
+      </div>
+
+      {creating && (
+        <div className="rounded-2xl border border-gray-200 p-5">
+          <h3 className="text-sm font-semibold text-gray-900">New plan</h3>
+          <p className="mt-1 text-[13px] leading-relaxed text-gray-500">
+            Created as a draft, so it is reviewed before anyone can be put on it. A proof of
+            concept or trial is time-boxed and never appears on the public pricing page.
+          </p>
+          <div className="mt-4 grid gap-4 sm:grid-cols-3">
+            <label className="block">
+              <span className="mb-1.5 block text-[12px] font-medium text-gray-700">Key</span>
+              <input
+                value={nk.key}
+                onChange={(e) => setNk({ ...nk, key: e.target.value })}
+                placeholder="pilot_q3"
+                className={PKG_INPUT}
+              />
+              <span className="mt-1 block text-[11.5px] text-gray-500">Permanent. Subscriptions reference it.</span>
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-[12px] font-medium text-gray-700">Name</span>
+              <input value={nk.name} onChange={(e) => setNk({ ...nk, name: e.target.value })} className={PKG_INPUT} />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-[12px] font-medium text-gray-700">Kind</span>
+              <select value={nk.kind} onChange={(e) => setNk({ ...nk, kind: e.target.value })} className={PKG_INPUT}>
+                <option value="PUBLIC">Public - sold on the pricing page</option>
+                <option value="POC">Proof of concept - time-boxed</option>
+                <option value="TRIAL">Trial - time-boxed</option>
+              </select>
+            </label>
+          </div>
+          <button
+            disabled={!nk.key.trim()}
+            onClick={() => { onCreatePlan(nk.key.trim(), nk.kind, nk.name.trim() || nk.key.trim()); setCreating(false); setNk({ key: "", name: "", kind: "PUBLIC" }); }}
+            className="mt-4 rounded-xl bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+          >
+            Create draft
+          </button>
+        </div>
+      )}
+
       {unbuilt.length > 0 && (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
           <p className="text-sm font-medium text-amber-900">
@@ -316,6 +418,12 @@ function PlansTab({
                       className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-gray-800"
                     >
                       Preview &amp; publish
+                    </button>
+                    <button
+                      onClick={() => onDiscard(p.id, p.key, p.version)}
+                      className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-700 hover:border-red-400"
+                    >
+                      Discard
                     </button>
                   </div>
                 ) : p.status === "ACTIVE" ? (
@@ -656,49 +764,245 @@ function Field({ label, value, onChange }: { label: string; value: number; onCha
 
 // ─── Packages ───────────────────────────────────────────────────────────────
 
-function PackagesTab({ packages }: { packages: AdminPackage[] }) {
+/**
+ * The credit packages a customer can buy.
+ *
+ * Editable in place. The previous version rendered the same rows read-only
+ * while savePackage sat in the API client, called from nowhere - so a package's
+ * price could be read here and changed only in the database.
+ *
+ * Removing one is deliberately not always possible. A package a tenant's
+ * automatic top-up points at, or one anybody has ever bought, is refused by the
+ * server: the first would silently break their top-up, and the second is the
+ * row that explains a real charge. Both are retired instead, which takes them
+ * off sale and keeps the record.
+ */
+function PackagesTab({
+  packages,
+  token,
+  onChanged,
+  onError,
+}: {
+  packages: AdminPackage[];
+  token: string;
+  onChanged: (msg: string) => void;
+  onError: (msg: string) => void;
+}) {
+  const [editing, setEditing] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [form, setForm] = useState<Record<string, string>>({});
+
+  function open(p: AdminPackage | null) {
+    setEditing(p?.key ?? "__new__");
+    setForm({
+      key: p?.key ?? "",
+      name: p?.name ?? "",
+      nameHe: p?.nameHe ?? "",
+      credits: String(p?.credits ?? ""),
+      price: String(p?.price ?? ""),
+      currency: p?.currency ?? "USD",
+      status: p?.status ?? "DRAFT",
+      discountLabel: p?.discountLabel ?? "",
+      customerVisible: String(p?.customerVisible ?? true),
+      sortOrder: String(p?.sortOrder ?? 0),
+    });
+  }
+
+  async function save() {
+    const key = form.key.trim();
+    if (!key) return onError("A package needs a key.");
+    setBusy(true);
+    try {
+      await savePackage(token, key, {
+        name: form.name || key,
+        nameHe: form.nameHe || null,
+        credits: Number(form.credits) || 0,
+        price: Number(form.price) || 0,
+        currency: form.currency,
+        status: form.status,
+        customerVisible: form.customerVisible === "true",
+        discountLabel: form.discountLabel || null,
+        sortOrder: Number(form.sortOrder) || 0,
+      });
+      setEditing(null);
+      onChanged(`Package ${key} saved.`);
+    } catch (e: any) {
+      onError(e?.message ?? "Could not save the package.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(p: AdminPackage) {
+    // Asked plainly, because the server may refuse and the reason matters more
+    // than the confirmation.
+    if (!confirm(`Remove the package "${p.name}"? Retiring it is usually the right choice if anyone has bought it.`)) return;
+    setBusy(true);
+    try {
+      await deletePackage(token, p.key);
+      onChanged(`Package ${p.key} removed.`);
+    } catch (e: any) {
+      onError(packageError(e?.message));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
-    <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
-      <table className="w-full text-sm">
-        <thead className="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-400">
-          <tr>
-            <th className="px-4 py-2.5 text-start">Package</th>
-            <th className="px-4 py-2.5 text-end">Credits</th>
-            <th className="px-4 py-2.5 text-end">Price</th>
-            <th className="px-4 py-2.5 text-end">Per credit</th>
-            <th className="px-4 py-2.5 text-center">Status</th>
-            <th className="px-4 py-2.5 text-center">Visible</th>
-            <th className="px-4 py-2.5 text-start">Expiry</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-100">
-          {packages.map((p) => (
-            <tr key={p.key}>
-              <td className="px-4 py-2.5">
-                <span className="font-medium text-gray-800">{p.name}</span>
-                {p.discountLabel && <span className="ms-2 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-700">{p.discountLabel}</span>}
-                <span className="block font-mono text-[11px] text-gray-400">{p.key}</span>
-              </td>
-              <td className="px-4 py-2.5 text-end tabular-nums" dir="ltr">{p.credits.toLocaleString()}</td>
-              <td className="px-4 py-2.5 text-end tabular-nums" dir="ltr">{p.currency} {p.price}</td>
-              <td className="px-4 py-2.5 text-end font-mono text-xs text-gray-500" dir="ltr">
-                {(Number(p.price) / p.credits).toFixed(4)}
-              </td>
-              <td className="px-4 py-2.5 text-center">
-                <span className={clsx("rounded-full border px-2 py-0.5 text-[11px]", STATUS_STYLE[p.status] ?? STATUS_STYLE.RETIRED)}>
-                  {p.status}
-                </span>
-              </td>
-              <td className="px-4 py-2.5 text-center text-gray-500">{p.customerVisible ? "yes" : "no"}</td>
-              <td className="px-4 py-2.5 text-gray-500">
-                {p.expiryPolicy === "NEVER" ? "never" : p.expiryPolicy === "PERIOD_END" ? "period end" : `${p.expiryDays}d`}
-              </td>
+    <div>
+      <div className="mb-3 flex justify-end">
+        <button
+          onClick={() => open(null)}
+          className="rounded-lg bg-gray-900 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-gray-800"
+        >
+          New package
+        </button>
+      </div>
+
+      <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white">
+        <table className="w-full min-w-[720px] text-sm">
+          <thead className="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-400">
+            <tr>
+              <th className="px-4 py-2.5 text-start">Package</th>
+              <th className="px-4 py-2.5 text-end">Credits</th>
+              <th className="px-4 py-2.5 text-end">Price</th>
+              <th className="px-4 py-2.5 text-end">Per credit</th>
+              <th className="px-4 py-2.5 text-center">Status</th>
+              <th className="px-4 py-2.5 text-center">Visible</th>
+              <th className="px-4 py-2.5 text-start">Expiry</th>
+              <th className="px-4 py-2.5" />
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {packages.map((p) => (
+              <tr key={p.key}>
+                <td className="px-4 py-2.5">
+                  <span className="font-medium text-gray-800">{p.name}</span>
+                  {p.discountLabel && <span className="ms-2 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-700">{p.discountLabel}</span>}
+                  <span className="block font-mono text-[11px] text-gray-400">{p.key}</span>
+                </td>
+                <td className="px-4 py-2.5 text-end tabular-nums" dir="ltr">{p.credits.toLocaleString()}</td>
+                <td className="px-4 py-2.5 text-end tabular-nums" dir="ltr">{p.currency} {p.price}</td>
+                <td className="px-4 py-2.5 text-end font-mono text-xs text-gray-500" dir="ltr">
+                  {(Number(p.price) / p.credits).toFixed(4)}
+                </td>
+                <td className="px-4 py-2.5 text-center">
+                  <span className={clsx("rounded-full border px-2 py-0.5 text-[11px]", STATUS_STYLE[p.status] ?? STATUS_STYLE.RETIRED)}>
+                    {p.status}
+                  </span>
+                </td>
+                <td className="px-4 py-2.5 text-center text-gray-500">{p.customerVisible ? "yes" : "no"}</td>
+                <td className="px-4 py-2.5 text-gray-500">
+                  {p.expiryPolicy === "NEVER" ? "never" : p.expiryPolicy === "PERIOD_END" ? "period end" : `${p.expiryDays}d`}
+                </td>
+                <td className="px-4 py-2.5 text-end">
+                  <div className="flex justify-end gap-2">
+                    <button
+                      disabled={busy}
+                      onClick={() => open(p)}
+                      className="rounded-lg border border-gray-300 px-2.5 py-1 text-[11.5px] font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      disabled={busy}
+                      onClick={() => remove(p)}
+                      className="rounded-lg border border-red-200 px-2.5 py-1 text-[11.5px] font-medium text-red-700 hover:border-red-400 disabled:opacity-50"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {editing && (
+        <div className="mt-4 rounded-2xl border border-gray-200 p-5">
+          <h3 className="text-sm font-semibold text-gray-900">
+            {editing === "__new__" ? "New package" : `Edit ${editing}`}
+          </h3>
+          <div className="mt-4 grid gap-4 sm:grid-cols-3">
+            <PkgField label="Key" hint="Permanent. Purchases reference it.">
+              <input
+                value={form.key}
+                disabled={editing !== "__new__"}
+                onChange={(e) => setForm({ ...form, key: e.target.value })}
+                className={PKG_INPUT}
+              />
+            </PkgField>
+            <PkgField label="Name"><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={PKG_INPUT} /></PkgField>
+            <PkgField label="Name (Hebrew)"><input dir="rtl" value={form.nameHe} onChange={(e) => setForm({ ...form, nameHe: e.target.value })} className={PKG_INPUT} /></PkgField>
+            <PkgField label="Credits"><input inputMode="numeric" dir="ltr" value={form.credits} onChange={(e) => setForm({ ...form, credits: e.target.value })} className={PKG_INPUT} /></PkgField>
+            <PkgField label="Price"><input inputMode="decimal" dir="ltr" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} className={PKG_INPUT} /></PkgField>
+            <PkgField label="Currency">
+              <select value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} className={PKG_INPUT}>
+                <option value="USD">USD</option>
+                <option value="ILS">ILS</option>
+              </select>
+            </PkgField>
+            <PkgField label="Status" hint="Only ACTIVE is on sale.">
+              <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className={PKG_INPUT}>
+                <option value="DRAFT">DRAFT</option>
+                <option value="ACTIVE">ACTIVE</option>
+                <option value="RETIRED">RETIRED</option>
+              </select>
+            </PkgField>
+            <PkgField label="Visible to customers">
+              <select value={form.customerVisible} onChange={(e) => setForm({ ...form, customerVisible: e.target.value })} className={PKG_INPUT}>
+                <option value="true">yes</option>
+                <option value="false">no</option>
+              </select>
+            </PkgField>
+            <PkgField label="Discount label"><input value={form.discountLabel} onChange={(e) => setForm({ ...form, discountLabel: e.target.value })} className={PKG_INPUT} /></PkgField>
+          </div>
+
+          {form.credits && form.price && (
+            <p className="mt-3 text-[13px] text-gray-500" dir="ltr">
+              {Number(form.credits).toLocaleString()} credits for {form.currency} {form.price} ·{" "}
+              {(Number(form.price) / Number(form.credits)).toFixed(4)} per credit
+            </p>
+          )}
+
+          <div className="mt-4 flex gap-3">
+            <button disabled={busy} onClick={save} className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50">
+              {busy ? "Saving…" : "Save package"}
+            </button>
+            <button onClick={() => setEditing(null)} className="rounded-xl px-3 py-2 text-sm text-gray-500 hover:text-gray-700">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+const PKG_INPUT =
+  "w-full rounded-xl border border-gray-300 px-3 py-2 text-[14px] text-gray-900 focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900 disabled:bg-gray-50 disabled:text-gray-500";
+
+function PkgField({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block text-[12px] font-medium text-gray-700">{label}</span>
+      {children}
+      {hint && <span className="mt-1 block text-[11.5px] text-gray-500">{hint}</span>}
+    </label>
+  );
+}
+
+/** The refusals worth explaining rather than showing as a failed request. */
+function packageError(code?: string): string {
+  switch (code) {
+    case "package_in_use":
+      return "Organizations have automatic top-up pointing at this package. Retire it instead, or move them first.";
+    case "package_already_purchased":
+      return "This package explains real charges. Set its status to RETIRED instead - that takes it off sale and keeps the record.";
+    default:
+      return "Could not remove that package.";
+  }
 }
 
 // ─── Currency ───────────────────────────────────────────────────────────────

@@ -263,6 +263,100 @@ router.patch("/admin/pricing/plans/:id", authenticate, requirePlatformPermission
   res.json({ ok: true, plan: { id: updated.id, key: updated.key, version: updated.version, status: updated.status } });
 });
 
+/**
+ * Discard a DRAFT plan version.
+ *
+ * DRAFT only, and that is the whole safety argument. A published version is
+ * immutable because organizations hold a commercial snapshot of it; deleting
+ * one would remove the definition of what they agreed to pay for while they are
+ * still paying it. A draft has never been sold and can be discarded freely.
+ *
+ * Entitlements and volume options cascade. Nothing else references a draft.
+ */
+router.delete("/admin/pricing/plans/:id", authenticate, requirePlatformPermission(P.PLANS_MANAGE), async (req, res) => {
+  const plan = await prisma.plan.findUnique({ where: { id: String(req.params.id) } });
+  if (!plan) return res.status(404).json({ error: "unknown_plan" });
+
+  if (plan.status !== "DRAFT") {
+    return res.status(409).json({
+      error: "plan_version_immutable",
+      hint: "Only a draft can be discarded. A published version defines what paying organizations agreed to.",
+      status: plan.status,
+    });
+  }
+
+  // Belt and braces. A draft should have no subscribers by construction -
+  // subscriptions reference published versions - so if one does, something is
+  // wrong and deleting is the wrong response to it.
+  const subscribers = await prisma.subscription.count({
+    where: { planKey: plan.key, planVersion: plan.version },
+  });
+  if (subscribers > 0) {
+    return res.status(409).json({ error: "plan_in_use", subscribers });
+  }
+
+  await prisma.plan.delete({ where: { id: plan.id } });
+  await audit(req, "pricing.plan_discarded", "plan", plan.id, { key: plan.key, version: plan.version });
+  res.json({ ok: true, discarded: { key: plan.key, version: plan.version } });
+});
+
+/**
+ * Create a plan that does not exist yet, of a chosen kind.
+ *
+ * The only previous way to get a new plan was POST /plans/:key/versions, which
+ * copies an EXISTING key and inherits its kind - so a POC or trial plan could
+ * not be created at all unless one already existed. Custom plans had their own
+ * endpoint, hardcoded to CUSTOM and requiring a tenant.
+ *
+ * Always DRAFT. A plan that could be created already published would skip the
+ * review the publish flow exists to provide.
+ */
+router.post("/admin/pricing/plans", authenticate, requirePlatformPermission(P.PLANS_MANAGE), async (req, res) => {
+  const b = req.body ?? {};
+  const key = String(b.key ?? "").trim().toLowerCase().replace(/[^a-z0-9_]/g, "_");
+  if (!key) return res.status(400).json({ error: "key_required" });
+
+  // POC and TRIAL are time-boxed arrangements; PUBLIC is the sellable catalog.
+  // CUSTOM is deliberately absent - it belongs to a tenant and has its own
+  // endpoint that requires one.
+  const ALLOWED = ["PUBLIC", "POC", "TRIAL"];
+  const kind = String(b.kind ?? "PUBLIC").toUpperCase();
+  if (!ALLOWED.includes(kind)) {
+    return res.status(400).json({ error: "unsupported_kind", allowed: ALLOWED });
+  }
+
+  const existing = await prisma.plan.findFirst({ where: { key } });
+  if (existing) {
+    return res.status(409).json({
+      error: "plan_key_exists",
+      hint: "Create a new version of it instead of a second plan with the same key.",
+    });
+  }
+
+  const plan = await prisma.plan.create({
+    data: {
+      key,
+      version: 1,
+      name: String(b.name ?? key),
+      nameHe: b.nameHe ?? null,
+      descriptionEn: b.descriptionEn ?? null,
+      descriptionHe: b.descriptionHe ?? null,
+      basePrice: b.basePrice != null ? String(b.basePrice) : null,
+      currency: b.currency ?? "USD",
+      includedAiUnits: Number(b.includedCredits ?? 0),
+      status: "DRAFT",
+      kind: kind as any,
+      // A POC or trial is not sold on the pricing page.
+      salesOnly: kind !== "PUBLIC",
+      sortOrder: Number(b.sortOrder ?? 0),
+      internalNote: b.internalNote ?? null,
+    },
+  });
+
+  await audit(req, "pricing.plan_created", "plan", plan.id, { key, kind });
+  res.status(201).json({ ok: true, plan: { id: plan.id, key: plan.key, version: plan.version, kind: plan.kind } });
+});
+
 /** Set feature entitlements and numeric limits on a DRAFT. */
 router.put("/admin/pricing/plans/:id/entitlements", authenticate, requirePlatformPermission(P.PRICING_MANAGE), async (req, res) => {
   const plan = await prisma.plan.findUnique({ where: { id: String(req.params.id) } });
@@ -613,6 +707,53 @@ router.put("/admin/pricing/packages/:key", authenticate, requirePlatformPermissi
   const pkg = await prisma.creditPackage.upsert({ where: { key }, create: { key, ...data }, update: data });
   await audit(req, "pricing.package_updated", "credit_package", pkg.id, { key, price: data.price, credits: data.units, status: data.status });
   res.json({ ok: true, package: { key: pkg.key, status: pkg.status } });
+});
+
+/**
+ * Remove a credit package from the catalog.
+ *
+ * Refuses in two cases, both of which would be silent damage:
+ *
+ *   A tenant's automatic top-up points at packages BY KEY. Deleting one leaves
+ *   that policy aiming at nothing, and the failure surfaces later - when their
+ *   credits run low and the top-up they configured does not happen.
+ *
+ *   A package that has been bought is the description of what somebody paid
+ *   for. Purchases record it as `package:<key>` on the credit lot, so the row
+ *   is what explains a real charge months later. That gets RETIRED, not
+ *   deleted: retiring takes it off sale and keeps the explanation.
+ *
+ * Only a package nobody has bought and nothing points at is actually removed.
+ */
+router.delete("/admin/pricing/packages/:key", authenticate, requirePlatformPermission(P.PRICING_MANAGE), async (req, res) => {
+  const key = String(req.params.key);
+  const pkg = await prisma.creditPackage.findUnique({ where: { key } });
+  if (!pkg) return res.status(404).json({ error: "unknown_package" });
+
+  const [autoPolicies, purchased] = await Promise.all([
+    prisma.autoPurchasePolicy.count({ where: { packageKey: key } }),
+    prisma.aiUnitLot.count({ where: { source: { in: [`package:${key}`, `auto:${key}`] } } }),
+  ]);
+
+  if (autoPolicies > 0) {
+    return res.status(409).json({
+      error: "package_in_use",
+      hint: "Organizations have automatic top-up pointing at this package. Retire it instead, or move them first.",
+      autoPurchasePolicies: autoPolicies,
+    });
+  }
+
+  if (purchased > 0) {
+    return res.status(409).json({
+      error: "package_already_purchased",
+      hint: "This package explains real charges. Retire it instead - that removes it from sale and keeps the record.",
+      purchases: purchased,
+    });
+  }
+
+  await prisma.creditPackage.delete({ where: { key } });
+  await audit(req, "pricing.package_deleted", "credit_package", pkg.id, { key });
+  res.json({ ok: true, deleted: key });
 });
 
 // ── Currency ────────────────────────────────────────────────────────────────

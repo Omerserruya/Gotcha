@@ -58,7 +58,7 @@ describe("it calls what the server actually accepts", () => {
     ];
     const call = code.slice(code.indexOf("updateDraftPlan(token, plan.id, {"));
     const body = call.slice(0, call.indexOf("});"));
-    const sent = [...body.matchAll(/^\s{8}(\w+):/gm)].map((m) => m[1]);
+    const sent = (body.match(/^\s{8}(\w+):/gm) ?? []).map((l) => l.trim().replace(":", ""));
     const unknown = sent.filter((f) => !accepted.includes(f));
     expect(unknown, `not accepted by the server: ${unknown.join(", ")}`).toEqual([]);
   });
@@ -117,5 +117,62 @@ describe("the money is shown as its effect", () => {
   it("states how many organizations are already on the published version", () => {
     expect(editor).toContain("subscriberCount");
     expect(editor).toContain("keep their snapshot");
+  });
+});
+
+describe("discarding a draft", () => {
+  it("is offered on drafts only", () => {
+    const draftBranch = list.slice(list.indexOf('p.status === "DRAFT"'), list.indexOf('p.status === "ACTIVE"'));
+    expect(draftBranch).toContain("Discard");
+    // A published version defines what paying organizations agreed to.
+    const activeBranch = list.slice(list.indexOf('p.status === "ACTIVE"'));
+    expect(activeBranch.slice(0, 600)).not.toContain("Discard");
+  });
+
+  it("confirms, naming which draft", () => {
+    expect(list).toContain("Discard draft ${key} v${version}?");
+  });
+
+  it("explains the refusal rather than showing a raw code", () => {
+    expect(list).toContain("Only a draft can be discarded");
+  });
+});
+
+describe("credit packages are editable", () => {
+  it("can be added, edited and removed", () => {
+    expect(list).toContain("savePackage(token, key, {");
+    expect(list).toContain("deletePackage(token, p.key)");
+    expect(list).toContain("New package");
+  });
+
+  it("will not let the key be changed after creation", () => {
+    // Purchases reference the key. Renaming it orphans that history.
+    expect(list).toContain('disabled={editing !== "__new__"}');
+  });
+
+  it("explains why a removal was refused", () => {
+    // Both refusals are protective, and neither is obvious from a failed
+    // request: a broken auto top-up surfaces weeks later, and a deleted
+    // package takes the explanation of a real charge with it.
+    expect(list).toContain("automatic top-up pointing at this package");
+    expect(list).toContain("explains real charges");
+  });
+});
+
+describe("POC and trial plans can be created", () => {
+  it("offers the kinds that are time-boxed", () => {
+    expect(list).toContain('value="POC"');
+    expect(list).toContain('value="TRIAL"');
+    expect(list).toContain('value="PUBLIC"');
+  });
+
+  it("does not offer CUSTOM here", () => {
+    // A custom plan belongs to a tenant and has its own endpoint requiring one.
+    const form = list.slice(list.indexOf("New plan"), list.indexOf("Create draft"));
+    expect(form).not.toContain('value="CUSTOM"');
+  });
+
+  it("creates them as drafts", () => {
+    expect(list).toContain("created as a draft");
   });
 });
