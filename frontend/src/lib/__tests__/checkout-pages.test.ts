@@ -199,3 +199,33 @@ describe("unauthorized and unknown look identical", () => {
     }
   });
 });
+
+describe("the continuation token does not live in the address bar", () => {
+  it("is moved to session storage and stripped from the URL", () => {
+    expect(shell).toContain("sessionStorage.setItem");
+    expect(shell).toContain("searchParams.delete(\"token\")");
+    // replaceState rather than a navigation, so polling in progress and the
+    // page state are untouched.
+    expect(shell).toContain("window.history.replaceState");
+  });
+
+  it("is scoped to the checkout reference", () => {
+    // A link for one checkout must never authorize another.
+    expect(shell).toMatch(/gotcha\.checkout\.\$\{reference\}/);
+  });
+
+  it("falls back to the URL when storage is unavailable", () => {
+    // Private mode exists. A token in the address bar is better than a
+    // customer who cannot pay.
+    const fn = shell.slice(shell.indexOf("function useCheckoutToken"), shell.indexOf("export function CheckoutShell"));
+    expect(fn).toContain("catch");
+    expect(fn).toContain("return token");
+  });
+
+  it("the self-correcting redirect does not put it back", () => {
+    // Re-appending the token on every internal redirect would undo the whole
+    // point of removing it.
+    const redirect = shell.slice(shell.indexOf("pathForStatus(data.status)"), shell.indexOf("pathForStatus(data.status)") + 500);
+    expect(redirect).toContain("hasStoredToken(reference)");
+  });
+});

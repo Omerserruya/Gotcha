@@ -127,6 +127,16 @@ customer                     GOTCHA                          iCount
 
 Two things this diagram is built around.
 
+**The link does not stay in the address bar.** The continuation token is a
+bearer credential for the checkout — it can show the price, start a payment
+session and ask the server to charge. It arrives in a URL because it comes from
+an email, so on first load it is moved to `sessionStorage` (scoped to that
+checkout reference) and stripped from the URL. Cross-origin leakage is already
+covered by `Referrer-Policy`; this is about browser history, a shared device,
+and the screen-share someone does while on the phone to support. If storage is
+unavailable the URL is left alone — a token in the address bar beats a customer
+who cannot pay.
+
 **The customer's browser never reports an outcome.** Returning to the success
 URL proves they came back. People close tabs, lose signal and bookmark redirect
 URLs. The only accepted proof is iCount's own answer.
