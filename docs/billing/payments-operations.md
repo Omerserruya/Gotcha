@@ -237,8 +237,14 @@ no evidence at all.
 - Before payment the conversion is marked indicative; afterwards it is the
   frozen figure actually charged.
 - Declines are a category ("that card has expired"), never iCount's raw string.
+- A decline is named, so they know whether to try a different card. The
+  suggestion to retry appears only when retrying is actually possible.
 - An unknown outcome shows as *processing*, never as a retryable failure —
-  offering a retry there could charge them twice.
+  offering a retry there could charge them twice. It also reads differently from
+  a charge that is merely in flight: "we are checking with your bank, this can
+  take longer than usual, you do not need to wait here, please do not pay
+  again". Promising "a few moments" would leave them watching a spinner that may
+  need a person to resolve.
 
 ---
 

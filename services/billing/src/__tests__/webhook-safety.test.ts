@@ -143,3 +143,23 @@ describe("a declined customer is told why", () => {
     expect(body).toMatch(/declineCategory:/);
   });
 });
+
+describe("an unknown outcome is not described as nearly done", () => {
+  const status = readFileSync(join(__dirname, "../routes/checkout.ts"), "utf8");
+
+  it("distinguishes 'in flight' from 'we do not know'", () => {
+    // PROCESSING covers both a charge submitted seconds ago and one whose
+    // outcome was never learned. The second needs a provider lookup and
+    // possibly a person; telling that customer it takes "a few moments" leaves
+    // them watching a spinner that may not resolve while they wait.
+    expect(status).toContain("awaitingResolution:");
+    expect(status).toMatch(/UNKNOWN"[\s\S]{0,120}RECONCILIATION_REQUIRED/);
+  });
+
+  it("still refuses to offer a retry in that state", () => {
+    // The one thing that must never happen here: inviting a second payment from
+    // someone who may already have been charged.
+    expect(status).toMatch(/UNKNOWN[\s\S]{0,120}return "PROCESSING"/);
+    expect(status).toContain('retryEligible: status === "PAYMENT_REQUIRED" || status === "FAILED"');
+  });
+});

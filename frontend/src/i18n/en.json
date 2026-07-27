@@ -4732,6 +4732,11 @@
       "CARD_UNUSABLE": "That card could not be used.",
       "DECLINED": "The payment was declined by the card issuer.",
       "tryAnother": "Please try a different card."
+    },
+    "unresolved": {
+      "title": "We are checking with your bank",
+      "body": "Your payment is being confirmed with the card issuer. This can take longer than usual, and you do not need to wait here - we will email you as soon as we know. Please do not pay again in the meantime.",
+      "status": "Checking with the card issuer"
     }
   }
 }

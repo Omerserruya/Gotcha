@@ -231,6 +231,13 @@ router.get("/checkout/:reference/status", optionalAuth, async (req, res) => {
       // card, none the wiser. Never the provider's raw string.
       declineCategory:
         attempt?.state === "FAILED" ? declineCategory(attempt.failureCode) : null,
+      // PROCESSING covers two very different situations: a charge submitted
+      // seconds ago, and one whose outcome we never learned. The second needs a
+      // reconciliation sweep and possibly a person, so telling that customer it
+      // "usually takes a few moments" leaves them watching a spinner that may
+      // not resolve while they wait.
+      awaitingResolution:
+        attempt?.state === "UNKNOWN" || attempt?.state === "RECONCILIATION_REQUIRED",
       // Both must hold: a provider that can store a card, and an approved rate
       // to charge at. Offering payment without the second sends someone to a
       // card form for a charge that would then be refused.

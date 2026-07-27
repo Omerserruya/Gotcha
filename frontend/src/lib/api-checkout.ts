@@ -53,6 +53,13 @@ export interface CheckoutSummary {
   paymentSetupAvailable: boolean;
   /** Why the last attempt was refused, if one was. Never a raw provider string. */
   declineCategory: string | null;
+  /**
+   * True when the outcome is genuinely unknown rather than merely in flight.
+   *
+   * Resolving it needs a provider lookup and possibly a person, so the waiting
+   * copy must not promise "a few moments".
+   */
+  awaitingResolution: boolean;
 }
 
 export class CheckoutUnavailable extends Error {
