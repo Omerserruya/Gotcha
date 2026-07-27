@@ -20,14 +20,8 @@ import webhookRoutes from "./routes/webhooks";
 import checkoutRoutes from "./routes/checkout";
 import checkoutSessionRoutes from "./routes/checkout-session";
 import internalRoutes from "./routes/internal";
-import { runBillingCycle } from "./services/subscription.service";
-import { runDunning } from "./services/dunning.service";
-import { sweepUnknownAttempts } from "./services/reconciliation.service";
-import { expireStaleLeases } from "./services/payment-attempt.service";
-import { expireStaleQuotes } from "./services/payment-quote.service";
-import { expireStaleSessions } from "./services/tokenization.service";
-import { purgeSpentCheckoutArtifacts } from "./services/billing-retention.service";
 import { assertIcountConfig } from "./providers/icount-config";
+import { runSchedulerTick, tickWasEventful } from "./services/scheduler.service";
 
 // Fail closed before the first request. A billing service configured to talk to
 // the real iCount API without a token would accept traffic and then fail every
@@ -63,41 +57,11 @@ const schedulerEnabled = (process.env.BILLING_SCHEDULER_ENABLED ?? "true").toLow
 const intervalMs = parseInt(process.env.BILLING_CYCLE_INTERVAL_MS || String(60 * 60 * 1000), 10);
 if (schedulerEnabled) {
   const tick = async () => {
-    try {
-      const cycle = await runBillingCycle();
-      const dunning = await runDunning();
-      // Sysadmin cost analytics: discover conversations that closed since the
-      // last tick and settle the ones whose late-job window has elapsed. Runs
-      // here rather than on conversation close so the AI hot path never waits
-      // on aggregation.
-      const usage = await settleDueConversations().catch((err: any) => {
-        console.warn("[billing][usage] settle failed:", err?.message ?? err);
-        return { settled: 0, discovered: 0 };
-      });
-      // Charges whose outcome we never learned. Nothing else resolves them, and
-      // left alone they are either a customer who paid and did not get their
-      // plan, or one who did not pay and did. Both need answering.
-      const reconciled = await sweepUnknownAttempts().catch((err: any) => {
-        console.warn("[billing][reconcile] sweep failed:", err?.message ?? err);
-        return { examined: 0, resolvedPaid: 0, resolvedUnpaid: 0, escalated: 0 };
-      });
-      // Housekeeping: leases whose holder died, and quotes nobody used.
-      await expireStaleLeases().catch(() => undefined);
-      await expireStaleQuotes().catch(() => undefined);
-      await expireStaleSessions().catch(() => undefined);
-      // Spent checkout artifacts. Never touches anything that records money
-      // moving - see the service for exactly where that line is drawn.
-      const purged = await purgeSpentCheckoutArtifacts().catch((err: any) => {
-        console.warn("[billing][retention] purge failed:", err?.message ?? err);
-        return { tokenizationSessions: 0, continuationLinks: 0, unusedQuotes: 0 };
-      });
-      if (cycle.trials || cycle.renewals || cycle.pending || dunning.retried || dunning.suspended || usage.settled || usage.discovered || reconciled.examined
-        || purged.tokenizationSessions || purged.continuationLinks || purged.unusedQuotes) {
-        console.log("[billing][cycle]", { cycle, dunning, usage, reconciled, purged });
-      }
-    } catch (err: any) {
-      console.warn("[billing][cycle] failed:", err?.message ?? err);
-    }
+    // Every stage is individually guarded inside runSchedulerTick, so one
+    // failing subsystem cannot silently skip the others - see that file for why
+    // reconciliation in particular must not be collateral damage.
+    const result = await runSchedulerTick();
+    if (tickWasEventful(result)) console.log("[billing][cycle]", result);
   };
   const timer = setInterval(tick, intervalMs);
   if (typeof timer.unref === "function") timer.unref();
