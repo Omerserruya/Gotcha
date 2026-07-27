@@ -12,7 +12,7 @@
  * through `describeAllWorlds` untouched.
  */
 
-import { assembleFacts, checkAiAllowed, getBalance, type Facts, type KernelSignals } from "@chatcenter/shared";
+import { assembleFacts, checkAiAllowed, getBalance, type DenyReason, type Facts, type KernelSignals } from "@chatcenter/shared";
 import {
   ensureCapabilitiesRegistered,
   describeAllWorlds,
@@ -66,12 +66,7 @@ async function readBilling(tenantId: string): Promise<KernelSignals["billing"]> 
     let status: KernelSignals["billing"]["status"] = "active";
     try {
       const allowance = await checkAiAllowed(tenantId);
-      status =
-        allowance.reason === "suspended" || allowance.reason === "canceled"
-          ? "suspended"
-          : allowance.reason === "units_exhausted"
-            ? "past_due"
-            : "active";
+      status = billingStatusFor(allowance.reason);
     } catch (statusErr: any) {
       console.warn(`[oracle] billing status read failed (${statusErr?.message}); defaulting status=active (balance remains the hard signal)`);
     }
@@ -120,4 +115,30 @@ export async function assembleOracleFacts(opts: AssembleOracleOptions): Promise<
     world,
     now: opts.now,
   });
+}
+
+/**
+ * Map a refusal reason to the billing status the reasoning layer sees.
+ *
+ * Exhaustive on purpose. A reason that falls through to "active" tells the
+ * reasoning layer that billing is fine for a tenant the runtime is refusing to
+ * serve - which is worse than no signal at all, because it looks authoritative.
+ * A new DenyReason is therefore a COMPILE error here rather than a silent
+ * "active" discovered later in production.
+ */
+function billingStatusFor(reason: DenyReason | undefined): KernelSignals["billing"]["status"] {
+  if (!reason) return "active";
+  switch (reason) {
+    case "suspended":
+    case "canceled":
+    case "tenant_suspended":
+      return "suspended";
+    case "units_exhausted":
+    case "payment_required":
+      return "past_due";
+    default: {
+      const never: never = reason;
+      return never;
+    }
+  }
 }

@@ -1184,17 +1184,21 @@ async function generateAIBotReplyInner(
     throw err;
   }
 
-  // Billing pre-flight: when AI Units are exhausted (or the subscription is
-  // suspended) and enforcement is in HARD mode, escalate to a human cleanly
-  // instead of attempting an AI turn. observe/soft/off never block here.
+  // Billing pre-flight: when the tenant cannot be served - no active plan, a
+  // suspended account, or AI Units exhausted - and enforcement is in HARD mode,
+  // escalate to a human cleanly instead of attempting an AI turn.
+  // observe/soft/off never block here.
   const aiAllowance = await checkAiAllowed(opts.tenantId);
   if (!aiAllowance.allowed && aiAllowance.reason) {
     return {
       reply: null,
       escalation: {
-        reason: `units_exhausted:${aiAllowance.reason}`,
+        // Labelled by what actually happened. Calling a plan that was never
+        // paid for "units_exhausted" sends an agent looking for a credit
+        // balance that was never the problem.
+        reason: `billing_blocked:${aiAllowance.reason}`,
         priority: "medium",
-        summary: `AI paused - ${aiAllowance.reason}. Remaining AI Units: ${aiAllowance.balance}.`,
+        summary: billingPauseSummary(aiAllowance),
       },
       awaitingApproval: null,
       toolCallLog: [],
@@ -4201,4 +4205,26 @@ async function loadFollowupFlowFacts(args: {
   }
 
   return out;
+}
+
+/**
+ * Why the AI stopped, in words the agent picking up the conversation can act on.
+ *
+ * The agent sees this in their inbox and has to decide what to tell a customer
+ * who is waiting. "Remaining AI Units: 0" is true and useless when the real
+ * problem is that the organization never completed payment.
+ */
+function billingPauseSummary(allowance: { reason?: string; balance: number }): string {
+  switch (allowance.reason) {
+    case "payment_required":
+      return "AI paused - this organization's plan is not active yet. Payment has not been confirmed.";
+    case "tenant_suspended":
+      return "AI paused - this organization's account is suspended.";
+    case "suspended":
+      return "AI paused - the subscription is suspended.";
+    case "canceled":
+      return "AI paused - the subscription is canceled.";
+    default:
+      return `AI paused - AI Units exhausted. Remaining: ${allowance.balance}.`;
+  }
 }
