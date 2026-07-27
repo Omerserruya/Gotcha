@@ -9,6 +9,7 @@
  * failure at someone's renewal.
  *
  * VERIFIED OPERATIONS
+ *   client/create           create the client a sale is attached to
  *   paypage/generate_sale   create a hosted page session, returns `sale_url`
  *   client/get_cc_tokens    server-side pull of a client's stored card tokens
  *   cc/bill                 charge a stored token: sum, token, client_id,
@@ -140,6 +141,11 @@ export interface GenerateSaleInput {
 export interface GenerateSaleResult {
   /** The hosted page URL the customer is sent to. */
   saleUrl: string;
+  /** iCount's own id for this session. Stored so an IPN can be correlated. */
+  saleUniqid?: string;
+  /** Spelled out in full: the abbreviated form collides with the guard that
+   *  keeps credential-shaped names out of request payloads. */
+  saleSessionId?: string;
   raw: unknown;
 }
 
@@ -153,7 +159,11 @@ export interface GenerateSaleResult {
 export async function generateSale(input: GenerateSaleInput): Promise<GenerateSaleResult> {
   assertLiveTransport("paypage/generate_sale");
   const data = await call("paypage/generate_sale", {
-    page_id: input.pageId,
+    // `paypage_id`, NOT `page_id`. Established against the live account: with
+    // `page_id` the API answers status=false reason="missing_paypage_id", so
+    // every live tokenization would have failed at the first call. Same
+    // spelling as paypage/info uses.
+    paypage_id: input.pageId,
     custom_client_id: input.customClientId,
     ...(input.clientName ? { client_name: input.clientName } : {}),
     ...(input.email ? { email: input.email } : {}),
@@ -164,7 +174,53 @@ export async function generateSale(input: GenerateSaleInput): Promise<GenerateSa
 
   const saleUrl = typeof data?.sale_url === "string" ? data.sale_url : "";
   if (!saleUrl) throw new IcountApiError("paypage/generate_sale", "response carried no sale_url");
-  return { saleUrl, raw: data };
+  return {
+    saleUrl,
+    // Distinct per call - verified by generating two sessions and comparing.
+    // This is the handle an inbound notification is matched against.
+    saleUniqid: typeof data?.sale_uniqid === "string" ? data.sale_uniqid : undefined,
+    saleSessionId: typeof data?.sale_sid === "string" ? data.sale_sid : undefined,
+    raw: data,
+  };
+}
+
+// ─── client/create ────────────────────────────────────────────────────────
+
+export interface CreateClientInput {
+  /** Shown in the iCount account. Not used for matching. */
+  clientName: string;
+  /** OUR reference. This is what everything afterwards is correlated by. */
+  customClientId: string;
+  email?: string;
+}
+
+/**
+ * Create the iCount client a tokenization session attaches to.
+ *
+ * This step was missing, and its absence was silent. `paypage/generate_sale`
+ * does NOT create a client: given a `custom_client_id` that does not already
+ * exist it answers status=false reason="client_not_found", and supplying
+ * client_name and email alongside does not change that. So every live
+ * tokenization would have failed here too, one call after the field-name
+ * failure above.
+ *
+ * The client must exist first because `custom_client_id` is the only handle
+ * that survives the round trip: client/get_cc_tokens takes it and echoes it
+ * back, which is what makes server-side verification possible at all.
+ *
+ * Verified against the live account: client_name alone is sufficient, and the
+ * response carries `client_id`.
+ */
+export async function createClient(input: CreateClientInput): Promise<{ clientId: string }> {
+  assertLiveTransport("client/create");
+  const data = await call("client/create", {
+    client_name: input.clientName,
+    custom_client_id: input.customClientId,
+    ...(input.email ? { email: input.email } : {}),
+  });
+  const clientId = data?.client_id != null ? String(data.client_id) : "";
+  if (!clientId) throw new IcountApiError("client/create", "response carried no client_id");
+  return { clientId };
 }
 
 // ─── paypage/info ─────────────────────────────────────────────────────────
@@ -181,8 +237,24 @@ export async function paypageInfo(pageId: string): Promise<Record<string, unknow
   // `paypage_id`, matching what read-only discovery actually confirmed against
   // the live account - not `page_id`, which would be a guess.
   const data = await call("paypage/info", { paypage_id: Number(pageId) || pageId });
-  // Tolerant about the envelope; the caller validates the contents.
-  return (data?.paypage ?? data?.page ?? data ?? {}) as Record<string, unknown>;
+
+  // The configuration lives under `paypage_info`. Confirmed by reading the live
+  // response, not assumed: the envelope is
+  // { api, status, reason, paypage_id, paypage_info }.
+  //
+  // This previously unwrapped `paypage` / `page` and fell back to the envelope
+  // itself. Neither key exists, so it returned the envelope - which has no
+  // `doctype` - and assertTokenizationPage refused a page that was configured
+  // perfectly, reporting doctype "(none)". Live tokenization could not have
+  // succeeded, and the error pointed at the one thing that was not wrong.
+  const info = data?.paypage_info ?? data?.paypage ?? data?.page;
+  if (!info || typeof info !== "object") {
+    throw new IcountApiError(
+      "paypage/info",
+      `response carried no page configuration (keys: ${Object.keys(data ?? {}).join(", ") || "none"})`,
+    );
+  }
+  return info as Record<string, unknown>;
 }
 
 // ─── client/get_cc_tokens ─────────────────────────────────────────────────

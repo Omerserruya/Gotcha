@@ -17,6 +17,7 @@ import adminExchangeRateRoutes from "./routes/admin-exchange-rates";
 import adminAnalyticsRoutes from "./routes/admin-analytics";
 import invoicesRoutes from "./routes/invoices";
 import webhookRoutes from "./routes/webhooks";
+import icountIpnRoutes from "./routes/icount-ipn";
 import checkoutRoutes from "./routes/checkout";
 import checkoutSessionRoutes from "./routes/checkout-session";
 import internalRoutes from "./routes/internal";
@@ -48,6 +49,9 @@ app.use("/api", invoicesRoutes);
 app.use("/api", checkoutRoutes);
 app.use("/api", checkoutSessionRoutes);
 app.use("/api", webhookRoutes);
+// The IPN endpoint iCount can actually reach. Public and unauthenticated by
+// design - see the route for why a signature would add nothing.
+app.use("/api", icountIpnRoutes);
 app.use("/api", internalRoutes);
 
 // Scheduler: trials → activate, period end → renew, pending changes → apply,

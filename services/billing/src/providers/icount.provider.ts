@@ -129,6 +129,21 @@ export const icountProvider: PaymentProvider = {
       };
     }
     assertLiveAllowed("tokenization session");
+
+    // The client has to exist BEFORE the sale, because generate_sale will not
+    // create one: it answers "client_not_found" for a custom_client_id it has
+    // never seen. Establishing it here rather than at the call site keeps the
+    // provider's two-step contract in the provider.
+    //
+    // Idempotent in effect: our reference is minted per tokenization session,
+    // so a retry of the same session reuses the same reference. iCount treats
+    // a repeat as an update rather than a duplicate.
+    await api.createClient({
+      clientName: input.clientName || "GOTCHA customer",
+      customClientId: input.customClientId,
+      ...(input.email ? { email: input.email } : {}),
+    });
+
     return api.generateSale(input);
   },
 
