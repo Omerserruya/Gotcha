@@ -49,18 +49,47 @@ type ReadOnlyAction = (typeof READ_ONLY_ACTIONS)[number];
 const REQUEST_TIMEOUT_MS = 15_000;
 const RUN_DEADLINE_MS = 60_000;
 
-/** Keys worth printing by value: configuration facts, never customer data. */
+/**
+ * Keys printed by value: page/account CONFIGURATION only.
+ *
+ * Deliberately excluded: the page id itself, page_url (which embeds it), and
+ * every identifying field (email, phone, vat_id, addresses, user_id,
+ * created_by/updated_by, social handles, logo).
+ */
 const SAFE_PAGE_KEYS = [
-  "paypage_id", "page_id", "id", "name", "page_name", "type", "page_type",
-  "active", "is_active", "status", "enabled", "currency", "currency_code",
-  "lang", "sum", "amount", "is_token", "token", "cc_token", "standing_order",
-  "hok", "success_url", "failure_url", "cancel_url", "ipn_url", "callback_url",
-  "income_type_id", "client_type_id", "doc_type", "create_doc",
+  // identity / state
+  "page_name", "page_name_en", "is_active", "deleted", "is_deleted", "language",
+  // what KIND of page this is - the decisive question
+  "cc_page_version", "donation_page", "simplify_page", "is_shopify", "is_wooco",
+  "doctype", "activate_autoinvoices", "post_action_success",
+  // standing order (הוראת קבע). hk_page is the flag that would make iCount,
+  // not GOTCHA, the renewal owner.
+  "hk_page", "hk_payments", "hk_billing_day", "hk_issue_every",
+  "hk_start_after", "hk_start_date", "hk_payment_sum_calc",
+  "hk_payment_sum_calc_type",
+  // amount: fixed in the page, or supplied per transaction?
+  "custom_sum", "variable_price", "minimum_price", "max_payments", "max_sales",
+  "currency_id", "add_vat", "auto_vat_detection", "tax_exempt",
+  // callbacks
+  "ipn_url", "success_url", "failure_url", "cancel_url", "callback_url",
+  // which customer fields the page asks for
+  "require_email", "require_fname_lname", "require_id", "require_phone",
+  "require_tos", "request_address", "request_dob", "cc_holder_id_enabled",
+  "custom_fields", "items",
+  // 3DS / SCA
+  "require_3ds", "allow_non_3ds_issuer", "require_3ds_txn_limit",
+  "require_3ds_accum_period", "require_3ds_txn_period",
+  // misc config
+  "captcha", "income_type_id", "client_type_id", "installments_interest_rate",
 ] as const;
 
 const SAFE_ACCOUNT_KEYS = [
-  "cid", "company_name", "business_type", "businessType", "is_vat_exempt",
-  "cc_refund_enabled", "cc_provider", "doc_shipping_address", "currency",
+  "businessType", "is_vat_exempt", "is_trial", "system_type",
+  // the capability flags that decide whether tokenization is even possible
+  "cc_enabled", "cc_storage_enabled", "cc_require_cvv", "cc_refund_enabled",
+  "cc_provider", "hk_enabled", "always_allow_paynow",
+  "autoinvoice_cc_enabled", "base_currency_code", "multi_currency",
+  "create_doc_v2",
 ] as const;
 
 const started = Date.now();
@@ -104,6 +133,16 @@ async function readOnly(action: ReadOnlyAction, body: Record<string, unknown> = 
 }
 
 /** Print a curated subset by value; report everything else by key name only. */
+function maskPageId(text: string): string {
+  const id = icountPaymentPageId();
+  // Only substitute a distinctive id. A short one (e.g. "5") occurs inside
+  // unrelated values like cc_page_version, and blind replacement would corrupt
+  // the report it is meant to protect. The page id is excluded from the printed
+  // key set outright, so this is belt-and-braces, not the primary control.
+  if (!id || id.length < 4) return text;
+  return text.split(id).join("<page-id>");
+}
+
 function describe(label: string, obj: unknown, safeKeys: readonly string[]): void {
   if (!obj || typeof obj !== "object") {
     console.log(`  ${label}: (no object returned)`);
@@ -117,7 +156,7 @@ function describe(label: string, obj: unknown, safeKeys: readonly string[]): voi
   for (const k of shown) {
     const v = record[k];
     const printable = v === null || typeof v !== "object" ? String(v) : `<${Array.isArray(v) ? "array" : "object"}>`;
-    console.log(`    ${k} = ${String(redactIcount(printable))}`);
+    console.log(`    ${k} = ${maskPageId(String(redactIcount(printable)))}`);
   }
   const rest = keys.filter((k) => !shown.includes(k));
   if (rest.length) {
@@ -180,7 +219,7 @@ async function main(): Promise<void> {
       console.log("  configured page FOUND in this account:");
       describe("entry", match, SAFE_PAGE_KEYS);
     } else if (pageId) {
-      console.error(`  configured page id NOT found in this account.`);
+      console.error(`  configured page NOT found in this account.`);
     }
     // Unrelated pages are deliberately not dumped.
   } catch (err: any) {
