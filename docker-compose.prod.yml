@@ -499,6 +499,9 @@ services:
     <<: *default-restart
     logging: *default-logging
     environment:
+      # How long the public pricing page is cached. Declared so prod is
+      # configurable through the normal path rather than by editing compose.
+      PUBLIC_PRICING_CACHE_SECONDS: ${PUBLIC_PRICING_CACHE_SECONDS:-}
       # Where a customer returns after the hosted payment page. Without it the
       # return URLs are omitted and they land wherever the provider defaults to.
       APP_PUBLIC_URL: ${APP_PUBLIC_URL:-}
