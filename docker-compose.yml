@@ -547,7 +547,6 @@ services:
       PORT: ${BILLING_PORT:-4009}
       OIDC_ISSUER: ${OIDC_ISSUER}
       OIDC_JWKS_URI: ${OIDC_JWKS_URI}
-      OAUTH_STATE_SECRET: ${OAUTH_STATE_SECRET}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
       INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:-chatcenter-internal-2026}
       # Billing config

@@ -526,6 +526,15 @@ services:
       PUBLIC_PRICING_CACHE_SECONDS: ${PUBLIC_PRICING_CACHE_SECONDS:-}
       # Where a customer returns after the hosted payment page. Without it the
       # return URLs are omitted and they land wherever the provider defaults to.
+      # The unauthenticated marketing catalog. It was declared for billing in
+      # dev and NOWHERE in production, so setting PUBLIC_PRICING_ENABLED=true in
+      # a production env file reached nginx but never reached the service - the
+      # gateway would serve /pricing while the API behind it 404'd the catalog,
+      # and the page would show no prices at all.
+      #
+      # Default stays "false", matching nginx and dev: provisional prices must
+      # never become publicly reachable by omission.
+      PUBLIC_PRICING_ENABLED: ${PUBLIC_PRICING_ENABLED:-false}
       APP_PUBLIC_URL: ${APP_PUBLIC_URL:-}
       # Hosts this deployment may send a paying customer back through. Empty
       # disables the check; set it in production so a mistyped APP_PUBLIC_URL
