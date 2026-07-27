@@ -57,6 +57,9 @@ lever for "this number is wrong, stop taking money".
 `simulator` also needs `ICOUNT_ALLOW_SIMULATOR=true`; without it, it degrades to
 mock rather than switching on a mode nobody asked for.
 
+`mock` models a customer who pays immediately and successfully, so a full
+checkout completes locally. Use `simulator` when you need the failure paths.
+
 `live` additionally requires `NODE_ENV=production` **and**
 `ICOUNT_ALLOW_LIVE=true`. Both, checked before any network call — so a developer
 flipping `ICOUNT_MODE=live` in a local `.env` still cannot charge a real card.
@@ -81,7 +84,7 @@ and the page id has no business in a browser.
 | `ICOUNT_API_TOKEN` | Bearer token. Never logged; stripped from every error path |
 | `ICOUNT_API_BASE_URL` | defaults to the v3 endpoint |
 | `ICOUNT_PAYMENT_PAGE_ID` | the `cc_token` PayPage. Configuration, not a secret |
-| `BILLING_PAYMENT_TOKEN_ENCRYPTION_KEY` | 32 bytes, base64. Dedicated — no fallback to any other key |
+| `BILLING_PAYMENT_TOKEN_ENCRYPTION_KEY` | 32 bytes, base64. Dedicated — no fallback to any other key. **Required even in mock/simulator**: storing a card token encrypts it, so an unset key fails checkout at the moment the card is confirmed |
 | `APP_PUBLIC_URL` | where customers return after the hosted page |
 | `BILLING_SCHEDULER_ENABLED` | renewal, dunning, reconciliation sweep |
 

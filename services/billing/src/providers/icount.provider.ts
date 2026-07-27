@@ -99,6 +99,15 @@ export const icountProvider: PaymentProvider = {
       return sim.simulateGenerateSale({ pageId: input.pageId, customClientId: input.customClientId });
     }
     if (isMock()) {
+      // Mock models a customer who pays immediately and successfully: the card
+      // appears the moment they are sent to the page.
+      //
+      // It has to be registered HERE rather than returned unconditionally from
+      // listStoredCards, because the baseline is captured before this call. A
+      // mock that always returned a card would put that card in the baseline
+      // too, so nothing would ever look new and a local checkout could never
+      // complete - which is precisely what it did before this.
+      sim.simulateTokenization(input.customClientId, `icmock_${input.customClientId}`);
       return {
         saleUrl: `https://icount.mock/paypage/${encodeURIComponent(input.pageId)}?ref=${encodeURIComponent(input.customClientId)}`,
         raw: { mock: true },
@@ -115,10 +124,10 @@ export const icountProvider: PaymentProvider = {
    * success URL proves they returned; this proves a card exists.
    */
   async listStoredCards(query: StoredCardQuery) {
-    if (isSimulator()) return sim.simulateGetCcTokens(query);
-    if (isMock()) {
-      return [{ token: `icmock_${query.customClientId ?? query.clientId}`, brand: "visa", last4: "4242", expMonth: 12, expYear: 2030 }];
-    }
+    // Mock and simulator share the same store, so both answer honestly: no
+    // cards for a customer reference nobody has tokenized, exactly as a real
+    // provider does.
+    if (isMock()) return sim.simulateGetCcTokens(query);
     assertLiveAllowed("stored card lookup");
     return api.getCcTokens(query);
   },
