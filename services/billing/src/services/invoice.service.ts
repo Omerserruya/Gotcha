@@ -4,7 +4,7 @@
  * tax-document reference. The iCount-issued doc is the authoritative record;
  * our Invoice row is a mirror for in-app display + history.
  */
-import { prisma } from "@chatcenter/shared";
+import { prisma, decryptPaymentToken } from "@chatcenter/shared";
 import type { BillingProvider, InvoiceType } from "@prisma/client";
 import { getProvider } from "../providers";
 import { emitBillingEvent } from "../lib/events";
@@ -111,7 +111,11 @@ export async function chargeFor(input: ChargeForInput): Promise<ChargeForResult>
 
   const provider = getProvider(ctx.provider);
   const result = await provider.charge({
-    token: ctx.token,
+    // Decrypted at the last possible moment, immediately before the provider
+    // call, and never held anywhere a DTO, log or audit event can reach.
+    // A token that cannot be decrypted fails the charge loudly rather than
+    // being silently replaced or dropped.
+    token: decryptPaymentToken(ctx.token),
     providerCustomerId: ctx.providerCustomerId,
     amount: input.amount,
     currency,

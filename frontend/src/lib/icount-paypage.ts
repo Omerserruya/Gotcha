@@ -1,4 +1,15 @@
 /**
+ * DEAD CODE - UNREACHABLE, PENDING REMOVAL.
+ *
+ * Nothing imports this. It implements a popup + postMessage contract that iCount
+ * does not actually offer: the real flow is a redirect with a server-to-server
+ * callback. It is retained only so the eventual redirect implementation can be
+ * diffed against it, and MUST be deleted in the round that lands that flow.
+ *
+ * Do not import it. A provider token must never originate in a browser.
+ *
+ * ---
+ *
  * iCount PayPage client flow - the browser side of secure card capture.
  *
  * Trust model (defense in depth):

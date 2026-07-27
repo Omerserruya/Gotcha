@@ -21,6 +21,24 @@ use an iCount standing order (`hk_page = 0`). Our payment page is configured as
 Could you please provide **current API v3 request and response examples** for
 the following? We are holding live charging disabled until these are confirmed.
 
+## Blocking — these ten prevent us going live
+
+1. How is a `cc_token` PayPage session launched (static URL from the page id, or
+   an API call that returns a URL)?
+2. How is `client_id` supplied to that page?
+3. How is `custom_client_id`, or an opaque checkout reference of ours, supplied?
+4. How does our **server** receive or retrieve the reusable card token?
+5. Which callback or IPN proves tokenization succeeded? (We will not treat a
+   browser redirect as proof.)
+6. What is the exact `cc/bill` **currency** field name, and the accepted values?
+7. Does `cc/bill` accept a **unique merchant transaction reference**?
+8. Is that reference searchable and returned through `cc/transactions`?
+9. Does `cc/bill` create a document, and does it return `doctype` / `docnum`?
+10. What happens to the ₪1 token-validation transaction — voided, or settled and
+    needing reversal?
+
+The sections below expand on each of these.
+
 ## 1. cc_token PayPage launch and callback
 
 1. How is a `cc_token` page opened for a customer — a static URL derived from

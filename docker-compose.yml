@@ -495,6 +495,9 @@ services:
       # Configuration, not a credential: which "Credit card token" PayPage to use.
       ICOUNT_PAYMENT_PAGE_ID: ${ICOUNT_PAYMENT_PAGE_ID:-}
       ICOUNT_WEBHOOK_SECRET: ${ICOUNT_WEBHOOK_SECRET:-}
+      # Dedicated card-token key. Billing service only; never NEXT_PUBLIC.
+      BILLING_PAYMENT_TOKEN_ENCRYPTION_KEY: ${BILLING_PAYMENT_TOKEN_ENCRYPTION_KEY:-}
+      BILLING_PAYMENT_TOKEN_DECRYPTION_KEYS: ${BILLING_PAYMENT_TOKEN_DECRYPTION_KEYS:-}
     depends_on:
       db:
         condition: service_healthy

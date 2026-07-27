@@ -6,10 +6,25 @@
  * only thing standing between a retry and a second charge, which makes this
  * file load-bearing rather than bookkeeping.
  *
+ * TWO separate guarantees are needed, and the unique index only provides the
+ * first:
+ *
+ *   Uniqueness stops two ROWS existing for one logical charge. It is a
+ *   PostgreSQL constraint, so it holds across every billing instance.
+ *
+ *   Ownership stops two WORKERS executing that one row. Uniqueness alone does
+ *   not give this: two instances can both find the same existing row and both
+ *   decide to charge it. That is what `claimExecution` is for, and it is the
+ *   actual money-safety boundary. A scheduler leader lock is an optimisation
+ *   that reduces duplicate scanning; it must never be the only protection.
+ *
  * The rules, in order of importance:
  *
  *   1. One row per LOGICAL charge, keyed by `attemptKey`. Creating a second is
  *      a database conflict, not a second call to the provider.
+ *   1b. Exactly one worker may hold a time-bounded execution lease on that row,
+ *      taken with a single atomic conditional UPDATE. Losers exit without
+ *      calling the provider.
  *   2. A charge whose outcome is unknown (timeout, crash between request and
  *      response) becomes UNKNOWN - never FAILED. FAILED means "the provider
  *      told us no"; UNKNOWN means "we do not know", and treating the second as
@@ -167,7 +182,7 @@ export async function reconcileUnknown(args: {
 }): Promise<{ state: PaymentAttemptState; candidates: number }> {
   const attempt = await prisma.paymentAttempt.findUnique({ where: { id: args.attemptId } });
   if (!attempt) throw new Error("attempt_not_found");
-  if (attempt.state !== "UNKNOWN") {
+  if (!requiresReconciliation(attempt.state)) {
     return { state: attempt.state, candidates: attempt.candidateCount ?? 0 };
   }
 
@@ -231,6 +246,11 @@ export function mayRetry(state: PaymentAttemptState): boolean {
   return state === "FAILED";
 }
 
+/** States that forbid a new provider call until reconciliation resolves them. */
+export function requiresReconciliation(state: PaymentAttemptState): boolean {
+  return state === "UNKNOWN" || state === "RECONCILIATION_REQUIRED";
+}
+
 async function setState(
   id: string,
   state: PaymentAttemptState,
@@ -243,4 +263,180 @@ async function setState(
   } = {},
 ): Promise<void> {
   await prisma.paymentAttempt.update({ where: { id }, data: { state, ...extra } });
+}
+
+// ── Cross-instance execution ownership ──────────────────────────────────────
+
+/** How long a worker may hold an execution lease before it is considered dead. */
+export const DEFAULT_LEASE_MS = 120_000;
+
+/** States a worker may take ownership of. */
+const CLAIMABLE_STATES = ["PENDING", "FAILED"] as const;
+
+/**
+ * Take exclusive ownership of an attempt, atomically.
+ *
+ * ONE conditional UPDATE. Not read-then-write: reading first and updating after
+ * leaves a window in which two workers both read "unowned" and both proceed.
+ * Postgres row-locks the matching row, so of N concurrent callers exactly one
+ * sees count === 1 and the rest see 0.
+ *
+ * The `providerRequestStartedAt: null` condition is the important one. It means
+ * a lease can only ever be taken when NO provider request has been submitted
+ * for this attempt. An attempt whose previous owner died mid-flight is
+ * therefore unclaimable here by construction, and must go through
+ * reconciliation instead - see expireStaleLeases().
+ */
+export async function claimExecution(args: {
+  attemptId: string;
+  owner: string;
+  leaseMs?: number;
+  now?: Date;
+}): Promise<{ claimed: boolean }> {
+  const now = args.now ?? new Date();
+  const leaseMs = args.leaseMs ?? DEFAULT_LEASE_MS;
+
+  const res = await prisma.paymentAttempt.updateMany({
+    where: {
+      id: args.attemptId,
+      state: { in: [...CLAIMABLE_STATES] },
+      // Never reclaim something that may already have been submitted.
+      providerRequestStartedAt: null,
+      OR: [
+        { executionOwner: null },
+        { executionLeaseExpiresAt: null },
+        { executionLeaseExpiresAt: { lt: now } },
+      ],
+    },
+    data: {
+      executionOwner: args.owner,
+      executionLeaseExpiresAt: new Date(now.getTime() + leaseMs),
+      executionStartedAt: now,
+      lastHeartbeatAt: now,
+      attemptNumber: { increment: 1 },
+      state: "PENDING",
+    },
+  });
+
+  return { claimed: res.count === 1 };
+}
+
+/**
+ * Record that a provider request is about to be sent.
+ *
+ * Written BEFORE the call, deliberately. If this write succeeds and the process
+ * then dies, the attempt is permanently unclaimable and must be reconciled -
+ * which is the correct, conservative outcome. Writing it after the call would
+ * leave a window where a crash looks like "never submitted".
+ *
+ * Scoped to the lease holder: a worker whose lease expired cannot mark a
+ * request as started.
+ */
+export async function markProviderRequestStarted(args: {
+  attemptId: string;
+  owner: string;
+  now?: Date;
+}): Promise<boolean> {
+  const now = args.now ?? new Date();
+  const res = await prisma.paymentAttempt.updateMany({
+    where: {
+      id: args.attemptId,
+      executionOwner: args.owner,
+      executionLeaseExpiresAt: { gt: now },
+      providerRequestStartedAt: null,
+    },
+    data: { providerRequestStartedAt: now, lastHeartbeatAt: now },
+  });
+  return res.count === 1;
+}
+
+/** Record that the provider answered, whatever the answer was. */
+export async function markProviderResponseReceived(args: {
+  attemptId: string;
+  owner: string;
+  now?: Date;
+}): Promise<void> {
+  const now = args.now ?? new Date();
+  await prisma.paymentAttempt.updateMany({
+    where: { id: args.attemptId, executionOwner: args.owner },
+    data: { providerResponseReceivedAt: now, lastHeartbeatAt: now },
+  });
+}
+
+/** Extend a lease during a long provider call. */
+export async function heartbeat(args: {
+  attemptId: string;
+  owner: string;
+  leaseMs?: number;
+  now?: Date;
+}): Promise<boolean> {
+  const now = args.now ?? new Date();
+  const res = await prisma.paymentAttempt.updateMany({
+    where: { id: args.attemptId, executionOwner: args.owner, executionLeaseExpiresAt: { gt: now } },
+    data: {
+      lastHeartbeatAt: now,
+      executionLeaseExpiresAt: new Date(now.getTime() + (args.leaseMs ?? DEFAULT_LEASE_MS)),
+    },
+  });
+  return res.count === 1;
+}
+
+/** Give up ownership without changing the outcome. */
+export async function releaseExecution(args: { attemptId: string; owner: string }): Promise<void> {
+  await prisma.paymentAttempt.updateMany({
+    where: { id: args.attemptId, executionOwner: args.owner },
+    data: { executionOwner: null, executionLeaseExpiresAt: null },
+  });
+}
+
+/**
+ * Sweep leases whose holder died.
+ *
+ * The distinction that matters, and the reason this is not a single query:
+ *
+ *   Expired BEFORE submission (providerRequestStartedAt IS NULL)
+ *     No provider request was ever sent. There is proof no charge exists, so
+ *     the attempt is simply released and another worker may claim it.
+ *
+ *   Expired AFTER submission may have started (providerRequestStartedAt set,
+ *   providerResponseReceivedAt NULL)
+ *     A charge may exist at the provider and we will never know from local
+ *     state. Moving it to RECONCILIATION_REQUIRED forbids another cc/bill;
+ *     it must be resolved against cc/transactions, and escalated to
+ *     MANUAL_REVIEW if that cannot decide.
+ *
+ * Reclaiming the second case for a fresh charge is precisely how a customer
+ * gets billed twice, so it is never done automatically.
+ */
+export async function expireStaleLeases(now: Date = new Date()): Promise<{
+  released: number;
+  needsReconciliation: number;
+}> {
+  const released = await prisma.paymentAttempt.updateMany({
+    where: {
+      executionLeaseExpiresAt: { lt: now },
+      executionOwner: { not: null },
+      providerRequestStartedAt: null, // proof: nothing was submitted
+      state: { in: [...CLAIMABLE_STATES] },
+    },
+    data: { executionOwner: null, executionLeaseExpiresAt: null },
+  });
+
+  const needsReconciliation = await prisma.paymentAttempt.updateMany({
+    where: {
+      executionLeaseExpiresAt: { lt: now },
+      executionOwner: { not: null },
+      providerRequestStartedAt: { not: null },
+      providerResponseReceivedAt: null,
+      state: { in: ["PENDING"] },
+    },
+    data: {
+      state: "RECONCILIATION_REQUIRED",
+      executionOwner: null,
+      executionLeaseExpiresAt: null,
+      failureCode: "lease_expired_after_submission: outcome unknown, reconcile before any retry",
+    },
+  });
+
+  return { released: released.count, needsReconciliation: needsReconciliation.count };
 }

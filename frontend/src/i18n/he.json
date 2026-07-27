@@ -1444,7 +1444,8 @@
           "knowledge_sources": "מקורות ידע"
         },
         "everythingIn": "כל היכולות של {plan}, ובנוסף"
-      }
+      },
+      "paymentSetupUnavailable": "הגדרת תשלום מאובטח אינה זמינה בסביבה הזו."
     }
   },
   "outbound": {

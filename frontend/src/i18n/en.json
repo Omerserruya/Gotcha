@@ -1444,7 +1444,8 @@
           "knowledge_sources": "Knowledge sources"
         },
         "everythingIn": "Everything in {plan}, plus"
-      }
+      },
+      "paymentSetupUnavailable": "Secure payment setup is not enabled in this environment."
     }
   },
   "outbound": {

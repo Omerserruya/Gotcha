@@ -44,6 +44,10 @@ enum ChannelResponseMode {
 enum TenantStatus {
   PENDING_ADMIN_SETUP
   PENDING_ONBOARDING
+  /// Provisioned on a PAID plan whose first payment has not been verified.
+  /// Identity onboarding and payment setup are allowed; paid application
+  /// access and paid entitlements are not.
+  PENDING_PAYMENT
   ACTIVE
   SUSPENDED
 }
@@ -2664,7 +2668,10 @@ model PaymentMethod {
   billingProfileId String              @map("billing_profile_id")
   provider         BillingProvider     @default(ICOUNT)
   // Tokenized reference only - raw PAN is NEVER stored (iCount is the PCI vault).
+  // Encrypted at rest with the dedicated billing payment-token key; the version
+  // records WHICH key, so rotation does not orphan existing rows.
   token            String
+  tokenKeyVersion  String?             @map("token_key_version")
   brand            String?
   last4            String?
   expMonth         Int?                @map("exp_month")
@@ -2881,6 +2888,10 @@ enum PaymentAttemptState {
   /// The outcome is genuinely unknown - a timeout, or a crash between request
   /// and response. MUST NOT be retried: reconcile against the provider first.
   UNKNOWN
+  /// A lease expired at a point where a provider request may already have been
+  /// submitted. Distinct from UNKNOWN only in provenance; both forbid a retry
+  /// until reconciliation proves no charge exists.
+  RECONCILIATION_REQUIRED
   /// Reconciliation could not decide (for example several equal candidate
   /// transactions). Requires a human; never auto-retried.
   MANUAL_REVIEW
@@ -2909,6 +2920,22 @@ model PaymentAttempt {
 
   state PaymentAttemptState @default(PENDING)
 
+  /// ── Cross-instance execution ownership ──────────────────────────────────
+  /// The unique attemptKey above stops two ROWS existing. These stop two
+  /// WORKERS executing the one row. Ownership is taken with a single atomic
+  /// conditional UPDATE, never read-then-write, so exactly one worker can win.
+  executionOwner          String?   @map("execution_owner")
+  executionLeaseExpiresAt DateTime? @map("execution_lease_expires_at")
+  executionStartedAt      DateTime? @map("execution_started_at")
+  lastHeartbeatAt         DateTime? @map("last_heartbeat_at")
+  attemptNumber           Int       @default(0) @map("attempt_number")
+
+  /// The two timestamps that decide whether an expired lease is safe to
+  /// reclaim. If a request was started and no response was recorded, a charge
+  /// may exist at the provider and reclaiming for a NEW call could double it.
+  providerRequestStartedAt   DateTime? @map("provider_request_started_at")
+  providerResponseReceivedAt DateTime? @map("provider_response_received_at")
+
   providerChargeRef String? @map("provider_charge_ref")
   failureCode       String? @map("failure_code")
 
@@ -2925,6 +2952,7 @@ model PaymentAttempt {
   @@index([tenantId])
   @@index([state])
   @@index([checkoutId])
+  @@index([executionLeaseExpiresAt])
   @@map("payment_attempts")
 }
 

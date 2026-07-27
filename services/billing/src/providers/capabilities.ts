@@ -83,6 +83,19 @@ export const MANUAL_CAPABILITIES: ProviderCapabilities = {
   chargeCurrencies: [],
 } as const;
 
+/** Stable machine-readable code for the currency block. */
+export const ICOUNT_CHARGE_CURRENCY_UNVERIFIED = "ICOUNT_CHARGE_CURRENCY_UNVERIFIED";
+
+export class ChargeCurrencyUnverifiedError extends Error {
+  readonly code = ICOUNT_CHARGE_CURRENCY_UNVERIFIED;
+  constructor(readonly requested: string, readonly verified: readonly string[]) {
+    super(
+      `[billing] refusing a ${requested || "(unspecified)"} charge: the provider's currency contract is unverified for it (verified: ${verified.join(", ") || "none"})`,
+    );
+    this.name = "ChargeCurrencyUnverifiedError";
+  }
+}
+
 export class CapabilityUnavailableError extends Error {
   constructor(readonly capability: string, readonly state: CapabilityState) {
     super(`[billing] capability "${capability}" is ${state} - refusing to proceed`);
@@ -103,9 +116,7 @@ export function assertCapability(
 export function assertChargeCurrency(caps: ProviderCapabilities, currency: string): void {
   const wanted = (currency || "").toUpperCase();
   if (!caps.chargeCurrencies.includes(wanted)) {
-    throw new Error(
-      `[billing] refusing a ${wanted || "(unspecified)"} charge: the provider's currency contract is unverified for it (verified: ${caps.chargeCurrencies.join(", ") || "none"})`,
-    );
+    throw new ChargeCurrencyUnverifiedError(wanted, caps.chargeCurrencies);
   }
 }
 

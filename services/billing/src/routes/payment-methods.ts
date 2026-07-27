@@ -10,6 +10,7 @@ import { Router } from "express";
 import { authenticate, resolveTenant, requirePermission, prisma } from "@chatcenter/shared";
 import { ensureBillableEntity } from "../services/billable-entity.service";
 import { defaultProvider } from "../providers";
+import { encryptPaymentToken, assertPaymentTokenKey } from "@chatcenter/shared";
 
 const router = Router();
 
@@ -39,8 +40,14 @@ router.post("/billing/payment-methods", authenticate, resolveTenant, requirePerm
     // prior active method (status→REMOVED, not just demoted) so no orphaned
     // tokens linger and the default is unambiguous.
     await prisma.paymentMethod.updateMany({ where: { billingProfileId: profile.id, status: "ACTIVE" }, data: { status: "REMOVED", isDefault: false } });
+    // The reusable token is a bearer instrument: encrypted at rest with the
+    // dedicated billing key, and the key version stored alongside so rotation
+    // does not orphan the row. Validated HERE rather than at startup, so a mock
+    // stack that never stores a token needs no key.
+    assertPaymentTokenKey();
+    const sealed = encryptPaymentToken(tok.token);
     const pm = await prisma.paymentMethod.create({
-      data: { billingProfileId: profile.id, provider: provider.name, token: tok.token, brand: tok.brand, last4: tok.last4, expMonth: tok.expMonth, expYear: tok.expYear, isDefault: true, status: "ACTIVE" },
+      data: { billingProfileId: profile.id, provider: provider.name, token: sealed.ciphertext, tokenKeyVersion: sealed.keyVersion, brand: tok.brand, last4: tok.last4, expMonth: tok.expMonth, expYear: tok.expYear, isDefault: true, status: "ACTIVE" },
     });
 
     // Storing a card provisions NOTHING. It used to auto-start a trial on the

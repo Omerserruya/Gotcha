@@ -10,7 +10,6 @@ import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import { RequirePermission } from "@/components/RequirePermission";
-import { openPayPage } from "@/lib/icount-paypage";
 import {
   getPaymentMethods,
   addPaymentMethod,
@@ -56,34 +55,19 @@ function PaymentMethodInner() {
     }
   };
 
-  // Card capture happens ONLY on the provider-hosted PayPage. The popup posts
-  // back a short-lived page token (origin- and shape-validated in
-  // lib/icount-paypage); the backend then confirms that token with iCount
-  // server-side and binds it to the authenticated tenant BEFORE anything is
-  // stored - so the card row shown here only refreshes after real provider
-  // confirmation. Dev/mock (no PayPage URL configured): accept a token
-  // directly so the flow stays testable end-to-end; the backend runs in
-  // ICOUNT_MODE=mock and can never charge a real card.
-  const addCard = async () => {
-    const paypageUrl = process.env.NEXT_PUBLIC_ICOUNT_PAYPAGE_URL;
-    if (paypageUrl) {
-      setBusy("add-card");
-      setMsg(null);
-      const outcome = await openPayPage(paypageUrl);
-      if (outcome.status === "success") {
-        // Server-side confirmation is the only success signal.
-        await run("add-card", () => addPaymentMethod(token!, outcome.pageToken), t("settings.billing.cardSaved"));
-      } else {
-        setBusy(null);
-        if (outcome.status === "cancelled") setMsg({ kind: "ok", text: t("settings.billing.payPageCancelled") });
-        else if (outcome.status === "timeout") setMsg({ kind: "err", text: t("settings.billing.payPageTimeout") });
-        else setMsg({ kind: "err", text: t("settings.billing.payPageBlocked") });
-      }
-      return;
-    }
-    const pageToken = window.prompt(t("settings.billing.devTokenPrompt"), "pt_dev");
-    if (!pageToken) return;
-    await run("add-card", () => addPaymentMethod(token!, pageToken), t("settings.billing.cardSaved"));
+  // Secure payment setup is NOT available yet.
+  //
+  // The previous implementation opened a provider popup and accepted a token
+  // the BROWSER posted back, and fell through to window.prompt when no page URL
+  // was configured - which let anyone type a payment token straight into the
+  // application. Both are gone: a provider token must never originate in a
+  // browser, and neither the popup contract nor the redirect replacement is
+  // verified yet.
+  //
+  // Tests inject provider fixtures directly through the billing service; there
+  // is deliberately no application route that accepts a client-supplied token.
+  const addCard = () => {
+    setMsg({ kind: "err", text: t("settings.billing.paymentSetupUnavailable") });
   };
 
   return (
