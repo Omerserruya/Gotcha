@@ -23,7 +23,13 @@ export function getEnforcementMode(): EnforcementMode {
   return (["off", "observe", "soft", "hard"].includes(m) ? m : "off") as EnforcementMode;
 }
 
-export type DenyReason = "units_exhausted" | "suspended" | "canceled";
+export type DenyReason =
+  | "units_exhausted"
+  | "suspended"
+  | "canceled"
+  /** The organization itself has not paid - distinct from running out of units. */
+  | "payment_required"
+  | "tenant_suspended";
 
 export class AiUnitsExhaustedError extends Error {
   constructor(public reason: DenyReason, public tenantId: string) {
@@ -52,15 +58,35 @@ export async function checkAiAllowed(tenantId: string): Promise<AiAllowance> {
   if (mode === "off") return { allowed: true, wouldBlock: false, mode, balance: Infinity };
 
   let sub: { status: string; enforcementEnabled: boolean } | null = null;
+  let tenantStatus: string | null = null;
   try {
-    const link = await prisma.billableEntityTenant.findUnique({
-      where: { tenantId },
-      include: { entity: { include: { subscription: true } } },
-    });
+    const [link, tenant] = await Promise.all([
+      prisma.billableEntityTenant.findUnique({
+        where: { tenantId },
+        include: { entity: { include: { subscription: true } } },
+      }),
+      prisma.tenant.findUnique({ where: { id: tenantId }, select: { status: true } }),
+    ]);
     sub = link?.entity.subscription ?? null;
+    tenantStatus = tenant?.status ?? null;
   } catch {
     // Fail-open on read error - never block paying customers on a DB blip.
     return { allowed: true, wouldBlock: false, mode, balance: Infinity };
+  }
+
+  // The ORGANIZATION's own state comes first, before any subscription question.
+  //
+  // A tenant provisioned on a paid plan has no subscription until its first
+  // payment is confirmed - activation is what creates one. The check below used
+  // to read "no subscription yet" as unlimited access, so such a tenant was
+  // blocked from the application while its bot answered customers for free,
+  // indefinitely. The access matrix already says the paid product is not
+  // available in that state; this is the runtime honouring it.
+  if (tenantStatus === "PENDING_PAYMENT") {
+    return denial("payment_required", mode);
+  }
+  if (tenantStatus === "SUSPENDED") {
+    return denial("tenant_suspended", mode);
   }
 
   // No subscription yet, or enforcement explicitly disabled (grandfathered).
@@ -79,6 +105,17 @@ export async function checkAiAllowed(tenantId: string): Promise<AiAllowance> {
   const wouldBlock = reason != null;
   // Only `hard` mode actually blocks; observe/soft meter+notify but allow.
   return { allowed: wouldBlock ? mode !== "hard" : true, wouldBlock, reason, mode, balance };
+}
+
+/**
+ * A refusal that respects the enforcement mode.
+ *
+ * `observe` and `soft` still allow the call - the mode exists so enforcement can
+ * be switched on gradually, and a new denial reason must not become a hard
+ * outage the moment it ships.
+ */
+function denial(reason: DenyReason, mode: EnforcementMode): AiAllowance {
+  return { allowed: mode !== "hard", wouldBlock: true, reason, mode, balance: 0 };
 }
 
 /** Pre-flight that throws AiUnitsExhaustedError when the call must be blocked. */

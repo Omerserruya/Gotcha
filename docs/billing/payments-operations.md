@@ -258,6 +258,34 @@ cleared. It carries no payment quote, and activation refuses if one is attached
 
 ---
 
+## What an unpaid organization can do
+
+Nothing that costs money. Two gates, and they answer different questions.
+
+**Application routes** go through `requireActiveTenant()`, which defers to the
+access matrix in `tenant-access-policy`. A `PENDING_PAYMENT` tenant gets 402 with
+`TENANT_PAYMENT_REQUIRED` everywhere except payment setup and identity
+onboarding — the two things they need in order to resolve it.
+
+**The AI runtime** goes through `checkAiAllowed`. This is the one that matters
+commercially: the product's value is the bot answering inbound messages, which is
+not an application route and would otherwise keep running.
+
+It refuses `PENDING_PAYMENT` and `SUSPENDED` tenants outright, before any
+subscription question. That is not redundant with the first gate — a tenant
+provisioned on a paid plan has **no subscription at all** until its first payment
+is confirmed, because activation is what creates one, and the check used to read
+"no subscription" as unlimited.
+
+`payment_required` is deliberately distinct from `units_exhausted`. "Your plan is
+not active" and "you have used your credits" are different conversations to have
+with a customer.
+
+Both refusals respect `BILLING_ENFORCEMENT_MODE`: `observe` and `soft` record
+without blocking, so enforcement can be switched on gradually.
+
+---
+
 ## Webhooks
 
 The endpoint at `/api/billing/webhooks/icount` **records and does nothing else**.
