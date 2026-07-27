@@ -248,6 +248,34 @@ cleared. It carries no payment quote, and activation refuses if one is attached
 
 ---
 
+## Webhooks
+
+The endpoint at `/api/billing/webhooks/icount` **records and does nothing else**.
+It verifies the signature, bounds and redacts the body, writes one event row,
+and stops.
+
+That is deliberate. It previously read an event `type` off the payload and, on
+`payment.chargeback`, suspended the tenant and clawed back their credits — using
+event names that were **invented**, since iCount's callback contract has never
+been verified. The route is publicly reachable and accepted unsigned payloads
+outside live mode, so anyone able to reach it could suspend a paying
+organization by posting a guessed string.
+
+`ICOUNT_WEBHOOK_SECRET` is now **required in every mode**. Without it, every
+webhook is rejected — including in mock. "Only in dev" is not a property of an
+endpoint the internet can reach.
+
+Acting on webhooks again needs two things: the verified callback contract from
+iCount, and a decision about what a chargeback should do. Until then, a human
+reviews the event log. Losing a few hours before reacting to a real dispute is
+recoverable; suspending a paying customer because someone posted JSON is not.
+
+Chargebacks and refunds can still be applied deliberately — `applyChargeback`
+and `refundCharge` are intact and audited; they are simply no longer reachable
+from the internet.
+
+---
+
 ## What gets cleaned up
 
 The scheduler deletes checkout artifacts that have finished and aged out:

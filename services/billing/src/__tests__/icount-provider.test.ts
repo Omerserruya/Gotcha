@@ -105,9 +105,16 @@ describe("icount provider: webhook signature verification", () => {
     expect(icountProvider.verifyWebhook({ headers: {}, rawBody: body })).toBe(false);
   });
 
-  it("without a secret: accepts only in mock mode, rejects in live", () => {
-    expect(icountProvider.verifyWebhook({ headers: {}, rawBody: body })).toBe(true); // mock
-    process.env.ICOUNT_MODE = "live";
-    expect(icountProvider.verifyWebhook({ headers: {}, rawBody: body })).toBe(false); // live w/o secret
+  it("without a secret: rejects in EVERY mode", () => {
+    // This used to accept unsigned webhooks outside live mode. The route is
+    // publicly reachable, so "only in dev" was not a property it had - anyone
+    // able to reach the endpoint could post whatever they liked.
+    for (const mode of ["mock", "simulator", "live"]) {
+      process.env.ICOUNT_MODE = mode;
+      expect(
+        icountProvider.verifyWebhook({ headers: {}, rawBody: body }),
+        `mode=${mode} must reject an unsigned webhook`,
+      ).toBe(false);
+    }
   });
 });

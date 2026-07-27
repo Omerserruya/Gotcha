@@ -51,8 +51,11 @@ describe("billing/iCount provider (mock mode)", () => {
     expect(res.providerInvoiceRef).toBe("inv_k1");
   });
 
-  it("mock webhook verification accepts when no secret configured", () => {
-    expect(icountProvider.verifyWebhook({ headers: {}, rawBody: "{}" })).toBe(true);
+  it("rejects an unsigned webhook even in mock mode", () => {
+    // No secret means no verification, and no verification means reject. The
+    // endpoint is reachable from the internet in every deployment.
+    delete process.env.ICOUNT_WEBHOOK_SECRET;
+    expect(icountProvider.verifyWebhook({ headers: {}, rawBody: "{}" })).toBe(false);
   });
 });
 

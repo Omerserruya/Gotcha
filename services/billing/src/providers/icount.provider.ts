@@ -259,9 +259,19 @@ export const icountProvider: PaymentProvider = {
     return api.transactions(query);
   },
 
+  /**
+   * Verify a webhook signature.
+   *
+   * No secret means no verification, and no verification means REJECT - in
+   * every mode, including mock. It used to accept unsigned webhooks outside
+   * live mode, which sounds like a development convenience until you notice
+   * the route is publicly reachable and the handler could suspend a tenant and
+   * claw back their credits. "Only in dev" is not a property of an endpoint the
+   * internet can reach.
+   */
   verifyWebhook(input: WebhookVerifyInput): boolean {
     const secret = process.env.ICOUNT_WEBHOOK_SECRET;
-    if (!secret) return icountMode() !== "live"; // dev: accept without a secret; live: never
+    if (!secret) return false;
     const sig = (input.headers["x-icount-signature"] as string) || "";
     const expected = createHmac("sha256", secret).update(input.rawBody).digest("hex");
     try {
