@@ -113,6 +113,7 @@ export type UntrustedSource =
   | "tool_description"
   | "history"
   | "widget_visitor"
+  | "storefront"
   | "unknown";
 
 export interface SanitizeOptions {

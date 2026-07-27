@@ -22,6 +22,8 @@ import routerRuleRoutes from "./routes/router-rules";
 import flowCanvasRoutes from "./routes/flow-canvas";
 import usageRoutes from "./routes/usage";
 import embeddedChatRouter from "./routes/embedded-chat";
+import shopifyChatPublicRoutes from "./routes/shopify-chat-public";
+import shopifyLiveChatRoutes from "./routes/shopify-live-chat";
 import actionPlannerRoutes from "./routes/action-planner";
 import toolPermissionRoutes from "./routes/tool-permissions";
 import aiDebugRoutes from "./routes/ai-debug";
@@ -98,6 +100,11 @@ app.use("/api/router-rules", routerRuleRoutes);
 app.use("/api/flow-canvas", flowCanvasRoutes);
 app.use("/api/usage", usageRoutes);
 app.use("/api/embedded-chat", embeddedChatRouter);
+// Public storefront surface — unauthenticated by design, guarded by
+// (public channel key + Origin + signed visitor session). Mounted before
+// the authenticated admin router so neither can shadow the other.
+app.use("/api/shopify-chat", shopifyChatPublicRoutes);
+app.use("/api/shopify-live-chat", shopifyLiveChatRoutes);
 app.use("/api/action-planner", actionPlannerRoutes);
 app.use("/api/tool-permissions", toolPermissionRoutes);
 app.use("/api/ai-debug", aiDebugRoutes);

@@ -123,6 +123,14 @@ export interface ContextSlot {
    * tenant hasn't registered any.
    */
   templatesBlock?: string;
+  /**
+   * Shopify storefront context — where on the store the customer is
+   * standing, plus the SERVER-RESOLVED product for that page. Only
+   * present on Shopify Live Chat conversations. It is ground truth: the
+   * handle came from the browser, but every fact in the block was
+   * re-read from Shopify before it got here.
+   */
+  storefrontBlock?: string;
   locale?: string;
 }
 
@@ -262,6 +270,9 @@ function buildConversationBlock(opts: BuildPromptOpts): string | null {
   }
   if (ctx?.templatesBlock?.trim()) {
     ctxBlocks.push(sanitizeUntrusted(ctx.templatesBlock.trim(), { wrap: true, source: "template", maxLength: 4000 }));
+  }
+  if (ctx?.storefrontBlock?.trim()) {
+    ctxBlocks.push(sanitizeUntrusted(ctx.storefrontBlock.trim(), { wrap: true, source: "storefront", maxLength: 3000 }));
   }
   if (ctxBlocks.length > 0) {
     parts.push(["# Conversation Context", ...ctxBlocks].join("\n\n"));
@@ -571,6 +582,7 @@ function buildContext(opts: BuildPromptOpts): string | null {
   if (ctx?.pendingApprovalsBlock?.trim()) blocks.push(ctx.pendingApprovalsBlock.trim());
   if (ctx?.whatsappWindowBlock?.trim()) blocks.push(ctx.whatsappWindowBlock.trim());
   if (ctx?.templatesBlock?.trim()) blocks.push(ctx.templatesBlock.trim());
+  if (ctx?.storefrontBlock?.trim()) blocks.push(ctx.storefrontBlock.trim());
 
   return ["# Context", ...blocks].join("\n\n");
 }
