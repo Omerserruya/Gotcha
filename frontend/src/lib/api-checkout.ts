@@ -1,9 +1,11 @@
 /**
- * Customer checkout status client.
+ * Customer checkout client.
  *
- * Read-only by construction. There is no "complete checkout" call here because
- * no such endpoint exists: a browser returning from a payment page proves the
- * customer came back, never that they paid.
+ * Two of these calls mutate, and both are careful about the same thing: they
+ * ask the server to look again, and never tell it what happened. There is no
+ * "complete checkout" call, because a browser returning from a payment page
+ * proves the customer came back and nothing more. Whether they paid is
+ * something only the server can establish, by asking the provider.
  */
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
@@ -24,6 +26,15 @@ export type CheckoutNextAction =
   | "REQUEST_NEW_LINK"
   | "CONTACT_SUPPORT";
 
+/** What the card is actually debited, and whether that figure is settled. */
+export interface CheckoutCharge {
+  amount: string;
+  currency: string;
+  exchangeRate: string;
+  /** True once a real charge froze these numbers; false while indicative. */
+  settled: boolean;
+}
+
 export interface CheckoutSummary {
   reference: string;
   organizationName: string | null;
@@ -33,6 +44,7 @@ export interface CheckoutSummary {
   includedCredits: number;
   amount: string;
   currency: string;
+  charge: CheckoutCharge | null;
   billingInterval: string;
   expiresAt: string;
   status: CheckoutStatus;
@@ -84,4 +96,64 @@ export function pathForStatus(status: CheckoutStatus): string {
     case "AWAITING_PAYMENT_SETUP":
     default: return "/checkout/payment-required";
   }
+}
+
+export type AdvancePhase =
+  | "AWAITING_CARD"
+  | "CHARGING"
+  | "PAID"
+  | "PAYMENT_FAILED"
+  | "NEEDS_ATTENTION";
+
+export interface AdvanceResult {
+  phase: AdvancePhase;
+  /** A coarse category, never the provider's raw decline string. */
+  declineCategory?: string;
+}
+
+function authHeaders(opts: { authToken?: string | null }) {
+  return {
+    "Content-Type": "application/json",
+    Accept: "application/json",
+    ...(opts.authToken ? { Authorization: `Bearer ${opts.authToken}` } : {}),
+  };
+}
+
+/**
+ * Start payment setup and get where to send the customer.
+ *
+ * The destination comes from the server. Letting the client choose it would be
+ * an open redirect into a page that asks for card details.
+ */
+export async function startPaymentSession(
+  reference: string,
+  opts: { token?: string | null; authToken?: string | null } = {},
+): Promise<{ redirectUrl: string }> {
+  const res = await fetch(`${API_URL}/api/checkout/${encodeURIComponent(reference)}/payment-session`, {
+    method: "POST",
+    headers: authHeaders(opts),
+    body: JSON.stringify(opts.token ? { token: opts.token } : {}),
+  });
+  if (!res.ok) throw new CheckoutUnavailable(res.status);
+  return (await res.json()).data;
+}
+
+/**
+ * Ask the server to re-check and move the checkout forward.
+ *
+ * Sends no outcome, no transaction id and no success flag - only proof of who
+ * is asking. Safe to call repeatedly; that is how the waiting page works.
+ */
+export async function advanceCheckout(
+  reference: string,
+  opts: { token?: string | null; authToken?: string | null; signal?: AbortSignal } = {},
+): Promise<AdvanceResult> {
+  const res = await fetch(`${API_URL}/api/checkout/${encodeURIComponent(reference)}/advance`, {
+    method: "POST",
+    headers: authHeaders(opts),
+    body: JSON.stringify(opts.token ? { token: opts.token } : {}),
+    signal: opts.signal,
+  });
+  if (!res.ok) throw new CheckoutUnavailable(res.status);
+  return (await res.json()).data;
 }

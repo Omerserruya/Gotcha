@@ -22,6 +22,10 @@ const navItems = [
   // are deliberately separate entries because they answer different questions.
   { href: "/system/plans", icon: PricingIcon, label: "Plans & Pricing" },
   { href: "/system/conversation-costs", icon: UsageIcon, label: "Conversation Cost" },
+  // Separate from Plans & Pricing on purpose: that surface decides what a plan
+  // costs, this one decides what a card is actually debited. Burying the second
+  // inside the first would make a 10x mistake easy to make quietly.
+  { href: "/system/exchange-rate", icon: PricingIcon, label: "Exchange Rate" },
 ];
 
 export function SystemLayout({ children }: { children: React.ReactNode }) {

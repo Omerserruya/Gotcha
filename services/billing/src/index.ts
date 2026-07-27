@@ -13,10 +13,12 @@ import creditsRoutes from "./routes/credits";
 import pricingRoutes from "./routes/pricing";
 import publicPricingRoutes from "./routes/public-pricing";
 import adminPricingRoutes from "./routes/admin-pricing";
+import adminExchangeRateRoutes from "./routes/admin-exchange-rates";
 import adminAnalyticsRoutes from "./routes/admin-analytics";
 import invoicesRoutes from "./routes/invoices";
 import webhookRoutes from "./routes/webhooks";
 import checkoutRoutes from "./routes/checkout";
+import checkoutSessionRoutes from "./routes/checkout-session";
 import internalRoutes from "./routes/internal";
 import { runBillingCycle } from "./services/subscription.service";
 import { runDunning } from "./services/dunning.service";
@@ -39,11 +41,13 @@ app.use("/api", pricingRoutes);
 app.use("/api", publicPricingRoutes);
 // Platform (Sysadmin) tier. Never reachable by a tenant ADMIN.
 app.use("/api", adminPricingRoutes);
+app.use("/api", adminExchangeRateRoutes);
 app.use("/api", adminAnalyticsRoutes);
 app.use("/api", invoicesRoutes);
 // Customer-facing checkout status. Read-only: nothing here can complete a
 // checkout, and the opaque reference alone is never authorization.
 app.use("/api", checkoutRoutes);
+app.use("/api", checkoutSessionRoutes);
 app.use("/api", webhookRoutes);
 app.use("/api", internalRoutes);
 

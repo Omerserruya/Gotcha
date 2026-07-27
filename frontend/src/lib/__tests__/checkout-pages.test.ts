@@ -25,19 +25,63 @@ describe("all five routes exist", () => {
 });
 
 describe("a browser can never complete a checkout", () => {
-  it("the client exposes no mutation at all", () => {
-    expect(client).not.toMatch(/method:\s*["'](POST|PUT|PATCH|DELETE)["']/);
-    // "COMPLETED" is a status the client READS; what must not exist is a
-    // function that completes anything.
-    expect(client).not.toMatch(/export (async )?function \w*[Cc]omplete/);
-    expect(client).not.toMatch(/export (async )?function \w*(Pay|Charge|Activate)/);
-    expect(client).toContain("Read-only by construction");
+  it("the client can prompt a re-check but never report an outcome", () => {
+    // Checkout is enabled now, so two calls legitimately mutate: starting a
+    // payment session, and asking the server to look again. The invariant that
+    // matters is narrower than "no mutations" - it is that nothing the browser
+    // sends can DECIDE anything.
+    const bodies = [...client.matchAll(/body:\s*JSON\.stringify\(([^;]*?)\),/g)].map((m) => m[1]);
+    expect(bodies.length).toBeGreaterThan(0);
+    for (const body of bodies) {
+      // Only proof of who is asking may travel in a request body.
+      expect(body, `a request body may carry only authorization, not: ${body}`).toMatch(
+        /^\s*opts\.token \? \{ token: opts\.token \} : \{\}\s*$/,
+      );
+    }
+    // "COMPLETED" is a status the client READS, and starting payment SETUP is
+    // fine - what must not exist is a function that claims the money moved.
+    for (const verb of ["complete", "activate", "confirm", "markPaid", "charge"]) {
+      expect(client, `no client function may ${verb} a checkout`).not.toMatch(
+        new RegExp(`export (async )?function ${verb}\\w*`, "i"),
+      );
+    }
+    expect(client).toContain("never tell it what happened");
   });
 
-  it.each(PAGES)("%s posts nothing", (p) => {
+  it("no mutation sends a status, amount or transaction reference", () => {
+    // Scoped to what is actually SENT. Checking the whole file would match the
+    // response types, which legitimately describe a status the client reads.
+    const sent = [...client.matchAll(/method:\s*"POST"[\s\S]*?\n  \}\);/g)].map((m) => m[0]);
+    expect(sent.length).toBeGreaterThan(0);
+    for (const request of sent) {
+      for (const forbidden of ["paid", "success", "status", "amount", "transactionId", "confirmationCode", "chargeRef"]) {
+        expect(request, `a request must not carry ${forbidden}`).not.toMatch(
+          new RegExp(`${forbidden}\\s*:`, "i"),
+        );
+      }
+    }
+  });
+
+  it.each(PAGES)("%s builds no request of its own", (p) => {
     const page = read(`app/checkout/${p}/page.tsx`);
+    // Pages go through the client, so the rules asserted above apply to them
+    // too rather than being re-implemented per page.
     expect(page).not.toMatch(/fetch\(/);
     expect(page).not.toMatch(/method:\s*["']POST["']/);
+  });
+
+  it("the destination for card entry comes from the server", () => {
+    const page = read("app/checkout/payment-required/page.tsx");
+    // A client-chosen destination would be an open redirect into a page asking
+    // for card details.
+    expect(page).toContain("startPaymentSession");
+    expect(page).toMatch(/window\.location\.assign\(redirectUrl\)/);
+    expect(page).not.toMatch(/window\.open\(/);
+  });
+
+  it("driving the checkout forward asks, it does not assert", () => {
+    expect(shell).toContain("advanceCheckout");
+    expect(shell).toContain("It sends no outcome");
   });
 
   it("the server decides which page you belong on", () => {

@@ -213,13 +213,53 @@ describe("provider events are disabled and store nothing sensitive", () => {
 
 describe("checkout status is customer-safe", () => {
   const route = readFileSync(join(__dirname, "../routes/checkout.ts"), "utf8");
+  // Authorization is shared with the mutating routes so the two cannot drift
+  // apart about who may act on a checkout.
+  const auth = readFileSync(join(__dirname, "../lib/checkout-auth.ts"), "utf8");
+  const session = readFileSync(join(__dirname, "../routes/checkout-session.ts"), "utf8");
 
   it("knowing the reference is not authorization", () => {
-    expect(route).toContain("Knowing the opaque reference is NOT authorization");
+    expect(auth).toContain("knowing the opaque reference is NOT authorization");
     expect(route).toContain("if (!auth.ok) return notFound(res)");
     // Unauthorized and missing produce the SAME response, so a caller cannot
     // probe which references exist.
-    expect(route).toContain("function notFound");
+    expect(auth).toContain("export function checkoutNotFound");
+  });
+
+  it("the mutating routes authorize through the same function", () => {
+    expect(session).toContain("authorizeCheckout");
+    expect(session).toContain("if (!auth.ok)");
+    // Its own copy would be a second set of rules to keep in step.
+    expect(session).not.toMatch(/function authorize\w*\(/);
+  });
+
+  it("no mutating route accepts an outcome from the client", () => {
+    const code = session.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+    // A browser may ask us to look again. It may not tell us what it found.
+    for (const claim of [
+      "req.body.status", "req.body.paid", "req.body.success",
+      "req.body.transactionId", "req.body.confirmation", "req.body.amount",
+      "req.body.token,",
+    ]) {
+      expect(code, `must not read ${claim} from the client`).not.toContain(claim);
+    }
+    expect(code).toContain("advanceCheckout");
+  });
+
+  it("returns a decline category, never the raw provider string", () => {
+    // A provider decline can carry account detail and reads like an error log.
+    expect(session).toContain("declineCategory");
+    expect(session).toContain("function categorize");
+    const shown = session.slice(session.indexOf("function safeAdvance"), session.indexOf("function categorize"));
+    expect(shown).not.toContain("failureCode:");
+  });
+
+  it("generates the payment destination server-side", () => {
+    const code = session.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+    // A client-supplied destination would be an open redirect into a page that
+    // asks for card details.
+    expect(code).not.toMatch(/req\.(body|query)\.(redirect|returnUrl|successUrl|failureUrl)/);
+    expect(code).toContain("startPaymentSetup");
   });
 
   it("exposes no provider or internal identifier", () => {

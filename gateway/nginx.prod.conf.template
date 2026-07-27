@@ -460,6 +460,20 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
+        # ─── The exchange rate money is charged at. Sysadmin only, in-app.
+        #     Separate prefix because this decides what every Israeli customer's
+        #     card is debited, and it should be visible as its own surface in
+        #     the routing table rather than folded into pricing.
+        location /api/admin/billing {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://billing_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
         location /api/admin/analytics {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://billing_service;

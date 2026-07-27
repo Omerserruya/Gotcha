@@ -8,9 +8,10 @@ import {
 
 function Processing() {
   const { t } = useI18n();
-  // Polls while waiting. Returning to this page is NOT proof of payment; the
-  // server decides, and the shell moves us when it does.
-  const { phase, summary } = useCheckout(["PROCESSING", "MANUAL_REVIEW"], { poll: true });
+  // Drives and polls. Returning to this page is NOT proof of payment - `drive`
+  // only asks the server to check with the provider again. The server decides,
+  // and the shell moves us when it does.
+  const { phase, summary } = useCheckout(["PROCESSING", "MANUAL_REVIEW"], { poll: true, drive: true });
 
   if (phase === "unavailable") return <CheckoutUnavailableState />;
 

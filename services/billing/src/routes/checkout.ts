@@ -14,11 +14,14 @@
  *      that they paid - that answer comes from verified server-side processing.
  */
 import { Router } from "express";
-import { prisma, authenticate, resolveTenant } from "@chatcenter/shared";
-import type { Request, Response } from "express";
-import { resolveContinuationLink, markLinkUsed } from "../services/continuation-link.service";
+import { prisma } from "@chatcenter/shared";
 import { checkoutEnabled } from "../providers/capabilities";
 import { getCapabilities } from "../providers";
+import { activeRate, convert } from "../services/exchange-rate.service";
+import { quoteDisplay } from "../services/payment-quote.service";
+// Shared with the mutating session routes, so the two cannot drift apart about
+// who is allowed to act on a checkout.
+import { authorizeCheckout as authorize, checkoutNotFound as notFound, optionalAuth } from "../lib/checkout-auth";
 
 const router = Router();
 
@@ -54,7 +57,11 @@ type SafeStatus =
   | "COMPLETED"
   | "MANUAL_REVIEW";
 
-function safeStatus(checkout: { status: string; expiresAt: Date }, attemptState?: string | null): SafeStatus {
+function safeStatus(
+  checkout: { status: string; expiresAt: Date },
+  attemptState?: string | null,
+  sessionStatus?: string | null,
+): SafeStatus {
   if (checkout.status === "PAID") return "COMPLETED";
   if (checkout.status === "CANCELED") return "EXPIRED";
   if (checkout.status === "EXPIRED" || checkout.expiresAt.getTime() <= Date.now()) return "EXPIRED";
@@ -66,6 +73,17 @@ function safeStatus(checkout: { status: string; expiresAt: Date }, attemptState?
   if (attemptState === "MANUAL_REVIEW") return "MANUAL_REVIEW";
   if (attemptState === "PENDING" && checkout.status === "TOKENIZED") return "PROCESSING";
   if (attemptState === "FAILED") return "PAYMENT_REQUIRED";
+
+  // A payment session is open, so the customer has been sent to the hosted page
+  // and may be on their way back. Without this they would land on the return
+  // URL, be told payment was still required, and reasonably conclude they had
+  // to pay again.
+  if (sessionStatus === "PENDING" || sessionStatus === "AWAITING_RETURN" || sessionStatus === "VERIFIED") {
+    return "PROCESSING";
+  }
+  // An abandoned or expired session is not "processing" - nothing is in
+  // flight, and leaving them watching a spinner forever would be worse than
+  // asking them to start again.
 
   return "AWAITING_PAYMENT_SETUP";
 }
@@ -85,40 +103,57 @@ function nextAction(status: SafeStatus, providerReady: boolean): string {
   }
 }
 
+
 /**
- * Authorize a request for a checkout.
+ * The ILS figures, and whether they are settled or still indicative.
  *
- * The reference alone is never enough. A continuation token is the customer's
- * proof; a session with membership in the bound tenant is a signed-in user's.
+ * Before payment there is no frozen quote yet, so the conversion is shown at
+ * the currently approved rate and marked as such - it is what WILL be used, not
+ * a promise that nothing changes in between. After payment the frozen quote is
+ * authoritative and is shown exactly.
+ *
+ * Returns null when no rate is approved, so the UI can say charging is
+ * unavailable rather than displaying a number it made up.
  */
-async function authorize(req: Request, checkout: { id: string; tenantId: string | null }) {
-  const rawToken = typeof req.query.token === "string" ? req.query.token : null;
-  if (rawToken) {
-    const resolved = await resolveContinuationLink(rawToken);
-    if (resolved.ok && resolved.checkout.id === checkout.id) {
-      await markLinkUsed(resolved.link.id);
-      return { ok: true as const, via: "continuation_link" };
-    }
-    return { ok: false as const };
+async function chargeFigures(checkout: { id: string; snapshotPrice: any; snapshotCurrency: string }) {
+  const settled = await prisma.paymentQuote.findFirst({
+    where: { checkoutId: checkout.id, status: "CONSUMED" },
+    orderBy: { createdAt: "desc" },
+  });
+  if (settled) {
+    const d = quoteDisplay(settled);
+    return {
+      amount: d.chargeAmount,
+      currency: d.chargeCurrency,
+      exchangeRate: d.fxRate,
+      settled: true,
+    };
   }
 
-  const user = (req as any).user;
-  if (!user) return { ok: false as const };
-  if (user.role === "SYSTEM_ADMIN") return { ok: true as const, via: "platform_admin" };
-
-  if (checkout.tenantId && user.userId) {
-    const member = await prisma.user.findFirst({
-      where: { id: user.userId, tenantId: checkout.tenantId },
-      select: { id: true },
+  try {
+    const rate = await activeRate({
+      base: checkout.snapshotCurrency,
+      quote: "ILS",
+      now: new Date(),
     });
-    if (member) return { ok: true as const, via: "tenant_member" };
+    return {
+      amount: convert(checkout.snapshotPrice, rate.rate).toFixed(2),
+      currency: "ILS",
+      exchangeRate: Number(rate.rate).toFixed(4),
+      settled: false,
+    };
+  } catch {
+    // Identity case: an ILS-priced plan needs no conversion.
+    if (String(checkout.snapshotCurrency).toUpperCase() === "ILS") {
+      return {
+        amount: Number(checkout.snapshotPrice).toFixed(2),
+        currency: "ILS",
+        exchangeRate: "1.0000",
+        settled: false,
+      };
+    }
+    return null;
   }
-  return { ok: false as const };
-}
-
-/** Uniform not-found. An unauthorized caller must not learn a reference exists. */
-function notFound(res: Response) {
-  return res.status(404).json({ error: "checkout_not_found" });
 }
 
 /**
@@ -155,8 +190,18 @@ router.get("/checkout/:reference/status", optionalAuth, async (req, res) => {
     select: { name: true },
   });
 
+  const session = await prisma.tokenizationSession.findFirst({
+    where: { checkoutId: checkout.id },
+    orderBy: { createdAt: "desc" },
+    select: { status: true, expiresAt: true },
+  });
+  // Expiry is enforced on read here too: a session past its deadline is not an
+  // open one, whatever its stored status still says.
+  const liveSession = session && session.expiresAt > new Date() ? session.status : null;
+
   const providerReady = checkoutEnabled(getCapabilities("ICOUNT"));
-  const status = safeStatus(checkout, attempt?.state);
+  const status = safeStatus(checkout, attempt?.state, liveSession);
+  const charge = await chargeFigures(checkout);
 
   // Every field here is customer-safe. No token, page id, provider customer id,
   // transaction id, attempt key, internal tenant id or raw provider payload.
@@ -170,30 +215,23 @@ router.get("/checkout/:reference/status", optionalAuth, async (req, res) => {
       includedCredits: checkout.snapshotIncludedCredits,
       amount: String(checkout.amount),
       currency: checkout.currency,
+      // What the card is actually debited. The customer agrees a USD figure and
+      // is charged in shekels, so showing only the USD price would leave them
+      // unable to recognize their own statement.
+      charge,
       billingInterval: "MONTHLY",
       expiresAt: checkout.expiresAt,
       status,
       nextAction: nextAction(status, providerReady),
       // Retry is offered only where retrying cannot double-charge.
       retryEligible: status === "PAYMENT_REQUIRED" || status === "FAILED",
-      paymentSetupAvailable: providerReady,
+      // Both must hold: a provider that can store a card, and an approved rate
+      // to charge at. Offering payment without the second sends someone to a
+      // card form for a charge that would then be refused.
+      paymentSetupAvailable: providerReady && charge !== null,
     },
   });
 });
 
-/**
- * Optional authentication.
- *
- * `authenticate` rejects an anonymous request, but a customer holding a
- * continuation token legitimately has no session. So authentication is
- * attempted and its failure tolerated; `authorize` is what actually decides.
- */
-function optionalAuth(req: Request, res: Response, next: () => void) {
-  if (!req.headers.authorization) return next();
-  authenticate(req as any, res as any, ((err?: unknown) => {
-    if (err) return next();
-    resolveTenant(req as any, res as any, (() => next()) as any);
-  }) as any);
-}
 
 export default router;

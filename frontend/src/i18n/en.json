@@ -4671,7 +4671,10 @@
       "plan": "Plan",
       "recurring": "Recurring",
       "credits": "Included credits",
-      "activationNote": "Your organization becomes fully active once payment is confirmed."
+      "activationNote": "Your organization becomes fully active once payment is confirmed.",
+      "charged": "Charged today",
+      "rateSettled": "Converted at {rate} ILS per USD, the rate applied to this payment.",
+      "rateIndicative": "Your card is charged in shekels, at {rate} ILS per USD."
     },
     "action": {
       "startPayment": "Set up payment",
@@ -4679,7 +4682,8 @@
       "contactSupport": "Contact support",
       "requestNewLink": "Request a new link",
       "continue": "Continue to GOTCHA",
-      "backHome": "Back to homepage"
+      "backHome": "Back to homepage",
+      "retryPayment": "Try a different card"
     },
     "paymentRequired": {
       "eyebrow": "Payment",
@@ -4717,6 +4721,15 @@
       "eyebrow": "Link",
       "title": "We could not open this page",
       "body": "This link may have expired or already been used. Contact your administrator for a new one."
+    },
+    "error": {
+      "paymentSetupFailed": "We could not open the payment page. Please try again in a moment."
+    },
+    "decline": {
+      "CARD_EXPIRED": "That card has expired.",
+      "INSUFFICIENT_FUNDS": "The payment was declined for insufficient funds.",
+      "CARD_UNUSABLE": "That card could not be used.",
+      "DECLINED": "The payment was declined by the card issuer."
     }
   }
 }

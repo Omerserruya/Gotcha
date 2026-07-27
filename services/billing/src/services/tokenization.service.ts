@@ -244,10 +244,23 @@ async function resolveBillingProfile(tenantId: string): Promise<string> {
   });
   if (existing) return existing.id;
 
-  const created = await prisma.billingProfile.create({
-    data: { billableEntityId: link.billableEntityId },
-  });
-  return created.id;
+  try {
+    const created = await prisma.billingProfile.create({
+      data: { billableEntityId: link.billableEntityId },
+    });
+    return created.id;
+  } catch (err: any) {
+    // Concurrent verifications race here - the customer's browser polls, and
+    // several polls can find no profile at the same moment. The unique index on
+    // billableEntityId settles it; the loser reads the winner's row rather than
+    // failing a verification that actually succeeded.
+    if (err?.code !== "P2002") throw err;
+    const raced = await prisma.billingProfile.findFirst({
+      where: { billableEntityId: link.billableEntityId },
+    });
+    if (!raced) throw err;
+    return raced.id;
+  }
 }
 
 async function listCards(query: { clientId?: string | null; customClientId?: string | null }): Promise<StoredCard[]> {

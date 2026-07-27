@@ -17,6 +17,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useI18n } from "@/context/I18nContext";
 import {
+  advanceCheckout,
   getCheckoutStatus,
   pathForStatus,
   type CheckoutSummary,
@@ -25,7 +26,15 @@ import {
 
 type Phase = "loading" | "ready" | "unavailable";
 
-export function useCheckout(expected: CheckoutStatus[], opts: { poll?: boolean } = {}) {
+/**
+ * Load a checkout, and optionally keep asking the server to move it forward.
+ *
+ * `drive` is what turns a customer returning from the payment page into a
+ * completed checkout. It sends no outcome - only a request to re-check - so
+ * this hook cannot make a checkout succeed by claiming it did. Everything it
+ * displays comes back from the server afterwards.
+ */
+export function useCheckout(expected: CheckoutStatus[], opts: { poll?: boolean; drive?: boolean } = {}) {
   const params = useSearchParams();
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>("loading");
@@ -46,6 +55,15 @@ export function useCheckout(expected: CheckoutStatus[], opts: { poll?: boolean }
     const load = async () => {
       try {
         const authToken = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+
+        if (opts.drive) {
+          // Ask the server to look again before reading the status, so the
+          // customer sees the result of this check rather than the one before
+          // it. A failure here is not fatal: the status read below still shows
+          // where things stand.
+          await advanceCheckout(reference, { token, authToken, signal: ac.signal }).catch(() => {});
+        }
+
         const data = await getCheckoutStatus(reference, { token, authToken, signal: ac.signal });
         if (cancelled) return;
         setSummary(data);
@@ -130,6 +148,12 @@ export function CheckoutShell({
 export function CheckoutSummaryCard({ summary }: { summary: CheckoutSummary }) {
   const { t } = useI18n();
   const symbol = summary.currency === "ILS" ? "₪" : "$";
+  const charge = summary.charge;
+  // The plan is priced in dollars and the card is debited in shekels. Showing
+  // only the dollar figure would leave someone unable to recognize the line on
+  // their own statement, and that is exactly the sort of surprise that turns
+  // into a chargeback.
+  const converted = charge && charge.currency !== summary.currency;
 
   return (
     <div className="rounded-2xl border border-gray-200 p-5">
@@ -142,8 +166,22 @@ export function CheckoutSummaryCard({ summary }: { summary: CheckoutSummary }) {
           label={t("checkout.summary.recurring")}
           value={`${symbol}${Number(summary.amount).toLocaleString("en-US")} ${summary.currency}`}
         />
+        {converted && (
+          <Line
+            label={t("checkout.summary.charged")}
+            value={`₪${Number(charge!.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+            strong
+          />
+        )}
         <Line label={t("checkout.summary.credits")} value={summary.includedCredits.toLocaleString()} />
       </dl>
+      {converted && (
+        <p className="mt-3 text-[12.5px] leading-[1.6] text-gray-500">
+          {charge!.settled
+            ? t("checkout.summary.rateSettled").replace("{rate}", charge!.exchangeRate)
+            : t("checkout.summary.rateIndicative").replace("{rate}", charge!.exchangeRate)}
+        </p>
+      )}
       <p className="mt-4 border-t border-gray-100 pt-3 text-[12.5px] leading-[1.6] text-gray-500">
         {t("checkout.summary.activationNote")}
       </p>
