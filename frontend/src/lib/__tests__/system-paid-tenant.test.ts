@@ -79,8 +79,11 @@ describe("the browser never submits or computes a price", () => {
     expect(billingUi).toContain("getProvisionablePlans");
     expect(billingUi).toContain("plan?.chatVolumeEnabled");
     expect(billingUi).toContain("plan?.voiceVolumeEnabled");
-    // No plan name or price literal in the component.
-    expect(billingUi).not.toMatch(/AI Workforce|Foundation|1499|499\b/);
+    // No plan name or price literal in the component. Comments stripped: one
+    // explains the "499" vs "499.00" numeric-compare fix and must not trip the
+    // check it documents.
+    const code = billingUi.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+    expect(code).not.toMatch(/AI Workforce|Foundation|1499|499\b/);
   });
 });
 

@@ -205,8 +205,10 @@ function CommercialSummary({ quote }: { quote: ProvisioningQuote }) {
     <div className="rounded-lg border border-gray-200 bg-white p-3">
       <dl className="space-y-1.5 text-[13px]">
         <Row label="Plan" value={quote.planName} />
-        <Row label="Base price" value={`${fmt(quote.basePrice)} / ${quote.billingInterval.toLowerCase()}`} />
-        {quote.totalAmount !== quote.basePrice && (
+        <Row label="Base price" value={`${fmt(quote.basePrice)} / ${intervalLabel(quote.billingInterval)}`} />
+        {/* Numeric compare: the API returns "499" and "499.00" for the same
+            amount, so a string compare showed a redundant identical row. */}
+        {Number(quote.totalAmount) !== Number(quote.basePrice) && (
           <Row label="With selected volume" value={fmt(quote.totalAmount)} />
         )}
         <Row label="Recurring total" value={`${fmt(quote.totalAmount)} ${quote.currency}`} strong />
@@ -270,6 +272,11 @@ function Row({ label, value, strong }: { label: string; value: string; strong?: 
       <dd className={`tabular-nums ${strong ? "font-semibold text-gray-900" : "text-gray-800"}`}>{value}</dd>
     </div>
   );
+}
+
+/** "MONTHLY" is an enum, not operator copy. */
+function intervalLabel(interval: string): string {
+  return interval === "MONTHLY" ? "month" : interval === "ANNUAL" ? "year" : interval.toLowerCase();
 }
 
 function friendlyQuoteError(code?: string): string {
