@@ -52,6 +52,14 @@ export const AuditAction = {
   TENANT_DELETED: "tenant.deleted",
   TENANT_ACTIVATED: "tenant.activated",
   TENANT_DEACTIVATED: "tenant.deactivated",
+  // ── Paid-tenant provisioning ──
+  PAID_TENANT_PROVISIONING_REQUESTED: "billing.paid_tenant_provisioning_requested",
+  PAID_TENANT_CREATED: "billing.paid_tenant_created",
+  PENDING_CHECKOUT_CREATED: "billing.pending_checkout_created",
+  PAYMENT_CONTINUATION_LINK_CREATED: "billing.payment_continuation_link_created",
+  PAYMENT_CONTINUATION_LINK_REVOKED: "billing.payment_continuation_link_revoked",
+  PAYMENT_CONTINUATION_LINK_RESENT: "billing.payment_continuation_link_resent",
+  PAID_TENANT_PROVISIONING_FAILED: "billing.paid_tenant_provisioning_failed",
   // ── Role changes ──
   ROLE_CHANGED: "user.role_changed",
   ROLE_CREATED: "role.created",

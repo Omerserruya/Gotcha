@@ -2874,11 +2874,58 @@ model PendingCheckout {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  attempts PaymentAttempt[]
+  attempts          PaymentAttempt[]
+  continuationLinks PaymentContinuationLink[]
 
   @@index([tenantId])
   @@index([status, expiresAt])
   @@map("pending_checkouts")
+}
+
+enum ContinuationLinkPurpose {
+  /// Lets a newly provisioned paid tenant finish identity setup and reach the
+  /// payment continuation flow. Grants nothing on its own.
+  PAID_TENANT_ONBOARDING
+}
+
+/// A short-lived, revocable capability to continue a specific checkout.
+///
+/// Only a HASH is stored. The raw token exists for exactly as long as it takes
+/// to put it in one email, and is never persisted, logged or returned again -
+/// so a database dump, a log leak or a stolen backup cannot reconstruct a
+/// working link.
+///
+/// It is bound to one tenant, one checkout and one purpose, so a token that
+/// does leak cannot be aimed at anything else.
+model PaymentContinuationLink {
+  id String @id @default(cuid())
+
+  checkoutId String @map("checkout_id")
+  tenantId   String @map("tenant_id")
+
+  /// SHA-256 of the raw token. Unique so a lookup is a single indexed probe
+  /// with no scan, and so two links can never collide.
+  tokenHash String @unique @map("token_hash")
+
+  purpose ContinuationLinkPurpose @default(PAID_TENANT_ONBOARDING)
+
+  expiresAt DateTime  @map("expires_at")
+  /// Multi-use until expiry: onboarding is several steps across possibly
+  /// several sittings, and a single-use link would strand a customer who
+  /// refreshed. Recorded on FIRST use for audit; revocation and expiry are the
+  /// controls that actually end it.
+  usedAt    DateTime? @map("used_at")
+  revokedAt DateTime? @map("revoked_at")
+
+  createdBy String?  @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  checkout PendingCheckout @relation(fields: [checkoutId], references: [id], onDelete: Cascade)
+
+  @@index([checkoutId])
+  @@index([tenantId])
+  @@index([expiresAt])
+  @@map("payment_continuation_links")
 }
 
 enum PaymentAttemptState {

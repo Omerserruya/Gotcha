@@ -14,6 +14,12 @@ import { runBillingCycle } from "../services/subscription.service";
 import { runDunning } from "../services/dunning.service";
 import { refundCharge } from "../services/refund.service";
 import { setupPoc } from "../services/poc.service";
+import {
+  provisionPaidTenant,
+  resolveAndValidatePlan,
+  ProvisioningRefused,
+} from "../services/paid-provisioning.service";
+import { issueContinuationLink, revokeLinksForCheckout } from "../services/continuation-link.service";
 import { emitBillingEvent } from "../lib/events";
 
 const router = Router();
@@ -129,3 +135,131 @@ router.get("/internal/billing/summary", async (req, res) => {
 });
 
 export default router;
+
+
+// ── Paid-tenant provisioning (called by auth's Sysadmin tenant-creation) ─────
+
+/**
+ * Validate a plan + volume selection WITHOUT creating anything.
+ *
+ * Called before the tenant is created, so a bad selection fails while there is
+ * still nothing to roll back. It also returns the server-computed commercial
+ * summary, which is the only figure the Sysadmin UI is allowed to display.
+ */
+router.post("/internal/billing/validate-paid-plan", async (req, res) => {
+  const { planVersionId, chatVolumeOptionKey, voiceVolumeOptionKey, billingInterval } = req.body ?? {};
+  if (!planVersionId) return res.status(400).json({ error: "planVersionId required" });
+  try {
+    const plan = await resolveAndValidatePlan({
+      planVersionId,
+      chatVolumeOptionKey: chatVolumeOptionKey ?? null,
+      voiceVolumeOptionKey: voiceVolumeOptionKey ?? null,
+      billingInterval,
+    });
+    res.json({ ok: true, planKey: plan.key, planVersion: plan.version, planName: plan.name });
+  } catch (err: any) {
+    const code = err instanceof ProvisioningRefused ? err.code : "validation_failed";
+    res.status(400).json({ error: code, message: err?.message });
+  }
+});
+
+/**
+ * Create the billing scaffolding for an already-created paid tenant.
+ *
+ * Returns the raw continuation token exactly once, for the caller to put in
+ * one email. It is never persisted and never returned again.
+ */
+router.post("/internal/billing/provision-paid-tenant", async (req, res) => {
+  const { tenantId, planVersionId, chatVolumeOptionKey, voiceVolumeOptionKey, billingInterval, commercialNote, actor } =
+    req.body ?? {};
+  if (!tenantId || !planVersionId) {
+    return res.status(400).json({ error: "tenantId and planVersionId required" });
+  }
+  try {
+    const result = await provisionPaidTenant({
+      tenantId,
+      planVersionId,
+      chatVolumeOptionKey: chatVolumeOptionKey ?? null,
+      voiceVolumeOptionKey: voiceVolumeOptionKey ?? null,
+      billingInterval,
+      commercialNote: commercialNote ?? null,
+      actor: actor ?? null,
+      rawRequest: req.body ?? {},
+    });
+    res.json({ ok: true, ...result });
+  } catch (err: any) {
+    const code = err instanceof ProvisioningRefused ? err.code : "provisioning_failed";
+    res.status(400).json({ error: code, message: err?.message });
+  }
+});
+
+/**
+ * Issue a replacement continuation link.
+ *
+ * Reuses the SAME checkout and the SAME payment attempt: a resend is a new
+ * envelope for the existing offer, not a new offer. Issuing revokes the prior
+ * link inside one transaction, so at most one link is ever valid.
+ */
+router.post("/internal/billing/resend-payment-link", async (req, res) => {
+  const { tenantId, actor } = req.body ?? {};
+  if (!tenantId) return res.status(400).json({ error: "tenantId required" });
+
+  const checkout = await prisma.pendingCheckout.findFirst({
+    where: { tenantId, status: { in: ["PENDING", "AWAITING_PROVIDER", "TOKENIZED"] } },
+    orderBy: { createdAt: "desc" },
+  });
+  if (!checkout) return res.status(404).json({ error: "no_resumable_checkout" });
+  if (checkout.expiresAt.getTime() <= Date.now()) {
+    // Deliberately not auto-reissued: a new expiry would be a new commercial
+    // offer, and that is a decision, not a side effect of clicking resend.
+    return res.status(409).json({ error: "checkout_expired" });
+  }
+
+  // Rate limit, DB-backed so it holds across instances. Resend exists to
+  // repair a lost email, not to be a send button.
+  const cooldownSec = Number(process.env.PAYMENT_LINK_RESEND_COOLDOWN_SECONDS || 60);
+  const recent = await prisma.paymentContinuationLink.findFirst({
+    where: { checkoutId: checkout.id },
+    orderBy: { createdAt: "desc" },
+    select: { createdAt: true },
+  });
+  if (recent && Date.now() - recent.createdAt.getTime() < cooldownSec * 1000) {
+    const retryAfter = Math.ceil((cooldownSec * 1000 - (Date.now() - recent.createdAt.getTime())) / 1000);
+    return res.status(429).json({ error: "resend_rate_limited", retryAfterSeconds: retryAfter });
+  }
+
+  const link = await issueContinuationLink({
+    checkoutId: checkout.id,
+    tenantId,
+    createdBy: actor ?? null,
+  });
+
+  res.json({
+    ok: true,
+    checkoutId: checkout.id,
+    checkoutReference: checkout.reference,
+    link,
+    // The snapshot is reused verbatim - a resend never re-prices.
+    summary: {
+      planKey: checkout.planKey,
+      planVersion: checkout.planVersion,
+      amount: String(checkout.amount),
+      currency: checkout.currency,
+      includedCredits: checkout.snapshotIncludedCredits,
+      expiresAt: link.expiresAt,
+    },
+  });
+});
+
+/** Revoke every active link for a tenant's checkout, without reissuing. */
+router.post("/internal/billing/revoke-payment-links", async (req, res) => {
+  const { tenantId } = req.body ?? {};
+  if (!tenantId) return res.status(400).json({ error: "tenantId required" });
+  const checkout = await prisma.pendingCheckout.findFirst({
+    where: { tenantId },
+    orderBy: { createdAt: "desc" },
+  });
+  if (!checkout) return res.status(404).json({ error: "no_checkout" });
+  const revoked = await revokeLinksForCheckout(checkout.id);
+  res.json({ ok: true, revoked });
+});

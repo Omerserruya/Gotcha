@@ -199,8 +199,18 @@ describe("structural safety", () => {
     const checkout = read("services/billing/src/services/checkout.service.ts");
     expect(checkout).not.toMatch(/\btoken\b\s*:/); // no token field on the checkout record
     const schema = read("packages/shared/prisma/schema.prisma");
-    const model = schema.slice(schema.indexOf("model PendingCheckout"), schema.indexOf("enum PaymentAttemptState"));
+    // Slice the PendingCheckout model precisely. Slicing to the next enum used
+    // to work, but PaymentContinuationLink now sits between them and
+    // legitimately says "token" throughout - it stores a HASH of one.
+    const start = schema.indexOf("model PendingCheckout");
+    const model = schema.slice(start, schema.indexOf('@@map("pending_checkouts")', start));
     expect(model).not.toMatch(/\btoken\b/i);
+
+    // And the continuation link stores only a hash, never a raw token.
+    const linkStart = schema.indexOf("model PaymentContinuationLink");
+    const linkModel = schema.slice(linkStart, schema.indexOf('@@map("payment_continuation_links")', linkStart));
+    expect(linkModel).toContain("tokenHash");
+    expect(linkModel).not.toMatch(/^\s*token\s+String/m);
   });
 
   it("15. live charging remains disabled by default", () => {

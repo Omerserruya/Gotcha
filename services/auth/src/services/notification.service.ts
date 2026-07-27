@@ -826,3 +826,141 @@ export async function sendTeamInviteEmail(
   });
   await sendHtmlEmail(email, subject, html, text);
 }
+
+/**
+ * Paid-tenant onboarding email.
+ *
+ * Rendered entirely from the IMMUTABLE commercial snapshot passed in by the
+ * caller. It never reads the live Plan row: if pricing changes between issuing
+ * an offer and the customer opening the email, they must still see the terms
+ * they were actually offered.
+ *
+ * Carries no internal identifier of any kind - no tenant id, checkout id,
+ * attempt id, plan id or provider detail - and no card or token vocabulary. The
+ * only opaque value is the continuation token, which is the whole point of the
+ * link.
+ */
+export function paidOnboardingEmailHtml(a: {
+  adminName: string;
+  tenantName: string;
+  planName: string;
+  amount: string;
+  currency: string;
+  includedCredits: number;
+  continuationUrl: string;
+  expiresAtLabel: string;
+  locale?: string;
+}): string {
+  const he = a.locale === "he";
+  const symbol = a.currency === "ILS" ? "₪" : "$";
+  const price = `${symbol}${Number(a.amount).toLocaleString("en-US")}`;
+  const credits = a.includedCredits.toLocaleString("en-US");
+
+  return renderBrandEmail({
+    locale: a.locale,
+    title: he ? `הגדרת ${escapeHtml(a.tenantName)} - GOTCHA.` : `Set up ${escapeHtml(a.tenantName)} - GOTCHA.`,
+    preheader: he
+      ? "הארגון שלכם נוצר. השלימו הגדרה ותשלום כדי להפעיל את התוכנית."
+      : "Your organization has been created. Complete setup and payment to activate your plan.",
+    eyebrow: he ? "הארגון שלכם נוצר" : "Your organization is ready",
+    icon: "&#9889;",
+    headline: he ? `נגדיר את ${escapeHtml(a.tenantName)}.` : `Let's set up ${escapeHtml(a.tenantName)}.`,
+    subhead: he
+      ? `${escapeHtml(a.adminName)}, הארגון שלכם נוצר. השלימו את ההגדרה והתשלום כדי להפעיל את התוכנית שנבחרה.`
+      : `${escapeHtml(a.adminName)}, your organization has been created. Complete account setup and payment to activate the selected plan.`,
+    bodyHtml: emailSteps(he ? "התוכנית שנבחרה" : "Your selected plan", [
+      { marker: "1", title: escapeHtml(a.planName), desc: he ? `${price} לחודש` : `${price} per month` },
+      { marker: "2", title: he ? `${credits} קרדיטים` : `${credits} credits`, desc: he ? "כלולים בכל חודש" : "included every month" },
+      {
+        marker: "&#10003;",
+        title: he ? "הפעלה לאחר אישור התשלום" : "Activates after payment is confirmed",
+        desc: he
+          ? "אפשר להשלים את הגדרת המשתמש כבר עכשיו."
+          : "You can complete account setup right away.",
+      },
+    ]),
+    cta: { label: he ? "השלמת ההגדרה" : "Complete setup", url: a.continuationUrl },
+    fallbackUrl: a.continuationUrl,
+    expiryNote: he
+      ? `הקישור בתוקף עד <strong style="color:#7C3291;">${escapeHtml(a.expiresAtLabel)}</strong>`
+      : `This link is valid until <strong style="color:#7C3291;">${escapeHtml(a.expiresAtLabel)}</strong>`,
+    footerNote: he
+      ? "קיבלתם את ההודעה הזו כי נוצר עבורכם ארגון ב-gotcha.co.il"
+      : "You're receiving this because your organization was created on gotcha.co.il",
+  });
+}
+
+export async function sendPaidOnboardingEmail(a: {
+  tenantId: string;
+  adminEmail: string;
+  adminName: string;
+  tenantName: string;
+  adminUserId: string;
+  continuationToken: string;
+  linkExpiresAt: Date;
+  planName: string;
+  amount: string;
+  currency: string;
+  includedCredits: number;
+  locale?: string;
+  resend?: boolean;
+}): Promise<void> {
+  const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+  const continuationUrl = `${frontendUrl}/onboarding/paid?token=${encodeURIComponent(a.continuationToken)}`;
+  const he = a.locale === "he";
+  const expiresAtLabel = a.linkExpiresAt.toISOString().slice(0, 16).replace("T", " ");
+
+  const subject = he
+    ? `הגדרת ${a.tenantName} ותשלום - GOTCHA.`
+    : `Set up ${a.tenantName} and complete payment - GOTCHA.`;
+
+  const html = paidOnboardingEmailHtml({ ...a, continuationUrl, expiresAtLabel });
+  const symbol = a.currency === "ILS" ? "₪" : "$";
+  const text = he
+    ? [
+        `שלום ${a.adminName},`, "",
+        `הארגון "${a.tenantName}" נוצר ב-GOTCHA.`, "",
+        `התוכנית שנבחרה: ${a.planName}`,
+        `מחיר: ${symbol}${Number(a.amount).toLocaleString("en-US")} לחודש`,
+        `קרדיטים כלולים: ${a.includedCredits.toLocaleString("en-US")}`, "",
+        "השלימו את ההגדרה והתשלום כדי להפעיל את התוכנית:",
+        continuationUrl, "",
+        `הקישור בתוקף עד ${expiresAtLabel}.`, "",
+        "החשבון יופעל במלואו לאחר אישור התשלום.", "",
+        "צוות GOTCHA.",
+      ].join("\n")
+    : [
+        `Hello ${a.adminName},`, "",
+        `Your organization "${a.tenantName}" has been created on GOTCHA.`, "",
+        `Selected plan: ${a.planName}`,
+        `Price: ${symbol}${Number(a.amount).toLocaleString("en-US")} per month`,
+        `Included credits: ${a.includedCredits.toLocaleString("en-US")}`, "",
+        "Complete account setup and payment to activate the plan:",
+        continuationUrl, "",
+        `This link is valid until ${expiresAtLabel}.`, "",
+        "Your account becomes fully active once payment is confirmed.", "",
+        "The GOTCHA. Team",
+      ].join("\n");
+
+  const payload: NotificationPayload = {
+    tenantId: a.tenantId,
+    channel: "email",
+    type: a.resend ? "paid_onboarding_email_resent" : "paid_onboarding_email",
+    recipient: a.adminEmail,
+    subject,
+    body: text,
+    // The continuation URL carries the raw token, so it is deliberately NOT
+    // recorded in notification metadata.
+    metadata: { planName: a.planName, expiresAt: a.linkExpiresAt.toISOString() },
+  };
+
+  try {
+    await sendHtmlEmail(a.adminEmail, subject, html, text);
+    await logNotification(payload, "sent");
+  } catch (err: any) {
+    // Delivery failure activates nothing. Resend is the repair path.
+    console.error("Failed to send paid onboarding email:", err?.message ?? err);
+    await logNotification(payload, "failed", err.message);
+    throw err;
+  }
+}

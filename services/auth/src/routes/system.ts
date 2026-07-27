@@ -21,7 +21,7 @@ import {
   seedTenantRbac,
 } from "@chatcenter/shared";
 import { eraseTenant } from "../services/gdpr.service";
-import { sendOnboardingEmail } from "../services/notification.service";
+import { sendOnboardingEmail, sendPaidOnboardingEmail} from "../services/notification.service";
 import { scheduleOnboardingNudge, triggerNudgeNow } from "../services/nudge-engine.service";
 import { listOnboardingSnapshots, getOnboardingSnapshot } from "../services/onboarding-state.service";
 import { inviteUser, syncIdentityNameByUser, syncMembershipAccess } from "../services/invitation.service";
@@ -183,18 +183,98 @@ router.get("/tenants/:id", authenticate, requireSystemAdmin(), async (req: Reque
   }
 });
 
+const BILLING_SERVICE_URL = process.env.BILLING_SERVICE_URL || "http://billing:4009";
+
+/** One internal call to the billing service. Never throws; returns a verdict. */
+async function callBilling(
+  path: string,
+  body: Record<string, unknown>,
+): Promise<{ ok: boolean; body: any }> {
+  try {
+    const res = await fetch(`${BILLING_SERVICE_URL}/api/internal/billing/${path}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Internal-Key": process.env.INTERNAL_SERVICE_KEY || "",
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(15_000),
+    });
+    const parsed = await res.json().catch(() => ({}));
+    return { ok: res.ok, body: parsed };
+  } catch (err: any) {
+    // A billing outage must not silently produce a tenant with no billing
+    // state, so this is reported as a failure rather than swallowed.
+    return { ok: false, body: { error: "billing_unreachable", message: err?.message } };
+  }
+}
+
 // ─── Create Tenant ───────────────────────────────────────────
+
+/**
+ * Optional billing provisioning.
+ *
+ * Only NONE and PAID_PLAN are accepted. TRIAL, POC, CUSTOM_PLAN and
+ * MANUAL_CONTRACT each keep their own explicit path with their own rules, and
+ * half-exposing them here would let a caller reach a flow that does not yet
+ * enforce those rules.
+ *
+ * There is deliberately no price, credit or currency field: every commercial
+ * value is recomputed server-side from the option keys, and sending one is a
+ * 400 rather than a silent no-op.
+ */
+const billingSchema = z
+  .object({
+    mode: z.enum(["NONE", "PAID_PLAN"]),
+    planVersionId: z.string().min(1).optional(),
+    chatVolumeOptionKey: z.string().min(1).nullable().optional(),
+    voiceVolumeOptionKey: z.string().min(1).nullable().optional(),
+    billingInterval: z.enum(["MONTHLY", "ANNUAL"]).optional(),
+    paymentRequiredBeforeAccess: z.boolean().optional(),
+    commercialNote: z.string().max(2000).optional(),
+  })
+  // strict() BEFORE refine(): a stray `price` or `credits` is rejected, not
+  // silently ignored, so a caller cannot keep sending one believing it works.
+  .strict()
+  .refine((b) => b.mode !== "PAID_PLAN" || !!b.planVersionId, {
+    message: "planVersionId is required for PAID_PLAN",
+    path: ["planVersionId"],
+  });
 
 const createTenantSchema = z.object({
   name: z.string().min(1).max(100),
   slug: z.string().min(2).max(50).regex(/^[a-z0-9-]+$/, "Slug must be lowercase alphanumeric with hyphens"),
   adminEmail: z.string().email(),
   adminName: z.string().min(1),
+  billing: billingSchema.optional(),
 });
 
 router.post("/tenants", authenticate, requireSystemAdmin(), validate(createTenantSchema), async (req: Request, res: Response): Promise<void> => {
   try {
-    const { name, slug, adminEmail, adminName } = req.body;
+    const { name, slug, adminEmail, adminName, billing } = req.body;
+    const paid = billing?.mode === "PAID_PLAN";
+    const actorId = (req as any).user?.userId as string | undefined;
+
+    // Validate the commercial selection BEFORE anything is created. A bad plan
+    // or volume key must fail while there is still no tenant to roll back.
+    if (paid) {
+      const check = await callBilling("validate-paid-plan", {
+        planVersionId: billing.planVersionId,
+        chatVolumeOptionKey: billing.chatVolumeOptionKey ?? null,
+        voiceVolumeOptionKey: billing.voiceVolumeOptionKey ?? null,
+        billingInterval: billing.billingInterval,
+      });
+      if (!check.ok) {
+        res.status(400).json({ error: "Invalid billing selection", code: check.body?.error });
+        return;
+      }
+      void writeAudit({
+        tenantId: null as any, actorType: "user", actorId,
+        action: AuditAction.PAID_TENANT_PROVISIONING_REQUESTED,
+        targetType: "plan_version", targetId: billing.planVersionId,
+        metadata: { slug, chatVolumeOptionKey: billing.chatVolumeOptionKey ?? null, voiceVolumeOptionKey: billing.voiceVolumeOptionKey ?? null },
+      });
+    }
 
     // Check slug uniqueness
     const existing = await prisma.tenant.findUnique({ where: { slug } });
@@ -224,7 +304,10 @@ router.post("/tenants", authenticate, requireSystemAdmin(), validate(createTenan
 
     const result = await prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.create({
-        data: { name, slug, status: "PENDING_ADMIN_SETUP" },
+        // A paid tenant starts owing money. PENDING_PAYMENT denies the paid
+        // product at the shared access matrix while still permitting identity
+        // onboarding and payment setup.
+        data: { name, slug, status: paid ? "PENDING_PAYMENT" : "PENDING_ADMIN_SETUP" },
       });
 
       const admin = await tx.user.create({
@@ -275,10 +358,88 @@ router.post("/tenants", authenticate, requireSystemAdmin(), validate(createTenan
       },
     });
 
-    // Send onboarding email with magic link (non-blocking)
-    sendOnboardingEmail(result.tenant.id, adminEmail, adminName, name, slug, result.admin.id).catch((err) => {
-      console.error("Failed to send onboarding email:", err);
-    });
+    // Billing scaffolding for a paid tenant. Creates BillableEntity, an
+    // immutable PendingCheckout, a PENDING PaymentAttempt and ONE continuation
+    // link. No subscription, no credits, no entitlements, no provider call.
+    let paidProvisioning: any = null;
+    if (paid) {
+      const prov = await callBilling("provision-paid-tenant", {
+        tenantId: result.tenant.id,
+        planVersionId: billing.planVersionId,
+        chatVolumeOptionKey: billing.chatVolumeOptionKey ?? null,
+        voiceVolumeOptionKey: billing.voiceVolumeOptionKey ?? null,
+        billingInterval: billing.billingInterval,
+        commercialNote: billing.commercialNote ?? null,
+        actor: actorId ?? null,
+      });
+
+      if (!prov.ok) {
+        // The tenant exists but has no billing state. Leaving it PENDING_PAYMENT
+        // with no checkout is the recoverable outcome: it is inert (the access
+        // matrix denies the paid product), a Sysadmin can see it, and resend can
+        // repair it. What must NOT happen is an active tenant, or an onboarding
+        // email carrying a link that goes nowhere.
+        void writeAudit({
+          tenantId: result.tenant.id, actorType: "user", actorId,
+          action: AuditAction.PAID_TENANT_PROVISIONING_FAILED,
+          targetType: "tenant", targetId: result.tenant.id,
+          metadata: { failureCode: prov.body?.error ?? "unknown" },
+        });
+        res.status(502).json({
+          error: "Tenant created but billing provisioning failed",
+          code: prov.body?.error ?? "provisioning_failed",
+          data: { tenant: { id: result.tenant.id, slug, status: "PENDING_PAYMENT" }, recoverable: true },
+        });
+        return;
+      }
+
+      paidProvisioning = prov.body;
+
+      void writeAudit({
+        tenantId: result.tenant.id, actorType: "user", actorId,
+        action: AuditAction.PAID_TENANT_CREATED,
+        targetType: "tenant", targetId: result.tenant.id,
+        metadata: { planKey: paidProvisioning.summary?.planKey, planVersion: paidProvisioning.summary?.planVersion },
+      });
+      void writeAudit({
+        tenantId: result.tenant.id, actorType: "user", actorId,
+        action: AuditAction.PENDING_CHECKOUT_CREATED,
+        targetType: "checkout", targetId: paidProvisioning.checkoutReference,
+        metadata: { amount: paidProvisioning.summary?.amount, currency: paidProvisioning.summary?.currency },
+      });
+      // The link id is audited; the raw token never is.
+      void writeAudit({
+        tenantId: result.tenant.id, actorType: "user", actorId,
+        action: AuditAction.PAYMENT_CONTINUATION_LINK_CREATED,
+        targetType: "continuation_link", targetId: paidProvisioning.link?.id,
+        metadata: { expiresAt: paidProvisioning.link?.expiresAt },
+      });
+    }
+
+    // Send onboarding email with magic link (non-blocking).
+    if (paid && paidProvisioning) {
+      sendPaidOnboardingEmail({
+        tenantId: result.tenant.id,
+        adminEmail,
+        adminName,
+        tenantName: name,
+        adminUserId: result.admin.id,
+        continuationToken: paidProvisioning.link.token,
+        linkExpiresAt: new Date(paidProvisioning.link.expiresAt),
+        // Rendered from the IMMUTABLE snapshot, never the live plan row.
+        planName: paidProvisioning.summary.planName,
+        amount: paidProvisioning.summary.amount,
+        currency: paidProvisioning.summary.currency,
+        includedCredits: paidProvisioning.summary.includedCredits,
+      }).catch((err) => {
+        // Delivery failure must not activate anything. Resend is the repair.
+        console.error("Failed to send paid onboarding email:", err?.message ?? err);
+      });
+    } else {
+      sendOnboardingEmail(result.tenant.id, adminEmail, adminName, name, slug, result.admin.id).catch((err) => {
+        console.error("Failed to send onboarding email:", err);
+      });
+    }
 
     // Arm the onboarding nudge so a tenant that never starts gets a follow-up.
     scheduleOnboardingNudge(result.tenant.id, "1d").catch(() => {});
@@ -287,12 +448,125 @@ router.post("/tenants", authenticate, requireSystemAdmin(), validate(createTenan
       data: {
         tenant: { id: result.tenant.id, name: result.tenant.name, slug: result.tenant.slug, status: result.tenant.status },
         admin: { id: result.admin.id, email: result.admin.email, name: result.admin.name },
+        // Safe summary only. The raw continuation token is never returned by
+        // any API - it exists solely for the one email that carries it.
+        ...(paidProvisioning
+          ? {
+              billing: {
+                mode: "PAID_PLAN",
+                checkoutReference: paidProvisioning.checkoutReference,
+                planName: paidProvisioning.summary.planName,
+                amount: paidProvisioning.summary.amount,
+                currency: paidProvisioning.summary.currency,
+                includedCredits: paidProvisioning.summary.includedCredits,
+                billingInterval: paidProvisioning.summary.billingInterval,
+                linkExpiresAt: paidProvisioning.link.expiresAt,
+                paidAccessGranted: false,
+              },
+            }
+          : {}),
       },
     });
   } catch (err) {
     console.error("Create tenant error:", err);
     res.status(500).json({ error: "Failed to create tenant" });
   }
+});
+
+// ─── Resend Paid Payment / Onboarding Link ──────────────────
+
+/**
+ * Issue a replacement continuation link for a tenant awaiting payment.
+ *
+ * Reuses the SAME checkout and the SAME payment attempt: a resend is a new
+ * envelope for the existing offer, never a new offer, so the customer cannot be
+ * re-priced by an administrator clicking a button. Issuing revokes the previous
+ * link, so at most one is ever valid.
+ */
+router.post("/tenants/:id/resend-payment-link", authenticate, requireSystemAdmin(), async (req: Request, res: Response): Promise<void> => {
+  const tenantId = req.params.id as string;
+  const actorId = (req as any).user?.userId as string | undefined;
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { id: true, name: true, status: true },
+  });
+  if (!tenant) {
+    res.status(404).json({ error: "Tenant not found" });
+    return;
+  }
+  if (tenant.status !== "PENDING_PAYMENT") {
+    res.status(409).json({ error: "Tenant is not awaiting payment", tenantStatus: tenant.status });
+    return;
+  }
+
+  const admin = await prisma.user.findFirst({
+    where: { tenantId, role: "ADMIN" },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, email: true, name: true },
+  });
+  if (!admin) {
+    res.status(409).json({ error: "Tenant has no administrator to send to" });
+    return;
+  }
+
+  const resend = await callBilling("resend-payment-link", { tenantId, actor: actorId ?? null });
+  if (!resend.ok) {
+    res.status(resend.body?.error === "resend_rate_limited" ? 429 : 400).json({
+      error: resend.body?.error ?? "resend_failed",
+      ...(resend.body?.retryAfterSeconds ? { retryAfterSeconds: resend.body.retryAfterSeconds } : {}),
+    });
+    return;
+  }
+
+  const planRow = await prisma.plan.findFirst({
+    where: { key: resend.body.summary.planKey, version: resend.body.summary.planVersion },
+    select: { name: true },
+  });
+
+  try {
+    await sendPaidOnboardingEmail({
+      tenantId,
+      adminEmail: admin.email,
+      adminName: admin.name ?? admin.email,
+      tenantName: tenant.name,
+      adminUserId: admin.id,
+      continuationToken: resend.body.link.token,
+      linkExpiresAt: new Date(resend.body.link.expiresAt),
+      planName: planRow?.name ?? resend.body.summary.planKey,
+      amount: resend.body.summary.amount,
+      currency: resend.body.summary.currency,
+      includedCredits: resend.body.summary.includedCredits,
+      resend: true,
+    });
+  } catch {
+    // The new link exists and the old one is revoked either way; the admin can
+    // try again once the mail transport recovers.
+    res.status(502).json({ error: "link_issued_but_email_failed", recoverable: true });
+    return;
+  }
+
+  void writeAudit({
+    tenantId, actorType: "user", actorId,
+    action: AuditAction.PAYMENT_CONTINUATION_LINK_REVOKED,
+    targetType: "checkout", targetId: resend.body.checkoutReference,
+  });
+  void writeAudit({
+    tenantId, actorType: "user", actorId,
+    action: AuditAction.PAYMENT_CONTINUATION_LINK_RESENT,
+    targetType: "continuation_link", targetId: resend.body.link.id,
+    metadata: { expiresAt: resend.body.link.expiresAt },
+  });
+
+  // Safe response: never the raw token.
+  res.json({
+    data: {
+      resent: true,
+      sentTo: admin.email,
+      linkExpiresAt: resend.body.link.expiresAt,
+      checkoutReference: resend.body.checkoutReference,
+    },
+  });
 });
 
 // ─── Resend Onboarding Link ─────────────────────────────────
