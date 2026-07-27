@@ -16,6 +16,7 @@ import adminPricingRoutes from "./routes/admin-pricing";
 import adminAnalyticsRoutes from "./routes/admin-analytics";
 import invoicesRoutes from "./routes/invoices";
 import webhookRoutes from "./routes/webhooks";
+import checkoutRoutes from "./routes/checkout";
 import internalRoutes from "./routes/internal";
 import { runBillingCycle } from "./services/subscription.service";
 import { runDunning } from "./services/dunning.service";
@@ -40,6 +41,9 @@ app.use("/api", publicPricingRoutes);
 app.use("/api", adminPricingRoutes);
 app.use("/api", adminAnalyticsRoutes);
 app.use("/api", invoicesRoutes);
+// Customer-facing checkout status. Read-only: nothing here can complete a
+// checkout, and the opaque reference alone is never authorization.
+app.use("/api", checkoutRoutes);
 app.use("/api", webhookRoutes);
 app.use("/api", internalRoutes);
 

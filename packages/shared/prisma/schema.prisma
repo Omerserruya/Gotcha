@@ -2882,6 +2882,113 @@ model PendingCheckout {
   @@map("pending_checkouts")
 }
 
+enum ProviderCustomerStatus {
+  ACTIVE
+  /// The provider no longer recognises the mapping; re-resolve before use.
+  STALE
+  REVOKED
+}
+
+/// Durable mapping between a GOTCHA billable entity and a provider customer.
+///
+/// Email is deliberately NOT the join key: two tenants can share a billing
+/// contact, and a provider customer belonging to one tenant must never be
+/// reachable by another. The join is (provider, environment, billableEntityId),
+/// with the provider's own id stored alongside a stable opaque reference we
+/// control.
+model ProviderCustomer {
+  id String @id @default(cuid())
+
+  provider    BillingProvider @default(ICOUNT)
+  /// "mock" | "simulator" | "live". A simulator customer id is meaningless in
+  /// production, so the environment is part of the identity.
+  environment String          @default("mock")
+
+  tenantId         String @map("tenant_id")
+  billableEntityId String @map("billable_entity_id")
+
+  /// The provider's own customer id.
+  providerCustomerId String @map("provider_customer_id")
+
+  /// Stable opaque reference WE generate and send to the provider, so a
+  /// customer can be re-found without relying on their id or on email.
+  externalReference String @unique @map("external_reference")
+
+  status       ProviderCustomerStatus @default(ACTIVE)
+  lastSyncedAt DateTime?              @map("last_synced_at")
+  createdAt    DateTime               @default(now()) @map("created_at")
+  updatedAt    DateTime               @updatedAt @map("updated_at")
+
+  /// One mapping per entity per provider per environment.
+  @@unique([provider, environment, billableEntityId])
+  /// A provider customer id may not be claimed by two entities.
+  @@unique([provider, environment, providerCustomerId])
+  @@index([tenantId])
+  @@map("provider_customers")
+}
+
+enum ProviderEventVerification {
+  UNVERIFIED
+  VERIFIED
+  INVALID
+  UNSUPPORTED
+}
+
+enum ProviderEventProcessing {
+  RECEIVED
+  VERIFIED
+  REJECTED
+  PROCESSING
+  PROCESSED
+  DUPLICATE
+  FAILED
+  MANUAL_REVIEW
+}
+
+/// Provider-neutral inbound event storage.
+///
+/// Deliberately holds NO provider-specific field names: the iCount callback
+/// contract is not verified, and inventing its shape here is exactly the
+/// mistake that produced the fabricated endpoints. The payload is stored
+/// redacted, and the route that writes it stays disabled until the callback
+/// authentication contract is known.
+model ProviderBillingEvent {
+  id String @id @default(cuid())
+
+  provider    BillingProvider @default(ICOUNT)
+  environment String          @default("mock")
+
+  /// The provider's event id when it supplies one. Null is expected until the
+  /// contract is verified, which is why dedup also uses the payload hash.
+  externalEventId String? @map("external_event_id")
+
+  /// SHA-256 of the raw body. Duplicate detection when no event id exists -
+  /// but an identical hash is NOT proof of business-level duplication.
+  payloadHash String @map("payload_hash")
+
+  /// Redacted. Never an Authorization header, card token, PAN or CVV.
+  redactedPayload Json @map("redacted_payload")
+
+  receivedAt   DateTime                  @default(now()) @map("received_at")
+  verification ProviderEventVerification @default(UNVERIFIED)
+  processing   ProviderEventProcessing   @default(RECEIVED)
+
+  checkoutId       String? @map("checkout_id")
+  paymentAttemptId String? @map("payment_attempt_id")
+  duplicateOfId    String? @map("duplicate_of_id")
+
+  failureCode   String?   @map("failure_code")
+  failureReason String?   @map("failure_reason")
+  processedAt   DateTime? @map("processed_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  @@unique([provider, environment, externalEventId])
+  @@index([provider, payloadHash])
+  @@index([processing])
+  @@index([checkoutId])
+  @@map("provider_billing_events")
+}
+
 enum BillingProvisioningState {
   PENDING
   PROCESSING
