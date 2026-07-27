@@ -4665,5 +4665,58 @@
     },
     "volumeHint": "Drag the bar, or use the arrow keys.",
     "alsoIncludes": "Also includes:"
+  },
+  "checkout": {
+    "summary": {
+      "plan": "Plan",
+      "recurring": "Recurring",
+      "credits": "Included credits",
+      "activationNote": "Your organization becomes fully active once payment is confirmed."
+    },
+    "action": {
+      "startPayment": "Set up payment",
+      "tryAgain": "Try again",
+      "contactSupport": "Contact support",
+      "requestNewLink": "Request a new link",
+      "continue": "Continue to GOTCHA",
+      "backHome": "Back to homepage"
+    },
+    "paymentRequired": {
+      "eyebrow": "Payment",
+      "title": "One step left",
+      "body": "Set up payment to activate the plan chosen for your organization.",
+      "unavailable": "Secure payment setup is not available yet. We will be in touch as soon as it is ready, and nothing has been charged."
+    },
+    "processing": {
+      "eyebrow": "Payment",
+      "title": "Confirming your payment",
+      "body": "This usually takes a few moments. You can leave this page open.",
+      "status": "Waiting for confirmation"
+    },
+    "manualReview": {
+      "title": "We are checking one thing",
+      "body": "Your payment needs a quick manual check before your plan activates. Nothing further is required from you.",
+      "status": "Under review by our team"
+    },
+    "failed": {
+      "eyebrow": "Payment",
+      "title": "That payment did not go through",
+      "body": "No charge was made. You can try again, or contact us and we will sort it out with you."
+    },
+    "expired": {
+      "eyebrow": "Link",
+      "title": "This link has expired",
+      "body": "For security, payment links are valid for a limited time. Ask your administrator for a new one, or contact us."
+    },
+    "completed": {
+      "eyebrow": "Confirmed",
+      "title": "Your plan is active",
+      "body": "Payment is confirmed and your organization is ready to use."
+    },
+    "unavailable": {
+      "eyebrow": "Link",
+      "title": "We could not open this page",
+      "body": "This link may have expired or already been used. Contact your administrator for a new one."
+    }
   }
 }
