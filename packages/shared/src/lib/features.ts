@@ -31,6 +31,8 @@ export const FEATURES = {
   CHANNEL_OUTLOOK: "channel_outlook",
   CHANNEL_SLACK: "channel_slack",
   CHANNEL_WEBCHAT: "channel_webchat",
+  SHOPIFY_LIVE_CHAT: "shopify_live_chat",
+  SHOPIFY_PRODUCT_MESSAGING: "shopify_product_messaging",
 
   // ── Messaging — conversation operations ─────────────────────
   CONVERSATION_MANAGEMENT: "conversation_management",
@@ -200,6 +202,8 @@ export const FEATURE_METADATA: Record<Feature, FeatureMetadata> = {
   [FEATURES.CHANNEL_OUTLOOK]: m(FEATURES.CHANNEL_OUTLOOK, "messaging", "Outlook Channel", "Send and receive messages via Outlook.", "all"),
   [FEATURES.CHANNEL_SLACK]: m(FEATURES.CHANNEL_SLACK, "messaging", "Slack Channel", "Send and receive messages via Slack.", "all"),
   [FEATURES.CHANNEL_WEBCHAT]: m(FEATURES.CHANNEL_WEBCHAT, "messaging", "Webchat Channel", "Embedded chat widget on websites.", "all"),
+  [FEATURES.SHOPIFY_LIVE_CHAT]: m(FEATURES.SHOPIFY_LIVE_CHAT, "messaging", "Shopify Live Chat", "Branded live chat installed on a Shopify storefront through a Theme App Extension.", "all"),
+  [FEATURES.SHOPIFY_PRODUCT_MESSAGING]: m(FEATURES.SHOPIFY_PRODUCT_MESSAGING, "commerce", "Shopify Product Messaging", "Send Shopify product cards, carousels and Add to Cart actions inside a conversation.", "all"),
 
   // ── Messaging — conversation operations ─────────────────────
   [FEATURES.CONVERSATION_MANAGEMENT]: m(FEATURES.CONVERSATION_MANAGEMENT, "messaging", "Conversation Management", "View and manage customer conversations.", "all"),

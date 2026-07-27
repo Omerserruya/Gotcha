@@ -125,6 +125,8 @@ export { createServiceApp, startService } from "./lib/service-app";
 export {
   LINK_IDENTIFIER_TOOL,
   ESCALATE_TOOL,
+  SEND_PRODUCT_CARD_TOOL,
+  SEND_PRODUCT_CAROUSEL_TOOL,
   buildAgentTools,
   buildAgentToolsForAIAgent,
   dispatchToolCall,
@@ -137,7 +139,58 @@ export type {
   ToolCallLike,
   ScheduleMeetingArgs,
   ScheduleMeetingResult,
+  SendShopifyProductsArgs,
+  SendShopifyProductsResult,
 } from "./lib/agent-tools";
+
+// Shopify Live Chat — channel config, visitor sessions, product snapshots.
+export {
+  SHOPIFY_LIVE_CHAT_CHANNEL,
+  SHOPIFY_MESSAGE_TYPES,
+  MAX_CAROUSEL_ITEMS,
+  DEFAULT_CAROUSEL_ITEMS,
+  MAX_VISITOR_MESSAGE_CHARS,
+  VISITOR_SESSION_TTL_SECONDS,
+  DEFAULT_SUGGESTED_QUESTIONS,
+  isShopifyCommerceMessageType,
+  normalizeShopDomain,
+  normalizeStorefrontDomain,
+  buildAllowedOrigins,
+  isOriginAllowed,
+  defaultShopifyLiveChatConfig,
+  normalizeShopifyLiveChatConfig,
+  readShopifyLiveChatConfig,
+  sanitizeToken,
+  sanitizeAssetUrl,
+  sanitizeProductImageUrl,
+  buildProductUrl,
+  buildProductSnapshot,
+  resolveAvailability,
+  signVisitorSession,
+  verifyVisitorSession,
+  newVisitorId,
+  normalizeStorefrontContext,
+  isRenderableCommercePayload,
+} from "./lib/shopify-live-chat";
+export type {
+  ShopifyMessageType,
+  ShopifyLiveChatConfig,
+  ShopifyLiveChatAppearance,
+  ShopifyLiveChatWelcome,
+  ShopifyLiveChatHours,
+  ShopifyLiveChatRouting,
+  ShopifyLiveChatCommerce,
+  ShopifyLiveChatPrivacy,
+  ShopifyLiveChatInstall,
+  Availability,
+  VisitorSessionPayload,
+  StorefrontContext,
+  StorefrontPageType,
+  ProductSnapshot,
+  ProductVariantSnapshot,
+  ShopifyCommerceMessagePayload,
+  BuildProductSnapshotInput,
+} from "./lib/shopify-live-chat";
 
 // Secrets
 export { getSecret, requireSecret, setSecretProvider, resetSecretProvider } from "./secrets";

@@ -76,6 +76,14 @@ export interface AgentToolContext {
     body: string;
     priority?: "low" | "normal" | "high" | "urgent";
   }) => Promise<{ ok: true; result: unknown } | { ok: false; reason: string }>;
+  /**
+   * Shopify product card / carousel handler. Wired by the AI service from
+   * its catalog + commerce-message services, so this file stays free of
+   * Shopify specifics. Present only on Shopify Live Chat conversations
+   * where product messaging is allowed; when absent the tools are not
+   * surfaced and a stray call degrades to a clear refusal.
+   */
+  sendShopifyProducts?: (args: SendShopifyProductsArgs) => Promise<SendShopifyProductsResult>;
 }
 
 export interface ScheduleMeetingArgs {
@@ -498,6 +506,97 @@ export const ESCALATE_TOOL = {
   },
 };
 
+/**
+ * Shopify Live Chat product messaging.
+ *
+ * Two tools rather than one because the model's *intent* differs: "here
+ * is the one I recommend" and "here are a few to compare" are different
+ * answers, and collapsing them into a count parameter reliably produced
+ * one-item carousels. Both accept references only — the server re-reads
+ * title, price, image and stock from Shopify, so the model cannot invent
+ * a product or quote a stale price even if it tries.
+ */
+export const SEND_PRODUCT_CARD_TOOL = {
+  type: "function" as const,
+  function: {
+    name: "send_product_card",
+    description:
+      "Show the customer ONE specific product as a rich card with its live price, image, availability and an Add to Cart button. " +
+      "Use after you have identified the single best product for them. " +
+      "Write your normal reply text as usual — the card is sent alongside it, so do NOT paste the product URL or price into your message.",
+    parameters: {
+      type: "object",
+      properties: {
+        product_id: {
+          type: "string",
+          description: "Shopify product id, from a product search or lookup. Preferred.",
+        },
+        handle: {
+          type: "string",
+          description: "Shopify product handle, if you have that instead of an id.",
+        },
+        variant_id: {
+          type: "string",
+          description:
+            "Specific variant id, ONLY when the customer already chose their size/colour. Leave empty otherwise so they can pick.",
+        },
+        reason: {
+          type: "string",
+          description:
+            "One short sentence on why this product fits this customer. Shown on the card.",
+        },
+      },
+    },
+  },
+};
+
+export const SEND_PRODUCT_CAROUSEL_TOOL = {
+  type: "function" as const,
+  function: {
+    name: "send_product_carousel",
+    description:
+      "Show the customer a small set of products side by side, each with live price, image and availability. " +
+      "Use when several products genuinely fit and the customer should choose. " +
+      "Prefer 3 items; never send more than 5. Do not use this to list your whole catalogue.",
+    parameters: {
+      type: "object",
+      properties: {
+        products: {
+          type: "array",
+          description: "The products to show, best first.",
+          items: {
+            type: "object",
+            properties: {
+              product_id: { type: "string", description: "Shopify product id. Preferred." },
+              handle: { type: "string", description: "Shopify product handle." },
+              variant_id: { type: "string", description: "Variant id, only if already chosen." },
+              reason: { type: "string", description: "One short sentence on why this one fits." },
+            },
+          },
+        },
+      },
+      required: ["products"],
+    },
+  },
+};
+
+export interface SendShopifyProductsArgs {
+  products: Array<{
+    productId?: string | null;
+    handle?: string | null;
+    variantId?: string | null;
+    reason?: string | null;
+  }>;
+}
+
+export type SendShopifyProductsResult =
+  | {
+      ok: true;
+      /** Titles the model may safely refer to — resolved from Shopify. */
+      products: Array<{ title: string; price: string | null; currency: string; available: boolean }>;
+    }
+  | { ok: false; reason: string };
+
 export interface BuildAgentToolsOptions {
   identityLinking?: boolean;
   escalation?: boolean;
@@ -512,6 +611,13 @@ export interface BuildAgentToolsOptions {
    * causes the model to confidently propose times it can't actually book.
    */
   scheduleMeeting?: boolean;
+  /**
+   * Shopify product card / carousel tools. Default OFF — only enable on a
+   * Shopify Live Chat conversation whose channel and plan both allow
+   * product messaging. Surfacing them elsewhere would let the model
+   * promise a card the channel cannot render.
+   */
+  shopifyProducts?: boolean;
   /** Extra tenant-defined function schemas to append. */
   extra?: Array<Record<string, unknown>>;
   /**
@@ -536,6 +642,10 @@ export function buildAgentTools(opts: BuildAgentToolsOptions = {}): Array<Record
   // as an integration tool (AgentToolPermission), not auto-included here.
   // The schema + dispatcher are kept so a connected CRM can expose it.
   if (opts.scheduleMeeting === true) tools.push(SCHEDULE_MEETING_TOOL as any);
+  if (opts.shopifyProducts === true) {
+    tools.push(SEND_PRODUCT_CARD_TOOL as any);
+    tools.push(SEND_PRODUCT_CAROUSEL_TOOL as any);
+  }
   if (opts.extra?.length) tools.push(...opts.extra);
   return tools;
 }
@@ -963,6 +1073,56 @@ export async function dispatchToolCall(
     }
   }
 
+  if (name === "send_product_card" || name === "send_product_carousel") {
+    if (!ctx.sendShopifyProducts) {
+      return {
+        toolCallId: toolCall.id,
+        content: JSON.stringify({
+          ok: false,
+          reason: "product_cards_not_available_on_this_channel",
+          instruction:
+            "You cannot show a product card here. Describe the product in plain text instead, and never invent a price or stock level.",
+        }),
+      };
+    }
+    const refs =
+      name === "send_product_card"
+        ? [
+            {
+              productId: str(args.product_id),
+              handle: str(args.handle),
+              variantId: str(args.variant_id),
+              reason: str(args.reason),
+            },
+          ]
+        : (Array.isArray(args.products) ? args.products : []).map((p: any) => ({
+            productId: str(p?.product_id),
+            handle: str(p?.handle),
+            variantId: str(p?.variant_id),
+            reason: str(p?.reason),
+          }));
+    if (!refs.length || refs.every((r) => !r.productId && !r.handle)) {
+      return {
+        toolCallId: toolCall.id,
+        content: JSON.stringify({
+          ok: false,
+          reason: "no_product_reference",
+          instruction:
+            "Search the catalogue first and pass the product id you found. Never guess an id.",
+        }),
+      };
+    }
+    try {
+      const result = await ctx.sendShopifyProducts({ products: refs });
+      return { toolCallId: toolCall.id, content: JSON.stringify(result) };
+    } catch (err: any) {
+      return {
+        toolCallId: toolCall.id,
+        content: JSON.stringify({ ok: false, reason: err?.message || "send_products_failed" }),
+      };
+    }
+  }
+
   if (name === "close_conversation") {
     if (!ctx.conversationId) {
       return {
@@ -1367,6 +1527,14 @@ function parseISO8601Duration(input: string): number | null {
  * raw (tool, params); this is just the "one-sentence first line"
  * fallback for lists and notifications.
  */
+/** Model-supplied scalar → trimmed string or null. */
+function str(raw: unknown): string | null {
+  if (typeof raw === "number") return String(raw);
+  if (typeof raw !== "string") return null;
+  const v = raw.trim();
+  return v ? v.slice(0, 200) : null;
+}
+
 function summarizeToolCall(name: string, args: Record<string, unknown>): string {
   const preview = Object.entries(args)
     .filter(([, v]) => v !== undefined && v !== null && v !== "")

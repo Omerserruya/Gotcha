@@ -32,7 +32,7 @@ export const flowResumeQueue = new Queue("flow-resume", { connection: { url: RED
 
 export interface IncomingMessageJob {
   tenantId: string;
-  channel: "WHATSAPP" | "MESSENGER" | "INSTAGRAM" | "EMAIL" | "GMAIL" | "OUTLOOK" | "SLACK" | "WEBCHAT";
+  channel: "WHATSAPP" | "MESSENGER" | "INSTAGRAM" | "EMAIL" | "GMAIL" | "OUTLOOK" | "SLACK" | "WEBCHAT" | "SHOPIFY_LIVE_CHAT";
   channelAccountId: string;
   normalizedMessage: {
     externalMessageId: string;
@@ -49,6 +49,13 @@ export interface IncomingMessageJob {
     };
     mediaUrl?: string;
     fileName?: string;
+    /**
+     * Extra, already-sanitized context to persist on the created Message
+     * row's `metadata`. Producers must put only safe, structured values
+     * here — the worker copies it verbatim. Used by Shopify Live Chat to
+     * carry the storefront page context the visitor asked from.
+     */
+    metadata?: Record<string, unknown>;
   };
 }
 

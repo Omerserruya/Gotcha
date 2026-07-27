@@ -189,11 +189,16 @@ const TOOLS: ToolDefinition[] = [
     "Take a customer out of a segment. Implemented via customer tags.",
     { ...P.customerSel, segment: { type: "string" } }, ["segment"]),
 
+  // ── Shop ──
+  t("get_shop", "READ", "LOW", "Get the store's name, primary domain and currency.",
+    "You need the shop's currency or canonical storefront domain (e.g. to build a product link or price a card).", {}),
+
   // ── Products ──
   t("get_product", "READ", "LOW", "Get a product by id or handle.",
     "Customer asks about a specific product.", { product_id: { type: "string" }, handle: { type: "string" } }),
-  t("search_products", "READ", "LOW", "Search products by title fragment.",
-    "Customer asks 'do you sell X?'.", { query: { type: "string" }, limit: { type: "number" } }, ["query"]),
+  t("search_products", "READ", "LOW", "Search products by title, vendor, product type, tag or SKU.",
+    "Customer asks 'do you sell X?' or you need candidates to recommend.",
+    { query: { type: "string" }, limit: { type: "number" }, status: { type: "string", enum: ["active", "any"], description: "Default 'active' — only products a shopper can actually buy." } }, ["query"]),
   t("inventory_status", "READ", "LOW", "Check stock for a product or variant.",
     "Customer asks 'is X in stock?'.", { product_id: { type: "string" }, variant_id: { type: "string" } }),
   t("variant_information", "READ", "LOW", "Get variant details (price, SKU, options, inventory).",
@@ -554,11 +559,46 @@ const ShopifyAdapter: ProviderAdapter = {
       }
       case "search_products": {
         const limit = clampLimit(args.limit, 20, 250);
+        const q = String(args.query || "").trim();
+        const activeOnly = String(args.status || "active") !== "any";
+        // GraphQL first: REST /products.json cannot search — it pages the
+        // whole catalog and we filter client-side, which silently misses
+        // anything past the first page. Shopify's `products(query:)` does a
+        // real full-text search over title/vendor/type/tag/sku. REST stays
+        // as the fallback so a store without GraphQL access still works.
+        try {
+          const data = await shopifyGraphQL(ctx, PRODUCT_SEARCH_QUERY, {
+            q: activeOnly ? `${q} status:active` : q,
+            n: Math.min(limit, 50),
+          });
+          const nodes = data?.products?.nodes;
+          if (Array.isArray(nodes)) return nodes.map(mapGraphQLProduct);
+        } catch (err: any) {
+          console.warn("[shopify] GraphQL product search unavailable, falling back to REST:", err?.message);
+        }
         const r: any = await sreq(ctx, "GET", `/products.json?limit=${limit}`);
-        const q = String(args.query || "").toLowerCase();
+        const lower = q.toLowerCase();
         const products = (r.products || []).filter((p: any) =>
-          !q || String(p.title || "").toLowerCase().includes(q) || String(p.handle || "").toLowerCase().includes(q));
+          (!activeOnly || String(p.status || "active").toLowerCase() === "active")
+          && (!lower
+            || String(p.title || "").toLowerCase().includes(lower)
+            || String(p.handle || "").toLowerCase().includes(lower)
+            || String(p.vendor || "").toLowerCase().includes(lower)
+            || String(p.product_type || "").toLowerCase().includes(lower)
+            || String(p.tags || "").toLowerCase().includes(lower)));
         return products.slice(0, limit);
+      }
+      case "get_shop": {
+        const r: any = await sreq(ctx, "GET", `/shop.json`);
+        const s = r.shop || {};
+        return {
+          name: s.name ?? null,
+          currency: s.currency ?? s.money_format ?? null,
+          myshopify_domain: s.myshopify_domain ?? shop,
+          primary_domain: s.domain ?? null,
+          iana_timezone: s.iana_timezone ?? null,
+          country_code: s.country_code ?? null,
+        };
       }
       case "inventory_status": {
         if (args.variant_id) {
@@ -830,6 +870,80 @@ const RETURNS_QUERY = `
       }
     }
   }`;
+
+// Product search. Field set is deliberately conservative — every field
+// here exists in 2024-04, because GraphQL fails the WHOLE query on one
+// unknown field and the fallback would then be the only path that ever runs.
+const PRODUCT_SEARCH_QUERY = `
+  query ProductSearch($q: String!, $n: Int!) {
+    products(first: $n, query: $q) {
+      nodes {
+        legacyResourceId
+        title
+        handle
+        status
+        vendor
+        productType
+        featuredImage { url }
+        images(first: 5) { nodes { url } }
+        options { name }
+        variants(first: 50) {
+          nodes {
+            legacyResourceId
+            title
+            sku
+            price
+            compareAtPrice
+            availableForSale
+            inventoryQuantity
+            inventoryPolicy
+            selectedOptions { name value }
+          }
+        }
+      }
+    }
+  }`;
+
+/**
+ * Map a GraphQL product onto the REST-ish shape the rest of the tool
+ * surface already speaks, so callers (and the LLM) see one contract
+ * regardless of which transport answered.
+ *
+ * `available` is carried through explicitly: `availableForSale` is
+ * Shopify's own verdict and strictly better than re-deriving stock from
+ * the inventory triplet.
+ */
+function mapGraphQLProduct(p: any): any {
+  const variants = (p?.variants?.nodes || []).map((v: any) => {
+    const opts: string[] = (v?.selectedOptions || []).map((o: any) => o?.value).filter(Boolean);
+    return {
+      id: v?.legacyResourceId ?? null,
+      title: v?.title ?? null,
+      sku: v?.sku ?? null,
+      price: v?.price ?? null,
+      compare_at_price: v?.compareAtPrice ?? null,
+      available: v?.availableForSale === true,
+      inventory_quantity: v?.inventoryQuantity ?? null,
+      inventory_policy: String(v?.inventoryPolicy ?? "").toLowerCase() || null,
+      option1: opts[0] ?? null,
+      option2: opts[1] ?? null,
+      option3: opts[2] ?? null,
+    };
+  });
+  const images = (p?.images?.nodes || []).map((i: any) => ({ src: i?.url })).filter((i: any) => i.src);
+  return {
+    id: p?.legacyResourceId ?? null,
+    title: p?.title ?? null,
+    handle: p?.handle ?? null,
+    status: String(p?.status ?? "ACTIVE").toLowerCase(),
+    vendor: p?.vendor ?? null,
+    product_type: p?.productType ?? null,
+    image: p?.featuredImage?.url ? { src: p.featuredImage.url } : images[0] ?? null,
+    images,
+    options: (p?.options || []).map((o: any) => ({ name: o?.name })).filter((o: any) => o.name),
+    variants,
+  };
+}
 
 /** Normalize the GraphQL returns connection into a flat, LLM-friendly shape. */
 function mapReturns(nodes: any[] | undefined): any[] {
