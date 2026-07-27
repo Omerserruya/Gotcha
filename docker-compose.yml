@@ -255,6 +255,12 @@ services:
         BUILD_SHA: ${BUILD_SHA:-dev}
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/whatsapp_cc}
+      # Paid-access gate - see the `ai` service for the full note. Present here
+      # because this service can produce billable work on its own, and a service
+      # without this variable defaults to "off", which is a bypass path.
+      BILLING_ENFORCEMENT_MODE: ${BILLING_ENFORCEMENT_MODE:-enforce}
+      BILLING_PAST_DUE_GRACE_HOURS: ${BILLING_PAST_DUE_GRACE_HOURS:-72}
+      BILLING_ALLOW_UNENFORCED: ${BILLING_ALLOW_UNENFORCED:-}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: ${NODE_ENV:-development}
       PORT: ${CONVERSATION_PORT:-4002}
@@ -335,6 +341,12 @@ services:
       dockerfile: services/chatbot/Dockerfile
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/whatsapp_cc}
+      # Paid-access gate - see the `ai` service for the full note. Present here
+      # because this service can produce billable work on its own, and a service
+      # without this variable defaults to "off", which is a bypass path.
+      BILLING_ENFORCEMENT_MODE: ${BILLING_ENFORCEMENT_MODE:-enforce}
+      BILLING_PAST_DUE_GRACE_HOURS: ${BILLING_PAST_DUE_GRACE_HOURS:-72}
+      BILLING_ALLOW_UNENFORCED: ${BILLING_ALLOW_UNENFORCED:-}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: ${NODE_ENV:-development}
       PORT: ${CHATBOT_PORT:-4005}
@@ -367,11 +379,21 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
       OPENAI_DEFAULT_MODEL: ${OPENAI_DEFAULT_MODEL:-gpt-5-mini}
-      # ── AI-Unit billing gate: off|observe|soft|hard. Default HARD: credits are
-      # enforced for every subscription with enforcementEnabled (POCs, trials,
-      # paid). Tenants with NO subscription still fail open (dev tenants keep
-      # working); grandfathered subs skip the gate by design. ──
-      BILLING_ENFORCEMENT_MODE: ${BILLING_ENFORCEMENT_MODE:-hard}
+      # ── Paid-access gate: off|audit|enforce (hard/soft/observe still accepted).
+      # Checks BOTH halves of the question - is the organization commercially in
+      # good standing, AND does their plan include the capability being used.
+      # A tenant with NO subscription is now DENIED, not allowed: that was the
+      # hole through which unpaid organizations kept being served. Grandfathered
+      # subscriptions skip the gate by design, recorded on the row.
+      # Production runs `enforce`; services refuse to boot on a missing or
+      # misspelt value, because both would silently mean "nobody has to pay". ──
+      BILLING_ENFORCEMENT_MODE: ${BILLING_ENFORCEMENT_MODE:-enforce}
+      # Hours a failed renewal keeps working, so an expired card is not treated
+      # as harshly as never paying.
+      BILLING_PAST_DUE_GRACE_HOURS: ${BILLING_PAST_DUE_GRACE_HOURS:-72}
+      # Only meaningful with mode=off in production: an explicit acknowledgement
+      # that the deployment is deliberately running unenforced.
+      BILLING_ALLOW_UNENFORCED: ${BILLING_ALLOW_UNENFORCED:-}
       BILLING_SERVICE_URL: ${BILLING_SERVICE_URL:-http://billing:4009}
       # Set OPENAI_LOG=debug to log the FULL outbound OpenAI request (system
       # prompt + messages + tool schemas) and response to stdout. Off by default.
@@ -484,10 +506,25 @@ services:
       # Where a customer returns after the hosted payment page. Without it the
       # return URLs are omitted and they land wherever the provider defaults to.
       APP_PUBLIC_URL: ${APP_PUBLIC_URL:-}
-      # Read here only to REPORT enforcement in the Sysadmin preview. It must
-      # match what the ai service uses, or the preview describes a different
-      # system than the one refusing customers.
-      BILLING_ENFORCEMENT_MODE: ${BILLING_ENFORCEMENT_MODE:-hard}
+      # Read here to REPORT enforcement in the Sysadmin preview and the
+      # enforcement impact report. Both the mode AND the grace period must match
+      # what the other services use, or the report describes a different system
+      # than the one refusing customers - which is worse than no report, because
+      # someone would act on it.
+      BILLING_ENFORCEMENT_MODE: ${BILLING_ENFORCEMENT_MODE:-enforce}
+      BILLING_PAST_DUE_GRACE_HOURS: ${BILLING_PAST_DUE_GRACE_HOURS:-72}
+      BILLING_ALLOW_UNENFORCED: ${BILLING_ALLOW_UNENFORCED:-}
+      # ── Payment capability switches. Separate from ICOUNT_MODE: that decides
+      # whether the provider can be reached, these decide whether the capability
+      # is part of the product yet. All default OFF, because a payment
+      # capability that switches itself on takes someone's money somewhere
+      # nobody meant it to. ──
+      ICOUNT_CHECKOUT_ENABLED: ${ICOUNT_CHECKOUT_ENABLED:-false}
+      ICOUNT_TOKENIZATION_ENABLED: ${ICOUNT_TOKENIZATION_ENABLED:-false}
+      ICOUNT_STORED_CARD_CHARGE_ENABLED: ${ICOUNT_STORED_CARD_CHARGE_ENABLED:-false}
+      # Whether a customer may open their own checkout. Off: every checkout is
+      # opened by a human through Sysadmin paid provisioning.
+      SELF_SERVE_CHECKOUT_ENABLED: ${SELF_SERVE_CHECKOUT_ENABLED:-false}
       # Required to charge live, alongside NODE_ENV=production. Declared so it
       # can be set through the normal path rather than by editing compose.
       ICOUNT_ALLOW_LIVE: ${ICOUNT_ALLOW_LIVE:-}
@@ -555,6 +592,12 @@ services:
       OIDC_JWKS_URI: ${OIDC_JWKS_URI}
       OAUTH_STATE_SECRET: ${OAUTH_STATE_SECRET}
       DATABASE_URL: ${DATABASE_URL}
+      # Paid-access gate - see the `ai` service for the full note. Present here
+      # because this service can produce billable work on its own, and a service
+      # without this variable defaults to "off", which is a bypass path.
+      BILLING_ENFORCEMENT_MODE: ${BILLING_ENFORCEMENT_MODE:-enforce}
+      BILLING_PAST_DUE_GRACE_HOURS: ${BILLING_PAST_DUE_GRACE_HOURS:-72}
+      BILLING_ALLOW_UNENFORCED: ${BILLING_ALLOW_UNENFORCED:-}
     depends_on:
       redis:
         condition: service_healthy
@@ -572,6 +615,12 @@ services:
       dockerfile: services/incoming-worker/Dockerfile
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/whatsapp_cc}
+      # Paid-access gate - see the `ai` service for the full note. Present here
+      # because this service can produce billable work on its own, and a service
+      # without this variable defaults to "off", which is a bypass path.
+      BILLING_ENFORCEMENT_MODE: ${BILLING_ENFORCEMENT_MODE:-enforce}
+      BILLING_PAST_DUE_GRACE_HOURS: ${BILLING_PAST_DUE_GRACE_HOURS:-72}
+      BILLING_ALLOW_UNENFORCED: ${BILLING_ALLOW_UNENFORCED:-}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: ${NODE_ENV:-development}
       WHATSAPP_API_URL: ${WHATSAPP_API_URL:-https://graph.facebook.com/v19.0}
@@ -607,6 +656,12 @@ services:
       dockerfile: services/outgoing-worker/Dockerfile
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/whatsapp_cc}
+      # Paid-access gate - see the `ai` service for the full note. Present here
+      # because this service can produce billable work on its own, and a service
+      # without this variable defaults to "off", which is a bypass path.
+      BILLING_ENFORCEMENT_MODE: ${BILLING_ENFORCEMENT_MODE:-enforce}
+      BILLING_PAST_DUE_GRACE_HOURS: ${BILLING_PAST_DUE_GRACE_HOURS:-72}
+      BILLING_ALLOW_UNENFORCED: ${BILLING_ALLOW_UNENFORCED:-}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: ${NODE_ENV:-development}
       WHATSAPP_API_URL: ${WHATSAPP_API_URL:-https://graph.facebook.com/v19.0}

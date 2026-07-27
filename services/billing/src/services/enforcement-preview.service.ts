@@ -12,16 +12,30 @@
  *
  * Read-only. It changes nothing and never calls the provider.
  */
-import { prisma, getBalance } from "@chatcenter/shared";
+import { prisma, getBalance, checkPaidAccess } from "@chatcenter/shared";
 
 /** A conversation inside this window means the tenant is genuinely live. */
 const ACTIVITY_WINDOW_DAYS = 7;
 
+/**
+ * Every reason the gate can give, in this module's vocabulary.
+ *
+ * `units_exhausted` is kept as the local spelling of the gate's
+ * `credits_exhausted`, because it is what the Sysadmin surface and its readers
+ * already say.
+ */
 export type BlockReason =
   | "payment_required"
   | "tenant_suspended"
+  | "no_subscription"
+  | "subscription_pending"
   | "subscription_suspended"
   | "subscription_canceled"
+  | "subscription_paused"
+  | "trial_expired"
+  | "poc_expired"
+  | "past_due_grace_expired"
+  | "feature_not_in_plan"
   | "units_exhausted";
 
 export interface AffectedTenant {
@@ -48,9 +62,16 @@ export interface EnforcementPreview {
 /**
  * Everyone the runtime would refuse.
  *
- * Deliberately mirrors `checkAiAllowed`'s ordering rather than re-deriving it:
- * tenant state first, then subscription, then balance. A preview that disagrees
- * with the gate is worse than no preview, because it will be trusted.
+ * Asks the gate itself, once per tenant, under an assumed `enforce`. It used to
+ * mirror the gate's ordering by hand, with a comment explaining that a preview
+ * which disagrees with the gate is worse than no preview - and then the gate
+ * grew stricter and the mirror did not follow it. The preview quietly began
+ * understating who would be cut off, which is the exact way this report gets
+ * someone into trouble: it is read once, believed, and acted on.
+ *
+ * Calling the real thing means it cannot drift again.
+ *
+ * Read-only. It changes nothing and never calls the provider.
  */
 export async function previewEnforcement(now: Date = new Date()): Promise<EnforcementPreview> {
   const mode = (process.env.BILLING_ENFORCEMENT_MODE || "off").toLowerCase();
@@ -64,27 +85,19 @@ export async function previewEnforcement(now: Date = new Date()): Promise<Enforc
   const affected: AffectedTenant[] = [];
 
   for (const tenant of tenants) {
+    // The one source of the answer. `assumeMode` makes it report what WOULD
+    // happen under enforcement while enforcement is still off, which is the
+    // whole point of a forecast.
+    const decision = await checkPaidAccess({ tenantId: tenant.id, assumeMode: "enforce", now });
+    if (!decision.wouldDeny) continue;
+
+    const reason: BlockReason =
+      decision.reason === "credits_exhausted" ? "units_exhausted" : (decision.reason as BlockReason);
+
     const link = await prisma.billableEntityTenant.findUnique({
       where: { tenantId: tenant.id },
       include: { entity: { include: { subscription: true } } },
     });
-    const sub = link?.entity.subscription ?? null;
-
-    let reason: BlockReason | null = null;
-
-    // Tenant state first, exactly as the gate evaluates it.
-    if (tenant.status === "PENDING_PAYMENT") reason = "payment_required";
-    else if (tenant.status === "SUSPENDED") reason = "tenant_suspended";
-    else if (sub && sub.enforcementEnabled) {
-      if (sub.status === "SUSPENDED") reason = "subscription_suspended";
-      else if (sub.status === "CANCELED") reason = "subscription_canceled";
-      else {
-        const balance = await creditBalance(tenant.id);
-        if (balance <= 0) reason = "units_exhausted";
-      }
-    }
-
-    if (!reason) continue;
 
     const recentConversations = await prisma.conversation.count({
       where: { tenantId: tenant.id, createdAt: { gte: since } },
@@ -99,8 +112,8 @@ export async function previewEnforcement(now: Date = new Date()): Promise<Enforc
       // The number that decides whether this is a quiet config change or an
       // outage for someone's customers.
       live: recentConversations > 0,
-      subscriptionStatus: sub?.status ?? null,
-      creditBalance: reason === "units_exhausted" ? 0 : null,
+      subscriptionStatus: link?.entity.subscription?.status ?? null,
+      creditBalance: reason === "units_exhausted" ? (decision.balance ?? 0) : null,
     });
   }
 
@@ -112,7 +125,7 @@ export async function previewEnforcement(now: Date = new Date()): Promise<Enforc
 
   return {
     mode,
-    enforcing: mode === "hard",
+    enforcing: mode === "hard" || mode === "enforce",
     affected,
     totals: { tenants: affected.length, live: affected.filter((t) => t.live).length, byReason },
   };

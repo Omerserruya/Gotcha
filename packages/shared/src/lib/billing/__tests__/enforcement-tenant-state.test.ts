@@ -84,15 +84,29 @@ describe("an organization that has not paid gets no AI", () => {
 });
 
 describe("it does not break anyone who should be served", () => {
-  it("allows an ACTIVE tenant with no subscription", async () => {
+  it("REFUSES an active tenant with no subscription", async () => {
     const t = await tenant("ACTIVE");
-    // Free, trial and pre-billing tenants legitimately have no subscription.
-    // Denying them would be a far worse failure than the one being fixed.
-    expect((await checkAiAllowed(t.id)).allowed).toBe(true);
+    // This reverses the earlier rule, deliberately and on instruction.
+    //
+    // It used to allow this case, reasoning that free and pre-billing tenants
+    // legitimately have no subscription. The cost of that reasoning was that
+    // "no subscription" and "paid customer" were served identically, so an
+    // organization that never paid was indistinguishable from one that did.
+    //
+    // The blast radius is real: every ACTIVE tenant with no subscription row
+    // loses paid functionality. That is what audit mode and the enforcement
+    // impact report are for - measure it, then switch it on.
+    const res = await checkAiAllowed(t.id);
+    expect(res.allowed).toBe(false);
+    expect(res.reason).toBe("no_subscription");
   });
 
   it("allows a tenant still onboarding", async () => {
     const t = await tenant("PENDING_ONBOARDING");
+    // Onboarding has no subscription yet by definition, and it is the flow
+    // through which one gets bought. Refusing it here would make the product
+    // impossible to start using. The paid product stays out of reach anyway -
+    // the tenant access matrix denies that scope for this status.
     expect((await checkAiAllowed(t.id)).allowed).toBe(true);
   });
 

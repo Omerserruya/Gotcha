@@ -161,3 +161,16 @@ export {
 } from "./enforcement";
 export type { EnforcementMode, AiAllowance, MeterResult, DenyReason } from "./enforcement";
 export * from "./payment-token-crypto";
+
+// The unified gate: commercial standing AND feature entitlement, in one place,
+// callable from background workers that have no request context.
+export {
+  checkPaidAccess,
+  assertPaidAccess,
+  getEnforcementMode as getPaidAccessMode,
+  assertEnforcementConfigured,
+  pastDueGraceHours,
+  explainDenial,
+  PaidAccessDeniedError,
+} from "./entitlement-gate";
+export type { PaidAccessDecision, PaidAccessQuery, DenialReason } from "./entitlement-gate";

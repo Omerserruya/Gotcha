@@ -24,7 +24,7 @@
  * why an unknown outcome is never retried.
  */
 import { createHmac, timingSafeEqual } from "crypto";
-import { isMock, isSimulator, icountMode } from "./icount-config";
+import { isMock, isSimulator, icountMode, assertPaymentCapability } from "./icount-config";
 import * as api from "./icount-client";
 import { CURRENCY_ID_ILS, IcountOutcomeUnknown } from "./icount-client";
 import * as sim from "./icount-simulator";
@@ -107,6 +107,9 @@ export const icountProvider: PaymentProvider = {
    * browser lands, not how the outcome is learned.
    */
   async startTokenization(input: StartTokenizationInput): Promise<StartTokenizationResult> {
+    // Checked in every mode, including mock. A capability that is "off" but
+    // still works locally is one whose off state nobody has actually tested.
+    assertPaymentCapability("tokenization");
     if (isSimulator()) {
       return sim.simulateGenerateSale({ pageId: input.pageId, customClientId: input.customClientId });
     }
@@ -172,6 +175,10 @@ export const icountProvider: PaymentProvider = {
     // misconfigured stack must be told it may not charge at all, rather than
     // being told its amount was malformed and left to "fix" that.
     assertLiveAllowed("charge");
+    // Charging a stored card is a separate switch from being allowed to reach
+    // the provider at all: a stack can legitimately be live for tokenization
+    // while stored-card charging is still closed.
+    assertPaymentCapability("stored_card_charge");
     assertChargeSafety(input);
 
     if (isMock() && !isSimulator()) {

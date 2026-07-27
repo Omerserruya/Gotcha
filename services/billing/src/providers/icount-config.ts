@@ -183,3 +183,55 @@ export function sanitizeIcountError(path: string, err: unknown): Error {
     `[icount] ${path} failed${status ? ` (HTTP ${status})` : ""}: ${String(redactIcount(detail))}`,
   );
 }
+
+/**
+ * Which payment capabilities are switched on.
+ *
+ * Separate from ICOUNT_MODE, and deliberately so. Mode answers "may this stack
+ * reach the provider and move real money". These answer "is this capability
+ * part of the product yet" - a question with a different answer per capability
+ * and a different owner. Collecting cards can be switched on before charging
+ * them is, and self-service checkout can stay closed while both work.
+ *
+ * All three default OFF. A capability that switches itself on when nobody has
+ * configured anything is a capability that will be on somewhere nobody meant it
+ * to be, and for these three that means taking a customer's money.
+ */
+export type PaymentCapability = "checkout" | "tokenization" | "stored_card_charge";
+
+const CAPABILITY_ENV: Record<PaymentCapability, string> = {
+  checkout: "ICOUNT_CHECKOUT_ENABLED",
+  tokenization: "ICOUNT_TOKENIZATION_ENABLED",
+  stored_card_charge: "ICOUNT_STORED_CARD_CHARGE_ENABLED",
+};
+
+/**
+ * Opt-in, and only on the exact string "true".
+ *
+ * Not truthiness: "false", "0" and "no" all read as true under a loose check,
+ * and each of those is something an operator would plausibly write meaning off.
+ */
+export function paymentCapabilityEnabled(capability: PaymentCapability): boolean {
+  return String(process.env[CAPABILITY_ENV[capability]] || "").trim().toLowerCase() === "true";
+}
+
+export class PaymentCapabilityDisabledError extends Error {
+  readonly code = "PAYMENT_CAPABILITY_DISABLED";
+  constructor(readonly capability: PaymentCapability) {
+    super(
+      `[icount] the "${capability}" capability is disabled. ` +
+        `Set ${CAPABILITY_ENV[capability]}=true to enable it.`,
+    );
+    this.name = "PaymentCapabilityDisabledError";
+  }
+}
+
+/**
+ * Refuse before doing anything.
+ *
+ * Called at the provider boundary rather than by each caller, because a guard
+ * every caller has to remember is a guard one caller will not.
+ */
+export function assertPaymentCapability(capability: PaymentCapability): void {
+  if (!paymentCapabilityEnabled(capability)) throw new PaymentCapabilityDisabledError(capability);
+}

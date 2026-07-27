@@ -10,6 +10,7 @@
  * subscription. The redirect can at most tell us WHICH checkout the customer
  * came back from; whether it was paid is a separate, server-side question.
  */
+import { assertPaymentCapability } from "../providers/icount-config";
 import { randomBytes } from "crypto";
 import { prisma } from "@chatcenter/shared";
 import type { CheckoutStatus } from "@prisma/client";
@@ -45,7 +46,23 @@ export function newCheckoutReference(): string {
   return `chk_${randomBytes(24).toString("base64url")}`;
 }
 
+/**
+ * Open a checkout a customer can pay for themselves.
+ *
+ * This has NO callers today, and that is the current product position: nobody
+ * buys without a human. Every live checkout is created by Sysadmin paid
+ * provisioning instead (paid-provisioning.service), which is a deliberate
+ * human decision per organization.
+ *
+ * The guard is here rather than on a public route because the route does not
+ * exist yet. Wiring one up is exactly the change that would open self-service
+ * purchase by accident, and this makes that change refuse rather than succeed
+ * until someone sets the flag on purpose.
+ */
 export async function createPendingCheckout(input: CreateCheckoutInput) {
+  if (String(process.env.SELF_SERVE_CHECKOUT_ENABLED || "").trim().toLowerCase() !== "true") {
+    throw new SelfServeCheckoutDisabledError();
+  }
   const reference = newCheckoutReference();
   const ttl = input.ttlMinutes ?? DEFAULT_TTL_MINUTES;
 
@@ -124,12 +141,37 @@ export async function markStatus(id: string, status: CheckoutStatus) {
  * defined, because a guard nothing invokes is not a guard.
  */
 export function assertCheckoutMayBeEnabled(caps: ProviderCapabilities): void {
+  // Two different reasons checkout can be closed, and they are not the same
+  // thing. This one is a product decision - self-service purchase is not open
+  // yet - and it is checked first, because telling an operator their provider
+  // lacks a capability when the real answer is "we have not switched it on"
+  // sends them to fix the wrong system.
+  assertPaymentCapability("checkout");
+
   if (!checkoutEnabled(caps)) {
     throw new CheckoutDisabledError();
   }
 }
 
 /** Distinct type so a caller can turn it into whatever its surface needs. */
+/**
+ * Self-service purchase is closed as a product decision.
+ *
+ * Deliberately NOT a CheckoutDisabledError. That one means the provider's
+ * tokenization contract is unverified - a thing to go and fix. This one means
+ * nobody is supposed to buy without a human yet, and there is nothing broken.
+ */
+export class SelfServeCheckoutDisabledError extends Error {
+  readonly code = "self_serve_checkout_disabled";
+  constructor() {
+    super(
+      "[billing] self-service checkout is disabled: every checkout is opened by Sysadmin " +
+        "paid provisioning. Set SELF_SERVE_CHECKOUT_ENABLED=true to open it.",
+    );
+    this.name = "SelfServeCheckoutDisabledError";
+  }
+}
+
 export class CheckoutDisabledError extends Error {
   readonly code = "payment_setup_unavailable";
   constructor() {

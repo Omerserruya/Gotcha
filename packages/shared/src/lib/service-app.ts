@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
+import { assertEnforcementConfigured } from "./billing/entitlement-gate";
 
 export interface ServiceConfig {
   name: string;
@@ -58,7 +59,19 @@ export function createServiceApp(config: ServiceConfig): express.Express {
   return app;
 }
 
+/**
+ * Start listening, but not on a configuration that fails open.
+ *
+ * The billing enforcement check lives HERE rather than in each service's entry
+ * point, because a check every service has to remember is a check one service
+ * will not have - and the service that forgets becomes the way in. Anything
+ * booting through startService gets it whether or not anyone thought about it.
+ *
+ * Only refuses in production. Development stacks routinely run unenforced and
+ * should keep working.
+ */
 export function startService(app: express.Express, config: ServiceConfig): void {
+  assertEnforcementConfigured();
   app.listen(config.port, () => {
     console.log(`[${config.name}] running on port ${config.port} (build ${process.env.BUILD_SHA || "dev"})`);
   });

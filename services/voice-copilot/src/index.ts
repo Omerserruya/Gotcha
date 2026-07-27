@@ -1,8 +1,12 @@
 import { createApp } from "./app";
 import { loadEnv } from "./config/env";
 import { logger } from "./lib/logger";
+import { assertEnforcementConfigured } from "@chatcenter/shared";
 
 async function main(): Promise<void> {
+  // Before anything else: a voice call is billable work, and a stack that
+  // cannot say who is allowed to make one should not answer the phone.
+  assertEnforcementConfigured();
   const env = loadEnv();
   const { httpServer, shutdown } = createApp();
 

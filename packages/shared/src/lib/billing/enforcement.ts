@@ -13,23 +13,51 @@
  * (no "infinite balance" hack).
  */
 import { prisma } from "../prisma";
+import { checkPaidAccess } from "./entitlement-gate";
 import { priceUsageFromDb } from "./pricing";
 import { getBalance, consumeUnits, type UsageThreshold } from "./wallet";
 
 export type EnforcementMode = "off" | "observe" | "soft" | "hard";
 
+/**
+ * The enforcement mode, in this module's vocabulary.
+ *
+ * Two vocabularies exist for one setting: off/observe/soft/hard here, and
+ * off/audit/enforce in the gate. Both are accepted, because a deployment set to
+ * the OTHER spelling used to fall through to "off" - which does not merely skip
+ * enforcement, it skips metering, so usage would stop being recorded and
+ * nobody would see a number indicating anything was wrong.
+ */
 export function getEnforcementMode(): EnforcementMode {
-  const m = (process.env.BILLING_ENFORCEMENT_MODE || "off").toLowerCase();
+  const m = String(process.env.BILLING_ENFORCEMENT_MODE || "off").toLowerCase().trim();
+  if (m === "enforce") return "hard";
+  if (m === "audit") return "soft";
   return (["off", "observe", "soft", "hard"].includes(m) ? m : "off") as EnforcementMode;
 }
 
+/**
+ * Every way a paid operation can be refused.
+ *
+ * Mirrors DenialReason from the entitlement gate, which is now the single place
+ * the decision is made. Two vocabularies for one decision would drift, and the
+ * drift would show up as a customer being told the wrong thing.
+ */
 export type DenyReason =
   | "units_exhausted"
   | "suspended"
   | "canceled"
-  /** The organization itself has not paid - distinct from running out of units. */
   | "payment_required"
-  | "tenant_suspended";
+  | "tenant_suspended"
+  | "no_subscription"
+  | "subscription_pending"
+  | "subscription_suspended"
+  | "subscription_canceled"
+  | "subscription_paused"
+  | "trial_expired"
+  | "poc_expired"
+  | "past_due_grace_expired"
+  | "feature_not_in_plan"
+  | "credits_exhausted";
 
 export class AiUnitsExhaustedError extends Error {
   constructor(public reason: DenyReason, public tenantId: string) {
@@ -53,69 +81,37 @@ export interface AiAllowance {
  * Pre-flight: may this tenant run an AI request right now? Cheap - reads the
  * subscription + the materialized balance snapshot. Never throws.
  */
-export async function checkAiAllowed(tenantId: string): Promise<AiAllowance> {
-  const mode = getEnforcementMode();
-  if (mode === "off") return { allowed: true, wouldBlock: false, mode, balance: Infinity };
-
-  let sub: { status: string; enforcementEnabled: boolean } | null = null;
-  let tenantStatus: string | null = null;
-  try {
-    const [link, tenant] = await Promise.all([
-      prisma.billableEntityTenant.findUnique({
-        where: { tenantId },
-        include: { entity: { include: { subscription: true } } },
-      }),
-      prisma.tenant.findUnique({ where: { id: tenantId }, select: { status: true } }),
-    ]);
-    sub = link?.entity.subscription ?? null;
-    tenantStatus = tenant?.status ?? null;
-  } catch {
-    // Fail-open on read error - never block paying customers on a DB blip.
-    return { allowed: true, wouldBlock: false, mode, balance: Infinity };
-  }
-
-  // The ORGANIZATION's own state comes first, before any subscription question.
-  //
-  // A tenant provisioned on a paid plan has no subscription until its first
-  // payment is confirmed - activation is what creates one. The check below used
-  // to read "no subscription yet" as unlimited access, so such a tenant was
-  // blocked from the application while its bot answered customers for free,
-  // indefinitely. The access matrix already says the paid product is not
-  // available in that state; this is the runtime honouring it.
-  if (tenantStatus === "PENDING_PAYMENT") {
-    return denial("payment_required", mode);
-  }
-  if (tenantStatus === "SUSPENDED") {
-    return denial("tenant_suspended", mode);
-  }
-
-  // No subscription yet, or enforcement explicitly disabled (grandfathered).
-  if (!sub || !sub.enforcementEnabled) return { allowed: true, wouldBlock: false, mode, balance: Infinity };
-
-  let reason: DenyReason | undefined;
-  let balance = 0;
-  if (sub.status === "SUSPENDED") reason = "suspended";
-  else if (sub.status === "CANCELED") reason = "canceled";
-  else {
-    const bal = await getBalance(tenantId);
-    balance = bal.total;
-    if (bal.total <= 0) reason = "units_exhausted";
-  }
-
-  const wouldBlock = reason != null;
-  // Only `hard` mode actually blocks; observe/soft meter+notify but allow.
-  return { allowed: wouldBlock ? mode !== "hard" : true, wouldBlock, reason, mode, balance };
-}
-
 /**
- * A refusal that respects the enforcement mode.
+ * May this tenant run an AI request right now?
  *
- * `observe` and `soft` still allow the call - the mode exists so enforcement can
- * be switched on gradually, and a new denial reason must not become a hard
- * outage the moment it ships.
+ * Delegates to the entitlement gate, which asks BOTH halves of the question -
+ * is the organization commercially in good standing, and does their plan
+ * include what they are about to use. This used to ask only the first, so a
+ * paying customer could use a capability they had never bought.
+ *
+ * `feature` is optional because many call sites are asking the general question
+ * ("may this tenant run AI at all"). When a caller knows which capability is
+ * being exercised, passing it is what makes the second half meaningful.
+ *
+ * Never throws.
  */
-function denial(reason: DenyReason, mode: EnforcementMode): AiAllowance {
-  return { allowed: mode !== "hard", wouldBlock: true, reason, mode, balance: 0 };
+export async function checkAiAllowed(tenantId: string, feature?: string): Promise<AiAllowance> {
+  const decision = await checkPaidAccess({ tenantId, feature });
+  // This module's callers have always known an exhausted wallet as
+  // "units_exhausted". Renaming it here would silently change what every
+  // consumer switching on the reason sees.
+  const reason = decision.reason === "credits_exhausted" ? "units_exhausted" : decision.reason;
+  const mode = decision.mode === "enforce" ? "hard" : decision.mode === "audit" ? "soft" : "off";
+  return {
+    allowed: decision.allowed,
+    wouldBlock: decision.wouldDeny,
+    reason: reason as DenyReason | undefined,
+    mode: mode as EnforcementMode,
+    // Infinity means "credits were not the deciding factor", which is what the
+    // callers that render a balance expect to see when the block was
+    // commercial rather than a spent wallet.
+    balance: decision.balance ?? Infinity,
+  };
 }
 
 /** Pre-flight that throws AiUnitsExhaustedError when the call must be blocked. */

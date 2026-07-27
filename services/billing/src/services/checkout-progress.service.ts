@@ -22,6 +22,7 @@ import { activatePaidCheckout } from "./checkout-activation.service";
 import { chargingRateConfigured } from "./exchange-rate.service";
 import { getCapabilities } from "../providers";
 import { assertCheckoutMayBeEnabled, CheckoutDisabledError } from "./checkout.service";
+import { PaymentCapabilityDisabledError } from "../providers/icount-config";
 
 export class CheckoutProgressRefused extends Error {
   constructor(readonly code: string, detail?: string) {
@@ -58,6 +59,12 @@ export async function startPaymentSetup(
   } catch (err) {
     if (err instanceof CheckoutDisabledError) {
       throw new CheckoutProgressRefused(err.code);
+    }
+    // A switched-off capability is a refusal, not a fault. Letting it escape
+    // here would surface as a 500, which reads as "we are broken" to a customer
+    // and sends an operator looking for an outage that is not happening.
+    if (err instanceof PaymentCapabilityDisabledError) {
+      throw new CheckoutProgressRefused("payment_setup_unavailable");
     }
     throw err;
   }
