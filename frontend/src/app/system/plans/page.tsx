@@ -18,6 +18,7 @@
 //     ledger, invoices or existing subscriptions.
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { SystemLayout } from "@/components/SystemLayout";
 import { useAuth } from "@/context/AuthContext";
 import clsx from "clsx";
@@ -300,12 +301,23 @@ function PlansTab({
 
               <div className="flex shrink-0 flex-col items-end gap-2">
                 {p.status === "DRAFT" ? (
-                  <button
-                    onClick={() => onPreview(p.id)}
-                    className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-gray-800"
-                  >
-                    Preview &amp; publish
-                  </button>
+                  <div className="flex gap-2">
+                    {/* The action the success message has always promised and
+                        the UI never offered: a draft could only be published
+                        exactly as it was seeded. */}
+                    <Link
+                      href={`/system/plans/${p.id}`}
+                      className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      Edit
+                    </Link>
+                    <button
+                      onClick={() => onPreview(p.id)}
+                      className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-gray-800"
+                    >
+                      Preview &amp; publish
+                    </button>
+                  </div>
                 ) : p.status === "ACTIVE" ? (
                   <button
                     onClick={() => onCreateVersion(p.key)}
