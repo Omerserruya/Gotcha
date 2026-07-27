@@ -46,8 +46,23 @@ browser, and none may be prefixed `NEXT_PUBLIC_`.
 | `ICOUNT_API_TOKEN` | **yes, in live mode** | The API token. Secret. |
 | `ICOUNT_API_BASE_URL` | no | Defaults to `https://api.icount.co.il/api/v3.php`. |
 | `ICOUNT_PAYMENT_PAGE_ID` | for checkout | The "Credit card token" (טוקן אשראי) PayPage id. **Configuration, not a credential.** |
-| `ICOUNT_WEBHOOK_SECRET` | for callbacks | Shared secret for verifying iCount callbacks. |
+| `ICOUNT_WEBHOOK_SECRET` | **no - see below** | Legacy. iCount cannot sign a callback; requiring it makes the endpoint inert, not secure. |
 | `ICOUNT_ALLOW_LIVE` | for live charging | Explicit acknowledgement. See below. |
+| `ICOUNT_CHECKOUT_ENABLED` | to open checkout | Default `false`. |
+| `ICOUNT_TOKENIZATION_ENABLED` | to collect cards | Default `false`. |
+| `ICOUNT_STORED_CARD_CHARGE_ENABLED` | to charge stored cards | Default `false`. |
+| `SELF_SERVE_CHECKOUT_ENABLED` | to let customers buy unaided | Default `false`. Every checkout is opened by a human through Sysadmin paid provisioning. |
+| `APP_PUBLIC_URL` | when any of the above is on | Where a customer returns after paying. Startup refuses without it. |
+| `APP_PUBLIC_URL_ALLOWED_HOSTS` | recommended in production | Hosts a customer may be sent back through. |
+| `INTERNAL_BILLING_WEBHOOK_FORWARD_SECRET` | no | Authenticates the gateway to billing hop. Not a provider secret. |
+
+### The capability switches are separate from the mode
+
+`ICOUNT_MODE` decides whether the provider can be reached at all. The three
+`*_ENABLED` flags decide whether each capability is part of the product yet, and
+they are independent on purpose: cards can be collectable before they are
+chargeable. All default off, because a payment capability that switches itself
+on eventually takes someone's money somewhere nobody intended.
 
 ### The Page ID is not a secret
 
@@ -108,10 +123,73 @@ at startup. Every request is timeout-bounded, the run has a deadline, and there
 are no retries. Output is redacted and reports unknown fields by key name rather
 than dumping values.
 
-## Not yet verified
+## The verified call chain
 
-The **transport** above is confirmed. The **endpoint paths and payloads** for
-tokenization and stored-card charging are not, and the current provider still
-contains unverified endpoint names inherited from an earlier implementation.
-Every live call remains blocked by the guard above until those are verified
-against the authenticated account.
+Established by calling the live account, not read from documentation. Three
+assumptions were wrong, and each would have failed every live tokenization:
+
+1. **`client/create`** `{client_name, custom_client_id}` -> `client_id`
+
+   This step was missing entirely. `paypage/generate_sale` does NOT create a
+   client: given a `custom_client_id` it has not seen it answers
+   `reason="client_not_found"`, and supplying `client_name` and `email`
+   alongside does not change that. The client must exist first, and it matters
+   beyond the sale, because `custom_client_id` is the only handle that survives
+   the round trip.
+
+2. **`paypage/generate_sale`** `{paypage_id, custom_client_id, ipn_url}` ->
+   `{sale_url, sale_uniqid, sale_sid}`
+
+   The field is `paypage_id`, **not** `page_id`. With `page_id` the API answers
+   `reason="missing_paypage_id"`. `sale_uniqid` is distinct per call.
+
+3. **`client/get_cc_tokens`** `{custom_client_id}` -> `{client_id,
+   custom_client_id, cc_tokens}`
+
+   Echoes the reference back. This is the server-side proof that a card was
+   stored, and the only accepted one.
+
+`paypage/info` nests its configuration under **`paypage_info`**. The unwrapping
+previously looked for `paypage` and `page` and fell back to the envelope, which
+has no `doctype` - so the tokenization guard refused a correctly configured page
+and reported its doctype as "(none)".
+
+## IPN
+
+**Configuration mode: `STATIC_ON_CC_TOKEN_PAGE`.**
+
+`ipn_url` is a persisted field on the cc_token PayPage, confirmed by reading the
+live page (where it is currently empty). Set it there, in the iCount UI, to:
+
+```
+https://app.gotcha.co.il/api/billing/providers/icount/ipn
+```
+
+`paypage/generate_sale` accepts a per-sale `ipn_url` without complaint, but with
+no observable effect and no way to confirm it is honoured. An unconfirmed
+delivery mechanism is one where the notification silently never arrives, so the
+static field is what this integration relies on.
+
+### The IPN is not trusted
+
+The endpoint is public and unauthenticated **by design**. It reads no outcome,
+token, amount or status off the body. It matches the payload against references
+we minted, and then asks iCount directly, server to server, what happened. A
+forged IPN can achieve exactly one thing: cause us to ask a question we were
+going to ask anyway.
+
+It cannot mark a payment successful, verify a card, activate a subscription,
+grant credits or change a tenant's status, because none of those decisions read
+the payload.
+
+### Why there is no signature check
+
+`ICOUNT_WEBHOOK_SECRET` guards the older `/api/billing/webhooks/icount` route
+with an `x-icount-signature` HMAC header. **That header is not something iCount
+sends** - it was a contract invented on this side. Requiring it does not secure
+the endpoint, it makes it inert: every genuine notification is rejected with
+401 and the integration silently never works. The variable is also unset, so
+that route currently rejects everything unconditionally.
+
+Do not "fix" this by inventing a secret the provider cannot produce. The fix is
+that the payload decides nothing, which is what removes the need for one.
