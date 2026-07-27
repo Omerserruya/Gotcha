@@ -19,6 +19,7 @@ import { checkPaidAccess, pastDueGraceHours } from "../entitlement-gate";
 const RUN = `gate-${Date.now()}`;
 const tenantIds: string[] = [];
 const entityIds: string[] = [];
+const planIds: string[] = [];
 const ORIGINAL = { ...process.env };
 
 const HOUR = 3_600_000;
@@ -66,8 +67,21 @@ beforeEach(() => {
   delete process.env.BILLING_PAST_DUE_GRACE_HOURS;
 });
 
+/** A plan of a given kind, since the seeded catalog has only PUBLIC and LEGACY. */
+async function planOfKind(kind: "POC" | "TRIAL") {
+  // Unique per call: (key, version) is uniquely indexed, so two tests each
+  // asking for a POC plan would collide on the second.
+  const key = `${RUN}-${kind.toLowerCase()}-${Math.random().toString(36).slice(2, 8)}`;
+  const plan = await prisma.plan.create({
+    data: { key, name: `${kind} fixture`, version: 1, kind: kind as any, active: false },
+  });
+  planIds.push(plan.id);
+  return plan;
+}
+
 afterAll(async () => {
   await prisma.subscription.deleteMany({ where: { billableEntityId: { in: entityIds } } });
+  await prisma.plan.deleteMany({ where: { id: { in: planIds } } });
   await prisma.billableEntityTenant.deleteMany({ where: { tenantId: { in: tenantIds } } });
   await prisma.tenant.deleteMany({ where: { id: { in: tenantIds } } });
   process.env = { ...ORIGINAL };
@@ -216,5 +230,98 @@ describe("credits are checked unless a caller opts out", () => {
   it("skips the wallet only when asked to", async () => {
     const t = await tenantWith({ status: "ACTIVE" });
     expect((await checkPaidAccess({ tenantId: t.id, skipCreditCheck: true })).allowed).toBe(true);
+  });
+});
+
+describe("the half that was missing: is this capability in their plan", () => {
+  /**
+   * The whole reason the gate exists.
+   *
+   * Commercial standing and plan inclusion were answered by two separate
+   * functions with nothing composing them, so an organization in perfect
+   * standing could use a capability they had never bought. These use REAL plan
+   * rows, because the claim is about what the catalog actually says: Foundation
+   * excludes the copilot and AI Workforce includes it, which is exactly what
+   * the public pricing page advertises.
+   */
+  it("refuses a capability the plan excludes", async () => {
+    const t = await tenantWith({ status: "ACTIVE", planKey: "foundation", planVersion: 1 });
+    const d = await checkPaidAccess({ tenantId: t.id, feature: "ai.copilot" });
+    // In good standing, paying, and still not entitled to this.
+    expect(d.allowed).toBe(false);
+    expect(d.reason).toBe("feature_not_in_plan");
+    expect(d.feature).toBe("ai.copilot");
+  });
+
+  it("allows a capability the plan includes", async () => {
+    const t = await tenantWith({ status: "ACTIVE", planKey: "ai_workforce", planVersion: 1 });
+    const d = await checkPaidAccess({
+      tenantId: t.id,
+      feature: "ai.copilot",
+      skipCreditCheck: true,
+    });
+    expect(d.allowed).toBe(true);
+    expect(d.reason).toBeUndefined();
+  });
+
+  it("reports the plan problem before the wallet", async () => {
+    // Both are true for this tenant - excluded capability AND no credits. The
+    // customer needs to be told the one they can act on, and "buy more credits"
+    // would not have got them the copilot.
+    const t = await tenantWith({ status: "ACTIVE", planKey: "foundation", planVersion: 1 });
+    expect((await checkPaidAccess({ tenantId: t.id, feature: "ai.copilot" })).reason).toBe(
+      "feature_not_in_plan",
+    );
+  });
+
+  it("says nothing about features when none was named", async () => {
+    // Callers asking the plain commercial question must not be refused for a
+    // capability they never mentioned.
+    const t = await tenantWith({ status: "ACTIVE", planKey: "foundation", planVersion: 1 });
+    const d = await checkPaidAccess({ tenantId: t.id, skipCreditCheck: true });
+    expect(d.reason).not.toBe("feature_not_in_plan");
+    expect(d.allowed).toBe(true);
+  });
+});
+
+describe("a proof of concept ends even when the subscription looks fine", () => {
+  it("refuses an expired POC", async () => {
+    const plan = await planOfKind("POC");
+    const t = await tenantWith({
+      status: "ACTIVE",
+      planKey: plan.key,
+      planVersion: 1,
+      currentPeriodEnd: ago(1),
+    });
+    // The subscription status says ACTIVE. An unattended POC would otherwise
+    // run forever, which is how an evaluation quietly becomes free production
+    // use that nobody is billing for.
+    const d = await checkPaidAccess({ tenantId: t.id });
+    expect(d.allowed).toBe(false);
+    expect(d.reason).toBe("poc_expired");
+  });
+
+  it("allows a POC still inside its window", async () => {
+    const plan = await planOfKind("POC");
+    const t = await tenantWith({
+      status: "ACTIVE",
+      planKey: plan.key,
+      planVersion: 1,
+      currentPeriodEnd: ahead(24),
+    });
+    expect((await checkPaidAccess({ tenantId: t.id, skipCreditCheck: true })).allowed).toBe(true);
+  });
+
+  it("reports an expired TRIAL plan as a trial, not a POC", async () => {
+    const plan = await planOfKind("TRIAL");
+    const t = await tenantWith({
+      status: "ACTIVE",
+      planKey: plan.key,
+      planVersion: 1,
+      currentPeriodEnd: ago(1),
+    });
+    // Different conversations with a customer: an evaluation that ended and a
+    // trial that ended are not the same thing to the person reading it.
+    expect((await checkPaidAccess({ tenantId: t.id })).reason).toBe("trial_expired");
   });
 });
