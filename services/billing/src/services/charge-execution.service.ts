@@ -98,8 +98,10 @@ export async function executeCharge(input: ExecuteChargeInput): Promise<ExecuteC
   if (!method) throw new ChargeRefused("payment_method_not_found");
   if (method.status !== "ACTIVE") throw new ChargeRefused("payment_method_not_active", method.status);
 
+  const attemptKey = await keyForThisTry(input.attemptKey);
+
   const { created, attempt } = await beginAttempt({
-    attemptKey: input.attemptKey,
+    attemptKey,
     purpose: input.purpose,
     amount: Number(new Prisma.Decimal(input.commercialAmount)),
     currency: input.commercialCurrency.toUpperCase(),
@@ -185,7 +187,7 @@ export async function executeCharge(input: ExecuteChargeInput): Promise<ExecuteC
         chargeCurrency: quote.chargeCurrency,
         providerCurrencyId: quote.providerCurrencyId,
         description: input.description,
-        idempotencyKey: input.attemptKey,
+        idempotencyKey: attemptKey,
         issueInvoice: input.issueInvoice,
       },
     });
@@ -218,4 +220,42 @@ export async function executeCharge(input: ExecuteChargeInput): Promise<ExecuteC
  */
 export function chargeableAgain(state: PaymentAttemptState): boolean {
   return state === "FAILED";
+}
+
+/** How many times one logical charge may be retried after a decline. */
+export const MAX_RETRIES_AFTER_FAILURE = 5;
+
+/**
+ * The key for THIS attempt at a logical charge.
+ *
+ * The base key is deterministic, which is what stops a double-click becoming
+ * two charges. But it also meant a declined customer could never pay again:
+ * the key stayed occupied by the FAILED attempt forever, so every subsequent
+ * try - even on a different card - returned the original decline. Someone
+ * whose card was declined once was permanently unable to buy anything.
+ *
+ * Retrying after FAILED is safe precisely because FAILED is the state that
+ * means the provider said no and no money moved. That is the whole reason it is
+ * kept distinct from UNKNOWN. So a fresh key is minted only when EVERY existing
+ * attempt for this charge failed; a single PENDING, SUCCEEDED, UNKNOWN or
+ * RECONCILIATION_REQUIRED among them and the base key is returned unchanged, so
+ * the caller gets that state back and does not charge.
+ */
+async function keyForThisTry(baseKey: string): Promise<string> {
+  const existing = await prisma.paymentAttempt.findMany({
+    where: { OR: [{ attemptKey: baseKey }, { attemptKey: { startsWith: `${baseKey}:r` } }] },
+    select: { attemptKey: true, state: true },
+  });
+  if (!existing.length) return baseKey;
+
+  // One non-failed attempt anywhere in the chain means this charge is settled
+  // or in flight. Return the base key so beginAttempt reports it.
+  if (!existing.every((a) => a.state === "FAILED")) return baseKey;
+
+  if (existing.length > MAX_RETRIES_AFTER_FAILURE) {
+    // Stop minting keys. Repeated declines are a conversation to have with the
+    // customer, not something to keep hammering the provider about.
+    return baseKey;
+  }
+  return `${baseKey}:r${existing.length}`;
 }

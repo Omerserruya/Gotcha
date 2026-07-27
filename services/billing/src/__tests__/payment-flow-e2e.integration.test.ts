@@ -15,7 +15,11 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import { prisma } from "@chatcenter/shared";
 import { Prisma } from "@prisma/client";
 import { proposeRate, approveRate } from "../services/exchange-rate.service";
-import { executeCharge, chargeableAgain } from "../services/charge-execution.service";
+import {
+  executeCharge,
+  chargeableAgain,
+  MAX_RETRIES_AFTER_FAILURE,
+} from "../services/charge-execution.service";
 import {
   startTokenizationSession,
   verifyTokenizationSession,
@@ -24,6 +28,7 @@ import {
   MAX_VERIFICATION_ATTEMPTS,
 } from "../services/tokenization.service";
 import { activatePaidCheckout } from "../services/checkout-activation.service";
+import { startPaymentSetup } from "../services/checkout-progress.service";
 import { SIM, resetSimulator, simulateTokenization } from "../providers/icount-simulator";
 
 // Set before anything imports the crypto module, which reads the key lazily but
@@ -40,6 +45,14 @@ const checkoutIds: string[] = [];
 const rateIds: string[] = [];
 let restoreActiveRateId: string | null = null;
 const ORIGINAL = { ...process.env };
+
+/** Seed only if the pair has no live rate, so tests can share one. */
+async function seedApprovedRateIfMissing() {
+  const active = await prisma.billingExchangeRate.findFirst({
+    where: { baseCurrency: "USD", quoteCurrency: "ILS", status: "ACTIVE" },
+  });
+  if (!active) await seedApprovedRate();
+}
 
 async function seedApprovedRate() {
   const draft = await proposeRate({ ...PAIR, rate: TEST_RATE, createdBy: `${RUN}-author` });
@@ -293,6 +306,54 @@ describe("tokenization only counts a card this session actually stored", () => {
   });
 });
 
+describe("clicking Pay twice does not strand the customer", () => {
+  it("resumes the same session instead of minting a new reference", async () => {
+    const { tenant, checkout } = await newTenantWithCheckout();
+    await seedApprovedRateIfMissing();
+
+    const first = await startPaymentSetup(checkout.reference);
+    const second = await startPaymentSetup(checkout.reference);
+
+    // The bug this guards against: a second click used to create a whole new
+    // session with a new customer reference. A customer who had already entered
+    // their card against the first one would then be stranded - their card
+    // existed, and we would be looking somewhere else for it.
+    expect(second.sessionId).toBe(first.sessionId);
+    expect(await prisma.tokenizationSession.count({ where: { checkoutId: checkout.id } })).toBe(1);
+
+    // Prove the consequence, not just the count: a card entered against the
+    // original reference is still found.
+    const session = await prisma.tokenizationSession.findFirst({ where: { checkoutId: checkout.id } });
+    simulateTokenization(session!.customClientId, `${SIM.OK}_resumed`);
+    const verified = await verifyTokenizationSession(session!.id);
+    expect(verified.verified).toBe(true);
+    expect(tenant.id).toBeTruthy();
+  });
+
+  it("still issues a usable destination on the second click", async () => {
+    const { checkout } = await newTenantWithCheckout();
+    await seedApprovedRateIfMissing();
+    const first = await startPaymentSetup(checkout.reference);
+    const second = await startPaymentSetup(checkout.reference);
+    // A resumed session must still send them somewhere - returning the same
+    // session id with no URL would be a dead button.
+    expect(second.redirectUrl).toBeTruthy();
+    expect(first.redirectUrl).toBeTruthy();
+  });
+
+  it("refuses to start payment when no rate is approved", async () => {
+    const { checkout } = await newTenantWithCheckout();
+    await prisma.billingExchangeRate.updateMany({
+      where: { baseCurrency: "USD", quoteCurrency: "ILS", status: "ACTIVE" },
+      data: { status: "RETIRED" },
+    });
+    // Better to refuse now than after they have entered card details against a
+    // charge we could not then price.
+    await expect(startPaymentSetup(checkout.reference)).rejects.toThrow(/charging_rate_not_configured/);
+    await seedApprovedRate();
+  });
+});
+
 describe("when the charge goes wrong", () => {
   async function chargeWith(prefix: (typeof SIM)[keyof typeof SIM]) {
     const { tenant, checkout } = await newTenantWithCheckout();
@@ -310,6 +371,86 @@ describe("when the charge goes wrong", () => {
     });
     return { res, tenant, checkout };
   }
+
+  it("a declined customer can pay on a second try", async () => {
+    const { tenant, checkout } = await newTenantWithCheckout();
+    await seedApprovedRateIfMissing();
+    const declined = await tokenize(tenant.id, checkout.id, SIM.DECLINE);
+
+    const args = {
+      attemptKey: `checkout:${checkout.reference}`,
+      purpose: "SUBSCRIPTION_INITIAL" as const,
+      tenantId: tenant.id,
+      checkoutId: checkout.id,
+      commercialAmount: 499,
+      commercialCurrency: "USD",
+      description: "AI Workforce",
+      providerCustomerId: "cli_retry",
+    };
+
+    const first = await executeCharge({ ...args, paymentMethodId: declined.paymentMethodId });
+    expect(first.state).toBe("FAILED");
+
+    // They add a working card and try again. Before this, the deterministic key
+    // stayed occupied by the failed attempt forever, so every retry returned
+    // the original decline - someone declined once could never buy anything.
+    const good = await tokenize(tenant.id, checkout.id, SIM.OK);
+    const second = await executeCharge({ ...args, paymentMethodId: good.paymentMethodId });
+
+    expect(second.state).toBe("SUCCEEDED");
+    expect(second.executed).toBe(true);
+    expect(second.attemptId).not.toBe(first.attemptId);
+
+    // ...and the successful one can still activate exactly once.
+    const activated = await activatePaidCheckout({
+      checkoutId: checkout.id,
+      paymentAttemptId: second.attemptId,
+    });
+    expect(activated.firstActivation).toBe(true);
+  });
+
+  it("stops minting retries after repeated declines", async () => {
+    const { tenant, checkout } = await newTenantWithCheckout();
+    await seedApprovedRateIfMissing();
+    const { paymentMethodId } = await tokenize(tenant.id, checkout.id, SIM.DECLINE);
+    const args = {
+      attemptKey: `checkout:${checkout.reference}`,
+      purpose: "SUBSCRIPTION_INITIAL" as const,
+      tenantId: tenant.id, checkoutId: checkout.id,
+      commercialAmount: 499, commercialCurrency: "USD",
+      description: "AI Workforce", paymentMethodId, providerCustomerId: "cli_retry",
+    };
+    for (let i = 0; i < MAX_RETRIES_AFTER_FAILURE + 3; i += 1) await executeCharge(args);
+    const count = await prisma.paymentAttempt.count({ where: { checkoutId: checkout.id } });
+    // Repeated declines are a conversation with the customer, not something to
+    // keep hammering the provider about.
+    expect(count).toBeLessThanOrEqual(MAX_RETRIES_AFTER_FAILURE + 1);
+  });
+
+  it("never mints a retry key while an outcome is unknown", async () => {
+    const { tenant, checkout } = await newTenantWithCheckout();
+    await seedApprovedRateIfMissing();
+    const unknown = await tokenize(tenant.id, checkout.id, SIM.TIMEOUT);
+    const args = {
+      attemptKey: `checkout:${checkout.reference}`,
+      purpose: "SUBSCRIPTION_INITIAL" as const,
+      tenantId: tenant.id, checkoutId: checkout.id,
+      commercialAmount: 499, commercialCurrency: "USD",
+      description: "AI Workforce", providerCustomerId: "cli_retry",
+    };
+    const first = await executeCharge({ ...args, paymentMethodId: unknown.paymentMethodId });
+    expect(first.state).toBe("UNKNOWN");
+
+    const good = await tokenize(tenant.id, checkout.id, SIM.OK);
+    const second = await executeCharge({ ...args, paymentMethodId: good.paymentMethodId });
+
+    // THE case this must never get wrong: the first charge may have landed, so
+    // a second one would take the money twice. Even a new card does not unlock
+    // a retry while the outcome is unknown.
+    expect(second.executed).toBe(false);
+    expect(second.state).toBe("UNKNOWN");
+    expect(await prisma.paymentAttempt.count({ where: { checkoutId: checkout.id } })).toBe(1);
+  });
 
   it("a decline is FAILED, and may be retried", async () => {
     const { res, tenant } = await chargeWith(SIM.DECLINE);

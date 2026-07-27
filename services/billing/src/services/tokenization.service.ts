@@ -298,6 +298,35 @@ export async function expireStaleSessions(now: Date = new Date()): Promise<numbe
   return res.count;
 }
 
+/**
+ * Get a fresh hosted-page URL for a session that already exists.
+ *
+ * Deliberately NOT a new session. The customer reference is what the provider
+ * files a stored card under, so a second click that minted a new reference
+ * would leave a customer who entered their card against the first one stranded:
+ * their card exists, and we would be looking in the wrong place for it.
+ *
+ * Regenerating against the SAME reference means a card stored via either URL
+ * lands where we are watching, and the baseline captured at the start still
+ * describes what they had before.
+ */
+export async function resumeTokenizationSession(
+  session: TokenizationSession,
+  opts: { successUrl?: string; failureUrl?: string } = {},
+): Promise<string> {
+  const start = await icountProvider.startTokenization!({
+    pageId: session.pageId,
+    customClientId: session.customClientId,
+    successUrl: opts.successUrl,
+    failureUrl: opts.failureUrl,
+  });
+  await prisma.tokenizationSession.update({
+    where: { id: session.id },
+    data: { status: "AWAITING_RETURN" },
+  });
+  return start.saleUrl;
+}
+
 /** The live session for a checkout, if one is still open. */
 export async function sessionForCheckout(
   checkoutId: string,

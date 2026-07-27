@@ -13,6 +13,7 @@ import { prisma } from "@chatcenter/shared";
 import type { PendingCheckout } from "@prisma/client";
 import { executeCharge } from "./charge-execution.service";
 import {
+  resumeTokenizationSession,
   sessionForCheckout,
   startTokenizationSession,
   verifyTokenizationSession,
@@ -59,13 +60,13 @@ export async function startPaymentSetup(
 
   const existing = await sessionForCheckout(checkout.id);
   if (existing && existing.status !== "VERIFIED") {
-    const resumed = await startTokenizationSession({
-      tenantId: checkout.tenantId!,
-      checkoutId: checkout.id,
-      successUrl: opts.successUrl,
-      failureUrl: opts.failureUrl,
-    });
-    return { redirectUrl: resumed.saleUrl, sessionId: resumed.session.id };
+    // Genuinely resume: a fresh URL against the SAME customer reference. This
+    // used to start a whole new session, which meant a second click minted a
+    // new reference - so a customer who had already entered their card against
+    // the first one was stranded, because their card existed and we were
+    // looking somewhere else for it.
+    const redirectUrl = await resumeTokenizationSession(existing, opts);
+    return { redirectUrl, sessionId: existing.id };
   }
 
   const started = await startTokenizationSession({
