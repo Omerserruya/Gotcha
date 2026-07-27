@@ -218,3 +218,42 @@ describe("the discovery tool cannot move money", () => {
     expect(index).not.toContain("icount-inspect");
   });
 });
+
+describe("services reach the provider through its interface", () => {
+  const tokenization = read("services/billing/src/services/tokenization.service.ts");
+  const chargeExec = read("services/billing/src/services/charge-execution.service.ts");
+
+  it("tokenization does not import a named provider adapter", () => {
+    // The interface exists so swapping providers is a config change rather than
+    // a rewrite. A service reaching past it for iCount specifically makes that
+    // claim quietly untrue while its own header still states it.
+    expect(tokenization).not.toContain("icount.provider");
+    expect(tokenization).toContain("defaultProvider");
+  });
+
+  it("charge execution resolves the provider from the payment method", () => {
+    // Which provider to charge is a property of the stored card, not a global.
+    expect(chargeExec).toContain("getProvider(method.provider)");
+    expect(chargeExec).not.toContain("icount.provider");
+  });
+
+  it("only the adapter and its own tests name iCount directly", () => {
+    const { readdirSync, statSync } = require("node:fs");
+    const offenders: string[] = [];
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir)) {
+        const full = join(dir, entry);
+        if (statSync(full).isDirectory()) {
+          if (entry !== "__tests__" && entry !== "providers") walk(full);
+          continue;
+        }
+        if (!entry.endsWith(".ts")) continue;
+        if (/from ["'].*icount\.provider["']/.test(readFileSync(full, "utf8"))) offenders.push(full);
+      }
+    };
+    walk(join(REPO, "services/billing/src"));
+    // The adapter lives in providers/; everything else goes through the
+    // interface. A new import here is the abstraction leaking again.
+    expect(offenders, `named adapter imported by: ${offenders.join(", ")}`).toEqual([]);
+  });
+});

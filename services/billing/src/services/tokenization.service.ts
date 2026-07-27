@@ -19,10 +19,25 @@
 import { createHash, randomBytes } from "crypto";
 import { prisma, encryptPaymentToken, CURRENT_PAYMENT_TOKEN_KEY_VERSION } from "@chatcenter/shared";
 import type { TokenizationSession } from "@prisma/client";
-import { icountProvider } from "../providers/icount.provider";
+import { defaultProvider } from "../providers";
 import { icountPaymentPageId } from "../providers/icount-config";
 import { assertTokenizationPage } from "../providers/icount-paypage";
 import type { StoredCard } from "../providers/provider";
+
+/**
+ * The configured provider, resolved per call.
+ *
+ * Not a direct import of the iCount adapter. The provider interface exists so
+ * that swapping providers is a config change rather than a rewrite, and a
+ * service reaching past it for a named implementation makes that claim quietly
+ * untrue - which is how an abstraction becomes decoration while still being
+ * described in its own header.
+ *
+ * Resolved at CALL time so tests and runtime configuration are honoured.
+ */
+function provider() {
+  return defaultProvider();
+}
 
 /** A session outlives a slow checkout but not an abandoned one. */
 export const SESSION_TTL_MS = 60 * 60 * 1000;
@@ -75,11 +90,14 @@ const pageChecked = new Map<string, number>();
 async function assertPageStoresCards(pageId: string): Promise<void> {
   const seen = pageChecked.get(pageId);
   if (seen && Date.now() - seen < PAGE_CHECK_TTL_MS) return;
-  if (!icountProvider.describePaymentPage) return;
+  // Bound once: resolving twice would let the guard and the call disagree about
+  // which provider they are talking to.
+  const p = provider();
+  if (!p.describePaymentPage) return;
 
   let page;
   try {
-    page = await icountProvider.describePaymentPage(pageId);
+    page = await p.describePaymentPage(pageId);
   } catch (err) {
     // Could not ask. Fail closed: sending someone to a page we cannot verify is
     // how an unintended charge happens, and a delayed checkout is recoverable.
@@ -142,7 +160,7 @@ export async function startTokenizationSession(input: StartSessionInput): Promis
   const existing = await listCards({ clientId: input.providerClientId, customClientId });
   const baseline = existing.map((c) => fingerprint(c.token));
 
-  const start = await icountProvider.startTokenization!({
+  const start = await provider().startTokenization!({
     pageId,
     customClientId,
     clientName: input.customerName,
@@ -318,10 +336,11 @@ async function resolveBillingProfile(tenantId: string): Promise<string> {
 }
 
 async function listCards(query: { clientId?: string | null; customClientId?: string | null }): Promise<StoredCard[]> {
-  if (!icountProvider.listStoredCards) return [];
+  const p = provider();
+  if (!p.listStoredCards) return [];
   if (!query.clientId && !query.customClientId) return [];
   try {
-    return await icountProvider.listStoredCards({
+    return await p.listStoredCards({
       clientId: query.clientId ?? undefined,
       customClientId: query.customClientId ?? undefined,
     });
@@ -368,7 +387,7 @@ export async function resumeTokenizationSession(
   session: TokenizationSession,
   opts: { successUrl?: string; failureUrl?: string } = {},
 ): Promise<string> {
-  const start = await icountProvider.startTokenization!({
+  const start = await provider().startTokenization!({
     pageId: session.pageId,
     customClientId: session.customClientId,
     successUrl: opts.successUrl,
