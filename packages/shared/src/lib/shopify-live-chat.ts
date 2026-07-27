@@ -599,18 +599,30 @@ export interface VisitorSessionPayload {
   exp: number;
 }
 
-function sessionSecret(): string {
+/**
+ * Session key.
+ *
+ * Deliberately NOT the channel-credential key (CHANNEL_ENCRYPTION_KEY):
+ * visitor sessions and stored Shopify credentials have completely
+ * different rotation lifetimes, and reusing one key for both is the kind
+ * of coupling that makes rotating either of them a migration.
+ */
+function sessionKey(): Buffer {
   const explicit = process.env.WIDGET_SESSION_SECRET;
-  if (explicit && explicit.length >= 16) return explicit;
+  if (explicit && explicit.length >= 16) return derive(explicit);
   const jwtSecret = process.env.JWT_SECRET;
-  if (jwtSecret && jwtSecret.length >= 16) return `slc:${jwtSecret}`;
+  if (jwtSecret && jwtSecret.length >= 16) return derive(`slc:${jwtSecret}`);
   if (process.env.NODE_ENV === "production") {
     throw new Error(
       "[shopify-live-chat] WIDGET_SESSION_SECRET (or JWT_SECRET) is required in production. " +
-        "Refusing to sign visitor sessions with a default secret.",
+        "Refusing to issue visitor sessions with a default secret.",
     );
   }
-  return "slc:dev-visitor-secret";
+  return derive("slc:dev-visitor-secret");
+}
+
+function derive(secret: string): Buffer {
+  return crypto.createHash("sha256").update(`shopify-live-chat:visitor:${secret}`).digest();
 }
 
 function b64url(buf: Buffer): string {
@@ -621,10 +633,21 @@ function fromB64url(s: string): Buffer {
   return Buffer.from(s.replace(/-/g, "+").replace(/_/g, "/"), "base64");
 }
 
+const IV_BYTES = 12;
+const TAG_BYTES = 16;
+
 /**
- * Opaque, tamper-evident visitor session token. Deliberately NOT a JWT:
- * it must never be confused with a staff token by any middleware, and it
- * carries no user identity at all.
+ * Genuinely opaque visitor session token: AES-256-GCM over the payload,
+ * `iv || tag || ciphertext`, base64url.
+ *
+ * Encrypted rather than merely signed, because a signed-but-readable
+ * token would hand every shopper our internal tenant and channel ids in
+ * exchange for a base64 decode. GCM is authenticated, so this is also
+ * tamper-evident without a second HMAC.
+ *
+ * Deliberately NOT a JWT and not even JWT-shaped: no middleware anywhere
+ * in the platform should be able to mistake one of these for a staff
+ * token, and it carries no user identity at all.
  */
 export function signVisitorSession(
   input: Omit<VisitorSessionPayload, "v" | "iat" | "exp"> & { ttlSeconds?: number },
@@ -639,33 +662,41 @@ export function signVisitorSession(
     iat,
     exp: iat + (input.ttlSeconds ?? VISITOR_SESSION_TTL_SECONDS),
   };
-  const body = b64url(Buffer.from(JSON.stringify(payload), "utf8"));
-  const sig = b64url(crypto.createHmac("sha256", sessionSecret()).update(body).digest());
-  return `${body}.${sig}`;
+  const iv = crypto.randomBytes(IV_BYTES);
+  const cipher = crypto.createCipheriv("aes-256-gcm", sessionKey(), iv);
+  const ciphertext = Buffer.concat([
+    cipher.update(JSON.stringify(payload), "utf8"),
+    cipher.final(),
+  ]);
+  return b64url(Buffer.concat([iv, cipher.getAuthTag(), ciphertext]));
 }
 
-/** Verify + decode. Returns null on any tampering, expiry or malformation. */
+/** Decrypt + validate. Returns null on any tampering, expiry or malformation. */
 export function verifyVisitorSession(token: unknown): VisitorSessionPayload | null {
-  if (typeof token !== "string" || token.length > 4096) return null;
-  const dot = token.indexOf(".");
-  if (dot <= 0) return null;
-  const body = token.slice(0, dot);
-  const sig = token.slice(dot + 1);
-  if (!body || !sig) return null;
+  if (typeof token !== "string" || !token || token.length > 4096) return null;
 
-  let expected: string;
+  let plaintext: string;
   try {
-    expected = b64url(crypto.createHmac("sha256", sessionSecret()).update(body).digest());
+    const raw = fromB64url(token);
+    if (raw.length <= IV_BYTES + TAG_BYTES) return null;
+    const decipher = crypto.createDecipheriv(
+      "aes-256-gcm",
+      sessionKey(),
+      raw.subarray(0, IV_BYTES),
+    );
+    decipher.setAuthTag(raw.subarray(IV_BYTES, IV_BYTES + TAG_BYTES));
+    plaintext = Buffer.concat([
+      decipher.update(raw.subarray(IV_BYTES + TAG_BYTES)),
+      decipher.final(),
+    ]).toString("utf8");
   } catch {
+    // Wrong key, flipped bit, truncated token, junk: all the same answer.
     return null;
   }
-  const a = fromB64url(sig);
-  const b = fromB64url(expected);
-  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
 
   let payload: VisitorSessionPayload;
   try {
-    payload = JSON.parse(fromB64url(body).toString("utf8"));
+    payload = JSON.parse(plaintext);
   } catch {
     return null;
   }

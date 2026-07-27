@@ -786,8 +786,11 @@ window.__gotchaShopifyChatApp = function (boot) {
         img.className = "card-im";
         img.src = imgUrl;
         img.alt = "";
-        img.loading = "lazy";
-        img.decoding = "async";
+        // Attributes, not properties: a browser that does not implement
+        // the `loading` IDL still honours the attribute, and it is what
+        // a merchant's own auditing tools will look for.
+        img.setAttribute("loading", "lazy");
+        img.setAttribute("decoding", "async");
         on(img, "error", function () { img.remove(); });
         top.appendChild(img);
       } else {
