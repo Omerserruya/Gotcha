@@ -10,7 +10,11 @@
  * sits next to the rate, because "3.65" means nothing at a glance and "$499
  * becomes ₪1,821.35" means everything.
  *
- * It separates proposing from approving, and refuses to let one person do both.
+ * It separates proposing from approving, and refuses to let one person do both -
+ * for OVERRIDES. The ordinary daily rate is fetched from the Bank of Israel and
+ * needs no approval at all, because asking two people to sign off on the central
+ * bank's own published number is ceremony, not control: it approves everything,
+ * every day, and so checks nothing.
  *
  * It states plainly when charging is off, rather than leaving an empty state to
  * be interpreted. "No approved rate" is not a blank screen; it is a sentence.
@@ -39,10 +43,12 @@ export default function ExchangeRatePage() {
   const [data, setData] = useState<RatesPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState("");
+  const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<Reconciliation[]>([]);
   const [enforcement, setEnforcement] = useState<EnforcementPreview | null>(null);
+  const [fx, setFx] = useState<FxStatus | null>(null);
 
   const authed = useCallback(
     async (path: string, init?: RequestInit) => {
@@ -85,6 +91,14 @@ export default function ExchangeRatePage() {
     } catch {
       setEnforcement(null);
     }
+    try {
+      const s = await authed("/api/admin/billing/fx-status");
+      setFx(s.data ?? null);
+    } catch {
+      // Unknown, not "broken". The feed panel says so rather than showing a
+      // healthy-looking default for a state nobody established.
+      setFx(null);
+    }
   }, [authed]);
 
   useEffect(() => {
@@ -113,8 +127,8 @@ export default function ExchangeRatePage() {
           <h1 className="text-2xl font-semibold tracking-tight text-gray-900">Exchange rate</h1>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-gray-500">
             Plans are priced in dollars and charged in shekels. This is the rate used to convert
-            them. It is entered by hand and never fetched, so a change here is always a decision
-            somebody made.
+            them. It comes from the Bank of Israel&apos;s official representative rate and is
+            fetched automatically. Overriding it by hand is possible, and takes two people.
           </p>
         </header>
 
@@ -122,13 +136,17 @@ export default function ExchangeRatePage() {
           <div className="h-32 animate-pulse rounded-2xl bg-gray-100 motion-reduce:animate-none" />
         ) : (
           <>
+            <OfficialFeed fx={fx} busy={busy} onRefresh={() => act(() => authed("/api/admin/billing/fx-refresh", { method: "POST" }))} />
+
             <CurrentRate data={data} />
 
             <section className="mt-8 rounded-2xl border border-gray-200 p-5">
-              <h2 className="text-sm font-semibold text-gray-900">Propose a new rate</h2>
+              <h2 className="text-sm font-semibold text-gray-900">Override the official rate</h2>
               <p className="mt-1 text-[13px] leading-relaxed text-gray-500">
-                Proposing does not change anything. A second administrator has to approve it before
-                any card is charged at this rate.
+                Only for when the official rate cannot be used. Proposing does not change anything:
+                a second administrator has to approve it before any card is charged at this rate,
+                and an override expires on its own so a temporary decision does not become
+                permanent by being forgotten.
               </p>
 
               <div className="mt-4 flex flex-wrap items-end gap-4">
@@ -147,6 +165,23 @@ export default function ExchangeRatePage() {
                   />
                 </label>
 
+                {/* Required, and required for a reason: an override with nothing
+                    stated is indistinguishable from a mistake six months later,
+                    when someone is trying to work out why a customer was charged
+                    at a number the central bank never published. */}
+                <label className="block min-w-[16rem] flex-1">
+                  <span className="mb-1.5 block text-[12px] font-medium text-gray-700">
+                    Why this override is needed
+                  </span>
+                  <input
+                    type="text"
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                    placeholder="Bank of Israel feed unavailable since Tuesday"
+                    className="w-full rounded-xl border border-gray-300 px-3 py-2 text-[15px] text-gray-900 focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+                  />
+                </label>
+
                 {/* The effect, next to the cause. "3.65" reads as nothing; the
                     converted price reads as a decision. */}
                 <div className="rounded-xl bg-gray-50 px-4 py-2.5">
@@ -158,14 +193,15 @@ export default function ExchangeRatePage() {
 
                 <button
                   type="button"
-                  disabled={busy || !preview}
+                  disabled={busy || !preview || !reason.trim()}
                   onClick={() =>
                     act(async () => {
                       await authed("/api/admin/billing/exchange-rates", {
                         method: "POST",
-                        body: JSON.stringify({ rate: draft.trim() }),
+                        body: JSON.stringify({ rate: draft.trim(), reason: reason.trim() }),
                       });
                       setDraft("");
+                      setReason("");
                     })
                   }
                   className="rounded-xl bg-gray-900 px-4 py-2.5 text-[14px] font-medium text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
@@ -201,6 +237,156 @@ export default function ExchangeRatePage() {
       </div>
     </SystemLayout>
   );
+}
+
+
+export type FxStatus = {
+  enabled: boolean;
+  source: string;
+  maxStalenessHours: number;
+  charging: boolean;
+  current: {
+    rate: string;
+    origin: string;
+    verificationState: string;
+    officialDate: string | null;
+    retrievedAt: string | null;
+    maxUseUntil: string | null;
+    overrideReason: string | null;
+    ageHours: number | null;
+    usable: boolean;
+  } | null;
+  metrics: {
+    lastSuccessAt: string | null;
+    lastFailureAt: string | null;
+    lastFailureReason: string | null;
+    circuitOpenUntil: string | null;
+  };
+};
+
+/**
+ * The official feed, answering the only two questions anyone opens this for:
+ * can we charge right now, and how old is the number we would charge at.
+ *
+ * Both are stated as sentences. A green dot and a timestamp require the reader
+ * to work out the implication themselves, and the implication - "every Israeli
+ * customer's card is about to be debited at a rate from last Tuesday" - is the
+ * part that matters.
+ */
+function OfficialFeed({
+  fx,
+  busy,
+  onRefresh,
+}: {
+  fx: FxStatus | null;
+  busy: boolean;
+  onRefresh: () => void;
+}) {
+  if (!fx) {
+    return (
+      <section className="rounded-2xl border border-gray-200 bg-gray-50 p-5">
+        <h2 className="text-sm font-semibold text-gray-900">Bank of Israel feed</h2>
+        <p className="mt-1 text-[13px] text-gray-500">
+          Could not read the feed status. This says nothing about whether charging works - it means
+          this panel could not find out.
+        </p>
+      </section>
+    );
+  }
+
+  const c = fx.current;
+  const stale = c?.ageHours != null && c.ageHours > fx.maxStalenessHours;
+  const overridden = c?.origin === "MANUAL_OVERRIDE" || c?.origin === "EMERGENCY_FALLBACK";
+
+  // Charging off is the headline when it is true. Everything else is detail.
+  const tone = !fx.charging
+    ? "border-red-200 bg-red-50"
+    : overridden || stale
+      ? "border-amber-200 bg-amber-50"
+      : "border-gray-200 bg-white";
+
+  return (
+    <section className={`rounded-2xl border p-5 ${tone}`}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold text-gray-900">Bank of Israel feed</h2>
+          <p className="mt-1 text-[13px] leading-relaxed text-gray-700">
+            {!fx.enabled
+              ? "The feed is switched off. Charging needs an approved manual rate."
+              : !fx.charging
+                ? "No usable rate. Nothing can be charged right now."
+                : overridden
+                  ? "Charging at a manual override, not the official rate."
+                  : "Charging at the official representative rate."}
+          </p>
+        </div>
+
+        <button
+          type="button"
+          disabled={busy || !fx.enabled}
+          onClick={onRefresh}
+          className="rounded-xl border border-gray-300 bg-white px-3.5 py-2 text-[13px] font-medium text-gray-900 transition-colors hover:border-gray-900 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Fetch now
+        </button>
+      </div>
+
+      {c && (
+        <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
+          <Fact label="Rate" value={Number(c.rate).toFixed(4)} mono />
+          <Fact label="Published" value={c.officialDate ? new Date(c.officialDate).toLocaleDateString() : "—"} />
+          <Fact
+            label="Age"
+            value={c.ageHours == null ? "—" : `${c.ageHours}h`}
+            // Said plainly rather than colour-coded, because the consequence is
+            // that charging stops, not that a badge turns orange.
+            note={stale ? `past the ${fx.maxStalenessHours}h limit` : undefined}
+          />
+          <Fact label="Origin" value={originLabel(c.origin)} note={c.overrideReason ?? undefined} />
+        </dl>
+      )}
+
+      {fx.metrics.circuitOpenUntil && (
+        <p className="mt-3 text-[13px] text-amber-800">
+          The feed failed repeatedly and is not being called again until{" "}
+          {new Date(fx.metrics.circuitOpenUntil).toLocaleTimeString()}. The stored rate is still
+          used until it goes stale.
+        </p>
+      )}
+
+      {fx.metrics.lastFailureReason && !fx.metrics.circuitOpenUntil && (
+        <p className="mt-3 text-[13px] text-gray-500">
+          Last failure: {fx.metrics.lastFailureReason}
+          {fx.metrics.lastFailureAt ? ` (${new Date(fx.metrics.lastFailureAt).toLocaleString()})` : ""}
+        </p>
+      )}
+    </section>
+  );
+}
+
+function Fact({ label, value, note, mono }: { label: string; value: string; note?: string; mono?: boolean }) {
+  return (
+    <div>
+      <dt className="text-[11px] uppercase tracking-wide text-gray-500">{label}</dt>
+      <dd className={`mt-0.5 text-[14px] font-medium text-gray-900 ${mono ? "tabular-nums" : ""}`} dir={mono ? "ltr" : undefined}>
+        {value}
+      </dd>
+      {note && <p className="mt-0.5 text-[12px] text-amber-800">{note}</p>}
+    </div>
+  );
+}
+
+function originLabel(origin: string): string {
+  switch (origin) {
+    case "AUTOMATIC_OFFICIAL":
+      return "Official";
+    case "MANUAL_OVERRIDE":
+      return "Manual override";
+    case "EMERGENCY_FALLBACK":
+      return "Emergency fallback";
+    default:
+      return origin;
+  }
 }
 
 function History({
