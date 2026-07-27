@@ -2,6 +2,26 @@ import { describe, it, expect, beforeEach, afterAll } from "vitest";
 import { createHmac } from "crypto";
 import { icountProvider } from "../providers/icount.provider";
 
+/**
+ * A well-formed charge. The ILS amount and currency id come from a frozen
+ * payment quote in real use; here they are spelled out so each test overrides
+ * only the field it is about.
+ */
+function CHARGE(over: Record<string, any> = {}): any {
+  return {
+    token: "icmock_x",
+    providerCustomerId: "cli_1",
+    amount: 499,
+    currency: "USD",
+    chargeAmount: "1821.35",
+    chargeCurrency: "ILS",
+    providerCurrencyId: 1,
+    description: "t",
+    idempotencyKey: "k1",
+    ...over,
+  };
+}
+
 // The provider resolves ICOUNT_MODE at CALL time, so each test can set the
 // environment it needs. Restore a safe default afterwards.
 const ORIGINAL = { ...process.env };
@@ -26,11 +46,20 @@ describe("icount provider: mock mode (dev/E2E default)", () => {
   });
 
   it("charges deterministically (idempotency-keyed refs, no network)", async () => {
-    const r = await icountProvider.charge({
-      token: "icmock_x", amount: 10, currency: "ILS", description: "t", idempotencyKey: "k1",
-    } as any);
+    const r = await icountProvider.charge(CHARGE({ idempotencyKey: "k1" }));
     expect(r.success).toBe(true);
     expect(r.providerChargeRef).toBe("chg_k1");
+  });
+
+  it("holds mock to the same argument rules as live", async () => {
+    // A mock that is more permissive than production certifies code that would
+    // fail on the real thing.
+    await expect(icountProvider.charge(CHARGE({ providerCurrencyId: 2 }))).rejects.toThrow(/currency_id 2/);
+    await expect(icountProvider.charge(CHARGE({ chargeCurrency: "USD" }))).rejects.toThrow(/only ILS/);
+    await expect(icountProvider.charge(CHARGE({ chargeAmount: "0" }))).rejects.toThrow(/positive charge amount/);
+    await expect(icountProvider.charge(CHARGE({ providerCustomerId: undefined }))).rejects.toThrow(
+      /no client identifier/,
+    );
   });
 });
 
@@ -43,9 +72,12 @@ describe("icount provider: live-charge environment guard", () => {
   it("refuses live charge without the explicit ICOUNT_ALLOW_LIVE acknowledgement", async () => {
     process.env.ICOUNT_MODE = "live";
     // Even a (hypothetical) production NODE_ENV is not enough on its own.
-    await expect(
-      icountProvider.charge({ token: "t", amount: 1, currency: "ILS", description: "x", idempotencyKey: "k" } as any),
-    ).rejects.toThrow(/refusing live charge/);
+    // The env guard fires before argument validation, so a misconfigured stack
+    // is told it may not charge at all rather than that its amount was wrong.
+    await expect(icountProvider.charge(CHARGE())).rejects.toThrow(/refusing live charge/);
+    await expect(icountProvider.charge(CHARGE({ chargeAmount: undefined }))).rejects.toThrow(
+      /refusing live charge/,
+    );
   });
 
   it("refuses live refund under the same guard", async () => {

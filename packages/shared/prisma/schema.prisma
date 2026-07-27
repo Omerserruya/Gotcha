@@ -3157,6 +3157,13 @@ model PaymentAttempt {
   /// on this column is what makes duplicate activation grant credits once.
   consumedByActivationAt DateTime? @map("consumed_by_activation_at")
 
+  /// The frozen conversion this charge used. Null for manual contracts, which
+  /// move no money through a provider.
+  paymentQuoteId     String?  @map("payment_quote_id")
+  chargeAmount       Decimal? @map("charge_amount") @db.Decimal(12, 2)
+  chargeCurrency     String?  @map("charge_currency")
+  providerCurrencyId Int?     @map("provider_currency_id")
+
   /// How the money was proven: PROVIDER_CONFIRMED or MANUAL_EXTERNAL_CONTRACT.
   /// Recorded on the attempt itself so billing history can never present a
   /// Sysadmin-activated contract as a card payment that actually cleared.
@@ -3446,6 +3453,116 @@ model FxRateSnapshot {
   @@unique([baseCurrency, quoteCurrency, rateDate, source])
   @@index([baseCurrency, quoteCurrency, fetchedAt])
   @@map("fx_rate_snapshots")
+}
+
+enum BillingExchangeRateStatus {
+  DRAFT
+  /// Approved and usable for real charges. At most one per currency pair.
+  ACTIVE
+  RETIRED
+}
+
+/// The rate money is actually charged at.
+///
+/// Deliberately NOT FxRateSnapshot. That one refreshes itself from an external
+/// source during use and falls back to a hardcoded 3.7 when the fetch fails -
+/// acceptable for showing an approximate price, unacceptable for deciding what
+/// to charge someone. A silent fallback would mean billing a customer at a rate
+/// nobody chose.
+///
+/// This one is entered and approved by a human, versioned, and windowed. It
+/// never fetches anything. If no ACTIVE rate exists, charging fails closed.
+model BillingExchangeRate {
+  id String @id @default(cuid())
+
+  baseCurrency  String @default("USD") @map("base_currency")
+  quoteCurrency String @default("ILS") @map("quote_currency")
+
+  rate Decimal @db.Decimal(18, 8)
+
+  /// MANUAL_PLATFORM_RATE for now. Never a live web lookup at charge time.
+  source  String @default("MANUAL_PLATFORM_RATE")
+  version Int
+
+  activeFrom  DateTime  @map("active_from")
+  activeUntil DateTime? @map("active_until")
+
+  status BillingExchangeRateStatus @default(DRAFT)
+
+  /// Approval is separate from creation on purpose: the person who types a
+  /// rate should not be the only one who can make it chargeable.
+  createdBy  String?   @map("created_by")
+  approvedBy String?   @map("approved_by")
+  approvedAt DateTime? @map("approved_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  quotes PaymentQuote[]
+
+  @@unique([baseCurrency, quoteCurrency, version])
+  @@index([baseCurrency, quoteCurrency, status, activeFrom])
+  @@map("billing_exchange_rates")
+}
+
+enum PaymentQuoteStatus {
+  ACTIVE
+  CONSUMED
+  EXPIRED
+  SUPERSEDED
+}
+
+/// An immutable, frozen conversion: what was agreed, and what will be charged.
+///
+/// The customer agrees a USD figure; iCount is charged in ILS. Without freezing
+/// the conversion, the amount could move between the screen that showed it and
+/// the request that charges it - so the rate, its version and the resulting ILS
+/// figure are captured together and never recalculated.
+model PaymentQuote {
+  id String @id @default(cuid())
+
+  tenantId       String? @map("tenant_id")
+  checkoutId     String? @map("checkout_id")
+  subscriptionId String? @map("subscription_id")
+
+  /// SUBSCRIPTION_INITIAL | RENEWAL | CREDIT_PACKAGE | AUTO_TOPUP | UPGRADE
+  purpose String
+
+  /// What the customer agreed to, in the commercial currency.
+  commercialAmount   Decimal @map("commercial_amount") @db.Decimal(12, 2)
+  commercialCurrency String  @map("commercial_currency")
+
+  /// The exact rate used, pinned by id AND copied by value, so the numbers
+  /// survive even if the rate row is later retired or corrected.
+  /// Null only for an identity quote (same currency both sides), where there is
+  /// no conversion and therefore no approved rate to pin. A CHECK constraint
+  /// keeps the two cases from being confused.
+  fxRateId      String?  @map("fx_rate_id")
+  fxRate        Decimal  @map("fx_rate") @db.Decimal(18, 8)
+  fxRateSource  String   @map("fx_rate_source")
+  fxRateVersion Int      @map("fx_rate_version")
+  fxQuotedAt    DateTime @map("fx_quoted_at")
+
+  /// What the provider is actually asked to charge.
+  chargeAmount       Decimal @map("charge_amount") @db.Decimal(12, 2)
+  chargeCurrency     String  @map("charge_currency")
+  /// iCount currency id. 1 = ILS, 2 = USD. Policy pins this to 1 for now.
+  providerCurrencyId Int     @map("provider_currency_id")
+  roundingMode       String  @default("HALF_UP") @map("rounding_mode")
+
+  expiresAt DateTime           @map("expires_at")
+  status    PaymentQuoteStatus @default(ACTIVE)
+
+  /// Set when an attempt consumes this quote. One quote, one charge.
+  consumedByAttemptId String?   @unique @map("consumed_by_attempt_id")
+  consumedAt          DateTime? @map("consumed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  fxRateRef BillingExchangeRate? @relation(fields: [fxRateId], references: [id])
+
+  @@index([checkoutId])
+  @@index([tenantId])
+  @@index([status, expiresAt])
+  @@map("payment_quotes")
 }
 
 // ─── POC / Trial templates (Sysadmin-only) ─────────────────

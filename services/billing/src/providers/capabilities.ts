@@ -48,9 +48,11 @@ export const ICOUNT_CAPABILITIES: ProviderCapabilities = {
   // The PayPage is confirmed to be type cc_token, so the page can tokenize.
   tokenization: "verified",
 
-  // ...but how it returns the token is NOT confirmed. This single field is what
-  // keeps the customer-facing checkout disabled.
-  tokenRetrievalContract: "unverified",
+  // Confirmed: the token is pulled server-side with client/get_cc_tokens after
+  // the hosted session. This is what allowed the customer-facing checkout to be
+  // enabled - the success signal is now a provider query, not a browser
+  // redirect.
+  tokenRetrievalContract: "verified",
 
   // Written confirmation: POST cc/bill, without customer presence, without CVV,
   // for merchant-initiated transactions and monthly renewal.
@@ -65,12 +67,15 @@ export const ICOUNT_CAPABILITIES: ProviderCapabilities = {
   fullRefund: "verified",
   partialRefund: "unsupported",
 
-  // cc/bill has no confirmed currency parameter. ILS is the account's base
-  // currency and therefore what an omitted-currency charge settles in; every
-  // other currency is refused, so a USD plan price can never be quietly
-  // charged as ILS.
+  // cc/bill takes an explicit currency_id (1 = ILS, 2 = USD). Product policy
+  // charges ILS only, so USD stays out of this list: the catalog is priced in
+  // USD and converted at an approved rate, and submitting USD directly would
+  // bypass the frozen quote that makes the two figures reconcilable.
   chargeCurrencies: ["ILS"],
 } as const;
+
+/** The provider currency ids GOTCHA may submit. Deliberately ILS alone. */
+export const ICOUNT_CHARGE_CURRENCY_IDS: Readonly<Record<string, number>> = { ILS: 1 };
 
 /** Manual/offline provider: no automated money movement at all. */
 export const MANUAL_CAPABILITIES: ProviderCapabilities = {

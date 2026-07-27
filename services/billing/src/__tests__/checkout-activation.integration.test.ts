@@ -17,6 +17,7 @@ const RUN = `act-${Date.now()}`;
 const tenantIds: string[] = [];
 const checkoutIds: string[] = [];
 const attemptIds: string[] = [];
+const quoteIds: string[] = [];
 
 async function fixture(opts: {
   amount?: number;
@@ -24,6 +25,7 @@ async function fixture(opts: {
   attemptState?: PaymentAttemptState;
   consumed?: boolean;
   checkoutStatus?: "PENDING" | "EXPIRED" | "CANCELED" | "PAID";
+  withoutQuote?: boolean;
 } = {}) {
   const n = `${RUN}-${Math.random().toString(36).slice(2, 8)}`;
   const tenant = await prisma.tenant.create({
@@ -57,6 +59,32 @@ async function fixture(opts: {
   });
   checkoutIds.push(checkout.id);
 
+  // This plan is priced in ILS and charged in ILS, so the quote is an identity
+  // one: no conversion, no approved rate to pin. It still has to exist, because
+  // a provider payment with no quote is a charge nobody can reconcile.
+  const quote = opts.withoutQuote
+    ? null
+    : await prisma.paymentQuote.create({
+        data: {
+          tenantId: tenant.id,
+          checkoutId: checkout.id,
+          purpose: "SUBSCRIPTION_INITIAL",
+          commercialAmount: 499,
+          commercialCurrency: "ILS",
+          fxRateId: null,
+          fxRate: 1,
+          fxRateSource: "IDENTITY",
+          fxRateVersion: 0,
+          fxQuotedAt: new Date(),
+          chargeAmount: 499,
+          chargeCurrency: "ILS",
+          providerCurrencyId: 1,
+          expiresAt: new Date(Date.now() + 3_600_000),
+          status: "ACTIVE",
+        },
+      });
+  if (quote) quoteIds.push(quote.id);
+
   const attempt = await prisma.paymentAttempt.create({
     data: {
       attemptKey: `${n}:initial`,
@@ -67,15 +95,20 @@ async function fixture(opts: {
       currency,
       state: opts.attemptState ?? "SUCCEEDED",
       consumedByActivationAt: opts.consumed ? new Date() : null,
+      paymentQuoteId: quote?.id ?? null,
+      chargeAmount: quote ? 499 : null,
+      chargeCurrency: quote ? "ILS" : null,
+      providerCurrencyId: quote ? 1 : null,
     },
   });
   attemptIds.push(attempt.id);
 
-  return { tenant, checkout, attempt, entityId: entity.id };
+  return { tenant, checkout, attempt, quote, entityId: entity.id };
 }
 
 afterAll(async () => {
   await prisma.paymentAttempt.deleteMany({ where: { id: { in: attemptIds } } });
+  await prisma.paymentQuote.deleteMany({ where: { id: { in: quoteIds } } });
   await prisma.pendingCheckout.deleteMany({ where: { id: { in: checkoutIds } } });
   await prisma.aiUnitLot.deleteMany({ where: { tenantId: { in: tenantIds } } }).catch(() => {});
   await prisma.tenant.deleteMany({ where: { id: { in: tenantIds } } });

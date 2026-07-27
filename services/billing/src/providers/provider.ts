@@ -22,9 +22,20 @@ export interface TokenizeResult {
 export interface ChargeInput {
   token: string;
   providerCustomerId?: string;
-  /** Amount in major currency units (e.g. 499.00 ILS). */
+  /** Our own opaque customer reference, when the provider echoes one back. */
+  customClientId?: string;
+  /** The commercial amount the customer agreed to, for the record. */
   amount: number;
   currency: string;
+  /**
+   * What is actually submitted, as a decimal string from a frozen payment
+   * quote. A string, not a number: a float amount is a rounding bug waiting
+   * for the right price.
+   */
+  chargeAmount?: string;
+  chargeCurrency?: string;
+  /** The provider's own currency id. Never defaulted - see the quote. */
+  providerCurrencyId?: number;
   description: string;
   /** Required for safe retries - the provider must dedupe on this. */
   idempotencyKey: string;
@@ -36,6 +47,12 @@ export interface ChargeInput {
 export interface ChargeResult {
   success: boolean;
   providerChargeRef?: string;
+  /**
+   * The charge cannot be treated as either done or not done, so a human or a
+   * lookup has to settle it. Distinct from `success: false`, which means no
+   * money moved and a retry is safe.
+   */
+  requiresReconciliation?: boolean;
   /** Set on failure: provider/decline code for dunning + display. */
   failureCode?: string;
   /** Populated when issueInvoice was requested and succeeded. */
@@ -69,8 +86,46 @@ export interface WebhookVerifyInput {
   rawBody: string;
 }
 
+export interface StartTokenizationInput {
+  pageId: string;
+  /** Our reference, echoed back so the session can be correlated server-side. */
+  customClientId: string;
+  clientName?: string;
+  email?: string;
+  successUrl?: string;
+  failureUrl?: string;
+  ipnUrl?: string;
+}
+
+export interface StartTokenizationResult {
+  saleUrl: string;
+  raw: unknown;
+}
+
+export interface StoredCardQuery {
+  clientId?: string;
+  customClientId?: string;
+}
+
+export interface StoredCard {
+  token: string;
+  brand?: string;
+  last4?: string;
+  expMonth?: number;
+  expYear?: number;
+}
+
 export interface PaymentProvider {
   readonly name: BillingProvider;
+  /** Begin a hosted tokenization session. Returns where to send the customer. */
+  startTokenization?(input: StartTokenizationInput): Promise<StartTokenizationResult>;
+  /**
+   * Ask the provider which cards it has stored.
+   *
+   * The only accepted proof that tokenization happened. A browser returning to
+   * a success URL proves the customer came back and nothing more.
+   */
+  listStoredCards?(query: StoredCardQuery): Promise<StoredCard[]>;
   /**
    * Confirm a PayPage tokenization server-side. For iCount this also reflects
    * the J5 (1₪) verification result; the auth is released by iCount's flow.

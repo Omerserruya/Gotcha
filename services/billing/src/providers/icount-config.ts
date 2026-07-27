@@ -21,7 +21,7 @@
  * created in the iCount UI under System -> Settings -> Automation -> API Tokens.
  *
  * Config (env, billing service only - never NEXT_PUBLIC):
- *   ICOUNT_MODE            "mock" (default) | "live"
+ *   ICOUNT_MODE            "mock" (default) | "simulator" | "live"
  *   ICOUNT_API_TOKEN       the SID / API token
  *   ICOUNT_API_BASE_URL    default https://api.icount.co.il/api/v3.php
  *   ICOUNT_PAYMENT_PAGE_ID the "Credit card token" PayPage id - CONFIGURATION,
@@ -34,12 +34,50 @@ import { redact } from "@chatcenter/shared";
 const DEFAULT_API_BASE_URL = "https://api.icount.co.il/api/v3.php";
 
 /**
- * Mock mode makes no network calls at all, so it needs no credentials and can
- * never charge anything. Resolved at CALL time so tests and runtime config
- * changes are honoured.
+ * The three modes, and what separates them.
+ *
+ *   mock       no network, no credentials, deterministic fixtures. The default,
+ *              so a stack that was never configured cannot charge anything.
+ *   simulator  no network either, but it models the provider's failure
+ *              behaviour: declines, timeouts, ambiguous outcomes. This is what
+ *              the end-to-end payment tests run against, because the paths that
+ *              matter most are the ones where things go wrong, and those cannot
+ *              be exercised against a real payments API.
+ *   live       real network, real money.
+ *
+ * Only `live` reaches the network. Simulator is deliberately NOT a mode that
+ * "sometimes" calls out - a mode that occasionally touches production is a mode
+ * that will touch production on the wrong day.
+ */
+export type IcountMode = "mock" | "simulator" | "live";
+
+export function icountMode(): IcountMode {
+  const raw = String(process.env.ICOUNT_MODE || "mock").toLowerCase();
+  if (raw === "live") return "live";
+  if (raw === "simulator") {
+    // Simulator is opt-in. Without the acknowledgement it degrades to mock
+    // rather than silently enabling a mode someone did not ask for.
+    return process.env.ICOUNT_ALLOW_SIMULATOR === "true" ? "simulator" : "mock";
+  }
+  return "mock";
+}
+
+export function isLive(): boolean {
+  return icountMode() === "live";
+}
+
+export function isSimulator(): boolean {
+  return icountMode() === "simulator";
+}
+
+/**
+ * True for every mode that performs no network call and can charge nothing.
+ *
+ * Kept as the single question call sites ask before deciding whether a guard
+ * applies, so adding a fourth mode later cannot leave one of them behind.
  */
 export function isMock(): boolean {
-  return String(process.env.ICOUNT_MODE || "mock").toLowerCase() !== "live";
+  return icountMode() !== "live";
 }
 
 export function icountApiBaseUrl(): string {
@@ -96,7 +134,7 @@ export function authHeaders(): Record<string, string> {
  */
 export function assertIcountConfig(env: NodeJS.ProcessEnv = process.env): void {
   const mode = String(env.ICOUNT_MODE || "mock").toLowerCase();
-  if (mode !== "live") return; // mock: no network, no credentials needed
+  if (mode !== "live") return; // mock/simulator: no network, no credentials needed
 
   if (!(env.ICOUNT_API_TOKEN || "").trim()) {
     throw new Error(

@@ -11,8 +11,11 @@
  * rejected before it can touch subscription state.
  */
 import { prisma, materializeEntitlements, rolloverIncluded } from "@chatcenter/shared";
-import type { PaymentAttempt, PendingCheckout } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+import type { PaymentAttempt, PaymentQuote, PendingCheckout } from "@prisma/client";
 import { currentPeriod } from "../lib/period";
+import { CHARGE_CURRENCY, CHARGE_CURRENCY_ID, assertQuoteMatchesCommercial } from "./payment-quote.service";
+import { convert } from "./exchange-rate.service";
 
 /**
  * How the payment was proven.
@@ -68,7 +71,15 @@ export async function activatePaidCheckout(args: {
   const attempt = await prisma.paymentAttempt.findUnique({ where: { id: args.paymentAttemptId } });
   if (!attempt) throw new ActivationRefused("attempt_not_found");
 
-  assertActivatable(checkout, attempt);
+  // A provider charge moved ILS while the customer agreed USD. The quote is the
+  // only record connecting the two, so it is loaded and verified here rather
+  // than trusted from whatever wrote the attempt.
+  const quote = attempt.paymentQuoteId
+    ? await prisma.paymentQuote.findUnique({ where: { id: attempt.paymentQuoteId } })
+    : null;
+  if (attempt.paymentQuoteId && !quote) throw new ActivationRefused("payment_quote_not_found");
+
+  assertActivatable(checkout, attempt, quote);
 
   // Idempotency: a checkout already COMPLETED is a no-op, not an error and not
   // a second grant of credits.
@@ -152,7 +163,11 @@ export async function activatePaidCheckout(args: {
 }
 
 /** Every refusal reason, in one place so the rules are readable together. */
-export function assertActivatable(checkout: PendingCheckout, attempt: PaymentAttempt): void {
+export function assertActivatable(
+  checkout: PendingCheckout,
+  attempt: PaymentAttempt,
+  quote?: PaymentQuote | null,
+): void {
   if (!checkout.tenantId) throw new ActivationRefused("checkout_has_no_tenant");
 
   if (checkout.status === "EXPIRED") throw new ActivationRefused("checkout_expired");
@@ -182,6 +197,92 @@ export function assertActivatable(checkout: PendingCheckout, attempt: PaymentAtt
   }
   if (attempt.consumedByActivationAt) {
     throw new ActivationRefused("attempt_already_consumed");
+  }
+
+  assertQuoteInvariants(checkout, attempt, quote);
+}
+
+/**
+ * The dual-currency half of the activation contract.
+ *
+ * A provider-confirmed payment must carry a quote. Without one there is no
+ * record of what ILS figure was actually taken or at which rate, and activating
+ * would mean granting a plan against a charge nobody can reconcile.
+ *
+ * A manual contract carries none, and must not: no money moved through a
+ * provider, so there is nothing to convert.
+ */
+function assertQuoteInvariants(
+  checkout: PendingCheckout,
+  attempt: PaymentAttempt,
+  quote?: PaymentQuote | null,
+): void {
+  const source = attempt.paymentSource ?? "PROVIDER_CONFIRMED";
+
+  if (source === "MANUAL_EXTERNAL_CONTRACT") {
+    if (quote || attempt.paymentQuoteId) throw new ActivationRefused("manual_contract_must_not_have_quote");
+    return;
+  }
+
+  if (!quote) throw new ActivationRefused("provider_payment_without_quote");
+
+  if (quote.checkoutId && quote.checkoutId !== checkout.id) {
+    throw new ActivationRefused("quote_not_for_this_checkout");
+  }
+  if (quote.consumedByAttemptId && quote.consumedByAttemptId !== attempt.id) {
+    // The quote was spent by a different attempt. Honouring it here would let
+    // one frozen conversion activate two checkouts.
+    throw new ActivationRefused("quote_consumed_by_other_attempt");
+  }
+
+  // Source side: the quote must describe the agreed commercial terms, and its
+  // charge amount must still recompute from its own frozen rate.
+  try {
+    assertQuoteMatchesCommercial(quote, {
+      id: checkout.id,
+      amount: checkout.snapshotPrice,
+      currency: checkout.snapshotCurrency,
+    });
+  } catch (err: any) {
+    throw new ActivationRefused(err?.code ?? "quote_commercial_mismatch");
+  }
+
+  // Charge side: what was actually submitted must equal what the quote froze.
+  if (attempt.chargeAmount == null) throw new ActivationRefused("attempt_missing_charge_amount");
+  if (!new Prisma.Decimal(attempt.chargeAmount).equals(new Prisma.Decimal(quote.chargeAmount))) {
+    throw new ActivationRefused("charge_amount_mismatch");
+  }
+  if ((attempt.chargeCurrency ?? "").toUpperCase() !== quote.chargeCurrency.toUpperCase()) {
+    throw new ActivationRefused("charge_currency_mismatch");
+  }
+  if (quote.chargeCurrency !== CHARGE_CURRENCY) {
+    throw new ActivationRefused("charge_currency_not_ils", quote.chargeCurrency);
+  }
+  if (attempt.providerCurrencyId !== CHARGE_CURRENCY_ID || quote.providerCurrencyId !== CHARGE_CURRENCY_ID) {
+    throw new ActivationRefused("provider_currency_id_not_ils");
+  }
+
+  // Rate identity: value AND version. A matching amount under a different rate
+  // version means two rates produced the same figure by coincidence, which is
+  // not the same as the charge having been made at the approved rate.
+  const recomputed = convert(quote.commercialAmount, quote.fxRate);
+  if (!recomputed.equals(new Prisma.Decimal(quote.chargeAmount))) {
+    throw new ActivationRefused("fx_rate_does_not_produce_charge_amount");
+  }
+  // A converted quote must name the approved rate it used. An identity quote
+  // has none by definition, and is distinguished by its source rather than by
+  // an absent field, so the two cannot be confused.
+  const identity = quote.fxRateSource === "IDENTITY";
+  if (identity) {
+    if (quote.commercialCurrency !== quote.chargeCurrency) {
+      throw new ActivationRefused("identity_quote_across_currencies");
+    }
+    if (quote.fxRateId) throw new ActivationRefused("identity_quote_pins_a_rate");
+  } else {
+    if (!quote.fxRateId) throw new ActivationRefused("converted_quote_without_rate_reference");
+    if (!Number.isInteger(quote.fxRateVersion) || quote.fxRateVersion < 1) {
+      throw new ActivationRefused("fx_rate_version_invalid");
+    }
   }
 }
 

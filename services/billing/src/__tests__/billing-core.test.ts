@@ -39,7 +39,13 @@ describe("billing/iCount provider (mock mode)", () => {
   });
 
   it("charges successfully and issues an invoice ref when asked", async () => {
-    const res = await icountProvider.charge({ token: "icmock_x", amount: 499, currency: "ILS", description: "Pro", idempotencyKey: "k1", issueInvoice: true });
+    const res = await icountProvider.charge({
+      token: "icmock_x", providerCustomerId: "cli_1",
+      amount: 499, currency: "USD",
+      // The ILS figure and currency id come from a frozen payment quote.
+      chargeAmount: "1821.35", chargeCurrency: "ILS", providerCurrencyId: 1,
+      description: "Pro", idempotencyKey: "k1", issueInvoice: true,
+    });
     expect(res.success).toBe(true);
     expect(res.providerChargeRef).toBe("chg_k1");
     expect(res.providerInvoiceRef).toBe("inv_k1");

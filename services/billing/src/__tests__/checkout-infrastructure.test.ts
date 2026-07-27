@@ -67,11 +67,20 @@ describe("tokenization page validation", () => {
 // ── 4. Missing contract prevents checkout ───────────────────────────────────
 
 describe("checkout cannot be enabled without a verified token-retrieval contract", () => {
-  it("4. is disabled today, because token retrieval is unverified", () => {
+  it("4. is enabled now that the token is pulled server-side", () => {
+    // What changed: client/get_cc_tokens is confirmed, so the success signal is
+    // a provider query rather than a browser redirect. The rule itself did not
+    // move - checkout still requires BOTH capabilities verified.
     expect(ICOUNT_CAPABILITIES.tokenization).toBe("verified");
-    expect(ICOUNT_CAPABILITIES.tokenRetrievalContract).toBe("unverified");
-    expect(checkoutEnabled(ICOUNT_CAPABILITIES)).toBe(false);
-    expect(() => assertCheckoutMayBeEnabled(ICOUNT_CAPABILITIES)).toThrow(/checkout is disabled/);
+    expect(ICOUNT_CAPABILITIES.tokenRetrievalContract).toBe("verified");
+    expect(checkoutEnabled(ICOUNT_CAPABILITIES)).toBe(true);
+    expect(() => assertCheckoutMayBeEnabled(ICOUNT_CAPABILITIES)).not.toThrow();
+  });
+
+  it("4a. would go back to disabled the moment retrieval stopped being verified", () => {
+    const regressed = { ...ICOUNT_CAPABILITIES, tokenRetrievalContract: "unverified" as const };
+    expect(checkoutEnabled(regressed)).toBe(false);
+    expect(() => assertCheckoutMayBeEnabled(regressed)).toThrow(/checkout is disabled/);
   });
 
   it("4b. would enable only when BOTH tokenization and retrieval are verified", () => {
@@ -97,8 +106,9 @@ describe("currency safety", () => {
   });
 
   it("6. USD cannot silently become ILS", () => {
-    // cc/bill has no confirmed currency parameter, so a USD snapshot must be
-    // refused rather than submitted and settled in the account base currency.
+    // cc/bill now takes an explicit currency_id, but the catalog is priced in
+    // USD and charged in ILS through a frozen quote. Submitting USD directly
+    // would bypass that, so USD stays unchargeable.
     expect(ICOUNT_CAPABILITIES.chargeCurrencies).not.toContain("USD");
     expect(() => assertChargeCurrency(ICOUNT_CAPABILITIES, "USD")).toThrow(/refusing a USD charge/);
     expect(() => assertChargeCurrency(ICOUNT_CAPABILITIES, "ILS")).not.toThrow();
@@ -107,7 +117,18 @@ describe("currency safety", () => {
   it("6b. the provider refuses non-ILS before any network call", () => {
     const provider = read("services/billing/src/providers/icount.provider.ts");
     expect(provider).toContain("assertChargeSafety");
-    expect(provider).toMatch(/refusing \$\{input\.currency\} charge/);
+    expect(provider).toMatch(/only ILS charges are enabled/);
+  });
+
+  it("6c. the ILS amount comes from a quote, never computed in the adapter", () => {
+    const provider = read("services/billing/src/providers/icount.provider.ts");
+    const code = provider.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+    // A second place the exchange rate lives is a second answer to what the
+    // customer owes.
+    for (const forbidden of ["fxRate", "activeRate", "convert(", "* rate", "usdIls"]) {
+      expect(code, `the adapter must not do its own conversion (${forbidden})`).not.toContain(forbidden);
+    }
+    expect(provider).toContain("input.chargeAmount");
   });
 });
 

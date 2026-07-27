@@ -107,10 +107,13 @@ describe("token transport", () => {
     expect(headers.Authorization).toBe("Bearer tok_live_abcdefghijklmnop");
     expect(headers["Content-Type"]).toBe("application/json");
 
-    const code = read("services/billing/src/providers/icount.provider.ts");
+    // The wire-level calls live in the typed client now; the rule is unchanged.
+    const code = read("services/billing/src/providers/icount-client.ts");
     // The token must never be interpolated into a request path.
     expect(code).not.toMatch(/\$\{[^}]*[Tt]oken[^}]*\}\/?`?\s*,?\s*$/m);
     expect(code).toContain("headers: authHeaders()");
+    // ...nor into a request body, where it would land in provider-side logs.
+    expect(code).not.toMatch(/api_?token|sid:|access_token:/i);
   });
 });
 

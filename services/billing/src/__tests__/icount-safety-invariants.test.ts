@@ -77,38 +77,68 @@ describe("live charging cannot happen by accident", () => {
 
 describe("the provider uses only iCount-verified operations", () => {
   const provider = read("services/billing/src/providers/icount.provider.ts");
+  // The wire-level calls moved into a typed client, so the payload assertions
+  // follow them. What is asserted is unchanged: only confirmed operations, only
+  // confirmed fields.
+  const client = read("services/billing/src/providers/icount-client.ts");
 
   it("calls the verified endpoints", () => {
-    expect(provider).toContain('call("cc/bill"');
-    expect(provider).toContain('call("doc/cancel"');
-    expect(provider).toContain('call("cc/transactions"');
+    for (const op of ["cc/bill", "doc/cancel", "cc/transactions", "paypage/generate_sale", "client/get_cc_tokens"]) {
+      // Tolerant of the call being wrapped across lines; strict about the
+      // action name being a literal argument to call().
+      const pattern = new RegExp(`call(<[^>]*>)?\\(\\s*\n?\\s*"${op.replace("/", "\\/")}"`);
+      expect(client, `${op} must be called through the typed client`).toMatch(pattern);
+    }
   });
 
   it("no longer calls the fabricated endpoints", () => {
     for (const invented of ["cc/charge", "cc/refund", "paypage/get_token_info"]) {
-      expect(provider, `must not call ${invented}`).not.toMatch(
-        new RegExp(`call\\(\\s*["']${invented.replace("/", "\\/")}["']`),
-      );
+      const pattern = new RegExp(`call\\(\\s*["']${invented.replace("/", "\\/")}["']`);
+      expect(client, `must not call ${invented}`).not.toMatch(pattern);
+      expect(provider, `must not call ${invented}`).not.toMatch(pattern);
     }
   });
 
   it("sends only the fields iCount confirmed for cc/bill", () => {
-    const body = provider.slice(provider.indexOf('call("cc/bill"'), provider.indexOf('call("cc/bill"') + 400);
+    const start = client.indexOf('call(\n    "cc/bill"') >= 0 ? client.indexOf('call(\n    "cc/bill"') : client.indexOf('"cc/bill"');
+    const body = client.slice(start, start + 500);
     expect(body).toContain("sum:");
     expect(body).toContain("token:");
     expect(body).toContain("client_id:");
-    // No invented currency/description/idempotency parameter.
+    // currency_id IS confirmed (1 = ILS). The rest remain invented.
+    expect(body).toContain("currency_id:");
     expect(body).not.toMatch(/currency_code:|idempotency_key:|description:/);
   });
 
-  it("refuses a charge whose currency handling is unverified", () => {
-    // cc/bill has no confirmed currency field and the account base is ILS.
+  it("refuses any charge that is not ILS with currency_id 1", () => {
     expect(provider).toContain("assertChargeSafety");
-    expect(provider).toMatch(/refusing \$\{input\.currency\} charge/);
+    expect(provider).toMatch(/only ILS charges are enabled/);
+    // The account is multi-currency, so a wrong id does not fail - it charges
+    // the wrong amount.
+    expect(provider).toMatch(/CURRENCY_ID_ILS/);
   });
 
-  it("has no live tokenization path, since token retrieval is unverified", () => {
-    expect(provider).toMatch(/tokenization is not implemented/);
+  it("establishes tokenization server-side rather than from a redirect", () => {
+    // The token-retrieval contract is now verified, so checkout is enabled -
+    // but the success signal must still be a provider query.
+    expect(provider).toContain("listStoredCards");
+    expect(client).toContain('call("client/get_cc_tokens"');
+    expect(provider).toMatch(/tokenizeAndVerify is not the tokenization path/);
+  });
+
+  it("never treats an unknown outcome as a failure that may be retried", () => {
+    // A decline means no money moved. An unknown means it may have. Collapsing
+    // the two is how a customer gets billed twice.
+    expect(client).toContain("IcountOutcomeUnknown");
+    expect(client).toMatch(/mutating[\s\S]{0,400}IcountOutcomeUnknown/);
+    expect(provider).toMatch(/if \(err instanceof IcountOutcomeUnknown\) throw err/);
+  });
+
+  it("reports a reference-less success as needing reconciliation, not success", () => {
+    // Without a reference the charge cannot be reconciled or refunded, and an
+    // invented id would hide that.
+    expect(provider).toContain("charge_reference_missing");
+    expect(provider).toContain("requiresReconciliation: true");
   });
 
   it("refuses a partial refund rather than cancelling the whole document", () => {
