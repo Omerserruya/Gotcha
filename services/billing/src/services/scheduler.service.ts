@@ -14,6 +14,11 @@
  * So every stage runs behind its own guard, and the tick reports which ones
  * failed rather than only that "the cycle" did. Extracted from index.ts because
  * a scheduler you cannot call from a test is a scheduler nobody has tested.
+ *
+ * Running on several instances at once is safe without a leader lock, because
+ * every charge is keyed from the subscription and period rather than from the
+ * worker or the clock. That is a property of the keys, not of the scheduler -
+ * see scheduler-multi-instance.integration.test.ts.
  */
 import { runBillingCycle } from "./subscription.service";
 import { runDunning } from "./dunning.service";

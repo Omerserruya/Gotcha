@@ -51,8 +51,20 @@ app.use("/api", webhookRoutes);
 app.use("/api", internalRoutes);
 
 // Scheduler: trials → activate, period end → renew, pending changes → apply,
-// failed renewals → dunning ladder. Single-instance dev loop; in multi-instance
-// prod, gate with a leader lock or convert to a BullMQ repeatable job.
+// failed renewals → dunning ladder.
+//
+// Safe to run on several instances without a leader lock. Not by luck: every
+// charge it makes is keyed deterministically from the subscription and the
+// billing period, so concurrent replicas collide on a unique index instead of
+// each opening their own charge. Verified in
+// scheduler-multi-instance.integration.test.ts - four replicas renewing the
+// same subscription at the same instant produce one charge, one invoice and one
+// credit grant, and an unknown outcome still leaves exactly one charge to
+// reconcile.
+//
+// A leader lock would still reduce duplicated scanning, which is a cost
+// question rather than a correctness one. Do not remove the deterministic keys
+// on the assumption that a lock is doing this job.
 const schedulerEnabled = (process.env.BILLING_SCHEDULER_ENABLED ?? "true").toLowerCase() !== "false";
 const intervalMs = parseInt(process.env.BILLING_CYCLE_INTERVAL_MS || String(60 * 60 * 1000), 10);
 if (schedulerEnabled) {

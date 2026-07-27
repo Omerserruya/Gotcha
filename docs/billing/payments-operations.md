@@ -360,6 +360,28 @@ from the internet.
 
 ---
 
+## Running more than one billing instance
+
+Safe, without a leader lock.
+
+Not by luck: every charge the scheduler makes is keyed deterministically from
+the subscription and the billing period, so concurrent replicas collide on a
+unique index rather than each opening their own charge. Four replicas renewing
+the same subscription at the same instant produce **one** charge, one invoice
+and one credit grant — and an unknown outcome still leaves exactly one charge to
+reconcile, which is the combination that would otherwise be worst.
+
+A leader lock would still cut duplicated scanning. That is a cost question, not
+a correctness one.
+
+**Do not remove the deterministic charge keys** on the assumption that a lock is
+doing this job. It is not.
+
+Each stage of the tick is also independently guarded, so a failure in renewals
+cannot stop reconciliation. The log names which stages failed.
+
+---
+
 ## What gets cleaned up
 
 The scheduler deletes checkout artifacts that have finished and aged out:
