@@ -75,6 +75,51 @@ describe("live charging cannot happen by accident", () => {
   });
 });
 
+describe("the provider uses only iCount-verified operations", () => {
+  const provider = read("services/billing/src/providers/icount.provider.ts");
+
+  it("calls the verified endpoints", () => {
+    expect(provider).toContain('call("cc/bill"');
+    expect(provider).toContain('call("doc/cancel"');
+    expect(provider).toContain('call("cc/transactions"');
+  });
+
+  it("no longer calls the fabricated endpoints", () => {
+    for (const invented of ["cc/charge", "cc/refund", "paypage/get_token_info"]) {
+      expect(provider, `must not call ${invented}`).not.toMatch(
+        new RegExp(`call\\(\\s*["']${invented.replace("/", "\\/")}["']`),
+      );
+    }
+  });
+
+  it("sends only the fields iCount confirmed for cc/bill", () => {
+    const body = provider.slice(provider.indexOf('call("cc/bill"'), provider.indexOf('call("cc/bill"') + 400);
+    expect(body).toContain("sum:");
+    expect(body).toContain("token:");
+    expect(body).toContain("client_id:");
+    // No invented currency/description/idempotency parameter.
+    expect(body).not.toMatch(/currency_code:|idempotency_key:|description:/);
+  });
+
+  it("refuses a charge whose currency handling is unverified", () => {
+    // cc/bill has no confirmed currency field and the account base is ILS.
+    expect(provider).toContain("assertChargeSafety");
+    expect(provider).toMatch(/refusing \$\{input\.currency\} charge/);
+  });
+
+  it("has no live tokenization path, since token retrieval is unverified", () => {
+    expect(provider).toMatch(/tokenization is not implemented/);
+  });
+
+  it("refuses a partial refund rather than cancelling the whole document", () => {
+    expect(provider).toContain("partial_refund_unsupported");
+  });
+
+  it("refuses a refund with no document reference", () => {
+    expect(provider).toContain("missing_document_reference");
+  });
+});
+
 describe("the discovery tool cannot move money", () => {
   const tool = read("services/billing/src/scripts/icount-inspect.ts");
 

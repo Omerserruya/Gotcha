@@ -1,22 +1,33 @@
 /**
- * iCount provider - Israeli PCI-compliant vault, payments + legal invoicing.
+ * iCount provider.
  *
- * Flow:
- *   1. Frontend opens iCount PayPage; customer enters card; iCount tokenizes
- *      and runs the J5 (1₪) preauthorization, releasing it immediately.
- *   2. The page returns a token reference; we confirm it here server-side.
- *   3. All future charges use the stored token via the iCount API.
- *   4. iCount issues the legal tax document (חשבונית מס) - the authoritative
- *      record; we keep only a reference.
+ * Authentication is API-token only - see ./icount-config. Transport is
+ * `Authorization: Bearer <token>` with a JSON body, verified against the live
+ * account (auth/info returns 200 for a UI-generated API Token).
  *
- * Authentication is API-token only - see ./icount-config. There is no
- * username/password path and no fallback.
+ * VERIFIED OPERATIONS (written confirmation from iCount support):
  *
- * NOTE: the endpoint PATHS and payload shapes below are NOT yet verified
- * against authenticated iCount documentation. Only the transport (Bearer
- * header, JSON body, `status`/`error_description` envelope) is confirmed. Every
- * live call remains blocked by assertLiveAllowed() until the contract is
- * verified against the real account.
+ *   cc/bill          charge a stored card token. Works without the customer
+ *                    present, without CVV, for merchant-initiated transactions
+ *                    and for monthly subscription renewal.
+ *                    Fields: sum, token, client_id and/or custom_client_id.
+ *   cc/transactions  transaction lookup, for resolving an ambiguous charge.
+ *   doc/cancel       full document-linked refund, with refund_cc: true.
+ *
+ * These replace the fabricated `cc/charge`, `cc/refund` and
+ * `paypage/get_token_info` that earlier versions of this file invented.
+ *
+ * STILL UNVERIFIED, and deliberately not guessed:
+ *
+ *   - How the tokenization PayPage returns or exposes the reusable card token.
+ *     `tokenizeAndVerify` therefore has no live implementation.
+ *   - The currency parameter for cc/bill. The account is multi_currency with an
+ *     ILS base, so a charge in another currency is NOT safe to attempt yet.
+ *   - Any idempotency mechanism for cc/bill. This matters: renewal and dunning
+ *     both retry, and without provider-side deduplication a retry is a second
+ *     charge. See assertChargeSafety() below.
+ *
+ * Every live call remains blocked by assertLiveAllowed() until those are closed.
  */
 import axios from "axios";
 import { createHmac, timingSafeEqual } from "crypto";
@@ -52,14 +63,29 @@ function assertLiveAllowed(operation: string): void {
 }
 
 /**
- * One authenticated request.
+ * Refuse charges whose safety depends on a contract detail we have not
+ * verified.
  *
- * Credentials never appear in the body or the URL - only in the Authorization
- * header, which `sanitizeIcountError` strips from anything that escapes. The
- * raw axios error is deliberately discarded rather than rethrown, because it
- * carries `config.headers` and would otherwise put the API token into every
- * log that catches it.
+ * The confirmed cc/bill payload is {sum, token, client_id|custom_client_id}.
+ * It carries no verified currency field and no verified idempotency key, so:
+ *
+ *   - a non-ILS charge would be submitted with an unspecified currency against
+ *     a multi-currency account, and
+ *   - a retried renewal cannot be deduplicated by the provider.
+ *
+ * Both are money bugs, not cosmetic gaps, so they fail closed rather than being
+ * attempted with an invented parameter name.
  */
+function assertChargeSafety(input: ChargeInput): void {
+  if (isMock()) return;
+  if (input.currency && input.currency.toUpperCase() !== "ILS") {
+    throw new Error(
+      `[icount] refusing ${input.currency} charge: cc/bill has no verified currency parameter and the account base currency is ILS`,
+    );
+  }
+}
+
+/** One authenticated request. Credentials live only in the header. */
 async function call(path: string, body: Record<string, unknown>): Promise<any> {
   try {
     const res = await axios.post(`${icountApiBaseUrl()}/${path}`, body, {
@@ -79,26 +105,37 @@ async function call(path: string, body: Record<string, unknown>): Promise<any> {
 export const icountProvider: PaymentProvider = {
   name: "ICOUNT",
 
+  /**
+   * Not implemented for live.
+   *
+   * The tokenization PayPage is confirmed to exist and to be of type
+   * `cc_token`, but how it returns the reusable token - directly on a callback,
+   * or by fetching it from the iCount customer afterwards - is not verified.
+   * Inventing that contract is exactly what produced the previous
+   * `paypage/get_token_info`, so there is no live path here at all.
+   */
   async tokenizeAndVerify(input): Promise<TokenizeResult> {
     if (isMock()) {
-      // Deterministic mock - no network. Mirrors a successful tokenize + J5.
+      // Deterministic mock - no network. Keeps dev/E2E flows working.
       return { token: `icmock_${input.pageToken}`, brand: "visa", last4: "4242", expMonth: 12, expYear: 2030 };
     }
     assertLiveAllowed("tokenize");
-    // Confirm the PayPage token; iCount returns stored-card metadata.
-    const data = await call("paypage/get_token_info", { page_token: input.pageToken });
-    return {
-      token: data.cc_token || data.token,
-      brand: data.cc_type,
-      last4: data.cc_last4 || data.last4,
-      expMonth: data.cc_exp_month,
-      expYear: data.cc_exp_year,
-      providerCustomerId: data.client_id ? String(data.client_id) : undefined,
-    };
+    throw new Error(
+      "[icount] tokenization is not implemented: the token-retrieval contract for the cc_token PayPage is not verified yet",
+    );
   },
 
+  /**
+   * Charge a stored card token. VERIFIED: POST cc/bill.
+   *
+   * Unattended by design - no customer presence and no CVV - which is what
+   * makes GOTCHA-owned monthly renewal possible.
+   */
   async charge(input: ChargeInput): Promise<ChargeResult> {
-    if (!isMock()) assertLiveAllowed("charge");
+    if (!isMock()) {
+      assertLiveAllowed("charge");
+      assertChargeSafety(input);
+    }
     if (isMock()) {
       return {
         success: true,
@@ -107,14 +144,12 @@ export const icountProvider: PaymentProvider = {
       };
     }
     try {
-      // Charge the stored token and (optionally) issue the tax document in one call.
-      const data = await call("cc/charge", {
-        cc_token: input.token,
+      // Only fields confirmed by iCount support are sent. No invented
+      // currency, description or idempotency parameter.
+      const data = await call("cc/bill", {
         sum: input.amount,
-        currency_code: input.currency,
-        description: input.description,
-        idempotency_key: input.idempotencyKey,
-        ...(input.issueInvoice ? { create_doc: "invrec", client_name: input.customer?.name, email: input.customer?.email, vat_id: input.customer?.vatId } : {}),
+        token: input.token,
+        ...(input.providerCustomerId ? { client_id: input.providerCustomerId } : {}),
       });
       return {
         success: true,
@@ -123,25 +158,63 @@ export const icountProvider: PaymentProvider = {
         providerPdfUrl: data.doc_url,
       };
     } catch (err: any) {
-      return { success: false, failureCode: err?.response?.data?.error_code || err?.message || "charge_failed" };
+      return { success: false, failureCode: err?.message || "charge_failed" };
     }
   },
 
+  /**
+   * Refund. VERIFIED: POST doc/cancel with refund_cc: true.
+   *
+   * Two consequences of it being DOCUMENT-linked rather than charge-linked:
+   *
+   *   1. It needs the document reference, not the charge reference. A charge
+   *      recorded without a document cannot be refunded through this route.
+   *   2. It is a FULL cancellation. A partial refund would silently return more
+   *      than asked, so a partial request fails instead of being approximated.
+   */
   async refund(input: RefundInput): Promise<ChargeResult> {
     if (!isMock()) assertLiveAllowed("refund");
     if (isMock()) return { success: true, providerChargeRef: `rfnd_${input.idempotencyKey}` };
+
+    if (input.expectedFullAmount != null && input.amount !== input.expectedFullAmount) {
+      return {
+        success: false,
+        failureCode: "partial_refund_unsupported: doc/cancel cancels the whole document",
+      };
+    }
+    if (!input.providerInvoiceRef) {
+      return {
+        success: false,
+        failureCode: "missing_document_reference: doc/cancel is document-linked, a charge ref is not enough",
+      };
+    }
     try {
-      const data = await call("cc/refund", {
-        confirmation_code: input.providerChargeRef,
-        sum: input.amount,
-        currency_code: input.currency,
-        reason: input.reason,
-        idempotency_key: input.idempotencyKey,
+      const data = await call("doc/cancel", {
+        doctype: input.providerInvoiceDocType || "invrec",
+        docnum: input.providerInvoiceRef,
+        refund_cc: true,
+        ...(input.reason ? { reason: input.reason } : {}),
       });
       return { success: true, providerChargeRef: data.confirmation_code || input.providerChargeRef };
     } catch (err: any) {
       return { success: false, failureCode: err?.message || "refund_failed" };
     }
+  },
+
+  /**
+   * Resolve an ambiguous charge. VERIFIED: POST cc/transactions.
+   *
+   * The safety net for the missing idempotency contract: when a charge's
+   * outcome is unknown (timeout, crash between request and response), ask the
+   * provider what actually happened instead of retrying blind.
+   */
+  async lookupTransactions(query: { token?: string; clientId?: string }): Promise<unknown> {
+    if (isMock()) return { transactions: [] };
+    assertLiveAllowed("transaction lookup");
+    return call("cc/transactions", {
+      ...(query.token ? { token: query.token } : {}),
+      ...(query.clientId ? { client_id: query.clientId } : {}),
+    });
   },
 
   verifyWebhook(input: WebhookVerifyInput): boolean {

@@ -70,6 +70,12 @@ export async function refundCharge(input: { chargeId: string; amount?: number; r
     currency: charge.currency,
     reason: input.reason ?? "merchant_refund",
     idempotencyKey: `refund:${charge.id}`,
+    // iCount cancels a DOCUMENT, not a charge, so the issued document
+    // reference is what the refund actually needs. Passing the full charge
+    // amount lets the provider refuse a partial refund it cannot honour
+    // instead of silently returning the whole thing.
+    providerInvoiceRef: charge.invoice?.providerInvoiceRef ?? undefined,
+    expectedFullAmount: Number(charge.amount),
   });
   if (!res.success) return { ok: false, reclaimed: 0, failureCode: res.failureCode };
   return reverse({ chargeId: charge.id, kind: "refund", reason: input.reason ?? "merchant_refund" });

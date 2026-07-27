@@ -49,6 +49,19 @@ export interface RefundInput {
   currency: string;
   idempotencyKey: string;
   reason?: string;
+  /**
+   * iCount refunds are DOCUMENT-linked (doc/cancel), not charge-linked, so the
+   * issued document is what actually gets cancelled. A charge with no document
+   * cannot be refunded through that route.
+   */
+  providerInvoiceRef?: string;
+  providerInvoiceDocType?: string;
+  /**
+   * The charge's full amount. Supplied so a provider that can only cancel a
+   * whole document can REFUSE a partial refund rather than silently returning
+   * more than was asked for.
+   */
+  expectedFullAmount?: number;
 }
 
 export interface WebhookVerifyInput {
@@ -66,5 +79,11 @@ export interface PaymentProvider {
   tokenizeAndVerify(input: { pageToken: string; customer?: { email?: string; name?: string } }): Promise<TokenizeResult>;
   charge(input: ChargeInput): Promise<ChargeResult>;
   refund(input: RefundInput): Promise<ChargeResult>;
+  /**
+   * Ask the provider what actually happened to a charge whose outcome is
+   * unknown - a timeout, or a crash between request and response. Optional:
+   * not every provider offers a lookup.
+   */
+  lookupTransactions?(query: { token?: string; clientId?: string }): Promise<unknown>;
   verifyWebhook(input: WebhookVerifyInput): boolean;
 }
