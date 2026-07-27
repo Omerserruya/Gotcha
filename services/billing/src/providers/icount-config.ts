@@ -1,10 +1,14 @@
 /**
  * iCount authentication and configuration.
  *
- * API TOKEN ONLY. There is exactly one supported authentication mode and no
- * fallback: a missing or malformed token is a hard failure, never a downgrade
- * to some other credential. Mixed-mode auth is how a service ends up quietly
- * sending a password because a token lookup returned empty.
+ * API TOKEN ONLY. There is one authentication method and no fallback: a missing
+ * token is a hard failure, never a downgrade to some other credential. Mixed
+ * -mode auth is how a service ends up quietly sending a password because a
+ * token lookup returned empty.
+ *
+ * There is deliberately no ICOUNT_AUTH_MODE knob. A setting whose only legal
+ * value is the one thing the code does is not configuration, it is a chance to
+ * misconfigure something that has no alternative.
  *
  * Transport is `Authorization: Bearer <token>` with a JSON body, verified
  * against iCount's own first-party integration, which builds every request as:
@@ -18,7 +22,6 @@
  *
  * Config (env, billing service only - never NEXT_PUBLIC):
  *   ICOUNT_MODE            "mock" (default) | "live"
- *   ICOUNT_AUTH_MODE       must be "api_token"
  *   ICOUNT_API_TOKEN       the SID / API token
  *   ICOUNT_API_BASE_URL    default https://api.icount.co.il/api/v3.php
  *   ICOUNT_PAYMENT_PAGE_ID the "Credit card token" PayPage id - CONFIGURATION,
@@ -27,9 +30,6 @@
  *   ICOUNT_ALLOW_LIVE      explicit acknowledgement required to charge live
  */
 import { redact } from "@chatcenter/shared";
-
-/** The only authentication mode this service supports. */
-export const SUPPORTED_AUTH_MODE = "api_token";
 
 const DEFAULT_API_BASE_URL = "https://api.icount.co.il/api/v3.php";
 
@@ -66,12 +66,6 @@ export function icountPaymentPageId(): string | null {
  * should crash here rather than send a request with no Authorization header.
  */
 export function icountApiToken(): string {
-  const mode = (process.env.ICOUNT_AUTH_MODE || SUPPORTED_AUTH_MODE).trim().toLowerCase();
-  if (mode !== SUPPORTED_AUTH_MODE) {
-    throw new Error(
-      `[icount] unsupported ICOUNT_AUTH_MODE "${mode}": only "${SUPPORTED_AUTH_MODE}" is supported (username/password auth was removed)`,
-    );
-  }
   const token = (process.env.ICOUNT_API_TOKEN || "").trim();
   if (!token) {
     throw new Error(
@@ -102,14 +96,6 @@ export function authHeaders(): Record<string, string> {
  */
 export function assertIcountConfig(env: NodeJS.ProcessEnv = process.env): void {
   const mode = String(env.ICOUNT_MODE || "mock").toLowerCase();
-  const authMode = (env.ICOUNT_AUTH_MODE || SUPPORTED_AUTH_MODE).trim().toLowerCase();
-
-  if (authMode !== SUPPORTED_AUTH_MODE) {
-    throw new Error(
-      `[icount] unsupported ICOUNT_AUTH_MODE "${authMode}": only "${SUPPORTED_AUTH_MODE}" is supported`,
-    );
-  }
-
   if (mode !== "live") return; // mock: no network, no credentials needed
 
   if (!(env.ICOUNT_API_TOKEN || "").trim()) {

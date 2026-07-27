@@ -17,7 +17,6 @@ import {
   redactIcount,
   sanitizeIcountError,
   isMock,
-  SUPPORTED_AUTH_MODE,
 } from "../providers/icount-config";
 
 const REPO = join(__dirname, "../../../..");
@@ -85,15 +84,19 @@ describe("no legacy credential path exists", () => {
     expect(code).not.toMatch(/\bpass\b\s*[,:]/);
   });
 
-  it("rejects any auth mode other than api_token instead of silently degrading", () => {
+  it("exposes no auth-mode switch to get wrong", () => {
+    // A setting whose only legal value is the one thing the code does is not
+    // configuration, it is a chance to misconfigure something with no
+    // alternative. Setting it must therefore change nothing.
     process.env.ICOUNT_API_TOKEN = "tok_live_abcdefghijklmnop";
-    process.env.ICOUNT_AUTH_MODE = "user_pass";
-    expect(() => icountApiToken()).toThrow(/unsupported ICOUNT_AUTH_MODE/);
-    expect(() => assertIcountConfig()).toThrow(/unsupported ICOUNT_AUTH_MODE/);
-  });
-
-  it("supports exactly one auth mode", () => {
-    expect(SUPPORTED_AUTH_MODE).toBe("api_token");
+    (process.env as any).ICOUNT_AUTH_MODE = "user_pass";
+    expect(icountApiToken()).toBe("tok_live_abcdefghijklmnop");
+    expect(() => assertIcountConfig()).not.toThrow();
+    for (const f of ["services/billing/src/providers/icount-config.ts", ".env.example", "docker-compose.yml", "docker-compose.prod.yml"]) {
+      expect(read(f).replace(/^.*deliberately no ICOUNT_AUTH_MODE.*$/m, ""), `${f} must not define an auth mode`).not.toMatch(
+        /ICOUNT_AUTH_MODE\s*[:=]/,
+      );
+    }
   });
 });
 
@@ -131,7 +134,7 @@ describe("the API token never reaches the browser", () => {
         }
         if (!/\.(ts|tsx|js|jsx)$/.test(entry)) continue;
         const code = readFileSync(p, "utf8");
-        if (/ICOUNT_API_TOKEN|ICOUNT_AUTH_MODE|ICOUNT_PASS|ICOUNT_CID/.test(code)) hits.push(p);
+        if (/ICOUNT_API_TOKEN|ICOUNT_PASS|ICOUNT_CID/.test(code)) hits.push(p);
       }
     };
     walk(join(REPO, "frontend/src"));

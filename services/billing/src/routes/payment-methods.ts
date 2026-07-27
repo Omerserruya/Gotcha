@@ -1,13 +1,14 @@
 /**
  * Payment methods. The card is tokenized on the provider's hosted page
  * (iCount PayPage); the client posts the resulting page token here and we
- * confirm it server-side (incl. iCount's J5 verification) and store ONLY the
- * token + card metadata. Raw PAN never touches GOTCHA.
+ * confirm it server-side and store ONLY the token + card metadata. Raw PAN
+ * never touches GOTCHA.
+ *
+ * Storing a card is NOT a purchase and provisions nothing on its own.
  */
 import { Router } from "express";
 import { authenticate, resolveTenant, requirePermission, prisma } from "@chatcenter/shared";
 import { ensureBillableEntity } from "../services/billable-entity.service";
-import { createTrialSubscription } from "../services/subscription.service";
 import { defaultProvider } from "../providers";
 
 const router = Router();
@@ -42,19 +43,12 @@ router.post("/billing/payment-methods", authenticate, resolveTenant, requirePerm
       data: { billingProfileId: profile.id, provider: provider.name, token: tok.token, brand: tok.brand, last4: tok.last4, expMonth: tok.expMonth, expYear: tok.expYear, isDefault: true, status: "ACTIVE" },
     });
 
-    // First card on file → start the trial now (card-before-trial). Best-effort:
-    // a provisioning hiccup must not fail card storage. No-op once a sub exists.
-    let trialStarted = false;
-    const sub = await prisma.subscription.findUnique({ where: { billableEntityId: entityId } });
-    if (!sub) {
-      try {
-        await createTrialSubscription({ tenantId: req.tenantId!, planKey: process.env.BILLING_DEFAULT_TRIAL_PLAN || "pro", actor: req.user?.userId });
-        trialStarted = true;
-      } catch (e: any) {
-        console.error(`[billing] auto trial-start failed for tenant ${req.tenantId}:`, e?.message ?? e);
-      }
-    }
-    return res.json({ ok: true, trialStarted, paymentMethod: { id: pm.id, brand: pm.brand, last4: pm.last4, expMonth: pm.expMonth, expYear: pm.expYear } });
+    // Storing a card provisions NOTHING. It used to auto-start a trial on the
+    // BILLING_DEFAULT_TRIAL_PLAN, which handed the customer a subscription they
+    // never chose - on a plan key that defaulted to the RETIRED, ILS-priced
+    // "pro". A subscription now begins only from an explicit plan selection
+    // whose payment has been verified server-side.
+    return res.json({ ok: true, paymentMethod: { id: pm.id, brand: pm.brand, last4: pm.last4, expMonth: pm.expMonth, expYear: pm.expYear } });
   } catch (err: any) {
     return res.status(400).json({ error: err?.message ?? "tokenize_failed" });
   }

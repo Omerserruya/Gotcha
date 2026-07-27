@@ -509,7 +509,6 @@ services:
       # iCount. Mock by default. Authentication is API-TOKEN ONLY - there is no
       # username/password path. Billing service only; never NEXT_PUBLIC.
       ICOUNT_MODE: ${ICOUNT_MODE:-mock}
-      ICOUNT_AUTH_MODE: ${ICOUNT_AUTH_MODE:-api_token}
       ICOUNT_API_TOKEN: ${ICOUNT_API_TOKEN:-}
       ICOUNT_API_BASE_URL: ${ICOUNT_API_BASE_URL:-https://api.icount.co.il/api/v3.php}
       # Configuration, not a credential: which "Credit card token" PayPage to use.

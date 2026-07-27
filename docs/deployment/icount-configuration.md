@@ -9,8 +9,11 @@ created in iCount under **System → Settings → Automation → API Tokens**.
 
 Username/password authentication (`ICOUNT_CID` / `ICOUNT_USER` / `ICOUNT_PASS`)
 is **not supported and not implemented**. There is no fallback, no mixed mode,
-and no automatic downgrade. If the token is missing, the provider refuses to
-call the API and, in live mode, the service refuses to start.
+no automatic downgrade, and deliberately no auth-mode setting: a knob whose only
+legal value is the one thing the code does is not configuration.
+
+If the token is missing, the provider refuses to call the API and, in live mode,
+the service refuses to start.
 
 This is deliberate. A credential fallback is how a service ends up quietly
 sending a password because a token lookup returned an empty string.
@@ -40,7 +43,6 @@ browser, and none may be prefixed `NEXT_PUBLIC_`.
 | Variable | Required | Purpose |
 |---|---|---|
 | `ICOUNT_MODE` | no (default `mock`) | `mock` makes no network calls and cannot charge anything. `live` talks to the real API. |
-| `ICOUNT_AUTH_MODE` | no (default `api_token`) | Must be `api_token`. Any other value is a hard startup failure. |
 | `ICOUNT_API_TOKEN` | **yes, in live mode** | The API token. Secret. |
 | `ICOUNT_API_BASE_URL` | no | Defaults to `https://api.icount.co.il/api/v3.php`. |
 | `ICOUNT_PAYMENT_PAGE_ID` | for checkout | The "Credit card token" (טוקן אשראי) PayPage id. **Configuration, not a credential.** |
@@ -84,9 +86,27 @@ sets `ICOUNT_MODE=live` by mistake.
 | Symptom | Cause |
 |---|---|
 | Billing service exits at boot with `requires ICOUNT_API_TOKEN` | `ICOUNT_MODE=live` with no token configured. Working as intended. |
-| `unsupported ICOUNT_AUTH_MODE` | Something set `ICOUNT_AUTH_MODE` to a value other than `api_token`. |
 | `refusing live charge` | `ICOUNT_ALLOW_LIVE` or `NODE_ENV` guard not satisfied. |
 | `ICOUNT_API_TOKEN is not configured` at call time | Mock mode is off but no token is present. |
+
+## Read-only discovery
+
+Once `ICOUNT_API_TOKEN` and `ICOUNT_PAYMENT_PAGE_ID` are set on the billing
+service:
+
+```bash
+docker compose exec billing npm run icount:inspect
+```
+
+It calls exactly three actions — `auth/info`, `paypage/info`,
+`paypage/get_list` — enforced by an allowlist checked on every request, with no
+override flag. It cannot charge, refund, tokenize, create a document, or mutate
+anything, and it never enables live charging.
+
+It is a standalone entrypoint, never imported by the service, so it cannot run
+at startup. Every request is timeout-bounded, the run has a deadline, and there
+are no retries. Output is redacted and reports unknown fields by key name rather
+than dumping values.
 
 ## Not yet verified
 

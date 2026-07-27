@@ -266,7 +266,6 @@ services:
       INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:-chatcenter-internal-2026}
       # Billing provisioning on onboarding completion (entity + trial + Units).
       BILLING_SERVICE_URL: ${BILLING_SERVICE_URL:-http://billing:4009}
-      BILLING_DEFAULT_TRIAL_PLAN: ${BILLING_DEFAULT_TRIAL_PLAN:-pro}
       # Required for the Meta Resumable Upload API path that mints media
       # handles for IMAGE/VIDEO/DOCUMENT WhatsApp template examples.
       META_APP_ID: ${META_APP_ID:-}
@@ -491,7 +490,6 @@ services:
       # iCount. Mock by default. Authentication is API-TOKEN ONLY - there is no
       # username/password path. Billing service only; never NEXT_PUBLIC.
       ICOUNT_MODE: ${ICOUNT_MODE:-mock}
-      ICOUNT_AUTH_MODE: ${ICOUNT_AUTH_MODE:-api_token}
       ICOUNT_API_TOKEN: ${ICOUNT_API_TOKEN:-}
       ICOUNT_API_BASE_URL: ${ICOUNT_API_BASE_URL:-https://api.icount.co.il/api/v3.php}
       # Configuration, not a credential: which "Credit card token" PayPage to use.
