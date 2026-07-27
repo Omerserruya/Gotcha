@@ -344,6 +344,19 @@ export async function changePlan(input: ChangePlanInput): Promise<ChangePlanResu
         description: samePlan ? `${target.name} volume change (prorated)` : `Upgrade to ${target.name} (prorated)`,
         idempotencyKey: `upgrade:${sub.id}:${periodKey}:${target.key}:${target.version}:${selection}:${pmKey}`,
       });
+      if (res.outcomeUnknown) {
+        // The plan is NOT flipped - we cannot confirm they paid for it. But
+        // telling them the payment failed would be worse than saying nothing:
+        // they may have been charged, and "failed" invites them to try again.
+        // Flagged for reconciliation, which can complete the upgrade once the
+        // provider's own records settle it.
+        await emitBillingEvent({
+          type: "payment.reconciliation_required",
+          tenantId,
+          data: { invoiceId: res.invoiceId, context: "upgrade", targetPlan: target.key },
+        });
+        throw new Error("upgrade_payment_outcome_unknown");
+      }
       if (!res.success) {
         await emitBillingEvent({ type: "payment.failed", tenantId, data: { invoiceId: res.invoiceId, reason: res.failureCode, context: "upgrade", targetPlan: target.key } });
         throw new Error(`upgrade_payment_failed:${res.failureCode ?? "charge_failed"}`);

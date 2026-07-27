@@ -106,6 +106,14 @@ export const AuditAction = {
   RECOMMENDATION_COMPLETED: "recommendation.completed",
   RECOMMENDATION_DISMISSED: "recommendation.dismissed",
   RECOMMENDATION_REOPENED: "recommendation.reopened",
+  // ── The rate money is charged at ──
+  // Platform-level (tenantId "platform"). These decide what every Israeli
+  // customer's card is debited, so they are audited separately from pricing:
+  // "who changed the price of a plan" and "who changed what a dollar costs" are
+  // different questions, and the second one has no per-tenant trail anywhere.
+  EXCHANGE_RATE_PROPOSED: "billing.exchange_rate_proposed",
+  EXCHANGE_RATE_APPROVED: "billing.exchange_rate_approved",
+  EXCHANGE_RATE_RETIRED: "billing.exchange_rate_retired",
   // ── GDPR data-subject actions ──
   DSR_EXPORT_REQUESTED: "gdpr.export_requested",
   DSR_EXPORT_COMPLETED: "gdpr.export_completed",

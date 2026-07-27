@@ -30,6 +30,32 @@ import {
   ExchangeRateUnavailable,
 } from "../services/exchange-rate.service";
 import { pendingReconciliations, sweepUnknownAttempts } from "../services/reconciliation.service";
+import { writeAudit, AuditAction } from "@chatcenter/shared";
+
+/**
+ * Record who did what to the charging rate.
+ *
+ * The row itself keeps createdBy and approvedBy, but only for the CURRENT
+ * state. An audit entry survives the row being retired or corrected, which is
+ * exactly the situation in which someone asks who changed this and when.
+ */
+async function auditRate(req: any, action: string, rate: any, extra?: Record<string, unknown>) {
+  await writeAudit({
+    tenantId: "platform",
+    actorType: "user",
+    actorId: req.user?.userId ?? null,
+    action,
+    targetType: "billing_exchange_rate",
+    targetId: rate?.id ?? null,
+    metadata: {
+      pair: `${rate?.baseCurrency}->${rate?.quoteCurrency}`,
+      rate: String(rate?.rate),
+      version: rate?.version,
+      status: rate?.status,
+      ...extra,
+    },
+  });
+}
 
 const router = Router();
 
@@ -113,6 +139,7 @@ router.post("/admin/billing/exchange-rates", ...guard, async (req, res) => {
       source: source ? String(source) : undefined,
       createdBy: actor(req),
     });
+    await auditRate(req, AuditAction.EXCHANGE_RATE_PROPOSED, created);
     res.status(201).json({ data: shape(created) });
   } catch (err) {
     respond(res, err);
@@ -129,6 +156,11 @@ router.post("/admin/billing/exchange-rates", ...guard, async (req, res) => {
 router.post("/admin/billing/exchange-rates/:id/approve", ...guard, async (req, res) => {
   try {
     const approved = await approveRate({ id: String(req.params.id), approvedBy: actor(req) });
+    // The moment charging behaviour changes for every customer.
+    await auditRate(req, AuditAction.EXCHANGE_RATE_APPROVED, approved, {
+      approvedBy: approved.approvedBy,
+      createdBy: approved.createdBy,
+    });
     res.json({ data: shape(approved) });
   } catch (err) {
     respond(res, err);
@@ -144,6 +176,9 @@ router.post("/admin/billing/exchange-rates/:id/approve", ...guard, async (req, r
 router.post("/admin/billing/exchange-rates/:id/retire", ...guard, async (req, res) => {
   try {
     const retired = await retireRate({ id: String(req.params.id), actor: actor(req) });
+    // Retiring without a replacement stops all charging, so it needs a trail as
+    // much as approving does.
+    await auditRate(req, AuditAction.EXCHANGE_RATE_RETIRED, retired);
     res.json({ data: shape(retired) });
   } catch (err) {
     respond(res, err);

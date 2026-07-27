@@ -9,7 +9,9 @@
  * updates - only the real database can prove those hold.
  */
 import { describe, it, expect, afterAll, beforeAll } from "vitest";
-import { prisma } from "@chatcenter/shared";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { prisma, writeAudit } from "@chatcenter/shared";
 import { Prisma } from "@prisma/client";
 import {
   activeRate,
@@ -603,5 +605,54 @@ describe("activation verifies the frozen conversion", () => {
   it("refusals stay typed", async () => {
     const { checkout } = await newCheckout();
     expect(() => assertActivatable(checkout, attemptFor(checkout, null), null)).toThrow(ActivationRefused);
+  });
+});
+
+describe("changing the charging rate leaves a trail", () => {
+  const route = readFileSync(join(__dirname, "../routes/admin-exchange-rates.ts"), "utf8");
+
+  it("audits proposing, approving and retiring", () => {
+    // The row keeps createdBy and approvedBy, but only for its CURRENT state.
+    // An audit entry survives the row being retired or corrected - which is
+    // exactly when someone asks who changed this.
+    for (const action of ["EXCHANGE_RATE_PROPOSED", "EXCHANGE_RATE_APPROVED", "EXCHANGE_RATE_RETIRED"]) {
+      expect(route, `${action} must be audited`).toContain(`AuditAction.${action}`);
+    }
+    expect(route).toContain('tenantId: "platform"');
+  });
+
+  it("records who, not just what", async () => {
+    expect(route).toContain("actorId: req.user?.userId");
+    // The rate value and version go into the entry, so the trail is readable
+    // without joining back to a row that may since have changed.
+    expect(route).toMatch(/metadata:[\s\S]{0,200}rate: String\(rate\?\.rate\)/);
+  });
+
+  it("a platform-scoped audit entry actually persists", async () => {
+    const action = `billing.exchange_rate_test_${RUN}`;
+    await writeAudit({
+      tenantId: "platform",
+      actorType: "user",
+      actorId: "someone",
+      action,
+      targetType: "billing_exchange_rate",
+      targetId: "rate_x",
+      metadata: { rate: "3.65" },
+    });
+    // Scoped by tenant: the cross-tenant guard blocks an unscoped audit read,
+    // and platform-level entries are no exception - "platform" is a tenant id
+    // like any other as far as isolation is concerned.
+    const found = await prisma.auditLog.findFirst({ where: { tenantId: "platform", action } });
+    expect(found?.tenantId).toBe("platform");
+    expect((found?.metadata as any)?.rate).toBe("3.65");
+    await prisma.auditLog.deleteMany({ where: { tenantId: "platform", action } });
+  });
+
+  it("no endpoint fetches a rate from anywhere", () => {
+    const code = route.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+    // A rate arriving from the web during a charge is a rate nobody approved.
+    for (const forbidden of ["fetch(", "axios", "getUsdIlsRate", "refreshUsdIlsRate"]) {
+      expect(code, `the rate admin must not ${forbidden}`).not.toContain(forbidden);
+    }
   });
 });
