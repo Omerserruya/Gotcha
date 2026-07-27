@@ -27,7 +27,16 @@ async function apiFetch<T = any>(path: string, options: FetchOptions = {}): Prom
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(body.error || `Request failed: ${res.status}`);
+    // Additive: the message is unchanged for existing callers, but the status
+    // and structured code are attached so a caller can branch on WHICH failure
+    // it was rather than pattern-matching prose.
+    const err = new Error(body.error || `Request failed: ${res.status}`) as Error & {
+      status?: number; code?: string; body?: unknown;
+    };
+    err.status = res.status;
+    err.code = body.code ?? body.error;
+    err.body = body;
+    throw err;
   }
 
   return res.json();

@@ -34,6 +34,13 @@ import {
   materializeEntitlements,
 } from "@chatcenter/shared";
 import { listCatalogPlans, quote } from "../services/pricing.service";
+import { resolveAndValidatePlan } from "../services/paid-provisioning.service";
+import { quote as quotePricing } from "../services/pricing.service";
+import { ICOUNT_CAPABILITIES } from "../providers/capabilities";
+import { toDecimalString } from "@chatcenter/shared";
+
+const CHARGEABLE_CURRENCIES = ICOUNT_CAPABILITIES.chargeCurrencies;
+
 
 const router = Router();
 const P = PLATFORM_PERMISSIONS;
@@ -771,3 +778,88 @@ router.get("/admin/pricing/preview-customer", authenticate, requirePlatformPermi
 });
 
 export default router;
+
+// ── Paid-tenant provisioning support (Sysadmin UI) ──────────────────────────
+// Nested under /admin/pricing so it inherits the existing gateway location.
+
+/**
+ * Plans a Sysadmin may provision a paid tenant onto.
+ *
+ * ACTIVE and PUBLIC only. Draft, retired, sales-only, POC, TRIAL and any plan
+ * scoped to an organization are excluded here as well as in the provisioning
+ * service, so the UI cannot even offer something the backend would reject.
+ */
+router.get("/admin/pricing/provisioning/plans", authenticate, requirePlatformPermission(P.BILLING_PROVISION), async (_req, res) => {
+  const plans = await prisma.plan.findMany({
+    where: { status: "ACTIVE", kind: "PUBLIC", salesOnly: false, tenantId: null },
+    orderBy: { sortOrder: "asc" },
+    include: { volumeOptions: { where: { enabled: true }, orderBy: { dailyVolume: "asc" } } },
+  });
+
+  res.json({
+    data: plans.map((p) => ({
+      id: p.id,
+      key: p.key,
+      version: p.version,
+      name: p.name,
+      basePrice: String(p.basePrice),
+      currency: p.currency,
+      includedCredits: p.includedAiUnits,
+      billingInterval: p.billingInterval,
+      chatVolumeEnabled: p.chatVolumeEnabled,
+      voiceVolumeEnabled: p.voiceVolumeEnabled,
+      chatOptions: p.volumeOptions.filter((o) => o.channel === "CHAT").map(safeOption),
+      voiceOptions: p.volumeOptions.filter((o) => o.channel === "VOICE").map(safeOption),
+    })),
+  });
+});
+
+function safeOption(o: { key: string; dailyVolume: number; additionalCredits: number; additionalPrice: unknown }) {
+  return {
+    key: o.key,
+    dailyVolume: o.dailyVolume,
+    additionalCredits: o.additionalCredits,
+    additionalPrice: String(o.additionalPrice),
+  };
+}
+
+/**
+ * The authoritative commercial summary for a selection.
+ *
+ * The UI displays THIS and never computes a total of its own, so what an
+ * operator sees is what provisioning will actually freeze into the snapshot.
+ */
+router.post("/admin/pricing/provisioning/quote", authenticate, requirePlatformPermission(P.BILLING_PROVISION), async (req, res) => {
+  const { planVersionId, chatVolumeOptionKey, voiceVolumeOptionKey } = req.body ?? {};
+  if (!planVersionId) return res.status(400).json({ error: "planVersionId required" });
+  try {
+    const plan = await resolveAndValidatePlan({
+      planVersionId,
+      chatVolumeOptionKey: chatVolumeOptionKey ?? null,
+      voiceVolumeOptionKey: voiceVolumeOptionKey ?? null,
+    });
+    const q = await quotePricing({
+      planKey: plan.key,
+      planVersion: plan.version,
+      chatVolumeOptionKey: chatVolumeOptionKey ?? null,
+      voiceVolumeOptionKey: voiceVolumeOptionKey ?? null,
+    });
+    res.json({
+      data: {
+        planName: plan.name,
+        basePrice: String(plan.basePrice),
+        totalAmount: toDecimalString(q.monthlyPrice),
+        currency: q.currency,
+        includedCredits: q.includedCredits,
+        estimatedChatsMonthly: q.estimate.chat.monthly,
+        estimatedCallsMonthly: q.estimate.voice.monthly,
+        billingInterval: plan.billingInterval,
+        // Honest operational signal: cc/bill has no verified currency parameter,
+        // so a non-ILS plan cannot actually be charged yet.
+        chargeableToday: CHARGEABLE_CURRENCIES.includes(q.currency),
+      },
+    });
+  } catch (err: any) {
+    res.status(400).json({ error: err?.code ?? "quote_failed", message: err?.message });
+  }
+});

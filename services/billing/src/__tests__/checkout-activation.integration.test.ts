@@ -192,9 +192,12 @@ describe("no browser-callable completion path exists", () => {
     const { readFileSync, readdirSync } = await import("node:fs");
     const { join } = await import("node:path");
     const dir = join(__dirname, "../routes");
-    const hits = readdirSync(dir).filter((f) =>
-      /activatePaidCheckout/.test(readFileSync(join(dir, f), "utf8")),
-    );
+    // Files only: src/routes gained a subdirectory, and readFileSync on a
+    // directory throws EISDIR.
+    const hits = readdirSync(dir, { withFileTypes: true })
+      .filter((e) => e.isFile() && e.name.endsWith(".ts"))
+      .filter((e) => /activatePaidCheckout/.test(readFileSync(join(dir, e.name), "utf8")))
+      .map((e) => e.name);
     expect(hits, `activation must not be reachable from a route: ${hits.join(", ")}`).toEqual([]);
   });
 });
