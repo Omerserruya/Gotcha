@@ -249,6 +249,21 @@ export interface PaymentMethod {
   isDefault: boolean;
 }
 
+/** One attempt to take the money for an invoice. */
+export interface InvoiceCharge {
+  id: string;
+  status: string;
+  /** The agreed price, in the commercial currency. */
+  amount: string;
+  currency: string;
+  /** What the card was actually debited. Null for older rows. */
+  chargeAmount: string | null;
+  chargeCurrency: string | null;
+  exchangeRate: string | null;
+  attemptNumber: number;
+  createdAt: string;
+}
+
 export interface Invoice {
   id: string;
   type: string;
@@ -259,6 +274,17 @@ export interface Invoice {
   providerPdfUrl: string | null;
   createdAt: string;
   paidAt: string | null;
+  charges?: InvoiceCharge[];
+}
+
+/**
+ * What the customer was actually charged for an invoice, if we know.
+ *
+ * Their bank statement shows shekels; the invoice shows dollars. Showing only
+ * the second turns "why was I charged 1,821?" into a support conversation.
+ */
+export function settledCharge(invoice: Invoice): InvoiceCharge | null {
+  return invoice.charges?.find((c) => c.status === "SUCCEEDED" && c.chargeAmount) ?? null;
 }
 
 // ─── Subscription ────────────────────────────────────────────

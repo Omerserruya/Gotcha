@@ -28,6 +28,7 @@ import {
   type Subscription,
   type Plan,
   type PaymentMethod,
+  settledCharge,
   type Invoice,
   type CurrentSubscriptionView,
 } from "@/lib/api-billing";
@@ -378,7 +379,22 @@ export default function BillingSettingsPage() {
               {invoices.map((inv) => (
                 <tr key={inv.id} className="border-t border-gray-50">
                   <td className="py-2.5 text-gray-700">{dateFmt(inv.createdAt)}</td>
-                  <td className="py-2.5 text-gray-700" dir="ltr">{money(inv.amount, inv.currency)}</td>
+                  <td className="py-2.5 text-gray-700" dir="ltr">
+                    {money(inv.amount, inv.currency)}
+                    {/* The shekel figure, when it differs. This is the number on
+                        the customer's bank statement - showing only the invoice
+                        currency is what makes people ring up asking what the
+                        other charge was. */}
+                    {(() => {
+                      const charge = settledCharge(inv);
+                      if (!charge || charge.chargeCurrency === inv.currency) return null;
+                      return (
+                        <span className="block text-xs text-gray-400">
+                          {money(charge.chargeAmount!, charge.chargeCurrency!)}
+                        </span>
+                      );
+                    })()}
+                  </td>
                   <td className={`py-2.5 font-medium ${INVOICE_STATUS_STYLES[inv.status] ?? "text-gray-600"}`}>
                     {t(`settings.billing.invStatuses.${inv.status}`) || inv.status}
                   </td>
