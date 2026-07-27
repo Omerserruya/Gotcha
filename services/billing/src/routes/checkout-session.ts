@@ -23,6 +23,7 @@ import {
   CheckoutProgressRefused,
 } from "../services/checkout-progress.service";
 import { declineCategory } from "../lib/decline-category";
+import { buildReturnUrl } from "../lib/public-url";
 
 const router = Router();
 
@@ -136,10 +137,22 @@ function safeAdvance(result: Awaited<ReturnType<typeof advanceCheckout>>) {
   }
 }
 
+/**
+ * Where the customer comes back to.
+ *
+ * Built from configuration and a fixed path, never from anything a request
+ * supplied. A misconfiguration returns undefined rather than throwing here, so
+ * a checkout does not fail outright on it - but startup already refuses to boot
+ * a payment-enabled stack without a valid value, so reaching this in production
+ * means the environment changed under a running process.
+ */
 function returnUrl(page: string, reference: string): string | undefined {
-  const base = (process.env.APP_PUBLIC_URL || "").replace(/\/+$/, "");
-  if (!base) return undefined;
-  return `${base}/checkout/${page}?ref=${encodeURIComponent(reference)}`;
+  try {
+    return buildReturnUrl(`/checkout/${encodeURIComponent(page)}`, { ref: reference });
+  } catch (err) {
+    console.error("[billing] cannot build a return URL:", (err as Error).message);
+    return undefined;
+  }
 }
 
 function respondRefusal(res: any, err: unknown) {

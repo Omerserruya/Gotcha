@@ -18,6 +18,7 @@ import adminAnalyticsRoutes from "./routes/admin-analytics";
 import invoicesRoutes from "./routes/invoices";
 import webhookRoutes from "./routes/webhooks";
 import icountIpnRoutes from "./routes/icount-ipn";
+import { assertPublicUrlConfigured } from "./lib/public-url";
 import checkoutRoutes from "./routes/checkout";
 import checkoutSessionRoutes from "./routes/checkout-session";
 import internalRoutes from "./routes/internal";
@@ -82,6 +83,11 @@ if (schedulerEnabled) {
   const timer = setInterval(tick, intervalMs);
   if (typeof timer.unref === "function") timer.unref();
 }
+
+// A stack that can send someone to a payment page must be able to bring them
+// back. Checked before listening, because the alternative is finding out from
+// a customer stranded on the provider's page after paying.
+assertPublicUrlConfigured();
 
 startService(app, config);
 

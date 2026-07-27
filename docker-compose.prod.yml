@@ -527,6 +527,14 @@ services:
       # Where a customer returns after the hosted payment page. Without it the
       # return URLs are omitted and they land wherever the provider defaults to.
       APP_PUBLIC_URL: ${APP_PUBLIC_URL:-}
+      # Hosts this deployment may send a paying customer back through. Empty
+      # disables the check; set it in production so a mistyped APP_PUBLIC_URL
+      # cannot hand a payment provider someone else's domain.
+      APP_PUBLIC_URL_ALLOWED_HOSTS: ${APP_PUBLIC_URL_ALLOWED_HOSTS:-}
+      # Authenticates the GATEWAY -> billing hop for forwarded notifications.
+      # Not a provider secret: iCount cannot sign anything, and the IPN endpoint
+      # is built so it does not need them to.
+      INTERNAL_BILLING_WEBHOOK_FORWARD_SECRET: ${INTERNAL_BILLING_WEBHOOK_FORWARD_SECRET:-}
       # Read here to REPORT enforcement in the Sysadmin preview and the
       # enforcement impact report. Both the mode AND the grace period must match
       # what the other services use, or the report describes a different system
