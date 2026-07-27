@@ -26,6 +26,7 @@ import { sweepUnknownAttempts } from "./services/reconciliation.service";
 import { expireStaleLeases } from "./services/payment-attempt.service";
 import { expireStaleQuotes } from "./services/payment-quote.service";
 import { expireStaleSessions } from "./services/tokenization.service";
+import { purgeSpentCheckoutArtifacts } from "./services/billing-retention.service";
 import { assertIcountConfig } from "./providers/icount-config";
 
 // Fail closed before the first request. A billing service configured to talk to
@@ -84,8 +85,15 @@ if (schedulerEnabled) {
       await expireStaleLeases().catch(() => undefined);
       await expireStaleQuotes().catch(() => undefined);
       await expireStaleSessions().catch(() => undefined);
-      if (cycle.trials || cycle.renewals || cycle.pending || dunning.retried || dunning.suspended || usage.settled || usage.discovered || reconciled.examined) {
-        console.log("[billing][cycle]", { cycle, dunning, usage, reconciled });
+      // Spent checkout artifacts. Never touches anything that records money
+      // moving - see the service for exactly where that line is drawn.
+      const purged = await purgeSpentCheckoutArtifacts().catch((err: any) => {
+        console.warn("[billing][retention] purge failed:", err?.message ?? err);
+        return { tokenizationSessions: 0, continuationLinks: 0, unusedQuotes: 0 };
+      });
+      if (cycle.trials || cycle.renewals || cycle.pending || dunning.retried || dunning.suspended || usage.settled || usage.discovered || reconciled.examined
+        || purged.tokenizationSessions || purged.continuationLinks || purged.unusedQuotes) {
+        console.log("[billing][cycle]", { cycle, dunning, usage, reconciled, purged });
       }
     } catch (err: any) {
       console.warn("[billing][cycle] failed:", err?.message ?? err);

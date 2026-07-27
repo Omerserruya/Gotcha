@@ -248,6 +248,28 @@ cleared. It carries no payment quote, and activation refuses if one is attached
 
 ---
 
+## What gets cleaned up
+
+The scheduler deletes checkout artifacts that have finished and aged out:
+tokenization sessions, spent or expired continuation links, and quotes that were
+frozen but never charged against.
+
+| Variable | Default | What |
+|---|---|---|
+| `BILLING_RETENTION_TOKENIZATION_DAYS` | 90 | finished tokenization sessions |
+| `BILLING_RETENTION_CONTINUATION_LINK_DAYS` | 90 | revoked or expired links |
+| `BILLING_RETENTION_UNUSED_QUOTE_DAYS` | 30 | quotes never charged against |
+
+Every deletion is scoped to a **terminal state** as well as an age. Age alone
+would delete the session of someone who is simply slow on the hosted page, and
+losing their customer reference strands them.
+
+**Nothing that records money moving is deleted.** A consumed quote is the only
+record of what a customer was charged and at what rate; charges, attempts,
+invoices and subscriptions are financial records with their own obligations.
+
+---
+
 ## Deploying
 
 1. `npx prisma migrate deploy` in `packages/shared`.
