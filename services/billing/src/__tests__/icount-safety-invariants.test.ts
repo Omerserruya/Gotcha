@@ -24,8 +24,22 @@ describe("adding a card provisions nothing", () => {
 
   it("returns no provisioning signal to the client", () => {
     // The response used to advertise `trialStarted`, which taught the frontend
-    // that saving a card was a provisioning action.
-    expect(route).toMatch(/res\.json\(\{\s*ok:\s*true,\s*paymentMethod:/);
+    // that saving a card was a provisioning action. It now returns the stored
+    // card and nothing else - notably no subscription, plan or trial.
+    expect(route).toContain('status: "STORED"');
+    for (const signal of ["trialStarted", "subscription:", "planKey:", "trialEndsAt"]) {
+      expect(route, `the response must not carry ${signal}`).not.toContain(signal);
+    }
+  });
+
+  it("never takes the stored card from the client", () => {
+    const code = route.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+    // The browser sends a session id; what was stored is established by asking
+    // the provider. It used to send the token itself, which is the same mistake
+    // as trusting a redirect.
+    expect(code).not.toContain("req.body?.pageToken");
+    expect(code).not.toMatch(/body\??\.(token|ccToken|cardToken)/);
+    expect(code).toContain("verifyTokenizationSession");
   });
 });
 

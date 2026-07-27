@@ -19,6 +19,11 @@ export type BillingEventType =
   | "subscription.resumed"
   | "subscription.suspended"
   | "subscription.past_due"
+  // Distinct from past_due on purpose: past_due means the customer definitely
+  // was not charged and dunning may retry. This one means we do not know, and
+  // nothing automated may act on it.
+  | "subscription.renewal_unknown"
+  | "payment.reconciliation_required"
   | "invoice.issued"
   | "invoice.paid"
   | "payment.failed"
@@ -43,6 +48,17 @@ export interface EmitBillingEventInput {
   userId?: string;
 }
 
+/**
+ * How long a money operation will wait on the notification queue.
+ *
+ * Bounded on purpose. BullMQ retries a connection indefinitely rather than
+ * throwing, so an `await` on a queue that cannot be reached simply never
+ * returns - and this is called from inside charge handling. A notification
+ * outage must not hold a charge open or, worse, leave its outcome unrecorded.
+ * Losing the notification is bad; losing the money record is worse.
+ */
+const EMIT_TIMEOUT_MS = 2_000;
+
 export async function emitBillingEvent(input: EmitBillingEventInput): Promise<void> {
   try {
     const event = {
@@ -52,12 +68,21 @@ export async function emitBillingEvent(input: EmitBillingEventInput): Promise<vo
       data: input.data,
       metadata: { userId: input.userId, timestamp: new Date().toISOString() },
     };
-    await queue().add("system-event", event, {
+    const enqueued = queue().add("system-event", event, {
       removeOnComplete: 1000,
       removeOnFail: 100,
       attempts: 5,
       backoff: { type: "exponential", delay: 2_000 },
     });
+    await Promise.race([
+      enqueued,
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("notification queue did not accept in time")), EMIT_TIMEOUT_MS),
+      ),
+    ]);
+    // The enqueue may still land after the race; swallow its rejection so an
+    // unreachable queue cannot surface as an unhandled rejection later.
+    enqueued.catch(() => {});
   } catch (err: any) {
     console.warn("[billing/events] emit failed:", err?.message ?? err);
   }

@@ -51,12 +51,37 @@ export async function runDunning(now = new Date()): Promise<{ retried: number; s
     }
     const tenantId = (await tenantsForEntity(sub.billableEntityId))[0];
     const plan = await getPlan(sub.planKey, sub.planVersion);
-    const price = plan?.basePrice ? Number(plan.basePrice) : 0;
+    // The CONTRACTED price, not today's list price. A customer on a
+    // grandfathered snapshot must be retried at what they agreed to, otherwise
+    // a failed renewal quietly re-prices them.
+    const price = sub.snapshotPrice != null ? Number(sub.snapshotPrice) : plan?.basePrice ? Number(plan.basePrice) : 0;
+    const currency = sub.snapshotCurrency ?? plan?.currency ?? "USD";
     const periodKey = sub.currentPeriodEnd ? periodKeyFor(sub.currentPeriodEnd) : periodKeyFor(now);
 
     const res = price > 0
-      ? await chargeFor({ entityId: sub.billableEntityId, tenantId, type: "SUBSCRIPTION", amount: price, currency: plan!.currency, description: `${plan!.name} renewal retry`, idempotencyKey: `dunning:${sub.id}:${periodKey}:${d.attempts + 1}`, attemptNumber: d.attempts + 1 })
+      ? await chargeFor({ entityId: sub.billableEntityId, tenantId, type: "SUBSCRIPTION", amount: price, currency, description: `${plan?.name ?? sub.planKey} renewal retry`, idempotencyKey: `dunning:${sub.id}:${periodKey}:${d.attempts + 1}`, attemptNumber: d.attempts + 1 })
       : { success: true, invoiceId: "" };
+
+    if ((res as any).outcomeUnknown) {
+      // Stop the ladder. Advancing it would schedule another retry, and the
+      // charge we just made may have succeeded - retrying is how a customer
+      // ends up billed twice for one month.
+      await prisma.dunningState.update({
+        where: { id: d.id },
+        data: { nextRetryAt: null, lastFailureCode: res.failureCode, attempts: d.attempts + 1 },
+      });
+      await prisma.subscriptionEvent.create({
+        data: {
+          subscriptionId: sub.id,
+          type: "dunning_paused_outcome_unknown",
+          fromStatus: "PAST_DUE",
+          toStatus: "PAST_DUE",
+          actor: "scheduler",
+          metadata: { reason: res.failureCode } as any,
+        },
+      });
+      continue;
+    }
 
     if (res.success) {
       await prisma.subscription.update({ where: { id: sub.id }, data: { status: "ACTIVE" } });

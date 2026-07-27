@@ -2279,6 +2279,9 @@ enum ChargeStatus {
   SUCCEEDED
   FAILED
   REFUNDED
+  /// Submitted, but the outcome never came back. Distinct from FAILED because
+  /// FAILED invites a retry and this one must be reconciled instead.
+  UNKNOWN
 }
 
 enum BillingInterval {
@@ -2806,13 +2809,25 @@ model Charge {
   invoiceId         String          @map("invoice_id")
   provider          BillingProvider @default(ICOUNT)
   providerChargeRef String?         @map("provider_charge_ref")
+  /// The agreed commercial figure, in the commercial currency.
   amount            Decimal         @db.Decimal(12, 2)
   currency          String          @default("ILS")
-  status            ChargeStatus    @default(PENDING)
-  attemptNumber     Int             @default(1) @map("attempt_number")
-  failureCode       String?         @map("failure_code")
-  idempotencyKey    String          @unique @map("idempotency_key")
-  createdAt         DateTime        @default(now()) @map("created_at")
+
+  /// What was actually submitted to the provider, and the frozen conversion
+  /// behind it. Keeping only the commercial figure would make "how much was
+  /// taken from the card" unanswerable.
+  paymentQuoteId     String?  @map("payment_quote_id")
+  chargeAmount       Decimal? @map("charge_amount") @db.Decimal(12, 2)
+  chargeCurrency     String?  @map("charge_currency")
+  providerCurrencyId Int?     @map("provider_currency_id")
+  fxRate             Decimal? @map("fx_rate") @db.Decimal(18, 8)
+  fxRateVersion      Int?     @map("fx_rate_version")
+
+  status         ChargeStatus @default(PENDING)
+  attemptNumber  Int          @default(1) @map("attempt_number")
+  failureCode    String?      @map("failure_code")
+  idempotencyKey String       @unique @map("idempotency_key")
+  createdAt      DateTime     @default(now()) @map("created_at")
 
   invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 

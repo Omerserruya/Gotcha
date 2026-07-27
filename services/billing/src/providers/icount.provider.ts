@@ -153,11 +153,7 @@ export const icountProvider: PaymentProvider = {
     assertLiveAllowed("charge");
     assertChargeSafety(input);
 
-    if (isSimulator()) {
-      const res = sim.simulateBill(billPayload(input));
-      return toChargeResult(res);
-    }
-    if (isMock()) {
+    if (isMock() && !isSimulator()) {
       return {
         success: true,
         providerChargeRef: `chg_${input.idempotencyKey}`,
@@ -167,8 +163,19 @@ export const icountProvider: PaymentProvider = {
       };
     }
 
-    const res = await api.bill(billPayload(input));
-    return toChargeResult(res);
+    try {
+      const res = isSimulator() ? sim.simulateBill(billPayload(input)) : await api.bill(billPayload(input));
+      return toChargeResult(res);
+    } catch (err: any) {
+      // An unknown outcome is rethrown. It is not a decline, and the caller
+      // must be forced to handle it differently - a decline may be retried, an
+      // unknown may not.
+      if (err instanceof IcountOutcomeUnknown) throw err;
+      // A decline IS a result: the provider answered, and the answer was no.
+      // Letting it propagate as an exception would make every caller wrap this
+      // in a try/catch to discover something the return type already models.
+      return { success: false, failureCode: err?.message ?? "charge_failed" };
+    }
   },
 
   /**

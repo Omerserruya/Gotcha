@@ -195,6 +195,22 @@ export async function activateOrRenew(subscriptionId: string, opts: { reason: "t
       description: `${plan.name} subscription (${period.key})`,
       idempotencyKey: `sub:${subscriptionId}:${period.key}`,
     });
+    if (res.outcomeUnknown) {
+      // We do not know whether the customer was charged. PAST_DUE would put
+      // them into the dunning ladder, and dunning retries - which would take
+      // the money a second time if the first charge actually landed. The
+      // subscription is left where it is, and a human reconciles.
+      await recordEvent(subscriptionId, "renewal_outcome_unknown", sub.status, sub.status, "scheduler", {
+        invoiceId: res.invoiceId,
+        reason: res.failureCode,
+      });
+      await emitBillingEvent({
+        type: "subscription.renewal_unknown",
+        tenantId,
+        data: { invoiceId: res.invoiceId, reason: res.failureCode },
+      });
+      return { success: false };
+    }
     if (!res.success) {
       await prisma.subscription.update({ where: { id: subscriptionId }, data: { status: "PAST_DUE" } });
       await recordEvent(subscriptionId, "renewal_failed", sub.status, "PAST_DUE", "scheduler", { invoiceId: res.invoiceId });

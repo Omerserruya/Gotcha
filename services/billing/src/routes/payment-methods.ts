@@ -1,16 +1,27 @@
 /**
- * Payment methods. The card is tokenized on the provider's hosted page
- * (iCount PayPage); the client posts the resulting page token here and we
- * confirm it server-side and store ONLY the token + card metadata. Raw PAN
- * never touches GOTCHA.
+ * Payment methods.
+ *
+ * The card is entered on the provider's hosted page; GOTCHA stores only the
+ * resulting token and card metadata, encrypted. Raw PAN never touches us.
+ *
+ * The client used to POST a page token it had received in the browser, and we
+ * stored whatever it sent. That is the wrong shape for the same reason a
+ * redirect is not a receipt: the browser is reporting an outcome it is not in a
+ * position to know. Adding a card is now the same two-step as checkout - start
+ * a session, then ask the SERVER to confirm a new card exists.
  *
  * Storing a card is NOT a purchase and provisions nothing on its own.
  */
 import { Router } from "express";
 import { authenticate, resolveTenant, requirePermission, prisma } from "@chatcenter/shared";
 import { ensureBillableEntity } from "../services/billable-entity.service";
-import { defaultProvider } from "../providers";
-import { encryptPaymentToken, assertPaymentTokenKey } from "@chatcenter/shared";
+import {
+  startTokenizationSession,
+  verifyTokenizationSession,
+  TokenizationRefused,
+} from "../services/tokenization.service";
+import { checkoutEnabled } from "../providers/capabilities";
+import { getCapabilities } from "../providers";
 
 const router = Router();
 
@@ -21,45 +32,100 @@ router.get("/billing/payment-methods", authenticate, resolveTenant, requirePermi
   res.json({ paymentMethods: profile?.paymentMethods ?? [] });
 });
 
-/** Confirm a PayPage tokenization and store the card-on-file (also used to replace). */
-router.post("/billing/payment-methods", authenticate, resolveTenant, requirePermission("settings:billing:manage"), async (req, res) => {
-  const { pageToken } = req.body ?? {};
-  if (!pageToken) return res.status(400).json({ error: "pageToken required" });
-  try {
-    const provider = defaultProvider();
-    const tok = await provider.tokenizeAndVerify({ pageToken, customer: { email: req.user?.email } });
+/**
+ * Start adding (or replacing) a card.
+ *
+ * Returns where to send the person. Their browser then comes back and calls
+ * confirm, which asks the provider what actually happened.
+ */
+router.post(
+  "/billing/payment-methods/session",
+  authenticate,
+  resolveTenant,
+  requirePermission("settings:billing:manage"),
+  async (req, res) => {
+    if (!checkoutEnabled(getCapabilities("ICOUNT"))) {
+      return res.status(409).json({ error: "payment_setup_unavailable" });
+    }
+    try {
+      await ensureBillableEntity(req.tenantId!);
+      const { session, saleUrl } = await startTokenizationSession({
+        tenantId: req.tenantId!,
+        customerEmail: req.user?.email,
+      });
+      return res.json({ data: { redirectUrl: saleUrl, sessionId: session.id } });
+    } catch (err: any) {
+      if (err instanceof TokenizationRefused) return res.status(409).json({ error: err.code });
+      console.error("[billing] payment method session failed:", err);
+      return res.status(500).json({ error: "payment_setup_failed" });
+    }
+  },
+);
 
-    const entityId = await ensureBillableEntity(req.tenantId!);
-    const profile = await prisma.billingProfile.upsert({
-      where: { billableEntityId: entityId },
-      create: { billableEntityId: entityId, provider: provider.name, providerCustomerId: tok.providerCustomerId, billingEmail: req.user?.email },
-      update: { provider: provider.name, providerCustomerId: tok.providerCustomerId ?? undefined },
-    });
+/**
+ * Confirm that a card was stored.
+ *
+ * Takes only the session id - no token, no card details, no success flag. The
+ * answer comes from querying the provider and comparing against the baseline
+ * captured when the session started, so a person who abandoned the page cannot
+ * end up with a card they never entered attributed to this attempt.
+ */
+router.post(
+  "/billing/payment-methods/confirm",
+  authenticate,
+  resolveTenant,
+  requirePermission("settings:billing:manage"),
+  async (req, res) => {
+    const sessionId = String(req.body?.sessionId ?? "");
+    if (!sessionId) return res.status(400).json({ error: "session_required" });
 
-    // Replace semantics: a tenant has at most ONE active card. RETIRE every
-    // prior active method (status→REMOVED, not just demoted) so no orphaned
-    // tokens linger and the default is unambiguous.
-    await prisma.paymentMethod.updateMany({ where: { billingProfileId: profile.id, status: "ACTIVE" }, data: { status: "REMOVED", isDefault: false } });
-    // The reusable token is a bearer instrument: encrypted at rest with the
-    // dedicated billing key, and the key version stored alongside so rotation
-    // does not orphan the row. Validated HERE rather than at startup, so a mock
-    // stack that never stores a token needs no key.
-    assertPaymentTokenKey();
-    const sealed = encryptPaymentToken(tok.token);
-    const pm = await prisma.paymentMethod.create({
-      data: { billingProfileId: profile.id, provider: provider.name, token: sealed.ciphertext, tokenKeyVersion: sealed.keyVersion, brand: tok.brand, last4: tok.last4, expMonth: tok.expMonth, expYear: tok.expYear, isDefault: true, status: "ACTIVE" },
-    });
+    const session = await prisma.tokenizationSession.findUnique({ where: { id: sessionId } });
+    // Scoped to the caller's tenant: a session id is otherwise a way to claim
+    // someone else's stored card.
+    if (!session || session.tenantId !== req.tenantId) {
+      return res.status(404).json({ error: "session_not_found" });
+    }
 
-    // Storing a card provisions NOTHING. It used to auto-start a trial on the
-    // BILLING_DEFAULT_TRIAL_PLAN, which handed the customer a subscription they
-    // never chose - on a plan key that defaulted to the RETIRED, ILS-priced
-    // "pro". A subscription now begins only from an explicit plan selection
-    // whose payment has been verified server-side.
-    return res.json({ ok: true, paymentMethod: { id: pm.id, brand: pm.brand, last4: pm.last4, expMonth: pm.expMonth, expYear: pm.expYear } });
-  } catch (err: any) {
-    return res.status(400).json({ error: err?.message ?? "tokenize_failed" });
-  }
-});
+    try {
+      const result = await verifyTokenizationSession(sessionId);
+      if (!result.verified) {
+        return res.json({ data: { status: "PENDING", reason: result.reason } });
+      }
+
+      const method = await prisma.paymentMethod.findUnique({ where: { id: result.paymentMethodId } });
+
+      // Replace semantics: a tenant has at most ONE active card. Retire every
+      // prior one so no orphaned token lingers and the default is unambiguous.
+      await prisma.paymentMethod.updateMany({
+        where: {
+          billingProfileId: method!.billingProfileId,
+          id: { not: method!.id },
+          status: "ACTIVE",
+        },
+        data: { status: "REMOVED", isDefault: false },
+      });
+
+      // Storing a card provisions NOTHING. It used to auto-start a trial on a
+      // default plan key, handing the customer a subscription they never chose.
+      return res.json({
+        data: {
+          status: "STORED",
+          paymentMethod: {
+            id: method!.id,
+            brand: method!.brand,
+            last4: method!.last4,
+            expMonth: method!.expMonth,
+            expYear: method!.expYear,
+          },
+        },
+      });
+    } catch (err: any) {
+      if (err instanceof TokenizationRefused) return res.status(409).json({ error: err.code });
+      console.error("[billing] payment method confirm failed:", err);
+      return res.status(500).json({ error: "payment_setup_failed" });
+    }
+  },
+);
 
 router.delete("/billing/payment-methods/:id", authenticate, resolveTenant, requirePermission("settings:billing:manage"), async (req, res) => {
   // Ownership scoping (cross-tenant IDOR guard). PaymentMethod has no tenantId

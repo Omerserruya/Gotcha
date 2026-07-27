@@ -7,6 +7,7 @@
 import { prisma, decryptPaymentToken } from "@chatcenter/shared";
 import type { BillingProvider, InvoiceType } from "@prisma/client";
 import { getProvider } from "../providers";
+import { assertChargeable, consumeQuote, createPaymentQuote, type QuotePurpose } from "./payment-quote.service";
 import { emitBillingEvent } from "../lib/events";
 
 export interface ChargeForInput {
@@ -25,6 +26,15 @@ export interface ChargeForResult {
   success: boolean;
   invoiceId: string;
   failureCode?: string;
+  /**
+   * The charge may or may not have gone through.
+   *
+   * Callers must branch on this before doing anything a failure would trigger.
+   * Dunning in particular retries failures, and retrying a charge that landed
+   * takes the money twice - so an unknown is deliberately NOT a failure with a
+   * different message, it is a different outcome.
+   */
+  outcomeUnknown?: boolean;
 }
 
 /** Resolve the entity's payment context (provider + default token + profile). */
@@ -92,7 +102,14 @@ export async function chargeFor(input: ChargeForInput): Promise<ChargeForResult>
       const prior = await prisma.charge.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
       if (prior) {
         const inProgress = prior.status === "PENDING";
-        return { success: prior.status === "SUCCEEDED", invoiceId: prior.invoiceId, failureCode: prior.failureCode ?? (inProgress ? "charge_in_progress" : undefined) };
+        return {
+          success: prior.status === "SUCCEEDED",
+          invoiceId: prior.invoiceId,
+          failureCode: prior.failureCode ?? (inProgress ? "charge_in_progress" : undefined),
+          // A charge still in flight, or one whose outcome was never learned,
+          // must not be retried by whoever finds it.
+          outcomeUnknown: inProgress || prior.status === "UNKNOWN",
+        };
       }
     }
     throw err;
@@ -109,8 +126,55 @@ export async function chargeFor(input: ChargeForInput): Promise<ChargeForResult>
     return { success: false, invoiceId: invoice.id, failureCode: "no_payment_method" };
   }
 
+  // Freeze the conversion. This is the renewal and credit-purchase path, so it
+  // needs its own quote per charge: a renewal twelve months from now must be
+  // converted at the rate in force THEN, and recorded with it, or the customer's
+  // statement and our invoice will not agree.
+  let quote;
+  try {
+    quote = await createPaymentQuote({
+      purpose: quotePurposeFor(input.type),
+      commercialAmount: input.amount.toFixed(2),
+      commercialCurrency: currency,
+      tenantId: input.tenantId ?? null,
+      now: new Date(),
+    });
+    assertChargeable(quote);
+  } catch (err: any) {
+    // No approved rate means no defensible number to charge. Fail the charge
+    // rather than inventing one; dunning will retry once a rate is approved.
+    const code = `charge_not_priceable: ${err?.code ?? err?.message ?? "unknown"}`;
+    await prisma.charge.update({ where: { id: chargeId }, data: { status: "FAILED", failureCode: code } });
+    await prisma.invoice.update({ where: { id: invoice.id }, data: { status: "FAILED" } });
+    await emitBillingEvent({
+      type: "payment.failed",
+      tenantId: input.tenantId,
+      data: { invoiceId: invoice.id, reason: code, amount: input.amount },
+    });
+    return { success: false, invoiceId: invoice.id, failureCode: code };
+  }
+
+  const chargeAmount = quote.chargeAmount.toFixed(2);
+
+  // Recorded BEFORE the request, so a crash mid-flight leaves a row saying what
+  // was going to be submitted.
+  await prisma.charge.update({
+    where: { id: chargeId },
+    data: {
+      paymentQuoteId: quote.id,
+      chargeAmount: quote.chargeAmount,
+      chargeCurrency: quote.chargeCurrency,
+      providerCurrencyId: quote.providerCurrencyId,
+      fxRate: quote.fxRate,
+      fxRateVersion: quote.fxRateVersion,
+    },
+  });
+  await consumeQuote({ quoteId: quote.id, attemptId: chargeId });
+
   const provider = getProvider(ctx.provider);
-  const result = await provider.charge({
+  let result;
+  try {
+    result = await provider.charge({
     // Decrypted at the last possible moment, immediately before the provider
     // call, and never held anywhere a DTO, log or audit event can reach.
     // A token that cannot be decrypted fails the charge loudly rather than
@@ -119,11 +183,51 @@ export async function chargeFor(input: ChargeForInput): Promise<ChargeForResult>
     providerCustomerId: ctx.providerCustomerId,
     amount: input.amount,
     currency,
+    chargeAmount,
+    chargeCurrency: quote.chargeCurrency,
+    providerCurrencyId: quote.providerCurrencyId,
     description: input.description,
     idempotencyKey: input.idempotencyKey,
     issueInvoice: true,
     customer: ctx.customer,
-  });
+    });
+  } catch (err: any) {
+    // The provider says it does not know whether the money moved. This must NOT
+    // become FAILED: dunning retries failures, and retrying a charge that may
+    // have landed takes the money twice.
+    if (err?.outcomeUnknown === true) {
+      await prisma.charge.update({
+        where: { id: chargeId },
+        data: { status: "UNKNOWN", failureCode: "outcome_unknown_reconciliation_required" },
+      });
+      await emitBillingEvent({
+        type: "payment.failed",
+        tenantId: input.tenantId,
+        data: { invoiceId: invoice.id, reason: "outcome_unknown", amount: input.amount },
+      });
+      return {
+        success: false,
+        invoiceId: invoice.id,
+        failureCode: "outcome_unknown_reconciliation_required",
+        outcomeUnknown: true,
+      };
+    }
+    throw err;
+  }
+
+  if (result.requiresReconciliation) {
+    // Accepted, but with no reference we could reconcile or refund it by.
+    await prisma.charge.update({
+      where: { id: chargeId },
+      data: { status: "UNKNOWN", failureCode: result.failureCode ?? "charge_reference_missing" },
+    });
+    return {
+      success: false,
+      invoiceId: invoice.id,
+      failureCode: result.failureCode,
+      outcomeUnknown: true,
+    };
+  }
 
   await prisma.charge.update({
     where: { id: chargeId },
@@ -146,4 +250,19 @@ export async function chargeFor(input: ChargeForInput): Promise<ChargeForResult>
   await prisma.invoice.update({ where: { id: invoice.id }, data: { status: "FAILED" } });
   await emitBillingEvent({ type: "payment.failed", tenantId: input.tenantId, data: { invoiceId: invoice.id, reason: result.failureCode, amount: input.amount } });
   return { success: false, invoiceId: invoice.id, failureCode: result.failureCode };
+}
+
+/**
+ * Map an invoice type to a quote purpose.
+ *
+ * Kept explicit rather than casting the string through: the two vocabularies
+ * are allowed to diverge, and a silent cast would break quietly if they did.
+ */
+function quotePurposeFor(type: string): QuotePurpose {
+  switch (type) {
+    case "SUBSCRIPTION": return "RENEWAL";
+    case "CREDIT_PURCHASE": return "CREDIT_PACKAGE";
+    case "AUTO_PURCHASE": return "AUTO_TOPUP";
+    default: return "CREDIT_PACKAGE";
+  }
 }
