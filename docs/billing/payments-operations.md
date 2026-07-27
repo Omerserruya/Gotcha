@@ -1,8 +1,25 @@
 # Payments: how it works and how to run it
 
-GOTCHA prices in **USD** and charges in **ILS**. Everything below follows from
-that one fact, and from a second: iCount has no idempotency key, so a retry is a
-second charge unless we prevent it ourselves.
+Written for whoever is on call, not whoever wrote it.
+
+---
+
+## Start here
+
+| What you are seeing | Where to look |
+|---|---|
+| Nobody can pay; checkout refuses before the card form | [The rate](#the-rate) — most likely no approved rate |
+| A customer says they were charged but has no plan | [Reconciliation](#reconciliation) |
+| A customer says they were charged twice | [UNKNOWN is not FAILED](#unknown-is-not-failed) — then Reconciliation |
+| An organization's AI stopped answering | [What an unpaid organization can do](#what-an-unpaid-organization-can-do) |
+| Renewals are failing across the board | [The rate](#the-rate) — an expired or retired rate blocks every charge |
+| You need to stop taking money, now | Retire the active rate. See [If something looks wrong](#if-something-looks-wrong) |
+| A refund needs issuing | [Refunds](#refunds) |
+| A customer paid outside the product | [Manual contracts](#manual-contracts) |
+
+Two facts everything else follows from: GOTCHA prices in **USD** and charges in
+**ILS**, and iCount has **no idempotency key**, so a retry is a second charge
+unless we prevent it ourselves.
 
 ---
 
@@ -85,6 +102,8 @@ and the page id has no business in a browser.
 | `ICOUNT_API_BASE_URL` | defaults to the v3 endpoint |
 | `ICOUNT_PAYMENT_PAGE_ID` | the `cc_token` PayPage. Configuration, not a secret. **Validated before any customer is sent to it** — see below |
 | `BILLING_PAYMENT_TOKEN_ENCRYPTION_KEY` | 32 bytes, base64. Dedicated — no fallback to any other key. **Required even in mock/simulator**: storing a card token encrypts it, so an unset key fails checkout at the moment the card is confirmed |
+| `ICOUNT_WEBHOOK_SECRET` | HMAC secret for provider callbacks. **Required in every mode** — without it every webhook is rejected, including in mock |
+| `BILLING_ENFORCEMENT_MODE` | `off` \| `observe` \| `soft` \| `hard`. Only `hard` actually refuses service |
 | `APP_PUBLIC_URL` | where customers return after the hosted page |
 | `BILLING_SCHEDULER_ENABLED` | renewal, dunning, reconciliation sweep |
 
@@ -127,16 +146,6 @@ customer                     GOTCHA                          iCount
 
 Two things this diagram is built around.
 
-**The link does not stay in the address bar.** The continuation token is a
-bearer credential for the checkout — it can show the price, start a payment
-session and ask the server to charge. It arrives in a URL because it comes from
-an email, so on first load it is moved to `sessionStorage` (scoped to that
-checkout reference) and stripped from the URL. Cross-origin leakage is already
-covered by `Referrer-Policy`; this is about browser history, a shared device,
-and the screen-share someone does while on the phone to support. If storage is
-unavailable the URL is left alone — a token in the address bar beats a customer
-who cannot pay.
-
 **The customer's browser never reports an outcome.** Returning to the success
 URL proves they came back. People close tabs, lose signal and bookmark redirect
 URLs. The only accepted proof is iCount's own answer.
@@ -145,6 +154,19 @@ URLs. The only accepted proof is iCount's own answer.
 anyone anywhere, then look for one that is new. Checking only that "a card
 exists" would accept a card saved months ago, or a replayed session, as proof
 that this payment happened.
+
+### The link itself
+
+The continuation token in the emailed URL is a bearer credential: it can show the
+price, start a payment session, and ask the server to charge. On first load it is
+moved to `sessionStorage`, scoped to that checkout reference, and stripped from
+the URL.
+
+Cross-origin leakage is already covered by `Referrer-Policy` — the token never
+reaches iCount. This is about where a URL persists locally: browser history, a
+shared device, and the screen-share someone does while on the phone to support.
+If storage is unavailable the URL is left alone; a token in the address bar beats
+a customer who cannot pay.
 
 ---
 
