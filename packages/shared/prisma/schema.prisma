@@ -2417,20 +2417,20 @@ model Plan {
   internalNote  String?    @map("internal_note")
 
   // ── Commercial configuration (all data, never code) ──
-  supportLevel          String? @map("support_level") // standard | priority | dedicated
-  dataRetentionDays     Int?    @map("data_retention_days")
-  autoPurchaseEligible  Boolean @default(true) @map("auto_purchase_eligible")
-  creditPackagesEligible Boolean @default(true) @map("credit_packages_eligible")
+  supportLevel           String?   @map("support_level") // standard | priority | dedicated
+  dataRetentionDays      Int?      @map("data_retention_days")
+  autoPurchaseEligible   Boolean   @default(true) @map("auto_purchase_eligible")
+  creditPackagesEligible Boolean   @default(true) @map("credit_packages_eligible")
   // Whether the customer may pick a recurring chat / voice volume. Foundation
   // ships with both OFF; flipping either ON is a data change.
-  chatVolumeEnabled     Boolean @default(false) @map("chat_volume_enabled")
-  voiceVolumeEnabled    Boolean @default(false) @map("voice_volume_enabled")
+  chatVolumeEnabled      Boolean   @default(false) @map("chat_volume_enabled")
+  voiceVolumeEnabled     Boolean   @default(false) @map("voice_volume_enabled")
   // Contract terms for CUSTOM plans.
-  contractStart         DateTime? @map("contract_start")
-  contractEnd           DateTime? @map("contract_end")
-  approvalState         String?   @map("approval_state") // PENDING | APPROVED | REJECTED
-  approvedBy            String?   @map("approved_by")
-  approvedAt            DateTime? @map("approved_at")
+  contractStart          DateTime? @map("contract_start")
+  contractEnd            DateTime? @map("contract_end")
+  approvalState          String?   @map("approval_state") // PENDING | APPROVED | REJECTED
+  approvedBy             String?   @map("approved_by")
+  approvedAt             DateTime? @map("approved_at")
 
   entitlements  PlanEntitlement[]
   volumeOptions PlanVolumeOption[]
@@ -2485,24 +2485,24 @@ model CreditPackage {
   createdAt        DateTime @default(now()) @map("created_at")
 
   // ── Catalog configuration (pricing round) ──
-  nameHe          String?            @map("name_he")
-  status          PlanStatus         @default(ACTIVE) // Draft → Active → Retired
+  nameHe              String?            @map("name_he")
+  status              PlanStatus         @default(ACTIVE) // Draft → Active → Retired
   // NULL = every plan. Otherwise an array of plan keys, e.g. ["ai_workforce"].
-  eligiblePlanKeys Json?             @map("eligible_plan_keys")
-  activeFrom      DateTime?          @map("active_from")
-  activeTo        DateTime?          @map("active_to")
-  expiryPolicy    CreditExpiryPolicy @default(NEVER) @map("expiry_policy")
-  expiryDays      Int?               @map("expiry_days") // DAYS_AFTER_PURCHASE only
-  customerVisible Boolean            @default(true) @map("customer_visible")
-  maxPurchaseQuantity Int?           @map("max_purchase_quantity")
-  discountLabel   String?            @map("discount_label")
-  sortOrder       Int                @default(0) @map("sort_order")
+  eligiblePlanKeys    Json?              @map("eligible_plan_keys")
+  activeFrom          DateTime?          @map("active_from")
+  activeTo            DateTime?          @map("active_to")
+  expiryPolicy        CreditExpiryPolicy @default(NEVER) @map("expiry_policy")
+  expiryDays          Int?               @map("expiry_days") // DAYS_AFTER_PURCHASE only
+  customerVisible     Boolean            @default(true) @map("customer_visible")
+  maxPurchaseQuantity Int?               @map("max_purchase_quantity")
+  discountLabel       String?            @map("discount_label")
+  sortOrder           Int                @default(0) @map("sort_order")
   // A future price that takes effect on its own date without touching `price`
   // until then - so scheduling a price change is not a live price change.
-  scheduledPrice     Decimal?  @map("scheduled_price") @db.Decimal(12, 2)
-  scheduledPriceFrom DateTime? @map("scheduled_price_from")
-  internalNote    String?            @map("internal_note")
-  updatedAt       DateTime           @default(now()) @updatedAt @map("updated_at")
+  scheduledPrice      Decimal?           @map("scheduled_price") @db.Decimal(12, 2)
+  scheduledPriceFrom  DateTime?          @map("scheduled_price_from")
+  internalNote        String?            @map("internal_note")
+  updatedAt           DateTime           @default(now()) @updatedAt @map("updated_at")
 
   @@index([status, sortOrder])
   @@map("credit_packages")
@@ -2731,19 +2731,19 @@ model Subscription {
 }
 
 model PendingSubscriptionChange {
-  id                String            @id @default(cuid())
-  subscriptionId    String            @unique @map("subscription_id")
-  changeType        PendingChangeType @map("change_type")
-  targetPlanKey     String?           @map("target_plan_key")
-  targetPlanVersion Int?              @map("target_plan_version")
-  effectiveAt       DateTime          @map("effective_at") // = currentPeriodEnd
-  createdBy         String?           @map("created_by")
-  createdAt         DateTime          @default(now()) @map("created_at")
-  appliedAt         DateTime?         @map("applied_at")
+  id                   String            @id @default(cuid())
+  subscriptionId       String            @unique @map("subscription_id")
+  changeType           PendingChangeType @map("change_type")
+  targetPlanKey        String?           @map("target_plan_key")
+  targetPlanVersion    Int?              @map("target_plan_version")
+  effectiveAt          DateTime          @map("effective_at") // = currentPeriodEnd
+  createdBy            String?           @map("created_by")
+  createdAt            DateTime          @default(now()) @map("created_at")
+  appliedAt            DateTime?         @map("applied_at")
   // Scheduled volume-selector change (pricing round). Applied together with the
   // plan change, or on its own for changeType = VOLUME_CHANGE.
-  targetChatVolumeKey  String? @map("target_chat_volume_key")
-  targetVoiceVolumeKey String? @map("target_voice_volume_key")
+  targetChatVolumeKey  String?           @map("target_chat_volume_key")
+  targetVoiceVolumeKey String?           @map("target_voice_volume_key")
 
   subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
 
@@ -2813,6 +2813,121 @@ model Charge {
   @@map("charges")
 }
 
+enum CheckoutStatus {
+  PENDING // created; customer not yet sent to the provider
+  AWAITING_PROVIDER // customer redirected; waiting for SERVER-SIDE confirmation
+  TOKENIZED // card stored and verified server-side; plan not yet charged
+  PAID // plan charge succeeded - the only state that may provision
+  EXPIRED
+  CANCELED
+  FAILED
+}
+
+/// An immutable record of what the customer chose, created BEFORE they are sent
+/// to the provider.
+///
+/// Everything commercial is frozen here: no price, plan or credit figure is
+/// ever accepted back from the browser or from a provider callback. The
+/// callback carries only `reference`, which is opaque and reveals nothing.
+model PendingCheckout {
+  id String @id @default(cuid())
+
+  /// The ONLY checkout identifier that leaves the server. Opaque: it encodes no
+  /// tenant, plan, price or customer information.
+  reference String @unique
+
+  /// Null for a pre-tenant signup; the tenant is created after payment.
+  tenantId      String? @map("tenant_id")
+  signupContext Json?   @map("signup_context")
+
+  planKey              String  @map("plan_key")
+  planVersion          Int     @map("plan_version")
+  chatVolumeOptionKey  String? @map("chat_volume_option_key")
+  voiceVolumeOptionKey String? @map("voice_volume_option_key")
+
+  /// The commercial snapshot the customer actually saw, frozen at creation.
+  snapshotPrice           Decimal @map("snapshot_price") @db.Decimal(12, 2)
+  snapshotCurrency        String  @map("snapshot_currency")
+  snapshotIncludedCredits Int     @map("snapshot_included_credits")
+
+  amount   Decimal @db.Decimal(12, 2)
+  currency String
+
+  /// Whether this checkout is allowed to provision without an initial charge
+  /// (Sysadmin trial/POC policy only). Defaults to "none": pay first.
+  trialBehavior String @default("none") @map("trial_behavior")
+
+  status    CheckoutStatus @default(PENDING)
+  expiresAt DateTime       @map("expires_at")
+
+  /// Deterministic key for the eventual plan charge, so a replayed callback
+  /// cannot produce a second one.
+  idempotencyKey String @unique @map("idempotency_key")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  attempts PaymentAttempt[]
+
+  @@index([tenantId])
+  @@index([status, expiresAt])
+  @@map("pending_checkouts")
+}
+
+enum PaymentAttemptState {
+  PENDING
+  SUCCEEDED
+  FAILED
+  /// The outcome is genuinely unknown - a timeout, or a crash between request
+  /// and response. MUST NOT be retried: reconcile against the provider first.
+  UNKNOWN
+  /// Reconciliation could not decide (for example several equal candidate
+  /// transactions). Requires a human; never auto-retried.
+  MANUAL_REVIEW
+}
+
+/// One row per logical charge.
+///
+/// `attemptKey` is the uniqueness that actually prevents a double charge: a
+/// second attempt for the same logical charge is a database conflict rather
+/// than a second call to the provider. This matters because iCount has not
+/// confirmed any provider-side idempotency mechanism, so GOTCHA's own
+/// uniqueness is currently the ONLY guarantee.
+model PaymentAttempt {
+  id String @id @default(cuid())
+
+  attemptKey String @unique @map("attempt_key")
+
+  checkoutId String? @map("checkout_id")
+  tenantId   String? @map("tenant_id")
+
+  /// SUBSCRIPTION_INITIAL | RENEWAL | CREDIT_PURCHASE | AUTO_TOPUP
+  purpose String
+
+  amount   Decimal @db.Decimal(12, 2)
+  currency String
+
+  state PaymentAttemptState @default(PENDING)
+
+  providerChargeRef String? @map("provider_charge_ref")
+  failureCode       String? @map("failure_code")
+
+  /// Reconciliation bookkeeping, for resolving an UNKNOWN outcome.
+  reconciledAt   DateTime? @map("reconciled_at")
+  candidateCount Int?      @map("candidate_count")
+  reviewReason   String?   @map("review_reason")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  checkout PendingCheckout? @relation(fields: [checkoutId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([state])
+  @@index([checkoutId])
+  @@map("payment_attempts")
+}
+
 model AutoPurchasePolicy {
   id               String    @id @default(cuid())
   billableEntityId String    @unique @map("billable_entity_id")
@@ -2830,19 +2945,19 @@ model AutoPurchasePolicy {
 
   // ── Pricing round ──
   // Notify the owner at this consumption %, ahead of the purchase threshold.
-  warningThresholdPct Int      @default(80) @map("warning_threshold_pct")
+  warningThresholdPct Int                       @default(80) @map("warning_threshold_pct")
   // Increment-based top-up: buy `incrementCredits` at `pricePerCredit` instead
   // of a fixed package. Takes precedence over packageKey when both are set.
-  incrementCredits    Int?     @map("increment_credits")
-  pricePerCredit      Decimal? @map("price_per_credit") @db.Decimal(12, 6)
+  incrementCredits    Int?                      @map("increment_credits")
+  pricePerCredit      Decimal?                  @map("price_per_credit") @db.Decimal(12, 6)
   // What happens once the monthly ceiling is reached (or auto-purchase is off)
   // and the balance hits zero. Enforced server-side by the AI runtime gate.
   limitBehavior       AutoPurchaseLimitBehavior @default(STOP_AI) @map("limit_behavior")
   // Single-flight lock. A purchase attempt CAS-claims the policy row; a stale
   // lock (older than the TTL) is reclaimable so a crashed worker cannot wedge
   // auto-purchase permanently.
-  lockedAt            DateTime? @map("locked_at")
-  lockToken           String?   @map("lock_token")
+  lockedAt            DateTime?                 @map("locked_at")
+  lockToken           String?                   @map("lock_token")
 
   entity BillableEntity @relation(fields: [billableEntityId], references: [id], onDelete: Cascade)
 
@@ -2922,26 +3037,26 @@ model BillingWebhookEvent {
 // `implemented=false` means the capability exists in the catalog but is NOT
 // built yet - it can never be entitled, sold, or shown on a pricing page.
 model FeatureDefinition {
-  id              String               @id @default(cuid())
-  key             String               @unique // "ai.employee", "voice.call_pilot"
-  nameEn          String               @map("name_en")
-  nameHe          String               @map("name_he")
-  descriptionEn   String?              @map("description_en")
-  descriptionHe   String?              @map("description_he")
-  category        FeatureCategory
-  entitlementType EntitlementValueType @default(BOOLEAN) @map("entitlement_type")
+  id                   String               @id @default(cuid())
+  key                  String               @unique // "ai.employee", "voice.call_pilot"
+  nameEn               String               @map("name_en")
+  nameHe               String               @map("name_he")
+  descriptionEn        String?              @map("description_en")
+  descriptionHe        String?              @map("description_he")
+  category             FeatureCategory
+  entitlementType      EntitlementValueType @default(BOOLEAN) @map("entitlement_type")
   // Applied when no plan or override supplies a value. { bool } | { count } | …
-  defaultValue    Json?                @map("default_value")
+  defaultValue         Json?                @map("default_value")
   // Free-form list of where this key is enforced server-side, e.g.
   // ["services/ai:employee.create", "packages/shared:assertFeature"]. Kept as
   // data so the Sysadmin console can show the enforcement surface honestly.
-  enforcementLocations Json?           @map("enforcement_locations")
-  customerVisible Boolean              @default(true) @map("customer_visible")
-  sysadminOnly    Boolean              @default(false) @map("sysadmin_only")
-  implemented     Boolean              @default(true)
-  sortOrder       Int                  @default(0) @map("sort_order")
-  createdAt       DateTime             @default(now()) @map("created_at")
-  updatedAt       DateTime             @default(now()) @updatedAt @map("updated_at")
+  enforcementLocations Json?                @map("enforcement_locations")
+  customerVisible      Boolean              @default(true) @map("customer_visible")
+  sysadminOnly         Boolean              @default(false) @map("sysadmin_only")
+  implemented          Boolean              @default(true)
+  sortOrder            Int                  @default(0) @map("sort_order")
+  createdAt            DateTime             @default(now()) @map("created_at")
+  updatedAt            DateTime             @default(now()) @updatedAt @map("updated_at")
 
   @@index([category, sortOrder])
   @@map("feature_definitions")
@@ -3043,21 +3158,21 @@ enum EstimationScope {
 // increment. Display currency and charged currency are different things and the
 // UI must say so.
 model PricingCurrencyConfig {
-  id                   String   @id @default(cuid())
-  baseCurrency         String   @default("USD") @map("base_currency")
-  displayCurrencies    Json     @map("display_currencies") // ["USD","ILS"]
-  ilsRoundingIncrement Int      @default(5) @map("ils_rounding_increment") // ₪1 | ₪5 | ₪10 | ₪50
-  roundingMode         String   @default("UP") @map("rounding_mode")
-  fxSource             String   @default("boi") @map("fx_source") // Bank of Israel representative rate
-  fxRefreshHours       Int      @default(24) @map("fx_refresh_hours")
-  fallbackUsdIls       Decimal  @default(3.700000) @map("fallback_usd_ils") @db.Decimal(18, 6)
+  id                      String   @id @default(cuid())
+  baseCurrency            String   @default("USD") @map("base_currency")
+  displayCurrencies       Json     @map("display_currencies") // ["USD","ILS"]
+  ilsRoundingIncrement    Int      @default(5) @map("ils_rounding_increment") // ₪1 | ₪5 | ₪10 | ₪50
+  roundingMode            String   @default("UP") @map("rounding_mode")
+  fxSource                String   @default("boi") @map("fx_source") // Bank of Israel representative rate
+  fxRefreshHours          Int      @default(24) @map("fx_refresh_hours")
+  fallbackUsdIls          Decimal  @default(3.700000) @map("fallback_usd_ils") @db.Decimal(18, 6)
   // When true, checkout charges the display currency; when false (default) ILS
   // is labelled as an estimate and the charge happens in `baseCurrency`.
-  chargeInDisplayCurrency Boolean @default(false) @map("charge_in_display_currency")
-  active               Boolean  @default(true)
-  updatedBy            String?  @map("updated_by")
-  createdAt            DateTime @default(now()) @map("created_at")
-  updatedAt            DateTime @default(now()) @updatedAt @map("updated_at")
+  chargeInDisplayCurrency Boolean  @default(false) @map("charge_in_display_currency")
+  active                  Boolean  @default(true)
+  updatedBy               String?  @map("updated_by")
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @default(now()) @updatedAt @map("updated_at")
 
   @@map("pricing_currency_configs")
 }
@@ -3081,26 +3196,26 @@ model FxRateSnapshot {
 // Operator-editable defaults for evaluation access. POC and Trial share the
 // infrastructure but keep separate labels and configuration.
 model TrialPocTemplate {
-  id                   String   @id @default(cuid())
-  key                  String   @unique // "trial" | "poc"
-  nameEn               String   @map("name_en")
-  nameHe               String   @map("name_he")
-  durationDays         Int      @map("duration_days")
-  creditCap            Int      @map("credit_cap")
-  allFeatures          Boolean  @default(true) @map("all_features")
-  autoRenew            Boolean  @default(false) @map("auto_renew")
-  autoPurchaseEnabled  Boolean  @default(false) @map("auto_purchase_enabled")
-  customerSelfActivate Boolean  @default(false) @map("customer_self_activate")
+  id                       String   @id @default(cuid())
+  key                      String   @unique // "trial" | "poc"
+  nameEn                   String   @map("name_en")
+  nameHe                   String   @map("name_he")
+  durationDays             Int      @map("duration_days")
+  creditCap                Int      @map("credit_cap")
+  allFeatures              Boolean  @default(true) @map("all_features")
+  autoRenew                Boolean  @default(false) @map("auto_renew")
+  autoPurchaseEnabled      Boolean  @default(false) @map("auto_purchase_enabled")
+  customerSelfActivate     Boolean  @default(false) @map("customer_self_activate")
   // Optional restrictions applied to the evaluation tenant, e.g.
   // { "providers": ["shopify"], "limits": { "limit:ai_employees": 2 } }.
-  restrictions         Json?
+  restrictions             Json?
   // Whether unused evaluation credits survive conversion to a paid plan.
-  transferRemainingCredits Boolean @default(false) @map("transfer_remaining_credits")
-  bannerKind           String   @default("TRIAL") @map("banner_kind") // TRIAL | POC
-  active               Boolean  @default(true)
-  updatedBy            String?  @map("updated_by")
-  createdAt            DateTime @default(now()) @map("created_at")
-  updatedAt            DateTime @default(now()) @updatedAt @map("updated_at")
+  transferRemainingCredits Boolean  @default(false) @map("transfer_remaining_credits")
+  bannerKind               String   @default("TRIAL") @map("banner_kind") // TRIAL | POC
+  active                   Boolean  @default(true)
+  updatedBy                String?  @map("updated_by")
+  createdAt                DateTime @default(now()) @map("created_at")
+  updatedAt                DateTime @default(now()) @updatedAt @map("updated_at")
 
   @@map("trial_poc_templates")
 }
