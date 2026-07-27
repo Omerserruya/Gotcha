@@ -9,18 +9,18 @@
  *   4. iCount issues the legal tax document (חשבונית מס) - the authoritative
  *      record; we keep only a reference.
  *
- * Config (env):
- *   ICOUNT_API_BASE   default https://api.icount.co.il/api/v3.php
- *   ICOUNT_CID / ICOUNT_USER / ICOUNT_PASS   company credentials
- *   ICOUNT_MODE       "live" | "mock"  (mock = deterministic, no network - dev/E2E)
- *   ICOUNT_WEBHOOK_SECRET   shared secret for webhook signature verification
+ * Authentication is API-token only - see ./icount-config. There is no
+ * username/password path and no fallback.
  *
- * NOTE: exact iCount request/response shapes are encapsulated here. When wiring
- * to the real account, only the private request helpers below need adjustment;
- * the PaymentProvider surface stays stable.
+ * NOTE: the endpoint PATHS and payload shapes below are NOT yet verified
+ * against authenticated iCount documentation. Only the transport (Bearer
+ * header, JSON body, `status`/`error_description` envelope) is confirmed. Every
+ * live call remains blocked by assertLiveAllowed() until the contract is
+ * verified against the real account.
  */
 import axios from "axios";
 import { createHmac, timingSafeEqual } from "crypto";
+import { isMock, icountApiBaseUrl, authHeaders, sanitizeIcountError } from "./icount-config";
 import type {
   PaymentProvider,
   TokenizeResult,
@@ -30,12 +30,8 @@ import type {
   WebhookVerifyInput,
 } from "./provider";
 
-const API_BASE = process.env.ICOUNT_API_BASE || "https://api.icount.co.il/api/v3.php";
-// Mode is resolved at CALL time (not module load) so the env guard is
-// testable and honors runtime configuration changes.
-function isMock(): boolean {
-  return (process.env.ICOUNT_MODE || "mock").toLowerCase() !== "live";
-}
+// Mode, base URL and auth all resolve at CALL time (not module load) so the
+// env guard stays testable and honours runtime configuration changes.
 
 /**
  * Hard environment guard: development/test can NEVER reach the live iCount
@@ -55,22 +51,29 @@ function assertLiveAllowed(operation: string): void {
   }
 }
 
-function creds() {
-  return {
-    cid: process.env.ICOUNT_CID || "",
-    user: process.env.ICOUNT_USER || "",
-    pass: process.env.ICOUNT_PASS || "",
-  };
-}
-
+/**
+ * One authenticated request.
+ *
+ * Credentials never appear in the body or the URL - only in the Authorization
+ * header, which `sanitizeIcountError` strips from anything that escapes. The
+ * raw axios error is deliberately discarded rather than rethrown, because it
+ * carries `config.headers` and would otherwise put the API token into every
+ * log that catches it.
+ */
 async function call(path: string, body: Record<string, unknown>): Promise<any> {
-  const { cid, user, pass } = creds();
-  if (!cid || !user || !pass) throw new Error("[icount] missing ICOUNT_CID/USER/PASS");
-  const res = await axios.post(`${API_BASE}/${path}`, { cid, user, pass, ...body }, { timeout: 20_000 });
-  if (res.data && res.data.status === false) {
-    throw new Error(`[icount] ${path} failed: ${res.data.reason || JSON.stringify(res.data)}`);
+  try {
+    const res = await axios.post(`${icountApiBaseUrl()}/${path}`, body, {
+      timeout: 20_000,
+      headers: authHeaders(),
+    });
+    // iCount signals application errors in the body with status:false.
+    if (res.data && res.data.status === false) {
+      throw new Error(res.data.error_description || res.data.reason || "unknown_error");
+    }
+    return res.data;
+  } catch (err) {
+    throw sanitizeIcountError(path, err);
   }
-  return res.data;
 }
 
 export const icountProvider: PaymentProvider = {

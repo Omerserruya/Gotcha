@@ -19,6 +19,13 @@ import webhookRoutes from "./routes/webhooks";
 import internalRoutes from "./routes/internal";
 import { runBillingCycle } from "./services/subscription.service";
 import { runDunning } from "./services/dunning.service";
+import { assertIcountConfig } from "./providers/icount-config";
+
+// Fail closed before the first request. A billing service configured to talk to
+// the real iCount API without a token would accept traffic and then fail every
+// charge; refusing to boot surfaces the misconfiguration at deploy time
+// instead of at the customer's renewal.
+assertIcountConfig();
 
 const config = { name: "billing-service", port: parseInt(process.env.PORT || "4009", 10) };
 const app = createServiceApp(config);

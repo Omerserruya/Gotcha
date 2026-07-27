@@ -488,12 +488,14 @@ services:
       # same flag for the page, so the gate holds without JavaScript.
       PUBLIC_PRICING_ENABLED: ${PUBLIC_PRICING_ENABLED:-false}
       PUBLIC_PRICING_CACHE_SECONDS: ${PUBLIC_PRICING_CACHE_SECONDS:-120}
-      # iCount (mock by default; set ICOUNT_MODE=live + creds for production)
+      # iCount. Mock by default. Authentication is API-TOKEN ONLY - there is no
+      # username/password path. Billing service only; never NEXT_PUBLIC.
       ICOUNT_MODE: ${ICOUNT_MODE:-mock}
-      ICOUNT_API_BASE: ${ICOUNT_API_BASE:-https://api.icount.co.il/api/v3.php}
-      ICOUNT_CID: ${ICOUNT_CID:-}
-      ICOUNT_USER: ${ICOUNT_USER:-}
-      ICOUNT_PASS: ${ICOUNT_PASS:-}
+      ICOUNT_AUTH_MODE: ${ICOUNT_AUTH_MODE:-api_token}
+      ICOUNT_API_TOKEN: ${ICOUNT_API_TOKEN:-}
+      ICOUNT_API_BASE_URL: ${ICOUNT_API_BASE_URL:-https://api.icount.co.il/api/v3.php}
+      # Configuration, not a credential: which "Credit card token" PayPage to use.
+      ICOUNT_PAYMENT_PAGE_ID: ${ICOUNT_PAYMENT_PAGE_ID:-}
       ICOUNT_WEBHOOK_SECRET: ${ICOUNT_WEBHOOK_SECRET:-}
     depends_on:
       db:
