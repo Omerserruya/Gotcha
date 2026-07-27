@@ -104,27 +104,37 @@ export async function advanceCheckout(reference: string): Promise<AdvanceResult>
   if (checkout.status === "PAID") return { phase: "PAID", firstActivation: false };
   if (!checkout.tenantId) throw new CheckoutProgressRefused("checkout_has_no_tenant");
 
-  // An attempt already exists whose outcome we cannot act on. Surfacing it as a
-  // failure would invite a retry; a retry here can charge twice.
-  const prior = await prisma.paymentAttempt.findFirst({
-    where: { checkoutId: checkout.id },
-    orderBy: { createdAt: "desc" },
+  // A charge that already succeeded wins over everything else, including a
+  // later failed retry. Reconciliation can turn an older UNKNOWN into SUCCEEDED
+  // after a newer attempt has already failed, so "the most recent attempt" is
+  // the wrong question to ask - "did any of them work" is the right one.
+  const succeeded = await prisma.paymentAttempt.findFirst({
+    where: { checkoutId: checkout.id, state: "SUCCEEDED" },
+    orderBy: { createdAt: "asc" },
   });
-  if (prior && (prior.state === "UNKNOWN" || prior.state === "RECONCILIATION_REQUIRED" || prior.state === "MANUAL_REVIEW")) {
-    return { phase: "NEEDS_ATTENTION", reason: prior.state };
-  }
+
+  // An attempt whose outcome we cannot act on. Surfacing it as a failure would
+  // invite a retry; a retry here can charge twice.
+  const unresolved = succeeded
+    ? null
+    : await prisma.paymentAttempt.findFirst({
+        where: {
+          checkoutId: checkout.id,
+          state: { in: ["UNKNOWN", "RECONCILIATION_REQUIRED", "MANUAL_REVIEW"] },
+        },
+        orderBy: { createdAt: "desc" },
+      });
+  if (unresolved) return { phase: "NEEDS_ATTENTION", reason: unresolved.state };
+
+  // Activate straight away rather than looking at the card again - the money is
+  // already in, and re-verifying tokenization would only be a way to fail.
+  if (succeeded) return activate(checkout, succeeded.id);
 
   const session = await sessionForCheckout(checkout.id);
   if (!session) return { phase: "AWAITING_CARD" };
 
   const verified = await verifyTokenizationSession(session.id);
   if (!verified.verified) return { phase: "AWAITING_CARD" };
-
-  // The card exists. If a charge already succeeded, skip straight to
-  // activation rather than charging again.
-  if (prior?.state === "SUCCEEDED") {
-    return activate(checkout, prior.id);
-  }
 
   const charge = await executeCharge({
     // Derived from the checkout, so every retry is the SAME logical charge.
