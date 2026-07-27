@@ -2937,7 +2937,7 @@ model ProviderCustomer {
   /// One mapping per entity per provider per environment.
   @@unique([provider, environment, billableEntityId])
   /// A provider customer id may not be claimed by two entities.
-  @@unique([provider, environment, providerCustomerId])
+  @@unique([provider, environment, providerCustomerId], map: "provider_customers_provider_environment_provider_customer_id_ke")
   @@index([tenantId])
   @@map("provider_customers")
 }
@@ -2997,7 +2997,7 @@ model ProviderBillingEvent {
   processedAt   DateTime? @map("processed_at")
   createdAt     DateTime  @default(now()) @map("created_at")
 
-  @@unique([provider, environment, externalEventId])
+  @@unique([provider, environment, externalEventId], map: "provider_billing_events_provider_environment_external_event_id_")
   @@index([provider, payloadHash])
   @@index([processing])
   @@index([checkoutId])
@@ -3203,6 +3203,11 @@ model PaymentAttempt {
   @@index([state])
   @@index([checkoutId])
   @@index([executionLeaseExpiresAt])
+  // Both created by migrations and previously undeclared here, so a fresh
+  // database had indexes the schema did not know about - which shows up as
+  // drift and, worse, would be silently dropped by anyone regenerating.
+  @@index([paymentQuoteId], map: "payment_attempts_payment_quote_id_idx")
+  @@index([paymentSource], map: "payment_attempts_payment_source_idx")
   @@map("payment_attempts")
 }
 
@@ -3511,7 +3516,7 @@ model TokenizationSession {
   status TokenizationSessionStatus @default(PENDING)
 
   /// SHA-256 of each token the provider held BEFORE this session.
-  baselineFingerprints String[] @map("baseline_fingerprints")
+  baselineFingerprints String[] @default([]) @map("baseline_fingerprints")
   /// SHA-256 of the token this session produced.
   resolvedFingerprint  String?  @map("resolved_fingerprint")
   paymentMethodId      String?  @map("payment_method_id")
@@ -3527,7 +3532,7 @@ model TokenizationSession {
 
   @@index([tenantId])
   @@index([checkoutId])
-  @@index([status, expiresAt])
+  @@index([status, expiresAt], map: "tokenization_sessions_status_expires_idx")
   @@map("tokenization_sessions")
 }
 
@@ -3574,8 +3579,8 @@ model BillingExchangeRate {
 
   quotes PaymentQuote[]
 
-  @@unique([baseCurrency, quoteCurrency, version])
-  @@index([baseCurrency, quoteCurrency, status, activeFrom])
+  @@unique([baseCurrency, quoteCurrency, version], map: "billing_exchange_rates_base_quote_version_key")
+  @@index([baseCurrency, quoteCurrency, status, activeFrom], map: "billing_exchange_rates_lookup_idx")
   @@map("billing_exchange_rates")
 }
 
@@ -3633,11 +3638,15 @@ model PaymentQuote {
 
   createdAt DateTime @default(now()) @map("created_at")
 
-  fxRateRef BillingExchangeRate? @relation(fields: [fxRateId], references: [id])
+  /// Restrict, NOT SetNull. A consumed quote is the record of what a customer
+  /// was charged and at what rate; nulling its rate reference when a rate row is
+  /// removed would quietly destroy that evidence. The schema said SetNull by
+  /// omission while the migration said Restrict - they now agree.
+  fxRateRef BillingExchangeRate? @relation(fields: [fxRateId], references: [id], onDelete: Restrict)
 
   @@index([checkoutId])
   @@index([tenantId])
-  @@index([status, expiresAt])
+  @@index([status, expiresAt], map: "payment_quotes_status_expires_idx")
   @@map("payment_quotes")
 }
 

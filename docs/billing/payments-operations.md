@@ -349,13 +349,25 @@ invoices and subscriptions are financial records with their own obligations.
 
 ## Deploying
 
-1. `npx prisma migrate deploy` in `packages/shared`.
+1. `npx prisma migrate deploy` in `packages/shared`. Verified to apply cleanly to
+   an empty database, and the resulting schema matches `schema.prisma` for every
+   billing table.
 2. Set the environment above. Leave `ICOUNT_MODE=mock` until the rest is ready.
 3. Confirm nginx routes `/api/checkout` and `/api/admin/billing` to the billing
    service.
 4. Set `ICOUNT_MODE=live`, `ICOUNT_ALLOW_LIVE=true`, `NODE_ENV=production`.
 5. Propose and approve a rate. **Charging stays off until this is done.**
 6. Verify with one real payment on a card you control, then refund it.
+
+### Known: pre-existing schema drift elsewhere
+
+`prisma migrate diff` between a freshly migrated database and `schema.prisma`
+reports ~68 differences on tables **outside** billing — mostly foreign keys and
+index names on `ai_agents`, `call_analyses`, `copilot_configs` and similar. They
+predate this work and are not addressed here.
+
+They matter because they make drift checks noisy, which is how a real difference
+hides. Worth a dedicated pass; not one to fold into a billing change.
 
 ### If something looks wrong
 
