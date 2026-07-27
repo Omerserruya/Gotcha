@@ -937,6 +937,134 @@ export interface ShopifyCommerceMessagePayload {
   source: "ai" | "agent";
 }
 
+// ─── Visitor-facing message projection ───────────────────────
+
+export interface VisitorMessageView {
+  id: string;
+  direction: "INBOUND" | "OUTBOUND";
+  body: string;
+  messageType: string;
+  /** Display name only — never a staff email address. */
+  author: string | null;
+  authorKind: "visitor" | "agent" | "ai";
+  createdAt: string;
+  commerce: {
+    addToCartEnabled: boolean;
+    products: Array<Record<string, unknown>>;
+  } | null;
+}
+
+export interface VisitorProjectionContext {
+  assistantName: string;
+  shopDomain: string;
+  channelAccountId: string;
+}
+
+/**
+ * The ONE place a stored message becomes something a shopper may see.
+ *
+ * Used by both the polling endpoint and the realtime socket projection,
+ * so the two can never drift into disagreeing about what is safe to
+ * expose. Internal fields — tenant id, tool logs, approval state, the
+ * agent's email — stop here.
+ *
+ * Returns null for anything the shopper should not receive at all
+ * (system breadcrumbs, empty rows, a commerce payload from another
+ * store).
+ */
+export function projectVisitorMessage(
+  message: {
+    id: string;
+    direction: string;
+    body: string | null;
+    messageType: string | null;
+    senderName: string | null;
+    metadata: unknown;
+    mediaUrl?: string | null;
+    createdAt: Date | string;
+  },
+  ctx: VisitorProjectionContext,
+): VisitorMessageView | null {
+  const messageType = message.messageType ?? "text";
+  // Escalation breadcrumbs are inbox furniture, not chat content.
+  if (messageType === "system") return null;
+
+  const meta = (message.metadata ?? {}) as Record<string, any>;
+  const commerce = projectCommerceForVisitor(meta, ctx);
+  const body = message.body ?? "";
+  if (!body && !message.mediaUrl && !commerce) return null;
+
+  const direction = message.direction === "INBOUND" ? "INBOUND" : "OUTBOUND";
+  const isAgent = direction === "OUTBOUND" && meta.source !== "ai_bot";
+
+  return {
+    id: message.id,
+    direction,
+    body,
+    messageType,
+    author:
+      direction === "INBOUND"
+        ? null
+        : isAgent
+          ? displayAgentName(message.senderName)
+          : ctx.assistantName,
+    authorKind: direction === "INBOUND" ? "visitor" : isAgent ? "agent" : "ai",
+    createdAt:
+      typeof message.createdAt === "string" ? message.createdAt : message.createdAt.toISOString(),
+    commerce,
+  };
+}
+
+/**
+ * Staff identities arrive from the inbox composer as email addresses.
+ * A shopper gets a first name, never a way to contact an agent directly.
+ */
+function displayAgentName(senderName: string | null): string {
+  if (!senderName) return "Support";
+  const local = senderName.includes("@") ? senderName.split("@")[0] : senderName;
+  return sanitizeToken(local.replace(/[._-]+/g, " "), 40) || "Support";
+}
+
+function projectCommerceForVisitor(
+  meta: Record<string, any>,
+  ctx: VisitorProjectionContext,
+): VisitorMessageView["commerce"] {
+  const payload = meta?.shopify;
+  if (!isRenderableCommercePayload(payload, {
+    shopDomain: ctx.shopDomain,
+    channelAccountId: ctx.channelAccountId,
+  })) {
+    return null;
+  }
+  return {
+    addToCartEnabled: payload.addToCartEnabled === true,
+    products: payload.products.map((p) => ({
+      productId: p.productId,
+      handle: p.handle,
+      title: p.title,
+      imageUrl: p.imageUrl,
+      productUrl: p.productUrl,
+      currency: p.currency,
+      price: p.price,
+      compareAtPrice: p.compareAtPrice,
+      available: p.available,
+      published: p.status === "active",
+      selectedVariantId: p.selectedVariantId,
+      optionNames: p.optionNames,
+      reason: p.reason,
+      variants: (p.variants ?? []).map((v) => ({
+        variantId: v.variantId,
+        title: v.title,
+        price: v.price,
+        compareAtPrice: v.compareAtPrice,
+        available: v.available,
+        options: v.options,
+        requiresSellingPlan: v.requiresSellingPlan,
+      })),
+    })),
+  };
+}
+
 /**
  * Guard used at RENDER time (widget payload + inbox). Rejects a payload
  * whose store or channel does not match the conversation it is being

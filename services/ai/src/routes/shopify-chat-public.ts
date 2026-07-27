@@ -30,7 +30,7 @@ import {
   newVisitorId,
   normalizeStorefrontContext,
   isOriginAllowed,
-  isShopifyCommerceMessageType,
+  projectVisitorMessage,
   MAX_VISITOR_MESSAGE_CHARS,
   type VisitorSessionPayload,
   type StorefrontContext,
@@ -433,13 +433,9 @@ router.get("/messages", pollLimiter, async (req: Request, res: Response) => {
 });
 
 /**
- * Project stored messages into the customer-safe shape.
- *
- * Internal fields (tenant id, channel account id, tool logs, approval
- * state, agent email) never cross this boundary. Commerce payloads are
- * re-checked against the channel binding at render time — the cheap last
- * line behind the tenant-scoped query that already made a foreign
- * snapshot impossible.
+ * Read a page of history and hand every row to the shared visitor
+ * projection — the same function the realtime socket path uses, so
+ * polling and streaming can never disagree about what is safe to show.
  */
 async function loadVisibleMessages(
   tenantId: string,
@@ -452,8 +448,6 @@ async function loadVisibleMessages(
       tenantId,
       conversationId,
       ...(after ? { createdAt: { gt: after } } : {}),
-      // System markers (escalation breadcrumbs) are inbox furniture, not
-      // something the shopper should see appear in their chat.
       messageType: { not: "system" },
     },
     orderBy: { createdAt: "asc" },
@@ -470,75 +464,14 @@ async function loadVisibleMessages(
     },
   });
 
-  return rows
-    .filter((m) => m.body || m.mediaUrl || isShopifyCommerceMessageType(m.messageType))
-    .map((m) => {
-      const meta = (m.metadata ?? {}) as Record<string, any>;
-      const isAgent = m.direction === "OUTBOUND" && meta.source !== "ai_bot";
-      return {
-        id: m.id,
-        direction: m.direction,
-        body: m.body,
-        messageType: m.messageType,
-        // Human agents show as their display name; the AI employee shows
-        // as the merchant's configured assistant name. An agent's email
-        // address is never surfaced to a shopper.
-        author: m.direction === "INBOUND"
-          ? null
-          : isAgent
-            ? displayAgentName(m.senderName)
-            : channel.config.welcome.assistantName,
-        authorKind: m.direction === "INBOUND" ? "visitor" : isAgent ? "agent" : "ai",
-        createdAt: m.createdAt.toISOString(),
-        commerce: projectCommerce(meta, channel),
-      };
-    });
-}
-
-function displayAgentName(senderName: string | null): string {
-  if (!senderName) return "Support";
-  // Staff identities arrive as emails from the inbox composer; show only
-  // the local part, never the address.
-  const name = senderName.includes("@") ? senderName.split("@")[0] : senderName;
-  return name.replace(/[._-]+/g, " ").trim().slice(0, 40) || "Support";
-}
-
-function projectCommerce(meta: Record<string, any>, channel: ShopifyLiveChatChannel) {
-  const payload = meta?.shopify;
-  if (!payload || payload.kind !== "shopify_commerce") return null;
-  if (payload.shopDomain !== channel.config.shopDomain) return null;
-  if (payload.channelAccountId !== channel.id) return null;
-  const products = Array.isArray(payload.products) ? payload.products : [];
-  if (!products.length) return null;
-  return {
-    addToCartEnabled: payload.addToCartEnabled === true,
-    products: products
-      .filter((p: any) => p?.shopDomain === channel.config.shopDomain)
-      .map((p: any) => ({
-        productId: p.productId,
-        handle: p.handle,
-        title: p.title,
-        imageUrl: p.imageUrl,
-        productUrl: p.productUrl,
-        currency: p.currency,
-        price: p.price,
-        compareAtPrice: p.compareAtPrice,
-        available: p.available,
-        published: p.status === "active",
-        selectedVariantId: p.selectedVariantId,
-        optionNames: p.optionNames,
-        reason: p.reason,
-        variants: (p.variants ?? []).map((v: any) => ({
-          variantId: v.variantId,
-          title: v.title,
-          price: v.price,
-          compareAtPrice: v.compareAtPrice,
-          available: v.available,
-          options: v.options,
-          requiresSellingPlan: v.requiresSellingPlan,
-        })),
-      })),
+  const projectionContext = {
+    assistantName: channel.config.welcome.assistantName,
+    shopDomain: channel.config.shopDomain ?? "",
+    channelAccountId: channel.id,
   };
+  return rows
+    .map((m) => projectVisitorMessage(m, projectionContext))
+    .filter((m): m is NonNullable<typeof m> => m !== null);
 }
 
 // ─── POST /cart/validate ─────────────────────────────────────

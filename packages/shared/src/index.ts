@@ -171,6 +171,7 @@ export {
   newVisitorId,
   normalizeStorefrontContext,
   isRenderableCommercePayload,
+  projectVisitorMessage,
 } from "./lib/shopify-live-chat";
 export type {
   ShopifyMessageType,
@@ -190,6 +191,8 @@ export type {
   ProductVariantSnapshot,
   ShopifyCommerceMessagePayload,
   BuildProductSnapshotInput,
+  VisitorMessageView,
+  VisitorProjectionContext,
 } from "./lib/shopify-live-chat";
 
 // Secrets
