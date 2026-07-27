@@ -3455,6 +3455,67 @@ model FxRateSnapshot {
   @@map("fx_rate_snapshots")
 }
 
+enum TokenizationSessionStatus {
+  /// Created, customer not sent yet.
+  PENDING
+  /// Customer is on the hosted page. Says nothing about whether they paid.
+  AWAITING_RETURN
+  /// A NEW card was confirmed to exist by querying the provider.
+  VERIFIED
+  FAILED
+  EXPIRED
+  /// Customer left without storing a card.
+  ABANDONED
+}
+
+/// One attempt to have a customer store a card on the hosted page.
+///
+/// The interesting field is `baselineFingerprints`. Before the customer is sent
+/// anywhere, we record which card tokens the provider ALREADY has for them.
+/// Afterwards we pull again and look for one that is new.
+///
+/// Without that baseline, "the customer has a stored card" would be accepted as
+/// proof that THIS session stored one - so a customer who already had a card on
+/// file, or a stale session replayed later, would appear to have paid when
+/// nothing happened. The baseline turns a existence check into a change check.
+///
+/// Only fingerprints are kept here. The usable token lives encrypted on
+/// PaymentMethod; duplicating it would double the number of places a card token
+/// can leak from.
+model TokenizationSession {
+  id String @id @default(cuid())
+
+  tenantId   String  @map("tenant_id")
+  checkoutId String? @map("checkout_id")
+
+  /// Our opaque reference, sent as custom_client_id and echoed back.
+  customClientId   String  @unique @map("custom_client_id")
+  providerClientId String? @map("provider_client_id")
+  pageId           String  @map("page_id")
+
+  status TokenizationSessionStatus @default(PENDING)
+
+  /// SHA-256 of each token the provider held BEFORE this session.
+  baselineFingerprints String[] @map("baseline_fingerprints")
+  /// SHA-256 of the token this session produced.
+  resolvedFingerprint  String?  @map("resolved_fingerprint")
+  paymentMethodId      String?  @map("payment_method_id")
+
+  /// How many times the server has polled the provider for the new card.
+  verificationAttempts Int       @default(0) @map("verification_attempts")
+  lastVerifiedAt       DateTime? @map("last_verified_at")
+  failureReason        String?   @map("failure_reason")
+
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([tenantId])
+  @@index([checkoutId])
+  @@index([status, expiresAt])
+  @@map("tokenization_sessions")
+}
+
 enum BillingExchangeRateStatus {
   DRAFT
   /// Approved and usable for real charges. At most one per currency pair.

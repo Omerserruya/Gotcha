@@ -46,6 +46,13 @@ export type AttemptPurpose =
   | "CREDIT_PURCHASE"
   | "AUTO_TOPUP";
 
+export interface QuoteBinding {
+  paymentQuoteId: string;
+  chargeAmount: string;
+  chargeCurrency: string;
+  providerCurrencyId: number;
+}
+
 export interface BeginAttemptInput {
   attemptKey: string;
   purpose: AttemptPurpose;
@@ -53,6 +60,8 @@ export interface BeginAttemptInput {
   currency: string;
   tenantId?: string | null;
   checkoutId?: string | null;
+  /** The frozen conversion this charge will submit. */
+  quote?: QuoteBinding;
 }
 
 export interface AttemptRecord {
@@ -66,6 +75,10 @@ export interface AttemptRecord {
 /** Errors that mean "we do not know what happened", as opposed to a decline. */
 function isAmbiguousFailure(err: unknown): boolean {
   const e = err as any;
+  // A provider that already worked out its outcome was ambiguous says so
+  // explicitly. Relying on message sniffing alone would silently downgrade
+  // those to FAILED, which is the one mistake this whole file exists to avoid.
+  if (e?.outcomeUnknown === true) return true;
   const code = String(e?.code ?? "");
   const msg = String(e?.message ?? "");
   return (
@@ -98,6 +111,13 @@ export async function beginAttempt(
         tenantId: input.tenantId ?? null,
         checkoutId: input.checkoutId ?? null,
         state: "PENDING",
+        // Recorded at creation, not at success: if the process dies mid-charge,
+        // the row still says what was going to be submitted, which is what
+        // reconciliation needs to look for.
+        paymentQuoteId: input.quote?.paymentQuoteId ?? null,
+        chargeAmount: input.quote?.chargeAmount ?? null,
+        chargeCurrency: input.quote?.chargeCurrency ?? null,
+        providerCurrencyId: input.quote?.providerCurrencyId ?? null,
       },
       select: { id: true, attemptKey: true, state: true, providerChargeRef: true, failureCode: true },
     });
@@ -126,14 +146,20 @@ export async function runAttempt(args: {
   provider: PaymentProvider;
   capabilities: ProviderCapabilities;
   charge: ChargeInput;
-}): Promise<{ state: PaymentAttemptState; result?: ChargeResult }> {
+  // `failureCode` is returned as well as persisted: a caller needs the decline
+  // reason to tell the customer what happened, and re-reading the row to find
+  // out is an easy step to forget.
+}): Promise<{ state: PaymentAttemptState; result?: ChargeResult; failureCode?: string }> {
   // Refuse before any network call if the currency contract is unverified for
-  // this currency - a USD snapshot must never be submitted and settle as ILS.
+  // what will actually be SUBMITTED. Checking `currency` here would be wrong
+  // now that the two differ: the customer agrees USD and the provider is sent
+  // ILS, so checking the commercial currency would refuse every USD plan while
+  // saying nothing about the charge itself.
   try {
-    assertChargeCurrency(args.capabilities, args.charge.currency);
+    assertChargeCurrency(args.capabilities, args.charge.chargeCurrency ?? args.charge.currency);
   } catch (err: any) {
     await setState(args.attemptId, "FAILED", { failureCode: err.message });
-    return { state: "FAILED" };
+    return { state: "FAILED", failureCode: err.message };
   }
 
   let result: ChargeResult;
@@ -142,23 +168,27 @@ export async function runAttempt(args: {
   } catch (err) {
     if (isAmbiguousFailure(err)) {
       // We may or may not have charged. Do not guess, do not retry.
-      await setState(args.attemptId, "UNKNOWN", {
-        failureCode: "ambiguous_outcome: provider did not answer",
-      });
-      return { state: "UNKNOWN" };
+      const code = "ambiguous_outcome: provider did not answer";
+      await setState(args.attemptId, "UNKNOWN", { failureCode: code });
+      return { state: "UNKNOWN", failureCode: code };
     }
-    await setState(args.attemptId, "FAILED", {
-      failureCode: (err as any)?.message ?? "charge_failed",
-    });
-    return { state: "FAILED" };
+    const code = (err as any)?.message ?? "charge_failed";
+    await setState(args.attemptId, "FAILED", { failureCode: code });
+    return { state: "FAILED", failureCode: code };
   }
 
   if (result.success) {
     await setState(args.attemptId, "SUCCEEDED", { providerChargeRef: result.providerChargeRef });
     return { state: "SUCCEEDED", result };
   }
+  if (result.requiresReconciliation) {
+    // The provider took the charge but gave us nothing to identify it with.
+    // FAILED would invite a retry, and a retry here charges a second time.
+    await setState(args.attemptId, "RECONCILIATION_REQUIRED", { failureCode: result.failureCode });
+    return { state: "RECONCILIATION_REQUIRED", result, failureCode: result.failureCode };
+  }
   await setState(args.attemptId, "FAILED", { failureCode: result.failureCode });
-  return { state: "FAILED", result };
+  return { state: "FAILED", result, failureCode: result.failureCode };
 }
 
 /**

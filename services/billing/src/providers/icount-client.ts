@@ -48,6 +48,14 @@ export class IcountApiError extends Error {
  * retry.
  */
 export class IcountOutcomeUnknown extends Error {
+  /**
+   * Provider-agnostic marker. The attempt state machine must recognize an
+   * unknown outcome without importing an iCount-specific class, because
+   * recording one as FAILED would invite a retry, and a retry after a possible
+   * charge is a second charge.
+   */
+  readonly outcomeUnknown = true;
+
   constructor(readonly path: string, readonly cause: string) {
     super(`[icount] ${path}: outcome unknown (${cause}) - reconciliation required, retrying could double-charge`);
     this.name = "IcountOutcomeUnknown";
