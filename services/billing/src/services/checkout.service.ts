@@ -114,13 +114,28 @@ export async function markStatus(id: string, status: CheckoutStatus) {
 /**
  * Guard for exposing checkout to customers at all.
  *
- * Throws while the provider's token-retrieval contract is unverified, because
- * without it the only available success signal is "the browser came back".
+ * Requires BOTH that the provider can store a card and that we have a verified
+ * way to learn, on the server, that it did. Missing the second is the state
+ * that forces the only available success signal to be "the browser came back",
+ * which proves the customer returned and nothing else.
+ *
+ * Both are verified for iCount today - the token is pulled with
+ * client/get_cc_tokens - so this passes. It is called rather than merely
+ * defined, because a guard nothing invokes is not a guard.
  */
 export function assertCheckoutMayBeEnabled(caps: ProviderCapabilities): void {
   if (!checkoutEnabled(caps)) {
-    throw new Error(
+    throw new CheckoutDisabledError();
+  }
+}
+
+/** Distinct type so a caller can turn it into whatever its surface needs. */
+export class CheckoutDisabledError extends Error {
+  readonly code = "payment_setup_unavailable";
+  constructor() {
+    super(
       "[billing] checkout is disabled: the provider's tokenization or token-retrieval contract is not verified, so tokenization success cannot be confirmed server-side",
     );
+    this.name = "CheckoutDisabledError";
   }
 }

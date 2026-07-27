@@ -20,8 +20,8 @@ import {
 } from "./tokenization.service";
 import { activatePaidCheckout } from "./checkout-activation.service";
 import { chargingRateConfigured } from "./exchange-rate.service";
-import { checkoutEnabled } from "../providers/capabilities";
 import { getCapabilities } from "../providers";
+import { assertCheckoutMayBeEnabled, CheckoutDisabledError } from "./checkout.service";
 
 export class CheckoutProgressRefused extends Error {
   constructor(readonly code: string, detail?: string) {
@@ -49,8 +49,17 @@ export async function startPaymentSetup(
 ): Promise<PaymentSetupResult> {
   const checkout = await requireOpenCheckout(reference);
 
-  if (!checkoutEnabled(getCapabilities("ICOUNT"))) {
-    throw new CheckoutProgressRefused("payment_setup_unavailable");
+  try {
+    // One statement of the rule, in checkout.service, actually invoked. It used
+    // to be defined there and checked separately here, which left the guard
+    // unused and its message free to drift out of date - it still claimed
+    // checkout was disabled long after it had been enabled.
+    assertCheckoutMayBeEnabled(getCapabilities("ICOUNT"));
+  } catch (err) {
+    if (err instanceof CheckoutDisabledError) {
+      throw new CheckoutProgressRefused(err.code);
+    }
+    throw err;
   }
   // Refuse before sending anyone to a payment page we could not then charge
   // against. Discovering that after they enter card details would be worse.

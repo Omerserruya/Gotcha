@@ -83,6 +83,17 @@ describe("checkout cannot be enabled without a verified token-retrieval contract
     expect(() => assertCheckoutMayBeEnabled(regressed)).toThrow(/checkout is disabled/);
   });
 
+  it("4b. the guard is actually reached, not merely defined", () => {
+    // It was defined and called by nothing but its own test - which is how its
+    // message went on claiming checkout was disabled long after it had been
+    // enabled. A guard nothing invokes is not a guard, and worse, it reads like
+    // reassurance.
+    const progress = read("services/billing/src/services/checkout-progress.service.ts");
+    expect(progress).toContain("assertCheckoutMayBeEnabled(getCapabilities(");
+    // ...and there is only ONE statement of the rule.
+    expect(progress).not.toMatch(/if \(!checkoutEnabled\(/);
+  });
+
   it("4b. would enable only when BOTH tokenization and retrieval are verified", () => {
     expect(checkoutEnabled({ ...ICOUNT_CAPABILITIES, tokenRetrievalContract: "verified" })).toBe(true);
     expect(checkoutEnabled({ ...ICOUNT_CAPABILITIES, tokenization: "unverified", tokenRetrievalContract: "verified" })).toBe(false);
