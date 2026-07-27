@@ -1,0 +1,101 @@
+{%- comment -%}
+  GOTCHA Chat — Theme App Embed block.
+
+  This is the entire storefront footprint of the feature. It does three
+  things and nothing else:
+
+    1. Publishes the page context ONLY Liquid can know (page type, product
+       handle, cart item count, currency, locale, theme id).
+    2. Declares the public channel key.
+    3. Loads the widget bootstrap asynchronously.
+
+  What it deliberately does NOT do:
+    - render any markup into the theme's layout (the widget mounts itself
+      into a Shadow DOM host it creates, so no theme style can reach it
+      and it cannot reach the theme)
+    - block rendering (the script is `async`, and nothing above it is
+      render-blocking)
+    - expose any credential. `channel_key` is a PUBLIC identifier: it
+      names a channel, and the server still requires the request Origin to
+      match the merchant's own storefront before it will answer.
+
+  Note on the context below: every value here is a HINT. The server
+  re-resolves the product from Shopify before the assistant says anything
+  about it, and never trusts a price, a stock level or a cart total that
+  arrived from a browser.
+{%- endcomment -%}
+
+{%- if block.settings.channel_key != blank -%}
+  <script type="application/json" id="gotcha-chat-context">
+    {
+      "pageType": {{ request.page_type | json }},
+      "productHandle": {%- if product -%}{{ product.handle | json }}{%- else -%}null{%- endif -%},
+      "collectionHandle": {%- if collection -%}{{ collection.handle | json }}{%- else -%}null{%- endif -%},
+      "path": {{ request.path | json }},
+      "cartItemCount": {{ cart.item_count | default: 0 | json }},
+      "currency": {{ cart.currency.iso_code | json }},
+      "locale": {{ request.locale.iso_code | json }},
+      "themeId": {{ theme.id | json }}
+    }
+  </script>
+
+  <script>
+    window.__gotchaShopifyChat = {
+      channelKey: {{ block.settings.channel_key | json }},
+      apiBase: {{ block.settings.api_base | default: 'https://api.gotcha.co.il' | json }},
+      assetBase: {{ block.settings.asset_base | default: 'https://app.gotcha.co.il' | json }},
+      shopDomain: {{ shop.permanent_domain | json }},
+      openOnLoad: {{ block.settings.open_on_load | default: false | json }}
+    };
+  </script>
+
+  <script
+    src="{{ block.settings.asset_base | default: 'https://app.gotcha.co.il' }}/widget/gotcha-shopify-bootstrap.js"
+    async
+    crossorigin="anonymous"
+  ></script>
+{%- endif -%}
+
+{% schema %}
+{
+  "name": "GOTCHA Chat",
+  "target": "body",
+  "settings": [
+    {
+      "type": "paragraph",
+      "content": "Paste the channel key from GOTCHA → Settings → Channels → Shopify Live Chat. Appearance, welcome copy, suggested questions and business hours are all configured in GOTCHA, so your theme stays the single place for theme settings and GOTCHA stays the single place for chat settings."
+    },
+    {
+      "type": "text",
+      "id": "channel_key",
+      "label": "Channel key",
+      "info": "Required. Without it this embed does nothing."
+    },
+    {
+      "type": "checkbox",
+      "id": "open_on_load",
+      "label": "Open the chat automatically on page load",
+      "default": false,
+      "info": "Off by default. Opening unprompted on every page is the fastest way to make shoppers dismiss a widget permanently."
+    },
+    {
+      "type": "header",
+      "content": "Advanced"
+    },
+    {
+      "type": "text",
+      "id": "api_base",
+      "label": "GOTCHA API URL",
+      "default": "https://api.gotcha.co.il",
+      "info": "Only change this if GOTCHA told you to."
+    },
+    {
+      "type": "text",
+      "id": "asset_base",
+      "label": "GOTCHA widget URL",
+      "default": "https://app.gotcha.co.il",
+      "info": "Only change this if GOTCHA told you to."
+    }
+  ]
+}
+{% endschema %}

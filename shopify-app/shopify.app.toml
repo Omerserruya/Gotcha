@@ -1,0 +1,36 @@
+# GOTCHA — Shopify app manifest.
+#
+# This app exists for ONE reason: to ship the Theme App Extension that
+# puts the GOTCHA chat widget on a merchant's storefront. It deliberately
+# requests no write scopes — everything the widget does is either a read
+# (products, for cards) or a same-origin storefront cart call made by the
+# shopper's own browser against their own theme.
+#
+# The Admin API connection used for product truth is the EXISTING GOTCHA
+# Shopify integration (Settings → Integrations). This manifest does not
+# introduce a second connection or a second credential.
+
+name = "GOTCHA Chat"
+handle = "gotcha-chat"
+application_url = "https://app.gotcha.co.il/settings/channels/shopify-live-chat"
+embedded = false
+
+[access_scopes]
+# read_products is what a product card needs: title, image, price,
+# variants, inventory. Nothing here can modify a store.
+scopes = "read_products"
+
+[auth]
+redirect_urls = [
+  "https://api.gotcha.co.il/api/integrations/shopify/callback",
+]
+
+[webhooks]
+api_version = "2024-04"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/uninstalled" ]
+  uri = "https://api.gotcha.co.il/api/integrations/shopify/webhooks/uninstalled"
+
+[build]
+include_config_on_deploy = true
