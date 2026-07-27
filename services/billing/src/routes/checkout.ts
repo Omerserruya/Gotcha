@@ -18,6 +18,7 @@ import { prisma } from "@chatcenter/shared";
 import { checkoutEnabled } from "../providers/capabilities";
 import { getCapabilities } from "../providers";
 import { activeRate, convert } from "../services/exchange-rate.service";
+import { declineCategory } from "../lib/decline-category";
 import { quoteDisplay } from "../services/payment-quote.service";
 // Shared with the mutating session routes, so the two cannot drift apart about
 // who is allowed to act on a checkout.
@@ -178,7 +179,7 @@ router.get("/checkout/:reference/status", optionalAuth, async (req, res) => {
   const attempt = await prisma.paymentAttempt.findFirst({
     where: { checkoutId: checkout.id },
     orderBy: { createdAt: "desc" },
-    select: { state: true },
+    select: { state: true, failureCode: true },
   });
 
   const tenant = checkout.tenantId
@@ -225,6 +226,11 @@ router.get("/checkout/:reference/status", optionalAuth, async (req, res) => {
       nextAction: nextAction(status, providerReady),
       // Retry is offered only where retrying cannot double-charge.
       retryEligible: status === "PAYMENT_REQUIRED" || status === "FAILED",
+      // Why the last attempt was refused, as a category. Without this the
+      // customer sees "one step left" after a decline and retries the same
+      // card, none the wiser. Never the provider's raw string.
+      declineCategory:
+        attempt?.state === "FAILED" ? declineCategory(attempt.failureCode) : null,
       // Both must hold: a provider that can store a card, and an approved rate
       // to charge at. Offering payment without the second sends someone to a
       // card form for a charge that would then be refused.

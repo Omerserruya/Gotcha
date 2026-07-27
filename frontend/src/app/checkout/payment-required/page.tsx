@@ -42,6 +42,23 @@ function PaymentRequired() {
         <CheckoutSkeleton />
       ) : (
         <>
+          {/* A decline is the first thing to say, before asking again. Without
+              it the page reads "one step left" to someone whose card was just
+              refused, and they retry the same card none the wiser. */}
+          {summary.declineCategory && (
+            <div
+              role="status"
+              className="mb-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[13.5px] leading-[1.6] text-amber-900"
+            >
+              {t(`checkout.decline.${summary.declineCategory}`)}
+              {/* Only advise trying another card if they actually can. Telling
+                  someone to retry while the panel below says payment setup is
+                  unavailable is two messages contradicting each other, and the
+                  advice is useless either way. */}
+              {summary.paymentSetupAvailable && ` ${t("checkout.decline.tryAnother")}`}
+            </div>
+          )}
+
           <CheckoutSummaryCard summary={summary} />
           <div className="mt-6">
             {summary.paymentSetupAvailable ? (
@@ -53,7 +70,9 @@ function PaymentRequired() {
                   aria-busy={starting}
                   className="w-full rounded-xl bg-gray-900 px-5 py-3 text-[14px] font-semibold text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:ring-offset-2 sm:w-auto"
                 >
-                  {t("checkout.action.startPayment")}
+                  {summary.declineCategory
+                    ? t("checkout.action.retryPayment")
+                    : t("checkout.action.startPayment")}
                 </button>
                 {error && (
                   <p role="alert" className="mt-3 text-[13px] leading-[1.6] text-red-600">

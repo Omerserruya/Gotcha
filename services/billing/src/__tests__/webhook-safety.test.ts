@@ -101,3 +101,45 @@ describe("the signature check itself", () => {
     expect(provider).toContain("sig.length === expected.length");
   });
 });
+
+describe("a declined customer is told why", () => {
+  const shared = readFileSync(join(__dirname, "../lib/decline-category.ts"), "utf8");
+  const status = readFileSync(join(__dirname, "../routes/checkout.ts"), "utf8");
+  const session = readFileSync(join(__dirname, "../routes/checkout-session.ts"), "utf8");
+
+  it("categorises rather than passing the provider's words through", async () => {
+    const { declineCategory } = await import("../lib/decline-category");
+    expect(declineCategory("card expired")).toBe("CARD_EXPIRED");
+    expect(declineCategory("insufficient funds")).toBe("INSUFFICIENT_FUNDS");
+    expect(declineCategory("invalid token")).toBe("CARD_UNUSABLE");
+    // An unrecognised code is still a refusal. Passing its text through would
+    // leak exactly what this exists to avoid.
+    expect(declineCategory("ERR_7734 acct 4021 blocked by issuer policy")).toBe("DECLINED");
+    expect(declineCategory(undefined)).toBe("DECLINED");
+  });
+
+  it("both surfaces use the SAME categoriser", () => {
+    // Two copies would drift, and the same decline would then be described
+    // differently depending on which request surfaced it.
+    expect(status).toContain('from "../lib/decline-category"');
+    expect(session).toContain('from "../lib/decline-category"');
+    expect(session).not.toMatch(/function categorize\(/);
+  });
+
+  it("the status read exposes it, so the page knows on load", () => {
+    // Only returning it from `advance` would mean a customer arriving fresh
+    // from their email sees "one step left" after a decline.
+    expect(status).toContain("declineCategory:");
+    expect(status).toContain('attempt?.state === "FAILED"');
+  });
+
+  it("never returns the raw failure code to a customer", () => {
+    const body = status.slice(status.indexOf("res.json({"));
+    // As a returned FIELD. Passing it into the categoriser is the whole point;
+    // emitting it is the thing that must not happen.
+    expect(body).not.toMatch(/^\s*failureCode\s*:/m);
+    expect(body).not.toMatch(/failure_code/);
+    // ...and the categorised form IS returned.
+    expect(body).toMatch(/declineCategory:/);
+  });
+});

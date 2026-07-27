@@ -22,6 +22,7 @@ import {
   startPaymentSetup,
   CheckoutProgressRefused,
 } from "../services/checkout-progress.service";
+import { declineCategory } from "../lib/decline-category";
 
 const router = Router();
 
@@ -126,23 +127,13 @@ function safeAdvance(result: Awaited<ReturnType<typeof advanceCheckout>>) {
     case "PAID":
       return { phase: "PAID" };
     case "PAYMENT_FAILED":
-      return { phase: "PAYMENT_FAILED", declineCategory: categorize(result.failureCode) };
+      return { phase: "PAYMENT_FAILED", declineCategory: declineCategory(result.failureCode) };
     case "NEEDS_ATTENTION":
       // Deliberately not the internal state name.
       return { phase: "NEEDS_ATTENTION" };
     default:
       return { phase: result.phase };
   }
-}
-
-/** A coarse, customer-safe reason. Enough to know whether to try another card. */
-function categorize(failureCode?: string): string {
-  const code = (failureCode ?? "").toLowerCase();
-  if (/expired/.test(code)) return "CARD_EXPIRED";
-  if (/insufficient|funds|limit/.test(code)) return "INSUFFICIENT_FUNDS";
-  if (/declin|refus|denied/.test(code)) return "DECLINED";
-  if (/invalid|token/.test(code)) return "CARD_UNUSABLE";
-  return "DECLINED";
 }
 
 function returnUrl(page: string, reference: string): string | undefined {

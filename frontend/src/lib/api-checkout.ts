@@ -51,6 +51,8 @@ export interface CheckoutSummary {
   nextAction: CheckoutNextAction;
   retryEligible: boolean;
   paymentSetupAvailable: boolean;
+  /** Why the last attempt was refused, if one was. Never a raw provider string. */
+  declineCategory: string | null;
 }
 
 export class CheckoutUnavailable extends Error {

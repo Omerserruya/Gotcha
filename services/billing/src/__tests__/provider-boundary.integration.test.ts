@@ -248,10 +248,12 @@ describe("checkout status is customer-safe", () => {
 
   it("returns a decline category, never the raw provider string", () => {
     // A provider decline can carry account detail and reads like an error log.
+    // The categoriser moved to a shared lib so the status read and this route
+    // describe the same decline identically; the rule is unchanged.
     expect(session).toContain("declineCategory");
-    expect(session).toContain("function categorize");
-    const shown = session.slice(session.indexOf("function safeAdvance"), session.indexOf("function categorize"));
-    expect(shown).not.toContain("failureCode:");
+    expect(session).toContain('from "../lib/decline-category"');
+    const shown = session.slice(session.indexOf("function safeAdvance"), session.indexOf("function returnUrl"));
+    expect(shown).not.toMatch(/^\s*failureCode\s*:/m);
   });
 
   it("generates the payment destination server-side", () => {
