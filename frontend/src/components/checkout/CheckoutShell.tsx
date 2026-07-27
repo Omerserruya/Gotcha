@@ -121,8 +121,12 @@ export function CheckoutShell({
     <div className="min-h-screen bg-white">
       <header className="border-b border-gray-100">
         <div className="mx-auto flex max-w-[640px] items-center px-5 py-5">
+          {/* dir="ltr" on the wordmark: in an RTL page the trailing period is
+              reordered to the front and the brand reads ".GOTCHA". A name is
+              not a sentence and should not be bidi-reordered. */}
           <Link
             href="/"
+            dir="ltr"
             className="rounded text-[17px] font-bold tracking-[-0.02em] text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
           >
             GOTCHA.

@@ -206,7 +206,9 @@ function Shell({ t, children }: { t: (k: string) => string; children: React.Reac
       >
         <div className="mx-auto flex max-w-[1240px] items-center justify-between px-4 py-3.5 sm:px-12 lg:px-20">
           <Link href="/" className="flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 rounded">
-            <span className="text-[17px] font-bold tracking-[-0.02em] text-gray-900">GOTCHA.</span>
+            {/* dir="ltr": in RTL the trailing period is reordered to the
+                front and the brand reads ".GOTCHA". */}
+            <span dir="ltr" className="text-[17px] font-bold tracking-[-0.02em] text-gray-900">GOTCHA.</span>
           </Link>
           <div className="flex items-center gap-4">
             <button
