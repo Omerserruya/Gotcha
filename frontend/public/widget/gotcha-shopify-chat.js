@@ -207,7 +207,11 @@ window.__gotchaShopifyChatApp = function (boot) {
 
   var css = [
     ".panel{",
-    "  position:fixed;bottom:88px;" + side + ":20px;width:392px;max-width:calc(100vw - 32px);",
+    "  position:fixed;bottom:88px;" + side + ":20px;width:392px;",
+    // Never wider than the viewport, whatever the theme is doing. A
+    // storefront with its own horizontal overflow must not be able to
+    // drag the widget wider and make its own bug worse.
+    "  max-width:min(392px, calc(100vw - 32px));",
     "  height:min(640px, calc(100vh - 120px));",
     "  background:#fff;color:#0f172a;border-radius:" + radius + "px;",
     "  box-shadow:0 24px 60px rgba(15,23,42,.22),0 2px 8px rgba(15,23,42,.08);",
@@ -219,11 +223,16 @@ window.__gotchaShopifyChatApp = function (boot) {
     "@media (prefers-reduced-motion: reduce){.panel{animation:none}}",
     // Phones: a floating card wastes the screen and fights the keyboard.
     "@media (max-width: 560px){",
-    "  .panel{inset:0;width:100%;max-width:100%;height:100%;border-radius:0;",
+    // width:auto, driven by the insets — `width:100%` resolves against a
+    // containing block that a wide page can inflate, which is how the
+    // panel ends up 12px past the screen on a theme that already
+    // overflows.
+    "  .panel{inset:0;width:auto;max-width:100vw;height:100%;border-radius:0;",
     "    height:100dvh;padding-bottom:env(safe-area-inset-bottom);}",
     "}",
     ".hd{display:flex;align-items:center;gap:12px;padding:16px 18px;border-bottom:1px solid #eef1f5;}",
     ".hd-av{width:40px;height:40px;border-radius:12px;object-fit:cover;background:" + brand + ";flex:0 0 auto;}",
+    ".hd-mono{display:flex;align-items:center;justify-content:center;color:" + onBrand + ";font-weight:650;font-size:17px;}",
     ".hd-tx{flex:1 1 auto;min-width:0;}",
     ".hd-nm{font-weight:650;font-size:15px;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}",
     ".hd-st{display:flex;align-items:center;gap:6px;font-size:12.5px;color:#64748b;margin-top:2px;}",
@@ -293,9 +302,14 @@ window.__gotchaShopifyChatApp = function (boot) {
     ".qty-b:disabled{opacity:.4;cursor:not-allowed;}",
     ".qty-v{min-width:22px;text-align:center;font-size:14px;font-variant-numeric:tabular-nums;}",
     ".acts{display:flex;gap:8px;padding:0 12px 12px;}",
-    ".btn{flex:1 1 auto;border-radius:11px;padding:9px 12px;font:inherit;font-size:13.5px;font-weight:600;cursor:pointer;text-align:center;text-decoration:none;border:1px solid transparent;}",
+    ".btn{flex:1 1 0;min-width:0;border-radius:11px;padding:9px 10px;font:inherit;font-size:13.5px;font-weight:600;",
+    "  cursor:pointer;text-align:center;text-decoration:none;border:1px solid transparent;white-space:nowrap;",
+    "  overflow:hidden;text-overflow:ellipsis;}",
     ".btn-p{background:" + brand + ";color:" + onBrand + ";}",
-    ".btn-p:disabled{opacity:.45;cursor:not-allowed;}",
+    // A disabled primary button must not still look like the thing to
+    // press. Neutral outline reads as "not yet", which is the truth: the
+    // shopper has a size to choose first.
+    ".btn-p:disabled{background:#fff;color:#94a3b8;border-color:#e2e8f0;cursor:not-allowed;}",
     ".btn-s{background:#fff;color:#0f172a;border-color:#e2e8f0;}",
     ".btn-s:hover{border-color:#cbd5e1;}",
     ".btn:focus-visible{outline:2px solid " + brand + ";outline-offset:2px;}",
@@ -306,10 +320,26 @@ window.__gotchaShopifyChatApp = function (boot) {
     ".car{position:relative;max-width:100%;}",
     ".car-tr{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;padding:2px 2px 8px;",
     "  scrollbar-width:thin;-webkit-overflow-scrolling:touch;}",
-    ".car-tr>*{flex:0 0 214px;scroll-snap-align:start;max-width:214px;}",
+    ".car-tr>*{flex:0 0 186px;scroll-snap-align:start;max-width:186px;}",
     ".car-tr .card{max-width:100%;}",
-    ".car-tr .card-top{flex-direction:column;}",
-    ".car-tr .card-im{width:100%;height:132px;}",
+    ".car-tr .card-top{flex-direction:column;gap:9px;padding:10px;}",
+    ".car-tr .card-im{width:100%;height:112px;}",
+    // A carousel item is a shortlist entry, not a product page. Two lines
+    // of reasoning is enough to choose between three shoes; more turns
+    // the strip into a wall and buries the actions below the fold.
+    // padding-bottom would reveal a sliver of the clamped third line —
+    // `overflow:hidden` clips at the PADDING box, not the content box.
+    ".car-tr .why{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;",
+    "  line-height:1.35;max-height:2.7em;padding:0 10px;margin-bottom:8px;}",
+    // Stacked, full-width actions. Side by side at 186px both labels get
+    // ellipsised into "Add to …" and "View pr.", which is worse than
+    // taking a second row.
+    ".car-tr .acts{padding:0 10px 10px;flex-direction:column;gap:6px;}",
+    ".car-tr .btn{font-size:12.5px;padding:8px 8px;flex:0 0 auto;width:100%;}",
+    // Right-edge fade: without it a scrollable strip looks like a clipped
+    // one, and shoppers do not swipe what they cannot tell is swipeable.
+    ".car::after{content:'';position:absolute;top:0;bottom:14px;" + (dir === "rtl" ? "left" : "right") + ":0;",
+    "  width:26px;pointer-events:none;background:linear-gradient(to " + (dir === "rtl" ? "left" : "right") + ",rgba(255,255,255,0),#fff);}",
     ".car-nav{display:flex;gap:6px;justify-content:flex-end;padding:0 2px;}",
     ".car-n{width:28px;height:28px;border-radius:8px;border:1px solid #e2e8f0;background:#fff;cursor:pointer;color:#475569;}",
     ".car-n:focus-visible{outline:2px solid " + brand + ";outline-offset:2px;}",
@@ -372,12 +402,19 @@ window.__gotchaShopifyChatApp = function (boot) {
   });
 
   var header = el("div", "hd");
-  var headerAvatar = document.createElement("img");
-  headerAvatar.className = "hd-av";
-  headerAvatar.alt = "";
   var logo = safeUrl(appearance.logoUrl) || safeUrl(appearance.avatarUrl);
-  if (logo) headerAvatar.src = logo;
-  else headerAvatar.style.background = brand;
+  var headerAvatar;
+  if (logo) {
+    headerAvatar = document.createElement("img");
+    headerAvatar.className = "hd-av";
+    headerAvatar.alt = "";
+    headerAvatar.src = logo;
+  } else {
+    // A merchant who has not uploaded a logo yet should get a monogram,
+    // not a solid block of brand colour that reads as a broken image.
+    headerAvatar = el("div", "hd-av hd-mono", (welcome.assistantName || "?").trim().charAt(0).toUpperCase());
+    attr(headerAvatar, { "aria-hidden": "true" });
+  }
 
   var headerText = el("div", "hd-tx");
   var headerName = el("div", "hd-nm", welcome.assistantName || "");
@@ -507,6 +544,11 @@ window.__gotchaShopifyChatApp = function (boot) {
           auth: { visitorToken: token(), conversationId: S.conversationId },
           reconnectionDelay: 800,
           reconnectionDelayMax: 8000,
+          // Bounded on purpose. On a network that blocks websockets the
+          // default is an endless retry loop running alongside the HTTP
+          // fallback: twice the traffic, on a page we promised not to
+          // slow down. Give up and let polling carry the conversation.
+          reconnectionAttempts: 6,
         });
         socket.on("connect", function () {
           setConnection("live");
@@ -531,6 +573,13 @@ window.__gotchaShopifyChatApp = function (boot) {
           startPolling(6000);
         });
         socket.on("connect_error", function () {
+          setConnection("polling");
+          startPolling(5000);
+        });
+        socket.io.on("reconnect_failed", function () {
+          // Stop trying entirely; polling is now the transport.
+          try { socket.close(); } catch (e) {}
+          socket = null;
           setConnection("polling");
           startPolling(5000);
         });
@@ -701,7 +750,14 @@ window.__gotchaShopifyChatApp = function (boot) {
     footer.hidden = false;
     var list = el("div", "msgs");
 
-    S.messages.forEach(function (m) { list.appendChild(messageRow(m)); });
+    // Only label the first message of a run. Repeating the assistant's
+    // name above every consecutive bubble reads like three different
+    // people talking.
+    var previousAuthor = null;
+    S.messages.forEach(function (m) {
+      list.appendChild(messageRow(m, m.author === previousAuthor));
+      previousAuthor = m.author;
+    });
     S.pending.forEach(function (p) { list.appendChild(pendingRow(p)); });
 
     if (S.awaitingReply && !S.ended) {
@@ -720,11 +776,11 @@ window.__gotchaShopifyChatApp = function (boot) {
     scrollToEnd();
   }
 
-  function messageRow(m) {
+  function messageRow(m, sameAuthorAsPrevious) {
     var row = el("div", "row");
     attr(row, { "data-me": m.direction === "INBOUND" ? "1" : "0" });
 
-    if (m.direction === "OUTBOUND" && m.author) {
+    if (m.direction === "OUTBOUND" && m.author && !sameAuthorAsPrevious) {
       row.appendChild(el("div", "who", m.author));
     }
     if (m.commerce && m.commerce.products && m.commerce.products.length) {
@@ -765,7 +821,14 @@ window.__gotchaShopifyChatApp = function (boot) {
 
   // ── Product card ────────────────────────────────────────────────
 
-  function productCard(product, addToCartAllowed) {
+  /**
+   * @param compact  Rendered inside a carousel. A shortlist entry is a
+   *   choice between products, not a configurator: the variant picker
+   *   and quantity stepper are dropped, and Add to Cart only appears
+   *   when a variant is already resolved. Anything else belongs on the
+   *   single card the shopper lands on after choosing.
+   */
+  function productCard(product, addToCartAllowed, compact) {
     var card = el("div", "card");
     var vState = {
       variantId: product.selectedVariantId || autoVariant(product),
@@ -825,7 +888,7 @@ window.__gotchaShopifyChatApp = function (boot) {
       // arbitrary variant chosen for the shopper — Add to Cart stays
       // disabled until they pick one that actually exists.
       var needsChoice = (product.optionNames || []).length > 0 && product.variants.length > 1;
-      if (needsChoice) {
+      if (needsChoice && !compact) {
         var opts = el("div", "opts");
         opts.appendChild(el("div", "opt-l", T.chooseOption));
         var chips = el("div", "chips");
@@ -861,7 +924,7 @@ window.__gotchaShopifyChatApp = function (boot) {
         !variant.requiresSellingPlan &&
         product.published !== false;
 
-      if (canAdd) {
+      if (canAdd && !compact) {
         var qtyRow = el("div", "qty");
         var minus = el("button", "qty-b", "−");
         attr(minus, { type: "button", "aria-label": T.quantity + " −" });
@@ -880,7 +943,11 @@ window.__gotchaShopifyChatApp = function (boot) {
       }
 
       var acts = el("div", "acts");
-      if (addToCartAllowed && features.addToCart) {
+      // In a carousel, only offer Add to Cart when there is genuinely
+      // nothing left to choose. Otherwise the button would either lie or
+      // pick a size for the shopper.
+      var offerAdd = addToCartAllowed && features.addToCart && (!compact || canAdd);
+      if (offerAdd) {
         var add = el("button", "btn btn-p", vState.busy ? T.adding : T.addToCart);
         attr(add, { type: "button" });
         add.disabled = !canAdd || vState.busy;
@@ -937,7 +1004,7 @@ window.__gotchaShopifyChatApp = function (boot) {
     var strip = el("div", "car-tr");
     attr(strip, { role: "group", "aria-label": T.next, tabindex: "0" });
     commerce.products.forEach(function (p) {
-      strip.appendChild(productCard(p, commerce.addToCartEnabled));
+      strip.appendChild(productCard(p, commerce.addToCartEnabled, true));
     });
 
     // Keyboard: the strip itself is focusable and arrow keys scroll it,
@@ -1002,6 +1069,10 @@ window.__gotchaShopifyChatApp = function (boot) {
         vState.busy = false;
         vState.done = true;
         repaint();
+        // The card grows by a confirmation row, which lands below the
+        // fold on a full conversation. Without this the shopper taps Add
+        // to cart and, as far as they can tell, nothing happens.
+        scrollToEnd();
         api("/cart/result", { ok: true }).catch(function () {});
         notifyThemeCartChanged();
       })
@@ -1015,6 +1086,7 @@ window.__gotchaShopifyChatApp = function (boot) {
           (err && err.status === 409 && err.message) ||
           T.failed;
         repaint();
+        scrollToEnd();
         api("/cart/result", { ok: false }).catch(function () {});
       });
   }

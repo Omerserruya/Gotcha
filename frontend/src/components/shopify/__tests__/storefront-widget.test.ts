@@ -152,6 +152,29 @@ afterEach(() => {
 // ─── Rendering ──────────────────────────────────────────────
 
 describe("welcome state", () => {
+  it("shows a monogram when the merchant has not uploaded a logo", async () => {
+    // A solid block of brand colour reads as a broken image.
+    const { shadow } = await boot();
+    const avatar = shadow.querySelector(".hd-av")!;
+    expect(avatar.tagName).toBe("DIV");
+    expect(avatar.textContent).toBe("S");
+  });
+
+  it("labels only the first message of a run", async () => {
+    // Repeating the assistant's name above every consecutive bubble
+    // reads like several different people talking.
+    const now = new Date().toISOString();
+    const { shadow } = await boot({
+      messages: [
+        { id: "a", direction: "OUTBOUND", body: "one", messageType: "text", author: "Store Assistant", authorKind: "ai", createdAt: now, commerce: null },
+        { id: "b", direction: "OUTBOUND", body: "two", messageType: "text", author: "Store Assistant", authorKind: "ai", createdAt: now, commerce: null },
+        { id: "c", direction: "OUTBOUND", body: "three", messageType: "text", author: "dana", authorKind: "agent", createdAt: now, commerce: null },
+      ],
+    });
+    const names = Array.from(shadow.querySelectorAll(".who")).map((n) => n.textContent);
+    expect(names).toEqual(["Store Assistant", "dana"]);
+  });
+
   it("renders the merchant's headline and suggested questions", async () => {
     const { shadow } = await boot();
     const text = shadow.textContent ?? "";
@@ -451,7 +474,19 @@ describe("carousel", () => {
           createdAt: new Date().toISOString(),
           commerce: {
             addToCartEnabled: true,
-            products: [makeProduct(), makeProduct({ productId: "222", title: "Trail Light" }), makeProduct({ productId: "333", title: "Road Max" })],
+            products: [
+              // Multi-variant: the shopper still has a size to choose.
+              makeProduct(),
+              // Single variant, resolved: nothing left to decide.
+              makeProduct({
+                productId: "222",
+                title: "Trail Light",
+                optionNames: [],
+                selectedVariantId: "9101",
+                variants: [{ variantId: "9101", title: "Default", price: "98.00", compareAtPrice: null, available: true, options: [], requiresSellingPlan: false }],
+              }),
+              makeProduct({ productId: "333", title: "Road Max" }),
+            ],
           },
         },
       ],
@@ -473,6 +508,29 @@ describe("carousel", () => {
     strip.scrollLeft = 0;
     strip.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
     expect(strip.scrollLeft).toBeGreaterThan(0);
+  });
+
+  it("does not put a variant picker on a shortlist entry", async () => {
+    // A carousel is a choice BETWEEN products. Configuring one belongs
+    // on the single card the shopper lands on after choosing, and at
+    // 186px the picker plus quantity plus two buttons buries the
+    // actions below the fold.
+    const { shadow } = await carouselHarness();
+    expect(shadow.querySelectorAll(".car-tr .chip")).toHaveLength(0);
+    expect(shadow.querySelectorAll(".car-tr .qty")).toHaveLength(0);
+  });
+
+  it("offers Add to Cart only where there is nothing left to choose", async () => {
+    const { shadow } = await carouselHarness();
+    const cards = Array.from(shadow.querySelectorAll(".car-tr .card"));
+    const labels = cards.map((c) =>
+      Array.from(c.querySelectorAll(".btn")).map((b) => b.textContent),
+    );
+    // Card 1 has real sizes to pick, so it links out rather than
+    // pretending it can add something.
+    expect(labels[0]).toEqual(["View product"]);
+    // Cards 2 and 3 are single-variant: Add to Cart is honest there.
+    expect(labels[1]).toContain("Add to cart");
   });
 
   it("gives its navigation buttons accessible names", async () => {
