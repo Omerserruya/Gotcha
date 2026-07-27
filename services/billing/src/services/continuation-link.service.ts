@@ -114,12 +114,18 @@ export async function resolveContinuationLink(rawToken: unknown): Promise<LinkRe
   if (link.revokedAt) return { ok: false, reason: "revoked" };
   if (link.expiresAt.getTime() <= Date.now()) return { ok: false, reason: "expired" };
 
-  // A completed, expired or cancelled checkout is not resumable, however valid
-  // the link is.
+  // Deliberately NOT refused for a completed, expired or cancelled checkout.
+  //
+  // This resolver authorizes reading a checkout as well as resuming one, and
+  // refusing here meant a customer's link died the instant their payment
+  // succeeded: they were redirected to the confirmation page, it could not
+  // authorize, and they were shown "this link is no longer available" seconds
+  // after paying. That is the worst possible moment to show someone an error.
+  //
+  // Resumability is enforced where it belongs - startPaymentSetup and
+  // advanceCheckout both refuse a checkout that is finished - so a valid link
+  // can show what happened without being able to change it.
   const status = link.checkout.status;
-  if (status === "PAID" || status === "EXPIRED" || status === "CANCELED") {
-    return { ok: false, reason: "checkout_not_resumable" };
-  }
 
   return {
     ok: true,

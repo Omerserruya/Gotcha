@@ -270,6 +270,42 @@ describe("an emailed link keeps working", () => {
     if (!res.ok) expect(res.reason).toBe("revoked");
   });
 
+  it("still works after the payment succeeds", async () => {
+    const { tenant, checkout } = await scenario();
+    const link = await issueContinuationLink({ checkoutId: checkout.id, tenantId: tenant.id });
+    await prisma.pendingCheckout.update({ where: { id: checkout.id }, data: { status: "PAID" } });
+
+    // The bug this guards against: the link died the instant the payment
+    // succeeded, so the customer was redirected to the confirmation page, it
+    // could not authorize, and they saw "this link is no longer available"
+    // seconds after paying. The worst possible moment to show someone an error.
+    const res = await resolveContinuationLink(link.token);
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.checkout.status).toBe("PAID");
+  });
+
+  it("still works for an expired checkout, so the page can explain", async () => {
+    const { tenant, checkout } = await scenario();
+    const link = await issueContinuationLink({ checkoutId: checkout.id, tenantId: tenant.id });
+    await prisma.pendingCheckout.update({ where: { id: checkout.id }, data: { status: "EXPIRED" } });
+    // "This checkout expired, ask for a new link" is more use than the generic
+    // unavailable state.
+    expect((await resolveContinuationLink(link.token)).ok).toBe(true);
+  });
+
+  it("but a finished checkout cannot be advanced", async () => {
+    const { checkout } = await scenario();
+    await prisma.pendingCheckout.update({ where: { id: checkout.id }, data: { status: "CANCELED" } });
+    // Viewing is not resuming. The guard moved, it did not disappear.
+    await expect(advanceCheckout(checkout.reference)).rejects.toThrow(/checkout_canceled/);
+  });
+
+  it("nor can an expired one", async () => {
+    const { checkout } = await scenario();
+    await prisma.pendingCheckout.update({ where: { id: checkout.id }, data: { status: "EXPIRED" } });
+    await expect(advanceCheckout(checkout.reference)).rejects.toThrow(/checkout_expired/);
+  });
+
   it("issuing a new link retires the old one", async () => {
     const { tenant, checkout } = await scenario();
     const first = await issueContinuationLink({ checkoutId: checkout.id, tenantId: tenant.id });

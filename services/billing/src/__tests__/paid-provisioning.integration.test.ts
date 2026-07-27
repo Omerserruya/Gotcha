@@ -7,6 +7,7 @@
  */
 import { describe, it, expect, afterAll } from "vitest";
 import { prisma } from "@chatcenter/shared";
+import { startPaymentSetup } from "../services/checkout-progress.service";
 import {
   provisionPaidTenant,
   resolveAndValidatePlan,
@@ -243,12 +244,21 @@ describe("continuation links", () => {
     expect((await resolveContinuationLink(link.token)).ok).toBe(true);
   });
 
-  it("a link cannot resume a checkout that is already paid", async () => {
+  it("a link can VIEW a paid checkout but not resume it", async () => {
     const { link, checkoutId } = await linked();
     await prisma.pendingCheckout.update({ where: { id: checkoutId }, data: { status: "PAID" } });
+
+    // Viewing must still work. Refusing here meant a customer's link died the
+    // instant their payment succeeded - redirected to the confirmation page,
+    // unable to authorize, shown "no longer available" seconds after paying.
     const res = await resolveContinuationLink(link.token);
-    expect(res.ok).toBe(false);
-    if (!res.ok) expect(res.reason).toBe("checkout_not_resumable");
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.checkout.status).toBe("PAID");
+
+    // Resuming must not. The guarantee moved to where resuming happens; it did
+    // not go away.
+    const checkout = await prisma.pendingCheckout.findUnique({ where: { id: checkoutId } });
+    await expect(startPaymentSetup(checkout!.reference)).rejects.toThrow(/checkout_already_paid/);
   });
 
   it("a link grants nothing on its own", async () => {

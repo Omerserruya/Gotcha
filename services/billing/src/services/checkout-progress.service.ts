@@ -102,6 +102,13 @@ export async function advanceCheckout(reference: string): Promise<AdvanceResult>
   const checkout = await prisma.pendingCheckout.findUnique({ where: { reference } });
   if (!checkout) throw new CheckoutProgressRefused("checkout_not_found");
   if (checkout.status === "PAID") return { phase: "PAID", firstActivation: false };
+  // Stated here rather than relied upon from the link resolver, which now
+  // authorizes viewing a finished checkout so the customer can see what
+  // happened. Advancing one must still be impossible.
+  if (checkout.status === "CANCELED") throw new CheckoutProgressRefused("checkout_canceled");
+  if (checkout.status === "EXPIRED" || checkout.expiresAt <= new Date()) {
+    throw new CheckoutProgressRefused("checkout_expired");
+  }
   if (!checkout.tenantId) throw new CheckoutProgressRefused("checkout_has_no_tenant");
 
   // A charge that already succeeded wins over everything else, including a
