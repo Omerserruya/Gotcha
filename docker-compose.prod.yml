@@ -273,6 +273,10 @@ services:
       # Signs the `state` param for third-party OAuth (Google/Meta/etc).
       # Unrelated to user authentication.
       OAUTH_STATE_SECRET: ${OAUTH_STATE_SECRET:?OAUTH_STATE_SECRET required in prod}
+      # Auth calls billing's internal endpoints (paid-tenant provisioning).
+      # Without this every such call 401s and provisioning silently fails.
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:-chatcenter-internal-2026}
+      BILLING_SERVICE_URL: ${BILLING_SERVICE_URL:-http://billing:4009}
       META_APP_ID: ${META_APP_ID:-}
       META_APP_SECRET: ${META_APP_SECRET:-}
       WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID: ${WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID:-}

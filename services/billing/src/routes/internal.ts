@@ -170,7 +170,7 @@ router.post("/internal/billing/validate-paid-plan", async (req, res) => {
  * one email. It is never persisted and never returned again.
  */
 router.post("/internal/billing/provision-paid-tenant", async (req, res) => {
-  const { tenantId, planVersionId, chatVolumeOptionKey, voiceVolumeOptionKey, billingInterval, commercialNote, actor } =
+  const { tenantId, planVersionId, chatVolumeOptionKey, voiceVolumeOptionKey, billingInterval, commercialNote, actor, idempotencyKey } =
     req.body ?? {};
   if (!tenantId || !planVersionId) {
     return res.status(400).json({ error: "tenantId and planVersionId required" });
@@ -184,6 +184,7 @@ router.post("/internal/billing/provision-paid-tenant", async (req, res) => {
       billingInterval,
       commercialNote: commercialNote ?? null,
       actor: actor ?? null,
+      idempotencyKey: idempotencyKey ?? undefined,
       rawRequest: req.body ?? {},
     });
     res.json({ ok: true, ...result });
@@ -208,11 +209,16 @@ router.post("/internal/billing/resend-payment-link", async (req, res) => {
     where: { tenantId, status: { in: ["PENDING", "AWAITING_PROVIDER", "TOKENIZED"] } },
     orderBy: { createdAt: "desc" },
   });
-  if (!checkout) return res.status(404).json({ error: "no_resumable_checkout" });
+  if (!checkout) {
+    // Resend reuses; it never creates. A tenant whose provisioning never
+    // completed needs REPAIR, and conflating the two would hide a broken
+    // provisioning behind a button that looks like it worked.
+    return res.status(409).json({ error: "BILLING_PROVISIONING_INCOMPLETE" });
+  }
   if (checkout.expiresAt.getTime() <= Date.now()) {
     // Deliberately not auto-reissued: a new expiry would be a new commercial
     // offer, and that is a decision, not a side effect of clicking resend.
-    return res.status(409).json({ error: "checkout_expired" });
+    return res.status(409).json({ error: "PAYMENT_LINK_NOT_AVAILABLE", detail: "checkout_expired" });
   }
 
   // Rate limit, DB-backed so it holds across instances. Resend exists to
@@ -225,7 +231,7 @@ router.post("/internal/billing/resend-payment-link", async (req, res) => {
   });
   if (recent && Date.now() - recent.createdAt.getTime() < cooldownSec * 1000) {
     const retryAfter = Math.ceil((cooldownSec * 1000 - (Date.now() - recent.createdAt.getTime())) / 1000);
-    return res.status(429).json({ error: "resend_rate_limited", retryAfterSeconds: retryAfter });
+    return res.status(429).json({ error: "PAYMENT_LINK_RATE_LIMITED", retryAfterSeconds: retryAfter });
   }
 
   const link = await issueContinuationLink({

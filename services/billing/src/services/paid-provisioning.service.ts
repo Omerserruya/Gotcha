@@ -35,6 +35,14 @@ const CLIENT_SUPPLIED_MONEY = [
 export interface ProvisionPaidTenantInput {
   tenantId: string;
   planVersionId: string;
+  /**
+   * Deterministic key from the durable provisioning request.
+   *
+   * This is what makes retry safe: the checkout and the initial attempt are
+   * keyed on it, so any number of repairs converge on ONE set of records
+   * instead of minting a new checkout each time.
+   */
+  idempotencyKey?: string;
   chatVolumeOptionKey?: string | null;
   voiceVolumeOptionKey?: string | null;
   billingInterval?: string;
@@ -45,6 +53,8 @@ export interface ProvisionPaidTenantInput {
 }
 
 export interface ProvisionPaidTenantResult {
+  /** True when this call created the records; false when it found existing ones. */
+  created: boolean;
   checkoutId: string;
   checkoutReference: string;
   paymentAttemptId: string;
@@ -161,6 +171,40 @@ export async function provisionPaidTenant(
   });
 
   const entityId = await ensureBillableEntity(input.tenantId);
+
+  // Converge, do not duplicate. A repair for an already-provisioned request
+  // must return what exists rather than create a second checkout.
+  const idempotencyKey = input.idempotencyKey ?? `checkout:${(await import("crypto")).randomBytes(24).toString("base64url")}`;
+  const existing = await prisma.pendingCheckout.findUnique({ where: { idempotencyKey } });
+  if (existing) {
+    const attempt = await prisma.paymentAttempt.findFirst({ where: { checkoutId: existing.id } });
+    const link = await issueContinuationLink({
+      checkoutId: existing.id,
+      tenantId: input.tenantId,
+      createdBy: input.actor ?? null,
+    });
+    return {
+      created: false,
+      checkoutId: existing.id,
+      checkoutReference: existing.reference,
+      paymentAttemptId: attempt?.id ?? "",
+      billableEntityId: entityId,
+      link,
+      summary: {
+        planKey: existing.planKey,
+        planVersion: existing.planVersion,
+        planName: plan.name,
+        includedCredits: existing.snapshotIncludedCredits,
+        amount: String(existing.amount),
+        currency: existing.currency,
+        billingInterval: plan.billingInterval,
+        estimatedChatsMonthly: q.estimate.chat.monthly,
+        estimatedCallsMonthly: q.estimate.voice.monthly,
+        expiresAt: link.expiresAt,
+      },
+    };
+  }
+
   const reference = `chk_${(await import("crypto")).randomBytes(24).toString("base64url")}`;
   const expiresAt = new Date(Date.now() + Number(process.env.PAYMENT_LINK_TTL_HOURS || 72) * 3_600_000);
 
@@ -183,7 +227,7 @@ export async function provisionPaidTenant(
         trialBehavior: "none",
         status: "PENDING",
         expiresAt,
-        idempotencyKey: `checkout:${reference}`,
+        idempotencyKey,
       },
     });
 
@@ -192,7 +236,9 @@ export async function provisionPaidTenant(
     // before anything can race for it.
     const attempt = await tx.paymentAttempt.create({
       data: {
-        attemptKey: `checkout:${reference}:initial`,
+        // Derived from the SAME deterministic key, so a concurrent repair
+        // collides on the unique index instead of preparing a second charge.
+        attemptKey: `${idempotencyKey}:initial`,
         checkoutId: checkout.id,
         tenantId: input.tenantId,
         purpose: "SUBSCRIPTION_INITIAL",
@@ -212,6 +258,7 @@ export async function provisionPaidTenant(
   });
 
   return {
+    created: true,
     checkoutId: created.checkout.id,
     checkoutReference: created.checkout.reference,
     paymentAttemptId: created.attempt.id,

@@ -2882,6 +2882,66 @@ model PendingCheckout {
   @@map("pending_checkouts")
 }
 
+enum BillingProvisioningState {
+  PENDING
+  PROCESSING
+  COMPLETED
+  /// A transient failure (billing unreachable, timeout). Safe to retry.
+  FAILED_RETRYABLE
+  /// A validation failure that retrying cannot fix - a retired plan, an invalid
+  /// volume key. Retrying blindly would just fail again, so it does not.
+  FAILED_PERMANENT
+  CANCELLED
+}
+
+/// The durable record of what a Sysadmin ASKED for.
+///
+/// It exists because tenant creation and billing provisioning live in different
+/// services and cannot share a transaction. Without it, a billing failure left
+/// the tenant in PENDING_PAYMENT with the requested plan recorded nowhere:
+/// resend could not recreate the missing checkout, and retrying creation was
+/// blocked by slug uniqueness. That was a dead end, not a recoverable state.
+///
+/// This is a provisioning workflow record, not a billing ledger entry. It holds
+/// the REQUEST, never prices, provider payloads, credentials or tokens - every
+/// commercial value is recomputed server-side from these keys.
+model TenantBillingProvisioningRequest {
+  id       String @id @default(cuid())
+  tenantId String @map("tenant_id")
+
+  requestedBy String? @map("requested_by")
+  mode        String  @default("PAID_PLAN")
+
+  planVersionId        String  @map("plan_version_id")
+  chatVolumeOptionKey  String? @map("chat_volume_option_key")
+  voiceVolumeOptionKey String? @map("voice_volume_option_key")
+  billingInterval      String? @map("billing_interval")
+  commercialNote       String? @map("commercial_note")
+
+  /// Deterministic, derived from this request. Billing keys the checkout and
+  /// the initial attempt on it, so any number of retries converge on one set
+  /// of records rather than creating a new one each time.
+  idempotencyKey String @unique @map("idempotency_key")
+
+  state      BillingProvisioningState @default(PENDING)
+  checkoutId String?                  @map("checkout_id")
+
+  attemptCount  Int       @default(0) @map("attempt_count")
+  lastAttemptAt DateTime? @map("last_attempt_at")
+  nextRetryAt   DateTime? @map("next_retry_at")
+
+  /// Sanitized. A provider or transport message is never stored verbatim.
+  lastFailureCode    String? @map("last_failure_code")
+  lastFailureMessage String? @map("last_failure_message")
+
+  createdAt   DateTime  @default(now()) @map("created_at")
+  completedAt DateTime? @map("completed_at")
+
+  @@index([tenantId])
+  @@index([state, nextRetryAt])
+  @@map("tenant_billing_provisioning_requests")
+}
+
 enum ContinuationLinkPurpose {
   /// Lets a newly provisioned paid tenant finish identity setup and reach the
   /// payment continuation flow. Grants nothing on its own.

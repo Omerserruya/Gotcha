@@ -22,6 +22,7 @@ import {
 } from "@chatcenter/shared";
 import { eraseTenant } from "../services/gdpr.service";
 import { sendOnboardingEmail, sendPaidOnboardingEmail} from "../services/notification.service";
+import { createProvisioningRequest, runProvisioning, provisioningStatusForTenant } from "../services/billing-provisioning.service";
 import { scheduleOnboardingNudge, triggerNudgeNow } from "../services/nudge-engine.service";
 import { listOnboardingSnapshots, getOnboardingSnapshot } from "../services/onboarding-state.service";
 import { inviteUser, syncIdentityNameByUser, syncMembershipAccess } from "../services/invitation.service";
@@ -358,27 +359,32 @@ router.post("/tenants", authenticate, requireSystemAdmin(), validate(createTenan
       },
     });
 
-    // Billing scaffolding for a paid tenant. Creates BillableEntity, an
-    // immutable PendingCheckout, a PENDING PaymentAttempt and ONE continuation
-    // link. No subscription, no credits, no entitlements, no provider call.
+    // Billing scaffolding for a paid tenant. The REQUEST is made durable first,
+    // so a billing failure leaves a recoverable state rather than a tenant whose
+    // requested plan is recorded nowhere.
     let paidProvisioning: any = null;
     if (paid) {
-      const prov = await callBilling("provision-paid-tenant", {
+      const provRequest = await createProvisioningRequest({
         tenantId: result.tenant.id,
-        planVersionId: billing.planVersionId,
-        chatVolumeOptionKey: billing.chatVolumeOptionKey ?? null,
-        voiceVolumeOptionKey: billing.voiceVolumeOptionKey ?? null,
-        billingInterval: billing.billingInterval,
-        commercialNote: billing.commercialNote ?? null,
-        actor: actorId ?? null,
+        requestedBy: actorId ?? null,
+        selection: {
+          planVersionId: billing.planVersionId,
+          chatVolumeOptionKey: billing.chatVolumeOptionKey ?? null,
+          voiceVolumeOptionKey: billing.voiceVolumeOptionKey ?? null,
+          billingInterval: billing.billingInterval ?? null,
+          commercialNote: billing.commercialNote ?? null,
+        },
       });
 
+      const outcome = await runProvisioning(provRequest.id);
+      const prov = { ok: outcome.ok, body: outcome.body ?? { error: outcome.failureCode } };
+
       if (!prov.ok) {
-        // The tenant exists but has no billing state. Leaving it PENDING_PAYMENT
-        // with no checkout is the recoverable outcome: it is inert (the access
-        // matrix denies the paid product), a Sysadmin can see it, and resend can
-        // repair it. What must NOT happen is an active tenant, or an onboarding
-        // email carrying a link that goes nowhere.
+        // The tenant exists but billing setup did not complete. It stays
+        // PENDING_PAYMENT - inert, because the access matrix denies the paid
+        // product - and the durable provisioning request holds exactly what was
+        // requested, so REPAIR can finish the job without the operator
+        // re-entering anything. No email is sent, because there is no link.
         void writeAudit({
           tenantId: result.tenant.id, actorType: "user", actorId,
           action: AuditAction.PAID_TENANT_PROVISIONING_FAILED,
@@ -386,9 +392,20 @@ router.post("/tenants", authenticate, requireSystemAdmin(), validate(createTenan
           metadata: { failureCode: prov.body?.error ?? "unknown" },
         });
         res.status(502).json({
-          error: "Tenant created but billing provisioning failed",
-          code: prov.body?.error ?? "provisioning_failed",
-          data: { tenant: { id: result.tenant.id, slug, status: "PENDING_PAYMENT" }, recoverable: true },
+          error: "Tenant created but billing setup did not complete",
+          code: outcome.failureCode ?? "provisioning_failed",
+          data: {
+            tenant: { id: result.tenant.id, name, slug, status: "PENDING_PAYMENT" },
+            admin: { id: result.admin.id, email: adminEmail, name: adminName },
+            billing: {
+              mode: "PAID_PLAN",
+              provisioningState: outcome.state,
+              // Repair, not "create the tenant again".
+              canRepair: outcome.state === "FAILED_RETRYABLE" || outcome.state === "PENDING",
+              paidAccessGranted: false,
+              emailSent: false,
+            },
+          },
         });
         return;
       }
@@ -473,6 +490,129 @@ router.post("/tenants", authenticate, requireSystemAdmin(), validate(createTenan
   }
 });
 
+// ─── Repair Billing Provisioning ────────────────────────────
+
+/**
+ * Finish billing setup for a tenant whose provisioning did not complete.
+ *
+ * Distinct from resend on purpose. Resend REUSES an existing checkout; repair
+ * CREATES the records that were never made. Letting one button do both would
+ * hide a broken provisioning behind an action that looks like it worked.
+ *
+ * Idempotent: billing converges on the request's deterministic key, so calling
+ * this repeatedly - or concurrently - yields one checkout, one initial payment
+ * attempt and one active link.
+ */
+router.post("/tenants/:id/repair-billing-provisioning", authenticate, requireSystemAdmin(), async (req: Request, res: Response): Promise<void> => {
+  const tenantId = req.params.id as string;
+  const actorId = (req as any).user?.userId as string | undefined;
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { id: true, name: true, status: true },
+  });
+  if (!tenant) {
+    res.status(404).json({ error: "Tenant not found" });
+    return;
+  }
+  if (tenant.status !== "PENDING_PAYMENT") {
+    res.status(409).json({ error: "TENANT_NOT_PENDING_PAYMENT", tenantStatus: tenant.status });
+    return;
+  }
+
+  const status = await provisioningStatusForTenant(tenantId);
+  if (!status) {
+    res.status(409).json({ error: "NO_PROVISIONING_REQUEST" });
+    return;
+  }
+  if (status.state === "COMPLETED") {
+    // Nothing to repair. Resend is the right action here.
+    res.status(409).json({ error: "BILLING_PROVISIONING_ALREADY_COMPLETE" });
+    return;
+  }
+
+  const outcome = await runProvisioning(status.id);
+  if (!outcome.ok) {
+    res.status(502).json({
+      error: "BILLING_PROVISIONING_FAILED",
+      code: outcome.failureCode,
+      state: outcome.state,
+      canRepair: outcome.state === "FAILED_RETRYABLE",
+    });
+    return;
+  }
+
+  // The link and the email happen only AFTER a checkout exists, so a broken
+  // link can never be sent.
+  const admin = await prisma.user.findFirst({
+    where: { tenantId, role: "ADMIN" },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, email: true, name: true },
+  });
+
+  let emailSent = false;
+  if (admin && outcome.body?.link?.token) {
+    try {
+      await sendPaidOnboardingEmail({
+        tenantId,
+        adminEmail: admin.email,
+        adminName: admin.name ?? admin.email,
+        tenantName: tenant.name,
+        adminUserId: admin.id,
+        continuationToken: outcome.body.link.token,
+        linkExpiresAt: new Date(outcome.body.link.expiresAt),
+        planName: outcome.body.summary.planName,
+        amount: outcome.body.summary.amount,
+        currency: outcome.body.summary.currency,
+        includedCredits: outcome.body.summary.includedCredits,
+      });
+      emailSent = true;
+      void writeAudit({
+        tenantId, actorType: "user", actorId,
+        action: AuditAction.PAID_TENANT_EMAIL_SENT,
+        targetType: "tenant", targetId: tenantId,
+      });
+    } catch {
+      // Billing setup is now correct; only delivery failed. Resend repairs that.
+      void writeAudit({
+        tenantId, actorType: "user", actorId,
+        action: AuditAction.PAID_TENANT_EMAIL_FAILED,
+        targetType: "tenant", targetId: tenantId,
+      });
+    }
+  }
+
+  void writeAudit({
+    tenantId, actorType: "user", actorId,
+    action: AuditAction.BILLING_PROVISIONING_REPAIRED,
+    targetType: "provisioning_request", targetId: status.id,
+    metadata: { checkoutReference: outcome.body?.checkoutReference, emailSent },
+  });
+
+  res.json({
+    data: {
+      repaired: true,
+      tenantStatus: "PENDING_PAYMENT",
+      billing: {
+        provisioningState: "COMPLETED",
+        checkoutReference: outcome.body?.checkoutReference,
+        planName: outcome.body?.summary?.planName,
+        amount: outcome.body?.summary?.amount,
+        currency: outcome.body?.summary?.currency,
+        linkExpiresAt: outcome.body?.link?.expiresAt,
+        emailSent,
+        paidAccessGranted: false,
+      },
+    },
+  });
+});
+
+/** Safe provisioning state for the Sysadmin tenant UI. */
+router.get("/tenants/:id/billing-provisioning", authenticate, requireSystemAdmin(), async (req: Request, res: Response): Promise<void> => {
+  const status = await provisioningStatusForTenant(req.params.id as string);
+  res.json({ data: status });
+});
+
 // ─── Resend Paid Payment / Onboarding Link ──────────────────
 
 /**
@@ -510,10 +650,20 @@ router.post("/tenants/:id/resend-payment-link", authenticate, requireSystemAdmin
     return;
   }
 
+  // Resend reuses an existing checkout. If provisioning never completed there
+  // is nothing to reuse, and the operator needs repair instead.
+  const provStatus = await provisioningStatusForTenant(tenantId);
+  if (provStatus && provStatus.state !== "COMPLETED") {
+    res.status(409).json({ error: "BILLING_PROVISIONING_INCOMPLETE", canRepair: provStatus.canRepair });
+    return;
+  }
+
   const resend = await callBilling("resend-payment-link", { tenantId, actor: actorId ?? null });
   if (!resend.ok) {
-    res.status(resend.body?.error === "resend_rate_limited" ? 429 : 400).json({
-      error: resend.body?.error ?? "resend_failed",
+    const code = resend.body?.error ?? "PAYMENT_LINK_NOT_AVAILABLE";
+    const httpStatus = code === "PAYMENT_LINK_RATE_LIMITED" ? 429 : code === "BILLING_PROVISIONING_INCOMPLETE" ? 409 : 400;
+    res.status(httpStatus).json({
+      error: code,
       ...(resend.body?.retryAfterSeconds ? { retryAfterSeconds: resend.body.retryAfterSeconds } : {}),
     });
     return;

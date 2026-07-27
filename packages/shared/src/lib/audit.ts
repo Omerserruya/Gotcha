@@ -60,6 +60,13 @@ export const AuditAction = {
   PAYMENT_CONTINUATION_LINK_REVOKED: "billing.payment_continuation_link_revoked",
   PAYMENT_CONTINUATION_LINK_RESENT: "billing.payment_continuation_link_resent",
   PAID_TENANT_PROVISIONING_FAILED: "billing.paid_tenant_provisioning_failed",
+  BILLING_PROVISIONING_REQUEST_CREATED: "billing.provisioning_request_created",
+  BILLING_PROVISIONING_ATTEMPTED: "billing.provisioning_attempted",
+  BILLING_PROVISIONING_COMPLETED: "billing.provisioning_completed",
+  BILLING_PROVISIONING_FAILED: "billing.provisioning_failed",
+  BILLING_PROVISIONING_REPAIRED: "billing.provisioning_repaired",
+  PAID_TENANT_EMAIL_SENT: "billing.paid_tenant_email_sent",
+  PAID_TENANT_EMAIL_FAILED: "billing.paid_tenant_email_failed",
   // ── Role changes ──
   ROLE_CHANGED: "user.role_changed",
   ROLE_CREATED: "role.created",
