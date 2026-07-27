@@ -117,6 +117,11 @@ export interface StoredCard {
 
 export interface PaymentProvider {
   readonly name: BillingProvider;
+  /**
+   * Read a hosted page's configuration, so the caller can confirm it stores a
+   * card rather than charging for one.
+   */
+  describePaymentPage?(pageId: string): Promise<Record<string, unknown>>;
   /** Begin a hosted tokenization session. Returns where to send the customer. */
   startTokenization?(input: StartTokenizationInput): Promise<StartTokenizationResult>;
   /**

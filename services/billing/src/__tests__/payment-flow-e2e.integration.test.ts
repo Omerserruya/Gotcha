@@ -25,8 +25,10 @@ import {
   verifyTokenizationSession,
   fingerprint,
   expireStaleSessions,
+  forgetPaymentPageChecks,
   MAX_VERIFICATION_ATTEMPTS,
 } from "../services/tokenization.service";
+import { icountProvider } from "../providers/icount.provider";
 import { activatePaidCheckout } from "../services/checkout-activation.service";
 import { startPaymentSetup } from "../services/checkout-progress.service";
 import { SIM, resetSimulator, simulateTokenization } from "../providers/icount-simulator";
@@ -521,6 +523,86 @@ describe("when the charge goes wrong", () => {
     } finally {
       await seedApprovedRate();
     }
+  });
+});
+
+describe("nobody is sent to a page that would charge them", () => {
+  beforeEach(() => forgetPaymentPageChecks());
+
+  it("refuses a page that charges instead of storing a card", async () => {
+    const { tenant, checkout } = await newTenantWithCheckout();
+    const original = icountProvider.describePaymentPage;
+    // `invrec` is an immediate-charge checkout page. Sending someone there
+    // takes their money instead of storing their card.
+    (icountProvider as any).describePaymentPage = async () => ({
+      doctype: "invrec", is_active: 1, is_deleted: 0,
+    });
+    try {
+      await expect(
+        startTokenizationSession({ tenantId: tenant.id, checkoutId: checkout.id }),
+      ).rejects.toThrow(/payment_page_misconfigured/);
+    } finally {
+      (icountProvider as any).describePaymentPage = original;
+    }
+  });
+
+  it("refuses an iCount standing order", async () => {
+    const { tenant, checkout } = await newTenantWithCheckout();
+    const original = icountProvider.describePaymentPage;
+    // A standing order would make iCount a SECOND renewal owner, billing the
+    // same customer every month alongside us.
+    (icountProvider as any).describePaymentPage = async () => ({
+      doctype: "cc_token", hk_page: 1, is_active: 1, is_deleted: 0,
+    });
+    try {
+      await expect(
+        startTokenizationSession({ tenantId: tenant.id, checkoutId: checkout.id }),
+      ).rejects.toThrow(/payment_page_misconfigured/);
+    } finally {
+      (icountProvider as any).describePaymentPage = original;
+    }
+  });
+
+  it("fails closed when the page cannot be checked at all", async () => {
+    const { tenant, checkout } = await newTenantWithCheckout();
+    const original = icountProvider.describePaymentPage;
+    (icountProvider as any).describePaymentPage = async () => {
+      throw new Error("provider unreachable");
+    };
+    try {
+      // A delayed checkout is recoverable; an unintended charge is not.
+      await expect(
+        startTokenizationSession({ tenantId: tenant.id, checkoutId: checkout.id }),
+      ).rejects.toThrow(/payment_page_unverified/);
+    } finally {
+      (icountProvider as any).describePaymentPage = original;
+    }
+  });
+
+  it("does not cache a failure, so fixing the page takes effect at once", async () => {
+    const { tenant, checkout } = await newTenantWithCheckout();
+    const original = icountProvider.describePaymentPage;
+    (icountProvider as any).describePaymentPage = async () => ({ doctype: "invrec", is_active: 1 });
+    try {
+      await expect(
+        startTokenizationSession({ tenantId: tenant.id, checkoutId: checkout.id }),
+      ).rejects.toThrow();
+      // Corrected in iCount. The next attempt must succeed immediately rather
+      // than waiting out a cache.
+      (icountProvider as any).describePaymentPage = async () => ({
+        doctype: "cc_token", hk_page: 0, is_active: 1, is_deleted: 0,
+      });
+      const ok = await startTokenizationSession({ tenantId: tenant.id, checkoutId: checkout.id });
+      expect(ok.session.id).toBeTruthy();
+    } finally {
+      (icountProvider as any).describePaymentPage = original;
+    }
+  });
+
+  it("a correctly configured page is accepted", async () => {
+    const { tenant, checkout } = await newTenantWithCheckout();
+    const res = await startTokenizationSession({ tenantId: tenant.id, checkoutId: checkout.id });
+    expect(res.saleUrl).toBeTruthy();
   });
 });
 

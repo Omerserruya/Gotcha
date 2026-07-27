@@ -89,6 +89,18 @@ export const icountProvider: PaymentProvider = {
   name: "ICOUNT",
 
   /**
+   * Read the configured payment page, so its type can be checked.
+   *
+   * Mock and simulator report a correctly configured page: they perform no
+   * network call, and there is no real page to misconfigure.
+   */
+  async describePaymentPage(pageId: string) {
+    if (isMock()) return { doctype: "cc_token", hk_page: 0, is_active: 1, is_deleted: 0 };
+    assertLiveAllowed("payment page lookup");
+    return api.paypageInfo(pageId);
+  },
+
+  /**
    * Create the hosted page session the customer is sent to.
    *
    * Returns a URL and nothing else. The success and failure URLs are where the

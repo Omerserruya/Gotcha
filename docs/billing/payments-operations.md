@@ -83,13 +83,29 @@ and the page id has no business in a browser.
 | `ICOUNT_ALLOW_LIVE` | required for `live`, with `NODE_ENV=production` |
 | `ICOUNT_API_TOKEN` | Bearer token. Never logged; stripped from every error path |
 | `ICOUNT_API_BASE_URL` | defaults to the v3 endpoint |
-| `ICOUNT_PAYMENT_PAGE_ID` | the `cc_token` PayPage. Configuration, not a secret |
+| `ICOUNT_PAYMENT_PAGE_ID` | the `cc_token` PayPage. Configuration, not a secret. **Validated before any customer is sent to it** — see below |
 | `BILLING_PAYMENT_TOKEN_ENCRYPTION_KEY` | 32 bytes, base64. Dedicated — no fallback to any other key. **Required even in mock/simulator**: storing a card token encrypts it, so an unset key fails checkout at the moment the card is confirmed |
 | `APP_PUBLIC_URL` | where customers return after the hosted page |
 | `BILLING_SCHEDULER_ENABLED` | renewal, dunning, reconciliation sweep |
 
 Startup fails closed: `ICOUNT_MODE=live` without a token refuses to boot rather
 than running a billing service whose every charge will fail at the worst moment.
+
+### The page must store cards, not sell them
+
+Before sending anyone to the hosted page, the service reads its configuration
+and refuses unless it is a `cc_token` page that is active and is not a standing
+order. Two things this prevents, both of which charge a real person:
+
+- an `invrec` page **charges immediately** instead of storing a card;
+- an `hk_page` standing order makes iCount a **second renewal owner**, billing
+  the same customer every month alongside us.
+
+A page that checks out is trusted for ten minutes. A page that fails, or that
+cannot be read at all, is **not** cached — so correcting it in iCount takes
+effect on the next attempt, and a provider outage blocks checkout rather than
+waving it through. A delayed checkout is recoverable; an unintended charge is
+not.
 
 ---
 

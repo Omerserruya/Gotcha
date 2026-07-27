@@ -21,6 +21,7 @@ import { prisma, encryptPaymentToken, CURRENT_PAYMENT_TOKEN_KEY_VERSION } from "
 import type { TokenizationSession } from "@prisma/client";
 import { icountProvider } from "../providers/icount.provider";
 import { icountPaymentPageId } from "../providers/icount-config";
+import { assertTokenizationPage } from "../providers/icount-paypage";
 import type { StoredCard } from "../providers/provider";
 
 /** A session outlives a slow checkout but not an abandoned one. */
@@ -46,6 +47,57 @@ export class TokenizationRefused extends Error {
  */
 export function fingerprint(token: string): string {
   return createHash("sha256").update(token).digest("hex");
+}
+
+/**
+ * How long a page is trusted after it checks out.
+ *
+ * Short enough that a page changed in iCount stops being used fairly quickly,
+ * long enough that a busy checkout does not query the provider on every click.
+ */
+const PAGE_CHECK_TTL_MS = 10 * 60 * 1000;
+
+/** Only successes are cached - see assertPageStoresCards. */
+const pageChecked = new Map<string, number>();
+
+/**
+ * Refuse to send anyone to a page that would charge them.
+ *
+ * The check existed and nothing called it, which made it decoration. The risk
+ * it describes is concrete: a page of type `invrec` charges the customer
+ * immediately instead of storing their card, and an `hk_page` standing order
+ * makes iCount a second renewal owner billing the same customer every month
+ * alongside us.
+ *
+ * A FAILED check is deliberately not cached, so fixing the configuration in
+ * iCount takes effect immediately rather than after a timeout.
+ */
+async function assertPageStoresCards(pageId: string): Promise<void> {
+  const seen = pageChecked.get(pageId);
+  if (seen && Date.now() - seen < PAGE_CHECK_TTL_MS) return;
+  if (!icountProvider.describePaymentPage) return;
+
+  let page;
+  try {
+    page = await icountProvider.describePaymentPage(pageId);
+  } catch (err) {
+    // Could not ask. Fail closed: sending someone to a page we cannot verify is
+    // how an unintended charge happens, and a delayed checkout is recoverable.
+    throw new TokenizationRefused("payment_page_unverified", (err as Error)?.message);
+  }
+
+  try {
+    assertTokenizationPage(page as any);
+  } catch (err) {
+    throw new TokenizationRefused("payment_page_misconfigured", (err as Error)?.message);
+  }
+
+  pageChecked.set(pageId, Date.now());
+}
+
+/** Clear the page-validity cache. For tests and for a config change. */
+export function forgetPaymentPageChecks(): void {
+  pageChecked.clear();
 }
 
 /** An opaque customer reference of our own. Never an email or a tenant id. */
@@ -80,6 +132,8 @@ export async function startTokenizationSession(input: StartSessionInput): Promis
   const now = input.now ?? new Date();
   const pageId = icountPaymentPageId();
   if (!pageId) throw new TokenizationRefused("payment_page_not_configured");
+
+  await assertPageStoresCards(pageId);
 
   const customClientId = newCustomClientId();
 

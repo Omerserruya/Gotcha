@@ -167,6 +167,24 @@ export async function generateSale(input: GenerateSaleInput): Promise<GenerateSa
   return { saleUrl, raw: data };
 }
 
+// ─── paypage/info ─────────────────────────────────────────────────────────
+
+/**
+ * Read a payment page's configuration.
+ *
+ * Read-only, and used for one purpose: confirming the configured page STORES a
+ * card rather than charging for one. Getting that wrong is not a degraded
+ * experience, it is an unintended charge on a real customer.
+ */
+export async function paypageInfo(pageId: string): Promise<Record<string, unknown>> {
+  assertLiveTransport("paypage/info");
+  // `paypage_id`, matching what read-only discovery actually confirmed against
+  // the live account - not `page_id`, which would be a guess.
+  const data = await call("paypage/info", { paypage_id: Number(pageId) || pageId });
+  // Tolerant about the envelope; the caller validates the contents.
+  return (data?.paypage ?? data?.page ?? data ?? {}) as Record<string, unknown>;
+}
+
 // ─── client/get_cc_tokens ─────────────────────────────────────────────────
 
 export interface StoredCardToken {
