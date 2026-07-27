@@ -22,6 +22,10 @@ import checkoutSessionRoutes from "./routes/checkout-session";
 import internalRoutes from "./routes/internal";
 import { runBillingCycle } from "./services/subscription.service";
 import { runDunning } from "./services/dunning.service";
+import { sweepUnknownAttempts } from "./services/reconciliation.service";
+import { expireStaleLeases } from "./services/payment-attempt.service";
+import { expireStaleQuotes } from "./services/payment-quote.service";
+import { expireStaleSessions } from "./services/tokenization.service";
 import { assertIcountConfig } from "./providers/icount-config";
 
 // Fail closed before the first request. A billing service configured to talk to
@@ -69,8 +73,19 @@ if (schedulerEnabled) {
         console.warn("[billing][usage] settle failed:", err?.message ?? err);
         return { settled: 0, discovered: 0 };
       });
-      if (cycle.trials || cycle.renewals || cycle.pending || dunning.retried || dunning.suspended || usage.settled || usage.discovered) {
-        console.log("[billing][cycle]", { cycle, dunning, usage });
+      // Charges whose outcome we never learned. Nothing else resolves them, and
+      // left alone they are either a customer who paid and did not get their
+      // plan, or one who did not pay and did. Both need answering.
+      const reconciled = await sweepUnknownAttempts().catch((err: any) => {
+        console.warn("[billing][reconcile] sweep failed:", err?.message ?? err);
+        return { examined: 0, resolvedPaid: 0, resolvedUnpaid: 0, escalated: 0 };
+      });
+      // Housekeeping: leases whose holder died, and quotes nobody used.
+      await expireStaleLeases().catch(() => undefined);
+      await expireStaleQuotes().catch(() => undefined);
+      await expireStaleSessions().catch(() => undefined);
+      if (cycle.trials || cycle.renewals || cycle.pending || dunning.retried || dunning.suspended || usage.settled || usage.discovered || reconciled.examined) {
+        console.log("[billing][cycle]", { cycle, dunning, usage, reconciled });
       }
     } catch (err: any) {
       console.warn("[billing][cycle] failed:", err?.message ?? err);

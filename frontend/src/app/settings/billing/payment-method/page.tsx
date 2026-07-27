@@ -1,21 +1,28 @@
 "use client";
 
-// Payment method - the dedicated card-management flow. GOTCHA never captures or
-// stores raw card data: capture happens on the iCount hosted PayPage (or, in
-// dev/mock, a page-token prompt), and only the resulting provider token reaches
-// our backend. Kept on its own route so the main Billing page stays compact.
+// Payment method - the dedicated card-management flow.
+//
+// GOTCHA never captures or stores raw card data. The card is entered on the
+// provider's hosted page; we send the person there and, when they come back,
+// ask the SERVER whether a new card exists. Their return proves they came back
+// and nothing else, so nothing here reports an outcome - it only asks.
 
 import { useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import { RequirePermission } from "@/components/RequirePermission";
 import {
   getPaymentMethods,
-  addPaymentMethod,
+  startPaymentMethodSession,
+  confirmPaymentMethod,
   removePaymentMethod,
   type PaymentMethod,
 } from "@/lib/api-billing";
+
+/** Survives the round trip to the provider's page, which leaves our origin. */
+const SESSION_KEY = "gotcha.paymentMethodSession";
 
 function PaymentMethodInner() {
   const { token } = useAuth();
@@ -40,6 +47,46 @@ function PaymentMethodInner() {
     reload();
   }, [reload]);
 
+  // Coming back from the hosted page. The server is asked what happened; the
+  // URL we arrived on is not evidence of anything, so it is not consulted
+  // beyond noticing that we returned.
+  const params = useSearchParams();
+  useEffect(() => {
+    if (!token) return;
+    const sessionId = typeof window !== "undefined" ? sessionStorage.getItem(SESSION_KEY) : null;
+    if (!sessionId) return;
+
+    let cancelled = false;
+    let attempts = 0;
+
+    const check = async () => {
+      attempts += 1;
+      try {
+        const { data } = await confirmPaymentMethod(token, sessionId);
+        if (cancelled) return;
+        if (data.status === "STORED") {
+          sessionStorage.removeItem(SESSION_KEY);
+          setMsg({ kind: "ok", text: t("settings.billing.cardSaved") });
+          await reload();
+          return;
+        }
+      } catch {
+        // A failed check is not a failed card. Keep asking for a while.
+      }
+      // The provider can take a moment to register the card, so a single "not
+      // yet" is not an answer. Give up quietly rather than showing an error for
+      // someone who simply changed their mind.
+      if (!cancelled && attempts < 10) setTimeout(check, 2000);
+      else if (!cancelled) sessionStorage.removeItem(SESSION_KEY);
+    };
+
+    check();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, params]);
+
   const run = async (key: string, fn: () => Promise<unknown>, okText: string) => {
     if (!token) return;
     setBusy(key);
@@ -55,19 +102,22 @@ function PaymentMethodInner() {
     }
   };
 
-  // Secure payment setup is NOT available yet.
-  //
-  // The previous implementation opened a provider popup and accepted a token
-  // the BROWSER posted back, and fell through to window.prompt when no page URL
-  // was configured - which let anyone type a payment token straight into the
-  // application. Both are gone: a provider token must never originate in a
-  // browser, and neither the popup contract nor the redirect replacement is
-  // verified yet.
-  //
-  // Tests inject provider fixtures directly through the billing service; there
-  // is deliberately no application route that accepts a client-supplied token.
-  const addCard = () => {
-    setMsg({ kind: "err", text: t("settings.billing.paymentSetupUnavailable") });
+  // Start card entry: ask the server for a destination, remember which session
+  // this is, and navigate. A full navigation rather than a popup - a card form
+  // in a window whose address bar you cannot see is the habit phishing relies
+  // on.
+  const addCard = async () => {
+    if (!token) return;
+    setBusy("add");
+    setMsg(null);
+    try {
+      const { data } = await startPaymentMethodSession(token);
+      sessionStorage.setItem(SESSION_KEY, data.sessionId);
+      window.location.assign(data.redirectUrl);
+    } catch {
+      setMsg({ kind: "err", text: t("settings.billing.paymentSetupUnavailable") });
+      setBusy(null);
+    }
   };
 
   return (

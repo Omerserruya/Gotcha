@@ -315,10 +315,30 @@ export const setAutoPurchase = (token: string, policy: Partial<AutoPurchasePolic
 export const getPaymentMethods = (token: string) =>
   apiFetch<{ paymentMethods: PaymentMethod[] }>("/api/billing/payment-methods", { token });
 
-export const addPaymentMethod = (token: string, pageToken: string) =>
-  apiFetch<{ ok: boolean; paymentMethod: PaymentMethod }>("/api/billing/payment-methods", {
-    token, method: "POST", body: JSON.stringify({ pageToken }),
+/**
+ * Start adding a card. Returns where to send the person.
+ *
+ * There is deliberately no call that posts a card token. The browser used to
+ * receive one from the provider and send it here, which is the same mistake as
+ * treating a redirect as a receipt: the browser is reporting an outcome it is
+ * not in a position to know.
+ */
+export const startPaymentMethodSession = (token: string) =>
+  apiFetch<{ data: { redirectUrl: string; sessionId: string } }>("/api/billing/payment-methods/session", {
+    token, method: "POST", body: JSON.stringify({}),
   });
+
+/**
+ * Ask the server whether a card was actually stored.
+ *
+ * Sends only the session id. The answer comes from the provider, compared
+ * against the cards that existed before the session started.
+ */
+export const confirmPaymentMethod = (token: string, sessionId: string) =>
+  apiFetch<{ data: { status: "STORED" | "PENDING"; paymentMethod?: PaymentMethod; reason?: string } }>(
+    "/api/billing/payment-methods/confirm",
+    { token, method: "POST", body: JSON.stringify({ sessionId }) },
+  );
 
 export const removePaymentMethod = (token: string, id: string) =>
   apiFetch<{ ok: boolean }>(`/api/billing/payment-methods/${id}`, { token, method: "DELETE" });

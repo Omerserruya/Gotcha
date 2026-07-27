@@ -30,7 +30,7 @@ describe("a browser can never complete a checkout", () => {
     // payment session, and asking the server to look again. The invariant that
     // matters is narrower than "no mutations" - it is that nothing the browser
     // sends can DECIDE anything.
-    const bodies = [...client.matchAll(/body:\s*JSON\.stringify\(([^;]*?)\),/g)].map((m) => m[1]);
+    const bodies = Array.from(client.matchAll(/body:\s*JSON\.stringify\(([^;]*?)\),/g), (m) => m[1]);
     expect(bodies.length).toBeGreaterThan(0);
     for (const body of bodies) {
       // Only proof of who is asking may travel in a request body.
@@ -51,7 +51,7 @@ describe("a browser can never complete a checkout", () => {
   it("no mutation sends a status, amount or transaction reference", () => {
     // Scoped to what is actually SENT. Checking the whole file would match the
     // response types, which legitimately describe a status the client reads.
-    const sent = [...client.matchAll(/method:\s*"POST"[\s\S]*?\n  \}\);/g)].map((m) => m[0]);
+    const sent = Array.from(client.matchAll(/method:\s*"POST"[\s\S]*?\n  \}\);/g), (m) => m[0]);
     expect(sent.length).toBeGreaterThan(0);
     for (const request of sent) {
       for (const forbidden of ["paid", "success", "status", "amount", "transactionId", "confirmationCode", "chargeRef"]) {

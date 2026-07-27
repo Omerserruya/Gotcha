@@ -29,6 +29,7 @@ import {
   ExchangeRateRefused,
   ExchangeRateUnavailable,
 } from "../services/exchange-rate.service";
+import { pendingReconciliations, sweepUnknownAttempts } from "../services/reconciliation.service";
 
 const router = Router();
 
@@ -165,6 +166,35 @@ router.post("/admin/billing/exchange-rates/preview", ...guard, async (req, res) 
     res.json({ data: { charge: converted.toFixed(2), currency: "ILS" } });
   } catch {
     res.status(400).json({ error: "invalid_preview_input" });
+  }
+});
+
+/**
+ * Charges nobody could settle automatically.
+ *
+ * Deliberately read-only and on the platform surface: resolving one means
+ * looking at the provider's own records, and the action that follows is a
+ * refund or a manual activation, both of which already have their own audited
+ * paths. A one-click "mark as paid" here would be a way to grant a plan with no
+ * evidence at all.
+ */
+router.get("/admin/billing/reconciliations", ...guard, async (_req, res) => {
+  res.json({ data: await pendingReconciliations() });
+});
+
+/**
+ * Run the sweep now.
+ *
+ * It only ever asks the provider what happened - it never re-submits a charge -
+ * so triggering it by hand is safe. Useful when a provider outage has just
+ * ended and nobody wants to wait for the next tick.
+ */
+router.post("/admin/billing/reconciliations/sweep", ...guard, async (_req, res) => {
+  try {
+    res.json({ data: await sweepUnknownAttempts() });
+  } catch (err) {
+    console.error("[billing] reconciliation sweep failed:", err);
+    res.status(500).json({ error: "sweep_failed" });
   }
 });
 

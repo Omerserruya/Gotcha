@@ -235,7 +235,17 @@ export async function reconcileUnknown(args: {
       ? raw
       : [];
 
-  const wanted = Number(attempt.amount);
+  // Match on what was SUBMITTED, not what was agreed. The provider's sums are
+  // in shekels; comparing them to the dollar figure would match nothing and
+  // quietly send every reconciliation to manual review.
+  if (attempt.chargeAmount == null) {
+    await setState(args.attemptId, "MANUAL_REVIEW", {
+      reviewReason: "attempt records no submitted amount to match against",
+      reconciledAt: new Date(),
+    });
+    return { state: "MANUAL_REVIEW", candidates: 0 };
+  }
+  const wanted = Number(attempt.chargeAmount);
   const candidates = all.filter((t) => Number(t?.sum ?? t?.amount) === wanted);
 
   if (candidates.length === 1) {
