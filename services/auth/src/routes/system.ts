@@ -4,6 +4,8 @@ import {
   prisma,
   authenticate,
   requireSystemAdmin,
+  requirePlatformPermission,
+  PLATFORM_PERMISSIONS,
   validate,
   ensureIdentity,
   createRecoveryLink,
@@ -185,6 +187,19 @@ router.get("/tenants/:id", authenticate, requireSystemAdmin(), async (req: Reque
 });
 
 const BILLING_SERVICE_URL = process.env.BILLING_SERVICE_URL || "http://billing:4009";
+
+/** Internal GET against the billing service. Never throws. */
+async function callBillingGet(path: string): Promise<{ ok: boolean; body: any }> {
+  try {
+    const res = await fetch(`${BILLING_SERVICE_URL}/api/internal/billing/${path}`, {
+      headers: { "X-Internal-Key": process.env.INTERNAL_SERVICE_KEY || "" },
+      signal: AbortSignal.timeout(15_000),
+    });
+    return { ok: res.ok, body: await res.json().catch(() => ({})) };
+  } catch (err: any) {
+    return { ok: false, body: { error: "billing_unreachable", message: err?.message } };
+  }
+}
 
 /** One internal call to the billing service. Never throws; returns a verdict. */
 async function callBilling(
@@ -489,6 +504,90 @@ router.post("/tenants", authenticate, requireSystemAdmin(), validate(createTenan
     res.status(500).json({ error: "Failed to create tenant" });
   }
 });
+
+// ─── Manual External Contract ───────────────────────────────
+
+/**
+ * Activate a tenant whose payment arrived outside the product.
+ *
+ * Behind a STRONGER permission than provisioning, because it activates a paid
+ * subscription with no payment processor involved: the only evidence is an
+ * operator asserting the money arrived. Every field below is therefore
+ * mandatory, and all of it is audited.
+ *
+ * It never claims an iCount payment occurred and creates no Charge row.
+ */
+const manualContractSchema = z
+  .object({
+    amount: z.number().positive(),
+    currency: z.string().min(3).max(3),
+    externalReference: z.string().min(1).max(200),
+    paymentSourceDescription: z.string().min(1).max(200),
+    reason: z.string().min(1).max(1000),
+  })
+  .strict();
+
+router.post(
+  "/tenants/:id/activate-manual-contract",
+  authenticate,
+  requirePlatformPermission(PLATFORM_PERMISSIONS.BILLING_MANUAL_ACTIVATE),
+  validate(manualContractSchema),
+  async (req: Request, res: Response): Promise<void> => {
+    const tenantId = req.params.id as string;
+    const actorId = (req as any).user?.userId as string | undefined;
+    const { amount, currency, externalReference, paymentSourceDescription, reason } = req.body;
+
+    const result = await callBilling("activate-manual-contract", {
+      tenantId, amount, currency, externalReference, paymentSourceDescription, reason,
+      actor: actorId ?? null,
+    });
+
+    if (!result.ok) {
+      void writeAudit({
+        tenantId, actorType: "user", actorId,
+        action: AuditAction.PAID_TENANT_PROVISIONING_FAILED,
+        targetType: "manual_contract", targetId: tenantId,
+        metadata: { failureCode: result.body?.error },
+      });
+      res.status(400).json({ error: result.body?.error ?? "manual_contract_failed" });
+      return;
+    }
+
+    // Audited with the external reference and reason, never with a provider
+    // transaction id - there isn't one, and implying otherwise would be false.
+    void writeAudit({
+      tenantId, actorType: "user", actorId,
+      action: AuditAction.MANUAL_CONTRACT_ACTIVATED,
+      targetType: "tenant", targetId: tenantId,
+      metadata: {
+        externalReference, paymentSource: paymentSourceDescription, reason,
+        amount: String(amount), currency,
+        firstActivation: result.body?.firstActivation,
+      },
+    });
+
+    res.json({
+      data: {
+        activated: true,
+        firstActivation: result.body?.firstActivation,
+        tenantStatus: "ACTIVE",
+        paymentSource: "MANUAL_EXTERNAL_CONTRACT",
+        providerTransaction: null,
+      },
+    });
+  },
+);
+
+/** Manual contracts on record, for the Sysadmin billing history view. */
+router.get(
+  "/tenants/:id/manual-contracts",
+  authenticate,
+  requirePlatformPermission(PLATFORM_PERMISSIONS.BILLING_READ),
+  async (req: Request, res: Response): Promise<void> => {
+    const result = await callBillingGet(`manual-contracts/${req.params.id}`);
+    res.json({ data: result.ok ? result.body?.data ?? [] : [] });
+  },
+);
 
 // ─── Repair Billing Provisioning ────────────────────────────
 

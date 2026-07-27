@@ -3157,6 +3157,16 @@ model PaymentAttempt {
   /// on this column is what makes duplicate activation grant credits once.
   consumedByActivationAt DateTime? @map("consumed_by_activation_at")
 
+  /// How the money was proven: PROVIDER_CONFIRMED or MANUAL_EXTERNAL_CONTRACT.
+  /// Recorded on the attempt itself so billing history can never present a
+  /// Sysadmin-activated contract as a card payment that actually cleared.
+  paymentSource String @default("PROVIDER_CONFIRMED") @map("payment_source")
+
+  /// Manual-contract provenance. Null for provider-confirmed attempts.
+  externalReference   String? @map("external_reference")
+  manualReason        String? @map("manual_reason")
+  manualPaymentSource String? @map("manual_payment_source")
+
   /// Reconciliation bookkeeping, for resolving an UNKNOWN outcome.
   reconciledAt   DateTime? @map("reconciled_at")
   candidateCount Int?      @map("candidate_count")

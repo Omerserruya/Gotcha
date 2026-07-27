@@ -67,6 +67,7 @@ export const AuditAction = {
   BILLING_PROVISIONING_REPAIRED: "billing.provisioning_repaired",
   PAID_TENANT_EMAIL_SENT: "billing.paid_tenant_email_sent",
   PAID_TENANT_EMAIL_FAILED: "billing.paid_tenant_email_failed",
+  MANUAL_CONTRACT_ACTIVATED: "billing.manual_contract_activated",
   // ── Role changes ──
   ROLE_CHANGED: "user.role_changed",
   ROLE_CREATED: "role.created",

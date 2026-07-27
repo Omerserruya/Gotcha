@@ -20,6 +20,7 @@ import {
   ProvisioningRefused,
 } from "../services/paid-provisioning.service";
 import { issueContinuationLink, revokeLinksForCheckout } from "../services/continuation-link.service";
+import { activateManualContract, manualContractsForTenant, ManualContractRefused } from "../services/manual-contract.service";
 import { emitBillingEvent } from "../lib/events";
 
 const router = Router();
@@ -268,4 +269,50 @@ router.post("/internal/billing/revoke-payment-links", async (req, res) => {
   if (!checkout) return res.status(404).json({ error: "no_checkout" });
   const revoked = await revokeLinksForCheckout(checkout.id);
   res.json({ ok: true, revoked });
+});
+
+
+/**
+ * Activate an externally settled contract.
+ *
+ * No provider call, no Charge row, no claim that an iCount transaction
+ * occurred. Reuses the one activation boundary so the snapshot, the
+ * amount match and the once-only credit grant all still apply.
+ */
+router.post("/internal/billing/activate-manual-contract", async (req, res) => {
+  const { tenantId, amount, currency, externalReference, paymentSourceDescription, reason, actor } =
+    req.body ?? {};
+  if (!tenantId) return res.status(400).json({ error: "tenantId required" });
+  try {
+    const result = await activateManualContract({
+      tenantId,
+      amount: Number(amount),
+      currency: String(currency ?? ""),
+      externalReference: String(externalReference ?? ""),
+      paymentSourceDescription: String(paymentSourceDescription ?? ""),
+      reason: String(reason ?? ""),
+      actor: actor ?? null,
+    });
+    res.json({ ok: true, ...result });
+  } catch (err: any) {
+    const code = err instanceof ManualContractRefused ? err.code : "manual_contract_failed";
+    res.status(400).json({ error: code, message: err?.message });
+  }
+});
+
+/** Manual contracts on record for a tenant, for billing history. */
+router.get("/internal/billing/manual-contracts/:tenantId", async (req, res) => {
+  const rows = await manualContractsForTenant(String(req.params.tenantId));
+  res.json({
+    data: rows.map((r) => ({
+      id: r.id,
+      amount: String(r.amount),
+      currency: r.currency,
+      externalReference: r.externalReference,
+      paymentSource: r.manualPaymentSource,
+      reason: r.manualReason,
+      activated: Boolean(r.consumedByActivationAt),
+      createdAt: r.createdAt,
+    })),
+  });
 });
