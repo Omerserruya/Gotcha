@@ -103,8 +103,8 @@ and the page id has no business in a browser.
 | `ICOUNT_PAYMENT_PAGE_ID` | the `cc_token` PayPage. Configuration, not a secret. **Validated before any customer is sent to it** — see below |
 | `BILLING_PAYMENT_TOKEN_ENCRYPTION_KEY` | 32 bytes, base64. Dedicated — no fallback to any other key. **Required even in mock/simulator**: storing a card token encrypts it, so an unset key fails checkout at the moment the card is confirmed |
 | `ICOUNT_WEBHOOK_SECRET` | HMAC secret for provider callbacks. **Required in every mode** — without it every webhook is rejected, including in mock |
-| `BILLING_ENFORCEMENT_MODE` | `off` \| `observe` \| `soft` \| `hard`. Only `hard` actually refuses service |
-| `APP_PUBLIC_URL` | where customers return after the hosted page |
+| `BILLING_ENFORCEMENT_MODE` | `off` \| `observe` \| `soft` \| `hard`. Only `hard` actually refuses service. Read by the **ai** service, which evaluates the gate, and by **billing**, which only reports it — they must match, or the Sysadmin preview describes a different system than the one refusing customers. Undeclared means `off`, which fails **open** |
+| `APP_PUBLIC_URL` | where customers return after the hosted page. **Required for checkout** — unset, the return URLs are omitted and the customer lands wherever the provider defaults to instead of on their confirmation page |
 | `BILLING_SCHEDULER_ENABLED` | renewal, dunning, reconciliation sweep |
 
 Startup fails closed: `ICOUNT_MODE=live` without a token refuses to boot rather

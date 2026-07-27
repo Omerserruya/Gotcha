@@ -400,6 +400,10 @@ services:
     <<: *default-restart
     logging: *default-logging
     environment:
+      # Decides whether unpaid or suspended organizations are refused AI.
+      # Undeclared means "off", which fails OPEN - so it is stated here
+      # rather than left to a default nobody sees.
+      BILLING_ENFORCEMENT_MODE: ${BILLING_ENFORCEMENT_MODE:-hard}
       DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: production
@@ -495,6 +499,21 @@ services:
     <<: *default-restart
     logging: *default-logging
     environment:
+      # Where a customer returns after the hosted payment page. Without it the
+      # return URLs are omitted and they land wherever the provider defaults to.
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-}
+      # Read here only to REPORT enforcement in the Sysadmin preview. It must
+      # match what the ai service uses, or the preview describes a different
+      # system than the one refusing customers.
+      BILLING_ENFORCEMENT_MODE: ${BILLING_ENFORCEMENT_MODE:-hard}
+      # Required to charge live, alongside NODE_ENV=production. Declared so it
+      # can be set through the normal path rather than by editing compose.
+      ICOUNT_ALLOW_LIVE: ${ICOUNT_ALLOW_LIVE:-}
+      ICOUNT_ALLOW_SIMULATOR: ${ICOUNT_ALLOW_SIMULATOR:-}
+      ICOUNT_ENVIRONMENT: ${ICOUNT_ENVIRONMENT:-}
+      ICOUNT_PROVIDER_EVENTS_ENABLED: ${ICOUNT_PROVIDER_EVENTS_ENABLED:-}
+      PAYMENT_LINK_TTL_HOURS: ${PAYMENT_LINK_TTL_HOURS:-}
+      PAYMENT_LINK_RESEND_COOLDOWN_SECONDS: ${PAYMENT_LINK_RESEND_COOLDOWN_SECONDS:-}
       DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: production
