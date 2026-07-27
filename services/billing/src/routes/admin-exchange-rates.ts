@@ -30,6 +30,7 @@ import {
   ExchangeRateUnavailable,
 } from "../services/exchange-rate.service";
 import { pendingReconciliations, sweepUnknownAttempts } from "../services/reconciliation.service";
+import { previewEnforcement } from "../services/enforcement-preview.service";
 import { writeAudit, AuditAction } from "@chatcenter/shared";
 
 /**
@@ -230,6 +231,23 @@ router.post("/admin/billing/reconciliations/sweep", ...guard, async (_req, res) 
   } catch (err) {
     console.error("[billing] reconciliation sweep failed:", err);
     res.status(500).json({ error: "sweep_failed" });
+  }
+});
+
+/**
+ * Who would stop being served if enforcement were switched on.
+ *
+ * Read-only, and worth having because enforcement mode is one environment
+ * variable that changes what happens to live customer conversations. Flipping
+ * it without knowing the blast radius means learning it from the organizations
+ * whose bots went quiet.
+ */
+router.get("/admin/billing/enforcement-preview", ...guard, async (_req, res) => {
+  try {
+    res.json({ data: await previewEnforcement() });
+  } catch (err) {
+    console.error("[billing] enforcement preview failed:", err);
+    res.status(500).json({ error: "preview_failed" });
   }
 });
 

@@ -53,6 +53,22 @@ interface Reconciliation {
   createdAt: string;
 }
 
+interface AffectedTenant {
+  tenantId: string;
+  name: string;
+  status: string;
+  reason: string;
+  recentConversations: number;
+  live: boolean;
+}
+
+interface EnforcementPreview {
+  mode: string;
+  enforcing: boolean;
+  affected: AffectedTenant[];
+  totals: { tenants: number; live: number; byReason: Record<string, number> };
+}
+
 interface RatesPayload {
   current: Rate | null;
   chargingEnabled: boolean;
@@ -70,6 +86,7 @@ export default function ExchangeRatePage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<Reconciliation[]>([]);
+  const [enforcement, setEnforcement] = useState<EnforcementPreview | null>(null);
 
   const authed = useCallback(
     async (path: string, init?: RequestInit) => {
@@ -105,6 +122,12 @@ export default function ExchangeRatePage() {
       setPending(rec.data ?? []);
     } catch {
       setPending([]);
+    }
+    try {
+      const enf = await authed("/api/admin/billing/enforcement-preview");
+      setEnforcement(enf.data ?? null);
+    } catch {
+      setEnforcement(null);
     }
   }, [authed]);
 
@@ -201,6 +224,8 @@ export default function ExchangeRatePage() {
                 </p>
               )}
             </section>
+
+            <Enforcement preview={enforcement} />
 
             <Reconciliations
               rows={pending}
@@ -428,6 +453,98 @@ function describeState(r: Reconciliation): string {
   if (r.state === "RECONCILIATION_REQUIRED") return "Charged, but with no usable reference";
   if ((r.candidateCount ?? 0) > 1) return `${r.candidateCount} identical transactions - cannot tell which`;
   return r.reviewReason ?? "Needs review";
+}
+
+/**
+ * Who stops being served, or would.
+ *
+ * Enforcement is one environment variable that decides whether unpaid
+ * organizations' bots keep answering customers. The point of showing this is
+ * that the answer to "how many people does this affect" should be available
+ * before the switch is flipped, not discovered from the organizations whose
+ * bots went quiet.
+ */
+function Enforcement({ preview }: { preview: EnforcementPreview | null }) {
+  if (!preview) return null;
+
+  const { enforcing, totals, affected } = preview;
+  if (!totals.tenants) {
+    return (
+      <section className="mt-8 rounded-2xl border border-gray-200 p-5">
+        <h2 className="text-sm font-semibold text-gray-900">Service enforcement</h2>
+        <p className="mt-1.5 text-[13px] leading-relaxed text-gray-500">
+          Mode <span className="font-medium text-gray-900">{preview.mode}</span>. No organization would
+          be refused right now.
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <section
+      className={`mt-8 rounded-2xl border p-5 ${
+        totals.live ? "border-red-200 bg-red-50/40" : "border-gray-200"
+      }`}
+    >
+      <h2 className="text-sm font-semibold text-gray-900">
+        {enforcing
+          ? `${totals.tenants} organization${totals.tenants === 1 ? "" : "s"} being refused`
+          : `${totals.tenants} organization${totals.tenants === 1 ? "" : "s"} would be refused`}
+      </h2>
+      <p className="mt-1.5 max-w-2xl text-[13px] leading-relaxed text-gray-600">
+        Mode is <span className="font-medium text-gray-900">{preview.mode}</span>.{" "}
+        {enforcing
+          ? "These organizations' AI is not answering their customers."
+          : "Switching enforcement to hard would stop their AI answering their customers."}{" "}
+        {totals.live > 0 ? (
+          <span className="font-medium text-red-700">
+            {totals.live} of them {totals.live === 1 ? "is" : "are"} handling live conversations.
+          </span>
+        ) : (
+          "None of them are currently handling conversations."
+        )}
+      </p>
+
+      <div className="mt-4 overflow-x-auto rounded-xl border border-gray-200 bg-white">
+        <table className="w-full min-w-[560px] text-left text-[13px]">
+          <thead className="border-b border-gray-100 bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500">
+            <tr>
+              <th className="px-4 py-2.5 font-medium">Organization</th>
+              <th className="px-4 py-2.5 font-medium">Why</th>
+              <th className="px-4 py-2.5 font-medium">Conversations (7d)</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {affected.slice(0, 25).map((t) => (
+              <tr key={t.tenantId} className={t.live ? "bg-red-50/40" : undefined}>
+                <td className="px-4 py-2.5 text-gray-900">{t.name}</td>
+                <td className="px-4 py-2.5 text-gray-600">{reasonLabel(t.reason)}</td>
+                <td className="px-4 py-2.5 tabular-nums text-gray-700">
+                  {t.recentConversations || "—"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {affected.length > 25 && (
+        <p className="mt-2 text-[12.5px] text-gray-500">
+          Showing the 25 most active of {affected.length}.
+        </p>
+      )}
+    </section>
+  );
+}
+
+function reasonLabel(reason: string): string {
+  switch (reason) {
+    case "payment_required": return "Plan never activated - payment not confirmed";
+    case "tenant_suspended": return "Organization suspended";
+    case "subscription_suspended": return "Subscription suspended";
+    case "subscription_canceled": return "Subscription canceled";
+    case "units_exhausted": return "Out of credits";
+    default: return reason;
+  }
 }
 
 function StatusPill({ status }: { status: Rate["status"] }) {

@@ -284,6 +284,17 @@ with a customer.
 Both refusals respect `BILLING_ENFORCEMENT_MODE`: `observe` and `soft` record
 without blocking, so enforcement can be switched on gradually.
 
+### Before switching enforcement to `hard`
+
+**System → Exchange Rate** shows who would stop being served, why, and how many
+conversations each has handled in the last seven days. That last number is the
+one that matters: it separates a quiet configuration change from an outage for
+somebody's customers.
+
+The preview reads the same balance helper and evaluates the same order as the
+runtime gate, and there is a test asserting the two cannot disagree — a preview
+that quietly diverges is worse than none, because it will be believed.
+
 ---
 
 ## Webhooks
