@@ -35,7 +35,7 @@ async function ensureRate() {
     where: { baseCurrency: "USD", quoteCurrency: "ILS", status: "ACTIVE" },
   });
   if (active) return active;
-  const draft = await proposeRate({ rate: "3.65", createdBy: `${RUN}-a` });
+  const draft = await proposeRate({ rate: "3.65", reason: "test seed", createdBy: `${RUN}-a` });
   rateIds.push(draft.id);
   return approveRate({ id: draft.id, approvedBy: `${RUN}-b` });
 }

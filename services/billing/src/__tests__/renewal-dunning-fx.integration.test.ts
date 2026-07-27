@@ -40,7 +40,7 @@ async function setRate(value: string) {
     where: { baseCurrency: "USD", quoteCurrency: "ILS", status: "ACTIVE" },
     data: { status: "RETIRED" },
   });
-  const draft = await proposeRate({ ...PAIR, rate: value, createdBy: `${RUN}-a` });
+  const draft = await proposeRate({ ...PAIR, rate: value, reason: "test seed", createdBy: `${RUN}-a` });
   rateIds.push(draft.id);
   return approveRate({ id: draft.id, approvedBy: `${RUN}-b` });
 }

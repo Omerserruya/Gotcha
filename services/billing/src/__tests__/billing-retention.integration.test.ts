@@ -67,7 +67,7 @@ async function makeQuote(checkoutId: string, tenantId: string, status: any, cons
 }
 
 beforeAll(async () => {
-  const draft = await proposeRate({ rate: "3.65", createdBy: `${RUN}-a` });
+  const draft = await proposeRate({ rate: "3.65", reason: "test seed", createdBy: `${RUN}-a` });
   rateIds.push(draft.id);
   const active = await approveRate({ id: draft.id, approvedBy: `${RUN}-b` });
   rateId = active.id;

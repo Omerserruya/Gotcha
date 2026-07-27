@@ -28,6 +28,8 @@ import {
   retireRate,
   ExchangeRateRefused,
   ExchangeRateUnavailable,
+  fxStatus,
+  fetchAndStoreOfficialRate,
 } from "../services/exchange-rate.service";
 import { pendingReconciliations, sweepUnknownAttempts } from "../services/reconciliation.service";
 import { previewEnforcement } from "../services/enforcement-preview.service";
@@ -85,6 +87,12 @@ function shape(rate: any) {
     source: rate.source,
     version: rate.version,
     status: rate.status,
+    origin: rate.origin,
+    verificationState: rate.verificationState,
+    officialDate: rate.officialDate,
+    retrievedAt: rate.retrievedAt,
+    maxUseUntil: rate.maxUseUntil,
+    overrideReason: rate.overrideReason,
     activeFrom: rate.activeFrom,
     activeUntil: rate.activeUntil,
     createdBy: rate.createdBy,
@@ -124,11 +132,21 @@ router.get("/admin/billing/exchange-rates", ...guard, async (req, res) => {
   });
 });
 
-/** Propose a rate. Created as DRAFT: proposing does not make it chargeable. */
+/**
+ * Propose a MANUAL override. Created as DRAFT: proposing changes nothing.
+ *
+ * Normal daily rates never come through here - they are fetched from the Bank
+ * of Israel automatically. This is for the cases where a person is genuinely
+ * asserting a number, and those are the cases that need a second pair of eyes.
+ */
 router.post("/admin/billing/exchange-rates", ...guard, async (req, res) => {
-  const { rate, base, quote, activeFrom, activeUntil, source } = req.body ?? {};
+  const { rate, base, quote, activeFrom, activeUntil, reason, origin, expiresAt } = req.body ?? {};
   if (rate === undefined || rate === null || rate === "") {
     return res.status(400).json({ error: "rate_required" });
+  }
+  if (!String(reason ?? "").trim()) {
+    // An override with no stated reason is indistinguishable from a mistake.
+    return res.status(400).json({ error: "reason_required" });
   }
   try {
     const created = await proposeRate({
@@ -137,11 +155,45 @@ router.post("/admin/billing/exchange-rates", ...guard, async (req, res) => {
       quote: quote ? String(quote) : undefined,
       activeFrom: activeFrom ? new Date(activeFrom) : undefined,
       activeUntil: activeUntil ? new Date(activeUntil) : null,
-      source: source ? String(source) : undefined,
+      reason: String(reason),
+      origin: origin === "EMERGENCY_FALLBACK" ? "EMERGENCY_FALLBACK" : "MANUAL_OVERRIDE",
+      expiresAt: expiresAt ? new Date(expiresAt) : undefined,
       createdBy: actor(req),
     });
-    await auditRate(req, AuditAction.EXCHANGE_RATE_PROPOSED, created);
+    await auditRate(req, AuditAction.EXCHANGE_RATE_PROPOSED, created, { reason: String(reason) });
     res.status(201).json({ data: shape(created) });
+  } catch (err) {
+    respond(res, err);
+  }
+});
+
+/**
+ * The official rate feed: what it says, how old it is, and whether charging is
+ * possible right now.
+ *
+ * Read-only. It reports the stored state and does not trigger a fetch, so
+ * opening the page cannot itself cause a call to the central bank.
+ */
+router.get("/admin/billing/fx-status", ...guard, async (_req, res) => {
+  try {
+    res.json({ data: await fxStatus() });
+  } catch (err) {
+    console.error("[billing] fx status failed:", err);
+    res.status(500).json({ error: "fx_status_failed" });
+  }
+});
+
+/**
+ * Fetch the official rate now.
+ *
+ * Read-only against the Bank of Israel and safe to invoke by hand - useful when
+ * the feed has just recovered and nobody wants to wait for the next tick.
+ */
+router.post("/admin/billing/fx-refresh", ...guard, async (req, res) => {
+  try {
+    const rate = await fetchAndStoreOfficialRate();
+    await auditRate(req, AuditAction.EXCHANGE_RATE_APPROVED, rate, { trigger: "manual_refresh" });
+    res.json({ data: shape(rate) });
   } catch (err) {
     respond(res, err);
   }

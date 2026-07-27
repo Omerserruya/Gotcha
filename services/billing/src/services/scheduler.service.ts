@@ -21,6 +21,7 @@
  * see scheduler-multi-instance.integration.test.ts.
  */
 import { runBillingCycle } from "./subscription.service";
+import { refreshOfficialRateIfDue } from "./exchange-rate.service";
 import { runDunning } from "./dunning.service";
 import { settleDueConversations } from "@chatcenter/shared";
 import { sweepUnknownAttempts } from "./reconciliation.service";
@@ -58,6 +59,11 @@ async function stage<T>(name: string, run: () => Promise<T>, fallback: T, failed
 /** One pass of every scheduled billing job. Safe to call directly in a test. */
 export async function runSchedulerTick(): Promise<TickResult> {
   const failed: string[] = [];
+
+  // The official rate first: a renewal that runs before the day's rate is
+  // fetched would either use yesterday's or fail, and both are avoidable by
+  // simply asking first.
+  await stage("fx", () => refreshOfficialRateIfDue(), undefined as any, failed);
 
   const cycle = await stage(
     "cycle",

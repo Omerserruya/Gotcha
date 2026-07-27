@@ -474,6 +474,13 @@ services:
       context: .
       dockerfile: services/billing/Dockerfile
     environment:
+      # Official Bank of Israel USD/ILS feed. Off by default: with it off there
+      # is no chargeable rate, which is the safe direction.
+      BOI_FX_ENABLED: ${BOI_FX_ENABLED:-false}
+      # How long a published rate stays usable. The BOI does not publish on
+      # weekends or Israeli holidays, so Friday must carry through to Sunday.
+      BOI_FX_MAX_STALENESS_HOURS: ${BOI_FX_MAX_STALENESS_HOURS:-120}
+      BOI_FX_BASE_URL: ${BOI_FX_BASE_URL:-}
       # Where a customer returns after the hosted payment page. Without it the
       # return URLs are omitted and they land wherever the provider defaults to.
       APP_PUBLIC_URL: ${APP_PUBLIC_URL:-}

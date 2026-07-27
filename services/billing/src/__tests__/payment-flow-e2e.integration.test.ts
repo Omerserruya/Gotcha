@@ -57,7 +57,7 @@ async function seedApprovedRateIfMissing() {
 }
 
 async function seedApprovedRate() {
-  const draft = await proposeRate({ ...PAIR, rate: TEST_RATE, createdBy: `${RUN}-author` });
+  const draft = await proposeRate({ ...PAIR, rate: TEST_RATE, reason: "test seed", createdBy: `${RUN}-author` });
   rateIds.push(draft.id);
   return approveRate({ id: draft.id, approvedBy: `${RUN}-approver` });
 }

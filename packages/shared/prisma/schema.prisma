@@ -3537,10 +3537,33 @@ model TokenizationSession {
 }
 
 enum BillingExchangeRateStatus {
+  /// Proposed manually and awaiting a second administrator. Never chargeable.
   DRAFT
-  /// Approved and usable for real charges. At most one per currency pair.
+  /// Usable for real charges. At most one per currency pair.
   ACTIVE
   RETIRED
+}
+
+enum FxRateOrigin {
+  /// Fetched automatically from the official source. No approval required -
+  /// requiring two people to sign off the central bank's own daily number
+  /// would mean charging stops every weekend nobody is watching.
+  AUTOMATIC_OFFICIAL
+  /// Entered by a person. Requires a second administrator, because a typed
+  /// rate is the one number here nobody else has checked.
+  MANUAL_OVERRIDE
+  /// Entered by a person because the official source was unreachable past the
+  /// permitted staleness window. Also requires two people.
+  EMERGENCY_FALLBACK
+}
+
+enum FxVerificationState {
+  /// Parsed from a well-formed official response.
+  VERIFIED_OFFICIAL
+  /// A human asserted it. Approved by a second human.
+  MANUALLY_APPROVED
+  /// Retrieved but failed a sanity check. Never chargeable.
+  REJECTED
 }
 
 /// The rate money is actually charged at.
@@ -3561,9 +3584,32 @@ model BillingExchangeRate {
 
   rate Decimal @db.Decimal(18, 8)
 
-  /// MANUAL_PLATFORM_RATE for now. Never a live web lookup at charge time.
-  source  String @default("MANUAL_PLATFORM_RATE")
+  /// BANK_OF_ISRAEL_REPRESENTATIVE for the automatic path.
+  source  String @default("BANK_OF_ISRAEL_REPRESENTATIVE")
   version Int
+
+  /// How this rate came to exist, and therefore what approval it needed.
+  origin FxRateOrigin @default(AUTOMATIC_OFFICIAL)
+
+  verificationState FxVerificationState @default(VERIFIED_OFFICIAL) @map("verification_state")
+
+  /// When the SOURCE published it, distinct from when we fetched it. A rate
+  /// retrieved on Sunday still carries Friday's publication date, and that is
+  /// the date a customer or an auditor would recognise.
+  officialDate DateTime? @map("official_date")
+  retrievedAt  DateTime? @map("retrieved_at")
+
+  /// SHA-256 of the raw provider response. Lets a disputed charge be traced
+  /// back to the exact bytes we were served, without storing the payload.
+  rawResponseHash String? @map("raw_response_hash")
+
+  /// Hard expiry. Past this the rate is not "old", it is unusable - charging
+  /// stops rather than quietly using a stale number.
+  maxUseUntil DateTime? @map("max_use_until")
+
+  /// Set only on a manual override or emergency fallback.
+  overrideReason   String? @map("override_reason")
+  overrideOfRateId String? @map("override_of_rate_id")
 
   activeFrom  DateTime  @map("active_from")
   activeUntil DateTime? @map("active_until")

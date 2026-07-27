@@ -53,7 +53,7 @@ const checkoutIds: string[] = [];
 let preexistingActiveId: string | null = null;
 
 async function makeActiveRate(value = TEST_RATE) {
-  const draft = await proposeRate({ ...PAIR, rate: value, createdBy: `${RUN}-author` });
+  const draft = await proposeRate({ ...PAIR, rate: value, reason: "test seed", createdBy: `${RUN}-author` });
   rateIds.push(draft.id);
   const active = await approveRate({ id: draft.id, approvedBy: `${RUN}-approver` });
   return active;
@@ -139,7 +139,7 @@ describe("the charging rate is approved, not fetched", () => {
   });
 
   it("a proposed rate is not yet chargeable", async () => {
-    const draft = await proposeRate({ ...PAIR, rate: "3.99", createdBy: `${RUN}-a` });
+    const draft = await proposeRate({ ...PAIR, rate: "3.99", reason: "test seed", createdBy: `${RUN}-a` });
     rateIds.push(draft.id);
     expect(draft.status).toBe("DRAFT");
     expect(draft.approvedBy).toBeNull();
@@ -156,7 +156,7 @@ describe("the charging rate is approved, not fetched", () => {
   });
 
   it("the approver cannot be the author", async () => {
-    const draft = await proposeRate({ ...PAIR, rate: "3.70", createdBy: "same-person" });
+    const draft = await proposeRate({ ...PAIR, rate: "3.70", reason: "test seed", createdBy: "same-person" });
     rateIds.push(draft.id);
     await expect(approveRate({ id: draft.id, approvedBy: "same-person" })).rejects.toThrow(
       /approver_must_differ_from_creator/,
@@ -178,7 +178,7 @@ describe("the charging rate is approved, not fetched", () => {
 
   it("the database refuses a second active row outright", async () => {
     const active = await activeRate(PAIR);
-    const draft = await proposeRate({ ...PAIR, rate: "4.10", createdBy: `${RUN}-a` });
+    const draft = await proposeRate({ ...PAIR, rate: "4.10", reason: "test seed", createdBy: `${RUN}-a` });
     rateIds.push(draft.id);
     // Bypassing approveRate must not be a way to get two live rates.
     await expect(
@@ -189,7 +189,7 @@ describe("the charging rate is approved, not fetched", () => {
 
   it("rejects a rate that is obviously a typo", async () => {
     for (const bad of ["0", "-1", "3650"]) {
-      await expect(proposeRate({ ...PAIR, rate: bad, createdBy: `${RUN}-a` })).rejects.toBeInstanceOf(
+      await expect(proposeRate({ ...PAIR, rate: bad, reason: "test seed", createdBy: `${RUN}-a` })).rejects.toBeInstanceOf(
         ExchangeRateRefused,
       );
     }
@@ -198,7 +198,7 @@ describe("the charging rate is approved, not fetched", () => {
   it("a rate whose window has not opened is not the rate", async () => {
     await prisma.billingExchangeRate.updateMany({ where: PAIR_WHERE(), data: { status: "RETIRED" } });
     const future = new Date(Date.now() + 86_400_000);
-    const draft = await proposeRate({ ...PAIR, rate: "3.55", activeFrom: future, createdBy: `${RUN}-a` });
+    const draft = await proposeRate({ ...PAIR, rate: "3.55", activeFrom: future, reason: "test seed", createdBy: `${RUN}-a` });
     rateIds.push(draft.id);
     await approveRate({ id: draft.id, approvedBy: `${RUN}-approver` });
     await expect(activeRate(PAIR)).rejects.toThrow(/no_active_rate/);
