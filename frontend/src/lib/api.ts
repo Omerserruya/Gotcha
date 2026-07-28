@@ -539,6 +539,91 @@ export function sendShopifyProductMessage(
   );
 }
 
+// ─── Shopify CHAT app install (App Store flow) ─────────────
+//
+// Distinct from the Shopify Live Chat channel calls above: those configure
+// a channel that already exists, these turn a verified Shopify install into
+// one. The install itself is identified by an HttpOnly cookie set by the
+// OAuth callback; `session` is the fallback for browsers that dropped it.
+
+export type ShopifyChatActivationState =
+  | "APP_NOT_INSTALLED"
+  | "INSTALLATION_UNBOUND"
+  | "CHANNEL_NOT_CREATED"
+  | "TENANT_INACTIVE"
+  | "ENTITLEMENT_DISABLED"
+  | "EMBED_NOT_ENABLED"
+  | "EMBED_ENABLED_NOT_SEEN"
+  | "STALE"
+  | "UNINSTALLED"
+  | "CORE_DISCONNECTED_PRODUCT_CHAT_UNAVAILABLE"
+  | "LIVE";
+
+export interface ShopifyChatActivation {
+  state: ShopifyChatActivationState;
+  shopDomain: string;
+  channelId: string | null;
+  channelEnabled: boolean;
+  productMessaging: boolean;
+  coreConnected: boolean;
+  verifiedDomains: string[];
+  themeEditorDeepLink: string | null;
+  lastHeartbeatAt: string | null;
+}
+
+export interface ShopifyChatInstallContext {
+  shopDomain: string;
+  status: "PENDING" | "ACTIVE" | "UNINSTALLED";
+  alreadyBound: boolean;
+  boundToThisOrganization: boolean;
+  claimedByAnotherOrganization: boolean;
+  appAdminLink: string | null;
+}
+
+function installQuery(session?: string | null): string {
+  return session ? `?session=${encodeURIComponent(session)}` : "";
+}
+
+export function getShopifyChatInstallContext(token: string, session?: string | null) {
+  return apiFetch<{ data: ShopifyChatInstallContext }>(
+    `/api/shopify-chat-install/context${installQuery(session)}`,
+    { token },
+  );
+}
+
+export function bindShopifyChatInstall(token: string, session?: string | null) {
+  return apiFetch<{
+    data: {
+      channelId: string;
+      channelCreated: boolean;
+      shopDomain: string;
+      activation: ShopifyChatActivation;
+    };
+  }>("/api/shopify-chat-install/bind", {
+    token,
+    method: "POST",
+    body: JSON.stringify({ session: session ?? undefined }),
+  });
+}
+
+export function getShopifyChatActivation(token: string, opts: { shop?: string; session?: string | null } = {}) {
+  const params = new URLSearchParams();
+  if (opts.shop) params.set("shop", opts.shop);
+  if (opts.session) params.set("session", opts.session);
+  const qs = params.toString();
+  return apiFetch<{ data: ShopifyChatActivation }>(
+    `/api/shopify-chat-install/activation${qs ? `?${qs}` : ""}`,
+    { token },
+  );
+}
+
+export function refreshShopifyChatDomains(token: string, shop: string) {
+  return apiFetch<{ data: { verifiedDomains: string[] } }>(
+    "/api/shopify-chat-install/refresh-domains",
+    { token, method: "POST", body: JSON.stringify({ shop }) },
+  );
+}
+
 // ─── Tenant Channel Config ─────────────────────────────────
 
 export function getChannelConfig(token: string) {

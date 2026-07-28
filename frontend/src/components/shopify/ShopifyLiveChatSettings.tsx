@@ -18,6 +18,7 @@ import {
   type ShopifyLiveChatChannel,
 } from "@/lib/api";
 import ConfirmModal from "@/components/ConfirmModal";
+import { ShopifyGlyph } from "./ShopifyGlyph";
 import { WidgetPreview, PREVIEW_FIXTURE, type PreviewState, type PreviewDevice } from "./WidgetPreview";
 import type { ProductView } from "./ProductCard";
 
@@ -54,6 +55,8 @@ export function ShopifyLiveChatSettings() {
 
   const [loading, setLoading] = useState(true);
   const [store, setStore] = useState<any>(null);
+  /** Why the page could not load - kept apart from "no store connected". */
+  const [loadError, setLoadError] = useState<{ code?: string; message: string } | null>(null);
   const [channel, setChannel] = useState<ShopifyLiveChatChannel | null>(null);
   const [draft, setDraft] = useState<any>(null);
   const [dirty, setDirty] = useState(false);
@@ -81,10 +84,15 @@ export function ShopifyLiveChatSettings() {
   const load = useCallback(async () => {
     if (!token) return;
     setLoading(true);
+    setLoadError(null);
     try {
+      // Deliberately NOT swallowed into `{ connected: false }`. A 403 from
+      // the licence gate or a 500 from the adapter is not the same fact as
+      // "this workspace has no Shopify store", and telling a merchant whose
+      // store IS connected to go connect one sends them to fix nothing.
       const [storeRes, channelsRes] = await Promise.all([
-        getShopifyStore(token).catch(() => ({ data: { connected: false } })),
-        listShopifyLiveChatChannels(token).catch(() => ({ data: [] })),
+        getShopifyStore(token),
+        listShopifyLiveChatChannels(token),
       ]);
       setStore(storeRes.data);
       const first = (channelsRes.data || [])[0] || null;
@@ -93,7 +101,10 @@ export function ShopifyLiveChatSettings() {
       setDirty(false);
       if (first) setSection((s) => (s === "store" ? "installation" : s));
     } catch (err: any) {
-      notify(err.message || t("common.error"), "err");
+      setStore(null);
+      setChannel(null);
+      setDraft(null);
+      setLoadError({ code: err?.code, message: err?.message || t("common.error") });
     } finally {
       setLoading(false);
     }
@@ -221,14 +232,56 @@ export function ShopifyLiveChatSettings() {
     );
   }
 
+  // ── The page could not load ───────────────────────────────
+  // Two different truths, two different next actions: the workspace is not
+  // licensed for this channel (nothing the merchant can fix here), or the
+  // request failed (worth retrying). Neither is "connect your store".
+  if (loadError) {
+    const locked = loadError.code === "FEATURE_NOT_AVAILABLE";
+    return (
+      <div className="max-w-2xl mx-auto p-6 space-y-4">
+        <Header t={t} />
+        <div
+          className={clsx(
+            "rounded-2xl border p-5 space-y-2",
+            locked ? "bg-amber-50 border-amber-200" : "bg-red-50 border-red-200",
+          )}
+        >
+          <p className={clsx("font-semibold", locked ? "text-amber-900" : "text-red-900")}>
+            {locked ? t("shopifyChat.lockedTitle") : t("shopifyChat.loadFailedTitle")}
+          </p>
+          <p className={clsx("text-sm", locked ? "text-amber-800" : "text-red-800")}>
+            {locked ? t("shopifyChat.lockedBody") : loadError.message}
+          </p>
+          {!locked && (
+            <button
+              onClick={load}
+              className="inline-block text-sm font-medium px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700"
+            >
+              {t("shopifyChat.retry")}
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   // ── No store connected ────────────────────────────────────
   if (!store?.connected) {
+    // A connected integration with no shop domain recorded is a different
+    // problem from no integration at all, and reconnecting is the fix for
+    // exactly one of them.
+    const noDomain = store?.reason === "no_shop_domain";
     return (
       <div className="max-w-2xl mx-auto p-6 space-y-4">
         <Header t={t} />
         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 space-y-2">
-          <p className="font-semibold text-amber-900">{t("shopifyChat.noStoreTitle")}</p>
-          <p className="text-sm text-amber-800">{t("shopifyChat.noStoreBody")}</p>
+          <p className="font-semibold text-amber-900">
+            {noDomain ? t("shopifyChat.noShopDomainTitle") : t("shopifyChat.noStoreTitle")}
+          </p>
+          <p className="text-sm text-amber-800">
+            {noDomain ? t("shopifyChat.noShopDomainBody") : t("shopifyChat.noStoreBody")}
+          </p>
           <a
             href="/settings/integrations"
             className="inline-block text-sm font-medium px-4 py-2 rounded-lg bg-amber-600 text-white hover:bg-amber-700"
@@ -356,27 +409,11 @@ export function ShopifyLiveChatSettings() {
 
           {section === "installation" && (
             <Card title={t("shopifyChat.section.installation")}>
-              <Field label={t("shopifyChat.channelKey")} hint={t("shopifyChat.channelKeyHint")}>
-                <div className="flex gap-2">
-                  <input
-                    readOnly
-                    value={channel.publicKey}
-                    onFocus={(e) => e.currentTarget.select()}
-                    className="flex-1 text-xs font-mono px-3 py-2 border border-gray-200 rounded-lg bg-gray-50"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navigator.clipboard?.writeText(channel.publicKey);
-                      notify(t("shopifyChat.copied"));
-                    }}
-                    className="text-xs px-3 py-2 rounded-lg border border-gray-200 hover:bg-gray-50"
-                  >
-                    {t("common.copy")}
-                  </button>
-                </div>
-              </Field>
-
+              {/* The normal path is one button. A merchant who installed
+                  from the App Store has already had their store, channel and
+                  domains bound for them; all that is left is switching the
+                  App Embed on in their theme. */}
+              <p className="text-sm text-gray-600">{t("shopifyChat.activationIntro")}</p>
               {install?.themeEditorDeepLink ? (
                 <a
                   href={install.themeEditorDeepLink}
@@ -387,7 +424,7 @@ export function ShopifyLiveChatSettings() {
                   {t("shopifyChat.openThemeEditor")}
                 </a>
               ) : (
-                <p className="text-xs text-gray-500">{t("shopifyChat.noDeepLink")}</p>
+                <p className="text-xs text-amber-700">{t("shopifyChat.noDeepLink")}</p>
               )}
 
               <ol className="text-sm text-gray-600 space-y-1.5 list-decimal ps-5 pt-1">
@@ -396,23 +433,55 @@ export function ShopifyLiveChatSettings() {
                 ))}
               </ol>
 
-              <Field
-                label={t("shopifyChat.storefrontDomains")}
-                hint={t("shopifyChat.storefrontDomainsHint")}
-              >
-                <textarea
-                  rows={3}
-                  value={(draft.install?.storefrontDomains || []).join("\n")}
-                  onChange={(e) =>
-                    patch(
-                      "install.storefrontDomains",
-                      e.target.value.split("\n").map((d) => d.trim()).filter(Boolean),
-                    )
-                  }
-                  placeholder="shop.example.com"
-                  className="w-full text-sm px-3 py-2 border border-gray-200 rounded-lg font-mono"
-                />
-              </Field>
+              {/* Everything below is recovery. Pasting a key and typing a
+                  domain used to be step one of setup; they are now what
+                  support reaches for when an installation record is lost. */}
+              <details className="pt-2 border-t border-gray-100">
+                <summary className="text-xs text-gray-400 cursor-pointer select-none">
+                  {t("shopifyChat.advancedTroubleshooting")}
+                </summary>
+                <div className="space-y-3.5 pt-3">
+                  <p className="text-xs text-gray-500">{t("shopifyChat.advancedIntro")}</p>
+                  <Field label={t("shopifyChat.channelKey")} hint={t("shopifyChat.channelKeyHint")}>
+                    <div className="flex gap-2">
+                      <input
+                        readOnly
+                        value={channel.publicKey}
+                        onFocus={(e) => e.currentTarget.select()}
+                        className="flex-1 text-xs font-mono px-3 py-2 border border-gray-200 rounded-lg bg-gray-50"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard?.writeText(channel.publicKey);
+                          notify(t("shopifyChat.copied"));
+                        }}
+                        className="text-xs px-3 py-2 rounded-lg border border-gray-200 hover:bg-gray-50"
+                      >
+                        {t("common.copy")}
+                      </button>
+                    </div>
+                  </Field>
+
+                  <Field
+                    label={t("shopifyChat.storefrontDomains")}
+                    hint={t("shopifyChat.storefrontDomainsHint")}
+                  >
+                    <textarea
+                      rows={3}
+                      value={(draft.install?.storefrontDomains || []).join("\n")}
+                      onChange={(e) =>
+                        patch(
+                          "install.storefrontDomains",
+                          e.target.value.split("\n").map((d) => d.trim()).filter(Boolean),
+                        )
+                      }
+                      placeholder="shop.example.com"
+                      className="w-full text-sm px-3 py-2 border border-gray-200 rounded-lg font-mono"
+                    />
+                  </Field>
+                </div>
+              </details>
             </Card>
           )}
 
@@ -882,9 +951,14 @@ export function ShopifyLiveChatSettings() {
 
 function Header({ t }: { t: (k: string) => string }) {
   return (
-    <div>
-      <h1 className="text-2xl font-bold text-gray-900">{t("shopifyChat.title")}</h1>
-      <p className="text-sm text-gray-500 mt-1">{t("shopifyChat.subtitle")}</p>
+    <div className="flex items-start gap-3">
+      <span className="w-11 h-11 rounded-xl bg-gray-50 border border-gray-100 flex items-center justify-center shrink-0">
+        <ShopifyGlyph className="w-6 h-6" />
+      </span>
+      <div className="min-w-0">
+        <h1 className="text-2xl font-bold text-gray-900">{t("shopifyChat.title")}</h1>
+        <p className="text-sm text-gray-500 mt-1">{t("shopifyChat.subtitle")}</p>
+      </div>
     </div>
   );
 }

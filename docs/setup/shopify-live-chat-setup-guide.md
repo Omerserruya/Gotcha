@@ -11,74 +11,78 @@ maintains this.
 
 ---
 
-## 1. What a merchant needs before they start
+## 1. Two Shopify products, one storefront chat
 
-| Requirement | Why |
-|---|---|
-| A connected Shopify store in GOTCHA | The channel binds to one store permanently. Prices, stock and product data always come from it. |
-| The `SHOPIFY_LIVE_CHAT` entitlement | Without it the widget refuses to load on the storefront. |
-| An AI employee or a department | A chat with no owner has nowhere to go. The channel will not enable without one. |
-| Their public storefront domain | Shoppers browse a custom domain, not `*.myshopify.com`. Both must be allowed. |
+| Product | What it is | What it owns |
+|---|---|---|
+| **GOTCHA Shopify Chat App** | A public Shopify App Store app carrying the Theme App Extension | Install, App Embed, storefront widget, visitor sessions, chat, handoff |
+| **GOTCHA Core Shopify Integration** | The existing Admin API connection under Settings → Integrations | Products, inventory, orders, customers, refunds, returns, AI commerce tools |
 
-`SHOPIFY_PRODUCT_MESSAGING` is a separate entitlement. Without it the
-chat works normally and product cards are simply not offered. That
-degradation is deliberate: a plan that does not include commerce
-messaging should still get a working support chat.
+They are **separate Partner apps with separate credentials**. Installing
+the Chat app grants no Admin API access at all. Product cards work by
+borrowing a safe, server-side projection from the Core integration when
+one is connected; when it is not, text chat carries on and product
+messaging reports itself as unavailable rather than failing mid-sale.
+
+Full reasoning: `docs/architecture/shopify-core-vs-chat-app.md`.
 
 ---
 
 ## 2. Merchant setup, start to finish
 
-### 2.1 Connect Shopify
+### 2.1 Install from the Shopify App Store
 
-**Settings → Integrations → Shopify.** This is the existing GOTCHA
-Shopify connection. Shopify Live Chat does not create a second one.
+The merchant clicks **Add app**. Shopify runs authorization and returns
+them to GOTCHA's onboarding wizard at `/shopify/chat/install`.
 
-Required scope: **`read_products`**. It is the only scope this feature
-needs; nothing here can modify a store.
+Nothing is copied, pasted or typed in this step. The verified shop domain
+comes from the install itself.
 
-### 2.2 Create the channel
+### 2.2 Sign in to GOTCHA
 
-**Settings → Channels → Shopify Live Chat → Create.**
+The wizard sends them through the normal GOTCHA sign-in. The verified
+installation survives the round trip in an HttpOnly continuation session,
+so they come back to the same wizard, on the same step.
 
-The channel is created **disabled**. Nothing reaches a live storefront
-until the merchant explicitly turns it on.
+### 2.3 Choose an organization
 
-### 2.3 Install the App Embed
+Only organizations where they hold `channels:manage:update` are offered.
+The organization must be ACTIVE and must hold the `shopify_live_chat`
+entitlement — a Shopify install does not bypass plan enforcement.
 
-1. In GOTCHA, open the **Installation** section and copy the **channel key**.
-2. Click **Open the Shopify Theme Editor** (or in Shopify: Online Store →
-   Themes → Customize).
-3. Open **App embeds** in the left sidebar.
-4. Turn on **GOTCHA Chat**.
-5. Paste the channel key into the block's **Channel key** field.
-6. Click **Save**, then reload the storefront.
+### 2.4 Connect
 
-The channel key is a **public identifier, not a secret**. It names a
-channel; the server still requires the request to come from the
-merchant's own storefront before it will answer.
+One button. GOTCHA:
 
-### 2.4 Declare the storefront domain
+- binds the verified shop to that organization,
+- creates the Shopify Live Chat channel, or reuses the existing one for
+  the same store,
+- records `<shop>.myshopify.com` as a verified origin, and asks Shopify
+  (through the Core connection, when there is one) for the storefront's
+  primary domain,
+- creates the channel **switched off**.
 
-Under **Installation → Storefront domains**, add the domain shoppers
-actually browse (for example `shop.example.com`), one per line. The
-`*.myshopify.com` domain is allowed automatically.
+### 2.5 Activate the App Embed
 
-Skipping this is the single most common reason the widget "does not
-appear": the bootstrap is refused because the request Origin is not on
-the allowlist.
+Shopify keeps app embeds off until a merchant enables them, so this step
+cannot be automated. The wizard's button opens the live theme editor with
+the GOTCHA Chat embed targeted; the merchant switches it on and saves.
 
-### 2.5 Configure and enable
+Opening the link proves nothing. The wizard waits for a real page load
+from the storefront before it calls the widget active.
 
-Work down the sections: Appearance, Welcome, Suggested questions, AI
-employee, Routing, Human handoff, Business hours, Privacy. The live
-preview beside the form shows every state, including Hebrew RTL and
-mobile.
+### 2.6 Verify
 
-Then flip **Enabled**. The status strip at the top of the screen always
-names what is currently blocking the widget, if anything.
+The wizard polls until a storefront heartbeat arrives, then shows the
+final state: installed, bound, embed active, chat enabled, product
+messaging status and Core integration status.
 
----
+### Recovery only: the channel key
+
+The `sfy_...` channel key and manual storefront-domain entry still exist,
+under **Advanced troubleshooting** in chat settings. They are for support
+re-establishing a store whose installation record was lost. A normal
+installation never shows them.
 
 ## 3. Troubleshooting
 
@@ -87,8 +91,8 @@ repair step. The first blocked check is the one to fix.
 
 | What you see | What it means | Fix |
 |---|---|---|
-| No widget on the storefront, "App Embed not seen" | The embed is off, or the channel key is missing from it | Turn on the GOTCHA Chat app embed and paste the channel key |
-| No widget on your custom domain, but it works on `.myshopify.com` | The Origin is not allowlisted | Add the domain under Installation → Storefront domains |
+| No widget on the storefront, "App Embed not seen" | The embed is off in this theme | Turn on the GOTCHA Chat app embed and save |
+| No widget on your custom domain, but it works on `.myshopify.com` | The custom domain was not verified at install time (usually: no Core connection to ask) | Connect Shopify under Settings → Integrations, or add the domain under Advanced troubleshooting |
 | "Channel bound to a different store" | The workspace reconnected Shopify to another store | Reconnect the original store, or delete this channel and create one for the new store |
 | Chat works, no product cards | Missing `read_products` scope, or the product messaging entitlement | Reconnect Shopify to grant the scope; contact your administrator for the entitlement |
 | "No routing target" | No AI employee or department assigned | Assign one under AI employee or Routing |
@@ -106,8 +110,15 @@ something vague, the detail is in the service logs under
   stays configured and starts working again when re-enabled.
 - **Delete the channel** → disabled first, then removed. Conversations
   on the channel are removed with it. Warned about before it happens.
-- **Uninstall the Shopify app** → product access stops. Text chat keeps
-  working; the diagnostics panel reports the lost connection.
+- **Uninstall the CHAT app in Shopify** → `app/uninstalled` retires the
+  installation and switches the channel off. The storefront stops
+  bootstrapping. The Core commerce integration is untouched.
+- **Uninstall the CORE app in Shopify** → the commerce connection is
+  marked DISCONNECTED and its credentials dropped. Text chat keeps
+  working; product cards and Add to Cart report themselves unavailable.
+- **Reinstall the Chat app** → the previous organization and channel are
+  restored, but only after Shopify re-proves the merchant controls the
+  store.
 
 ---
 

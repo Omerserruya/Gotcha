@@ -692,6 +692,7 @@
     "notConfigured": "This provider ({platform}) is not configured for this environment yet, so it cannot be connected.",
     "statusRequiresAction": "Requires action",
     "statusWidgetPending": "Waiting for installation",
+    "statusOff": "Off",
     "catMessaging": "Messaging",
     "catEmail": "Email",
     "catTeam": "Team channels",
@@ -1943,7 +1944,11 @@
     "saving": "Saving...",
     "send": "Send",
     "copy": "Copy",
-    "saved": "Saved"
+    "saved": "Saved",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "connected": "Connected",
+    "notConnected": "Not connected"
   },
   "onboarding": {
     "channelsBanner": "Pick WhatsApp, Instagram, or Email to connect your first channel.",
@@ -4701,7 +4706,9 @@
       "requestNewLink": "Request a new link",
       "continue": "Continue to GOTCHA",
       "backHome": "Back to homepage",
-      "retryPayment": "Try a different card"
+      "retryPayment": "Try a different card",
+      "resendEmail": "Send it again",
+      "resending": "Sending..."
     },
     "paymentRequired": {
       "eyebrow": "Payment",
@@ -4733,7 +4740,10 @@
     "completed": {
       "eyebrow": "Confirmed",
       "title": "Your plan is active",
-      "body": "Payment is confirmed and your organization is ready to use."
+      "body": "Payment is confirmed and your organization is ready to use.",
+      "noEmailYet": "No welcome email yet?",
+      "resendDone": "Sent. Check your inbox again in a moment.",
+      "resendFailed": "We couldn't send it just now. Try again in a moment."
     },
     "unavailable": {
       "eyebrow": "Link",
@@ -4764,6 +4774,12 @@
   "shopifyChat": {
     "title": "Shopify Live Chat",
     "subtitle": "A branded chat on your Shopify storefront that can answer product questions and add items to the cart.",
+    "lockedTitle": "Shopify Live Chat is not enabled for this workspace",
+    "lockedBody": "Your Shopify store stays connected. The live chat channel itself is not part of this workspace's plan yet, so its settings cannot be opened. Contact support to have it enabled.",
+    "loadFailedTitle": "Could not load Shopify Live Chat",
+    "retry": "Try again",
+    "noShopDomainTitle": "Your Shopify integration has no store address",
+    "noShopDomainBody": "The integration is connected but no myshopify.com domain was recorded for it, and the chat has to know which store it is bound to. Reconnect the integration to record it.",
     "noStoreTitle": "Connect your Shopify store first",
     "noStoreBody": "Shopify Live Chat is bound to one connected store. Prices, stock and product details always come from that store, so the connection has to exist before the channel does.",
     "goToIntegrations": "Go to Integrations",
@@ -4909,6 +4925,84 @@
       "blog": "Blog",
       "other": "Storefront"
     },
-    "cartItems": "{count} in cart"
+    "cartItems": "{count} in cart",
+    "activationIntro": "Your store is connected. The last step is switching the GOTCHA Chat app embed on in your live theme and saving.",
+    "advancedTroubleshooting": "Advanced troubleshooting",
+    "advancedIntro": "You do not need these for a normal installation. They exist so support can re-establish a store's link if its installation record is lost."
+  },
+  "shopifyInstall": {
+    "title": "Set up GOTCHA Chat",
+    "subtitle": "A few steps and your storefront has a chat that knows your catalogue.",
+    "step1Title": "Shopify app installed",
+    "step1Verified": "Verified store",
+    "step2Title": "Sign in to GOTCHA",
+    "step2Body": "Sign in with your GOTCHA account, or create one. Your store stays connected while you do.",
+    "step2Cta": "Sign in to GOTCHA",
+    "step2SignedIn": "Signed in as",
+    "step3Title": "Choose your organization",
+    "step3Body": "Pick the workspace this store belongs to. We create the chat channel for you.",
+    "step4Done": "Connected. The chat channel is ready.",
+    "step4Cta": "Connect this store",
+    "connecting": "Connecting...",
+    "step5Title": "Turn on the chat in your theme",
+    "step5Body": "Shopify keeps app embeds switched off until you enable them. This link opens your live theme with GOTCHA Chat ready to turn on. Switch it on, then click Save.",
+    "step5Cta": "Open the Shopify Theme Editor",
+    "step5AfterSave": "After you save, open your storefront once. We watch for the first page load and confirm it here.",
+    "step6Title": "Verify on your storefront",
+    "step7Title": "You are set up",
+    "checkAgain": "Check again",
+    "watching": "Watching for your storefront...",
+    "noDeepLink": "The activation link is not available yet. Open Online Store, then Themes, then Customize, then App embeds, and turn on GOTCHA Chat.",
+    "noSession": "We could not find a recent Shopify installation for this browser. Start again from your Shopify admin.",
+    "stepLocked": "Finish the step above first.",
+    "noOrganizations": "This account has no active organization that can hold a channel. Ask an administrator to invite you, or create one first.",
+    "claimedElsewhere": "This store is already connected to a different GOTCHA organization. Sign in with an account in that organization, or contact support to move it.",
+    "bindFailed": "We could not connect the store.",
+    "failedTitle": "Installation did not complete",
+    "failedBody": "Shopify could not finish the installation.",
+    "failedRetry": "Open the app again from your Shopify admin to retry.",
+    "openSettings": "Open chat settings",
+    "openStorefront": "Open my storefront",
+    "advanced": "Advanced troubleshooting",
+    "advancedDomains": "Storefront domains we accept:",
+    "advancedManual": "A channel key and manual domain entry exist in chat settings for recovery only. A normal installation never needs them.",
+    "factStore": "Store",
+    "factChannel": "Chat channel",
+    "factEmbed": "App embed",
+    "factChat": "Chat",
+    "factProducts": "Product messaging",
+    "factCore": "Shopify commerce integration",
+    "factActive": "Active",
+    "factInactive": "Not active yet",
+    "factProductsOff": "Off",
+    "state": {
+      "APP_NOT_INSTALLED": "The app is not installed on this store.",
+      "INSTALLATION_UNBOUND": "The store is installed but not connected to an organization yet.",
+      "CHANNEL_NOT_CREATED": "The chat channel has not been created yet.",
+      "TENANT_INACTIVE": "This organization is not active, so the widget cannot serve shoppers.",
+      "ENTITLEMENT_DISABLED": "This organization's plan does not include Shopify Live Chat.",
+      "EMBED_NOT_ENABLED": "The chat is off. Turn on the app embed in your theme and save.",
+      "EMBED_ENABLED_NOT_SEEN": "Waiting for the first page load on your storefront.",
+      "STALE": "We have not seen your storefront recently. If you changed theme, turn the app embed on again.",
+      "UNINSTALLED": "The app was removed from this store.",
+      "CORE_DISCONNECTED_PRODUCT_CHAT_UNAVAILABLE": "Chat is live. Product cards are off until the Shopify commerce integration is connected.",
+      "LIVE": "Live on your storefront."
+    },
+    "error": {
+      "app_not_configured": "GOTCHA Chat is not configured on this environment yet.",
+      "invalid_shop": "That does not look like a Shopify store address.",
+      "invalid_signature": "We could not verify that request came from Shopify.",
+      "token_exchange_failed": "Shopify did not complete the authorization.",
+      "install_failed": "Something went wrong finishing the installation."
+    },
+    "bindError": {
+      "not_entitled": "This organization's plan does not include Shopify Live Chat. Add it, then try again.",
+      "shop_taken": "This store is already connected to another organization.",
+      "bound_to_other_tenant": "This store is already connected to another organization.",
+      "installation_uninstalled": "This installation was removed. Install GOTCHA Chat again from Shopify.",
+      "installation_not_found": "We could not find that installation.",
+      "NO_INSTALL_SESSION": "We could not find a recent Shopify installation for this browser."
+    },
+    "step1PendingSignIn": "Shopify sent you here after authorizing GOTCHA Chat. Sign in below and we will confirm which store it was."
   }
 }

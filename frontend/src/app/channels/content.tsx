@@ -18,6 +18,7 @@ import {
   updateWebchatSettings,
 } from "@/lib/api";
 import { ChannelBadge } from "@/components/conversations/ChannelBadge";
+import { ShopifyGlyph } from "@/components/shopify/ShopifyGlyph";
 import { ChannelsOnboardingBanner } from "@/components/onboarding/ChannelsOnboardingBanner";
 import clsx from "clsx";
 import ConfirmModal from "@/components/ConfirmModal";
@@ -39,6 +40,9 @@ function StatusBadge({ status }: { status: string }) {
     // website widget waiting for its first real page load.
     REQUIRES_ACTION: { bg: "bg-amber-50", text: "text-amber-700", ring: "ring-amber-200", label: t("channels.statusRequiresAction") },
     WIDGET_PENDING: { bg: "bg-yellow-50", text: "text-yellow-700", ring: "ring-yellow-200", label: t("channels.statusWidgetPending") },
+    // Configured, deliberately not serving anyone yet - "Connecting..."
+    // would claim work is in progress that nobody started.
+    OFF: { bg: "bg-gray-100", text: "text-gray-500", ring: "ring-gray-200", label: t("channels.statusOff") },
   };
   const c = config[status] || config.DISCONNECTED;
   return (
@@ -638,18 +642,35 @@ function ChannelsPageContent() {
             merchant it is the same question as the embedded chat - how a
             visitor to my site reaches me - and a category holding one card
             reads as a mistake. */}
-        <ConnectCard
-          icon={
-            <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="#5E8E3E" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-              <path d="M6 8h12l-1 12H7L6 8Z" />
-              <path d="M9 8V6a3 3 0 0 1 6 0v2" />
-            </svg>
-          }
-          title={t("channels.shopifyLiveChat")}
-          description={t("channels.shopifyLiveChatDesc")}
-          buttonLabel={t("channels.configureShopifyLiveChat")}
-          onClick={() => { window.location.href = "/settings/channels/shopify-live-chat"; }}
-        />
+        {(() => {
+          // Truthful state, not a permanent "Set up": the channel either
+          // does not exist yet, exists but is switched off, or is serving a
+          // storefront. Sending a merchant who already finished setup back
+          // through a setup-shaped button is how a card lies.
+          const sfy = accounts.find((a: any) => a.channel === "SHOPIFY_LIVE_CHAT");
+          const live = !!sfy?.platformMeta?.shopifyLiveChat?.enabled;
+          const state = !sfy ? "NONE" : sfy.lastError ? "REQUIRES_ACTION" : live ? "CONNECTED" : "OFF";
+          return (
+            <div className="bg-white rounded-2xl border border-gray-200 p-5 flex flex-col items-center text-center gap-3">
+              <div className="w-12 h-12 rounded-xl bg-gray-50 flex items-center justify-center">
+                <ShopifyGlyph className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-sm text-gray-900">{t("channels.shopifyLiveChat")}</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {sfy?.platformMeta?.shopifyLiveChat?.shopDomain || t("channels.shopifyLiveChatDesc")}
+                </p>
+              </div>
+              {state !== "NONE" && <StatusBadge status={state} />}
+              <a
+                href="/settings/channels/shopify-live-chat"
+                className="text-xs px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition font-medium w-full"
+              >
+                {sfy ? t("channels.open") : t("channels.configureShopifyLiveChat")}
+              </a>
+            </div>
+          );
+        })()}
           </div>
         </div>
       </div>
