@@ -53,7 +53,7 @@ describe("it calls what the server actually accepts", () => {
     // edit failing to save with no error at all.
     const accepted = [
       "name", "nameHe", "descriptionEn", "descriptionHe", "basePrice", "currency",
-      "includedCredits", "sortOrder", "supportLevel", "autoPurchaseEligible",
+      "includedCredits", "voiceCredits", "sortOrder", "supportLevel", "autoPurchaseEligible",
       "creditPackagesEligible", "chatVolumeEnabled", "voiceVolumeEnabled", "internalNote",
     ];
     const call = code.slice(code.indexOf("updateDraftPlan(token, plan.id, {"));
@@ -117,6 +117,58 @@ describe("the money is shown as its effect", () => {
   it("states how many organizations are already on the published version", () => {
     expect(editor).toContain("subscriberCount");
     expect(editor).toContain("keep their snapshot");
+  });
+});
+
+describe("the credit allowance is one number", () => {
+  /**
+   * `config:credit_split` is what quoteFor() actually sells, and it was seeded
+   * once and cloned into every version. The editor wrote only the total, so a
+   * plan edited to 10,000 credits went on granting the seeded 2,000. The editor
+   * now sets the voice share of that total and the server derives the rest.
+   */
+  it("sets the voice share rather than a second independent number", () => {
+    expect(editor).toContain("Of which voice credits");
+    expect(code).toContain("voiceCredits: Math.min(");
+  });
+
+  it("shows what the split comes out as", () => {
+    expect(code).toContain("const chatCredits = total - voiceCredits");
+    expect(editor).toContain("chat ·");
+  });
+
+  it("cannot save a voice share larger than the allowance", () => {
+    expect(editor).toContain("Voice credits cannot exceed the included credits");
+  });
+});
+
+describe("the recommended plan can be set", () => {
+  it("offers the badge on published public plans", () => {
+    // The endpoint and the API client both existed; nothing ever called them,
+    // so the badge could only be changed by editing the database.
+    expect(client).toContain("export const setRecommendedPlan");
+    expect(list).toContain("onSetRecommended");
+    const activeBranch = list.slice(list.indexOf('p.status === "ACTIVE" ? ('));
+    expect(activeBranch.slice(0, 1200)).toContain("Recommend");
+  });
+
+  it("toggles off, because null is how the recommendation is cleared", () => {
+    expect(list).toContain("onSetRecommended(p.recommended ? null : p.key)");
+  });
+});
+
+describe("versions do not pile up in one list", () => {
+  it("filters to what is live, in progress, or superseded", () => {
+    for (const scope of ["live", "drafts", "history"]) expect(list).toContain(`"${scope}"`);
+    expect(list).toContain("const visible = plans.filter(");
+  });
+
+  it("defaults to what customers can actually buy", () => {
+    expect(list).toContain('useState<PlanScope>("live")');
+  });
+
+  it("says how many versions the filter is hiding", () => {
+    expect(list).toContain("other version");
   });
 });
 

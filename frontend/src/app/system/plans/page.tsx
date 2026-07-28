@@ -39,6 +39,7 @@ import {
   previewEstimation,
   publishEstimation,
   refreshFx,
+  setRecommendedPlan,
   type AdminPlan,
   type AdminFeature,
   type EstimationConfig,
@@ -156,6 +157,28 @@ export default function SystemPlansPage() {
     }
   };
 
+  const doSetRecommended = async (key: string | null) => {
+    if (!token) return;
+    try {
+      await setRecommendedPlan(token, key);
+      setMsg({
+        kind: "ok",
+        text: key
+          ? `${key} is now the recommended plan on the pricing page.`
+          : "No plan is marked as recommended any more.",
+      });
+      reload();
+    } catch (e: any) {
+      setMsg({
+        kind: "err",
+        text:
+          e?.message === "unknown_recommendable_plan"
+            ? "Only a published public plan can be the recommended one."
+            : e?.message ?? "Could not change the recommendation.",
+      });
+    }
+  };
+
   const doPreview = async (id: string) => {
     if (!token) return;
     try {
@@ -235,7 +258,15 @@ export default function SystemPlansPage() {
         ) : (
           <>
             {tab === "plans" && (
-              <PlansTab plans={plans} features={features} onCreateVersion={doCreateVersion} onPreview={doPreview} onDiscard={doDiscardDraft} onCreatePlan={doCreatePlan} />
+              <PlansTab
+                plans={plans}
+                features={features}
+                onCreateVersion={doCreateVersion}
+                onPreview={doPreview}
+                onDiscard={doDiscardDraft}
+                onCreatePlan={doCreatePlan}
+                onSetRecommended={doSetRecommended}
+              />
             )}
             {tab === "estimation" && (
               <EstimationTab token={token!} configs={estimations} onPublished={() => { setMsg({ kind: "ok", text: "New estimation version published. Existing subscriptions keep their snapshot." }); reload(); }} />
@@ -273,8 +304,32 @@ export default function SystemPlansPage() {
 
 // ─── Plans ──────────────────────────────────────────────────────────────────
 
+/**
+ * Which versions the list is showing.
+ *
+ * Every version of every plan in one flat list was unreadable the moment a
+ * second version existed: a retired v1 and a half-finished draft v3 sat between
+ * two live plans, all looking equally real. These are the three questions
+ * anyone actually has - what is live, what am I working on, what did we sell
+ * before - so the list answers one at a time.
+ */
+type PlanScope = "live" | "drafts" | "history";
+
+const SCOPE_OF: Record<string, PlanScope> = {
+  ACTIVE: "live",
+  DRAFT: "drafts",
+  RETIRED: "history",
+  ARCHIVED: "history",
+};
+
+const SCOPE_EMPTY: Record<PlanScope, string> = {
+  live: "No published plan versions. A draft becomes live when it is published.",
+  drafts: "No drafts in progress. Every plan here is exactly what customers can buy.",
+  history: "Nothing retired yet. Superseded versions land here and keep their subscribers.",
+};
+
 function PlansTab({
-  plans, features, onCreateVersion, onPreview, onDiscard, onCreatePlan,
+  plans, features, onCreateVersion, onPreview, onDiscard, onCreatePlan, onSetRecommended,
 }: {
   plans: AdminPlan[];
   features: AdminFeature[];
@@ -282,14 +337,47 @@ function PlansTab({
   onPreview: (id: string) => void;
   onDiscard: (id: string, key: string, version: number) => void;
   onCreatePlan: (key: string, kind: string, name: string) => void;
+  onSetRecommended: (key: string | null) => void;
 }) {
   const unbuilt = features.filter((f) => !f.implemented);
   const [creating, setCreating] = useState(false);
+  const [scope, setScope] = useState<PlanScope>("live");
   const [nk, setNk] = useState({ key: "", name: "", kind: "PUBLIC" });
+
+  const counts: Record<PlanScope, number> = { live: 0, drafts: 0, history: 0 };
+  for (const p of plans) counts[SCOPE_OF[p.status] ?? "history"] += 1;
+  const visible = plans.filter((p) => (SCOPE_OF[p.status] ?? "history") === scope);
+  // How many other versions of the same plan exist, so a live card can say what
+  // the filter is hiding instead of pretending it is the only one.
+  const versionsOf = (key: string) => plans.filter((p) => p.key === key).length;
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex gap-1 rounded-xl bg-gray-100 p-1">
+          {(
+            [
+              ["live", "Live"],
+              ["drafts", "Drafts"],
+              ["history", "History"],
+            ] as Array<[PlanScope, string]>
+          ).map(([k, label]) => (
+            <button
+              key={k}
+              onClick={() => setScope(k)}
+              aria-pressed={scope === k}
+              className={clsx(
+                "rounded-lg px-3 py-1.5 text-xs font-medium transition",
+                scope === k ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-900",
+              )}
+            >
+              {label}
+              <span className={clsx("ml-1.5 tabular-nums", scope === k ? "text-gray-400" : "text-gray-400")}>
+                {counts[k]}
+              </span>
+            </button>
+          ))}
+        </div>
         <button
           onClick={() => setCreating((v) => !v)}
           className="rounded-lg bg-gray-900 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-gray-800"
@@ -351,8 +439,14 @@ function PlansTab({
         </div>
       )}
 
+      {visible.length === 0 && (
+        <p className="rounded-2xl border border-dashed border-gray-200 px-5 py-8 text-center text-[13px] text-gray-500">
+          {SCOPE_EMPTY[scope]}
+        </p>
+      )}
+
       <div className="space-y-3">
-        {plans.map((p) => (
+        {visible.map((p) => (
           <div key={p.id} className="rounded-2xl border border-gray-200 bg-white p-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
@@ -379,7 +473,16 @@ function PlansTab({
                   </span>
                   <span>
                     <span className="text-gray-400">Credits</span>{" "}
-                    <span className="font-medium" dir="ltr">{p.includedCredits.toLocaleString()}</span>
+                    <span className="font-medium" dir="ltr">
+                      {p.includedCredits.toLocaleString()}
+                      {p.voiceCredits > 0 && (
+                        <span className="font-normal text-gray-400">
+                          {" "}
+                          ({(p.includedCredits - p.voiceCredits).toLocaleString()} chat ·{" "}
+                          {p.voiceCredits.toLocaleString()} voice)
+                        </span>
+                      )}
+                    </span>
                   </span>
                   <span>
                     <span className="text-gray-400">Volume</span>{" "}
@@ -427,15 +530,42 @@ function PlansTab({
                     </button>
                   </div>
                 ) : p.status === "ACTIVE" ? (
-                  <button
-                    onClick={() => onCreateVersion(p.key)}
-                    className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
-                  >
-                    New draft version
-                  </button>
+                  <div className="flex gap-2">
+                    {/* Which plan the pricing page badges is presentation, not
+                        commercial terms - no subscription snapshots it - so it
+                        is set here rather than costing a whole new version. */}
+                    {p.kind === "PUBLIC" && (
+                      <button
+                        onClick={() => onSetRecommended(p.recommended ? null : p.key)}
+                        aria-pressed={p.recommended}
+                        title={
+                          p.recommended
+                            ? "Remove the recommended badge from the pricing page"
+                            : "Badge this plan as recommended on the pricing page"
+                        }
+                        className={clsx(
+                          "rounded-lg border px-3 py-1.5 text-xs font-medium",
+                          p.recommended
+                            ? "border-gray-900 bg-gray-900 text-white hover:bg-gray-800"
+                            : "border-gray-300 text-gray-700 hover:bg-gray-50",
+                        )}
+                      >
+                        {p.recommended ? "★ Recommended" : "☆ Recommend"}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => onCreateVersion(p.key)}
+                      className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      New draft version
+                    </button>
+                  </div>
                 ) : null}
                 {p.status === "ACTIVE" && (
-                  <span className="text-[11px] text-gray-400">Published versions are immutable</span>
+                  <span className="text-[11px] text-gray-400">
+                    Published versions are immutable
+                    {versionsOf(p.key) > 1 && ` · ${versionsOf(p.key) - 1} other version${versionsOf(p.key) > 2 ? "s" : ""}`}
+                  </span>
                 )}
               </div>
             </div>

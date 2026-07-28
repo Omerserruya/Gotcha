@@ -181,3 +181,41 @@ describe("the credit ledger has exactly one writer", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+/**
+ * One allowance, three rows that describe it.
+ *
+ * `plans.included_ai_units` is the total. `config:credit_split` says how it is
+ * presented per channel and `limit:included_ai_units` is what the entitlement
+ * resolver reads. Only the first is what the plan editor asks for - and only
+ * the SPLIT is what quoteFor() totals into what a subscriber is sold and
+ * granted. They were written once at seed time and cloned forward, so an edited
+ * plan kept selling 2,000 credits no matter what a sysadmin typed.
+ */
+describe("a plan's credit allowance cannot disagree with itself", () => {
+  const admin = read(join(SRC, "routes/admin-pricing.ts"));
+  const pricing = read(join(SRC, "services/pricing.service.ts"));
+
+  it("every route that writes an allowance rewrites the rows that describe it", () => {
+    // Each `includedAiUnits:` write must be followed by a syncCreditRows call
+    // before the next one, or that route leaves a stale split behind.
+    // `includedAiUnits: number` is a type annotation, not a write.
+    const writes = [...admin.matchAll(/includedAiUnits: (?!number)/g)].map((m) => m.index ?? 0);
+    const syncs = [...admin.matchAll(/syncCreditRows\(/g)].map((m) => m.index ?? 0);
+    const unsynced = writes.filter((at) => !syncs.some((s) => s > at && s - at < 4000));
+    expect(unsynced, "an allowance is written with no syncCreditRows after it").toEqual([]);
+  });
+
+  it("the split can never be the only place the allowance lives", () => {
+    // The read side reconciles too, so rows that drifted before this fix
+    // behave correctly without a migration.
+    expect(pricing).toContain("const total = Math.max(0, Number(plan.includedAiUnits ?? 0) || 0)");
+    expect(pricing).toMatch(/if \(chat \+ voice === total\) return \{ chat, voice \}/);
+  });
+
+  it("quoting still totals the split, so the reconciliation is what protects it", () => {
+    // If this stops being true the guarantee moves and these tests should move
+    // with it - not be deleted.
+    expect(pricing).toContain("includedCredits: chatCredits + voiceCredits");
+  });
+});

@@ -62,6 +62,50 @@ async function audit(req: any, action: string, targetType: string, targetId: str
   }).catch((err: any) => console.error("[admin-pricing] audit failed:", err?.message ?? err));
 }
 
+/**
+ * Keep every copy of a plan's credit allowance in agreement.
+ *
+ * `plans.included_ai_units` is the total, and the only number this console asks
+ * anyone for. Two rows repeat it: `config:credit_split`, which says how the
+ * total is presented per channel, and `limit:included_ai_units`, which the
+ * entitlement resolver reads. Both were written once at seed time and never
+ * again - so an edited plan kept selling and GRANTING the seeded 2,000 credits
+ * no matter what was typed here, because `quoteFor()` totals the split.
+ *
+ * Called at every site that writes an allowance. `voice` is the voice share of
+ * the total; the rest is chat.
+ */
+async function syncCreditRows(planId: string, total: number, voice?: number | null) {
+  const existing = await prisma.planEntitlement.findUnique({
+    where: { planId_entitlementKey: { planId, entitlementKey: "config:credit_split" } },
+  });
+  const previousVoice = Number((existing?.value as any)?.voice ?? 0) || 0;
+  const safeTotal = Math.max(0, Math.round(Number(total) || 0));
+  // An unspecified voice share keeps whatever the plan had, as far as the new
+  // total allows. Shrinking the allowance below the old voice share must not
+  // leave a negative chat allowance.
+  const safeVoice = Math.min(safeTotal, Math.max(0, Math.round(Number(voice ?? previousVoice) || 0)));
+
+  for (const row of [
+    { key: "config:credit_split", valueType: "CONFIG", value: { chat: safeTotal - safeVoice, voice: safeVoice } },
+    { key: "limit:included_ai_units", valueType: "COUNTER", value: { count: safeTotal } },
+  ]) {
+    await prisma.planEntitlement.upsert({
+      where: { planId_entitlementKey: { planId, entitlementKey: row.key } },
+      create: { planId, entitlementKey: row.key, valueType: row.valueType as any, value: row.value as any },
+      update: { valueType: row.valueType as any, value: row.value as any },
+    });
+  }
+  return { chat: safeTotal - safeVoice, voice: safeVoice };
+}
+
+/** The voice share of a loaded plan's allowance, for read responses. */
+function voiceShareOf(plan: { includedAiUnits: number; entitlements: Array<{ entitlementKey: string; value: any }> }) {
+  const raw = plan.entitlements.find((e) => e.entitlementKey === "config:credit_split")?.value as any;
+  const voice = Math.max(0, Number(raw?.voice ?? 0) || 0);
+  return Math.min(plan.includedAiUnits, voice);
+}
+
 // ── Catalog: read ───────────────────────────────────────────────────────────
 
 router.get("/admin/pricing/plans", authenticate, requirePlatformPermission(P.PRICING_READ), async (_req, res) => {
@@ -98,6 +142,9 @@ router.get("/admin/pricing/plans", authenticate, requirePlatformPermission(P.PRI
       basePrice: p.basePrice != null ? String(p.basePrice) : null,
       currency: p.currency,
       includedCredits: p.includedAiUnits,
+      // The voice share of the allowance. Chat is the remainder, always - the
+      // editor sets a total and a voice share, never two independent numbers.
+      voiceCredits: voiceShareOf(p),
       billingInterval: p.billingInterval,
       sortOrder: p.sortOrder,
       recommended: p.recommended,
@@ -220,6 +267,11 @@ router.post("/admin/pricing/plans/:key/versions", authenticate, requirePlatformP
     });
   }
 
+  // The cloned split describes the SOURCE version's allowance. If this draft
+  // was created with a different one, the split has to follow it or the draft
+  // would quote the old number.
+  await syncCreditRows(draft.id, draft.includedAiUnits, req.body?.voiceCredits ?? null);
+
   await audit(req, "pricing.plan_version_created", "plan", draft.id, { key, version, from: source.version });
   res.json({ ok: true, plan: { id: draft.id, key, version, status: draft.status } });
 });
@@ -259,6 +311,13 @@ router.patch("/admin/pricing/plans/:id", authenticate, requirePlatformPermission
       ...(b.effectiveFrom != null ? { effectiveFrom: new Date(b.effectiveFrom) } : {}),
     },
   });
+
+  // The allowance a draft SELLS is the split, so changing the included credits
+  // without rewriting it changed nothing a customer would ever receive.
+  if (b.includedCredits != null || b.voiceCredits != null) {
+    await syncCreditRows(plan.id, updated.includedAiUnits, b.voiceCredits != null ? Number(b.voiceCredits) : null);
+  }
+
   await audit(req, "pricing.plan_updated", "plan", plan.id, { key: plan.key, version: plan.version, fields: Object.keys(b) });
   res.json({ ok: true, plan: { id: updated.id, key: updated.key, version: updated.version, status: updated.status } });
 });
@@ -352,6 +411,10 @@ router.post("/admin/pricing/plans", authenticate, requirePlatformPermission(P.PL
       internalNote: b.internalNote ?? null,
     },
   });
+
+  // Write the split up front so the plan never has an allowance the catalog
+  // cannot see. A plan created with 0 credits gets a 0 split, not a missing one.
+  await syncCreditRows(plan.id, plan.includedAiUnits, b.voiceCredits ?? 0);
 
   await audit(req, "pricing.plan_created", "plan", plan.id, { key, kind });
   res.status(201).json({ ok: true, plan: { id: plan.id, key: plan.key, version: plan.version, kind: plan.kind } });
@@ -497,7 +560,10 @@ router.post("/admin/pricing/plans/:id/publish", authenticate, requirePlatformPer
 
   await prisma.$transaction(async (tx) => {
     if (previous) {
-      await tx.plan.update({ where: { id: previous.id }, data: { status: "RETIRED", effectiveTo: new Date() } });
+      await tx.plan.update({
+        where: { id: previous.id },
+        data: { status: "RETIRED", effectiveTo: new Date(), recommended: false },
+      });
     }
     await tx.plan.update({
       where: { id: draft.id },
@@ -506,6 +572,10 @@ router.post("/admin/pricing/plans/:id/publish", authenticate, requirePlatformPer
         publishedAt: new Date(),
         publishedBy: req.user?.userId ?? "system",
         effectiveFrom: draft.effectiveFrom ?? new Date(),
+        // The recommendation follows the plan, not the version. A draft is
+        // created with the flag off, so republishing the recommended plan used
+        // to drop the badge off the pricing page without anyone asking.
+        ...(previous?.recommended ? { recommended: true } : {}),
       },
     });
   });
@@ -518,19 +588,44 @@ router.post("/admin/pricing/plans/:id/publish", authenticate, requirePlatformPer
 
 /** Reorder the public catalog and set the recommended plan. */
 router.post("/admin/pricing/plans/order", authenticate, requirePlatformPermission(P.PLANS_MANAGE), async (req, res) => {
-  const order: Array<{ key: string; sortOrder: number }> = req.body?.order ?? [];
-  const recommendedKey: string | null = req.body?.recommendedKey ?? null;
+  const body = req.body ?? {};
+  const order: Array<{ key: string; sortOrder: number }> = body.order ?? [];
   for (const o of order) {
     await prisma.plan.updateMany({ where: { key: o.key }, data: { sortOrder: Number(o.sortOrder) } });
   }
-  if (recommendedKey !== null) {
+
+  // Presence, not truthiness, decides whether the recommendation changes:
+  // omitting the field leaves it alone, sending null CLEARS it. Reading a
+  // missing field as null left no way to un-recommend a plan at all.
+  let recommendedKey: string | null | undefined;
+  if ("recommendedKey" in body) {
+    recommendedKey = body.recommendedKey == null ? null : String(body.recommendedKey);
+
+    if (recommendedKey !== null) {
+      // Recommending a plan nobody can buy would badge a card the pricing page
+      // never renders, so it is refused rather than silently ignored.
+      const target = await prisma.plan.findFirst({
+        where: { key: recommendedKey, status: "ACTIVE", kind: "PUBLIC" },
+        select: { id: true },
+      });
+      if (!target) {
+        return res.status(404).json({
+          error: "unknown_recommendable_plan",
+          hint: "Only a published public plan can be the recommended one.",
+        });
+      }
+    }
+
     // Exactly one recommended plan: clear then set, so a stale flag cannot
     // leave two cards both claiming to be the recommendation.
     await prisma.plan.updateMany({ where: { kind: "PUBLIC" }, data: { recommended: false } });
-    await prisma.plan.updateMany({ where: { key: recommendedKey, status: "ACTIVE" }, data: { recommended: true } });
+    if (recommendedKey !== null) {
+      await prisma.plan.updateMany({ where: { key: recommendedKey, status: "ACTIVE" }, data: { recommended: true } });
+    }
   }
-  await audit(req, "pricing.catalog_reordered", "plan", null, { order, recommendedKey });
-  res.json({ ok: true });
+
+  await audit(req, "pricing.catalog_reordered", "plan", null, { order, recommendedKey: recommendedKey ?? null });
+  res.json({ ok: true, recommendedKey: recommendedKey ?? null });
 });
 
 // ── Public estimation ───────────────────────────────────────────────────────
@@ -832,7 +927,9 @@ router.post("/admin/pricing/custom-plans", authenticate, requirePlatformPermissi
       billingInterval: b.billingInterval ?? "MONTHLY",
       basePrice: b.monthlyPrice != null ? Number(b.monthlyPrice).toFixed(2) : null,
       currency: b.currency ?? "USD",
-      includedAiUnits: Number(b.includedCredits ?? 0),
+      // A negotiated plan may be described either as a total or as a per-channel
+      // split. Whichever arrives, the total is what the plan stores.
+      includedAiUnits: Number(b.includedCredits ?? Number(b.chatCredits ?? 0) + Number(b.voiceCredits ?? 0)),
       salesOnly: true,
       // Created as a DRAFT: a negotiated plan should be reviewed before it can
       // be assigned, exactly like a public one.
@@ -865,12 +962,9 @@ router.post("/admin/pricing/custom-plans", authenticate, requirePlatformPermissi
       data: { planId: plan.id, entitlementKey: k, valueType: "COUNTER", value: { count: Number(v) } },
     });
   }
-  await prisma.planEntitlement.create({
-    data: {
-      planId: plan.id, entitlementKey: "config:credit_split", valueType: "CONFIG",
-      value: { chat: Number(b.chatCredits ?? b.includedCredits ?? 0), voice: Number(b.voiceCredits ?? 0) },
-    },
-  });
+  // The split has to add up to the plan's own included credits, or the quote
+  // would sell an allowance the plan does not say it has.
+  await syncCreditRows(plan.id, plan.includedAiUnits, b.voiceCredits ?? 0);
 
   // A custom plan may carry its own public estimation assumption.
   if (b.estimation) {

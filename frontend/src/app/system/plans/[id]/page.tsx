@@ -53,6 +53,7 @@ interface Draft {
   basePrice: string;
   currency: string;
   includedCredits: string;
+  voiceCredits: string;
   supportLevel: string;
   sortOrder: string;
   chatVolumeEnabled: boolean;
@@ -106,6 +107,7 @@ export default function EditPlanPage() {
           basePrice: p.basePrice ?? "",
           currency: p.currency ?? "USD",
           includedCredits: String(p.includedCredits ?? 0),
+          voiceCredits: String(p.voiceCredits ?? 0),
           supportLevel: p.supportLevel ?? "",
           sortOrder: String(p.sortOrder ?? 0),
           chatVolumeEnabled: p.chatVolumeEnabled,
@@ -138,6 +140,13 @@ export default function EditPlanPage() {
     return (price / credits).toFixed(4);
   }, [draft?.basePrice, draft?.includedCredits]);
 
+  // The split is derived, never a second number to keep in step by hand: the
+  // total is what a subscriber gets, and voice is a share of it.
+  const total = Math.max(0, Number(draft?.includedCredits ?? 0) || 0);
+  const voiceCredits = Math.min(total, Math.max(0, Number(draft?.voiceCredits ?? 0) || 0));
+  const chatCredits = total - voiceCredits;
+  const voiceOverflow = (Number(draft?.voiceCredits ?? 0) || 0) > total;
+
   async function save(): Promise<boolean> {
     if (!token || !plan || !draft) return false;
     setSaving(true);
@@ -152,6 +161,7 @@ export default function EditPlanPage() {
         basePrice: draft.basePrice,
         currency: draft.currency,
         includedCredits: Number(draft.includedCredits),
+        voiceCredits: Math.min(Number(draft.voiceCredits) || 0, Number(draft.includedCredits) || 0),
         supportLevel: draft.supportLevel,
         sortOrder: Number(draft.sortOrder),
         chatVolumeEnabled: draft.chatVolumeEnabled,
@@ -309,13 +319,39 @@ export default function EditPlanPage() {
                 <option value="ILS">ILS</option>
               </select>
             </Field>
-            <Field label="Included credits">
+            <Field label="Included credits" hint="What a subscriber receives each month.">
               <input
                 inputMode="numeric"
                 dir="ltr"
                 {...text(draft.includedCredits, (v) => setDraft({ ...draft, includedCredits: v }))}
               />
             </Field>
+          </div>
+
+          {/* The allowance is ONE balance. This only says how it is presented on
+              the pricing page, and it has to add up to the allowance - selling a
+              split that disagreed with the total is how an edited plan kept
+              granting the number it was seeded with. */}
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <Field
+              label="Of which voice credits"
+              hint="Leave at 0 for a chat-only plan. Chat gets the rest."
+            >
+              <input
+                inputMode="numeric"
+                dir="ltr"
+                {...text(draft.voiceCredits, (v) => setDraft({ ...draft, voiceCredits: v }))}
+              />
+            </Field>
+            <div className="self-end pb-2 text-[12px] text-gray-500" dir="ltr">
+              {chatCredits.toLocaleString()} chat · {voiceCredits.toLocaleString()} voice
+              {voiceOverflow && (
+                <span className="mt-1 block text-red-600">
+                  Voice credits cannot exceed the included credits. Saved as{" "}
+                  {Number(draft.includedCredits || 0).toLocaleString()}.
+                </span>
+              )}
+            </div>
           </div>
 
           {/* The price and the allowance mean little apart. Together they are a

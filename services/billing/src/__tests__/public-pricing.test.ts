@@ -198,6 +198,40 @@ describe("public catalog contents", () => {
   });
 
   /**
+   * The bug this guards: `config:credit_split` is seeded once and cloned into
+   * every new version, while the plan editor writes `includedAiUnits`. The
+   * split was believed over the plan's own total, so a plan edited to 10,000
+   * credits still advertised - and, through quoteFor(), still SOLD and granted
+   * - the seeded 2,000.
+   */
+  it("sells the plan's included credits, not a stale channel split", async () => {
+    plans.push(
+      plan({
+        includedAiUnits: 10_000,
+        entitlements: [{ entitlementKey: "config:credit_split", valueType: "CONFIG", value: { chat: 2000, voice: 0 } }],
+      }),
+    );
+
+    const p = (await request(app()).get("/api/public/pricing")).body.plans[0];
+    expect(p.includedCredits).toBe(10_000);
+    expect(p.creditSplit).toEqual({ chat: 10_000, voice: 0 });
+    // 10,000 / 8 per chat. The old split would have claimed 250.
+    expect(p.estimate.chat.monthly).toBe(1250);
+  });
+
+  it("keeps the voice share when reconciling a stale split", async () => {
+    plans.push(
+      plan({
+        includedAiUnits: 9000,
+        entitlements: [{ entitlementKey: "config:credit_split", valueType: "CONFIG", value: { chat: 2000, voice: 5000 } }],
+      }),
+    );
+
+    const p = (await request(app()).get("/api/public/pricing")).body.plans[0];
+    expect(p.creditSplit).toEqual({ chat: 4000, voice: 5000 });
+  });
+
+  /**
    * Guards against the estimate silently coming from FALLBACK_ESTIMATION, which
    * happens to use the same 8/20/25 numbers as the seed. A non-default ratio
    * proves the CONFIGURED value is what reaches the public response.

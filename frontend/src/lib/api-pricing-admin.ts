@@ -54,6 +54,8 @@ export interface AdminPlan {
   basePrice: string | null;
   currency: string;
   includedCredits: number;
+  /** The voice share of the allowance. Chat is always the remainder. */
+  voiceCredits: number;
   billingInterval: string;
   sortOrder: number;
   recommended: boolean;
@@ -155,9 +157,21 @@ export const publishPlan = (token: string, id: string) =>
   );
 
 export const reorderPlans = (token: string, order: Array<{ key: string; sortOrder: number }>, recommendedKey: string | null) =>
-  req<{ ok: boolean }>("/api/admin/pricing/plans/order", token, {
+  req<{ ok: boolean; recommendedKey: string | null }>("/api/admin/pricing/plans/order", token, {
     method: "POST",
     body: JSON.stringify({ order, recommendedKey }),
+  });
+
+/**
+ * Set - or clear, with null - the one plan the pricing page badges.
+ *
+ * Sending no order leaves the catalog order untouched; the server treats the
+ * recommendation as its own decision.
+ */
+export const setRecommendedPlan = (token: string, key: string | null) =>
+  req<{ ok: boolean; recommendedKey: string | null }>("/api/admin/pricing/plans/order", token, {
+    method: "POST",
+    body: JSON.stringify({ recommendedKey: key }),
   });
 
 // ─── Public estimation ───────────────────────────────────────

@@ -101,16 +101,36 @@ function entitlementValue(e: { valueType: string; value: any }): unknown {
   return e.value;
 }
 
-/** The chat/voice split of a plan's BASE allowance, for the public estimate. */
+/**
+ * The chat/voice split of a plan's BASE allowance.
+ *
+ * The split says how the allowance is PRESENTED per channel. The size of the
+ * allowance is `includedAiUnits` - the one number the plan editor asks for - and
+ * this function guarantees the split always adds up to it.
+ *
+ * That guarantee is not cosmetic. `quoteFor()` sells and grants chat + voice,
+ * so a split left over from an earlier version used to override the included
+ * credits a sysadmin had just set: a plan edited to 10,000 credits still quoted
+ * and granted the seeded 2,000. Where the two disagree the plan's own total
+ * wins, and the voice share is kept as far as it fits.
+ */
 export function creditSplitFor(plan: any): { chat: number; voice: number } {
+  const total = Math.max(0, Number(plan.includedAiUnits ?? 0) || 0);
   const cfg = plan.entitlements?.find((e: any) => e.entitlementKey === "config:credit_split");
   const raw = cfg ? (entitlementValue(cfg) as any) : null;
   if (raw && typeof raw === "object" && Number.isFinite(Number(raw.chat))) {
-    return { chat: Number(raw.chat) || 0, voice: Number(raw.voice) || 0 };
+    const chat = Math.max(0, Number(raw.chat) || 0);
+    const voice = Math.max(0, Number(raw.voice) || 0);
+    if (chat + voice === total) return { chat, voice };
+    // A sales-only plan carries no allowance of its own; there is nothing to
+    // reconcile against, so the configured split stands.
+    if (total === 0) return { chat, voice };
+    const keptVoice = Math.min(voice, total);
+    return { chat: total - keptVoice, voice: keptVoice };
   }
   // No explicit split configured: treat the whole allowance as chat, which is
   // the only claim the data actually supports.
-  return { chat: plan.includedAiUnits ?? 0, voice: 0 };
+  return { chat: total, voice: 0 };
 }
 
 /**
