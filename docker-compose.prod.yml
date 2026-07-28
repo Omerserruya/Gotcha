@@ -563,6 +563,9 @@ services:
       # Whether a customer may open their own checkout. Off: every checkout is
       # opened by a human through Sysadmin paid provisioning.
       SELF_SERVE_CHECKOUT_ENABLED: ${SELF_SERVE_CHECKOUT_ENABLED:-false}
+      # Declared, never set here: dropping Secure from the checkout cookie in
+      # production would put a bearer credential on the wire in the clear.
+      CHECKOUT_COOKIE_INSECURE: ${CHECKOUT_COOKIE_INSECURE:-}
       # Required to charge live, alongside NODE_ENV=production. Declared so it
       # can be set through the normal path rather than by editing compose.
       ICOUNT_ALLOW_LIVE: ${ICOUNT_ALLOW_LIVE:-}

@@ -18,22 +18,119 @@ export type CheckoutAuth =
   | { ok: true; via: "continuation_link" | "platform_admin" | "tenant_member" }
   | { ok: false };
 
+/**
+ * Cookie name for one checkout's continuation token.
+ *
+ * Per reference, so a cookie held for one checkout can never authorize
+ * another. The reference is hex-ish and opaque already; anything outside the
+ * cookie-name grammar is dropped rather than escaped, because a name that
+ * needed escaping would be a reference format nobody intended.
+ */
+function cookieName(reference: string): string {
+  return `gc_co_${reference.replace(/[^A-Za-z0-9_-]/g, "")}`;
+}
+
+/** Express has no cookie parser in this service, and adding one is not worth a dependency. */
+function readCookie(req: Request, name: string): string | null {
+  const header = req.headers.cookie;
+  if (!header) return null;
+  for (const part of header.split(";")) {
+    const eq = part.indexOf("=");
+    if (eq < 0) continue;
+    if (part.slice(0, eq).trim() !== name) continue;
+    try {
+      return decodeURIComponent(part.slice(eq + 1).trim()) || null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
+ * Move the continuation token out of the page and into an HttpOnly cookie.
+ *
+ * The token is a bearer credential: it can show the plan and price, start a
+ * payment session and ask the server to charge. It has to arrive in a URL
+ * because it comes from an email, but it must not stay anywhere script can
+ * read it - sessionStorage is readable by any XSS on the page, and a query
+ * string persists in history and in access logs.
+ *
+ * Scoped to /api/checkout so it is never attached to an unrelated request,
+ * and expiring with the link itself so a stale cookie cannot outlive the
+ * offer it belongs to.
+ */
+export function setCheckoutCookie(res: Response, reference: string, token: string, expiresAt: Date) {
+  const maxAge = Math.max(0, Math.floor((expiresAt.getTime() - Date.now()) / 1000));
+  if (maxAge === 0) return;
+  // Secure unless someone deliberately turns it off for plaintext local work.
+  //
+  // Not inferred from the request: TLS terminates at the edge and nginx
+  // forwards X-Forwarded-Proto $scheme, so the header reports the internal
+  // hop - "http" - even when the customer is on HTTPS. Trusting it would drop
+  // Secure on every production request. NODE_ENV is no better, since dev is
+  // served over TLS too. So the safe value is the default, and the unsafe one
+  // has to be asked for.
+  const secure = process.env.CHECKOUT_COOKIE_INSECURE !== "true";
+  res.append(
+    "Set-Cookie",
+    [
+      `${cookieName(reference)}=${encodeURIComponent(token)}`,
+      "Path=/api/checkout",
+      "HttpOnly",
+      "SameSite=Lax",
+      secure ? "Secure" : "",
+      `Max-Age=${maxAge}`,
+    ]
+      .filter(Boolean)
+      .join("; "),
+  );
+}
+
+/** Drop the cookie once it can no longer be of use. */
+export function clearCheckoutCookie(res: Response, reference: string) {
+  res.append("Set-Cookie", `${cookieName(reference)}=; Path=/api/checkout; HttpOnly; SameSite=Lax; Max-Age=0`);
+}
+
 export async function authorizeCheckout(
   req: Request,
-  checkout: { id: string; tenantId: string | null },
+  checkout: { id: string; tenantId: string | null; reference?: string },
+  res?: Response,
 ): Promise<CheckoutAuth> {
-  const rawToken =
+  // The cookie is preferred: once the handoff has happened the token should
+  // no longer be travelling in URLs or bodies at all.
+  const fromCookie = checkout.reference ? readCookie(req, cookieName(checkout.reference)) : null;
+  const fromRequest =
     typeof req.query.token === "string"
       ? req.query.token
       : typeof (req.body as any)?.token === "string"
         ? (req.body as any).token
         : null;
+  const rawToken = fromCookie ?? fromRequest;
 
   if (rawToken) {
     const resolved = await resolveContinuationLink(rawToken);
     if (resolved.ok && resolved.checkout.id === checkout.id) {
       await markLinkUsed(resolved.link.id);
+      // Only on the first hop, when the token arrived in the open. After that
+      // the cookie is already doing the work.
+      if (res && !fromCookie && checkout.reference) {
+        setCheckoutCookie(res, checkout.reference, rawToken, resolved.link.expiresAt);
+      }
       return { ok: true, via: "continuation_link" };
+    }
+    // A cookie that no longer resolves is spent or revoked; take it away
+    // rather than letting it fail every later request in the same session.
+    if (res && fromCookie && checkout.reference) clearCheckoutCookie(res, checkout.reference);
+    if (fromCookie && fromRequest && fromRequest !== fromCookie) {
+      // Fall through to the request-supplied token: the customer may be
+      // opening a freshly issued link over a stale cookie.
+      const retry = await resolveContinuationLink(fromRequest);
+      if (retry.ok && retry.checkout.id === checkout.id) {
+        await markLinkUsed(retry.link.id);
+        if (res && checkout.reference) setCheckoutCookie(res, checkout.reference, fromRequest, retry.link.expiresAt);
+        return { ok: true, via: "continuation_link" };
+      }
     }
     return { ok: false };
   }

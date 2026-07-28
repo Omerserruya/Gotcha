@@ -533,6 +533,11 @@ services:
       # Whether a customer may open their own checkout. Off: every checkout is
       # opened by a human through Sysadmin paid provisioning.
       SELF_SERVE_CHECKOUT_ENABLED: ${SELF_SERVE_CHECKOUT_ENABLED:-false}
+      # Drops Secure from the checkout continuation cookie, for plaintext local
+      # work only. Not inferred from the request: TLS terminates at the edge, so
+      # X-Forwarded-Proto reports the internal hop and trusting it would drop
+      # Secure on every real request. The safe value is the default.
+      CHECKOUT_COOKIE_INSECURE: ${CHECKOUT_COOKIE_INSECURE:-}
       # Required to charge live, alongside NODE_ENV=production. Declared so it
       # can be set through the normal path rather than by editing compose.
       ICOUNT_ALLOW_LIVE: ${ICOUNT_ALLOW_LIVE:-}

@@ -63,7 +63,7 @@ async function loadAndAuthorize(req: any, res: any) {
     checkoutNotFound(res);
     return null;
   }
-  const auth = await authorizeCheckout(req, checkout);
+  const auth = await authorizeCheckout(req, checkout, res);
   // Same response as a missing checkout, so an unauthorized caller cannot probe
   // which references exist.
   if (!auth.ok) {

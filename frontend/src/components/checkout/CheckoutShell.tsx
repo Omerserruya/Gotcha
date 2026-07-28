@@ -12,7 +12,7 @@
  * been, and is deciding whether to trust us with a card.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useI18n } from "@/context/I18nContext";
@@ -73,12 +73,10 @@ export function useCheckout(expected: CheckoutStatus[], opts: { poll?: boolean; 
         // stale link corrects itself rather than showing the wrong story.
         if (!expected.includes(data.status)) {
           const target = pathForStatus(data.status);
-          // No token in the target URL: it is held in sessionStorage for this
-          // reference, so putting it back would undo the whole point of taking
-          // it out. When storage is unavailable the token is still in the
-          // current URL and this preserves it.
-          const carry = !hasStoredToken(reference) && token ? `&token=${encodeURIComponent(token)}` : "";
-          router.replace(`${target}?ref=${encodeURIComponent(reference)}${carry}`);
+          // Only the reference travels. The request that just succeeded also
+          // established the checkout cookie, so the next page is authorized
+          // without the token being put back into a URL.
+          router.replace(`${target}?ref=${encodeURIComponent(reference)}`);
           return;
         }
         // Only the waiting page polls, and only while it is still waiting.
@@ -103,7 +101,7 @@ export function useCheckout(expected: CheckoutStatus[], opts: { poll?: boolean; 
 }
 
 /**
- * Hold the continuation token without leaving it in the address bar.
+ * Use the continuation token once, then let the server hold it.
  *
  * The token is a bearer credential for this checkout: it can show the plan and
  * price, start a payment session, and ask the server to charge. It arrives in a
@@ -111,43 +109,27 @@ export function useCheckout(expected: CheckoutStatus[], opts: { poll?: boolean; 
  * in a shared device's autocomplete, and visible in any screen-share, which is
  * a normal thing to do while paying if you have called support.
  *
- * So it is moved to sessionStorage on first read and stripped from the URL.
- * Cross-origin leakage is already handled by Referrer-Policy; this is about the
- * places a URL persists locally.
+ * It used to be moved to sessionStorage, which solved the URL and left the
+ * credential somewhere any script on the page could read. Now the first
+ * authorized request hands it to an HttpOnly cookie scoped to /api/checkout,
+ * and the browser carries it from there. Nothing script-readable keeps it, and
+ * only the opaque reference stays in the address bar.
  *
- * Scoped to the reference, so a link for one checkout can never authorize
- * another. Falls back to leaving the URL alone when sessionStorage is
- * unavailable - a token in the address bar is better than a customer who cannot
- * pay.
+ * The token is still stripped from the URL on sight, which is why this runs in
+ * a layout effect - the address bar should not hold a credential for however
+ * long paint happens to take.
  */
 function useCheckoutToken(reference: string, fromUrl: string | null): string | null {
-  const [token, setToken] = useState<string | null>(fromUrl);
+  // Not state: rewriting the URL must not re-run the request effect below,
+  // and the value is needed exactly once.
+  const [token] = useState<string | null>(fromUrl);
 
-  useEffect(() => {
-    if (!reference) return;
-    const key = `gotcha.checkout.${reference}`;
-
-    if (fromUrl) {
-      setToken(fromUrl);
-      try {
-        sessionStorage.setItem(key, fromUrl);
-        // Drop it from the address bar without a navigation, so the page state
-        // and the polling in progress are untouched.
-        const url = new URL(window.location.href);
-        url.searchParams.delete("token");
-        window.history.replaceState(null, "", url.toString());
-      } catch {
-        // Private mode, or storage disabled. Keep the URL as it is.
-      }
-      return;
-    }
-
-    try {
-      const stored = sessionStorage.getItem(key);
-      if (stored) setToken(stored);
-    } catch {
-      /* nothing stored, and nothing we can do about it */
-    }
+  useLayoutEffect(() => {
+    if (!reference || !fromUrl) return;
+    // No navigation, so page state and any polling in progress are untouched.
+    const url = new URL(window.location.href);
+    url.searchParams.delete("token");
+    window.history.replaceState(null, "", url.toString());
   }, [reference, fromUrl]);
 
   return token;
@@ -258,15 +240,6 @@ function Line({ label, value, strong }: { label: string; value: string; strong?:
       </dd>
     </div>
   );
-}
-
-/** Whether the token for this checkout survived into sessionStorage. */
-function hasStoredToken(reference: string): boolean {
-  try {
-    return Boolean(sessionStorage.getItem(`gotcha.checkout.${reference}`));
-  } catch {
-    return false;
-  }
 }
 
 /** Stable skeleton. Shows no numerals: a flash of "$0" would misstate the price. */

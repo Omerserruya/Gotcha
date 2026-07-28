@@ -221,7 +221,7 @@ router.get("/checkout/:reference/status", optionalAuth, async (req, res) => {
   const checkout = await prisma.pendingCheckout.findUnique({ where: { reference } });
   if (!checkout) return notFound(res);
 
-  const auth = await authorize(req, checkout);
+  const auth = await authorize(req, checkout, res);
   // Same response as a missing checkout: an unauthorized caller learns nothing
   // about whether the reference was real.
   if (!auth.ok) return notFound(res);

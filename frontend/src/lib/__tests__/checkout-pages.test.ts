@@ -201,31 +201,37 @@ describe("unauthorized and unknown look identical", () => {
 });
 
 describe("the continuation token does not live in the address bar", () => {
-  it("is moved to session storage and stripped from the URL", () => {
-    expect(shell).toContain("sessionStorage.setItem");
-    expect(shell).toContain("searchParams.delete(\"token\")");
+  it("is stripped from the URL without a navigation", () => {
+    expect(shell).toContain('searchParams.delete("token")');
     // replaceState rather than a navigation, so polling in progress and the
     // page state are untouched.
     expect(shell).toContain("window.history.replaceState");
   });
 
-  it("is scoped to the checkout reference", () => {
-    // A link for one checkout must never authorize another.
-    expect(shell).toMatch(/gotcha\.checkout\.\$\{reference\}/);
+  it("is stripped before paint, not after", () => {
+    // The address bar should not hold a payment credential for however long
+    // rendering happens to take.
+    const fn = shell.slice(shell.indexOf("function useCheckoutToken"), shell.indexOf("export function CheckoutShell"));
+    expect(fn).toContain("useLayoutEffect");
   });
 
-  it("falls back to the URL when storage is unavailable", () => {
-    // Private mode exists. A token in the address bar is better than a
-    // customer who cannot pay.
-    const fn = shell.slice(shell.indexOf("function useCheckoutToken"), shell.indexOf("export function CheckoutShell"));
-    expect(fn).toContain("catch");
-    expect(fn).toContain("return token");
+  it("is not parked anywhere a script can read it", () => {
+    // It used to go to sessionStorage, which fixed the URL and left the
+    // credential readable by any XSS on the page. The server holds it in an
+    // HttpOnly cookie now.
+    // Matches use, not the comment explaining why it is no longer used.
+    expect(shell).not.toMatch(/sessionStorage\s*\.\s*(set|get)Item/);
+    expect(shell).not.toMatch(/localStorage\s*\.\s*setItem/);
+    expect(shell).not.toContain("gotcha.checkout.");
   });
 
   it("the self-correcting redirect does not put it back", () => {
     // Re-appending the token on every internal redirect would undo the whole
-    // point of removing it.
-    const redirect = shell.slice(shell.indexOf("pathForStatus(data.status)"), shell.indexOf("pathForStatus(data.status)") + 500);
-    expect(redirect).toContain("hasStoredToken(reference)");
+    // point of removing it. The cookie set by the request that just succeeded
+    // authorizes the next page instead.
+    const at = shell.indexOf("pathForStatus(data.status)");
+    const redirect = shell.slice(at, at + 500);
+    expect(redirect).toContain("router.replace(`${target}?ref=${encodeURIComponent(reference)}`)");
+    expect(redirect).not.toContain("token=");
   });
 });

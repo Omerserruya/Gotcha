@@ -100,15 +100,40 @@ describe("checkout entry page", () => {
     }
   });
 
-  it("moves the token out of the address bar and into session storage", async () => {
+  it("gets the token out of the address bar", async () => {
     // It is a bearer credential for a payment, and it arrives in a URL only
-    // because it came from an email.
+    // because it came from an email. A URL persists in history, in a shared
+    // device's autocomplete, and in any screen-share.
     getCheckoutStatus.mockResolvedValue(summary("PAYMENT_REQUIRED"));
     render(<Page />);
 
     await waitFor(() => expect(replace).toHaveBeenCalled());
-    expect(sessionStorage.getItem("gotcha.checkout.chk_abc")).toBe("tok_123");
+    expect(window.location.search).not.toContain("tok_123");
     expect(String(replace.mock.calls[0][0])).not.toContain("tok_123");
+  });
+
+  it("leaves the credential nowhere a script can read it", async () => {
+    // It used to be parked in sessionStorage, which fixed the URL and left it
+    // readable by any XSS on the page. The server holds it in an HttpOnly
+    // cookie now; the browser has no copy of its own.
+    getCheckoutStatus.mockResolvedValue(summary("PAYMENT_REQUIRED"));
+    render(<Page />);
+
+    await waitFor(() => expect(replace).toHaveBeenCalled());
+    expect(JSON.stringify({ ...sessionStorage, ...localStorage })).not.toContain("tok_123");
+    expect(document.cookie).not.toContain("tok_123");
+  });
+
+  it("carries only the reference to the next page", async () => {
+    // The first authorized request establishes the cookie, so putting the
+    // token back into a URL would undo the point of taking it out.
+    getCheckoutStatus.mockResolvedValue(summary("PAYMENT_REQUIRED"));
+    render(<Page />);
+
+    await waitFor(() => expect(replace).toHaveBeenCalled());
+    const target = String(replace.mock.calls[0][0]);
+    expect(target).toContain("ref=chk_abc");
+    expect(target).not.toContain("token=");
   });
 
   it("authorizes the status lookup with the emailed token", async () => {
