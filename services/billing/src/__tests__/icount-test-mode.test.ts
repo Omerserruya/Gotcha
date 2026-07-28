@@ -13,6 +13,18 @@
  * written or charged.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+/**
+ * Source reads use __dirname, not `new URL(..., import.meta.url)`.
+ *
+ * Vitest runs either happily, but this repo compiles to CommonJS and `tsc
+ * --noEmit` rejects import.meta outright - so the package's typecheck failed
+ * while every test passed, which is the combination most likely to be ignored
+ * until it blocks something else.
+ */
+const read = (rel: string) => readFileSync(join(__dirname, "..", rel), "utf8");
 
 const ORIGINAL = { ...process.env };
 
@@ -147,9 +159,7 @@ describe("the account gate", () => {
 
 describe("what the client sends", () => {
   it("gates every write and charge on the account, and leaves reads open", async () => {
-    const src = await import("node:fs").then((fs) =>
-      fs.readFileSync(new URL("../providers/icount-client.ts", import.meta.url), "utf8"),
-    );
+    const src = read("providers/icount-client.ts");
 
     // Writes and money movements.
     for (const op of ["paypage/generate_sale", "client/create", "cc/bill", "doc/cancel"]) {
@@ -169,9 +179,7 @@ describe("what the client sends", () => {
   });
 
   it("puts no credential or internal id in a return URL", async () => {
-    const src = await import("node:fs").then((fs) =>
-      fs.readFileSync(new URL("../routes/checkout-session.ts", import.meta.url), "utf8"),
-    );
+    const src = read("routes/checkout-session.ts");
     const builder = src.slice(src.indexOf("function returnUrl"));
     expect(builder).toContain("buildReturnUrl");
     // Only the opaque reference travels.
@@ -182,9 +190,7 @@ describe("what the client sends", () => {
   });
 
   it("correlates the hosted session without depending on an unverified field", async () => {
-    const src = await import("node:fs").then((fs) =>
-      fs.readFileSync(new URL("../providers/icount-client.ts", import.meta.url), "utf8"),
-    );
+    const src = read("providers/icount-client.ts");
     // x_order_id is sent for provider-side reconciliation...
     expect(src).toContain("x_order_id");
     // ...but custom_client_id remains the handle everything is looked up by,
