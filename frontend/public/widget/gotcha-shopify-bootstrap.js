@@ -22,13 +22,17 @@
   "use strict";
 
   var cfg = window.__gotchaShopifyChat;
-  if (!cfg || !cfg.channelKey) return;
+  // Either identifier is enough to ASK. Neither is authority: the server
+  // answers only if the request Origin belongs to the resolved store.
+  // shopDomain is the App Store path; channelKey is recovery only.
+  if (!cfg || (!cfg.shopDomain && !cfg.channelKey)) return;
   if (window.__gotchaShopifyChatLoaded) return;
   window.__gotchaShopifyChatLoaded = true;
 
   var API = String(cfg.apiBase || "").replace(/\/$/, "");
   var ASSETS = String(cfg.assetBase || "").replace(/\/$/, "");
-  var STORAGE_PREFIX = "gotcha_sfy_" + cfg.channelKey.slice(-12);
+  var IDENTITY = String(cfg.shopDomain || cfg.channelKey || "");
+  var STORAGE_PREFIX = "gotcha_sfy_" + IDENTITY.slice(-12);
 
   // ── Storefront context (hints only; the server re-resolves truth) ──
   var context = {};
@@ -268,7 +272,8 @@
   function start() {
     var existingToken = store.get("session");
     post("/api/shopify-chat/bootstrap", {
-      publicKey: cfg.channelKey,
+      shopDomain: cfg.shopDomain || undefined,
+      publicKey: cfg.channelKey || undefined,
       context: context,
       themeId: context.themeId ? String(context.themeId) : null,
       sessionToken: existingToken || undefined,

@@ -1,36 +1,77 @@
-# GOTCHA — Shopify app manifest.
+# GOTCHA Chat — Shopify app manifest.
 #
-# This app exists for ONE reason: to ship the Theme App Extension that
-# puts the GOTCHA chat widget on a merchant's storefront. It deliberately
-# requests no write scopes — everything the widget does is either a read
-# (products, for cards) or a same-origin storefront cart call made by the
-# shopper's own browser against their own theme.
+# ⚠️  THIS FILE CONFIGURES THE **GOTCHA SHOPIFY CHAT APP** ONLY.
 #
-# The Admin API connection used for product truth is the EXISTING GOTCHA
-# Shopify integration (Settings → Integrations). This manifest does not
-# introduce a second connection or a second credential.
+# It must never be deployed against the GOTCHA Core Shopify Integration's
+# Partner app (`SHOPIFY_API_KEY`). `include_config_on_deploy = true` means a
+# deploy REPLACES the target app's scopes and redirect allowlist — pointing
+# this at Core would strip read_orders/write_orders/read_customers/price
+# rules/returns from every connected store and break their OAuth.
+#
+# `client_id` is written by `shopify app config link`. Before any CLI
+# command run:
+#
+#     node scripts/shopify/verify-chat-app-identity.mjs
+#
+# which refuses when the linked id is missing, equals the Core app's, or
+# disagrees with SHOPIFY_CHAT_APP_CLIENT_ID.
+#
+# The Admin API connection used for product truth is the SEPARATE Core
+# integration (Settings → Integrations). This app introduces no second
+# commerce credential.
 
 name = "GOTCHA Chat"
 handle = "gotcha-chat"
-application_url = "https://app.gotcha.co.il/settings/channels/shopify-live-chat"
+
+# Non-embedded: GOTCHA's merchant UI is its own application, not an iframe
+# inside Shopify admin. There is no App Bridge and no session-token code,
+# which is also why the authorization-code flow (not token exchange) is the
+# correct install path for this app.
 embedded = false
 
+# Where Shopify sends a merchant who opens the app. Starts the install
+# handshake when the shop is not yet bound, and lands on the onboarding
+# wizard when it is.
+application_url = "https://gotcha.co.il/api/connectors/shopify-chat/oauth/init"
+
 [access_scopes]
-# read_products is what a product card needs: title, image, price,
-# variants, inventory. Nothing here can modify a store.
-scopes = "read_products"
+# EMPTY BY DESIGN.
+#
+# The storefront widget needs no Admin API access: product truth comes from
+# the Core integration's existing read_products grant through a safe
+# server-side projection, and Add to Cart happens in the shopper's own
+# browser against the theme's /cart/add.js.
+#
+# A `read_products` scope belongs here only in the same version that adds
+# Chat token storage, rotation and a scope-upgrade flow. Requesting a scope
+# nothing consumes is exactly what App Store review rejects.
+scopes = ""
 
 [auth]
 redirect_urls = [
-  "https://api.gotcha.co.il/api/integrations/shopify/callback",
+  "https://gotcha.co.il/api/connectors/shopify-chat/oauth/callback",
 ]
 
 [webhooks]
 api_version = "2024-04"
 
+  # Chat lifecycle. Handled by services/ai, verified with the CHAT secret.
   [[webhooks.subscriptions]]
   topics = [ "app/uninstalled" ]
-  uri = "https://api.gotcha.co.il/api/integrations/shopify/webhooks/uninstalled"
+  uri = "https://gotcha.co.il/api/shopify-chat/webhooks/app-uninstalled"
+
+  # Mandatory compliance topics for public App Store distribution.
+  [[webhooks.subscriptions]]
+  topics = [ "customers/data_request" ]
+  uri = "https://gotcha.co.il/api/shopify-chat/webhooks/customers-data-request"
+
+  [[webhooks.subscriptions]]
+  topics = [ "customers/redact" ]
+  uri = "https://gotcha.co.il/api/shopify-chat/webhooks/customers-redact"
+
+  [[webhooks.subscriptions]]
+  topics = [ "shop/redact" ]
+  uri = "https://gotcha.co.il/api/shopify-chat/webhooks/shop-redact"
 
 [build]
 include_config_on_deploy = true

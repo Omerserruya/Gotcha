@@ -1,0 +1,49 @@
+# GOTCHA Chat — DEVELOPMENT app manifest.
+#
+# A second Partner app, used only against development stores. Same code,
+# different identity and different host, so a development install can never
+# reach production data and a production listing can never be reconfigured
+# by a developer's `shopify app deploy`.
+#
+# Select it with:   shopify app config use shopify.app.dev.toml
+# Verify it with:   node scripts/shopify/verify-chat-app-identity.mjs
+#
+# `dev.gotcha.co.il` is the only non-production host that actually resolves
+# and serves both the API and the widget assets. `app.gotcha.co.il` and
+# `api.gotcha.co.il` do NOT exist — do not reintroduce them.
+
+name = "GOTCHA Chat (Dev)"
+handle = "gotcha-chat-dev"
+embedded = false
+
+application_url = "https://dev.gotcha.co.il/api/connectors/shopify-chat/oauth/init"
+
+[access_scopes]
+scopes = ""
+
+[auth]
+redirect_urls = [
+  "https://dev.gotcha.co.il/api/connectors/shopify-chat/oauth/callback",
+]
+
+[webhooks]
+api_version = "2024-04"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/uninstalled" ]
+  uri = "https://dev.gotcha.co.il/api/shopify-chat/webhooks/app-uninstalled"
+
+  [[webhooks.subscriptions]]
+  topics = [ "customers/data_request" ]
+  uri = "https://dev.gotcha.co.il/api/shopify-chat/webhooks/customers-data-request"
+
+  [[webhooks.subscriptions]]
+  topics = [ "customers/redact" ]
+  uri = "https://dev.gotcha.co.il/api/shopify-chat/webhooks/customers-redact"
+
+  [[webhooks.subscriptions]]
+  topics = [ "shop/redact" ]
+  uri = "https://dev.gotcha.co.il/api/shopify-chat/webhooks/shop-redact"
+
+[build]
+include_config_on_deploy = true
