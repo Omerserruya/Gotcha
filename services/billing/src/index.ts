@@ -13,6 +13,7 @@ import creditsRoutes from "./routes/credits";
 import pricingRoutes from "./routes/pricing";
 import publicPricingRoutes from "./routes/public-pricing";
 import adminPricingRoutes from "./routes/admin-pricing";
+import adminPaymentReadinessRoutes from "./routes/admin-payment-readiness";
 import adminExchangeRateRoutes from "./routes/admin-exchange-rates";
 import adminAnalyticsRoutes from "./routes/admin-analytics";
 import invoicesRoutes from "./routes/invoices";
@@ -42,6 +43,7 @@ app.use("/api", pricingRoutes);
 app.use("/api", publicPricingRoutes);
 // Platform (Sysadmin) tier. Never reachable by a tenant ADMIN.
 app.use("/api", adminPricingRoutes);
+app.use("/api", adminPaymentReadinessRoutes);
 app.use("/api", adminExchangeRateRoutes);
 app.use("/api", adminAnalyticsRoutes);
 app.use("/api", invoicesRoutes);

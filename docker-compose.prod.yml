@@ -570,6 +570,10 @@ services:
       # can be set through the normal path rather than by editing compose.
       ICOUNT_ALLOW_LIVE: ${ICOUNT_ALLOW_LIVE:-}
       ICOUNT_ALLOW_SIMULATOR: ${ICOUNT_ALLOW_SIMULATOR:-}
+      # Declared, never set in production: the startup gate refuses
+      # ICOUNT_MODE=test when NODE_ENV=production outright.
+      ICOUNT_ALLOW_TEST: ${ICOUNT_ALLOW_TEST:-}
+      ICOUNT_TEST_ACCOUNT_ID: ${ICOUNT_TEST_ACCOUNT_ID:-}
       ICOUNT_ENVIRONMENT: ${ICOUNT_ENVIRONMENT:-}
       ICOUNT_PROVIDER_EVENTS_ENABLED: ${ICOUNT_PROVIDER_EVENTS_ENABLED:-}
       PAYMENT_LINK_TTL_HOURS: ${PAYMENT_LINK_TTL_HOURS:-}

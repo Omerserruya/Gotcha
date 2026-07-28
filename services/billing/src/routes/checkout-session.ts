@@ -88,6 +88,9 @@ router.post("/checkout/:reference/payment-session", optionalAuth, async (req, re
     const result = await startPaymentSetup(checkout.reference, {
       successUrl: returnUrl("processing", checkout.reference),
       failureUrl: returnUrl("failed", checkout.reference),
+      // Abandoning the hosted page is not a failure: nothing was attempted, so
+      // the checkout stays exactly as it was and the customer can start again.
+      cancelUrl: returnUrl("cancelled", checkout.reference),
     });
     // The session id is not returned. The customer does not need it, and it
     // would only be one more identifier travelling through a browser.

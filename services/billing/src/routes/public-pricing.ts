@@ -104,9 +104,18 @@ interface PublicPlan {
   estimate: PublicEstimate;
 }
 
+interface PublicChannelEstimate {
+  credits: number;
+  monthly: number;
+  daily: number;
+  /** "DECLARED_VOLUME" = the volume this plan sells; "CREDIT_RATIO" = derived. */
+  basis: string;
+  creditsPerUnit: number;
+}
+
 interface PublicEstimate {
-  chat: { credits: number; monthly: number; daily: number };
-  voice: { credits: number; monthly: number; daily: number };
+  chat: PublicChannelEstimate;
+  voice: PublicChannelEstimate;
   totalInteractions: number;
   pricePerChat: string | null;
   pricePerCall: string | null;

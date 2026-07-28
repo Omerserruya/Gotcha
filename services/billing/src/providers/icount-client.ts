@@ -25,6 +25,7 @@ import {
   authHeaders,
   icountApiBaseUrl,
   icountMode,
+  icountTestAccountId,
   sanitizeIcountError,
   redactIcount,
 } from "./icount-config";
@@ -115,11 +116,96 @@ async function call<T = any>(
   return res.data as T;
 }
 
-/** Live network calls are only ever made in live mode. */
+/**
+ * Network calls happen in live and test mode only.
+ *
+ * Test mode reaches the same API with the same transport; what makes it safe is
+ * WHICH account answers, and that is established separately by
+ * `assertTestAccount` below before anything is written or charged.
+ */
 function assertLiveTransport(operation: string): void {
-  if (icountMode() !== "live") {
-    throw new Error(`[icount] ${operation}: refusing a network call outside live mode (mode=${icountMode()})`);
+  const mode = icountMode();
+  if (mode !== "live" && mode !== "test") {
+    throw new Error(`[icount] ${operation}: refusing a network call outside live/test mode (mode=${mode})`);
   }
+}
+
+/**
+ * The authenticated account, straight from the provider.
+ *
+ * Read-only and free of side effects, which is what lets it be the thing every
+ * other call is gated on: identity has to be establishable before permission to
+ * act can depend on it.
+ */
+export interface IcountAccountIdentity {
+  /** iCount's own identifier for the authenticated account. */
+  accountId: string;
+  /** Display name, for the readiness panel. Never a credential. */
+  companyName?: string;
+  raw: unknown;
+}
+
+export async function authInfo(): Promise<IcountAccountIdentity> {
+  assertLiveTransport("auth/info");
+  const data = await call("auth/info", {});
+  // iCount is inconsistent about which of these carries the account handle, so
+  // take the first that is present rather than insisting on one spelling.
+  const accountId = [data?.cid, data?.company_id, data?.client_id, data?.account_id]
+    .map((v: unknown) => (v == null ? "" : String(v).trim()))
+    .find((v: string) => v.length > 0);
+  if (!accountId) throw new IcountApiError("auth/info", "response carried no account identifier");
+  return {
+    accountId,
+    companyName: typeof data?.company_name === "string" ? data.company_name : undefined,
+    raw: data,
+  };
+}
+
+/**
+ * Cached identity check. One network call per process, not per charge.
+ *
+ * Cached on the resolved account rather than on "we checked once", so a token
+ * swapped underneath a running process is re-verified the next time the cache
+ * is cleared rather than inheriting a previous account's approval.
+ */
+let verifiedTestAccount: string | null = null;
+
+/** Drop the memoized identity. For tests, and for a config reload. */
+export function resetTestAccountVerification(): void {
+  verifiedTestAccount = null;
+}
+
+/**
+ * Refuse to act unless the token belongs to the account we were told to use.
+ *
+ * This is the whole safety argument for test mode. Without it "test" is a label
+ * on an env var: the same code, the same API, the same transport, and nothing
+ * at all standing between a mistyped token and a real charge on the production
+ * account. With it, the provider itself has to agree about which account is
+ * answering before anything is written.
+ *
+ * Deliberately gates WRITES, not reads. Discovering which account a token
+ * resolves to must stay possible - that is how an operator diagnoses exactly
+ * this misconfiguration.
+ */
+export async function assertTestAccount(operation: string): Promise<void> {
+  if (icountMode() !== "test") return;
+
+  const expected = icountTestAccountId();
+  if (!expected) {
+    throw new Error(
+      `[icount] ${operation}: refusing - ICOUNT_TEST_ACCOUNT_ID is not configured, so there is nothing to verify the account against`,
+    );
+  }
+  if (verifiedTestAccount === expected) return;
+
+  const identity = await authInfo();
+  if (identity.accountId !== expected) {
+    throw new Error(
+      `[icount] ${operation}: refusing - the API token resolves to account ${identity.accountId}, not the configured test account ${expected}. A production token in a test stack is exactly what this check exists to stop.`,
+    );
+  }
+  verifiedTestAccount = identity.accountId;
 }
 
 // ─── paypage/generate_sale ────────────────────────────────────────────────
@@ -134,8 +220,12 @@ export interface GenerateSaleInput {
   /** Where the customer lands afterwards. A return is not proof of payment. */
   successUrl?: string;
   failureUrl?: string;
+  /** Where the customer lands if they abandon the hosted page. */
+  cancelUrl?: string;
   /** Server-to-server notification target, if configured. */
   ipnUrl?: string;
+  /** Our checkout reference, for provider-side reconciliation only. */
+  orderId?: string;
 }
 
 export interface GenerateSaleResult {
@@ -158,6 +248,7 @@ export interface GenerateSaleResult {
  */
 export async function generateSale(input: GenerateSaleInput): Promise<GenerateSaleResult> {
   assertLiveTransport("paypage/generate_sale");
+  await assertTestAccount("paypage/generate_sale");
   const data = await call("paypage/generate_sale", {
     // `paypage_id`, NOT `page_id`. Established against the live account: with
     // `page_id` the API answers status=false reason="missing_paypage_id", so
@@ -169,7 +260,13 @@ export async function generateSale(input: GenerateSaleInput): Promise<GenerateSa
     ...(input.email ? { email: input.email } : {}),
     ...(input.successUrl ? { success_url: input.successUrl } : {}),
     ...(input.failureUrl ? { failure_url: input.failureUrl } : {}),
+    ...(input.cancelUrl ? { cancel_url: input.cancelUrl } : {}),
     ...(input.ipnUrl ? { ipn_url: input.ipnUrl } : {}),
+    // Correlation only. Unlike custom_client_id this field is not one we have
+    // written confirmation for, so nothing depends on it coming back - it is
+    // sent so the transaction can be found from the iCount side, and if the
+    // provider drops it the flow is unaffected.
+    ...(input.orderId ? { x_order_id: input.orderId } : {}),
   });
 
   const saleUrl = typeof data?.sale_url === "string" ? data.sale_url : "";
@@ -213,6 +310,7 @@ export interface CreateClientInput {
  */
 export async function createClient(input: CreateClientInput): Promise<{ clientId: string }> {
   assertLiveTransport("client/create");
+  await assertTestAccount("client/create");
   const data = await call("client/create", {
     client_name: input.clientName,
     custom_client_id: input.customClientId,
@@ -364,6 +462,7 @@ export interface BillResult {
  */
 export async function bill(input: BillInput): Promise<BillResult> {
   assertLiveTransport("cc/bill");
+  await assertTestAccount("cc/bill");
   if (input.currencyId !== CURRENCY_ID_ILS) {
     throw new IcountApiError("cc/bill", `refusing currency_id ${input.currencyId}: only ILS charges are enabled`);
   }
@@ -443,6 +542,7 @@ export interface CancelInput {
 /** Cancel a document, optionally refunding the card. Full amount only. */
 export async function cancelDocument(input: CancelInput): Promise<{ ref: string | null; raw: unknown }> {
   assertLiveTransport("doc/cancel");
+  await assertTestAccount("doc/cancel");
   const data = await call(
     "doc/cancel",
     {

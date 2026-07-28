@@ -219,6 +219,44 @@ describe("public catalog contents", () => {
     expect(p.estimate.chat.monthly).toBe(1250);
   });
 
+  /**
+   * The bug this guards: the plan SELLS "10 conversations per business day" in
+   * its selector, and separately carries a credit allowance. Editing the
+   * allowance to 750 without touching the tiers made the catalog answer ~94 a
+   * month - contradicting the very tier the visitor is choosing from.
+   */
+  it("advertises the volume the plan sells, not the volume its credits imply", async () => {
+    plans.push(
+      plan({
+        includedAiUnits: 750,
+        basePrice: "39.00",
+        chatVolumeEnabled: true,
+        entitlements: [{ entitlementKey: "config:credit_split", valueType: "CONFIG", value: { chat: 750, voice: 0 } }],
+        volumeOptions: [
+          {
+            id: "vo-1", key: "chat_10", channel: "CHAT", dailyVolume: 10, monthlyVolume: 250,
+            businessDaysPerMonth: 25, creditsPerUnit: "3.0000", additionalCredits: 0, additionalPrice: "0.00",
+            currency: "USD", isDefault: true, enabled: true, sortOrder: 0, activeFrom: null, activeTo: null,
+          },
+        ],
+      }),
+    );
+
+    const p = (await request(app()).get("/api/public/pricing")).body.plans[0];
+    expect(p.estimate.chat.monthly).toBe(250);
+    expect(p.estimate.chat.daily).toBe(10);
+    expect(p.estimate.chat.basis).toBe("DECLARED_VOLUME");
+    // And it says what that costs per conversation: 750 / 250.
+    expect(p.estimate.chat.creditsPerUnit).toBe(3);
+  });
+
+  it("still divides by the ratio for a plan that sells no declared volume", async () => {
+    plans.push(plan({ includedAiUnits: 750, entitlements: [{ entitlementKey: "config:credit_split", valueType: "CONFIG", value: { chat: 750, voice: 0 } }] }));
+    const p = (await request(app()).get("/api/public/pricing")).body.plans[0];
+    expect(p.estimate.chat.basis).toBe("CREDIT_RATIO");
+    expect(p.estimate.chat.monthly).toBe(94); // 750 / 8, rounded
+  });
+
   it("keeps the voice share when reconciling a stale split", async () => {
     plans.push(
       plan({

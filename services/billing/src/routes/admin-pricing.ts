@@ -33,7 +33,7 @@ import {
   money,
   materializeEntitlements,
 } from "@chatcenter/shared";
-import { listCatalogPlans, quote } from "../services/pricing.service";
+import { listCatalogPlans, quote, declaredVolumeOf } from "../services/pricing.service";
 import { resolveAndValidatePlan } from "../services/paid-provisioning.service";
 import { quote as quotePricing } from "../services/pricing.service";
 import { ICOUNT_CAPABILITIES } from "../providers/capabilities";
@@ -263,6 +263,28 @@ router.post("/admin/pricing/plans/:key/versions", authenticate, requirePlatformP
         creditsPerUnit: o.creditsPerUnit, additionalCredits: o.additionalCredits,
         additionalPrice: o.additionalPrice, currency: o.currency, isDefault: o.isDefault,
         sortOrder: o.sortOrder, enabled: o.enabled,
+      },
+    });
+  }
+
+  // A plan-scoped estimate belongs to the PLAN, not to one version of it. The
+  // config is keyed by plan id, so without cloning it the new version silently
+  // falls back to the global assumption and publishing quietly restates what
+  // the pricing page says about this plan.
+  const sourceEstimation = source.estimations[0];
+  if (sourceEstimation) {
+    await prisma.publicEstimationConfig.create({
+      data: {
+        scope: "PLAN",
+        planId: draft.id,
+        version: 1,
+        active: true,
+        chatCreditsPerEstimatedConversation: sourceEstimation.chatCreditsPerEstimatedConversation,
+        voiceCreditsPerEstimatedCall: sourceEstimation.voiceCreditsPerEstimatedCall,
+        businessDaysPerMonth: sourceEstimation.businessDaysPerMonth,
+        effectiveFrom: sourceEstimation.effectiveFrom,
+        internalNote: `Carried over from ${key} v${source.version}`,
+        createdBy: req.user?.userId,
       },
     });
   }
@@ -668,7 +690,10 @@ router.post("/admin/pricing/estimation/preview", authenticate, requirePlatformPe
 
   const affected = await prisma.plan.findMany({
     where: scope === "GLOBAL" ? { status: "ACTIVE" } : { id: planId },
-    include: { entitlements: { where: { entitlementKey: "config:credit_split" } } },
+    include: {
+      entitlements: { where: { entitlementKey: "config:credit_split" } },
+      volumeOptions: { orderBy: { sortOrder: "asc" } },
+    },
   });
 
   const proposed = { chatCreditsPerEstimatedConversation: chatRatio, voiceCreditsPerEstimatedCall: voiceRatio, businessDaysPerMonth: businessDays, version: 0, configId: null, scope: "GLOBAL" as const };
@@ -677,8 +702,22 @@ router.post("/admin/pricing/estimation/preview", authenticate, requirePlatformPe
   for (const p of affected) {
     const split = (p.entitlements[0]?.value as any) ?? { chat: p.includedAiUnits, voice: 0 };
     const current = await resolveEstimation({ planId: p.id });
-    const before = estimatePlanCapacity({ chatCredits: Number(split.chat) || 0, voiceCredits: Number(split.voice) || 0, ratios: current });
-    const after = estimatePlanCapacity({ chatCredits: Number(split.chat) || 0, voiceCredits: Number(split.voice) || 0, ratios: proposed });
+    // The plan's default tiers, so the preview shows what the pricing page will
+    // actually say. A plan that SELLS a volume is unmoved by a ratio change, and
+    // the operator has to be able to see that rather than be shown a delta that
+    // will never reach a customer.
+    const defaultTier = (channel: "CHAT" | "VOICE", enabled: boolean) => {
+      if (!enabled) return null;
+      const offered = p.volumeOptions.filter((o) => o.channel === channel && o.enabled);
+      return declaredVolumeOf(offered.find((o) => o.isDefault) ?? offered[0] ?? null);
+    };
+    const volumes = {
+      chatVolume: defaultTier("CHAT", p.chatVolumeEnabled),
+      voiceVolume: defaultTier("VOICE", p.voiceVolumeEnabled),
+    };
+    const credits = { chatCredits: Number(split.chat) || 0, voiceCredits: Number(split.voice) || 0 };
+    const before = estimatePlanCapacity({ ...credits, ...volumes, ratios: current });
+    const after = estimatePlanCapacity({ ...credits, ...volumes, ratios: proposed });
     const price = p.basePrice != null ? money(p.basePrice, p.currency) : money("0.00", p.currency);
     const perChatBefore = before.chat.estimatedMonthly > 0 ? price.minor / before.chat.estimatedMonthly / 100 : null;
     const perChatAfter = after.chat.estimatedMonthly > 0 ? price.minor / after.chat.estimatedMonthly / 100 : null;

@@ -24,6 +24,8 @@ import {
   isUnsellable,
   getFeatureDef,
   type EstimationRatios,
+  type EstimateBasis,
+  type DeclaredVolume,
   type BillingMoney as Money,
   type DisplayPrice,
 } from "@chatcenter/shared";
@@ -76,9 +78,26 @@ export interface PlanView {
   estimate: QuoteEstimate;
 }
 
+export interface ChannelEstimateView {
+  credits: number;
+  monthly: number;
+  daily: number;
+  /**
+   * Where the figure came from: the volume the plan SELLS, or the credit
+   * allowance divided by the configured assumption. Stated so no surface has to
+   * guess whether the number it renders is an offer or an inference.
+   */
+  basis: EstimateBasis;
+  /**
+   * Credits per conversation / call behind the figure - the configured
+   * assumption, or the one the sold volume implies.
+   */
+  creditsPerUnit: number;
+}
+
 export interface QuoteEstimate {
-  chat: { credits: number; monthly: number; daily: number };
-  voice: { credits: number; monthly: number; daily: number };
+  chat: ChannelEstimateView;
+  voice: ChannelEstimateView;
   totalInteractions: number;
   pricePerChat: string | null;
   pricePerCall: string | null;
@@ -134,25 +153,58 @@ export function creditSplitFor(plan: any): { chat: number; voice: number } {
 }
 
 /**
+ * The volume a selected option sells, or null when the channel has no
+ * selector. `dailyVolume` is the number the customer actually picked, so it is
+ * the number every downstream surface must repeat back to them.
+ */
+export function declaredVolumeOf(option: { dailyVolume: number; monthlyVolume: number } | null | undefined): DeclaredVolume | null {
+  if (!option) return null;
+  const daily = Number(option.dailyVolume) || 0;
+  const monthly = Number(option.monthlyVolume) || 0;
+  if (!(daily > 0) && !(monthly > 0)) return null;
+  return { daily, monthly };
+}
+
+/**
  * Build the capacity + price-per-conversation estimate for a concrete
  * selection. Pure composition over the estimation engine; never reads usage.
+ *
+ * When the selection carries a declared volume, THAT is the capacity - the
+ * configurator sold "N conversations per business day" and the summary beneath
+ * it must not answer with a different number derived from credits.
  */
 export function buildEstimate(input: {
   chatCredits: number;
   voiceCredits: number;
   monthlyPrice: Money;
   ratios: EstimationRatios;
+  chatVolume?: DeclaredVolume | null;
+  voiceVolume?: DeclaredVolume | null;
 }): QuoteEstimate {
   const cap = estimatePlanCapacity({
     chatCredits: input.chatCredits,
     voiceCredits: input.voiceCredits,
     ratios: input.ratios,
+    chatVolume: input.chatVolume ?? null,
+    voiceVolume: input.voiceVolume ?? null,
   });
   const price = estimatePricePerInteraction(input.monthlyPrice, cap);
   const round = (n: number) => Math.round(n * 10) / 10;
   return {
-    chat: { credits: input.chatCredits, monthly: Math.round(cap.chat.estimatedMonthly), daily: round(cap.chat.estimatedDaily) },
-    voice: { credits: input.voiceCredits, monthly: Math.round(cap.voice.estimatedMonthly), daily: round(cap.voice.estimatedDaily) },
+    chat: {
+      credits: input.chatCredits,
+      monthly: Math.round(cap.chat.estimatedMonthly),
+      daily: round(cap.chat.estimatedDaily),
+      basis: cap.chat.basis,
+      creditsPerUnit: round(cap.chat.creditsPerUnit),
+    },
+    voice: {
+      credits: input.voiceCredits,
+      monthly: Math.round(cap.voice.estimatedMonthly),
+      daily: round(cap.voice.estimatedDaily),
+      basis: cap.voice.basis,
+      creditsPerUnit: round(cap.voice.creditsPerUnit),
+    },
     totalInteractions: Math.round(cap.estimatedTotalInteractions),
     pricePerChat: price.pricePerChat ? toDecimalString(price.pricePerChat) : null,
     pricePerCall: price.pricePerCall ? toDecimalString(price.pricePerCall) : null,
@@ -213,6 +265,11 @@ async function toPlanView(plan: any, display: string, now: Date): Promise<PlanVi
       .map((o: any) => toVolumeView(o, split.voice, display)),
   );
 
+  // The selection a visitor lands on. Only a channel whose selector is actually
+  // enabled has one - a disabled selector sells no declared volume.
+  const defaultChat = plan.chatVolumeEnabled ? chatOptions.find((o) => o.isDefault) ?? chatOptions[0] ?? null : null;
+  const defaultVoice = plan.voiceVolumeEnabled ? voiceOptions.find((o) => o.isDefault) ?? voiceOptions[0] ?? null : null;
+
   // Features: report the plan's explicit entitlement, falling back to the
   // catalog default. Unbuilt capabilities are dropped entirely - they are not
   // sellable and must not appear on a pricing page.
@@ -260,11 +317,17 @@ async function toPlanView(plan: any, display: string, now: Date): Promise<PlanVi
     limits,
     chatOptions,
     voiceOptions,
+    // The card's headline capacity is the DEFAULT selection's, so the number on
+    // the card is the same number the configurator shows before anyone touches
+    // a selector. Credits and price stay the plan's own base, which is what the
+    // card states - a default tier that added either would contradict it.
     estimate: buildEstimate({
       chatCredits: split.chat,
       voiceCredits: split.voice,
       monthlyPrice: basePrice ?? money("0.00", currency),
       ratios,
+      chatVolume: declaredVolumeOf(defaultChat),
+      voiceVolume: declaredVolumeOf(defaultVoice),
     }),
   };
 }
@@ -378,7 +441,14 @@ export async function quote(input: {
     includedCredits: chatCredits + voiceCredits,
     chatCredits,
     voiceCredits,
-    estimate: buildEstimate({ chatCredits, voiceCredits, monthlyPrice: price, ratios }),
+    estimate: buildEstimate({
+      chatCredits,
+      voiceCredits,
+      monthlyPrice: price,
+      ratios,
+      chatVolume: declaredVolumeOf(chatOpt),
+      voiceVolume: declaredVolumeOf(voiceOpt),
+    }),
     ratios,
     currency,
   };
@@ -435,7 +505,15 @@ export async function describeSubscription(sub: any, displayCurrency = "USD") {
     voiceVolumeOptionKey: sub.voiceVolumeOptionKey,
     chatDailyVolume: chatOpt?.dailyVolume ?? null,
     voiceDailyVolume: voiceOpt?.dailyVolume ?? null,
-    estimate: buildEstimate({ chatCredits, voiceCredits, monthlyPrice: price, ratios }),
+    // The volume the customer contracted for, not a re-derivation of it.
+    estimate: buildEstimate({
+      chatCredits,
+      voiceCredits,
+      monthlyPrice: price,
+      ratios,
+      chatVolume: declaredVolumeOf(chatOpt),
+      voiceVolume: declaredVolumeOf(voiceOpt),
+    }),
     /** True when the terms come from a stored snapshot rather than the live plan. */
     fromSnapshot: sub.snapshotPrice != null,
   };

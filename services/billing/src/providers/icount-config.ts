@@ -49,11 +49,26 @@ const DEFAULT_API_BASE_URL = "https://api.icount.co.il/api/v3.php";
  * "sometimes" calls out - a mode that occasionally touches production is a mode
  * that will touch production on the wrong day.
  */
-export type IcountMode = "mock" | "simulator" | "live";
+export type IcountMode = "mock" | "simulator" | "test" | "live";
 
+/**
+ * The three DEPLOYMENT modes are mock, test and live.
+ *
+ * `simulator` is not a fourth deployment mode: it is the in-process failure
+ * engine the automated suite runs against - declines, timeouts, ambiguous
+ * outcomes - and it reaches the network exactly as often as mock does, which is
+ * never. It is spelled separately only so the test suite can ask for failure
+ * modelling without pretending to be configured for a provider.
+ */
 export function icountMode(): IcountMode {
   const raw = String(process.env.ICOUNT_MODE || "mock").toLowerCase();
   if (raw === "live") return "live";
+  if (raw === "test") {
+    // Test reaches the real API with real credentials. It is opt-in for the
+    // same reason live is, and it degrades to mock rather than quietly
+    // enabling network calls nobody asked for.
+    return process.env.ICOUNT_ALLOW_TEST === "true" ? "test" : "mock";
+  }
   if (raw === "simulator") {
     // Simulator is opt-in. Without the acknowledgement it degrades to mock
     // rather than silently enabling a mode someone did not ask for.
@@ -70,14 +85,43 @@ export function isSimulator(): boolean {
   return icountMode() === "simulator";
 }
 
+/** Real HTTP to api.icount.co.il, against the configured TEST account. */
+export function isTest(): boolean {
+  return icountMode() === "test";
+}
+
 /**
  * True for every mode that performs no network call and can charge nothing.
  *
  * Kept as the single question call sites ask before deciding whether a guard
- * applies, so adding a fourth mode later cannot leave one of them behind.
+ * applies, so adding a mode later cannot leave one of them behind.
+ *
+ * Written as an explicit list of the no-network modes rather than `!== "live"`.
+ * That inversion was correct while live was the only mode that reached the
+ * network; with `test` added it would have made every provider method
+ * short-circuit to the fixture and a "real" test run would have proved nothing
+ * while looking like it passed.
  */
 export function isMock(): boolean {
-  return icountMode() !== "live";
+  const mode = icountMode();
+  return mode === "mock" || mode === "simulator";
+}
+
+/** Every mode that performs real HTTP against the provider. */
+export function isNetworkMode(): boolean {
+  return !isMock();
+}
+
+/**
+ * The account this stack is allowed to be talking to in test mode.
+ *
+ * Configuration, not a credential: it names which iCount account the token is
+ * expected to resolve to, so a production token dropped into a dev .env is
+ * caught by identity rather than by an invoice.
+ */
+export function icountTestAccountId(): string | null {
+  const id = (process.env.ICOUNT_TEST_ACCOUNT_ID || "").trim();
+  return id || null;
 }
 
 export function icountApiBaseUrl(): string {
@@ -134,6 +178,42 @@ export function authHeaders(): Record<string, string> {
  */
 export function assertIcountConfig(env: NodeJS.ProcessEnv = process.env): void {
   const mode = String(env.ICOUNT_MODE || "mock").toLowerCase();
+
+  if (mode === "test") {
+    // Test and live are mutually exclusive intents. Set together, the operator
+    // has said two contradictory things about where the money goes, and
+    // resolving that silently in either direction is the wrong call.
+    if (env.ICOUNT_ALLOW_LIVE === "true") {
+      throw new Error(
+        "[icount] ICOUNT_MODE=test with ICOUNT_ALLOW_LIVE=true - refusing to start: these say opposite things about which account is charged",
+      );
+    }
+    if (env.ICOUNT_ALLOW_TEST !== "true") {
+      throw new Error(
+        "[icount] ICOUNT_MODE=test requires ICOUNT_ALLOW_TEST=true - refusing to start a stack that would reach the provider without the acknowledgement",
+      );
+    }
+    if (!(env.ICOUNT_API_TOKEN || "").trim()) {
+      throw new Error(
+        "[icount] ICOUNT_MODE=test requires ICOUNT_API_TOKEN - refusing to start a billing service that cannot authenticate",
+      );
+    }
+    // Without this, "test mode" is a label rather than a guarantee: nothing
+    // would stop the configured token belonging to the production account, and
+    // the first charge would be real money on a real customer's card.
+    if (!(env.ICOUNT_TEST_ACCOUNT_ID || "").trim()) {
+      throw new Error(
+        "[icount] ICOUNT_MODE=test requires ICOUNT_TEST_ACCOUNT_ID - refusing to start without knowing which account the token must resolve to",
+      );
+    }
+    if (env.NODE_ENV === "production") {
+      throw new Error(
+        "[icount] ICOUNT_MODE=test is refused in production - a production stack must not be pointed at a test terminal",
+      );
+    }
+    return;
+  }
+
   if (mode !== "live") return; // mock/simulator: no network, no credentials needed
 
   if (!(env.ICOUNT_API_TOKEN || "").trim()) {

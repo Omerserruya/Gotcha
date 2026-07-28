@@ -24,7 +24,7 @@
  * why an unknown outcome is never retried.
  */
 import { createHmac, timingSafeEqual } from "crypto";
-import { isMock, isSimulator, icountMode, assertPaymentCapability } from "./icount-config";
+import { isMock, isSimulator, isTest, icountMode, assertPaymentCapability } from "./icount-config";
 import * as api from "./icount-client";
 import { CURRENCY_ID_ILS, IcountOutcomeUnknown } from "./icount-client";
 import * as sim from "./icount-simulator";
@@ -51,6 +51,12 @@ export { IcountOutcomeUnknown };
  */
 function assertLiveAllowed(operation: string): void {
   if (isMock()) return;
+  // Test mode reaches the provider, but only ever the configured test account -
+  // enforced in the client by assertTestAccount, which asks the provider who is
+  // answering before any write. It is deliberately NOT held to the production
+  // guard below: requiring NODE_ENV=production to use a test terminal would
+  // mean the only way to exercise payments was to pretend to be production.
+  if (isTest()) return;
   const isProd = process.env.NODE_ENV === "production";
   const acknowledged = process.env.ICOUNT_ALLOW_LIVE === "true";
   if (!isProd || !acknowledged) {

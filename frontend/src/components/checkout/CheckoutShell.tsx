@@ -216,6 +216,23 @@ export function CheckoutSummaryCard({ summary }: { summary: CheckoutSummary }) {
           />
         )}
         <Line label={t("checkout.summary.credits")} value={summary.includedCredits.toLocaleString()} />
+        {/* How often this recurs, stated rather than implied. "Recurring $39"
+            leaves someone to guess whether that is monthly or yearly, and the
+            two are a factor of twelve apart. */}
+        <Line
+          label={t("checkout.summary.interval")}
+          value={t(
+            summary.billingInterval === "ANNUAL"
+              ? "checkout.summary.intervalAnnual"
+              : "checkout.summary.intervalMonthly",
+          )}
+        />
+        {/* The offer has an expiry, and it is not reissued automatically - a new
+            link is a new commercial offer and a deliberate act. Someone who
+            leaves this open overnight should know that before they come back. */}
+        {summary.expiresAt && (
+          <Line label={t("checkout.summary.offerValid")} value={formatExpiry(summary.expiresAt)} />
+        )}
       </dl>
       {converted && (
         <p className="mt-3 text-[12.5px] leading-[1.6] text-gray-500">
@@ -229,6 +246,25 @@ export function CheckoutSummaryCard({ summary }: { summary: CheckoutSummary }) {
       </p>
     </div>
   );
+}
+
+/**
+ * The expiry, to the minute, in the viewer's own timezone.
+ *
+ * Not a relative "in 3 days": someone reading this is deciding whether to go
+ * and find their card now or later, and a date they can check against a
+ * calendar answers that better than an interval they have to add to the time
+ * they think it is.
+ */
+function formatExpiry(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString(undefined, {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function Line({ label, value, strong }: { label: string; value: string; strong?: boolean }) {

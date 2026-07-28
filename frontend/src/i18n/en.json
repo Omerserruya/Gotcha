@@ -1368,6 +1368,9 @@
       "cancellation": "Cancellation",
       "cancelExplain": "Your subscription renews on {date}. Cancelling keeps full access until then; remaining monthly credits expire at period end, purchased credits stay on the account, and your data is not deleted. You can resume any time before that date.",
       "cancelNoPermission": "Only an owner can cancel the subscription.",
+      "cancelNothingToCancel": "This workspace is not on a paid subscription, so there is nothing to cancel. Choose a plan whenever you are ready.",
+      "cancelAlreadyCanceled": "This subscription is already cancelled. Choose a plan to start again.",
+      "cancelLegacyPlan": "This workspace is on a legacy plan that is not billed through the subscription system. Contact support to close it.",
       "interval": {
         "MONTHLY": "month",
         "QUARTERLY": "quarter",
@@ -4680,7 +4683,11 @@
       "activationNote": "Your organization becomes fully active once payment is confirmed.",
       "charged": "Charged today",
       "rateSettled": "Converted at {rate} ILS per USD, the rate applied to this payment.",
-      "rateIndicative": "Your card is charged in shekels, at {rate} ILS per USD."
+      "rateIndicative": "Your card is charged in shekels, at {rate} ILS per USD.",
+      "interval": "Billing",
+      "intervalMonthly": "Monthly",
+      "intervalAnnual": "Yearly",
+      "offerValid": "Offer valid until"
     },
     "action": {
       "startPayment": "Set up payment",
@@ -4742,6 +4749,11 @@
       "title": "We are checking with your bank",
       "body": "Your payment is being confirmed with the card issuer. This can take longer than usual, and you do not need to wait here - we will email you as soon as we know. Please do not pay again in the meantime.",
       "status": "Checking with the card issuer"
+    },
+    "cancelled": {
+      "eyebrow": "Payment not completed",
+      "title": "You closed the payment page",
+      "body": "Nothing was charged and no card was saved. Your plan is still waiting, and you can pick up where you left off whenever you are ready."
     }
   }
 }

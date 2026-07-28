@@ -542,6 +542,13 @@ services:
       # can be set through the normal path rather than by editing compose.
       ICOUNT_ALLOW_LIVE: ${ICOUNT_ALLOW_LIVE:-}
       ICOUNT_ALLOW_SIMULATOR: ${ICOUNT_ALLOW_SIMULATOR:-}
+      # ICOUNT_MODE=test reaches the REAL iCount API with real credentials, and
+      # is the only non-production way to exercise the hosted page. Two things
+      # keep it safe and both are required: the acknowledgement, and the account
+      # the token must resolve to - checked against auth/info before any write,
+      # so a production token in a dev stack is refused rather than charged.
+      ICOUNT_ALLOW_TEST: ${ICOUNT_ALLOW_TEST:-}
+      ICOUNT_TEST_ACCOUNT_ID: ${ICOUNT_TEST_ACCOUNT_ID:-}
       ICOUNT_ENVIRONMENT: ${ICOUNT_ENVIRONMENT:-}
       ICOUNT_PROVIDER_EVENTS_ENABLED: ${ICOUNT_PROVIDER_EVENTS_ENABLED:-}
       PAYMENT_LINK_TTL_HOURS: ${PAYMENT_LINK_TTL_HOURS:-}

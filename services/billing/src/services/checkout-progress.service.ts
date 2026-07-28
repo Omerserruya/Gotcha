@@ -46,7 +46,7 @@ export interface PaymentSetupResult {
  */
 export async function startPaymentSetup(
   reference: string,
-  opts: { successUrl?: string; failureUrl?: string } = {},
+  opts: { successUrl?: string; failureUrl?: string; cancelUrl?: string } = {},
 ): Promise<PaymentSetupResult> {
   const checkout = await requireOpenCheckout(reference);
 
@@ -90,6 +90,9 @@ export async function startPaymentSetup(
     checkoutId: checkout.id,
     successUrl: opts.successUrl,
     failureUrl: opts.failureUrl,
+    cancelUrl: opts.cancelUrl,
+    // The opaque checkout reference, never a database id.
+    orderId: checkout.reference,
   });
 
   await prisma.pendingCheckout.update({

@@ -131,6 +131,10 @@ export interface StartSessionInput {
   customerEmail?: string;
   successUrl?: string;
   failureUrl?: string;
+  /** Where the customer lands if they abandon the hosted page. */
+  cancelUrl?: string;
+  /** Checkout reference, echoed to the provider for reconciliation only. */
+  orderId?: string;
   now?: Date;
 }
 
@@ -167,6 +171,8 @@ export async function startTokenizationSession(input: StartSessionInput): Promis
     email: input.customerEmail,
     successUrl: input.successUrl,
     failureUrl: input.failureUrl,
+    cancelUrl: input.cancelUrl,
+    orderId: input.orderId,
   });
 
   const session = await prisma.tokenizationSession.create({

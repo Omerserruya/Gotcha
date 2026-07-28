@@ -94,7 +94,18 @@ export interface StartTokenizationInput {
   email?: string;
   successUrl?: string;
   failureUrl?: string;
+  /** Where the customer lands if they abandon the hosted page. */
+  cancelUrl?: string;
   ipnUrl?: string;
+  /**
+   * Our checkout reference, echoed into the provider's own records.
+   *
+   * A SECOND correlation handle, never the primary one: `customClientId` is the
+   * verified field that survives the round trip and is what every lookup keys
+   * on. This exists so a transaction is identifiable from the iCount side
+   * during reconciliation, and nothing breaks if the provider ignores it.
+   */
+  orderId?: string;
 }
 
 export interface StartTokenizationResult {
