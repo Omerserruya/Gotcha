@@ -32,7 +32,13 @@ const client = readFileSync(join(SRC, "lib/api-checkout.ts"), "utf8");
  * along - the kind of false alarm that trains people to ignore a check.
  */
 function responseFields(): string[] {
-  const start = route.indexOf("res.json({");
+  // Anchored on the status route by name. An earlier version took the first
+  // `res.json({` in the file, which silently became a different route's
+  // response the moment one was added above it - and then reported the whole
+  // contract as broken.
+  const handler = route.indexOf('router.get("/checkout/:reference/status"');
+  expect(handler, "the status route is no longer declared as /checkout/:reference/status").toBeGreaterThan(-1);
+  const start = route.indexOf("res.json({", handler);
   expect(start, "the status route no longer returns res.json({ ... }) - has it been restructured?").toBeGreaterThan(-1);
   const body = route.slice(start, start + 2500);
   const named = Array.from(body.matchAll(/^ {6}(\w+):/gm), (m) => m[1]);

@@ -14,7 +14,7 @@
  *      that they paid - that answer comes from verified server-side processing.
  */
 import { Router } from "express";
-import { prisma } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requirePaymentSetupAccess } from "@chatcenter/shared";
 import { checkoutEnabled } from "../providers/capabilities";
 import { getCapabilities } from "../providers";
 import { activeRate, convert } from "../services/exchange-rate.service";
@@ -163,6 +163,56 @@ async function chargeFigures(checkout: { id: string; snapshotPrice: any; snapsho
  * Optional authentication: a customer arriving from an email has a continuation
  * token and no session, while a signed-in user has the reverse.
  */
+/**
+ * The signed-in customer's own outstanding checkout.
+ *
+ * Without this, the ONLY way to reach payment is the reference in the
+ * original email. Lose that mail and the organization is stuck owing money
+ * with no route to pay it, which is not a state anybody should be able to
+ * get into by archiving a message.
+ *
+ * Returns a reference, not a summary: the caller then goes through the same
+ * `/checkout/:reference/status` every other visitor uses, so there is one
+ * authorization path rather than a privileged shortcut that could drift
+ * from it. Membership is what authorizes here - the reference is the
+ * ANSWER, so it cannot also be the question.
+ *
+ * Gated on PAYMENT_SETUP, so a suspended tenant cannot use it to self-serve
+ * back in.
+ */
+router.get(
+  "/checkout/mine",
+  authenticate,
+  resolveTenant,
+  requirePaymentSetupAccess(),
+  async (req, res) => {
+    const tenantId = req.tenantId;
+    if (!tenantId) return res.status(400).json({ error: "tenant_context_required" });
+
+    const checkout = await prisma.pendingCheckout.findFirst({
+      where: {
+        tenantId,
+        // Only a checkout that can still be acted on. A PAID or CANCELLED one
+        // would send the customer to a page telling them to pay again.
+        status: { in: ["PENDING", "AWAITING_PROVIDER", "TOKENIZED"] },
+      },
+      orderBy: { createdAt: "desc" },
+      select: { reference: true, expiresAt: true },
+    });
+
+    // No outstanding checkout is a normal answer, not an error: a tenant on
+    // no billing, or one already paid, simply has nothing to settle.
+    if (!checkout) return res.json({ data: { checkout: null } });
+    if (checkout.expiresAt.getTime() <= Date.now()) {
+      // Deliberately not auto-reissued: a new expiry is a new commercial
+      // offer, and that is an operator's decision.
+      return res.json({ data: { checkout: null, expired: true } });
+    }
+
+    res.json({ data: { checkout: { reference: checkout.reference, expiresAt: checkout.expiresAt } } });
+  },
+);
+
 router.get("/checkout/:reference/status", optionalAuth, async (req, res) => {
   const reference = String(req.params.reference || "");
   if (!reference.startsWith("chk_")) return notFound(res);

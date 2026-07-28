@@ -3,7 +3,7 @@ import { Router, Request, Response } from "express";
 import { z } from "zod";
 import * as crypto from "crypto";
 import { promises as dns } from "dns";
-import { prisma, authenticate, resolveTenant, requireRole, validate, trackAIUsage, meterAiUnits, writeAudit, AuditAction } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireRole, validate, trackAIUsage, meterAiUnits, writeAudit, AuditAction, normalizeDiscoveryRecord, normalizeDiscoveryTechnology } from "@chatcenter/shared";
 import { sendActivationConfirmation, sendOnboardingInvite, sendTeammateInvite, sendIntegrationRequestEmail } from "../services/notification.service";
 import { inviteUser, resendSetupLink } from "../services/invitation.service";
 import { ingestTaughtDocument } from "../services/teach-ingest";
@@ -931,13 +931,25 @@ router.post("/complete", requireRole("ADMIN"), async (req: Request, res: Respons
       departments = [dept];
     }
 
-    // Activate first, generate AI configs after. The activation flip is
-    // the only thing the user blocks on; the LLM call can take seconds.
+    // A tenant provisioned on a paid plan does not become ACTIVE by finishing
+    // setup. Only verified payment does that, in checkout-activation.service,
+    // which grants the subscription and the credits in the same transaction.
+    //
+    // Without this branch, finishing onboarding flipped the tenant to ACTIVE
+    // and the access matrix then allowed the whole paid product - so the plan
+    // was, in practice, optional. Onboarding still COMPLETES: the customer's
+    // work is real and must not be thrown away or repeated after they pay.
+    const awaitingPayment = tenant.status === "PENDING_PAYMENT";
+
     await prisma.$transaction([
-      prisma.tenant.update({
-        where: { id: req.tenantId! },
-        data: { status: "ACTIVE" },
-      }),
+      ...(awaitingPayment
+        ? []
+        : [
+            prisma.tenant.update({
+              where: { id: req.tenantId! },
+              data: { status: "ACTIVE" },
+            }),
+          ]),
       prisma.tenantOnboarding.upsert({
         where: { tenantId: req.tenantId! },
         create: { tenantId: req.tenantId!, currentStep: "COMPLETED", completedAt: new Date() },
@@ -967,9 +979,14 @@ router.post("/complete", requireRole("ADMIN"), async (req: Request, res: Respons
       console.log(`[Onboarding] Tenant ${req.tenantId} skipped employee creation - activating without an AI employee.`);
     }
 
-    sendActivationConfirmation(req.tenantId!).catch((err) => {
-      console.error("Failed to send activation confirmation:", err);
-    });
+    // Only when the workspace is genuinely live. Telling a customer their
+    // plan is active while it is still waiting on payment is the kind of
+    // email that gets forwarded back to us with a screenshot.
+    if (!awaitingPayment) {
+      sendActivationConfirmation(req.tenantId!).catch((err) => {
+        console.error("Failed to send activation confirmation:", err);
+      });
+    }
 
     // Re-arm the nudge one last time: if they activated without a live channel,
     // the sweep sends "your AI employee is waiting to start working"; if they're
@@ -984,8 +1001,14 @@ router.post("/complete", requireRole("ADMIN"), async (req: Request, res: Respons
 
     res.json({
       data: {
-        status: "ACTIVE",
-        message: "Tenant activated. AI configurations generating in background.",
+        status: awaitingPayment ? "PENDING_PAYMENT" : "ACTIVE",
+        // The client routes on this flag, not on prose. Setup is finished
+        // either way; what differs is whether the workspace opens or the
+        // customer is handed to payment.
+        paymentRequired: awaitingPayment,
+        message: awaitingPayment
+          ? "Setup complete. The workspace opens once payment is confirmed."
+          : "Tenant activated. AI configurations generating in background.",
         departmentsActivated: departments.length,
       },
     });
@@ -2131,7 +2154,14 @@ router.post("/discover", requireRole("ADMIN"), validate(discoverSchema), async (
       data: {
         scanPhase: "synthesis",
         communication: { channels: deterministicChannels },
-        technology: { platform: signals.platform, tools: signals.tools.map((s) => ({ slug: s, name: s })) },
+        // Normalized so the checkpoint writes the FULL shape. This used to
+        // persist only `platform` and `tools`, and because it is also the
+        // fallback that survives a failed synthesis, that half-object was
+        // what the review screen read - and crashed on.
+        technology: normalizeDiscoveryTechnology({
+          platform: signals.platform,
+          tools: signals.tools.map((s) => ({ slug: s, name: s })),
+        }),
       },
     }).catch(() => {});
 
@@ -2179,7 +2209,7 @@ router.post("/discover", requireRole("ADMIN"), validate(discoverSchema), async (
         business: report.business ?? undefined,
         knowledge: report.knowledge ?? undefined,
         communication: report.communication ?? undefined,
-        technology: report.technology ?? undefined,
+        technology: report.technology ? normalizeDiscoveryTechnology(report.technology) : undefined,
         gaps: report.gaps ?? undefined,
         recommendation: report.recommendation ?? undefined,
         confidence: report.confidence ?? undefined,
@@ -2195,7 +2225,7 @@ router.post("/discover", requireRole("ADMIN"), validate(discoverSchema), async (
         business: report.business ?? undefined,
         knowledge: report.knowledge ?? undefined,
         communication: report.communication ?? undefined,
-        technology: report.technology ?? undefined,
+        technology: report.technology ? normalizeDiscoveryTechnology(report.technology) : undefined,
         gaps: report.gaps ?? undefined,
         recommendation: report.recommendation ?? undefined,
         confidence: report.confidence ?? undefined,
@@ -2213,7 +2243,7 @@ router.post("/discover", requireRole("ADMIN"), validate(discoverSchema), async (
     // will send "I noticed you stopped after Business Discovery" ~a day later.
     scheduleOnboardingNudge(req.tenantId!, "1d").catch(() => {});
 
-    res.json({ data: { ok: true, domain: origin, discovery: saved } });
+    res.json({ data: { ok: true, domain: origin, discovery: normalizeDiscoveryRecord(saved as Record<string, unknown>) } });
   } catch (err) {
     console.error("Discover error:", err);
     res.status(500).json({ error: "Failed to discover business" });
@@ -2344,7 +2374,11 @@ router.post("/discover/plan", requireRole("ADMIN"), validate(planSchema), async 
 router.get("/discovery", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
   try {
     const discovery = await prisma.businessDiscovery.findUnique({ where: { tenantId: req.tenantId! } });
-    res.json({ data: { discovery: discovery || null } });
+    // Normalized on the way out, so a reader never receives a half-written
+    // technology object. The row can legitimately be partial: the mid-scan
+    // checkpoint writes what it knows, and a failed synthesis leaves it
+    // that way on purpose. The API contract should not inherit that.
+    res.json({ data: { discovery: normalizeDiscoveryRecord(discovery as Record<string, unknown> | null) } });
   } catch (err) {
     console.error("Get discovery error:", err);
     res.status(500).json({ error: "Failed to get discovery" });
@@ -2428,7 +2462,7 @@ router.patch("/discovery", requireRole("ADMIN"), validate(discoveryPatchSchema),
       where: { tenantId: req.tenantId! },
       data,
     });
-    res.json({ data: { discovery: saved } });
+    res.json({ data: { discovery: normalizeDiscoveryRecord(saved as Record<string, unknown>) } });
   } catch (err) {
     console.error("Patch discovery error:", err);
     res.status(500).json({ error: "Failed to save corrections" });
@@ -2457,15 +2491,18 @@ router.post("/discovery/correct", requireRole("ADMIN"), validate(correctSchema),
       comm.channels = (Array.isArray(comm.channels) ? comm.channels : []).filter((c: any) => String(c?.type) !== key);
       data.communication = comm;
     } else if (target === "tool") {
-      const tech = (existing.technology as any) || {};
-      tech.tools = (Array.isArray(tech.tools) ? tech.tools : []).filter((t: any) => String(t?.slug) !== key);
-      tech.legacy = (Array.isArray(tech.legacy) ? tech.legacy : []).filter((t: any) => String(t?.slug) !== key);
-      tech.tracking = (Array.isArray(tech.tracking) ? tech.tracking : []).filter((t: any) => String(t?.slug) !== key);
-      data.technology = tech;
+      // Normalize FIRST so a correction never writes back the partial shape
+      // it was handed. Removing one tool should not be the thing that
+      // decides whether `legacy` exists.
+      const tech = normalizeDiscoveryTechnology(existing.technology);
+      data.technology = {
+        ...tech,
+        tools: tech.tools.filter((t) => t.slug !== key),
+        legacy: tech.legacy.filter((t) => t.slug !== key),
+        tracking: tech.tracking.filter((t) => t.slug !== key),
+      };
     } else if (target === "platform") {
-      const tech = (existing.technology as any) || {};
-      tech.platform = null;
-      data.technology = tech;
+      data.technology = { ...normalizeDiscoveryTechnology(existing.technology), platform: null };
     } else if (target === "gap") {
       const slug = slugifyGap(key);
       data.gaps = (Array.isArray(existing.gaps) ? existing.gaps : []).filter((g: any) => slugifyGap(String(g?.label || "")) !== slug);
@@ -2476,7 +2513,7 @@ router.post("/discovery/correct", requireRole("ADMIN"), validate(correctSchema),
     }
 
     const saved = await prisma.businessDiscovery.update({ where: { tenantId: req.tenantId! }, data });
-    res.json({ data: { ok: true, discovery: saved } });
+    res.json({ data: { ok: true, discovery: normalizeDiscoveryRecord(saved as Record<string, unknown>) } });
   } catch (err) {
     console.error("Correct discovery error:", err);
     res.status(500).json({ error: "Failed to apply correction" });

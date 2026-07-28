@@ -93,6 +93,29 @@ export async function getCheckoutStatus(
   return body.data as CheckoutSummary;
 }
 
+/**
+ * The signed-in customer's own outstanding checkout, if they have one.
+ *
+ * Authorized by MEMBERSHIP, not by knowing a reference: this is how someone
+ * who lost the email still reaches payment. Returns null when there is
+ * nothing to settle, which is the normal answer for a tenant on no billing
+ * or one already paid.
+ */
+export async function getMyCheckout(
+  opts: { authToken?: string | null; signal?: AbortSignal } = {},
+): Promise<{ reference: string; expiresAt: string } | null> {
+  const res = await fetch(`${API_URL}/api/checkout/mine`, {
+    signal: opts.signal,
+    headers: {
+      Accept: "application/json",
+      ...(opts.authToken ? { Authorization: `Bearer ${opts.authToken}` } : {}),
+    },
+  });
+  if (!res.ok) throw new CheckoutUnavailable(res.status);
+  const body = await res.json();
+  return body?.data?.checkout ?? null;
+}
+
 /** Which page a status belongs on, so a stale bookmark self-corrects. */
 export function pathForStatus(status: CheckoutStatus): string {
   switch (status) {

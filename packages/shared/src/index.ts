@@ -407,6 +407,23 @@ export type {
   WorkingHoursWindow,
 } from "./lib/agent-tools";
 
+// Business discovery: shape guarantees for the Json columns whose
+// collections several writers populate inconsistently.
+export {
+  normalizeDiscoveryTechnology,
+  normalizeDiscoveryCommunication,
+  normalizeDiscoveryRecord,
+  DISCOVERY_TECH_COLLECTIONS,
+} from "./lib/business-discovery-shape";
+export type {
+  DiscoveryConfidence,
+  DiscoveryTechItem,
+  DiscoveryPlatform,
+  DiscoveryTechnology,
+  DiscoveryChannel,
+  DiscoveryCommunication,
+} from "./lib/business-discovery-shape";
+
 // Secrets
 export { getSecret, requireSecret, setSecretProvider, resetSecretProvider } from "./secrets";
 export type { SecretProvider } from "./secrets";

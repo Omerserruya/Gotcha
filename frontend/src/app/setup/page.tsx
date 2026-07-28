@@ -64,7 +64,10 @@ import {
   type DiscoveryRecommendation,
   type DiscoveryGap,
   type DiscoveryChannel,
+  type DiscoveryTechItem,
 } from "@/lib/api";
+import { getMyCheckout } from "@/lib/api-checkout";
+import { renderableTech } from "./discovery-shape";
 import { SYSTEMS, ConnectScreen } from "./connect-screen";
 import { useRevealOnOpen } from "@/lib/useRevealOnOpen";
 import AgentBuilder from "@/components/aiEmployee/AgentBuilder";
@@ -256,6 +259,10 @@ function SetupContent() {
   // Discovery / review state
   const [domain, setDomain] = useState("");
   const [disc, setDisc] = useState<BusinessDiscoveryRecord | null>(null);
+  // The organization's outstanding checkout, when it has one. Sourced from
+  // membership rather than a URL, so it is present however the customer got
+  // here - including after losing the original email.
+  const [awaitingPayment, setAwaitingPayment] = useState<{ reference: string } | null>(null);
   const [savingProfile, setSavingProfile] = useState(false);
   const scannedOnce = useRef(false);
   // Furthest PROGRESS_ORDER index ever reached (seeded from the persisted
@@ -461,6 +468,12 @@ function SetupContent() {
 
         // Load any persisted discovery so every movement re-hydrates on refresh
         // and after an OAuth round-trip.
+        // Never blocks setup: a billing hiccup must not stop someone
+        // configuring their workspace. Absent means "nothing owed".
+        getMyCheckout({ authToken: token })
+          .then((c) => setAwaitingPayment(c ? { reference: c.reference } : null))
+          .catch(() => setAwaitingPayment(null));
+
         const discRes = await getBusinessDiscovery(token).catch(() => null);
         const d = discRes?.data.discovery || null;
         if (d) { setDisc(d); if (d.recommendation) setRec(d.recommendation); if (d.primaryGoal) setGoals([d.primaryGoal]); }
@@ -777,7 +790,21 @@ function SetupContent() {
     try {
       const stashed = (() => { try { return localStorage.getItem("onboarding.coreSystem"); } catch { return null; } })();
       if (stashed) { await setCoreSystem(token, stashed as CoreSystemSlug).catch(() => {}); }
-      await completeOnboarding(token, { skipCoreSystem: !stashed, skipEmployee: opts?.skipEmployee === true });
+      const done = await completeOnboarding(token, { skipCoreSystem: !stashed, skipEmployee: opts?.skipEmployee === true });
+
+      // A paid organization is not open yet. The server keeps it
+      // PENDING_PAYMENT and says so here; sending the customer into a
+      // workspace that every API call would refuse with a 402 is worse than
+      // no destination at all.
+      if (done?.data?.paymentRequired) {
+        await minShow;
+        const ref = await getMyCheckout({ authToken: token }).catch(() => null);
+        // With a reference the customer lands on their own summary; without
+        // one the entry page still explains the state rather than dead-ending.
+        router.replace(ref ? `/checkout/payment-required?ref=${encodeURIComponent(ref.reference)}` : "/checkout");
+        return;
+      }
+
       // Arm the 11-step in-app product tour: it auto-starts on the Getting
       // Started landing and walks every core surface (Next/Back/Skip).
       try {
@@ -814,6 +841,27 @@ function SetupContent() {
       <LocaleCorner />
       <div className="max-w-4xl w-full mx-auto">
         <MovementRail phase={phase} he={he} />
+        {/* Said up front, not sprung at the end. A customer who only learns
+            their organization is unpaid on the last screen has spent the
+            whole of setup with the wrong idea of what happens next. */}
+        {awaitingPayment && (
+          <div
+            role="status"
+            className="mb-6 flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-2xl bg-primary-50 border border-primary-100 text-primary-800 text-sm"
+          >
+            <span>
+              {he
+                ? "הארגון ממתין לתשלום. אפשר להשלים את ההגדרה עכשיו, והוא ייפתח לאחר אישור התשלום."
+                : "This organization is waiting for payment. You can finish setting up now, and it opens once payment is confirmed."}
+            </span>
+            <a
+              href={`/checkout/payment-required?ref=${encodeURIComponent(awaitingPayment.reference)}`}
+              className="shrink-0 rounded-lg bg-primary-600 px-3.5 py-1.5 text-[13px] font-semibold text-white hover:bg-primary-700"
+            >
+              {he ? "למסך התשלום" : "Go to payment"}
+            </a>
+          </div>
+        )}
         {error && <div className="mb-6 p-3.5 rounded-2xl bg-amber-50 border border-amber-100 text-amber-700 text-sm">{error}</div>}
         <div key={shown} className={leaving ? (forward ? "animate-leaveUp" : "animate-leaveDown") : (forward ? "animate-riseIn" : "animate-riseDown")}>
 
@@ -1056,6 +1104,7 @@ function WarnIcon({ className = "w-3.5 h-3.5 text-amber-500" }: { className?: st
 // "other communication method", shown separately - never mixed in.
 const PRIMARY_CHANNELS = new Set(["whatsapp", "instagram", "facebook", "messenger", "telegram", "email", "phone"]);
 
+
 // Gaps that make sense as TEACH cards (knowledge you can hand over). A missing
 // live-chat widget or CRM is a recommendation/mission, not teachable knowledge.
 const TEACHABLE_GAP_DOMAINS = new Set(["knowledge", "business", "brand"]);
@@ -1286,7 +1335,16 @@ function LearnedScreen({ he, disc, health, gaps, editBiz, editBrand, onEditProdu
   const allChannels = disc.communication?.channels || [];
   const channels = allChannels.filter((c) => PRIMARY_CHANNELS.has(c.type));
   const otherMethods = allChannels.filter((c) => !PRIMARY_CHANNELS.has(c.type));
+  // The API normalizes these collections, but they live in a Json column
+  // that several writers populate, so this screen derives them defensively
+  // ONCE rather than trusting the shape at four separate render sites. A
+  // review screen that shows less is recoverable; one that throws takes the
+  // whole of onboarding down with it.
   const tech = disc.technology || null;
+  const techTools = renderableTech(tech?.tools);
+  const techLegacy = renderableTech(tech?.legacy);
+  const techTracking = renderableTech(tech?.tracking);
+  const hasTech = !!tech?.platform || techTools.length > 0 || techLegacy.length > 0 || techTracking.length > 0;
   // The scan reads the site's mail records (MX / mailto) and names the real
   // provider on its own - surfacing that we *figured it out* (not asked) is a
   // quiet "how did it know?" moment. Grounded, never AI-flavoured.
@@ -1487,7 +1545,7 @@ function LearnedScreen({ he, disc, health, gaps, editBiz, editBrand, onEditProdu
         )}
 
         {/* Technologies & systems - never mixed with communication. */}
-        {tech && (tech.platform || tech.tools.length > 0 || tech.legacy.length > 0) && (
+        {tech && hasTech && (
           <Collapsible he={he} title={he ? "טכנולוגיות ומערכות שזיהיתי" : "Technologies & systems you appear to use"} defaultOpen>
             {tech.platform && (
               <div className="flex items-center gap-3 p-3.5 rounded-xl border-2 border-primary-200 bg-primary-50/40">
@@ -1500,9 +1558,9 @@ function LearnedScreen({ he, disc, health, gaps, editBiz, editBrand, onEditProdu
                 {correcting && <CorrectMenu he={he} onCorrect={(a) => onCorrect("platform", a, tech.platform!.slug)} />}
               </div>
             )}
-            {tech.tools.length > 0 && (
+            {techTools.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mt-2.5">
-                {tech.tools.map((t, i) => (
+                {techTools.map((t, i) => (
                   <span key={i} className="group inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-white text-gray-700 border border-gray-150 shadow-subtle">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={`https://cdn.simpleicons.org/${t.slug}`} alt="" className="w-3.5 h-3.5 object-contain" onError={(e) => { e.currentTarget.style.display = "none"; }} />
@@ -1512,8 +1570,8 @@ function LearnedScreen({ he, disc, health, gaps, editBiz, editBrand, onEditProdu
                 ))}
               </div>
             )}
-            {tech.legacy.length > 0 && (
-              <p className="text-[11px] text-gray-400 mt-2">{he ? "זוהו גם (כנראה שרידים ישנים, לא הפלטפורמה הפעילה): " : "Also detected (likely legacy artifacts, not your active platform): "}{tech.legacy.map((l) => l.name).join(", ")}</p>
+            {techLegacy.length > 0 && (
+              <p className="text-[11px] text-gray-400 mt-2">{he ? "זוהו גם (כנראה שרידים ישנים, לא הפלטפורמה הפעילה): " : "Also detected (likely legacy artifacts, not your active platform): "}{techLegacy.map((l) => l.name).join(", ")}</p>
             )}
           </Collapsible>
         )}
