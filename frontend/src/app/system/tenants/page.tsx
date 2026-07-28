@@ -6,6 +6,7 @@ import { useAuth } from "@/context/AuthContext";
 import { getSystemTenants, createTenant, updateTenant, resendOnboardingLink } from "@/lib/api";
 import {
   BillingSection, EMPTY_BILLING, tenantBillingUiState, BillingStatusBadge, TenantBillingActions,
+  PlanAccessBadge, billingSelectionComplete,
   type BillingSelection,
 } from "@/components/system/TenantBilling";
 import {
@@ -125,20 +126,29 @@ export default function TenantsPage() {
         slug: formSlug,
         adminEmail: formAdminEmail,
         adminName: formAdminName,
-        // Option KEYS only. No price, credits or currency is ever submitted -
-        // the backend recomputes and rejects any smuggled commercial value.
-        ...(billing.mode === "PAID_PLAN"
-          ? {
-              billing: {
+        // Option KEYS only for the paid path. No price, credits or currency is
+        // ever submitted - the backend recomputes and rejects any smuggled
+        // commercial value. The POC credit budget is not a price; it is the
+        // allowance being given away, so it is sent, bounded and audited.
+        billing:
+          billing.mode === "PAID_PLAN"
+            ? {
                 mode: "PAID_PLAN",
                 planVersionId: billing.planVersionId,
                 chatVolumeOptionKey: billing.chatVolumeOptionKey,
                 voiceVolumeOptionKey: billing.voiceVolumeOptionKey,
                 paymentRequiredBeforeAccess: true,
                 ...(billing.commercialNote ? { commercialNote: billing.commercialNote } : {}),
+              }
+            : {
+                mode: "POC",
+                pocCredits: Number(billing.pocCredits),
+                // End of the chosen day, so "expires on the 30th" means the
+                // whole of the 30th rather than midnight at its start.
+                pocExpiresAt: new Date(`${billing.pocExpiresAt}T23:59:59.000Z`).toISOString(),
+                pocFeatureAreas: billing.pocFeatureAreas,
+                ...(billing.commercialNote ? { commercialNote: billing.commercialNote } : {}),
               },
-            }
-          : {}),
       });
 
       if (billing.mode === "PAID_PLAN") {
@@ -149,7 +159,9 @@ export default function TenantsPage() {
           detail: res?.data?.billing?.linkExpiresAt,
         });
       } else {
-        showMsg("Tenant created successfully");
+        showMsg(
+          `${formName} created on a POC: ${Number(billing.pocCredits).toLocaleString()} credits, no charge and no renewal.`,
+        );
       }
       setShowCreate(false);
       setFormName(""); setFormSlug(""); setFormAdminEmail(""); setFormAdminName("");
@@ -325,10 +337,10 @@ export default function TenantsPage() {
               <p className="text-xs text-gray-500">
                 {billing.mode === "PAID_PLAN"
                   ? "The admin receives an email with a secure setup link. The plan activates only after payment is confirmed."
-                  : "The admin receives an invitation email with a secure setup link and chooses their own password there."}
+                  : "The admin receives an invitation email with a secure setup link. POC access starts immediately and is never charged."}
               </p>
               <button
-                type="submit" disabled={creating || (billing.mode === "PAID_PLAN" && !quote)}
+                type="submit" disabled={creating || !billingSelectionComplete(billing, !!quote)}
                 className="px-5 py-2 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition font-medium text-sm disabled:opacity-40"
               >
                 {creating ? "Creating..." : "Create Tenant"}
@@ -365,6 +377,7 @@ export default function TenantsPage() {
                   <th className="text-start text-xs font-medium text-gray-500 uppercase tracking-wider px-5 py-3">Users</th>
                   <th className="text-start text-xs font-medium text-gray-500 uppercase tracking-wider px-5 py-3">Active Chats</th>
                   <th className="text-start text-xs font-medium text-gray-500 uppercase tracking-wider px-5 py-3">Channels</th>
+                  <th className="text-start text-xs font-medium text-gray-500 uppercase tracking-wider px-5 py-3">Plan</th>
                   <th className="text-start text-xs font-medium text-gray-500 uppercase tracking-wider px-5 py-3">Status</th>
                   <th className="text-start text-xs font-medium text-gray-500 uppercase tracking-wider px-5 py-3">Actions</th>
                 </tr>
@@ -381,6 +394,8 @@ export default function TenantsPage() {
                     <td className="px-5 py-3 text-sm text-gray-600">{t._count?.users || 0}</td>
                     <td className="px-5 py-3 text-sm text-gray-600">{t._count?.conversations || 0}</td>
                     <td className="px-5 py-3 text-sm text-gray-600">{t._count?.channelAccounts || 0}</td>
+                    {/* Never blank. A tenant with no plan says so, in red. */}
+                    <td className="px-5 py-3"><PlanAccessBadge access={t.planAccess} /></td>
                     <td className="px-5 py-3">
                       {t.status === "PENDING_PAYMENT" ? (
                         // Two different operator problems, never one badge.

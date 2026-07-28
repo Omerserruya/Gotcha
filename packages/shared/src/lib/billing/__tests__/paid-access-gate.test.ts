@@ -107,11 +107,24 @@ describe("the organization's own state", () => {
     expect(d.reason).toBe("no_subscription");
   });
 
-  it("leaves an onboarding tenant alone", async () => {
-    const t = await tenantWith(null, "PENDING_ONBOARDING");
-    // No subscription by definition, and onboarding is how one gets bought.
-    // The tenant access matrix keeps the paid product out of reach anyway.
+  it("leaves an onboarding tenant that HAS a plan alone", async () => {
+    const t = await tenantWith({}, "PENDING_ONBOARDING");
+    // Setting up the workspace is not a paid operation to be judged on its own
+    // merits; the plan exists and the tenant is simply not finished yet.
     expect((await checkPaidAccess({ tenantId: t.id })).allowed).toBe(true);
+  });
+
+  it("refuses an onboarding tenant with no plan at all", async () => {
+    const t = await tenantWith(null, "PENDING_ONBOARDING");
+    // This used to be allowed, on the reasoning that onboarding precedes
+    // paying. It no longer does: every organization is created with either a
+    // paid checkout or a POC, so a tenant in onboarding with no access source
+    // is not someone signing up - it is a tenant that should not be served.
+    // The hole mattered because background workers never pass through the HTTP
+    // matrix that was supposedly covering this.
+    const d = await checkPaidAccess({ tenantId: t.id });
+    expect(d.reason).toBe("no_subscription");
+    expect(d.allowed).toBe(false);
   });
 });
 

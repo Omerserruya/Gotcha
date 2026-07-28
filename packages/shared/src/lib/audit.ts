@@ -68,6 +68,9 @@ export const AuditAction = {
   PAID_TENANT_EMAIL_SENT: "billing.paid_tenant_email_sent",
   PAID_TENANT_EMAIL_FAILED: "billing.paid_tenant_email_failed",
   MANUAL_CONTRACT_ACTIVATED: "billing.manual_contract_activated",
+  // A POC is product given away: who authorised it, how much, until when and
+  // with which feature areas is exactly the thing to be able to answer later.
+  POC_PROVISIONED: "billing.poc_provisioned",
   // ── Role changes ──
   ROLE_CHANGED: "user.role_changed",
   ROLE_CREATED: "role.created",

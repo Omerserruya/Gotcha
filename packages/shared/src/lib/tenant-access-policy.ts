@@ -34,6 +34,7 @@ export interface TenantAccessDenial {
     | "TENANT_ADMIN_SETUP_REQUIRED"
     | "TENANT_ONBOARDING_REQUIRED"
     | "TENANT_PAYMENT_REQUIRED"
+    | "TENANT_PLAN_REQUIRED"
     | "TENANT_SUSPENDED"
     | "TENANT_NOT_FOUND";
   /** Customer-safe. Never names a provider or exposes billing internals. */
@@ -51,17 +52,63 @@ function assertNever(value: never): never {
 }
 
 /**
+ * Whether an active commercial or evaluation access source exists.
+ *
+ * Optional, and omitting it keeps the status-only behaviour. That is not
+ * politeness toward callers - it is the only way a caller that genuinely cannot
+ * answer the question (no database at hand, a pure UI check) is distinguishable
+ * from one that answered "no". Treating "did not ask" as "has no plan" would
+ * deny the product on missing information.
+ */
+export interface TenantPlanAccessFacts {
+  /** True when the tenant may use the paid product on commercial grounds. */
+  active: boolean;
+  /** True when the state is a paid plan awaiting its first payment. */
+  pendingPayment?: boolean;
+}
+
+/**
  * Decide whether a tenant in `status` may exercise `scope`.
  *
  * IDENTITY is always allowed, for every status. Locking someone out of
  * authentication, MFA setup or logout because their organization owes money
  * makes the problem unfixable by the person best placed to fix it.
+ *
+ * `planAccess` is the second half of the question. Status alone says whether the
+ * ORGANIZATION is in a usable state; it says nothing about whether anyone is
+ * entitled to the product. An ACTIVE tenant with no subscription passed this
+ * matrix for as long as it existed, and every route in the product served it.
  */
 export function evaluateTenantAccess(
   status: TenantStatus,
   scope: TenantAccessScope,
+  planAccess?: TenantPlanAccessFacts,
 ): TenantAccessDecision {
   if (scope === "IDENTITY") return ALLOW;
+
+  // The paid product requires an access source, whatever the status says.
+  // Scoped to FULL_APPLICATION on purpose: ONBOARDING and PAYMENT_SETUP are the
+  // two flows through which a tenant ACQUIRES a plan, and requiring one to
+  // reach them would make the state unrecoverable from inside the product.
+  if (scope === "FULL_APPLICATION" && planAccess && !planAccess.active) {
+    return planAccess.pendingPayment
+      ? {
+          allow: false,
+          httpStatus: 402,
+          code: "TENANT_PAYMENT_REQUIRED",
+          message: "Your plan activates once payment is confirmed",
+          redirectPath: "/checkout/payment-required",
+        }
+      : {
+          allow: false,
+          httpStatus: 402,
+          code: "TENANT_PLAN_REQUIRED",
+          // Says what is true without implying the customer did something
+          // wrong: an organization with no plan is usually our own provisioning
+          // gap, not their non-payment.
+          message: "This organization does not have an active plan",
+        };
+  }
 
   switch (status) {
     case "ACTIVE":

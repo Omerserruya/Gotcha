@@ -704,7 +704,34 @@ export function getSystemTenant(token: string, id: string) {
   return apiFetch<{ data: any }>(`/api/system/tenants/${id}`, { token });
 }
 
-export function createTenant(token: string, data: { name: string; slug: string; adminEmail: string; adminName: string }) {
+/**
+ * Billing is REQUIRED, and is one of exactly two shapes.
+ *
+ * Typed as a union rather than a bag of optional fields so that omitting the
+ * commercial decision - or sending a POC budget on a paid plan - does not
+ * compile. The server refuses both anyway; this is so nobody writes it.
+ */
+export type CreateTenantBilling =
+  | {
+      mode: "PAID_PLAN";
+      planVersionId: string;
+      chatVolumeOptionKey?: string | null;
+      voiceVolumeOptionKey?: string | null;
+      paymentRequiredBeforeAccess?: boolean;
+      commercialNote?: string;
+    }
+  | {
+      mode: "POC";
+      pocCredits: number;
+      pocExpiresAt: string;
+      pocFeatureAreas: string[];
+      commercialNote?: string;
+    };
+
+export function createTenant(
+  token: string,
+  data: { name: string; slug: string; adminEmail: string; adminName: string; billing: CreateTenantBilling },
+) {
   return apiFetch<{ data: any }>("/api/system/tenants", { token, method: "POST", body: JSON.stringify(data) });
 }
 

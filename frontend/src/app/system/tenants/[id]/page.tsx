@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import { SystemLayout } from "@/components/SystemLayout";
 import { FeaturesSection } from "./FeaturesSection";
 import { EntitlementsSection } from "./EntitlementsSection";
+import { PlanAccessBadge, MissingPlanBanner } from "@/components/system/TenantBilling";
 import clsx from "clsx";
 
 export default function TenantDetailPage() {
@@ -328,6 +329,10 @@ export default function TenantDetailPage() {
               <p className="text-xs text-gray-400 mt-1">Created: {new Date(tenant.createdAt).toLocaleString()}</p>
             </div>
             <div className="flex items-center gap-3">
+              {/* Shown beside the status, not instead of it: "enabled" and
+                  "has a plan" are different facts and a tenant can be one
+                  without the other. */}
+              <PlanAccessBadge access={tenant.planAccess} />
               <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ring-1 ${
                 tenant.isActive ? "bg-green-50 text-green-600 ring-green-200" : "bg-red-50 text-red-600 ring-red-200"
               }`}>
@@ -360,6 +365,16 @@ export default function TenantDetailPage() {
             ))}
           </div>
         </div>
+
+        {/* The organization has no plan. Said once, loudly, with both ways out. */}
+        {tenant.planAccess?.needsReview && (
+          <MissingPlanBanner
+            access={tenant.planAccess}
+            onAssigned={() => { fetchTenant(); }}
+            tenantId={tenantId as string}
+            token={token ?? ""}
+          />
+        )}
 
         {/* Connected Channels */}
         {tenant.channels && tenant.channels.length > 0 && (

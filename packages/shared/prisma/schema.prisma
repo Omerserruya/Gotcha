@@ -3032,13 +3032,25 @@ model TenantBillingProvisioningRequest {
   tenantId String @map("tenant_id")
 
   requestedBy String? @map("requested_by")
+  /// "PAID_PLAN" | "POC". The two ways an organization may be created.
   mode        String  @default("PAID_PLAN")
 
-  planVersionId        String  @map("plan_version_id")
+  /// Null for a POC, which is provisioned onto the internal POC plan rather
+  /// than a chosen catalog version.
+  planVersionId        String? @map("plan_version_id")
   chatVolumeOptionKey  String? @map("chat_volume_option_key")
   voiceVolumeOptionKey String? @map("voice_volume_option_key")
   billingInterval      String? @map("billing_interval")
   commercialNote       String? @map("commercial_note")
+
+  // ── POC selection ──
+  // Held here for the same reason the paid selection is: if the call into
+  // billing fails, the operator's choices must survive it, or repair would mean
+  // re-entering a credit budget and an expiry from memory.
+  pocCredits      Int?      @map("poc_credits")
+  pocExpiresAt    DateTime? @map("poc_expires_at")
+  /// License domains the POC may use. Empty means every domain.
+  pocFeatureAreas String[]  @map("poc_feature_areas")
 
   /// Deterministic, derived from this request. Billing keys the checkout and
   /// the initial attempt on it, so any number of retries converge on one set

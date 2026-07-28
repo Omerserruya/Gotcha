@@ -39,6 +39,12 @@ export const MAX_PROVISIONING_ATTEMPTS = 5;
  * retrying only burns attempts and hides the real problem from the operator.
  */
 const PERMANENT_FAILURES = new Set([
+  // POC selections that are wrong rather than unlucky: an unknown domain or a
+  // past expiry will be just as wrong on the fifth attempt.
+  "unknown_feature_domain",
+  "expiry_must_be_in_the_future",
+  "credit_budget_required",
+  "tenant_not_found",
   "plan_version_not_found",
   "plan_version_not_active",
   "plan_version_not_selectable",
@@ -55,11 +61,17 @@ export function classifyFailure(code: string | undefined): BillingProvisioningSt
 }
 
 export interface BillingSelection {
-  planVersionId: string;
+  /** Defaults to PAID_PLAN, which is what every caller meant before POC existed. */
+  mode?: "PAID_PLAN" | "POC";
+  planVersionId?: string | null;
   chatVolumeOptionKey?: string | null;
   voiceVolumeOptionKey?: string | null;
   billingInterval?: string | null;
   commercialNote?: string | null;
+  /** POC only. */
+  pocCredits?: number | null;
+  pocExpiresAt?: Date | null;
+  pocFeatureAreas?: string[] | null;
 }
 
 /** Persist the request BEFORE billing is called, so a failure is recoverable. */
@@ -68,16 +80,20 @@ export async function createProvisioningRequest(args: {
   requestedBy?: string | null;
   selection: BillingSelection;
 }) {
+  const mode = args.selection.mode ?? "PAID_PLAN";
   const request = await prisma.tenantBillingProvisioningRequest.create({
     data: {
       tenantId: args.tenantId,
       requestedBy: args.requestedBy ?? null,
-      mode: "PAID_PLAN",
-      planVersionId: args.selection.planVersionId,
+      mode,
+      planVersionId: args.selection.planVersionId ?? null,
       chatVolumeOptionKey: args.selection.chatVolumeOptionKey ?? null,
       voiceVolumeOptionKey: args.selection.voiceVolumeOptionKey ?? null,
       billingInterval: args.selection.billingInterval ?? null,
       commercialNote: args.selection.commercialNote ?? null,
+      pocCredits: args.selection.pocCredits ?? null,
+      pocExpiresAt: args.selection.pocExpiresAt ?? null,
+      pocFeatureAreas: args.selection.pocFeatureAreas ?? [],
       // Placeholder, replaced below with a key derived from the row's own id
       // so it is deterministic for this request and nothing else.
       idempotencyKey: `provisioning:pending:${args.tenantId}:${Date.now()}`,
@@ -97,7 +113,7 @@ export async function createProvisioningRequest(args: {
     action: AuditAction.BILLING_PROVISIONING_REQUEST_CREATED,
     targetType: "provisioning_request",
     targetId: updated.id,
-    metadata: { planVersionId: args.selection.planVersionId },
+    metadata: { mode, planVersionId: args.selection.planVersionId ?? null, pocCredits: args.selection.pocCredits ?? null },
   });
 
   return updated;
@@ -146,15 +162,21 @@ export async function runProvisioning(requestId: string): Promise<ProvisioningOu
     metadata: { attempt: request.attemptCount + 1 },
   });
 
-  let res: { ok: boolean; body: any };
-  try {
-    const httpRes = await fetch(`${billingServiceUrl()}/api/internal/billing/provision-paid-tenant`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Internal-Key": process.env.INTERNAL_SERVICE_KEY || "",
-      },
-      body: JSON.stringify({
+  // Two destinations, one saga. A POC and a paid plan differ in what billing
+  // does, not in how a cross-service failure is made recoverable, so both run
+  // through the same claim, retry classification and repair path.
+  const poc = request.mode === "POC";
+  const endpoint = poc ? "setup-poc" : "provision-paid-tenant";
+  const payload = poc
+    ? {
+        tenantId: request.tenantId,
+        credits: request.pocCredits,
+        expiresAt: request.pocExpiresAt ? request.pocExpiresAt.toISOString() : null,
+        features: request.pocFeatureAreas?.length ? request.pocFeatureAreas : null,
+        note: request.commercialNote,
+        actor: request.requestedBy,
+      }
+    : {
         tenantId: request.tenantId,
         planVersionId: request.planVersionId,
         chatVolumeOptionKey: request.chatVolumeOptionKey,
@@ -163,7 +185,17 @@ export async function runProvisioning(requestId: string): Promise<ProvisioningOu
         commercialNote: request.commercialNote,
         actor: request.requestedBy,
         idempotencyKey: request.idempotencyKey,
-      }),
+      };
+
+  let res: { ok: boolean; body: any };
+  try {
+    const httpRes = await fetch(`${billingServiceUrl()}/api/internal/billing/${endpoint}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Internal-Key": process.env.INTERNAL_SERVICE_KEY || "",
+      },
+      body: JSON.stringify(payload),
       signal: AbortSignal.timeout(15_000),
     });
     res = { ok: httpRes.ok, body: await httpRes.json().catch(() => ({})) };
@@ -180,7 +212,7 @@ export async function runProvisioning(requestId: string): Promise<ProvisioningOu
         state,
         lastFailureCode: code,
         // Sanitized: a transport or provider message is never stored verbatim.
-        lastFailureMessage: safeMessage(code, state),
+        lastFailureMessage: safeMessage(code, state, request.mode),
         nextRetryAt: state === "FAILED_RETRYABLE" ? nextBackoff(request.attemptCount + 1) : null,
       },
     });
@@ -215,9 +247,11 @@ export async function runProvisioning(requestId: string): Promise<ProvisioningOu
 }
 
 /** Operator-safe message. Never a raw transport or provider string. */
-function safeMessage(code: string, state: BillingProvisioningState): string {
+function safeMessage(code: string, state: BillingProvisioningState, mode = "PAID_PLAN"): string {
   if (state === "FAILED_PERMANENT") {
-    return "The selected plan or volume option is no longer valid. Choose a different plan and provision again.";
+    return mode === "POC"
+      ? "The POC settings are not valid. Correct the credit budget, expiry or feature areas and provision again."
+      : "The selected plan or volume option is no longer valid. Choose a different plan and provision again.";
   }
   if (code === "billing_unreachable") {
     return "The billing service could not be reached. This is usually temporary; retry the setup.";
@@ -241,6 +275,7 @@ export async function provisioningStatusForTenant(tenantId: string) {
   return {
     id: request.id,
     state: request.state,
+    mode: request.mode,
     planVersionId: request.planVersionId,
     attemptCount: request.attemptCount,
     lastAttemptAt: request.lastAttemptAt,

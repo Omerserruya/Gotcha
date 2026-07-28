@@ -100,6 +100,7 @@ export {
   getGlobalEstimation,
   resolveEstimation,
   estimateChannel,
+  estimateDeclaredChannel,
   estimatePlanCapacity,
   estimatePricePerInteraction,
   estimateRemainingConversations,
@@ -113,6 +114,8 @@ export {
 export type {
   EstimationRatios,
   ChannelEstimate,
+  EstimateBasis,
+  DeclaredVolume,
   PlanEstimate,
   PriceBreakdown,
   EstimationSnapshot,
@@ -174,3 +177,22 @@ export {
   PaidAccessDeniedError,
 } from "./entitlement-gate";
 export type { PaidAccessDecision, PaidAccessQuery, DenialReason } from "./entitlement-gate";
+
+// The tenant-commercial invariant: every organization has exactly one plan.
+export {
+  classifyTenantPlanAccess,
+  subscriptionIsActiveSource,
+  planAccessLabel,
+} from "./tenant-plan-access";
+export type {
+  PlanAccessSource,
+  PlanAccessState,
+  PlanAccessVerdict,
+  PlanAccessInput,
+  PlanAccessSubscription,
+} from "./tenant-plan-access";
+export {
+  resolveTenantPlanAccess,
+  resolveTenantPlanAccessBatch,
+  tenantPlanGateFacts,
+} from "./tenant-plan-resolver";

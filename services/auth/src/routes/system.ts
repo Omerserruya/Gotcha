@@ -21,6 +21,9 @@ import {
   writeAudit,
   AuditAction,
   seedTenantRbac,
+  ALL_LICENSE_KEYS,
+  resolveTenantPlanAccess,
+  resolveTenantPlanAccessBatch,
 } from "@chatcenter/shared";
 import { eraseTenant } from "../services/gdpr.service";
 import { sendOnboardingEmail, sendPaidOnboardingEmail} from "../services/notification.service";
@@ -30,6 +33,17 @@ import { listOnboardingSnapshots, getOnboardingSnapshot } from "../services/onbo
 import { inviteUser, syncIdentityNameByUser, syncMembershipAccess } from "../services/invitation.service";
 
 const router = Router();
+
+/**
+ * The license domains a POC's feature areas are chosen from.
+ *
+ * Derived from the permission catalog, not listed, so a domain added to the
+ * product cannot go missing here - and under default-ALLOW license semantics, a
+ * missing domain is a GRANTED one.
+ */
+const LICENSE_DOMAINS: string[] = Array.from(
+  new Set(ALL_LICENSE_KEYS.map((k) => k.split(":")[0] as string)),
+).sort();
 
 // System-admin routes legitimately need cross-tenant reads (list all
 // tenants, aggregate usage across tenants, create new tenant admins,
@@ -120,7 +134,32 @@ router.get("/tenants", authenticate, requireSystemAdmin(), async (req: Request, 
       prisma.tenant.count({ where }),
     ]);
 
-    res.json({ data: tenants, meta: { total, page, limit } });
+    // Every row carries its plan state. The console used to show status alone,
+    // which meant an ACTIVE tenant with no plan at all looked exactly like a
+    // paying one - the single most expensive thing this screen can get wrong.
+    const access = await resolveTenantPlanAccessBatch(tenants.map((t) => t.id));
+
+    res.json({
+      data: tenants.map((t) => {
+        const v = access.get(t.id);
+        return {
+          ...t,
+          planAccess: v
+            ? {
+                state: v.state,
+                label: v.label,
+                source: v.source,
+                active: v.active,
+                planKey: v.planKey,
+                expiresAt: v.expiresAt,
+                needsReview: v.needsReview,
+                reviewReason: v.reviewReason ?? null,
+              }
+            : null,
+        };
+      }),
+      meta: { total, page, limit },
+    });
   } catch (err) {
     console.error("List tenants error:", err);
     res.status(500).json({ error: "Failed to list tenants" });
@@ -172,12 +211,25 @@ router.get("/tenants/:id", authenticate, requireSystemAdmin(), async (req: Reque
       orderBy: { name: "asc" },
     });
 
+    const planAccess = await resolveTenantPlanAccess(tenant.id);
+
     res.json({
       data: {
         ...tenant,
         users,
         channels,
         departments,
+        planAccess: {
+          state: planAccess.state,
+          label: planAccess.label,
+          source: planAccess.source,
+          active: planAccess.active,
+          planKey: planAccess.planKey,
+          planName: planAccess.planName,
+          expiresAt: planAccess.expiresAt,
+          needsReview: planAccess.needsReview,
+          reviewReason: planAccess.reviewReason ?? null,
+        },
       },
     });
   } catch (err) {
@@ -228,26 +280,37 @@ async function callBilling(
 // ─── Create Tenant ───────────────────────────────────────────
 
 /**
- * Optional billing provisioning.
+ * Mandatory billing provisioning.
  *
- * Only NONE and PAID_PLAN are accepted. TRIAL, POC, CUSTOM_PLAN and
- * MANUAL_CONTRACT each keep their own explicit path with their own rules, and
- * half-exposing them here would let a caller reach a flow that does not yet
- * enforce those rules.
+ * Exactly one of PAID_PLAN or POC. "No billing" is gone: it created an
+ * organization with full product access and no commercial record of why, and
+ * every such tenant then had to be noticed by a person before it was ever
+ * reconciled. An evaluation is a legitimate reason to not be charging someone;
+ * having never decided is not.
  *
- * There is deliberately no price, credit or currency field: every commercial
- * value is recomputed server-side from the option keys, and sending one is a
- * 400 rather than a silent no-op.
+ * TRIAL, CUSTOM_PLAN and MANUAL_CONTRACT keep their own explicit paths with
+ * their own rules - a manual contract in particular activates a paid plan on an
+ * operator's word alone and sits behind a stronger permission than this.
+ *
+ * There is deliberately no price, credit or currency field for the paid path:
+ * every commercial value is recomputed server-side from the option keys, and
+ * sending one is a 400 rather than a silent no-op. The POC credit budget is
+ * different in kind - it is not a price, it is the allowance an operator is
+ * choosing to give away - so it is accepted, bounded, and audited.
  */
 const billingSchema = z
   .object({
-    mode: z.enum(["NONE", "PAID_PLAN"]),
+    mode: z.enum(["PAID_PLAN", "POC"]),
     planVersionId: z.string().min(1).optional(),
     chatVolumeOptionKey: z.string().min(1).nullable().optional(),
     voiceVolumeOptionKey: z.string().min(1).nullable().optional(),
     billingInterval: z.enum(["MONTHLY", "ANNUAL"]).optional(),
     paymentRequiredBeforeAccess: z.boolean().optional(),
     commercialNote: z.string().max(2000).optional(),
+    // ── POC ──
+    pocCredits: z.number().int().positive().max(1_000_000).optional(),
+    pocExpiresAt: z.string().datetime().optional(),
+    pocFeatureAreas: z.array(z.string().min(1)).optional(),
   })
   // strict() BEFORE refine(): a stray `price` or `credits` is rejected, not
   // silently ignored, so a caller cannot keep sending one believing it works.
@@ -255,21 +318,54 @@ const billingSchema = z
   .refine((b) => b.mode !== "PAID_PLAN" || !!b.planVersionId, {
     message: "planVersionId is required for PAID_PLAN",
     path: ["planVersionId"],
+  })
+  .refine((b) => b.mode !== "POC" || typeof b.pocCredits === "number", {
+    message: "pocCredits is required for POC",
+    path: ["pocCredits"],
+  })
+  .refine((b) => b.mode !== "POC" || !!b.pocExpiresAt, {
+    // An evaluation with no end is not an evaluation, it is free product.
+    message: "pocExpiresAt is required for POC",
+    path: ["pocExpiresAt"],
+  })
+  .refine((b) => b.mode !== "POC" || (b.pocFeatureAreas?.length ?? 0) > 0, {
+    message: "pocFeatureAreas must name at least one feature area",
+    path: ["pocFeatureAreas"],
   });
 
-const createTenantSchema = z.object({
+/** Exported so the policy can be tested as the rule it is, not via a mock. */
+export const createTenantSchema = z.object({
   name: z.string().min(1).max(100),
   slug: z.string().min(2).max(50).regex(/^[a-z0-9-]+$/, "Slug must be lowercase alphanumeric with hyphens"),
   adminEmail: z.string().email(),
   adminName: z.string().min(1),
-  billing: billingSchema.optional(),
+  // Required. An organization without a commercial decision is the thing this
+  // whole route now exists to prevent.
+  billing: billingSchema,
 });
 
 router.post("/tenants", authenticate, requireSystemAdmin(), validate(createTenantSchema), async (req: Request, res: Response): Promise<void> => {
   try {
     const { name, slug, adminEmail, adminName, billing } = req.body;
-    const paid = billing?.mode === "PAID_PLAN";
+    const paid = billing.mode === "PAID_PLAN";
+    const isPoc = billing.mode === "POC";
     const actorId = (req as any).user?.userId as string | undefined;
+
+    // Validate the POC selection BEFORE anything is created, for the same
+    // reason the paid one is: a rejected expiry or an unknown feature area must
+    // fail while there is still no tenant to roll back.
+    const pocExpiresAt = isPoc ? new Date(billing.pocExpiresAt) : null;
+    if (isPoc) {
+      if (!pocExpiresAt || Number.isNaN(pocExpiresAt.getTime()) || pocExpiresAt <= new Date()) {
+        res.status(400).json({ error: "Invalid billing selection", code: "expiry_must_be_in_the_future" });
+        return;
+      }
+      const unknown = (billing.pocFeatureAreas as string[]).filter((f) => !LICENSE_DOMAINS.includes(f));
+      if (unknown.length) {
+        res.status(400).json({ error: "Invalid billing selection", code: "unknown_feature_domain", domains: unknown });
+        return;
+      }
+    }
 
     // Validate the commercial selection BEFORE anything is created. A bad plan
     // or volume key must fail while there is still no tenant to roll back.
@@ -374,46 +470,60 @@ router.post("/tenants", authenticate, requireSystemAdmin(), validate(createTenan
       },
     });
 
-    // Billing scaffolding for a paid tenant. The REQUEST is made durable first,
-    // so a billing failure leaves a recoverable state rather than a tenant whose
-    // requested plan is recorded nowhere.
+    // Billing scaffolding. The REQUEST is made durable first, so a billing
+    // failure leaves a recoverable state rather than a tenant whose requested
+    // plan is recorded nowhere. Both modes go through this: a POC that failed
+    // halfway is exactly as stuck as a paid one, and just as repairable.
     let paidProvisioning: any = null;
-    if (paid) {
+    let pocProvisioning: any = null;
+    {
       const provRequest = await createProvisioningRequest({
         tenantId: result.tenant.id,
         requestedBy: actorId ?? null,
-        selection: {
-          planVersionId: billing.planVersionId,
-          chatVolumeOptionKey: billing.chatVolumeOptionKey ?? null,
-          voiceVolumeOptionKey: billing.voiceVolumeOptionKey ?? null,
-          billingInterval: billing.billingInterval ?? null,
-          commercialNote: billing.commercialNote ?? null,
-        },
+        selection: paid
+          ? {
+              mode: "PAID_PLAN",
+              planVersionId: billing.planVersionId,
+              chatVolumeOptionKey: billing.chatVolumeOptionKey ?? null,
+              voiceVolumeOptionKey: billing.voiceVolumeOptionKey ?? null,
+              billingInterval: billing.billingInterval ?? null,
+              commercialNote: billing.commercialNote ?? null,
+            }
+          : {
+              mode: "POC",
+              planVersionId: null,
+              commercialNote: billing.commercialNote ?? null,
+              pocCredits: billing.pocCredits,
+              pocExpiresAt,
+              pocFeatureAreas: billing.pocFeatureAreas ?? [],
+            },
       });
 
       const outcome = await runProvisioning(provRequest.id);
       const prov = { ok: outcome.ok, body: outcome.body ?? { error: outcome.failureCode } };
 
       if (!prov.ok) {
-        // The tenant exists but billing setup did not complete. It stays
-        // PENDING_PAYMENT - inert, because the access matrix denies the paid
-        // product - and the durable provisioning request holds exactly what was
-        // requested, so REPAIR can finish the job without the operator
-        // re-entering anything. No email is sent, because there is no link.
+        // The tenant exists but plan setup did not complete. It is inert: a
+        // PENDING_PAYMENT tenant is denied the paid product by the access
+        // matrix, and a POC tenant that never got its subscription has no
+        // access source, which the same matrix now also denies. The durable
+        // provisioning request holds exactly what was requested, so REPAIR can
+        // finish the job without the operator re-entering anything. No email is
+        // sent, because there is nothing yet to send anyone to.
         void writeAudit({
           tenantId: result.tenant.id, actorType: "user", actorId,
           action: AuditAction.PAID_TENANT_PROVISIONING_FAILED,
           targetType: "tenant", targetId: result.tenant.id,
-          metadata: { failureCode: prov.body?.error ?? "unknown" },
+          metadata: { mode: billing.mode, failureCode: prov.body?.error ?? "unknown" },
         });
         res.status(502).json({
-          error: "Tenant created but billing setup did not complete",
+          error: "Tenant created but plan setup did not complete",
           code: outcome.failureCode ?? "provisioning_failed",
           data: {
-            tenant: { id: result.tenant.id, name, slug, status: "PENDING_PAYMENT" },
+            tenant: { id: result.tenant.id, name, slug, status: result.tenant.status },
             admin: { id: result.admin.id, email: adminEmail, name: adminName },
             billing: {
-              mode: "PAID_PLAN",
+              mode: billing.mode,
               provisioningState: outcome.state,
               // Repair, not "create the tenant again".
               canRepair: outcome.state === "FAILED_RETRYABLE" || outcome.state === "PENDING",
@@ -425,8 +535,25 @@ router.post("/tenants", authenticate, requireSystemAdmin(), validate(createTenan
         return;
       }
 
-      paidProvisioning = prov.body;
+      if (isPoc) {
+        pocProvisioning = prov.body;
+        void writeAudit({
+          tenantId: result.tenant.id, actorType: "user", actorId,
+          action: AuditAction.POC_PROVISIONED,
+          targetType: "tenant", targetId: result.tenant.id,
+          metadata: {
+            credits: billing.pocCredits,
+            expiresAt: pocExpiresAt?.toISOString() ?? null,
+            featuresEnabled: pocProvisioning?.featuresEnabled ?? billing.pocFeatureAreas,
+            note: billing.commercialNote ?? null,
+          },
+        });
+      } else {
+        paidProvisioning = prov.body;
+      }
+    }
 
+    if (paid) {
       void writeAudit({
         tenantId: result.tenant.id, actorType: "user", actorId,
         action: AuditAction.PAID_TENANT_CREATED,
@@ -483,6 +610,22 @@ router.post("/tenants", authenticate, requireSystemAdmin(), validate(createTenan
         admin: { id: result.admin.id, email: result.admin.email, name: result.admin.name },
         // Safe summary only. The raw continuation token is never returned by
         // any API - it exists solely for the one email that carries it.
+        ...(pocProvisioning
+          ? {
+              billing: {
+                mode: "POC",
+                credits: pocProvisioning.credits,
+                expiresAt: pocProvisioning.expiresAt,
+                featuresEnabled: pocProvisioning.featuresEnabled,
+                featuresDenied: pocProvisioning.featuresDenied,
+                // Said plainly, because the operator is giving product away and
+                // should be certain nothing will ever be charged for it.
+                charges: "none",
+                renewal: "none",
+                paidAccessGranted: true,
+              },
+            }
+          : {}),
         ...(paidProvisioning
           ? {
               billing: {
@@ -615,14 +758,19 @@ router.post("/tenants/:id/repair-billing-provisioning", authenticate, requireSys
     res.status(404).json({ error: "Tenant not found" });
     return;
   }
-  if (tenant.status !== "PENDING_PAYMENT") {
-    res.status(409).json({ error: "TENANT_NOT_PENDING_PAYMENT", tenantStatus: tenant.status });
-    return;
-  }
-
   const status = await provisioningStatusForTenant(tenantId);
   if (!status) {
     res.status(409).json({ error: "NO_PROVISIONING_REQUEST" });
+    return;
+  }
+  // The status guard belongs to the PAID path only. A paid tenant that is not
+  // PENDING_PAYMENT has either already paid or was never awaiting payment, and
+  // "repairing" it would create a checkout for an organization that does not owe
+  // anything. A POC tenant is never PENDING_PAYMENT at all - it owes nothing -
+  // so applying the same guard to it would make a half-provisioned POC
+  // permanently unrepairable, which is the exact state repair exists for.
+  if (status.mode !== "POC" && tenant.status !== "PENDING_PAYMENT") {
+    res.status(409).json({ error: "TENANT_NOT_PENDING_PAYMENT", tenantStatus: tenant.status });
     return;
   }
   if (status.state === "COMPLETED") {
@@ -693,16 +841,26 @@ router.post("/tenants/:id/repair-billing-provisioning", authenticate, requireSys
   res.json({
     data: {
       repaired: true,
-      tenantStatus: "PENDING_PAYMENT",
+      tenantStatus: tenant.status,
       billing: {
+        mode: status.mode,
         provisioningState: "COMPLETED",
-        checkoutReference: outcome.body?.checkoutReference,
-        planName: outcome.body?.summary?.planName,
-        amount: outcome.body?.summary?.amount,
-        currency: outcome.body?.summary?.currency,
-        linkExpiresAt: outcome.body?.link?.expiresAt,
-        emailSent,
-        paidAccessGranted: false,
+        ...(status.mode === "POC"
+          ? {
+              credits: outcome.body?.credits,
+              expiresAt: outcome.body?.expiresAt,
+              featuresEnabled: outcome.body?.featuresEnabled,
+              paidAccessGranted: true,
+            }
+          : {
+              checkoutReference: outcome.body?.checkoutReference,
+              planName: outcome.body?.summary?.planName,
+              amount: outcome.body?.summary?.amount,
+              currency: outcome.body?.summary?.currency,
+              linkExpiresAt: outcome.body?.link?.expiresAt,
+              emailSent,
+              paidAccessGranted: false,
+            }),
       },
     },
   });
@@ -712,6 +870,169 @@ router.post("/tenants/:id/repair-billing-provisioning", authenticate, requireSys
 router.get("/tenants/:id/billing-provisioning", authenticate, requireSystemAdmin(), async (req: Request, res: Response): Promise<void> => {
   const status = await provisioningStatusForTenant(req.params.id as string);
   res.json({ data: status });
+});
+
+// ─── Remediation: give an existing plan-less tenant a plan ──
+
+/**
+ * Assign a paid plan to an organization that has none.
+ *
+ * The other half of what the audit offers. A tenant with no plan can already be
+ * given a POC from its own page; without this it could not be given a paid plan
+ * at all, and the only remaining route would have been to create a second
+ * organization and move people to it.
+ *
+ * It refuses a tenant that already holds access. Re-pointing a live plan is a
+ * plan CHANGE - it has to reckon with an existing subscription, a period, and
+ * money already taken - and doing it through a route meant for the empty case
+ * would silently skip all of that.
+ */
+const assignPaidPlanSchema = z
+  .object({
+    planVersionId: z.string().min(1),
+    chatVolumeOptionKey: z.string().min(1).nullable().optional(),
+    voiceVolumeOptionKey: z.string().min(1).nullable().optional(),
+    billingInterval: z.enum(["MONTHLY", "ANNUAL"]).optional(),
+    commercialNote: z.string().max(2000).optional(),
+  })
+  .strict();
+
+router.post("/tenants/:id/assign-paid-plan", authenticate, requireSystemAdmin(), validate(assignPaidPlanSchema), async (req: Request, res: Response): Promise<void> => {
+  const tenantId = req.params.id as string;
+  const actorId = (req as any).user?.userId as string | undefined;
+  const { planVersionId, chatVolumeOptionKey, voiceVolumeOptionKey, billingInterval, commercialNote } = req.body;
+
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { id: true, name: true, status: true } });
+  if (!tenant) {
+    res.status(404).json({ error: "Tenant not found" });
+    return;
+  }
+
+  const access = await resolveTenantPlanAccess(tenantId);
+  if (access.active) {
+    res.status(409).json({ error: "TENANT_ALREADY_HAS_A_PLAN", state: access.state, label: access.label });
+    return;
+  }
+
+  const check = await callBilling("validate-paid-plan", {
+    planVersionId,
+    chatVolumeOptionKey: chatVolumeOptionKey ?? null,
+    voiceVolumeOptionKey: voiceVolumeOptionKey ?? null,
+    billingInterval,
+  });
+  if (!check.ok) {
+    res.status(400).json({ error: "Invalid billing selection", code: check.body?.error });
+    return;
+  }
+
+  // The tenant now owes its first payment, which is what PENDING_PAYMENT means.
+  // Set BEFORE provisioning: if billing fails, the tenant must be left in the
+  // state that denies the paid product, not the one that grants it.
+  await prisma.tenant.update({ where: { id: tenantId }, data: { status: "PENDING_PAYMENT" } });
+
+  const provRequest = await createProvisioningRequest({
+    tenantId,
+    requestedBy: actorId ?? null,
+    selection: {
+      mode: "PAID_PLAN",
+      planVersionId,
+      chatVolumeOptionKey: chatVolumeOptionKey ?? null,
+      voiceVolumeOptionKey: voiceVolumeOptionKey ?? null,
+      billingInterval: billingInterval ?? null,
+      commercialNote: commercialNote ?? null,
+    },
+  });
+
+  const outcome = await runProvisioning(provRequest.id);
+  if (!outcome.ok) {
+    res.status(502).json({
+      error: "BILLING_PROVISIONING_FAILED",
+      code: outcome.failureCode,
+      state: outcome.state,
+      canRepair: outcome.state === "FAILED_RETRYABLE" || outcome.state === "PENDING",
+    });
+    return;
+  }
+
+  const admin = await prisma.user.findFirst({
+    where: { tenantId, role: "ADMIN" },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, email: true, name: true },
+  });
+
+  let emailSent = false;
+  if (admin && outcome.body?.link?.token) {
+    try {
+      await sendPaidOnboardingEmail({
+        tenantId,
+        adminEmail: admin.email,
+        adminName: admin.name ?? admin.email,
+        tenantName: tenant.name,
+        adminUserId: admin.id,
+        continuationToken: outcome.body.link.token,
+        checkoutReference: outcome.body.checkoutReference,
+        linkExpiresAt: new Date(outcome.body.link.expiresAt),
+        planName: outcome.body.summary.planName,
+        amount: outcome.body.summary.amount,
+        currency: outcome.body.summary.currency,
+        includedCredits: outcome.body.summary.includedCredits,
+      });
+      emailSent = true;
+    } catch {
+      // Setup is correct; only delivery failed. Resend repairs that.
+    }
+  }
+
+  void writeAudit({
+    tenantId, actorType: "user", actorId,
+    action: AuditAction.PAID_TENANT_CREATED,
+    targetType: "tenant", targetId: tenantId,
+    metadata: { assignedToExistingTenant: true, planKey: outcome.body?.summary?.planKey, emailSent },
+  });
+
+  res.json({
+    data: {
+      tenantStatus: "PENDING_PAYMENT",
+      billing: {
+        mode: "PAID_PLAN",
+        checkoutReference: outcome.body?.checkoutReference,
+        planName: outcome.body?.summary?.planName,
+        amount: outcome.body?.summary?.amount,
+        currency: outcome.body?.summary?.currency,
+        emailSent,
+        paidAccessGranted: false,
+      },
+    },
+  });
+});
+
+/**
+ * The feature areas a POC may be scoped to.
+ *
+ * Served rather than hardcoded in the UI so the picker cannot fall behind the
+ * catalog - a domain missing from the picker is one an operator cannot grant,
+ * and, under default-ALLOW, one they cannot deny either.
+ */
+router.get("/poc-feature-domains", authenticate, requireSystemAdmin(), async (_req: Request, res: Response): Promise<void> => {
+  res.json({ data: LICENSE_DOMAINS });
+});
+
+// ─── Estate-wide plan audit ─────────────────────────────────
+
+/**
+ * Every tenant, grouped by how it holds access.
+ *
+ * Read-only. A tenant with no plan is REPORTED, never repaired automatically:
+ * assigning a paid plan would invent a commercial agreement nobody made, and
+ * granting credits would just make the anomaly stop showing up.
+ */
+router.get("/tenants-plan-audit", authenticate, requireSystemAdmin(), async (_req: Request, res: Response): Promise<void> => {
+  const report = await callBillingGet("tenant-plan-audit");
+  if (!report.ok) {
+    res.status(502).json({ error: "PLAN_AUDIT_UNAVAILABLE", code: report.body?.error });
+    return;
+  }
+  res.json({ data: report.body });
 });
 
 // ─── Resend Paid Payment / Onboarding Link ──────────────────

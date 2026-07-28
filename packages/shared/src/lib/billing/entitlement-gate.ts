@@ -254,15 +254,20 @@ export async function checkPaidAccess(query: PaidAccessQuery): Promise<PaidAcces
   if (tenant?.status === "SUSPENDED") return deny(mode, "tenant_suspended");
 
   // Statuses where the paid product is already refused by the tenant access
-  // matrix (see tenant-access-policy) are left alone here.
+  // matrix (see tenant-access-policy) are left alone here - but only when an
+  // access source actually exists.
   //
-  // A tenant still in onboarding has no subscription yet, and asking "do they
-  // have one" would refuse them - which would break onboarding itself, the one
-  // flow that has to work BEFORE anyone can pay. The paid product is not
-  // reachable from those states anyway; evaluateTenantAccess denies the
-  // FULL_APPLICATION scope. Refusing again here buys nothing and costs the
-  // ability to sign anyone up.
-  if (tenant && tenant.status !== "ACTIVE") return ALLOW(mode);
+  // This used to allow every non-ACTIVE tenant unconditionally, on the reasoning
+  // that onboarding has no subscription yet and refusing it would break the one
+  // flow that must work before anyone can pay. That reasoning stopped holding
+  // when every organization began life with a plan: a POC or a paid checkout is
+  // created WITH the tenant now, so a tenant in onboarding with no access source
+  // at all is not a customer signing up, it is a tenant that should not be
+  // served. And the blanket allow was reachable by background workers, which do
+  // not pass through the HTTP matrix at all.
+  if (tenant && tenant.status !== "ACTIVE") {
+    return subscription ? ALLOW(mode) : deny(mode, "no_subscription");
+  }
 
   // Grandfathered subscriptions have enforcement explicitly disabled. That is a
   // commercial decision recorded on the row, not an accident.

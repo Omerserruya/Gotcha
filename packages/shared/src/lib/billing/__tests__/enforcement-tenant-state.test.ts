@@ -101,13 +101,28 @@ describe("it does not break anyone who should be served", () => {
     expect(res.reason).toBe("no_subscription");
   });
 
-  it("allows a tenant still onboarding", async () => {
-    const t = await tenant("PENDING_ONBOARDING");
-    // Onboarding has no subscription yet by definition, and it is the flow
-    // through which one gets bought. Refusing it here would make the product
-    // impossible to start using. The paid product stays out of reach anyway -
-    // the tenant access matrix denies that scope for this status.
+  it("allows a tenant still onboarding that HAS a plan", async () => {
+    const t = await tenant("PENDING_ONBOARDING", { withSubscription: true });
+    // Being mid-setup is not itself a commercial fact. The plan exists; the
+    // workspace is simply not finished.
     expect((await checkAiAllowed(t.id)).allowed).toBe(true);
+  });
+
+  it("refuses a tenant onboarding with no plan at all", async () => {
+    const t = await tenant("PENDING_ONBOARDING");
+    // The earlier rule allowed every non-ACTIVE tenant, reasoning that
+    // onboarding precedes paying and refusing it would make the product
+    // impossible to start using. That reasoning no longer holds: an
+    // organization is now created WITH a plan - a paid checkout or a POC - so
+    // reaching onboarding with no access source means provisioning did not
+    // finish, not that a customer is signing up.
+    //
+    // It mattered because this gate is what background workers ask. The tenant
+    // access matrix that was said to be covering this is HTTP-only, so an
+    // inbound message handler served these tenants regardless.
+    const res = await checkAiAllowed(t.id);
+    expect(res.allowed).toBe(false);
+    expect(res.reason).toBe("no_subscription");
   });
 
   it("allows an ACTIVE tenant with a live subscription and credits", async () => {

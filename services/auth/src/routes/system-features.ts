@@ -15,6 +15,8 @@ import {
   ALL_LICENSE_KEYS,
   setTenantEntitlement,
   getEffectiveEntitlements,
+  writeAudit,
+  AuditAction,
   type Feature,
 } from "@chatcenter/shared";
 
@@ -244,6 +246,7 @@ const pocSchema = z.object({
   expiresAt: z.string().datetime().optional(),
   // Feature domains the POC may use. Omitted → all domains enabled.
   features: z.array(z.string()).optional(),
+  note: z.string().max(2000).optional(),
 });
 router.post(
   "/tenants/:tenantId/poc",
@@ -255,40 +258,52 @@ router.post(
     const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { id: true } });
     if (!tenant) { res.status(404).json({ error: "Tenant not found" }); return; }
 
-    const { credits, expiresAt, features } = req.body as { credits: number; expiresAt?: string; features?: string[] };
+    const { credits, expiresAt, features, note } = req.body as {
+      credits: number; expiresAt?: string; features?: string[]; note?: string;
+    };
     const expiry = expiresAt ? new Date(expiresAt) : null;
     if (expiry && expiry <= new Date()) { res.status(400).json({ error: "expiresAt must be in the future" }); return; }
-    const picked = features ? new Set(features) : null;
-    if (picked) {
-      for (const f of picked) {
+    if (features) {
+      for (const f of features) {
         if (!LICENSE_DOMAINS.includes(f)) { res.status(400).json({ error: "Unknown feature domain", domain: f }); return; }
       }
     }
 
-    // Feature set: license default-ALLOW means absent rows = allowed, so an
-    // exact POC feature set needs EXPLICIT rows for every domain - true for
-    // picked, false for the rest - all TRIAL-source with the POC's expiry.
-    for (const domain of LICENSE_DOMAINS) {
-      await setTenantEntitlement({
-        tenantId,
-        key: domain,
-        valueType: "BOOLEAN",
-        value: picked ? picked.has(domain) : true,
-        source: "TRIAL",
-        expiresAt: expiry,
-        reason: "POC provisioning",
-        createdBy: req.user?.userId,
-      });
-    }
-
-    // Money side: enforced subscription + the operator-set credit budget.
+    // ONE provisioning path. This route used to write the entitlement rows here
+    // and then ask billing for the subscription and credits, which meant the
+    // two halves of a POC could each happen without the other: an entitlement
+    // grant with no budget, or a budget with every feature switched on. Both
+    // now happen behind a single call that either does all of it or reports a
+    // failure, and tenant creation reaches the same call.
     const billing = await billingInternal("setup-poc", {
       method: "POST",
-      body: { tenantId, credits, expiresAt: expiry?.toISOString() ?? null, actor: req.user?.userId },
+      body: {
+        tenantId,
+        credits,
+        expiresAt: expiry?.toISOString() ?? null,
+        features: features?.length ? features : null,
+        note: note ?? null,
+        actor: req.user?.userId,
+      },
     });
-    if (billing?.error) { res.status(502).json({ error: `POC billing setup failed: ${billing.error}` }); return; }
+    if (billing?.error) { res.status(502).json({ error: `POC setup failed: ${billing.error}` }); return; }
 
-    res.json({ data: { ok: true, credits, expiresAt: expiry, features: picked ? Array.from(picked) : LICENSE_DOMAINS, balance: billing?.balance ?? null } });
+    void writeAudit({
+      tenantId, actorType: "user", actorId: req.user?.userId,
+      action: AuditAction.POC_PROVISIONED, targetType: "tenant", targetId: tenantId,
+      metadata: { credits, expiresAt: expiry?.toISOString() ?? null, featuresEnabled: billing?.featuresEnabled ?? null },
+    });
+
+    res.json({
+      data: {
+        ok: true,
+        credits,
+        expiresAt: expiry,
+        features: billing?.featuresEnabled ?? LICENSE_DOMAINS,
+        featuresDenied: billing?.featuresDenied ?? [],
+        balance: billing?.balance ?? null,
+      },
+    });
   },
 );
 

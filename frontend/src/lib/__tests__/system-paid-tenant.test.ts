@@ -72,7 +72,11 @@ describe("the browser never submits or computes a price", () => {
   });
 
   it("submission is blocked until the server has quoted", () => {
-    expect(page).toContain('billing.mode === "PAID_PLAN" && !quote');
+    // The completeness rule moved into a named function when POC gained its own
+    // required fields; a paid plan still cannot be submitted without the
+    // server's quote, which is the property this protects.
+    expect(page).toContain("billingSelectionComplete(billing, !!quote)");
+    expect(billingUi).toContain('if (v.mode === "PAID_PLAN") return !!v.planVersionId && quoted;');
   });
 
   it("24-25. plans and volume options come from the API, not hardcoded", () => {
@@ -138,7 +142,12 @@ describe("the client leaks nothing", () => {
   });
 
   it("23. unsupported billing modes are not offered", () => {
-    for (const mode of ["TRIAL", "POC", "CUSTOM_PLAN", "MANUAL_CONTRACT"]) {
+    // POC left this list deliberately: it is now one of the two ways an
+    // organization can be created, and it has its own required fields and its
+    // own explicit entitlement rules on the server. The other three still keep
+    // their separate flows - a manual contract in particular activates a paid
+    // plan on an operator's word and sits behind a stronger permission.
+    for (const mode of ["TRIAL", "CUSTOM_PLAN", "MANUAL_CONTRACT"]) {
       expect(billingUi, `${mode} must not appear in this UI`).not.toContain(mode);
     }
   });

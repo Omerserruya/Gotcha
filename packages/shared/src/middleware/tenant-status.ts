@@ -4,7 +4,9 @@ import {
   evaluateTenantAccess,
   tenantAccessErrorBody,
   type TenantAccessScope,
+  type TenantPlanAccessFacts,
 } from "../lib/tenant-access-policy";
+import { tenantPlanGateFacts } from "../lib/billing/tenant-plan-resolver";
 
 /**
  * Tenant status gates.
@@ -50,7 +52,19 @@ function gate(scope: TenantAccessScope) {
       return;
     }
 
-    const decision = evaluateTenantAccess(tenant.status, scope);
+    // Only the paid product asks the commercial question, so onboarding and
+    // payment setup cost no extra query - and those are precisely the flows a
+    // tenant without a plan has to be able to reach.
+    let planAccess: TenantPlanAccessFacts | undefined;
+    if (scope === "FULL_APPLICATION") {
+      const facts = await tenantPlanGateFacts(req.tenantId);
+      // `unknown` means the plan state could not be read. Denying on it would
+      // turn a database blip into every paying organization losing the product
+      // at once; the entitlement gate makes the same call for the same reason.
+      if (!facts.unknown) planAccess = facts;
+    }
+
+    const decision = evaluateTenantAccess(tenant.status, scope, planAccess);
     if (!decision.allow) {
       res.status(decision.httpStatus).json({
         // `error` and `tenantStatus` are retained for existing consumers; the
@@ -68,7 +82,8 @@ function gate(scope: TenantAccessScope) {
 
 /**
  * The paid product: inbox, conversations, AI, channels, integrations, customer
- * data, workflows, knowledge. ACTIVE only.
+ * data, workflows, knowledge. ACTIVE *and* holding an active access source -
+ * a paid subscription, a POC, a trial, or a manual contract.
  */
 export function requireActiveTenant() {
   return gate("FULL_APPLICATION");

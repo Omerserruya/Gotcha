@@ -13,7 +13,8 @@ import { backfillAllTenants, grandfatherTenant } from "../services/grandfather.s
 import { runBillingCycle } from "../services/subscription.service";
 import { runDunning } from "../services/dunning.service";
 import { refundCharge, applyChargeback, applyRefundConfirmation } from "../services/refund.service";
-import { setupPoc } from "../services/poc.service";
+import { provisionPoc, PocProvisioningRefused, POC_FEATURE_DOMAINS } from "../services/poc.service";
+import { auditTenantPlans } from "../services/tenant-plan-audit.service";
 import {
   provisionPaidTenant,
   resolveAndValidatePlan,
@@ -131,20 +132,50 @@ router.post("/internal/billing/run-cycle", async (_req, res) => {
 });
 
 /**
- * SYSTEM_ADMIN console: provision a card-less POC - a real, ENFORCED
- * subscription with an operator-set credit budget and optional expiry.
+ * Provision a card-less POC in full: an ENFORCED subscription, the operator's
+ * credit budget, the expiry, and an explicit entitlement row for every feature
+ * domain - enabled for the chosen ones, denied for the rest.
+ *
+ * The single POC entry point. Both callers - tenant creation and the per-tenant
+ * console action - come through here, so a POC cannot exist with its money set
+ * up and its features not, or the reverse.
+ *
+ * Idempotent: safe to call again for a repair or a correction.
  */
 router.post("/internal/billing/setup-poc", async (req, res) => {
-  const { tenantId, credits, expiresAt, actor } = req.body ?? {};
+  const { tenantId, credits, expiresAt, features, note, actor } = req.body ?? {};
   if (!tenantId || typeof credits !== "number" || credits <= 0) {
     return res.status(400).json({ error: "tenantId and positive credits required" });
   }
   try {
-    const result = await setupPoc({ tenantId, credits, expiresAt: expiresAt ? new Date(expiresAt) : null, actor });
+    const result = await provisionPoc({
+      tenantId,
+      credits,
+      expiresAt: expiresAt ? new Date(expiresAt) : null,
+      features: Array.isArray(features) ? features : null,
+      note: note ?? null,
+      actor,
+    });
     res.json({ ok: true, ...result });
   } catch (err: any) {
-    res.status(400).json({ error: err?.message ?? "setup_poc_failed" });
+    const code = err instanceof PocProvisioningRefused ? err.code : "setup_poc_failed";
+    res.status(400).json({ error: code, message: err?.message });
   }
+});
+
+/** The domains a POC's feature areas may be chosen from. */
+router.get("/internal/billing/poc-feature-domains", async (_req, res) => {
+  res.json({ ok: true, domains: POC_FEATURE_DOMAINS });
+});
+
+/**
+ * Every tenant, grouped by how it holds access. Read-only by design: it
+ * assigns nothing and grants nothing, because a tenant with no plan needs an
+ * operator's decision, not an automatic one.
+ */
+router.get("/internal/billing/tenant-plan-audit", async (_req, res) => {
+  const report = await auditTenantPlans();
+  res.json({ ok: true, ...report });
 });
 
 /** SYSTEM_ADMIN console: top up credits (PURCHASED bucket - never expires). */

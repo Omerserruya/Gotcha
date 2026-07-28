@@ -87,10 +87,35 @@ export async function getProvisioningQuote(
   return r.data;
 }
 
+/**
+ * Give a plan-less organization a paid plan.
+ *
+ * Refused by the server for a tenant that already holds one: re-pointing a live
+ * plan is a plan change, with an existing subscription and money already taken
+ * to reckon with, and this route does none of that.
+ */
+export async function assignPaidPlan(
+  token: string,
+  tenantId: string,
+  selection: { planVersionId: string; chatVolumeOptionKey?: string | null; voiceVolumeOptionKey?: string | null },
+) {
+  return call<{ data: any }>(`/api/system/tenants/${tenantId}/assign-paid-plan`, token, {
+    method: "POST",
+    body: JSON.stringify(selection),
+  });
+}
+
+/** The license domains a POC can be scoped to. Served, never hardcoded. */
+export async function getPocFeatureDomains(token: string): Promise<string[]> {
+  const r = await call<{ data: string[] }>("/api/system/poc-feature-domains", token);
+  return r.data;
+}
+
 export interface ProvisioningStatus {
   id: string;
   state: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED_RETRYABLE" | "FAILED_PERMANENT" | "CANCELLED";
-  planVersionId: string;
+  mode?: "PAID_PLAN" | "POC";
+  planVersionId: string | null;
   attemptCount: number;
   lastAttemptAt: string | null;
   lastFailureCode: string | null;

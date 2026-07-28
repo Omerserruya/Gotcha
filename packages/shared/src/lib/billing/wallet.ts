@@ -271,6 +271,14 @@ export async function consumeUnits(
 /**
  * Expire the prior period's INCLUDED lots and grant the new period's allowance.
  * Purchased lots are untouched. Called by the renewal job.
+ *
+ * `replaceCurrentPeriod` also expires the CURRENT period's lots before granting.
+ * A renewal must not do that - it runs once per period and the current period's
+ * allowance is the one being replaced by a later one. Re-provisioning does: an
+ * operator who fixes a POC's credit budget from 5,000 to 2,000 and runs it again
+ * means the budget IS 2,000, and without this the second grant lands in the same
+ * period alongside the first, leaving 7,000. That is not a rounding difference,
+ * it is the allowance being decided by how many times someone pressed a button.
  */
 export async function rolloverIncluded(
   tenantId: string,
@@ -279,10 +287,16 @@ export async function rolloverIncluded(
   expiresAt: Date,
   source: string,
   client: FullClient = prisma,
+  opts: { replaceCurrentPeriod?: boolean } = {},
 ): Promise<void> {
   await client.$transaction(async (tx) => {
     const stale = await tx.aiUnitLot.findMany({
-      where: { tenantId, bucket: "INCLUDED", periodKey: { not: newPeriodKey }, unitsRemaining: { gt: 0 } },
+      where: {
+        tenantId,
+        bucket: "INCLUDED",
+        ...(opts.replaceCurrentPeriod ? {} : { periodKey: { not: newPeriodKey } }),
+        unitsRemaining: { gt: 0 },
+      },
     });
     for (const lot of stale) {
       const rem = dec(lot.unitsRemaining);
