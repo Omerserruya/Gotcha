@@ -248,3 +248,32 @@ describe("activation state", () => {
     expect(isServingState("ENTITLEMENT_DISABLED")).toBe(false);
   });
 });
+
+describe("production refuses to run without a visitor-session secret", () => {
+  it("throws rather than minting sessions with a default key", async () => {
+    // Case 34. In dev there is a fallback so the stack boots; in
+    // production a missing secret must stop the widget, not quietly make
+    // every visitor session forgeable.
+    const savedNode = process.env.NODE_ENV;
+    const savedWidget = process.env.WIDGET_SESSION_SECRET;
+    const savedJwt = process.env.JWT_SECRET;
+    delete process.env.WIDGET_SESSION_SECRET;
+    delete process.env.JWT_SECRET;
+    (process.env as any).NODE_ENV = "production";
+    try {
+      const { signVisitorSession } = await import("../shopify-live-chat");
+      expect(() =>
+        signVisitorSession({
+          tenantId: "t1",
+          channelAccountId: "c1",
+          visitorId: "v1",
+          shopDomain: "my-store.myshopify.com",
+        }),
+      ).toThrow(/WIDGET_SESSION_SECRET/);
+    } finally {
+      (process.env as any).NODE_ENV = savedNode;
+      if (savedWidget !== undefined) process.env.WIDGET_SESSION_SECRET = savedWidget;
+      if (savedJwt !== undefined) process.env.JWT_SECRET = savedJwt;
+    }
+  });
+});
