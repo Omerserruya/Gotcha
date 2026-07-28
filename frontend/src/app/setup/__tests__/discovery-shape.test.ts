@@ -105,3 +105,52 @@ describe("the exact record that crashed the page", () => {
     expect(hasTech).toBe(false);
   });
 });
+
+/**
+ * The states a scan can actually be in, end to end.
+ *
+ * `legacy` was the field that crashed the page, but it crashed because the
+ * mid-scan checkpoint writes a PARTIAL object - so the interesting cases are
+ * the shapes a real scan passes through, not one field in isolation.
+ */
+describe("every state a scan passes through", () => {
+  const cases: Array<[string, unknown]> = [
+    // Nothing has run yet.
+    ["not started", undefined],
+    ["null column", null],
+    // The mid-scan checkpoint: the exact shape that took the page down.
+    ["mid-scan checkpoint", { platform: { slug: "shopify", name: "Shopify" }, tools: [] }],
+    // A scan that ran and found nothing is a legitimate, complete result.
+    ["completed, found nothing", { platform: null, legacy: [], tracking: [], tools: [] }],
+    // A scan that failed leaves whatever the writer managed before it threw.
+    ["failed scan", { platform: null }],
+    ["failed scan, error marker", { error: "scan_failed" }],
+    // Json columns accept anything; these have all been seen in the wild.
+    ["malformed - string", "shopify"],
+    ["malformed - array", [{ name: "Shopify" }]],
+    ["malformed - collection is an object", { legacy: { name: "nope" }, tools: [] }],
+    ["malformed - collection is a string", { legacy: "klaviyo", tools: [] }],
+    ["malformed - entries are primitives", { legacy: ["klaviyo", 42, null], tools: [] }],
+  ];
+
+  it.each(cases)("renders %s without throwing", (_label, technology) => {
+    const tech = technology as any;
+    // Exactly what the page does for each of the four fields.
+    expect(() => {
+      for (const key of ["legacy", "tracking", "tools"]) {
+        const list = renderableTech(tech?.[key]);
+        expect(Array.isArray(list)).toBe(true);
+        list.map((t) => t.name.trim());
+      }
+    }).not.toThrow();
+  });
+
+  it.each(cases)("reports a length for %s, which is what the page reads", (_label, technology) => {
+    const tech = technology as any;
+    // `tech.legacy.length` is the expression that threw. It must be safe for
+    // every one of these, which is the whole point of routing through the guard.
+    expect(typeof techList(tech?.legacy).length).toBe("number");
+    expect(typeof techList(tech?.tracking).length).toBe("number");
+    expect(typeof techList(tech?.tools).length).toBe("number");
+  });
+});

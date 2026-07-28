@@ -839,6 +839,27 @@ router.post("/tenants/:id/resend-onboarding", authenticate, requireSystemAdmin()
       return;
     }
 
+    // A paid tenant has TWO front doors, and only one of them asks for money.
+    //
+    // This email carries an Authentik setup link that lands the customer
+    // authenticated inside the setup wizard - it says so in as many words: "no
+    // login required". Sent to a tenant that owes money, it hands over the
+    // identity and the wizard while the checkout sits untouched, which is
+    // exactly how a paid workspace was reached without paying: the operator
+    // clicked Resend onboarding, the customer followed it, created their
+    // account, landed in /setup, and never saw a payment screen.
+    //
+    // The payment link is a different button, so this refuses and names it
+    // rather than sending the customer through the wrong door politely.
+    if (tenant.status === "PENDING_PAYMENT") {
+      res.status(409).json({
+        error: "TENANT_AWAITING_PAYMENT",
+        hint: "This organization is on a paid plan and has not paid. Use Resend payment link; the onboarding email would let them into setup without paying.",
+        tenantStatus: tenant.status,
+      });
+      return;
+    }
+
     // Find the admin user for this tenant
     const admin = await prisma.user.findFirst({
       where: { tenantId: tenant.id, role: "ADMIN", isActive: true },

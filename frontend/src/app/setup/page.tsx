@@ -470,8 +470,17 @@ function SetupContent() {
         // and after an OAuth round-trip.
         // Never blocks setup: a billing hiccup must not stop someone
         // configuring their workspace. Absent means "nothing owed".
+        // Payment comes BEFORE setup for a paid organization. Landing here with
+        // an open checkout means they arrived through the onboarding email -
+        // the door that does not ask for money - so send them to the one that
+        // does instead of letting them configure a workspace that will not
+        // open. The banner below stays for anyone this redirect cannot resolve.
         getMyCheckout({ authToken: token })
-          .then((c) => setAwaitingPayment(c ? { reference: c.reference } : null))
+          .then((c) => {
+            if (!c) return setAwaitingPayment(null);
+            setAwaitingPayment({ reference: c.reference });
+            router.replace(`/checkout/payment-required?ref=${encodeURIComponent(c.reference)}`);
+          })
           .catch(() => setAwaitingPayment(null));
 
         const discRes = await getBusinessDiscovery(token).catch(() => null);

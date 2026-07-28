@@ -12,6 +12,7 @@ import { FeatureGuides } from "./onboarding/FeatureGuides";
 import { GuidedTour } from "./onboarding/GuidedTour";
 import { CreditAlertBanner } from "./CreditAlertBanner";
 import { getOnboardingStatus } from "@/lib/api";
+import { destinationForTenantStatus } from "@/lib/payment-gate";
 import { setAnalyticsToken } from "@/lib/analytics";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
@@ -73,17 +74,35 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     });
   }
 
-  // Check tenant onboarding status and redirect if needed
+  // Where this organization belongs, if not here.
+  //
+  // Two changes from the version that let a paid tenant into the product. It no
+  // longer sends every not-yet-active tenant to /setup: one that owes money
+  // goes to the payment screen, because /setup was the way around paying. And
+  // it is no longer ADMIN-only - the paid product is denied to every member of
+  // an unpaid organization, so showing them the app to have the API refuse each
+  // call was a worse experience than saying why.
+  //
+  // The server decides; this only obeys. A member of an unpaid organization is
+  // refused at the API with 402 whatever happens here.
   useEffect(() => {
-    if (!isLoading && user && user.role === "ADMIN" && token && !pathname.startsWith("/setup")) {
-      getOnboardingStatus(token)
-        .then((res) => {
-          if (res.data.tenant.status !== "ACTIVE") {
-            router.replace("/setup");
-          }
-        })
-        .catch(() => {}); // Ignore errors (e.g. system admin)
-    }
+    if (isLoading || !user || !token) return;
+    if (user.role === "SYSTEM_ADMIN") return; // has no tenant of their own
+    let cancelled = false;
+
+    getOnboardingStatus(token)
+      .then(async (res) => {
+        const target = await destinationForTenantStatus(res.data.tenant.status, {
+          authToken: token,
+          pathname,
+        });
+        if (!cancelled && target) router.replace(target);
+      })
+      .catch(() => {}); // Ignore errors (e.g. system admin, or no tenant yet)
+
+    return () => {
+      cancelled = true;
+    };
   }, [user, isLoading, token, router, pathname]);
 
   useEffect(() => {
