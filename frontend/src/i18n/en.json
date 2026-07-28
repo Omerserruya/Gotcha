@@ -4668,6 +4668,11 @@
     "alsoIncludes": "Also includes:"
   },
   "checkout": {
+    "opening": {
+      "eyebrow": "Checkout",
+      "title": "Opening your checkout",
+      "body": "One moment while we look up the plan for your organization."
+    },
     "summary": {
       "plan": "Plan",
       "recurring": "Recurring",

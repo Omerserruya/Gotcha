@@ -457,6 +457,7 @@ router.post("/tenants", authenticate, requireSystemAdmin(), validate(createTenan
         tenantName: name,
         adminUserId: result.admin.id,
         continuationToken: paidProvisioning.link.token,
+        checkoutReference: paidProvisioning.checkoutReference,
         linkExpiresAt: new Date(paidProvisioning.link.expiresAt),
         // Rendered from the IMMUTABLE snapshot, never the live plan row.
         planName: paidProvisioning.summary.planName,
@@ -659,6 +660,7 @@ router.post("/tenants/:id/repair-billing-provisioning", authenticate, requireSys
         tenantName: tenant.name,
         adminUserId: admin.id,
         continuationToken: outcome.body.link.token,
+        checkoutReference: outcome.body.checkoutReference,
         linkExpiresAt: new Date(outcome.body.link.expiresAt),
         planName: outcome.body.summary.planName,
         amount: outcome.body.summary.amount,
@@ -781,6 +783,7 @@ router.post("/tenants/:id/resend-payment-link", authenticate, requireSystemAdmin
       tenantName: tenant.name,
       adminUserId: admin.id,
       continuationToken: resend.body.link.token,
+      checkoutReference: resend.body.checkoutReference,
       linkExpiresAt: new Date(resend.body.link.expiresAt),
       planName: planRow?.name ?? resend.body.summary.planKey,
       amount: resend.body.summary.amount,

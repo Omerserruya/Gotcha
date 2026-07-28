@@ -897,6 +897,12 @@ export async function sendPaidOnboardingEmail(a: {
   tenantName: string;
   adminUserId: string;
   continuationToken: string;
+  /**
+   * The checkout this link is for. Required: the token authorizes action on a
+   * checkout the caller already names, so a link carrying only the token
+   * lands on a page with nothing to ask about.
+   */
+  checkoutReference: string;
   linkExpiresAt: Date;
   planName: string;
   amount: string;
@@ -906,7 +912,13 @@ export async function sendPaidOnboardingEmail(a: {
   resend?: boolean;
 }): Promise<void> {
   const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
-  const continuationUrl = `${frontendUrl}/onboarding/paid?token=${encodeURIComponent(a.continuationToken)}`;
+  // Both parts are needed, and they do different jobs: `ref` says WHICH
+  // checkout, `token` proves the holder may act on it. The entry page strips
+  // the token out of the address bar on arrival.
+  const continuationUrl =
+    `${frontendUrl}/checkout` +
+    `?ref=${encodeURIComponent(a.checkoutReference)}` +
+    `&token=${encodeURIComponent(a.continuationToken)}`;
   const he = a.locale === "he";
   const expiresAtLabel = a.linkExpiresAt.toISOString().slice(0, 16).replace("T", " ");
 
