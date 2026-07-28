@@ -480,6 +480,32 @@ export type {
   VisitorProjectionContext,
 } from "./lib/shopify-live-chat";
 
+// GOTCHA Shopify CHAT app — its own identity, verification and lifecycle.
+// Deliberately a separate module from the live-chat channel config above:
+// one describes the merchant's widget, the other the Shopify app that
+// installs it. See docs/architecture/shopify-core-vs-chat-app.md.
+export {
+  getShopifyChatAppConfig,
+  validateChatAppConfig,
+  isChatAppConfigured,
+  normalizeShopifyShopDomain,
+  normalizeStorefrontHost,
+  verifyShopifyQueryHmac,
+  verifyShopifyWebhookHmac,
+  buildThemeEditorDeepLink,
+  buildAppAdminLink,
+  resolveChatActivationState,
+  isServingState,
+  HEARTBEAT_FRESH_MS,
+  HEARTBEAT_GRACE_MS,
+} from "./lib/shopify-chat-app";
+export type {
+  ShopifyChatAppConfig,
+  ChatAppConfigProblem,
+  ChatActivationState,
+  ChatActivationInput,
+} from "./lib/shopify-chat-app";
+
 // Secrets
 export { getSecret, requireSecret, setSecretProvider, resetSecretProvider } from "./secrets";
 export type { SecretProvider } from "./secrets";

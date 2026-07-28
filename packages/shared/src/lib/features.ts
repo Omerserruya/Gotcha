@@ -31,8 +31,13 @@ export const FEATURES = {
   CHANNEL_OUTLOOK: "channel_outlook",
   CHANNEL_SLACK: "channel_slack",
   CHANNEL_WEBCHAT: "channel_webchat",
+  // Four distinct Shopify capabilities, deliberately not one bundle.
+  // Installing the CHAT app grants none of the commerce ones: a storefront
+  // widget must never be able to arrive carrying refund authority.
+  SHOPIFY_CORE_INTEGRATION: "shopify_core_integration",
   SHOPIFY_LIVE_CHAT: "shopify_live_chat",
   SHOPIFY_PRODUCT_MESSAGING: "shopify_product_messaging",
+  SHOPIFY_ORDER_ACTIONS: "shopify_order_actions",
 
   // ── Messaging - conversation operations ─────────────────────
   CONVERSATION_MANAGEMENT: "conversation_management",
@@ -202,8 +207,19 @@ export const FEATURE_METADATA: Record<Feature, FeatureMetadata> = {
   [FEATURES.CHANNEL_OUTLOOK]: m(FEATURES.CHANNEL_OUTLOOK, "messaging", "Outlook Channel", "Send and receive messages via Outlook.", "all"),
   [FEATURES.CHANNEL_SLACK]: m(FEATURES.CHANNEL_SLACK, "messaging", "Slack Channel", "Send and receive messages via Slack.", "all"),
   [FEATURES.CHANNEL_WEBCHAT]: m(FEATURES.CHANNEL_WEBCHAT, "messaging", "Webchat Channel", "Embedded chat widget on websites.", "all"),
-  [FEATURES.SHOPIFY_LIVE_CHAT]: m(FEATURES.SHOPIFY_LIVE_CHAT, "messaging", "Shopify Live Chat", "Branded live chat installed on a Shopify storefront through a Theme App Extension.", "all"),
-  [FEATURES.SHOPIFY_PRODUCT_MESSAGING]: m(FEATURES.SHOPIFY_PRODUCT_MESSAGING, "commerce", "Shopify Product Messaging", "Send Shopify product cards, carousels and Add to Cart actions inside a conversation.", "all"),
+  // The two Shopify keys are the only CHANNEL features with a server-side
+  // gate mounted on them (`requireFeature` in services/ai). Every other
+  // channel above is gated by the `communication.omnichannel` licence and
+  // nothing else, and NO provisioning path - plan materialization, POC
+  // setup, tenant creation - ever writes a row for these two. Left at the
+  // usual `defaultEnabled: false` the gate denied every tenant that ever
+  // existed, which surfaced as "connect your Shopify store" on a workspace
+  // whose store was connected. Default-on, still explicitly disableable
+  // per tenant from the system console (a row with enabled = false wins).
+  [FEATURES.SHOPIFY_CORE_INTEGRATION]: { ...m(FEATURES.SHOPIFY_CORE_INTEGRATION, "commerce", "Shopify Core Integration", "Admin API connection to a Shopify store: products, inventory, store binding and agent order context.", "all"), defaultEnabled: true },
+  [FEATURES.SHOPIFY_ORDER_ACTIONS]: { ...m(FEATURES.SHOPIFY_ORDER_ACTIONS, "commerce", "Shopify Order Actions", "Order lookup and cancellation, customer writes, refunds, returns and discounts through the Core integration.", "none"), defaultEnabled: true },
+  [FEATURES.SHOPIFY_LIVE_CHAT]: { ...m(FEATURES.SHOPIFY_LIVE_CHAT, "messaging", "Shopify Live Chat", "Branded live chat installed on a Shopify storefront through a Theme App Extension.", "all"), defaultEnabled: true },
+  [FEATURES.SHOPIFY_PRODUCT_MESSAGING]: { ...m(FEATURES.SHOPIFY_PRODUCT_MESSAGING, "commerce", "Shopify Product Messaging", "Send Shopify product cards, carousels and Add to Cart actions inside a conversation.", "all"), defaultEnabled: true },
 
   // ── Messaging - conversation operations ─────────────────────
   [FEATURES.CONVERSATION_MANAGEMENT]: m(FEATURES.CONVERSATION_MANAGEMENT, "messaging", "Conversation Management", "View and manage customer conversations.", "all"),

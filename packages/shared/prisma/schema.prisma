@@ -141,6 +141,7 @@ model Tenant {
   messages                Message[]
   chatbotFlows            ChatbotFlow[]
   channelAccounts         ChannelAccount[]
+  shopifyChatInstalls     ShopifyChatInstallation[]
   channelConfig           TenantChannelConfig?
   departments             Department[]
   departmentMembers       DepartmentMember[]
@@ -288,15 +289,78 @@ model ChannelAccount {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  tenant        Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  conversations Conversation[]
-  templates     MessageTemplate[]
+  tenant                   Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversations            Conversation[]
+  templates                MessageTemplate[]
+  shopifyChatInstallations ShopifyChatInstallation[]
 
   @@unique([channel, externalId])
   @@index([tenantId])
   @@index([connectionStatus])
   @@index([tokenExpiresAt])
   @@map("channel_accounts")
+}
+
+// ─── Shopify Chat App installation ───────────────────────────
+//
+// The GOTCHA Shopify CHAT app's own install record. Deliberately NOT
+// TenantIntegration: that table belongs to the GOTCHA Core Shopify
+// Integration (Admin API, orders, refunds), and letting a chat uninstall
+// touch a row in it would let the storefront widget revoke a merchant's
+// commerce connection.
+//
+// A row exists from the moment Shopify authorization completes, which is
+// BEFORE we know which GOTCHA organization the merchant belongs to -
+// `tenantId` and `channelAccountId` stay null until the merchant signs in
+// and binds. Uninstalled rows are kept for audit; only one row per shop may
+// be un-uninstalled at a time.
+
+enum ShopifyChatInstallStatus {
+  /// Shopify authorization done, no GOTCHA organization chosen yet.
+  PENDING
+  /// Bound to a tenant and a channel.
+  ACTIVE
+  /// app/uninstalled received, or the merchant disconnected it.
+  UNINSTALLED
+}
+
+model ShopifyChatInstallation {
+  id         String                   @id @default(cuid())
+  shopDomain String                   @map("shop_domain")
+  status     ShopifyChatInstallStatus @default(PENDING)
+
+  /// Which Shopify app this row came from - future-proofs a second surface.
+  appIdentity String @default("gotcha-chat") @map("app_identity")
+
+  /// Encrypted Chat access token, only when the app actually requests
+  /// scopes. Version 1 requests none, so this is null and there is nothing
+  /// to leak. Never returned to any browser.
+  accessToken String? @map("access_token")
+  tokenScopes String? @map("token_scopes")
+
+  tenantId         String? @map("tenant_id")
+  channelAccountId String? @map("channel_account_id")
+
+  /// Storefront hosts verified as belonging to THIS shop.
+  verifiedDomains Json @default("[]") @map("verified_domains")
+
+  installedAt    DateTime  @default(now()) @map("installed_at")
+  uninstalledAt  DateTime? @map("uninstalled_at")
+  boundAt        DateTime? @map("bound_at")
+  lastVerifiedAt DateTime? @map("last_verified_at")
+  /// Last time the App Embed reported from a live storefront.
+  lastHeartbeatAt DateTime? @map("last_heartbeat_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant         Tenant?         @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  channelAccount ChannelAccount? @relation(fields: [channelAccountId], references: [id], onDelete: SetNull)
+
+  @@index([shopDomain])
+  @@index([tenantId])
+  @@index([status])
+  @@map("shopify_chat_installations")
 }
 
 // ─── Tenant Channel Config ───────────────────────────────────
