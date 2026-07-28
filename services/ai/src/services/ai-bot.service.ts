@@ -150,6 +150,7 @@ import {
   type ActionContract,
 } from "./action-contracts.repo";
 import { tryEmit } from "./notifications-emit";
+import { prepareShopifyTurn } from "./shopify-chat-turn.service";
 import type { SystemEventType } from "./notifications-emit";
 
 /**
@@ -277,6 +278,17 @@ export interface AIBotReplyResult {
   }>;
   modelUsed: string;
   totalTokens: number;
+  /**
+   * Extra messages the caller must persist AFTER the text reply, in this
+   * order. Today that is Shopify product cards / carousels: the model
+   * explains its recommendation in `reply`, then the card follows.
+   * Empty for every other channel.
+   */
+  structuredMessages?: Array<{
+    messageType: string;
+    body: string;
+    metadata: Record<string, unknown>;
+  }>;
 }
 
 function toAgentRecord(row: any): AgentRecord {
@@ -1503,7 +1515,21 @@ async function generateAIBotReplyInner(
   // Company identity inherited from the tenant BusinessProfile - so the agent
   // always knows who it works for and what the company does/sells.
   const companyContext: CompanyContext | null = await getCompanyContext(opts.tenantId);
+  // Shopify Live Chat wiring. Null on every other channel, which is the
+  // common case — the storefront block and the product tools simply do
+  // not exist for a WhatsApp or Instagram turn.
+  const shopifyTurn = await prepareShopifyTurn({
+    tenantId: opts.tenantId,
+    conversationId: opts.conversationId,
+  }).catch((err: any) => {
+    console.warn("[ai-bot] shopify turn prep failed:", err?.message);
+    return null;
+  });
+  if (shopifyTurn?.storefrontBlock) {
+    ctxSlot.storefrontBlock = shopifyTurn.storefrontBlock;
+  }
   const agentToolCtx: AgentToolContext = {
+    sendShopifyProducts: shopifyTurn?.sendShopifyProducts,
     tenantId: opts.tenantId,
     conversationId: opts.conversationId,
     contactId: contactRow?.id,
@@ -1715,6 +1741,8 @@ async function generateAIBotReplyInner(
     rescheduleMeeting: hasExistingBooking,
     cancelMeeting: hasExistingBooking,
     // Honor CatalogTool.allowedModes - tools tagged ASSIST-only are dropped
+    shopifyProducts: shopifyTurn?.productMessagingEnabled === true,
+    // Honor CatalogTool.allowedModes — tools tagged ASSIST-only are dropped
     // from the autonomous surface. The copilot path uses {closure,followup}
     // flags; the autonomous path uses this mode filter.
     allowedMode: "AUTO",
@@ -3933,6 +3961,12 @@ async function generateAIBotReplyInner(
     toolCallLog,
     modelUsed: model,
     totalTokens,
+    // Only ship staged cards when there is a reply to attach them to. On
+    // an escalation or an approval pause the customer is being handed
+    // over, and a product card arriving after "let me get a colleague"
+    // would be noise.
+    structuredMessages:
+      safeReply && shopifyTurn?.staged.length ? shopifyTurn.staged : undefined,
   };
 }
 

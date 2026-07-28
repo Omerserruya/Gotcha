@@ -19,6 +19,7 @@ import voiceSessionsRoutes from "./routes/voice-sessions";
 import voiceChannelsRoutes from "./routes/voice-channels";
 import autoBuyRoutes from "./routes/auto-buy";
 import { handleVoiceSessionEnded } from "./subscribers/voice-auto-close";
+import { relayToVisitor, relayConversationState } from "./subscribers/shopify-visitor-relay";
 
 const config = { name: "conversation-service", port: parseInt(process.env.PORT || "4002", 10) };
 const app = createServiceApp(config);
@@ -38,6 +39,16 @@ subscribeToEvents((event) => {
   } catch {
     // Socket not ready yet - event is dropped (acceptable per MVP spec)
   }
+});
+
+// Shopify Live Chat: project the same events into the storefront
+// visitor's own room. Reuses this transport instead of adding a second
+// one; the projection strips everything a shopper must not see.
+subscribeToEvents((event) => {
+  relayToVisitor(event).catch((err) => {
+    console.warn("[shopify-visitor-relay] threw:", (err as { message?: string })?.message ?? err);
+  });
+  relayConversationState(event);
 });
 
 // Backend safety net: when a voice session ends (browser close, drop, reaper),

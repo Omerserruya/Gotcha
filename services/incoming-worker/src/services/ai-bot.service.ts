@@ -39,7 +39,7 @@ const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://ai:4006";
 const INTERNAL_SERVICE_KEY = getInternalServiceKey();
 
 interface SendContext {
-  channel: "WHATSAPP" | "MESSENGER" | "INSTAGRAM";
+  channel: "WHATSAPP" | "MESSENGER" | "INSTAGRAM" | "SHOPIFY_LIVE_CHAT";
   channelAccountExternalId: string;
   credentials: ChannelCredentials;
   recipientId: string;
@@ -60,6 +60,16 @@ interface AIBotReplyResult {
   }>;
   modelUsed: string;
   totalTokens: number;
+  /**
+   * Messages the AI service prepared but deliberately did not persist, so
+   * they land AFTER the text reply. Shopify product cards use this: the
+   * bot says why it recommends something, then the card appears.
+   */
+  structuredMessages?: Array<{
+    messageType: string;
+    body: string;
+    metadata: Record<string, unknown>;
+  }>;
 }
 
 export async function processAIBot(
@@ -443,6 +453,41 @@ export async function processAIBot(
     tenantId,
     data: { message: aiMessage, conversationId, channel: sendContext.channel },
   });
+
+  // Structured follow-ups (Shopify product cards). Persisted after the
+  // text so the customer reads the reasoning before the card. Their
+  // content was already resolved and validated by the AI service — the
+  // worker only owns the write and the realtime fan-out.
+  for (const extra of result.structuredMessages ?? []) {
+    try {
+      const structured = await prisma.message.create({
+        data: {
+          tenantId,
+          conversationId,
+          channel: sendContext.channel,
+          direction: "OUTBOUND",
+          body: extra.body,
+          messageType: extra.messageType,
+          senderName: "AI Bot",
+          status: "SENT",
+          metadata: extra.metadata as any,
+        },
+      });
+      await prisma.conversation.update({
+        where: { id: conversationId },
+        data: { lastMessageAt: structured.createdAt },
+      });
+      await publishEvent({
+        event: "message:new",
+        tenantId,
+        data: { message: structured, conversationId, channel: sendContext.channel },
+      });
+    } catch (err: any) {
+      // A card that fails to persist must not lose the reply that was
+      // already delivered — log and move on.
+      console.error("[AI-Bot] structured message persist failed:", err?.message);
+    }
+  }
 
   // If the bot called close_conversation this turn, the dispatcher already
   // flipped the conversation row to CLOSED (see agent-tools.ts close handler)

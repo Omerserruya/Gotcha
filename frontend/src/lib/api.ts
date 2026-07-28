@@ -450,6 +450,95 @@ export function updateWebchatSettings(token: string, accountId: string, settings
   });
 }
 
+// ─── Shopify Live Chat ─────────────────────────────────────
+//
+// Merchant-facing surface only. The storefront widget talks to
+// /api/shopify-chat with a signed visitor session and never uses any of
+// these — nothing here should ever be reachable without a staff token.
+
+export interface ShopifyLiveChatChannel {
+  id: string;
+  publicKey: string;
+  displayName: string;
+  connectionStatus: string;
+  config: any;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function getShopifyStore(token: string) {
+  return apiFetch<{ data: any }>("/api/shopify-live-chat/store", { token });
+}
+
+export function listShopifyLiveChatChannels(token: string) {
+  return apiFetch<{ data: ShopifyLiveChatChannel[] }>("/api/shopify-live-chat/channels", { token });
+}
+
+export function createShopifyLiveChatChannel(token: string, displayName?: string) {
+  return apiFetch<{ data: ShopifyLiveChatChannel }>("/api/shopify-live-chat/channels", {
+    token,
+    method: "POST",
+    body: JSON.stringify({ displayName }),
+  });
+}
+
+export function updateShopifyLiveChatChannel(
+  token: string,
+  channelId: string,
+  payload: { config?: any; displayName?: string },
+) {
+  return apiFetch<{ data: ShopifyLiveChatChannel }>(
+    `/api/shopify-live-chat/channels/${channelId}`,
+    { token, method: "PUT", body: JSON.stringify(payload) },
+  );
+}
+
+export function deleteShopifyLiveChatChannel(token: string, channelId: string) {
+  return apiFetch<{ data: { deleted: boolean } }>(
+    `/api/shopify-live-chat/channels/${channelId}`,
+    { token, method: "DELETE" },
+  );
+}
+
+export function getShopifyLiveChatDiagnostics(token: string, channelId: string) {
+  return apiFetch<{ data: any }>(
+    `/api/shopify-live-chat/channels/${channelId}/diagnostics`,
+    { token },
+  );
+}
+
+export function getShopifyLiveChatInstall(token: string, channelId: string) {
+  return apiFetch<{ data: any }>(`/api/shopify-live-chat/channels/${channelId}/install`, { token });
+}
+
+export function searchShopifyProducts(
+  token: string,
+  query: string,
+  opts: { limit?: number; includeUnpublished?: boolean } = {},
+) {
+  const params = new URLSearchParams({ q: query });
+  if (opts.limit) params.set("limit", String(opts.limit));
+  if (opts.includeUnpublished) params.set("includeUnpublished", "true");
+  return apiFetch<{ data: { shopDomain: string; currency: string; products: any[] } }>(
+    `/api/shopify-live-chat/products?${params.toString()}`,
+    { token },
+  );
+}
+
+export function sendShopifyProductMessage(
+  token: string,
+  conversationId: string,
+  payload: {
+    products: Array<{ productId?: string; handle?: string; variantId?: string; reason?: string }>;
+    text?: string;
+  },
+) {
+  return apiFetch<{ data: { messageId: string; productCount: number } }>(
+    `/api/shopify-live-chat/conversations/${conversationId}/products`,
+    { token, method: "POST", body: JSON.stringify(payload) },
+  );
+}
+
 // ─── Tenant Channel Config ─────────────────────────────────
 
 export function getChannelConfig(token: string) {

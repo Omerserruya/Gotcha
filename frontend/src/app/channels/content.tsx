@@ -627,6 +627,29 @@ function ChannelsPageContent() {
           onClick={handleCreateWebchat}
           disabled={connecting}
         />
+
+        {/* Shopify Live Chat lives on its own screen: it is bound to a
+            connected store and carries commerce configuration that has
+            nothing in common with the OAuth-and-done channels above.
+            Mixing it into this grid's connect flow would mean pretending
+            those setups are the same shape.
+
+            Filed under Website rather than in its own category: to a
+            merchant it is the same question as the embedded chat - how a
+            visitor to my site reaches me - and a category holding one card
+            reads as a mistake. */}
+        <ConnectCard
+          icon={
+            <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="#5E8E3E" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M6 8h12l-1 12H7L6 8Z" />
+              <path d="M9 8V6a3 3 0 0 1 6 0v2" />
+            </svg>
+          }
+          title={t("channels.shopifyLiveChat")}
+          description={t("channels.shopifyLiveChatDesc")}
+          buttonLabel={t("channels.configureShopifyLiveChat")}
+          onClick={() => { window.location.href = "/settings/channels/shopify-live-chat"; }}
+        />
           </div>
         </div>
       </div>

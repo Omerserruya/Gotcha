@@ -926,6 +926,37 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
+
+        # ─── Shopify Live Chat (public storefront surface) ───
+        #
+        # Deliberately NO CORS headers here. The widget runs on the
+        # merchant's OWN domain, so the allowed origin differs per
+        # channel and only the service knows which one is legal. A
+        # wildcard at this layer would let any site read a reply that
+        # the service was willing to send; the service echoes the
+        # request Origin only after checking it against the channel's
+        # configured storefront domains, and answers 403 with no CORS
+        # header otherwise.
+        location /api/shopify-chat {
+            limit_req zone=api burst=30 nodelay;
+            proxy_pass http://ai_service;
+            proxy_set_header Host $host;
+            proxy_set_header Origin $http_origin;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # ─── Shopify Live Chat (authenticated merchant admin) ───
+        location /api/shopify-live-chat {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://ai_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
         # ─── Tenant-scoped routing ───────────────────────
         location ~ ^/t/([^/]+)/api/auth(.*)$ {
             proxy_pass http://auth_service/api/auth$2$is_args$args;

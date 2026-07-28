@@ -20,6 +20,13 @@ enum ChannelType {
   SLACK
   VOICE
   WEBCHAT
+  // Shopify storefront live chat. Distinct from WEBCHAT: the widget is
+  // installed through a Shopify Theme App Extension, is bound to ONE
+  // connected Shopify store (TenantIntegration slug="shopify"), and can
+  // carry structured commerce messages (product cards / carousels).
+  // Channel config lives in ChannelAccount.platformMeta; the storefront
+  // only ever sees ChannelAccount.externalId (the public channel key).
+  SHOPIFY_LIVE_CHAT
 }
 
 enum ChannelConnectionStatus {

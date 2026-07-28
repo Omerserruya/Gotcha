@@ -176,6 +176,7 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
     messageType,
     interactiveReply,
     mediaUrl: rawMediaUrl,
+    metadata: producerMetadata,
   } = normalizedMessage;
 
   // Idempotency check
@@ -312,7 +313,13 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
       messageType,
       senderName: displayName || senderDisplayName,
       status: "DELIVERED",
-      metadata: interactiveReply ? { interactiveReply } : undefined,
+      // Producer-supplied metadata (already sanitized at the edge) merges
+      // under the interactive reply so a channel can attach its own
+      // context — e.g. the Shopify storefront page a visitor asked from.
+      metadata:
+        interactiveReply || producerMetadata
+          ? { ...(producerMetadata ?? {}), ...(interactiveReply ? { interactiveReply } : {}) }
+          : undefined,
       mediaUrl: resolvedMediaUrl,
       fileName: resolvedFileName,
     },
