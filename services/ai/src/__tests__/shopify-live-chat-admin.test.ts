@@ -13,7 +13,10 @@ import request from "supertest";
 vi.hoisted(() => {
   process.env.NODE_ENV = "test";
   process.env.JWT_SECRET = "test-secret-that-is-long-enough";
-  process.env.SHOPIFY_APP_CLIENT_ID = "test-client-id";
+  // The deep link is built from the CHAT app's identity now that the
+  // storefront widget ships in its own Shopify app.
+  process.env.SHOPIFY_CHAT_APP_CLIENT_ID = "test-client-id";
+  process.env.SHOPIFY_CHAT_BLOCK_HANDLE = "gotcha_chat";
 });
 
 vi.mock("bullmq", () => ({ Queue: class { add = vi.fn(); }, Worker: class {}, Job: class {} }));
@@ -348,6 +351,7 @@ describe("diagnostics", () => {
   it("returns install instructions with a theme editor deep link", async () => {
     const res = await request(app()).get("/api/shopify-live-chat/channels/ch1/install");
     expect(res.body.data.themeEditorDeepLink).toContain(`https://${SHOP}/admin/themes/current/editor`);
+    expect(res.body.data.blockHandle).toBe("gotcha_chat");
     expect(res.body.data.themeEditorDeepLink).toContain("test-client-id");
     expect(res.body.data.steps.length).toBeGreaterThan(3);
   });

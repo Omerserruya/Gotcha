@@ -28,6 +28,9 @@ import {
   type ShopifyLiveChatConfig,
   type Availability,
 } from "@chatcenter/shared";
+// Read-only question asked of the CORE integration: "is a store connected?".
+// The chat service never writes to it and never uses its token.
+import { loadConnection } from "./connectors/integration-framework";
 
 export const SHOPIFY_LIVE_CHAT = "SHOPIFY_LIVE_CHAT";
 
@@ -142,13 +145,32 @@ export type BootstrapResolution =
       channel: ShopifyLiveChatChannel;
       availability: Availability;
       allowedOrigins: string[];
-      /** Product messaging survived both the entitlement and the config. */
+      /**
+       * Product messaging survived the entitlement, the merchant's own
+       * switch AND a live Core store connection. All three, because a
+       * `true` here puts Add to Cart buttons in front of shoppers.
+       */
       productMessagingEnabled: boolean;
+      /** Core Shopify Integration reachable for this shop. */
+      coreConnected: boolean;
     }
   | { ok: false; denial: BootstrapDenial };
 
 /**
- * Resolve a public channel key into a servable channel.
+ * Resolve a storefront request into a servable channel.
+ *
+ * Two ways in, one trust model:
+ *
+ *   - `shopDomain` — the App Store path. The Theme App Embed publishes
+ *     `shop.permanent_domain`, we look up the verified Chat installation
+ *     for that shop and follow it to the channel. The merchant never sees
+ *     or copies an identifier.
+ *   - `publicKey` — the original manual path, kept as a recovery fallback
+ *     for a merchant whose installation record is missing.
+ *
+ * Neither is proof of anything on its own: both are LOOKUP KEYS supplied by
+ * a browser. The security is the Origin check below — a forged shop domain
+ * from another site cannot present an origin that belongs to that shop.
  *
  * Order matters: cheap identity checks first, then the origin check (so a
  * forged shop domain is refused before we spend a DB read on features),
@@ -157,20 +179,46 @@ export type BootstrapResolution =
  * storefront.
  */
 export async function resolveForBootstrap(input: {
-  publicKey: unknown;
+  publicKey?: unknown;
+  shopDomain?: unknown;
   origin: unknown;
 }): Promise<BootstrapResolution> {
   const publicKey = typeof input.publicKey === "string" ? input.publicKey.trim() : "";
-  if (!publicKey || publicKey.length > 128) return { ok: false, denial: "unknown_channel" };
+  const shopDomain = normalizeShopDomain(input.shopDomain);
+  if (!publicKey && !shopDomain) return { ok: false, denial: "unknown_channel" };
+  if (publicKey && publicKey.length > 128) return { ok: false, denial: "unknown_channel" };
 
-  // The caller is anonymous and has no tenant context; the public key is
-  // globally unique by construction, so this lookup MUST be cross-tenant.
-  // Everything downstream is scoped to the tenant we derive from the row.
-  const row = await withCrossTenantAccess(async () =>
-    prisma.channelAccount.findFirst({
-      where: { externalId: publicKey, channel: SHOPIFY_LIVE_CHAT as any },
-    }),
-  );
+  // The caller is anonymous and has no tenant context, so both lookups MUST
+  // be cross-tenant. Everything downstream is scoped to the tenant we derive
+  // from the row we found.
+  let row: any = null;
+  let installationDomains: string[] = [];
+
+  if (shopDomain) {
+    const installation = await withCrossTenantAccess(async () =>
+      (prisma as any).shopifyChatInstallation.findFirst({
+        where: { shopDomain, status: "ACTIVE" },
+      }),
+    );
+    if (installation?.channelAccountId) {
+      installationDomains = Array.isArray(installation.verifiedDomains)
+        ? (installation.verifiedDomains as string[])
+        : [];
+      row = await withCrossTenantAccess(async () =>
+        prisma.channelAccount.findFirst({
+          where: { id: installation.channelAccountId, channel: SHOPIFY_LIVE_CHAT as any },
+        }),
+      );
+    }
+  }
+
+  if (!row && publicKey) {
+    row = await withCrossTenantAccess(async () =>
+      prisma.channelAccount.findFirst({
+        where: { externalId: publicKey, channel: SHOPIFY_LIVE_CHAT as any },
+      }),
+    );
+  }
   if (!row) return { ok: false, denial: "unknown_channel" };
 
   const channel = toChannel(row);
@@ -178,10 +226,19 @@ export async function resolveForBootstrap(input: {
     return { ok: false, denial: "disabled" };
   }
 
-  const shopDomain = normalizeShopDomain(channel.config.shopDomain);
-  if (!shopDomain) return { ok: false, denial: "store_disconnected" };
+  const channelShop = normalizeShopDomain(channel.config.shopDomain);
+  if (!channelShop) return { ok: false, denial: "store_disconnected" };
+  // A lookup by shop must land on a channel bound to THAT shop. Without
+  // this, a stale installation row pointing at a re-bound channel could
+  // serve one storefront's widget to another's shoppers.
+  if (shopDomain && shopDomain !== channelShop) return { ok: false, denial: "unknown_channel" };
 
-  const allowedOrigins = buildAllowedOrigins(shopDomain, channel.config.install.storefrontDomains);
+  const allowedOrigins = buildAllowedOrigins(channelShop, [
+    ...channel.config.install.storefrontDomains,
+    // Domains Shopify itself confirmed belong to this shop, recorded at
+    // install time. The merchant never types these.
+    ...installationDomains,
+  ]);
   if (!isOriginAllowed(input.origin, allowedOrigins)) {
     return { ok: false, denial: "origin_not_allowed" };
   }
@@ -201,12 +258,26 @@ export async function resolveForBootstrap(input: {
     FEATURES.SHOPIFY_PRODUCT_MESSAGING,
   );
 
+  // Product truth comes from the CORE Shopify Integration. Without it the
+  // server will refuse every product card and cart validation, so promising
+  // the capability here would make the widget offer buttons that fail. A
+  // connection lookup, not an API call: this runs on every page load.
+  let coreConnected = false;
+  try {
+    const conn = await loadConnection({ tenantId: channel.tenantId, slug: "shopify" });
+    coreConnected = !!conn && normalizeShopDomain(conn.config?.shopDomain) === channelShop;
+  } catch (err) {
+    console.warn("[shopify-live-chat] core connection probe failed:", (err as Error)?.message);
+  }
+
   return {
     ok: true,
     channel,
     availability: resolveAvailability(channel.config.hours),
     allowedOrigins,
-    productMessagingEnabled: productEntitled && channel.config.commerce.productMessagingEnabled,
+    productMessagingEnabled:
+      productEntitled && channel.config.commerce.productMessagingEnabled && coreConnected,
+    coreConnected,
   };
 }
 

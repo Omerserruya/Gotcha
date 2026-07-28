@@ -254,6 +254,10 @@ services:
       args:
         BUILD_SHA: ${BUILD_SHA:-dev}
     environment:
+      # Verifies storefront visitor sessions minted by services/ai.
+      # Same secret, same failure mode: unset in production means
+      # every Shopify Live Chat visitor session is rejected.
+      WIDGET_SESSION_SECRET: ${WIDGET_SESSION_SECRET:-}
       DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/whatsapp_cc}
       # Paid-access gate - see the `ai` service for the full note. Present here
       # because this service can produce billable work on its own, and a service
@@ -429,6 +433,26 @@ services:
       SHOPIFY_API_KEY: ${SHOPIFY_API_KEY:-}
       SHOPIFY_API_SECRET: ${SHOPIFY_API_SECRET:-}
       SHOPIFY_REDIRECT_URI: ${SHOPIFY_REDIRECT_URI:-}
+      # ── GOTCHA Shopify CHAT app ───────────────────────────────────
+      # A SEPARATE Shopify Partner app from the Core integration above.
+      # Never reuse SHOPIFY_API_KEY / SHOPIFY_API_SECRET here: a chat
+      # uninstall must not be able to revoke a merchant's commerce
+      # connection. See docs/architecture/shopify-core-vs-chat-app.md.
+      SHOPIFY_CHAT_APP_CLIENT_ID: ${SHOPIFY_CHAT_APP_CLIENT_ID:-}
+      SHOPIFY_CHAT_APP_SECRET: ${SHOPIFY_CHAT_APP_SECRET:-}
+      SHOPIFY_CHAT_APP_URL: ${SHOPIFY_CHAT_APP_URL:-https://dev.gotcha.co.il}
+      SHOPIFY_CHAT_REDIRECT_URI: ${SHOPIFY_CHAT_REDIRECT_URI:-https://dev.gotcha.co.il/api/connectors/shopify-chat/oauth/callback}
+      # The App Embed BLOCK handle is the .liquid file name (underscore),
+      # NOT the extension handle (hyphen). The Theme Editor deep link is
+      # built from it and silently opens nothing when it is wrong.
+      SHOPIFY_CHAT_BLOCK_HANDLE: ${SHOPIFY_CHAT_BLOCK_HANDLE:-gotcha_chat}
+      SHOPIFY_CHAT_EXTENSION_HANDLE: ${SHOPIFY_CHAT_EXTENSION_HANDLE:-gotcha-chat}
+      SHOPIFY_CHAT_APP_HANDLE: ${SHOPIFY_CHAT_APP_HANDLE:-gotcha-chat-dev}
+      # Empty by design in v1 - the Chat app needs no Admin API access.
+      SHOPIFY_CHAT_SCOPES: ${SHOPIFY_CHAT_SCOPES:-}
+      # Encrypts storefront visitor sessions. Mandatory in production:
+      # without it signVisitorSession() throws and no widget can start.
+      WIDGET_SESSION_SECRET: ${WIDGET_SESSION_SECRET:-}
       WIX_CLIENT_ID: ${WIX_CLIENT_ID:-}
       WIX_CLIENT_SECRET: ${WIX_CLIENT_SECRET:-}
       WIX_REDIRECT_URI: ${WIX_REDIRECT_URI:-}
@@ -561,6 +585,11 @@ services:
       OIDC_JWKS_URI: ${OIDC_JWKS_URI}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
       INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:-chatcenter-internal-2026}
+      # Identity is auth's domain: billing asks it to welcome a paid tenant and
+      # hand that admin a way in. Without this the welcome email never sends,
+      # and a customer who paid from an emailed link has no way to set a
+      # password at all.
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth:4001}
       # Billing config
       BILLING_PROVIDER: ${BILLING_PROVIDER:-ICOUNT}
       BILLING_TRIAL_DAYS: ${BILLING_TRIAL_DAYS:-14}

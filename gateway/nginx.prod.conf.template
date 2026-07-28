@@ -957,6 +957,19 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
+        # ─── Shopify CHAT app: merchant install + binding (authenticated) ───
+        # Separate from /api/shopify-chat (public storefront) so the two
+        # cannot be confused: this one carries a GOTCHA session, that one
+        # never does.
+        location /api/shopify-chat-install {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://ai_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
         # ─── Tenant-scoped routing ───────────────────────
         location ~ ^/t/([^/]+)/api/auth(.*)$ {
             proxy_pass http://auth_service/api/auth$2$is_args$args;

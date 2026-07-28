@@ -43,6 +43,10 @@ import {
   type ShopifyLiveChatChannel,
 } from "../services/shopify-live-chat.service";
 import { validateCartLine } from "../services/shopify-catalog.service";
+import {
+  findLiveInstallation,
+  recordInstallationHeartbeat,
+} from "../services/shopify-chat-install.service";
 
 const router = Router();
 
@@ -72,7 +76,10 @@ function limiter(name: string, defaultMax: number, key: (req: Request) => string
 
 const visitorKey = (req: Request) =>
   String((req.body as any)?.sessionToken ?? req.get("x-visitor-token") ?? "").slice(-24);
-const channelKey = (req: Request) => String((req.body as any)?.publicKey ?? "").slice(0, 64);
+// Either identifier the storefront can present. Bucketing by shop domain
+// matters now that it is the primary key an App Store install sends.
+const channelKey = (req: Request) =>
+  String((req.body as any)?.publicKey ?? (req.body as any)?.shopDomain ?? "").slice(0, 64);
 
 const bootstrapLimiter = limiter("bootstrap", 20, channelKey);
 const conversationLimiter = limiter("conversation", 20, visitorKey);
@@ -108,6 +115,18 @@ router.use((req: Request, res: Response, next: NextFunction) => {
   }
   next();
 });
+
+/**
+ * Mirror the storefront heartbeat onto the Chat installation record.
+ *
+ * Best-effort and fire-and-forget: a merchant whose widget is serving
+ * shoppers must never see a page slow down because we were bookkeeping.
+ */
+async function touchInstallationHeartbeat(shopDomain: string | null | undefined): Promise<void> {
+  if (!shopDomain) return;
+  const installation = await findLiveInstallation(shopDomain);
+  if (installation) await recordInstallationHeartbeat(installation.id);
+}
 
 /** One shape for every refusal. Callers get no detail; our logs do. */
 function unavailable(res: Response, reason: string): void {
@@ -165,6 +184,10 @@ router.post("/bootstrap", bootstrapLimiter, async (req: Request, res: Response) 
   try {
     const origin = req.get("origin");
     const resolution = await resolveForBootstrap({
+      // App Store installs identify themselves by shop domain, which the
+      // Theme App Embed already knows. `publicKey` stays accepted for the
+      // manual/recovery path.
+      shopDomain: (req.body as any)?.shopDomain,
       publicKey: (req.body as any)?.publicKey,
       origin,
     });
@@ -183,6 +206,9 @@ router.post("/bootstrap", bootstrapLimiter, async (req: Request, res: Response) 
       themeId: (req.body as any)?.themeId ?? null,
       path: context.path,
     }).catch((err) => console.warn("[shopify-chat] heartbeat failed:", err?.message));
+    // The installation carries its own heartbeat so the onboarding wizard
+    // can verify activation without loading the whole channel config.
+    touchInstallationHeartbeat(channel.config.shopDomain).catch(() => undefined);
 
     // Reuse the browser's existing visitor id when it presents a valid
     // session for THIS channel; otherwise mint a new anonymous one.

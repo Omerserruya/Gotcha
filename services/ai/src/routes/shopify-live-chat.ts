@@ -23,6 +23,8 @@ import {
   resolveAvailability,
   defaultShopifyLiveChatConfig,
   isFeatureEnabledForTenant,
+  getShopifyChatAppConfig,
+  buildThemeEditorDeepLink,
   type ProductSnapshot,
 } from "@chatcenter/shared";
 import {
@@ -44,9 +46,10 @@ import { sendProductMessage } from "../services/shopify-commerce-message.service
 const router = Router();
 router.use(authenticate, resolveTenant, requireActiveTenant());
 
-/** Shopify app identity used to build Theme Editor deep links. */
-const SHOPIFY_APP_CLIENT_ID = process.env.SHOPIFY_APP_CLIENT_ID || "";
-const THEME_APP_BLOCK_HANDLE = process.env.SHOPIFY_CHAT_BLOCK_HANDLE || "gotcha-chat";
+// Theme Editor deep links are built from the CHAT app's identity, never
+// the Core integration's: the App Embed belongs to the Chat app, and
+// pointing `activateAppId` at the Core client id opens the editor with
+// nothing selected.
 
 // ─── Store ───────────────────────────────────────────────────
 
@@ -407,16 +410,20 @@ router.get(
     // Shopify's Theme Editor deep link needs the app's client id. When it
     // is not configured we say so plainly instead of handing the merchant
     // a link that silently opens the wrong screen.
-    const deepLink =
-      shop && SHOPIFY_APP_CLIENT_ID
-        ? `https://${shop}/admin/themes/current/editor?context=apps&activateAppId=${SHOPIFY_APP_CLIENT_ID}/${THEME_APP_BLOCK_HANDLE}`
-        : null;
+    const chatApp = getShopifyChatAppConfig();
+    const deepLink = shop
+      ? buildThemeEditorDeepLink({
+          shopDomain: shop,
+          clientId: chatApp.clientId,
+          blockHandle: chatApp.blockHandle,
+        })
+      : null;
     res.json({
       data: {
         publicKey: channel.publicKey,
         shopDomain: shop,
         themeEditorDeepLink: deepLink,
-        blockHandle: THEME_APP_BLOCK_HANDLE,
+        blockHandle: chatApp.blockHandle,
         steps: [
           "Open your Shopify admin and go to Online Store → Themes.",
           "Click Customize on your live theme.",
