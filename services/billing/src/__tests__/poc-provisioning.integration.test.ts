@@ -12,7 +12,13 @@
  */
 import { describe, it, expect, afterAll, beforeAll } from "vitest";
 import { prisma, getBalance, getEffectiveEntitlements, checkPaidAccess } from "@chatcenter/shared";
-import { provisionPoc, PocProvisioningRefused, POC_FEATURE_DOMAINS, POC_PLAN_KEY } from "../services/poc.service";
+import {
+  provisionPoc,
+  expireDuePocs,
+  PocProvisioningRefused,
+  POC_FEATURE_DOMAINS,
+  POC_PLAN_KEY,
+} from "../services/poc.service";
 import { provisionPaidTenant } from "../services/paid-provisioning.service";
 import { auditTenantPlans } from "../services/tenant-plan-audit.service";
 
@@ -240,6 +246,83 @@ describe("paid provisioning grants nothing before payment", () => {
     // A negotiated plan belonging to one organization must never be sellable
     // to another - the price on it was agreed with someone else.
     await expect(provisionPaidTenant({ tenantId: t.id, planVersionId: scoped.id })).rejects.toThrow();
+  });
+});
+
+describe("the expiry sweep", () => {
+  async function evaluationOn(kind: "POC" | "TRIAL", planKey: string, periodEnd: Date) {
+    const t = await makeTenant("ACTIVE");
+    const plan = await prisma.plan.create({
+      data: { key: planKey, version: 1, name: planKey, kind, basePrice: null, includedAiUnits: 0, salesOnly: true },
+    });
+    planIds.push(plan.id);
+    const e = await prisma.billableEntity.create({ data: { displayName: planKey } });
+    entityIds.push(e.id);
+    await prisma.billableEntityTenant.create({ data: { billableEntityId: e.id, tenantId: t.id } });
+    await prisma.subscription.create({
+      data: {
+        billableEntityId: e.id, planKey, planVersion: 1, status: "ACTIVE",
+        enforcementEnabled: true, cancelAtPeriodEnd: true, currentPeriodEnd: periodEnd,
+      },
+    });
+    await prisma.tenantEntitlement.create({
+      data: {
+        tenantId: t.id, entitlementKey: "conversation", valueType: "BOOLEAN",
+        value: { bool: true }, source: "TRIAL", expiresAt: periodEnd,
+      },
+    });
+    await prisma.tenantFeature.create({ data: { tenantId: t.id, feature: "conversation", enabled: true } });
+    return t;
+  }
+
+  it("expires an evaluation on a TEMPLATE plan key, not just the built-in one", async () => {
+    // The sweep matched planKey === "poc", which covered the POCs provisioned
+    // by this file and nothing else. Template evaluations live on their own
+    // plan keys, and this is the only thing that ends them - so they stayed
+    // ACTIVE past their date with every feature still switched on.
+    const key = `pilot-${RUN}-${Math.random().toString(36).slice(2, 8)}`;
+    const t = await evaluationOn("POC", key, ago(1));
+
+    await expireDuePocs();
+
+    const link = await prisma.billableEntityTenant.findUnique({ where: { tenantId: t.id } });
+    const sub = await prisma.subscription.findUnique({ where: { billableEntityId: link!.billableEntityId } });
+    expect(sub!.status).toBe("CANCELED");
+    // And the workspace locks down with it, rather than keeping the last
+    // materialized value forever.
+    const feature = await prisma.tenantFeature.findFirst({ where: { tenantId: t.id, feature: "conversation" } });
+    expect(feature!.enabled).toBe(false);
+  });
+
+  it("leaves an evaluation still inside its window alone", async () => {
+    const key = `pilot-${RUN}-${Math.random().toString(36).slice(2, 8)}`;
+    const t = await evaluationOn("POC", key, ahead(48));
+    await expireDuePocs();
+    const link = await prisma.billableEntityTenant.findUnique({ where: { tenantId: t.id } });
+    const sub = await prisma.subscription.findUnique({ where: { billableEntityId: link!.billableEntityId } });
+    expect(sub!.status).toBe("ACTIVE");
+  });
+
+  it("never touches a paid subscription between periods", async () => {
+    // Widening the sweep from one key to a kind is only safe if it cannot
+    // reach a paying customer whose renewal is simply due.
+    const t = await makeTenant("ACTIVE");
+    const key = `paidsweep-${RUN}-${Math.random().toString(36).slice(2, 8)}`;
+    const plan = await prisma.plan.create({
+      data: { key, version: 1, name: key, kind: "PUBLIC", status: "ACTIVE", basePrice: 39, currency: "USD", includedAiUnits: 750 },
+    });
+    planIds.push(plan.id);
+    const e = await prisma.billableEntity.create({ data: { displayName: key } });
+    entityIds.push(e.id);
+    await prisma.billableEntityTenant.create({ data: { billableEntityId: e.id, tenantId: t.id } });
+    await prisma.subscription.create({
+      data: { billableEntityId: e.id, planKey: key, planVersion: 1, status: "ACTIVE", currentPeriodEnd: ago(1) },
+    });
+
+    await expireDuePocs();
+
+    const sub = await prisma.subscription.findUnique({ where: { billableEntityId: e.id } });
+    expect(sub!.status).toBe("ACTIVE");
   });
 });
 

@@ -237,16 +237,46 @@ export async function provisionPoc(input: PocProvisioningInput): Promise<PocProv
 }
 
 /**
- * Cancel POCs whose window closed and revert their expired TRIAL feature rows.
- * Expired TRIAL entitlements silently drop out of getEffectiveEntitlements(),
- * but their materialized TenantFeature rows would keep the last value forever -
- * flip those OFF explicitly so the workspace UI locks down with the POC.
+ * Cancel evaluations whose window closed and revert their expired TRIAL feature
+ * rows. Expired TRIAL entitlements silently drop out of
+ * getEffectiveEntitlements(), but their materialized TenantFeature rows would
+ * keep the last value forever - flip those OFF explicitly so the workspace UI
+ * locks down with the evaluation.
+ *
+ * Selected by the plan's KIND, not by one hardcoded plan key.
+ *
+ * It used to match `planKey === "poc"`, which covered the POCs this file
+ * provisions and nothing else. Template-provisioned evaluations
+ * (evaluation.service) live on plans keyed by the TEMPLATE - "pilot_30d" and
+ * the like - with kind POC or TRIAL, and this was the only sweep that expires
+ * them. They therefore stayed ACTIVE past their end date with every granted
+ * feature still switched on in the workspace: the one thing an evaluation must
+ * not do is quietly become permanent.
+ *
+ * TRIALING subscriptions are deliberately untouched - the trial branch of the
+ * billing cycle converts those, and cancelling one here would end a trial that
+ * was about to be charged and become a paying customer.
  */
 export async function expireDuePocs(now = new Date()): Promise<number> {
-  const due = await prisma.subscription.findMany({
-    where: { planKey: POC_PLAN_KEY, status: "ACTIVE", currentPeriodEnd: { lte: now } },
-    select: { id: true, billableEntityId: true },
+  const candidates = await prisma.subscription.findMany({
+    where: { status: "ACTIVE", currentPeriodEnd: { lte: now } },
+    select: { id: true, billableEntityId: true, planKey: true, planVersion: true },
   });
+  if (!candidates.length) return 0;
+
+  // Resolve kinds in one query rather than per subscription: this runs inside
+  // the billing cycle, over the whole estate.
+  const plans = await prisma.plan.findMany({
+    where: { OR: candidates.map((c) => ({ key: c.planKey, version: c.planVersion })) },
+    select: { key: true, version: true, kind: true },
+  });
+  const kindBy = new Map(plans.map((p) => [`${p.key}@${p.version}`, p.kind]));
+
+  const due = candidates.filter((c) => {
+    const kind = kindBy.get(`${c.planKey}@${c.planVersion}`);
+    return kind === "POC" || kind === "TRIAL";
+  });
+
   for (const sub of due) {
     await prisma.subscription.update({ where: { id: sub.id }, data: { status: "CANCELED" } });
     for (const tenantId of await tenantsForEntity(sub.billableEntityId)) {
@@ -258,7 +288,11 @@ export async function expireDuePocs(now = new Date()): Promise<number> {
         await prisma.tenantFeature.updateMany({ where: { tenantId, feature: e.entitlementKey }, data: { enabled: false } });
       }
       if (expired.length) invalidatePermissionsCache({ tenantId });
-      await emitBillingEvent({ type: "subscription.canceled", tenantId, data: { planKey: POC_PLAN_KEY, poc: true, reason: "poc_expired" } });
+      await emitBillingEvent({
+        type: "subscription.canceled",
+        tenantId,
+        data: { planKey: sub.planKey, poc: true, reason: "poc_expired" },
+      });
     }
   }
   return due.length;
