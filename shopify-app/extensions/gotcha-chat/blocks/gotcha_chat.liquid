@@ -93,15 +93,15 @@
     },
     {
       "type": "text",
-      "id": "api_base",
-      "label": "GOTCHA API URL",
-      "info": "Leave blank unless GOTCHA told you otherwise."
+      "id": "asset_base",
+      "label": "GOTCHA environment URL",
+      "info": "Leave blank on a live store. Testing against GOTCHA's development environment? Set this to https://dev.gotcha.co.il — otherwise the widget is loaded from production, which does not serve this store."
     },
     {
       "type": "text",
-      "id": "asset_base",
-      "label": "GOTCHA widget URL",
-      "info": "Leave blank unless GOTCHA told you otherwise."
+      "id": "api_base",
+      "label": "GOTCHA API URL (rarely needed)",
+      "info": "Leave blank. The widget already talks to whichever environment served it; set this only if GOTCHA asked you to split the two."
     }
   ]
 }

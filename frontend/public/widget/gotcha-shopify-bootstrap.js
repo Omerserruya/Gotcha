@@ -29,7 +29,27 @@
   if (window.__gotchaShopifyChatLoaded) return;
   window.__gotchaShopifyChatLoaded = true;
 
-  var API = String(cfg.apiBase || "").replace(/\/$/, "");
+  // Where GOTCHA lives. Prefer the explicit setting, but fall back to the
+  // origin this very script was loaded from: whoever served the bootstrap
+  // is by definition the deployment that owns this widget. That removes a
+  // whole class of failure where a merchant (or a dev store) has the asset
+  // host right and the API host wrong, and the two silently disagree.
+  function originOfThisScript() {
+    try {
+      var el = document.currentScript;
+      if (!el) {
+        var all = document.getElementsByTagName("script");
+        for (var i = all.length - 1; i >= 0; i--) {
+          if (all[i].src && all[i].src.indexOf("gotcha-shopify-bootstrap") !== -1) { el = all[i]; break; }
+        }
+      }
+      return el && el.src ? new URL(el.src, window.location.href).origin : "";
+    } catch (e) {
+      return "";
+    }
+  }
+
+  var API = String(cfg.apiBase || originOfThisScript() || "").replace(/\/$/, "");
   var ASSETS = String(cfg.assetBase || "").replace(/\/$/, "");
   var IDENTITY = String(cfg.shopDomain || cfg.channelKey || "");
   var STORAGE_PREFIX = "gotcha_sfy_" + IDENTITY.slice(-12);
