@@ -21,6 +21,12 @@
  *      browser ever names its own tenant.
  */
 
+import {
+  defaultShopifyChatUx,
+  normalizeShopifyChatUx,
+  type ShopifyChatUx,
+} from "./shopify-chat-ux";
+
 import crypto from "crypto";
 
 // ─── Channel constants ───────────────────────────────────────
@@ -224,6 +230,11 @@ export interface ShopifyLiveChatInstall {
   lastSeenPath: string | null;
 }
 
+/**
+ * Launcher / hero / proactive / sounds / behaviour live in their own
+ * module: they are presentation, they change often, and none of them may
+ * ever be able to break the channel contract in this file.
+ */
 export interface ShopifyLiveChatConfig {
   /** Shop the channel is bound to. Immutable after creation. */
   shopDomain: string | null;
@@ -237,6 +248,8 @@ export interface ShopifyLiveChatConfig {
   commerce: ShopifyLiveChatCommerce;
   privacy: ShopifyLiveChatPrivacy;
   install: ShopifyLiveChatInstall;
+  /** Merchant-configurable experience. Normalised on every read. */
+  ux: ShopifyChatUx;
 }
 
 export const DEFAULT_SUGGESTED_QUESTIONS: string[] = [
@@ -248,6 +261,7 @@ export const DEFAULT_SUGGESTED_QUESTIONS: string[] = [
 
 export function defaultShopifyLiveChatConfig(): ShopifyLiveChatConfig {
   return {
+    ux: defaultShopifyChatUx(),
     shopDomain: null,
     tenantIntegrationId: null,
     enabled: false,
@@ -409,6 +423,11 @@ export function normalizeShopifyLiveChatConfig(
   const p = (src.privacy ?? {}) as Record<string, any>;
   const i = (src.install ?? {}) as Record<string, any>;
 
+  // Upgrade-on-read: a channel written before any of this existed gets
+  // the defaults, and a half-written blob gets the missing halves. No
+  // reader downstream has to guard for an absent nested field.
+  const ux = normalizeShopifyChatUx(src.ux, base.ux);
+
   const questions = Array.isArray(w.suggestedQuestions)
     ? w.suggestedQuestions
         .map((q: unknown) => sanitizeToken(q, MAX_QUESTION))
@@ -435,6 +454,7 @@ export function normalizeShopifyLiveChatConfig(
   return {
     shopDomain: base.shopDomain,
     tenantIntegrationId: base.tenantIntegrationId,
+    ux,
     enabled: bool(src.enabled, base.enabled),
     appearance: {
       primaryColor: hex(a.primaryColor, base.appearance.primaryColor),

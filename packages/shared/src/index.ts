@@ -480,6 +480,55 @@ export type {
   VisitorProjectionContext,
 } from "./lib/shopify-live-chat";
 
+// Shopify chat EXPERIENCE: launcher, hero, proactive teaser, sounds and
+// the widget state machine. Separate from the channel contract above.
+export {
+  SHOPIFY_CHAT_UX_SCHEMA_VERSION,
+  WIDGET_STATES,
+  resolveWidgetState,
+  showsHero,
+  sanitizeMediaUrl,
+  HERO_IMAGE_EXTENSIONS,
+  HERO_VIDEO_EXTENSIONS,
+  MEDIA_GUIDANCE,
+  LAUNCHER_SHAPES,
+  LAUNCHER_ICON_NAMES,
+  HERO_MEDIA_TYPES,
+  PROACTIVE_TRIGGERS,
+  SOUND_PACKS,
+  defaultLauncher,
+  normalizeLauncher,
+  defaultHero,
+  normalizeHero,
+  defaultProactive,
+  normalizeProactive,
+  shouldShowTeaser,
+  defaultSounds,
+  normalizeSounds,
+  shouldPlaySound,
+  defaultBehavior,
+  normalizeBehavior,
+  defaultShopifyChatUx,
+  normalizeShopifyChatUx,
+  publicUxConfig,
+} from "./lib/shopify-chat-ux";
+export type {
+  WidgetState,
+  LauncherShape,
+  LauncherIconName,
+  HeroMediaType,
+  ProactiveTrigger,
+  SoundPack,
+  SoundEvent,
+  ShopifyChatLauncher,
+  ShopifyChatHero,
+  ShopifyChatProactive,
+  ShopifyChatSounds,
+  ShopifyChatBehavior,
+  ShopifyChatUx,
+  TeaserDecisionInput,
+} from "./lib/shopify-chat-ux";
+
 // GOTCHA Shopify CHAT app — its own identity, verification and lifecycle.
 // Deliberately a separate module from the live-chat channel config above:
 // one describes the merchant's widget, the other the Shopify app that
