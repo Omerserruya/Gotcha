@@ -55,22 +55,26 @@ api_version = "2026-10"
   uri = "https://dev.gotcha.co.il/api/shopify-chat/webhooks/app-uninstalled"
 
   # Mandatory compliance topics for public App Store distribution.
-  [[webhooks.subscriptions]]
-  topics = [ "customers/data_request" ]
-  uri = "https://dev.gotcha.co.il/api/shopify-chat/webhooks/customers-data-request"
-
-  [[webhooks.subscriptions]]
-  topics = [ "customers/redact" ]
-  uri = "https://dev.gotcha.co.il/api/shopify-chat/webhooks/customers-redact"
-
-  [[webhooks.subscriptions]]
-  topics = [ "shop/redact" ]
-  uri = "https://dev.gotcha.co.il/api/shopify-chat/webhooks/shop-redact"
+  #
+  # These are NOT ordinary subscriptions. Declaring them as
+  # `[[webhooks.subscriptions]]` is rejected outright — "The following
+  # topic is invalid: customers/data_request" — because Shopify treats the
+  # privacy trio as a distinct, named block. The endpoints behind them are
+  # the same handlers either way.
+  [webhooks.privacy_compliance]
+  customer_data_request_url = "https://dev.gotcha.co.il/api/shopify-chat/webhooks/customers-data-request"
+  customer_deletion_url = "https://dev.gotcha.co.il/api/shopify-chat/webhooks/customers-redact"
+  shop_deletion_url = "https://dev.gotcha.co.il/api/shopify-chat/webhooks/shop-redact"
 
 [build]
-include_config_on_deploy = true
 # OFF deliberately. With this on, `shopify app dev` rewrites
 # application_url and redirect_urls to a tunnel address and leaves them
 # there — which is exactly how an app quietly stops pointing at
 # dev.gotcha.co.il.
 automatically_update_urls_on_dev = false
+# NOTE: `include_config_on_deploy` used to live here and was removed by the
+# CLI on link — it is deprecated in 3.x, and configuration is now ALWAYS
+# uploaded by `app deploy`. That makes the identity check in
+# scripts/shopify/verify-chat-app-identity.mjs more load-bearing, not less:
+# there is no longer any flag standing between a mis-linked project and the
+# Core connector's configuration.

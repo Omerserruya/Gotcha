@@ -93,7 +93,17 @@ const manifest = {
   apiVersion: scalar("api_version"),
 };
 const redirectUrls = [...tomlCode.matchAll(/"(https:\/\/[^"]*oauth\/callback)"/g)].map((m) => m[1]);
-const webhookUris = [...tomlCode.matchAll(/uri\s*=\s*"([^"]+)"/g)].map((m) => m[1]);
+/**
+ * Every webhook endpoint the manifest declares, from BOTH shapes:
+ * ordinary `uri = "..."` subscriptions, and the mandatory privacy trio,
+ * which Shopify requires under [webhooks.privacy_compliance] as
+ * customer_data_request_url / customer_deletion_url / shop_deletion_url.
+ * Declaring the privacy topics as ordinary subscriptions is rejected.
+ */
+const webhookUris = [
+  ...[...tomlCode.matchAll(/uri\s*=\s*"([^"]+)"/g)].map((m) => m[1]),
+  ...[...tomlCode.matchAll(/^\s*\w+_url\s*=\s*"([^"]+)"/gm)].map((m) => m[1]),
+];
 const extensionToml = path.join(APP_DIR, "extensions", "gotcha-chat", "shopify.extension.toml");
 const extensionHandle = fs.existsSync(extensionToml)
   ? (fs.readFileSync(extensionToml, "utf8").match(/^\s*handle\s*=\s*"([^"]+)"/m) ?? [])[1] ?? null
