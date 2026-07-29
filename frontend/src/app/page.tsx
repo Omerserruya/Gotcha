@@ -97,15 +97,21 @@ export default function Home() {
         id="chatcenter-widget"
         strategy="afterInteractive"
         dangerouslySetInnerHTML={{
+          // Same origin as the page it is on, rather than a hard-coded
+          // production host. On dev that hard-coding made the script
+          // cross-origin, so our own CSP (script-src 'self') blocked it
+          // and our own site never showed the widget we ship.
+          //
+          // Colour and icon are no longer set here either: they live in
+          // the widget's configuration now, alongside every other channel,
+          // and a copy in this snippet would quietly win over it.
           __html: `
             window.__chatcenter = {
               widgetId: "widget_5a3961c3f5dc11493517ffac",
-              apiUrl: "https://gotcha.co.il",
-              color: "#733fee",
-              iconUrl: " https://img.icons8.com/?size=48&id=4cjwkaJ1Zo0u&format=png",
+              apiUrl: window.location.origin,
             };
             var s = document.createElement("script");
-            s.src = "https://gotcha.co.il/widget/chatcenter-widget.js";
+            s.src = window.location.origin + "/widget/chatcenter-widget.js";
             s.async = true;
             document.head.appendChild(s);
           `,
