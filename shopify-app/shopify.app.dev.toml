@@ -6,19 +6,35 @@
 # by a developer's `shopify app deploy`.
 #
 # Select it with:   shopify app config use shopify.app.dev.toml
-# Verify it with:   node scripts/shopify/verify-chat-app-identity.mjs
+# Verify it with:   node scripts/shopify/verify-chat-app-identity.mjs --config shopify.app.dev.toml
 #
 # `dev.gotcha.co.il` is the only non-production host that actually resolves
 # and serves both the API and the widget assets. `app.gotcha.co.il` and
 # `api.gotcha.co.il` do NOT exist — do not reintroduce them.
+#
+# NOTE: `shopify app config link` rewrote this file with Shopify's defaults
+# when it created the app (embedded = true, placeholder application_url and
+# redirect_urls, automatically_update_urls_on_dev = true). Those are
+# restored below to the values this architecture actually needs. If you
+# re-run `config link`, re-check every value in this file afterwards.
 
+client_id = "96c9417a8e0b8b7ea17b8c9bf7f4c3ad"
 name = "GOTCHA Chat (Dev)"
 handle = "gotcha-chat-dev"
+
+# Non-embedded: GOTCHA's merchant UI is its own application, not an iframe
+# inside Shopify admin. There is no App Bridge and no session-token code,
+# which is also why the authorization-code flow (not token exchange) is the
+# correct install path for this app.
 embedded = false
 
+# Where Shopify sends a merchant who opens the app. Starts the install
+# handshake when the shop is not yet bound, and lands on the onboarding
+# wizard when it is.
 application_url = "https://dev.gotcha.co.il/api/connectors/shopify-chat/oauth/init"
 
 [access_scopes]
+# EMPTY BY DESIGN — the storefront widget needs no Admin API access.
 scopes = ""
 
 [auth]
@@ -27,12 +43,18 @@ redirect_urls = [
 ]
 
 [webhooks]
-api_version = "2024-04"
+# Shopify's CLI wrote 2026-10 when it created the app; 2024-04 (this repo's
+# original value) is long past its supported window. See the report note:
+# the Admin REST version pinned in shopify.adapter.ts is a separate, older
+# concern that belongs to the CORE integration.
+api_version = "2026-10"
 
+  # Chat lifecycle. Handled by services/ai, verified with the CHAT secret.
   [[webhooks.subscriptions]]
   topics = [ "app/uninstalled" ]
   uri = "https://dev.gotcha.co.il/api/shopify-chat/webhooks/app-uninstalled"
 
+  # Mandatory compliance topics for public App Store distribution.
   [[webhooks.subscriptions]]
   topics = [ "customers/data_request" ]
   uri = "https://dev.gotcha.co.il/api/shopify-chat/webhooks/customers-data-request"
@@ -47,3 +69,8 @@ api_version = "2024-04"
 
 [build]
 include_config_on_deploy = true
+# OFF deliberately. With this on, `shopify app dev` rewrites
+# application_url and redirect_urls to a tunnel address and leaves them
+# there — which is exactly how an app quietly stops pointing at
+# dev.gotcha.co.il.
+automatically_update_urls_on_dev = false

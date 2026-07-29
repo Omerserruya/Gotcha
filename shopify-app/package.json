@@ -1,0 +1,10 @@
+{
+  "name": "gotcha-chat-shopify-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "GOTCHA Chat — Shopify app shell. Carries the Theme App Extension only; all server code lives in services/ai.",
+  "license": "UNLICENSED",
+  "scripts": {
+    "verify": "node ../scripts/shopify/verify-chat-app-identity.mjs --config shopify.app.dev.toml"
+  }
+}
