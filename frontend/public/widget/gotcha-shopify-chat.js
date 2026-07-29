@@ -214,6 +214,20 @@ window.__gotchaShopifyChatApp = function (boot) {
     // button. Shadow DOM has no UA sheet of its own to fall back on, so
     // this has to be declared here, once, ahead of everything.
     "[hidden]{display:none!important;}",
+    // ── Welcome hero ──
+    // Bleeds to the panel edges by cancelling the body's padding, so the
+    // media touches the sides instead of floating in a gutter.
+    ".hero{position:relative;margin:-18px -18px 0;overflow:hidden;background:#eef2f7;}",
+    ".hero-m{display:block;width:100%;height:100%;}",
+    // The fade is what makes the media belong to the panel rather than
+    // sit on top of it: media dissolves into the chat surface.
+    ".hero-fd{position:absolute;left:0;right:0;bottom:0;pointer-events:none;}",
+    ".hero-ov{position:absolute;inset:0;pointer-events:none;}",
+    // The avatar hangs below the media's bottom edge. z-index keeps it
+    // above the fade, and the ring separates it from any busy image.
+    ".wel-av{display:block;border-radius:50%;object-fit:cover;position:relative;z-index:2;",
+    "  background:#fff;border:3px solid #fff;box-shadow:0 4px 14px rgba(15,23,42,.18);}",
+    "@media (prefers-reduced-motion: reduce){.hero-m{animation:none!important}}",
     ".panel{",
     "  position:fixed;bottom:88px;" + side + ":20px;width:392px;",
     // Never wider than the viewport, whatever the theme is doing. A
@@ -399,6 +413,10 @@ window.__gotchaShopifyChatApp = function (boot) {
 
   // ── Panel shell ─────────────────────────────────────────────────
 
+  // The hero video, when one is playing. Held so it can be stopped the
+  // moment it stops being visible — a muted loop running behind a closed
+  // panel is battery and bandwidth a shopper never agreed to spend.
+  var heroVideo = null;
   var panel = el("div", "panel");
   attr(panel, {
     role: "dialog",
@@ -705,13 +723,125 @@ window.__gotchaShopifyChatApp = function (boot) {
 
     if (S.phase === "offline_form") { renderOfflineForm(); return; }
     if (!S.messages.length && !S.pending.length && S.phase === "welcome") { renderWelcome(); return; }
+    // Leaving the welcome state: the hero is gone from the DOM the moment
+    // the message list replaces it, so release the video handle too
+    // rather than leaving a detached element decoding in the background.
+    pauseHero();
+    heroVideo = null;
     renderMessages();
+  }
+
+  /**
+   * The rich welcome hero: image, GIF or muted looping video, fading into
+   * the chat surface with the brand avatar overlapping its bottom edge.
+   *
+   * Every branch here degrades to "no hero" rather than to a broken
+   * frame. A merchant who pastes a URL that 404s, or a browser that
+   * refuses autoplay, must still get a usable chat.
+   */
+  function renderHero(parent) {
+    var h = (boot.widget && boot.widget.ux && boot.widget.ux.hero) || null;
+    if (!h || h.mediaType === "none" || !h.mediaUrl) return null;
+    var url = safeUrl(h.mediaUrl);
+    if (!url) return null;
+
+    var mobile = window.matchMedia("(max-width: 560px)").matches;
+    var height = mobile ? h.mobileHeight : h.height;
+
+    var hero = el("div", "hero");
+    hero.style.height = height + "px";
+    if (h.cornerRadius) hero.style.borderRadius = h.cornerRadius + "px";
+
+    var media;
+    if (h.mediaType === "video") {
+      media = document.createElement("video");
+      // Muted + playsinline are the only combination browsers will
+      // autoplay. Audio never autoplays, on any platform, by design.
+      media.muted = true;
+      media.defaultMuted = true;
+      media.setAttribute("muted", "");
+      media.setAttribute("playsinline", "");
+      media.playsInline = true;
+      media.loop = !!h.videoLoop;
+      media.preload = "none";
+      var poster = safeUrl(h.posterUrl);
+      if (poster) media.poster = poster;
+      media.src = url;
+      // A shopper who asked their OS for less motion gets the poster.
+      var still = reducedMotion() || !h.videoAutoplay;
+      if (!still) {
+        var p = media.play();
+        if (p && p.catch) p.catch(function () { /* autoplay refused: poster stands in */ });
+      }
+      heroVideo = media;
+    } else {
+      media = document.createElement("img");
+      media.src = url;
+      media.alt = "";
+      media.loading = "lazy";
+      media.decoding = "async";
+    }
+    media.className = "hero-m";
+    media.style.height = "100%";
+    media.style.objectFit = h.objectFit || "cover";
+    media.style.objectPosition = h.focalPoint || "50% 50%";
+    // A dead URL leaves no trace: the frame collapses instead of showing
+    // a broken-image glyph at the top of the chat.
+    media.onerror = function () {
+      try { hero.remove(); } catch (e) { if (hero.parentNode) hero.parentNode.removeChild(hero); }
+    };
+    hero.appendChild(media);
+
+    if (h.overlayStrength > 0) {
+      var ov = el("div", "hero-ov");
+      ov.style.background = "rgba(0,0,0," + (h.overlayStrength / 100) + ")";
+      hero.appendChild(ov);
+    }
+    if (h.fadeStrength > 0) {
+      var fd = el("div", "hero-fd");
+      var bg = h.backgroundColor || "#ffffff";
+      fd.style.height = Math.round(height * (h.fadeStrength / 100)) + "px";
+      fd.style.background = "linear-gradient(to bottom, " + hexToRgba(bg, 0) + ", " + bg + ")";
+      hero.appendChild(fd);
+    }
+    parent.appendChild(hero);
+    return h;
+  }
+
+  /** #rrggbb -> rgba(), so a gradient can start fully transparent. */
+  function hexToRgba(hex, alpha) {
+    var m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(String(hex || ""));
+    if (!m) return "rgba(255,255,255," + alpha + ")";
+    return "rgba(" + parseInt(m[1], 16) + "," + parseInt(m[2], 16) + "," + parseInt(m[3], 16) + "," + alpha + ")";
+  }
+
+  function reducedMotion() {
+    try { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) { return false; }
   }
 
   function renderWelcome() {
     footer.hidden = false;
     var wrap = el("div", "wel");
-    var logoUrl = safeUrl(appearance.logoUrl);
+    var hero = renderHero(wrap);
+
+    // With a hero the avatar overlaps its bottom edge; without one the
+    // original logo treatment is unchanged.
+    var avatarUrl = hero ? safeUrl(hero.avatarUrl) || safeUrl(appearance.logoUrl) : safeUrl(appearance.logoUrl);
+    if (hero && avatarUrl) {
+      var av = document.createElement("img");
+      av.className = "wel-av";
+      av.src = avatarUrl;
+      av.alt = "";
+      av.style.width = hero.avatarSize + "px";
+      av.style.height = hero.avatarSize + "px";
+      av.style.marginTop = "-" + hero.avatarOverlap + "px";
+      av.style.marginLeft = "auto";
+      av.style.marginRight = "auto";
+      av.onerror = function () { av.style.display = "none"; };
+      wrap.appendChild(av);
+    }
+
+    var logoUrl = hero ? null : safeUrl(appearance.logoUrl);
     if (logoUrl) {
       var img = document.createElement("img");
       img.className = "wel-lg";
@@ -1397,9 +1527,23 @@ window.__gotchaShopifyChatApp = function (boot) {
       });
   }
 
+  function pauseHero() {
+    if (heroVideo) { try { heroVideo.pause(); } catch (e) {} }
+  }
+
+  // A backgrounded tab should not be decoding video either.
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) pauseHero();
+    else if (S.opened && heroVideo && !reducedMotion()) {
+      var p = heroVideo.play();
+      if (p && p.catch) p.catch(function () {});
+    }
+  });
+
   function close() {
     panel.hidden = true;
     S.opened = false;
+    pauseHero();
     track("widget_closed");
     // Keep the socket while a conversation is live so an agent's reply
     // still raises the badge; drop the poll timer either way.

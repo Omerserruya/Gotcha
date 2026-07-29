@@ -61,7 +61,7 @@ interface Harness {
  * here, so the harness seeds a conversation id and opens the panel; the
  * history comes back from the stubbed /conversation call.
  */
-async function boot(options: { messages?: any[]; features?: Record<string, boolean> } = {}): Promise<Harness> {
+async function boot(options: { messages?: any[]; features?: Record<string, boolean>; ux?: any } = {}): Promise<Harness> {
   const host = document.createElement("div");
   document.body.appendChild(host);
   const shadow = host.attachShadow({ mode: "open" });
@@ -120,6 +120,7 @@ async function boot(options: { messages?: any[]; features?: Record<string, boole
       },
       offline: { active: false, message: "Away", behavior: "ai", formFields: [], consentRequired: false, consentText: "" },
       features: { humanHandoff: true, productMessaging: true, addToCart: true, ...(options.features ?? {}) },
+      ux: options.ux,
     },
   };
 
@@ -673,5 +674,149 @@ describe("close and reopen", () => {
     expect(panel.hidden).toBe(false);
     // One panel, not six: reopening must not remount the widget.
     expect(h.shadow.querySelectorAll(".panel").length).toBe(1);
+  });
+});
+
+// ─── Welcome hero ────────────────────────────────────────────
+//
+// The hero is the first thing a shopper sees, and it is built entirely
+// from URLs a merchant pasted into a form. Every case below is really the
+// same question: what happens when that URL is wrong?
+
+function hero(overrides: Record<string, any> = {}) {
+  return {
+    hero: {
+      mediaType: "image",
+      mediaUrl: "https://cdn.example.com/hero.jpg",
+      posterUrl: null,
+      height: 180,
+      mobileHeight: 148,
+      focalPoint: "50% 40%",
+      objectFit: "cover",
+      overlayStrength: 0,
+      fadeStrength: 60,
+      cornerRadius: 0,
+      avatarUrl: "https://cdn.example.com/avatar.png",
+      avatarSize: 64,
+      avatarOverlap: 28,
+      backgroundColor: "#ffffff",
+      textColor: "#0f172a",
+      accentColor: "#111827",
+      videoLoop: true,
+      videoAutoplay: true,
+      ...overrides,
+    },
+  };
+}
+
+describe("welcome hero", () => {
+  it("renders an image hero above the welcome copy", async () => {
+    const h = await boot({ messages: [], ux: hero() });
+    const img = h.shadow.querySelector(".hero .hero-m") as HTMLImageElement;
+    expect(img).toBeTruthy();
+    expect(img.tagName).toBe("IMG");
+    expect(img.getAttribute("src")).toBe("https://cdn.example.com/hero.jpg");
+    expect(img.style.objectPosition).toBe("50% 40%");
+    // Decorative: it must not be announced to a screen reader.
+    expect(img.getAttribute("alt")).toBe("");
+  });
+
+  it("renders a GIF the same way an image is rendered", async () => {
+    const h = await boot({
+      messages: [],
+      ux: hero({ mediaType: "gif", mediaUrl: "https://cdn.example.com/loop.gif" }),
+    });
+    const img = h.shadow.querySelector(".hero .hero-m") as HTMLImageElement;
+    expect(img.tagName).toBe("IMG");
+    expect(img.getAttribute("src")).toContain(".gif");
+  });
+
+  it("renders video muted and inline, which is the only autoplayable form", async () => {
+    const h = await boot({
+      messages: [],
+      ux: hero({ mediaType: "video", mediaUrl: "https://cdn.example.com/clip.mp4", posterUrl: "https://cdn.example.com/p.jpg" }),
+    });
+    const v = h.shadow.querySelector(".hero .hero-m") as HTMLVideoElement;
+    expect(v.tagName).toBe("VIDEO");
+    expect(v.muted).toBe(true);
+    expect(v.hasAttribute("playsinline")).toBe(true);
+    expect(v.getAttribute("poster")).toContain("p.jpg");
+    expect(v.loop).toBe(true);
+    // Nothing is fetched until the widget is actually open.
+    expect(v.preload).toBe("none");
+  });
+
+  it("fades the media into the chat surface", async () => {
+    const h = await boot({ messages: [], ux: hero() });
+    const fade = h.shadow.querySelector(".hero .hero-fd") as HTMLElement;
+    expect(fade).toBeTruthy();
+    // Transparent at the top, the panel's own colour at the bottom.
+    expect(fade.style.background).toContain("linear-gradient");
+    expect(fade.style.background).toContain("rgba(255,255,255,0)");
+  });
+
+  it("overlaps the avatar onto the bottom edge of the media", async () => {
+    const h = await boot({ messages: [], ux: hero({ avatarOverlap: 28, avatarSize: 64 }) });
+    const av = h.shadow.querySelector(".wel-av") as HTMLImageElement;
+    expect(av).toBeTruthy();
+    expect(av.style.marginTop).toBe("-28px");
+    expect(av.style.width).toBe("64px");
+  });
+
+  it("shows no hero at all when there is no media", async () => {
+    const h = await boot({ messages: [], ux: { hero: { mediaType: "none", mediaUrl: null } } });
+    expect(h.shadow.querySelector(".hero")).toBeNull();
+    // ...and the welcome copy is still there.
+    expect(h.shadow.querySelector(".wel-h")).toBeTruthy();
+  });
+
+  it("survives a config with no ux block at all", async () => {
+    // An existing channel, configured long before any of this shipped.
+    const h = await boot({ messages: [] });
+    expect(h.shadow.querySelector(".hero")).toBeNull();
+    expect(h.shadow.querySelector(".wel")).toBeTruthy();
+  });
+
+  it("collapses the frame if the media fails to load", async () => {
+    const h = await boot({ messages: [], ux: hero() });
+    const img = h.shadow.querySelector(".hero .hero-m") as HTMLImageElement;
+    img.dispatchEvent(new Event("error"));
+    // A broken-image glyph at the top of the chat is worse than no hero.
+    expect(h.shadow.querySelector(".hero")).toBeNull();
+  });
+});
+
+describe("welcome to conversation", () => {
+  it("drops the hero once the shopper sends the first message", async () => {
+    const h = await boot({ messages: [], ux: hero() });
+    expect(h.shadow.querySelector(".hero")).toBeTruthy();
+
+    const suggestion = h.shadow.querySelector(".sug-b") as HTMLButtonElement;
+    suggestion.click();
+    await new Promise((r) => setTimeout(r, 30));
+
+    // Compact chat: the message list owns the space now.
+    expect(h.shadow.querySelector(".hero")).toBeNull();
+    expect(h.shadow.querySelector(".msgs")).toBeTruthy();
+  });
+
+  it("opens an existing conversation straight into compact chat", async () => {
+    // Case 28: a returning shopper must never be shown marketing media
+    // above their own messages.
+    const h = await boot({
+      messages: [{ id: "m1", direction: "OUTBOUND", body: "Hello again", createdAt: new Date().toISOString() }],
+      ux: hero(),
+    });
+    expect(h.shadow.querySelector(".hero")).toBeNull();
+    expect(h.shadow.querySelector(".msgs")).toBeTruthy();
+  });
+
+  it("does not remount the widget when transitioning", async () => {
+    const h = await boot({ messages: [], ux: hero() });
+    const panelBefore = h.shadow.querySelector(".panel");
+    (h.shadow.querySelector(".sug-b") as HTMLButtonElement).click();
+    await new Promise((r) => setTimeout(r, 30));
+    // Same panel element: the view changed, the widget did not restart.
+    expect(h.shadow.querySelector(".panel")).toBe(panelBefore);
   });
 });

@@ -31,6 +31,7 @@ import {
   normalizeStorefrontContext,
   isOriginAllowed,
   projectVisitorMessage,
+  publicUxConfig,
   MAX_VISITOR_MESSAGE_CHARS,
   type VisitorSessionPayload,
   type StorefrontContext,
@@ -92,11 +93,14 @@ const eventLimiter = limiter("events", 60, visitorKey);
 // ─── CORS ────────────────────────────────────────────────────
 //
 // The storefront lives on the merchant's own domain, so these responses
-// are genuinely cross-origin. We echo the request Origin only after the
-// channel resolves and the origin is on its allowlist; a denied request
-// gets a 403 with NO CORS header, so the browser cannot read the body
-// either way. Preflight is answered permissively because it grants
-// nothing on its own — the real request still runs the full check.
+// are genuinely cross-origin. We echo the Origin only for a storefront we
+// recognise — including on refusals, so the browser can read our
+// deliberate "unavailable" body instead of an opaque CORS error. An
+// unrecognised origin gets no header at all, and its preflight is refused
+// outright rather than handed a list of methods.
+//
+// None of this is authorization: the per-channel origin allowlist still
+// decides who is actually served.
 
 function allowOrigin(res: Response, origin: string | undefined): void {
   if (!origin) return;
@@ -172,7 +176,6 @@ async function touchInstallationHeartbeat(shopDomain: string | null | undefined)
   if (installation) await recordInstallationHeartbeat(installation.id);
 }
 
-/** One shape for every refusal. Callers get no detail; our logs do. */
 /**
  * One shape for every refusal. Callers get no detail; our logs do.
  *
@@ -333,6 +336,9 @@ function publicWidgetConfig(
       productMessaging: productMessagingEnabled,
       addToCart: productMessagingEnabled && commerce.addToCartEnabled,
     },
+    // Launcher / hero / teaser / sounds / behaviour. Presentation only —
+    // publicUxConfig is the boundary that keeps identifiers out of it.
+    ux: publicUxConfig(channel.config.ux),
   };
 }
 
