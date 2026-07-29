@@ -106,14 +106,41 @@ async function measure({ width, height, messages }) {
       view: panel.getAttribute("data-view"), state: panel.getAttribute("data-state"),
       panel: box(".panel"), header: box(".hd"), headerVisible: vis(".hd"), headerAvatar: box(".hd-av"),
       hero: box(".hero"), body: box(".bd"), composer: box(".ft"),
+      textarea: box(".ta"), send: box(".snd"), subRow: box(".sub"),
+      // The VISIBLE close control is the ::before chip, not the 44px
+      // target it sits inside. Measuring the button would report the
+      // touch area and miss the whole point of the change.
+      closeChip: (() => {
+        const e = s.querySelector('[data-act="close"]');
+        if (!e) return null;
+        const cs = getComputedStyle(e, "::before");
+        const w = parseFloat(cs.width), h = parseFloat(cs.height);
+        return Number.isFinite(w) && Number.isFinite(h) ? { width: w, height: h } : null;
+      })(),
+      // Nothing may stick out sideways, whatever the theme is doing.
+      overflowsX: (() => {
+        const pr = s.querySelector(".panel").getBoundingClientRect();
+        return Array.from(s.querySelectorAll(".panel *")).some((n) => {
+          const r = n.getBoundingClientRect();
+          return r.width > 0 && (r.left < pr.left - 1 || r.right > pr.right + 1);
+        });
+      })(),
+      // The clamp is computed against the panel's MAXIMUM height, because
+      // in the welcome view the panel hugs its content — measuring the
+      // rendered height would be circular.
+      panelBasis: window.matchMedia("(max-width: 560px)").matches
+        ? window.innerHeight
+        : Math.min(640, window.innerHeight - 120),
       close: box('[data-act="close"]'), closeVisible: vis('[data-act="close"]'),
-      suggestions: Array.from(s.querySelectorAll(".sug button")).map((b) => { const r = b.getBoundingClientRect(); return { bottom: r.bottom, height: r.height }; }),
+      suggestions: Array.from(s.querySelectorAll(".sug-b"))
+        .filter((b) => !b.hidden)
+        .map((b) => { const r = b.getBoundingClientRect(); return { bottom: r.bottom, height: r.height }; }),
       // A scroll region legitimately holds more than it shows. What
       // matters is that everything is REACHABLE, not that it all fits.
       bodyScroll: (() => { const e = s.querySelector(".bd"); return e ? { scrollHeight: e.scrollHeight, clientHeight: e.clientHeight } : null; })(),
       lastSuggestionReachable: (() => {
         const e = s.querySelector(".bd");
-        const all = s.querySelectorAll(".sug button");
+        const all = Array.from(s.querySelectorAll(".sug-b")).filter((b) => !b.hidden);
         if (!e || !all.length) return true;
         const last = all[all.length - 1];
         // `behavior: "instant"` matters: .bd sets scroll-behavior:smooth,
@@ -144,9 +171,9 @@ check("desktop welcome: no conversation header", d.headerVisible === false);
 if (d.hero) {
   const gap = d.hero.top - d.panel.top;
   check("desktop welcome: hero is flush with the panel's top edge", Math.abs(gap) <= 1, `gap=${gap.toFixed(2)}px`);
-  check("desktop welcome: hero is clamped to a sane share of the panel",
-    d.hero.height <= Math.round(d.panel.height * 0.34),
-    `${Math.round(d.hero.height)}px of ${Math.round(d.panel.height)}px (${Math.round((d.hero.height / d.panel.height) * 100)}%)`);
+  check("desktop welcome: hero is clamped to a quarter of the usable panel",
+    d.hero.height <= Math.ceil(d.panelBasis * 0.25),
+    `${Math.round(d.hero.height)}px of ${d.panelBasis}px usable (${Math.round((d.hero.height / d.panelBasis) * 100)}%)`);
 } else {
   check("desktop welcome: hero is flush with the panel's top edge", true, "no hero media configured");
   check("desktop welcome: hero is clamped to a sane share of the panel", true, "no hero media configured");
@@ -180,20 +207,37 @@ check("desktop conversation: the scroll region ends above the composer",
   !d.composer || d.body.bottom <= d.composer.top + 1,
   d.composer ? `body ends ${Math.round(d.body.bottom)}, composer starts ${Math.round(d.composer.top)}` : "n/a");
 check("desktop conversation: the close control survives the state change", d.closeVisible === true);
+check("desktop: the composer is one line, not a panel",
+  d.composer && d.composer.height <= 96,
+  d.composer ? `${Math.round(d.composer.height)}px` : "missing");
+check("desktop: the textarea defaults to a single line",
+  d.textarea && d.textarea.height <= 42,
+  d.textarea ? `${Math.round(d.textarea.height)}px` : "missing");
+check("desktop: the send button is 36-40px",
+  d.send && d.send.width >= 36 && d.send.width <= 40,
+  d.send ? `${Math.round(d.send.width)}px` : "missing");
+check("desktop: the footer row is thin",
+  !d.subRow || d.subRow.height <= 20,
+  d.subRow ? `${Math.round(d.subRow.height)}px` : "n/a");
+check("desktop: the visible close chip is smaller than its touch target",
+  d.closeChip && d.closeChip.width <= 32 && d.close.width >= 44,
+  d.closeChip ? `chip ${Math.round(d.closeChip.width)}px inside ${Math.round(d.close.width)}px target` : "no chip");
+check("desktop: nothing overflows the panel horizontally", d.overflowsX === false);
 await page.close();
 
 // ── Every viewport the merchant's shoppers actually use ──
 for (const [w, h] of [[320, 568], [360, 640], [375, 667], [390, 844], [430, 932], [768, 1024]]) {
   const { page: vp, geom: m } = await measure({ width: w, height: h, messages: [] });
   const fits = m.panel.width <= w + 1 && m.panel.left >= -1;
-  const heroOk = !m.hero || m.hero.height <= Math.round(m.panel.height * 0.31);
+  const heroOk = !m.hero || m.hero.height <= Math.ceil(m.panelBasis * (w <= 560 ? 0.22 : 0.25));
   // Scrolled to the end, the last suggestion must clear the composer.
   const sugOk = m.lastSuggestionReachable;
   const closeOk = m.close && m.close.width >= 44 && m.close.height >= 44;
-  check(`${w}x${h}: fits, hero clamped, every suggestion clears the composer, 44px close`,
-    fits && heroOk && sugOk && closeOk,
+  check(`${w}x${h}: fits, hero clamped, every suggestion clears the composer, 44px close, no overflow`,
+    fits && heroOk && sugOk && closeOk && m.overflowsX === false,
     `panel=${Math.round(m.panel.width)}px hero=${m.hero ? Math.round(m.hero.height) : 0}px sugs=${m.suggestions.length}` +
-      (fits ? "" : " FITS✗") + (heroOk ? "" : " HERO✗") + (sugOk ? "" : " SUGS✗") + (closeOk ? "" : " CLOSE✗"));
+      (fits ? "" : " FITS✗") + (heroOk ? "" : " HERO✗") + (sugOk ? "" : " SUGS✗") +
+      (closeOk ? "" : " CLOSE✗") + (m.overflowsX ? " OVERFLOW✗" : ""));
   await vp.close();
 }
 

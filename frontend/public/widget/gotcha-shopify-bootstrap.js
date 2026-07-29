@@ -55,7 +55,7 @@
   // bootstrap can only ever load the exact bundle it was built against —
   // a hand-typed ?v= let four commits change the bundle without changing
   // its URL, and every cache kept serving the old one.
-  var CHAT_BUNDLE = "gotcha-shopify-chat.4b01ad520508.js";
+  var CHAT_BUNDLE = "gotcha-shopify-chat.736d03a5d008.js";
 
   var IDENTITY = String(cfg.shopDomain || cfg.channelKey || "");
   var STORAGE_PREFIX = "gotcha_sfy_" + IDENTITY.slice(-12);
@@ -186,12 +186,14 @@
     var L = (widget.ux && widget.ux.launcher) || null;
     var mobile = window.matchMedia("(max-width: 560px)").matches;
 
-    var size = L ? L.size : 56;
+    // Mobile gets a slightly smaller launcher: the same button is a larger
+    // share of a 360px screen than of a desktop one.
+    var size = L ? (mobile ? Math.max(40, L.size - 4) : L.size) : 48;
     var bg = L ? L.backgroundColor : a.primaryColor;
     var fg = L ? L.iconColor : a.contrastColor;
     var side = (L ? (mobile ? L.mobilePosition : L.position) : a.launcherPosition) === "left" ? "left" : "right";
-    var offSide = L ? L.offsetSide : 20;
-    var offBottom = L ? (mobile ? L.mobileOffsetBottom : L.offsetBottom) : 20;
+    var offSide = L ? L.offsetSide : 18;
+    var offBottom = L ? (mobile ? L.mobileOffsetBottom : L.offsetBottom) : 18;
 
     // Shape is expressed as a radius so one rule covers all three, and a
     // pill only widens when it actually carries a label.
@@ -200,13 +202,19 @@
       ? (L.shape === "circle" ? Math.round(size / 2) : L.shape === "pill" ? Math.round(size / 2) : 16)
       : 28;
     var width = showLabel ? "auto" : size + "px";
-    var padding = showLabel ? "0 " + Math.round(size / 3.5) + "px" : "0";
+    // A narrower pill. size/3.5 gave a label more horizontal padding than
+    // the text needed, which is most of why the labelled launcher read as
+    // a banner rather than a button.
+    var padding = showLabel ? "0 " + Math.round(size / 4.5) + "px" : "0";
 
+    // Softened across the board. The old "medium" was heavier than most
+    // storefronts use anywhere on their own page, so the launcher looked
+    // pasted on rather than part of the store.
     var SHADOWS = [
       "none",
-      "0 2px 8px rgba(15,23,42,.14)",
-      "0 6px 24px rgba(15,23,42,.22),0 2px 6px rgba(15,23,42,.12)",
-      "0 12px 38px rgba(15,23,42,.32),0 4px 10px rgba(15,23,42,.18)",
+      "0 1px 4px rgba(15,23,42,.10)",
+      "0 4px 16px rgba(15,23,42,.16),0 1px 3px rgba(15,23,42,.10)",
+      "0 10px 30px rgba(15,23,42,.24),0 3px 8px rgba(15,23,42,.14)",
     ];
     // NOT `shadow`: that name belongs to the ShadowRoot in this scope.
     var boxShadow = SHADOWS[L ? L.shadow : 2] || SHADOWS[2];
@@ -225,12 +233,13 @@
       "  border:" + (L && L.showBorder ? "2px solid " + L.borderColor : "0") + ";",
       "  box-shadow:" + boxShadow + ";",
       "  transition:transform .18s ease, box-shadow .18s ease;",
-      "  font:600 14px/1 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;",
+      "  font:600 13px/1 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;",
+      "  letter-spacing:-.005em;",
       "}",
-      ".ldr:hover{transform:translateY(-2px);box-shadow:" + (SHADOWS[3]) + ";}",
+        ".ldr:hover{transform:translateY(-1px);box-shadow:" + SHADOWS[3] + ";}",
       ".ldr:active{transform:translateY(0);}",
       ".ldr:focus-visible{outline:3px solid " + bg + ";outline-offset:3px;}",
-      ".ldr svg{width:" + Math.round(size * 0.46) + "px;height:" + Math.round(size * 0.46) + "px;",
+      ".ldr svg{width:" + Math.round(size * 0.42) + "px;height:" + Math.round(size * 0.42) + "px;",
       "  fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none;}",
       // A custom image is clipped to the launcher's own shape so it can
       // never spill outside the button.

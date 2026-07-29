@@ -178,8 +178,8 @@ describe("welcome hero", () => {
   });
 
   it("defaults short enough to leave room for content", () => {
-    expect(defaultHero().height).toBe(140);
-    expect(defaultHero().mobileHeight).toBe(118);
+    expect(defaultHero().height).toBe(124);
+    expect(defaultHero().mobileHeight).toBe(108);
   });
 
   it("only accepts a well-formed focal point", () => {
@@ -465,5 +465,126 @@ describe("hero height is a preference, not a promise", () => {
     expect(heroHeightWarning({ configured: 140, panelHeight: 640, isMobile: false })).toBe("ok");
     expect(heroHeightWarning({ configured: 220, panelHeight: 480, isMobile: true })).toBe("tight");
     expect(heroHeightWarning({ configured: 200, panelHeight: 320, isMobile: true })).toBe("dropped");
+  });
+});
+
+describe("welcome screen proportions", () => {
+  // (1) The hero was taking a third of the panel and pushing the third
+  // suggested question under the composer.
+  it("defaults the hero to a size that leaves room for the conversation", () => {
+    const h = defaultHero();
+    expect(h.height).toBeGreaterThanOrEqual(115);
+    expect(h.height).toBeLessThanOrEqual(135);
+    expect(h.mobileHeight).toBeGreaterThanOrEqual(95);
+    expect(h.mobileHeight).toBeLessThanOrEqual(120);
+    expect(h.mobileHeight).toBeLessThan(h.height);
+  });
+
+  // (2) A merchant may configure any height; the panel still has the last
+  // word, because a hero that leaves no room for a question is not a
+  // taller hero, it is a broken welcome screen.
+  it("never lets the hero take more than a quarter of the panel", () => {
+    for (const panelHeight of [568, 640, 667, 844, 932, 1024]) {
+      for (const isMobile of [true, false]) {
+        const resolved = resolveHeroHeight({ configured: 320, panelHeight, isMobile });
+        const share = resolved / panelHeight;
+        expect(share).toBeLessThanOrEqual(isMobile ? 0.22 : 0.25);
+      }
+    }
+  });
+
+  it("drops the hero entirely rather than showing a stripe", () => {
+    // 200px of panel cannot host a hero AND a usable welcome screen.
+    expect(resolveHeroHeight({ configured: 190, panelHeight: 200, isMobile: true })).toBe(0);
+    expect(heroHeightWarning({ configured: 190, panelHeight: 200, isMobile: true })).toBe("dropped");
+  });
+
+  it("tells the merchant when their height will not be honoured", () => {
+    expect(heroHeightWarning({ configured: 124, panelHeight: 640, isMobile: false })).toBe("ok");
+    expect(heroHeightWarning({ configured: 300, panelHeight: 640, isMobile: false })).toBe("tight");
+  });
+
+  it("honours a merchant's height when the panel can afford it", () => {
+    // (12) Configurability is preserved — only impractical values are cut.
+    expect(resolveHeroHeight({ configured: 120, panelHeight: 900, isMobile: false })).toBe(120);
+    expect(normalizeHero({ height: 150 }).height).toBe(150);
+    expect(normalizeHero({ mobileHeight: 96 }).mobileHeight).toBe(96);
+  });
+
+  // (11) A launcher that does not announce itself before being asked.
+  it("defaults the launcher to a restrained size and offset", () => {
+    const l = defaultLauncher();
+    expect(l.size).toBeLessThanOrEqual(48);
+    expect(l.size).toBeGreaterThanOrEqual(40);
+    expect(l.offsetSide).toBeLessThanOrEqual(18);
+    expect(l.offsetBottom).toBeLessThanOrEqual(18);
+    expect(l.mobileOffsetBottom).toBeLessThanOrEqual(l.offsetBottom);
+  });
+
+  it("still lets a merchant make the launcher whatever they want", () => {
+    const l = normalizeLauncher({ size: 72, shape: "pill", label: "Need help?", showLabel: true, shadow: 3 });
+    expect(l.size).toBe(72);
+    expect(l.shape).toBe("pill");
+    expect(l.label).toBe("Need help?");
+    expect(l.shadow).toBe(3);
+  });
+
+  it("opens with a question rather than a greeting that asks nothing", () => {
+    const w = defaultWelcome();
+    expect(w.title).toBe("How can I help?");
+    // Merchant copy still wins; this is only the unconfigured default.
+    expect(normalizeWelcome({ title: "Shalom" }).title).toBe("Shalom");
+  });
+
+  it("attaches the avatar to the hero rather than floating it below", () => {
+    const w = defaultWelcome();
+    expect(w.avatarOverlap).toBeGreaterThanOrEqual(28);
+    expect(w.avatarSize).toBeLessThanOrEqual(60);
+    // Overlap must not swallow the avatar whole.
+    expect(w.avatarOverlap).toBeLessThan(w.avatarSize);
+  });
+});
+
+describe("public widget payload", () => {
+  it("carries presentation only, and nothing that identifies the tenant", () => {
+    const ux = normalizeShopifyChatUx({
+      welcome: { title: "Hi", avatarUrl: "https://cdn.example.com/a.png" },
+      hero: { mediaType: "image", mediaUrl: "https://cdn.example.com/h.jpg" },
+      launcher: { label: "Need help?" },
+      proactive: { enabled: true, includeUrls: ["/products/*"] },
+    });
+    const pub = publicUxConfig(ux);
+    const serialized = JSON.stringify(pub);
+
+    // Everything a shopper's browser needs to draw the widget.
+    expect(Object.keys(pub).sort()).toEqual(
+      ["behavior", "hero", "launcher", "proactive", "sounds", "welcome"].sort(),
+    );
+
+    // ...and nothing it does not. These are the shapes that would matter
+    // if one ever slipped in: an id, a secret, a routing decision.
+    for (const forbidden of [
+      "tenantId", "tenant_id", "channelAccountId", "channelId", "integrationId",
+      "accessToken", "token", "secret", "apiKey", "webhookSecret",
+      "aiAgentId", "departmentId", "systemPrompt", "instructions",
+      "email", "phone", "shopDomain", "adminApi", "internal",
+    ]) {
+      expect(serialized).not.toContain(forbidden);
+    }
+  });
+
+  it("does not gain fields when the merchant configures more", () => {
+    // A regression here is silent: the widget keeps working and the extra
+    // field is simply published to every storefront visitor.
+    const bare = Object.keys(publicUxConfig(defaultShopifyChatUx())).sort();
+    const rich = Object.keys(
+      publicUxConfig(
+        normalizeShopifyChatUx({
+          welcome: { title: "x" }, hero: { mediaType: "video", mediaUrl: "https://cdn.example.com/v.mp4" },
+          sounds: { enabled: true }, behavior: { openOnLoad: true },
+        }),
+      ),
+    ).sort();
+    expect(rich).toEqual(bare);
   });
 });

@@ -156,13 +156,36 @@ describe("widget asset CORS (gateway templates)", () => {
     expect(body).not.toContain("Access-Control-Allow-Credentials");
   });
 
-  it.each(templates)("%s keeps nosniff and a revalidating cache", (file) => {
+  it.each(templates)("%s keeps nosniff on the widget assets", (file) => {
     const conf = fs.readFileSync(file, "utf8");
     const block = conf.slice(conf.indexOf("location /widget/"));
     const body = block.slice(0, block.indexOf("\n        }"));
     expect(body).toContain('add_header X-Content-Type-Options "nosniff"');
-    // Filename carries no content hash, so the TTL must stay short.
-    expect(body).toMatch(/Cache-Control "public, max-age=(\d{1,3}), must-revalidate"/);
+  });
+
+  it.each(templates)("%s caches hashed bundles forever and the bootstrap never", (file) => {
+    const conf = fs.readFileSync(file, "utf8");
+
+    // The chat bundle's filename carries a content hash, so new bytes are
+    // a new URL and the old one can safely be cached forever.
+    const dirBlock = conf.slice(conf.indexOf("location /widget/"));
+    const dirBody = dirBlock.slice(0, dirBlock.indexOf("\n        }"));
+    expect(dirBody).toMatch(/Cache-Control "public, max-age=31536000, immutable"/);
+
+    // The bootstrap's filename is stable — it is what the theme points at
+    // — so it must be revalidated on every load, or a change to it can sit
+    // unseen in a shopper's browser for as long as the TTL allows.
+    const bootIdx = conf.indexOf("location = /widget/gotcha-shopify-bootstrap.js");
+    expect(bootIdx).toBeGreaterThan(-1);
+    const bootBlock = conf.slice(bootIdx);
+    const bootBody = bootBlock.slice(0, bootBlock.indexOf("\n        }"));
+    expect(bootBody).toMatch(/Cache-Control "public, no-cache, must-revalidate"/);
+    expect(bootBody).toContain('add_header X-Content-Type-Options "nosniff"');
+
+    // nginx matches an exact-match location before a prefix one, so the
+    // bootstrap's rule wins over the immutable directory rule regardless
+    // of the order they appear in the file.
+    expect(conf.indexOf("location = /widget/")).toBeGreaterThan(-1);
   });
 });
 

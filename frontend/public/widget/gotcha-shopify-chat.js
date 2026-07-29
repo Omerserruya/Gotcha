@@ -38,6 +38,7 @@ window.__gotchaShopifyChatApp = function (boot) {
       placeholder: "Ask us anything",
       send: "Send",
       startConversation: "Start the conversation",
+      showMore: "Show {n} more",
       connecting: "Connecting…",
       reconnecting: "Reconnecting…",
       waitingAi: "Typing…",
@@ -79,6 +80,7 @@ window.__gotchaShopifyChatApp = function (boot) {
       placeholder: "אפשר לשאול אותנו הכל",
       send: "שליחה",
       startConversation: "אפשר להתחיל",
+      showMore: "עוד {n}",
       connecting: "מתחברים…",
       reconnecting: "מתחברים מחדש…",
       waitingAi: "מקלידים…",
@@ -252,14 +254,18 @@ window.__gotchaShopifyChatApp = function (boot) {
     // to `position:relative` there and put a 44px hole above the hero.
     // Over the hero it needs its own contrast: a merchant's photograph
     // can be any colour, and the way out must be legible on all of them.
-    ".panel[data-view='welcome'] .x{top:10px;" + (dir === "rtl" ? "left" : "right") + ":10px;",
-    "  background:rgba(15,23,42,.45);color:#fff;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);",
-    "  border-radius:50%;}",
-    ".panel[data-view='welcome'] .x:hover{background:rgba(15,23,42,.62);color:#fff;}",
+    // Over a photograph the chip needs its own contrast, because a
+    // merchant's hero can be any colour and the way out must be legible on
+    // all of them. Everywhere else it stays a quiet neutral.
+    ".panel[data-view='welcome'] .x{color:#fff;}",
+    ".panel[data-view='welcome'] .x::before{background:rgba(15,23,42,.32);",
+    "  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);}",
+    ".panel[data-view='welcome'] .x:hover::before{background:rgba(15,23,42,.46);}",
+    ".panel[data-view='welcome'] .x:active::before{transform:scale(.92);}",
     // ── Welcome hero ──
     // Bleeds to the panel edges by cancelling the body's padding, so the
     // media touches the sides instead of floating in a gutter.
-    ".hero{position:relative;margin:-18px -18px 0;overflow:hidden;background:#eef2f7;}",
+    ".hero{position:relative;margin:calc(var(--pad) * -1) calc(var(--pad) * -1) 0;overflow:hidden;background:#eef2f7;}",
     ".hero-m{display:block;width:100%;height:100%;}",
     // The fade is what makes the media belong to the panel rather than
     // sit on top of it: media dissolves into the chat surface.
@@ -267,11 +273,27 @@ window.__gotchaShopifyChatApp = function (boot) {
     ".hero-ov{position:absolute;inset:0;pointer-events:none;}",
     // The avatar hangs below the media's bottom edge. z-index keeps it
     // above the fade, and the ring separates it from any busy image.
+    // Attached to the hero, not floating below it: a 3px ring, a soft
+    // shadow, and no bottom margin of its own — the .wel gap owns the
+    // distance to the title so there is only one number to tune.
     ".wel-av{display:block;border-radius:50%;object-fit:cover;position:relative;z-index:2;",
-    "  background:#fff;border:3px solid #fff;box-shadow:0 4px 14px rgba(15,23,42,.18);}",
+    "  background:#fff;border:3px solid #fff;box-shadow:0 3px 10px rgba(15,23,42,.14);margin-bottom:0;}",
     "@media (prefers-reduced-motion: reduce){.hero-m{animation:none!important}}",
+    // ── The spacing scale ──
+    //
+    // Every gap in the welcome screen is one of these. The widget was
+    // built with margins chosen per-rule — 18px here, 14px there, a -8px
+    // correction to undo one of them — and the sum was a panel that felt
+    // loose at the top and ran out of room at the bottom. One scale means
+    // tightening the layout is a change to five numbers, not fifty.
+    ":host,.panel{",
+    "  --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:20px;",
+    // The body's horizontal padding, referenced by anything that needs to
+    // bleed to the panel edge (the hero) or line up with it.
+    "  --pad:16px;",
+    "}",
     ".panel{",
-    "  position:fixed;bottom:88px;" + side + ":20px;width:392px;",
+    "  position:fixed;bottom:80px;" + side + ":16px;width:392px;",
     // Never wider than the viewport, whatever the theme is doing. A
     // storefront with its own horizontal overflow must not be able to
     // drag the widget wider and make its own bug worse.
@@ -282,6 +304,13 @@ window.__gotchaShopifyChatApp = function (boot) {
     "  display:flex;flex-direction:column;overflow:hidden;",
     "  font:400 15px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;",
     "  animation:rise .22s cubic-bezier(.2,.8,.3,1);",
+    "}",
+    // A welcome screen is short by design, and a card that reserves the
+    // full 640px for it ends in a band of empty white above the composer.
+    // Hug the content; the max-height keeps a long question list scrolling
+    // rather than growing off the screen.
+    "@media (min-width: 561px){",
+    "  .panel[data-view='welcome']{height:auto;max-height:min(640px, calc(100vh - 120px));}",
     "}",
     "@keyframes rise{from{opacity:0;transform:translateY(12px) scale(.985)}to{opacity:1;transform:none}}",
     "@media (prefers-reduced-motion: reduce){.panel{animation:none}}",
@@ -313,37 +342,73 @@ window.__gotchaShopifyChatApp = function (boot) {
     // is the shopper's way out of the widget — the last control that
     // should be fiddly on a phone. The icon stays visually small; the
     // hit area does not.
-    ".x{width:44px;height:44px;min-width:44px;min-height:44px;border-radius:12px;border:0;",
-    "  background:transparent;color:#64748b;cursor:pointer;",
-    "  display:flex;align-items:center;justify-content:center;",
+    // 44x44 is the accessibility floor and this is the shopper's way out,
+    // so the TARGET never shrinks. What shrinks is the part you can see:
+    // a 30px chip drawn behind the icon. Making the visible control the
+    // same size as the touch target is what made the X the loudest thing
+    // in the hero.
+    ".x{width:44px;height:44px;min-width:44px;min-height:44px;border:0;background:transparent;",
+    "  color:#64748b;cursor:pointer;display:flex;align-items:center;justify-content:center;",
     // Taken OUT of the panel's column flow. It is a child of the panel so
     // that it survives the header being hidden in the welcome view, which
     // also means it must not occupy a row of that column.
-    "  position:absolute;top:6px;" + (dir === "rtl" ? "left" : "right") + ":8px;",
-    "  z-index:6;pointer-events:auto;}",
-    ".x:hover{background:#f1f5f9;color:#0f172a;}",
-    ".x:focus-visible{outline:3px solid " + brand + ";outline-offset:2px;}",
-    ".x svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;pointer-events:none;}",
+    "  position:absolute;top:var(--s2);" + (dir === "rtl" ? "left" : "right") + ":var(--s2);",
+    "  z-index:6;pointer-events:auto;-webkit-tap-highlight-color:transparent;}",
+    ".x::before{content:'';position:absolute;width:30px;height:30px;border-radius:50%;",
+    "  background:rgba(15,23,42,.06);transition:background .15s,transform .15s;}",
+    ".x svg{position:relative;width:15px;height:15px;fill:none;stroke:currentColor;",
+    "  stroke-width:2.1;stroke-linecap:round;pointer-events:none;}",
+    ".x:hover::before{background:rgba(15,23,42,.12);}",
+    ".x:hover{color:#0f172a;}",
+    ".x:active::before{transform:scale(.92);}",
+    ".x:focus-visible{outline:none;}",
+    ".x:focus-visible::before{outline:2px solid " + brand + ";outline-offset:3px;}",
+    "@media (prefers-reduced-motion: reduce){.x::before{transition:none}}",
 
     // The only scrolling region. The extra bottom padding is what lets
     // the LAST suggested question clear the composer instead of sitting
     // permanently underneath it.
+    // The ONLY scrolling region. The composer is a flex sibling below it,
+    // never an overlay, so nothing here can be trapped behind it.
     ".bd{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;",
-    "  padding:18px 18px 26px;scroll-behavior:smooth;overscroll-behavior:contain;}",
+    "  padding:var(--pad) var(--pad) var(--s4);scroll-behavior:smooth;overscroll-behavior:contain;}",
     "@media (prefers-reduced-motion: reduce){.bd{scroll-behavior:auto}}",
 
     // Welcome
-    ".wel{display:flex;flex-direction:column;gap:14px;padding:10px 2px 4px;}",
+    // One gap between blocks, and a tighter one inside the title/subtitle
+    // pair so they read as a unit. The old sheet used a -8px margin on the
+    // subtitle to claw back a gap it had just declared.
+    ".wel{display:flex;flex-direction:column;gap:var(--s3);padding:var(--s2) 0 0;}",
     ".wel-lg{width:52px;height:52px;border-radius:14px;object-fit:contain;background:#f8fafc;}",
-    ".wel-h{font-size:26px;line-height:1.2;font-weight:680;letter-spacing:-.02em;margin:0;}",
-    ".wel-s{font-size:15px;color:#475569;margin:-8px 0 0;}",
-    ".sug{display:flex;flex-direction:column;gap:8px;}",
-    ".sug-b{text-align:" + (dir === "rtl" ? "right" : "left") + ";border:1px solid #e2e8f0;background:#fff;",
-    "  border-radius:14px;padding:12px 14px;font:inherit;font-size:14.5px;color:#0f172a;cursor:pointer;",
-    "  transition:border-color .15s,background .15s,transform .15s;}",
-    ".sug-b:hover{border-color:" + brand + ";background:#f8fafc;}",
+    ".wel-cp{display:flex;flex-direction:column;gap:var(--s1);}",
+    ".wel-h{font-size:21px;line-height:1.25;font-weight:670;letter-spacing:-.015em;margin:0;}",
+    // Measure, not just size: a subtitle that runs the full panel width is
+    // harder to scan than one that breaks where a person would.
+    ".wel-s{font-size:14px;line-height:1.45;color:#5b6b7f;margin:0;max-width:34ch;}",
+    ".wel[data-align='center'] .wel-s{margin-left:auto;margin-right:auto;}",
+    ".sug{display:flex;flex-direction:column;gap:var(--s1);}",
+    // Compact: 9px of padding and a 1.35 line-height instead of 12px and
+    // the panel default. Three questions now cost what two used to.
+    ".sug-b{text-align:" + (dir === "rtl" ? "right" : "left") + ";border:1px solid #e8edf3;background:#fff;",
+    "  border-radius:11px;padding:9px 12px;font:inherit;font-size:13.5px;line-height:1.35;",
+    "  color:#1e293b;cursor:pointer;min-height:38px;display:flex;align-items:center;",
+    "  transition:border-color .15s,background .15s,color .15s;}",
+    // The accent earns its place on interaction rather than sitting on
+    // every border at rest.
+    ".sug-b:hover{border-color:" + brand + ";background:" + brand + "0b;color:#0f172a;}",
+    ".sug-b:active{background:" + brand + "16;}",
     ".sug-b:focus-visible{outline:2px solid " + brand + ";outline-offset:2px;}",
     "@media (prefers-reduced-motion: reduce){.sug-b{transition:none}}",
+    // §5 More than three questions collapses behind a quiet toggle rather
+    // than turning the welcome screen into a list.
+    // Follows the copy's alignment rather than picking its own, and stays
+    // quiet: it is an escape hatch for the curious, not a call to action.
+    ".sug-more{align-self:" + (dir === "rtl" ? "flex-end" : "flex-start") + ";background:none;border:0;",
+    "  padding:var(--s1) var(--s2);margin:0;font:inherit;font-size:12.5px;font-weight:500;color:#64748b;",
+    "  cursor:pointer;border-radius:8px;}",
+    ".wel[data-align='center'] .sug-more{align-self:center;}",
+    ".sug-more:hover{color:" + brand + ";}",
+    ".sug-more:focus-visible{outline:2px solid " + brand + ";outline-offset:2px;border-radius:6px;}",
 
     // Messages
     ".msgs{display:flex;flex-direction:column;gap:10px;}",
@@ -431,20 +496,37 @@ window.__gotchaShopifyChatApp = function (boot) {
     ".car-n:focus-visible{outline:2px solid " + brand + ";outline-offset:2px;}",
 
     // Composer
-    ".ft{border-top:1px solid #eef1f5;padding:12px 14px;padding-bottom:calc(12px + env(safe-area-inset-bottom));background:#fff;}",
-    ".cmp{display:flex;align-items:flex-end;gap:8px;}",
-    ".ta{flex:1 1 auto;resize:none;border:1px solid #e2e8f0;border-radius:14px;padding:10px 13px;",
-    "  font:inherit;font-size:16px;line-height:1.4;max-height:120px;min-height:42px;color:#0f172a;background:#fff;}",
-    "@media (min-width: 561px){.ta{font-size:14.5px;}}",
-    ".ta:focus{outline:none;border-color:" + brand + ";box-shadow:0 0 0 3px " + brand + "22;}",
-    ".snd{width:42px;height:42px;flex:0 0 auto;border-radius:12px;border:0;background:" + brand + ";color:" + onBrand + ";cursor:pointer;}",
-    ".snd:disabled{opacity:.4;cursor:not-allowed;}",
+    // A one-line composer by default. It was 115px of a 640px panel —
+    // more than the hero is allowed now — mostly padding around an empty
+    // textarea.
+    ".ft{border-top:1px solid #f0f3f7;padding:var(--s2) var(--s3);",
+    "  padding-bottom:calc(var(--s2) + env(safe-area-inset-bottom));background:#fff;flex:0 0 auto;}",
+    ".cmp{display:flex;align-items:flex-end;gap:var(--s2);}",
+    // border-box, or min-height:38 becomes 38 + padding + border = 56 —
+    // the same trap that made a "44px" header measure 57.
+    ".ta{flex:1 1 auto;box-sizing:border-box;resize:none;border:1px solid #e4e9f0;border-radius:11px;padding:8px 12px;",
+    "  font:inherit;font-size:16px;line-height:1.4;max-height:104px;min-height:38px;color:#0f172a;background:#fff;",
+    "  transition:border-color .15s,box-shadow .15s;}",
+    "@media (min-width: 561px){.ta{font-size:14px;}}",
+    ".ta::placeholder{color:#9aa7b8;}",
+    ".ta:focus{outline:none;border-color:" + brand + ";box-shadow:0 0 0 3px " + brand + "1f;}",
+    "@media (prefers-reduced-motion: reduce){.ta{transition:none}}",
+    ".snd{width:38px;height:38px;flex:0 0 auto;border-radius:10px;border:0;background:" + brand + ";",
+    "  color:" + onBrand + ";cursor:pointer;display:flex;align-items:center;justify-content:center;",
+    "  transition:opacity .15s,transform .15s;}",
+    ".snd:disabled{opacity:.35;cursor:not-allowed;}",
+    ".snd:not(:disabled):active{transform:scale(.94);}",
     ".snd:focus-visible{outline:2px solid " + brand + ";outline-offset:2px;}",
-    ".snd svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}",
-    ".sub{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;}",
-    ".lnk{background:none;border:0;padding:0;font:inherit;font-size:12px;color:#64748b;cursor:pointer;text-decoration:underline;}",
+    ".snd svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}",
+    "@media (prefers-reduced-motion: reduce){.snd{transition:none}}",
+    // §8 The footer states who is answering and offers a person. Neither
+    // needs height: this row is now 15px plus its gap.
+    ".sub{display:flex;align-items:center;justify-content:space-between;gap:var(--s2);margin-top:var(--s1);}",
+    ".lnk{background:none;border:0;padding:0;font:inherit;font-size:11.5px;color:#64748b;cursor:pointer;",
+    "  text-decoration:none;border-bottom:1px solid #cbd5e1;line-height:1.25;}",
+    ".lnk:hover{color:" + brand + ";border-bottom-color:" + brand + ";}",
     ".lnk:focus-visible{outline:2px solid " + brand + ";outline-offset:2px;}",
-    ".pw{font-size:11px;color:#94a3b8;}",
+    ".pw{font-size:10.5px;color:#a3aec0;line-height:1.25;}",
     ".banner{font-size:12.5px;padding:8px 14px;text-align:center;}",
     ".banner[data-kind='warn']{background:#fef3c7;color:#92400e;}",
     ".banner[data-kind='err']{background:#fee2e2;color:#b91c1c;}",
@@ -866,9 +948,12 @@ window.__gotchaShopifyChatApp = function (boot) {
     // Mirrors resolveHeroHeight() in @chatcenter/shared — the widget ships
     // without a bundler and cannot import it, so the rule is duplicated
     // deliberately and tested on both sides.
-    var panelH = panel.getBoundingClientRect().height || (mobile ? window.innerHeight : 640);
-    var reserved = mobile ? 300 : 330;
-    var height = Math.min(configured, Math.max(0, panelH - reserved), Math.round(panelH * (mobile ? 0.28 : 0.32)));
+    // The panel's MAXIMUM height, not its current one. In the welcome view
+    // the panel sizes to its content, so measuring it here would be
+    // circular — and before first paint it measures zero.
+    var panelH = mobile ? window.innerHeight : Math.min(640, window.innerHeight - 120);
+    var reserved = mobile ? 264 : 288;
+    var height = Math.min(configured, Math.max(0, panelH - reserved), Math.floor(panelH * (mobile ? 0.22 : 0.25)));
     // Below ~72px a hero reads as a stripe. Drop it rather than show it badly.
     if (height < 72) return null;
 
@@ -960,10 +1045,10 @@ window.__gotchaShopifyChatApp = function (boot) {
       av.className = "wel-av";
       av.src = avatarUrl;
       av.alt = "";
-      var avSize = (W && W.avatarSize) || 60;
+      var avSize = (W && W.avatarSize) || 56;
       av.style.width = avSize + "px";
       av.style.height = avSize + "px";
-      av.style.marginTop = "-" + ((W && W.avatarOverlap) || 26) + "px";
+      av.style.marginTop = "-" + ((W && W.avatarOverlap) || 30) + "px";
       av.style.marginLeft = "auto";
       av.style.marginRight = "auto";
       av.onerror = function () { av.style.display = "none"; };
@@ -980,9 +1065,16 @@ window.__gotchaShopifyChatApp = function (boot) {
     }
     var title = (W && W.title) || welcome.headline || "";
     var subtitle = (W && W.subtitle) || welcome.subline || "";
-    wrap.appendChild(el("h2", "wel-h", title));
-    if (subtitle) wrap.appendChild(el("p", "wel-s", subtitle));
-    if (W && W.textAlign === "center") wrap.style.textAlign = "center";
+    // Grouped: a title and its subtitle are one thought, and should not be
+    // separated by the same gap that separates them from the questions.
+    var copy = el("div", "wel-cp");
+    copy.appendChild(el("h2", "wel-h", title));
+    if (subtitle) copy.appendChild(el("p", "wel-s", subtitle));
+    wrap.appendChild(copy);
+    if (!W || W.textAlign !== "start") {
+      wrap.style.textAlign = "center";
+      wrap.setAttribute("data-align", "center");
+    }
 
     if (boot.availability === "offline" && widget.offline && widget.offline.message) {
       var note = el("p", "wel-s", widget.offline.message);
@@ -993,15 +1085,37 @@ window.__gotchaShopifyChatApp = function (boot) {
     if (questions.length) {
       var list = el("div", "sug");
       attr(list, { role: "group", "aria-label": T.startConversation });
-      questions.forEach(function (q) {
+      // Three is what a shopper reads; a fourth and fifth are a list they
+      // skip. The rest stay one tap away rather than costing everyone the
+      // height.
+      var VISIBLE = 3;
+      var hidden = [];
+      questions.forEach(function (q, i) {
         var b = el("button", "sug-b", q);
         attr(b, { type: "button" });
         on(b, "click", function () {
           track("suggested_question_clicked");
           submit(q);
         });
+        if (i >= VISIBLE) {
+          b.hidden = true;
+          hidden.push(b);
+        }
         list.appendChild(b);
       });
+      if (hidden.length) {
+        var more = el("button", "sug-more", T.showMore.replace("{n}", String(hidden.length)));
+        attr(more, { type: "button", "aria-expanded": "false" });
+        on(more, "click", function () {
+          hidden.forEach(function (b) { b.hidden = false; });
+          more.remove();
+          // The newly revealed questions are below the fold by definition,
+          // so say so by moving to them rather than leaving the shopper to
+          // wonder whether anything happened.
+          hidden[0].scrollIntoView({ block: "nearest" });
+        });
+        list.appendChild(more);
+      }
       wrap.appendChild(list);
     }
 
@@ -1532,9 +1646,15 @@ window.__gotchaShopifyChatApp = function (boot) {
 
   // ── Composer behaviour ──────────────────────────────────────────
 
+  // One line until the visitor actually needs more, then bounded. The
+  // ceiling must match the stylesheet's max-height or the two disagree
+  // and the textarea grows past a scrollbar it cannot show.
+  var TA_MIN = 38;
+  var TA_MAX = 104;
+
   function autoGrow() {
     textarea.style.height = "auto";
-    textarea.style.height = Math.min(120, textarea.scrollHeight) + "px";
+    textarea.style.height = Math.max(TA_MIN, Math.min(TA_MAX, textarea.scrollHeight)) + "px";
     sendBtn.disabled = !textarea.value.trim();
   }
 

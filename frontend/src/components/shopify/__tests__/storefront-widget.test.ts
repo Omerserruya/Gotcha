@@ -61,7 +61,15 @@ interface Harness {
  * here, so the harness seeds a conversation id and opens the panel; the
  * history comes back from the stubbed /conversation call.
  */
-async function boot(options: { messages?: any[]; features?: Record<string, boolean>; ux?: any } = {}): Promise<Harness> {
+async function boot(
+  options: {
+    messages?: any[];
+    features?: Record<string, boolean>;
+    ux?: any;
+    /** Merchant branding, so accent-colour behaviour can be tested with a real second brand. */
+    appearance?: Record<string, any>;
+  } = {},
+): Promise<Harness> {
   const host = document.createElement("div");
   document.body.appendChild(host);
   const shadow = host.attachShadow({ mode: "open" });
@@ -101,6 +109,7 @@ async function boot(options: { messages?: any[]; features?: Record<string, boole
     onClosed: vi.fn(),
     widget: {
       appearance: {
+        ...{
         primaryColor: "#111827",
         contrastColor: "#ffffff",
         logoUrl: null,
@@ -111,6 +120,8 @@ async function boot(options: { messages?: any[]; features?: Record<string, boole
         language: "en",
         direction: "auto",
         showPoweredBy: true,
+        },
+        ...(options.appearance ?? {}),
       },
       welcome: {
         headline: "Hi there",
@@ -151,6 +162,184 @@ afterEach(() => {
 });
 
 // ─── Rendering ──────────────────────────────────────────────
+
+describe("welcome polish", () => {
+  function css(shadow: ShadowRoot) {
+    return Array.from(shadow.querySelectorAll("style")).map((n) => n.textContent ?? "").join("\n");
+  }
+
+  // (3) The touch target and the visible control are no longer the same
+  // size. 44x44 stays because it is the accessibility floor for the
+  // shopper's way out; the chip you can actually see is 30px, because at
+  // 44 it was the loudest thing in the hero.
+  it("keeps a 44px target while the visible chip is 30px", async () => {
+    const sheet = css((await boot({ messages: [], ux: hero() })).shadow);
+    expect(sheet).toContain(".x{width:44px;height:44px;min-width:44px;min-height:44px;");
+    expect(sheet).toContain(".x::before{content:'';position:absolute;width:30px;height:30px;");
+    expect(sheet).toContain(".x svg{position:relative;width:15px;height:15px;");
+  });
+
+  it("gives the chip its own contrast over a photograph", async () => {
+    // A merchant's hero can be any colour; the way out must be legible on
+    // all of them without being a black disc on a pale one.
+    const sheet = css((await boot({ messages: [], ux: hero() })).shadow);
+    expect(sheet).toContain(".panel[data-view='welcome'] .x::before{background:rgba(15,23,42,.32);");
+    expect(sheet).toContain("backdrop-filter:blur(8px)");
+    // ...and stays quiet everywhere else.
+    expect(sheet).toContain(".x::before{content:'';position:absolute;width:30px;height:30px;border-radius:50%;");
+    expect(sheet).toContain("background:rgba(15,23,42,.06);");
+  });
+
+  // (4) One scale, referenced by name, instead of a number per rule.
+  it("declares a single spacing scale the layout refers to", async () => {
+    const sheet = css((await boot({ messages: [] })).shadow);
+    expect(sheet).toContain("--s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:20px;");
+    expect(sheet).toContain("--pad:16px;");
+    // The rules consume the scale rather than restating pixels.
+    expect(sheet).toContain(".wel{display:flex;flex-direction:column;gap:var(--s3);");
+    expect(sheet).toContain(".sug{display:flex;flex-direction:column;gap:var(--s1);}");
+    expect(sheet).toContain("padding:var(--pad) var(--pad) var(--s4);");
+  });
+
+  it("hangs the avatar off the hero with no margin of its own", async () => {
+    // The gap to the title belongs to .wel, so there is one number to tune
+    // rather than a margin here fighting a gap there.
+    const h = await boot({
+      messages: [],
+      ux: { ...hero(), welcome: { avatarUrl: "https://cdn.example.com/a.png" } },
+    });
+    const av = h.shadow.querySelector(".wel-av") as HTMLImageElement;
+    expect(av.style.marginTop).toBe("-30px");
+    expect(css(h.shadow)).toContain("box-shadow:0 3px 10px rgba(15,23,42,.14);margin-bottom:0;");
+  });
+
+  it("groups the title and subtitle so they read as one thought", async () => {
+    const h = await boot({ messages: [] });
+    const copy = h.shadow.querySelector(".wel-cp")!;
+    expect(copy.querySelector(".wel-h")).toBeTruthy();
+    expect(copy.querySelector(".wel-s")).toBeTruthy();
+    // A tighter gap inside the pair than between it and the questions.
+    expect(css(h.shadow)).toContain(".wel-cp{display:flex;flex-direction:column;gap:var(--s1);}");
+  });
+
+  it("gives the subtitle a measure so it breaks where a person would", async () => {
+    expect(css((await boot({ messages: [] })).shadow)).toContain("max-width:34ch;");
+  });
+
+  // (5) Compact suggestions.
+  it("sizes suggested questions compactly", async () => {
+    const sheet = css((await boot({ messages: [] })).shadow);
+    expect(sheet).toContain("border-radius:11px;padding:9px 12px;font:inherit;font-size:13.5px;line-height:1.35;");
+    // Still a usable target.
+    expect(sheet).toContain("min-height:38px;");
+  });
+
+  // (6) A long question wraps rather than being clipped or ellipsised.
+  it("lets a long question wrap instead of clipping it", async () => {
+    const sheet = css((await boot({ messages: [] })).shadow);
+    expect(sheet).not.toMatch(/\.sug-b\{[^}"]*white-space:nowrap/);
+    expect(sheet).not.toMatch(/\.sug-b\{[^}"]*text-overflow:ellipsis/);
+    // align-items:center rather than a fixed height, so two lines fit.
+    expect(sheet).toContain("display:flex;align-items:center;");
+  });
+
+  it("collapses a fourth question behind a quiet toggle", async () => {
+    const h = await boot({
+      messages: [],
+      ux: { welcome: { suggestedQuestions: ["one", "two", "three", "four", "five"] } },
+    });
+    const shown = () => Array.from(h.shadow.querySelectorAll(".sug-b")).filter((b) => !(b as HTMLElement).hidden);
+    expect(shown()).toHaveLength(3);
+
+    const more = h.shadow.querySelector(".sug-more") as HTMLButtonElement;
+    expect(more).toBeTruthy();
+    expect(more.textContent).toBe("Show 2 more");
+
+    more.click();
+    // All of them reachable, and the toggle gets out of the way.
+    expect(shown()).toHaveLength(5);
+    expect(h.shadow.querySelector(".sug-more")).toBeNull();
+  });
+
+  it("shows no toggle when everything already fits", async () => {
+    const h = await boot({ messages: [], ux: { welcome: { suggestedQuestions: ["one", "two", "three"] } } });
+    expect(h.shadow.querySelector(".sug-more")).toBeNull();
+    expect(h.shadow.querySelectorAll(".sug-b")).toHaveLength(3);
+  });
+
+  // (8, 9) Composer.
+  it("defaults the composer to one line and bounds its growth", async () => {
+    const sheet = css((await boot({ messages: [] })).shadow);
+    expect(sheet).toContain("min-height:38px;");
+    expect(sheet).toContain("max-height:104px;");
+    expect(sheet).toContain(".ft{border-top:1px solid #f0f3f7;padding:var(--s2) var(--s3);");
+    expect(sheet).toContain(".snd{width:38px;height:38px;");
+  });
+
+  it("keeps the composer a flex sibling of the scroll region, never an overlay", async () => {
+    // An absolutely-positioned composer is how content ends up trapped
+    // underneath it.
+    const sheet = css((await boot({ messages: [] })).shadow);
+    expect(sheet).toContain(".ft{border-top:1px solid #f0f3f7;");
+    expect(sheet).toMatch(/\.ft\{[^}"]*(?!position:absolute)/);
+    expect(sheet).toContain("flex:0 0 auto;}");
+    expect(sheet).toContain(".bd{flex:1 1 auto;min-height:0;overflow-y:auto;");
+  });
+
+  it("respects the iOS safe area at the bottom of the composer", async () => {
+    expect(css((await boot({ messages: [] })).shadow)).toContain("padding-bottom:calc(var(--s2) + env(safe-area-inset-bottom));");
+  });
+
+  // (10) Footer.
+  it("keeps the footer row thin", async () => {
+    const sheet = css((await boot({ messages: [] })).shadow);
+    expect(sheet).toContain(".sub{display:flex;align-items:center;justify-content:space-between;gap:var(--s2);margin-top:var(--s1);}");
+    expect(sheet).toContain(".pw{font-size:10.5px;");
+    expect(sheet).toContain("font-size:11.5px;color:#64748b;");
+  });
+
+  // (13) The accent is the merchant's, and it lands on interaction rather
+  // than on every border at rest.
+  it("threads the merchant's accent through the interactive states", async () => {
+    const h = await boot({ messages: [] });
+    const sheet = css(h.shadow);
+    // #111827 is this fixture's configured primaryColor.
+    expect(sheet).toContain(".sug-b:hover{border-color:#111827;background:#1118270b;");
+    expect(sheet).toContain(".snd{width:38px;height:38px;flex:0 0 auto;border-radius:10px;border:0;background:#111827;");
+    expect(sheet).toContain(".ta:focus{outline:none;border-color:#111827;");
+    // Neutral borders stay neutral and quiet.
+    expect(sheet).toContain("border:1px solid #e8edf3;");
+  });
+
+  it("uses no hardcoded brand colour for the accent", async () => {
+    // A different merchant, a different accent, everywhere it matters.
+    const h = await boot({ messages: [], appearance: { primaryColor: "#7c3aed", contrastColor: "#ffffff" } });
+    const sheet = css(h.shadow);
+    expect(sheet).toContain("background:#7c3aed;");
+    expect(sheet).toContain(".sug-b:hover{border-color:#7c3aed;");
+    expect(sheet).not.toContain("#111827");
+  });
+
+  // (18) RTL.
+  it("mirrors the close control and the toggle for RTL", async () => {
+    const h = await boot({ messages: [], appearance: { language: "he", direction: "rtl" } });
+    const sheet = css(h.shadow);
+    expect(sheet).toContain("position:absolute;top:var(--s2);left:var(--s2);");
+    expect(sheet).toContain(".sug-more{align-self:flex-end;");
+  });
+
+  // (19) Every hero media type still lays out.
+  for (const mediaType of ["image", "gif", "video"] as const) {
+    it(`lays out a ${mediaType} hero`, async () => {
+      const url = mediaType === "video" ? "https://cdn.example.com/c.mp4" : "https://cdn.example.com/h.jpg";
+      const h = await boot({ messages: [], ux: { hero: { mediaType, mediaUrl: url, height: 124, mobileHeight: 108 } } });
+      const heroEl = h.shadow.querySelector(".hero") as HTMLElement;
+      expect(heroEl).toBeTruthy();
+      expect(heroEl.style.height).toBe("124px");
+      expect(h.shadow.querySelector(mediaType === "video" ? "video.hero-m" : "img.hero-m")).toBeTruthy();
+    });
+  }
+});
 
 describe("panel layout", () => {
   // The storefront panel is 640px tall. Every pixel the chrome takes is a
@@ -222,7 +411,7 @@ describe("panel layout", () => {
     const sheet = css((await boot({ messages: [] })).shadow);
     const positions = (sheet.match(/\.x\{[^}]*position:/g) ?? []).length;
     expect(positions).toBe(1);
-    expect(sheet).toContain("position:absolute;top:6px;");
+    expect(sheet).toContain("position:absolute;top:var(--s2);");
   });
 
   it("sizes the header with border-box so min-height means what it says", async () => {
@@ -231,7 +420,7 @@ describe("panel layout", () => {
   });
 
   it("leaves room below the last suggestion so the composer cannot cover it", async () => {
-    expect(css((await boot({ messages: [] })).shadow)).toContain("padding:18px 18px 26px;");
+    expect(css((await boot({ messages: [] })).shadow)).toContain("padding:var(--pad) var(--pad) var(--s4);");
   });
 });
 
@@ -1007,15 +1196,17 @@ describe("close button ergonomics", () => {
     // in the welcome view). As a flex item of that column it would occupy
     // a 44px row — which is exactly the white gap that appeared above the
     // hero when a second `.x` rule reset it to position:relative.
-    expect(WIDGET_SOURCE).toContain('"  position:absolute;top:6px;"');
+    expect(WIDGET_SOURCE).toContain('"  position:absolute;top:var(--s2);"');
     // ...and no other `.x` rule may quietly put it back into flow.
     const xRules = WIDGET_SOURCE.match(/\.x\{[^}"]*/g) ?? [];
     expect(xRules.some((r) => r.includes("position:relative"))).toBe(false);
   });
 
   it("has a visible focus style and a non-capturing icon", () => {
-    expect(WIDGET_SOURCE).toContain(".x:focus-visible{outline:3px solid");
+    // The ring goes on the visible chip, not on the 44px target — an
+    // outline around the invisible hit area looks like a stray rectangle.
+    expect(WIDGET_SOURCE).toContain('".x:focus-visible::before{outline:2px solid "');
     // The svg must not swallow the click and defeat the hit area.
-    expect(WIDGET_SOURCE).toContain(".x svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;pointer-events:none;}");
+    expect(WIDGET_SOURCE).toContain("stroke-width:2.1;stroke-linecap:round;pointer-events:none;}");
   });
 });

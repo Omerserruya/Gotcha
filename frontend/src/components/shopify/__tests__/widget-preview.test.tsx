@@ -6,6 +6,8 @@
  * stock, a carousel that cannot widen the page, and keyboard access.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { readFileSync } from "fs";
+import { resolve } from "path";
 import { render, screen, within, waitFor } from "@testing-library/react";
 import { WidgetPreview, PREVIEW_FIXTURE } from "../WidgetPreview";
 import { ProductCard, ProductCarousel, formatMoney, type ProductView } from "../ProductCard";
@@ -146,6 +148,24 @@ describe("preview shell", () => {
 
     mountWith({ state: "product", productsAreReal: true });
     expect(screen.queryByText(/Sample product/i)).toBeNull();
+  });
+
+  it("passes the merchant's layout config through untouched", async () => {
+    // (15) Preview/storefront parity is structural — the preview boots the
+    // same bundle — but it would still break if the preview quietly
+    // adjusted the config on the way in. Only presentation context
+    // (language, direction, offline) may differ, because those are what
+    // the preview's own controls are FOR.
+    const source = readFileSync(resolve(__dirname, "../WidgetPreview.tsx"), "utf8");
+    const overridden = source.match(/const (appearance|offline|widget) = [^;]+;/g) ?? [];
+    expect(overridden.join(" ")).toContain("language");
+    expect(overridden.join(" ")).toContain("direction");
+    // Nothing in the preview may rewrite the layout blocks.
+    for (const layoutKey of ["ux.hero", "ux.welcome", "ux.launcher", "hero:", "welcome:"]) {
+      expect(source).not.toContain(`${layoutKey} = {`);
+    }
+    // ...and the config reaches the widget as one spread, not field by field.
+    expect(source).toContain("widget: { ...widget, appearance, offline }");
   });
 
   it("says the preview is unavailable rather than drawing an imitation", async () => {

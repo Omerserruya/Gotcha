@@ -22,15 +22,12 @@ import { ShopifyGlyph } from "./ShopifyGlyph";
 import { WidgetPreview, PREVIEW_FIXTURE, type PreviewState, type PreviewDevice } from "./WidgetPreview";
 import type { ProductView } from "./ProductCard";
 import {
-  normalizeWelcome,
-  normalizeHero,
   heroHeightWarning,
   sanitizeMediaUrl,
   MEDIA_GUIDANCE,
-// Deep import on purpose. The package root pulls in express and Prisma
-// through service-app.ts, which webpack then tries to bundle for the
-// browser; this module is pure and has no imports of its own.
-} from "@chatcenter/shared/src/lib/shopify-chat-ux";
+  WELCOME_FALLBACK,
+  HERO_FALLBACK,
+} from "@/lib/shopify-chat-ux-client";
 
 /**
  * Shopify Live Chat channel configuration.
@@ -87,11 +84,18 @@ export function ShopifyLiveChatSettings() {
   const [install, setInstall] = useState<any>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
-  // Normalized once, here, so every input below reads the same values the
-  // storefront will. Binding to raw `draft.ux?.welcome?.x ?? fallback`
-  // scattered through the JSX is how the defaults drifted apart before.
-  const welcome = useMemo(() => normalizeWelcome(draft?.ux?.welcome), [draft?.ux?.welcome]);
-  const hero = useMemo(() => normalizeHero(draft?.ux?.hero), [draft?.ux?.hero]);
+  // Resolved once, here, so every input below reads the same values the
+  // storefront will. The server normalizes on every read and write, so a
+  // saved channel arrives canonical; the fallbacks cover only a channel
+  // that has never been saved.
+  const welcome = useMemo(
+    () => ({ ...WELCOME_FALLBACK, ...(draft?.ux?.welcome ?? {}) }),
+    [draft?.ux?.welcome],
+  );
+  const hero = useMemo(
+    () => ({ ...HERO_FALLBACK, ...(draft?.ux?.hero ?? {}) }),
+    [draft?.ux?.hero],
+  );
   const heroFit = useMemo(
     () => heroHeightWarning({ configured: hero.height, panelHeight: 640, isMobile: false }),
     [hero.height],
