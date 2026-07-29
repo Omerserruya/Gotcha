@@ -204,8 +204,17 @@ describe("POST /bootstrap", () => {
       .set("Origin", ORIGIN)
       .send({ publicKey: freshKey() });
 
+    // The session token is AES-GCM ciphertext rendered as base64url, so a
+    // two-character id like "t1" turns up inside it by chance often enough
+    // to fail this suite for no reason. Check the ENVELOPE for short ids
+    // and the whole body for the long, distinctive names a real leak would
+    // carry.
+    const envelope = JSON.stringify({ ...res.body, data: { ...res.body.data, session: undefined } });
+    for (const leak of ["t1", "ch1", "ti1", "agent1"]) {
+      expect(envelope).not.toContain(leak);
+    }
     const body = JSON.stringify(res.body);
-    for (const leak of ["t1", "ch1", "ti1", "agent1", "accessToken", "shpat_", "credentials"]) {
+    for (const leak of ["accessToken", "shpat_", "credentials", "tenantId", "tenantIntegrationId"]) {
       expect(body).not.toContain(leak);
     }
     expect(res.body.data.widget).not.toHaveProperty("routing");

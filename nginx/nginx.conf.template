@@ -951,6 +951,47 @@ http {
         }
 
 
+        # ─── Storefront widget assets (public, cross-origin BY DESIGN) ───
+        #
+        # These files are loaded by <script> from arbitrary merchant
+        # storefronts, so they are the one place a wildcard CORS origin is
+        # correct: public JavaScript, no tenant data, no credentials, no
+        # cookie. Without this the browser refuses the script outright and
+        # the widget never runs — which looks identical, from the server
+        # side, to "the merchant never enabled the embed".
+        #
+        # Deliberately NO Access-Control-Allow-Credentials: it is invalid
+        # alongside a wildcard origin, and nothing here needs a cookie.
+        # Deliberately NO Vary: Origin: the response does not vary by
+        # origin, and adding it would fragment every cache for nothing.
+        location /widget/ {
+            proxy_pass http://frontend;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+
+            proxy_hide_header Access-Control-Allow-Origin;
+            add_header Access-Control-Allow-Origin "*" always;
+            add_header Access-Control-Allow-Methods "GET, HEAD, OPTIONS" always;
+
+            # The filename carries no content hash, so a long TTL would pin
+            # a broken widget in every shopper's cache until it expired.
+            # Short TTL plus revalidation until the assets are versioned.
+            proxy_hide_header Cache-Control;
+            add_header Cache-Control "public, max-age=300, must-revalidate" always;
+
+            # Security headers repeated: this location declares add_header,
+            # which cancels server-level inheritance, so ALL six must be re-emitted.
+            add_header X-Content-Type-Options "nosniff" always;
+            add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+            add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+            add_header X-Frame-Options "SAMEORIGIN" always;
+            add_header Permissions-Policy "camera=(), geolocation=(), payment=()" always;
+            add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
+        }
+
         # ─── Shopify Live Chat (public storefront surface) ───
         #
         # Deliberately NO CORS headers here. The widget runs on the

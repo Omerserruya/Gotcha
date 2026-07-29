@@ -78,7 +78,15 @@ if (process.env.OPENAI_API_KEY) {
   console.warn("AI provider: No OPENAI_API_KEY set - using stub provider");
 }
 
-const config = { name: "ai-service", port: parseInt(process.env.PORT || "4006", 10) };
+const config = {
+  name: "ai-service",
+  port: parseInt(process.env.PORT || "4006", 10),
+  // The Shopify storefront surface answers many merchant origins and owns
+  // its own CORS, including preflight. The service-wide policy would pin
+  // every response to FRONTEND_URL with credentials on, and would end the
+  // OPTIONS request before the router's origin check ever ran.
+  publicCorsPaths: ["/api/shopify-chat"],
+};
 const app = createServiceApp(config);
 
 app.use("/api/ai-assist", aiAssistRoutes);

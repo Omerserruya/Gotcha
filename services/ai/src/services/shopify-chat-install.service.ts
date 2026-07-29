@@ -270,6 +270,88 @@ export async function refreshVerifiedDomains(installation: ChatInstallation): Pr
   return list;
 }
 
+// ─── Origin recognition (CORS preflight only) ────────────────
+
+/**
+ * Is this Origin a storefront we have ever verified, for ANY tenant?
+ *
+ * Needed because a CORS preflight carries no body: at OPTIONS time we do
+ * not yet know which shop the request is for, so the per-channel origin
+ * check that guards the real request cannot run. This answers the weaker
+ * question the preflight can actually ask — "is this origin one of our
+ * merchants' storefronts at all?" — so an unrelated site is refused up
+ * front instead of being told which methods it may use.
+ *
+ * This is NOT authorization. The real request still resolves the channel
+ * and re-checks the origin against THAT channel's allowlist; a preflight
+ * grants nothing on its own.
+ */
+const ORIGIN_CACHE_TTL_MS = 60_000;
+const knownOriginCache = new Map<string, { ok: boolean; expiresAt: number }>();
+
+/** Test-only: drop cached origin lookups. */
+export function __resetKnownOriginCache(): void {
+  knownOriginCache.clear();
+}
+
+export async function isKnownStorefrontOrigin(origin: unknown): Promise<boolean> {
+  if (typeof origin !== "string" || !origin) return false;
+  let host: string;
+  try {
+    const u = new URL(origin);
+    // http:// storefronts do not exist on Shopify, and allowing one would
+    // let a plaintext page speak for a merchant's domain.
+    if (u.protocol !== "https:") return false;
+    host = u.hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+
+  const cached = knownOriginCache.get(host);
+  if (cached && cached.expiresAt > Date.now()) return cached.ok;
+
+  let ok = false;
+  try {
+    // Any live installation that verified this host.
+    const install = await withCrossTenantAccess(async () =>
+      (prisma as any).shopifyChatInstallation.findFirst({
+        where: { status: "ACTIVE", verifiedDomains: { array_contains: host } },
+        select: { id: true },
+      }),
+    );
+    ok = !!install;
+
+    if (!ok) {
+      // Or a channel bound to this shop / carrying it as a storefront
+      // domain — covers a channel created through the manual path.
+      const rows = await withCrossTenantAccess(async () =>
+        prisma.channelAccount.findMany({
+          where: { channel: SHOPIFY_LIVE_CHAT as any, isActive: true },
+          select: { platformMeta: true },
+        }),
+      );
+      ok = rows.some((r: any) => {
+        const cfg = r.platformMeta?.shopifyLiveChat;
+        if (!cfg) return false;
+        if (normalizeShopifyShopDomain(cfg.shopDomain) === host) return true;
+        const extra: string[] = Array.isArray(cfg.install?.storefrontDomains)
+          ? cfg.install.storefrontDomains
+          : [];
+        return extra.some((d) => normalizeStorefrontHost(d) === host);
+      });
+    }
+  } catch (err) {
+    // Fail CLOSED. A preflight we cannot evaluate is refused; the widget
+    // retries, and no unknown site is handed an allowance because our
+    // database blinked.
+    console.warn("[shopify-chat] origin recognition failed:", (err as Error)?.message);
+    ok = false;
+  }
+
+  knownOriginCache.set(host, { ok, expiresAt: Date.now() + ORIGIN_CACHE_TTL_MS });
+  return ok;
+}
+
 // ─── Binding ─────────────────────────────────────────────────
 
 export type BindFailure =

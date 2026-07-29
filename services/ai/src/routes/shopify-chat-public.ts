@@ -46,6 +46,7 @@ import { validateCartLine } from "../services/shopify-catalog.service";
 import {
   findLiveInstallation,
   recordInstallationHeartbeat,
+  isKnownStorefrontOrigin,
 } from "../services/shopify-chat-install.service";
 
 const router = Router();
@@ -100,16 +101,59 @@ const eventLimiter = limiter("events", 60, visitorKey);
 function allowOrigin(res: Response, origin: string | undefined): void {
   if (!origin) return;
   res.setHeader("Access-Control-Allow-Origin", origin);
-  res.setHeader("Vary", "Origin");
 }
 
-router.use((req: Request, res: Response, next: NextFunction) => {
+/**
+ * `Vary: Origin` on EVERY response, including refusals.
+ *
+ * These responses genuinely differ by origin, so a shared cache that
+ * ignored Origin could hand one merchant's storefront a response minted
+ * for another's. It belongs on the refusals too, or the refusal is the
+ * thing that gets cached and replayed.
+ */
+router.use(async (req: Request, res: Response, next: NextFunction) => {
   res.setHeader("Cache-Control", "no-store");
+  res.setHeader("Vary", "Origin");
+
+  // Take the CORS headers back from the service-wide `cors()` in
+  // createServiceApp. That one is written for the GOTCHA dashboard: it
+  // pins Access-Control-Allow-Origin to FRONTEND_URL and sets
+  // credentials: true. Both are wrong here — this surface answers many
+  // merchant origins and carries its session in a body field, never a
+  // cookie — and leaving credentials on would also make the header set
+  // invalid the moment an origin is echoed.
+  res.removeHeader("Access-Control-Allow-Origin");
+  res.removeHeader("Access-Control-Allow-Credentials");
+
+  const origin = req.get("origin");
+  // Recognised = "belongs to some merchant we have verified". Not
+  // authorization: the per-channel origin check still runs on the real
+  // request. This only decides whether the browser may READ our answer.
+  const recognised = origin ? await isKnownStorefrontOrigin(origin) : false;
+  (req as any).__originRecognised = recognised;
+
+  // Set it here, once, so EVERY response carries it — including the 4xx
+  // and 5xx paths. A refusal without a CORS header is replaced by the
+  // browser with an opaque CORS error, which hides the deliberate,
+  // detail-free body we wrote and sends the merchant chasing the wrong
+  // fault. The body still says nothing but "unavailable".
+  if (recognised) allowOrigin(res, origin);
+
   if (req.method === "OPTIONS") {
-    allowOrigin(res, req.get("origin"));
+    // A preflight carries no body, so we cannot know which shop this is
+    // for. Answer only for origins we recognise; an unrelated site gets a
+    // bare 403 rather than a list of the methods it may use.
+    if (!recognised) {
+      console.warn(`[shopify-chat] preflight refused for unrecognised origin: ${origin ?? "(none)"}`);
+      res.status(403).end();
+      return;
+    }
+    allowOrigin(res, origin);
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
     res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Visitor-Token");
     res.setHeader("Access-Control-Max-Age", "600");
+    // Deliberately no Access-Control-Allow-Credentials: the storefront
+    // surface carries its session in a body field, never in a cookie.
     res.status(204).end();
     return;
   }
@@ -129,6 +173,13 @@ async function touchInstallationHeartbeat(shopDomain: string | null | undefined)
 }
 
 /** One shape for every refusal. Callers get no detail; our logs do. */
+/**
+ * One shape for every refusal. Callers get no detail; our logs do.
+ *
+ * The CORS header for a recognised storefront was already set by the
+ * middleware above, so a merchant's browser can read this body instead of
+ * an opaque CORS error. An unrecognised origin still gets no header.
+ */
 function unavailable(res: Response, reason: string): void {
   console.warn(`[shopify-chat] refused: ${reason}`);
   res.status(403).json({ error: "unavailable" });

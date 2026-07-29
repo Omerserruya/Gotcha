@@ -51,6 +51,18 @@
 
   var API = String(cfg.apiBase || originOfThisScript() || "").replace(/\/$/, "");
   var ASSETS = String(cfg.assetBase || "").replace(/\/$/, "");
+  // Whatever ?v= the <script> tag was loaded with, reused for every other
+  // asset this bootstrap pulls.
+  var ASSET_VERSION_QS = (function () {
+    try {
+      var src = (document.currentScript && document.currentScript.src) || "";
+      var m = src.match(/[?&]v=([^&]+)/);
+      return m ? "?v=" + m[1] : "";
+    } catch (e) {
+      return "";
+    }
+  })();
+
   var IDENTITY = String(cfg.shopDomain || cfg.channelKey || "");
   var STORAGE_PREFIX = "gotcha_sfy_" + IDENTITY.slice(-12);
 
@@ -232,7 +244,10 @@
     if (appPromise) return appPromise;
     appPromise = new Promise(function (resolve, reject) {
       var s = document.createElement("script");
-      s.src = ASSETS + "/widget/gotcha-shopify-chat.js";
+      // Inherit the entry point's version token so the lazy half can never
+      // be served from a different release than the bootstrap that asked
+      // for it — the filenames carry no content hash.
+      s.src = ASSETS + "/widget/gotcha-shopify-chat.js" + ASSET_VERSION_QS;
       s.async = true;
       s.crossOrigin = "anonymous";
       s.onload = function () {

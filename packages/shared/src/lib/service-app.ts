@@ -9,6 +9,17 @@ export interface ServiceConfig {
   name: string;
   port: number;
   corsOrigin?: string;
+  /**
+   * Path prefixes that own their CORS entirely.
+   *
+   * The default policy below is written for the GOTCHA dashboard: one
+   * fixed origin, credentials on. A surface that answers MANY third-party
+   * origins (the Shopify storefront widget) needs the opposite, and it
+   * cannot simply overwrite the headers afterwards — `cors()` also ENDS
+   * the OPTIONS request itself, so a router mounted later never sees a
+   * preflight at all and its origin checks are silently bypassed.
+   */
+  publicCorsPaths?: string[];
 }
 
 export function createServiceApp(config: ServiceConfig): express.Express {
@@ -18,10 +29,16 @@ export function createServiceApp(config: ServiceConfig): express.Express {
   app.set("trust proxy", 1);
 
   app.use(helmet());
-  app.use(cors({
+
+  const defaultCors = cors({
     origin: config.corsOrigin || process.env.FRONTEND_URL || "http://localhost:3000",
     credentials: true,
-  }));
+  });
+  const publicCorsPaths = config.publicCorsPaths ?? [];
+  app.use((req, res, next) => {
+    if (publicCorsPaths.some((p) => req.path.startsWith(p))) return next();
+    return defaultCors(req, res, next);
+  });
 
   const limiter = rateLimit({
     windowMs: 15 * 60 * 1000,
