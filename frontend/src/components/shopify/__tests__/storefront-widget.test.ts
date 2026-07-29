@@ -614,7 +614,7 @@ describe("close and reopen", () => {
     const panel = h.shadow.querySelector(".panel") as HTMLElement;
     expect(panel.hidden).toBe(false);
 
-    const close = h.shadow.querySelector('button[aria-label]') as HTMLButtonElement;
+    const close = h.shadow.querySelector('button[data-act="close"]') as HTMLButtonElement;
     close.click();
 
     expect(panel.hidden).toBe(true);
@@ -625,7 +625,7 @@ describe("close and reopen", () => {
 
   it("carries an accessible label and is reachable by keyboard", async () => {
     const h = await boot();
-    const close = h.shadow.querySelector('button[aria-label]') as HTMLButtonElement;
+    const close = h.shadow.querySelector('button[data-act="close"]') as HTMLButtonElement;
     expect(close.getAttribute("aria-label")).toBe("Close chat");
     expect(close.tagName).toBe("BUTTON");
     expect(close.disabled).toBe(false);

@@ -210,7 +210,8 @@
       "0 6px 24px rgba(15,23,42,.22),0 2px 6px rgba(15,23,42,.12)",
       "0 12px 38px rgba(15,23,42,.32),0 4px 10px rgba(15,23,42,.18)",
     ];
-    var shadow = SHADOWS[L ? L.shadow : 2] || SHADOWS[2];
+    // NOT `shadow`: that name belongs to the ShadowRoot in this scope.
+    var boxShadow = SHADOWS[L ? L.shadow : 2] || SHADOWS[2];
 
     host.style.setProperty(side, offSide + "px");
     host.style.setProperty("bottom", offBottom + "px");
@@ -224,7 +225,7 @@
       "  display:flex;align-items:center;justify-content:center;gap:8px;position:relative;",
       "  background:" + bg + ";color:" + fg + ";",
       "  border:" + (L && L.showBorder ? "2px solid " + L.borderColor : "0") + ";",
-      "  box-shadow:" + shadow + ";",
+      "  box-shadow:" + boxShadow + ";",
       "  transition:transform .18s ease, box-shadow .18s ease;",
       "  font:600 14px/1 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;",
       "}",
@@ -245,6 +246,23 @@
       ".bdg[data-show='1']{display:block;}",
       "@media (prefers-reduced-motion: reduce){.ldr{transition:none;}.ldr:hover{transform:none;}}",
       "@media (forced-colors: active){.ldr{border:1px solid ButtonText;}}",
+      // Teaser: a card that sits above the launcher, never over the page
+      // content, and never wider than a phone.
+      ".tsr{position:absolute;bottom:" + (size + 14) + "px;" + side + ":0;width:280px;max-width:calc(100vw - 40px);",
+      "  background:#fff;color:#0f172a;border-radius:16px;padding:14px 16px 12px;text-align:start;",
+      "  box-shadow:0 18px 44px rgba(15,23,42,.24),0 2px 8px rgba(15,23,42,.10);",
+      "  font:400 14px/1.45 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;",
+      "  animation:tsrIn .22s cubic-bezier(.2,.8,.3,1);}",
+      "@keyframes tsrIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}",
+      "@media (prefers-reduced-motion: reduce){.tsr{animation:none}}",
+      ".tsr-t{font-weight:650;margin-bottom:4px;}",
+      ".tsr-m{color:#475569;margin-bottom:10px;}",
+      ".tsr-a{border:0;border-radius:10px;padding:8px 12px;cursor:pointer;font:600 13px/1 inherit;",
+      "  background:" + bg + ";color:" + fg + ";}",
+      // 32px hit area, sat in the corner, with an accessible name.
+      ".tsr-x{position:absolute;top:6px;" + (side === "left" ? "right" : "left") + ":6px;width:32px;height:32px;",
+      "  border:0;background:transparent;color:#94a3b8;font-size:20px;line-height:1;cursor:pointer;border-radius:8px;}",
+      ".tsr-x:hover{background:#f1f5f9;color:#0f172a;}",
     ].join("\n");
 
     launcher.className = "ldr";
@@ -285,6 +303,241 @@
     badge.setAttribute("aria-hidden", "true");
     if (!L || L.showUnreadBadge) launcher.appendChild(badge);
   }
+
+  // ── Proactive teaser ─────────────────────────────────────────
+  //
+  // Every rule below is a reason NOT to interrupt somebody, which is why
+  // they are all checked before any reason to. The defaults are off, and
+  // when a merchant turns it on it is a teaser they can ignore rather
+  // than a panel that takes over their screen.
+  //
+  // Mirrors shouldShowTeaser() in @chatcenter/shared — same reason as the
+  // sound rules: no bundler here, so the logic is duplicated on purpose
+  // and tested on both sides.
+
+  var teaserEl = null;
+  var teaserTimer = null;
+  var teaserShown = false;
+
+  function pStore(key, fallback) {
+    try { var v = window.localStorage.getItem("gotcha_sfy_p_" + key); return v === null ? fallback : v; }
+    catch (e) { return fallback; }
+  }
+  function pSet(key, value) {
+    try { window.localStorage.setItem("gotcha_sfy_p_" + key, String(value)); } catch (e) {}
+  }
+  function sStore(key, fallback) {
+    try { var v = window.sessionStorage.getItem("gotcha_sfy_p_" + key); return v === null ? fallback : v; }
+    catch (e) { return fallback; }
+  }
+  function sSet(key, value) {
+    try { window.sessionStorage.setItem("gotcha_sfy_p_" + key, String(value)); } catch (e) {}
+  }
+
+  function teaserAllowed(cfg) {
+    if (!cfg || !cfg.enabled) return false;
+    if (state.open) return false;
+    // Somebody already talking to us is not somebody to interrupt.
+    if (state.store.get("conversation")) return false;
+    var mobile = window.matchMedia("(max-width: 560px)").matches;
+    if (mobile ? !cfg.mobileEnabled : !cfg.desktopEnabled) return false;
+    if (cfg.respectBusinessHours && state.availability === "offline") return false;
+    if (Number(sStore("session", 0)) >= cfg.maxPerSession) return false;
+    if (Number(pStore("ever", 0)) >= cfg.maxPerVisitor) return false;
+
+    var visits = Number(pStore("visits", 0));
+    if (cfg.firstVisitOnly && visits > 1) return false;
+    if (cfg.returningVisitorOnly && visits <= 1) return false;
+
+    var dismissed = Number(pStore("dismissed", 0));
+    if (dismissed && Date.now() - dismissed < cfg.cooldownHours * 3600000) return false;
+
+    var path = location.pathname || "/";
+    for (var i = 0; i < cfg.excludeUrls.length; i++) if (path.indexOf(cfg.excludeUrls[i]) === 0) return false;
+    if (cfg.includeUrls.length) {
+      var included = false;
+      for (var j = 0; j < cfg.includeUrls.length; j++) if (path.indexOf(cfg.includeUrls[j]) === 0) included = true;
+      if (!included) return false;
+    }
+    if (cfg.minPageViews > 1 && visits < cfg.minPageViews) return false;
+    return true;
+  }
+
+  function showTeaser(cfg) {
+    if (teaserShown || !teaserAllowed(cfg)) return;
+    teaserShown = true;
+    sSet("session", Number(sStore("session", 0)) + 1);
+    pSet("ever", Number(pStore("ever", 0)) + 1);
+
+    if (cfg.autoOpen) { openChat(); return; }
+
+    teaserEl = document.createElement("div");
+    teaserEl.className = "tsr";
+    var title = document.createElement("div");
+    title.className = "tsr-t";
+    title.textContent = cfg.title;
+    var msg = document.createElement("div");
+    msg.className = "tsr-m";
+    msg.textContent = cfg.message;
+    var act = document.createElement("button");
+    act.type = "button";
+    act.className = "tsr-a";
+    act.textContent = cfg.actionLabel;
+    var dismiss = document.createElement("button");
+    dismiss.type = "button";
+    dismiss.className = "tsr-x";
+    dismiss.setAttribute("aria-label", "Dismiss");
+    dismiss.textContent = "\u00d7";
+
+    act.addEventListener("click", function () { hideTeaser(); openChat(); });
+    dismiss.addEventListener("click", function () {
+      // A dismissal is a decision, and it is remembered for the cooldown.
+      pSet("dismissed", Date.now());
+      hideTeaser();
+    });
+
+    teaserEl.appendChild(dismiss);
+    teaserEl.appendChild(title);
+    teaserEl.appendChild(msg);
+    teaserEl.appendChild(act);
+    teaserEl.setAttribute("role", "status");
+    shadow.appendChild(teaserEl);
+
+    if (cfg.playSound) state.playSound("proactive");
+  }
+
+  function hideTeaser() {
+    if (teaserEl && teaserEl.parentNode) teaserEl.parentNode.removeChild(teaserEl);
+    teaserEl = null;
+  }
+
+  function armTeaser(widget) {
+    var cfg = widget && widget.ux && widget.ux.proactive;
+    if (!cfg || !cfg.enabled) return;
+
+    pSet("visits", Number(pStore("visits", 0)) + 1);
+    var mobile = window.matchMedia("(max-width: 560px)").matches;
+    var delay = (mobile ? cfg.mobileDelaySeconds : cfg.delaySeconds) * 1000;
+
+    if (cfg.trigger === "scroll_depth") {
+      var onScroll = function () {
+        var h = document.documentElement;
+        var pct = ((h.scrollTop || document.body.scrollTop) / ((h.scrollHeight || 1) - h.clientHeight)) * 100;
+        if (pct >= cfg.scrollPercent) {
+          window.removeEventListener("scroll", onScroll);
+          showTeaser(cfg);
+        }
+      };
+      window.addEventListener("scroll", onScroll, { passive: true });
+      return;
+    }
+    if (cfg.trigger === "exit_intent") {
+      if (mobile) return; // there is no pointer to leave the viewport
+      var onLeave = function (e) {
+        if (e.clientY <= 0) { document.removeEventListener("mouseout", onLeave); showTeaser(cfg); }
+      };
+      document.addEventListener("mouseout", onLeave);
+      return;
+    }
+    if (cfg.trigger === "custom_event") {
+      window.addEventListener(cfg.customEvent, function () { showTeaser(cfg); }, { once: true });
+      return;
+    }
+    if (cfg.trigger === "product_page" && state.context.pageType !== "product") return;
+    if (cfg.trigger === "cart_page" && state.context.pageType !== "cart") return;
+
+    // time_on_page, page_views, inactivity, repeat_product_views and the
+    // page-type triggers all resolve to "wait, then offer".
+    teaserTimer = setTimeout(function () { showTeaser(cfg); }, delay);
+  }
+
+  // ── Sound ────────────────────────────────────────────────────
+  //
+  // Synthesised, not downloaded. Two short tones from an oscillator cost
+  // nothing to ship, cannot fail to load, need no CSP allowance and
+  // involve no third-party host — and a notification chime is a beep, so
+  // there is nothing a sample file would buy us.
+  //
+  // Browsers refuse audio until a real gesture, so the context is created
+  // lazily on the first one and every call before that is dropped rather
+  // than logging an error on the merchant's storefront.
+  var audioCtx = null;
+  var userInteracted = false;
+
+  function markInteracted() {
+    if (userInteracted) return;
+    userInteracted = true;
+    // Resume a context that was created suspended (Safari, Chrome).
+    if (audioCtx && audioCtx.state === "suspended") audioCtx.resume().catch(function () {});
+  }
+  ["pointerdown", "keydown", "touchstart"].forEach(function (evt) {
+    window.addEventListener(evt, markInteracted, { once: true, passive: true, capture: true });
+  });
+
+  var TONES = {
+    subtle: { outgoing: [520, 0.06], incoming_ai: [660, 0.09], incoming_human: [740, 0.09], proactive: [600, 0.10], handoff: [820, 0.10], error: [300, 0.12] },
+    classic: { outgoing: [660, 0.07], incoming_ai: [880, 0.11], incoming_human: [990, 0.11], proactive: [780, 0.12], handoff: [1040, 0.12], error: [260, 0.14] },
+  };
+
+  function visitorMuted() {
+    try { return window.localStorage.getItem("gotcha_sfy_muted") === "1"; } catch (e) { return false; }
+  }
+  state.visitorMuted = visitorMuted;
+  state.setVisitorMuted = function (muted) {
+    try { window.localStorage.setItem("gotcha_sfy_muted", muted ? "1" : "0"); } catch (e) {}
+  };
+
+  /**
+   * Play one short tone for an event, if every rule says yes.
+   *
+   * Mirrors shouldPlaySound() in @chatcenter/shared, which is the source
+   * of truth for the server and the settings preview. The widget ships
+   * without a bundler so it cannot import it; the rules are duplicated
+   * deliberately and tested on both sides.
+   */
+  state.playSound = function (event, opts) {
+    opts = opts || {};
+    var cfg = state.widget && state.widget.ux && state.widget.ux.sounds;
+    if (!cfg || !cfg.enabled) return false;
+    if (visitorMuted()) return false;
+    if (!userInteracted) return false;
+    if (opts.fromHistory) return false;
+    if (event === "outgoing" && opts.sendFailed) return false;
+
+    var per = {
+      outgoing: cfg.outgoing, incoming_ai: cfg.incomingAi, incoming_human: cfg.incomingHuman,
+      proactive: cfg.proactive, handoff: cfg.handoff, error: cfg.error,
+    };
+    if (!per[event]) return false;
+
+    var incoming = event === "incoming_ai" || event === "incoming_human" || event === "handoff";
+    if (incoming && !state.open && !cfg.playWhenClosed) return false;
+    if (!document.hidden && !cfg.playWhenTabActive) return false;
+
+    try {
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return false;
+      if (!audioCtx) audioCtx = new Ctx();
+      if (audioCtx.state === "suspended") audioCtx.resume().catch(function () {});
+      var pack = TONES[cfg.pack] || TONES.subtle;
+      var spec = pack[event] || pack.incoming_ai;
+      var osc = audioCtx.createOscillator();
+      var gain = audioCtx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = spec[0];
+      // Never looped, always short, and eased out so it does not click.
+      var vol = Math.max(0, Math.min(1, (cfg.volume || 0) / 100)) * 0.25;
+      gain.gain.setValueAtTime(0, audioCtx.currentTime);
+      gain.gain.linearRampToValueAtTime(vol, audioCtx.currentTime + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + spec[1]);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + spec[1] + 0.02);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  };
 
   function escapeAttr(v) {
     return String(v).replace(/"/g, "&quot;").replace(/</g, "&lt;");
@@ -365,6 +618,10 @@
 
   launcher.addEventListener("click", function () {
     if (state.open) return;
+    // Opening the chat answers the teaser's question; leaving it up
+    // would talk over the panel the shopper just asked for.
+    hideTeaser();
+    if (teaserTimer) { clearTimeout(teaserTimer); teaserTimer = null; }
     openChat();
   });
 
@@ -391,6 +648,7 @@
         shadow.appendChild(launcherStyle);
         shadow.appendChild(launcher);
         document.body.appendChild(host);
+        armTeaser(state.widget);
 
         // A returning shopper with an open conversation gets the app
         // warmed in idle time so an agent's reply can raise the unread

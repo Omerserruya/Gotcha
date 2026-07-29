@@ -33,6 +33,8 @@ window.__gotchaShopifyChatApp = function (boot) {
       online: "Online",
       offline: "Away",
       close: "Close chat",
+      mute: "Mute chat sounds",
+      unmute: "Unmute chat sounds",
       placeholder: "Ask us anything",
       send: "Send",
       startConversation: "Start the conversation",
@@ -72,6 +74,8 @@ window.__gotchaShopifyChatApp = function (boot) {
       online: "זמינים",
       offline: "לא זמינים",
       close: "סגירת הצ׳אט",
+      mute: "השתקת צלילי הצ׳אט",
+      unmute: "ביטול השתקה",
       placeholder: "אפשר לשאול אותנו הכל",
       send: "שליחה",
       startConversation: "אפשר להתחיל",
@@ -453,12 +457,41 @@ window.__gotchaShopifyChatApp = function (boot) {
   headerText.appendChild(headerStatus);
 
   var closeBtn = el("button", "x");
-  attr(closeBtn, { type: "button", "aria-label": T.close });
+  // A stable hook so tests and tooling can find THE close button rather
+  // than the first button that happens to carry a label.
+  attr(closeBtn, { type: "button", "aria-label": T.close, "data-act": "close" });
   closeBtn.innerHTML =
     '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
 
   header.appendChild(headerAvatar);
   header.appendChild(headerText);
+  // Visitor mute. Only offered when the merchant enabled sound at all —
+  // a mute button for silence a shopper already has is just clutter.
+  var muteBtn = null;
+  var soundsOn = !!(boot.widget && boot.widget.ux && boot.widget.ux.sounds && boot.widget.ux.sounds.enabled);
+  if (soundsOn && boot.setVisitorMuted) {
+    muteBtn = el("button", "x");
+    attr(muteBtn, { type: "button" });
+    paintMute();
+    on(muteBtn, "click", function () {
+      var next = !(boot.visitorMuted && boot.visitorMuted());
+      boot.setVisitorMuted(next);
+      paintMute();
+    });
+    header.appendChild(muteBtn);
+  }
+
+  function paintMute() {
+    if (!muteBtn) return;
+    var muted = boot.visitorMuted && boot.visitorMuted();
+    // The label states what the button DOES, which is what a screen
+    // reader user needs, not what the current state is.
+    attr(muteBtn, { "aria-label": muted ? T.unmute : T.mute, "aria-pressed": muted ? "true" : "false" });
+    muteBtn.innerHTML = muted
+      ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5L6 9H3v6h3l5 4V5z"/><path d="M17 9l4 6M21 9l-4 6"/></svg>'
+      : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5L6 9H3v6h3l5 4V5z"/><path d="M16 9a4 4 0 0 1 0 6"/></svg>';
+  }
+
   header.appendChild(closeBtn);
 
   var banner = el("div", "banner");
@@ -586,7 +619,9 @@ window.__gotchaShopifyChatApp = function (boot) {
         });
         socket.on("visitor:message", function (payload) {
           if (!payload || payload.conversationId !== S.conversationId) return;
-          ingest([payload.message]);
+          // The only genuinely live delivery path, and so the only one
+          // allowed to make a sound.
+          ingest([payload.message], true);
         });
         socket.on("visitor:conversation", function (payload) {
           if (!payload || payload.conversationId !== S.conversationId) return;
@@ -660,7 +695,13 @@ window.__gotchaShopifyChatApp = function (boot) {
    * message comes back from the server, the local placeholder is removed
    * rather than leaving the message on screen twice.
    */
-  function ingest(incoming) {
+  /**
+   * @param live  true when these messages just arrived, false when they
+   *              are history being replayed. Only the former may make a
+   *              sound — a shopper reopening a chat must not hear a
+   *              burst of chimes for messages they already read.
+   */
+  function ingest(incoming, live) {
     if (!incoming || !incoming.length) return;
     var known = {};
     S.messages.forEach(function (m) { known[m.id] = true; });
@@ -677,6 +718,12 @@ window.__gotchaShopifyChatApp = function (boot) {
       } else {
         S.awaitingReply = false;
         if (!S.opened) S.unread++;
+        if (live && boot.playSound) {
+          // A human reply and an assistant reply are different events to
+          // a shopper, so they are different sounds.
+          var human = m.author && m.author.type === "AGENT";
+          boot.playSound(human ? "incoming_human" : "incoming_ai", { fromHistory: false });
+        }
       }
       S.messages.push(m);
       S.lastCursor = m.createdAt;
@@ -1372,6 +1419,9 @@ window.__gotchaShopifyChatApp = function (boot) {
         });
       })
       .then(function () {
+        // The chime belongs here, not in submit(): it means "delivered",
+        // and a send that failed must never sound like one that worked.
+        if (boot.playSound) boot.playSound("outgoing", { sendFailed: false });
         // Nudge once shortly after: the bot's reply arrives over the
         // socket, but a slow model plus a dropped frame should not leave
         // the shopper staring at a typing indicator forever.
