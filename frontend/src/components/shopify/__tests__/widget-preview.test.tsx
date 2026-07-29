@@ -5,8 +5,8 @@
  * state in both directions, product cards that tell the truth about
  * stock, a carousel that cannot widen the page, and keyboard access.
  */
-import { describe, it, expect, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen, within, waitFor } from "@testing-library/react";
 import { WidgetPreview, PREVIEW_FIXTURE } from "../WidgetPreview";
 import { ProductCard, ProductCarousel, formatMoney, type ProductView } from "../ProductCard";
 
@@ -73,10 +73,15 @@ const IN_STOCK: ProductView = {
 
 // ─── Welcome state ──────────────────────────────────────────
 
-describe("welcome state", () => {
-  it("renders the merchant's branding and suggested questions in English LTR", () => {
-    // (case 57)
-    const { container } = render(
+describe("preview shell", () => {
+  // The preview no longer draws its own version of the panel. It boots
+  // the real `public/widget/gotcha-shopify-chat.js` in an iframe, so the
+  // things worth asserting here are that it loads the RIGHT bundle, in a
+  // real viewport, and never falls back to an imitation. What the widget
+  // then renders is covered against the actual file in
+  // storefront-widget.test.ts.
+  function mountWith(props: Record<string, any> = {}) {
+    return render(
       <WidgetPreview
         config={config()}
         device="desktop"
@@ -84,109 +89,74 @@ describe("welcome state", () => {
         language="en"
         sampleProducts={PREVIEW_FIXTURE}
         productsAreReal={false}
+        {...props}
       />,
     );
-    expect(screen.getByText("Hi there")).toBeInTheDocument();
-    expect(screen.getByText("Store Assistant")).toBeInTheDocument();
-    expect(screen.getByText("Which product is right for me?")).toBeInTheDocument();
-    expect(container.querySelector('[dir="ltr"]')).toBeTruthy();
-    expect(screen.getByText("Online")).toBeInTheDocument();
+  }
+
+  beforeEach(() => {
+    (globalThis as any).fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ chat: "gotcha-shopify-chat.abc123abc123.js" }),
+    }));
   });
 
-  it("renders right to left for Hebrew", () => {
-    // (case 56)
-    const { container } = render(
-      <WidgetPreview
-        config={config()}
-        device="desktop"
-        state="welcome"
-        language="he"
-        sampleProducts={PREVIEW_FIXTURE}
-        productsAreReal={false}
-      />,
-    );
-    const panel = container.querySelector('[dir="rtl"]');
-    expect(panel).toBeTruthy();
-    expect(panel!.getAttribute("lang")).toBe("he");
-    expect(screen.getByText("זמינים")).toBeInTheDocument();
+  it("renders the real widget in a frame instead of a copy of it", () => {
+    // (case 57) The old preview was a React re-implementation and drifted:
+    // it kept a full header the storefront had dropped and never learned
+    // about the hero. A frame cannot drift, because it is the same file.
+    const { container } = mountWith();
+    expect(container.querySelector("iframe")).toBeTruthy();
+    // No hand-built panel markup left behind.
+    expect(screen.queryByText("Hi there")).toBeNull();
   });
 
-  it("shows the away message and status when outside business hours", () => {
-    // (case 21)
-    render(
-      <WidgetPreview
-        config={config()}
-        device="desktop"
-        state="offline"
-        language="en"
-        sampleProducts={PREVIEW_FIXTURE}
-        productsAreReal={false}
-      />,
-    );
-    expect(screen.getByText("Away")).toBeInTheDocument();
-    expect(screen.getByText("We are away right now.")).toBeInTheDocument();
+  it("loads the content-hashed bundle named by the manifest", async () => {
+    mountWith();
+    await waitFor(() => expect((globalThis as any).fetch).toHaveBeenCalled());
+    const [url, init] = (globalThis as any).fetch.mock.calls[0];
+    expect(url).toBe("/widget/widget-manifest.json");
+    // Hard-coding the bundle name is exactly how a stale widget reached a
+    // live storefront once already.
+    expect(init).toMatchObject({ cache: "no-cache" });
   });
 
-  it("uses a full-height frame on mobile and a compact panel on desktop", () => {
-    // (cases 58, 59)
-    const mobile = render(
-      <WidgetPreview config={config()} device="mobile" state="welcome" language="en" sampleProducts={PREVIEW_FIXTURE} productsAreReal={false} />,
-    );
-    expect(mobile.container.querySelector(".h-\\[600px\\]")).toBeTruthy();
-    mobile.unmount();
-
-    const desktop = render(
-      <WidgetPreview config={config()} device="desktop" state="welcome" language="en" sampleProducts={PREVIEW_FIXTURE} productsAreReal={false} />,
-    );
-    expect(desktop.container.querySelector(".w-\\[392px\\]")).toBeTruthy();
+  it("sandboxes the frame but keeps it same-origin so the widget can run", () => {
+    const { container } = mountWith();
+    const sandbox = container.querySelector("iframe")!.getAttribute("sandbox") ?? "";
+    expect(sandbox).toContain("allow-scripts");
+    expect(sandbox).toContain("allow-same-origin");
+    // Withheld: the preview must not be able to navigate the dashboard.
+    expect(sandbox).not.toContain("allow-top-navigation");
+    expect(sandbox).not.toContain("allow-popups");
   });
 
-  it("hides the powered-by line when the merchant turned it off", () => {
-    render(
-      <WidgetPreview
-        config={config({ appearance: { showPoweredBy: false } })}
-        device="desktop"
-        state="welcome"
-        language="en"
-        sampleProducts={PREVIEW_FIXTURE}
-        productsAreReal={false}
-      />,
-    );
-    expect(screen.queryByText("Powered by GOTCHA")).not.toBeInTheDocument();
+  it("gives mobile a real phone viewport rather than a narrow box", () => {
+    // The widget switches layout on its own (max-width:560px) query, which
+    // only fires if the frame is genuinely narrow.
+    const { container } = mountWith({ device: "mobile" });
+    const frame = container.querySelector("iframe")!.parentElement as HTMLElement;
+    expect(frame.style.width).toBe("390px");
   });
 
-  it("labels a fixture product as a sample rather than passing it off as real", () => {
-    // A preview that shows invented products unlabelled is a lie.
-    render(
-      <WidgetPreview
-        config={config()}
-        device="desktop"
-        state="product"
-        language="en"
-        sampleProducts={PREVIEW_FIXTURE}
-        productsAreReal={false}
-      />,
-    );
-    expect(screen.getByText(/connect a store with products to preview your own/i)).toBeInTheDocument();
+  it("labels sample products, and says nothing when they are the merchant's own", () => {
+    const sample = mountWith({ state: "product" });
+    expect(screen.getByText(/Sample product/i)).toBeInTheDocument();
+    sample.unmount();
+
+    mountWith({ state: "product", productsAreReal: true });
+    expect(screen.queryByText(/Sample product/i)).toBeNull();
   });
 
-  it("says nothing about samples when the products are the merchant's own", () => {
-    render(
-      <WidgetPreview
-        config={config()}
-        device="desktop"
-        state="product"
-        language="en"
-        sampleProducts={[IN_STOCK]}
-        productsAreReal
-      />,
-    );
-    expect(screen.queryByText(/connect a store with products/i)).not.toBeInTheDocument();
-    expect(screen.getByText("Cloud Pro Runner")).toBeInTheDocument();
+  it("says the preview is unavailable rather than drawing an imitation", async () => {
+    // Showing a plausible-looking fake when the real widget cannot load is
+    // worse than showing nothing: the merchant would tune and ship it.
+    (globalThis as any).fetch = vi.fn(async () => ({ ok: false, status: 404 }));
+    const { container } = mountWith();
+    await waitFor(() => expect(container.querySelector("iframe")).toBeNull());
+    expect(screen.getByText(/could not be loaded/i)).toBeInTheDocument();
   });
 });
-
-// ─── Product card ───────────────────────────────────────────
 
 describe("product card", () => {
   it("shows price, sale price and the recommendation reason", () => {

@@ -9,6 +9,11 @@
 import { describe, it, expect } from "vitest";
 import {
   resolveWidgetState,
+  defaultWelcome,
+  normalizeWelcome,
+  migrateLegacyWelcome,
+  resolveHeroHeight,
+  heroHeightWarning,
   showsHero,
   sanitizeMediaUrl,
   defaultLauncher,
@@ -165,10 +170,16 @@ describe("welcome hero", () => {
   });
 
   it("clamps layout numbers into a survivable range", () => {
-    const h = normalizeHero({ height: 9999, avatarOverlap: -5, fadeStrength: 300 });
-    expect(h.height).toBe(320);
-    expect(h.avatarOverlap).toBe(0);
+    const h = normalizeHero({ height: 9999, fadeStrength: 300 });
+    // 220 desktop / 180 mobile: 320 let a hero eat half the panel.
+    expect(h.height).toBe(220);
+    expect(normalizeHero({ mobileHeight: 9999 }).mobileHeight).toBe(180);
     expect(h.fadeStrength).toBe(100);
+  });
+
+  it("defaults short enough to leave room for content", () => {
+    expect(defaultHero().height).toBe(140);
+    expect(defaultHero().mobileHeight).toBe(118);
   });
 
   it("only accepts a well-formed focal point", () => {
@@ -350,5 +361,109 @@ describe("configuration bundle", () => {
     for (const leak of ["tenantId", "channelAccountId", "tenantIntegrationId", "accessToken", "secret"]) {
       expect(body).not.toContain(leak);
     }
+  });
+});
+
+// ─── One welcome, not four ───────────────────────────────────
+//
+// The same ideas used to live in appearance.logoUrl, appearance.avatarUrl,
+// welcome.headline, welcome.subline and welcome.suggestedQuestions, edited
+// from four settings sections, with the renderer silently resolving the
+// avatar as `hero.avatarUrl || appearance.logoUrl`. A merchant could not
+// tell which control won. These pin the replacement.
+
+describe("canonical welcome", () => {
+  it("normalizes nothing into a complete, renderable object", () => {
+    const w = normalizeWelcome(undefined);
+    expect(w).toEqual(defaultWelcome());
+    expect(Array.isArray(w.suggestedQuestions)).toBe(true);
+  });
+
+  it("strips markup out of merchant copy", () => {
+    const w = normalizeWelcome({ title: "<img onerror=x>Hi", subtitle: "<script>bad</script>ok" });
+    expect(w.title).not.toContain("<");
+    expect(w.subtitle).not.toContain("<");
+  });
+
+  it("refuses an unsafe avatar without losing the rest", () => {
+    const w = normalizeWelcome({ title: "Kept", avatarUrl: "https://evil.example/x.svg" });
+    expect(w.avatarUrl).toBeNull();
+    expect(w.title).toBe("Kept");
+  });
+});
+
+describe("legacy migration", () => {
+  const legacy = {
+    appearance: { logoUrl: "https://cdn.example.com/logo.png", avatarUrl: null },
+    welcome: {
+      headline: "Old title",
+      subline: "Old subtitle",
+      assistantName: "Old assistant",
+      suggestedQuestions: ["Old question"],
+    },
+  };
+
+  it("carries an old channel across without losing anything", () => {
+    const w = migrateLegacyWelcome(legacy);
+    expect(w.title).toBe("Old title");
+    expect(w.subtitle).toBe("Old subtitle");
+    expect(w.assistantName).toBe("Old assistant");
+    expect(w.suggestedQuestions).toEqual(["Old question"]);
+    expect(w.avatarUrl).toBe("https://cdn.example.com/logo.png");
+  });
+
+  it("prefers avatarUrl over logoUrl, and the v1 hero avatar over both", () => {
+    expect(
+      migrateLegacyWelcome({
+        ...legacy,
+        appearance: { logoUrl: "https://cdn.example.com/logo.png", avatarUrl: "https://cdn.example.com/av.png" },
+      }).avatarUrl,
+    ).toBe("https://cdn.example.com/av.png");
+
+    expect(
+      migrateLegacyWelcome({ ...legacy, hero: { avatarUrl: "https://cdn.example.com/hero-av.png" } }).avatarUrl,
+    ).toBe("https://cdn.example.com/hero-av.png");
+  });
+
+  it("lets a newly saved value beat every legacy value", () => {
+    // The whole point: once a merchant edits the canonical field, no
+    // stale legacy value may creep back over it.
+    const w = migrateLegacyWelcome({ ...legacy, ux: { welcome: { title: "New title" } } });
+    expect(w.title).toBe("New title");
+    // ...and untouched fields still come from legacy rather than defaults.
+    expect(w.subtitle).toBe("Old subtitle");
+  });
+
+  it("survives a channel with no legacy block at all", () => {
+    expect(migrateLegacyWelcome({})).toEqual(defaultWelcome());
+  });
+
+  it("survives half a legacy block", () => {
+    const w = migrateLegacyWelcome({ welcome: { headline: "Only a title" } as any });
+    expect(w.title).toBe("Only a title");
+    expect(w.subtitle).toBe(defaultWelcome().subtitle);
+  });
+});
+
+describe("hero height is a preference, not a promise", () => {
+  it("honours the configured height when there is room", () => {
+    expect(resolveHeroHeight({ configured: 140, panelHeight: 640, isMobile: false })).toBe(140);
+  });
+
+  it("clamps on a short phone so content survives", () => {
+    // 568px tall screen: a 180px hero would trap the last suggestion.
+    const h = resolveHeroHeight({ configured: 180, panelHeight: 480, isMobile: true });
+    expect(h).toBeLessThan(180);
+    expect(h).toBeLessThanOrEqual(Math.round(480 * 0.28));
+  });
+
+  it("drops the hero entirely rather than render a stripe", () => {
+    expect(resolveHeroHeight({ configured: 200, panelHeight: 320, isMobile: true })).toBe(0);
+  });
+
+  it("tells the merchant when their choice will not fit", () => {
+    expect(heroHeightWarning({ configured: 140, panelHeight: 640, isMobile: false })).toBe("ok");
+    expect(heroHeightWarning({ configured: 220, panelHeight: 480, isMobile: true })).toBe("tight");
+    expect(heroHeightWarning({ configured: 200, panelHeight: 320, isMobile: true })).toBe("dropped");
   });
 });

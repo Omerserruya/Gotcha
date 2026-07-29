@@ -55,7 +55,7 @@
   // bootstrap can only ever load the exact bundle it was built against —
   // a hand-typed ?v= let four commits change the bundle without changing
   // its URL, and every cache kept serving the old one.
-  var CHAT_BUNDLE = "gotcha-shopify-chat.bc241284b698.js";
+  var CHAT_BUNDLE = "gotcha-shopify-chat.4b01ad520508.js";
 
   var IDENTITY = String(cfg.shopDomain || cfg.channelKey || "");
   var STORAGE_PREFIX = "gotcha_sfy_" + IDENTITY.slice(-12);
@@ -153,6 +153,10 @@
 
   var launcherStyle = document.createElement("style");
   var launcher = document.createElement("button");
+  // A stable hook for verification, for the same reason the close button
+  // has one: matching on tag or class made an acceptance test click the
+  // wrong control and report a pass.
+  launcher.setAttribute("data-act", "launcher");
   var badge = document.createElement("span");
 
   var ICONS = {
@@ -481,8 +485,48 @@
     if (cfg.trigger === "product_page" && state.context.pageType !== "product") return;
     if (cfg.trigger === "cart_page" && state.context.pageType !== "cart") return;
 
-    // time_on_page, page_views, inactivity, repeat_product_views and the
-    // page-type triggers all resolve to "wait, then offer".
+    if (cfg.trigger === "page_views") {
+      // Depth of visit, not time on one page. A shopper who has looked at
+      // several pages is browsing; one who just landed is not.
+      if (Number(pStore("visits", 0)) < cfg.minPageViews) return;
+    }
+
+    if (cfg.trigger === "repeat_product_views") {
+      // The signal is comparison shopping: the same product returned to,
+      // or several products looked at in one session.
+      if (state.context.pageType !== "product" || !state.context.productHandle) return;
+      var seen = [];
+      try { seen = JSON.parse(pStore("seenProducts", "[]")) || []; } catch (e) { seen = []; }
+      var handle = String(state.context.productHandle);
+      var repeat = seen.indexOf(handle) !== -1;
+      if (!repeat) seen.push(handle);
+      // Bounded: this lives in storage on a shopper's device.
+      if (seen.length > 20) seen = seen.slice(-20);
+      pSet("seenProducts", JSON.stringify(seen));
+      if (!repeat && seen.length < cfg.minPageViews) return;
+    }
+
+    if (cfg.trigger === "inactivity") {
+      // Fires only after the shopper has gone QUIET for the delay, and
+      // the clock restarts every time they do something. Someone reading
+      // a page is not stuck; someone who has stopped moving might be.
+      var idle = null;
+      var restart = function () {
+        if (idle) clearTimeout(idle);
+        idle = setTimeout(function () { stopWatching(); showTeaser(cfg); }, delay);
+      };
+      var events = ["pointermove", "pointerdown", "keydown", "scroll", "touchstart"];
+      var stopWatching = function () {
+        if (idle) clearTimeout(idle);
+        for (var i = 0; i < events.length; i++) window.removeEventListener(events[i], restart);
+      };
+      for (var k = 0; k < events.length; k++) window.addEventListener(events[k], restart, { passive: true });
+      restart();
+      teaserTimer = null;
+      return;
+    }
+
+    // time_on_page and the page-type triggers: wait, then offer.
     teaserTimer = setTimeout(function () { showTeaser(cfg); }, delay);
   }
 

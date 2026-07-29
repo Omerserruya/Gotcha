@@ -152,6 +152,89 @@ afterEach(() => {
 
 // ─── Rendering ──────────────────────────────────────────────
 
+describe("panel layout", () => {
+  // The storefront panel is 640px tall. Every pixel the chrome takes is a
+  // pixel the conversation does not get, and the welcome screen was
+  // spending ~72px on a header that named an assistant the shopper had
+  // not spoken to yet, above a 10px white gap, above the hero.
+  function css(shadow: ShadowRoot) {
+    return Array.from(shadow.querySelectorAll("style")).map((n) => n.textContent ?? "").join("\n");
+  }
+
+  it("gives the welcome screen no conversation header at all", async () => {
+    const { shadow } = await boot({ messages: [], ux: hero() });
+    expect(shadow.querySelector(".panel")!.getAttribute("data-view")).toBe("welcome");
+    expect(css(shadow)).toContain(".panel[data-view='welcome'] .hd{display:none;}");
+  });
+
+  it("switches to the conversation view once there are messages", async () => {
+    const now = new Date().toISOString();
+    const { shadow } = await boot({
+      messages: [{ id: "a", direction: "OUTBOUND", body: "hello", messageType: "text", author: "A", authorKind: "ai", createdAt: now, commerce: null }],
+    });
+    expect(shadow.querySelector(".panel")!.getAttribute("data-view")).toBe("conversation");
+    expect(shadow.querySelector(".hd")).toBeTruthy();
+  });
+
+  it("keeps the conversation header compact", async () => {
+    // 44px of chrome, not 72. The avatar shrinks with it.
+    const { shadow } = await boot({ messages: [] });
+    const sheet = css(shadow);
+    expect(sheet).toContain("min-height:44px;max-height:48px;");
+    expect(sheet).toContain(".hd-av{width:30px;height:30px;");
+  });
+
+  it("truncates a long assistant name instead of wrapping the header", async () => {
+    const { shadow } = await boot({ messages: [] });
+    expect(css(shadow)).toContain("text-overflow:ellipsis;");
+  });
+
+  it("removes the white gap above the hero", async () => {
+    // The gap was .wel's own padding-top surviving the hero's negative
+    // margin. In the welcome view the hero owns the panel's top edge.
+    const sheet = css((await boot({ messages: [], ux: hero() })).shadow);
+    expect(sheet).toContain(".panel[data-view='welcome'] .bd{padding-top:0;}");
+    expect(sheet).toContain(".panel[data-view='welcome'] .wel{padding-top:0;}");
+    expect(sheet).toContain(".panel[data-view='welcome'] .hero{margin-top:0;");
+  });
+
+  it("hangs the close button off the panel, not the header", async () => {
+    // Otherwise hiding the header in the welcome view would take the only
+    // way out with it.
+    const { shadow } = await boot({ messages: [], ux: hero() });
+    const x = shadow.querySelector('[data-act="close"]')!;
+    expect(x).toBeTruthy();
+    expect((x.parentElement as HTMLElement).className).toContain("panel");
+  });
+
+  it("still closes from the welcome screen, where there is no header", async () => {
+    const { shadow } = await boot({ messages: [], ux: hero() });
+    const panel = shadow.querySelector(".panel") as HTMLElement;
+    (shadow.querySelector('[data-act="close"]') as HTMLElement).click();
+    expect(panel.getAttribute("data-state")).toBe("closed");
+    expect(panel.hidden).toBe(true);
+  });
+
+  it("declares the close button's position exactly once", async () => {
+    // Two `.x{...}` blocks in one stylesheet is not a style nit: the
+    // second one said `position:relative`, which put a 44px close button
+    // into the panel's column flow and opened a white gap above the hero.
+    const sheet = css((await boot({ messages: [] })).shadow);
+    const positions = (sheet.match(/\.x\{[^}]*position:/g) ?? []).length;
+    expect(positions).toBe(1);
+    expect(sheet).toContain("position:absolute;top:6px;");
+  });
+
+  it("sizes the header with border-box so min-height means what it says", async () => {
+    // Without it, min-height:44 plus padding and a border measured 57px.
+    expect(css((await boot({ messages: [] })).shadow)).toContain("box-sizing:border-box;border-bottom:1px solid #eef1f5;min-height:44px;");
+  });
+
+  it("leaves room below the last suggestion so the composer cannot cover it", async () => {
+    expect(css((await boot({ messages: [] })).shadow)).toContain("padding:18px 18px 26px;");
+  });
+});
+
 describe("welcome state", () => {
   it("shows a monogram when the merchant has not uploaded a logo", async () => {
     // A solid block of brand colour reads as a broken image.
@@ -756,7 +839,12 @@ describe("welcome hero", () => {
   });
 
   it("overlaps the avatar onto the bottom edge of the media", async () => {
-    const h = await boot({ messages: [], ux: hero({ avatarOverlap: 28, avatarSize: 64 }) });
+    // The avatar belongs to the WELCOME block, not the hero: it survives
+    // when the merchant removes the media, so it cannot be a hero field.
+    const h = await boot({
+      messages: [],
+      ux: { ...hero(), welcome: { avatarUrl: "https://cdn.example.com/a.png", avatarOverlap: 28, avatarSize: 64 } },
+    });
     const av = h.shadow.querySelector(".wel-av") as HTMLImageElement;
     expect(av).toBeTruthy();
     expect(av.style.marginTop).toBe("-28px");
@@ -914,13 +1002,20 @@ describe("close button ergonomics", () => {
     expect(WIDGET_SOURCE).toMatch(/\.x\{width:44px;height:44px;min-width:44px;min-height:44px/);
   });
 
-  it("cannot be covered by anything the header lays out", () => {
-    expect(WIDGET_SOURCE).toContain("position:relative;z-index:2;pointer-events:auto;}");
+  it("is taken out of the panel's flow so it cannot push the hero down", () => {
+    // It is a child of the panel (so it survives the header being hidden
+    // in the welcome view). As a flex item of that column it would occupy
+    // a 44px row — which is exactly the white gap that appeared above the
+    // hero when a second `.x` rule reset it to position:relative.
+    expect(WIDGET_SOURCE).toContain('"  position:absolute;top:6px;"');
+    // ...and no other `.x` rule may quietly put it back into flow.
+    const xRules = WIDGET_SOURCE.match(/\.x\{[^}"]*/g) ?? [];
+    expect(xRules.some((r) => r.includes("position:relative"))).toBe(false);
   });
 
   it("has a visible focus style and a non-capturing icon", () => {
     expect(WIDGET_SOURCE).toContain(".x:focus-visible{outline:3px solid");
     // The svg must not swallow the click and defeat the hit area.
-    expect(WIDGET_SOURCE).toContain(".x svg{width:20px;height:20px;pointer-events:none;}");
+    expect(WIDGET_SOURCE).toContain(".x svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;pointer-events:none;}");
   });
 });

@@ -21,6 +21,16 @@ import ConfirmModal from "@/components/ConfirmModal";
 import { ShopifyGlyph } from "./ShopifyGlyph";
 import { WidgetPreview, PREVIEW_FIXTURE, type PreviewState, type PreviewDevice } from "./WidgetPreview";
 import type { ProductView } from "./ProductCard";
+import {
+  normalizeWelcome,
+  normalizeHero,
+  heroHeightWarning,
+  sanitizeMediaUrl,
+  MEDIA_GUIDANCE,
+// Deep import on purpose. The package root pulls in express and Prisma
+// through service-app.ts, which webpack then tries to bundle for the
+// browser; this module is pure and has no imports of its own.
+} from "@chatcenter/shared/src/lib/shopify-chat-ux";
 
 /**
  * Shopify Live Chat channel configuration.
@@ -36,10 +46,12 @@ const SECTIONS = [
   "store",
   "installation",
   "launcher",
-  "hero",
-  "appearance",
+  // One section, not four. "hero", "appearance", "welcome" and
+  // "questions" all edited pieces of the same screen, so a merchant had
+  // to visit four tabs to change one thing and could set the avatar in
+  // two places that disagreed.
   "welcome",
-  "questions",
+  "appearance",
   "proactive",
   "sounds",
   "behavior",
@@ -74,6 +86,16 @@ export function ShopifyLiveChatSettings() {
   const [diagnostics, setDiagnostics] = useState<any>(null);
   const [install, setInstall] = useState<any>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
+
+  // Normalized once, here, so every input below reads the same values the
+  // storefront will. Binding to raw `draft.ux?.welcome?.x ?? fallback`
+  // scattered through the JSX is how the defaults drifted apart before.
+  const welcome = useMemo(() => normalizeWelcome(draft?.ux?.welcome), [draft?.ux?.welcome]);
+  const hero = useMemo(() => normalizeHero(draft?.ux?.hero), [draft?.ux?.hero]);
+  const heroFit = useMemo(
+    () => heroHeightWarning({ configured: hero.height, panelHeight: 640, isMobile: false }),
+    [hero.height],
+  );
 
   const [previewState, setPreviewState] = useState<PreviewState>("welcome");
   const [previewDevice, setPreviewDevice] = useState<PreviewDevice>("desktop");
@@ -559,73 +581,6 @@ export function ShopifyLiveChatSettings() {
             </Card>
           )}
 
-          {section === "hero" && (
-            <Card title={t("shopifyChat.section.hero")} hint={t("shopifyChat.heroHint")}>
-              <Field label={t("shopifyChat.heroMediaType")}>
-                <Select value={draft.ux?.hero?.mediaType ?? "none"} onChange={(v) => patch("ux.hero.mediaType", v)}
-                  options={["none", "image", "gif", "video"].map((v) => ({ value: v, label: t(`shopifyChat.media.${v}`) }))} />
-              </Field>
-              {draft.ux?.hero?.mediaType !== "none" && (
-                <>
-                  <Field label={t("shopifyChat.heroMediaUrl")} hint={t("shopifyChat.mediaHint")}>
-                    <input type="url" value={draft.ux?.hero?.mediaUrl ?? ""}
-                      onChange={(e) => patch("ux.hero.mediaUrl", e.target.value || null)}
-                      className="w-full text-sm px-3 py-2 border border-gray-200 rounded-lg" />
-                  </Field>
-                  {draft.ux?.hero?.mediaType === "video" && (
-                    <Field label={t("shopifyChat.heroPoster")} hint={t("shopifyChat.heroPosterHint")}>
-                      <input type="url" value={draft.ux?.hero?.posterUrl ?? ""}
-                        onChange={(e) => patch("ux.hero.posterUrl", e.target.value || null)}
-                        className="w-full text-sm px-3 py-2 border border-gray-200 rounded-lg" />
-                    </Field>
-                  )}
-                  <div className="grid grid-cols-2 gap-3">
-                    <Field label={`${t("shopifyChat.heroHeight")}: ${draft.ux?.hero?.height ?? 180}px`}>
-                      <input type="range" min={80} max={320} value={draft.ux?.hero?.height ?? 180}
-                        onChange={(e) => patch("ux.hero.height", Number(e.target.value))} className="w-full" />
-                    </Field>
-                    <Field label={`${t("shopifyChat.heroMobileHeight")}: ${draft.ux?.hero?.mobileHeight ?? 148}px`}>
-                      <input type="range" min={80} max={280} value={draft.ux?.hero?.mobileHeight ?? 148}
-                        onChange={(e) => patch("ux.hero.mobileHeight", Number(e.target.value))} className="w-full" />
-                    </Field>
-                    <Field label={`${t("shopifyChat.heroFade")}: ${draft.ux?.hero?.fadeStrength ?? 60}%`}>
-                      <input type="range" min={0} max={100} value={draft.ux?.hero?.fadeStrength ?? 60}
-                        onChange={(e) => patch("ux.hero.fadeStrength", Number(e.target.value))} className="w-full" />
-                    </Field>
-                    <Field label={`${t("shopifyChat.heroOverlay")}: ${draft.ux?.hero?.overlayStrength ?? 0}%`}>
-                      <input type="range" min={0} max={100} value={draft.ux?.hero?.overlayStrength ?? 0}
-                        onChange={(e) => patch("ux.hero.overlayStrength", Number(e.target.value))} className="w-full" />
-                    </Field>
-                  </div>
-                  <Field label={t("shopifyChat.heroAvatar")} hint={t("shopifyChat.mediaHint")}>
-                    <input type="url" value={draft.ux?.hero?.avatarUrl ?? ""}
-                      onChange={(e) => patch("ux.hero.avatarUrl", e.target.value || null)}
-                      className="w-full text-sm px-3 py-2 border border-gray-200 rounded-lg" />
-                  </Field>
-                  <div className="grid grid-cols-2 gap-3">
-                    <Field label={`${t("shopifyChat.heroAvatarSize")}: ${draft.ux?.hero?.avatarSize ?? 64}px`}>
-                      <input type="range" min={40} max={96} value={draft.ux?.hero?.avatarSize ?? 64}
-                        onChange={(e) => patch("ux.hero.avatarSize", Number(e.target.value))} className="w-full" />
-                    </Field>
-                    <Field label={`${t("shopifyChat.heroOverlap")}: ${draft.ux?.hero?.avatarOverlap ?? 28}px`}>
-                      <input type="range" min={0} max={60} value={draft.ux?.hero?.avatarOverlap ?? 28}
-                        onChange={(e) => patch("ux.hero.avatarOverlap", Number(e.target.value))} className="w-full" />
-                    </Field>
-                  </div>
-                  {draft.ux?.hero?.mediaType === "video" && (
-                    <>
-                      <Toggle label={t("shopifyChat.videoLoop")} checked={draft.ux?.hero?.videoLoop !== false}
-                        onChange={(v) => patch("ux.hero.videoLoop", v)} />
-                      <Toggle label={t("shopifyChat.videoAutoplay")} hint={t("shopifyChat.videoAutoplayHint")}
-                        checked={draft.ux?.hero?.videoAutoplay !== false}
-                        onChange={(v) => patch("ux.hero.videoAutoplay", v)} />
-                    </>
-                  )}
-                </>
-              )}
-            </Card>
-          )}
-
           {section === "proactive" && (
             <Card title={t("shopifyChat.section.proactive")} hint={t("shopifyChat.proactiveHint")}>
               <Toggle label={t("shopifyChat.proactiveEnabled")} hint={t("shopifyChat.proactiveEnabledHint")}
@@ -756,14 +711,9 @@ export function ShopifyLiveChatSettings() {
                   className="w-full text-sm px-3 py-2 border border-gray-200 rounded-lg"
                 />
               </Field>
-              <Field label={t("shopifyChat.avatarUrl")} hint={t("shopifyChat.httpsOnly")}>
-                <input
-                  type="url"
-                  value={draft.appearance.avatarUrl || ""}
-                  onChange={(e) => patch("appearance.avatarUrl", e.target.value || null)}
-                  className="w-full text-sm px-3 py-2 border border-gray-200 rounded-lg"
-                />
-              </Field>
+              {/* The assistant avatar lives in Welcome experience now.
+                  It used to be settable here as well, and the two inputs
+                  wrote to different places. */}
               <div className="grid grid-cols-2 gap-3">
                 <Field label={t("shopifyChat.launcherIcon")}>
                   <Select
@@ -832,76 +782,128 @@ export function ShopifyLiveChatSettings() {
           )}
 
           {section === "welcome" && (
-            <Card title={t("shopifyChat.section.welcome")}>
-              <Field label={t("shopifyChat.assistantName")}>
-                <input
-                  maxLength={40}
-                  value={draft.welcome.assistantName}
-                  onChange={(e) => patch("welcome.assistantName", e.target.value)}
-                  className="w-full text-sm px-3 py-2 border border-gray-200 rounded-lg"
-                />
-              </Field>
-              <Field label={t("shopifyChat.headline")}>
-                <input
-                  maxLength={60}
-                  value={draft.welcome.headline}
-                  onChange={(e) => patch("welcome.headline", e.target.value)}
-                  className="w-full text-sm px-3 py-2 border border-gray-200 rounded-lg"
-                />
-              </Field>
-              <Field label={t("shopifyChat.subline")}>
-                <textarea
-                  rows={3}
-                  maxLength={200}
-                  value={draft.welcome.subline}
-                  onChange={(e) => patch("welcome.subline", e.target.value)}
-                  className="w-full text-sm px-3 py-2 border border-gray-200 rounded-lg"
-                />
-              </Field>
-            </Card>
-          )}
+            <>
+              <Card title={t("shopifyChat.section.welcome")} hint={t("shopifyChat.welcomeSectionHint")}>
+                <Field label={t("shopifyChat.assistantName")} hint={t("shopifyChat.assistantNameHint")}>
+                  <input maxLength={40} value={welcome.assistantName}
+                    onChange={(e) => patch("ux.welcome.assistantName", e.target.value)}
+                    className="w-full text-sm px-3 py-2 border border-gray-200 rounded-lg" />
+                </Field>
+                <Field label={t("shopifyChat.headline")}>
+                  <input maxLength={60} value={welcome.title}
+                    onChange={(e) => patch("ux.welcome.title", e.target.value)}
+                    className="w-full text-sm px-3 py-2 border border-gray-200 rounded-lg" />
+                </Field>
+                <Field label={t("shopifyChat.subline")}>
+                  <textarea rows={3} maxLength={200} value={welcome.subtitle}
+                    onChange={(e) => patch("ux.welcome.subtitle", e.target.value)}
+                    className="w-full text-sm px-3 py-2 border border-gray-200 rounded-lg" />
+                </Field>
+                <Field label={t("shopifyChat.textAlign")}>
+                  <Select value={welcome.textAlign} onChange={(v) => patch("ux.welcome.textAlign", v)}
+                    options={[
+                      { value: "center", label: t("shopifyChat.alignCenter") },
+                      { value: "start", label: t("shopifyChat.alignStart") },
+                    ]} />
+                </Field>
+              </Card>
 
-          {section === "questions" && (
-            <Card title={t("shopifyChat.section.questions")} hint={t("shopifyChat.questionsHint")}>
-              {(draft.welcome.suggestedQuestions || []).map((q: string, i: number) => (
-                <div key={i} className="flex gap-2">
-                  <input
-                    maxLength={80}
-                    value={q}
-                    onChange={(e) => {
-                      const next = [...draft.welcome.suggestedQuestions];
-                      next[i] = e.target.value;
-                      patch("welcome.suggestedQuestions", next);
-                    }}
-                    className="flex-1 text-sm px-3 py-2 border border-gray-200 rounded-lg"
-                  />
-                  <button
-                    type="button"
-                    onClick={() =>
-                      patch(
-                        "welcome.suggestedQuestions",
-                        draft.welcome.suggestedQuestions.filter((_: string, j: number) => j !== i),
-                      )
-                    }
-                    aria-label={t("common.delete")}
-                    className="px-3 py-2 text-sm text-gray-400 hover:text-red-600 rounded-lg"
-                  >
-                    ✕
-                  </button>
+              <Card title={t("shopifyChat.avatarCard")} hint={t("shopifyChat.avatarCardHint")}>
+                <MediaField label={t("shopifyChat.avatarUrl")} slot="image"
+                  value={welcome.avatarUrl} onChange={(v) => patch("ux.welcome.avatarUrl", v)} t={t} />
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label={`${t("shopifyChat.heroAvatarSize")}: ${welcome.avatarSize}px`}>
+                    <input type="range" min={40} max={96} value={welcome.avatarSize}
+                      onChange={(e) => patch("ux.welcome.avatarSize", Number(e.target.value))} className="w-full" />
+                  </Field>
+                  <Field label={`${t("shopifyChat.heroOverlap")}: ${welcome.avatarOverlap}px`}
+                    hint={t("shopifyChat.heroOverlapHint")}>
+                    <input type="range" min={0} max={60} value={welcome.avatarOverlap}
+                      onChange={(e) => patch("ux.welcome.avatarOverlap", Number(e.target.value))} className="w-full" />
+                  </Field>
                 </div>
-              ))}
-              {(draft.welcome.suggestedQuestions || []).length < 5 && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    patch("welcome.suggestedQuestions", [...(draft.welcome.suggestedQuestions || []), ""])
-                  }
-                  className="text-sm text-primary-600 hover:text-primary-700"
-                >
-                  + {t("shopifyChat.addQuestion")}
-                </button>
-              )}
-            </Card>
+              </Card>
+
+              <Card title={t("shopifyChat.section.hero")} hint={t("shopifyChat.heroHint")}>
+                <Field label={t("shopifyChat.heroMediaType")}>
+                  <Select value={hero.mediaType} onChange={(v) => patch("ux.hero.mediaType", v)}
+                    options={["none", "image", "gif", "video"].map((v) => ({ value: v, label: t(`shopifyChat.media.${v}`) }))} />
+                </Field>
+                {hero.mediaType !== "none" && (
+                  <>
+                    <MediaField label={t("shopifyChat.heroMediaUrl")}
+                      slot={hero.mediaType === "video" ? "video" : "image"}
+                      value={hero.mediaUrl} onChange={(v) => patch("ux.hero.mediaUrl", v)} t={t} />
+                    {hero.mediaType === "video" && (
+                      <MediaField label={t("shopifyChat.heroPoster")} slot="image" hint={t("shopifyChat.heroPosterHint")}
+                        value={hero.posterUrl} onChange={(v) => patch("ux.hero.posterUrl", v)} t={t} />
+                    )}
+                    <div className="grid grid-cols-2 gap-3">
+                      <Field label={`${t("shopifyChat.heroHeight")}: ${hero.height}px`}>
+                        <input type="range" min={90} max={220} value={hero.height}
+                          onChange={(e) => patch("ux.hero.height", Number(e.target.value))} className="w-full" />
+                      </Field>
+                      <Field label={`${t("shopifyChat.heroMobileHeight")}: ${hero.mobileHeight}px`}>
+                        <input type="range" min={80} max={180} value={hero.mobileHeight}
+                          onChange={(e) => patch("ux.hero.mobileHeight", Number(e.target.value))} className="w-full" />
+                      </Field>
+                      <Field label={`${t("shopifyChat.heroFade")}: ${hero.fadeStrength}%`}>
+                        <input type="range" min={0} max={100} value={hero.fadeStrength}
+                          onChange={(e) => patch("ux.hero.fadeStrength", Number(e.target.value))} className="w-full" />
+                      </Field>
+                      <Field label={`${t("shopifyChat.heroOverlay")}: ${hero.overlayStrength}%`}>
+                        <input type="range" min={0} max={100} value={hero.overlayStrength}
+                          onChange={(e) => patch("ux.hero.overlayStrength", Number(e.target.value))} className="w-full" />
+                      </Field>
+                    </div>
+                    {/* The panel has the last word on height. Say so here
+                        rather than letting the merchant wonder why their
+                        220 looks like 180 on the storefront. */}
+                    {heroFit !== "ok" && (
+                      <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                        {t(heroFit === "dropped" ? "shopifyChat.heroDropped" : "shopifyChat.heroTight")}
+                      </p>
+                    )}
+                    {hero.mediaType === "video" && (
+                      <>
+                        <Toggle label={t("shopifyChat.videoLoop")} checked={hero.videoLoop !== false}
+                          onChange={(v) => patch("ux.hero.videoLoop", v)} />
+                        <Toggle label={t("shopifyChat.videoAutoplay")} hint={t("shopifyChat.videoAutoplayHint")}
+                          checked={hero.videoAutoplay !== false}
+                          onChange={(v) => patch("ux.hero.videoAutoplay", v)} />
+                      </>
+                    )}
+                  </>
+                )}
+              </Card>
+
+              <Card title={t("shopifyChat.section.questions")} hint={t("shopifyChat.questionsHint")}>
+                {welcome.suggestedQuestions.map((q: string, i: number) => (
+                  <div key={i} className="flex gap-2">
+                    <input maxLength={80} value={q}
+                      onChange={(e) => {
+                        const next = [...welcome.suggestedQuestions];
+                        next[i] = e.target.value;
+                        patch("ux.welcome.suggestedQuestions", next);
+                      }}
+                      className="flex-1 text-sm px-3 py-2 border border-gray-200 rounded-lg" />
+                    <button type="button"
+                      onClick={() => patch("ux.welcome.suggestedQuestions", welcome.suggestedQuestions.filter((_: string, j: number) => j !== i))}
+                      aria-label={t("common.delete")}
+                      className="px-3 py-2 text-sm text-gray-400 hover:text-red-600 rounded-lg">
+                      ✕
+                    </button>
+                  </div>
+                ))}
+                {welcome.suggestedQuestions.length < 5 && (
+                  <button type="button"
+                    onClick={() => patch("ux.welcome.suggestedQuestions", [...welcome.suggestedQuestions, ""])}
+                    className="text-sm text-primary-600 hover:text-primary-700">
+                    + {t("shopifyChat.addQuestion")}
+                  </button>
+                )}
+              </Card>
+            </>
           )}
 
           {section === "ai" && (
@@ -1207,6 +1209,82 @@ function Header({ t }: { t: (k: string) => string }) {
         <p className="text-sm text-gray-500 mt-1">{t("shopifyChat.subtitle")}</p>
       </div>
     </div>
+  );
+}
+
+/**
+ * A media URL input that validates against the SAME rule the storefront
+ * applies, and explains a refusal in place.
+ *
+ * Without this the merchant pasted an http:// or .svg URL, saw the field
+ * accept it, and found an empty hero on their live store with nothing to
+ * explain it.
+ */
+function MediaField({
+  label, hint, slot, value, onChange, t,
+}: {
+  label: string;
+  hint?: string;
+  slot: "image" | "video";
+  value: string | null;
+  onChange: (v: string | null) => void;
+  t: (k: string) => string;
+}) {
+  const [raw, setRaw] = useState(value ?? "");
+  useEffect(() => { setRaw(value ?? ""); }, [value]);
+
+  const verdict = useMemo(() => {
+    if (!raw.trim()) return null;
+    return sanitizeMediaUrl(raw, slot);
+  }, [raw, slot]);
+  const rejected = raw.trim().length > 0 && verdict === null;
+
+  return (
+    <Field
+      label={label}
+      hint={
+        hint ??
+        (slot === "video"
+          ? t("shopifyChat.mediaHintVideo")
+              .replace("{mb}", String(Math.round(MEDIA_GUIDANCE.videoMaxBytes / 1e6)))
+              .replace("{secs}", String(MEDIA_GUIDANCE.videoMaxSeconds))
+          : t("shopifyChat.mediaHintImage")
+              .replace("{mb}", String((MEDIA_GUIDANCE.imageMaxBytes / 1e6).toFixed(1)))
+              .replace("{w}", String(MEDIA_GUIDANCE.recommendedWidth))
+              .replace("{h}", String(MEDIA_GUIDANCE.recommendedHeight)))
+      }
+    >
+      <input
+        type="url"
+        value={raw}
+        placeholder="https://"
+        onChange={(e) => {
+          setRaw(e.target.value);
+          // Only a URL the storefront would actually accept reaches the
+          // draft; a rejected one stays in the box with the reason next
+          // to it, rather than being saved and silently dropped later.
+          const next = e.target.value.trim();
+          onChange(next ? sanitizeMediaUrl(next, slot) : null);
+        }}
+        className={clsx(
+          "w-full text-sm px-3 py-2 border rounded-lg",
+          rejected ? "border-red-300 bg-red-50" : "border-gray-200",
+        )}
+      />
+      {rejected && (
+        <p className="mt-1 text-xs text-red-600">{t("shopifyChat.mediaRejected")}</p>
+      )}
+      {!rejected && verdict && (
+        <div className="mt-2 overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
+          {slot === "video" ? (
+            <video src={verdict} className="h-24 w-full object-cover" muted playsInline />
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={verdict} alt="" className="h-24 w-full object-cover" />
+          )}
+        </div>
+      )}
+    </Field>
   );
 }
 

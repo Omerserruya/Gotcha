@@ -24,6 +24,7 @@
 import {
   defaultShopifyChatUx,
   normalizeShopifyChatUx,
+  migrateLegacyWelcome,
   type ShopifyChatUx,
 } from "./shopify-chat-ux";
 
@@ -426,7 +427,6 @@ export function normalizeShopifyLiveChatConfig(
   // Upgrade-on-read: a channel written before any of this existed gets
   // the defaults, and a half-written blob gets the missing halves. No
   // reader downstream has to guard for an absent nested field.
-  const ux = normalizeShopifyChatUx(src.ux, base.ux);
 
   const questions = Array.isArray(w.suggestedQuestions)
     ? w.suggestedQuestions
@@ -434,6 +434,26 @@ export function normalizeShopifyLiveChatConfig(
         .filter((q: string) => q.length > 0)
         .slice(0, MAX_QUESTIONS)
     : base.welcome.suggestedQuestions;
+
+  let ux = normalizeShopifyChatUx(src.ux, base.ux);
+  // Fold the four legacy welcome sources into the canonical one. Runs on
+  // every read so an old channel needs no migration job, and a value the
+  // merchant has already saved under ux.welcome always wins over a stale
+  // legacy field. After the next save only the canonical shape persists.
+  ux = {
+    ...ux,
+    welcome: migrateLegacyWelcome({
+      ux: src.ux ?? base.ux,
+      appearance: { logoUrl: a.logoUrl ?? base.appearance.logoUrl, avatarUrl: a.avatarUrl ?? base.appearance.avatarUrl },
+      welcome: {
+        headline: w.headline ?? base.welcome.headline,
+        subline: w.subline ?? base.welcome.subline,
+        assistantName: w.assistantName ?? base.welcome.assistantName,
+        suggestedQuestions: questions,
+      },
+      hero: { avatarUrl: (src.ux as any)?.hero?.avatarUrl ?? null },
+    }),
+  };
 
   const domains = Array.isArray(i.storefrontDomains)
     ? Array.from(

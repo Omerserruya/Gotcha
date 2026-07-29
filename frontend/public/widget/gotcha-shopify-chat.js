@@ -231,6 +231,31 @@ window.__gotchaShopifyChatApp = function (boot) {
     // signal and for assistive technology.
     "[hidden]{display:none!important;}",
     ".panel[data-state='closed']{display:none!important;}",
+
+    // ── Layout by STATE, not by hiding things ad hoc ──
+    //
+    // WELCOME gives the whole panel to the brand: no conversation header
+    // at all, hero flush against the top edge. CONVERSATION swaps in a
+    // compact header, because by then the shopper knows where they are
+    // and the messages need the room.
+    ".panel[data-view='welcome'] .hd{display:none;}",
+    // The gap above the hero was .wel's own padding-top surviving the
+    // hero's negative margin. In welcome the hero owns the top edge.
+    ".panel[data-view='welcome'] .bd{padding-top:0;}",
+    ".panel[data-view='welcome'] .wel{padding-top:0;}",
+    ".panel[data-view='welcome'] .hero{margin-top:0;border-radius:" + radius + "px " + radius + "px 0 0;}",
+
+    // One close button for both states, moved rather than duplicated, so
+    // there is a single handler and a single data-act="close".
+    // Positioning lives with the rest of the .x rule further down; two
+    // `.x` blocks in one stylesheet is how `position:absolute` here lost
+    // to `position:relative` there and put a 44px hole above the hero.
+    // Over the hero it needs its own contrast: a merchant's photograph
+    // can be any colour, and the way out must be legible on all of them.
+    ".panel[data-view='welcome'] .x{top:10px;" + (dir === "rtl" ? "left" : "right") + ":10px;",
+    "  background:rgba(15,23,42,.45);color:#fff;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);",
+    "  border-radius:50%;}",
+    ".panel[data-view='welcome'] .x:hover{background:rgba(15,23,42,.62);color:#fff;}",
     // ── Welcome hero ──
     // Bleeds to the panel edges by cancelling the body's padding, so the
     // media touches the sides instead of floating in a gutter.
@@ -269,12 +294,19 @@ window.__gotchaShopifyChatApp = function (boot) {
     "  .panel{inset:0;width:auto;max-width:100vw;height:100%;border-radius:0;",
     "    height:100dvh;padding-bottom:env(safe-area-inset-bottom);}",
     "}",
-    ".hd{display:flex;align-items:center;gap:12px;padding:16px 18px;border-bottom:1px solid #eef1f5;}",
-    ".hd-av{width:40px;height:40px;border-radius:12px;object-fit:cover;background:" + brand + ";flex:0 0 auto;}",
-    ".hd-mono{display:flex;align-items:center;justify-content:center;color:" + onBrand + ";font-weight:650;font-size:17px;}",
+    // Compact by design: 16px padding around a 40px avatar made a 72px
+    // header, which is a lot of a 640px panel spent on saying who you are
+    // already talking to. 44px visual height, 30px avatar.
+    ".hd{display:flex;align-items:center;gap:10px;padding:6px 56px 6px 14px;",
+    // border-box, or min-height:44 becomes 44 + padding + border = 57.
+    "  box-sizing:border-box;border-bottom:1px solid #eef1f5;min-height:44px;max-height:48px;flex:0 0 auto;}",
+    ".hd-tx{min-width:0;line-height:1.2;}",
+    ".hd-av{width:30px;height:30px;border-radius:9px;object-fit:cover;background:" + brand + ";flex:0 0 auto;}",
+    ".hd-mono{display:flex;align-items:center;justify-content:center;color:" + onBrand + ";font-weight:650;font-size:14px;}",
     ".hd-tx{flex:1 1 auto;min-width:0;}",
-    ".hd-nm{font-weight:650;font-size:15px;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}",
-    ".hd-st{display:flex;align-items:center;gap:6px;font-size:12.5px;color:#64748b;margin-top:2px;}",
+    ".hd-nm{font-weight:650;font-size:14px;line-height:1.25;letter-spacing:-.01em;",
+    "  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}",
+    ".hd-st{display:flex;align-items:center;gap:5px;font-size:11.5px;line-height:1.2;color:#64748b;margin-top:1px;}",
     ".dot{width:7px;height:7px;border-radius:4px;background:#16a34a;flex:0 0 auto;}",
     ".dot[data-off='1']{background:#cbd5e1;}",
     // 44x44 is the accessibility floor for a touch target, and this one
@@ -282,22 +314,26 @@ window.__gotchaShopifyChatApp = function (boot) {
     // should be fiddly on a phone. The icon stays visually small; the
     // hit area does not.
     ".x{width:44px;height:44px;min-width:44px;min-height:44px;border-radius:12px;border:0;",
-    "  background:transparent;color:#64748b;cursor:pointer;flex:0 0 auto;",
+    "  background:transparent;color:#64748b;cursor:pointer;",
     "  display:flex;align-items:center;justify-content:center;",
-    // Above anything the header lays out, and always clickable.
-    "  position:relative;z-index:2;pointer-events:auto;}",
+    // Taken OUT of the panel's column flow. It is a child of the panel so
+    // that it survives the header being hidden in the welcome view, which
+    // also means it must not occupy a row of that column.
+    "  position:absolute;top:6px;" + (dir === "rtl" ? "left" : "right") + ":8px;",
+    "  z-index:6;pointer-events:auto;}",
     ".x:hover{background:#f1f5f9;color:#0f172a;}",
-    ".x:focus-visible{outline:3px solid #94a3b8;outline-offset:2px;}",
-    ".x svg{width:20px;height:20px;pointer-events:none;}",
-    ".x:hover{background:#f1f5f9;color:#0f172a;}",
-    ".x:focus-visible{outline:2px solid " + brand + ";outline-offset:2px;}",
-    ".x svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;}",
+    ".x:focus-visible{outline:3px solid " + brand + ";outline-offset:2px;}",
+    ".x svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;pointer-events:none;}",
 
-    ".bd{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;padding:18px;scroll-behavior:smooth;overscroll-behavior:contain;}",
+    // The only scrolling region. The extra bottom padding is what lets
+    // the LAST suggested question clear the composer instead of sitting
+    // permanently underneath it.
+    ".bd{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;",
+    "  padding:18px 18px 26px;scroll-behavior:smooth;overscroll-behavior:contain;}",
     "@media (prefers-reduced-motion: reduce){.bd{scroll-behavior:auto}}",
 
     // Welcome
-    ".wel{display:flex;flex-direction:column;gap:18px;padding:10px 2px 4px;}",
+    ".wel{display:flex;flex-direction:column;gap:14px;padding:10px 2px 4px;}",
     ".wel-lg{width:52px;height:52px;border-radius:14px;object-fit:contain;background:#f8fafc;}",
     ".wel-h{font-size:26px;line-height:1.2;font-weight:680;letter-spacing:-.02em;margin:0;}",
     ".wel-s{font-size:15px;color:#475569;margin:-8px 0 0;}",
@@ -518,7 +554,9 @@ window.__gotchaShopifyChatApp = function (boot) {
       : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5L6 9H3v6h3l5 4V5z"/><path d="M16 9a4 4 0 0 1 0 6"/></svg>';
   }
 
-  header.appendChild(closeBtn);
+  // Appended to the panel, not the header: in WELCOME there is no
+  // header to live in, and duplicating it would mean two handlers.
+  panel.appendChild(closeBtn);
 
   var banner = el("div", "banner");
   banner.hidden = true;
@@ -794,8 +832,11 @@ window.__gotchaShopifyChatApp = function (boot) {
     renderStatus();
     renderBanner();
 
-    if (S.phase === "offline_form") { renderOfflineForm(); return; }
-    if (!S.messages.length && !S.pending.length && S.phase === "welcome") { renderWelcome(); return; }
+    var inWelcome = !S.messages.length && !S.pending.length && S.phase === "welcome";
+    setPanelView(inWelcome ? "welcome" : "conversation");
+
+    if (S.phase === "offline_form") { setPanelView("conversation"); renderOfflineForm(); return; }
+    if (inWelcome) { renderWelcome(); return; }
     // Leaving the welcome state: the hero is gone from the DOM the moment
     // the message list replaces it, so release the video handle too
     // rather than leaving a detached element decoding in the background.
@@ -819,7 +860,17 @@ window.__gotchaShopifyChatApp = function (boot) {
     if (!url) return null;
 
     var mobile = window.matchMedia("(max-width: 560px)").matches;
-    var height = mobile ? h.mobileHeight : h.height;
+    var configured = mobile ? h.mobileHeight : h.height;
+
+    // The merchant's height is a PREFERENCE; the panel has the last word.
+    // Mirrors resolveHeroHeight() in @chatcenter/shared — the widget ships
+    // without a bundler and cannot import it, so the rule is duplicated
+    // deliberately and tested on both sides.
+    var panelH = panel.getBoundingClientRect().height || (mobile ? window.innerHeight : 640);
+    var reserved = mobile ? 300 : 330;
+    var height = Math.min(configured, Math.max(0, panelH - reserved), Math.round(panelH * (mobile ? 0.28 : 0.32)));
+    // Below ~72px a hero reads as a stripe. Drop it rather than show it badly.
+    if (height < 72) return null;
 
     var hero = el("div", "hero");
     hero.style.height = height + "px";
@@ -895,19 +946,24 @@ window.__gotchaShopifyChatApp = function (boot) {
   function renderWelcome() {
     footer.hidden = false;
     var wrap = el("div", "wel");
+    // Canonical source. `welcome` (the legacy block) is still read by the
+    // server-side migration, but by the time it reaches here there is
+    // exactly one place to look.
+    var W = (boot.widget && boot.widget.ux && boot.widget.ux.welcome) || null;
     var hero = renderHero(wrap);
 
     // With a hero the avatar overlaps its bottom edge; without one the
     // original logo treatment is unchanged.
-    var avatarUrl = hero ? safeUrl(hero.avatarUrl) || safeUrl(appearance.logoUrl) : safeUrl(appearance.logoUrl);
+    var avatarUrl = safeUrl(W && W.avatarUrl) || safeUrl(appearance.logoUrl);
     if (hero && avatarUrl) {
       var av = document.createElement("img");
       av.className = "wel-av";
       av.src = avatarUrl;
       av.alt = "";
-      av.style.width = hero.avatarSize + "px";
-      av.style.height = hero.avatarSize + "px";
-      av.style.marginTop = "-" + hero.avatarOverlap + "px";
+      var avSize = (W && W.avatarSize) || 60;
+      av.style.width = avSize + "px";
+      av.style.height = avSize + "px";
+      av.style.marginTop = "-" + ((W && W.avatarOverlap) || 26) + "px";
       av.style.marginLeft = "auto";
       av.style.marginRight = "auto";
       av.onerror = function () { av.style.display = "none"; };
@@ -922,15 +978,18 @@ window.__gotchaShopifyChatApp = function (boot) {
       img.alt = "";
       wrap.appendChild(img);
     }
-    wrap.appendChild(el("h2", "wel-h", welcome.headline || ""));
-    if (welcome.subline) wrap.appendChild(el("p", "wel-s", welcome.subline));
+    var title = (W && W.title) || welcome.headline || "";
+    var subtitle = (W && W.subtitle) || welcome.subline || "";
+    wrap.appendChild(el("h2", "wel-h", title));
+    if (subtitle) wrap.appendChild(el("p", "wel-s", subtitle));
+    if (W && W.textAlign === "center") wrap.style.textAlign = "center";
 
     if (boot.availability === "offline" && widget.offline && widget.offline.message) {
       var note = el("p", "wel-s", widget.offline.message);
       wrap.appendChild(note);
     }
 
-    var questions = welcome.suggestedQuestions || [];
+    var questions = (W && W.suggestedQuestions && W.suggestedQuestions.length ? W.suggestedQuestions : welcome.suggestedQuestions) || [];
     if (questions.length) {
       var list = el("div", "sug");
       attr(list, { role: "group", "aria-label": T.startConversation });
@@ -1624,6 +1683,14 @@ window.__gotchaShopifyChatApp = function (boot) {
   /**
    * The only place panel visibility changes. Everything else calls this.
    */
+  /**
+   * WELCOME or CONVERSATION. Drives layout entirely through CSS, so there
+   * is no scattered show/hide to fall out of sync with the state.
+   */
+  function setPanelView(view) {
+    panel.setAttribute("data-view", view);
+  }
+
   function setPanelOpen(open) {
     panel.setAttribute("data-state", open ? "open" : "closed");
     panel.hidden = !open;

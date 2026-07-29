@@ -36,6 +36,7 @@ const DIR = path.join(ROOT, "frontend/public/widget");
 const BOOTSTRAP = path.join(DIR, "gotcha-shopify-bootstrap.js");
 const CHAT_SRC = path.join(DIR, "gotcha-shopify-chat.js");
 const MANIFEST = path.join(DIR, "widget-manifest.json");
+const LIQUID = path.join(ROOT, "shopify-app/extensions/gotcha-chat/blocks/gotcha_chat.liquid");
 
 const checkOnly = process.argv.includes("--check");
 
@@ -61,6 +62,29 @@ if (!MARKER.test(bootstrapSource)) {
 const nextBootstrap = bootstrapSource.replace(MARKER, `var CHAT_BUNDLE = "${chatName}";`);
 const bootstrapHash = hash(Buffer.from(nextBootstrap));
 
+// The theme block names the exact bootstrap it was built against, for the
+// same reason the bootstrap names its chat bundle.
+//
+// This is what makes the chain immune to caches we do not control: the
+// edge in front of dev.gotcha.co.il rewrites the bootstrap's `no-cache`
+// to `max-age=14400` regardless of what the origin sends, so a stable
+// bootstrap URL can be four hours stale in a shopper's browser with
+// nothing we can do about it. A content-addressed URL cannot be stale,
+// because new bytes are a new URL.
+const LIQUID_MARKER = /gotcha-shopify-bootstrap\.js\?b=[0-9a-f]{12}|gotcha-shopify-bootstrap\.js\?b=BOOTSTRAP_HASH/;
+let liquidSource = fs.readFileSync(LIQUID, "utf8");
+if (!LIQUID_MARKER.test(liquidSource)) {
+  console.error(
+    "✗ gotcha_chat.liquid does not reference the bootstrap with a `?b=` stamp.\n" +
+      "  Without it the theme can serve a cached bootstrap indefinitely.",
+  );
+  process.exit(1);
+}
+const nextLiquid = liquidSource.replace(
+  LIQUID_MARKER,
+  `gotcha-shopify-bootstrap.js?b=${bootstrapHash}`,
+);
+
 const manifest = {
   chat: chatName,
   chatHash,
@@ -75,6 +99,7 @@ if (checkOnly) {
   if (!fs.existsSync(path.join(DIR, chatName))) problems.push(`missing hashed bundle ${chatName}`);
   const onDisk = fs.existsSync(MANIFEST) ? JSON.parse(fs.readFileSync(MANIFEST, "utf8")) : null;
   if (!onDisk || onDisk.chat !== chatName) problems.push("widget-manifest.json is stale");
+  if (nextLiquid !== liquidSource) problems.push("the theme block does not reference the current bootstrap hash");
   if (problems.length) {
     console.error("✗ widget build is out of date:");
     for (const p of problems) console.error("   • " + p);
@@ -95,7 +120,9 @@ for (const f of fs.readdirSync(DIR)) {
 fs.writeFileSync(path.join(DIR, chatName), chatSource);
 fs.writeFileSync(BOOTSTRAP, nextBootstrap);
 fs.writeFileSync(MANIFEST, JSON.stringify(manifest, null, 2) + "\n");
+fs.writeFileSync(LIQUID, nextLiquid);
 
 console.log(`✓ chat bundle   ${chatName}`);
 console.log(`✓ bootstrap     references it (hash ${bootstrapHash})`);
 console.log(`✓ manifest      ${path.relative(ROOT, MANIFEST)}`);
+console.log(`✓ theme block   loads bootstrap?b=${bootstrapHash}`);
