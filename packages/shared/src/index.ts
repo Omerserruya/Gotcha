@@ -450,7 +450,6 @@ export {
   sanitizeProductImageUrl,
   buildProductUrl,
   buildProductSnapshot,
-  resolveAvailability,
   signVisitorSession,
   verifyVisitorSession,
   newVisitorId,
@@ -561,6 +560,20 @@ export type {
   ChatActivationState,
   ChatActivationInput,
 } from "./lib/shopify-chat-app";
+
+// The App Proxy — the only path by which the storefront can PROVE which
+// customer is chatting. See lib/shopify-app-proxy.ts for why Liquid's
+// customer.id is not proof.
+export {
+  IDENTITY_TOKEN_TTL_SECONDS,
+  verifyAppProxySignature,
+  loggedInCustomerId,
+  signCustomerIdentity,
+  verifyCustomerIdentity,
+  verifiedCustomerExternalId,
+  isVerifiedCustomerExternalId,
+} from "./lib/shopify-app-proxy";
+export type { ShopifyCustomerIdentity } from "./lib/shopify-app-proxy";
 
 // Secrets
 export { getSecret, requireSecret, setSecretProvider, resetSecretProvider } from "./secrets";

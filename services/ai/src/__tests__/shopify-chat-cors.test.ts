@@ -298,11 +298,27 @@ describe("API CORS", () => {
       .set("Origin", STRANGER)
       .send({ shopDomain: SHOP });
 
-    for (const body of [JSON.stringify(ok.body), JSON.stringify(denied.body)]) {
+    for (const res of [ok, denied]) {
+      // The session token is deliberately opaque ciphertext, and its
+      // opacity is asserted where it is minted. Scanning random base64 for
+      // a two-character tenant id like "t1" finds one roughly 3% of runs
+      // and says nothing either way — so scan everything EXCEPT the token,
+      // and check the token by decrypting it instead.
+      const clone = JSON.parse(JSON.stringify(res.body ?? {}));
+      const token = clone?.data?.session?.token;
+      if (clone?.data?.session) delete clone.data.session;
+      const body = JSON.stringify(clone);
+
       expect(body).not.toContain("t1");
       expect(body).not.toContain("tenantId");
       expect(body).not.toContain("accessToken");
       expect(body).not.toContain("sfy_key");
+
+      if (token) {
+        // Readable only with the server's key — which is the point.
+        expect(token).not.toContain("t1");
+        expect(Buffer.from(token, "base64").toString("utf8")).not.toContain("tenantId");
+      }
     }
   });
 });

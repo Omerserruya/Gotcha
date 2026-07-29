@@ -115,7 +115,6 @@ function channelRow(mutate?: (c: any) => void) {
   config.shopDomain = SHOP;
   config.tenantIntegrationId = "ti1";
   config.enabled = true;
-  config.routing.aiAgentId = "agent1";
   mutate?.(config);
   return {
     id: "ch1",
@@ -249,25 +248,37 @@ describe("channel configuration", () => {
     H.channels.current = [channelRow()];
   });
 
-  it("refuses to enable a channel with nobody to answer it", async () => {
+  it("enables without a channel-level owner, because the graph routes", async () => {
+    // This used to be refused with NO_ROUTING_TARGET. The channel no longer
+    // owns an AI employee or a department: the Main Playbook decides, as it
+    // does for every other channel, and an unrouted conversation waits in
+    // the inbox for a human — which is the platform's normal behaviour, not
+    // a misconfiguration to block on.
     const res = await request(app())
       .put("/api/shopify-live-chat/channels/ch1")
-      .send({ config: { enabled: true, routing: { aiAgentId: null, departmentId: null } } });
-    expect(res.status).toBe(400);
-    expect(res.body.code).toBe("NO_ROUTING_TARGET");
+      .send({ config: { enabled: true } });
+    expect(res.status).toBe(200);
   });
 
-  it("refuses an AI employee or department from another workspace", async () => {
-    // (case 48) Ids alone are never enough; ownership is checked.
-    let res = await request(app())
+  it("cannot be pointed at another workspace's AI employee, because it cannot be pointed anywhere", async () => {
+    // (case 48) The old cross-tenant check existed because a channel could
+    // name an employee by id. It cannot any more — the ids are dropped on
+    // normalisation, so the whole class of mistake is gone rather than
+    // guarded.
+    const res = await request(app())
       .put("/api/shopify-live-chat/channels/ch1")
-      .send({ config: { routing: { aiAgentId: "agent-from-another-tenant" } } });
-    expect(res.status).toBe(400);
+      .send({
+        config: {
+          routing: { aiAgentId: "agent-from-another-tenant", departmentId: "dept-from-another-tenant" },
+        },
+      });
+    expect(res.status).toBe(200);
 
-    res = await request(app())
-      .put("/api/shopify-live-chat/channels/ch1")
-      .send({ config: { routing: { departmentId: "dept-from-another-tenant" } } });
-    expect(res.status).toBe(400);
+    const saved =
+      H.updateChannel.mock.calls.at(-1)?.[0]?.data?.platformMeta?.shopifyLiveChat ?? {};
+    expect(saved.routing).not.toHaveProperty("aiAgentId");
+    expect(saved.routing).not.toHaveProperty("departmentId");
+    expect(JSON.stringify(saved)).not.toContain("another-tenant");
   });
 
   it("normalises what it stores, so unsafe config never reaches a storefront", async () => {

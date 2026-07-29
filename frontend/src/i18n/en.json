@@ -4801,17 +4801,16 @@
       "appearance": "Appearance",
       "welcome": "Welcome experience",
       "questions": "Suggested questions",
-      "ai": "AI employee",
-      "routing": "Routing",
       "handoff": "Human handoff",
-      "hours": "Business hours",
+      "hours": "Availability",
       "privacy": "Privacy",
       "diagnostics": "Status",
       "launcher": "Launcher",
       "hero": "Welcome hero",
       "proactive": "Proactive engagement",
       "sounds": "Sounds",
-      "behavior": "Behaviour"
+      "behavior": "Behaviour",
+      "commerce": "Products & cart"
     },
     "shopDomain": "Shop domain",
     "currency": "Currency",
@@ -5041,7 +5040,11 @@
     "mediaRejected": "This address cannot be used. It must start with https:// and end in a supported file type.",
     "mediaHintImage": "https:// only. Up to {mb}MB, best at {w}x{h}. JPG, PNG, WebP, AVIF or GIF.",
     "mediaHintVideo": "https:// only. Up to {mb}MB and {secs} seconds. MP4 or WebM.",
-    "triggerLabel": "When to offer help"
+    "triggerLabel": "When to offer help",
+    "hoursMovedHint": "Opening hours are set once for your business and apply to every channel, so the widget always agrees with your AI employee about whether you are open.",
+    "hoursMovedLink": "Set your business hours",
+    "routingMovedHint": "Who answers a new chat is decided by your Main Playbook, the same as every other channel.",
+    "routingMovedLink": "Open the Main Playbook"
   },
   "shopifyInstall": {
     "title": "Set up GOTCHA Chat",

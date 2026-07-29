@@ -32,6 +32,13 @@ import {
   isOriginAllowed,
   projectVisitorMessage,
   publicUxConfig,
+  verifyAppProxySignature,
+  loggedInCustomerId,
+  signCustomerIdentity,
+  verifyCustomerIdentity,
+  verifiedCustomerExternalId,
+  getShopifyChatAppConfig,
+  normalizeShopifyShopDomain,
   MAX_VISITOR_MESSAGE_CHARS,
   type VisitorSessionPayload,
   type StorefrontContext,
@@ -270,10 +277,26 @@ router.post("/bootstrap", bootstrapLimiter, async (req: Request, res: Response) 
     const visitorId =
       existing && existing.channelAccountId === channel.id ? existing.visitorId : newVisitorId();
 
+    // Identity, if the shopper has one. The token can only have come from
+    // /proxy/identity, which only answers a request Shopify signed — so
+    // this is the one place a customer id may enter, and it never comes
+    // from the request body's own say-so.
+    const identity = verifyCustomerIdentity(
+      (req.body as any)?.identityToken,
+      channel.config.shopDomain!,
+    );
+    // An existing session that was already identified stays identified
+    // across page loads, so the shopper does not lose their thread while
+    // browsing.
+    const customerId =
+      identity?.customerId ??
+      (existing && existing.channelAccountId === channel.id ? existing.customerId ?? null : null);
+
     const sessionToken = signVisitorSession({
       tenantId: channel.tenantId,
       channelAccountId: channel.id,
       visitorId,
+      customerId,
       shopDomain: channel.config.shopDomain!,
     });
 
@@ -281,6 +304,9 @@ router.post("/bootstrap", bootstrapLimiter, async (req: Request, res: Response) 
       data: {
         session: { token: sessionToken },
         availability,
+        // Whether we know who this is. A boolean, never the id: the
+        // storefront has no use for it and every reason not to hold it.
+        identified: !!customerId,
         widget: publicWidgetConfig(channel, availability, productMessagingEnabled),
       },
     });
@@ -342,6 +368,57 @@ function publicWidgetConfig(
   };
 }
 
+// ─── GET /proxy/identity — Shopify vouches for the shopper ───
+//
+// Reached ONLY through Shopify's App Proxy: the browser calls the
+// merchant's own origin (`https://shop.myshopify.com/apps/gotcha-chat/
+// identity`) and Shopify forwards it here, appending
+// `logged_in_customer_id` and a `signature` made with our app secret.
+//
+// That is what makes the answer trustworthy. The browser never holds the
+// secret, so it cannot manufacture the signature — unlike Liquid's
+// `customer.id`, which any shopper can edit before it reaches us.
+//
+// A logged-out shopper is not an error: the request is still validly
+// signed, there is simply no id, and the widget carries on anonymously.
+router.get("/proxy/identity", bootstrapLimiter, async (req: Request, res: Response) => {
+  try {
+    const { clientSecret } = getShopifyChatAppConfig();
+    if (!verifyAppProxySignature(req.query as Record<string, string | string[] | undefined>, clientSecret)) {
+      // Uniform refusal: a bad signature, a missing secret and a replayed
+      // request all look the same from the storefront.
+      res.status(401).json({ error: "unavailable" });
+      return;
+    }
+
+    const shopRaw = req.query.shop;
+    const shopDomain = normalizeShopifyShopDomain(typeof shopRaw === "string" ? shopRaw : "");
+    if (!shopDomain) {
+      res.status(401).json({ error: "unavailable" });
+      return;
+    }
+
+    const customerId = loggedInCustomerId(req.query as Record<string, string | string[] | undefined>);
+    if (!customerId) {
+      // Signed, valid, and nobody is logged in. Say so plainly.
+      res.json({ data: { identified: false } });
+      return;
+    }
+
+    res.json({
+      data: {
+        identified: true,
+        // Short-lived and encrypted: the browser carries it straight back
+        // to /bootstrap and it is worthless anywhere else.
+        identityToken: signCustomerIdentity({ shopDomain, customerId }),
+      },
+    });
+  } catch (err) {
+    console.error("[shopify-chat] proxy identity error:", (err as Error)?.message);
+    res.status(500).json({ error: "unavailable" });
+  }
+});
+
 // ─── POST /conversation — create or resume ───────────────────
 
 router.post("/conversation", conversationLimiter, async (req: Request, res: Response) => {
@@ -374,15 +451,32 @@ router.post("/conversation", conversationLimiter, async (req: Request, res: Resp
  * or comes back an hour later expects the same thread — not a new one
  * with a fresh bot greeting.
  */
+/**
+ * The key a storefront conversation is filed under.
+ *
+ * A verified Shopify customer gets a namespaced, stable key, so their
+ * conversations follow them across browsers and devices and their history
+ * and summaries accrue to a person. An anonymous shopper keeps the
+ * per-browser visitor id, which is all we honestly know about them.
+ *
+ * Note what does NOT happen: an anonymous conversation is never adopted
+ * into an identity when the shopper later signs in. On a shared device
+ * that would hand one person's messages to whoever logs in next.
+ */
+function conversationKey(session: VisitorSessionPayload): string {
+  return session.customerId ? verifiedCustomerExternalId(session.customerId) : session.visitorId;
+}
+
 async function findOrCreateConversation(
   session: VisitorSessionPayload,
   channel: ShopifyLiveChatChannel,
 ) {
+  const externalId = conversationKey(session);
   const existing = await prisma.conversation.findFirst({
     where: {
       tenantId: session.tenantId,
       channel: "SHOPIFY_LIVE_CHAT" as any,
-      customerExternalId: session.visitorId,
+      customerExternalId: externalId,
       status: { not: "CLOSED" },
     },
     orderBy: { createdAt: "desc" },
@@ -394,11 +488,22 @@ async function findOrCreateConversation(
       tenantId: session.tenantId,
       channelAccountId: channel.id,
       channel: "SHOPIFY_LIVE_CHAT" as any,
-      customerExternalId: session.visitorId,
-      customerName: `Shopper on ${channel.config.shopDomain}`,
+      customerExternalId: externalId,
+      // Their actual name needs read_customers, which this app does not
+      // hold. "Signed-in" is the honest distinction we can draw today.
+      customerName: session.customerId
+        ? `Signed-in shopper on ${channel.config.shopDomain}`
+        : `Shopper on ${channel.config.shopDomain}`,
       status: "OPEN",
-      departmentId: channel.config.routing.departmentId,
-      assignedAiAgentId: channel.config.routing.aiAgentId,
+      // Deliberately NOT pre-assigned. The Main Playbook graph routes a
+      // new conversation exactly as it does for every other channel.
+      //
+      // Setting departmentId here was worse than duplication: the worker
+      // only routes when `messageCount <= 1 && !conversation.departmentId`,
+      // so a channel with a configured department silently skipped
+      // routeConversation entirely — the graph never ran, and which
+      // behaviour you got depended on whether a merchant had filled in a
+      // dropdown on the channel page.
     },
   });
 }

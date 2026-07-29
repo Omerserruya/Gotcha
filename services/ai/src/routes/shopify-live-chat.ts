@@ -20,7 +20,10 @@ import {
   FEATURES,
   normalizeShopifyLiveChatConfig,
   normalizeShopDomain,
-  resolveAvailability,
+  getRedis,
+  BUSINESS_HOURS_KEY,
+  parseBusinessHours,
+  evaluateBusinessHours,
   defaultShopifyLiveChatConfig,
   isFeatureEnabledForTenant,
   getShopifyChatAppConfig,
@@ -44,6 +47,22 @@ import {
 import { sendProductMessage } from "../services/shopify-commerce-message.service";
 
 const router = Router();
+
+/**
+ * The tenant's opening hours, as the storefront sees them.
+ *
+ * Reading the same configuration here is the point: a diagnostics panel
+ * that computed availability from a channel-local schedule would happily
+ * report "open" while the widget told shoppers the opposite.
+ */
+async function tenantAvailability(tenantId: string): Promise<"online" | "offline"> {
+  try {
+    const cfg = parseBusinessHours(await getRedis().get(BUSINESS_HOURS_KEY(tenantId)));
+    return evaluateBusinessHours(cfg).open ? "online" : "offline";
+  } catch {
+    return "online";
+  }
+}
 router.use(authenticate, resolveTenant, requireActiveTenant());
 
 // Theme Editor deep links are built from the CHAT app's identity, never
@@ -183,39 +202,17 @@ router.put(
       }
       const patch = { ...(req.body?.config ?? {}) };
 
-      // Routing targets must belong to THIS tenant. Without this an admin
-      // could point their widget at another workspace's AI employee by id.
-      if (patch.routing?.aiAgentId) {
-        const agent = await prisma.aIAgent.findFirst({
-          where: { id: String(patch.routing.aiAgentId), tenantId: req.tenantId! },
-          select: { id: true },
-        });
-        if (!agent) {
-          res.status(400).json({ error: "Unknown AI employee." });
-          return;
-        }
-      }
-      if (patch.routing?.departmentId) {
-        const dept = await prisma.department.findFirst({
-          where: { id: String(patch.routing.departmentId), tenantId: req.tenantId! },
-          select: { id: true },
-        });
-        if (!dept) {
-          res.status(400).json({ error: "Unknown department." });
-          return;
-        }
-      }
+      // The AI employee and department used to be set here, and had to be
+      // tenant-checked so an admin could not point their widget at another
+      // workspace's employee by id. Both now come from the Main Playbook
+      // graph, which is already tenant-scoped, so there is nothing left
+      // here to validate — or to get wrong.
 
-      // Enabling the widget requires an owner for the conversation —
-      // otherwise a shopper's first message lands nowhere.
+      // No owner gate any more. Every other channel lets a conversation
+      // land in the inbox unassigned when the graph declines to route it,
+      // and a human picks it up; the storefront now behaves the same.
       const merged = normalizeShopifyLiveChatConfig(patch, channel.config);
-      if (merged.enabled && !merged.routing.aiAgentId && !merged.routing.departmentId) {
-        res.status(400).json({
-          error: "Assign an AI employee or a department before enabling the widget.",
-          code: "NO_ROUTING_TARGET",
-        });
-        return;
-      }
+
 
       const updated = await saveChannelConfig(channel, patch);
       if (req.body?.displayName) {
@@ -331,17 +328,16 @@ router.get(
         },
         {
           id: "routing",
-          ok: !!(channel.config.routing.aiAgentId || channel.config.routing.departmentId),
-          state: channel.config.routing.aiAgentId || channel.config.routing.departmentId ? "ok" : "blocked",
-          title: "Conversation owner",
+          // Whether the Main Playbook can actually handle a storefront
+          // conversation is a property of the graph, not of this channel.
+          // Reporting it here would mean re-implementing the walker, so
+          // this states where the answer lives rather than guessing at it.
+          ok: true,
+          state: "info",
+          title: "Conversation routing",
           detail:
-            channel.config.routing.aiAgentId || channel.config.routing.departmentId
-              ? "New chats have an owner."
-              : "No AI employee or department is assigned.",
-          fix:
-            channel.config.routing.aiAgentId || channel.config.routing.departmentId
-              ? null
-              : "Pick an AI employee or a department under Routing.",
+            "New chats are routed by the Main Playbook, the same as every other channel.",
+          fix: null,
         },
         {
           id: "channel_enabled",
@@ -384,7 +380,8 @@ router.get(
         data: {
           status: blocking ? "blocked" : checks.some((c) => !c.ok) ? "degraded" : "healthy",
           blockingCheck: blocking?.id ?? null,
-          availability: resolveAvailability(channel.config.hours),
+          // Same tenant business hours the widget and the AI employee use.
+          availability: await tenantAvailability(channel.tenantId),
           lastHeartbeatAt: channel.config.install.lastHeartbeatAt,
           themeChanged: false,
           checks,

@@ -57,6 +57,11 @@
   // its URL, and every cache kept serving the old one.
   var CHAT_BUNDLE = "gotcha-shopify-chat.1d4f28625255.js";
 
+  // The App Proxy subpath on the MERCHANT's domain. Must match `subpath`
+  // and `prefix` in shopify.app.toml, or the request 404s and every
+  // shopper stays anonymous.
+  var PROXY_PATH = "/apps/" + (cfg.proxySubpath || "gotcha-chat");
+
   var IDENTITY = String(cfg.shopDomain || cfg.channelKey || "");
   var STORAGE_PREFIX = "gotcha_sfy_" + IDENTITY.slice(-12);
 
@@ -715,14 +720,54 @@
 
   // ── Go ──────────────────────────────────────────────────────────
 
+  /**
+   * Ask Shopify who is chatting, through the App Proxy.
+   *
+   * This goes to the MERCHANT's own origin, not ours — same-origin, no
+   * CORS, no cookies of ours involved. Shopify then calls us with a
+   * signature only it can produce, which is the whole reason the answer
+   * can be believed. Liquid's `customer.id` reaches us through this same
+   * browser and so proves nothing.
+   *
+   * Everything about this is best-effort. A merchant who has not set up
+   * the proxy, an older theme, a network blip: all resolve to "we do not
+   * know who this is", and the widget carries on anonymously. Identity is
+   * a bonus, never a prerequisite for chatting.
+   */
+  function fetchIdentity() {
+    if (!window.fetch) return Promise.resolve(null);
+    return new Promise(function (resolve) {
+      // Never let this hold up the widget. A proxy that hangs must cost
+      // the shopper nothing.
+      var settled = false;
+      var done = function (v) { if (!settled) { settled = true; resolve(v); } };
+      setTimeout(function () { done(null); }, 2500);
+
+      window
+        .fetch(PROXY_PATH + "/identity", {
+          method: "GET",
+          credentials: "same-origin",
+          headers: { accept: "application/json" },
+        })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (body) {
+          var data = body && body.data;
+          done(data && data.identified && data.identityToken ? data.identityToken : null);
+        })
+        .catch(function () { done(null); });
+    });
+  }
+
   function start() {
     var existingToken = store.get("session");
+    fetchIdentity().then(function (identityToken) {
     post("/api/shopify-chat/bootstrap", {
       shopDomain: cfg.shopDomain || undefined,
       publicKey: cfg.channelKey || undefined,
       context: context,
       themeId: context.themeId ? String(context.themeId) : null,
       sessionToken: existingToken || undefined,
+      identityToken: identityToken || undefined,
     })
       .then(function (res) {
         var data = res.data || {};
@@ -768,6 +813,7 @@
           console.warn("[gotcha-chat] bootstrap failed:", err.message);
         }
       });
+    });
   }
 
   function idle(fn) {

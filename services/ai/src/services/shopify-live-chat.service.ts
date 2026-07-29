@@ -23,8 +23,11 @@ import {
   normalizeShopifyLiveChatConfig,
   buildAllowedOrigins,
   isOriginAllowed,
-  resolveAvailability,
   normalizeShopDomain,
+  getRedis,
+  BUSINESS_HOURS_KEY,
+  parseBusinessHours,
+  evaluateBusinessHours,
   type ShopifyLiveChatConfig,
   type Availability,
 } from "@chatcenter/shared";
@@ -178,6 +181,31 @@ export type BootstrapResolution =
  * caller — the discrimination here exists for our logs, not for the
  * storefront.
  */
+/**
+ * Is the business open right now?
+ *
+ * Read from the TENANT's business hours — the same configuration the AI
+ * employee, the incoming worker and the settings page use. The channel
+ * used to carry its own week/timezone, which meant a merchant kept two
+ * schedules and only found out they disagreed when a shopper was told the
+ * store was closed while everyone else thought it open.
+ *
+ * A store has one set of opening hours. Where a shopper happens to be
+ * chatting from is not one of its inputs.
+ */
+async function resolveTenantAvailability(tenantId: string): Promise<Availability> {
+  try {
+    const cfg = parseBusinessHours(await getRedis().get(BUSINESS_HOURS_KEY(tenantId)));
+    return evaluateBusinessHours(cfg).open ? "online" : "offline";
+  } catch (err: any) {
+    // Config store unreachable → answer as open, matching what the AI
+    // employee does. A widget that says "we are closed" because Redis
+    // blinked is worse than one that answers out of hours.
+    console.warn("[shopify-chat] business-hours read failed (treating as open):", err?.message);
+    return "online";
+  }
+}
+
 export async function resolveForBootstrap(input: {
   publicKey?: unknown;
   shopDomain?: unknown;
@@ -273,7 +301,7 @@ export async function resolveForBootstrap(input: {
   return {
     ok: true,
     channel,
-    availability: resolveAvailability(channel.config.hours),
+    availability: await resolveTenantAvailability(channel.tenantId),
     allowedOrigins,
     productMessagingEnabled:
       productEntitled && channel.config.commerce.productMessagingEnabled && coreConnected,

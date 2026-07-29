@@ -95,7 +95,6 @@ function channelRow(mutate?: (c: any) => void) {
   const config = defaultShopifyLiveChatConfig();
   config.shopDomain = SHOP;
   config.enabled = true;
-  config.routing.aiAgentId = "agent1";
   mutate?.(config);
   return {
     id: "ch1",

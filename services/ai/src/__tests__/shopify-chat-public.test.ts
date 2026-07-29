@@ -91,7 +91,6 @@ function channel(overrides: Record<string, any> = {}) {
   config.shopDomain = SHOP;
   config.tenantIntegrationId = "ti1";
   config.enabled = true;
-  config.routing.aiAgentId = "agent1";
   config.install.storefrontDomains = ["shop.example.com"];
   Object.assign(config, overrides.config ?? {});
   return {
@@ -355,7 +354,13 @@ describe("conversation", () => {
     const created = H.createConversation.mock.calls[0][0].data;
     expect(created.channel).toBe("SHOPIFY_LIVE_CHAT");
     expect(created.customerExternalId).toBe("sfyv_visitor");
-    expect(created.assignedAiAgentId).toBe("agent1");
+    // Deliberately UNASSIGNED. Pre-assigning a department here made the
+    // incoming worker skip routeConversation entirely (it only routes when
+    // `!conversation.departmentId`), so the Main Playbook never ran for
+    // storefront chats. The graph owns this decision now, as it does on
+    // every other channel.
+    expect(created.assignedAiAgentId).toBeUndefined();
+    expect(created.departmentId).toBeUndefined();
   });
 
   it("resumes the existing conversation instead of starting a new one", async () => {

@@ -52,8 +52,9 @@ const SECTIONS = [
   "proactive",
   "sounds",
   "behavior",
-  "ai",
-  "routing",
+  "commerce",
+  // "ai" and "routing" are gone: the Main Playbook decides who handles a
+  // conversation, on this channel as on every other one.
   "handoff",
   "hours",
   "privacy",
@@ -910,18 +911,8 @@ export function ShopifyLiveChatSettings() {
             </>
           )}
 
-          {section === "ai" && (
-            <Card title={t("shopifyChat.section.ai")}>
-              <Field label={t("shopifyChat.aiEmployee")} hint={t("shopifyChat.aiEmployeeHint")}>
-                <Select
-                  value={draft.routing.aiAgentId || ""}
-                  onChange={(v) => patch("routing.aiAgentId", v || null)}
-                  options={[
-                    { value: "", label: t("shopifyChat.noAiEmployee") },
-                    ...agents.map((a) => ({ value: a.id, label: a.name })),
-                  ]}
-                />
-              </Field>
+          {section === "commerce" && (
+            <Card title={t("shopifyChat.section.commerce")}>
               <Toggle
                 label={t("shopifyChat.productMessaging")}
                 hint={t("shopifyChat.productMessagingHint")}
@@ -949,21 +940,6 @@ export function ShopifyLiveChatSettings() {
             </Card>
           )}
 
-          {section === "routing" && (
-            <Card title={t("shopifyChat.section.routing")}>
-              <Field label={t("shopifyChat.department")} hint={t("shopifyChat.departmentHint")}>
-                <Select
-                  value={draft.routing.departmentId || ""}
-                  onChange={(v) => patch("routing.departmentId", v || null)}
-                  options={[
-                    { value: "", label: t("shopifyChat.noDepartment") },
-                    ...departments.map((d) => ({ value: d.id, label: d.name })),
-                  ]}
-                />
-              </Field>
-            </Card>
-          )}
-
           {section === "handoff" && (
             <Card title={t("shopifyChat.section.handoff")}>
               <Toggle
@@ -982,42 +958,20 @@ export function ShopifyLiveChatSettings() {
 
           {section === "hours" && (
             <Card title={t("shopifyChat.section.hours")}>
-              <Toggle
-                label={t("shopifyChat.hoursEnabled")}
-                hint={t("shopifyChat.hoursEnabledHint")}
-                checked={!!draft.hours.enabled}
-                onChange={(v) => patch("hours.enabled", v)}
-              />
-              {draft.hours.enabled && (
-                <>
-                  <Field label={t("shopifyChat.timezone")}>
-                    <input
-                      value={draft.hours.timezone}
-                      onChange={(e) => patch("hours.timezone", e.target.value)}
-                      placeholder="Asia/Jerusalem"
-                      className="w-full text-sm px-3 py-2 border border-gray-200 rounded-lg"
-                    />
-                  </Field>
-                  <div className="space-y-2">
-                    {DAYS.map((d) => (
-                      <div key={d} className="flex items-center gap-2">
-                        <span className="w-24 text-xs text-gray-500">{t(`shopifyChat.day.${d}`)}</span>
-                        <input
-                          value={(draft.hours.week?.[d] || []).join(", ")}
-                          onChange={(e) => {
-                            const ranges = e.target.value
-                              .split(",")
-                              .map((r) => r.trim())
-                              .filter(Boolean);
-                            patch("hours.week", { ...(draft.hours.week || {}), [d]: ranges });
-                          }}
-                          placeholder="09:00-17:00"
-                          className="flex-1 text-sm px-3 py-1.5 border border-gray-200 rounded-lg font-mono"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                  <Field label={t("shopifyChat.offlineBehavior")}>
+              {/* The schedule itself lives with the business, not with this
+                  channel. A widget that kept its own week silently
+                  disagreed with the AI employee about whether the store
+                  was open. */}
+              <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-600">
+                <p>{t("shopifyChat.hoursMovedHint")}</p>
+                <a
+                  href="/settings/business-hours"
+                  className="mt-1 inline-block text-primary-600 hover:text-primary-700"
+                >
+                  {t("shopifyChat.hoursMovedLink")} →
+                </a>
+              </div>
+              <Field label={t("shopifyChat.offlineBehavior")}>
                     <Select
                       value={draft.hours.offlineBehavior}
                       onChange={(v) => patch("hours.offlineBehavior", v)}
@@ -1037,8 +991,6 @@ export function ShopifyLiveChatSettings() {
                       className="w-full text-sm px-3 py-2 border border-gray-200 rounded-lg"
                     />
                   </Field>
-                </>
-              )}
             </Card>
           )}
 

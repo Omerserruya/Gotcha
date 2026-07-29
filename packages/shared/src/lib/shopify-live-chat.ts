@@ -175,10 +175,10 @@ export interface ShopifyLiveChatWelcome {
 }
 
 export interface ShopifyLiveChatHours {
-  enabled: boolean;
-  timezone: string;
-  /** 0 = Sunday … 6 = Saturday. Each entry is a list of HH:MM-HH:MM ranges. */
-  week: Record<string, string[]>;
+  // enabled / timezone / week used to live here, duplicating the tenant's
+  // business hours with an incompatible shape. WHEN the store is open is
+  // now answered in exactly one place (lib/business-hours.ts); what the
+  // WIDGET says while it is closed is storefront copy, and stays here.
   offlineBehavior: OfflineBehavior;
   offlineMessage: string;
   /** Offline lead form asks for these fields only. */
@@ -187,9 +187,12 @@ export interface ShopifyLiveChatHours {
 }
 
 export interface ShopifyLiveChatRouting {
-  aiAgentId: string | null;
-  departmentId: string | null;
-  /** Show "talk to a human" affordance in the widget. */
+  /**
+   * Show "talk to a human" affordance in the widget.
+   *
+   * Genuinely per-channel: a storefront widget may reasonably offer a
+   * person when an unattended channel does not.
+   */
   allowHumanHandoff: boolean;
   /** Whether a human may hand the conversation back to the AI employee. */
   allowReturnToAi: boolean;
@@ -285,17 +288,12 @@ export function defaultShopifyLiveChatConfig(): ShopifyLiveChatConfig {
       suggestedQuestions: [...DEFAULT_SUGGESTED_QUESTIONS],
     },
     hours: {
-      enabled: false,
-      timezone: "UTC",
-      week: {},
       offlineBehavior: "ai",
       offlineMessage: "We are away right now. Leave a message and we will get back to you.",
       offlineFormFields: ["name", "email", "message"],
       offlineConsentText: "",
     },
     routing: {
-      aiAgentId: null,
-      departmentId: null,
       allowHumanHandoff: true,
       allowReturnToAi: true,
     },
@@ -502,9 +500,6 @@ export function normalizeShopifyLiveChatConfig(
       suggestedQuestions: questions,
     },
     hours: {
-      enabled: bool(h.enabled, base.hours.enabled),
-      timezone: isValidTimezone(h.timezone) ? h.timezone : base.hours.timezone,
-      week: "week" in h ? sanitizeWeek(h.week) : base.hours.week,
       offlineBehavior: OFFLINE_BEHAVIORS.includes(h.offlineBehavior)
         ? h.offlineBehavior
         : base.hours.offlineBehavior,
@@ -516,11 +511,11 @@ export function normalizeShopifyLiveChatConfig(
         : base.hours.offlineConsentText,
     },
     routing: {
-      aiAgentId: typeof r.aiAgentId === "string" && r.aiAgentId ? r.aiAgentId : ("aiAgentId" in r ? null : base.routing.aiAgentId),
-      departmentId:
-        typeof r.departmentId === "string" && r.departmentId
-          ? r.departmentId
-          : ("departmentId" in r ? null : base.routing.departmentId),
+      // aiAgentId and departmentId used to live here. They are dropped on
+      // read rather than migrated: the Main Playbook graph decides who
+      // handles a conversation, on this channel as on every other one, so
+      // there is nowhere for an old value to go. Leaving them in the blob
+      // would invite something to start reading them again.
       allowHumanHandoff: bool(r.allowHumanHandoff, base.routing.allowHumanHandoff),
       allowReturnToAi: bool(r.allowReturnToAi, base.routing.allowReturnToAi),
     },
@@ -573,56 +568,12 @@ export function readShopifyLiveChatConfig(platformMeta: unknown): ShopifyLiveCha
 
 export type Availability = "online" | "offline";
 
-/**
- * Is the merchant inside business hours right now?
- *
- * Hours disabled → always online. Hours enabled with no ranges for today
- * → offline. Computed in the merchant's timezone via Intl so there is no
- * dependency and no server-locale surprise.
- */
-export function resolveAvailability(
-  hours: ShopifyLiveChatHours,
-  now: Date = new Date(),
-): Availability {
-  if (!hours.enabled) return "online";
-  let parts: Intl.DateTimeFormatPart[];
-  try {
-    parts = new Intl.DateTimeFormat("en-US", {
-      timeZone: hours.timezone,
-      weekday: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    }).formatToParts(now);
-  } catch {
-    // A timezone that stopped resolving must not silently mark the store
-    // open — fail to the safe side and answer as offline.
-    return "offline";
-  }
-  const weekdayMap: Record<string, string> = {
-    Sun: "0", Mon: "1", Tue: "2", Wed: "3", Thu: "4", Fri: "5", Sat: "6",
-  };
-  const weekday = weekdayMap[parts.find((p) => p.type === "weekday")?.value ?? ""] ?? null;
-  if (weekday == null) return "offline";
-  const hh = parts.find((p) => p.type === "hour")?.value ?? "00";
-  const mm = parts.find((p) => p.type === "minute")?.value ?? "00";
-  const minutes = parseInt(hh, 10) * 60 + parseInt(mm, 10);
+// resolveAvailability(hours) used to live here and evaluated the channel's
+// own week/timezone. Availability is now answered from the TENANT's
+// business hours (lib/business-hours.ts) — one schedule for the whole
+// business, evaluated in one place, so the widget can never disagree with
+// the AI employee about whether the store is open.
 
-  const ranges = hours.week[weekday] ?? [];
-  for (const range of ranges) {
-    const m = RANGE_RE.exec(range);
-    if (!m) continue;
-    const start = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
-    const end = parseInt(m[3], 10) * 60 + parseInt(m[4], 10);
-    if (start <= end) {
-      if (minutes >= start && minutes < end) return "online";
-    } else {
-      // Overnight range (e.g. 22:00-02:00).
-      if (minutes >= start || minutes < end) return "online";
-    }
-  }
-  return "offline";
-}
 
 // ─── Visitor sessions ────────────────────────────────────────
 
@@ -631,8 +582,13 @@ export interface VisitorSessionPayload {
   v: 1;
   tenantId: string;
   channelAccountId: string;
-  /** Stable per-browser id — also the Conversation.customerExternalId. */
+  /** Stable per-browser id — the Conversation.customerExternalId when anonymous. */
   visitorId: string;
+  /**
+   * Shopify's customer id, present ONLY when Shopify itself vouched for it
+   * through the App Proxy. Never taken from anything the browser says.
+   */
+  customerId?: string | null;
   shopDomain: string;
   /** Issued at / expires at, epoch seconds. */
   iat: number;
@@ -698,6 +654,7 @@ export function signVisitorSession(
     tenantId: input.tenantId,
     channelAccountId: input.channelAccountId,
     visitorId: input.visitorId,
+    customerId: input.customerId ?? null,
     shopDomain: input.shopDomain,
     iat,
     exp: iat + (input.ttlSeconds ?? VISITOR_SESSION_TTL_SECONDS),

@@ -4802,17 +4802,16 @@
       "appearance": "עיצוב",
       "welcome": "חוויית הפתיחה",
       "questions": "שאלות מוצעות",
-      "ai": "עובד AI",
-      "routing": "ניתוב",
       "handoff": "מעבר לנציג",
-      "hours": "שעות פעילות",
+      "hours": "זמינות",
       "privacy": "פרטיות",
       "diagnostics": "סטטוס",
       "launcher": "כפתור הצ׳אט",
       "hero": "מסך הפתיחה",
       "proactive": "פנייה יזומה",
       "sounds": "צלילים",
-      "behavior": "התנהגות"
+      "behavior": "התנהגות",
+      "commerce": "מוצרים ועגלה"
     },
     "shopDomain": "כתובת החנות",
     "currency": "מטבע",
@@ -5042,7 +5041,11 @@
     "mediaRejected": "לא ניתן להשתמש בכתובת הזו. היא חייבת להתחיל ב-https:// ולהסתיים בסוג קובץ נתמך.",
     "mediaHintImage": "https:// בלבד. עד {mb}MB, מומלץ {w}x{h}. JPG, PNG, WebP, AVIF או GIF.",
     "mediaHintVideo": "https:// בלבד. עד {mb}MB ו-{secs} שניות. MP4 או WebM.",
-    "triggerLabel": "מתי להציע עזרה"
+    "triggerLabel": "מתי להציע עזרה",
+    "hoursMovedHint": "שעות הפעילות נקבעות פעם אחת לעסק וחלות על כל הערוצים, כך שהווידג׳ט תמיד מסכים עם הנציג החכם על השאלה אם אתם פתוחים.",
+    "hoursMovedLink": "הגדרת שעות הפעילות",
+    "routingMovedHint": "מי עונה לשיחה חדשה נקבע ב-Main Playbook, בדיוק כמו בכל ערוץ אחר.",
+    "routingMovedLink": "פתיחת ה-Main Playbook"
   },
   "shopifyInstall": {
     "title": "התקנת GOTCHA Chat",
