@@ -62,6 +62,66 @@ const DEVICE = {
   mobile: { width: 390, height: 640 },
 };
 
+/**
+ * Turn a draft CHANNEL config into the PUBLIC config the widget expects.
+ *
+ * These are two different shapes and it is easy to miss, because they
+ * share several field names. The storefront never sees a channel config:
+ * the server projects it in `publicWidgetConfig` — flattening the
+ * business-hours block into `offline`, and deriving a `features` block
+ * from `routing` and `commerce` that exists nowhere in the stored config.
+ *
+ * Handing the raw draft straight to the widget is what produced
+ * `Cannot read properties of undefined (reading 'humanHandoff')` and a
+ * preview that rendered nothing at all.
+ *
+ * The merchant's entitlements are not known here, so product messaging is
+ * assumed available — the preview shows what the configuration WOULD do,
+ * and the server remains the authority on what a given plan may actually
+ * use.
+ */
+export function previewWidgetConfig(
+  draft: any,
+  opts: { language: "en" | "he"; offline: boolean },
+) {
+  const appearance = draft?.appearance ?? {};
+  const welcome = draft?.welcome ?? {};
+  const hours = draft?.hours ?? {};
+  const routing = draft?.routing ?? {};
+  const commerce = draft?.commerce ?? {};
+  const privacy = draft?.privacy ?? {};
+
+  return {
+    appearance: {
+      ...appearance,
+      // The preview's own language control, not the merchant's setting:
+      // these two switches are what the control is FOR.
+      language: opts.language,
+      direction: opts.language === "he" ? "rtl" : "ltr",
+    },
+    welcome: {
+      headline: welcome.headline ?? "",
+      subline: welcome.subline ?? "",
+      assistantName: welcome.assistantName ?? "",
+      suggestedQuestions: welcome.suggestedQuestions ?? [],
+    },
+    offline: {
+      active: opts.offline,
+      message: hours.offlineMessage ?? "",
+      behavior: hours.offlineBehavior ?? "ai",
+      formFields: hours.offlineFormFields ?? [],
+      consentRequired: !!privacy.requireOfflineConsent,
+      consentText: hours.offlineConsentText ?? "",
+    },
+    features: {
+      humanHandoff: !!routing.allowHumanHandoff,
+      productMessaging: true,
+      addToCart: !!commerce.addToCartEnabled,
+    },
+    ux: draft?.ux ?? undefined,
+  };
+}
+
 /** Messages that put the widget into the state the merchant asked to see. */
 function messagesFor(state: PreviewState, products: ProductView[], copy: (typeof COPY)["en"]) {
   const now = new Date().toISOString();
@@ -136,10 +196,12 @@ export function WidgetPreview({ config, device, state, language, sampleProducts,
       doc.body.appendChild(host);
       const shadow = host.attachShadow({ mode: "open" });
 
-      const widget = JSON.parse(configKey);
-      const appearance = { ...(widget.appearance ?? {}), language, direction: language === "he" ? "rtl" : "ltr" };
-      const offline = { ...(widget.offline ?? {}), active: state === "offline" };
+      const draft = JSON.parse(configKey);
       const msgs = messagesFor(state, products, copy);
+      const widget = previewWidgetConfig(draft, {
+        language,
+        offline: state === "offline",
+      });
 
       const app = factory({
         api: "", assets: "",
@@ -157,7 +219,9 @@ export function WidgetPreview({ config, device, state, language, sampleProducts,
         },
         shadow,
         setUnread: () => {}, onOpened: () => {}, onClosed: () => {},
-        widget: { ...widget, appearance, offline },
+        // Sounds are never wired in the preview: a settings page that
+        // chimes at the merchant while they type is its own bug.
+        widget,
       });
       app.open();
     };

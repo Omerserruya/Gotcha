@@ -49,8 +49,8 @@ function plan(over: Partial<PublicPlan> = {}): PublicPlan {
       volume("voice_25", "VOICE", 25, 7500, "249.00"),
     ],
     estimate: {
-      chat: { credits: 2000, monthly: 250, daily: 10 },
-      voice: { credits: 5000, monthly: 250, daily: 10 },
+      chat: { credits: 2000, monthly: 250, daily: 10, basis: "DECLARED_VOLUME", creditsPerUnit: 8 },
+      voice: { credits: 5000, monthly: 250, daily: 10, basis: "DECLARED_VOLUME", creditsPerUnit: 20 },
       totalInteractions: 500,
       pricePerChat: "3.00", pricePerCall: "3.00", pricePerInteraction: "3.00",
       currency: "USD",
@@ -153,6 +153,55 @@ describe("price per conversation", () => {
     const q = quoteSelection(chatOnly, { chat: "chat_10", voice: null });
     expect(q.estimatedCallsMonthly).toBe(0);
     expect(q.pricePerCallMinor).toBeNull();
+  });
+});
+
+/**
+ * The summary sits directly under the selector the visitor just moved. If it
+ * answers with a different number, the page argues with itself - which is what
+ * happened while capacity was re-derived from credits divided by the global
+ * credits-per-conversation ratio.
+ */
+describe("the summary repeats the volume the visitor chose", () => {
+  // A plan whose credit allowance does NOT divide into what it advertises:
+  // 750 credits against 10 conversations a day is 3 credits each, not 8.
+  const mismatched = () =>
+    plan({
+      includedCredits: 750,
+      creditSplit: { chat: 750, voice: 0 },
+      voiceVolumeEnabled: false,
+      chatOptions: [volume("chat_10", "CHAT", 10, 0, "0.00", true), volume("chat_50", "CHAT", 50, 3000, "80.00")],
+      voiceOptions: [],
+    });
+
+  it("shows the chosen conversations per day, not credits over the ratio", () => {
+    const q = quoteSelection(mismatched(), { chat: "chat_10", voice: null });
+    expect(q.estimatedChatsDaily).toBe(10);
+    expect(q.estimatedChatsMonthly).toBe(250); // NOT 750 / 8 = 94
+    expect(q.chatBasis).toBe("DECLARED_VOLUME");
+  });
+
+  it("follows the selector when the visitor moves it", () => {
+    const q = quoteSelection(mismatched(), { chat: "chat_50", voice: null });
+    expect(q.estimatedChatsDaily).toBe(50);
+    expect(q.estimatedChatsMonthly).toBe(1250);
+  });
+
+  it("prices per conversation against the volume sold", () => {
+    const q = quoteSelection(mismatched(), { chat: "chat_10", voice: null });
+    // $1,499 over the 250 it sells.
+    expect(formatMinor(q.pricePerChatMinor!, "USD", 2)).toBe("$6.00");
+  });
+
+  it("falls back to the ratio only where nothing is sold", () => {
+    const fixed = plan({
+      creditSplit: { chat: 2000, voice: 0 },
+      chatVolumeEnabled: false,
+      voiceVolumeEnabled: false,
+    });
+    const q = quoteSelection(fixed, { chat: null, voice: null });
+    expect(q.chatBasis).toBe("CREDIT_RATIO");
+    expect(q.estimatedChatsMonthly).toBe(250); // 2,000 / 8
   });
 });
 

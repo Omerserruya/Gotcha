@@ -68,6 +68,8 @@ async function boot(
     ux?: any;
     /** Merchant branding, so accent-colour behaviour can be tested with a real second brand. */
     appearance?: Record<string, any>;
+    /** Wire the visitor mute control, which only renders when the host offers it. */
+    sounds?: boolean;
   } = {},
 ): Promise<Harness> {
   const host = document.createElement("div");
@@ -107,6 +109,17 @@ async function boot(
     setUnread: vi.fn(),
     onOpened: vi.fn(),
     onClosed: vi.fn(),
+    // The mute button is offered only when the bootstrap can actually
+    // mute anything, so the widget checks for these before rendering it.
+    ...(options.sounds
+      ? (() => {
+          let muted = false;
+          return {
+            visitorMuted: () => muted,
+            setVisitorMuted: (v: boolean) => { muted = v; },
+          };
+        })()
+      : {}),
     widget: {
       appearance: {
         ...{
@@ -174,9 +187,9 @@ describe("welcome polish", () => {
   // 44 it was the loudest thing in the hero.
   it("keeps a 44px target while the visible chip is 30px", async () => {
     const sheet = css((await boot({ messages: [], ux: hero() })).shadow);
-    expect(sheet).toContain(".x{width:44px;height:44px;min-width:44px;min-height:44px;");
-    expect(sheet).toContain(".x::before{content:'';position:absolute;width:30px;height:30px;");
-    expect(sheet).toContain(".x svg{position:relative;width:15px;height:15px;");
+    expect(sheet).toContain(".x,.mute{width:44px;height:44px;min-width:44px;min-height:44px;");
+    expect(sheet).toContain(".x::before,.mute::before{content:'';position:absolute;width:30px;height:30px;");
+    expect(sheet).toContain(".x svg,.mute svg{position:relative;width:15px;height:15px;");
   });
 
   it("gives the chip its own contrast over a photograph", async () => {
@@ -186,7 +199,7 @@ describe("welcome polish", () => {
     expect(sheet).toContain(".panel[data-view='welcome'] .x::before{background:rgba(15,23,42,.32);");
     expect(sheet).toContain("backdrop-filter:blur(8px)");
     // ...and stays quiet everywhere else.
-    expect(sheet).toContain(".x::before{content:'';position:absolute;width:30px;height:30px;border-radius:50%;");
+    expect(sheet).toContain(".x::before,.mute::before{content:'';position:absolute;width:30px;height:30px;border-radius:50%;");
     expect(sheet).toContain("background:rgba(15,23,42,.06);");
   });
 
@@ -394,6 +407,45 @@ describe("panel layout", () => {
     const x = shadow.querySelector('[data-act="close"]')!;
     expect(x).toBeTruthy();
     expect((x.parentElement as HTMLElement).className).toContain("panel");
+  });
+
+  it("does not stack the mute button on top of the close button", async () => {
+    // They look identical and must not be positioned identically. Sharing
+    // one class meant sharing `position:absolute`, which put the mute
+    // button exactly on the close button on a live storefront.
+    const h = await boot({
+      messages: [],
+      ux: { sounds: { enabled: true } },
+      sounds: true,
+    });
+    const sheet = css(h.shadow);
+    // The look is shared...
+    expect(sheet).toContain(".x,.mute{width:44px;height:44px;");
+    expect(sheet).toContain(".x::before,.mute::before{content:'';position:absolute;width:30px;height:30px;");
+    // ...the placement is not. Only the close button leaves the flow.
+    expect(sheet).toContain(".x{position:absolute;top:var(--s2);");
+    expect(sheet).toContain(".mute{flex:0 0 auto;}");
+    expect(sheet).not.toMatch(/\.mute\{[^}"]*position:absolute/);
+  });
+
+  it("reserves the close button's corner with logical padding", async () => {
+    // A physical `padding-right` reserves the wrong corner in RTL, where
+    // the close button is on the left — which is how the mute button ended
+    // up underneath it again in Hebrew.
+    const sheet = css((await boot({ messages: [] })).shadow);
+    expect(sheet).toContain("padding-block:6px;padding-inline:14px 56px;");
+    expect(sheet).not.toContain("padding:6px 56px 6px 14px");
+  });
+
+  it("gives the mute button its own stable hook", async () => {
+    const h = await boot({ messages: [], ux: { sounds: { enabled: true } }, sounds: true });
+    const mute = h.shadow.querySelector('[data-act="mute"]');
+    const close = h.shadow.querySelector('[data-act="close"]');
+    expect(mute).toBeTruthy();
+    expect(close).toBeTruthy();
+    expect(mute).not.toBe(close);
+    // A verification script once clicked mute believing it was close.
+    expect((mute as HTMLElement).className).not.toContain("x");
   });
 
   it("still closes from the welcome screen, where there is no header", async () => {
@@ -1188,7 +1240,7 @@ describe("close button ergonomics", () => {
   it("meets the 44x44 touch floor", () => {
     // Measured at 34x34 on a real storefront. It is the shopper's way
     // out of the widget; it should not be the fiddliest control in it.
-    expect(WIDGET_SOURCE).toMatch(/\.x\{width:44px;height:44px;min-width:44px;min-height:44px/);
+    expect(WIDGET_SOURCE).toMatch(/\.x,\.mute\{width:44px;height:44px;min-width:44px;min-height:44px/);
   });
 
   it("is taken out of the panel's flow so it cannot push the hero down", () => {
@@ -1196,7 +1248,7 @@ describe("close button ergonomics", () => {
     // in the welcome view). As a flex item of that column it would occupy
     // a 44px row — which is exactly the white gap that appeared above the
     // hero when a second `.x` rule reset it to position:relative.
-    expect(WIDGET_SOURCE).toContain('"  position:absolute;top:var(--s2);"');
+    expect(WIDGET_SOURCE).toContain('".x{position:absolute;top:var(--s2);"');
     // ...and no other `.x` rule may quietly put it back into flow.
     const xRules = WIDGET_SOURCE.match(/\.x\{[^}"]*/g) ?? [];
     expect(xRules.some((r) => r.includes("position:relative"))).toBe(false);
@@ -1205,7 +1257,7 @@ describe("close button ergonomics", () => {
   it("has a visible focus style and a non-capturing icon", () => {
     // The ring goes on the visible chip, not on the 44px target — an
     // outline around the invisible hit area looks like a stray rectangle.
-    expect(WIDGET_SOURCE).toContain('".x:focus-visible::before{outline:2px solid "');
+    expect(WIDGET_SOURCE).toContain('".x:focus-visible::before,.mute:focus-visible::before{outline:2px solid "');
     // The svg must not swallow the click and defeat the hit area.
     expect(WIDGET_SOURCE).toContain("stroke-width:2.1;stroke-linecap:round;pointer-events:none;}");
   });

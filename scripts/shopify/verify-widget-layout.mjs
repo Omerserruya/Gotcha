@@ -90,8 +90,17 @@ async function measure({ width, height, messages }) {
           : { data: {} },
         shadow,
         setUnread: () => {}, onOpened: () => {}, onClosed: () => {},
+        // The mute control renders only when the host can actually mute
+        // something. Without these it is absent, and the overlap it once
+        // caused with the close button cannot be measured at all.
+        visitorMuted: () => false,
+        setVisitorMuted: () => {},
         widget: cfg,
       });
+      // Kept on window so a failing check can report whether the close
+      // HANDLER ran, which distinguishes "the click never landed" from
+      // "it landed and something re-opened the panel".
+      window.__gotchaChatApp = app;
       app.open();
     },
     [widget, messages],
@@ -132,6 +141,26 @@ async function measure({ width, height, messages }) {
         ? window.innerHeight
         : Math.min(640, window.innerHeight - 120),
       close: box('[data-act="close"]'), closeVisible: vis('[data-act="close"]'),
+      mute: box('[data-act="mute"]'), muteVisible: vis('[data-act="mute"]'),
+      // Two controls that look alike must not sit in the same place. The
+      // real question is what a shopper's tap actually lands on.
+      controlsOverlap: (() => {
+        const c = s.querySelector('[data-act="close"]');
+        const m = s.querySelector('[data-act="mute"]');
+        if (!c || !m) return false;
+        const seen = (el) => { const cs = getComputedStyle(el); const r = el.getBoundingClientRect();
+          return cs.display !== "none" && cs.visibility !== "hidden" && r.width > 0; };
+        if (!seen(c) || !seen(m)) return false;
+        const a = c.getBoundingClientRect(), b = m.getBoundingClientRect();
+        return !(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top);
+      })(),
+      topmostAtCloseCentre: (() => {
+        const c = s.querySelector('[data-act="close"]');
+        if (!c) return null;
+        const r = c.getBoundingClientRect();
+        const hit = s.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        return hit ? hit.getAttribute("data-act") : null;
+      })(),
       suggestions: Array.from(s.querySelectorAll(".sug-b"))
         .filter((b) => !b.hidden)
         .map((b) => { const r = b.getBoundingClientRect(); return { bottom: r.bottom, height: r.height }; }),
@@ -187,11 +216,13 @@ const closedNow = await page.evaluate(() => {
   const s = document.getElementById("gotcha-chat-root").shadowRoot;
   s.querySelector('[data-act="close"]').click();
   const p = s.querySelector(".panel");
-  return { display: getComputedStyle(p).display, state: p.getAttribute("data-state"), height: p.getBoundingClientRect().height };
+  const dbg = window.__gotchaChatApp && window.__gotchaChatApp.debugState ? window.__gotchaChatApp.debugState() : {};
+  return { display: getComputedStyle(p).display, state: p.getAttribute("data-state"),
+    height: p.getBoundingClientRect().height, clicks: dbg.closeClicks ?? null };
 });
 check("desktop: clicking X actually removes the panel from the layout",
   closedNow.display === "none" && closedNow.height === 0,
-  `display=${closedNow.display} state=${closedNow.state} height=${closedNow.height}`);
+  `display=${closedNow.display} state=${closedNow.state} height=${closedNow.height} handlerRuns=${closedNow.clicks}`);
 await page.close();
 
 // ── Desktop, conversation ──
@@ -207,6 +238,12 @@ check("desktop conversation: the scroll region ends above the composer",
   !d.composer || d.body.bottom <= d.composer.top + 1,
   d.composer ? `body ends ${Math.round(d.body.bottom)}, composer starts ${Math.round(d.composer.top)}` : "n/a");
 check("desktop conversation: the close control survives the state change", d.closeVisible === true);
+check("desktop conversation: mute and close do not overlap",
+  d.controlsOverlap === false,
+  d.muteVisible ? `close x=${d.close.left.toFixed(0)} mute x=${d.mute.left.toFixed(0)}` : "mute not offered");
+check("desktop conversation: a tap on the close button reaches the close button",
+  d.topmostAtCloseCentre === "close",
+  `topmost=${d.topmostAtCloseCentre}`);
 check("desktop: the composer is one line, not a panel",
   d.composer && d.composer.height <= 96,
   d.composer ? `${Math.round(d.composer.height)}px` : "missing");

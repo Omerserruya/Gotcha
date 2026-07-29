@@ -5040,7 +5040,8 @@
     "heroDropped": "This height leaves too little room for the rest of the panel, so the image will not be shown at all. Try a smaller value.",
     "mediaRejected": "This address cannot be used. It must start with https:// and end in a supported file type.",
     "mediaHintImage": "https:// only. Up to {mb}MB, best at {w}x{h}. JPG, PNG, WebP, AVIF or GIF.",
-    "mediaHintVideo": "https:// only. Up to {mb}MB and {secs} seconds. MP4 or WebM."
+    "mediaHintVideo": "https:// only. Up to {mb}MB and {secs} seconds. MP4 or WebM.",
+    "triggerLabel": "When to offer help"
   },
   "shopifyInstall": {
     "title": "Set up GOTCHA Chat",

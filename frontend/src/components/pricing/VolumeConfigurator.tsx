@@ -152,7 +152,9 @@ export function VolumeConfigurator({
               </div>
               <p className="truncate text-[11px] tabular-nums text-gray-500" dir="ltr">
                 {q.includedCredits.toLocaleString()} {t("pricing.creditsWord")}
-                {q.estimatedChatsMonthly > 0 ? ` · ~${q.estimatedChatsMonthly.toLocaleString()} ${t("pricing.chatsWord")}` : ""}
+                {q.estimatedChatsMonthly > 0
+                  ? ` · ${approx(q.estimatedChatsMonthly.toLocaleString(), q.chatBasis)} ${t("pricing.chatsWord")}`
+                  : ""}
               </p>
             </div>
             <Link
@@ -166,6 +168,11 @@ export function VolumeConfigurator({
       </aside>
     </div>
   );
+}
+
+/** "~" only where the number is inferred rather than sold. */
+function approx(value: string, basis: "DECLARED_VOLUME" | "CREDIT_RATIO"): string {
+  return basis === "DECLARED_VOLUME" ? value : `~${value}`;
 }
 
 /** The summary body, shared so the two breakpoints cannot drift apart. */
@@ -208,18 +215,21 @@ function SummaryBody({
       <Rule className="my-5" />
 
       <dl className="space-y-2 text-[13px]">
+        {/* A volume the plan SELLS is stated flat. Only a figure inferred from
+            credits carries the "~" - hedging a commitment reads as evasion, and
+            hedging nothing reads as a promise the plan has not made. */}
         {q.estimatedChatsMonthly > 0 && (
           <Line
             label={t("pricing.estimatedChats")}
-            value={`~${q.estimatedChatsMonthly.toLocaleString()}`}
-            sub={`~${q.estimatedChatsDaily} ${t("pricing.perDayShort")}`}
+            value={approx(q.estimatedChatsMonthly.toLocaleString(), q.chatBasis)}
+            sub={`${approx(String(q.estimatedChatsDaily), q.chatBasis)} ${t("pricing.perDayShort")}`}
           />
         )}
         {q.estimatedCallsMonthly > 0 && (
           <Line
             label={t("pricing.estimatedCalls")}
-            value={`~${q.estimatedCallsMonthly.toLocaleString()}`}
-            sub={`~${q.estimatedCallsDaily} ${t("pricing.perDayShort")}`}
+            value={approx(q.estimatedCallsMonthly.toLocaleString(), q.voiceBasis)}
+            sub={`${approx(String(q.estimatedCallsDaily), q.voiceBasis)} ${t("pricing.perDayShort")}`}
           />
         )}
         {q.pricePerChatMinor != null && (

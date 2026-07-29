@@ -225,7 +225,7 @@ function PreviewColumn({
 
       <div className="mt-5 flex flex-wrap items-baseline gap-x-1.5" dir="ltr">
         <span className="text-[2rem] font-semibold leading-none tracking-[-0.03em] tabular-nums text-gray-900">
-          {priced ? formatMinor(q.monthlyMinor, q.currency) : t("pricing.custom")}
+          {priced ? formatMinor(q.monthlyMinor, q.currency) : t("pricing.custom.label")}
         </span>
         {priced && <span className="whitespace-nowrap text-[13px] text-gray-400">/ {t("pricing.month")}</span>}
       </div>

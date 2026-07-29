@@ -55,7 +55,7 @@
   // bootstrap can only ever load the exact bundle it was built against —
   // a hand-typed ?v= let four commits change the bundle without changing
   // its URL, and every cache kept serving the old one.
-  var CHAT_BUNDLE = "gotcha-shopify-chat.736d03a5d008.js";
+  var CHAT_BUNDLE = "gotcha-shopify-chat.1d4f28625255.js";
 
   var IDENTITY = String(cfg.shopDomain || cfg.channelKey || "");
   var STORAGE_PREFIX = "gotcha_sfy_" + IDENTITY.slice(-12);

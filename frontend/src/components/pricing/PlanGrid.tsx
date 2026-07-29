@@ -143,7 +143,7 @@ function PlanColumn({
             size={compact ? "lg" : "xl"}
           />
         ) : (
-          <Price formatted={t("pricing.custom")} size={compact ? "lg" : "xl"} />
+          <Price formatted={t("pricing.custom.label")} size={compact ? "lg" : "xl"} />
         )}
         {/* Quotes the SELECTED total in the charged currency, not the plan's
             base price, or the note would understate what is actually billed. */}

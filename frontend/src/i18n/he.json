@@ -5041,7 +5041,8 @@
     "heroDropped": "הגובה הזה אינו משאיר מספיק מקום לשאר החלון, ולכן התמונה לא תוצג כלל. כדאי לבחור ערך נמוך יותר.",
     "mediaRejected": "לא ניתן להשתמש בכתובת הזו. היא חייבת להתחיל ב-https:// ולהסתיים בסוג קובץ נתמך.",
     "mediaHintImage": "https:// בלבד. עד {mb}MB, מומלץ {w}x{h}. JPG, PNG, WebP, AVIF או GIF.",
-    "mediaHintVideo": "https:// בלבד. עד {mb}MB ו-{secs} שניות. MP4 או WebM."
+    "mediaHintVideo": "https:// בלבד. עד {mb}MB ו-{secs} שניות. MP4 או WebM.",
+    "triggerLabel": "מתי להציע עזרה"
   },
   "shopifyInstall": {
     "title": "התקנת GOTCHA Chat",

@@ -326,7 +326,12 @@ window.__gotchaShopifyChatApp = function (boot) {
     // Compact by design: 16px padding around a 40px avatar made a 72px
     // header, which is a lot of a 640px panel spent on saying who you are
     // already talking to. 44px visual height, 30px avatar.
-    ".hd{display:flex;align-items:center;gap:10px;padding:6px 56px 6px 14px;",
+    // LOGICAL padding, not physical. The inline-END reservation is what
+    // keeps the header's own controls clear of the absolutely-positioned
+    // close button — and in RTL that corner is on the left, so a hardcoded
+    // `padding-right` left the mute button sitting under the close button.
+    ".hd{display:flex;align-items:center;gap:10px;",
+    "  padding-block:6px;padding-inline:14px 56px;",
     // border-box, or min-height:44 becomes 44 + padding + border = 57.
     "  box-sizing:border-box;border-bottom:1px solid #eef1f5;min-height:44px;max-height:48px;flex:0 0 auto;}",
     ".hd-tx{min-width:0;line-height:1.2;}",
@@ -347,23 +352,30 @@ window.__gotchaShopifyChatApp = function (boot) {
     // a 30px chip drawn behind the icon. Making the visible control the
     // same size as the touch target is what made the X the loudest thing
     // in the hero.
-    ".x{width:44px;height:44px;min-width:44px;min-height:44px;border:0;background:transparent;",
+    // The close button and the mute button LOOK the same and SIT
+    // differently. Sharing one class made them share `position:absolute`
+    // too, which stacked the mute button exactly on top of the close
+    // button. The look is shared here; the placement is not.
+    ".x,.mute{width:44px;height:44px;min-width:44px;min-height:44px;border:0;background:transparent;",
     "  color:#64748b;cursor:pointer;display:flex;align-items:center;justify-content:center;",
-    // Taken OUT of the panel's column flow. It is a child of the panel so
+    "  position:relative;pointer-events:auto;-webkit-tap-highlight-color:transparent;}",
+    ".x::before,.mute::before{content:'';position:absolute;width:30px;height:30px;border-radius:50%;",
+    "  background:rgba(15,23,42,.06);transition:background .15s,transform .15s;}",
+    ".x svg,.mute svg{position:relative;width:15px;height:15px;fill:none;stroke:currentColor;",
+    "  stroke-width:2.1;stroke-linecap:round;pointer-events:none;}",
+    ".x:hover::before,.mute:hover::before{background:rgba(15,23,42,.12);}",
+    ".x:hover,.mute:hover{color:#0f172a;}",
+    ".x:active::before,.mute:active::before{transform:scale(.92);}",
+    ".x:focus-visible,.mute:focus-visible{outline:none;}",
+    ".x:focus-visible::before,.mute:focus-visible::before{outline:2px solid " + brand + ";outline-offset:3px;}",
+    "@media (prefers-reduced-motion: reduce){.x::before,.mute::before{transition:none}}",
+    // ONLY the close button leaves the flow. It is a child of the panel so
     // that it survives the header being hidden in the welcome view, which
     // also means it must not occupy a row of that column.
-    "  position:absolute;top:var(--s2);" + (dir === "rtl" ? "left" : "right") + ":var(--s2);",
-    "  z-index:6;pointer-events:auto;-webkit-tap-highlight-color:transparent;}",
-    ".x::before{content:'';position:absolute;width:30px;height:30px;border-radius:50%;",
-    "  background:rgba(15,23,42,.06);transition:background .15s,transform .15s;}",
-    ".x svg{position:relative;width:15px;height:15px;fill:none;stroke:currentColor;",
-    "  stroke-width:2.1;stroke-linecap:round;pointer-events:none;}",
-    ".x:hover::before{background:rgba(15,23,42,.12);}",
-    ".x:hover{color:#0f172a;}",
-    ".x:active::before{transform:scale(.92);}",
-    ".x:focus-visible{outline:none;}",
-    ".x:focus-visible::before{outline:2px solid " + brand + ";outline-offset:3px;}",
-    "@media (prefers-reduced-motion: reduce){.x::before{transition:none}}",
+    ".x{position:absolute;top:var(--s2);" + (dir === "rtl" ? "left" : "right") + ":var(--s2);z-index:6;}",
+    // The mute button stays a normal item of the header row, ahead of the
+    // padding that reserves the close button's corner.
+    ".mute{flex:0 0 auto;}",
 
     // The only scrolling region. The extra bottom padding is what lets
     // the LAST suggested question clear the composer instead of sitting
@@ -614,8 +626,8 @@ window.__gotchaShopifyChatApp = function (boot) {
   var muteBtn = null;
   var soundsOn = !!(boot.widget && boot.widget.ux && boot.widget.ux.sounds && boot.widget.ux.sounds.enabled);
   if (soundsOn && boot.setVisitorMuted) {
-    muteBtn = el("button", "x");
-    attr(muteBtn, { type: "button" });
+    muteBtn = el("button", "mute");
+    attr(muteBtn, { type: "button", "data-act": "mute" });
     paintMute();
     on(muteBtn, "click", function () {
       var next = !(boot.visitorMuted && boot.visitorMuted());

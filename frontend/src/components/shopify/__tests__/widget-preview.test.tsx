@@ -9,7 +9,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 import { render, screen, within, waitFor } from "@testing-library/react";
-import { WidgetPreview, PREVIEW_FIXTURE } from "../WidgetPreview";
+import { WidgetPreview, PREVIEW_FIXTURE, previewWidgetConfig } from "../WidgetPreview";
 import { ProductCard, ProductCarousel, formatMoney, type ProductView } from "../ProductCard";
 
 // The I18n provider reads a token from localStorage and hits the API on
@@ -150,22 +150,76 @@ describe("preview shell", () => {
     expect(screen.queryByText(/Sample product/i)).toBeNull();
   });
 
-  it("passes the merchant's layout config through untouched", async () => {
-    // (15) Preview/storefront parity is structural — the preview boots the
-    // same bundle — but it would still break if the preview quietly
-    // adjusted the config on the way in. Only presentation context
-    // (language, direction, offline) may differ, because those are what
-    // the preview's own controls are FOR.
-    const source = readFileSync(resolve(__dirname, "../WidgetPreview.tsx"), "utf8");
-    const overridden = source.match(/const (appearance|offline|widget) = [^;]+;/g) ?? [];
-    expect(overridden.join(" ")).toContain("language");
-    expect(overridden.join(" ")).toContain("direction");
-    // Nothing in the preview may rewrite the layout blocks.
-    for (const layoutKey of ["ux.hero", "ux.welcome", "ux.launcher", "hero:", "welcome:"]) {
-      expect(source).not.toContain(`${layoutKey} = {`);
-    }
-    // ...and the config reaches the widget as one spread, not field by field.
-    expect(source).toContain("widget: { ...widget, appearance, offline }");
+  it("projects the draft into the shape the widget actually expects", () => {
+    // A draft CHANNEL config and the PUBLIC widget config are different
+    // shapes that share field names. The widget reads `features.humanHandoff`,
+    // which exists nowhere in a stored channel config — it is derived by
+    // the server from `routing` and `commerce`. Handing the draft over raw
+    // threw "Cannot read properties of undefined (reading 'humanHandoff')"
+    // and the preview rendered nothing.
+    const cfg = previewWidgetConfig(
+      {
+        appearance: { primaryColor: "#111827" },
+        welcome: { headline: "Hi", subline: "Ask us", assistantName: "Bot", suggestedQuestions: ["a"] },
+        hours: { offlineMessage: "Away", offlineBehavior: "form", offlineFormFields: ["email"] },
+        routing: { allowHumanHandoff: true },
+        commerce: { addToCartEnabled: true },
+        privacy: { requireOfflineConsent: true },
+        ux: { welcome: { title: "Hello" } },
+      },
+      { language: "en", offline: false },
+    );
+
+    expect(cfg.features).toEqual({ humanHandoff: true, productMessaging: true, addToCart: true });
+    expect(cfg.offline).toMatchObject({ active: false, message: "Away", behavior: "form", consentRequired: true });
+    expect(cfg.welcome).toMatchObject({ headline: "Hi", assistantName: "Bot" });
+    expect(cfg.ux).toEqual({ welcome: { title: "Hello" } });
+  });
+
+  it("survives a draft with nothing in it", () => {
+    // The settings form renders before a channel exists, and every missing
+    // block must still produce a config the widget can read.
+    const cfg = previewWidgetConfig({}, { language: "he", offline: true });
+    expect(cfg.features.humanHandoff).toBe(false);
+    expect(cfg.offline.active).toBe(true);
+    expect(cfg.appearance.direction).toBe("rtl");
+    expect(cfg.welcome.suggestedQuestions).toEqual([]);
+  });
+
+  it("produces a config the REAL widget boots without throwing", () => {
+    // The strongest form of this test: run the actual storefront bundle
+    // against the projection. Anything the widget reads at startup and the
+    // projection omits shows up here as the same TypeError a merchant saw.
+    const widgetSource = readFileSync(
+      resolve(__dirname, "../../../../public/widget/gotcha-shopify-chat.js"),
+      "utf8",
+    );
+    (window as any).matchMedia = vi.fn().mockImplementation((q: string) => ({
+      matches: false, media: q, addEventListener: vi.fn(), removeEventListener: vi.fn(),
+      addListener: vi.fn(), removeListener: vi.fn(),
+    }));
+    // eslint-disable-next-line no-eval
+    (0, eval)(widgetSource);
+
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const shadow = host.attachShadow({ mode: "open" });
+    const mem: Record<string, string> = {};
+
+    const app = (window as any).__gotchaShopifyChatApp({
+      api: "", assets: "",
+      context: { pageType: "product", productHandle: "p", locale: "en" },
+      availability: "online",
+      store: { get: (k: string) => mem[k] ?? null, set: (k: string, v: string) => { mem[k] = v; }, del: (k: string) => { delete mem[k]; } },
+      post: async () => ({ data: { conversationId: "c", status: "OPEN", isHandedOver: false, messages: [] } }),
+      shadow,
+      setUnread: () => {}, onOpened: () => {}, onClosed: () => {},
+      widget: previewWidgetConfig(config(), { language: "en", offline: false }),
+    });
+
+    expect(() => app.open()).not.toThrow();
+    expect(shadow.querySelector(".panel")).toBeTruthy();
+    expect(shadow.querySelector(".wel")).toBeTruthy();
   });
 
   it("says the preview is unavailable rather than drawing an imitation", async () => {

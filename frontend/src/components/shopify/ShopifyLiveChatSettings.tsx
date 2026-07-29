@@ -591,7 +591,7 @@ export function ShopifyLiveChatSettings() {
                 checked={!!draft.ux?.proactive?.enabled} onChange={(v) => patch("ux.proactive.enabled", v)} />
               {draft.ux?.proactive?.enabled && (
                 <>
-                  <Field label={t("shopifyChat.trigger")}>
+                  <Field label={t("shopifyChat.triggerLabel")}>
                     <Select value={draft.ux?.proactive?.trigger ?? "time_on_page"} onChange={(v) => patch("ux.proactive.trigger", v)}
                       options={["time_on_page", "page_views", "scroll_depth", "exit_intent", "product_page", "cart_page", "inactivity", "custom_event"]
                         .map((v) => ({ value: v, label: t(`shopifyChat.trigger.${v}`) }))} />
