@@ -172,27 +172,71 @@
       '<path d="M12 17h.01M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7"/>',
   };
 
+  /**
+   * Draw the launcher entirely from merchant configuration.
+   *
+   * Falls back to the legacy `appearance` fields whenever a channel has
+   * no `ux.launcher` block, so a store configured before any of this
+   * shipped renders exactly as it did yesterday.
+   *
+   * Nothing here interpolates merchant text into markup: the label goes
+   * in via textContent and the custom icon via a src attribute that has
+   * already survived HTTPS + no-SVG validation on the server.
+   */
   function paintLauncher(widget) {
-    var a = widget.appearance;
-    var side = a.launcherPosition === "left" ? "left" : "right";
-    host.style.setProperty(side, "20px");
-    host.style.setProperty("bottom", "20px");
+    var a = widget.appearance || {};
+    var L = (widget.ux && widget.ux.launcher) || null;
+    var mobile = window.matchMedia("(max-width: 560px)").matches;
+
+    var size = L ? L.size : 56;
+    var bg = L ? L.backgroundColor : a.primaryColor;
+    var fg = L ? L.iconColor : a.contrastColor;
+    var side = (L ? (mobile ? L.mobilePosition : L.position) : a.launcherPosition) === "left" ? "left" : "right";
+    var offSide = L ? L.offsetSide : 20;
+    var offBottom = L ? (mobile ? L.mobileOffsetBottom : L.offsetBottom) : 20;
+
+    // Shape is expressed as a radius so one rule covers all three, and a
+    // pill only widens when it actually carries a label.
+    var showLabel = !!(L && L.showLabel && L.label);
+    var radius = L
+      ? (L.shape === "circle" ? Math.round(size / 2) : L.shape === "pill" ? Math.round(size / 2) : 16)
+      : 28;
+    var width = showLabel ? "auto" : size + "px";
+    var padding = showLabel ? "0 " + Math.round(size / 3.5) + "px" : "0";
+
+    var SHADOWS = [
+      "none",
+      "0 2px 8px rgba(15,23,42,.14)",
+      "0 6px 24px rgba(15,23,42,.22),0 2px 6px rgba(15,23,42,.12)",
+      "0 12px 38px rgba(15,23,42,.32),0 4px 10px rgba(15,23,42,.18)",
+    ];
+    var shadow = SHADOWS[L ? L.shadow : 2] || SHADOWS[2];
+
+    host.style.setProperty(side, offSide + "px");
+    host.style.setProperty("bottom", offBottom + "px");
     host.style.setProperty(side === "left" ? "right" : "left", "auto");
 
     launcherStyle.textContent = [
       ":host { all: initial; }",
       ".ldr{",
-      "  width:56px;height:56px;border-radius:28px;border:0;cursor:pointer;",
-      "  display:flex;align-items:center;justify-content:center;position:relative;",
-      "  background:" + a.primaryColor + ";color:" + a.contrastColor + ";",
-      "  box-shadow:0 6px 24px rgba(15,23,42,.22),0 2px 6px rgba(15,23,42,.12);",
+      "  min-width:" + size + "px;width:" + width + ";height:" + size + "px;",
+      "  padding:" + padding + ";border-radius:" + radius + "px;cursor:pointer;",
+      "  display:flex;align-items:center;justify-content:center;gap:8px;position:relative;",
+      "  background:" + bg + ";color:" + fg + ";",
+      "  border:" + (L && L.showBorder ? "2px solid " + L.borderColor : "0") + ";",
+      "  box-shadow:" + shadow + ";",
       "  transition:transform .18s ease, box-shadow .18s ease;",
-      "  font:inherit;padding:0;",
+      "  font:600 14px/1 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;",
       "}",
-      ".ldr:hover{transform:translateY(-2px);box-shadow:0 10px 30px rgba(15,23,42,.28);}",
-      ".ldr:focus-visible{outline:3px solid " + a.primaryColor + ";outline-offset:3px;}",
-      ".ldr svg{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}",
-      ".ldr img{width:56px;height:56px;border-radius:28px;object-fit:cover;}",
+      ".ldr:hover{transform:translateY(-2px);box-shadow:" + (SHADOWS[3]) + ";}",
+      ".ldr:active{transform:translateY(0);}",
+      ".ldr:focus-visible{outline:3px solid " + bg + ";outline-offset:3px;}",
+      ".ldr svg{width:" + Math.round(size * 0.46) + "px;height:" + Math.round(size * 0.46) + "px;",
+      "  fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none;}",
+      // A custom image is clipped to the launcher's own shape so it can
+      // never spill outside the button.
+      ".ldr img{width:" + size + "px;height:" + size + "px;border-radius:" + radius + "px;object-fit:cover;flex:none;}",
+      ".ldr .lbl{white-space:nowrap;}",
       ".bdg{",
       "  position:absolute;top:-2px;" + side + ":-2px;min-width:20px;height:20px;border-radius:10px;",
       "  background:#e11d48;color:#fff;font:600 11px/20px -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;",
@@ -209,18 +253,37 @@
     launcher.setAttribute("aria-expanded", "false");
     launcher.setAttribute(
       "aria-label",
-      widget.welcome.assistantName
+      widget.welcome && widget.welcome.assistantName
         ? "Chat with " + widget.welcome.assistantName
         : "Open chat",
     );
-    launcher.innerHTML = a.avatarUrl
-      ? '<img src="' + escapeAttr(a.avatarUrl) + '" alt="" />'
+
+    var iconUrl = L && L.icon === "custom" && L.iconUrl ? L.iconUrl : a.avatarUrl;
+    launcher.innerHTML = iconUrl
+      ? '<img src="' + escapeAttr(iconUrl) + '" alt="" />'
       : '<svg viewBox="0 0 24 24" aria-hidden="true">' +
-        (ICONS[a.launcherIcon] || ICONS.chat) +
+        (ICONS[(L && L.icon) || a.launcherIcon] || ICONS.chat) +
         "</svg>";
+
+    // A custom icon that fails to load must not leave an empty button.
+    var iconImg = launcher.querySelector("img");
+    if (iconImg) {
+      iconImg.onerror = function () {
+        launcher.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + ICONS.chat + "</svg>";
+        launcher.appendChild(badge);
+      };
+    }
+
+    if (showLabel) {
+      var lbl = document.createElement("span");
+      lbl.className = "lbl";
+      lbl.textContent = L.label;
+      launcher.appendChild(lbl);
+    }
+
     badge.className = "bdg";
     badge.setAttribute("aria-hidden", "true");
-    launcher.appendChild(badge);
+    if (!L || L.showUnreadBadge) launcher.appendChild(badge);
   }
 
   function escapeAttr(v) {
@@ -293,8 +356,11 @@
   };
   state.onOpened = function () {
     // On phones the panel is full height; leaving a floating button on
-    // top of it steals a tap target and covers content.
-    if (window.matchMedia("(max-width: 560px)").matches) launcher.style.display = "none";
+    // top of it steals a tap target and covers content. A merchant can
+    // opt out if their layout wants the button to stay.
+    var L = state.widget && state.widget.ux && state.widget.ux.launcher;
+    var hide = L ? L.hideOnMobileWhenOpen : true;
+    if (hide && window.matchMedia("(max-width: 560px)").matches) launcher.style.display = "none";
   };
 
   launcher.addEventListener("click", function () {
