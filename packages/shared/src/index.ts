@@ -428,6 +428,45 @@ export type {
   DiscoveryCommunication,
 } from "./lib/business-discovery-shape";
 
+// Onboarding → Knowledge Base projection. Pure: what SHOULD exist in the
+// knowledge base given what onboarding learned, plus the deterministic
+// reconciliation that makes a website re-scan refresh rather than duplicate.
+export {
+  KB_TOPICS,
+  SCAN_VERSION,
+  normalizeUrl,
+  normalizeContent,
+  checksumOf,
+  dedupeKeyFor,
+  buildEntry,
+  reconcile,
+} from "./lib/knowledge/onboarding-projection";
+export type {
+  KbTopic,
+  KbSourceType,
+  KbSourceMetadata,
+  ProjectedEntry,
+  ExistingDoc,
+  ReconcileAction,
+  ReconcileItem,
+  ReconcilePlan,
+} from "./lib/knowledge/onboarding-projection";
+export {
+  projectDiscoveryTopics,
+  projectPages,
+  projectReadinessAnswers,
+  projectExternalSources,
+  titleFor,
+} from "./lib/knowledge/discovery-to-knowledge";
+export type {
+  DiscoveryInput,
+  ProfileInput,
+  ReadinessAnswer,
+  PageInput,
+  ExternalSourceInput,
+  ProjectionContext,
+} from "./lib/knowledge/discovery-to-knowledge";
+
 // Shopify Live Chat - channel config, visitor sessions, product snapshots.
 export {
   SHOPIFY_LIVE_CHAT_CHANNEL,

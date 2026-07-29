@@ -105,10 +105,16 @@ export const AuditAction = {
   ALL_SESSIONS_TERMINATED: "auth.all_sessions_terminated",
   EMAIL_CHANGE_REQUESTED: "auth.email_change_requested",
   EMAIL_CHANGE_CONFIRMED: "auth.email_change_confirmed",
-  // ── Business recommendations (Your Business page lifecycle) ──
+  // ── Business recommendations lifecycle ──
   RECOMMENDATION_COMPLETED: "recommendation.completed",
   RECOMMENDATION_DISMISSED: "recommendation.dismissed",
   RECOMMENDATION_REOPENED: "recommendation.reopened",
+  // ── Knowledge Base ingestion ──
+  // A website scan rewrites what the AI employee knows, so every sync records
+  // what it added, refreshed, preserved and removed. Without this a customer
+  // asking "why did the bot start saying 14 days?" has no trail to follow.
+  KNOWLEDGE_SCAN_SYNCED: "knowledge.scan_synced",
+  KNOWLEDGE_BACKFILL_RUN: "knowledge.backfill_run",
   // ── The rate money is charged at ──
   // Platform-level (tenantId "platform"). These decide what every Israeli
   // customer's card is debited, so they are audited separately from pricing:

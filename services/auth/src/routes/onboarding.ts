@@ -3,7 +3,8 @@ import { Router, Request, Response } from "express";
 import { z } from "zod";
 import * as crypto from "crypto";
 import { promises as dns } from "dns";
-import { prisma, authenticate, resolveTenant, requireRole, validate, trackAIUsage, meterAiUnits, writeAudit, AuditAction, normalizeDiscoveryRecord, normalizeDiscoveryTechnology } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireRole, validate, trackAIUsage, meterAiUnits, writeAudit, AuditAction, normalizeDiscoveryRecord, normalizeDiscoveryTechnology, projectDiscoveryTopics, projectPages, projectReadinessAnswers } from "@chatcenter/shared";
+import { applyProjection, type SyncReport } from "../services/onboarding-knowledge.service";
 import { sendActivationConfirmation, sendOnboardingInvite, sendTeammateInvite, sendIntegrationRequestEmail } from "../services/notification.service";
 import { inviteUser, resendSetupLink } from "../services/invitation.service";
 import { ingestTaughtDocument } from "../services/teach-ingest";
@@ -2239,11 +2240,90 @@ router.post("/discover", requireRole("ADMIN"), validate(discoverSchema), async (
     // ephemeral; "I'll do it later" loses nothing). Best-effort.
     syncDiscoveryRecommendations(req.tenantId!, report).catch(() => {});
 
+    // Project the scan into real Knowledge Base entries. Until this existed,
+    // everything above was written to Json columns that only the "Your
+    // Business" page could read - the AI employee retrieves from
+    // KnowledgeDocument chunks and had no access to any of it. A customer who
+    // had just watched us describe their business in detail would then be told
+    // "I don't have that information".
+    //
+    // Awaited, not fire-and-forget: the response carries the honest ingestion
+    // result so the UI can show what landed and what failed instead of a
+    // success screen over a broken ingest. Failures never fail the scan - the
+    // discovery record is already saved.
+    let knowledgeSync: SyncReport | null = null;
+    try {
+      const profile = await prisma.businessProfile.findUnique({
+        where: { tenantId: req.tenantId! },
+        select: {
+          organizationName: true, industry: true, businessDescription: true,
+          country: true, primaryLanguage: true,
+        },
+      }).catch(() => null);
+
+      const ctx = { language: locale || profile?.primaryLanguage || "en", now: new Date().toISOString() };
+      const projected = [
+        ...projectDiscoveryTopics(saved as any, profile ?? {}, ctx),
+        // `okPages`, not `pages`: the latter is truncated to 2800 chars per
+        // page purely to keep the LLM request under its body-parser limit.
+        // Ingesting that truncation would put a knowingly half-read shipping
+        // policy in front of customers. The knowledge base gets the full text.
+        ...projectPages(
+          [
+            { url: origin, content: home.text },
+            ...okPages.map((p) => ({ url: p.url, content: p.text })),
+          ],
+          ctx,
+        ),
+      ];
+
+      knowledgeSync = await applyProjection(
+        { prisma, fetchFn: fetchWithTimeout as any, authHeader: req.headers.authorization! },
+        req.tenantId!,
+        projected,
+        // Only crawled pages may be retired by a re-scan. A topic summary the
+        // synthesis step failed to produce this time must not delete the good
+        // summary from the previous scan.
+        { removeMissing: true, removeScope: ["url"] },
+      );
+
+      void writeAudit({
+        tenantId: req.tenantId!,
+        actorType: "user",
+        actorId: (req as any).user?.userId,
+        action: AuditAction.KNOWLEDGE_SCAN_SYNCED,
+        targetType: "knowledge_base",
+        targetId: knowledgeSync.knowledgeBaseId ?? "-",
+        metadata: {
+          domain: origin,
+          added: knowledgeSync.added,
+          updated: knowledgeSync.updated,
+          unchanged: knowledgeSync.unchanged,
+          preserved: knowledgeSync.preserved,
+          removed: knowledgeSync.removed,
+          failed: knowledgeSync.failed,
+        },
+      });
+    } catch (err) {
+      console.error("[Onboarding] Knowledge projection failed:", err);
+      knowledgeSync = null;
+    }
+
     // Re-arm the onboarding nudge: if they go quiet after discovery, the sweep
     // will send "I noticed you stopped after Business Discovery" ~a day later.
     scheduleOnboardingNudge(req.tenantId!, "1d").catch(() => {});
 
-    res.json({ data: { ok: true, domain: origin, discovery: normalizeDiscoveryRecord(saved as Record<string, unknown>) } });
+    res.json({
+      data: {
+        ok: true,
+        domain: origin,
+        discovery: normalizeDiscoveryRecord(saved as Record<string, unknown>),
+        // The honest ingestion outcome. `null` means the projection itself
+        // threw - the UI must say knowledge sync failed and offer a retry,
+        // not imply the knowledge base is populated.
+        knowledge: knowledgeSync,
+      },
+    });
   } catch (err) {
     console.error("Discover error:", err);
     res.status(500).json({ error: "Failed to discover business" });
