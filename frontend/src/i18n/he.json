@@ -736,7 +736,8 @@
     "waPendingFinish": "סיום החיבור",
     "shopifyLiveChat": "צ׳אט חי לשופיפיי",
     "shopifyLiveChatDesc": "צ׳אט ממותג בחנות השופיפיי, עם כרטיסי מוצר והוספה לסל.",
-    "configureShopifyLiveChat": "הגדרה"
+    "configureShopifyLiveChat": "הגדרה",
+    "deleteWidgetMsg": "הפעולה מסירה את הצ׳אט מהאתר שלכם ומוחקת לצמיתות את השיחות וההודעות שלו. הסקריפט באתר יפסיק להציג דבר. לא ניתן לבטל."
   },
   "departments": {
     "title": "מחלקות",

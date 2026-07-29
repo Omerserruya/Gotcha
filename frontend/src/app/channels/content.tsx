@@ -144,7 +144,7 @@ function ChannelsPageContent() {
   const [messageType, setMessageType] = useState<"success" | "error">("success");
   const [disconnectConfirm, setDisconnectConfirm] = useState<{ open: boolean; id: string }>({ open: false, id: "" });
   const [disconnecting, setDisconnecting] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: string; name: string }>({ open: false, id: "", name: "" });
+  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: string; name: string; channel: string }>({ open: false, id: "", name: "", channel: "" });
   const [deleting, setDeleting] = useState(false);
   const [embedModal, setEmbedModal] = useState<{ open: boolean; widgetId: string; code: string; apiUrl: string; accountId: string }>({ open: false, widgetId: "", code: "", apiUrl: "", accountId: "" });
   const [embedTab, setEmbedTab] = useState<"html" | "nextjs" | "react" | "vue" | "php">("html");
@@ -152,6 +152,10 @@ function ChannelsPageContent() {
   const [widgetIconUrl, setWidgetIconUrl] = useState("");
   const [widgetTitle, setWidgetTitle] = useState("Chat with us");
   const [widgetPosition, setWidgetPosition] = useState<"right" | "left">("right");
+  // The full canonical config for the open widget. Kept so saving one
+  // field cannot silently drop the hero, teaser or sound settings that
+  // this modal does not show.
+  const [widgetConfig, setWidgetConfig] = useState<any>(null);
   const [savingWidget, setSavingWidget] = useState(false);
   const showMessage = (msg: string, type: "success" | "error" = "success") => {
     setMessage(msg);
@@ -398,7 +402,7 @@ function ChannelsPageContent() {
     setDeleting(true);
     try {
       await deleteChannelAccount(token, deleteConfirm.id);
-      setDeleteConfirm({ open: false, id: "", name: "" });
+      setDeleteConfirm({ open: false, id: "", name: "", channel: "" });
       showMessage(t("channels.deleted"), "success");
       fetchData();
     } catch (err: any) {
@@ -764,11 +768,14 @@ function ChannelsPageContent() {
                         if (token) {
                           try {
                             const res = await getWebchatSettings(token, account.id);
-                            const s = res.data || {};
-                            setWidgetColor(s.color || "#7c3aed");
-                            setWidgetIconUrl(s.iconUrl || "");
-                            setWidgetTitle(s.title || "Chat with us");
-                            setWidgetPosition(s.position || "right");
+                            // The canonical config, migrated on read — the
+                            // same shape the storefront widget uses.
+                            const cfg = res.data || {};
+                            setWidgetConfig(cfg);
+                            setWidgetColor(cfg.appearance?.primaryColor || "#7c3aed");
+                            setWidgetIconUrl(cfg.appearance?.logoUrl || "");
+                            setWidgetTitle(cfg.ux?.welcome?.title || "Chat with us");
+                            setWidgetPosition(cfg.ux?.launcher?.position || "right");
                           } catch { /* use defaults */ }
                         }
                       }}
@@ -823,10 +830,17 @@ function ChannelsPageContent() {
                     </button>
                   )}
 
-                  {/* Delete button (only for disconnected channels) */}
-                  {canManageChannels && account.connectionStatus === "DISCONNECTED" && (
+                  {/* Delete.
+                      A website widget is deletable in any state: it has no
+                      OAuth to revoke, so it never becomes DISCONNECTED, and
+                      gating on that status meant a tenant could create one
+                      and never remove it. The embed script asks the server
+                      before drawing, so a deleted widget simply stops
+                      appearing on their site. */}
+                  {canManageChannels &&
+                    (account.connectionStatus === "DISCONNECTED" || account.channel === "WEBCHAT") && (
                     <button
-                      onClick={() => setDeleteConfirm({ open: true, id: account.id, name: account.displayName || account.externalId })}
+                      onClick={() => setDeleteConfirm({ open: true, id: account.id, name: account.displayName || account.externalId, channel: String(account.channel || "") })}
                       className="text-xs text-red-400 hover:text-red-600 transition p-1"
                       title={t("common.delete")}
                     >
@@ -858,12 +872,16 @@ function ChannelsPageContent() {
     <ConfirmModal
       isOpen={deleteConfirm.open}
       title={t("channels.deleteChannel")}
-      message={t("channels.deleteChannelMsg", { name: deleteConfirm.name })}
+      message={
+        deleteConfirm.channel === "WEBCHAT"
+          ? t("channels.deleteWidgetMsg")
+          : t("channels.deleteChannelMsg", { name: deleteConfirm.name })
+      }
       confirmText={t("common.delete")}
       danger
       loading={deleting}
       onConfirm={confirmDelete}
-      onCancel={() => setDeleteConfirm({ open: false, id: "", name: "" })}
+      onCancel={() => setDeleteConfirm({ open: false, id: "", name: "", channel: "" })}
     />
     {embedModal.open && (
       <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -1047,12 +1065,26 @@ function ChannelsPageContent() {
                   if (!token || !embedModal.accountId) return;
                   setSavingWidget(true);
                   try {
-                    await updateWebchatSettings(token, embedModal.accountId, {
-                      color: widgetColor !== "#7c3aed" ? widgetColor : undefined,
-                      iconUrl: widgetIconUrl || undefined,
-                      title: widgetTitle !== "Chat with us" ? widgetTitle : undefined,
-                      position: widgetPosition !== "right" ? widgetPosition : undefined,
-                    });
+                    // Written into the shared config, so the website widget
+                    // and the storefront widget are configured the same way
+                    // and neither can drift from the other.
+                    const next = {
+                      ...(widgetConfig ?? {}),
+                      v: 2,
+                      appearance: { ...(widgetConfig?.appearance ?? {}), primaryColor: widgetColor, logoUrl: widgetIconUrl || null },
+                      ux: {
+                        ...(widgetConfig?.ux ?? {}),
+                        welcome: { ...(widgetConfig?.ux?.welcome ?? {}), title: widgetTitle },
+                        launcher: {
+                          ...(widgetConfig?.ux?.launcher ?? {}),
+                          position: widgetPosition,
+                          mobilePosition: widgetPosition,
+                          backgroundColor: widgetColor,
+                        },
+                      },
+                    };
+                    await updateWebchatSettings(token, embedModal.accountId, next);
+                    setWidgetConfig(next);
                     showMessage("Widget settings saved!", "success");
                   } catch {
                     showMessage("Failed to save settings", "error");

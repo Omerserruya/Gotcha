@@ -697,12 +697,23 @@ window.__gotchaShopifyChatApp = function (boot) {
     return store.get("session");
   }
 
+  // The channel's API base, supplied by whichever bootstrap loaded us.
+  // This is the ONLY thing in the bundle that was ever Shopify-specific:
+  // with commerce features off it is a general-purpose chat widget, and
+  // the website widget serves the same experience from the same file
+  // rather than a second implementation that drifts.
+  var API_BASE = boot.apiPath || "/api/shopify-chat";
+
   function api(path, payload) {
-    return boot.post("/api/shopify-chat" + path, payload || {}, token());
+    return boot.post(API_BASE + path, payload || {}, token());
   }
 
   function apiGet(path) {
-    return fetch(API + "/api/shopify-chat" + path, {
+    // Routed through the bootstrap when it offers a reader, so a channel
+    // whose API is shaped differently can adapt in ONE place instead of
+    // this bundle learning about every channel.
+    if (typeof boot.get === "function") return boot.get(API_BASE + path, token());
+    return fetch(API + API_BASE + path, {
       headers: { "X-Visitor-Token": token() || "" },
       credentials: "omit",
       mode: "cors",

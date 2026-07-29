@@ -736,7 +736,8 @@
     "waPendingFinish": "Finish connection",
     "shopifyLiveChat": "Shopify Live Chat",
     "shopifyLiveChatDesc": "Branded chat on your Shopify storefront, with product cards and Add to Cart.",
-    "configureShopifyLiveChat": "Set up"
+    "configureShopifyLiveChat": "Set up",
+    "deleteWidgetMsg": "This removes the chat widget from your website and permanently deletes its conversations and messages. The script on your site will stop showing anything. This cannot be undone."
   },
   "departments": {
     "title": "Departments",

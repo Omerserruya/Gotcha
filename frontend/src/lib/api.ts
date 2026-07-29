@@ -444,7 +444,14 @@ export function getWebchatSettings(token: string, accountId: string) {
   return apiFetch<{ data: any }>(`/api/channels/webchat/${accountId}/settings`, { token });
 }
 
-export function updateWebchatSettings(token: string, accountId: string, settings: { color?: string; iconUrl?: string; title?: string; subtitle?: string; welcome?: string; position?: string }) {
+/**
+ * The website widget's configuration.
+ *
+ * Accepts the canonical shape (the same experience block the storefront
+ * widget uses) and, for anything not yet updated, the old flat fields —
+ * the server migrates those on the way in.
+ */
+export function updateWebchatSettings(token: string, accountId: string, settings: Record<string, unknown>) {
   return apiFetch<{ data: any }>(`/api/channels/webchat/${accountId}/settings`, {
     token, method: "PUT", body: JSON.stringify(settings)
   });

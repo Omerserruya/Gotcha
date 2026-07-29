@@ -1,368 +1,308 @@
-(function() {
+/**
+ * GOTCHA website chat — the script a tenant pastes onto their own site.
+ *
+ * The filename and the `window.__chatcenter` contract are load-bearing:
+ * snippets are already pasted on customer sites and on gotcha.co.il
+ * itself, and none of them can be edited from here. Everything below is
+ * free to change; those two are not.
+ *
+ * This used to be a self-contained widget — its own markup, its own CSS,
+ * its own idea of what a chat looks like. It had drifted a long way from
+ * the storefront widget, so a tenant configuring both learned two editors
+ * and got two products. It now loads the SAME bundle the Shopify
+ * storefront runs, and adapts this channel's API to it.
+ *
+ * Two jobs, then:
+ *
+ *   1. Ask the server whether this widget still exists, BEFORE drawing
+ *      anything. The old script painted its launcher unconditionally and
+ *      only called the server when a visitor opened it — so a deleted
+ *      channel left a button on a customer's site that opened onto
+ *      silence. Asking first means a deleted widget simply is not there.
+ *
+ *   2. Translate. The bundle speaks the storefront's API shape; this
+ *      channel speaks /init, /message, /messages/:id. The adapter is the
+ *      right place for that difference, because it keeps the bundle free
+ *      of any knowledge about which channel it is serving.
+ */
+(function () {
   "use strict";
 
-  var config = window.__chatcenter || {};
-  var API_URL = config.apiUrl || "";
-  var WIDGET_ID = config.widgetId || "";
-  // Persistent visitor ID (survives browser close, identifies returning visitors)
-  var VISITOR_ID = localStorage.getItem("cc_visitor_" + WIDGET_ID) || "";
+  var cfg = window.__chatcenter || {};
+  var API = String(cfg.apiUrl || "").replace(/\/+$/, "");
+  var WIDGET_ID = String(cfg.widgetId || "");
 
-  // Per-tab session ID (prevents cross-tab message collision)
-  var SESSION_ID = sessionStorage.getItem("cc_session_" + WIDGET_ID) || "";
-  if (!SESSION_ID) {
-    SESSION_ID = "sess_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9);
-    sessionStorage.setItem("cc_session_" + WIDGET_ID, SESSION_ID);
-  }
-  var POLL_INTERVAL = null;
-  var LAST_MESSAGE_TIME = "";
-  var IS_OPEN = false;
-  var UNREAD = 0;
-  var RENDERED_MSG_IDS = {};
-  var PENDING_OUTGOING = 0;
-  var SESSION_INITIALIZED = false;
+  if (!WIDGET_ID) return;
+  if (window.__gotchaWebchatLoaded) return;
+  window.__gotchaWebchatLoaded = true;
 
-  // Customization
-  var BRAND_COLOR = config.color || "#7c3aed";
-  // Auto-derive darker shade for hover by darkening the brand color
-  function darkenColor(hex, amount) {
-    var num = parseInt(hex.replace("#", ""), 16);
-    var r = Math.max(0, (num >> 16) - amount);
-    var g = Math.max(0, ((num >> 8) & 0x00FF) - amount);
-    var b = Math.max(0, (num & 0x0000FF) - amount);
-    return "#" + (0x1000000 + r * 0x10000 + g * 0x100 + b).toString(16).slice(1);
-  }
-  var BRAND_COLOR_HOVER = config.colorHover || darkenColor(BRAND_COLOR, 20);
-  var ICON_URL = config.iconUrl || "";
-  var TITLE = config.title || "Chat with us";
-  var SUBTITLE = config.subtitle || "We typically reply instantly";
-  var WELCOME = config.welcome || "Hi there! How can we help you today?";
-  var POSITION = config.position || "right";
+  var API_PATH = "/api/embedded-chat";
+  var STORAGE_PREFIX = "cc_" + WIDGET_ID.slice(-12);
 
-  // Notification sound (short beep using Web Audio API)
-  var audioCtx = null;
-  function playNotificationSound() {
-    try {
-      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      var osc = audioCtx.createOscillator();
-      var gain = audioCtx.createGain();
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-      osc.frequency.value = 800;
-      gain.gain.value = 0.15;
-      osc.start();
-      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
-      osc.stop(audioCtx.currentTime + 0.3);
-    } catch(e) {}
-  }
+  // ── First-party storage only. No cookies, so nothing here is affected
+  //    by third-party cookie blocking or a visitor's tracking settings.
+  var store = {
+    get: function (k) {
+      try { return window.localStorage.getItem(STORAGE_PREFIX + "_" + k); } catch (e) { return null; }
+    },
+    set: function (k, v) {
+      try { window.localStorage.setItem(STORAGE_PREFIX + "_" + k, v); } catch (e) {}
+    },
+    del: function (k) {
+      try { window.localStorage.removeItem(STORAGE_PREFIX + "_" + k); } catch (e) {}
+    },
+  };
 
-  // Styles
-  var posRight = POSITION !== "left";
-  var STYLES = `
-    #cc-widget-container * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-    #cc-widget-btn {
-      position: fixed; bottom: 24px; ${posRight ? "right" : "left"}: 24px; z-index: 99998;
-      width: 60px; height: 60px; border-radius: 50%;
-      background: ${ICON_URL ? "transparent" : "linear-gradient(135deg, " + BRAND_COLOR + ", " + BRAND_COLOR_HOVER + ")"};
-      border: none; cursor: pointer;
-      box-shadow: ${ICON_URL ? "0 4px 24px rgba(0,0,0,0.2)" : "0 4px 24px " + BRAND_COLOR + "66"};
-      display: flex; align-items: center; justify-content: center;
-      transition: transform 0.2s, box-shadow 0.2s;
-      ${ICON_URL ? "padding: 0; overflow: hidden;" : ""}
-    }
-    #cc-widget-btn:hover { transform: scale(1.08); box-shadow: ${ICON_URL ? "0 6px 32px rgba(0,0,0,0.3)" : "0 6px 32px " + BRAND_COLOR + "80"}; }
-    #cc-widget-btn svg { width: 28px; height: 28px; fill: white; }
-    #cc-widget-btn img { width: 60px; height: 60px; border-radius: 50%; object-fit: cover; }
-    #cc-widget-badge {
-      position: absolute; top: -4px; ${posRight ? "right" : "left"}: -4px;
-      background: #ef4444; color: white; font-size: 11px; font-weight: 700;
-      min-width: 20px; height: 20px; border-radius: 10px;
-      display: none; align-items: center; justify-content: center; padding: 0 5px;
-    }
-    #cc-widget-window {
-      position: fixed; bottom: 96px; ${posRight ? "right" : "left"}: 24px; z-index: 99999;
-      width: 380px; max-width: calc(100vw - 32px); height: 520px; max-height: calc(100vh - 120px);
-      background: white; border-radius: 16px;
-      box-shadow: 0 8px 48px rgba(0,0,0,0.15);
-      display: none; flex-direction: column; overflow: hidden;
-      animation: cc-slide-up 0.3s ease;
-    }
-    @keyframes cc-slide-up { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
-    #cc-widget-header {
-      padding: 16px 20px; background: linear-gradient(135deg, ${BRAND_COLOR}, ${BRAND_COLOR_HOVER});
-      color: white; display: flex; align-items: center; gap: 12px; flex-shrink: 0;
-    }
-    #cc-widget-header-avatar {
-      width: 36px; height: 36px; border-radius: 50%;
-      background: rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center;
-      font-weight: 700; font-size: 14px;
-    }
-    #cc-widget-header-info h4 { font-size: 14px; font-weight: 600; }
-    #cc-widget-header-info p { font-size: 11px; opacity: 0.8; margin-top: 2px; }
-    #cc-widget-close {
-      margin-left: auto; background: rgba(255,255,255,0.15); border: none;
-      width: 28px; height: 28px; border-radius: 8px; cursor: pointer;
-      display: flex; align-items: center; justify-content: center; transition: background 0.2s;
-    }
-    #cc-widget-close:hover { background: rgba(255,255,255,0.3); }
-    #cc-widget-close svg { width: 14px; height: 14px; stroke: white; fill: none; }
-    #cc-widget-messages {
-      flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px;
-      background: #f9fafb;
-    }
-    .cc-msg { max-width: 80%; padding: 14px 18px; border-radius: 16px; font-size: 14px; line-height: 1.6; word-wrap: break-word; word-break: break-word; white-space: pre-wrap; }
-    .cc-msg-in { background: white; color: #1f2937; border: 1px solid #e5e7eb; border-bottom-left-radius: 4px; align-self: flex-start; }
-    .cc-msg-out { background: ${BRAND_COLOR}; color: white; border-bottom-right-radius: 4px; align-self: flex-end; }
-    .cc-msg-time { font-size: 10px; opacity: 0.5; margin-top: 4px; }
-    .cc-typing { align-self: flex-start; display: flex; gap: 4px; padding: 12px 16px; background: white; border: 1px solid #e5e7eb; border-radius: 16px; border-bottom-left-radius: 4px; }
-    .cc-typing span { width: 6px; height: 6px; background: #9ca3af; border-radius: 50%; animation: cc-bounce 1.2s infinite; }
-    .cc-typing span:nth-child(2) { animation-delay: 0.15s; }
-    .cc-typing span:nth-child(3) { animation-delay: 0.3s; }
-    @keyframes cc-bounce { 0%,80%,100% { transform: translateY(0); } 40% { transform: translateY(-6px); } }
-    #cc-widget-input-area {
-      padding: 12px 16px; border-top: 1px solid #e5e7eb; background: white;
-      display: flex; align-items: flex-end; gap: 8px; flex-shrink: 0;
-    }
-    #cc-widget-input {
-      flex: 1; border: 1px solid #e5e7eb; border-radius: 12px; padding: 10px 14px;
-      font-size: 13px; resize: none; outline: none; max-height: 80px;
-      font-family: inherit; transition: border-color 0.2s;
-    }
-    #cc-widget-input:focus { border-color: ${BRAND_COLOR}; }
-    #cc-widget-send {
-      width: 38px; height: 38px; border-radius: 12px; border: none;
-      background: ${BRAND_COLOR}; cursor: pointer; display: flex; align-items: center; justify-content: center;
-      transition: background 0.2s; flex-shrink: 0;
-    }
-    #cc-widget-send:hover { background: ${BRAND_COLOR_HOVER}; }
-    #cc-widget-send:disabled { opacity: 0.4; cursor: default; }
-    #cc-widget-send svg { width: 16px; height: 16px; fill: none; stroke: white; stroke-width: 2; }
-    #cc-widget-powered {
-      text-align: center; padding: 6px; font-size: 10px; color: #9ca3af;
-      background: white; border-top: 1px solid #f3f4f6;
-    }
-    #cc-widget-powered a { color: ${BRAND_COLOR}; text-decoration: none; }
-    @media (max-width: 480px) {
-      #cc-widget-window { bottom: 0; right: 0; width: 100vw; height: 100vh; max-height: 100vh; border-radius: 0; }
-      #cc-widget-btn { bottom: 16px; right: 16px; width: 52px; height: 52px; }
-    }
-  `;
-
-  function injectStyles() {
-    var style = document.createElement("style");
-    style.textContent = STYLES;
-    document.head.appendChild(style);
-  }
-
-  function createWidget() {
-    var container = document.createElement("div");
-    container.id = "cc-widget-container";
-    container.innerHTML = `
-      <button id="cc-widget-btn" aria-label="Open chat">
-        ${ICON_URL ? '<img src="' + ICON_URL + '" alt="Chat">' : '<svg viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>'}
-        <span id="cc-widget-badge">0</span>
-      </button>
-      <div id="cc-widget-window">
-        <div id="cc-widget-header">
-          <div id="cc-widget-header-avatar">C</div>
-          <div id="cc-widget-header-info">
-            <h4>${TITLE}</h4>
-            <p>${SUBTITLE}</p>
-          </div>
-          <button id="cc-widget-close">
-            <svg viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-          </button>
-        </div>
-        <div id="cc-widget-messages"></div>
-        <div id="cc-widget-input-area">
-          <textarea id="cc-widget-input" placeholder="Type a message..." rows="1"></textarea>
-          <button id="cc-widget-send" disabled>
-            <svg viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"/></svg>
-          </button>
-        </div>
-        <div id="cc-widget-powered">Powered by <a href="https://gotcha.co.il" target="_blank">GOTCHA</a></div>
-      </div>
-    `;
-    document.body.appendChild(container);
-  }
-
-  function getEl(id) { return document.getElementById(id); }
-
-  function toggleWidget() {
-    IS_OPEN = !IS_OPEN;
-    var win = getEl("cc-widget-window");
-    win.style.display = IS_OPEN ? "flex" : "none";
-    if (IS_OPEN) {
-      UNREAD = 0;
-      updateBadge();
-      scrollToBottom();
-      getEl("cc-widget-input").focus();
-      if (!SESSION_INITIALIZED) initSession();
-    }
-  }
-
-  function updateBadge() {
-    var badge = getEl("cc-widget-badge");
-    if (UNREAD > 0) {
-      badge.textContent = UNREAD > 9 ? "9+" : UNREAD;
-      badge.style.display = "flex";
-    } else {
-      badge.style.display = "none";
-    }
-  }
-
-  function scrollToBottom() {
-    var el = getEl("cc-widget-messages");
-    setTimeout(function() { el.scrollTop = el.scrollHeight; }, 50);
-  }
-
-  function addMessage(text, direction, animate) {
-    var el = getEl("cc-widget-messages");
-    var div = document.createElement("div");
-    div.className = "cc-msg " + (direction === "OUTBOUND" ? "cc-msg-in" : "cc-msg-out");
-    div.textContent = text;
-    if (animate) {
-      div.style.opacity = "0";
-      div.style.transform = "translateY(8px)";
-      div.style.transition = "opacity 0.2s, transform 0.2s";
-      setTimeout(function() { div.style.opacity = "1"; div.style.transform = "translateY(0)"; }, 10);
-    }
-    el.appendChild(div);
-    scrollToBottom();
-  }
-
-  function showTyping() {
-    var el = getEl("cc-widget-messages");
-    var existing = el.querySelector(".cc-typing");
-    if (existing) return;
-    var div = document.createElement("div");
-    div.className = "cc-typing";
-    div.innerHTML = "<span></span><span></span><span></span>";
-    el.appendChild(div);
-    scrollToBottom();
-  }
-
-  function hideTyping() {
-    var el = getEl("cc-widget-messages");
-    var t = el.querySelector(".cc-typing");
-    if (t) t.remove();
-  }
-
-  async function initSession() {
-    try {
-      var res = await fetch(API_URL + "/api/embedded-chat/init", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ widgetId: WIDGET_ID, visitorId: VISITOR_ID, sessionId: SESSION_ID, pageUrl: window.location.href }),
-      });
-      var data = await res.json();
-      if (data.data) {
-        SESSION_ID = data.data.sessionId;
-        VISITOR_ID = data.data.visitorId;
-        SESSION_INITIALIZED = true;
-        localStorage.setItem("cc_visitor_" + WIDGET_ID, VISITOR_ID);
-        sessionStorage.setItem("cc_session_" + WIDGET_ID, SESSION_ID);
-        loadMessages();
-        startPolling();
-      }
-    } catch(e) {
-      console.error("[ChatCenter] Init failed:", e);
-    }
-  }
-
-  async function loadMessages() {
-    if (!SESSION_ID) return;
-    try {
-      var url = API_URL + "/api/embedded-chat/messages/" + SESSION_ID;
-      if (LAST_MESSAGE_TIME) url += "?after=" + encodeURIComponent(LAST_MESSAGE_TIME);
-      var res = await fetch(url);
-      var data = await res.json();
-      if (data.data && data.data.length > 0) {
-        var newInbound = 0;
-        data.data.forEach(function(msg) {
-          if (RENDERED_MSG_IDS[msg.id]) return;
-          RENDERED_MSG_IDS[msg.id] = true;
-          LAST_MESSAGE_TIME = msg.createdAt;
-          // Skip INBOUND messages we already rendered locally when sending
-          if (msg.direction === "INBOUND" && PENDING_OUTGOING > 0) {
-            PENDING_OUTGOING--;
-            return;
-          }
-          addMessage(msg.body, msg.direction, true);
-          if (msg.direction === "OUTBOUND" && !IS_OPEN) newInbound++;
-        });
-        if (newInbound > 0) {
-          UNREAD += newInbound;
-          updateBadge();
-          playNotificationSound();
+  function request(path, options) {
+    return fetch(API + path, options).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (json) {
+        if (!res.ok) {
+          var err = new Error(json.error || "request_failed");
+          err.status = res.status;
+          throw err;
         }
-        hideTyping();
-      }
-    } catch(e) {}
-  }
-
-  function startPolling() {
-    if (POLL_INTERVAL) clearInterval(POLL_INTERVAL);
-    POLL_INTERVAL = setInterval(loadMessages, 3000);
-  }
-
-  async function sendMessage() {
-    var input = getEl("cc-widget-input");
-    var text = input.value.trim();
-    if (!text) return;
-    if (!SESSION_INITIALIZED) await initSession();
-    if (!SESSION_INITIALIZED) return;
-
-    input.value = "";
-    getEl("cc-widget-send").disabled = true;
-    addMessage(text, "INBOUND", true);
-    PENDING_OUTGOING++;
-    showTyping();
-
-    try {
-      await fetch(API_URL + "/api/embedded-chat/message", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: SESSION_ID, visitorId: VISITOR_ID, body: text }),
+        return json;
       });
-    } catch(e) {
-      console.error("[ChatCenter] Send failed:", e);
-      hideTyping();
-    }
+    });
   }
 
-  function init() {
-    if (!WIDGET_ID) { console.error("[ChatCenter] Missing widgetId"); return; }
-    injectStyles();
-    createWidget();
+  function post(path, body) {
+    return request(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body || {}),
+      credentials: "omit",
+    });
+  }
 
-    getEl("cc-widget-btn").addEventListener("click", toggleWidget);
-    getEl("cc-widget-close").addEventListener("click", toggleWidget);
+  // ── The adapter ──────────────────────────────────────────────
+  //
+  // The bundle asks for the storefront's endpoints. This maps them onto
+  // the ones this channel actually has. Anything the website widget has
+  // no equivalent for resolves quietly rather than erroring: a missing
+  // analytics endpoint must never break a conversation.
 
-    var input = getEl("cc-widget-input");
-    var sendBtn = getEl("cc-widget-send");
+  function visitorId() {
+    var existing = store.get("visitor");
+    if (existing) return existing;
+    var minted = "v_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+    store.set("visitor", minted);
+    return minted;
+  }
 
-    input.addEventListener("input", function() {
-      sendBtn.disabled = !input.value.trim();
-      input.style.height = "auto";
-      input.style.height = Math.min(input.scrollHeight, 80) + "px";
+  function normalizeMessages(raw) {
+    return (raw || []).map(function (m) {
+      return {
+        id: m.id,
+        direction: m.direction,
+        body: m.body,
+        messageType: m.messageType || "text",
+        author: m.author || m.senderDisplayName || null,
+        authorKind: m.direction === "INBOUND" ? "visitor" : m.authorKind || "ai",
+        createdAt: m.createdAt || m.timestamp || new Date().toISOString(),
+        commerce: null,
+      };
+    });
+  }
+
+  function loadMessages(conversationId) {
+    return request(API_PATH + "/messages/" + encodeURIComponent(conversationId), {
+      credentials: "omit",
+    })
+      .then(function (res) {
+        var d = res.data || res;
+        return normalizeMessages(d.messages || d);
+      })
+      .catch(function () { return []; });
+  }
+
+  function adapterPost(fullPath, body) {
+    var path = fullPath.indexOf(API_PATH) === 0 ? fullPath.slice(API_PATH.length) : fullPath;
+
+    if (path === "/conversation") {
+      // The bundle's "open or resume"; this channel calls it /init.
+      return post(API_PATH + "/init", {
+        widgetId: WIDGET_ID,
+        visitorId: visitorId(),
+        sessionId: store.get("conversation") || undefined,
+        pageUrl: window.location.href,
+      }).then(function (res) {
+        var d = (res && res.data) || {};
+        if (!d.sessionId) throw new Error("unavailable");
+        store.set("conversation", d.sessionId);
+        // The bundle treats `session` as "we are ready to talk"; on this
+        // channel the conversation id IS that token.
+        store.set("session", d.sessionId);
+        return loadMessages(d.sessionId).then(function (messages) {
+          return {
+            data: {
+              conversationId: d.sessionId,
+              status: "OPEN",
+              isHandedOver: false,
+              messages: messages,
+            },
+          };
+        });
+      });
+    }
+
+    if (path === "/message") {
+      return post(API_PATH + "/message", {
+        sessionId: store.get("conversation"),
+        visitorId: visitorId(),
+        body: body && body.body,
+      });
+    }
+
+    // /events, /handoff, /lead and the cart endpoints have no equivalent
+    // here. Resolving empty keeps the bundle's optional paths working
+    // without inventing server behaviour that does not exist.
+    return Promise.resolve({ data: {} });
+  }
+
+  function adapterGet(fullPath) {
+    var path = fullPath.indexOf(API_PATH) === 0 ? fullPath.slice(API_PATH.length) : fullPath;
+    var conversationId = store.get("conversation");
+    if (path.indexOf("/messages") !== 0 || !conversationId) {
+      return Promise.resolve({ data: { messages: [] } });
+    }
+    return loadMessages(conversationId).then(function (messages) {
+      return { data: { conversationId: conversationId, isHandedOver: false, messages: messages } };
+    });
+  }
+
+  // ── Boot ─────────────────────────────────────────────────────
+
+  var host = null;
+  var shadow = null;
+  var app = null;
+
+  function loadBundle() {
+    // The bundle's filename is content-hashed, so it is read from the
+    // manifest rather than hard-coded — a hard-coded name is how a stale
+    // widget once stayed in browsers for hours.
+    return request("/widget/widget-manifest.json", { credentials: "omit" })
+      .then(function (manifest) {
+        return new Promise(function (resolve, reject) {
+          if (window.__gotchaShopifyChatApp) return resolve();
+          var s = document.createElement("script");
+          s.src = API + "/widget/" + manifest.chat;
+          s.async = true;
+          s.onload = resolve;
+          s.onerror = function () { reject(new Error("bundle_failed")); };
+          document.head.appendChild(s);
+        });
+      });
+  }
+
+  function mount(bootstrap) {
+    host = document.createElement("div");
+    host.id = "gotcha-chat-root";
+    host.style.cssText = "position:fixed;z-index:2147483000;bottom:0;right:0;";
+    document.body.appendChild(host);
+    shadow = host.attachShadow({ mode: "open" });
+
+    app = window.__gotchaShopifyChatApp({
+      api: API,
+      assets: API,
+      apiPath: API_PATH,
+      context: { pageType: "page", productHandle: null, locale: document.documentElement.lang || "en" },
+      availability: bootstrap.availability || "online",
+      store: store,
+      post: adapterPost,
+      get: adapterGet,
+      shadow: shadow,
+      setUnread: function () {},
+      onOpened: function () {},
+      onClosed: function () {},
+      widget: bootstrap.widget,
     });
 
-    input.addEventListener("keydown", function(e) {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        sendMessage();
-      }
-    });
+    paintLauncher(bootstrap.widget);
+  }
 
-    sendBtn.addEventListener("click", sendMessage);
+  /**
+   * The launcher, drawn from the same config the storefront launcher uses
+   * so the two are the same control with the same settings behind them.
+   */
+  function paintLauncher(widget) {
+    var L = (widget.ux && widget.ux.launcher) || {};
+    var appearance = widget.appearance || {};
+    var mobile = window.matchMedia("(max-width: 560px)").matches;
+    var size = mobile ? Math.max(40, (L.size || 48) - 4) : L.size || 48;
+    var side = (mobile ? L.mobilePosition : L.position) === "left" ? "left" : "right";
+    var offSide = L.offsetSide == null ? 18 : L.offsetSide;
+    var offBottom = (mobile ? L.mobileOffsetBottom : L.offsetBottom) || 18;
+    var radius = L.shape === "rounded" ? 16 : Math.round(size / 2);
+    var showLabel = !!(L.showLabel && L.label);
+    var SHADOWS = [
+      "none",
+      "0 1px 4px rgba(15,23,42,.10)",
+      "0 4px 16px rgba(15,23,42,.16),0 1px 3px rgba(15,23,42,.10)",
+      "0 10px 30px rgba(15,23,42,.24),0 3px 8px rgba(15,23,42,.14)",
+    ];
 
-    // Welcome message
-    addMessage(WELCOME, "OUTBOUND", false);
+    host.style.setProperty(side, offSide + "px");
+    host.style.setProperty("bottom", offBottom + "px");
+    host.style.setProperty(side === "left" ? "right" : "left", "auto");
+
+    var style = document.createElement("style");
+    style.textContent = [
+      ".ldr{min-width:" + size + "px;width:" + (showLabel ? "auto" : size + "px") + ";height:" + size + "px;",
+      "  padding:" + (showLabel ? "0 " + Math.round(size / 4.5) + "px" : "0") + ";border-radius:" + radius + "px;",
+      "  cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;border:0;",
+      "  background:" + (L.backgroundColor || appearance.primaryColor || "#7c3aed") + ";",
+      "  color:" + (L.iconColor || appearance.contrastColor || "#fff") + ";",
+      "  box-shadow:" + (SHADOWS[L.shadow == null ? 2 : L.shadow] || SHADOWS[2]) + ";",
+      "  font:600 13px/1 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;letter-spacing:-.005em;",
+      "  transition:transform .18s ease, box-shadow .18s ease;}",
+      ".ldr:hover{transform:translateY(-1px);box-shadow:" + SHADOWS[3] + ";}",
+      ".ldr:focus-visible{outline:3px solid " + (L.backgroundColor || "#7c3aed") + ";outline-offset:3px;}",
+      ".ldr svg{width:" + Math.round(size * 0.42) + "px;height:" + Math.round(size * 0.42) + "px;",
+      "  fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none;}",
+      "@media (prefers-reduced-motion: reduce){.ldr{transition:none}}",
+    ].join("\n");
+
+    var button = document.createElement("button");
+    button.className = "ldr";
+    button.type = "button";
+    button.setAttribute("data-act", "launcher");
+    button.setAttribute("aria-label", (widget.welcome && widget.welcome.assistantName) || "Chat");
+    button.innerHTML =
+      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c5 0 9 3.36 9 7.5S17 18 12 18a10.7 10.7 0 0 1-3-.42L5 19l1.2-3.2A7.9 7.9 0 0 1 3 10.5C3 6.36 7 3 12 3z"/></svg>' +
+      (showLabel ? "<span>" + String(L.label).replace(/[<>]/g, "") + "</span>" : "");
+    button.addEventListener("click", function () { if (app) app.open(); });
+
+    shadow.appendChild(style);
+    shadow.appendChild(button);
+  }
+
+  function start() {
+    // Ask BEFORE drawing. A widget that no longer exists draws nothing at
+    // all, rather than a button that opens onto silence.
+    post(API_PATH + "/bootstrap", { widgetId: WIDGET_ID })
+      .then(function (res) {
+        var data = (res && res.data) || {};
+        if (!data.widget) return;
+        return loadBundle().then(function () {
+          if (typeof window.__gotchaShopifyChatApp !== "function") return;
+          mount(data);
+        });
+      })
+      .catch(function (err) {
+        // A removed widget is not an error: the server answers 200 with an
+        // empty body and the branch above simply returns. This is for the
+        // genuinely exceptional — the network is down, or we are broken —
+        // and even then it stays a warning on someone else's website.
+        if (err && err.status !== 404) {
+          console.warn("[gotcha-chat] unavailable:", err.message);
+        }
+      });
   }
 
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
+    document.addEventListener("DOMContentLoaded", start, { once: true });
   } else {
-    init();
+    start();
   }
 })();

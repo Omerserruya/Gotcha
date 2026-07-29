@@ -575,6 +575,18 @@ export {
 } from "./lib/shopify-app-proxy";
 export type { ShopifyCustomerIdentity } from "./lib/shopify-app-proxy";
 
+// The website chat widget. Shares its experience block with the Shopify
+// storefront widget on purpose — see lib/webchat-widget.ts.
+export {
+  WEBCHAT_CHANNEL,
+  defaultWebchatConfig,
+  normalizeWebchatConfig,
+  migrateLegacyWebchat,
+  isLegacyWebchatSettings,
+  publicWebchatConfig,
+} from "./lib/webchat-widget";
+export type { WebchatConfig, LegacyWebchatSettings, WebchatPosition } from "./lib/webchat-widget";
+
 // Secrets
 export { getSecret, requireSecret, setSecretProvider, resetSecretProvider } from "./secrets";
 export type { SecretProvider } from "./secrets";

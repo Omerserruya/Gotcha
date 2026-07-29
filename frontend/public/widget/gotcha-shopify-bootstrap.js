@@ -55,7 +55,7 @@
   // bootstrap can only ever load the exact bundle it was built against —
   // a hand-typed ?v= let four commits change the bundle without changing
   // its URL, and every cache kept serving the old one.
-  var CHAT_BUNDLE = "gotcha-shopify-chat.1d4f28625255.js";
+  var CHAT_BUNDLE = "gotcha-shopify-chat.e8c2b20a006d.js";
 
   // The App Proxy subpath on the MERCHANT's domain. Must match `subpath`
   // and `prefix` in shopify.app.toml, or the request 404s and every

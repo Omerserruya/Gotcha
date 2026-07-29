@@ -5,6 +5,10 @@ import axios from "axios";
 import jwt from "jsonwebtoken";
 import {
   prisma,
+  // The website widget shares its experience config with the Shopify
+  // storefront widget — see packages/shared/src/lib/webchat-widget.ts.
+  normalizeWebchatConfig,
+  isLegacyWebchatSettings,
   authenticate,
   resolveTenant,
   requirePermission,
@@ -1931,18 +1935,28 @@ router.post("/webchat/create", authenticate, resolveTenant, requirePermission("c
 
 router.put("/webchat/:id/settings", authenticate, resolveTenant, async (req: Request, res: Response) => {
   try {
-    const { color, iconUrl, title, subtitle, welcome, position } = req.body;
     const account = await prisma.channelAccount.findFirst({
       where: { id: String(req.params.id), tenantId: req.tenantId!, channel: "WEBCHAT" },
     });
     if (!account) { res.status(404).json({ error: "Widget not found" }); return; }
 
-    const settings = { color, iconUrl, title, subtitle, welcome, position };
+    // The stored blob used to be whatever six fields this route happened to
+    // destructure. It is now the same experience the storefront widget is
+    // configured with — launcher, hero, welcome, proactive teaser, sounds —
+    // normalized on the way in so nothing unvalidated can reach a visitor's
+    // browser on someone else's website.
+    //
+    // The old flat keys are still accepted: a client that has not been
+    // updated keeps working, and `normalizeWebchatConfig` migrates them.
+    const current = normalizeWebchatConfig(account.credentials);
+    const incoming = isLegacyWebchatSettings(req.body) ? req.body : { ...req.body, v: 2 };
+    const settings = normalizeWebchatConfig(incoming, current);
+
     const updated = await prisma.channelAccount.update({
       where: { id: account.id },
       data: { credentials: settings as any },
     });
-    res.json({ data: updated });
+    res.json({ data: { ...updated, config: settings } });
   } catch (err) {
     console.error("Update webchat settings error:", err);
     res.status(500).json({ error: "Failed to update widget settings" });
@@ -1957,7 +1971,10 @@ router.get("/webchat/:id/settings", authenticate, resolveTenant, async (req: Req
       where: { id: String(req.params.id), tenantId: req.tenantId!, channel: "WEBCHAT" },
     });
     if (!account) { res.status(404).json({ error: "Widget not found" }); return; }
-    res.json({ data: account.credentials || {} });
+
+    // Migrated on read, so a widget configured before the two channels
+    // shared an editor opens with its branding intact rather than reset.
+    res.json({ data: normalizeWebchatConfig(account.credentials) });
   } catch (err) {
     console.error("Get webchat settings error:", err);
     res.status(500).json({ error: "Failed to get widget settings" });
