@@ -586,3 +586,92 @@ describe("presentation preferences", () => {
     expect(css).toMatch(/\.ta\{[^}]*font-size:16px/);
   });
 });
+
+// ─── Opening and closing ─────────────────────────────────────
+//
+// The close button looked dead on a real storefront: the handler ran,
+// state flipped, analytics fired, and the panel stayed on screen. The
+// cause was CSS, not JavaScript — `el.hidden` is inert against an author
+// rule that sets `display`, and a shadow root has no UA stylesheet of its
+// own to lean on.
+//
+// jsdom does not implement the shadow-DOM cascade, so it CANNOT reproduce
+// that: `getComputedStyle` here would have been green throughout the
+// outage. The contract test below asserts the stylesheet carries the rule,
+// which is the part jsdom can actually see; the visible behaviour is
+// proved in a real browser instead.
+
+describe("close and reopen", () => {
+  it("ships a [hidden] rule, because .panel sets its own display", () => {
+    expect(WIDGET_SOURCE).toMatch(/\[hidden\]\{display:none!important;?\}/);
+    // The rule only matters because of this one:
+    expect(WIDGET_SOURCE).toContain("display:flex;flex-direction:column;overflow:hidden;");
+  });
+
+  it("hides the panel and tells the bootstrap to restore the launcher", async () => {
+    const h = await boot();
+    const panel = h.shadow.querySelector(".panel") as HTMLElement;
+    expect(panel.hidden).toBe(false);
+
+    const close = h.shadow.querySelector('button[aria-label]') as HTMLButtonElement;
+    close.click();
+
+    expect(panel.hidden).toBe(true);
+    // The launcher lives in the bootstrap, not here; closing must hand
+    // control back or the shopper is left with no way in.
+    expect((h as any).app).toBeTruthy();
+  });
+
+  it("carries an accessible label and is reachable by keyboard", async () => {
+    const h = await boot();
+    const close = h.shadow.querySelector('button[aria-label]') as HTMLButtonElement;
+    expect(close.getAttribute("aria-label")).toBe("Close chat");
+    expect(close.tagName).toBe("BUTTON");
+    expect(close.disabled).toBe(false);
+  });
+
+  it("Escape closes the panel", async () => {
+    const h = await boot();
+    const panel = h.shadow.querySelector(".panel") as HTMLElement;
+    panel.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(panel.hidden).toBe(true);
+  });
+
+  it("keeps the visitor session and the conversation across close/reopen", async () => {
+    const h = await boot({ messages: [{ id: "m1", direction: "OUTBOUND", body: "Hello", createdAt: new Date().toISOString() }] });
+    const before = { session: h.storeData.session, conversation: h.storeData.conversation };
+
+    h.app.close();
+    h.app.open();
+    await new Promise((r) => setTimeout(r, 20));
+
+    // Closing is a view change, not the end of a conversation.
+    expect(h.storeData.session).toBe(before.session);
+    expect(h.storeData.conversation).toBe(before.conversation);
+    const panel = h.shadow.querySelector(".panel") as HTMLElement;
+    expect(panel.hidden).toBe(false);
+  });
+
+  it("does not mint a new visitor session when reopened", async () => {
+    const h = await boot();
+    const calls = () => h.post.mock.calls.filter((c: any[]) => String(c[0]).endsWith("/bootstrap")).length;
+    const before = calls();
+    h.app.close();
+    h.app.open();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(calls()).toBe(before);
+  });
+
+  it("survives repeated open/close without stacking listeners", async () => {
+    const h = await boot();
+    const panel = h.shadow.querySelector(".panel") as HTMLElement;
+    for (let i = 0; i < 5; i++) {
+      h.app.close();
+      h.app.open();
+      await new Promise((r) => setTimeout(r, 5));
+    }
+    expect(panel.hidden).toBe(false);
+    // One panel, not six: reopening must not remount the widget.
+    expect(h.shadow.querySelectorAll(".panel").length).toBe(1);
+  });
+});

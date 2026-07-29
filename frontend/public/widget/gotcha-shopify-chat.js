@@ -206,6 +206,14 @@ window.__gotchaShopifyChatApp = function (boot) {
   var side = appearance.launcherPosition === "left" ? "left" : "right";
 
   var css = [
+    // `el.hidden = true` only hides anything because of the UA stylesheet's
+    // `[hidden]{display:none}` — the weakest rule there is. Every element
+    // below that sets its own `display` (the panel is `display:flex`) beat
+    // it, so the close button ran, state flipped to closed, analytics
+    // fired, and the panel stayed on screen looking exactly like a dead
+    // button. Shadow DOM has no UA sheet of its own to fall back on, so
+    // this has to be declared here, once, ahead of everything.
+    "[hidden]{display:none!important;}",
     ".panel{",
     "  position:fixed;bottom:88px;" + side + ":20px;width:392px;",
     // Never wider than the viewport, whatever the theme is doing. A
