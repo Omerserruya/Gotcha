@@ -23,11 +23,12 @@ describe("Settings IA", () => {
 
   it("has the canonical Workspace destinations in the specified order", () => {
     const workspace = settingsNav.filter((i) => (i.group ?? "workspace") === "workspace").map((i) => i.href);
-    expect(workspace.slice(0, 8)).toEqual([
+    expect(workspace.slice(0, 7)).toEqual([
       "/settings",
       "/settings/billing",
       "/settings/usage",
-      "/settings/business",
+      // "/settings/business" ("Your Business") is retired - the scanned
+      // profile it showed is Knowledge Base content now.
       "/settings/people",
       "/settings/channels",
       "/settings/business-systems",
@@ -41,9 +42,12 @@ describe("Settings IA", () => {
   });
 
   it("every removed route has a redirect to its canonical home", () => {
-    for (const gone of ["/settings/users", "/settings/departments", "/settings/integrations", "/settings/tools", "/settings/policy", "/settings/business-rules", "/settings/voice-channels"]) {
+    for (const gone of ["/settings/users", "/settings/departments", "/settings/integrations", "/settings/tools", "/settings/policy", "/settings/business-rules", "/settings/voice-channels", "/settings/business"]) {
       expect(LEGACY_SETTINGS_REDIRECTS[gone]).toBeTruthy();
     }
+    // "Your Business" lands on Knowledge: the profile it displayed is now
+    // retrievable Knowledge Base content, not a separate product area.
+    expect(LEGACY_SETTINGS_REDIRECTS["/settings/business"]).toBe("/ai-studio/knowledge");
     // Tool + policy config redirects into AI Studio (canonical owner), never
     // to another Settings page.
     expect(LEGACY_SETTINGS_REDIRECTS["/settings/tools"]).toMatch(/^\/ai-studio\?tab=tools/);

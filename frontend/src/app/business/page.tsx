@@ -1,13 +1,15 @@
 "use client";
 
-// "Your Business" moved to Settings → Business (the main sidebar slot went to
-// Getting Started). This stub keeps every old deep link working.
+// "Your Business" is retired as a product area - everything it displayed is
+// now Knowledge Base content the AI employee can actually retrieve. Redirect
+// straight to Knowledge rather than hopping through /settings/business, so an
+// old deep link costs one navigation instead of two.
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 export default function BusinessPage() {
   const router = useRouter();
-  useEffect(() => { router.replace("/settings/business"); }, [router]);
+  useEffect(() => { router.replace("/ai-studio/knowledge"); }, [router]);
   return null;
 }

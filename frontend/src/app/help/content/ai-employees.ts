@@ -73,11 +73,11 @@ Before your employee goes live you chat with it. Say things like *"be friendlier
 
 ## Its voice comes from your business
 
-The employee is compiled from the living business profile GOTCHA built: your **brand voice** (tone, personality, preferred words), your **forbidden words**, your positioning and your languages. Fix the profile at **Your Business** and the changes carry into how the employee speaks.
+The employee is compiled from the living business profile GOTCHA built: your **brand voice** (tone, personality, preferred words), your **forbidden words**, your positioning and your languages. Fix the **Brand voice and communication style** entry at **AI Studio → Knowledge** and the changes carry into how the employee speaks.
 
 ## Ongoing corrections
 
-- On **Your Business**, correct any wrong finding (a channel that isn't yours, a tool you don't use) - the AI learns immediately and never resurfaces it.
+- At **AI Studio → Knowledge**, correct any wrong finding - the AI learns immediately and never resurfaces it.
 - Teach missing knowledge any time (URL, text, files, Drive) - see the [Knowledge](/help/knowledge/teach-from-website) guides.
 - Watch a few real conversations in the inbox during the first days; when an answer isn't how you'd say it, teach the better answer as knowledge.`,
         `## בהגדרה: כוונון בשיחה
@@ -86,11 +86,11 @@ The employee is compiled from the living business profile GOTCHA built: your **b
 
 ## הקול שלו מגיע מהעסק שלכם
 
-העובד מורכב מהפרופיל העסקי החי ש-GOTCHA בנתה: **קול המותג** (טון, אישיות, מילים מועדפות), **מילים אסורות**, מיצוב ושפות. תקנו את הפרופיל תחת **העסק שלכם** - והשינויים עוברים לאופן שבו העובד מדבר.
+העובד מורכב מהפרופיל העסקי החי ש-GOTCHA בנתה: **קול המותג** (טון, אישיות, מילים מועדפות), **מילים אסורות**, מיצוב ושפות. תקנו את הרשומה **קול המותג וסגנון תקשורת** תחת **AI Studio ← מאגר הידע** - והשינויים עוברים לאופן שבו העובד מדבר.
 
 ## תיקונים שוטפים
 
-- ב**העסק שלכם** תקנו כל ממצא שגוי (ערוץ שאינו שלכם, כלי שאינכם משתמשים בו) - ה-AI לומד מיד ולא מעלה זאת שוב.
+- תחת **AI Studio ← מאגר הידע** תקנו כל ממצא שגוי - ה-AI לומד מיד ולא מעלה זאת שוב.
 - למדו ידע חסר בכל עת (קישור, טקסט, קבצים, Drive) - ראו מדריכי [ידע](/help/knowledge/teach-from-website).
 - צפו בכמה שיחות אמיתיות בתיבה בימים הראשונים; כשתשובה אינה כפי שהייתם מנסחים - למדו את התשובה הטובה כידע.`,
       ],

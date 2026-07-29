@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import en from "../../../i18n/en.json";
@@ -46,25 +46,29 @@ describe("§9 no standalone Business Policies tab in AI Studio", () => {
   });
 });
 
-describe("§9 governance surface holds ONLY tool-attached config; workspace-wide rules live in Settings → Your Business", () => {
+describe("§9 governance surface holds ONLY tool-attached config", () => {
   const governance = read("app/ai-studio/page.tsx");
   const actionPanel = read("components/ai-studio/ActionPoliciesPanel.tsx");
-  const businessPage = read("app/settings/business/page.tsx");
 
   it("the workspace-wide conversation guardrails (PolicyAdmin) are NOT rendered in the AI Studio Tools surface", () => {
     // PolicyAdmin = escalation keywords / blocked topics / quiet hours / blanket
     // discount ceiling - not attached to a specific executable tool. It must not
     // be imported or rendered anywhere in the governance surface (a doc-comment
-    // pointer to its new home is fine).
+    // pointer is fine).
     expect(actionPanel).not.toContain("<PolicyAdmin");
     expect(actionPanel).not.toMatch(/import\s+PolicyAdmin/);
     expect(governance).not.toContain("<PolicyAdmin");
     expect(governance).not.toMatch(/import\s+PolicyAdmin/);
   });
 
-  it("PolicyAdmin now lives in Settings → Your Business", () => {
-    expect(businessPage).toContain('import PolicyAdmin from "@/components/PolicyAdmin"');
-    expect(businessPage).toContain("<PolicyAdmin token={token} />");
+  it("the PolicyAdmin editor is gone from the product entirely", () => {
+    // "Your Business" was retired as a product area and the workspace policy
+    // EDITOR went with it (explicit product decision). The runtime enforcement
+    // engine is untouched - already-configured guardrails keep being applied -
+    // but there is no longer a UI surface that mounts this component, so no
+    // page may import it.
+    expect(existsSync(join(SRC, "components/PolicyAdmin.tsx"))).toBe(false);
+    expect(existsSync(join(SRC, "components/business/BusinessTwin.tsx"))).toBe(false);
   });
 
   it("what stays in the governance surface is tool-attached: the per-tool matrix + per-action limits only", () => {

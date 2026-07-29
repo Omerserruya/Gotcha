@@ -9,8 +9,11 @@
  * compensation / coupon / refund / cancel tools - i.e. "action-specific limits"
  * that belong WITH the tool. Workspace-wide conversation guardrails that are
  * NOT attached to a specific executable tool (escalation keywords, blocked
- * topics, outbound quiet hours, the blanket discount ceiling) live in
- * Settings → Your Business, not here - see PolicyAdmin mounted there.
+ * topics, outbound quiet hours, the blanket discount ceiling) are a
+ * workspace-level concern rather than a per-tool one. They no longer have an
+ * editor surface at all: the "Your Business" area that hosted the editor was
+ * retired as a product area. The backend policy engine still enforces whatever
+ * is already stored, so existing guardrails keep applying.
  */
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";

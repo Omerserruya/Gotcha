@@ -144,8 +144,8 @@ export const faqs: HelpFaq[] = [
   {
     q: ["Can I edit what the AI learned about my business?", "אפשר לערוך את מה שה-AI למד על העסק?"],
     a: [
-      "Yes - everything. During setup press \"Something off?\" on the review screen, and any time later on **Your Business** in the sidebar. Corrections stick: the AI never resurfaces something you removed.",
-      "כן - הכול. בהגדרה לחצו \"משהו לא מדויק?\" במסך הסקירה, ובכל שלב אחר תחת **העסק שלכם** בתפריט. תיקונים נשמרים: ה-AI לא מעלה שוב משהו שהסרתם.",
+      "Yes - everything. During setup press \"Something off?\" on the review screen, and any time later at **AI Studio \u2192 Knowledge**. Corrections stick: the AI never resurfaces something you removed.",
+      "כן - הכול. בהגדרה לחצו \"משהו לא מדויק?\" במסך הסקירה, ובכל שלב אחר תחת **AI Studio ← מאגר הידע**. תיקונים נשמרים: ה-AI לא מעלה שוב משהו שהסרתם.",
     ],
   },
   {

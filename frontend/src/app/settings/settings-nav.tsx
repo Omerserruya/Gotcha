@@ -35,8 +35,9 @@ export const settingsNav: SettingsNavItem[] = [
   { href: "/settings", labelKey: "settings.nav.general", icon: GeneralIcon, exact: true, group: "workspace" },
   { href: "/settings/billing", labelKey: "settings.nav.billing", icon: BillingIcon, adminOnly: true },
   { href: "/settings/usage", labelKey: "nav.usage", icon: UsageIcon },
-  // The Digital Twin's permanent home. Includes the "Rescan business" action.
-  { href: "/settings/business", labelKey: "nav.business", icon: BusinessTwinIcon },
+  // "Your Business" removed: the scanned profile it displayed is now Knowledge
+  // Base content (AI Studio → Knowledge), which is the only place the AI
+  // employee can actually read it from. /settings/business redirects there.
   // People & Teams: Users + Departments as tabs of one destination.
   { href: "/settings/people", labelKey: "settings.nav.people", icon: AgentsIcon },
   // All customer communication channels, voice/phone included.
@@ -55,14 +56,6 @@ function AccountIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
-    </svg>
-  );
-}
-
-function BusinessTwinIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M3 21h18M4 21V7l8-4 8 4v14M9 21v-4a1 1 0 011-1h4a1 1 0 011 1v4M9 9h.01M15 9h.01M9 13h.01M15 13h.01" />
     </svg>
   );
 }

@@ -41,8 +41,7 @@
     "aiStudio": "AI Studio",
     "outbound": "Outbound",
     "usage": "Usage",
-    "approvals": "Approvals",
-    "business": "Your Business"
+    "approvals": "Approvals"
   },
   "conversations": {
     "title": "Inbox",
@@ -1982,7 +1981,7 @@
         "workflows": "Wire channels to your AI Employee, teams, and subflows in the main workflow.",
         "connect_source_of_truth": "Your CRM or store - so your AI knows every customer.",
         "add_webchat": "No chat widget was found on your site - let visitors talk to your AI right on the page.",
-        "teach_knowledge": "A few gaps are still open - teach them on Your Business."
+        "teach_knowledge": "A few gaps are still open - add them in Knowledge."
       },
       "viewBusiness": "See your full business profile →"
     }
@@ -4212,7 +4211,6 @@
     "features": {
       "title": "Get to know the platform",
       "inbox": "Inbox",
-      "business": "Your Business",
       "aiStudio": "AI Studio",
       "channels": "Channels",
       "knowledge": "Knowledge",

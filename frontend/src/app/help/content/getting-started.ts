@@ -27,7 +27,7 @@ export const gettingStarted: HelpCategory = {
 
 ## How it learns your business
 
-During setup, GOTCHA **investigates your website** - it reads your pages, detects your channels and technology, learns your brand voice and finds your policies. Everything it learns is shown to you with a confidence level, and you can correct anything. That living profile powers your AI employee from day one, and keeps living at **Your Business** in the sidebar.
+During setup, GOTCHA **investigates your website** - it reads your pages, detects your channels and technology, learns your brand voice and finds your policies. Everything it learns is shown to you with a confidence level, and you can correct anything. Everything it learns is stored as **Knowledge** entries your AI employee can actually quote back, and you can edit any of them at **AI Studio → Knowledge**.
 
 ## One inbox for everything
 
@@ -45,7 +45,7 @@ All channels land in a single shared inbox. Your team sees every conversation, c
 
 ## איך הוא לומד את העסק
 
-בהגדרה הראשונית GOTCHA **חוקרת את האתר שלכם** - קוראת את העמודים, מזהה ערוצים וטכנולוגיות, לומדת את קול המותג ומוצאת את המדיניות. כל ממצא מוצג לכם עם רמת ביטחון, וניתן לתקן הכול. הפרופיל החי הזה מפעיל את עובד ה-AI מהיום הראשון, וממשיך לחיות תחת **העסק שלכם** בתפריט.
+בהגדרה הראשונית GOTCHA **חוקרת את האתר שלכם** - קוראת את העמודים, מזהה ערוצים וטכנולוגיות, לומדת את קול המותג ומוצאת את המדיניות. כל ממצא מוצג לכם עם רמת ביטחון, וניתן לתקן הכול. כל מה שנלמד נשמר כרשומות **ידע** שעובד ה-AI באמת יכול לצטט, וניתן לערוך כל אחת מהן תחת **AI Studio ← מאגר הידע**.
 
 ## תיבה אחת להכול
 
@@ -147,9 +147,9 @@ GOTCHA קוראת את האתר מקצה לקצה - עמוד הבית, עמוד�
 
 Most customer conversations happen there. Go to **Channels → WhatsApp → Connect** and complete the Meta signup popup. [Full guide](/help/channels/connect-whatsapp-waba).
 
-## 2. Review "Your Business"
+## 2. Review your Knowledge
 
-The sidebar's **Your Business** page is the living profile GOTCHA built. Check the readiness strip ("Can I help you yet?"), resolve open recommendations, and teach any remaining gaps.
+**AI Studio → Knowledge** holds everything the scan learned, broken into topics: your business overview, products and services, shipping and returns, pricing, contact details, FAQs and brand voice. Read them, correct anything that is wrong, and add whatever is missing.
 
 ## 3. Send a real test message
 
@@ -170,9 +170,9 @@ Add agents and managers in **Settings → Users** - they get the shared inbox, a
 
 רוב שיחות הלקוחות קורות שם. גשו אל **ערוצים → וואטסאפ → התחברות** והשלימו את חלון ההרשמה של Meta. [מדריך מלא](/help/channels/connect-whatsapp-waba).
 
-## 2. עברו על "העסק שלכם"
+## 2. עברו על מאגר הידע
 
-עמוד **העסק שלכם** בתפריט הוא הפרופיל החי ש-GOTCHA בנתה. בדקו את רצועת המוכנות ("האם אני כבר יכול לעזור?"), טפלו בהמלצות פתוחות ולמדו פערים שנותרו.
+**AI Studio ← מאגר הידע** מרכז את כל מה שהסריקה למדה, מחולק לנושאים: סקירת העסק, מוצרים ושירותים, משלוחים והחזרות, תמחור, פרטי קשר, שאלות נפוצות וקול המותג. קראו, תקנו מה שלא מדויק והוסיפו את מה שחסר.
 
 ## 3. שלחו הודעת בדיקה אמיתית
 

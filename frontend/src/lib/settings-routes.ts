@@ -26,4 +26,11 @@ export const LEGACY_SETTINGS_REDIRECTS: Record<string, string> = {
   // Voice/phone is a communication channel: the list view now lives in
   // Channels (Voice section). Detail/new wizard routes are still real pages.
   "/settings/voice-channels": "/settings/channels",
+  // "Your Business" is retired as a product area. Everything it displayed -
+  // the scanned profile, the policies, the products, the FAQs - is now
+  // projected into real Knowledge Base entries the AI employee can actually
+  // retrieve, so Knowledge is where those links belong. The scanned profile
+  // was never editable configuration; it was knowledge shown in the wrong
+  // place.
+  "/settings/business": "/ai-studio/knowledge",
 };

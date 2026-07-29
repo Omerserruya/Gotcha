@@ -157,7 +157,7 @@ In Fireberry: **Settings → Integration → API Forms → My Token**. Copy the 
 - Customer recognition by email/phone from your store records.
 - Shopify can also serve as your **source of truth** if you don't run a separate CRM.
 
-> After connecting, GOTCHA adds store-specific recommendations (like automating order-status replies) to your list on **Your Business**.`,
+> After connecting, GOTCHA adds store-specific recommendations (like automating order-status replies) to your recommendations list.`,
         `## חיבור
 
 1. בחרו **Shopify** בהגדרה (או בהגדרות → אינטגרציות).
@@ -171,7 +171,7 @@ In Fireberry: **Settings → Integration → API Forms → My Token**. Copy the 
 - זיהוי לקוחות לפי אימייל/טלפון מרשומות החנות.
 - Shopify יכול לשמש גם כ**מקור האמת** אם אין לכם CRM נפרד.
 
-> אחרי החיבור GOTCHA מוסיפה המלצות ייעודיות לחנות (כמו אוטומציה למענה על סטטוס הזמנה) לרשימה שלכם ב**העסק שלכם**.`,
+> אחרי החיבור GOTCHA מוסיפה המלצות ייעודיות לחנות (כמו אוטומציה למענה על סטטוס הזמנה) לרשימת ההמלצות שלכם.`,
       ],
     },
   ],

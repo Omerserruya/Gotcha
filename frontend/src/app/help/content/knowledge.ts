@@ -23,7 +23,7 @@ export const knowledge: HelpCategory = {
 ## Where to do it
 
 - **During setup** - the review screen shows "What I'd love you to teach me": concrete, business-specific gaps (e.g. *your warranty policy*). Each card takes a URL or pasted text.
-- **Any time after** - the same teach cards live on **Your Business**, and remaining gaps stay listed as recommendations until you teach or dismiss them.
+- **Any time after** - open **AI Studio → Knowledge** to add, edit or refresh anything. Remaining gaps stay listed until you fill or dismiss them.
 
 ## Good teaching habits
 
@@ -40,7 +40,7 @@ export const knowledge: HelpCategory = {
 ## איפה עושים את זה
 
 - **בהגדרה** - מסך הסקירה מציג "מה שאשמח שתלמדו אותי": פערים קונקרטיים לעסק שלכם (למשל *מדיניות האחריות*). כל כרטיס מקבל קישור או טקסט.
-- **בכל שלב אחרי** - אותם כרטיסי לימוד חיים ב**העסק שלכם**, ופערים שנותרו נשארים כהמלצות עד שתלמדו או תדחו.
+- **בכל שלב אחרי** - פתחו **AI Studio ← מאגר הידע** כדי להוסיף, לערוך או לרענן כל דבר. פערים שנותרו נשארים ברשימה עד שתשלימו או תדחו אותם.
 
 ## הרגלי לימוד טובים
 

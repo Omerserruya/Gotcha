@@ -19,7 +19,8 @@ import { MissionPanel } from "./onboarding/MissionPanel";
 const navItems = [
   // journeyGated: shown only while the first-steps journey is incomplete
   // (mirrors MissionPanel's auto-dismiss - once done it's gone for good).
-  // "Your Business" moved to /settings/business when this slot was added.
+  // The old "Your Business" slot is gone entirely - what it showed is now
+  // Knowledge Base content (AI Studio → Knowledge).
   { href: "/getting-started", icon: RocketIcon, labelKey: "nav.gettingStarted", adminOnly: true, journeyGated: true },
   { href: "/conversations", icon: ChatIcon, labelKey: "nav.conversations" },
   { href: "/history", icon: HistoryIcon, labelKey: "nav.history", managerOrAdmin: true },
