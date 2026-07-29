@@ -35,9 +35,14 @@ import type { ProductView } from "./ProductCard";
 const SECTIONS = [
   "store",
   "installation",
+  "launcher",
+  "hero",
   "appearance",
   "welcome",
   "questions",
+  "proactive",
+  "sounds",
+  "behavior",
   "ai",
   "routing",
   "handoff",
@@ -482,6 +487,248 @@ export function ShopifyLiveChatSettings() {
                   </Field>
                 </div>
               </details>
+            </Card>
+          )}
+
+          {section === "launcher" && (
+            <Card title={t("shopifyChat.section.launcher")} hint={t("shopifyChat.launcherHint")}>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label={t("shopifyChat.launcherShape")}>
+                  <Select
+                    value={draft.ux?.launcher?.shape ?? "circle"}
+                    onChange={(v) => patch("ux.launcher.shape", v)}
+                    options={["circle", "rounded", "pill"].map((v) => ({ value: v, label: t(`shopifyChat.shape.${v}`) }))}
+                  />
+                </Field>
+                <Field label={`${t("shopifyChat.launcherSize")}: ${draft.ux?.launcher?.size ?? 60}px`}>
+                  <input type="range" min={44} max={96} value={draft.ux?.launcher?.size ?? 60}
+                    onChange={(e) => patch("ux.launcher.size", Number(e.target.value))} className="w-full" />
+                </Field>
+                <Field label={t("shopifyChat.launcherBg")}>
+                  <ColorInput value={draft.ux?.launcher?.backgroundColor ?? "#111827"} onChange={(v) => patch("ux.launcher.backgroundColor", v)} />
+                </Field>
+                <Field label={t("shopifyChat.launcherFg")}>
+                  <ColorInput value={draft.ux?.launcher?.iconColor ?? "#ffffff"} onChange={(v) => patch("ux.launcher.iconColor", v)} />
+                </Field>
+                <Field label={t("shopifyChat.position")}>
+                  <Select value={draft.ux?.launcher?.position ?? "right"} onChange={(v) => patch("ux.launcher.position", v)}
+                    options={[{ value: "right", label: t("shopifyChat.right") }, { value: "left", label: t("shopifyChat.left") }]} />
+                </Field>
+                <Field label={t("shopifyChat.mobilePosition")}>
+                  <Select value={draft.ux?.launcher?.mobilePosition ?? "right"} onChange={(v) => patch("ux.launcher.mobilePosition", v)}
+                    options={[{ value: "right", label: t("shopifyChat.right") }, { value: "left", label: t("shopifyChat.left") }]} />
+                </Field>
+                <Field label={`${t("shopifyChat.offsetBottom")}: ${draft.ux?.launcher?.offsetBottom ?? 20}px`}>
+                  <input type="range" min={0} max={120} value={draft.ux?.launcher?.offsetBottom ?? 20}
+                    onChange={(e) => patch("ux.launcher.offsetBottom", Number(e.target.value))} className="w-full" />
+                </Field>
+                <Field label={`${t("shopifyChat.offsetSide")}: ${draft.ux?.launcher?.offsetSide ?? 20}px`}>
+                  <input type="range" min={0} max={120} value={draft.ux?.launcher?.offsetSide ?? 20}
+                    onChange={(e) => patch("ux.launcher.offsetSide", Number(e.target.value))} className="w-full" />
+                </Field>
+              </div>
+              <Field label={`${t("shopifyChat.shadow")}: ${draft.ux?.launcher?.shadow ?? 2}`}>
+                <input type="range" min={0} max={3} value={draft.ux?.launcher?.shadow ?? 2}
+                  onChange={(e) => patch("ux.launcher.shadow", Number(e.target.value))} className="w-full" />
+              </Field>
+              <Field label={t("shopifyChat.launcherIcon")}>
+                <Select value={draft.ux?.launcher?.icon ?? "chat"} onChange={(v) => patch("ux.launcher.icon", v)}
+                  options={["chat", "sparkle", "bag", "question", "custom"].map((v) => ({ value: v, label: t(`shopifyChat.icon.${v}`) }))} />
+              </Field>
+              {draft.ux?.launcher?.icon === "custom" && (
+                <Field label={t("shopifyChat.launcherIconUrl")} hint={t("shopifyChat.mediaHint")}>
+                  <input type="url" value={draft.ux?.launcher?.iconUrl ?? ""}
+                    onChange={(e) => patch("ux.launcher.iconUrl", e.target.value || null)}
+                    className="w-full text-sm px-3 py-2 border border-gray-200 rounded-lg" />
+                </Field>
+              )}
+              <Toggle label={t("shopifyChat.showLabel")} checked={!!draft.ux?.launcher?.showLabel}
+                onChange={(v) => patch("ux.launcher.showLabel", v)} />
+              {draft.ux?.launcher?.showLabel && (
+                <Field label={t("shopifyChat.launcherLabel")}>
+                  <input maxLength={24} value={draft.ux?.launcher?.label ?? ""}
+                    onChange={(e) => patch("ux.launcher.label", e.target.value)}
+                    placeholder={t("shopifyChat.launcherLabelPlaceholder")}
+                    className="w-full text-sm px-3 py-2 border border-gray-200 rounded-lg" />
+                </Field>
+              )}
+              <Toggle label={t("shopifyChat.showBorder")} checked={!!draft.ux?.launcher?.showBorder}
+                onChange={(v) => patch("ux.launcher.showBorder", v)} />
+              <Toggle label={t("shopifyChat.showUnreadBadge")} checked={draft.ux?.launcher?.showUnreadBadge !== false}
+                onChange={(v) => patch("ux.launcher.showUnreadBadge", v)} />
+            </Card>
+          )}
+
+          {section === "hero" && (
+            <Card title={t("shopifyChat.section.hero")} hint={t("shopifyChat.heroHint")}>
+              <Field label={t("shopifyChat.heroMediaType")}>
+                <Select value={draft.ux?.hero?.mediaType ?? "none"} onChange={(v) => patch("ux.hero.mediaType", v)}
+                  options={["none", "image", "gif", "video"].map((v) => ({ value: v, label: t(`shopifyChat.media.${v}`) }))} />
+              </Field>
+              {draft.ux?.hero?.mediaType !== "none" && (
+                <>
+                  <Field label={t("shopifyChat.heroMediaUrl")} hint={t("shopifyChat.mediaHint")}>
+                    <input type="url" value={draft.ux?.hero?.mediaUrl ?? ""}
+                      onChange={(e) => patch("ux.hero.mediaUrl", e.target.value || null)}
+                      className="w-full text-sm px-3 py-2 border border-gray-200 rounded-lg" />
+                  </Field>
+                  {draft.ux?.hero?.mediaType === "video" && (
+                    <Field label={t("shopifyChat.heroPoster")} hint={t("shopifyChat.heroPosterHint")}>
+                      <input type="url" value={draft.ux?.hero?.posterUrl ?? ""}
+                        onChange={(e) => patch("ux.hero.posterUrl", e.target.value || null)}
+                        className="w-full text-sm px-3 py-2 border border-gray-200 rounded-lg" />
+                    </Field>
+                  )}
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label={`${t("shopifyChat.heroHeight")}: ${draft.ux?.hero?.height ?? 180}px`}>
+                      <input type="range" min={80} max={320} value={draft.ux?.hero?.height ?? 180}
+                        onChange={(e) => patch("ux.hero.height", Number(e.target.value))} className="w-full" />
+                    </Field>
+                    <Field label={`${t("shopifyChat.heroMobileHeight")}: ${draft.ux?.hero?.mobileHeight ?? 148}px`}>
+                      <input type="range" min={80} max={280} value={draft.ux?.hero?.mobileHeight ?? 148}
+                        onChange={(e) => patch("ux.hero.mobileHeight", Number(e.target.value))} className="w-full" />
+                    </Field>
+                    <Field label={`${t("shopifyChat.heroFade")}: ${draft.ux?.hero?.fadeStrength ?? 60}%`}>
+                      <input type="range" min={0} max={100} value={draft.ux?.hero?.fadeStrength ?? 60}
+                        onChange={(e) => patch("ux.hero.fadeStrength", Number(e.target.value))} className="w-full" />
+                    </Field>
+                    <Field label={`${t("shopifyChat.heroOverlay")}: ${draft.ux?.hero?.overlayStrength ?? 0}%`}>
+                      <input type="range" min={0} max={100} value={draft.ux?.hero?.overlayStrength ?? 0}
+                        onChange={(e) => patch("ux.hero.overlayStrength", Number(e.target.value))} className="w-full" />
+                    </Field>
+                  </div>
+                  <Field label={t("shopifyChat.heroAvatar")} hint={t("shopifyChat.mediaHint")}>
+                    <input type="url" value={draft.ux?.hero?.avatarUrl ?? ""}
+                      onChange={(e) => patch("ux.hero.avatarUrl", e.target.value || null)}
+                      className="w-full text-sm px-3 py-2 border border-gray-200 rounded-lg" />
+                  </Field>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label={`${t("shopifyChat.heroAvatarSize")}: ${draft.ux?.hero?.avatarSize ?? 64}px`}>
+                      <input type="range" min={40} max={96} value={draft.ux?.hero?.avatarSize ?? 64}
+                        onChange={(e) => patch("ux.hero.avatarSize", Number(e.target.value))} className="w-full" />
+                    </Field>
+                    <Field label={`${t("shopifyChat.heroOverlap")}: ${draft.ux?.hero?.avatarOverlap ?? 28}px`}>
+                      <input type="range" min={0} max={60} value={draft.ux?.hero?.avatarOverlap ?? 28}
+                        onChange={(e) => patch("ux.hero.avatarOverlap", Number(e.target.value))} className="w-full" />
+                    </Field>
+                  </div>
+                  {draft.ux?.hero?.mediaType === "video" && (
+                    <>
+                      <Toggle label={t("shopifyChat.videoLoop")} checked={draft.ux?.hero?.videoLoop !== false}
+                        onChange={(v) => patch("ux.hero.videoLoop", v)} />
+                      <Toggle label={t("shopifyChat.videoAutoplay")} hint={t("shopifyChat.videoAutoplayHint")}
+                        checked={draft.ux?.hero?.videoAutoplay !== false}
+                        onChange={(v) => patch("ux.hero.videoAutoplay", v)} />
+                    </>
+                  )}
+                </>
+              )}
+            </Card>
+          )}
+
+          {section === "proactive" && (
+            <Card title={t("shopifyChat.section.proactive")} hint={t("shopifyChat.proactiveHint")}>
+              <Toggle label={t("shopifyChat.proactiveEnabled")} hint={t("shopifyChat.proactiveEnabledHint")}
+                checked={!!draft.ux?.proactive?.enabled} onChange={(v) => patch("ux.proactive.enabled", v)} />
+              {draft.ux?.proactive?.enabled && (
+                <>
+                  <Field label={t("shopifyChat.trigger")}>
+                    <Select value={draft.ux?.proactive?.trigger ?? "time_on_page"} onChange={(v) => patch("ux.proactive.trigger", v)}
+                      options={["time_on_page", "page_views", "scroll_depth", "exit_intent", "product_page", "cart_page", "inactivity", "custom_event"]
+                        .map((v) => ({ value: v, label: t(`shopifyChat.trigger.${v}`) }))} />
+                  </Field>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label={`${t("shopifyChat.delay")}: ${draft.ux?.proactive?.delaySeconds ?? 15}s`}>
+                      <input type="range" min={3} max={120} value={draft.ux?.proactive?.delaySeconds ?? 15}
+                        onChange={(e) => patch("ux.proactive.delaySeconds", Number(e.target.value))} className="w-full" />
+                    </Field>
+                    <Field label={`${t("shopifyChat.mobileDelay")}: ${draft.ux?.proactive?.mobileDelaySeconds ?? 25}s`}>
+                      <input type="range" min={3} max={120} value={draft.ux?.proactive?.mobileDelaySeconds ?? 25}
+                        onChange={(e) => patch("ux.proactive.mobileDelaySeconds", Number(e.target.value))} className="w-full" />
+                    </Field>
+                  </div>
+                  <Field label={t("shopifyChat.teaserTitle")}>
+                    <input maxLength={60} value={draft.ux?.proactive?.title ?? ""}
+                      onChange={(e) => patch("ux.proactive.title", e.target.value)}
+                      className="w-full text-sm px-3 py-2 border border-gray-200 rounded-lg" />
+                  </Field>
+                  <Field label={t("shopifyChat.teaserMessage")}>
+                    <textarea rows={2} maxLength={200} value={draft.ux?.proactive?.message ?? ""}
+                      onChange={(e) => patch("ux.proactive.message", e.target.value)}
+                      className="w-full text-sm px-3 py-2 border border-gray-200 rounded-lg" />
+                  </Field>
+                  <Field label={t("shopifyChat.teaserAction")}>
+                    <input maxLength={30} value={draft.ux?.proactive?.actionLabel ?? ""}
+                      onChange={(e) => patch("ux.proactive.actionLabel", e.target.value)}
+                      className="w-full text-sm px-3 py-2 border border-gray-200 rounded-lg" />
+                  </Field>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label={t("shopifyChat.maxPerSession")}>
+                      <Select value={String(draft.ux?.proactive?.maxPerSession ?? 1)} onChange={(v) => patch("ux.proactive.maxPerSession", Number(v))}
+                        options={[1, 2, 3].map((n) => ({ value: String(n), label: String(n) }))} />
+                    </Field>
+                    <Field label={`${t("shopifyChat.cooldown")}: ${draft.ux?.proactive?.cooldownHours ?? 24}h`}>
+                      <input type="range" min={1} max={168} value={draft.ux?.proactive?.cooldownHours ?? 24}
+                        onChange={(e) => patch("ux.proactive.cooldownHours", Number(e.target.value))} className="w-full" />
+                    </Field>
+                  </div>
+                  <Toggle label={t("shopifyChat.autoOpen")} hint={t("shopifyChat.autoOpenHint")}
+                    checked={!!draft.ux?.proactive?.autoOpen} onChange={(v) => patch("ux.proactive.autoOpen", v)} />
+                  <Toggle label={t("shopifyChat.desktopEnabled")} checked={draft.ux?.proactive?.desktopEnabled !== false}
+                    onChange={(v) => patch("ux.proactive.desktopEnabled", v)} />
+                  <Toggle label={t("shopifyChat.mobileEnabled")} checked={draft.ux?.proactive?.mobileEnabled !== false}
+                    onChange={(v) => patch("ux.proactive.mobileEnabled", v)} />
+                  <Toggle label={t("shopifyChat.respectHours")} checked={draft.ux?.proactive?.respectBusinessHours !== false}
+                    onChange={(v) => patch("ux.proactive.respectBusinessHours", v)} />
+                </>
+              )}
+            </Card>
+          )}
+
+          {section === "sounds" && (
+            <Card title={t("shopifyChat.section.sounds")} hint={t("shopifyChat.soundsHint")}>
+              <Toggle label={t("shopifyChat.soundsEnabled")} checked={!!draft.ux?.sounds?.enabled}
+                onChange={(v) => patch("ux.sounds.enabled", v)} />
+              {draft.ux?.sounds?.enabled && (
+                <>
+                  <Field label={t("shopifyChat.soundPack")}>
+                    <Select value={draft.ux?.sounds?.pack ?? "subtle"} onChange={(v) => patch("ux.sounds.pack", v)}
+                      options={["subtle", "classic"].map((v) => ({ value: v, label: t(`shopifyChat.pack.${v}`) }))} />
+                  </Field>
+                  <Field label={`${t("shopifyChat.volume")}: ${draft.ux?.sounds?.volume ?? 40}%`}>
+                    <input type="range" min={0} max={100} value={draft.ux?.sounds?.volume ?? 40}
+                      onChange={(e) => patch("ux.sounds.volume", Number(e.target.value))} className="w-full" />
+                  </Field>
+                  <SoundPreview pack={draft.ux?.sounds?.pack ?? "subtle"} volume={draft.ux?.sounds?.volume ?? 40} t={t} />
+                  <Toggle label={t("shopifyChat.soundOutgoing")} checked={draft.ux?.sounds?.outgoing !== false}
+                    onChange={(v) => patch("ux.sounds.outgoing", v)} />
+                  <Toggle label={t("shopifyChat.soundIncomingAi")} checked={draft.ux?.sounds?.incomingAi !== false}
+                    onChange={(v) => patch("ux.sounds.incomingAi", v)} />
+                  <Toggle label={t("shopifyChat.soundIncomingHuman")} checked={draft.ux?.sounds?.incomingHuman !== false}
+                    onChange={(v) => patch("ux.sounds.incomingHuman", v)} />
+                  <Toggle label={t("shopifyChat.soundProactive")} checked={!!draft.ux?.sounds?.proactive}
+                    onChange={(v) => patch("ux.sounds.proactive", v)} />
+                  <Toggle label={t("shopifyChat.soundWhenClosed")} checked={draft.ux?.sounds?.playWhenClosed !== false}
+                    onChange={(v) => patch("ux.sounds.playWhenClosed", v)} />
+                  <Toggle label={t("shopifyChat.soundWhenTabActive")} checked={draft.ux?.sounds?.playWhenTabActive !== false}
+                    onChange={(v) => patch("ux.sounds.playWhenTabActive", v)} />
+                </>
+              )}
+            </Card>
+          )}
+
+          {section === "behavior" && (
+            <Card title={t("shopifyChat.section.behavior")}>
+              <Toggle label={t("shopifyChat.openOnLoad")} hint={t("shopifyChat.openOnLoadHint")}
+                checked={!!draft.ux?.behavior?.openOnLoad} onChange={(v) => patch("ux.behavior.openOnLoad", v)} />
+              <Toggle label={t("shopifyChat.closeOnOutsideClick")} checked={!!draft.ux?.behavior?.closeOnOutsideClick}
+                onChange={(v) => patch("ux.behavior.closeOnOutsideClick", v)} />
+              <Toggle label={t("shopifyChat.rememberOpenState")} checked={draft.ux?.behavior?.rememberOpenState !== false}
+                onChange={(v) => patch("ux.behavior.rememberOpenState", v)} />
+              <Toggle label={t("shopifyChat.mobileFullScreen")} checked={draft.ux?.behavior?.mobileFullScreen !== false}
+                onChange={(v) => patch("ux.behavior.mobileFullScreen", v)} />
+              <Toggle label={t("shopifyChat.keepHeaderMedia")} hint={t("shopifyChat.keepHeaderMediaHint")}
+                checked={!!draft.ux?.behavior?.keepHeaderMedia} onChange={(v) => patch("ux.behavior.keepHeaderMedia", v)} />
             </Card>
           )}
 
@@ -998,6 +1245,58 @@ function Field({
       {children}
       {hint && <span className="block text-[11px] text-gray-400">{hint}</span>}
     </label>
+  );
+}
+
+/**
+ * Play the built-in tones so a merchant can hear what they are choosing.
+ *
+ * Synthesised with the same oscillator recipe the widget uses, so the
+ * preview cannot drift from the storefront. A click is itself the user
+ * gesture browsers require, so nothing has to be unlocked first.
+ */
+function SoundPreview({ pack, volume, t }: { pack: string; volume: number; t: (k: string) => string }) {
+  const TONES: Record<string, Record<string, [number, number]>> = {
+    subtle: { outgoing: [520, 0.06], incoming_ai: [660, 0.09], incoming_human: [740, 0.09], proactive: [600, 0.1] },
+    classic: { outgoing: [660, 0.07], incoming_ai: [880, 0.11], incoming_human: [990, 0.11], proactive: [780, 0.12] },
+  };
+
+  function play(event: string) {
+    try {
+      const Ctx = (window as any).AudioContext || (window as any).webkitAudioContext;
+      if (!Ctx) return;
+      const ctx = new Ctx();
+      const spec = (TONES[pack] ?? TONES.subtle)[event] ?? [660, 0.09];
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = spec[0];
+      const vol = Math.max(0, Math.min(1, volume / 100)) * 0.25;
+      gain.gain.setValueAtTime(0, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(vol, ctx.currentTime + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + spec[1]);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + spec[1] + 0.02);
+      setTimeout(() => ctx.close().catch(() => {}), 600);
+    } catch {
+      /* a browser that will not make noise is not an error worth showing */
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {["outgoing", "incoming_ai", "incoming_human", "proactive"].map((e) => (
+        <button
+          key={e}
+          type="button"
+          onClick={() => play(e)}
+          className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50"
+        >
+          ▸ {t(`shopifyChat.sound.${e}`)}
+        </button>
+      ))}
+    </div>
   );
 }
 
