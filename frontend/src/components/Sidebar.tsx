@@ -128,60 +128,68 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
         )}
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 py-3 space-y-1 px-2">
-        {navItems
-          .filter((item) => {
-            // Gated by effective built-in role (consistent with the backend
-            // requireRole bridge - assigned roles drive nav, no dead links).
-            if (item.adminOnly && !atLeastRole("admin")) return false;
-            if ((item as any).managerOrAdmin && !atLeastRole("department_manager")) return false;
-            if ((item as any).journeyGated && !journeyIncomplete) return false;
-            // License gate: hide areas the tenant isn't entitled to. Only once
-            // /permissions/me has loaded (never flicker-hide during boot), and
-            // never for SYSTEM_ADMIN.
-            const domain = (item as any).domain as string | undefined;
-            if (domain && loaded && roleKey !== "system_admin") {
-              let licensed = false;
-              permissions.forEach((k) => { if (k.startsWith(domain + ":")) licensed = true; });
-              if (!licensed) return false;
-            }
-            return true;
-          })
-          .map((item) => {
-            const isActive = pathname.startsWith(item.href);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                title={collapsed ? t(item.labelKey) : undefined}
-                // data-tour hook used by the first-time GuidedTour to
-                // spotlight nav targets like /ai-studio and /conversations.
-                data-tour={`nav-${item.href.replace(/^\//, "").split("/")[0] || "home"}`}
-                className={clsx(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all",
-                  isActive
-                    ? "bg-primary-50/70 text-primary-600 font-medium"
-                    : "text-gray-500 hover:text-primary-600 hover:bg-gray-50/80"
-                )}
-              >
-                <item.icon className="w-5 h-5 shrink-0" />
-                {!collapsed && <span className="text-sm">{t(item.labelKey)}</span>}
-                {!collapsed && item.href === "/getting-started" && (journeyRemaining ?? 0) > 0 && (
-                  <span className="ms-auto shrink-0 min-w-[20px] h-5 px-1.5 rounded-full bg-primary-100 text-primary-700 text-[11px] font-bold flex items-center justify-center tabular-nums">
-                    {journeyRemaining}
-                  </span>
-                )}
-              </Link>
-            );
-          })}
-      </nav>
+      {/* Scrollable middle: nav + call banner + mission panel.
+          It MUST carry min-h-0 - a flex child defaults to min-height:auto, so
+          without it the nav refuses to shrink, the column overflows its fixed
+          h-screen, and md:overflow-hidden silently eats the footer below
+          (that's how the first-steps mission panel made the whole bottom of
+          the menu disappear). The user block stays outside, always visible. */}
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+        {/* Navigation */}
+        <nav className="py-3 space-y-1 px-2">
+          {navItems
+            .filter((item) => {
+              // Gated by effective built-in role (consistent with the backend
+              // requireRole bridge - assigned roles drive nav, no dead links).
+              if (item.adminOnly && !atLeastRole("admin")) return false;
+              if ((item as any).managerOrAdmin && !atLeastRole("department_manager")) return false;
+              if ((item as any).journeyGated && !journeyIncomplete) return false;
+              // License gate: hide areas the tenant isn't entitled to. Only once
+              // /permissions/me has loaded (never flicker-hide during boot), and
+              // never for SYSTEM_ADMIN.
+              const domain = (item as any).domain as string | undefined;
+              if (domain && loaded && roleKey !== "system_admin") {
+                let licensed = false;
+                permissions.forEach((k) => { if (k.startsWith(domain + ":")) licensed = true; });
+                if (!licensed) return false;
+              }
+              return true;
+            })
+            .map((item) => {
+              const isActive = pathname.startsWith(item.href);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  title={collapsed ? t(item.labelKey) : undefined}
+                  // data-tour hook used by the first-time GuidedTour to
+                  // spotlight nav targets like /ai-studio and /conversations.
+                  data-tour={`nav-${item.href.replace(/^\//, "").split("/")[0] || "home"}`}
+                  className={clsx(
+                    "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all",
+                    isActive
+                      ? "bg-primary-50/70 text-primary-600 font-medium"
+                      : "text-gray-500 hover:text-primary-600 hover:bg-gray-50/80"
+                  )}
+                >
+                  <item.icon className="w-5 h-5 shrink-0" />
+                  {!collapsed && <span className="text-sm">{t(item.labelKey)}</span>}
+                  {!collapsed && item.href === "/getting-started" && (journeyRemaining ?? 0) > 0 && (
+                    <span className="ms-auto shrink-0 min-w-[20px] h-5 px-1.5 rounded-full bg-primary-100 text-primary-700 text-[11px] font-bold flex items-center justify-center tabular-nums">
+                      {journeyRemaining}
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
+        </nav>
 
-      {/* Incoming call banner - desktop sidebar slot */}
-      <IncomingCallBannerSidebar />
+        {/* Incoming call banner - desktop sidebar slot */}
+        <IncomingCallBannerSidebar />
 
-      {/* Onboarding mission panel - auto-hides when all 5 are done */}
-      <MissionPanel collapsed={collapsed} />
+        {/* Onboarding mission panel - auto-hides when all 5 are done */}
+        <MissionPanel collapsed={collapsed} />
+      </div>
 
       {/* Language switcher moved to Settings → Language (system-wide
           setting that also affects AI-generated content like briefs,
