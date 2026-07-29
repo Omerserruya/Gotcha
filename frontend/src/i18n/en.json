@@ -737,7 +737,10 @@
     "shopifyLiveChat": "Shopify Live Chat",
     "shopifyLiveChatDesc": "Branded chat on your Shopify storefront, with product cards and Add to Cart.",
     "configureShopifyLiveChat": "Set up",
-    "deleteWidgetMsg": "This removes the chat widget from your website and permanently deletes its conversations and messages. The script on your site will stop showing anything. This cannot be undone."
+    "deleteWidgetMsg": "This removes the chat widget from your website and permanently deletes its conversations and messages. The script on your site will stop showing anything. This cannot be undone.",
+    "widgetSaved": "Widget settings saved",
+    "embedInstall": "Install",
+    "embedCustomise": "Customise"
   },
   "departments": {
     "title": "Departments",
@@ -1949,7 +1952,8 @@
     "enabled": "Enabled",
     "disabled": "Disabled",
     "connected": "Connected",
-    "notConnected": "Not connected"
+    "notConnected": "Not connected",
+    "unsavedChanges": "Unsaved changes"
   },
   "onboarding": {
     "channelsBanner": "Pick WhatsApp, Instagram, or Email to connect your first channel.",
@@ -5045,7 +5049,9 @@
     "hoursMovedHint": "Opening hours are set once for your business and apply to every channel, so the widget always agrees with your AI employee about whether you are open.",
     "hoursMovedLink": "Set your business hours",
     "routingMovedHint": "Who answers a new chat is decided by your Main Playbook, the same as every other channel.",
-    "routingMovedLink": "Open the Main Playbook"
+    "routingMovedLink": "Open the Main Playbook",
+    "desktop": "Desktop",
+    "mobile": "Mobile"
   },
   "shopifyInstall": {
     "title": "Set up GOTCHA Chat",

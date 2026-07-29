@@ -14,13 +14,12 @@ import {
   disconnectChannel,
   deleteChannelAccount,
   getChannelStatus,
-  getWebchatSettings,
-  updateWebchatSettings,
 } from "@/lib/api";
 import { ChannelBadge } from "@/components/conversations/ChannelBadge";
 import { ShopifyGlyph } from "@/components/shopify/ShopifyGlyph";
 import { ChannelsOnboardingBanner } from "@/components/onboarding/ChannelsOnboardingBanner";
 import clsx from "clsx";
+import { WebchatWidgetSettings } from "@/components/chat-widget/WebchatWidgetSettings";
 import ConfirmModal from "@/components/ConfirmModal";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
@@ -148,15 +147,11 @@ function ChannelsPageContent() {
   const [deleting, setDeleting] = useState(false);
   const [embedModal, setEmbedModal] = useState<{ open: boolean; widgetId: string; code: string; apiUrl: string; accountId: string }>({ open: false, widgetId: "", code: "", apiUrl: "", accountId: "" });
   const [embedTab, setEmbedTab] = useState<"html" | "nextjs" | "react" | "vue" | "php">("html");
-  const [widgetColor, setWidgetColor] = useState("#7c3aed");
-  const [widgetIconUrl, setWidgetIconUrl] = useState("");
-  const [widgetTitle, setWidgetTitle] = useState("Chat with us");
-  const [widgetPosition, setWidgetPosition] = useState<"right" | "left">("right");
+  // Install (the snippet) or Customise (the full editor).
+  const [embedMode, setEmbedMode] = useState<"install" | "customise">("install");
   // The full canonical config for the open widget. Kept so saving one
   // field cannot silently drop the hero, teaser or sound settings that
   // this modal does not show.
-  const [widgetConfig, setWidgetConfig] = useState<any>(null);
-  const [savingWidget, setSavingWidget] = useState(false);
   const showMessage = (msg: string, type: "success" | "error" = "success") => {
     setMessage(msg);
     setMessageType(type);
@@ -382,10 +377,6 @@ function ChannelsPageContent() {
 </script>`;
       setEmbedModal({ open: true, widgetId: widget.externalId, code: embedCode, apiUrl, accountId: widget.id });
       setEmbedTab("html");
-      setWidgetColor("#7c3aed");
-      setWidgetIconUrl("");
-      setWidgetTitle("Chat with us");
-      setWidgetPosition("right");
       showMessage(t("channels.connected"), "success");
       fetchData();
     } catch (err: any) {
@@ -765,19 +756,7 @@ function ChannelsPageContent() {
                         const apiUrl = process.env.NEXT_PUBLIC_API_URL || window.location.origin;
                         setEmbedModal({ open: true, widgetId: account.externalId, code: "", apiUrl, accountId: account.id });
                         setEmbedTab("html");
-                        if (token) {
-                          try {
-                            const res = await getWebchatSettings(token, account.id);
-                            // The canonical config, migrated on read — the
-                            // same shape the storefront widget uses.
-                            const cfg = res.data || {};
-                            setWidgetConfig(cfg);
-                            setWidgetColor(cfg.appearance?.primaryColor || "#7c3aed");
-                            setWidgetIconUrl(cfg.appearance?.logoUrl || "");
-                            setWidgetTitle(cfg.ux?.welcome?.title || "Chat with us");
-                            setWidgetPosition(cfg.ux?.launcher?.position || "right");
-                          } catch { /* use defaults */ }
-                        }
+                        // Settings load inside the editor itself now.
                       }}
                       className="text-xs text-violet-500 hover:text-violet-700 transition p-1"
                       title="Widget Settings"
@@ -886,7 +865,7 @@ function ChannelsPageContent() {
     {embedModal.open && (
       <div className="fixed inset-0 z-50 flex items-center justify-center">
         <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setEmbedModal({ open: false, widgetId: "", code: "", apiUrl: "", accountId: "" })} />
-        <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+        <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-5xl p-6 space-y-4 max-h-[90vh] overflow-y-auto">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-bold text-gray-900">{t("channels.embedTitle")}</h3>
             <button onClick={() => setEmbedModal({ open: false, widgetId: "", code: "", apiUrl: "", accountId: "" })} className="text-gray-400 hover:text-gray-600">
@@ -896,80 +875,35 @@ function ChannelsPageContent() {
             </button>
           </div>
 
-          {/* Customization */}
-          <div className="bg-gray-50 rounded-xl p-4 space-y-3">
-            <h4 className="text-sm font-semibold text-gray-700">Customize</h4>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs text-gray-500 mb-1 block">Brand Color</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="color"
-                    value={widgetColor}
-                    onChange={(e) => setWidgetColor(e.target.value)}
-                    className="w-8 h-8 rounded-lg border border-gray-200 cursor-pointer p-0"
-                  />
-                  <input
-                    type="text"
-                    value={widgetColor}
-                    onChange={(e) => setWidgetColor(e.target.value)}
-                    className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 font-mono"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="text-xs text-gray-500 mb-1 block">Position</label>
-                <div className="flex gap-1">
-                  <button
-                    onClick={() => setWidgetPosition("left")}
-                    className={clsx("flex-1 py-1.5 text-xs font-medium rounded-lg border transition", widgetPosition === "left" ? "border-violet-300 bg-violet-50 text-violet-700" : "border-gray-200 text-gray-500 hover:bg-gray-100")}
-                  >
-                    Left
-                  </button>
-                  <button
-                    onClick={() => setWidgetPosition("right")}
-                    className={clsx("flex-1 py-1.5 text-xs font-medium rounded-lg border transition", widgetPosition === "right" ? "border-violet-300 bg-violet-50 text-violet-700" : "border-gray-200 text-gray-500 hover:bg-gray-100")}
-                  >
-                    Right
-                  </button>
-                </div>
-              </div>
-              <div>
-                <label className="text-xs text-gray-500 mb-1 block">Header Title</label>
-                <input
-                  type="text"
-                  value={widgetTitle}
-                  onChange={(e) => setWidgetTitle(e.target.value)}
-                  className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-gray-500 mb-1 block">Icon URL (optional)</label>
-                <input
-                  type="text"
-                  value={widgetIconUrl}
-                  onChange={(e) => setWidgetIconUrl(e.target.value)}
-                  placeholder="https://example.com/icon.png"
-                  className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5"
-                />
-              </div>
-            </div>
-            {/* Preview */}
-            <div className="flex items-center gap-3 pt-2">
-              <div
-                className="w-12 h-12 rounded-full flex items-center justify-center shadow-lg"
-                style={{ background: `linear-gradient(135deg, ${widgetColor}, ${widgetColor}dd)` }}
-              >
-                {widgetIconUrl ? (
-                  <img src={widgetIconUrl} alt="" className="w-8 h-8 rounded-full object-cover" />
-                ) : (
-                  <svg className="w-6 h-6" fill="white" viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
+          {/* Install the snippet, or customise the widget. These were one
+              screen with four settings crammed under the code block, and
+              those settings were a small imitation of the storefront
+              widget's editor. It is the same editor now. */}
+          <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+            {(["install", "customise"] as const).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => setEmbedMode(mode)}
+                className={clsx(
+                  "flex-1 py-1.5 text-xs font-medium rounded-md transition",
+                  embedMode === mode ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700",
                 )}
-              </div>
-              <div className="text-xs text-gray-400">Widget preview</div>
-            </div>
+              >
+                {t(mode === "install" ? "channels.embedInstall" : "channels.embedCustomise")}
+              </button>
+            ))}
           </div>
 
+          {embedMode === "customise" && embedModal.accountId && token && (
+            <WebchatWidgetSettings
+              accountId={embedModal.accountId}
+              token={token}
+              onSaved={(msg, kind) => showMessage(msg, kind)}
+            />
+          )}
+
+          {embedMode === "install" && (
+            <>
           {/* Framework Tabs */}
           <div>
             <h4 className="text-sm font-semibold text-gray-700 mb-2">Install</h4>
@@ -992,14 +926,14 @@ function ChannelsPageContent() {
           {(() => {
             const wId = embedModal.widgetId;
             const api = embedModal.apiUrl;
+            // Identity only. Colour, icon, title and side used to be baked
+            // in here; the widget reads none of them any more, and a copy
+            // in a snippet a tenant pasted months ago would quietly claim
+            // to control something the dashboard actually owns.
             const configLines = [
               `  widgetId: "${wId}",`,
               `  apiUrl: "${api}",`,
-              widgetColor !== "#7c3aed" ? `  color: "${widgetColor}",` : "",
-              widgetIconUrl ? `  iconUrl: "${widgetIconUrl}",` : "",
-              widgetTitle !== "Chat with us" ? `  title: "${widgetTitle}",` : "",
-              widgetPosition !== "right" ? `  position: "${widgetPosition}",` : "",
-            ].filter(Boolean).join("\n");
+            ].join("\n");
             const configBlock = `{\n${configLines}\n}`;
 
             const snippets: Record<string, { imports?: string; code: string; hint: string }> = {
@@ -1056,47 +990,11 @@ function ChannelsPageContent() {
               </div>
             );
           })()}
+            </>
+          )}
+
           <div className="flex items-center justify-between pt-2 border-t border-gray-100">
             <p className="text-xs text-gray-400">Widget ID: <code className="bg-gray-100 px-1.5 py-0.5 rounded">{embedModal.widgetId}</code></p>
-            {embedModal.accountId && canManageChannels && (
-              <button
-                disabled={savingWidget}
-                onClick={async () => {
-                  if (!token || !embedModal.accountId) return;
-                  setSavingWidget(true);
-                  try {
-                    // Written into the shared config, so the website widget
-                    // and the storefront widget are configured the same way
-                    // and neither can drift from the other.
-                    const next = {
-                      ...(widgetConfig ?? {}),
-                      v: 2,
-                      appearance: { ...(widgetConfig?.appearance ?? {}), primaryColor: widgetColor, logoUrl: widgetIconUrl || null },
-                      ux: {
-                        ...(widgetConfig?.ux ?? {}),
-                        welcome: { ...(widgetConfig?.ux?.welcome ?? {}), title: widgetTitle },
-                        launcher: {
-                          ...(widgetConfig?.ux?.launcher ?? {}),
-                          position: widgetPosition,
-                          mobilePosition: widgetPosition,
-                          backgroundColor: widgetColor,
-                        },
-                      },
-                    };
-                    await updateWebchatSettings(token, embedModal.accountId, next);
-                    setWidgetConfig(next);
-                    showMessage("Widget settings saved!", "success");
-                  } catch {
-                    showMessage("Failed to save settings", "error");
-                  } finally {
-                    setSavingWidget(false);
-                  }
-                }}
-                className="px-4 py-1.5 bg-violet-600 text-white text-xs font-medium rounded-lg hover:bg-violet-700 transition disabled:opacity-50"
-              >
-                {savingWidget ? "Saving..." : "Save Settings"}
-              </button>
-            )}
           </div>
         </div>
       </div>

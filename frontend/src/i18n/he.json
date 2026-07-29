@@ -737,7 +737,10 @@
     "shopifyLiveChat": "צ׳אט חי לשופיפיי",
     "shopifyLiveChatDesc": "צ׳אט ממותג בחנות השופיפיי, עם כרטיסי מוצר והוספה לסל.",
     "configureShopifyLiveChat": "הגדרה",
-    "deleteWidgetMsg": "הפעולה מסירה את הצ׳אט מהאתר שלכם ומוחקת לצמיתות את השיחות וההודעות שלו. הסקריפט באתר יפסיק להציג דבר. לא ניתן לבטל."
+    "deleteWidgetMsg": "הפעולה מסירה את הצ׳אט מהאתר שלכם ומוחקת לצמיתות את השיחות וההודעות שלו. הסקריפט באתר יפסיק להציג דבר. לא ניתן לבטל.",
+    "widgetSaved": "הגדרות הצ׳אט נשמרו",
+    "embedInstall": "התקנה",
+    "embedCustomise": "התאמה אישית"
   },
   "departments": {
     "title": "מחלקות",
@@ -1950,7 +1953,8 @@
     "enabled": "מופעל",
     "disabled": "כבוי",
     "connected": "מחובר",
-    "notConnected": "לא מחובר"
+    "notConnected": "לא מחובר",
+    "unsavedChanges": "יש שינויים שלא נשמרו"
   },
   "onboarding": {
     "channelsBanner": "בחרו WhatsApp, אינסטגרם או אימייל כדי לחבר את הערוץ הראשון.",
@@ -5046,7 +5050,9 @@
     "hoursMovedHint": "שעות הפעילות נקבעות פעם אחת לעסק וחלות על כל הערוצים, כך שהווידג׳ט תמיד מסכים עם הנציג החכם על השאלה אם אתם פתוחים.",
     "hoursMovedLink": "הגדרת שעות הפעילות",
     "routingMovedHint": "מי עונה לשיחה חדשה נקבע ב-Main Playbook, בדיוק כמו בכל ערוץ אחר.",
-    "routingMovedLink": "פתיחת ה-Main Playbook"
+    "routingMovedLink": "פתיחת ה-Main Playbook",
+    "desktop": "מחשב",
+    "mobile": "נייד"
   },
   "shopifyInstall": {
     "title": "התקנת GOTCHA Chat",
