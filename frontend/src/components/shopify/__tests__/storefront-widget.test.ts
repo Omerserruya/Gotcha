@@ -820,3 +820,107 @@ describe("welcome to conversation", () => {
     expect(h.shadow.querySelector(".panel")).toBe(panelBefore);
   });
 });
+
+// ─── Deterministic close ─────────────────────────────────────
+//
+// The first fix relied on `[hidden]`, which is the weakest rule in the
+// cascade and lost to `.panel{display:flex}`. The state attribute now
+// owns visibility outright, so these assert the mechanism rather than
+// the symptom.
+
+describe("close is deterministic", () => {
+  it("marks the panel closed in the attribute that owns display", async () => {
+    const h = await boot();
+    const panel = h.shadow.querySelector(".panel") as HTMLElement;
+    expect(panel.getAttribute("data-state")).toBe("open");
+
+    (h.shadow.querySelector('button[data-act="close"]') as HTMLButtonElement).click();
+
+    expect(panel.getAttribute("data-state")).toBe("closed");
+    // Both signals, so neither a missing UA sheet nor a future author
+    // rule can leave a closed panel on screen.
+    expect(panel.hidden).toBe(true);
+  });
+
+  it("ships a rule that hides a closed panel without relying on [hidden]", () => {
+    expect(WIDGET_SOURCE).toMatch(/\.panel\[data-state='closed'\]\{display:none!important;?\}/);
+  });
+
+  it("is born closed rather than defaulting to visible", () => {
+    expect(WIDGET_SOURCE).toContain('panel.setAttribute("data-state", "closed")');
+  });
+
+  it("reopens cleanly through the same mutator", async () => {
+    const h = await boot();
+    const panel = h.shadow.querySelector(".panel") as HTMLElement;
+    h.app.close();
+    expect(panel.getAttribute("data-state")).toBe("closed");
+    h.app.open();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(panel.getAttribute("data-state")).toBe("open");
+    expect(panel.hidden).toBe(false);
+  });
+
+  it("stays closed across five cycles and keeps one panel", async () => {
+    const h = await boot();
+    for (let i = 0; i < 5; i++) {
+      h.app.close();
+      expect((h.shadow.querySelector(".panel") as HTMLElement).getAttribute("data-state")).toBe("closed");
+      h.app.open();
+      await new Promise((r) => setTimeout(r, 5));
+    }
+    expect(h.shadow.querySelectorAll(".panel").length).toBe(1);
+  });
+});
+
+describe("an explicit close is respected", () => {
+  it("records that the shopper closed it", async () => {
+    const h = await boot();
+    expect(h.app.closedByVisitor()).toBe(false);
+    (h.shadow.querySelector('button[data-act="close"]') as HTMLButtonElement).click();
+    // The flag outlives the render, so nothing automatic may reopen.
+    expect(h.app.closedByVisitor()).toBe(true);
+  });
+
+  it("does not set the flag when the widget closes itself", async () => {
+    const h = await boot();
+    h.app.close("internal");
+    expect(h.app.closedByVisitor()).toBe(false);
+  });
+
+  it("exposes safe state for debugging and nothing else", async () => {
+    const h = await boot();
+    (h.shadow.querySelector('button[data-act="close"]') as HTMLButtonElement).click();
+    const d = h.app.debugState();
+
+    expect(d.state).toBe("CLOSED");
+    expect(d.panelHidden).toBe(true);
+    expect(d.panelDataState).toBe("closed");
+    expect(d.closeClicks).toBe(1);
+    expect(d.closedByVisitor).toBe(true);
+
+    // Case 25: the debug surface must never become a leak.
+    const body = JSON.stringify(d);
+    for (const leak of ["t1", "session", "token", "tenant", "secret", "conversationId"]) {
+      expect(body.toLowerCase()).not.toContain(leak.toLowerCase());
+    }
+  });
+});
+
+describe("close button ergonomics", () => {
+  it("meets the 44x44 touch floor", () => {
+    // Measured at 34x34 on a real storefront. It is the shopper's way
+    // out of the widget; it should not be the fiddliest control in it.
+    expect(WIDGET_SOURCE).toMatch(/\.x\{width:44px;height:44px;min-width:44px;min-height:44px/);
+  });
+
+  it("cannot be covered by anything the header lays out", () => {
+    expect(WIDGET_SOURCE).toContain("position:relative;z-index:2;pointer-events:auto;}");
+  });
+
+  it("has a visible focus style and a non-capturing icon", () => {
+    expect(WIDGET_SOURCE).toContain(".x:focus-visible{outline:3px solid");
+    // The svg must not swallow the click and defeat the hit area.
+    expect(WIDGET_SOURCE).toContain(".x svg{width:20px;height:20px;pointer-events:none;}");
+  });
+});

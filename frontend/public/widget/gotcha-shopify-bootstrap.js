@@ -51,17 +51,11 @@
 
   var API = String(cfg.apiBase || originOfThisScript() || "").replace(/\/$/, "");
   var ASSETS = String(cfg.assetBase || "").replace(/\/$/, "");
-  // Whatever ?v= the <script> tag was loaded with, reused for every other
-  // asset this bootstrap pulls.
-  var ASSET_VERSION_QS = (function () {
-    try {
-      var src = (document.currentScript && document.currentScript.src) || "";
-      var m = src.match(/[?&]v=([^&]+)/);
-      return m ? "?v=" + m[1] : "";
-    } catch (e) {
-      return "";
-    }
-  })();
+  // Stamped by scripts/widget/build-widget.mjs. Content-hashed, so this
+  // bootstrap can only ever load the exact bundle it was built against —
+  // a hand-typed ?v= let four commits change the bundle without changing
+  // its URL, and every cache kept serving the old one.
+  var CHAT_BUNDLE = "gotcha-shopify-chat.bc241284b698.js";
 
   var IDENTITY = String(cfg.shopDomain || cfg.channelKey || "");
   var STORAGE_PREFIX = "gotcha_sfy_" + IDENTITY.slice(-12);
@@ -304,6 +298,34 @@
     if (!L || L.showUnreadBadge) launcher.appendChild(badge);
   }
 
+  /**
+   * Safe, read-only view of widget state for debugging a live storefront.
+   *
+   * Exposed always because a widget that misbehaves does so in
+   * production, on a merchant's store, where a build flag helps nobody.
+   * It carries no tenant id, no channel id, no session token, no message
+   * content and no AI configuration — only what somebody staring at a
+   * stuck widget needs.
+   */
+  window.__GOTCHA_CHAT_DEBUG__ = function () {
+    var info = {
+      bootstrapBundle: CHAT_BUNDLE,
+      bootstrapSrc: (document.currentScript && document.currentScript.src) || "(async)",
+      instances: document.querySelectorAll("#gotcha-chat-root").length,
+      open: !!state.open,
+      closedByVisitor: closedByVisitor(),
+      teaserVisible: !!teaserEl,
+      teaserTimerActive: !!teaserTimer,
+      unread: state.unread || 0,
+      userInteracted: userInteracted,
+      visitorMuted: visitorMuted(),
+      availability: state.availability || null,
+      appLoaded: !!app,
+    };
+    try { if (app && app.debugState) info.app = app.debugState(); } catch (e) { info.app = "unavailable"; }
+    return info;
+  };
+
   // ── Proactive teaser ─────────────────────────────────────────
   //
   // Every rule below is a reason NOT to interrupt somebody, which is why
@@ -314,6 +336,16 @@
   // Mirrors shouldShowTeaser() in @chatcenter/shared — same reason as the
   // sound rules: no bundler here, so the logic is duplicated on purpose
   // and tested on both sides.
+
+  // Set the moment the shopper clicks X, and never cleared for the life
+  // of this page view. The launcher can still reopen — that is the
+  // shopper asking — but nothing automatic may.
+  var visitorClosed = false;
+  function closedByVisitor() {
+    if (visitorClosed) return true;
+    // The app owns the authoritative flag once it is loaded.
+    try { return !!(app && app.closedByVisitor && app.closedByVisitor()); } catch (e) { return false; }
+  }
 
   var teaserEl = null;
   var teaserTimer = null;
@@ -337,6 +369,9 @@
   function teaserAllowed(cfg) {
     if (!cfg || !cfg.enabled) return false;
     if (state.open) return false;
+    // A shopper who closed the panel has answered the question the teaser
+    // exists to ask. Nothing auto-opens or re-offers for this page view.
+    if (closedByVisitor()) return false;
     // Somebody already talking to us is not somebody to interrupt.
     if (state.store.get("conversation")) return false;
     var mobile = window.matchMedia("(max-width: 560px)").matches;
@@ -560,10 +595,7 @@
     if (appPromise) return appPromise;
     appPromise = new Promise(function (resolve, reject) {
       var s = document.createElement("script");
-      // Inherit the entry point's version token so the lazy half can never
-      // be served from a different release than the bootstrap that asked
-      // for it — the filenames carry no content hash.
-      s.src = ASSETS + "/widget/gotcha-shopify-chat.js" + ASSET_VERSION_QS;
+      s.src = ASSETS + "/widget/" + CHAT_BUNDLE;
       s.async = true;
       s.crossOrigin = "anonymous";
       s.onload = function () {
@@ -601,6 +633,9 @@
 
   state.onClosed = function () {
     state.open = false;
+    visitorClosed = true;
+    hideTeaser();
+    if (teaserTimer) { clearTimeout(teaserTimer); teaserTimer = null; }
     launcher.setAttribute("aria-expanded", "false");
     launcher.style.display = "";
     try {
@@ -649,6 +684,12 @@
         shadow.appendChild(launcher);
         document.body.appendChild(host);
         armTeaser(state.widget);
+
+        // Open-on-load is a merchant preference, not an override of a
+        // shopper's decision: if they already closed it on this page
+        // view, it stays closed.
+        var behavior = state.widget.ux && state.widget.ux.behavior;
+        if (behavior && behavior.openOnLoad && !closedByVisitor()) openChat();
 
         // A returning shopper with an open conversation gets the app
         // warmed in idle time so an agent's reply can raise the unread
