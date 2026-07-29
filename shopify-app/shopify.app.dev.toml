@@ -78,3 +78,24 @@ automatically_update_urls_on_dev = false
 # scripts/shopify/verify-chat-app-identity.mjs more load-bearing, not less:
 # there is no longer any flag standing between a mis-linked project and the
 # Core connector's configuration.
+
+[app_proxy]
+# The ONLY way the storefront can prove which customer is chatting.
+#
+# The shopper's browser calls the merchant's own origin
+# (https://<shop>/apps/gotcha-chat/...); Shopify then calls `url`
+# server-to-server with `logged_in_customer_id` and a `signature` made
+# with this app's secret. The browser never holds the secret, so it
+# cannot forge the claim — which is exactly why Liquid's `customer.id`
+# is not usable for this.
+#
+# No access scope is involved: identity comes from Shopify's signature,
+# not from the Admin API. Reading that customer's ORDERS would need
+# read_customers/read_orders and Protected Customer Data approval, which
+# this app deliberately does not hold.
+#
+# `url` must match this config's host, or Shopify signs a request that
+# arrives nowhere.
+url = "https://dev.gotcha.co.il/api/shopify-chat/proxy"
+subpath = "gotcha-chat"
+prefix = "apps"

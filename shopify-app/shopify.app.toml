@@ -90,6 +90,9 @@ include_config_on_deploy = true
 # not from the Admin API. Reading that customer's ORDERS would need
 # read_customers/read_orders and Protected Customer Data approval, which
 # this app deliberately does not hold.
-url = "https://dev.gotcha.co.il/api/shopify-chat/proxy"
+#
+# `url` must match this config's host, or Shopify signs a request that
+# arrives nowhere.
+url = "https://gotcha.co.il/api/shopify-chat/proxy"
 subpath = "gotcha-chat"
 prefix = "apps"
