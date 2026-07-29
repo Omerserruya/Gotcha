@@ -180,6 +180,72 @@ describe("projectDiscoveryTopics - topic-based, never one mega-document", () => 
     expect(overview.metadata.language).toBe("he");
   });
 
+  // ── Regressions found by running the projection against the REAL dev
+  //    tenants, which clean fixtures never exercised. ──
+
+  it("treats the discovery's 'unknown' sentinels as absent, not as content", () => {
+    // The synthesis step fills every field it is asked for, so a country it
+    // could not determine comes back as the literal string "unknown". Rendering
+    // it produced "Country: unknown" in the knowledge base, which the employee
+    // would then say to a customer.
+    const withSentinels = projectDiscoveryTopics(
+      {
+        websiteDomain: "x.com",
+        business: {
+          summary: "A real summary long enough to be worth keeping around.",
+          pricingModel: "unknown",
+          products: ["unknown", "Real product"],
+        },
+      },
+      { organizationName: "Acme", country: "unknown", industry: "N/A" },
+      CTX,
+    );
+    const blob = JSON.stringify(withSentinels);
+    expect(blob).not.toMatch(/unknown/i);
+    expect(blob).not.toMatch(/"N\/A"/i);
+    // The one real product survives.
+    const products = withSentinels.find((e) => e.topic === "products_services");
+    expect(products?.content).toContain("Real product");
+  });
+
+  it("drops an entry that is only headings once sentinels are stripped", () => {
+    // Both live tenants produced a pricing entry consisting solely of
+    // "## Pricing model\nunknown" - a near-empty chunk competing with real
+    // knowledge at retrieval time. It must not be emitted at all.
+    const out = projectDiscoveryTopics(
+      { websiteDomain: "x.com", business: { pricingModel: "unknown" }, knowledge: { policies: { terms: "n/a" } } },
+      {},
+      CTX,
+    );
+    expect(out.find((e) => e.topic === "pricing_policies")).toBeUndefined();
+  });
+
+  it("localizes section headings inside the body, not just the title", () => {
+    const he = projectDiscoveryTopics(DISCOVERY, PROFILE, { ...CTX, language: "he" });
+    const overview = he.find((e) => e.topic === "business_overview")!;
+    expect(overview.content).toContain("## מי אנחנו");
+    expect(overview.content).not.toContain("## Who we are");
+    expect(overview.content).toContain("שם: Acme Chairs");
+    const brand = he.find((e) => e.topic === "brand_voice")!;
+    expect(brand.content).toContain("## קול");
+    expect(brand.content).toContain("## מילים אסורות");
+  });
+
+  it("keeps English bodies English", () => {
+    const overview = entries.find((e) => e.topic === "business_overview")!;
+    expect(overview.content).toContain("## Who we are");
+    expect(overview.content).toContain("Name: Acme Chairs");
+  });
+
+  it("gives two different tenants with equally empty data no shared junk entry", () => {
+    // The live run produced an identical checksum across two unrelated tenants
+    // because both pricing entries were the same "unknown" stub.
+    const a = projectDiscoveryTopics({ websiteDomain: "a.com", business: { pricingModel: "unknown" } }, {}, CTX);
+    const b = projectDiscoveryTopics({ websiteDomain: "b.com", business: { pricingModel: "unknown" } }, {}, CTX);
+    expect(a.filter((e) => e.topic === "pricing_policies")).toHaveLength(0);
+    expect(b.filter((e) => e.topic === "pricing_policies")).toHaveLength(0);
+  });
+
   it("is deterministic - the same input yields the same checksums", () => {
     const again = projectDiscoveryTopics(DISCOVERY, PROFILE, CTX);
     expect(again.map((e) => e.metadata.checksum)).toEqual(entries.map((e) => e.metadata.checksum));

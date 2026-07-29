@@ -6,12 +6,14 @@ import departmentRoutes from "./routes/departments";
 import channelRoutes from "./routes/channels";
 import systemRoutes from "./routes/system";
 import systemFeatureRoutes from "./routes/system-features";
+import knowledgeBackfillRoutes from "./routes/knowledge-backfill";
 import onboardingRoutes, { publicInviteRouter } from "./routes/onboarding";
 import waitlistRoutes from "./routes/waitlist";
 import permissionsRoutes from "./routes/permissions";
 import accountRoutes from "./routes/account";
 import tenantSecurityRoutes from "./routes/tenant-security";
 import gdprRoutes from "./routes/gdpr";
+import internalRoutes from "./routes/internal";
 import { startNudgeWorker } from "./services/nudge-engine.service";
 import rateLimit from "express-rate-limit";
 
@@ -43,6 +45,9 @@ app.use("/api/agents", agentRoutes);
 app.use("/api/departments", departmentRoutes);
 app.use("/api/channels", channelRoutes);
 app.use("/api/system", systemFeatureRoutes);
+// Platform operator only: onboarding → Knowledge Base backfill (preview by
+// default). Mounted before systemRoutes so its own SYSTEM_ADMIN guard applies.
+app.use("/api/system", knowledgeBackfillRoutes);
 app.use("/api/system", systemRoutes);
 app.use("/api/permissions", permissionsRoutes);
 app.use("/api/account", accountRoutes);
@@ -55,6 +60,8 @@ app.use("/api/onboarding", onboardingRoutes);
 // signed-random token, not the bearer header.
 app.use("/api/public/onboarding", publicInviteRouter);
 app.use("/api/waitlist", waitlistRoutes);
+// Service-to-service only; guarded by X-Internal-Key inside the router.
+app.use("/api", internalRoutes);
 
 startService(app, config);
 

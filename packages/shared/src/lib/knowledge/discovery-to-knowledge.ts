@@ -32,15 +32,33 @@ function obj(raw: unknown): Record<string, unknown> {
     : {};
 }
 
+/**
+ * Sentinels the discovery synthesis writes when it did NOT find something.
+ *
+ * The LLM step fills every field it was asked for, so an unknown country comes
+ * back as the literal string "unknown" rather than null. Rendering that
+ * verbatim produces "Country: unknown" in the knowledge base, and the employee
+ * then answers a customer with it - the same class of failure as reciting
+ * "undefined". Treat them as absent, which also lets an entry that consists
+ * only of sentinels be dropped entirely.
+ */
+const SENTINELS = new Set([
+  "unknown", "n/a", "na", "none", "null", "undefined", "not specified",
+  "not found", "not available", "unspecified", "-", "--", "?", "tbd",
+  "לא ידוע", "לא צוין", "לא רלוונטי", "אין",
+]);
+
 function str(raw: unknown): string {
-  return typeof raw === "string" ? raw.trim() : "";
+  if (typeof raw !== "string") return "";
+  const v = raw.trim();
+  return SENTINELS.has(v.toLowerCase()) ? "" : v;
 }
 
 function list(raw: unknown): string[] {
   if (!Array.isArray(raw)) return [];
   return raw
     .map((item) => {
-      if (typeof item === "string") return item.trim();
+      if (typeof item === "string") return str(item);
       if (item && typeof item === "object") {
         const o = item as Record<string, unknown>;
         const name = str(o.name) || str(o.label) || str(o.title);
@@ -131,64 +149,136 @@ const TITLES: Record<KbTopic, { en: string; he: string }> = {
 
 export function titleFor(topic: KbTopic, language: string): string {
   const entry = TITLES[topic];
-  return language?.toLowerCase().startsWith("he") ? entry.he : entry.en;
+  return isHe(language) ? entry.he : entry.en;
+}
+
+function isHe(language: string): boolean {
+  return !!language && language.toLowerCase().startsWith("he");
+}
+
+/**
+ * Section headings inside an entry's body.
+ *
+ * These are localized for the same reason the titles are: the body is the text
+ * a Hebrew-speaking customer's employee quotes back to them, and an entry whose
+ * title is "סקירת העסק" but whose headings read "## Who we are" is a
+ * half-translated document. It is also what the retrieval embedding sees, so
+ * matching the tenant's language improves the match for their own questions.
+ */
+const HEADINGS = {
+  who_we_are: { en: "Who we are", he: "מי אנחנו" },
+  what_we_do: { en: "What we do", he: "מה אנחנו עושים" },
+  value_prop: { en: "Value proposition", he: "הצעת הערך" },
+  business_model: { en: "Business model", he: "מודל עסקי" },
+  who_we_serve: { en: "Who we serve", he: "למי אנחנו פונים" },
+  products: { en: "Products", he: "מוצרים" },
+  services: { en: "Services", he: "שירותים" },
+  pricing_model: { en: "Pricing model", he: "מודל תמחור" },
+  terms: { en: "Terms", he: "תנאים" },
+  shipping: { en: "Shipping", he: "משלוחים" },
+  returns: { en: "Returns", he: "החזרות" },
+  refunds: { en: "Refunds", he: "זיכויים" },
+  cancellations: { en: "Cancellations", he: "ביטולים" },
+  help_centre: { en: "Help centre", he: "מרכז העזרה" },
+  documentation: { en: "Documentation", he: "תיעוד" },
+  privacy: { en: "Privacy", he: "פרטיות" },
+  contact: { en: "How to reach us", he: "איך ליצור איתנו קשר" },
+  faq: { en: "Frequently asked questions", he: "שאלות נפוצות" },
+  voice: { en: "Voice", he: "קול" },
+  tone: { en: "Tone", he: "טון" },
+  style: { en: "Style", he: "סגנון" },
+  positioning: { en: "Positioning", he: "מיצוב" },
+  vocabulary: { en: "Preferred vocabulary", he: "מילים מועדפות" },
+  forbidden: { en: "Never use these words", he: "מילים אסורות" },
+  languages: { en: "Languages", he: "שפות" },
+  fields: { en: "Details", he: "פרטים" },
+} as const;
+
+type HeadingKey = keyof typeof HEADINGS;
+
+/** Per-projection heading translator. */
+function headings(language: string) {
+  const he = isHe(language);
+  return (key: HeadingKey) => (he ? HEADINGS[key].he : HEADINGS[key].en);
+}
+
+/** Labels used inside the overview bullet list. */
+const FIELD_LABELS = {
+  name: { en: "Name", he: "שם" },
+  industry: { en: "Industry", he: "תחום" },
+  country: { en: "Country", he: "מדינה" },
+  website: { en: "Website", he: "אתר" },
+} as const;
+
+function fieldLabel(key: keyof typeof FIELD_LABELS, language: string): string {
+  return isHe(language) ? FIELD_LABELS[key].he : FIELD_LABELS[key].en;
 }
 
 // ─── Topic bodies ───────────────────────────────────────────
 
-function businessOverview(d: DiscoveryInput, p: ProfileInput): string {
+type Build = (d: DiscoveryInput, p: ProfileInput, lang: string) => string;
+
+function businessOverview(d: DiscoveryInput, p: ProfileInput, lang: string): string {
+  const h = headings(lang);
   const b = obj(d.business);
+  const industry = str(p.industry) || str(b.industry);
+  const domain = str(d.websiteDomain || "");
   return join([
-    section("Who we are", [
-      str(p.organizationName) && `Name: ${str(p.organizationName)}`,
-      str(p.industry) || str(b.industry) ? `Industry: ${str(p.industry) || str(b.industry)}` : "",
-      str(p.country) && `Country: ${str(p.country)}`,
-      str(d.websiteDomain || "") && `Website: ${str(d.websiteDomain || "")}`,
+    section(h("who_we_are"), [
+      str(p.organizationName) && `${fieldLabel("name", lang)}: ${str(p.organizationName)}`,
+      industry && `${fieldLabel("industry", lang)}: ${industry}`,
+      str(p.country) && `${fieldLabel("country", lang)}: ${str(p.country)}`,
+      domain && `${fieldLabel("website", lang)}: ${domain}`,
     ].filter(Boolean) as string[]),
-    section("What we do", str(b.summary) || str(p.businessDescription)),
-    section("Value proposition", str(b.valueProp)),
-    section("Business model", str(b.businessModel)),
-    section("Who we serve", list(b.personas).length ? list(b.personas) : (str(b.icp) ? [str(b.icp)] : [])),
+    section(h("what_we_do"), str(b.summary) || str(p.businessDescription)),
+    section(h("value_prop"), str(b.valueProp)),
+    section(h("business_model"), str(b.businessModel)),
+    section(h("who_we_serve"), list(b.personas).length ? list(b.personas) : (str(b.icp) ? [str(b.icp)] : [])),
   ]);
 }
 
-function productsServices(d: DiscoveryInput): string {
+function productsServices(d: DiscoveryInput, _p: ProfileInput, lang: string): string {
+  const h = headings(lang);
   const b = obj(d.business);
   return join([
-    section("Products", list(b.products)),
-    section("Services", list(b.services)),
+    section(h("products"), list(b.products)),
+    section(h("services"), list(b.services)),
   ]);
 }
 
-function pricingPolicies(d: DiscoveryInput): string {
+function pricingPolicies(d: DiscoveryInput, _p: ProfileInput, lang: string): string {
+  const h = headings(lang);
   const b = obj(d.business);
   const k = obj(obj(d.knowledge).policies);
   return join([
-    section("Pricing model", str(b.pricingModel)),
-    section("Terms", str(k.terms)),
+    section(h("pricing_model"), str(b.pricingModel)),
+    section(h("terms"), str(k.terms)),
   ]);
 }
 
-function shippingReturns(d: DiscoveryInput): string {
+function shippingReturns(d: DiscoveryInput, _p: ProfileInput, lang: string): string {
+  const h = headings(lang);
   const k = obj(obj(d.knowledge).policies);
   return join([
-    section("Shipping", str(k.shipping)),
-    section("Returns", str(k.returns)),
-    section("Refunds", str(k.refunds)),
-    section("Cancellations", str(k.cancellations)),
+    section(h("shipping"), str(k.shipping)),
+    section(h("returns"), str(k.returns)),
+    section(h("refunds"), str(k.refunds)),
+    section(h("cancellations"), str(k.cancellations)),
   ]);
 }
 
-function supportInfo(d: DiscoveryInput): string {
+function supportInfo(d: DiscoveryInput, _p: ProfileInput, lang: string): string {
+  const h = headings(lang);
   const k = obj(d.knowledge);
   return join([
-    section("Help centre", str(k.helpCenter)),
-    section("Documentation", str(k.docs)),
-    section("Privacy", str(obj(k.policies).privacy)),
+    section(h("help_centre"), str(k.helpCenter)),
+    section(h("documentation"), str(k.docs)),
+    section(h("privacy"), str(obj(k.policies).privacy)),
   ]);
 }
 
-function contactHours(d: DiscoveryInput): string {
+function contactHours(d: DiscoveryInput, _p: ProfileInput, lang: string): string {
+  const h = headings(lang);
   const channels = Array.isArray(obj(d.communication).channels)
     ? (obj(d.communication).channels as unknown[])
     : [];
@@ -202,13 +292,14 @@ function contactHours(d: DiscoveryInput): string {
       return [type, detail, purpose && `(${purpose})`].filter(Boolean).join(" - ");
     })
     .filter(Boolean);
-  return join([section("How to reach us", lines)]);
+  return join([section(h("contact"), lines)]);
 }
 
-function faq(d: DiscoveryInput): string {
+function faq(d: DiscoveryInput, _p: ProfileInput, lang: string): string {
+  const h = headings(lang);
   const k = obj(d.knowledge);
   const raw = k.faq;
-  if (typeof raw === "string") return join([section("Frequently asked questions", str(raw))]);
+  if (typeof raw === "string") return join([section(h("faq"), str(raw))]);
   if (Array.isArray(raw)) {
     const pairs = raw
       .map((item) => {
@@ -218,34 +309,35 @@ function faq(d: DiscoveryInput): string {
         return q && a ? `**${q}**\n${a}` : "";
       })
       .filter(Boolean);
-    return pairs.length ? `## Frequently asked questions\n\n${pairs.join("\n\n")}` : "";
+    return pairs.length ? `## ${h("faq")}\n\n${pairs.join("\n\n")}` : "";
   }
   return "";
 }
 
-function brandVoice(d: DiscoveryInput): string {
+function brandVoice(d: DiscoveryInput, _p: ProfileInput, lang: string): string {
+  const h = headings(lang);
   const b = obj(d.brand);
   const forbidden = list(b.forbiddenWords);
   return join([
-    section("Voice", str(b.voice)),
-    section("Tone", str(b.tone)),
-    section("Style", str(b.style)),
-    section("Positioning", str(b.positioning)),
-    section("Preferred vocabulary", list(b.vocabulary)),
-    forbidden.length ? section("Never use these words", forbidden) : "",
-    section("Languages", list(b.languages)),
+    section(h("voice"), str(b.voice)),
+    section(h("tone"), str(b.tone)),
+    section(h("style"), str(b.style)),
+    section(h("positioning"), str(b.positioning)),
+    section(h("vocabulary"), list(b.vocabulary)),
+    forbidden.length ? section(h("forbidden"), forbidden) : "",
+    section(h("languages"), list(b.languages)),
   ]);
 }
 
-const TOPIC_BUILDERS: Array<{ topic: KbTopic; build: (d: DiscoveryInput, p: ProfileInput) => string }> = [
+const TOPIC_BUILDERS: Array<{ topic: KbTopic; build: Build }> = [
   { topic: "business_overview", build: businessOverview },
-  { topic: "products_services", build: (d) => productsServices(d) },
-  { topic: "support_info", build: (d) => supportInfo(d) },
-  { topic: "shipping_returns", build: (d) => shippingReturns(d) },
-  { topic: "pricing_policies", build: (d) => pricingPolicies(d) },
-  { topic: "contact_hours", build: (d) => contactHours(d) },
-  { topic: "faq", build: (d) => faq(d) },
-  { topic: "brand_voice", build: (d) => brandVoice(d) },
+  { topic: "products_services", build: productsServices },
+  { topic: "support_info", build: supportInfo },
+  { topic: "shipping_returns", build: shippingReturns },
+  { topic: "pricing_policies", build: pricingPolicies },
+  { topic: "contact_hours", build: contactHours },
+  { topic: "faq", build: faq },
+  { topic: "brand_voice", build: brandVoice },
 ];
 
 // ─── Public projection ──────────────────────────────────────
@@ -262,8 +354,12 @@ export function projectDiscoveryTopics(
 ): ProjectedEntry[] {
   const entries: ProjectedEntry[] = [];
   for (const { topic, build } of TOPIC_BUILDERS) {
-    const content = build(discovery, profile);
-    if (!content || content.length < 24) continue;
+    const content = build(discovery, profile, ctx.language);
+    // An entry must carry real content, not just a heading. "## Pricing model"
+    // with nothing under it (which is what a discovery full of "unknown"
+    // sentinels used to produce) is a near-empty chunk that competes with real
+    // knowledge during retrieval while teaching the employee nothing.
+    if (!hasSubstance(content)) continue;
     entries.push(
       buildEntry({
         topic,
@@ -347,6 +443,28 @@ export function projectExternalSources(
 
 function normalizeContentLength(raw: string): number {
   return String(raw ?? "").trim().length;
+}
+
+/**
+ * Does this body say anything once the headings are removed?
+ *
+ * Measured on the non-heading lines, so a document made entirely of section
+ * titles scores zero regardless of how many sections it has.
+ *
+ * The floor is deliberately low. Stripping the "unknown"/"n/a" sentinels
+ * already empties the junk entries, so this only needs to catch a body that
+ * says nothing at all - and a business with exactly one short product name
+ * still has a real catalogue worth writing down.
+ */
+function hasSubstance(content: string): boolean {
+  if (!content) return false;
+  const body = content
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("##"))
+    .join(" ")
+    .replace(/^[-*\s]+/gm, "")
+    .trim();
+  return body.length >= 8;
 }
 
 function slug(s: string): string {
