@@ -2028,7 +2028,6 @@ export function deleteAIAgent(token: string, id: string) {
 export interface SandboxDiagnostics {
   employee: { id: string; name: string; role: string | null };
   department: { id: string; name: string } | null;
-  playbook: string | null;
   knowledgeUsed: Array<{ title: string; sourceType: string | null }>;
   toolsConsidered: string[];
   simulatedActions: Array<{ tool: string; arguments: Record<string, unknown> }>;

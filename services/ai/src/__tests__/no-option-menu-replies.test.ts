@@ -1,10 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { stripOptionMenu } from "../services/employee-tuning.service";
 
-const SRC = join(dirname(fileURLToPath(import.meta.url)), "..");
+// __dirname, not import.meta: this service compiles as CommonJS, and
+// import.meta is a tsc error under that module setting even though vitest
+// happens to accept it.
+const SRC = join(__dirname, "..");
 const read = (rel: string) => readFileSync(join(SRC, rel), "utf8");
 
 /**

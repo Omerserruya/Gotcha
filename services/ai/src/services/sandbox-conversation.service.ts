@@ -49,7 +49,6 @@ export interface SandboxTurnInput {
 export interface SandboxDiagnostics {
   employee: { id: string; name: string; role: string | null };
   department: { id: string; name: string } | null;
-  playbook: string | null;
   knowledgeUsed: Array<{ title: string; sourceType: string | null }>;
   toolsConsidered: string[];
   simulatedActions: Array<{ tool: string; arguments: Record<string, unknown> }>;
@@ -196,9 +195,6 @@ export async function runSandboxTurn(input: SandboxTurnInput): Promise<SandboxTu
     diagnostics: {
       employee: { id: agent.id, name: agent.name, role: agent.role ?? null },
       department,
-      // The playbook the turn ran under. Reported as the routing decision
-      // rather than a separate field, since that is what the runtime records.
-      playbook: null,
       knowledgeUsed: result.knowledgeUsed ?? [],
       toolsConsidered: log.map((t) => t.tool).filter(Boolean),
       simulatedActions,
