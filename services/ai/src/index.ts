@@ -28,6 +28,7 @@ import shopifyWebhookRoutes from "./routes/shopify-webhooks";
 import shopifyLiveChatRoutes from "./routes/shopify-live-chat";
 import actionPlannerRoutes from "./routes/action-planner";
 import toolPermissionRoutes from "./routes/tool-permissions";
+import integrationWorkspaceRoutes from "./routes/integration-workspace";
 import aiDebugRoutes from "./routes/ai-debug";
 import aiBotRoutes from "./routes/ai-bot";
 import agentLoopResumeRoutes from "./routes/agent-loop-resume";
@@ -131,6 +132,8 @@ app.use("/api/shopify-chat", shopifyChatPublicRoutes);
 app.use("/api/shopify-live-chat", shopifyLiveChatRoutes);
 app.use("/api/action-planner", actionPlannerRoutes);
 app.use("/api/tool-permissions", toolPermissionRoutes);
+// Integrations & Tools workspace: composed sidebar + per-integration tool policy.
+app.use("/api/integration-workspace", integrationWorkspaceRoutes);
 app.use("/api/ai-debug", aiDebugRoutes);
 app.use("/api/ai-bot", aiBotRoutes);
 app.use("/api/agent-loop", agentLoopResumeRoutes);

@@ -6,6 +6,8 @@ import {
   requireActiveTenant,
   requirePermissionOrRole,
   getDefaultHighRiskTools,
+  writeAudit,
+  AuditAction,
 } from "@chatcenter/shared";
 import { getAvailableTools, TOOL_REGISTRY } from "../services/tool-registry";
 import { riskGroupFor, type RiskGroup } from "@chatcenter/shared";
@@ -285,7 +287,13 @@ router.put("/:toolName", requirePermissionOrRole("ai:tools:manage", "ADMIN"), as
     // Validate tool exists in the effective registry. Prevents typo-induced
     // permission rows that never gate anything.
     const knownInternal = TOOL_REGISTRY.some((t) => t.name === toolName);
-    const isIntegration = toolName.startsWith("integration.");
+    // Two naming shapes reach this writer:
+    //   integration.<slug>  - generic HTTP catalog tools
+    //   <provider>.<slug>   - adapter-backed tools (shopify.cancel_order, ...)
+    // The second was rejected as unknown, which meant every Shopify tool was
+    // unsettable. Both resolve to the same CatalogTool by slug.
+    const dotted = /^[a-z0-9_]+\.[a-z0-9_]+$/.test(toolName);
+    const isIntegration = toolName.startsWith("integration.") || (dotted && !knownInternal);
     if (!knownInternal && !isIntegration) {
       res.status(400).json({ error: `unknown tool "${toolName}"` });
       return;
@@ -298,14 +306,68 @@ router.put("/:toolName", requirePermissionOrRole("ai:tools:manage", "ADMIN"), as
     // that's where the gate reads it from. Writing to TenantToolPermission for an
     // integration tool would silently no-op against the gate.
     if (isIntegration) {
-      const slug = toolName.replace(/^integration\./, "");
-      const tenantTool = await (prisma as any).tenantTool.findFirst({
+      // `integration.<slug>` and `<provider>.<slug>` both key on the slug.
+      const slug = toolName.slice(toolName.indexOf(".") + 1);
+      let tenantTool = await (prisma as any).tenantTool.findFirst({
         where: { tenantId, catalogTool: { slug } },
         select: { id: true, configOverrides: true },
       });
+
+      // PROVISION ON FIRST POLICY SET.
+      //
+      // Connecting an integration only ever provisions its READ tools - writes
+      // like cancel_order and process_refund are deliberately never
+      // auto-granted. That left them permanently unsettable: no row, so this
+      // returned 404, so an admin could not turn them on even deliberately.
+      //
+      // Creating the row here preserves the invariant that matters (a write is
+      // never granted without a human act) while making the act possible. A
+      // request that only DISABLES a tool provisions nothing: there is no point
+      // writing a row to record "off" when absent already means off.
       if (!tenantTool) {
-        res.status(404).json({ error: `integration tool "${slug}" not configured for tenant` });
-        return;
+        const disablingOnly = enabled === false;
+        if (disablingOnly) {
+          res.json({ data: { toolName, provisioned: false, note: "already disabled - nothing to store" } });
+          return;
+        }
+        const catalogTool = await (prisma as any).catalogTool.findFirst({
+          where: { slug },
+          select: { id: true, integrationId: true },
+        });
+        if (!catalogTool) {
+          res.status(404).json({ error: `unknown catalog tool "${slug}"` });
+          return;
+        }
+        // Must be a CONNECTED connection for THIS tenant - never provision a
+        // tool against a provider the tenant has not connected.
+        const conn = await (prisma as any).tenantIntegration.findFirst({
+          where: { tenantId, integrationId: catalogTool.integrationId, status: "CONNECTED" },
+          select: { id: true },
+        });
+        if (!conn) {
+          res.status(409).json({ error: `integration for "${slug}" is not connected` });
+          return;
+        }
+        const created = await (prisma as any).tenantTool.create({
+          data: {
+            tenantId,
+            tenantIntegrationId: conn.id,
+            catalogToolId: catalogTool.id,
+            isEnabled: true,
+            configOverrides: {},
+          },
+          select: { id: true, configOverrides: true },
+        });
+        tenantTool = created;
+        void writeAudit({
+          tenantId,
+          actorType: "user",
+          actorId: (req as any).user?.userId,
+          action: AuditAction.PERMISSION_CHANGED,
+          targetType: "tenant_tool",
+          targetId: created.id,
+          metadata: { tool: slug, provisionedOnFirstPolicySet: true },
+        });
       }
       const existingOverrides =
         (tenantTool.configOverrides as Record<string, unknown> | null) ?? {};
