@@ -3829,7 +3829,8 @@
       "header": {
         "muteButton": "השתק",
         "unmuteButton": "בטל השתקה",
-        "hangupButton": "נתק"
+        "hangupButton": "נתק",
+        "contextTitle": "הקשר"
       },
       "declined": {
         "noAnswer": "הלקוח לא ענה - סוגרים.",
@@ -5127,5 +5128,11 @@
       "NO_INSTALL_SESSION": "לא מצאנו התקנת שופיפיי עדכנית בדפדפן הזה."
     },
     "step1PendingSignIn": "שופיפיי הפנתה אתכם לכאן אחרי אישור GOTCHA Chat. התחברו למטה ונאשר על איזו חנות מדובר."
+  },
+  "permissions": {
+    "noAccess": {
+      "title": "אין לך הרשאה לעמוד הזה",
+      "subtitle": "אם צריך גישה, בקשו ממנהל סביבת העבודה."
+    }
   }
 }

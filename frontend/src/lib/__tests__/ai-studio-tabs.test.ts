@@ -7,8 +7,11 @@ import {
   DEFAULT_AI_STUDIO_TAB,
   normalizeAiStudioTab,
   aiStudioHref,
+  aiStudioTabI18nKey,
   isAiStudioTab,
 } from "../ai-studio-tabs";
+import en from "../../i18n/en.json";
+import he from "../../i18n/he.json";
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const read = (rel: string) => readFileSync(join(SRC, rel), "utf8");
@@ -87,5 +90,28 @@ describe("Nested pages preserve their origin tab on Back (no bare /ai-studio)", 
     expect(src).toContain("normalizeAiStudioTab(tabFromUrl)");
     // The old hardcoded team fallback is gone.
     expect(src).not.toMatch(/:\s*"team"\)/);
+  });
+
+  it("every tab key has a translation in both locales", () => {
+    // Renaming a tab key while leaving its label pointing at the old i18n key
+    // does not throw - t() echoes the key, so the tab renders as the literal
+    // string "aiStudio.tabs.overview" to the user.
+    for (const tab of AI_STUDIO_TABS) {
+      const path = aiStudioTabI18nKey(tab).split(".");
+      for (const [locale, dict] of [["en", en], ["he", he]] as const) {
+        const value = path.reduce<any>((node, k) => node?.[k], dict);
+        expect(typeof value, `${locale} is missing ${aiStudioTabI18nKey(tab)}`).toBe("string");
+        expect(value).not.toContain("aiStudio.tabs.");
+      }
+    }
+  });
+
+  it("the tab strip derives each label from its own key", () => {
+    const src = read("app/ai-studio/page.tsx");
+    // No hand-written key strings to drift out of sync with the key: field.
+    expect(src).not.toMatch(/t\("aiStudio\.tabs\./);
+    for (const tab of AI_STUDIO_TABS) {
+      expect(src).toContain(`aiStudioTabI18nKey("${tab}")`);
+    }
   });
 });

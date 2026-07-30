@@ -3828,7 +3828,8 @@
       "header": {
         "muteButton": "Mute",
         "unmuteButton": "Unmute",
-        "hangupButton": "Hang up"
+        "hangupButton": "Hang up",
+        "contextTitle": "Context"
       },
       "declined": {
         "noAnswer": "Customer didn't answer - closing.",
@@ -5126,5 +5127,11 @@
       "NO_INSTALL_SESSION": "We could not find a recent Shopify installation for this browser."
     },
     "step1PendingSignIn": "Shopify sent you here after authorizing GOTCHA Chat. Sign in below and we will confirm which store it was."
+  },
+  "permissions": {
+    "noAccess": {
+      "title": "You don't have access to this page",
+      "subtitle": "Ask a workspace admin if you need access."
+    }
   }
 }
