@@ -2029,7 +2029,8 @@ export interface SandboxDiagnostics {
   employee: { id: string; name: string; role: string | null };
   department: { id: string; name: string } | null;
   knowledgeUsed: Array<{ title: string; sourceType: string | null }>;
-  toolsConsidered: string[];
+  toolsOffered: string[];
+  toolsCalled: string[];
   simulatedActions: Array<{ tool: string; arguments: Record<string, unknown> }>;
   awaitingApproval: { tool: string; reason: string } | null;
   escalated: { reason: string } | null;

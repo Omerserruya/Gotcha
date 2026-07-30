@@ -296,6 +296,15 @@ export interface AIBotReplyResult {
    * customer data.
    */
   knowledgeUsed?: Array<{ title: string; sourceType: string | null }>;
+  /**
+   * Tool names OFFERED to the model this turn.
+   *
+   * Distinct from toolCallLog, which records what it actually called. The
+   * sandbox diagnostics need both: "no tool was called" and "no tool was
+   * available" look identical from the transcript, and they send an operator
+   * to completely different places.
+   */
+  toolsOffered?: string[];
 }
 
 function toAgentRecord(row: any): AgentRecord {
@@ -1418,7 +1427,8 @@ async function generateAIBotReplyInner(
   const knowledgeUsed: Array<{ title: string; sourceType: string | null }> = [];
   if (shouldRetrieveKB(behaviorState, opts.incomingMessage)) {
     try {
-      const chunks = await retrieveRelevantChunks(opts.tenantId, opts.incomingMessage, 5);
+      // Scoped to what THIS employee may read - see readableKnowledgeBaseIds.
+      const chunks = await retrieveRelevantChunks(opts.tenantId, opts.incomingMessage, 5, opts.aiAgentId);
       kbBlock = buildKnowledgeContext(chunks) || undefined;
       for (const c of chunks as any[]) {
         const title = String(c?.documentTitle ?? c?.title ?? "").trim();
@@ -1798,6 +1808,11 @@ async function generateAIBotReplyInner(
   } catch (err: any) {
     console.warn("[ai-bot] custom-api tool surface failed:", err?.message);
   }
+
+  // Snapshot of what the model was actually offered, for diagnostics.
+  const toolsOffered: string[] = (tools as any[])
+    .map((t) => t?.function?.name)
+    .filter((n): n is string => typeof n === "string");
 
   // ── Custom DB query tools ── (tenant-defined SQL/Mongo as bot tools)
   try {
@@ -3995,6 +4010,7 @@ async function generateAIBotReplyInner(
     awaitingApproval,
     toolCallLog,
     knowledgeUsed,
+    toolsOffered,
     modelUsed: model,
     totalTokens,
     // Only ship staged cards when there is a reply to attach them to. On

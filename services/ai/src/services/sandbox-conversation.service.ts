@@ -50,7 +50,11 @@ export interface SandboxDiagnostics {
   employee: { id: string; name: string; role: string | null };
   department: { id: string; name: string } | null;
   knowledgeUsed: Array<{ title: string; sourceType: string | null }>;
-  toolsConsidered: string[];
+  /** Tools OFFERED to the model this turn. */
+  toolsOffered: string[];
+  /** Tools it actually CALLED. "None offered" and "none chosen" are different
+   *  findings, and collapsing them sends the operator to the wrong place. */
+  toolsCalled: string[];
   simulatedActions: Array<{ tool: string; arguments: Record<string, unknown> }>;
   awaitingApproval: { tool: string; reason: string } | null;
   escalated: { reason: string } | null;
@@ -196,7 +200,8 @@ export async function runSandboxTurn(input: SandboxTurnInput): Promise<SandboxTu
       employee: { id: agent.id, name: agent.name, role: agent.role ?? null },
       department,
       knowledgeUsed: result.knowledgeUsed ?? [],
-      toolsConsidered: log.map((t) => t.tool).filter(Boolean),
+      toolsOffered: result.toolsOffered ?? [],
+      toolsCalled: log.map((t) => t.tool).filter(Boolean),
       simulatedActions,
       awaitingApproval: result.awaitingApproval
         ? { tool: result.awaitingApproval.tool, reason: result.awaitingApproval.reason }

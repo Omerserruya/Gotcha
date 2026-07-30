@@ -238,8 +238,12 @@ export default function TestChatModal({ isOpen, onClose, agentId, agentName, ava
                     : L("nothing retrieved for this question", "לא אוחזר ידע לשאלה הזו")}
                 />
                 <Diag
-                  label={L("Tools considered", "כלים שנשקלו")}
-                  value={diagnostics.toolsConsidered.length ? diagnostics.toolsConsidered.join(", ") : L("none", "אף אחד")}
+                  label={L("Tools available", "כלים זמינים")}
+                  value={diagnostics.toolsOffered.length ? diagnostics.toolsOffered.join(", ") : L("none offered", "לא הוצעו כלים")}
+                />
+                <Diag
+                  label={L("Tools used", "כלים שהופעלו")}
+                  value={diagnostics.toolsCalled.length ? diagnostics.toolsCalled.join(", ") : L("none used", "לא הופעלו כלים")}
                 />
                 <Diag
                   label={L("Execution", "ביצוע")}
