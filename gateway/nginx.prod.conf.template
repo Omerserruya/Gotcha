@@ -186,6 +186,20 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
+        # Workspace-wide business policy caps (conversation service). Bounds the
+        # compensation / refund / coupon tools the Integrations & Tools workspace
+        # displays. There was NEVER a location for this, so ActionPoliciesPanel
+        # has always 404'd - the panel rendered and silently had no data.
+        location /api/business-policies {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://conversation_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
         location /api/gdpr/contacts {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://conversation_service;

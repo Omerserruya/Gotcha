@@ -12,7 +12,7 @@ import clsx from "clsx";
 import TestChatModal from "@/components/TestChatModal";
 import { ReadinessReportModal, readinessBadgeTone } from "@/components/ReadinessReport";
 import { builderReadinessTest, type ReadinessReport } from "@/lib/gotcha-api";
-import ToolPermissionsPanel from "@/components/ai-studio/ToolPermissionsPanel";
+import { IntegrationWorkspace } from "@/components/integrations/IntegrationWorkspace";
 import { EmployeeReadinessStrip } from "@/components/ai-studio/EmployeeReadinessStrip";
 import ActionPoliciesPanel from "@/components/ai-studio/ActionPoliciesPanel";
 import { MainPlaybookEditor } from "@/components/mainPlaybook/MainPlaybookEditor";
@@ -848,8 +848,13 @@ function SkillsTab({ t }: { t: (key: string) => string }) {
         // single source of truth for AUTO/HITL; the business-policy spend caps
         // that bound compensation/refund tools render below it - no separate
         // "Business Policies" tab to drift out of sync.
+        // The Integrations & Tools workspace replaces the flat per-tool list.
+        // One integration is selected at a time from the sidebar; its tools are
+        // grouped by risk and each carries Autonomous / HITL / Disabled. The
+        // business-policy spend caps still render below it, because they bound
+        // the financial tools shown above and belong on the same surface.
         <div className="space-y-10">
-          <ToolPermissionsPanel />
+          <IntegrationWorkspace />
           <div className="pt-8 border-t border-gray-200">
             <ActionPoliciesPanel />
           </div>

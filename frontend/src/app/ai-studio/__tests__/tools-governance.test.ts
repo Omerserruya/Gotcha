@@ -21,18 +21,19 @@ describe("§9 no standalone Business Policies tab in AI Studio", () => {
     expect(page).not.toContain('subView === "policies"');
   });
 
-  it("folds the business-policy caps INTO the permissions (governance) surface", () => {
-    // ActionPoliciesPanel still renders - but nested under the permissions view,
-    // beside the per-tool HITL matrix, not as a standalone tab.
+  it("folds the business-policy caps INTO the governance surface, below the workspace", () => {
+    // The flat per-tool list was replaced by the Integrations & Tools workspace
+    // (sidebar + one selected integration). ActionPoliciesPanel still renders
+    // beneath it, because those caps bound the financial tools shown above.
     const permIdx = page.indexOf('subView === "permissions"');
-    const toolPanelIdx = page.indexOf("<ToolPermissionsPanel />");
+    const workspaceIdx = page.indexOf("<IntegrationWorkspace />");
     const policyPanelIdx = page.indexOf("<ActionPoliciesPanel />");
     expect(permIdx).toBeGreaterThan(-1);
-    expect(toolPanelIdx).toBeGreaterThan(permIdx);
-    expect(policyPanelIdx).toBeGreaterThan(toolPanelIdx);
-    // Only ONE render site for each panel (no duplication).
+    expect(workspaceIdx).toBeGreaterThan(permIdx);
+    expect(policyPanelIdx).toBeGreaterThan(workspaceIdx);
+    // Only ONE render site for each (no duplicate editable surface).
     expect(page.split("<ActionPoliciesPanel />").length - 1).toBe(1);
-    expect(page.split("<ToolPermissionsPanel />").length - 1).toBe(1);
+    expect(page.split("<IntegrationWorkspace />").length - 1).toBe(1);
   });
 
   it("aliases old ?view=policies deep-links onto the governance surface", () => {
@@ -71,11 +72,11 @@ describe("§9 governance surface holds ONLY tool-attached config", () => {
     expect(existsSync(join(SRC, "components/business/BusinessTwin.tsx"))).toBe(false);
   });
 
-  it("what stays in the governance surface is tool-attached: the per-tool matrix + per-action limits only", () => {
-    // ToolPermissionsPanel = enable / employee assignment / AUTO-HITL / approval
-    // recipient / provider scopes. ActionPoliciesPanel = action-specific limits
+  it("what stays in the governance surface is tool-attached: the workspace + per-action limits only", () => {
+    // IntegrationWorkspace = integration sidebar + per-tool Autonomous/HITL/
+    // Disabled + provider scopes. ActionPoliciesPanel = action-specific limits
     // (compensation/coupon/refund/cancel). Both are tool-attached.
-    expect(governance).toContain("<ToolPermissionsPanel />");
+    expect(governance).toContain("<IntegrationWorkspace />");
     expect(governance).toContain("<ActionPoliciesPanel />");
     // The action panel is now scoped to per-action caps only (no PolicyAdmin).
     expect(actionPanel).toContain("ACTION_KINDS");
