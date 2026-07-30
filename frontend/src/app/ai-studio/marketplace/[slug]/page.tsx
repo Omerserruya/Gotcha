@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useDynamicParam } from "@/lib/useRouteParam";
 import { aiStudioHref, normalizeAiStudioTab } from "@/lib/ai-studio-tabs";
@@ -83,7 +83,7 @@ function getLogoColor(name: string) {
   return LOGO_COLORS[Math.abs(hash) % LOGO_COLORS.length];
 }
 
-export default function IntegrationDetailPage() {
+function IntegrationDetailPageInner() {
   const slug = useDynamicParam("slug");
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -580,5 +580,18 @@ export default function IntegrationDetailPage() {
         </div>
       </div>
     </AppLayout>
+  );
+}
+
+// useSearchParams() forces this route into client-side rendering, and Next
+// requires that bail-out to sit behind a Suspense boundary - without one the
+// production build fails at prerender (it succeeds in dev, which is why this
+// went unnoticed). The inner component holds all the logic; this wrapper exists
+// only to provide the boundary.
+export default function IntegrationDetailPage() {
+  return (
+    <Suspense fallback={null}>
+      <IntegrationDetailPageInner />
+    </Suspense>
   );
 }
