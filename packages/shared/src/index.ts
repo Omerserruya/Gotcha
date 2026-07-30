@@ -60,6 +60,21 @@ export {
 } from "./lib/identity-resolver";
 // Read vs write classification - ONE table, used by the Copilot's
 // who-executes decision and by the sandbox write guard in dispatchToolCall.
+// Migrating existing tool policy into the three-state model. Conservative by
+// construction: never enables a disabled tool, never makes an approval-gated
+// tool autonomous, and reports impossible states instead of guessing.
+export {
+  decideMigration,
+  buildMigrationReport,
+  migrationWrites,
+} from "./lib/tool-policy-migration";
+export type {
+  ThreeState,
+  MigrationOutcome,
+  LegacyPolicy,
+  MigrationDecision,
+  MigrationReport,
+} from "./lib/tool-policy-migration";
 // Integrations & Tools workspace classification. Strict product boundary:
 // Channels owns communication, Knowledge Manager owns knowledge sources, and
 // this workspace owns business systems + executable tool policy.
