@@ -8,6 +8,7 @@ import {
   getDefaultHighRiskTools,
 } from "@chatcenter/shared";
 import { getAvailableTools, TOOL_REGISTRY } from "../services/tool-registry";
+import { riskGroupFor, type RiskGroup } from "@chatcenter/shared";
 
 /**
  * F4/F8 - Per-tenant tool permissions (HITL + enable/disable).
@@ -46,6 +47,19 @@ interface MergedToolRow {
   expiresAfterMin: number;
   allowModification: boolean;
   updatedAt: string | null;
+  /** Display grouping + policy floor. Computed from the canonical shared table. */
+  riskGroup: RiskGroup;
+  /**
+   * The facts that decide whether the tool can run at all, sent so the UI can
+   * name the REAL reason instead of rendering every block as an off switch. All
+   * optional: an internal tool has no integration and no scopes, and absent
+   * must mean "not blocking" rather than "blocked".
+   */
+  integration: string | null;
+  integrationConnected?: boolean;
+  requiredScopes?: string[];
+  grantedScopes?: string[];
+  hasCatalogEntry?: boolean;
 }
 
 router.get("/", async (req: Request, res: Response) => {
@@ -83,6 +97,30 @@ router.get("/", async (req: Request, res: Response) => {
       });
     }
 
+    // Connection state and granted provider scopes, per integration slug. The
+    // UI needs these to say "the integration is disconnected" or "this scope was
+    // never granted" instead of showing an off switch the admin cannot fix.
+    const tenantIntegrations = await (prisma as any).tenantIntegration
+      .findMany({
+        where: { tenantId },
+        select: {
+          status: true,
+          scopes: true,
+          integration: { select: { slug: true, name: true } },
+        },
+      })
+      .catch(() => [] as any[]);
+    const integrationBySlug = new Map<string, { connected: boolean; scopes: string[]; name: string }>();
+    for (const ti of tenantIntegrations as any[]) {
+      const slug = ti.integration?.slug;
+      if (!slug) continue;
+      integrationBySlug.set(slug, {
+        connected: String(ti.status || "").toUpperCase() === "CONNECTED",
+        scopes: Array.isArray(ti.scopes) ? ti.scopes.filter((x: unknown) => typeof x === "string") : [],
+        name: ti.integration?.name ?? slug,
+      });
+    }
+
     const defaultHighRisk = new Set(getDefaultHighRiskTools());
 
     const merged: MergedToolRow[] = [];
@@ -115,6 +153,16 @@ router.get("/", async (req: Request, res: Response) => {
           expiresAfterMin: 30,
           allowModification: false,
           updatedAt: tt?.updatedAt ? tt.updatedAt.toISOString() : null,
+          riskGroup: riskGroupFor(spec.name),
+          integration: slug,
+          // A tool whose provider we have no record of is not reported as
+          // disconnected - we simply do not know, and guessing "broken" is its
+          // own false statement.
+          integrationConnected: integrationBySlug.has(slug)
+            ? integrationBySlug.get(slug)!.connected
+            : undefined,
+          grantedScopes: integrationBySlug.get(slug)?.scopes,
+          hasCatalogEntry: tenantToolBySlug.has(slug),
         });
         return;
       }
@@ -134,6 +182,10 @@ router.get("/", async (req: Request, res: Response) => {
         expiresAfterMin: row?.expiresAfterMin ?? 30,
         allowModification: row?.allowModification ?? false,
         updatedAt: row?.updatedAt?.toISOString?.() ?? null,
+        riskGroup: riskGroupFor(spec.name),
+        // Internal tools have no provider, so no connection or scope can block
+        // them. Left undefined deliberately: absent means "not blocking".
+        integration: null,
       });
     };
 

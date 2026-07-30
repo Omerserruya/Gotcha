@@ -9,6 +9,16 @@ import {
   updateToolPermission,
   type ToolPermissionRow,
 } from "@/lib/gotcha-api";
+import {
+  resolveToolAvailability,
+  summarizeTools,
+  groupByRisk,
+  type PermissionState,
+} from "@/lib/tool-availability-client";
+import {
+  ToolPermissionRow as ToolRow,
+  RiskGroupHeading,
+} from "./ToolPermissionRow";
 
 type KindFilter = "action" | "integration" | "system" | "all";
 
@@ -18,7 +28,7 @@ type KindFilter = "action" | "integration" | "system" | "all";
  */
 export default function ToolPermissionsPanel() {
   const { token } = useAuth();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
 
   const KIND_LABEL: Record<ToolPermissionRow["kind"], string> = {
     action: t("settings.tools.kindAction"),
@@ -42,6 +52,10 @@ export default function ToolPermissionsPanel() {
   const [error, setError] = useState<string | null>(null);
   const [kindFilter, setKindFilter] = useState<KindFilter>("action");
   const [savingTool, setSavingTool] = useState<string | null>(null);
+  // Raw adapter identifiers are admin diagnostics, off by default: a customer
+  // reading "process_refund" in a permission list learns nothing they could not
+  // read from a human name.
+  const [showRaw, setShowRaw] = useState(false);
 
   async function load() {
     if (!token) return;
@@ -67,15 +81,44 @@ export default function ToolPermissionsPanel() {
     return rows.filter((r) => r.kind === kindFilter);
   }, [rows, kindFilter]);
 
-  const grouped = useMemo(() => {
-    const map = new Map<string, ToolPermissionRow[]>();
-    for (const r of filtered) {
-      const key = r.category;
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(r);
-    }
-    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [filtered]);
+  // Resolved availability per tool, then grouped by RISK rather than by
+  // vendor category: what an operator needs to scan for is "what can this thing
+  // do to my business", and a refund and a product lookup sitting together
+  // under "commerce" hides exactly that.
+  const resolved = useMemo(
+    () =>
+      filtered.map((row) => ({
+        row,
+        availability: resolveToolAvailability({
+          toolName: row.toolName,
+          enabled: row.enabled,
+          requiresApproval: row.requiresApproval,
+          integrationConnected: row.integrationConnected,
+          requiredScopes: row.requiredScopes,
+          grantedScopes: row.grantedScopes,
+          hasCatalogEntry: row.hasCatalogEntry,
+        }),
+      })),
+    [filtered],
+  );
+
+  // Distinct from `counts` below, which counts tools per KIND for the filter
+  // chips. This one counts what can actually RUN, for the summary headline.
+  const toolCounts = useMemo(() => summarizeTools(resolved.map((r) => r.availability)), [resolved]);
+  const grouped = useMemo(
+    () => groupByRisk(resolved.map((r) => ({ ...r, riskGroup: r.availability.riskGroup }))),
+    [resolved],
+  );
+
+  /**
+   * Map the row's chosen state onto the two booleans the API stores. Doing it
+   * here, once, keeps the three-way control from drifting out of step with the
+   * enabled/requiresApproval pair it actually writes.
+   */
+  function applyState(row: ToolPermissionRow, next: Exclude<PermissionState, "unavailable">) {
+    if (next === "disabled") return patchTool(row, { enabled: false });
+    return patchTool(row, { enabled: true, requiresApproval: next === "require_approval" });
+  }
 
   async function patchTool(
     row: ToolPermissionRow,
@@ -132,6 +175,34 @@ export default function ToolPermissionsPanel() {
         ))}
       </div>
 
+      {/* The honest headline plus a diagnostics switch. The count is of tools
+          that can ACTUALLY run, so an unavailable one is never counted as
+          enabled just because its stored preference says so. */}
+      <div className="mb-3 flex items-center justify-between gap-3 flex-wrap">
+        <p className="text-xs font-medium text-gray-700 tabular-nums" data-testid="panel-tool-count">
+          {locale === "he"
+            ? `${toolCounts.enabled} מתוך ${toolCounts.total} כלים מופעלים`
+            : `${toolCounts.enabled} of ${toolCounts.total} tools enabled`}
+          {toolCounts.unavailable > 0 && (
+            <span className="ms-2 rounded-md bg-rose-50 px-1.5 py-0.5 text-[10px] font-medium text-rose-700">
+              {locale === "he"
+                ? `${toolCounts.unavailable} לא זמינים`
+                : `${toolCounts.unavailable} unavailable`}
+            </span>
+          )}
+        </p>
+        <button
+          type="button"
+          onClick={() => setShowRaw((v) => !v)}
+          data-testid="toggle-raw-names"
+          className="text-[11px] font-medium text-gray-400 hover:text-gray-600"
+        >
+          {showRaw
+            ? (locale === "he" ? "הסתרת מזהים" : "Hide identifiers")
+            : (locale === "he" ? "הצגת מזהים" : "Show identifiers")}
+        </button>
+      </div>
+
       {error && (
         <div className="mb-3 px-4 py-2 text-sm bg-red-50 border border-red-200 text-red-700 rounded-lg">
           {error}
@@ -143,46 +214,23 @@ export default function ToolPermissionsPanel() {
       )}
 
       <div className="space-y-5">
-        {grouped.map(([category, list]) => (
-          <section key={category}>
-            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-2">
-              {CATEGORY_LABEL[category] ?? category}
-            </h3>
-            <div className="bg-white rounded-xl shadow-subtle border border-gray-100 overflow-hidden">
-              {list.map((row, i) => (
-                <div
+        {grouped.map(([group, list]) => (
+          <section key={group}>
+            <RiskGroupHeading group={group} count={list.length} he={locale === "he"} />
+            <div className="space-y-1.5">
+              {list.map(({ row, availability }) => (
+                <ToolRow
                   key={row.toolName}
-                  className={clsx(
-                    "px-4 py-3 flex items-start gap-4",
-                    i > 0 && "border-t border-gray-100",
-                  )}
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <code className="text-sm font-mono text-gray-900">{row.toolName}</code>
-                      <KindChip kind={row.kind} label={KIND_LABEL[row.kind]} />
-                      {row.isDefault && (
-                        <span className="text-[10px] text-gray-400 italic">{t("settings.tools.default")}</span>
-                      )}
-                    </div>
-                    <p className="text-xs text-gray-500">{row.description}</p>
-                  </div>
-                  <div className="flex items-center gap-6 shrink-0 pt-0.5">
-                    <ToggleLabel
-                      label={t("settings.tools.enabled")}
-                      checked={row.enabled}
-                      disabled={savingTool === row.toolName}
-                      onChange={(v) => patchTool(row, { enabled: v })}
-                    />
-                    <ToggleLabel
-                      label={t("settings.tools.hitl")}
-                      hint={t("settings.tools.hitlHint")}
-                      checked={row.requiresApproval}
-                      disabled={!row.enabled || savingTool === row.toolName}
-                      onChange={(v) => patchTool(row, { requiresApproval: v })}
-                    />
-                  </div>
-                </div>
+                  displayName={toolDisplayName(row.toolName, t)}
+                  rawName={row.toolName}
+                  description={row.description}
+                  requiredScopes={row.requiredScopes}
+                  availability={availability}
+                  he={locale === "he"}
+                  saving={savingTool === row.toolName}
+                  showRawName={showRaw}
+                  onChange={(next) => applyState(row, next)}
+                />
               ))}
             </div>
           </section>
@@ -247,4 +295,23 @@ function ToggleLabel({
       <span className="text-[10px] text-gray-500 mt-1">{label}</span>
     </div>
   );
+}
+
+/**
+ * A human name for a tool.
+ *
+ * Prefers an i18n entry (settings.tools.names.<tool>); otherwise derives one
+ * from the identifier so a newly added adapter tool reads as "Process refund"
+ * rather than "process_refund". The raw identifier stays available behind the
+ * diagnostics toggle.
+ */
+function toolDisplayName(toolName: string, t: (k: string) => string): string {
+  const key = `settings.tools.names.${toolName}`;
+  const translated = t(key);
+  if (translated && translated !== key) return translated;
+  return toolName
+    .replace(/^integration\./, "")
+    .replace(/[._]+/g, " ")
+    .replace(/^\s+|\s+$/g, "")
+    .replace(/^./, (c) => c.toUpperCase());
 }

@@ -623,6 +623,14 @@ export interface ToolPermissionRow {
   expiresAfterMin: number;
   allowModification: boolean;
   updatedAt: string | null;
+  /** Display grouping + policy floor, from the canonical shared table. */
+  riskGroup?: import("./tool-availability-client").RiskGroup;
+  /** Facts that decide availability. Absent means "not blocking". */
+  integration?: string | null;
+  integrationConnected?: boolean;
+  requiredScopes?: string[];
+  grantedScopes?: string[];
+  hasCatalogEntry?: boolean;
 }
 
 export function listToolPermissions(token: string) {
