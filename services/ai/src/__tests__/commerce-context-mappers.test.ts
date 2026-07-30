@@ -212,3 +212,39 @@ describe("order detail money is reported, never derived (§16)", () => {
     expect(d.lineItems[0].variantTitle).toBe("L");
   });
 });
+
+describe("order-state rules match what Shopify will actually accept", () => {
+  const { mapOrderCard } = (__testables as any);
+  const base = {
+    id: 1, name: "#1005", currency: "USD", total_price: "949.95",
+    financial_status: "paid", cancelled_at: null, line_items: [], created_at: "2026-07-08T00:00:00Z",
+  };
+  const card = (o: any) => mapOrderCard({ ...base, ...o }, "s.myshopify.com", true, "en", {});
+
+  it("does not offer Cancel on a fulfilled order", () => {
+    // Shopify 422s on this every time, echoing the whole order back. Offering
+    // the button sent the agent to a dead end and surfaced raw provider JSON.
+    const c = card({ fulfillment_status: "fulfilled", fulfillments: [{ id: 9 }] });
+    expect(c.eligibility.cancellable).toBe(false);
+    expect(c.eligibility.reasonIfNot).toBe("already_fulfilled");
+  });
+
+  it("treats a PARTIAL fulfillment as blocking too", () => {
+    expect(card({ fulfillment_status: "partial" }).eligibility.cancellable).toBe(false);
+  });
+
+  it("blocks on the presence of a fulfillment even when the status is blank", () => {
+    expect(card({ fulfillment_status: null, fulfillments: [{ id: 1 }] }).eligibility.cancellable).toBe(false);
+  });
+
+  it("still allows Cancel on an unfulfilled order", () => {
+    const c = card({ fulfillment_status: null, fulfillments: [] });
+    expect(c.eligibility.cancellable).toBe(true);
+    expect(c.eligibility.reasonIfNot).toBeUndefined();
+  });
+
+  it("keeps refund available on a fulfilled order", () => {
+    // Fulfilment blocks cancellation, not refunding.
+    expect(card({ fulfillment_status: "fulfilled", fulfillments: [{ id: 9 }] }).eligibility.refundable).toBe(true);
+  });
+});

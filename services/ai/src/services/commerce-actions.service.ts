@@ -29,18 +29,15 @@ import {
 import { executeAdapterTool } from "./connectors/integration-framework";
 import { resolveVerifiedShopifyCustomerId, orderToCard, invalidateCommerceCache } from "./commerce-context.service";
 
-const TOOL_FOR: Record<"cancel" | "refund" | "resend_confirmation", string> = {
+const TOOL_FOR: Record<"cancel" | "refund", string> = {
   cancel: "shopify.cancel_order",
   refund: "shopify.process_refund",
-  resend_confirmation: "shopify.resend_confirmation",
 };
 
 /** Build the adapter args from the typed request (server-controlled - the
  * order id is re-validated against the verified customer, never trusted raw). */
 function adapterArgs(req: CommerceActionRequest & { orderId: string }): Record<string, unknown> {
   const p = req.params ?? {};
-  // Nothing to configure: it re-sends the confirmation for this order.
-  if (req.action === "resend_confirmation") return { order_id: req.orderId };
   if (req.action === "cancel") {
     return {
       order_id: req.orderId,
@@ -258,13 +255,16 @@ export async function executeCommerceAction(opts: {
 
   if (!request.orderId) return { state: "denied", reason: "orderId_required" };
   const orderRequest = request as CommerceActionRequest & { orderId: string };
-  const tool = TOOL_FOR[request.action as "cancel" | "refund" | "resend_confirmation"];
+  const tool = TOOL_FOR[request.action as "cancel" | "refund"];
+  // The route validates the action, but this is the money path - an action we
+  // do not recognise must stop here rather than reach the adapter with an
+  // undefined tool name.
+  if (!tool) return { state: "denied", reason: "invalid_action" };
   const actionKind = actionKindForTool(tool) as BusinessActionKind;
 
   // 0. Permission (defence-in-depth; the route already gated).
   if (request.action === "cancel" && !opts.perms.canCancel) return { state: "denied", reason: "permission_denied" };
   if (request.action === "refund" && !opts.perms.canRefund) return { state: "denied", reason: "permission_denied" };
-  if (request.action === "resend_confirmation" && !opts.perms.canNotify) return { state: "denied", reason: "permission_denied" };
 
   // 1. Ownership: the order must belong to THIS conversation's verified customer.
   const verifiedCustomerId = await resolveVerifiedShopifyCustomerId(tenantId, conversationId);
@@ -293,10 +293,13 @@ export async function executeCommerceAction(opts: {
   // 3. Eligibility from verified live state.
   const total = Number(order?.total_price) || 0;
   const currency = String(order?.currency || "USD");
-  if (request.action === "resend_confirmation" && order?.cancelled_at) {
-    // Re-confirming an order the customer no longer has would be worse than
-    // doing nothing.
-    return { state: "unavailable", reason: "already_cancelled" };
+  const fulfilled =
+    ["fulfilled", "partial"].includes(String(order?.fulfillment_status || "").toLowerCase()) ||
+    (Array.isArray(order?.fulfillments) && order.fulfillments.length > 0);
+  if (request.action === "cancel" && fulfilled) {
+    // Shopify 422s on this with the entire order echoed back, which is not a
+    // message anyone can act on. Refuse it here with a reason instead.
+    return { state: "unavailable", reason: "already_fulfilled" };
   }
   if (request.action === "cancel" && order?.cancelled_at) {
     return { state: "unavailable", reason: "already_cancelled" };
@@ -400,14 +403,10 @@ export async function executeCommerceAction(opts: {
   }
 
   // 7. Post-action verify: re-fetch and confirm the intended state actually
-  //    landed. Resending a confirmation email changes NO order state, so there
-  //    is nothing to re-read - the provider's acknowledgement is the whole
-  //    result, and pretending to verify it would be theatre.
+  //    landed.
   const verified = await fetchOrder(tenantId, conversationId, orderRequest.orderId);
   const landed =
-    request.action === "resend_confirmation"
-      ? true
-      : request.action === "cancel"
+    request.action === "cancel"
       ? !!verified?.cancelled_at
       : String(verified?.financial_status || "").includes("refunded");
   await writeAudit({

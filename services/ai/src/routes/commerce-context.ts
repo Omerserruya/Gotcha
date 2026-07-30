@@ -54,7 +54,6 @@ async function commercePerms(p: PermissionPrincipal) {
 const PERMISSION_FOR: Record<string, "canCancel" | "canRefund" | "canTag" | "canNote" | "canNotify"> = {
   cancel: "canCancel",
   refund: "canRefund",
-  resend_confirmation: "canNotify",
   add_tag: "canTag",
   remove_tag: "canTag",
   add_note: "canNote",

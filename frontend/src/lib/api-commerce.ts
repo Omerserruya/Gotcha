@@ -115,7 +115,7 @@ export type CommerceActionResponse =
   | { state: "executed"; order: OrderCard }
   | { state: "executed_customer"; tags?: string[]; noteAdded?: boolean };
 
-export type CommerceOrderAction = "cancel" | "refund" | "resend_confirmation";
+export type CommerceOrderAction = "cancel" | "refund";
 export type CommerceCustomerAction = "add_tag" | "remove_tag" | "add_note";
 export type CommerceAction = CommerceOrderAction | CommerceCustomerAction;
 

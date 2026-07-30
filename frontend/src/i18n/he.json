@@ -421,7 +421,8 @@
     "byGotcha": "GOTCHA",
     "resendConfirmation": "שליחה חוזרת של מייל האישור",
     "loadMore": "טעינת עוד",
-    "showingOf": "מוצגות {shown} מתוך {total}"
+    "showingOf": "מוצגות {shown} מתוך {total}",
+    "alreadyFulfilled": "לא ניתן לבטל הזמנה שכבר נשלחה"
   },
   "crmPanel": {
     "title": "הקשר CRM",

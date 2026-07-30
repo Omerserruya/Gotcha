@@ -143,11 +143,15 @@ const TOOLS: ToolDefinition[] = [
     "Customer didn't receive their invoice / needs the payment link again.",
     { ...P.orderSel, to: { type: "string", description: "Override recipient email." } }),
   t("resend_confirmation", "ACTION", "MEDIUM", "Resend the order confirmation email.",
-    "Customer says they never got the confirmation email.", P.orderSel),
+    "Customer says they never got the confirmation email.", P.orderSel, undefined,
+    { unsupported: "Shopify has no REST endpoint to resend an order confirmation." }),
   t("edit_order", "ACTION", "HIGH", "Edit an order's line items (add/remove/adjust).",
     "You must change what's on an existing order and editing is allowed.",
     { ...P.orderSel, changes: { type: "object" } }, undefined,
-    { sideEffects: "Mutates a placed order. Requires GraphQL orderEdit." }),
+    {
+      sideEffects: "Mutates a placed order. Requires GraphQL orderEdit.",
+      unsupported: "Editing a placed order requires the GraphQL Admin API.",
+    }),
 
   // ── Fulfillment / shipping (read) ──
   t("get_shipment_status", "READ", "LOW", "Get the shipment status of an order's fulfillments.",
@@ -184,9 +188,9 @@ const TOOLS: ToolDefinition[] = [
 
   // ── Segments (graceful - tags are the supported proxy) ──
   t("list_segments", "READ", "LOW", "List customer segments (GraphQL - degrades gracefully).",
-    "You want the store's segments. Prefer customer tags for membership ops.", { limit: { type: "number" } }),
+    "You want the store's segments. Prefer customer tags for membership ops.", { limit: { type: "number" } }, undefined, { unsupported: "Segments are not exposed over the REST Admin API." }),
   t("check_segment_membership", "READ", "LOW", "Check whether a customer is in a segment (degrades gracefully).",
-    "You want to know a customer's segment. Prefer get_customer_tags.", { ...P.customerSel, segment: { type: "string" } }),
+    "You want to know a customer's segment. Prefer get_customer_tags.", { ...P.customerSel, segment: { type: "string" } }, undefined, { unsupported: "Segments are not exposed over the REST Admin API." }),
   t("add_customer_to_segment", "WRITE", "LOW", "Add a customer to a (tag-based) segment.",
     "Place a customer into a segment. Implemented via customer tags.",
     { ...P.customerSel, segment: { type: "string" } }, ["segment"]),
@@ -1036,6 +1040,33 @@ const ShopifyAdapter: ProviderAdapter = {
 
 // ─── Internal helpers ───────────────────────────────────────
 
+/**
+ * The part of a Shopify error body a human can act on.
+ *
+ * Shopify's 422 for a failed cancel echoes the ENTIRE order object, so a blind
+ * `text.slice(0, 240)` captured `{"order":{"id":...,"browser_ip":...` and cut
+ * off before the actual reason - the operator saw a wall of JSON that did not
+ * say what went wrong. `errors` is where the reason lives, in any of three
+ * shapes Shopify uses.
+ */
+function shopifyErrorSummary(text: string): string {
+  let body: any;
+  try { body = JSON.parse(text); } catch { return text.slice(0, 240); }
+  const errs = body?.errors ?? body?.error;
+  if (typeof errs === "string") return errs.slice(0, 240);
+  if (Array.isArray(errs)) return errs.join("; ").slice(0, 240);
+  if (errs && typeof errs === "object") {
+    return Object.entries(errs)
+      .map(([field, msgs]) => `${field}: ${Array.isArray(msgs) ? msgs.join(", ") : String(msgs)}`)
+      .join("; ")
+      .slice(0, 240);
+  }
+  // No `errors` key at all - Shopify echoed the resource. Say that plainly
+  // rather than pasting the object.
+  if (body?.order) return "Shopify rejected the request and returned the order unchanged (check its fulfillment and payment state).";
+  return text.slice(0, 240);
+}
+
 interface Ctx { token: string; base: string; }
 
 /**
@@ -1061,13 +1092,33 @@ async function executeRefund(ctx: Ctx, o: any, args: Record<string, any>): Promi
   }
 
   const isPartialAmount = args.amount != null;
-  const restockType = args.restock ? "restock" : "no_restock";
+
+  /**
+   * Shopify's restock_type is an ENUM, not a boolean.
+   *
+   * Valid values are no_restock / cancel / return / legacy_restock. We were
+   * sending the literal string "restock", which Shopify rejects outright with
+   * `refund_line_items: ["invalid restock type"]` - so every refund that asked
+   * to restock failed, and the agent saw a raw 422.
+   *
+   * Which of the two restocking values is correct depends on the line item:
+   * an UNFULFILLED item is being cancelled back into stock, a FULFILLED one is
+   * being returned. Sending the wrong one is not cosmetic - it decides whether
+   * Shopify treats the unit as never-shipped or as physically returned.
+   */
+  const restockTypeFor = (lineItemId: unknown): string => {
+    if (!args.restock) return "no_restock";
+    const li = (o.line_items || []).find((x: any) => String(x.id) === String(lineItemId));
+    const fulfillable = Number(li?.fulfillable_quantity ?? 0);
+    return fulfillable > 0 ? "cancel" : "return";
+  };
+
   let refundLineItems: Array<{ line_item_id: number; quantity: number; restock_type: string }> = [];
   if (Array.isArray(args.line_items) && args.line_items.length) {
     refundLineItems = args.line_items.map((li: any) => ({
       line_item_id: Number(li.line_item_id),
       quantity: Number(li.quantity || 1),
-      restock_type: restockType,
+      restock_type: restockTypeFor(li.line_item_id),
     }));
     for (const li of refundLineItems) {
       if (!Number.isFinite(li.line_item_id) || !(li.quantity > 0)) throw new Error("refund_line_items_invalid");
@@ -1078,7 +1129,7 @@ async function executeRefund(ctx: Ctx, o: any, args: Record<string, any>): Promi
       .map((li: any) => ({
         line_item_id: Number(li.id),
         quantity: Number(li.quantity || 0) - (refundedQty[String(li.id)] || 0),
-        restock_type: restockType,
+        restock_type: restockTypeFor(li.id),
       }))
       .filter((li: { quantity: number }) => li.quantity > 0);
     if (!refundLineItems.length && refundedAmount > 0) {
@@ -1393,7 +1444,7 @@ async function shopifyGraphQL(ctx: Ctx, query: string, variables: Record<string,
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`shopify_${res.status}: ${text.slice(0, 240)}`);
+    throw new Error(`shopify_${res.status}: ${shopifyErrorSummary(text)}`);
   }
   const j: any = await res.json();
   if (Array.isArray(j.errors) && j.errors.length) {
@@ -1420,7 +1471,7 @@ async function shopifyRequest(token: string, method: string, url: string, body?:
   const res = await fetch(url, init);
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`shopify_${res.status}: ${text.slice(0, 240)}`);
+    throw new Error(`shopify_${res.status}: ${shopifyErrorSummary(text)}`);
   }
   return await res.json();
 }

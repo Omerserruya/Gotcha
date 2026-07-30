@@ -165,8 +165,8 @@ export interface CommerceCapabilities {
    *  scope without the other. */
   canTag: boolean;
   canNote: boolean;
-  /** Resend the order confirmation email. A customer-visible side effect, so
-   *  it is its own grant rather than riding on read access. */
+  /** Reserved for customer-visible order emails. No REST endpoint exists to
+   *  resend an order confirmation, so nothing consumes this yet. */
   canNotify: boolean;
   grantedScopes: string[];
   lastCheckedAt: string | null;
@@ -238,11 +238,11 @@ export interface AICommerceSnapshot {
  * verified customer directly and take no order id at all - there is nothing
  * client-supplied to forge.
  */
-export type CommerceOrderActionKind = "cancel" | "refund" | "resend_confirmation";
+export type CommerceOrderActionKind = "cancel" | "refund";
 export type CommerceCustomerActionKind = "add_tag" | "remove_tag" | "add_note";
 export type CommerceActionKind = CommerceOrderActionKind | CommerceCustomerActionKind;
 
-export const COMMERCE_ORDER_ACTIONS: CommerceOrderActionKind[] = ["cancel", "refund", "resend_confirmation"];
+export const COMMERCE_ORDER_ACTIONS: CommerceOrderActionKind[] = ["cancel", "refund"];
 export const COMMERCE_CUSTOMER_ACTIONS: CommerceCustomerActionKind[] = ["add_tag", "remove_tag", "add_note"];
 
 export function isCustomerScopedAction(action: string): action is CommerceCustomerActionKind {

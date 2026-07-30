@@ -453,34 +453,15 @@ describe("timeline keeps Shopify's record apart from GOTCHA's actions (§24)", (
   });
 });
 
-describe("resend confirmation is a real action, gated like one", () => {
-  const openMenu = async () => {
+describe("actions the provider cannot execute are not offered", () => {
+  it("does not offer Resend confirmation at all", async () => {
+    // Shopify has NO REST endpoint for this - the adapter's handler always
+    // throws. A button for it is a button that can only ever fail.
     renderPanel();
     await screen.findByText("#1001");
     fireEvent.click(screen.getByLabelText("commerce.more"));
-  };
-
-  it("sends the order-scoped action with no extra params", async () => {
-    runCommerceAction.mockResolvedValue({ state: "executed", order: order() });
-    await openMenu();
-    fireEvent.click(await screen.findByTestId("resend-confirmation"));
-    await waitFor(() => expect(runCommerceAction).toHaveBeenCalled());
-    const input = runCommerceAction.mock.calls[0][2];
-    expect(input.action).toBe("resend_confirmation");
-    expect(input.orderId).toBe("gid://1");
-    expect(input.params.amount).toBeUndefined();
-  });
-
-  it("is hidden without the permission", async () => {
-    fetchCommerceContext.mockResolvedValue(okContext({ capabilities: caps({ canNotify: false }) }));
-    await openMenu();
     expect(screen.queryByTestId("resend-confirmation")).toBeNull();
-  });
-
-  it("is hidden on a cancelled order - re-confirming it would be worse than nothing", async () => {
-    fetchCommerceContext.mockResolvedValue(okContext({ recentOrders: [order({ cancelled: true })] }));
-    await openMenu();
-    expect(screen.queryByTestId("resend-confirmation")).toBeNull();
+    expect(screen.queryByText(/commerce\.resendConfirmation/)).toBeNull();
   });
 });
 

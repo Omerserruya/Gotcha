@@ -503,26 +503,28 @@ export async function getExecutableToolCountsBySlug(): Promise<Map<string, numbe
     select: { slug: true, endpoint: true, integration: { select: { slug: true } } },
   });
 
-  const adapterToolsBySlug = new Map<string, Set<string>>();
+  const adapterDefsBySlug = new Map<string, Map<string, any>>();
   const counts = new Map<string, number>();
 
   for (const ct of rows as any[]) {
     const integrationSlug = ct.integration?.slug;
     if (!integrationSlug) continue;
 
-    if (!adapterToolsBySlug.has(integrationSlug)) {
-      const names = new Set<string>();
+    if (!adapterDefsBySlug.has(integrationSlug)) {
+      const defs = new Map<string, any>();
       const adapter = getAdapter(integrationSlug);
       try {
         for (const def of adapter?.tools?.() ?? []) {
-          if (def?.name) names.add(def.name.slice(def.name.indexOf(".") + 1));
+          if (def?.name) defs.set(def.name.slice(def.name.indexOf(".") + 1), def);
         }
       } catch { /* a broken adapter must not hide the rest of the catalog */ }
-      adapterToolsBySlug.set(integrationSlug, names);
+      adapterDefsBySlug.set(integrationSlug, defs);
     }
 
     const hasEndpoint = typeof ct.endpoint === "string" && ct.endpoint.trim().length > 0;
-    if (!hasEndpoint && !adapterToolsBySlug.get(integrationSlug)!.has(ct.slug)) continue;
+    const def = adapterDefsBySlug.get(integrationSlug)?.get(ct.slug);
+    if (!hasEndpoint && !def) continue;
+    if (def?.unsupported) continue;
     counts.set(integrationSlug, (counts.get(integrationSlug) ?? 0) + 1);
   }
 
@@ -589,6 +591,10 @@ export async function getGovernableIntegrationTools(
     const hasEndpoint = typeof ct.endpoint === "string" && ct.endpoint.trim().length > 0;
     // Genuinely dead: nothing can execute it, so offering policy would be a lie.
     if (!adapterDef && !hasEndpoint) continue;
+    // Declared but not executable on this provider's API. Its handler always
+    // throws, so a permission control over it is a decision with no effect -
+    // and the failure only shows up later as a raw provider error.
+    if (adapterDef?.unsupported) continue;
 
     const row = rowByCatalogId.get(ct.id) as any;
     out.push({

@@ -421,7 +421,8 @@
     "byGotcha": "GOTCHA",
     "resendConfirmation": "Resend confirmation email",
     "loadMore": "Load more",
-    "showingOf": "Showing {shown} of {total}"
+    "showingOf": "Showing {shown} of {total}",
+    "alreadyFulfilled": "Fulfilled orders cannot be cancelled"
   },
   "crmPanel": {
     "title": "CRM Context",

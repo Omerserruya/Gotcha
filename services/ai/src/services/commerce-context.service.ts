@@ -357,6 +357,11 @@ function mapOrderCard(order: any, shopDomain: string, canWrite: boolean, locale:
 
   const refundable = Math.max(0, total - refunded);
   const isFullyRefunded = refunded >= total && total > 0;
+  // Any fulfillment at all blocks cancellation, including a partial one.
+  const ful = String(order?.fulfillment_status || "").toLowerCase();
+  const hasFulfillment =
+    ful === "fulfilled" || ful === "partial" ||
+    (Array.isArray(order?.fulfillments) && order.fulfillments.length > 0);
 
   return {
     orderId: String(order?.id),
@@ -376,10 +381,16 @@ function mapOrderCard(order: any, shopDomain: string, canWrite: boolean, locale:
     timeline: buildTimeline(order, refunded, total, locale),
     detail: mapOrderDetail(order, currency, imageByProduct),
     eligibility: {
-      cancellable: canWrite && !cancelled,
+      // Shopify REFUSES to cancel an order that has been fulfilled - it 422s
+      // with the whole order echoed back. Offering the button anyway sent the
+      // agent to a dead end and surfaced a raw provider error, which is the
+      // exact thing order-state rules exist to prevent.
+      cancellable: canWrite && !cancelled && !hasFulfillment,
       refundable: canWrite && !isFullyRefunded && refundable > 0,
       reasonIfNot: cancelled
         ? "already_cancelled"
+        : hasFulfillment
+        ? "already_fulfilled"
         : isFullyRefunded
         ? "already_refunded"
         : !canWrite
@@ -674,6 +685,7 @@ export async function orderToCard(
 
 // Exposed for unit tests (pure mappers).
 export const __testables = {
+  mapOrderCard,
   mapOrderDetail,
   financialChip,
   fulfillmentChip,

@@ -303,7 +303,6 @@ export function CommerceContextPanel({ conversationId, token, onState }: Props) 
           setMenuOpen={setMenuOpen}
           msg={actionMsg?.orderId === order.orderId ? actionMsg : null}
           onAction={(action) => setConfirm({ order, action })}
-          onResend={() => runOrderAction(order, "resend_confirmation" as any, {})}
           onRefresh={() => load(true)}
           dateLocale={dateLocale}
           t={t}
@@ -413,7 +412,7 @@ function StatusLine({ order, t }: { order: OrderCard; t: (k: string) => string }
 }
 
 function SingleOrderCard({
-  order, caps, busy, menuOpen, setMenuOpen, msg, onAction, onResend, onRefresh, dateLocale, t,
+  order, caps, busy, menuOpen, setMenuOpen, msg, onAction, onRefresh, dateLocale, t,
 }: {
   order: OrderCard;
   caps: CommerceContext["capabilities"] | null;
@@ -422,7 +421,6 @@ function SingleOrderCard({
   setMenuOpen: (v: boolean) => void;
   msg: { text: string; tone: StatusChip["tone"] } | null;
   onAction: (a: "cancel" | "refund") => void;
-  onResend: () => void;
   onRefresh: () => void;
   dateLocale: string;
   t: (k: string, v?: Record<string, string>) => string;
@@ -505,18 +503,6 @@ function SingleOrderCard({
                   >
                     {t("commerce.copyOrderNumber") || "Copy order number"}
                   </button>
-                  {/* No options to choose, so no modal - but it does email the
-                      customer, so it still goes through the policy chain. */}
-                  {caps?.canNotify && !order.cancelled && (
-                    <button
-                      data-testid="resend-confirmation"
-                      disabled={busy}
-                      className="block w-full text-start px-3 py-1.5 text-gray-700 hover:bg-gray-50 disabled:opacity-40"
-                      onClick={() => { setMenuOpen(false); onResend(); }}
-                    >
-                      {t("commerce.resendConfirmation") || "Resend confirmation email"}
-                    </button>
-                  )}
                 </div>
               </>
             )}
@@ -1033,8 +1019,18 @@ function OrderDetailSection({
           {detail.lineItems.length > 0 && (
             <ul className="space-y-1">
               {detail.lineItems.map((li, i) => (
-                <li key={`${li.title}-${i}`} className="flex items-start justify-between gap-2 text-[11px]" data-testid="order-line">
-                  <span className="min-w-0 text-gray-700" dir="auto">
+                <li key={`${li.title}-${i}`} className="flex items-center gap-2 text-[11px]" data-testid="order-line">
+                  {/* The image was fetched and then thrown away here, so the
+                      expanded view showed products with no picture. */}
+                  <span className="w-7 h-7 shrink-0 rounded-md border border-gray-100 bg-white overflow-hidden flex items-center justify-center">
+                    {li.imageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={li.imageUrl} alt="" className="w-full h-full object-cover" data-testid="order-line-image" />
+                    ) : (
+                      <span className="text-gray-300 text-[11px]">🛍️</span>
+                    )}
+                  </span>
+                  <span className="min-w-0 flex-1 text-gray-700" dir="auto">
                     <span className="tabular-nums text-gray-400">{li.quantity}× </span>
                     {li.title}
                     {li.variantTitle && <span className="text-gray-400"> · {li.variantTitle}</span>}

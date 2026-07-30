@@ -38,6 +38,15 @@ export interface ToolDefinition {
    * never proposes an action the provider will 403 forever.
    */
   requiredScopes?: string[];
+  /**
+   * Declared for the catalog but NOT executable on this provider's REST API.
+   *
+   * A tool whose handler always throws must never reach a permission screen:
+   * offering Autonomous / HITL / Disabled for something that can only ever
+   * fail asks an admin to make a decision that has no effect, and the failure
+   * only surfaces later as a raw provider error in front of a customer.
+   */
+  unsupported?: string;
 }
 
 export interface AdapterContext {
