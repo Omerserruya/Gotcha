@@ -112,7 +112,7 @@ export type CommerceActionResponse =
   | { state: "pending_approval"; approvalRequestId: string }
   | { state: "denied"; reason: string }
   | { state: "unavailable"; reason: string }
-  | { state: "executed"; order: OrderCard }
+  | { state: "executed"; order: OrderCard; note?: string }
   | { state: "executed_customer"; tags?: string[]; noteAdded?: boolean };
 
 export type CommerceOrderAction = "cancel" | "refund";

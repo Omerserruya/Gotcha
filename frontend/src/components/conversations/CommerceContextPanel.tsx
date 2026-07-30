@@ -147,7 +147,15 @@ export function CommerceContextPanel({ conversationId, token, onState }: Props) 
       const res: CommerceActionResponse = await runCommerceAction(token, conversationId, input, locale);
       if (res.state === "executed") {
         applyExecuted(res.order);
-        setActionMsg({ orderId: msgScope, text: t("commerce.actionDone") || "Done", tone: "positive" });
+        const skipped = res.note?.startsWith("not_restocked:") ? res.note.slice("not_restocked:".length) : null;
+        setActionMsg({
+          orderId: msgScope,
+          // Done, but say what did NOT happen.
+          text: skipped
+            ? `${t("commerce.actionDone") || "Done"} · ${t("commerce.notRestocked") || "items were not restocked"}: ${skipped}`
+            : t("commerce.actionDone") || "Done",
+          tone: skipped ? "warning" : "positive",
+        });
       } else if (res.state === "executed_customer") {
         if (res.tags) setTags(res.tags);
         setActionMsg({

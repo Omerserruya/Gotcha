@@ -1094,6 +1094,41 @@ async function executeRefund(ctx: Ctx, o: any, args: Record<string, any>): Promi
   const isPartialAmount = args.amount != null;
 
   /**
+   * WHERE the goods go back to.
+   *
+   * Restocking is refused with `refund_line_items.base: You need to set a
+   * location to restock items` unless each restocked line carries a
+   * location_id. Note that refunds/calculate does NOT enforce this - only the
+   * create call does - so a dry run alone will not catch it.
+   *
+   * The fulfillment that shipped a line item is the correct source: that is
+   * where the stock left from, and it is on the order we already have.
+   */
+  const locationByLineItem = new Map<string, number>();
+  let fallbackLocationId: number | undefined;
+  for (const f of o.fulfillments || []) {
+    const loc = Number(f?.location_id);
+    if (!Number.isFinite(loc)) continue;
+    if (fallbackLocationId === undefined) fallbackLocationId = loc;
+    for (const li of f?.line_items || []) {
+      if (li?.id != null) locationByLineItem.set(String(li.id), loc);
+    }
+  }
+  if (fallbackLocationId === undefined) {
+    // Unfulfilled orders have no fulfillment to learn from. This needs
+    // read_locations; when the scope is absent Shopify returns an empty list
+    // rather than an error, so treat "no locations" as "cannot restock".
+    try {
+      const locs: any = await sreq(ctx, "GET", "/locations.json");
+      const active = (locs?.locations || []).find((l: any) => l?.active) ?? (locs?.locations || [])[0];
+      if (active?.id != null) fallbackLocationId = Number(active.id);
+    } catch { /* no read_locations - handled below by degrading to no_restock */ }
+  }
+
+  /** Line items we were asked to restock but could not place. */
+  const restockSkipped: string[] = [];
+
+  /**
    * Shopify's restock_type is an ENUM, not a boolean.
    *
    * Valid values are no_restock / cancel / return / legacy_restock. We were
@@ -1106,19 +1141,27 @@ async function executeRefund(ctx: Ctx, o: any, args: Record<string, any>): Promi
    * being returned. Sending the wrong one is not cosmetic - it decides whether
    * Shopify treats the unit as never-shipped or as physically returned.
    */
-  const restockTypeFor = (lineItemId: unknown): string => {
-    if (!args.restock) return "no_restock";
+  const restockFor = (lineItemId: unknown): { restock_type: string; location_id?: number } => {
+    if (!args.restock) return { restock_type: "no_restock" };
     const li = (o.line_items || []).find((x: any) => String(x.id) === String(lineItemId));
     const fulfillable = Number(li?.fulfillable_quantity ?? 0);
-    return fulfillable > 0 ? "cancel" : "return";
+    const locationId = locationByLineItem.get(String(lineItemId)) ?? fallbackLocationId;
+    if (locationId === undefined) {
+      // Refuse to restock rather than fail the whole refund: the money going
+      // back is the primary intent, and a silent no-op would be worse than
+      // either. The caller is told which lines were skipped.
+      restockSkipped.push(String(li?.title ?? lineItemId));
+      return { restock_type: "no_restock" };
+    }
+    return { restock_type: fulfillable > 0 ? "cancel" : "return", location_id: locationId };
   };
 
-  let refundLineItems: Array<{ line_item_id: number; quantity: number; restock_type: string }> = [];
+  let refundLineItems: Array<{ line_item_id: number; quantity: number; restock_type: string; location_id?: number }> = [];
   if (Array.isArray(args.line_items) && args.line_items.length) {
     refundLineItems = args.line_items.map((li: any) => ({
       line_item_id: Number(li.line_item_id),
       quantity: Number(li.quantity || 1),
-      restock_type: restockTypeFor(li.line_item_id),
+      ...restockFor(li.line_item_id),
     }));
     for (const li of refundLineItems) {
       if (!Number.isFinite(li.line_item_id) || !(li.quantity > 0)) throw new Error("refund_line_items_invalid");
@@ -1129,7 +1172,7 @@ async function executeRefund(ctx: Ctx, o: any, args: Record<string, any>): Promi
       .map((li: any) => ({
         line_item_id: Number(li.id),
         quantity: Number(li.quantity || 0) - (refundedQty[String(li.id)] || 0),
-        restock_type: restockTypeFor(li.id),
+        ...restockFor(li.id),
       }))
       .filter((li: { quantity: number }) => li.quantity > 0);
     if (!refundLineItems.length && refundedAmount > 0) {
@@ -1195,6 +1238,9 @@ async function executeRefund(ctx: Ctx, o: any, args: Record<string, any>): Promi
     refund_status: allProcessed ? "processed" : "pending",
     financial_status: verify.order?.financial_status ?? null,
     processed_at: refund.processed_at ?? null,
+    // Reported, never silent: the agent asked for a restock and did not get
+    // one on these lines because no location could be resolved.
+    ...(restockSkipped.length ? { restock_skipped: restockSkipped } : {}),
   };
 }
 

@@ -422,7 +422,8 @@
     "resendConfirmation": "שליחה חוזרת של מייל האישור",
     "loadMore": "טעינת עוד",
     "showingOf": "מוצגות {shown} מתוך {total}",
-    "alreadyFulfilled": "לא ניתן לבטל הזמנה שכבר נשלחה"
+    "alreadyFulfilled": "לא ניתן לבטל הזמנה שכבר נשלחה",
+    "notRestocked": "הפריטים לא הוחזרו למלאי (אין מיקום מלאי)"
   },
   "crmPanel": {
     "title": "הקשר CRM",

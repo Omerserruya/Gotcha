@@ -685,7 +685,6 @@ export async function orderToCard(
 
 // Exposed for unit tests (pure mappers).
 export const __testables = {
-  mapOrderCard,
   mapOrderDetail,
   financialChip,
   fulfillmentChip,

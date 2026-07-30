@@ -422,7 +422,8 @@
     "resendConfirmation": "Resend confirmation email",
     "loadMore": "Load more",
     "showingOf": "Showing {shown} of {total}",
-    "alreadyFulfilled": "Fulfilled orders cannot be cancelled"
+    "alreadyFulfilled": "Fulfilled orders cannot be cancelled",
+    "notRestocked": "items were not restocked (no inventory location)"
   },
   "crmPanel": {
     "title": "CRM Context",

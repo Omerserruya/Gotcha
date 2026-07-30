@@ -430,5 +430,16 @@ export async function executeCommerceAction(opts: {
   // The order state changed - drop the cached context so the next panel open
   // (and the AI snapshot) reflects the verified new state (spec §9).
   invalidateCommerceCache({ tenantId, conversationId });
-  return { state: "executed", order: await orderToCard(tenantId, verified ?? order, opts.perms.canCancel || opts.perms.canRefund, opts.locale) };
+  // A restock the provider could not place must reach the agent - they ticked
+  // the box, and a silent no-op is the kind of false success this whole path
+  // exists to prevent.
+  const skipped = (exec.result as any)?.restock_skipped;
+  const note = Array.isArray(skipped) && skipped.length
+    ? `not_restocked:${skipped.join(", ")}`
+    : undefined;
+  return {
+    state: "executed",
+    order: await orderToCard(tenantId, verified ?? order, opts.perms.canCancel || opts.perms.canRefund, opts.locale),
+    ...(note ? { note } : {}),
+  };
 }

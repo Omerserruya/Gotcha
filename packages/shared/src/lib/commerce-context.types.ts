@@ -276,7 +276,7 @@ export type CommerceActionResponse =
   | { state: "pending_approval"; approvalRequestId: string }
   | { state: "denied"; reason: string }
   | { state: "unavailable"; reason: string }
-  | { state: "executed"; order: OrderCard }
+  | { state: "executed"; order: OrderCard; note?: string }
   /** Customer-scoped result: there is no order card to refresh, so the panel is
    *  told what the customer record now holds rather than being left to guess. */
   | { state: "executed_customer"; tags?: string[]; noteAdded?: boolean };
