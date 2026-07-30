@@ -193,8 +193,24 @@ export async function evaluatePolicies(opts: {
           ? { slug: toolSlugLookup, integration: { slug: integrationSlugLookup } }
           : { slug: toolSlugLookup },
       },
-      include: { catalogTool: true },
+      include: { catalogTool: true, tenantIntegration: { select: { status: true } } },
     });
+
+    // A tool whose provider is no longer connected cannot run, whatever the
+    // policy says. The bot's tool surface already filters on CONNECTED, so this
+    // was previously unreachable from an autonomous turn - but a human-initiated
+    // action (the customer context panel's quick actions) calls the gate
+    // directly, and there this is the ONLY connection check. Requirement: every
+    // execution verifies the integration is connected.
+    if (tenantTool) {
+      const connStatus = String(tenantTool.tenantIntegration?.status ?? "").toUpperCase();
+      if (connStatus && connStatus !== "CONNECTED") {
+        return denyResult(
+          `integration for "${toolSlugLookup}" is not connected (${connStatus.toLowerCase()})`,
+          {},
+        );
+      }
+    }
 
     if (!tenantTool) {
       const ref = integrationSlugLookup
