@@ -30,6 +30,9 @@ import {
   getDepartments,
 } from "@/lib/api";
 import clsx from "clsx";
+import { RefreshWebsiteKnowledge } from "@/components/knowledge/RefreshWebsiteKnowledge";
+import { SourceProvenance } from "@/components/knowledge/SourceProvenance";
+import { getBusinessDiscovery } from "@/lib/api";
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -40,7 +43,10 @@ interface KnowledgeDocument {
   chunkCount: number;
   sourceType: string;
   sourceUrl?: string;
+  /** Provenance stamped by the onboarding projection - see SourceProvenance. */
+  metadata?: unknown;
   createdAt: string;
+  updatedAt?: string;
 }
 
 interface KnowledgeBase {
@@ -96,7 +102,7 @@ export default function KnowledgePage() {
 
 function KnowledgePageInner() {
   const { token } = useAuth();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const router = useRouter();
   const searchParams = useSearchParams();
   // A knowledge source belongs to the Knowledge tab; Back must return there.
@@ -181,6 +187,19 @@ function KnowledgePageInner() {
     } finally {
       setLoading(false);
     }
+  }, [token]);
+
+  // The tenant's website domain, read once so the "Refresh website knowledge"
+  // action knows what to re-scan. A tenant that never ran a scan has none, and
+  // the control hides itself rather than offering a refresh of nothing.
+  const [websiteDomain, setWebsiteDomain] = useState<string | null>(null);
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    getBusinessDiscovery(token)
+      .then((r) => { if (!cancelled) setWebsiteDomain(r.data.discovery?.websiteDomain || null); })
+      .catch(() => { /* no discovery yet - the control stays hidden */ });
+    return () => { cancelled = true; };
   }, [token]);
 
   // Deep link from the AI Studio Knowledge tab (?kb=<id>): editing a knowledge
@@ -881,6 +900,15 @@ function KnowledgePageInner() {
                   </div>
                 </div>
 
+                {/* Re-scan the tenant's site and reconcile into this KB. Only
+                    rendered once we know their domain - there is nothing to
+                    refresh otherwise. */}
+                <RefreshWebsiteKnowledge
+                  token={token || ""}
+                  domain={websiteDomain}
+                  onRefreshed={loadKnowledgeBases}
+                />
+
                 {/* Tabs */}
                 <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
                   <button
@@ -958,6 +986,11 @@ function KnowledgePageInner() {
                                     doc.status === "error" ? "text-red-600" : "text-gray-400"
                                   )}>{doc.status}</span>
                                 </p>
+                                {/* Where this came from. Without it a customer
+                                    cannot tell their own writing from an entry
+                                    the scan generated - which matters before
+                                    they edit or delete one. */}
+                                <SourceProvenance metadata={doc.metadata} he={locale === "he"} />
                               </div>
                             </div>
                             <div className="flex items-center gap-1 shrink-0">

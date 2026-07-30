@@ -7,7 +7,7 @@ import { prisma, authenticate, resolveTenant, requireRole, validate, trackAIUsag
 import { applyProjection, type SyncReport } from "../services/onboarding-knowledge.service";
 import { sendActivationConfirmation, sendOnboardingInvite, sendTeammateInvite, sendIntegrationRequestEmail } from "../services/notification.service";
 import { inviteUser, resendSetupLink } from "../services/invitation.service";
-import { ingestTaughtDocument } from "../services/teach-ingest";
+import { ingestTaughtDocument, updateTaughtDocument } from "../services/teach-ingest";
 import { scheduleOnboardingNudge } from "../services/nudge-engine.service";
 import { syncDiscoveryRecommendations, listRecommendations, setRecommendationStatus, addStoreInspectionRecs, reconcileConnectSystemRecs } from "../services/recommendations.service";
 import OpenAI from "openai";
@@ -1000,6 +1000,39 @@ router.post("/complete", requireRole("ADMIN"), async (req: Request, res: Respons
       console.error(`[Onboarding] Billing provisioning failed for tenant ${req.tenantId}:`, err.message);
     });
 
+    // Knowledge health at the finish line.
+    //
+    // Onboarding is NOT blocked on this - a customer whose site failed to scan
+    // must still be able to finish, and their work must not be thrown away.
+    // What is forbidden is finishing SILENTLY: the success screen may not claim
+    // the employee is ready while its knowledge base is empty or every document
+    // failed to embed. The client renders a warning with a retry from these
+    // counts instead of a clean "you're all set".
+    const knowledgeHealth = await (async () => {
+      try {
+        const docs = await prisma.knowledgeDocument.findMany({
+          where: { tenantId: req.tenantId! },
+          select: { status: true },
+        });
+        const total = docs.length;
+        const ready = docs.filter((d) => d.status === "ready").length;
+        const failed = docs.filter((d) => d.status === "error").length;
+        const pending = total - ready - failed;
+        return {
+          total,
+          ready,
+          failed,
+          pending,
+          // "Usable" means the employee can actually retrieve something. An
+          // empty knowledge base and one where every document errored are the
+          // same experience for the customer asking a question.
+          usable: ready > 0,
+        };
+      } catch {
+        return null;
+      }
+    })();
+
     res.json({
       data: {
         status: awaitingPayment ? "PENDING_PAYMENT" : "ACTIVE",
@@ -1011,6 +1044,7 @@ router.post("/complete", requireRole("ADMIN"), async (req: Request, res: Respons
           ? "Setup complete. The workspace opens once payment is confirmed."
           : "Tenant activated. AI configurations generating in background.",
         departmentsActivated: departments.length,
+        knowledge: knowledgeHealth,
       },
     });
   } catch (err) {
@@ -2713,15 +2747,52 @@ router.post("/teach", requireRole("ADMIN"), validate(teachSchema), async (req: R
       kb = await prisma.knowledgeBase.create({ data: { tenantId: req.tenantId!, name: "Company Knowledge", description: "Taught during onboarding" }, select: { id: true } });
     }
 
+    // Answering the same gap twice used to create a second document, so a
+    // customer who corrected their own answer left both the old and the new
+    // one in retrieval and the employee could quote either. Route the answer
+    // through the same projection the scan uses: it carries a dedupe key, so
+    // re-answering REPLACES rather than accumulates.
+    const taught = projectReadinessAnswers(
+      [{ question: label, answer: content }],
+      { language: (req.body?.locale as string) || "en", now: new Date().toISOString() },
+    )[0];
+
+    // Matched in JS rather than SQL: the dedupe key lives inside a Json column
+    // and Prisma's JSON filters are not portable across the versions this repo
+    // supports. A tenant's own knowledge base is small enough for this to be
+    // cheap, and the query stays tenant-scoped.
+    const existingTaught = taught
+      ? await prisma.knowledgeDocument
+          .findMany({
+            where: { tenantId: req.tenantId!, knowledgeBaseId: kb.id },
+            select: { id: true, metadata: true },
+          })
+          .then((all) =>
+            all.find((d) => {
+              const m = d.metadata as Record<string, unknown> | null;
+              return !!m && typeof m === "object" && m.dedupeKey === taught.metadata.dedupeKey;
+            }) ?? null,
+          )
+          .catch(() => null)
+      : null;
+
+    // Preserve the source provenance the caller actually used (a URL answer
+    // keeps its URL) while keeping the readiness dedupe key.
+    const metadata = taught
+      ? { ...taught.metadata, sourceType: sourceType === "url" ? "url" : taught.metadata.sourceType, sourceUrl }
+      : undefined;
+
     // Create the document THROUGH services/ai so it is actually embedded
     // (chunked into Qdrant). A bare prisma.create here left it `pending` with no
     // vectors - never retrievable - so "Learned" was a false success.
-    const documentId = await ingestTaughtDocument(
-      kb.id,
-      req.headers.authorization!,
-      { title: label, content, sourceType, sourceUrl },
-      fetchWithTimeout,
-    );
+    const documentId = existingTaught
+      ? await updateTaughtDocument(kb.id, existingTaught.id, req.headers.authorization!, { title: label, content, metadata }, fetchWithTimeout)
+      : await ingestTaughtDocument(
+          kb.id,
+          req.headers.authorization!,
+          { title: label, content, sourceType, sourceUrl, metadata },
+          fetchWithTimeout,
+        );
 
     if (!documentId) {
       // Ingestion failed: do NOT complete the gap. Reporting "Learned" for

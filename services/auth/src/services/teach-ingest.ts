@@ -13,6 +13,8 @@ export interface TeachDocBody {
   content: string;
   sourceType: string;
   sourceUrl?: string;
+  /** Provenance + dedupe key, so re-answering a gap replaces its document. */
+  metadata?: Record<string, unknown>;
 }
 
 // Minimal fetch shape so callers can inject the auth service's own
@@ -47,6 +49,40 @@ export async function ingestTaughtDocument(
     if (!res.ok) return null;
     const json = await res.json().catch(() => null);
     return (json?.data?.id as string | undefined) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Replace an already-taught document in place.
+ *
+ * Used when a customer answers the SAME gap a second time - typically to
+ * correct their first answer. Creating a second document instead would leave
+ * both versions in retrieval, and the employee could quote the answer that was
+ * just corrected. Returns the document id on success, null on failure, so the
+ * caller can refuse to report "Learned" for something that did not land.
+ */
+export async function updateTaughtDocument(
+  kbId: string,
+  documentId: string,
+  authHeader: string,
+  body: { title: string; content: string; metadata?: Record<string, unknown> },
+  fetchFn: FetchLike,
+): Promise<string | null> {
+  try {
+    const res = await fetchFn(
+      `${AI_SERVICE_URL}/api/knowledge-bases/${encodeURIComponent(kbId)}/documents/${encodeURIComponent(documentId)}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: authHeader },
+        body: JSON.stringify(body),
+      },
+      30000,
+    );
+    if (!res.ok) return null;
+    const json = await res.json().catch(() => null);
+    return (json?.data?.id as string | undefined) ?? documentId;
   } catch {
     return null;
   }

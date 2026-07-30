@@ -1177,8 +1177,34 @@ export function teachGap(token: string, label: string, method: "text" | "url" | 
   });
 }
 
+/** Per-document outcome of a knowledge sync. Mirrors SyncReport in services/auth. */
+export interface KnowledgeSyncReport {
+  ok: boolean;
+  knowledgeBaseId: string | null;
+  added: number;
+  updated: number;
+  unchanged: number;
+  preserved: number;
+  removed: number;
+  failed: number;
+  details: Array<{
+    dedupeKey: string;
+    title?: string;
+    action: "create" | "update" | "unchanged" | "preserved" | "remove" | "failed";
+    documentId?: string;
+    reason?: string;
+  }>;
+}
+
 export function discoverBusiness(token: string, domain: string, locale?: string) {
-  return apiFetch<{ data: { ok: boolean; domain?: string; reason?: string; discovery?: BusinessDiscoveryRecord; signals?: { channels: string[]; technology: string[] } } }>(
+  return apiFetch<{ data: {
+    ok: boolean; domain?: string; reason?: string;
+    discovery?: BusinessDiscoveryRecord;
+    signals?: { channels: string[]; technology: string[] };
+    // Honest ingestion outcome. `null` means the projection threw: the UI must
+    // say the knowledge sync failed rather than imply the KB is populated.
+    knowledge?: KnowledgeSyncReport | null;
+  } }>(
     "/api/onboarding/discover",
     { token, method: "POST", body: JSON.stringify({ domain, locale }) },
   );
