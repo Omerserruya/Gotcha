@@ -78,6 +78,11 @@ export interface CommerceCapabilities {
   canOpen: boolean;
   canCancel: boolean;
   canRefund: boolean;
+  /** Tag and note the CUSTOMER record. Separate from order actions because they
+   *  need write_customers rather than write_orders, and a tenant may hold one
+   *  scope without the other. */
+  canTag: boolean;
+  canNote: boolean;
   grantedScopes: string[];
   lastCheckedAt: string | null;
   /** Scopes required-but-missing for an otherwise-available action. */
@@ -89,6 +94,9 @@ export interface CommerceContext {
   customer: {
     verified: true;
     customerId: string;
+    /** Provider tags on the customer record. Absent when they could not be
+     *  read, which is NOT the same as "this customer has no tags". */
+    tags?: string[];
   };
   summary: CommerceSummary;
   capabilities: CommerceCapabilities;
@@ -139,10 +147,30 @@ export interface AICommerceSnapshot {
 
 // ── Quick-action request/response (spec §6) ──
 
-export type CommerceActionKind = "cancel" | "refund";
+/**
+ * Order-scoped actions act on ONE order and must prove that order belongs to
+ * the conversation's verified customer. Customer-scoped actions act on the
+ * verified customer directly and take no order id at all - there is nothing
+ * client-supplied to forge.
+ */
+export type CommerceOrderActionKind = "cancel" | "refund";
+export type CommerceCustomerActionKind = "add_tag" | "remove_tag" | "add_note";
+export type CommerceActionKind = CommerceOrderActionKind | CommerceCustomerActionKind;
+
+export const COMMERCE_ORDER_ACTIONS: CommerceOrderActionKind[] = ["cancel", "refund"];
+export const COMMERCE_CUSTOMER_ACTIONS: CommerceCustomerActionKind[] = ["add_tag", "remove_tag", "add_note"];
+
+export function isCustomerScopedAction(action: string): action is CommerceCustomerActionKind {
+  return (COMMERCE_CUSTOMER_ACTIONS as string[]).includes(action);
+}
+
+export function isOrderScopedAction(action: string): action is CommerceOrderActionKind {
+  return (COMMERCE_ORDER_ACTIONS as string[]).includes(action);
+}
 
 export interface CommerceActionRequest {
-  orderId: string;
+  /** Required for order-scoped actions; absent for customer-scoped ones. */
+  orderId?: string;
   action: CommerceActionKind;
   idempotencyKey: string;
   params?: {
@@ -153,6 +181,9 @@ export interface CommerceActionRequest {
     lineItems?: { lineItemId: string; quantity: number }[];
     refundShipping?: boolean;
     notify?: boolean;
+    // customer-scoped
+    tag?: string;
+    note?: string;
   };
 }
 
@@ -160,4 +191,7 @@ export type CommerceActionResponse =
   | { state: "pending_approval"; approvalRequestId: string }
   | { state: "denied"; reason: string }
   | { state: "unavailable"; reason: string }
-  | { state: "executed"; order: OrderCard };
+  | { state: "executed"; order: OrderCard }
+  /** Customer-scoped result: there is no order card to refresh, so the panel is
+   *  told what the customer record now holds rather than being left to guess. */
+  | { state: "executed_customer"; tags?: string[]; noteAdded?: boolean };

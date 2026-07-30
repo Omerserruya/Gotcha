@@ -109,6 +109,11 @@ export const PERMISSIONS: readonly PermissionDef[] = [
   p("customer:commerce:open", "customer", "runtime", true, "Open Orders in Store", "Open the customer's order in the connected store admin."),
   p("customer:commerce:cancel", "customer", "runtime", true, "Cancel Orders", "Cancel a customer's store order (subject to business policy and approval)."),
   p("customer:commerce:refund", "customer", "runtime", true, "Refund Orders", "Refund a customer's store order (subject to business policy and approval)."),
+  // Customer-record actions, separate from order actions on purpose: they need
+  // write_customers rather than write_orders, and tagging a customer is a very
+  // different grant from moving their money.
+  p("customer:commerce:tag", "customer", "runtime", true, "Tag Customers", "Add or remove tags on a customer's connected-store record."),
+  p("customer:commerce:note", "customer", "runtime", true, "Note on Customers", "Add an internal note to a customer's connected-store record."),
 
   // ── CRM ─────────────────────────────────────────────────────
   p("crm:contacts:read", "crm", "runtime", true, "Read CRM Contacts", "View CRM contacts."),

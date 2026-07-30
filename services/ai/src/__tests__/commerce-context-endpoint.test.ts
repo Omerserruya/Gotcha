@@ -23,7 +23,7 @@ vi.mock("../services/connectors/customer-access-guard", () => ({
 
 import { buildCommerceContextResponse, invalidateCommerceCache } from "../services/commerce-context.service";
 
-const PERMS = { canRead: true, canOpen: true, canCancel: true, canRefund: true };
+const PERMS = { canRead: true, canOpen: true, canCancel: true, canRefund: true, canTag: true, canNote: true };
 
 function connectedShopify() {
   loadConnMock.mockResolvedValue({

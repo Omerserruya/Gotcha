@@ -48,6 +48,9 @@ export interface CommerceCapabilities {
   canOpen: boolean;
   canCancel: boolean;
   canRefund: boolean;
+  /** Customer-record actions. Need write_customers, not write_orders. */
+  canTag: boolean;
+  canNote: boolean;
   grantedScopes: string[];
   lastCheckedAt: string | null;
   missingScopes: string[];
@@ -55,7 +58,7 @@ export interface CommerceCapabilities {
 
 export interface CommerceContext {
   provider: "shopify";
-  customer: { verified: true; customerId: string };
+  customer: { verified: true; customerId: string; tags?: string[] };
   summary: CommerceSummary;
   capabilities: CommerceCapabilities;
   recentOrders: OrderCard[];
@@ -77,11 +80,18 @@ export type CommerceActionResponse =
   | { state: "pending_approval"; approvalRequestId: string }
   | { state: "denied"; reason: string }
   | { state: "unavailable"; reason: string }
-  | { state: "executed"; order: OrderCard };
+  | { state: "executed"; order: OrderCard }
+  | { state: "executed_customer"; tags?: string[]; noteAdded?: boolean };
+
+export type CommerceOrderAction = "cancel" | "refund";
+export type CommerceCustomerAction = "add_tag" | "remove_tag" | "add_note";
+export type CommerceAction = CommerceOrderAction | CommerceCustomerAction;
 
 export interface CommerceActionInput {
-  orderId: string;
-  action: "cancel" | "refund";
+  /** Order-scoped actions only. Customer-scoped ones must omit it - the server
+   *  rejects an order id it would not use, rather than ignoring it. */
+  orderId?: string;
+  action: CommerceAction;
   idempotencyKey: string;
   params?: {
     reason?: string;
@@ -90,6 +100,8 @@ export interface CommerceActionInput {
     lineItems?: { lineItemId: string; quantity: number }[];
     refundShipping?: boolean;
     notify?: boolean;
+    tag?: string;
+    note?: string;
   };
 }
 
@@ -138,7 +150,15 @@ export async function runCommerceAction(
   );
 }
 
-/** Stable idempotency key for a single click of an action on an order. */
-export function commerceIdemKey(conversationId: string, orderId: string, action: string): string {
-  return `${conversationId}:${orderId}:${action}:${Math.floor(Date.now() / 1000)}`;
+/**
+ * Stable idempotency key for a single click of an action.
+ *
+ * Second-resolution on purpose: a double-click inside the same second is a
+ * replay and must not move money twice, while a deliberate second attempt a
+ * moment later is a new operation. `scope` is the order id for order actions
+ * and the tag/note subject for customer ones, so acting on two different
+ * subjects never collides.
+ */
+export function commerceIdemKey(conversationId: string, scope: string, action: string): string {
+  return `${conversationId}:${scope}:${action}:${Math.floor(Date.now() / 1000)}`;
 }

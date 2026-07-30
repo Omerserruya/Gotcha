@@ -35,7 +35,11 @@ vi.mock("@chatcenter/shared", () => ({
   evaluateBusinessPolicy: (...a: any[]) => evalPolicyMock(...a),
   revalidateBeforeExecution: (...a: any[]) => revalidateMock(...a),
   createApprovalRequest: (...a: any[]) => createApprovalMock(...a),
-  computeOperationKey: (tool: string, params: any) => `${tool}:${params.order_id}:${params._idem}`,
+  computeOperationKey: (tool: string, params: any) =>
+    `${tool}:${params.order_id ?? params.customer_id}:${params.tag ?? ""}:${params._idem}`,
+  // Real behaviour, not a stub: routing an action to the wrong path is exactly
+  // the kind of bug these tests exist to catch.
+  isCustomerScopedAction: (a: string) => ["add_tag", "remove_tag", "add_note"].includes(a),
 }));
 
 import { executeCommerceAction } from "../services/commerce-actions.service";
@@ -48,7 +52,7 @@ const PAID_ORDER = {
 function baseOpts(overrides: any = {}) {
   return {
     tenantId: "t1", conversationId: "c1", actorUserId: "u1",
-    perms: { canCancel: true, canRefund: true },
+    perms: { canCancel: true, canRefund: true, canTag: true, canNote: true },
     request: { orderId: "5001", action: "refund" as const, idempotencyKey: "idem-1", params: {} },
     correlationId: "corr1",
     ...overrides,
@@ -168,5 +172,138 @@ describe("execution verification (tests 18, 19, 20)", () => {
     const r = await executeCommerceAction(baseOpts());
     expect(r.state).toBe("unavailable");
     expect((r as any).reason).toBe("action_not_verified");
+  });
+});
+
+/**
+ * Customer-scoped actions (tag / untag / note).
+ *
+ * These carry NO order id, so the whole class of "act on someone else's order
+ * by guessing an id" cannot arise: the customer comes from the conversation's
+ * verified link. What still has to hold is that permission is checked per
+ * action, that a write is verified before it is reported, and that a replay
+ * does not write twice.
+ */
+describe("customer-scoped actions", () => {
+  const customerOpts = (action: string, params: any = {}, perms: any = {}) =>
+    baseOpts({
+      perms: { canCancel: true, canRefund: true, canTag: true, canNote: true, ...perms },
+      request: { action, idempotencyKey: "idem-c1", params },
+    });
+
+  beforeEach(() => {
+    resolveVerifiedMock.mockResolvedValue("999");
+    auditFindFirstMock.mockResolvedValue(null);
+    evalPolicyMock.mockResolvedValue({ decision: "ALLOWED", reasonCodes: [] });
+  });
+
+  it("adds a tag through the adapter and reports the VERIFIED list", async () => {
+    execMock.mockImplementation(async ({ toolFunctionName }: any) => {
+      if (toolFunctionName === "shopify.add_tag") return { ok: true, result: {} };
+      if (toolFunctionName === "shopify.get_customer_tags") return { ok: true, result: { tags: ["vip", "wholesale"] } };
+      return { ok: false, reason: "unexpected" };
+    });
+    const res: any = await executeCommerceAction(customerOpts("add_tag", { tag: "wholesale" }) as any);
+    expect(res.state).toBe("executed_customer");
+    expect(res.tags).toEqual(["vip", "wholesale"]);
+    const call = execMock.mock.calls.find((c: any[]) => c[0].toolFunctionName === "shopify.add_tag")![0];
+    // The customer id is server-resolved; nothing from the request reaches it.
+    expect(call.args.customer_id).toBe("999");
+    expect(call.args.tag).toBe("wholesale");
+  });
+
+  it("does NOT report success when the tag is absent from the verified list", async () => {
+    // Shopify said OK, but the tag is not actually on the record. Reporting
+    // success here is how a UI ends up lying about the store's state.
+    execMock.mockImplementation(async ({ toolFunctionName }: any) => {
+      if (toolFunctionName === "shopify.add_tag") return { ok: true, result: {} };
+      if (toolFunctionName === "shopify.get_customer_tags") return { ok: true, result: { tags: ["vip"] } };
+      return { ok: false, reason: "unexpected" };
+    });
+    const res: any = await executeCommerceAction(customerOpts("add_tag", { tag: "wholesale" }) as any);
+    expect(res.state).toBe("unavailable");
+    expect(res.reason).toBe("action_not_verified");
+  });
+
+  it("removing a tag is verified by its ABSENCE", async () => {
+    execMock.mockImplementation(async ({ toolFunctionName }: any) => {
+      if (toolFunctionName === "shopify.remove_tag") return { ok: true, result: {} };
+      if (toolFunctionName === "shopify.get_customer_tags") return { ok: true, result: { tags: ["vip"] } };
+      return { ok: false, reason: "unexpected" };
+    });
+    const gone: any = await executeCommerceAction(customerOpts("remove_tag", { tag: "wholesale" }) as any);
+    expect(gone.state).toBe("executed_customer");
+
+    const stillThere: any = await executeCommerceAction(customerOpts("remove_tag", { tag: "vip" }) as any);
+    expect(stillThere.state).toBe("unavailable");
+  });
+
+  it("checks the tag permission, not the refund permission", async () => {
+    const res: any = await executeCommerceAction(customerOpts("add_tag", { tag: "x" }, { canTag: false }) as any);
+    expect(res.state).toBe("denied");
+    expect(res.reason).toBe("permission_denied");
+    expect(execMock).not.toHaveBeenCalled();
+  });
+
+  it("checks the note permission separately from the tag permission", async () => {
+    execMock.mockImplementation(async ({ toolFunctionName }: any) =>
+      toolFunctionName === "shopify.get_customer_tags"
+        ? { ok: true, result: { tags: ["x"] } }
+        : { ok: true, result: {} });
+    const res: any = await executeCommerceAction(customerOpts("add_note", { note: "hi" }, { canNote: false }) as any);
+    expect(res.state).toBe("denied");
+    // Holding canTag must not buy the ability to write notes - nor cost it.
+    const ok: any = await executeCommerceAction(customerOpts("add_tag", { tag: "x" }, { canNote: false }) as any);
+    expect(ok.state).not.toBe("denied");
+  });
+
+  it("refuses an empty tag or note instead of writing a blank one", async () => {
+    expect((await executeCommerceAction(customerOpts("add_tag", { tag: "   " }) as any) as any).reason).toBe("tag_required");
+    expect((await executeCommerceAction(customerOpts("add_note", { note: "" }) as any) as any).reason).toBe("note_required");
+    expect(execMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses to act when the conversation has no verified customer", async () => {
+    resolveVerifiedMock.mockResolvedValue(null);
+    const res: any = await executeCommerceAction(customerOpts("add_tag", { tag: "x" }) as any);
+    expect(res.state).toBe("denied");
+    expect(res.reason).toBe("customer_not_linked");
+    expect(execMock).not.toHaveBeenCalled();
+  });
+
+  it("treats a prior success as a replay and does not write again", async () => {
+    auditFindFirstMock.mockResolvedValue({ id: "prior" });
+    execMock.mockImplementation(async ({ toolFunctionName }: any) =>
+      toolFunctionName === "shopify.get_customer_tags"
+        ? { ok: true, result: { tags: ["vip"] } }
+        : { ok: false, reason: "should_not_be_called" });
+    const res: any = await executeCommerceAction(customerOpts("add_tag", { tag: "vip" }) as any);
+    expect(res.state).toBe("executed_customer");
+    expect(execMock.mock.calls.some((c: any[]) => c[0].toolFunctionName === "shopify.add_tag")).toBe(false);
+  });
+
+  it("honours a policy denial", async () => {
+    evalPolicyMock.mockResolvedValue({ decision: "DENIED", reasonCodes: ["tagging_disabled"] });
+    const res: any = await executeCommerceAction(customerOpts("add_tag", { tag: "x" }) as any);
+    expect(res.state).toBe("denied");
+    expect(res.reason).toBe("tagging_disabled");
+    expect(execMock).not.toHaveBeenCalled();
+  });
+
+  it("routes through HITL when policy requires approval", async () => {
+    evalPolicyMock.mockResolvedValue({ decision: "REQUIRES_HUMAN_APPROVAL", reasonCodes: [] });
+    createApprovalMock.mockResolvedValue({ id: "appr-9" });
+    const res: any = await executeCommerceAction(customerOpts("add_note", { note: "n" }) as any);
+    expect(res.state).toBe("pending_approval");
+    expect(res.approvalRequestId).toBe("appr-9");
+    expect(execMock).not.toHaveBeenCalled();
+  });
+
+  it("an order-scoped action with no order id is refused, not silently reinterpreted", async () => {
+    const res: any = await executeCommerceAction(
+      baseOpts({ request: { action: "refund", idempotencyKey: "i", params: {} } }) as any,
+    );
+    expect(res.state).toBe("denied");
+    expect(res.reason).toBe("orderId_required");
   });
 });

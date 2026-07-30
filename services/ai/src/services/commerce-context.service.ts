@@ -235,17 +235,24 @@ function mapOrderCard(order: any, shopDomain: string, canWrite: boolean, locale:
 
 function buildCapabilities(
   config: Record<string, any>,
-  agent: { canOpen: boolean; canCancel: boolean; canRefund: boolean },
+  agent: { canOpen: boolean; canCancel: boolean; canRefund: boolean; canTag: boolean; canNote: boolean },
 ): CommerceCapabilities {
   const granted: string[] = Array.isArray(config?.grantedScopes) ? config.grantedScopes : [];
   const hasRead = granted.length === 0 || granted.includes("read_orders");
   const hasWrite = granted.length === 0 || granted.includes("write_orders");
+  // Tagging and noting write the CUSTOMER record, which is a different scope.
+  // Conflating the two would offer a tag button that always fails on a store
+  // that granted write_orders but not write_customers.
+  const hasCustomerWrite = granted.length === 0 || granted.includes("write_customers");
   const missing: string[] = [];
   if (!hasWrite && (agent.canCancel || agent.canRefund)) missing.push("write_orders");
+  if (!hasCustomerWrite && (agent.canTag || agent.canNote)) missing.push("write_customers");
   return {
     canOpen: agent.canOpen,
     canCancel: agent.canCancel && hasWrite,
     canRefund: agent.canRefund && hasWrite,
+    canTag: agent.canTag && hasCustomerWrite,
+    canNote: agent.canNote && hasCustomerWrite,
     grantedScopes: granted,
     lastCheckedAt: config?.scopesCheckedAt ?? null,
     missingScopes: missing,
@@ -288,6 +295,8 @@ export interface CommerceAgentPermissions {
   canOpen: boolean;
   canCancel: boolean;
   canRefund: boolean;
+  canTag: boolean;
+  canNote: boolean;
 }
 
 /**
@@ -421,7 +430,13 @@ async function buildCommerceContextFresh(opts: {
 
   const data: CommerceContext = {
     provider: "shopify",
-    customer: { verified: true, customerId },
+    customer: {
+      verified: true,
+      customerId,
+      // Only when the provider actually gave us an array. Defaulting to [] here
+      // would render as "no tags" for a customer whose tags we failed to read.
+      ...(Array.isArray(customer?.tags) ? { tags: customer.tags.map((x: unknown) => String(x)) } : {}),
+    },
     summary,
     capabilities,
     recentOrders,

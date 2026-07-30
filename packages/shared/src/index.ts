@@ -201,7 +201,15 @@ export type {
   AICommerceSnapshot,
   CommerceActionKind,
   CommerceActionRequest,
+  CommerceOrderActionKind,
+  CommerceCustomerActionKind,
   CommerceActionResponse,
+} from "./lib/commerce-context.types";
+export {
+  COMMERCE_ORDER_ACTIONS,
+  COMMERCE_CUSTOMER_ACTIONS,
+  isCustomerScopedAction,
+  isOrderScopedAction,
 } from "./lib/commerce-context.types";
 export { trackAIUsage, estimateAICost, computeAICostUsd, resolveModelPricing, AI_MODEL_PRICING, getEmployeeUsageRollup } from "./lib/ai-usage";
 export type { AIUsageEvent, EmployeeUsageRollup } from "./lib/ai-usage";

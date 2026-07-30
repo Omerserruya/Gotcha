@@ -108,7 +108,7 @@ describe("capabilities gate on granted scopes + agent permission (tests 11, 12)"
   it("no write_orders scope disables cancel/refund even for a permitted agent", () => {
     const caps = buildCapabilities(
       { grantedScopes: ["read_orders"] },
-      { canOpen: true, canCancel: true, canRefund: true },
+      { canOpen: true, canCancel: true, canRefund: true, canTag: true, canNote: true },
     );
     expect(caps.canOpen).toBe(true);
     expect(caps.canCancel).toBe(false);
@@ -118,19 +118,44 @@ describe("capabilities gate on granted scopes + agent permission (tests 11, 12)"
   it("agent without the permission cannot cancel/refund even with the scope", () => {
     const caps = buildCapabilities(
       { grantedScopes: ["read_orders", "write_orders"] },
-      { canOpen: false, canCancel: false, canRefund: false },
+      { canOpen: false, canCancel: false, canRefund: false, canTag: false, canNote: false },
     );
     expect(caps.canCancel).toBe(false);
     expect(caps.canRefund).toBe(false);
     expect(caps.canOpen).toBe(false);
   });
-  it("permitted agent + write scope enables the actions", () => {
+  it("permitted agent + order write scope enables the ORDER actions", () => {
     const caps = buildCapabilities(
       { grantedScopes: ["read_orders", "write_orders"] },
-      { canOpen: true, canCancel: true, canRefund: true },
+      { canOpen: true, canCancel: true, canRefund: true, canTag: true, canNote: true },
     );
     expect(caps.canCancel).toBe(true);
     expect(caps.canRefund).toBe(true);
+    // write_orders does not buy customer-record writes. A store can grant one
+    // and not the other, and offering a tag button that always fails would be
+    // worse than not offering it.
+    expect(caps.canTag).toBe(false);
+    expect(caps.canNote).toBe(false);
+    expect(caps.missingScopes).toEqual(["write_customers"]);
+  });
+
+  it("both scopes granted → nothing missing", () => {
+    const caps = buildCapabilities(
+      { grantedScopes: ["read_orders", "write_orders", "write_customers"] },
+      { canOpen: true, canCancel: true, canRefund: true, canTag: true, canNote: true },
+    );
+    expect(caps.canTag).toBe(true);
+    expect(caps.canNote).toBe(true);
+    expect(caps.missingScopes).toHaveLength(0);
+  });
+
+  it("a scope is only reported missing when the agent could otherwise use it", () => {
+    // Listing write_customers for an agent who may not tag anyone would send
+    // an admin to re-authorize the store for no reason.
+    const caps = buildCapabilities(
+      { grantedScopes: ["read_orders", "write_orders"] },
+      { canOpen: true, canCancel: true, canRefund: true, canTag: false, canNote: false },
+    );
     expect(caps.missingScopes).toHaveLength(0);
   });
 });

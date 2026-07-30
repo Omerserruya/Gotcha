@@ -17,6 +17,8 @@ import {
   requireActiveTenant,
   requirePermission,
   hasPermission,
+  isCustomerScopedAction,
+  isOrderScopedAction,
   type PermissionPrincipal,
 } from "@chatcenter/shared";
 import { buildCommerceContextResponse } from "../services/commerce-context.service";
@@ -35,14 +37,26 @@ function principalOf(req: Request & { tenantId?: string }): PermissionPrincipal 
 }
 
 async function commercePerms(p: PermissionPrincipal) {
-  const [canRead, canOpen, canCancel, canRefund] = await Promise.all([
+  const [canRead, canOpen, canCancel, canRefund, canTag, canNote] = await Promise.all([
     hasPermission(p, "customer:commerce:read"),
     hasPermission(p, "customer:commerce:open"),
     hasPermission(p, "customer:commerce:cancel"),
     hasPermission(p, "customer:commerce:refund"),
+    hasPermission(p, "customer:commerce:tag"),
+    hasPermission(p, "customer:commerce:note"),
   ]);
-  return { canRead, canOpen, canCancel, canRefund };
+  return { canRead, canOpen, canCancel, canRefund, canTag, canNote };
 }
+
+/** Which permission a given action needs. One table, so the route gate and the
+ *  service gate cannot disagree about what an action costs. */
+const PERMISSION_FOR: Record<string, "canCancel" | "canRefund" | "canTag" | "canNote"> = {
+  cancel: "canCancel",
+  refund: "canRefund",
+  add_tag: "canTag",
+  remove_tag: "canTag",
+  add_note: "canNote",
+};
 
 function localeOf(req: Request): string | undefined {
   const q = typeof req.query.locale === "string" ? req.query.locale : undefined;
@@ -81,29 +95,42 @@ router.get(
   },
 );
 
-// ── POST an order quick action (cancel / refund) ───────────────────────────
+// ── POST a quick action (order-scoped or customer-scoped) ──────────────────
 router.post(
   "/:conversationId/actions",
   authenticate,
   resolveTenant,
   requireActiveTenant(),
   // Needs at least one action permission; the specific action is checked below.
-  requirePermission("customer:commerce:cancel", "customer:commerce:refund"),
+  requirePermission(
+    "customer:commerce:cancel",
+    "customer:commerce:refund",
+    "customer:commerce:tag",
+    "customer:commerce:note",
+  ),
   async (req: Request & { tenantId?: string }, res: Response) => {
     try {
       const tenantId = req.tenantId!;
       const conversationId = String(req.params.conversationId);
       const body = (req.body ?? {}) as any;
-      const action = body.action;
+      const action = String(body.action ?? "");
       const orderId = body.orderId;
       const idempotencyKey = body.idempotencyKey;
 
-      if (action !== "cancel" && action !== "refund") {
+      const orderScoped = isOrderScopedAction(action);
+      const customerScoped = isCustomerScopedAction(action);
+      if (!orderScoped && !customerScoped) {
         res.status(400).json({ error: "invalid_action" });
         return;
       }
-      if (!orderId || typeof orderId !== "string") {
+      // Only order-scoped actions carry an order. Demanding one for a tag would
+      // be wrong; accepting one silently would suggest it is being used.
+      if (orderScoped && (!orderId || typeof orderId !== "string")) {
         res.status(400).json({ error: "orderId_required" });
+        return;
+      }
+      if (customerScoped && orderId) {
+        res.status(400).json({ error: "orderId_not_applicable" });
         return;
       }
       if (!idempotencyKey || typeof idempotencyKey !== "string") {
@@ -113,13 +140,10 @@ router.post(
 
       const p = principalOf(req);
       const perms = await commercePerms(p);
-      // Per-action permission (route only proved the agent has ONE of the two).
-      if (action === "cancel" && !perms.canCancel) {
-        res.status(403).json({ error: "permission_denied", permission: "customer:commerce:cancel" });
-        return;
-      }
-      if (action === "refund" && !perms.canRefund) {
-        res.status(403).json({ error: "permission_denied", permission: "customer:commerce:refund" });
+      // Per-action permission (the route only proved the agent has ONE of them).
+      const needed = PERMISSION_FOR[action];
+      if (!needed || !perms[needed]) {
+        res.status(403).json({ error: "permission_denied", permission: `customer:commerce:${action}` });
         return;
       }
 
@@ -128,10 +152,15 @@ router.post(
         tenantId,
         conversationId,
         actorUserId: p.userId,
-        perms: { canCancel: perms.canCancel, canRefund: perms.canRefund },
+        perms: {
+          canCancel: perms.canCancel,
+          canRefund: perms.canRefund,
+          canTag: perms.canTag,
+          canNote: perms.canNote,
+        },
         request: {
-          orderId,
-          action,
+          ...(orderScoped ? { orderId } : {}),
+          action: action as any,
           idempotencyKey,
           params: body.params ?? {},
         },
@@ -140,8 +169,9 @@ router.post(
       });
 
       // Always 200: the discriminated `state` carries the domain outcome
-      // (executed / pending_approval / denied / unavailable). Hard auth failures
-      // are already handled by requirePermission (403) and validation (400).
+      // (executed / executed_customer / pending_approval / denied / unavailable).
+      // Hard auth failures are already handled by requirePermission (403) and
+      // validation (400).
       res.json(result);
     } catch (err: any) {
       console.error("[commerce-context] POST action error:", err?.message);

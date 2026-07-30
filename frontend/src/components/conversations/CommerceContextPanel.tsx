@@ -23,9 +23,12 @@ import {
   type Money,
   type StatusChip,
   type CommerceActionResponse,
+  type CommerceActionInput,
 } from "@/lib/api-commerce";
 
 const NAV_LIMIT = 25; // how many recent orders to load for navigation
+/** Message scope for customer-level actions, which have no order id. */
+const CUSTOMER_SCOPE = "__customer__";
 
 const toneText: Record<StatusChip["tone"], string> = {
   positive: "text-emerald-600",
@@ -55,6 +58,9 @@ export function CommerceContextPanel({ conversationId, token, onState }: Props) 
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState<{ order: OrderCard; action: "cancel" | "refund" } | null>(null);
+  // Customer tags, seeded from the context and replaced by the VERIFIED list the
+  // server returns after a change - never patched locally.
+  const [tags, setTags] = useState<string[] | null>(null);
   const [actionMsg, setActionMsg] = useState<{ orderId: string; text: string; tone: StatusChip["tone"] } | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -82,11 +88,19 @@ export function CommerceContextPanel({ conversationId, token, onState }: Props) 
   // when the conversation itself changes.
   useEffect(() => {
     setSelectedIndex(0);
+    setTags(null);
   }, [conversationId]);
 
   useEffect(() => {
     onState?.(resp?.state ?? null);
   }, [resp?.state, onState]);
+
+  // Seed the tag list from the loaded context. `undefined` from the server means
+  // "could not read them", which stays null here - the UI says "not loaded"
+  // rather than the much more confident, and possibly wrong, "no tags".
+  useEffect(() => {
+    if (resp?.state === "ok") setTags(resp.data.customer.tags ?? null);
+  }, [resp]);
 
   // Replace the selected order in place after a verified action (spec §6).
   function applyExecuted(order: OrderCard) {
@@ -100,33 +114,71 @@ export function CommerceContextPanel({ conversationId, token, onState }: Props) 
     });
   }
 
-  async function doAction(order: OrderCard, action: "cancel" | "refund") {
+  /**
+   * One dispatch for every action, order-scoped or customer-scoped.
+   *
+   * Nothing here is optimistic. The row/tag list updates only from the verified
+   * result the backend returns, and every non-executed outcome is reported with
+   * the server's own reason rather than collapsed into "failed" - "you may not
+   * refund" and "Shopify is unreachable" are different facts for the agent.
+   */
+  async function doAction(
+    input: CommerceActionInput,
+    msgScope: string,
+  ) {
     if (!token || !conversationId) return;
     setConfirm(null);
     setBusy(true);
     setActionMsg(null);
     try {
-      const res: CommerceActionResponse = await runCommerceAction(
-        token,
-        conversationId,
-        { orderId: order.orderId, action, idempotencyKey: commerceIdemKey(conversationId, order.orderId, action) },
-        locale,
-      );
+      const res: CommerceActionResponse = await runCommerceAction(token, conversationId, input, locale);
       if (res.state === "executed") {
         applyExecuted(res.order);
-        setActionMsg({ orderId: order.orderId, text: t("commerce.actionDone") || "Done", tone: "positive" });
+        setActionMsg({ orderId: msgScope, text: t("commerce.actionDone") || "Done", tone: "positive" });
+      } else if (res.state === "executed_customer") {
+        if (res.tags) setTags(res.tags);
+        setActionMsg({
+          orderId: msgScope,
+          text: res.noteAdded
+            ? t("commerce.noteAdded") || "Note added"
+            : t("commerce.actionDone") || "Done",
+          tone: "positive",
+        });
       } else if (res.state === "pending_approval") {
-        setActionMsg({ orderId: order.orderId, text: t("commerce.pendingApproval") || "Sent for approval", tone: "warning" });
+        setActionMsg({ orderId: msgScope, text: t("commerce.pendingApproval") || "Sent for approval", tone: "warning" });
       } else if (res.state === "denied") {
-        setActionMsg({ orderId: order.orderId, text: (t("commerce.denied") || "Not allowed") + `: ${res.reason}`, tone: "danger" });
+        setActionMsg({ orderId: msgScope, text: (t("commerce.denied") || "Not allowed") + `: ${res.reason}`, tone: "danger" });
       } else {
-        setActionMsg({ orderId: order.orderId, text: (t("commerce.unavailable") || "Unavailable") + `: ${res.reason}`, tone: "warning" });
+        setActionMsg({ orderId: msgScope, text: (t("commerce.unavailable") || "Unavailable") + `: ${res.reason}`, tone: "warning" });
       }
     } catch {
-      setActionMsg({ orderId: order.orderId, text: t("commerce.actionFailed") || "Action failed", tone: "danger" });
+      setActionMsg({ orderId: msgScope, text: t("commerce.actionFailed") || "Action failed", tone: "danger" });
     } finally {
       setBusy(false);
     }
+  }
+
+  function runOrderAction(order: OrderCard, action: "cancel" | "refund", params: CommerceActionInput["params"]) {
+    void doAction(
+      {
+        orderId: order.orderId,
+        action,
+        idempotencyKey: commerceIdemKey(conversationId!, order.orderId, action),
+        params,
+      },
+      order.orderId,
+    );
+  }
+
+  function runCustomerAction(action: "add_tag" | "remove_tag" | "add_note", params: CommerceActionInput["params"]) {
+    void doAction(
+      {
+        action,
+        idempotencyKey: commerceIdemKey(conversationId!, params?.tag || "note", action),
+        params,
+      },
+      CUSTOMER_SCOPE,
+    );
   }
 
   if (!conversationId) return null;
@@ -240,8 +292,36 @@ export function CommerceContextPanel({ conversationId, token, onState }: Props) 
         />
       )}
 
-      {confirm && (
-        <ConfirmDialog order={confirm.order} action={confirm.action} onCancel={() => setConfirm(null)} onConfirm={() => doAction(confirm.order, confirm.action)} t={t} />
+      {/* Customer-record actions: tags + internal note. Separate block because
+          they act on the CUSTOMER, not the selected order. */}
+      {(caps?.canTag || caps?.canNote) && resp.state === "ok" && (
+        <CustomerActions
+          caps={caps}
+          tags={tags}
+          busy={busy}
+          msg={actionMsg?.orderId === CUSTOMER_SCOPE ? actionMsg : null}
+          onAddTag={(tag) => runCustomerAction("add_tag", { tag })}
+          onRemoveTag={(tag) => runCustomerAction("remove_tag", { tag })}
+          onAddNote={(note) => runCustomerAction("add_note", { note })}
+          t={t}
+        />
+      )}
+
+      {confirm?.action === "refund" && (
+        <RefundDialog
+          order={confirm.order}
+          onCancel={() => setConfirm(null)}
+          onConfirm={(params) => runOrderAction(confirm.order, "refund", params)}
+          t={t}
+        />
+      )}
+      {confirm?.action === "cancel" && (
+        <CancelDialog
+          order={confirm.order}
+          onCancel={() => setConfirm(null)}
+          onConfirm={(params) => runOrderAction(confirm.order, "cancel", params)}
+          t={t}
+        />
       )}
     </section>
   );
@@ -424,38 +504,335 @@ function SingleOrderCard({
   );
 }
 
-function ConfirmDialog({
-  order, action, onConfirm, onCancel, t,
+/** Parse a decimal string like "129.90" into a number, or null. */
+function toAmount(v: string): number | null {
+  const n = Number(v.replace(/,/g, "").trim());
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/**
+ * Refund modal - full OR partial.
+ *
+ * The refundable maximum is the server's authoritative ceiling, so the field is
+ * validated against it here purely to give the agent an answer before a round
+ * trip; the backend refuses an over-max amount regardless. Restock and notify
+ * are explicit choices, never silent defaults, because both have consequences
+ * outside this screen (inventory, and an email to the customer).
+ */
+function RefundDialog({
+  order, onConfirm, onCancel, t,
 }: {
   order: OrderCard;
-  action: "cancel" | "refund";
-  onConfirm: () => void;
+  onConfirm: (params: CommerceActionInput["params"]) => void;
   onCancel: () => void;
   t: (k: string, v?: Record<string, string>) => string;
 }) {
-  const isRefund = action === "refund";
+  const max = toAmount(order.refundableMaximum?.amount ?? "") ?? 0;
+  const [mode, setMode] = useState<"full" | "partial">("full");
+  const [amount, setAmount] = useState("");
+  const [restock, setRestock] = useState(false);
+  const [refundShipping, setRefundShipping] = useState(false);
+  const [notify, setNotify] = useState(true);
+  const [reason, setReason] = useState("");
+
+  const parsed = toAmount(amount);
+  const overMax = mode === "partial" && parsed !== null && parsed > max + 0.005;
+  const invalid = mode === "partial" && (parsed === null || overMax);
+
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 p-4" onClick={onCancel}>
-      <div className="bg-white rounded-xl shadow-xl max-w-xs w-full p-4" onClick={(e) => e.stopPropagation()}>
-        <p className="text-sm font-semibold text-gray-900 mb-1">
-          {isRefund ? t("commerce.confirmRefund") || "Refund this order?" : t("commerce.confirmCancel") || "Cancel this order?"}
-        </p>
-        <div className="text-[11px] text-gray-600 space-y-1 mb-3">
-          <div><span className="text-gray-400">{t("commerce.order") || "Order"}:</span> <span dir="ltr">{order.orderNumber}</span></div>
-          <div><span className="text-gray-400">{t("commerce.total") || "Total"}:</span> <span dir="ltr">{money(order.total)}</span></div>
-          <div className="text-[11px]"><StatusLine order={order} t={t} /></div>
-          {isRefund && (
-            <div className="text-amber-700">{t("commerce.refundableUpTo") || "Refundable up to"}: <span dir="ltr">{money(order.refundableMaximum)}</span></div>
-          )}
-          <div className="text-gray-400 text-[10px] pt-1">{t("commerce.actionSubjectToApproval") || "Subject to your store's rules and may require approval."}</div>
-        </div>
-        <div className="flex justify-end gap-2">
-          <button onClick={onCancel} className="text-xs px-3 py-1.5 rounded-lg text-gray-600 hover:bg-gray-100">{t("commerce.back") || "Back"}</button>
-          <button onClick={onConfirm} className={clsx("text-xs px-3 py-1.5 rounded-lg text-white", isRefund ? "bg-amber-600 hover:bg-amber-700" : "bg-rose-600 hover:bg-rose-700")}>
-            {isRefund ? t("commerce.refund") || "Refund" : t("commerce.cancel") || "Cancel order"}
-          </button>
+    <Modal onCancel={onCancel} titleId="refund-title">
+      <p id="refund-title" className="text-sm font-semibold text-gray-900 mb-1">
+        {t("commerce.confirmRefund") || "Refund this order?"}
+      </p>
+      <div className="text-[11px] text-gray-600 space-y-1 mb-3">
+        <div><span className="text-gray-400">{t("commerce.order") || "Order"}:</span> <span dir="ltr">{order.orderNumber}</span></div>
+        <div><span className="text-gray-400">{t("commerce.total") || "Total"}:</span> <span dir="ltr">{money(order.total)}</span></div>
+        <div className="text-amber-700">
+          {t("commerce.refundableUpTo") || "Refundable up to"}: <span dir="ltr">{money(order.refundableMaximum)}</span>
         </div>
       </div>
+
+      <div className="flex gap-1 mb-2 bg-gray-100 rounded-lg p-0.5" role="radiogroup" aria-label={t("commerce.refundAmount") || "Refund amount"}>
+        {(["full", "partial"] as const).map((m) => (
+          <button
+            key={m}
+            type="button"
+            role="radio"
+            aria-checked={mode === m}
+            data-testid={`refund-mode-${m}`}
+            onClick={() => setMode(m)}
+            className={clsx(
+              "flex-1 text-[11px] font-medium py-1 rounded-md transition",
+              mode === m ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700",
+            )}
+          >
+            {m === "full" ? t("commerce.refundFull") || "Full" : t("commerce.refundPartial") || "Partial"}
+          </button>
+        ))}
+      </div>
+
+      {mode === "partial" && (
+        <div className="mb-2">
+          <label className="block text-[10px] text-gray-500 mb-1" htmlFor="refund-amount">
+            {t("commerce.refundAmount") || "Refund amount"} ({order.refundableMaximum?.currency})
+          </label>
+          <input
+            id="refund-amount"
+            data-testid="refund-amount"
+            inputMode="decimal"
+            dir="ltr"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder={order.refundableMaximum?.amount ?? "0.00"}
+            aria-invalid={invalid || undefined}
+            className={clsx(
+              "w-full px-2 py-1.5 rounded-lg border text-xs outline-none",
+              overMax ? "border-rose-300 bg-rose-50" : "border-gray-200 focus:border-indigo-300",
+            )}
+          />
+          {overMax && (
+            <p className="text-[10px] text-rose-600 mt-1" data-testid="refund-over-max">
+              {t("commerce.refundOverMax") || "More than this order can be refunded."}
+            </p>
+          )}
+        </div>
+      )}
+
+      <div className="space-y-1.5 mb-3">
+        <Check id="refund-restock" checked={restock} onChange={setRestock} label={t("commerce.restock") || "Return items to inventory"} />
+        <Check id="refund-shipping" checked={refundShipping} onChange={setRefundShipping} label={t("commerce.refundShipping") || "Also refund shipping"} />
+        <Check id="refund-notify" checked={notify} onChange={setNotify} label={t("commerce.notifyCustomer") || "Email the customer"} />
+      </div>
+
+      <input
+        data-testid="refund-reason"
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+        placeholder={t("commerce.reasonOptional") || "Reason (optional)"}
+        className="w-full px-2 py-1.5 rounded-lg border border-gray-200 text-xs outline-none focus:border-indigo-300 mb-3"
+      />
+
+      <p className="text-gray-400 text-[10px] mb-3">{t("commerce.actionSubjectToApproval") || "Subject to your store's rules and may require approval."}</p>
+
+      <div className="flex justify-end gap-2">
+        <button onClick={onCancel} className="text-xs px-3 py-1.5 rounded-lg text-gray-600 hover:bg-gray-100">{t("commerce.back") || "Back"}</button>
+        <button
+          data-testid="refund-submit"
+          disabled={invalid}
+          onClick={() =>
+            onConfirm({
+              ...(mode === "partial" && parsed !== null ? { amount: parsed } : {}),
+              restock,
+              refundShipping,
+              notify,
+              ...(reason.trim() ? { reason: reason.trim() } : {}),
+            })
+          }
+          className="text-xs px-3 py-1.5 rounded-lg text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-40"
+        >
+          {t("commerce.refund") || "Refund"}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+/** Cancel modal. Cancelling never silently refunds - that is its own action. */
+function CancelDialog({
+  order, onConfirm, onCancel, t,
+}: {
+  order: OrderCard;
+  onConfirm: (params: CommerceActionInput["params"]) => void;
+  onCancel: () => void;
+  t: (k: string, v?: Record<string, string>) => string;
+}) {
+  const [restock, setRestock] = useState(true);
+  const [reason, setReason] = useState("");
+  return (
+    <Modal onCancel={onCancel} titleId="cancel-title">
+      <p id="cancel-title" className="text-sm font-semibold text-gray-900 mb-1">
+        {t("commerce.confirmCancel") || "Cancel this order?"}
+      </p>
+      <div className="text-[11px] text-gray-600 space-y-1 mb-3">
+        <div><span className="text-gray-400">{t("commerce.order") || "Order"}:</span> <span dir="ltr">{order.orderNumber}</span></div>
+        <div><span className="text-gray-400">{t("commerce.total") || "Total"}:</span> <span dir="ltr">{money(order.total)}</span></div>
+        <StatusLine order={order} t={t} />
+      </div>
+
+      <div className="space-y-1.5 mb-2">
+        <Check id="cancel-restock" checked={restock} onChange={setRestock} label={t("commerce.restock") || "Return items to inventory"} />
+      </div>
+      {/* Said out loud, because the opposite is what people assume. */}
+      <p className="text-[10px] text-gray-500 mb-3">{t("commerce.cancelDoesNotRefund") || "Cancelling does not refund. Refund is a separate action."}</p>
+
+      <input
+        data-testid="cancel-reason"
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+        placeholder={t("commerce.reasonOptional") || "Reason (optional)"}
+        className="w-full px-2 py-1.5 rounded-lg border border-gray-200 text-xs outline-none focus:border-indigo-300 mb-3"
+      />
+
+      <p className="text-gray-400 text-[10px] mb-3">{t("commerce.actionSubjectToApproval") || "Subject to your store's rules and may require approval."}</p>
+
+      <div className="flex justify-end gap-2">
+        <button onClick={onCancel} className="text-xs px-3 py-1.5 rounded-lg text-gray-600 hover:bg-gray-100">{t("commerce.back") || "Back"}</button>
+        <button
+          data-testid="cancel-submit"
+          onClick={() => onConfirm({ restock, ...(reason.trim() ? { reason: reason.trim() } : {}) })}
+          className="text-xs px-3 py-1.5 rounded-lg text-white bg-rose-600 hover:bg-rose-700"
+        >
+          {t("commerce.cancel") || "Cancel order"}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+function Modal({ children, onCancel, titleId }: { children: React.ReactNode; onCancel: () => void; titleId: string }) {
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 p-4" onClick={onCancel}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="bg-white rounded-xl shadow-xl max-w-xs w-full p-4 max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function Check({ id, checked, onChange, label }: { id: string; checked: boolean; onChange: (v: boolean) => void; label: string }) {
+  return (
+    <label htmlFor={id} className="flex items-center gap-2 text-[11px] text-gray-700 cursor-pointer">
+      <input id={id} data-testid={id} type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="rounded border-gray-300" />
+      {label}
+    </label>
+  );
+}
+
+/**
+ * Customer tags and internal note.
+ *
+ * The tag list shown is whatever the server last verified. Adding a tag does
+ * not append locally - the panel waits for the re-read list, so a tag that
+ * silently failed to save can never appear to have saved.
+ */
+function CustomerActions({
+  caps, tags, busy, msg, onAddTag, onRemoveTag, onAddNote, t,
+}: {
+  caps: CommerceContext["capabilities"];
+  tags: string[] | null;
+  busy: boolean;
+  msg: { text: string; tone: StatusChip["tone"] } | null;
+  onAddTag: (tag: string) => void;
+  onRemoveTag: (tag: string) => void;
+  onAddNote: (note: string) => void;
+  t: (k: string, v?: Record<string, string>) => string;
+}) {
+  const [tagDraft, setTagDraft] = useState("");
+  const [noteDraft, setNoteDraft] = useState("");
+  const [noteOpen, setNoteOpen] = useState(false);
+
+  return (
+    <div className="px-3 pb-3 pt-1 border-t border-gray-50" data-testid="customer-actions">
+      {caps.canTag && (
+        <>
+          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">
+            {t("commerce.customerTags") || "Customer tags"}
+          </p>
+          <div className="flex flex-wrap gap-1 mb-1.5">
+            {tags === null ? (
+              <span className="text-[10px] text-gray-400">{t("commerce.tagsUnknown") || "Not loaded"}</span>
+            ) : tags.length === 0 ? (
+              <span className="text-[10px] text-gray-400">{t("commerce.noTags") || "No tags"}</span>
+            ) : (
+              tags.map((tag) => (
+                <span key={tag} data-testid={`customer-tag-${tag}`} className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-700">
+                  {tag}
+                  <button
+                    type="button"
+                    disabled={busy}
+                    aria-label={`${t("commerce.removeTag") || "Remove tag"} ${tag}`}
+                    onClick={() => onRemoveTag(tag)}
+                    className="text-gray-400 hover:text-rose-600 disabled:opacity-40 leading-none"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))
+            )}
+          </div>
+          <div className="flex gap-1 mb-2">
+            <input
+              data-testid="tag-input"
+              value={tagDraft}
+              onChange={(e) => setTagDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && tagDraft.trim()) { onAddTag(tagDraft.trim()); setTagDraft(""); }
+              }}
+              placeholder={t("commerce.addTag") || "Add a tag"}
+              className="flex-1 min-w-0 px-2 py-1 rounded-md border border-gray-200 text-[11px] outline-none focus:border-indigo-300"
+            />
+            <button
+              type="button"
+              data-testid="tag-add"
+              disabled={busy || !tagDraft.trim()}
+              onClick={() => { onAddTag(tagDraft.trim()); setTagDraft(""); }}
+              className="text-[10px] font-medium px-2 py-1 rounded-md bg-white border border-gray-200 text-gray-700 hover:border-indigo-300 disabled:opacity-40"
+            >
+              {t("commerce.add") || "Add"}
+            </button>
+          </div>
+        </>
+      )}
+
+      {caps.canNote && (
+        noteOpen ? (
+          <div className="flex flex-col gap-1">
+            <textarea
+              data-testid="note-input"
+              value={noteDraft}
+              onChange={(e) => setNoteDraft(e.target.value)}
+              rows={2}
+              placeholder={t("commerce.notePlaceholder") || "Internal note about this customer"}
+              className="w-full px-2 py-1 rounded-md border border-gray-200 text-[11px] outline-none focus:border-indigo-300 resize-none"
+            />
+            <div className="flex justify-end gap-1">
+              <button type="button" onClick={() => { setNoteOpen(false); setNoteDraft(""); }} className="text-[10px] px-2 py-1 rounded-md text-gray-500 hover:bg-gray-100">
+                {t("commerce.back") || "Back"}
+              </button>
+              <button
+                type="button"
+                data-testid="note-save"
+                disabled={busy || !noteDraft.trim()}
+                onClick={() => { onAddNote(noteDraft.trim()); setNoteDraft(""); setNoteOpen(false); }}
+                className="text-[10px] font-medium px-2 py-1 rounded-md bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40"
+              >
+                {t("commerce.saveNote") || "Save note"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            data-testid="note-open"
+            onClick={() => setNoteOpen(true)}
+            className="text-[10px] font-medium px-2 py-1 rounded-md bg-white border border-gray-200 text-gray-700 hover:border-indigo-300"
+          >
+            {t("commerce.addNote") || "Add a note"}
+          </button>
+        )
+      )}
+
+      {msg && (
+        <div className={clsx("mt-2 text-[10px] px-2 py-1 rounded", msg.tone === "positive" ? "bg-emerald-50 text-emerald-700" : msg.tone === "danger" ? "bg-rose-50 text-rose-600" : "bg-amber-50 text-amber-700")} data-testid="customer-action-msg">
+          {msg.text}
+        </div>
+      )}
     </div>
   );
 }
