@@ -14,20 +14,28 @@ const SRC = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const read = (rel: string) => readFileSync(join(SRC, rel), "utf8");
 
 describe("AI Studio tab contract - URL is the source of truth", () => {
-  it("canonical tabs are overview/knowledge/processes/tools; Overview is default", () => {
-    expect([...AI_STUDIO_TABS]).toEqual(["overview", "knowledge", "processes", "tools"]);
-    expect(DEFAULT_AI_STUDIO_TAB).toBe("overview");
+  it("canonical tabs are employees/knowledge/processes/tools; AI Employees is default", () => {
+    expect([...AI_STUDIO_TABS]).toEqual(["employees", "knowledge", "processes", "tools"]);
+    expect(DEFAULT_AI_STUDIO_TAB).toBe("employees");
     // Team is NOT a canonical tab, so route parsing can never yield it.
     expect(isAiStudioTab("team")).toBe(false);
+    // Nor is the old name, now that it is only an inbound alias.
+    expect(isAiStudioTab("overview")).toBe(false);
   });
 
-  it("§11.5 invalid/missing tab falls back to Overview, NOT Team", () => {
-    expect(normalizeAiStudioTab(null)).toBe("overview");
-    expect(normalizeAiStudioTab(undefined)).toBe("overview");
-    expect(normalizeAiStudioTab("")).toBe("overview");
-    expect(normalizeAiStudioTab("garbage")).toBe("overview");
-    // A stale ?tab=team link resolves to Overview, never re-introducing Team.
-    expect(normalizeAiStudioTab("team")).toBe("overview");
+  it("§11.5 invalid/missing tab falls back to AI Employees, NOT Team", () => {
+    expect(normalizeAiStudioTab(null)).toBe("employees");
+    expect(normalizeAiStudioTab(undefined)).toBe("employees");
+    expect(normalizeAiStudioTab("")).toBe("employees");
+    expect(normalizeAiStudioTab("garbage")).toBe("employees");
+    // A stale ?tab=team link resolves there too, never re-introducing Team.
+    expect(normalizeAiStudioTab("team")).toBe("employees");
+  });
+
+  it("every ?tab=overview link ever shared still works", () => {
+    // The tab was renamed for clarity; breaking bookmarks, guided-tour anchors
+    // and in-product links to pay for it would not be a fair trade.
+    expect(normalizeAiStudioTab("overview")).toBe("employees");
   });
 
   it("§11.4/§11.7 canonical + legacy aliases resolve deterministically (refresh + deep links)", () => {
@@ -67,14 +75,14 @@ describe("Nested pages preserve their origin tab on Back (no bare /ai-studio)", 
     expect(src).not.toContain('router.push("/ai-studio")');
   });
 
-  it("Employee editor returns to Overview and never to a bare /ai-studio", () => {
+  it("Employee editor returns to AI Employees and never to a bare /ai-studio", () => {
     const src = read("app/ai-studio/agents/[id]/page.tsx");
     expect(src).toContain("aiStudioHref(returnTab)");
-    expect(src).toMatch(/returnTab\s*=\s*_rt\s*\?\s*normalizeAiStudioTab\(_rt\)\s*:\s*"overview"/);
+    expect(src).toMatch(/returnTab\s*=\s*_rt\s*\?\s*normalizeAiStudioTab\(_rt\)\s*:\s*"employees"/);
     expect(src).not.toContain('router.push("/ai-studio")');
   });
 
-  it("the monolith default is Overview (never 'team')", () => {
+  it("the monolith default is AI Employees (never 'team')", () => {
     const src = read("app/ai-studio/page.tsx");
     expect(src).toContain("normalizeAiStudioTab(tabFromUrl)");
     // The old hardcoded team fallback is gone.

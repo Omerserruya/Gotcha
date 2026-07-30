@@ -13,6 +13,7 @@ import TestChatModal from "@/components/TestChatModal";
 import { ReadinessReportModal, readinessBadgeTone } from "@/components/ReadinessReport";
 import { builderReadinessTest, type ReadinessReport } from "@/lib/gotcha-api";
 import ToolPermissionsPanel from "@/components/ai-studio/ToolPermissionsPanel";
+import { EmployeeReadinessStrip } from "@/components/ai-studio/EmployeeReadinessStrip";
 import ActionPoliciesPanel from "@/components/ai-studio/ActionPoliciesPanel";
 import { MainPlaybookEditor } from "@/components/mainPlaybook/MainPlaybookEditor";
 import { FlowEditor } from "@/components/chatbot/FlowEditor";
@@ -266,6 +267,26 @@ function TeamTab({ t }: { t: (key: string) => string }) {
                 </svg>
                 {skillsCount} {t("aiStudio.team.skills")}
               </span>
+              {agent.departmentName && (
+                <span className="flex items-center gap-1">
+                  <span className="text-gray-300">|</span>
+                  {agent.departmentName}
+                </span>
+              )}
+            </div>
+
+            {/* What is actually wrong, and when it was last genuinely tried.
+                A readiness percentage with no reason gave the operator nothing
+                to act on. `lastTestedAt` comes from the real sandbox
+                conversation, not a separate counter. */}
+            <div className="mb-3 space-y-1">
+              <EmployeeReadinessStrip agent={agent} he={locale === "he"} />
+              {agent.lastTestedAt && (
+                <p className="text-[11px] text-gray-400">
+                  {locale === "he" ? "נבדק לאחרונה: " : "Last tested: "}
+                  {new Date(agent.lastTestedAt).toLocaleDateString(locale === "he" ? "he-IL" : "en-GB")}
+                </p>
+              )}
             </div>
 
             {/* Channels */}
@@ -1086,7 +1107,7 @@ function AIStudioPageInner() {
 
   const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = [
     {
-      key: "overview",
+      key: "employees",
       label: t("aiStudio.tabs.overview"),
       icon: (
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -1192,7 +1213,7 @@ function AIStudioPageInner() {
         </div>
 
         {/* Tab content */}
-        {activeTab === "overview" && <TeamTab t={t} />}
+        {activeTab === "employees" && <TeamTab t={t} />}
         {activeTab === "processes" && <PlaybooksTab t={t} />}
         {activeTab === "knowledge" && <KnowledgeTab t={t} />}
         {activeTab === "tools" && <SkillsTab t={t} />}

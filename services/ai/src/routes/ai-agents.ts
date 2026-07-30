@@ -72,15 +72,35 @@ router.get("/", authenticate, resolveTenant, requireActiveTenant(), requirePermi
       orderBy: { createdAt: "desc" },
     });
 
-    // Enrich with tool count
+    // Departments resolved once rather than per agent.
+    const departments = await prisma.department.findMany({
+      where: { tenantId: req.tenantId! as string },
+      select: { id: true, name: true },
+    }).catch(() => [] as Array<{ id: string; name: string }>);
+    const deptById = new Map(departments.map((d) => [d.id, d.name]));
+
+    // Enrich with tool count, department name and when it was last tested.
     const enriched = await Promise.all(agents.map(async (agent) => {
       const toolCount = await prisma.agentToolPermission.count({
         where: { tenantId: req.tenantId! as string, aiAgentId: agent.id, isAllowed: true },
       });
+      // "Last tested" is read from the sandbox conversation the test chat keeps,
+      // so it reflects a real conversation rather than a separate counter that
+      // could drift from whether anyone actually tried the employee.
+      const sandbox = await prisma.conversation.findFirst({
+        where: {
+          tenantId: req.tenantId! as string,
+          customerExternalId: { startsWith: `sandbox:${agent.id}:` },
+        },
+        select: { lastMessageAt: true, updatedAt: true },
+        orderBy: { updatedAt: "desc" },
+      }).catch(() => null);
       return {
         ...agent,
         knowledgeSources: agent.knowledgeBases.map((ak: any) => ak.knowledgeBase),
         toolCount,
+        departmentName: agent.departmentId ? deptById.get(agent.departmentId) ?? null : null,
+        lastTestedAt: sandbox ? (sandbox.lastMessageAt ?? sandbox.updatedAt) : null,
       };
     }));
 

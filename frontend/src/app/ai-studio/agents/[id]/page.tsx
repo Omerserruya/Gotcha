@@ -361,7 +361,7 @@ export default function AgentEditorPage() {
   const searchParams = useSearchParams();
   // An employee editor belongs to Overview; explicit ?returnTab= overrides.
   const _rt = searchParams.get("returnTab");
-  const returnTab = _rt ? normalizeAiStudioTab(_rt) : "overview";
+  const returnTab = _rt ? normalizeAiStudioTab(_rt) : "employees";
   const { t, locale } = useI18n();
   const { token } = useAuth();
 
