@@ -482,6 +482,53 @@ export interface GovernableTool {
   updatedAt: string | null;
 }
 
+/**
+ * How many EXECUTABLE tools each catalog integration has, per slug, regardless
+ * of whether this tenant has connected it.
+ *
+ * getGovernableIntegrationTools answers a different question - "what can this
+ * tenant set policy on right now" - and is connected-only by design. Using it
+ * to classify the sidebar gave every unconnected integration a count of 0, so
+ * they were all filed as status-only external connections and the "Available"
+ * group could never contain anything. An integration the tenant has not
+ * connected still HAS tools; that is the reason to connect it.
+ *
+ * "Executable" still excludes dead seeds - a catalog row with neither an
+ * endpoint nor an adapter cannot run, so counting it would oversell.
+ */
+export async function getExecutableToolCountsBySlug(): Promise<Map<string, number>> {
+  const { prisma } = await import("@chatcenter/shared");
+
+  const rows = await prisma.catalogTool.findMany({
+    select: { slug: true, endpoint: true, integration: { select: { slug: true } } },
+  });
+
+  const adapterToolsBySlug = new Map<string, Set<string>>();
+  const counts = new Map<string, number>();
+
+  for (const ct of rows as any[]) {
+    const integrationSlug = ct.integration?.slug;
+    if (!integrationSlug) continue;
+
+    if (!adapterToolsBySlug.has(integrationSlug)) {
+      const names = new Set<string>();
+      const adapter = getAdapter(integrationSlug);
+      try {
+        for (const def of adapter?.tools?.() ?? []) {
+          if (def?.name) names.add(def.name.slice(def.name.indexOf(".") + 1));
+        }
+      } catch { /* a broken adapter must not hide the rest of the catalog */ }
+      adapterToolsBySlug.set(integrationSlug, names);
+    }
+
+    const hasEndpoint = typeof ct.endpoint === "string" && ct.endpoint.trim().length > 0;
+    if (!hasEndpoint && !adapterToolsBySlug.get(integrationSlug)!.has(ct.slug)) continue;
+    counts.set(integrationSlug, (counts.get(integrationSlug) ?? 0) + 1);
+  }
+
+  return counts;
+}
+
 export async function getGovernableIntegrationTools(
   tenantId: string,
 ): Promise<GovernableTool[]> {

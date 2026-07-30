@@ -206,7 +206,40 @@ export function IntegrationWorkspace() {
           </div>
         )}
 
-        {detail && (
+        {/* Not connected yet: there is no policy to show, so do not show an
+            empty policy surface. Say what it does, what it would bring, and
+            where to connect it. */}
+        {detail?.connectable && (
+          <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm" data-testid="integration-connect">
+            <h2 className="text-base font-semibold text-gray-900">{detail.name}</h2>
+            {detail.description && (
+              <p className="mt-1 text-sm text-gray-600">{detail.description}</p>
+            )}
+            <p className="mt-3 text-xs text-gray-500">
+              {L(
+                "Not connected. Connect it to choose what its tools are allowed to do.",
+                "לא מחובר. חברו אותו כדי לקבוע מה הכלים שלו רשאים לעשות.",
+              )}
+            </p>
+            {(detail.catalogToolCount ?? 0) > 0 && (
+              <p className="mt-1 text-xs text-gray-400 tabular-nums">
+                {L(
+                  `Adds ${detail.catalogToolCount} tools once connected.`,
+                  `מוסיף ${detail.catalogToolCount} כלים אחרי החיבור.`,
+                )}
+              </p>
+            )}
+            <a
+              href={`/ai-studio/marketplace/${encodeURIComponent(detail.id)}?returnTab=tools`}
+              data-testid="integration-connect-cta"
+              className="mt-4 inline-flex items-center rounded-xl bg-primary-500 hover:bg-primary-600 px-4 py-2 text-sm font-medium text-white transition"
+            >
+              {L("Connect", "חיבור")}
+            </a>
+          </div>
+        )}
+
+        {detail && !detail.connectable && (
           <>
             {/* Selected integration header */}
             <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm mb-3" data-testid="integration-header">

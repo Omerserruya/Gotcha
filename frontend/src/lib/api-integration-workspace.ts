@@ -81,6 +81,13 @@ export interface IntegrationDetail {
   name: string;
   internal: boolean;
   connected?: boolean;
+  /** Present and true when the integration exists in the catalog but the tenant
+   *  has not connected it. There is no policy to show yet - only how to get one. */
+  connectable?: boolean;
+  description?: string | null;
+  logoUrl?: string | null;
+  /** How many tools connecting WOULD bring. Not a policy count. */
+  catalogToolCount?: number;
   missingScopes?: string[];
   grantedScopes?: string[];
   capabilityStatus?: string | null;

@@ -89,6 +89,22 @@ describe("knowledge sources stay with Knowledge Manager", () => {
 });
 
 describe("connection state", () => {
+  it("an unconnected integration that HAS tools is available, never status-only", () => {
+    // toolCount must be "tools this integration has", not "tools this tenant
+    // can set policy on right now". Feeding it a connected-only count made
+    // every unconnected integration classify as an external connection, so the
+    // Available group could never contain anything and the reason to connect
+    // an integration was invisible.
+    const e = classifyCatalogIntegration(catalog({ connection: undefined, toolCount: 10 }));
+    expect(e.kind).toBe("tool_integration");
+    expect(e.state).toBe("available");
+    expect(e.toolCount).toBe(10);
+
+    const sidebar = buildWorkspaceSidebar([e]);
+    expect(sidebar.toolIntegrations.available).toHaveLength(1);
+    expect(sidebar.externalConnections).toHaveLength(0);
+  });
+
   it("distinguishes available, disconnected, warning and plan-blocked", () => {
     expect(classifyCatalogIntegration(catalog({ connection: undefined })).state).toBe("available");
     expect(classifyCatalogIntegration(catalog({ connection: { status: "PENDING" } })).state).toBe("disconnected");

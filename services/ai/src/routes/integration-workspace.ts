@@ -36,7 +36,12 @@ import {
   GOTCHA_ENTRY_ID,
   type CatalogIntegrationInput,
 } from "@chatcenter/shared";
-import { TOOL_REGISTRY, getGovernableIntegrationTools, type GovernableTool } from "../services/tool-registry";
+import {
+  TOOL_REGISTRY,
+  getGovernableIntegrationTools,
+  getExecutableToolCountsBySlug,
+  type GovernableTool,
+} from "../services/tool-registry";
 import {
   capabilityStateFromConfig,
   capabilityStateIsFresh,
@@ -63,7 +68,7 @@ router.get("/", async (req: Request, res: Response) => {
   try {
     const tenantId = req.tenantId!;
 
-    const [catalog, connections, channels, knowledgeSources, governable] = await Promise.all([
+    const [catalog, connections, channels, knowledgeSources, governable, executableBySlug] = await Promise.all([
       prisma.integrationCatalog.findMany({
         select: {
           id: true, slug: true, name: true, category: true, description: true,
@@ -88,6 +93,10 @@ router.get("/", async (req: Request, res: Response) => {
       getGovernableIntegrationTools(tenantId).catch((err: any) => {
         console.error("[integration-workspace] governable tools failed:", err?.message, err?.stack?.split("\n")[1]?.trim());
         return [] as GovernableTool[];
+      }),
+      getExecutableToolCountsBySlug().catch((err: any) => {
+        console.error("[integration-workspace] executable counts failed:", err?.message);
+        return new Map<string, number>();
       }),
     ]);
 
@@ -120,10 +129,15 @@ router.get("/", async (req: Request, res: Response) => {
           description: row.description ?? null,
           logoUrl: row.logoUrl ?? null,
           isPublished: row.isPublished !== false,
-          // Governable count, falling back to 0 so a provider whose tools are
-          // all dead seeds is classified as an external connection, not as a
-          // tool integration with nothing in it.
-          toolCount: governableBySlug.get(row.slug) ?? 0,
+          // Connected: what is actually governable right now. Not connected:
+          // what connecting WOULD bring. Using the governable count for both
+          // filed every unconnected integration as a status-only external
+          // connection, because governable is connected-only by construction.
+          // A provider whose tools are all dead seeds still counts 0 and is
+          // classified as external - that part was right.
+          toolCount: conn
+            ? governableBySlug.get(row.slug) ?? 0
+            : executableBySlug.get(row.slug) ?? 0,
           ...(conn
             ? {
                 connection: {
@@ -204,7 +218,36 @@ router.get("/:id", async (req: Request, res: Response) => {
 
     const governable = (await getGovernableIntegrationTools(tenantId)).filter((t) => t.integrationSlug === id);
     if (!connection && governable.length === 0) {
-      res.status(404).json({ error: "Integration not found or not connected" });
+      // Not connected is not the same as not real. The sidebar lists available
+      // integrations, so selecting one must describe it and say how to connect
+      // it - a 404 here would render as "this integration does not exist".
+      const catalogRow = await prisma.integrationCatalog.findUnique({
+        where: { slug: id },
+        select: { slug: true, name: true, description: true, logoUrl: true, isPublished: true },
+      });
+      if (!catalogRow || catalogRow.isPublished === false) {
+        res.status(404).json({ error: "Integration not found" });
+        return;
+      }
+      const catalogToolCount = await prisma.catalogTool.count({
+        where: { integration: { slug: id } },
+      });
+      res.json({
+        data: {
+          id,
+          name: catalogRow.name,
+          internal: false,
+          connected: false,
+          connectable: true,
+          description: catalogRow.description ?? null,
+          logoUrl: catalogRow.logoUrl ?? null,
+          // What it WOULD bring, stated as such. Not a policy surface: there is
+          // nothing to enforce until the tenant connects it.
+          catalogToolCount,
+          counts: { total: 0, enabled: 0, alwaysAllow: 0, requireApproval: 0, disabled: 0, unavailable: 0 },
+          groups: [],
+        },
+      });
       return;
     }
 

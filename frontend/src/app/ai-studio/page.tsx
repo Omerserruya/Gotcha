@@ -75,20 +75,6 @@ function StatusBadge({ status, label }: { status: string; label?: string }) {
   );
 }
 
-// ─── Risk badge ───────────────────────────────────────────────
-function RiskBadge({ risk }: { risk: string }) {
-  const map: Record<string, string> = {
-    low: "bg-green-50 text-green-600 border-green-200",
-    medium: "bg-yellow-50 text-yellow-600 border-yellow-200",
-    high: "bg-red-50 text-red-600 border-red-200",
-  };
-  return (
-    <span className={clsx("px-2 py-0.5 rounded-full text-[10px] font-medium border uppercase tracking-wide", map[risk] || "bg-gray-50 text-gray-500 border-gray-200")}>
-      {risk} risk
-    </span>
-  );
-}
-
 // ─── Team Members Tab ─────────────────────────────────────────
 function TeamTab({ t }: { t: (key: string) => string }) {
   const { token } = useAuth();
@@ -694,39 +680,30 @@ const AUTH_TYPE_STYLES: Record<string, string> = {
   BASIC_AUTH: "bg-gray-50 text-gray-600 border-gray-200",
 };
 
-type SkillsSubView = "connected" | "marketplace" | "permissions";
+type SkillsSubView = "workspace" | "marketplace";
 
-const SKILLS_SUB_VIEWS: SkillsSubView[] = ["connected", "marketplace", "permissions"];
+const SKILLS_SUB_VIEWS: SkillsSubView[] = ["workspace", "marketplace"];
 
-// §9: "policies" is no longer a standalone sub-view. Business-policy caps now
-// live INSIDE the unified Tool governance surface (the permissions view),
-// alongside the per-tool HITL toggle - one place, not a disconnected tab.
-// The alias keeps old ?view=policies deep-links (and the /settings/policy,
-// /settings/business-rules redirects) landing on the right surface.
+// Every old sub-view name still resolves. "connected" (the flat tool list),
+// "permissions" and "policies" (the standalone governance tabs) were all
+// folded into the one workspace, which shows an integration's tools AND their
+// policy together. Breaking the deep links from /settings/tools,
+// /settings/policy and /settings/business-rules to pay for that would not be
+// a fair trade, so they are aliases, not removals.
+const SUB_VIEW_ALIASES: Record<string, SkillsSubView> = {
+  connected: "workspace",
+  permissions: "workspace",
+  policies: "workspace",
+  skills: "workspace",
+};
+
 function normalizeSkillsSubView(value: string | null): SkillsSubView | null {
-  if (value === "policies") return "permissions";
+  if (value && SUB_VIEW_ALIASES[value]) return SUB_VIEW_ALIASES[value];
   return isSkillsSubView(value) ? value : null;
 }
 
 function isSkillsSubView(value: string | null): value is SkillsSubView {
   return value !== null && (SKILLS_SUB_VIEWS as string[]).includes(value);
-}
-
-// Integration logo with graceful fallback to a first-letter badge when there's
-// no known logo (or the image fails to load). Resolves by slug or display name.
-function IntegrationLogo({ name, slug, className }: { name: string; slug?: string; className?: string }) {
-  const [broken, setBroken] = useState(false);
-  const url = logoForIntegration(slug || name);
-  return (
-    <div className={clsx("rounded-lg bg-white border border-gray-100 flex items-center justify-center shadow-sm overflow-hidden shrink-0", className)}>
-      {url && !broken ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={url} alt="" onError={() => setBroken(true)} className="w-2/3 h-2/3 object-contain" />
-      ) : (
-        <span className="text-xs font-bold text-gray-600">{(name || "?").charAt(0).toUpperCase()}</span>
-      )}
-    </div>
-  );
 }
 
 function SkillsTab({ t }: { t: (key: string) => string }) {
@@ -740,7 +717,7 @@ function SkillsTab({ t }: { t: (key: string) => string }) {
   // refresh/back/forward/share-link keep working the same way ?tab= does above.
   const viewFromUrl = searchParams.get("view");
   const [subView, setSubViewState] = useState<SkillsSubView>(
-    normalizeSkillsSubView(viewFromUrl) ?? "connected",
+    normalizeSkillsSubView(viewFromUrl) ?? "workspace",
   );
   useEffect(() => {
     const normalized = normalizeSkillsSubView(viewFromUrl);
@@ -814,16 +791,18 @@ function SkillsTab({ t }: { t: (key: string) => string }) {
       {/* Sub-view toggle */}
       <div className="flex gap-1 bg-gray-100/80 rounded-xl p-1 mb-5 w-fit" data-tour="ai-tools">
         <button
-          onClick={() => setSubView("connected")}
+          onClick={() => setSubView("workspace")}
+          data-testid="subview-workspace"
           className={clsx(
             "px-4 py-2 rounded-lg text-sm font-medium transition",
-            subView === "connected" ? "bg-white text-violet-700 shadow-sm" : "text-gray-500 hover:text-gray-700"
+            subView === "workspace" ? "bg-white text-violet-700 shadow-sm" : "text-gray-500 hover:text-gray-700"
           )}
         >
-          {t("aiStudio.tools.title")}
+          {t("aiStudio.tools.workspaceTab")}
         </button>
         <button
           onClick={() => setSubView("marketplace")}
+          data-testid="subview-marketplace"
           className={clsx(
             "px-4 py-2 rounded-lg text-sm font-medium transition",
             subView === "marketplace" ? "bg-white text-violet-700 shadow-sm" : "text-gray-500 hover:text-gray-700"
@@ -831,117 +810,20 @@ function SkillsTab({ t }: { t: (key: string) => string }) {
         >
           {t("marketplace.title")}
         </button>
-        <button
-          onClick={() => setSubView("permissions")}
-          className={clsx(
-            "px-4 py-2 rounded-lg text-sm font-medium transition",
-            subView === "permissions" ? "bg-white text-violet-700 shadow-sm" : "text-gray-500 hover:text-gray-700"
-          )}
-        >
-          {t("aiStudio.tools.governanceTab")}
-        </button>
       </div>
 
-      {subView === "permissions" ? (
-        // §9: ONE canonical Tool governance surface. The per-tool matrix
-        // (enable + HITL/requires-approval, split system vs external) is the
-        // single source of truth for AUTO/HITL; the business-policy spend caps
-        // that bound compensation/refund tools render below it - no separate
-        // "Business Policies" tab to drift out of sync.
-        // The Integrations & Tools workspace replaces the flat per-tool list.
-        // One integration is selected at a time from the sidebar; its tools are
-        // grouped by risk and each carries Autonomous / HITL / Disabled. The
-        // business-policy spend caps still render below it, because they bound
-        // the financial tools shown above and belong on the same surface.
+      {subView === "workspace" ? (
+        // ONE canonical governance surface. An integration is selected in the
+        // sidebar; its tools are grouped by risk and each carries Autonomous /
+        // HITL / Disabled, mapped straight onto what the runtime enforces. The
+        // business-policy spend caps render below because they bound the
+        // financial tools above - no separate tab to drift out of sync.
         <div className="space-y-10">
           <IntegrationWorkspace />
           <div className="pt-8 border-t border-gray-200">
             <ActionPoliciesPanel />
           </div>
         </div>
-      ) : subView === "connected" ? (
-        <>
-          {/* Connected tools - derived from real marketplace data */}
-          {(() => {
-            const connected = integrations
-              .filter((intg: any) => intg.tenantConnection?.status === "CONNECTED")
-              .map((intg: any) => ({
-                name: intg.name || intg.slug,
-                slug: intg.slug,
-                tools: (intg.catalogTools || []).map((ct: any) => ({
-                  name: ct.name,
-                  risk: (ct.riskLevel || "LOW").toLowerCase(),
-                  enabled: ct.tenantTool?.isEnabled ?? false,
-                })),
-              }));
-
-            if (loading) {
-              return <div className="text-sm text-gray-400 py-8 text-center">…</div>;
-            }
-            if (connected.length === 0) {
-              return (
-                <div className="bg-white rounded-2xl border border-dashed border-gray-200 p-8 text-center">
-                  <p className="text-sm text-gray-500">{t("aiStudio.tools.noneConnected") || "No integrations connected yet."}</p>
-                  <p className="text-xs text-gray-400 mt-1">{t("aiStudio.tools.connectNewSub")}</p>
-                </div>
-              );
-            }
-            return (
-              <div className="space-y-4">
-                {connected.map((intg) => (
-                  <div key={intg.slug} className="bg-white rounded-2xl shadow-card border border-gray-100 overflow-hidden">
-                    <div className="flex items-center gap-3 px-5 py-3.5 border-b border-gray-50 bg-gray-50/40">
-                      <IntegrationLogo name={intg.name} slug={intg.slug} className="w-8 h-8" />
-                      <span className="font-semibold text-gray-800">{intg.name}</span>
-                      <StatusBadge status="connected" />
-                    </div>
-                    {intg.tools.length === 0 ? (
-                      <div className="px-5 py-3 text-xs text-gray-400">{t("aiStudio.tools.noTools") || "No tools available for this integration."}</div>
-                    ) : (
-                      intg.tools.map((tool: { name: string; risk: string; enabled: boolean }, i: number) => (
-                        <div
-                          key={tool.name}
-                          className={clsx(
-                            "flex items-center gap-4 px-5 py-3 hover:bg-gray-50/40 transition",
-                            i < intg.tools.length - 1 && "border-b border-gray-50"
-                          )}
-                        >
-                          <div className={clsx("w-2 h-2 rounded-full shrink-0", tool.enabled ? "bg-green-400" : "bg-gray-200")} />
-                          <span className="text-sm text-gray-800 flex-1">{tool.name}</span>
-                          <RiskBadge risk={tool.risk} />
-                          <span className="text-xs text-gray-400 w-28 text-right">
-                            {tool.enabled
-                              ? <span className="text-green-600">{t("aiStudio.tools.enabled") || "enabled"}</span>
-                              : <span className="text-gray-400">{t("aiStudio.tools.disabled") || "disabled"}</span>
-                            }
-                          </span>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                ))}
-              </div>
-            );
-          })()}
-
-          <div
-            className="mt-4 bg-white rounded-2xl border-2 border-dashed border-gray-200 p-6 flex items-center gap-4 hover:border-violet-300 hover:bg-violet-50/30 transition cursor-pointer"
-            onClick={() => setSubView("marketplace")}
-          >
-            <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center shrink-0">
-              <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-              </svg>
-            </div>
-            <div>
-              <p className="text-sm font-medium text-gray-700">{t("aiStudio.tools.connectNew")}</p>
-              <p className="text-xs text-gray-400 mt-0.5">{t("aiStudio.tools.connectNewSub")}</p>
-            </div>
-            <svg className="w-4 h-4 text-gray-400 ml-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-            </svg>
-          </div>
-        </>
       ) : (
         <>
           {/* Marketplace */}

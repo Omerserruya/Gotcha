@@ -3213,7 +3213,7 @@
       "knowledge": "ידע",
       "sources": "מקורות",
       "manage": "נהל",
-      "skillsAndTools": "כישורים וכלים",
+      "skillsAndTools": "אינטגרציות וכלים",
       "browseMarketplace": "עיין בשוק",
       "toolsActive": "כלים פעילים",
       "connected": "מחובר",
@@ -3556,7 +3556,7 @@
     },
     "tools": {
       "title": "כלים מחוברים",
-      "subtitle": "פעולות שחברי צוות ה-AI יכולים לבצע דרך אינטגרציות חיצוניות",
+      "subtitle": "מה צוות ה-AI שלכם רשאי לעשות דרך המערכות העסקיות שחיברתם",
       "openMarketplace": "עיין בשוק",
       "usedBy": "בשימוש של",
       "notAssigned": "לא מוקצה",
@@ -3569,7 +3569,8 @@
       "enables": "מאפשר",
       "actionsLive": "פעולות לעובד/ת",
       "wouldEnable": "יאפשר:",
-      "governanceTab": "הרשאות ומדיניות"
+      "governanceTab": "הרשאות ומדיניות",
+      "workspaceTab": "כלים והרשאות"
     },
     "workspace": {
       "overview": "סקירה",

@@ -3212,7 +3212,7 @@
       "knowledge": "Knowledge",
       "sources": "sources",
       "manage": "Manage",
-      "skillsAndTools": "Skills & Tools",
+      "skillsAndTools": "Integrations & Tools",
       "browseMarketplace": "Browse Marketplace",
       "toolsActive": "tools active",
       "connected": "Connected",
@@ -3555,7 +3555,7 @@
     },
     "tools": {
       "title": "Connected Tools",
-      "subtitle": "Actions AI team members can perform via external integrations",
+      "subtitle": "What your AI team is allowed to do through your connected business systems",
       "openMarketplace": "Browse Marketplace",
       "usedBy": "Used by",
       "notAssigned": "Not assigned",
@@ -3568,7 +3568,8 @@
       "enables": "Enables",
       "actionsLive": "actions for your employee",
       "wouldEnable": "Would enable:",
-      "governanceTab": "Permissions & Policies"
+      "governanceTab": "Permissions & Policies",
+      "workspaceTab": "Tools & Permissions"
     },
     "workspace": {
       "overview": "Overview",

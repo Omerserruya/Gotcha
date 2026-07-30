@@ -10,40 +10,49 @@ const SRC = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 const read = (rel: string) => readFileSync(join(SRC, rel), "utf8");
 const page = read("app/ai-studio/page.tsx");
 
-describe("§9 no standalone Business Policies tab in AI Studio", () => {
-  it("removes 'policies' as a peer sub-view (union + list)", () => {
-    // The Tools tab has only three real sub-views now.
-    expect(page).toContain('type SkillsSubView = "connected" | "marketplace" | "permissions"');
-    expect(page).toContain('const SKILLS_SUB_VIEWS: SkillsSubView[] = ["connected", "marketplace", "permissions"]');
-    // There is no longer a peer button/branch that renders ActionPoliciesPanel
-    // as its own tab.
+describe("§9 ONE governance surface - no standalone policies or tools tab", () => {
+  it("the Tools tab has exactly two sub-views: the workspace and the marketplace", () => {
+    expect(page).toContain('type SkillsSubView = "workspace" | "marketplace"');
+    expect(page).toContain('const SKILLS_SUB_VIEWS: SkillsSubView[] = ["workspace", "marketplace"]');
+    // No peer branch renders policies, or a second flat tool list, as its own tab.
     expect(page).not.toContain('setSubView("policies")');
     expect(page).not.toContain('subView === "policies"');
+    expect(page).not.toContain('subView === "permissions"');
+    expect(page).not.toContain('subView === "connected"');
   });
 
-  it("folds the business-policy caps INTO the governance surface, below the workspace", () => {
+  it("folds the business-policy caps INTO the workspace surface, below it", () => {
     // The flat per-tool list was replaced by the Integrations & Tools workspace
     // (sidebar + one selected integration). ActionPoliciesPanel still renders
     // beneath it, because those caps bound the financial tools shown above.
-    const permIdx = page.indexOf('subView === "permissions"');
+    const viewIdx = page.indexOf('subView === "workspace"');
     const workspaceIdx = page.indexOf("<IntegrationWorkspace />");
     const policyPanelIdx = page.indexOf("<ActionPoliciesPanel />");
-    expect(permIdx).toBeGreaterThan(-1);
-    expect(workspaceIdx).toBeGreaterThan(permIdx);
+    expect(viewIdx).toBeGreaterThan(-1);
+    expect(workspaceIdx).toBeGreaterThan(viewIdx);
     expect(policyPanelIdx).toBeGreaterThan(workspaceIdx);
     // Only ONE render site for each (no duplicate editable surface).
     expect(page.split("<ActionPoliciesPanel />").length - 1).toBe(1);
     expect(page.split("<IntegrationWorkspace />").length - 1).toBe(1);
   });
 
-  it("aliases old ?view=policies deep-links onto the governance surface", () => {
-    expect(page).toContain('if (value === "policies") return "permissions"');
+  it("every retired sub-view name still resolves instead of 404-ing", () => {
+    // ?view=connected, =permissions and =policies were all real, shared URLs.
+    // Folding three surfaces into one must not break the links to them.
+    for (const legacy of ["connected", "permissions", "policies"]) {
+      expect(page).toMatch(new RegExp(`${legacy}:\\s*"workspace"`));
+    }
     expect(page).toContain("normalizeSkillsSubView(viewFromUrl)");
+    // And an unknown value still falls back rather than rendering nothing.
+    expect(page).toContain('normalizeSkillsSubView(viewFromUrl) ?? "workspace"');
   });
 
-  it("the governance tab label is localized in both locales", () => {
-    expect((en as any).aiStudio.tools.governanceTab).toBeTruthy();
-    expect((he as any).aiStudio.tools.governanceTab).toBeTruthy();
+  it("the superseded flat tool list is gone, not merely hidden", () => {
+    // Two views of the same policy data is how they drift apart. The old list
+    // rendered enabled/disabled from a different query than the one the
+    // runtime enforces.
+    expect(page).not.toContain('t("aiStudio.tools.noneConnected")');
+    expect(page).not.toContain("intg.tools.map(");
   });
 });
 
