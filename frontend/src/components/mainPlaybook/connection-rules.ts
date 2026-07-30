@@ -145,6 +145,82 @@ export function leftBoundaryX(
   return Math.min(...anchor.map((n) => n.position.x)) - pad;
 }
 
+/** The fixed column triggers start in. Everything else flows to the right. */
+export const TRIGGER_COLUMN_X = 0;
+
+/** Minimum gap between the trigger column and the first downstream node. */
+export const MIN_BODY_OFFSET_X = 260;
+
+export interface PositionedNode {
+  id?: string;
+  /**
+   * Optional because React Flow's own Node type allows it. A node with no type
+   * is not an entry node, so it is treated as body and shifted like one.
+   */
+  type?: string;
+  position: { x: number; y: number };
+}
+
+/**
+ * Normalize a graph's positions so triggers really are the left-most nodes.
+ *
+ * `leftBoundaryX` derives the boundary FROM the nodes, which is right for
+ * ordinary editing but wrong for a graph that arrives with nonsense
+ * coordinates: a trigger imported at x=-5000 simply dragged the boundary out
+ * with it, so the "triggers are on the left" rule silently held while the
+ * canvas panned into empty space, and a workflow saved by an older version
+ * could open with its start node off screen.
+ *
+ * The rule enforced here:
+ *   - every trigger/entry node sits in the trigger column (x = TRIGGER_COLUMN_X),
+ *     keeping its own Y so multiple triggers stay in the order the author put
+ *     them in;
+ *   - the rest of the graph is shifted so nothing sits left of that column.
+ *
+ * Pure: returns new node objects and never mutates the input. Y is left alone
+ * entirely - vertical placement carries meaning the author chose.
+ */
+export function normalizeGraphPositions<T extends PositionedNode>(nodes: T[]): T[] {
+  if (!Array.isArray(nodes) || nodes.length === 0) return nodes ?? [];
+
+  const finite = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+
+  // Repair unusable coordinates first, so NaN/undefined cannot poison the
+  // Math.min below and push the whole graph somewhere unreachable.
+  const repaired = nodes.map((n) => ({
+    ...n,
+    position: { x: finite(n.position?.x), y: finite(n.position?.y) },
+  }));
+
+  const isEntry = (n: PositionedNode) => !!n.type && ENTRY_NODE_TYPES.includes(n.type);
+  const nonEntries = repaired.filter((n) => !isEntry(n));
+
+  // How far right must the body move so nothing lands in or before the trigger
+  // column? Triggers themselves are pinned, so they are not part of this.
+  const minBodyX = nonEntries.length ? Math.min(...nonEntries.map((n) => n.position.x)) : Infinity;
+  const bodyFloor = TRIGGER_COLUMN_X + MIN_BODY_OFFSET_X;
+  const shift = Number.isFinite(minBodyX) && minBodyX < bodyFloor ? bodyFloor - minBodyX : 0;
+
+  return repaired.map((n) =>
+    isEntry(n)
+      ? ({ ...n, position: { x: TRIGGER_COLUMN_X, y: n.position.y } } as T)
+      : ({ ...n, position: { x: n.position.x + shift, y: n.position.y } } as T),
+  );
+}
+
+/**
+ * Is this graph already normalized? Used to avoid marking a freshly loaded
+ * workflow dirty when nothing actually needed moving.
+ */
+export function positionsAreNormalized(nodes: PositionedNode[]): boolean {
+  if (!Array.isArray(nodes) || nodes.length === 0) return true;
+  const normalized = normalizeGraphPositions(nodes);
+  return nodes.every((n, i) => {
+    const m = normalized[i]!;
+    return n.position?.x === m.position.x && n.position?.y === m.position.y;
+  });
+}
+
 /** Would adding source→target create a cycle? True if target can already reach source. */
 export function createsCycle(source: string, target: string, edges: GraphEdge[]): boolean {
   const adj = new Map<string, string[]>();

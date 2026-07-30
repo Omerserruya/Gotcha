@@ -53,7 +53,7 @@ import { ChannelEntryNode } from "../mainPlaybook/ChannelEntryNode";
 import { SendCommentReplyNode } from "../mainPlaybook/SendCommentReplyNode";
 import { NodeInspector } from "../mainPlaybook/NodeInspector";
 import { NODE_REGISTRY } from "../mainPlaybook/node-registry";
-import { validateConnection, leftBoundaryX, type ConnectionError } from "../mainPlaybook/connection-rules";
+import { validateConnection, leftBoundaryX, normalizeGraphPositions, type ConnectionError } from "../mainPlaybook/connection-rules";
 import { validateFlow } from "../mainPlaybook/flow-validator";
 import { nodeLabel, nodeDesc, nodeCategoryLabel } from "../mainPlaybook/node-i18n";
 import { NodeInfoIcon } from "../mainPlaybook/NodeInfoIcon";
@@ -765,6 +765,27 @@ function FlowEditorInner({ flowId, onBack, onCreated, embedded }: Props) {
   // Full-screen editing: the editor fills the page (canvas maximised) while
   // keeping its own toolbar (Back + save + Exit) so navigation is never lost.
   const [fullscreen, setFullscreen] = useState(false);
+  // Escape leaves full screen. Without this the only way out is the toolbar
+  // button, which is the one thing a maximised canvas makes easy to lose track
+  // of - and Escape is what everyone tries first.
+  useEffect(() => {
+    if (!fullscreen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { e.stopPropagation(); setFullscreen(false); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [fullscreen]);
+
+  // Unsaved-changes guard on reload / tab close. The in-app Back button has its
+  // own confirm; this covers the browser paths it cannot intercept.
+  useEffect(() => {
+    if (saveState !== "unsaved") return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [saveState]);
+
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
   // Selection drives the side-panel Inspector (unified nodes only - the
@@ -835,7 +856,11 @@ function FlowEditorInner({ flowId, onBack, onCreated, embedded }: Props) {
           position: n.position,
           data: n.data || {},
         }));
-        setNodes(rfNodes);
+        // Repair coordinates BEFORE the first render. A workflow saved by an
+        // older version (or hand-edited) can arrive with its trigger at a wild
+        // negative X; leftBoundaryX would then follow it out and the canvas
+        // would open on empty space with the start node off screen.
+        setNodes(normalizeGraphPositions(rfNodes));
       } else {
         setNodes(autoLayout(rawNodes, rawEdges));
       }

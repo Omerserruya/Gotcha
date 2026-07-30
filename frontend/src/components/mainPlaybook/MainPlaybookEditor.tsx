@@ -22,6 +22,7 @@ import "reactflow/dist/style.css";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import { nodeLabel, nodeDesc, nodeCategoryLabel } from "./node-i18n";
+import { leftBoundaryX, normalizeGraphPositions } from "./connection-rules";
 import {
   getAIAgents,
   getChatbotFlows,
@@ -901,6 +902,25 @@ function MainPlaybookEditorInner({ onBack, embedded }: Props) {
   const { token } = useAuth();
   const { t } = useI18n();
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  // Full-screen editing. This canvas had none: the Main Playbook is the widest
+  // graph in the product and was being edited inside a padded panel.
+  const [fullscreen, setFullscreen] = useState(false);
+  // Escape leaves full screen - the first thing anyone tries.
+  useEffect(() => {
+    if (!fullscreen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { e.stopPropagation(); setFullscreen(false); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [fullscreen]);
+
+  // Left boundary in GRAPH space, recomputed as nodes move.
+  const playbookExtent = useMemo(() => {
+    const left = leftBoundaryX(nodes.map((n) => ({ position: n.position, type: n.type as string })));
+    const FAR = 1_000_000;
+    return [[left, -FAR], [FAR, FAR]] as [[number, number], [number, number]];
+  }, [nodes]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -1020,7 +1040,11 @@ function MainPlaybookEditorInner({ onBack, embedded }: Props) {
             style: { stroke: "#c7c7cc", strokeWidth: 1.5 },
             markerEnd: { type: MarkerType.ArrowClosed, color: "#c7c7cc", width: 16, height: 16 },
           }));
-          setNodes(restoredNodes);
+          // Repair coordinates before the first render: a playbook saved by an
+          // older version can arrive with its entry node at a negative X, which
+          // would drag the left boundary out with it and open the canvas on
+          // empty space.
+          setNodes(normalizeGraphPositions(restoredNodes));
           setEdges(restoredEdges);
         } else {
           // No saved canvas yet - open the template gallery so the author
@@ -1458,7 +1482,7 @@ function MainPlaybookEditorInner({ onBack, embedded }: Props) {
     // Editor must own its own height: AppLayout's <main> is `flex-1` with no
     // explicit height, so `h-full` (= 100% of parent) collapses to auto.
     // Use viewport units, subtracting AppLayout's 8px top + 8px bottom padding.
-    <div className={embedded ? "h-full flex flex-col overflow-hidden" : "h-screen md:h-[calc(100vh-1rem)] flex flex-col overflow-hidden"}>
+    <div className={fullscreen ? "fixed inset-0 z-40 bg-white h-screen flex flex-col overflow-hidden" : (embedded ? "h-full flex flex-col overflow-hidden" : "h-screen md:h-[calc(100vh-1rem)] flex flex-col overflow-hidden")}>
       {/* Toolbar - breadcrumb left, secondary actions middle, primary CTA right */}
       <div className="bg-white border-b border-[var(--border-hairline)] px-2 md:px-4 h-14 flex items-center gap-2 md:gap-3 z-10">
         {onBack && (
@@ -1474,6 +1498,25 @@ function MainPlaybookEditorInner({ onBack, embedded }: Props) {
           <span className="text-gray-300 hidden sm:inline">/</span>
           <span className="font-medium text-gray-900 truncate">Main Playbook</span>
         </div>
+
+        {/* Full screen. The Main Playbook is the widest graph in the product;
+            editing it inside a padded panel wasted most of the window. */}
+        <button
+          onClick={() => setFullscreen((v) => !v)}
+          data-testid="playbook-fullscreen-toggle"
+          title={fullscreen ? "Exit full screen (Esc)" : "Full screen"}
+          aria-label={fullscreen ? "Exit full screen" : "Full screen"}
+          aria-pressed={fullscreen}
+          className="px-2.5 py-1.5 rounded-md text-xs font-medium text-gray-600 hover:bg-black/[0.04] transition flex items-center gap-1.5 shrink-0"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            {fullscreen ? (
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" />
+            ) : (
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+            )}
+          </svg>
+        </button>
 
         <button
           onClick={() => setTemplateGalleryOpen(true)}
@@ -1601,6 +1644,12 @@ function MainPlaybookEditorInner({ onBack, embedded }: Props) {
             }}
             fitView
             fitViewOptions={{ padding: 0.2 }}
+            // Triggers anchor the LEFT edge: panning stops there and nodes
+            // cannot be dragged left of it, while rightward growth and zoom
+            // stay free. Graph-space, so it survives zoom and RTL. Same shared
+            // helper the chatbot canvas uses.
+            translateExtent={playbookExtent}
+            nodeExtent={playbookExtent}
             snapToGrid
             snapGrid={[15, 15]}
             // Delete handling is owned by our window keydown listener so it
