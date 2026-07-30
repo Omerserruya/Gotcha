@@ -32,11 +32,27 @@ export interface OrderItem {
   imageUrl: string | null; // best-effort; Shopify order line items omit product image
 }
 
+/**
+ * Who the event came from (spec §24).
+ *
+ * "shopify" is the store's own record. "gotcha" is something this product did
+ * or was asked to do. Blending them would let a GOTCHA request read as a
+ * Shopify fact, which is precisely the confusion an agent reading a refund
+ * history cannot afford.
+ */
+export type TimelineSource = "shopify" | "gotcha";
+export type TimelineActor = "ai" | "agent" | "system";
+
 export interface TimelineMilestone {
   key: string;
   label: string;
   at: string | null; // ISO; null when the milestone is reached but Shopify gave no timestamp
   reached: boolean;
+  /** Defaults to "shopify" when absent, which is what every existing event is. */
+  source?: TimelineSource;
+  actor?: TimelineActor;
+  /** True for a failed or rejected step, so the UI can show it as such. */
+  failed?: boolean;
 }
 
 export interface OrderLineDetail {
@@ -149,6 +165,9 @@ export interface CommerceCapabilities {
    *  scope without the other. */
   canTag: boolean;
   canNote: boolean;
+  /** Resend the order confirmation email. A customer-visible side effect, so
+   *  it is its own grant rather than riding on read access. */
+  canNotify: boolean;
   grantedScopes: string[];
   lastCheckedAt: string | null;
   /** Scopes required-but-missing for an otherwise-available action. */
@@ -219,11 +238,11 @@ export interface AICommerceSnapshot {
  * verified customer directly and take no order id at all - there is nothing
  * client-supplied to forge.
  */
-export type CommerceOrderActionKind = "cancel" | "refund";
+export type CommerceOrderActionKind = "cancel" | "refund" | "resend_confirmation";
 export type CommerceCustomerActionKind = "add_tag" | "remove_tag" | "add_note";
 export type CommerceActionKind = CommerceOrderActionKind | CommerceCustomerActionKind;
 
-export const COMMERCE_ORDER_ACTIONS: CommerceOrderActionKind[] = ["cancel", "refund"];
+export const COMMERCE_ORDER_ACTIONS: CommerceOrderActionKind[] = ["cancel", "refund", "resend_confirmation"];
 export const COMMERCE_CUSTOMER_ACTIONS: CommerceCustomerActionKind[] = ["add_tag", "remove_tag", "add_note"];
 
 export function isCustomerScopedAction(action: string): action is CommerceCustomerActionKind {

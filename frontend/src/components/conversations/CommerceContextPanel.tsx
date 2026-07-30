@@ -28,7 +28,8 @@ import {
   type OrderDetail,
 } from "@/lib/api-commerce";
 
-const NAV_LIMIT = 25; // how many recent orders to load for navigation
+const NAV_LIMIT = 25;      // how many recent orders to load initially
+const NAV_LIMIT_STEP = 25; // how many more each "load more" brings
 /** Message scope for customer-level actions, which have no order id. */
 const CUSTOMER_SCOPE = "__customer__";
 
@@ -38,6 +39,14 @@ const toneText: Record<StatusChip["tone"], string> = {
   neutral: "text-gray-500",
   danger: "text-rose-600",
 };
+
+/** "Showing 25 of 40" - stated, never implied. */
+function L_showing(t: (k: string) => string, shown: number, total: number): string {
+  const tpl = t("commerce.showingOf");
+  return tpl && !tpl.startsWith("commerce.")
+    ? tpl.replace("{shown}", String(shown)).replace("{total}", String(total))
+    : `Showing ${shown} of ${total}`;
+}
 
 function money(m: Money | null | undefined): string {
   if (!m) return "";
@@ -65,13 +74,14 @@ export function CommerceContextPanel({ conversationId, token, onState }: Props) 
   const [tags, setTags] = useState<string[] | null>(null);
   const [actionMsg, setActionMsg] = useState<{ orderId: string; text: string; tone: StatusChip["tone"] } | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [limit, setLimit] = useState(NAV_LIMIT);
 
   const load = useCallback(
     async (refresh = false) => {
       if (!token || !conversationId) return;
       setLoading(true);
       try {
-        const data = await fetchCommerceContext(token, conversationId, { refresh, locale, limit: NAV_LIMIT });
+        const data = await fetchCommerceContext(token, conversationId, { refresh, locale, limit });
         setResp(data);
       } catch {
         setResp({ state: "unavailable", retryable: true });
@@ -79,7 +89,7 @@ export function CommerceContextPanel({ conversationId, token, onState }: Props) 
         setLoading(false);
       }
     },
-    [token, conversationId, locale],
+    [token, conversationId, locale, limit],
   );
 
   useEffect(() => {
@@ -91,6 +101,7 @@ export function CommerceContextPanel({ conversationId, token, onState }: Props) 
   useEffect(() => {
     setSelectedIndex(0);
     setTags(null);
+    setLimit(NAV_LIMIT);
   }, [conversationId]);
 
   useEffect(() => {
@@ -292,10 +303,29 @@ export function CommerceContextPanel({ conversationId, token, onState }: Props) 
           setMenuOpen={setMenuOpen}
           msg={actionMsg?.orderId === order.orderId ? actionMsg : null}
           onAction={(action) => setConfirm({ order, action })}
+          onResend={() => runOrderAction(order, "resend_confirmation" as any, {})}
           onRefresh={() => load(true)}
           dateLocale={dateLocale}
           t={t}
         />
+      )}
+
+      {/* The list is capped, so say so rather than letting "25" read as "all". */}
+      {summary && total > 0 && summary.orderCount > total && (
+        <div className="px-3 pb-2 flex items-center justify-between gap-2" data-testid="orders-truncated">
+          <span className="text-[10px] text-gray-400 tabular-nums">
+            {L_showing(t, total, summary.orderCount)}
+          </span>
+          <button
+            type="button"
+            data-testid="orders-load-more"
+            disabled={loading}
+            onClick={() => setLimit((n) => n + NAV_LIMIT_STEP)}
+            className="text-[10px] font-medium px-2 py-1 rounded-md bg-white border border-gray-200 text-gray-700 hover:border-indigo-300 disabled:opacity-40"
+          >
+            {t("commerce.loadMore") || "Load more"}
+          </button>
+        </div>
       )}
 
       {/* Customer-record actions: tags + internal note. Separate block because
@@ -383,7 +413,7 @@ function StatusLine({ order, t }: { order: OrderCard; t: (k: string) => string }
 }
 
 function SingleOrderCard({
-  order, caps, busy, menuOpen, setMenuOpen, msg, onAction, onRefresh, dateLocale, t,
+  order, caps, busy, menuOpen, setMenuOpen, msg, onAction, onResend, onRefresh, dateLocale, t,
 }: {
   order: OrderCard;
   caps: CommerceContext["capabilities"] | null;
@@ -392,6 +422,7 @@ function SingleOrderCard({
   setMenuOpen: (v: boolean) => void;
   msg: { text: string; tone: StatusChip["tone"] } | null;
   onAction: (a: "cancel" | "refund") => void;
+  onResend: () => void;
   onRefresh: () => void;
   dateLocale: string;
   t: (k: string, v?: Record<string, string>) => string;
@@ -474,6 +505,18 @@ function SingleOrderCard({
                   >
                     {t("commerce.copyOrderNumber") || "Copy order number"}
                   </button>
+                  {/* No options to choose, so no modal - but it does email the
+                      customer, so it still goes through the policy chain. */}
+                  {caps?.canNotify && !order.cancelled && (
+                    <button
+                      data-testid="resend-confirmation"
+                      disabled={busy}
+                      className="block w-full text-start px-3 py-1.5 text-gray-700 hover:bg-gray-50 disabled:opacity-40"
+                      onClick={() => { setMenuOpen(false); onResend(); }}
+                    >
+                      {t("commerce.resendConfirmation") || "Resend confirmation email"}
+                    </button>
+                  )}
                 </div>
               </>
             )}
@@ -489,21 +532,37 @@ function SingleOrderCard({
 
         {order.detail && <OrderDetailSection detail={order.detail} dateLocale={dateLocale} t={t} />}
 
-        {/* Order lifecycle timeline (verified Shopify data - not Shopify's native Timeline) */}
+        {/* Order lifecycle timeline. Shopify's own record and GOTCHA's actions
+            are kept visually apart (spec §24): a request this product made must
+            never read as something the store reports. */}
         {reached.length > 0 && (
           <div className="px-3 py-2.5 border-t border-gray-100/70 bg-white/60">
             <ul className="space-y-1.5">
-              {reached.map((m, i) => (
-                <li key={m.key} className="flex items-center gap-2">
-                  <span className={clsx("w-2 h-2 rounded-full shrink-0", i === reached.length - 1 ? "bg-emerald-500" : "bg-emerald-300")} />
-                  <span className="text-[11px] text-gray-700">
-                    {m.label}
-                    {m.at && (i === 0 || m.key === "cancelled" || m.key === "refunded") && (
-                      <span className="text-gray-400"> · {new Date(m.at).toLocaleDateString(dateLocale, { day: "numeric", month: "short", year: "numeric" })}</span>
-                    )}
-                  </span>
-                </li>
-              ))}
+              {reached.map((m, i) => {
+                const gotcha = m.source === "gotcha";
+                return (
+                  <li key={m.key} className="flex items-center gap-2" data-testid={gotcha ? "timeline-gotcha" : "timeline-shopify"}>
+                    <span
+                      className={clsx(
+                        "w-2 h-2 shrink-0",
+                        gotcha ? "rounded-[2px] rotate-45" : "rounded-full",
+                        m.failed ? "bg-rose-400" : gotcha ? "bg-indigo-400" : i === reached.length - 1 ? "bg-emerald-500" : "bg-emerald-300",
+                      )}
+                    />
+                    <span className={clsx("text-[11px]", m.failed ? "text-rose-600" : gotcha ? "text-indigo-700" : "text-gray-700")}>
+                      {gotcha && (
+                        <span className="text-[9px] font-semibold uppercase tracking-wide text-indigo-400 me-1">
+                          {m.actor === "ai" ? t("commerce.byAi") || "AI" : t("commerce.byGotcha") || "GOTCHA"}
+                        </span>
+                      )}
+                      {m.label}
+                      {m.at && (gotcha || i === 0 || m.key === "cancelled" || m.key === "refunded") && (
+                        <span className="text-gray-400"> · {new Date(m.at).toLocaleDateString(dateLocale, { day: "numeric", month: "short", year: "numeric" })}</span>
+                      )}
+                    </span>
+                  </li>
+                );
+              })}
             </ul>
           </div>
         )}

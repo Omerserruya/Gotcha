@@ -192,6 +192,8 @@ export type {
   StatusChip,
   OrderItem,
   TimelineMilestone,
+  TimelineSource,
+  TimelineActor,
   OrderCard,
   OrderDetail,
   OrderLineDetail,

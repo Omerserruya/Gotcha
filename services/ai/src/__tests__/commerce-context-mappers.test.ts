@@ -108,7 +108,7 @@ describe("capabilities gate on granted scopes + agent permission (tests 11, 12)"
   it("no write_orders scope disables cancel/refund even for a permitted agent", () => {
     const caps = buildCapabilities(
       { grantedScopes: ["read_orders"] },
-      { canOpen: true, canCancel: true, canRefund: true, canTag: true, canNote: true },
+      { canOpen: true, canCancel: true, canRefund: true, canTag: true, canNote: true, canNotify: true },
     );
     expect(caps.canOpen).toBe(true);
     expect(caps.canCancel).toBe(false);
@@ -118,7 +118,7 @@ describe("capabilities gate on granted scopes + agent permission (tests 11, 12)"
   it("agent without the permission cannot cancel/refund even with the scope", () => {
     const caps = buildCapabilities(
       { grantedScopes: ["read_orders", "write_orders"] },
-      { canOpen: false, canCancel: false, canRefund: false, canTag: false, canNote: false },
+      { canOpen: false, canCancel: false, canRefund: false, canTag: false, canNote: false, canNotify: false },
     );
     expect(caps.canCancel).toBe(false);
     expect(caps.canRefund).toBe(false);
@@ -127,7 +127,7 @@ describe("capabilities gate on granted scopes + agent permission (tests 11, 12)"
   it("permitted agent + order write scope enables the ORDER actions", () => {
     const caps = buildCapabilities(
       { grantedScopes: ["read_orders", "write_orders"] },
-      { canOpen: true, canCancel: true, canRefund: true, canTag: true, canNote: true },
+      { canOpen: true, canCancel: true, canRefund: true, canTag: true, canNote: true, canNotify: true },
     );
     expect(caps.canCancel).toBe(true);
     expect(caps.canRefund).toBe(true);
@@ -142,7 +142,7 @@ describe("capabilities gate on granted scopes + agent permission (tests 11, 12)"
   it("both scopes granted → nothing missing", () => {
     const caps = buildCapabilities(
       { grantedScopes: ["read_orders", "write_orders", "write_customers"] },
-      { canOpen: true, canCancel: true, canRefund: true, canTag: true, canNote: true },
+      { canOpen: true, canCancel: true, canRefund: true, canTag: true, canNote: true, canNotify: true },
     );
     expect(caps.canTag).toBe(true);
     expect(caps.canNote).toBe(true);
@@ -154,7 +154,7 @@ describe("capabilities gate on granted scopes + agent permission (tests 11, 12)"
     // an admin to re-authorize the store for no reason.
     const caps = buildCapabilities(
       { grantedScopes: ["read_orders", "write_orders"] },
-      { canOpen: true, canCancel: true, canRefund: true, canTag: false, canNote: false },
+      { canOpen: true, canCancel: true, canRefund: true, canTag: false, canNote: false, canNotify: false },
     );
     expect(caps.missingScopes).toHaveLength(0);
   });

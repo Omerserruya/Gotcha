@@ -177,6 +177,62 @@ function buildTimeline(order: any, refunded: number, total: number, locale: Loca
   return out;
 }
 
+
+/**
+ * GOTCHA's own action history for one order (spec §24).
+ *
+ * Read straight from the audit log, which is the record of what this product
+ * actually did - so nothing here is fabricated, and an action that was only
+ * REQUESTED never appears as one that happened. Marked source "gotcha" so the
+ * panel can keep it visually apart from Shopify's own events.
+ */
+export async function gotchaOrderEvents(
+  tenantId: string,
+  orderId: string,
+  locale: Locale,
+): Promise<TimelineMilestone[]> {
+  const L = (en: string, hebrew: string) => (he(locale) ? hebrew : en);
+  const rows = await (prisma as any).auditLog
+    .findMany({
+      where: {
+        tenantId,
+        targetType: "order",
+        targetId: String(orderId),
+        action: { startsWith: "commerce.order_action_" },
+      },
+      orderBy: { createdAt: "asc" },
+      select: { action: true, createdAt: true, actorType: true, metadata: true },
+      take: 50,
+    })
+    .catch(() => [] as any[]);
+
+  const LABELS: Record<string, { en: string; he: string; failed?: boolean }> = {
+    "commerce.order_action_hitl_created": { en: "Approval requested", he: "נשלח לאישור" },
+    "commerce.order_action_executed": { en: "Action executed", he: "הפעולה בוצעה" },
+    "commerce.order_action_denied": { en: "Action denied by policy", he: "הפעולה נדחתה על ידי המדיניות", failed: true },
+    "commerce.order_action_failed": { en: "Action failed", he: "הפעולה נכשלה", failed: true },
+    "commerce.order_action_unverified": { en: "Action could not be verified", he: "לא ניתן לאמת את הפעולה", failed: true },
+  };
+
+  return (rows as any[])
+    .map((r, i) => {
+      const spec = LABELS[r.action];
+      if (!spec) return null;
+      const what = String(r.metadata?.action ?? "");
+      const suffix = what ? ` (${what})` : "";
+      return {
+        key: `gotcha_${i}_${r.action}`,
+        label: `${L(spec.en, spec.he)}${suffix}`,
+        at: r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
+        reached: true,
+        source: "gotcha" as const,
+        actor: (r.actorType === "user" ? "agent" : r.actorType === "ai" ? "ai" : "system") as any,
+        ...(spec.failed ? { failed: true } : {}),
+      };
+    })
+    .filter(Boolean) as TimelineMilestone[];
+}
+
 // ── Order card mapping ──────────────────────────────────────────────────────
 
 const MAX_ITEMS_SHOWN = 1;
@@ -337,7 +393,7 @@ function mapOrderCard(order: any, shopDomain: string, canWrite: boolean, locale:
 
 function buildCapabilities(
   config: Record<string, any>,
-  agent: { canOpen: boolean; canCancel: boolean; canRefund: boolean; canTag: boolean; canNote: boolean },
+  agent: { canOpen: boolean; canCancel: boolean; canRefund: boolean; canTag: boolean; canNote: boolean; canNotify: boolean },
 ): CommerceCapabilities {
   const granted: string[] = Array.isArray(config?.grantedScopes) ? config.grantedScopes : [];
   const hasRead = granted.length === 0 || granted.includes("read_orders");
@@ -355,6 +411,9 @@ function buildCapabilities(
     canRefund: agent.canRefund && hasWrite,
     canTag: agent.canTag && hasCustomerWrite,
     canNote: agent.canNote && hasCustomerWrite,
+    // Resending a confirmation is an order-side action, so it rides on the
+    // order write scope rather than the customer one.
+    canNotify: agent.canNotify && hasWrite,
     grantedScopes: granted,
     lastCheckedAt: config?.scopesCheckedAt ?? null,
     missingScopes: missing,
@@ -399,6 +458,7 @@ export interface CommerceAgentPermissions {
   canRefund: boolean;
   canTag: boolean;
   canNote: boolean;
+  canNotify: boolean;
 }
 
 /**
@@ -504,6 +564,17 @@ async function buildCommerceContextFresh(opts: {
   const imageByProduct = await fetchProductImages(opts.tenantId, opts.conversationId, rawOrders);
   const recentOrders = rawOrders.map((o) => mapOrderCard(o, shopDomain, canWrite, locale, imageByProduct));
 
+  // Merge in what GOTCHA itself did to these orders (spec §24). One batched
+  // read for the whole page, and only for orders that actually have events -
+  // the timeline stays Shopify-only when this product has never touched them.
+  const gotchaEvents = await Promise.all(
+    recentOrders.map((o) => gotchaOrderEvents(opts.tenantId, o.orderId, locale).catch(() => [])),
+  );
+  recentOrders.forEach((o, i) => {
+    const evts = gotchaEvents[i];
+    if (evts.length) o.timeline = [...o.timeline, ...evts];
+  });
+
   // 6. Summary (shop-currency provider aggregate; never cross-currency summed).
   const orderCount = Number(customer?.orders_count ?? rawOrders.length) || 0;
   const shopCurrency = String(customer?.currency || rawOrders[0]?.currency || "USD");
@@ -593,7 +664,12 @@ export async function orderToCard(
   const conn = await loadConnection({ tenantId, slug: "shopify" });
   const shopDomain = String(conn?.config?.shopDomain || "").trim() || "unknown.myshopify.com";
   const imageByProduct = await fetchProductImages(tenantId, undefined, [order]);
-  return mapOrderCard(order, shopDomain, canWrite, l, imageByProduct);
+  const card = mapOrderCard(order, shopDomain, canWrite, l, imageByProduct);
+  // Same merge on the post-action refresh path: an executed action must not
+  // disappear from the timeline the instant the card is re-read.
+  const evts = await gotchaOrderEvents(tenantId, card.orderId, l).catch(() => []);
+  if (evts.length) card.timeline = [...card.timeline, ...evts];
+  return card;
 }
 
 // Exposed for unit tests (pure mappers).

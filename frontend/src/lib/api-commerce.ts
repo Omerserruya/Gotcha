@@ -13,7 +13,15 @@ export interface Money { amount: string; currency: string }
 export type ChipTone = "positive" | "warning" | "neutral" | "danger";
 export interface StatusChip { key: string; label: string; tone: ChipTone }
 export interface OrderItem { title: string; quantity: number; imageUrl: string | null }
-export interface TimelineMilestone { key: string; label: string; at: string | null; reached: boolean }
+export type TimelineSource = "shopify" | "gotcha";
+export type TimelineActor = "ai" | "agent" | "system";
+export interface TimelineMilestone {
+  key: string; label: string; at: string | null; reached: boolean;
+  /** Absent means Shopify's own record. */
+  source?: TimelineSource;
+  actor?: TimelineActor;
+  failed?: boolean;
+}
 
 export interface OrderCard {
   orderId: string;
@@ -74,6 +82,7 @@ export interface CommerceCapabilities {
   /** Customer-record actions. Need write_customers, not write_orders. */
   canTag: boolean;
   canNote: boolean;
+  canNotify: boolean;
   grantedScopes: string[];
   lastCheckedAt: string | null;
   missingScopes: string[];
@@ -106,7 +115,7 @@ export type CommerceActionResponse =
   | { state: "executed"; order: OrderCard }
   | { state: "executed_customer"; tags?: string[]; noteAdded?: boolean };
 
-export type CommerceOrderAction = "cancel" | "refund";
+export type CommerceOrderAction = "cancel" | "refund" | "resend_confirmation";
 export type CommerceCustomerAction = "add_tag" | "remove_tag" | "add_note";
 export type CommerceAction = CommerceOrderAction | CommerceCustomerAction;
 

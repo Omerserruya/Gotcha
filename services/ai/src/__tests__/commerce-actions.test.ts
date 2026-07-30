@@ -52,7 +52,7 @@ const PAID_ORDER = {
 function baseOpts(overrides: any = {}) {
   return {
     tenantId: "t1", conversationId: "c1", actorUserId: "u1",
-    perms: { canCancel: true, canRefund: true, canTag: true, canNote: true },
+    perms: { canCancel: true, canRefund: true, canTag: true, canNote: true, canNotify: true },
     request: { orderId: "5001", action: "refund" as const, idempotencyKey: "idem-1", params: {} },
     correlationId: "corr1",
     ...overrides,
@@ -187,7 +187,7 @@ describe("execution verification (tests 18, 19, 20)", () => {
 describe("customer-scoped actions", () => {
   const customerOpts = (action: string, params: any = {}, perms: any = {}) =>
     baseOpts({
-      perms: { canCancel: true, canRefund: true, canTag: true, canNote: true, ...perms },
+      perms: { canCancel: true, canRefund: true, canTag: true, canNote: true, canNotify: true, ...perms },
       request: { action, idempotencyKey: "idem-c1", params },
     });
 
@@ -305,5 +305,61 @@ describe("customer-scoped actions", () => {
     );
     expect(res.state).toBe("denied");
     expect(res.reason).toBe("orderId_required");
+  });
+});
+
+describe("resend confirmation", () => {
+  const resendOpts = (perms: any = {}) =>
+    baseOpts({
+      perms: { canCancel: true, canRefund: true, canTag: true, canNote: true, canNotify: true, ...perms },
+      request: { orderId: "5001", action: "resend_confirmation", idempotencyKey: "idem-r1", params: {} },
+    });
+
+  beforeEach(() => {
+    resolveVerifiedMock.mockResolvedValue("999");
+    auditFindFirstMock.mockResolvedValue(null);
+    evalPolicyMock.mockResolvedValue({ decision: "ALLOWED", reasonCodes: [] });
+    revalidateMock.mockResolvedValue({ ok: true });
+  });
+
+  it("checks its own permission, not the refund one", async () => {
+    const res: any = await executeCommerceAction(resendOpts({ canNotify: false }) as any);
+    expect(res.state).toBe("denied");
+    expect(res.reason).toBe("permission_denied");
+  });
+
+  it("still proves the order belongs to this conversation's customer", async () => {
+    execMock.mockResolvedValue({ ok: true, result: { ...PAID_ORDER, customer: { id: 12345 } } });
+    const res: any = await executeCommerceAction(resendOpts() as any);
+    expect(res.state).toBe("denied");
+    expect(res.reason).toBe("order_not_owned");
+  });
+
+  it("refuses on a cancelled order", async () => {
+    execMock.mockResolvedValue({ ok: true, result: { ...PAID_ORDER, cancelled_at: "2026-07-20T00:00:00Z" } });
+    const res: any = await executeCommerceAction(resendOpts() as any);
+    expect(res.state).toBe("unavailable");
+    expect(res.reason).toBe("already_cancelled");
+  });
+
+  it("sends only the order id, and never a refund amount", async () => {
+    execMock.mockResolvedValue({ ok: true, result: PAID_ORDER });
+    const res: any = await executeCommerceAction(resendOpts() as any);
+    expect(res.state).toBe("executed");
+    const call = execMock.mock.calls.find((c: any[]) => c[0].toolFunctionName === "shopify.resend_confirmation")![0];
+    expect(call.args).toEqual({ order_id: "5001" });
+  });
+
+  it("does not pretend to verify an email it cannot observe", async () => {
+    // The order state is unchanged by design, so a "did it land" re-read would
+    // be meaningless. The provider's acknowledgement is the whole result - and
+    // a provider failure must still be reported as one.
+    execMock.mockImplementation(async ({ toolFunctionName }: any) =>
+      toolFunctionName === "shopify.resend_confirmation"
+        ? { ok: false, reason: "smtp_rejected" }
+        : { ok: true, result: PAID_ORDER });
+    const res: any = await executeCommerceAction(resendOpts() as any);
+    expect(res.state).toBe("unavailable");
+    expect(res.reason).toBe("smtp_rejected");
   });
 });

@@ -416,7 +416,12 @@
     "subtotal": "Subtotal",
     "tax": "Tax",
     "track": "Track",
-    "tracking": "Tracking"
+    "tracking": "Tracking",
+    "byAi": "AI",
+    "byGotcha": "GOTCHA",
+    "resendConfirmation": "Resend confirmation email",
+    "loadMore": "Load more",
+    "showingOf": "Showing {shown} of {total}"
   },
   "crmPanel": {
     "title": "CRM Context",

@@ -47,7 +47,7 @@ const order = (over: Record<string, any> = {}) => ({
 });
 
 const caps = (over: Record<string, any> = {}) => ({
-  canOpen: true, canCancel: true, canRefund: true, canTag: true, canNote: true,
+  canOpen: true, canCancel: true, canRefund: true, canTag: true, canNote: true, canNotify: true,
   grantedScopes: ["read_orders", "write_orders", "write_customers"],
   lastCheckedAt: null, missingScopes: [], ...over,
 });
@@ -410,5 +410,109 @@ describe("order detail is progressive, and never invents money", () => {
     renderPanel();
     fireEvent.click(await screen.findByTestId("order-detail-toggle"));
     expect(screen.getByTestId("order-refunds").textContent).toContain("25.00");
+  });
+});
+
+describe("timeline keeps Shopify's record apart from GOTCHA's actions (§24)", () => {
+  const withTimeline = (timeline: any[]) => {
+    const c = okContext();
+    (c.data.recentOrders[0] as any).timeline = timeline;
+    fetchCommerceContext.mockResolvedValue(c);
+  };
+
+  it("marks a GOTCHA action differently from a Shopify event", async () => {
+    withTimeline([
+      { key: "placed", label: "Order placed", at: "2026-07-01T00:00:00.000Z", reached: true },
+      { key: "g1", label: "Approval requested (refund)", at: "2026-07-02T00:00:00.000Z", reached: true, source: "gotcha", actor: "agent" },
+    ]);
+    renderPanel();
+    expect((await screen.findAllByTestId("timeline-shopify")).length).toBe(1);
+    expect(screen.getAllByTestId("timeline-gotcha").length).toBe(1);
+    // The reader can see WHO, not just what.
+    expect(screen.getByTestId("timeline-gotcha").textContent).toContain("commerce.byGotcha");
+  });
+
+  it("attributes an AI-initiated action to the AI", async () => {
+    withTimeline([{ key: "g1", label: "Action executed (refund)", at: "2026-07-02T00:00:00.000Z", reached: true, source: "gotcha", actor: "ai" }]);
+    renderPanel();
+    expect((await screen.findByTestId("timeline-gotcha")).textContent).toContain("commerce.byAi");
+  });
+
+  it("shows a failed step as failed rather than as another green tick", async () => {
+    withTimeline([{ key: "g1", label: "Action failed (refund)", at: "2026-07-02T00:00:00.000Z", reached: true, source: "gotcha", failed: true }]);
+    renderPanel();
+    const li = await screen.findByTestId("timeline-gotcha");
+    expect(li.querySelector(".text-rose-600") || li.className.includes("rose") || li.innerHTML.includes("rose")).toBeTruthy();
+  });
+
+  it("leaves a Shopify-only timeline untouched", async () => {
+    withTimeline([{ key: "placed", label: "Order placed", at: "2026-07-01T00:00:00.000Z", reached: true }]);
+    renderPanel();
+    await screen.findByTestId("timeline-shopify");
+    expect(screen.queryByTestId("timeline-gotcha")).toBeNull();
+  });
+});
+
+describe("resend confirmation is a real action, gated like one", () => {
+  const openMenu = async () => {
+    renderPanel();
+    await screen.findByText("#1001");
+    fireEvent.click(screen.getByLabelText("commerce.more"));
+  };
+
+  it("sends the order-scoped action with no extra params", async () => {
+    runCommerceAction.mockResolvedValue({ state: "executed", order: order() });
+    await openMenu();
+    fireEvent.click(await screen.findByTestId("resend-confirmation"));
+    await waitFor(() => expect(runCommerceAction).toHaveBeenCalled());
+    const input = runCommerceAction.mock.calls[0][2];
+    expect(input.action).toBe("resend_confirmation");
+    expect(input.orderId).toBe("gid://1");
+    expect(input.params.amount).toBeUndefined();
+  });
+
+  it("is hidden without the permission", async () => {
+    fetchCommerceContext.mockResolvedValue(okContext({ capabilities: caps({ canNotify: false }) }));
+    await openMenu();
+    expect(screen.queryByTestId("resend-confirmation")).toBeNull();
+  });
+
+  it("is hidden on a cancelled order - re-confirming it would be worse than nothing", async () => {
+    fetchCommerceContext.mockResolvedValue(okContext({ recentOrders: [order({ cancelled: true })] }));
+    await openMenu();
+    expect(screen.queryByTestId("resend-confirmation")).toBeNull();
+  });
+});
+
+describe("the order list never pretends to be complete when it is not (§15)", () => {
+  const manyOrders = (loaded: number, totalCount: number) => {
+    const c = okContext();
+    c.data.summary.orderCount = totalCount;
+    c.data.recentOrders = Array.from({ length: loaded }, (_, i) =>
+      order({ orderId: `gid://${i}`, orderNumber: `#10${String(i).padStart(2, "0")}` }),
+    );
+    fetchCommerceContext.mockResolvedValue(c);
+  };
+
+  it("says how many of how many are shown", async () => {
+    manyOrders(25, 40);
+    renderPanel();
+    expect((await screen.findByTestId("orders-truncated")).textContent).toContain("25");
+    expect(screen.getByTestId("orders-truncated").textContent).toContain("40");
+  });
+
+  it("asks the server for more rather than pretending it already has them", async () => {
+    manyOrders(25, 40);
+    renderPanel();
+    fireEvent.click(await screen.findByTestId("orders-load-more"));
+    await waitFor(() => expect(fetchCommerceContext).toHaveBeenCalledTimes(2));
+    expect(fetchCommerceContext.mock.calls[1][2].limit).toBe(50);
+  });
+
+  it("says nothing when the whole list is already loaded", async () => {
+    manyOrders(3, 3);
+    renderPanel();
+    await screen.findByText("#1000");
+    expect(screen.queryByTestId("orders-truncated")).toBeNull();
   });
 });

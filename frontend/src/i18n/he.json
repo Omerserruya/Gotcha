@@ -416,7 +416,12 @@
     "subtotal": "סכום ביניים",
     "tax": "מס",
     "track": "מעקב",
-    "tracking": "מעקב משלוח"
+    "tracking": "מעקב משלוח",
+    "byAi": "AI",
+    "byGotcha": "GOTCHA",
+    "resendConfirmation": "שליחה חוזרת של מייל האישור",
+    "loadMore": "טעינת עוד",
+    "showingOf": "מוצגות {shown} מתוך {total}"
   },
   "crmPanel": {
     "title": "הקשר CRM",

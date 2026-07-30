@@ -114,6 +114,7 @@ export const PERMISSIONS: readonly PermissionDef[] = [
   // different grant from moving their money.
   p("customer:commerce:tag", "customer", "runtime", true, "Tag Customers", "Add or remove tags on a customer's connected-store record."),
   p("customer:commerce:note", "customer", "runtime", true, "Note on Customers", "Add an internal note to a customer's connected-store record."),
+  p("customer:commerce:notify", "customer", "runtime", true, "Resend Order Emails", "Resend a customer's order confirmation email from the connected store."),
 
   // ── CRM ─────────────────────────────────────────────────────
   p("crm:contacts:read", "crm", "runtime", true, "Read CRM Contacts", "View CRM contacts."),
