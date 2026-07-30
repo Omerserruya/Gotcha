@@ -497,3 +497,65 @@ describe("the order list never pretends to be complete when it is not (§15)", (
     expect(screen.queryByTestId("orders-truncated")).toBeNull();
   });
 });
+
+describe("an action removed by order state explains itself (§21)", () => {
+  const withOrder = (over: Record<string, any>, capsOver: Record<string, any> = {}) => {
+    fetchCommerceContext.mockResolvedValue(
+      okContext({ recentOrders: [order(over)], capabilities: caps(capsOver) }),
+    );
+  };
+
+  it("says why Cancel is missing on a fulfilled order", async () => {
+    // Hiding the button and leaving nothing behind reads as a broken feature.
+    withOrder({ eligibility: { cancellable: false, refundable: true, reasonIfNot: "already_fulfilled" } });
+    renderPanel();
+    await screen.findByText("#1001");
+    expect(screen.queryByText("commerce.cancel")).toBeNull();
+    expect(screen.getByTestId("eligibility-note").textContent).toContain("commerce.reasonFulfilled");
+  });
+
+  it("says why both are missing on a cancelled order", async () => {
+    withOrder({ eligibility: { cancellable: false, refundable: false, reasonIfNot: "already_cancelled" } });
+    renderPanel();
+    await screen.findByText("#1001");
+    expect(screen.getByTestId("eligibility-note").textContent).toContain("commerce.reasonCancelled");
+  });
+
+  it("stays quiet when the actions are available", async () => {
+    withOrder({ eligibility: { cancellable: true, refundable: true } });
+    renderPanel();
+    await screen.findByText("#1001");
+    expect(screen.queryByTestId("eligibility-note")).toBeNull();
+  });
+
+  it("stays quiet when the agent never had the permission anyway", async () => {
+    // Explaining why they cannot cancel, to someone who may never cancel, is
+    // noise about a capability they do not have.
+    withOrder(
+      { eligibility: { cancellable: false, refundable: false, reasonIfNot: "already_fulfilled" } },
+      { canCancel: false, canRefund: false },
+    );
+    renderPanel();
+    await screen.findByText("#1001");
+    expect(screen.queryByTestId("eligibility-note")).toBeNull();
+  });
+});
+
+describe("status chips", () => {
+  it("does not repeat a status a fully-refunded order reports twice", async () => {
+    // financial_status is "refunded" AND the refund chip is "refunded", so the
+    // row read "Refunded · Refunded" and React saw a duplicate key.
+    fetchCommerceContext.mockResolvedValue(
+      okContext({
+        recentOrders: [order({
+          financial: chip("refunded"),
+          refund: chip("refunded"),
+          eligibility: { cancellable: false, refundable: false, reasonIfNot: "already_refunded" },
+        })],
+      }),
+    );
+    renderPanel();
+    await screen.findByText("#1001");
+    expect(screen.getAllByText("refunded").length).toBe(1);
+  });
+});

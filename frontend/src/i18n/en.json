@@ -423,7 +423,11 @@
     "loadMore": "Load more",
     "showingOf": "Showing {shown} of {total}",
     "alreadyFulfilled": "Fulfilled orders cannot be cancelled",
-    "notRestocked": "items were not restocked (no inventory location)"
+    "notRestocked": "items were not restocked (no inventory location)",
+    "reasonFulfilled": "Cannot cancel a fulfilled order",
+    "reasonCancelled": "This order is already cancelled",
+    "reasonRefunded": "This order is already fully refunded",
+    "reasonScope": "The store connection is missing write permissions"
   },
   "crmPanel": {
     "title": "CRM Context",

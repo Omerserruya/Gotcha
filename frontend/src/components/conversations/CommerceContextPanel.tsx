@@ -48,6 +48,25 @@ function L_showing(t: (k: string) => string, shown: number, total: number): stri
     : `Showing ${shown} of ${total}`;
 }
 
+/** Why an action is not offered, in the reader's language. */
+function eligibilityReason(
+  reason: string | undefined,
+  t: (k: string) => string,
+): string | null {
+  switch (reason) {
+    case "already_fulfilled":
+      return t("commerce.reasonFulfilled") || "Cannot cancel a fulfilled order";
+    case "already_cancelled":
+      return t("commerce.reasonCancelled") || "This order is already cancelled";
+    case "already_refunded":
+      return t("commerce.reasonRefunded") || "This order is already fully refunded";
+    case "missing_write_scope":
+      return t("commerce.reasonScope") || "The store connection is missing write permissions";
+    default:
+      return null;
+  }
+}
+
 function money(m: Money | null | undefined): string {
   if (!m) return "";
   return `${m.currency} ${m.amount}`;
@@ -407,9 +426,14 @@ function StatusLine({ order, t }: { order: OrderCard; t: (k: string) => string }
     if (order.shipping && order.shipping.key === "delivered") parts.push(order.shipping);
   }
   if (!parts.length) return null;
+  // A fully-refunded order yields the SAME chip key twice - financial_status is
+  // "refunded" and so is the refund chip - which both duplicated the label on
+  // screen and gave React two children with one key.
+  const seen = new Set<string>();
+  const unique = parts.filter((p) => (seen.has(p.key) ? false : (seen.add(p.key), true)));
   return (
     <div className="text-[11px] font-medium mt-1.5 flex flex-wrap items-center gap-x-1 gap-y-0.5">
-      {parts.map((p, i) => (
+      {unique.map((p, i) => (
         <span key={p.key} className="inline-flex items-center">
           {i > 0 && <span className="text-gray-300 mx-1">·</span>}
           <span className={toneText[p.tone]}>{p.label}</span>
@@ -435,6 +459,14 @@ function SingleOrderCard({
 }) {
   const item = order.items[0];
   const reached = order.timeline.filter((m) => m.reached);
+
+  // Only speak about an action the agent could otherwise have taken: telling
+  // someone why they cannot cancel, when they were never allowed to cancel,
+  // is noise about a capability they do not have.
+  const blocked =
+    (caps?.canCancel && !order.eligibility.cancellable) ||
+    (caps?.canRefund && !order.eligibility.refundable);
+  const eligibilityNote = blocked ? eligibilityReason(order.eligibility.reasonIfNot, t) : null;
   return (
     <div className="p-3">
       <div className="rounded-xl border border-gray-100 bg-gray-50/40 overflow-hidden">
@@ -492,6 +524,21 @@ function SingleOrderCard({
             <button disabled={busy} onClick={() => onAction("cancel")} className="text-[10px] font-medium px-2 py-1 rounded-md bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 disabled:opacity-40">
               {t("commerce.cancel") || "Cancel"}
             </button>
+          )}
+          {/* An action that is gone because of the ORDER's state must say so.
+              Hiding the button and leaving nothing behind makes the reader
+              wonder whether the feature is broken - which is what happened. */}
+          {eligibilityNote && (
+            <span
+              data-testid="eligibility-note"
+              className="inline-flex items-center gap-1 text-[10px] text-gray-400"
+              title={eligibilityNote}
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+                <circle cx="12" cy="12" r="9" /><path d="M12 16v-4m0-4h.01" strokeLinecap="round" />
+              </svg>
+              {eligibilityNote}
+            </span>
           )}
           <div className="relative">
             <button onClick={() => setMenuOpen(!menuOpen)} aria-label={t("commerce.more") || "More"} className="text-[11px] px-2 py-1 rounded-md bg-white border border-gray-200 text-gray-500 hover:bg-gray-50 leading-none">⋯</button>

@@ -423,7 +423,11 @@
     "loadMore": "טעינת עוד",
     "showingOf": "מוצגות {shown} מתוך {total}",
     "alreadyFulfilled": "לא ניתן לבטל הזמנה שכבר נשלחה",
-    "notRestocked": "הפריטים לא הוחזרו למלאי (אין מיקום מלאי)"
+    "notRestocked": "הפריטים לא הוחזרו למלאי (אין מיקום מלאי)",
+    "reasonFulfilled": "לא ניתן לבטל הזמנה שכבר נשלחה",
+    "reasonCancelled": "ההזמנה כבר בוטלה",
+    "reasonRefunded": "ההזמנה כבר הוחזרה במלואה",
+    "reasonScope": "חסרות הרשאות כתיבה בחיבור לחנות"
   },
   "crmPanel": {
     "title": "הקשר CRM",
