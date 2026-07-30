@@ -34,6 +34,7 @@ import {
   groupByRisk,
   riskGroupFor,
   GOTCHA_ENTRY_ID,
+  toolDisplayName,
   type CatalogIntegrationInput,
 } from "@chatcenter/shared";
 import {
@@ -56,6 +57,13 @@ router.use(
   requireActiveTenant(),
   requirePermissionOrRole("ai:tools:read", "ADMIN"),
 );
+
+/** "he" when the caller asked for Hebrew, else "en". Tool labels are localized. */
+function localeOf(req: Request): "en" | "he" {
+  const q = typeof req.query.locale === "string" ? req.query.locale : undefined;
+  const h = req.headers["accept-language"] as string | undefined;
+  return String(q || h || "en").toLowerCase().startsWith("he") ? "he" : "en";
+}
 
 /** Internal GOTCHA tools an admin can set policy on: the mutating ones plus reads. */
 function internalTools() {
@@ -188,7 +196,7 @@ router.get("/:id", async (req: Request, res: Response) => {
         });
         return {
           name: t.name,
-          displayName: t.name,
+          displayName: toolDisplayName(t.name, null, localeOf(req)),
           description: t.description ?? "",
           riskGroup: availability.riskGroup,
           availability,
@@ -203,6 +211,9 @@ router.get("/:id", async (req: Request, res: Response) => {
           id: GOTCHA_ENTRY_ID,
           name: "GOTCHA",
           internal: true,
+          category: "SYSTEM",
+          description: "Internal GOTCHA platform tools and actions.",
+          connected: true,
           counts: summarizeTools(rows.map((r) => r.availability)),
           groups: groupByRisk(rows).map(([riskGroup, tools]) => ({ riskGroup, tools })),
         },
@@ -213,7 +224,10 @@ router.get("/:id", async (req: Request, res: Response) => {
     // A catalog integration.
     const connection = await prisma.tenantIntegration.findFirst({
       where: { tenantId, integration: { slug: id } },
-      select: { status: true, config: true, integration: { select: { slug: true, name: true } } },
+      select: {
+        status: true, config: true,
+        integration: { select: { slug: true, name: true, category: true, description: true, logoUrl: true } },
+      },
     });
 
     const governable = (await getGovernableIntegrationTools(tenantId)).filter((t) => t.integrationSlug === id);
@@ -284,7 +298,7 @@ router.get("/:id", async (req: Request, res: Response) => {
       });
       return {
         name: t.name,
-        displayName: t.displayName,
+        displayName: toolDisplayName(t.name, t.displayName, localeOf(req)),
         description: t.description,
         riskGroup: availability.riskGroup,
         availability,
@@ -300,6 +314,9 @@ router.get("/:id", async (req: Request, res: Response) => {
         id,
         name: connection?.integration?.name ?? id,
         internal: false,
+        category: connection?.integration?.category ?? null,
+        description: connection?.integration?.description ?? null,
+        logoUrl: connection?.integration?.logoUrl ?? null,
         connected,
         missingScopes: missing,
         grantedScopes: granted,

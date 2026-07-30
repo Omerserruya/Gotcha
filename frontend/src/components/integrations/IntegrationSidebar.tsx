@@ -3,67 +3,55 @@
 /**
  * The integration list.
  *
- * Two visually distinct regions, because they are different kinds of thing:
+ * Two regions, kept apart because they are different kinds of thing:
  *
- *   Tool integrations   - have executable tools and policy. Selecting one shows
- *                         its tools. This is what the screen is for.
- *   Other connected     - status only, owned by Channels or Knowledge Manager.
- *     services            Not selectable here; the row opens the screen that
- *                         owns it. Never shows a tool count.
+ *   Tool integrations   have executable tools and policy. Selecting one shows
+ *                       its tools. This is what the screen is for.
+ *   Other connected     status only, owned by Channels or the Knowledge
+ *     services          Manager. Not selectable here; the row opens the screen
+ *                       that owns it. Never shows a tool count.
  *
- * The separation is the point. A channel that appears in the same list as
- * Shopify, with the same affordances, teaches the reader that channels have
- * tool policy - and then the empty tool panel makes the product look broken.
+ * Status is carried by the GROUPING, not by a coloured dot on every row. A dot
+ * beside each name made the eye scan a column of traffic lights and told the
+ * reader nothing the "Connected" heading had not already said. The only badge
+ * left is a warning, because that is the one case where a row differs from the
+ * group it is filed under.
  */
 
+import { useState } from "react";
 import clsx from "clsx";
 import type { ConnectionState, WorkspaceEntry, WorkspaceSidebar } from "@/lib/api-integration-workspace";
+import { IntegrationLogo } from "./IntegrationLogo";
 
-const STATE_DOT: Record<ConnectionState, string> = {
-  connected: "bg-emerald-500",
-  warning: "bg-amber-500",
-  disconnected: "bg-rose-500",
-  available: "bg-gray-300",
-  not_entitled: "bg-gray-300",
-};
-
-function stateLabel(state: ConnectionState, he: boolean): string {
-  const en: Record<ConnectionState, string> = {
-    connected: "Connected",
-    warning: "Needs attention",
-    disconnected: "Disconnected",
-    available: "Available",
-    not_entitled: "Not in your plan",
-  };
-  const heb: Record<ConnectionState, string> = {
-    connected: "מחובר",
-    warning: "דורש טיפול",
-    disconnected: "מנותק",
-    available: "זמין",
-    not_entitled: "לא בתוכנית",
-  };
-  return he ? heb[state] : en[state];
+/** Conditions that belong ON the row, because the group cannot express them. */
+function rowCondition(entry: WorkspaceEntry, he: boolean): { label: string; tone: "warn" | "muted" } | null {
+  if (entry.warning?.reason === "missing_scopes") {
+    return { label: he ? "חסרות הרשאות" : "Missing permissions", tone: "warn" };
+  }
+  if (entry.state === "disconnected") {
+    return { label: he ? "נדרש חיבור מחדש" : "Reconnect required", tone: "warn" };
+  }
+  if (entry.state === "not_entitled") {
+    return { label: he ? "דורש שדרוג" : "Requires plan", tone: "muted" };
+  }
+  if (entry.warning?.reason === "capability_error") {
+    return { label: he ? "החיבור נכשל" : "Connection failed", tone: "warn" };
+  }
+  return null;
 }
 
-function Initial({ entry }: { entry: WorkspaceEntry }) {
-  if (entry.logoUrl) {
-    return <img src={entry.logoUrl} alt="" className="w-6 h-6 rounded-md object-contain shrink-0" />;
-  }
+function WarnIcon() {
   return (
-    <span
-      className={clsx(
-        "w-6 h-6 rounded-md shrink-0 flex items-center justify-center text-[10px] font-bold",
-        entry.internal ? "bg-primary-100 text-primary-700" : "bg-gray-100 text-gray-500",
-      )}
-    >
-      {entry.name.charAt(0).toUpperCase()}
-    </span>
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true" className="shrink-0">
+      <path d="M12 9v4m0 4h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 
 function ToolRow({
   entry, selected, onSelect, he,
 }: { entry: WorkspaceEntry; selected: boolean; onSelect: () => void; he: boolean }) {
+  const cond = rowCondition(entry, he);
   return (
     <button
       type="button"
@@ -71,27 +59,34 @@ function ToolRow({
       aria-current={selected ? "true" : undefined}
       data-testid={`sidebar-integration-${entry.id}`}
       className={clsx(
-        "w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-start transition",
-        selected ? "bg-primary-50 ring-1 ring-primary-200" : "hover:bg-gray-50",
+        "w-full flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-start transition",
+        "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400",
+        selected
+          ? "bg-gray-100 dark:bg-gray-800"
+          : "hover:bg-gray-50 dark:hover:bg-gray-800/60",
       )}
     >
-      <Initial entry={entry} />
+      <IntegrationLogo slug={entry.id} name={entry.name} logoUrl={entry.logoUrl} size={24} />
       <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-1.5">
-          <span className={clsx("text-sm truncate", selected ? "font-semibold text-primary-700" : "text-gray-800")}>
-            {entry.name}
-          </span>
-          <span className={clsx("w-1.5 h-1.5 rounded-full shrink-0", STATE_DOT[entry.state])} title={stateLabel(entry.state, he)} />
+        <span className={clsx(
+          "block truncate text-[13px]",
+          selected ? "font-semibold text-gray-900 dark:text-white" : "text-gray-700 dark:text-gray-200",
+        )}>
+          {entry.name}
         </span>
-        {entry.warning?.reason === "missing_scopes" && (
-          <span className="block text-[10px] text-amber-600 truncate">
-            {he ? "חסרות הרשאות" : "missing permissions"}
+        {cond && (
+          <span className={clsx(
+            "flex items-center gap-1 text-[10px] leading-tight",
+            cond.tone === "warn" ? "text-amber-600" : "text-gray-400",
+          )}>
+            {cond.tone === "warn" && <WarnIcon />}
+            {cond.label}
           </span>
         )}
       </span>
       {/* Only tool integrations carry a count, and it is never 0 here. */}
       {entry.toolCount !== null && (
-        <span className="shrink-0 text-[10px] font-medium text-gray-400 tabular-nums">{entry.toolCount}</span>
+        <span className="shrink-0 text-[10.5px] text-gray-400 tabular-nums">{entry.toolCount}</span>
       )}
     </button>
   );
@@ -105,30 +100,50 @@ function ExternalRow({ entry, he }: { entry: WorkspaceEntry; he: boolean }) {
     <a
       href={entry.href ?? "#"}
       data-testid={`sidebar-external-${entry.id}`}
-      className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-start transition hover:bg-gray-50 group"
+      className="group flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-start transition hover:bg-gray-50 dark:hover:bg-gray-800/60"
     >
-      <Initial entry={entry} />
+      <IntegrationLogo slug={entry.id.replace(/^(channel|knowledge):/, "").toLowerCase()} name={entry.name} logoUrl={entry.logoUrl} size={24} />
       <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-1.5">
-          <span className="text-sm truncate text-gray-600">{entry.name}</span>
-          <span className={clsx("w-1.5 h-1.5 rounded-full shrink-0", STATE_DOT[entry.state])} title={stateLabel(entry.state, he)} />
-        </span>
+        <span className="block truncate text-[13px] text-gray-500 dark:text-gray-400">{entry.name}</span>
         {/* Says where it is managed, so nobody looks for its policy here. */}
-        <span className="block text-[10px] text-gray-400 truncate">{ownerLabel}</span>
+        <span className="block truncate text-[10px] text-gray-400">{ownerLabel}</span>
       </span>
-      <svg className="w-3.5 h-3.5 shrink-0 text-gray-300 group-hover:text-gray-500 rtl:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <svg className="w-3 h-3 shrink-0 text-gray-300 group-hover:text-gray-500 rtl:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
         <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
       </svg>
     </a>
   );
 }
 
-function Group({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
+function Group({
+  id, title, hint, count, children,
+}: { id: string; title: string; hint?: string; count: number; children: React.ReactNode }) {
+  const [open, setOpen] = useState(true);
   return (
-    <div className="mb-3">
-      <p className="px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">{title}</p>
-      {hint && <p className="px-2.5 pb-1.5 text-[10px] text-gray-400">{hint}</p>}
-      <div className="space-y-0.5">{children}</div>
+    <div className="mb-1">
+      <button
+        type="button"
+        data-testid={`sidebar-group-${id}`}
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-1 px-2 py-1 text-[11px] font-medium text-gray-400 hover:text-gray-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 rounded"
+      >
+        <svg
+          width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}
+          aria-hidden="true"
+          className={clsx("transition-transform", open ? "rotate-0" : "-rotate-90 rtl:rotate-90")}
+        >
+          <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        {title}
+        <span className="ms-auto tabular-nums text-gray-300">{count}</span>
+      </button>
+      {open && (
+        <>
+          {hint && <p className="px-2 pb-1 text-[10px] text-gray-400">{hint}</p>}
+          <div className="space-y-0.5">{children}</div>
+        </>
+      )}
     </div>
   );
 }
@@ -143,39 +158,61 @@ export function IntegrationSidebar({
   search: string;
   onSearch: (v: string) => void;
 }) {
+  const [searchOpen, setSearchOpen] = useState(false);
   const L = (en: string, hebrew: string) => (he ? hebrew : en);
   const q = search.trim().toLowerCase();
-  const match = (e: WorkspaceEntry) => !q || e.name.toLowerCase().includes(q) || (e.category ?? "").toLowerCase().includes(q);
+  const match = (e: WorkspaceEntry) =>
+    !q || e.name.toLowerCase().includes(q) || (e.category ?? "").toLowerCase().includes(q);
 
   const connected = sidebar.toolIntegrations.connected.filter(match);
-  const available = sidebar.toolIntegrations.available.filter(match);
-  const unavailable = sidebar.toolIntegrations.unavailable.filter(match);
+  // ONE Available group. "Not entitled" is not a different place to look - it
+  // is a condition ON the row, which is why rowCondition exists.
+  const available = [...sidebar.toolIntegrations.available, ...sidebar.toolIntegrations.unavailable].filter(match);
   const external = sidebar.externalConnections.filter(match);
-  const nothing = !connected.length && !available.length && !unavailable.length && !external.length;
+  const nothing = !connected.length && !available.length && !external.length;
 
   return (
-    <aside className="w-full md:w-64 shrink-0 md:border-e border-gray-100 md:pe-3">
-      <div className="mb-3">
-        <input
-          value={search}
-          onChange={(e) => onSearch(e.target.value)}
-          placeholder={L("Search integrations", "חיפוש אינטגרציות")}
+    <aside className="w-full shrink-0 md:w-[228px] md:border-e md:border-gray-100 md:pe-2 dark:md:border-gray-800">
+      <div className="mb-2 flex items-center gap-1 px-2">
+        <h2 className="flex-1 text-[13px] font-semibold text-gray-800 dark:text-gray-100">
+          {L("Integrations", "אינטגרציות")}
+        </h2>
+        <button
+          type="button"
+          data-testid="integration-search-toggle"
           aria-label={L("Search integrations", "חיפוש אינטגרציות")}
-          data-testid="integration-search"
-          className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-gray-50 text-sm outline-none focus:bg-white focus:border-primary-300 focus:ring-2 focus:ring-primary-100 transition"
-        />
+          aria-expanded={searchOpen}
+          onClick={() => { setSearchOpen((v) => !v); if (searchOpen) onSearch(""); }}
+          className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 dark:hover:bg-gray-800"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+            <circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" strokeLinecap="round" />
+          </svg>
+        </button>
       </div>
 
+      {searchOpen && (
+        <div className="mb-2 px-1">
+          <input
+            autoFocus
+            value={search}
+            onChange={(e) => onSearch(e.target.value)}
+            placeholder={L("Search integrations", "חיפוש אינטגרציות")}
+            aria-label={L("Search integrations", "חיפוש אינטגרציות")}
+            data-testid="integration-search"
+            className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1 text-[12px] outline-none transition focus:border-primary-300 focus:ring-2 focus:ring-primary-100 dark:border-gray-700 dark:bg-gray-900"
+          />
+        </div>
+      )}
+
       {nothing && (
-        <p className="px-2.5 py-6 text-xs text-gray-400" data-testid="sidebar-empty">
-          {q
-            ? L("Nothing matches that.", "אין התאמות.")
-            : L("No integrations yet.", "אין עדיין אינטגרציות.")}
+        <p className="px-2 py-6 text-[11px] text-gray-400" data-testid="sidebar-empty">
+          {q ? L("Nothing matches that.", "אין התאמות.") : L("No integrations yet.", "אין עדיין אינטגרציות.")}
         </p>
       )}
 
       {connected.length > 0 && (
-        <Group title={L("Connected", "מחוברים")}>
+        <Group id="connected" title={L("Connected", "מחוברים")} count={connected.length}>
           {connected.map((e) => (
             <ToolRow key={e.id} entry={e} selected={e.id === selectedId} onSelect={() => onSelect(e.id)} he={he} />
           ))}
@@ -183,30 +220,28 @@ export function IntegrationSidebar({
       )}
 
       {available.length > 0 && (
-        <Group title={L("Available", "זמינים")}>
-          {available.map((e) => (
-            <ToolRow key={e.id} entry={e} selected={e.id === selectedId} onSelect={() => onSelect(e.id)} he={he} />
-          ))}
-        </Group>
-      )}
-
-      {unavailable.length > 0 && (
-        <Group title={L("Not usable now", "לא זמינים כרגע")}>
-          {unavailable.map((e) => (
-            <ToolRow key={e.id} entry={e} selected={e.id === selectedId} onSelect={() => onSelect(e.id)} he={he} />
-          ))}
-        </Group>
+        <>
+          <hr data-testid="sidebar-divider" className="my-2 border-gray-100 dark:border-gray-800" />
+          <Group id="available" title={L("Available", "אינטגרציות זמינות")} count={available.length}>
+            {available.map((e) => (
+              <ToolRow key={e.id} entry={e} selected={e.id === selectedId} onSelect={() => onSelect(e.id)} he={he} />
+            ))}
+          </Group>
+        </>
       )}
 
       {external.length > 0 && (
-        <Group
-          title={L("Other connected services", "שירותים מחוברים אחרים")}
-          hint={L("Managed elsewhere. No tool permissions here.", "מנוהלים במקום אחר. אין כאן הרשאות כלים.")}
-        >
-          {external.map((e) => (
-            <ExternalRow key={e.id} entry={e} he={he} />
-          ))}
-        </Group>
+        <>
+          <hr className="my-2 border-gray-100 dark:border-gray-800" />
+          <Group
+            id="external"
+            title={L("Other connected services", "שירותים מחוברים אחרים")}
+            hint={L("Managed elsewhere. No tool permissions here.", "מנוהלים במקום אחר. אין כאן הרשאות כלים.")}
+            count={external.length}
+          >
+            {external.map((e) => <ExternalRow key={e.id} entry={e} he={he} />)}
+          </Group>
+        </>
       )}
     </aside>
   );

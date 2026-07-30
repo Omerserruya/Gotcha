@@ -211,6 +211,7 @@ export type {
   CommerceCustomerActionKind,
   CommerceActionResponse,
 } from "./lib/commerce-context.types";
+export { toolDisplayName, humanizeToolName, looksLikeRawToolId } from "./lib/tool-display-names";
 export {
   COMMERCE_ORDER_ACTIONS,
   COMMERCE_CUSTOMER_ACTIONS,

@@ -4,6 +4,17 @@
 // `slugifyIntegration`. Used by IntegrationsExplorer and the AI builder's tool picker.
 
 export const INTEGRATION_LOGOS: Record<string, string> = {
+  // ── Local assets first. These ship with the app, so they never 404 and are
+  // not subject to a third party changing a CDN path. Anything remote below is
+  // a convenience, not a dependency: IntegrationLogo degrades to a real icon.
+  // The SQUARE app mark. logo_icon.png is 1526x355 - a wordmark despite its
+  // name - which renders as a 5px sliver inside a 24px tile.
+  gotcha: "/apple-touch-icon.png",
+  gmail: "/integrations/gmail.svg",
+  whatsapp: "/integrations/whatsapp.svg",
+  facebook: "/integrations/facebook.svg",
+  instagram: "/integrations/instagram.svg",
+
   shopify: "https://cdn.worldvectorlogo.com/logos/shopify.svg",
   woocommerce: "https://cdn.worldvectorlogo.com/logos/woocommerce.svg",
   bigcommerce: "https://cdn.worldvectorlogo.com/logos/bigcommerce-1.svg",
@@ -34,7 +45,17 @@ export const INTEGRATION_LOGOS: Record<string, string> = {
   airtable: "https://www.google.com/s2/favicons?domain=airtable.com&sz=64",
   fireberry: "https://www.google.com/s2/favicons?domain=fireberry.com&sz=64",
   returngo: "https://www.google.com/s2/favicons?domain=returngo.ai&sz=64",
+  google_drive: "https://cdn.worldvectorlogo.com/logos/google-drive.svg",
+  outlook: "https://cdn.worldvectorlogo.com/logos/microsoft-outlook.svg",
+  twilio: "https://cdn.worldvectorlogo.com/logos/twilio-2.svg",
+  bigquery: "https://cdn.worldvectorlogo.com/logos/google-bigquery-logo-1.svg",
+  mysql: "https://cdn.worldvectorlogo.com/logos/mysql-6.svg",
+  // custom_api and any unlisted provider deliberately have NO entry - they get
+  // the generic connector glyph, which is a better answer than a wrong logo.
 };
+
+/** Slugs whose logo is a local asset (used by tests to assert we ship them). */
+export const LOCAL_LOGO_SLUGS = ["gotcha", "gmail", "whatsapp", "facebook", "instagram"] as const;
 
 /** Normalize an integration display name to its slug: "Zoho CRM" → "zoho_crm". */
 export function slugifyIntegration(nameOrSlug: string): string {

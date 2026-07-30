@@ -27,45 +27,71 @@ const sidebar: WorkspaceSidebar = {
 
 const base = { selectedId: "gotcha", onSelect: () => {}, he: false, search: "", onSearch: () => {} };
 
-describe("IntegrationSidebar keeps the two kinds visually and functionally apart", () => {
-  it("renders tool integrations as selectable and external ones as links", () => {
-    render(<IntegrationSidebar sidebar={sidebar} {...base} />);
-    // Selectable.
-    expect(screen.getByTestId("sidebar-integration-shopify").tagName).toBe("BUTTON");
-    // Not selectable here - it opens the screen that owns it.
-    const wa = screen.getByTestId("sidebar-external-channel:WHATSAPP");
-    expect(wa.tagName).toBe("A");
-    expect(wa.getAttribute("href")).toBe("/settings/channels");
-  });
-
-  it("shows a tool count for tool integrations only", () => {
-    render(<IntegrationSidebar sidebar={sidebar} {...base} />);
-    expect(screen.getByTestId("sidebar-integration-shopify").textContent).toContain("62");
-    // No digits at all on an external row: a count there would read as
-    // "this has 0 tools", i.e. broken.
-    const wa = screen.getByTestId("sidebar-external-channel:WHATSAPP").textContent ?? "";
-    expect(wa).not.toMatch(/\d/);
-  });
-
-  it("says where an external service is managed", () => {
-    render(<IntegrationSidebar sidebar={sidebar} {...base} />);
-    expect(screen.getByTestId("sidebar-external-channel:WHATSAPP").textContent).toContain("Channels");
-    expect(screen.getByTestId("sidebar-external-knowledge:google_drive").textContent).toContain("Knowledge");
-  });
-
-  it("groups connected, available and not-usable separately", () => {
+describe("sidebar grouping matches the reference", () => {
+  it("puts every connected tool integration under one Connected heading", () => {
     render(<IntegrationSidebar sidebar={sidebar} {...base} />);
     expect(screen.getByText("Connected")).toBeTruthy();
-    expect(screen.getByText("Available")).toBeTruthy();
-    expect(screen.getByText("Not usable now")).toBeTruthy();
-    expect(screen.getByText("Other connected services")).toBeTruthy();
+    expect(screen.getByTestId("sidebar-integration-gotcha")).toBeTruthy();
+    expect(screen.getByTestId("sidebar-integration-shopify")).toBeTruthy();
   });
 
-  it("states that no tool permissions live in the external group", () => {
+  it("shows ONE divider, then one Available group holding everything not connected", () => {
     render(<IntegrationSidebar sidebar={sidebar} {...base} />);
-    expect(screen.getByText(/No tool permissions here/i)).toBeTruthy();
+    expect(screen.getByTestId("sidebar-divider")).toBeTruthy();
+    expect(screen.getByText("Available")).toBeTruthy();
+    // "Not usable now" was a second place to look for the same thing.
+    expect(screen.queryByText("Not usable now")).toBeNull();
+    expect(screen.getByTestId("sidebar-integration-hubspot")).toBeTruthy();
+    expect(screen.getByTestId("sidebar-integration-stripe")).toBeTruthy();
   });
 
+  it("carries a plan condition ON the row instead of in a separate group", () => {
+    render(<IntegrationSidebar sidebar={sidebar} {...base} />);
+    expect(screen.getByTestId("sidebar-integration-stripe").textContent).toContain("Requires plan");
+  });
+
+  it("renders no coloured status dot as the primary status", () => {
+    const { container } = render(<IntegrationSidebar sidebar={sidebar} {...base} />);
+    // The old design put a green/amber/grey dot on every row. Status is the
+    // group's job now; a dot per row said nothing the heading had not.
+    const dots = container.querySelectorAll(
+      'span.rounded-full.bg-emerald-500, span.rounded-full.bg-amber-500, span.rounded-full.bg-rose-500, span.rounded-full.bg-gray-300',
+    );
+    expect(dots.length).toBe(0);
+  });
+});
+
+describe("logos, not letter tiles", () => {
+  it("resolves a real logo for a known integration", () => {
+    render(<IntegrationSidebar sidebar={sidebar} {...base} />);
+    const img = screen.getByTestId("integration-logo-shopify").querySelector("img");
+    expect(img).toBeTruthy();
+    expect(img!.getAttribute("src")).toMatch(/shopify/i);
+    expect(img!.getAttribute("alt")).toBe("Shopify");
+  });
+
+  it("ships GOTCHA's own SQUARE mark from the repo, not the wordmark", () => {
+    // logo_icon.png is 1526x355 - a wordmark - and collapses to a sliver in a
+    // 24px tile. The square app icon is the one that belongs here.
+    render(<IntegrationSidebar sidebar={sidebar} {...base} />);
+    const img = screen.getByTestId("integration-logo-gotcha").querySelector("img");
+    expect(img!.getAttribute("src")).toBe("/apple-touch-icon.png");
+  });
+
+  it("falls back to an icon, never a letter tile", () => {
+    const s: WorkspaceSidebar = {
+      ...sidebar,
+      toolIntegrations: { ...sidebar.toolIntegrations, connected: [tool({ id: "custom_api", name: "Custom API" })] },
+    };
+    render(<IntegrationSidebar sidebar={s} {...base} selectedId="custom_api" />);
+    const fb = screen.getByTestId("integration-logo-fallback-custom_api");
+    expect(fb.querySelector("svg")).toBeTruthy();
+    // The old fallback rendered the first letter. That is the thing to avoid.
+    expect(fb.textContent?.trim()).toBe("");
+  });
+});
+
+describe("selection and separation of concerns", () => {
   it("marks the selected integration for assistive tech, not just visually", () => {
     render(<IntegrationSidebar sidebar={sidebar} {...base} selectedId="shopify" />);
     expect(screen.getByTestId("sidebar-integration-shopify").getAttribute("aria-current")).toBe("true");
@@ -79,6 +105,21 @@ describe("IntegrationSidebar keeps the two kinds visually and functionally apart
     expect(onSelect).toHaveBeenCalledWith("shopify");
   });
 
+  it("renders external services as links to their owning screen, with no count", () => {
+    render(<IntegrationSidebar sidebar={sidebar} {...base} />);
+    const wa = screen.getByTestId("sidebar-external-channel:WHATSAPP");
+    expect(wa.tagName).toBe("A");
+    expect(wa.getAttribute("href")).toBe("/settings/channels");
+    expect(wa.textContent).toContain("Channels");
+    // A count here would read as "this has 0 tools", i.e. broken.
+    expect(wa.textContent ?? "").not.toMatch(/\d/);
+  });
+
+  it("keeps a tool count on tool integrations", () => {
+    render(<IntegrationSidebar sidebar={sidebar} {...base} />);
+    expect(screen.getByTestId("sidebar-integration-shopify").textContent).toContain("62");
+  });
+
   it("surfaces a missing-scope warning inline", () => {
     const s: WorkspaceSidebar = {
       ...sidebar,
@@ -90,8 +131,17 @@ describe("IntegrationSidebar keeps the two kinds visually and functionally apart
     render(<IntegrationSidebar sidebar={s} {...base} />);
     expect(screen.getByText(/missing permissions/i)).toBeTruthy();
   });
+});
 
-  it("filters on search, and says so when nothing matches", () => {
+describe("search is integrations-only", () => {
+  it("stays collapsed behind an icon until asked for", () => {
+    render(<IntegrationSidebar sidebar={sidebar} {...base} />);
+    expect(screen.queryByTestId("integration-search")).toBeNull();
+    fireEvent.click(screen.getByTestId("integration-search-toggle"));
+    expect(screen.getByTestId("integration-search")).toBeTruthy();
+  });
+
+  it("filters integrations, and says so when nothing matches", () => {
     const { unmount } = render(<IntegrationSidebar sidebar={sidebar} {...base} search="hub" />);
     expect(screen.getByTestId("sidebar-integration-hubspot")).toBeTruthy();
     expect(screen.queryByTestId("sidebar-integration-shopify")).toBeNull();
@@ -99,10 +149,13 @@ describe("IntegrationSidebar keeps the two kinds visually and functionally apart
     render(<IntegrationSidebar sidebar={sidebar} {...base} search="zzzz" />);
     expect(screen.getByTestId("sidebar-empty")).toBeTruthy();
   });
+});
 
+describe("localization", () => {
   it("renders in Hebrew", () => {
     render(<IntegrationSidebar sidebar={sidebar} {...base} he={true} />);
     expect(screen.getByText("מחוברים")).toBeTruthy();
+    expect(screen.getByText("אינטגרציות זמינות")).toBeTruthy();
     expect(screen.getByText("שירותים מחוברים אחרים")).toBeTruthy();
   });
 });

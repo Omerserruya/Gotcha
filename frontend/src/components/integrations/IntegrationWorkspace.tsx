@@ -29,10 +29,15 @@ import {
   mayBeAlwaysAllowed,
   type BulkAction,
   type PermissionState,
+  type RiskGroup,
 } from "@/lib/tool-availability-client";
 import { initIntegrationOAuth } from "@/lib/api";
 import { IntegrationSidebar } from "./IntegrationSidebar";
-import { ToolPermissionRow, RiskGroupHeading, riskLabel } from "../ai-studio/ToolPermissionRow";
+import { IntegrationHeader } from "./IntegrationHeader";
+import { availabilityReasonText } from "./ToolAvailabilityReason";
+import { ToolCategorySection } from "./ToolCategorySection";
+import type { SelectableState } from "./ToolPermissionSegmentedControl";
+import { riskLabel } from "../ai-studio/ToolPermissionRow";
 import ConfirmModal from "../ConfirmModal";
 
 type Saving = { tool: string } | null;
@@ -56,6 +61,11 @@ export function IntegrationWorkspace() {
   const [bulkResult, setBulkResult] = useState<string | null>(null);
   const [showRaw, setShowRaw] = useState(false);
   const [connectOpen, setConnectOpen] = useState(false);
+  // Tool search is separate from integration search on purpose: they filter
+  // different lists, and one box doing both is a box that does neither well.
+  const [toolSearch, setToolSearch] = useState("");
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [groupApply, setGroupApply] = useState<{ group: RiskGroup; next: SelectableState; count: number } | null>(null);
 
   const loadSidebar = useCallback(async () => {
     if (!token) return;
@@ -81,7 +91,7 @@ export function IntegrationWorkspace() {
     setLoadingDetail(true);
     setSaveError(null);
     try {
-      const res = await getIntegrationDetail(token, id);
+      const res = await getIntegrationDetail(token, id, locale);
       setDetail(res.data);
     } catch (e: any) {
       setDetail(null);
@@ -89,15 +99,34 @@ export function IntegrationWorkspace() {
     } finally {
       setLoadingDetail(false);
     }
-  }, [token, he]);
+  }, [token, he, locale]);
 
   useEffect(() => { void loadSidebar(); }, [loadSidebar]);
   useEffect(() => { if (selectedId) void loadDetail(selectedId); }, [selectedId, loadDetail]);
+  useEffect(() => { setToolSearch(""); }, [selectedId]);
 
   const allTools = useMemo(
     () => (detail?.groups ?? []).flatMap((g) => g.tools),
     [detail],
   );
+
+  /** Search filters tools but keeps them inside their category. */
+  const visibleGroups = useMemo(() => {
+    const q = toolSearch.trim().toLowerCase();
+    const groups = detail?.groups ?? [];
+    if (!q) return groups;
+    return groups
+      .map((g) => ({
+        ...g,
+        tools: g.tools.filter(
+          (t) =>
+            t.displayName.toLowerCase().includes(q) ||
+            t.description.toLowerCase().includes(q) ||
+            t.name.toLowerCase().includes(q),
+        ),
+      }))
+      .filter((g) => g.tools.length > 0);
+  }, [detail, toolSearch]);
 
   async function applyPolicy(tool: WorkspaceTool, next: Exclude<PermissionState, "unavailable">) {
     if (!token || !selectedId) return;
@@ -143,6 +172,50 @@ export function IntegrationWorkspace() {
     await loadDetail(selectedId);
     await loadSidebar();
     // Report what actually happened, including partial failure.
+    setBulkResult(
+      failed === 0
+        ? L(`${ok} tools updated.`, `${ok} כלים עודכנו.`)
+        : L(`${ok} updated, ${failed} failed.`, `${ok} עודכנו, ${failed} נכשלו.`),
+    );
+  }
+
+  /**
+   * Apply one mode to a whole category.
+   *
+   * Skips unavailable tools and any tool whose risk group forbids the mode, so
+   * a bulk action can never quietly loosen something the product does not allow
+   * a single row to set.
+   */
+  function planGroupApply(group: RiskGroup, next: SelectableState) {
+    const g = (detail?.groups ?? []).find((x) => x.riskGroup === group);
+    if (!g) return [];
+    return g.tools.filter((t) => {
+      if (t.availability.state === "unavailable") return false;
+      if (next === "always_allow" && !mayBeAlwaysAllowed(group)) return false;
+      return t.availability.state !== next;
+    });
+  }
+
+  function requestGroupApply(group: RiskGroup, next: SelectableState) {
+    const affected = planGroupApply(group, next);
+    if (affected.length === 0) {
+      setBulkResult(L("Nothing to change.", "אין מה לשנות."));
+      return;
+    }
+    setGroupApply({ group, next, count: affected.length });
+  }
+
+  async function runGroupApply(group: RiskGroup, next: SelectableState) {
+    if (!token || !selectedId) return;
+    const affected = planGroupApply(group, next);
+    setBulkResult(null);
+    let ok = 0;
+    let failed = 0;
+    for (const t of affected) {
+      try { await setToolPolicy(token, t.name, next); ok += 1; } catch { failed += 1; }
+    }
+    await loadDetail(selectedId);
+    await loadSidebar();
     setBulkResult(
       failed === 0
         ? L(`${ok} tools updated.`, `${ok} כלים עודכנו.`)
@@ -213,143 +286,162 @@ export function IntegrationWorkspace() {
             empty policy surface. Say what it does, what it would bring, and
             where to connect it. */}
         {detail?.connectable && (
-          <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm" data-testid="integration-connect">
-            <h2 className="text-base font-semibold text-gray-900">{detail.name}</h2>
-            {detail.description && (
-              <p className="mt-1 text-sm text-gray-600">{detail.description}</p>
-            )}
-            <p className="mt-3 text-xs text-gray-500">
-              {L(
-                "Not connected. Connect it to choose what its tools are allowed to do.",
-                "לא מחובר. חברו אותו כדי לקבוע מה הכלים שלו רשאים לעשות.",
-              )}
-            </p>
-            {(detail.catalogToolCount ?? 0) > 0 && (
-              <p className="mt-1 text-xs text-gray-400 tabular-nums">
+          <div data-testid="integration-connect">
+            <IntegrationHeader
+              slug={detail.id}
+              name={detail.name}
+              category={detail.category}
+              description={detail.description}
+              logoUrl={detail.logoUrl}
+              internal={false}
+              connected={undefined}
+              enabled={0}
+              total={detail.catalogToolCount ?? 0}
+              he={he}
+            />
+            <div className="rounded-xl border border-gray-200/80 bg-white p-4 dark:border-gray-700 dark:bg-gray-900">
+              <p className="text-[12.5px] text-gray-600 dark:text-gray-300">
                 {L(
-                  `Adds ${detail.catalogToolCount} tools once connected.`,
-                  `מוסיף ${detail.catalogToolCount} כלים אחרי החיבור.`,
+                  "Not connected. Connect it to choose what its tools are allowed to do.",
+                  "לא מחובר. חברו אותו כדי לקבוע מה הכלים שלו רשאים לעשות.",
                 )}
               </p>
-            )}
-            <button
-              type="button"
-              onClick={() => setConnectOpen(true)}
-              data-testid="integration-connect-cta"
-              className="mt-4 inline-flex items-center rounded-xl bg-primary-500 hover:bg-primary-600 px-4 py-2 text-sm font-medium text-white transition"
-            >
-              {L("Connect", "חיבור")}
-            </button>
+              {(detail.catalogToolCount ?? 0) > 0 && (
+                <p className="mt-1 text-[11.5px] text-gray-400 tabular-nums">
+                  {L(
+                    `Adds ${detail.catalogToolCount} tools once connected.`,
+                    `מוסיף ${detail.catalogToolCount} כלים אחרי החיבור.`,
+                  )}
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={() => setConnectOpen(true)}
+                data-testid="integration-connect-cta"
+                className="mt-3 inline-flex items-center rounded-lg bg-primary-500 px-3 py-1.5 text-[12.5px] font-medium text-white transition hover:bg-primary-600"
+              >
+                {L("Connect", "חיבור")}
+              </button>
+            </div>
           </div>
         )}
 
         {detail && !detail.connectable && (
           <>
-            {/* Selected integration header */}
-            <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm mb-3" data-testid="integration-header">
-              <div className="flex items-start justify-between gap-3 flex-wrap">
-                <div className="min-w-0">
-                  <h2 className="text-base font-semibold text-gray-900">{detail.name}</h2>
-                  <p className="mt-0.5 text-xs font-medium text-gray-600 tabular-nums" data-testid="header-tool-count">
-                    {L(
-                      `${detail.counts.enabled} of ${detail.counts.total} tools enabled`,
-                      `${detail.counts.enabled} מתוך ${detail.counts.total} כלים מופעלים`,
-                    )}
-                  </p>
-                  {/* Precise reasons, never collapsed into "not connected". */}
-                  {detail.internal ? (
-                    <p className="mt-1 text-[11px] text-gray-400">
-                      {L("GOTCHA's own system actions. Always available.", "פעולות המערכת של GOTCHA. זמינות תמיד.")}
-                    </p>
-                  ) : (
-                    <div className="mt-1 flex flex-wrap gap-1.5">
-                      <span className={clsx(
-                        "rounded-md px-1.5 py-0.5 text-[10px] font-medium",
-                        detail.connected ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700",
-                      )}>
-                        {detail.connected ? L("Connected", "מחובר") : L("Disconnected", "מנותק")}
-                      </span>
-                      {(detail.missingScopes?.length ?? 0) > 0 && (
-                        <span className="rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700" data-testid="header-missing-scopes">
-                          {L("Missing permissions: ", "חסרות הרשאות: ")}{detail.missingScopes!.join(", ")}
-                        </span>
-                      )}
-                      {detail.capabilityFresh === false && (
-                        <span className="rounded-md bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
-                          {L("Permission check is stale", "בדיקת ההרשאות לא עדכנית")}
-                        </span>
-                      )}
-                      {detail.counts.unavailable > 0 && (
-                        <span className="rounded-md bg-rose-50 px-1.5 py-0.5 text-[10px] font-medium text-rose-700">
-                          {L(`${detail.counts.unavailable} unavailable`, `${detail.counts.unavailable} לא זמינים`)}
-                        </span>
-                      )}
+            <IntegrationHeader
+              slug={detail.id}
+              name={detail.name}
+              category={detail.category}
+              description={detail.description}
+              logoUrl={detail.logoUrl}
+              internal={detail.internal}
+              connected={detail.connected}
+              missingScopes={detail.missingScopes}
+              capabilityFresh={detail.capabilityFresh}
+              enabled={detail.counts.enabled}
+              total={detail.counts.total}
+              he={he}
+            />
+
+            {/* Tool search + the low-frequency actions, kept off the main axis.
+                The four bulk chips used to sit above the fold and competed with
+                the per-tool controls for attention; the per-category dropdown is
+                now the primary bulk affordance. */}
+            <div className="mb-3 flex items-center gap-2">
+              <input
+                value={toolSearch}
+                onChange={(e) => setToolSearch(e.target.value)}
+                placeholder={L("Search tools", "חיפוש כלים")}
+                aria-label={L("Search tools", "חיפוש כלים")}
+                data-testid="tool-search"
+                className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[12px] outline-none transition focus:border-primary-300 focus:ring-2 focus:ring-primary-100 dark:border-gray-700 dark:bg-gray-900"
+              />
+              <div className="relative shrink-0">
+                <button
+                  type="button"
+                  data-testid="more-actions"
+                  aria-haspopup="menu"
+                  aria-expanded={moreOpen}
+                  onClick={() => setMoreOpen((v) => !v)}
+                  className="rounded-lg border border-gray-200 px-2 py-1.5 text-[12px] text-gray-500 transition hover:border-gray-300 hover:text-gray-700 dark:border-gray-700"
+                >
+                  ⋯
+                </button>
+                {moreOpen && (
+                  <>
+                    <div className="fixed inset-0 z-20" onClick={() => setMoreOpen(false)} />
+                    <div role="menu" className="absolute end-0 z-30 mt-1 w-52 rounded-xl border border-gray-100 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-900">
+                      {(Object.keys(BULK_LABELS) as BulkAction[]).map((a) => (
+                        <button
+                          key={a}
+                          type="button"
+                          role="menuitem"
+                          data-testid={`bulk-${a}`}
+                          onClick={() => { setMoreOpen(false); requestBulk(a); }}
+                          className="block w-full px-3 py-1.5 text-start text-[11.5px] text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800"
+                        >
+                          {BULK_LABELS[a]}
+                        </button>
+                      ))}
+                      <div className="my-1 border-t border-gray-100 dark:border-gray-800" />
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => { setMoreOpen(false); setShowRaw((v) => !v); }}
+                        className="block w-full px-3 py-1.5 text-start text-[11.5px] text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800"
+                      >
+                        {showRaw ? L("Hide ids", "הסתרת מזהים") : L("Show ids", "הצגת מזהים")}
+                      </button>
                     </div>
-                  )}
-                </div>
-
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {(Object.keys(BULK_LABELS) as BulkAction[]).map((a) => (
-                    <button
-                      key={a}
-                      type="button"
-                      onClick={() => requestBulk(a)}
-                      data-testid={`bulk-${a}`}
-                      className="rounded-lg border border-gray-200 px-2 py-1 text-[11px] font-medium text-gray-600 hover:border-gray-300 hover:bg-gray-50 transition"
-                    >
-                      {BULK_LABELS[a]}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => setShowRaw((v) => !v)}
-                    className="text-[11px] font-medium text-gray-400 hover:text-gray-600 ms-1"
-                  >
-                    {showRaw ? L("Hide ids", "הסתרת מזהים") : L("Show ids", "הצגת מזהים")}
-                  </button>
-                </div>
+                  </>
+                )}
               </div>
-
-              {bulkResult && (
-                <p className="mt-2 rounded-lg bg-gray-50 px-2 py-1 text-[11px] text-gray-600" data-testid="bulk-result">
-                  {bulkResult}
-                </p>
-              )}
-              {saveError && (
-                <p className="mt-2 rounded-lg bg-rose-50 px-2 py-1 text-[11px] text-rose-700" data-testid="save-error">
-                  {saveError}
-                </p>
-              )}
             </div>
 
-            {/* Tool groups */}
-            {detail.groups.length === 0 ? (
-              <div className="rounded-2xl border border-gray-100 bg-white p-8 text-center" data-testid="no-tools">
-                <p className="text-sm text-gray-500">
-                  {L("This integration has no tools to govern.", "לאינטגרציה הזו אין כלים לניהול.")}
+            {bulkResult && (
+              <p className="mb-2 rounded-lg bg-gray-50 px-2 py-1 text-[11.5px] text-gray-600" data-testid="bulk-result">{bulkResult}</p>
+            )}
+            {saveError && (
+              <p className="mb-2 rounded-lg bg-rose-50 px-2 py-1 text-[11.5px] text-rose-700" data-testid="save-error">{saveError}</p>
+            )}
+
+            {visibleGroups.length === 0 ? (
+              <div className="rounded-xl border border-gray-200/80 bg-white p-8 text-center dark:border-gray-700 dark:bg-gray-900" data-testid="no-tools">
+                <p className="text-[12.5px] text-gray-500">
+                  {toolSearch.trim()
+                    ? L("No tools match that.", "אין כלים תואמים.")
+                    : L("This integration has no tools to govern.", "לאינטגרציה הזו אין כלים לניהול.")}
                 </p>
               </div>
             ) : (
-              detail.groups.map((group) => (
-                <section key={group.riskGroup} className="mb-2">
-                  <RiskGroupHeading group={group.riskGroup} count={group.tools.length} he={he} />
-                  <div className="space-y-1.5">
-                    {group.tools.map((t) => (
-                      <ToolPermissionRow
-                        key={t.name}
-                        displayName={t.displayName}
-                        rawName={t.name}
-                        description={t.description}
-                        requiredScopes={t.requiredScopes}
-                        availability={t.availability}
-                        he={he}
-                        saving={saving?.tool === t.name}
-                        showRawName={showRaw}
-                        onChange={(next) => void applyPolicy(t, next)}
-                      />
-                    ))}
-                  </div>
-                </section>
+              visibleGroups.map(({ riskGroup, tools }) => (
+                <ToolCategorySection
+                  key={riskGroup}
+                  group={riskGroup}
+                  title={riskLabel(riskGroup, he)}
+                  he={he}
+                  showRawName={showRaw}
+                  // Read-only opens by default; a big write group starts closed
+                  // so the page does not open 62 rows deep.
+                  defaultOpen={riskGroup === "read_only" || tools.length <= 12}
+                  tools={tools.map((t) => ({
+                    name: t.name,
+                    displayName: t.displayName,
+                    description: t.description,
+                    state: t.availability.state,
+                    unavailable: t.availability.state === "unavailable",
+                    unavailableReason: availabilityReasonText(t.availability, he) ?? undefined,
+                    lockedStates: mayBeAlwaysAllowed(t.riskGroup)
+                      ? undefined
+                      : { always_allow: L("This group cannot run without approval", "הקבוצה הזו לא יכולה לרוץ ללא אישור") },
+                    saving: saving?.tool === t.name,
+                  }))}
+                  onChangeTool={(row, next) => {
+                    const orig = tools.find((x) => x.name === row.name);
+                    if (orig) void applyPolicy(orig, next);
+                  }}
+                  onApplyGroup={(next) => requestGroupApply(riskGroup, next)}
+                />
               ))
             )}
           </>
@@ -370,6 +462,23 @@ export function IntegrationWorkspace() {
           }}
         />
       )}
+
+      <ConfirmModal
+        isOpen={!!groupApply}
+        title={groupApply ? riskLabel(groupApply.group, he) : ""}
+        message={
+          groupApply
+            ? L(
+                `This changes ${groupApply.count} tool${groupApply.count === 1 ? "" : "s"} in this group. Tools that cannot take the chosen mode are left alone.`,
+                `הפעולה תשנה ${groupApply.count} כלים בקבוצה. כלים שלא יכולים לקבל את המצב הנבחר יישארו כמו שהם.`,
+              )
+            : ""
+        }
+        confirmText={L("Apply", "החלה")}
+        cancelText={L("Cancel", "ביטול")}
+        onConfirm={() => { const g = groupApply; setGroupApply(null); if (g) void runGroupApply(g.group, g.next); }}
+        onCancel={() => setGroupApply(null)}
+      />
 
       <ConfirmModal
         isOpen={!!bulk}

@@ -84,6 +84,8 @@ export interface IntegrationDetail {
   /** Present and true when the integration exists in the catalog but the tenant
    *  has not connected it. There is no policy to show yet - only how to get one. */
   connectable?: boolean;
+  /** Raw DB enum (e.g. "PROJECT_MANAGEMENT"); the header prettifies it. */
+  category?: string | null;
   description?: string | null;
   logoUrl?: string | null;
   /** How many tools connecting WOULD bring. Not a policy count. */
@@ -110,9 +112,12 @@ export function getIntegrationWorkspace(token: string) {
   return apiFetch<{ data: WorkspaceSidebar }>("/api/integration-workspace", { token });
 }
 
-export function getIntegrationDetail(token: string, id: string) {
+export function getIntegrationDetail(token: string, id: string, locale?: string) {
+  // Tool labels are localized server-side, so the locale has to travel with
+  // the request. Without it a Hebrew tenant silently gets English names.
+  const qs = locale ? `?locale=${encodeURIComponent(locale)}` : "";
   return apiFetch<{ data: IntegrationDetail }>(
-    `/api/integration-workspace/${encodeURIComponent(id)}`,
+    `/api/integration-workspace/${encodeURIComponent(id)}${qs}`,
     { token },
   );
 }
