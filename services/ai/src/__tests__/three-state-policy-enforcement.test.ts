@@ -9,6 +9,8 @@
  * Uses a throwaway tenant + integration + catalog tool, cleaned up afterwards.
  */
 
+// MUST come before anything that constructs the Prisma client.
+import "./db-env";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { prisma, evaluateToolGate } from "@chatcenter/shared";
 
