@@ -15,11 +15,36 @@ import {
 import clsx from "clsx";
 
 // ─── Types ─────────────────────────────────────────────────
+/**
+ * Entry modes for the ONE shared Knowledge Manager.
+ *
+ * Callers used to send the user AWAY to /ai-studio/knowledge to add anything,
+ * which meant leaving the readiness report or an in-progress hire to do it -
+ * and losing that context. Every surface now opens this in place and says which
+ * job it wants done.
+ */
+export type KnowledgeEntryMode = "browse" | "upload" | "url" | "drive" | "answer";
+
 interface KnowledgeDrawerProps {
   isOpen: boolean;
   onClose: () => void;
-  linkedKbIds: string[];
-  onToggleKb: (kbId: string, linked: boolean) => void;
+  /**
+   * Employee-linking is OPTIONAL. When absent the manager is a pure knowledge
+   * surface (opened from readiness, onboarding, a missing-knowledge warning),
+   * and no link checkboxes are shown - there is no employee in scope to link to.
+   */
+  linkedKbIds?: string[];
+  onToggleKb?: (kbId: string, linked: boolean) => void;
+  /** Which job the caller wants done. Defaults to browsing. */
+  initialMode?: KnowledgeEntryMode;
+  /**
+   * Fired after knowledge is successfully added, so the caller can refresh its
+   * own state (readiness score, missing-question list, employee status) without
+   * a navigation that would discard unsaved work.
+   */
+  onAdded?: () => void;
+  /** Optional line explaining why the manager was opened. */
+  contextLabel?: string;
 }
 
 type DrawerView = "list" | "create" | "upload";
@@ -28,7 +53,23 @@ type DrawerView = "list" | "create" | "upload";
 // Confluence). Uploading a file was previously the only way to fill a KB from
 // here, which meant a tenant with Drive connected still had to leave the
 // employee editor to use it.
-type UploadMode = "file" | "url" | "text" | "sources";
+type UploadMode = "file" | "url" | "text" | "sources" | "answer";
+
+/**
+ * Entry mode (what the CALLER asked for) → upload panel mode (what the panel
+ * calls it). Stated once rather than inline at each call site, because the two
+ * vocabularies genuinely differ: "upload" is a file, "drive" is a connected
+ * source.
+ */
+function panelModeFor(mode: KnowledgeEntryMode): UploadMode {
+  switch (mode) {
+    case "upload": return "file";
+    case "drive": return "sources";
+    case "url": return "url";
+    case "answer": return "answer";
+    case "browse": return "file";
+  }
+}
 
 const STATUS_ICON: Record<string, { color: string; icon: string }> = {
   ready: { color: "bg-green-100 text-green-600", icon: "M5 13l4 4L19 7" },
@@ -38,13 +79,21 @@ const STATUS_ICON: Record<string, { color: string; icon: string }> = {
 };
 
 // ─── Component ─────────────────────────────────────────────
-export default function KnowledgeDrawer({ isOpen, onClose, linkedKbIds, onToggleKb }: KnowledgeDrawerProps) {
+export default function KnowledgeDrawer({
+  isOpen, onClose, linkedKbIds, onToggleKb, initialMode = "browse", onAdded, contextLabel,
+}: KnowledgeDrawerProps) {
+  const linked = linkedKbIds ?? [];
+  const canLink = typeof onToggleKb === "function";
   const { token } = useAuth();
   const { t } = useI18n();
 
   const [knowledgeBases, setKnowledgeBases] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<DrawerView>("list");
+  // Honour the entry mode: a caller that asked for "upload" should land on the
+  // upload panel, not on a list it has to navigate. Runs once per open, and only
+  // once a knowledge base exists to put the content in.
+  const openedForRef = useRef<string | null>(null);
 
   // Create KB state
   const [newName, setNewName] = useState("");
@@ -76,6 +125,22 @@ export default function KnowledgeDrawer({ isOpen, onClose, linkedKbIds, onToggle
       .catch(() => { if (!cancelled) setKbIntegrations([]); });
     return () => { cancelled = true; };
   }, [token, uploadKbId, uploadMode]);
+
+  // Entry-mode routing. Deliberately not dependent on `view`, so a user who
+  // navigates back to the list is not yanked forward again.
+  useEffect(() => {
+    if (!isOpen || initialMode === "browse" || loading) return;
+    if (openedForRef.current === initialMode) return;
+    const first = knowledgeBases[0];
+    if (!first) return; // nothing to add into yet - the list offers "create"
+    openedForRef.current = initialMode;
+    setUploadKbId(first.id);
+    setUploadMode(panelModeFor(initialMode));
+    setView("upload");
+  }, [isOpen, initialMode, loading, knowledgeBases]);
+
+  // Reset so reopening in a different mode routes again.
+  useEffect(() => { if (!isOpen) openedForRef.current = null; }, [isOpen]);
 
   /** Start OAuth for a knowledge provider, scoped to the KB being filled. */
   async function connectProvider(provider: "confluence" | "google_drive") {
@@ -117,9 +182,10 @@ export default function KnowledgeDrawer({ isOpen, onClose, linkedKbIds, onToggle
       const res = await createKnowledgeBase(token, { name: newName.trim(), description: newDesc.trim() || undefined });
       const newKb = res.data;
       await loadKbs();
-      // Auto-link the new KB
+      // Auto-link the new KB - only when there is an employee in scope to link
+      // it to. Opened from readiness or onboarding there is none.
       if (newKb?.id) {
-        onToggleKb(newKb.id, true);
+        onToggleKb?.(newKb.id, true);
         // Go to upload view for the new KB
         setUploadKbId(newKb.id);
         setView("upload");
@@ -152,8 +218,19 @@ export default function KnowledgeDrawer({ isOpen, onClose, linkedKbIds, onToggle
           content: uploadContent.trim(),
           sourceType: "text",
         });
+      } else if (uploadMode === "answer" && uploadContent.trim()) {
+        // A direct answer is stored question-first so retrieval matches on the
+        // question the customer will actually ask, not just the answer text.
+        const question = uploadTitle.trim();
+        await uploadKnowledgeDocument(token, uploadKbId, {
+          title: question || uploadContent.trim().slice(0, 80),
+          content: question ? `**${question}**\n\n${uploadContent.trim()}` : uploadContent.trim(),
+          sourceType: "text",
+        });
       }
       await loadKbs();
+      // The caller's readiness / missing-question / employee state is now stale.
+      onAdded?.();
       // Reset and go back to list
       resetUpload();
       setView("list");
@@ -169,7 +246,7 @@ export default function KnowledgeDrawer({ isOpen, onClose, linkedKbIds, onToggle
     setUploadTitle("");
     setUploadContent("");
     setUploadUrl("");
-    setUploadMode("file");
+    setUploadMode(panelModeFor(initialMode));
   }
 
   function openUploadFor(kbId: string) {
@@ -201,8 +278,16 @@ export default function KnowledgeDrawer({ isOpen, onClose, linkedKbIds, onToggle
             <p className="text-xs text-gray-400 mt-0.5">
               {view === "list" ? t("aiStudio.agents.editor.knowledge.subtitle") : view === "create" ? t("knowledge.createKbSub") : t("knowledge.uploadSub")}
             </p>
+            {/* Why the manager was opened. Without it, a manager opened from
+                the readiness report looks identical to one opened from the
+                Knowledge page, and the user loses their place. */}
+            {contextLabel && (
+              <p className="mt-0.5 text-[11px] font-medium text-violet-600" data-testid="knowledge-context">
+                {contextLabel}
+              </p>
+            )}
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition shrink-0">
+          <button onClick={onClose} data-testid="knowledge-close" className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition shrink-0">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -215,8 +300,9 @@ export default function KnowledgeDrawer({ isOpen, onClose, linkedKbIds, onToggle
             <KbListView
               knowledgeBases={knowledgeBases}
               loading={loading}
-              linkedKbIds={linkedKbIds}
+              linkedKbIds={linked}
               onToggle={onToggleKb}
+              canLink={canLink}
               onCreateNew={() => setView("create")}
               onUpload={openUploadFor}
               t={t}
@@ -263,10 +349,10 @@ export default function KnowledgeDrawer({ isOpen, onClose, linkedKbIds, onToggle
 
 // ─── KB List View ──────────────────────────────────────────
 function KbListView({
-  knowledgeBases, loading, linkedKbIds, onToggle, onCreateNew, onUpload, t,
+  knowledgeBases, loading, linkedKbIds, onToggle, onCreateNew, onUpload, t, canLink = true,
 }: {
-  knowledgeBases: any[]; loading: boolean; linkedKbIds: string[];
-  onToggle: (id: string, linked: boolean) => void; onCreateNew: () => void;
+  knowledgeBases: any[]; loading: boolean; linkedKbIds: string[]; canLink?: boolean;
+  onToggle?: (id: string, linked: boolean) => void; onCreateNew: () => void;
   onUpload: (kbId: string) => void; t: (key: string) => string;
 }) {
   if (loading) {
@@ -296,8 +382,9 @@ function KbListView({
               )}
             >
               <div className="flex items-start gap-3">
+                {canLink && (
                 <button
-                  onClick={() => onToggle(kb.id, !isLinked)}
+                  onClick={() => onToggle?.(kb.id, !isLinked)}
                   className={clsx(
                     "w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 mt-0.5 transition",
                     isLinked ? "bg-emerald-500 border-emerald-500" : "border-gray-300 hover:border-emerald-400"
@@ -309,6 +396,7 @@ function KbListView({
                     </svg>
                   )}
                 </button>
+                )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <h4 className="text-sm font-medium text-gray-900">{kb.name}</h4>
@@ -417,6 +505,7 @@ function UploadView({
   const MODE_LABEL: Record<UploadMode, string> = {
     file: t("knowledge.fileUpload"),
     url: t("knowledge.websiteUrl"),
+    answer: t("knowledge.answerDirectly"),
     text: t("knowledge.pasteText"),
     sources: t("knowledge.sourcesTab"),
   };
@@ -425,7 +514,7 @@ function UploadView({
     <div className="space-y-4">
       {/* Mode tabs */}
       <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
-        {(["file", "url", "text", "sources"] as const).map((m) => (
+        {(["file", "url", "answer", "text", "sources"] as const).map((m) => (
           <button
             key={m}
             onClick={() => setMode(m)}

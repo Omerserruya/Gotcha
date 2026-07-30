@@ -13,6 +13,7 @@
 import { useState } from "react";
 import clsx from "clsx";
 import { useI18n } from "@/context/I18nContext";
+import KnowledgeDrawer, { type KnowledgeEntryMode } from "./KnowledgeDrawer";
 import type { ReadinessReport, ReadinessQuestion, ReadinessRecommendation } from "@/lib/gotcha-api";
 import { uploadKnowledgeDocument, processKnowledgeDocument } from "@/lib/api";
 import { Modal } from "@/components/ui/Modal";
@@ -29,12 +30,14 @@ export function readinessBadgeTone(score: number): string {
 }
 
 // ─── One gap's inline resolver (answer / URL) ───────────────
-function GapResolver({ token, kbId, question, onResolved, L }: {
+function GapResolver({ token, kbId, question, onResolved, L, onOpenKnowledge }: {
   token: string;
   kbId: string | null;
   question: string;
   onResolved: () => void;
   L: (en: string, he: string) => string;
+  /** Opens the shared Knowledge Manager in place, in the requested mode. */
+  onOpenKnowledge?: (mode: KnowledgeEntryMode) => void;
 }) {
   const [mode, setMode] = useState<"idle" | "answer" | "url">("idle");
   const [value, setValue] = useState("");
@@ -79,9 +82,16 @@ function GapResolver({ token, kbId, question, onResolved, L }: {
           {L("Add a link", "הוסיפו קישור")}
         </button>
         <span className="text-gray-300">·</span>
-        <a href="/ai-studio/knowledge" target="_blank" rel="noreferrer" className="text-xs font-medium text-violet-600 hover:text-violet-700">
+        {/* Opens the shared Knowledge Manager in place. This used to be a
+            new-tab link, which meant abandoning the report (and any hiring
+            progress behind it) to connect a source. */}
+        <button
+          type="button"
+          onClick={() => onOpenKnowledge?.("drive")}
+          className="text-xs font-medium text-violet-600 hover:text-violet-700"
+        >
           {L("Connect a source", "חברו מקור ידע")}
-        </a>
+        </button>
       </span>
     );
   }
@@ -122,7 +132,7 @@ function GapResolver({ token, kbId, question, onResolved, L }: {
 }
 
 // ─── The report body (reusable everywhere) ──────────────────
-export function ReadinessReportView({ report, token, kbId, busy, onRerun, onAddKnowledge }: {
+export function ReadinessReportView({ report, token, kbId, busy, onRerun, onAddKnowledge, onOpenKnowledge }: {
   report: ReadinessReport;
   token: string;
   /** First attached knowledge base of this employee - target for inline fixes. */
@@ -131,6 +141,8 @@ export function ReadinessReportView({ report, token, kbId, busy, onRerun, onAddK
   onRerun: () => void;
   /** Optional override for "add knowledge" recommendations (the wizard opens its KB step). */
   onAddKnowledge?: () => void;
+  /** Opens the shared Knowledge Manager in place, in the requested mode. */
+  onOpenKnowledge?: (mode: KnowledgeEntryMode) => void;
 }) {
   const { locale } = useI18n();
   const he = locale === "he";
@@ -143,10 +155,11 @@ export function ReadinessReportView({ report, token, kbId, busy, onRerun, onAddK
 
   function recAction(r: ReadinessRecommendation) {
     if (r.type === "add_knowledge" || r.type === "add_faq" || r.type === "add_business_data") {
-      return onAddKnowledge ? (
-        <button onClick={onAddKnowledge} className="text-xs font-medium text-violet-600 hover:text-violet-700 shrink-0">{L("Add knowledge", "הוסיפו ידע")}</button>
-      ) : (
-        <a href="/ai-studio/knowledge" target="_blank" rel="noreferrer" className="text-xs font-medium text-violet-600 hover:text-violet-700 shrink-0">{L("Add knowledge", "הוסיפו ידע")}</a>
+      // No navigation in either branch: the caller's own handler if it has
+      // one, otherwise the shared manager in place.
+      const open = onAddKnowledge ?? (() => onOpenKnowledge?.("upload"));
+      return (
+        <button onClick={open} className="text-xs font-medium text-violet-600 hover:text-violet-700 shrink-0">{L("Add knowledge", "הוסיפו ידע")}</button>
       );
     }
     if (r.type === "connect_tool") {
@@ -234,7 +247,7 @@ export function ReadinessReportView({ report, token, kbId, busy, onRerun, onAddK
                     {done && <div className="text-xs text-emerald-600 mt-0.5">{L("Taught - will count on the next run", "נלמד - ייספר בהרצה הבאה")}</div>}
                     {isGap && !done && (
                       <div className="mt-1">
-                        <GapResolver token={token} kbId={kbId} question={q.question} L={L}
+                        <GapResolver token={token} kbId={kbId} question={q.question} L={L} onOpenKnowledge={onOpenKnowledge}
                           onResolved={() => setResolved((prev) => new Set(prev).add(i))} />
                       </div>
                     )}
@@ -267,6 +280,12 @@ export function ReadinessReportModal({ open, onClose, report, token, kbId, busy,
   const { locale } = useI18n();
   const he = locale === "he";
 
+  // The shared Knowledge Manager, opened from inside the report. Nothing here
+  // navigates: the report (and whatever is behind it, including an in-progress
+  // hire) stays exactly where it was, and a successful add re-runs readiness so
+  // the score the user is looking at stops being stale.
+  const [knowledgeMode, setKnowledgeMode] = useState<KnowledgeEntryMode | null>(null);
+
   // Scroll lock, focus trap, focus restore, Escape/backdrop and the portal all
   // come from the shared Modal - this component previously hand-rolled the
   // overlay, which is how the page behind it ended up scrolling with the
@@ -283,7 +302,14 @@ export function ReadinessReportModal({ open, onClose, report, token, kbId, busy,
       data-testid="readiness-report-modal"
     >
       {report ? (
-        <ReadinessReportView report={report} token={token} kbId={kbId} busy={busy} onRerun={onRerun} />
+        <ReadinessReportView
+          report={report}
+          token={token}
+          kbId={kbId}
+          busy={busy}
+          onRerun={onRerun}
+          onOpenKnowledge={setKnowledgeMode}
+        />
       ) : (
         <div className="py-16 text-center">
           <p className="text-sm text-gray-500 mb-4">{he ? "עוד לא נוצר דוח מוכנות לעובד/ת הזה." : "No readiness report yet for this employee."}</p>
@@ -293,6 +319,19 @@ export function ReadinessReportModal({ open, onClose, report, token, kbId, busy,
           </button>
         </div>
       )}
+
+      {/* ONE shared manager, opened in the mode the report asked for. */}
+      <KnowledgeDrawer
+        isOpen={knowledgeMode !== null}
+        onClose={() => setKnowledgeMode(null)}
+        initialMode={knowledgeMode ?? "browse"}
+        contextLabel={he ? "מדוח המוכנות" : "From the readiness report"}
+        onAdded={() => {
+          // The score on screen is now out of date. Re-run rather than leave the
+          // user looking at a number that no longer reflects their knowledge.
+          onRerun();
+        }}
+      />
     </Modal>
   );
 }

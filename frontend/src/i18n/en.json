@@ -836,6 +836,7 @@
     "sourceType": "Source Type",
     "content": "Content",
     "upload": "Upload & Process",
+    "answerDirectly": "Answer a question",
     "pasteText": "Paste Text",
     "uploadFile": "Upload File",
     "connectSource": "Connect Source",
