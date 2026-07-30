@@ -60,6 +60,28 @@ export {
 } from "./lib/identity-resolver";
 // Read vs write classification - ONE table, used by the Copilot's
 // who-executes decision and by the sandbox write guard in dispatchToolCall.
+// Tool permission explanation layer: risk grouping, and WHY a tool cannot run.
+// Deliberately not an authorization decision - evaluateToolGate owns that.
+export {
+  RISK_GROUPS,
+  riskGroupFor,
+  mayBeAlwaysAllowed,
+  recommendedState,
+  resolveToolAvailability,
+  summarizeTools,
+  groupByRisk,
+  planBulkAction,
+  bulkActionNeedsConfirmation,
+} from "./lib/tool-availability";
+export type {
+  RiskGroup,
+  PermissionState,
+  UnavailableReason,
+  ToolAvailabilityInput,
+  ToolAvailability,
+  ToolCounts,
+  BulkAction,
+} from "./lib/tool-availability";
 export { classifyToolEffect } from "./lib/tool-effect";
 export type { ToolEffect } from "./lib/tool-effect";
 export {
