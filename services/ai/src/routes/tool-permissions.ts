@@ -9,6 +9,12 @@ import {
 } from "@chatcenter/shared";
 import { getAvailableTools, TOOL_REGISTRY } from "../services/tool-registry";
 import { riskGroupFor, type RiskGroup } from "@chatcenter/shared";
+import {
+  capabilityStateFromConfig,
+  missingScopesFromConfig,
+  toolBlockedByMissingScopes,
+  getAdapter,
+} from "../services/connectors/integration-framework";
 
 /**
  * F4/F8 - Per-tenant tool permissions (HITL + enable/disable).
@@ -59,6 +65,10 @@ interface MergedToolRow {
   integrationConnected?: boolean;
   requiredScopes?: string[];
   grantedScopes?: string[];
+  /** Authoritative verdict from toolBlockedByMissingScopes - the runtime's own rule. */
+  scopeBlocked?: boolean;
+  /** Exactly which required scopes are known-missing. */
+  missingScopes?: string[];
   hasCatalogEntry?: boolean;
 }
 
@@ -97,28 +107,67 @@ router.get("/", async (req: Request, res: Response) => {
       });
     }
 
-    // Connection state and granted provider scopes, per integration slug. The
-    // UI needs these to say "the integration is disconnected" or "this scope was
-    // never granted" instead of showing an off switch the admin cannot fix.
+    // Connection state and scope facts per integration slug, so the UI can say
+    // "the integration is disconnected" or "this scope was never granted"
+    // instead of showing an off switch the admin cannot fix.
+    //
+    // There is no `scopes` COLUMN on TenantIntegration - an earlier version of
+    // this code selected one, which threw, was swallowed by the catch below, and
+    // left every scope fact permanently undefined. The real sources are on
+    // `config`:
+    //   config.capabilityState.grantedScopes - what the provider says is granted
+    //   config.missingScopes                 - the enforcement source the bot's
+    //                                          tool surface already reads
+    // Reading the same two the runtime reads is the point: a UI computing its
+    // own answer here is how the screen ends up disagreeing with execution.
     const tenantIntegrations = await (prisma as any).tenantIntegration
       .findMany({
         where: { tenantId },
         select: {
           status: true,
-          scopes: true,
+          config: true,
           integration: { select: { slug: true, name: true } },
         },
       })
-      .catch(() => [] as any[]);
-    const integrationBySlug = new Map<string, { connected: boolean; scopes: string[]; name: string }>();
+      .catch((err: any) => {
+        // Loud, because silence here is what hid the original bug.
+        console.error("[tool-permissions] integration lookup failed:", err?.message);
+        return [] as any[];
+      });
+
+    const integrationBySlug = new Map<
+      string,
+      { connected: boolean; grantedScopes: string[]; missingScopes: string[]; name: string }
+    >();
     for (const ti of tenantIntegrations as any[]) {
       const slug = ti.integration?.slug;
       if (!slug) continue;
+      const cfg = (ti.config && typeof ti.config === "object" ? ti.config : {}) as Record<string, any>;
       integrationBySlug.set(slug, {
         connected: String(ti.status || "").toUpperCase() === "CONNECTED",
-        scopes: Array.isArray(ti.scopes) ? ti.scopes.filter((x: unknown) => typeof x === "string") : [],
+        grantedScopes: capabilityStateFromConfig(cfg).grantedScopes,
+        missingScopes: missingScopesFromConfig(cfg),
         name: ti.integration?.name ?? slug,
       });
+    }
+
+    // Per-tool required scopes, from each adapter's own ToolDefinition. These
+    // are declared in connector code (not on CatalogTool), and are the same
+    // declarations `toolBlockedByMissingScopes` uses at the bot tool surface.
+    const requiredScopesByTool = new Map<string, string[]>();
+    const toolDefByName = new Map<string, any>();
+    for (const slug of integrationBySlug.keys()) {
+      const adapter = getAdapter(slug);
+      if (!adapter?.tools) continue;
+      try {
+        for (const def of adapter.tools()) {
+          if (!def?.name) continue;
+          toolDefByName.set(def.name, def);
+          if (def.requiredScopes?.length) requiredScopesByTool.set(def.name, def.requiredScopes);
+        }
+      } catch (err: any) {
+        console.warn(`[tool-permissions] adapter ${slug} tools() failed:`, err?.message);
+      }
     }
 
     const defaultHighRisk = new Set(getDefaultHighRiskTools());
@@ -161,7 +210,24 @@ router.get("/", async (req: Request, res: Response) => {
           integrationConnected: integrationBySlug.has(slug)
             ? integrationBySlug.get(slug)!.connected
             : undefined,
-          grantedScopes: integrationBySlug.get(slug)?.scopes,
+          requiredScopes: requiredScopesByTool.get(spec.name),
+          grantedScopes: integrationBySlug.get(slug)?.grantedScopes,
+          // The authoritative scope verdict, from the SAME function the bot's
+          // tool surface uses. Sent as a decided boolean rather than leaving the
+          // UI to re-derive it from two scope lists, because a second derivation
+          // is a second chance to disagree with the runtime.
+          scopeBlocked: (() => {
+            const def = toolDefByName.get(spec.name);
+            const missing = integrationBySlug.get(slug)?.missingScopes ?? [];
+            return def ? toolBlockedByMissingScopes(def, missing) : undefined;
+          })(),
+          missingScopes: (() => {
+            const def = toolDefByName.get(spec.name);
+            const missing = integrationBySlug.get(slug)?.missingScopes ?? [];
+            if (!def?.requiredScopes?.length || !missing.length) return undefined;
+            const hit = def.requiredScopes.filter((sc: string) => missing.includes(sc));
+            return hit.length ? hit : undefined;
+          })(),
           hasCatalogEntry: tenantToolBySlug.has(slug),
         });
         return;

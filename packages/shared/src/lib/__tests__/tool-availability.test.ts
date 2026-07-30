@@ -249,3 +249,50 @@ describe("bulk actions", () => {
     }
   });
 });
+
+describe("scope verdict precedence - the runtime's answer wins", () => {
+  const base = { toolName: "shopify.create_order", enabled: true, requiresApproval: true };
+
+  it("trusts scopeBlocked=true even when the scope lists look satisfied", () => {
+    // The enforcement source is config.missingScopes, populated from real
+    // provider errors. If the runtime says blocked, the row says blocked -
+    // re-deriving from two lists is how a screen ends up disagreeing with the
+    // code that actually refuses the call.
+    const r = resolveToolAvailability({
+      ...base,
+      scopeBlocked: true,
+      missingScopes: ["write_orders"],
+      requiredScopes: ["write_orders"],
+      grantedScopes: ["write_orders"],
+    });
+    expect(r.state).toBe("unavailable");
+    expect(r.reason).toBe("missing_scope");
+    expect(r.missingScopes).toEqual(["write_orders"]);
+  });
+
+  it("trusts scopeBlocked=false even when the lists look unsatisfied", () => {
+    const r = resolveToolAvailability({
+      ...base,
+      scopeBlocked: false,
+      requiredScopes: ["write_orders"],
+      grantedScopes: [],
+    });
+    expect(r.state).toBe("require_approval");
+    expect(r.reason).toBe("ok");
+  });
+
+  it("falls back to comparing lists only when there is no verdict", () => {
+    const r = resolveToolAvailability({
+      ...base,
+      requiredScopes: ["write_orders"],
+      grantedScopes: [],
+    });
+    expect(r.reason).toBe("missing_scope");
+    expect(r.missingScopes).toEqual(["write_orders"]);
+  });
+
+  it("still puts a plan gap ahead of any scope verdict", () => {
+    const r = resolveToolAvailability({ ...base, planEntitled: false, scopeBlocked: true });
+    expect(r.reason).toBe("plan_not_entitled");
+  });
+});

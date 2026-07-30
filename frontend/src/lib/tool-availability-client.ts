@@ -160,6 +160,17 @@ export interface ToolAvailabilityInput {
   /** Provider scopes this tool needs, and the ones actually granted. */
   requiredScopes?: string[];
   grantedScopes?: string[];
+  /**
+   * The runtime's OWN verdict (toolBlockedByMissingScopes against
+   * config.missingScopes). When present it wins over the required-vs-granted
+   * comparison below: the enforcement source is `missingScopes`, which is
+   * populated from real provider errors, and a UI that re-derives the answer
+   * from two scope lists will eventually disagree with the code that actually
+   * blocks the call.
+   */
+  scopeBlocked?: boolean;
+  /** Which required scopes are known-missing, when the runtime says so. */
+  missingScopes?: string[];
   /** Does the tenant's plan include the feature this tool belongs to? */
   planEntitled?: boolean;
   /** Dotted/integration tools with no CatalogTool row are denied at dispatch. */
@@ -198,12 +209,27 @@ export function resolveToolAvailability(input: ToolAvailabilityInput): ToolAvail
     return { ...base, state: "unavailable", reason: "integration_disconnected", overriddenByPlatform: true };
   }
 
-  const required = input.requiredScopes ?? [];
-  if (required.length > 0) {
-    const granted = new Set(input.grantedScopes ?? []);
-    const missing = required.filter((s) => !granted.has(s));
-    if (missing.length > 0) {
-      return { ...base, state: "unavailable", reason: "missing_scope", missingScopes: missing, overriddenByPlatform: true };
+  // Prefer the runtime's verdict when it gave one.
+  if (input.scopeBlocked === true) {
+    return {
+      ...base,
+      state: "unavailable",
+      reason: "missing_scope",
+      missingScopes: input.missingScopes ?? [],
+      overriddenByPlatform: true,
+    };
+  }
+  // Fall back to comparing declared-required against granted. Only used when
+  // the caller could not supply a verdict (e.g. a provider with no adapter
+  // ToolDefinition), so an absent verdict never means "definitely fine".
+  if (input.scopeBlocked !== false) {
+    const required = input.requiredScopes ?? [];
+    if (required.length > 0) {
+      const granted = new Set(input.grantedScopes ?? []);
+      const missing = required.filter((s) => !granted.has(s));
+      if (missing.length > 0) {
+        return { ...base, state: "unavailable", reason: "missing_scope", missingScopes: missing, overriddenByPlatform: true };
+      }
     }
   }
 
