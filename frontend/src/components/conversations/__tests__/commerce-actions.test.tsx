@@ -279,3 +279,136 @@ describe("capabilities gate what is offered", () => {
     expect(screen.getByText("commerce.cancel")).toBeTruthy();
   });
 });
+
+describe("customer summary shows only what the provider actually returned", () => {
+  const withSummary = (over: Record<string, any>) => {
+    const c = okContext();
+    Object.assign(c.data.summary, over);
+    fetchCommerceContext.mockResolvedValue(c);
+  };
+
+  it("renders the fields that are present", async () => {
+    withSummary({
+      name: "Dana Levi", email: "dana@example.com", phone: "+972500000000",
+      averageOrderValue: { amount: "150.00", currency: "USD" },
+      customerSince: "2025-01-05T00:00:00.000Z",
+      defaultAddress: "12 Herzl St, Tel Aviv",
+    });
+    renderPanel();
+    expect(await screen.findByTestId("customer-name")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("customer-summary-toggle"));
+    expect(screen.getByTestId("cs-email").textContent).toContain("dana@example.com");
+    expect(screen.getByTestId("cs-aov").textContent).toContain("150.00");
+    expect(screen.getByTestId("cs-address").textContent).toContain("Herzl");
+  });
+
+  it("omits a field entirely rather than showing a blank or a zero", async () => {
+    // "Average order: 0.00" is a claim about this customer's behaviour that
+    // the data does not support. An absent field must stay absent.
+    // One real field, so the section expands at all - then the ones Shopify
+    // did not return must simply not be there.
+    withSummary({ name: "Dana Levi", phone: "+972500000000" });
+    renderPanel();
+    await screen.findByTestId("customer-name");
+    fireEvent.click(screen.getByTestId("customer-summary-toggle"));
+    expect(screen.getByTestId("cs-phone")).toBeTruthy();
+    expect(screen.queryByTestId("cs-email")).toBeNull();
+    expect(screen.queryByTestId("cs-aov")).toBeNull();
+    expect(screen.queryByTestId("cs-address")).toBeNull();
+  });
+
+  it("offers no expander when there is nothing extra to show", async () => {
+    withSummary({ name: "Dana Levi" });
+    const c = okContext();
+    c.data.summary = { ...c.data.summary, name: "Dana Levi" } as any;
+    fetchCommerceContext.mockResolvedValue(c);
+    renderPanel();
+    await screen.findByTestId("customer-summary");
+    expect(screen.queryByTestId("customer-summary-toggle")).toBeNull();
+  });
+});
+
+describe("order detail is progressive, and never invents money", () => {
+  const withDetail = (detail: Record<string, any>) => {
+    const c = okContext();
+    (c.data.recentOrders[0] as any).detail = {
+      lineItems: [], itemCount: 0, tracking: [], tags: [], refunds: [], ...detail,
+    };
+    fetchCommerceContext.mockResolvedValue(c);
+  };
+
+  it("stays collapsed until asked", async () => {
+    withDetail({ subtotal: { amount: "90.00", currency: "USD" } });
+    renderPanel();
+    await screen.findByTestId("order-detail-toggle");
+    expect(screen.queryByTestId("order-detail")).toBeNull();
+    fireEvent.click(screen.getByTestId("order-detail-toggle"));
+    expect(screen.getByTestId("od-subtotal").textContent).toContain("90.00");
+  });
+
+  it("renders line items with quantity and line total", async () => {
+    withDetail({
+      itemCount: 3,
+      lineItems: [{ title: "Snowboard", variantTitle: "Large", quantity: 3, unitPrice: { amount: "50.00", currency: "USD" }, lineTotal: { amount: "150.00", currency: "USD" }, imageUrl: null }],
+    });
+    renderPanel();
+    fireEvent.click(await screen.findByTestId("order-detail-toggle"));
+    const line = screen.getByTestId("order-line");
+    expect(line.textContent).toContain("Snowboard");
+    expect(line.textContent).toContain("Large");
+    expect(line.textContent).toContain("150.00");
+  });
+
+  it("omits money lines the provider did not give", async () => {
+    withDetail({ subtotal: { amount: "90.00", currency: "USD" } });
+    renderPanel();
+    fireEvent.click(await screen.findByTestId("order-detail-toggle"));
+    expect(screen.getByTestId("od-subtotal")).toBeTruthy();
+    expect(screen.queryByTestId("od-tax")).toBeNull();
+    expect(screen.queryByTestId("od-shipping")).toBeNull();
+  });
+
+  it("hides a zero outstanding balance, which is not news", async () => {
+    withDetail({ outstanding: { amount: "0.00", currency: "USD" } });
+    renderPanel();
+    fireEvent.click(await screen.findByTestId("order-detail-toggle"));
+    expect(screen.queryByTestId("od-outstanding")).toBeNull();
+  });
+
+  it("shows an outstanding balance that is real", async () => {
+    withDetail({ outstanding: { amount: "40.00", currency: "USD" } });
+    renderPanel();
+    fireEvent.click(await screen.findByTestId("order-detail-toggle"));
+    expect(screen.getByTestId("od-outstanding").textContent).toContain("40.00");
+  });
+
+  it("links tracking when a URL exists and copies the number", async () => {
+    withDetail({ tracking: [{ number: "TRK1", url: "https://track/TRK1", company: "DHL" }] });
+    renderPanel();
+    fireEvent.click(await screen.findByTestId("order-detail-toggle"));
+    const link = screen.getByText("TRK1") as HTMLAnchorElement;
+    expect(link.tagName).toBe("A");
+    expect(link.href).toContain("track/TRK1");
+    expect(screen.getByTestId("copy-tracking")).toBeTruthy();
+  });
+
+  it("shows addresses, order tags and a cancellation reason when present", async () => {
+    withDetail({
+      shippingAddress: "12 Herzl St, Tel Aviv",
+      tags: ["fragile", "priority"],
+      cancelReason: "customer",
+    });
+    renderPanel();
+    fireEvent.click(await screen.findByTestId("order-detail-toggle"));
+    expect(screen.getByTestId("od-ship-to").textContent).toContain("Herzl");
+    expect(screen.getByTestId("order-tags").textContent).toContain("fragile");
+    expect(screen.getByTestId("od-cancel-reason").textContent).toContain("customer");
+  });
+
+  it("lists refund history", async () => {
+    withDetail({ refunds: [{ at: "2026-07-20T00:00:00.000Z", amount: { amount: "25.00", currency: "USD" } }] });
+    renderPanel();
+    fireEvent.click(await screen.findByTestId("order-detail-toggle"));
+    expect(screen.getByTestId("order-refunds").textContent).toContain("25.00");
+  });
+});

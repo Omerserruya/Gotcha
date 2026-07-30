@@ -88,6 +88,13 @@ export interface IntegrationDetail {
   logoUrl?: string | null;
   /** How many tools connecting WOULD bring. Not a policy count. */
   catalogToolCount?: number;
+  /** Straight from the catalog, so the workspace starts the real flow. */
+  authType?: string;
+  authSchema?: {
+    oauth?: boolean;
+    fields?: Array<{ key: string; label: string; type?: string; required?: boolean; placeholder?: string; helpText?: string }>;
+    scopes?: string[];
+  };
   missingScopes?: string[];
   grantedScopes?: string[];
   capabilityStatus?: string | null;
@@ -108,6 +115,24 @@ export function getIntegrationDetail(token: string, id: string) {
     `/api/integration-workspace/${encodeURIComponent(id)}`,
     { token },
   );
+}
+
+/**
+ * Connect a credential-based integration. Reuses the SAME endpoint the
+ * marketplace uses - there is no second connection implementation, and none of
+ * the credentials pass through anything but this call.
+ */
+export function connectIntegration(
+  token: string,
+  slug: string,
+  credentials: Record<string, string>,
+  config?: Record<string, unknown>,
+) {
+  return apiFetch<{ data: unknown }>(`/api/integrations/${encodeURIComponent(slug)}/connect`, {
+    token,
+    method: "POST",
+    body: JSON.stringify({ credentials, ...(config ? { config } : {}) }),
+  });
 }
 
 /**

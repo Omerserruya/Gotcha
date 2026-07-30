@@ -18,6 +18,7 @@ import {
   getIntegrationWorkspace,
   getIntegrationDetail,
   setToolPolicy,
+  connectIntegration,
   type IntegrationDetail,
   type WorkspaceSidebar,
   type WorkspaceTool,
@@ -29,6 +30,7 @@ import {
   type BulkAction,
   type PermissionState,
 } from "@/lib/tool-availability-client";
+import { initIntegrationOAuth } from "@/lib/api";
 import { IntegrationSidebar } from "./IntegrationSidebar";
 import { ToolPermissionRow, RiskGroupHeading, riskLabel } from "../ai-studio/ToolPermissionRow";
 import ConfirmModal from "../ConfirmModal";
@@ -53,6 +55,7 @@ export function IntegrationWorkspace() {
   const [bulk, setBulk] = useState<{ action: BulkAction; count: number } | null>(null);
   const [bulkResult, setBulkResult] = useState<string | null>(null);
   const [showRaw, setShowRaw] = useState(false);
+  const [connectOpen, setConnectOpen] = useState(false);
 
   const loadSidebar = useCallback(async () => {
     if (!token) return;
@@ -229,13 +232,14 @@ export function IntegrationWorkspace() {
                 )}
               </p>
             )}
-            <a
-              href={`/ai-studio/marketplace/${encodeURIComponent(detail.id)}?returnTab=tools`}
+            <button
+              type="button"
+              onClick={() => setConnectOpen(true)}
               data-testid="integration-connect-cta"
               className="mt-4 inline-flex items-center rounded-xl bg-primary-500 hover:bg-primary-600 px-4 py-2 text-sm font-medium text-white transition"
             >
               {L("Connect", "חיבור")}
-            </a>
+            </button>
           </div>
         )}
 
@@ -352,6 +356,21 @@ export function IntegrationWorkspace() {
         )}
       </section>
 
+      {connectOpen && detail?.connectable && (
+        <ConnectDialog
+          detail={detail}
+          he={he}
+          onCancel={() => setConnectOpen(false)}
+          onConnected={async () => {
+            setConnectOpen(false);
+            // Re-read rather than assume: the integration is only "connected"
+            // once the server says so, and its tools appear from that read.
+            await loadSidebar();
+            if (selectedId) await loadDetail(selectedId);
+          }}
+        />
+      )}
+
       <ConfirmModal
         isOpen={!!bulk}
         title={bulk ? BULK_LABELS[bulk.action] : ""}
@@ -370,6 +389,140 @@ export function IntegrationWorkspace() {
         onConfirm={() => { const a = bulk?.action; setBulk(null); if (a) void runBulk(a); }}
         onCancel={() => setBulk(null)}
       />
+    </div>
+  );
+}
+
+
+/**
+ * Start the REAL connection flow without leaving the workspace (spec §3).
+ *
+ * Two shapes, both existing endpoints - no second OAuth implementation:
+ *
+ *   OAuth providers      collect any pre-flight field the catalog declares
+ *                        (Shopify needs the shop domain), then hand off to
+ *                        /oauth/init, which is the only place that knows how
+ *                        to build the provider consent URL.
+ *   Credential providers render the catalog's declared fields and POST them to
+ *                        the same /connect endpoint the marketplace uses.
+ *
+ * The field list comes from the catalog, never from a hardcoded per-provider
+ * form here - that is what let this screen support every provider at once.
+ */
+function ConnectDialog({
+  detail, he, onCancel, onConnected,
+}: {
+  detail: IntegrationDetail;
+  he: boolean;
+  onCancel: () => void;
+  onConnected: () => void | Promise<void>;
+}) {
+  const { token } = useAuth();
+  const L = (en: string, hebrew: string) => (he ? hebrew : en);
+  const fields = detail.authSchema?.fields ?? [];
+  const isOAuth = detail.authSchema?.oauth === true || detail.authType === "OAUTH2";
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const missing = fields.filter((f) => f.required && !String(values[f.key] ?? "").trim());
+
+  async function submit() {
+    if (!token) return;
+    setBusy(true);
+    setError(null);
+    try {
+      if (isOAuth) {
+        // The pre-flight fields are query params for init (e.g. shop=...).
+        const { url } = await initIntegrationOAuth(token, detail.id, values);
+        if (!url) throw new Error(L("Could not start the connection.", "לא ניתן להתחיל את החיבור."));
+        // Remember where to come back to, so the callback lands on this screen.
+        try { sessionStorage.setItem("integrationReturnTo", "/ai-studio?tab=tools"); } catch { /* private mode */ }
+        window.location.href = url;
+        return;
+      }
+      await connectIntegration(token, detail.id, values);
+      await onConnected();
+    } catch (e: any) {
+      // The provider's own reason, kept intact. "Invalid API key" and "this
+      // store is on another plan" are different problems for the reader.
+      setError(e?.message || L("That did not connect.", "החיבור לא הצליח."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 p-4" onClick={onCancel}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="connect-title"
+        data-testid="connect-dialog"
+        className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-5 max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+        dir={he ? "rtl" : "ltr"}
+      >
+        <h3 id="connect-title" className="text-sm font-semibold text-gray-900">
+          {L(`Connect ${detail.name}`, `חיבור ${detail.name}`)}
+        </h3>
+
+        {isOAuth && (
+          <p className="mt-1 text-[11px] text-gray-500" data-testid="connect-oauth-note">
+            {L(
+              "You will be sent to the provider to approve access, then brought back here.",
+              "תועברו לספק לאישור הגישה ותחזרו לכאן.",
+            )}
+          </p>
+        )}
+
+        <div className="mt-3 space-y-2.5">
+          {fields.map((f) => (
+            <div key={f.key}>
+              <label htmlFor={`cf-${f.key}`} className="block text-[11px] font-medium text-gray-600 mb-1">
+                {f.label}{f.required && <span className="text-rose-500"> *</span>}
+              </label>
+              <input
+                id={`cf-${f.key}`}
+                data-testid={`connect-field-${f.key}`}
+                type={f.type === "password" ? "password" : "text"}
+                value={values[f.key] ?? ""}
+                placeholder={f.placeholder}
+                onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+                dir="ltr"
+                className="w-full px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs outline-none focus:border-primary-300 focus:ring-2 focus:ring-primary-100"
+              />
+              {f.helpText && <p className="mt-1 text-[10px] text-gray-400">{f.helpText}</p>}
+            </div>
+          ))}
+        </div>
+
+        {(detail.authSchema?.scopes?.length ?? 0) > 0 && (
+          <p className="mt-3 text-[10px] text-gray-400" data-testid="connect-scopes">
+            {L("Requests: ", "מבקש: ")}{detail.authSchema!.scopes!.join(", ")}
+          </p>
+        )}
+
+        {error && (
+          <p className="mt-3 rounded-lg bg-rose-50 px-2 py-1 text-[11px] text-rose-700" data-testid="connect-error">
+            {error}
+          </p>
+        )}
+
+        <div className="mt-4 flex justify-end gap-2">
+          <button onClick={onCancel} className="text-xs px-3 py-1.5 rounded-lg text-gray-600 hover:bg-gray-100">
+            {L("Cancel", "ביטול")}
+          </button>
+          <button
+            data-testid="connect-submit"
+            disabled={busy || missing.length > 0}
+            onClick={() => void submit()}
+            className="text-xs px-3 py-1.5 rounded-lg bg-primary-500 hover:bg-primary-600 text-white disabled:opacity-40"
+          >
+            {busy ? L("Connecting…", "מתחבר…") : L("Connect", "חיבור")}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

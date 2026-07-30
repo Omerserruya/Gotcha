@@ -31,11 +31,34 @@ export interface OrderCard {
   refundedAmount: Money;
   refundableMaximum: Money;
   timeline: TimelineMilestone[];
+  detail?: OrderDetail;
   eligibility: { cancellable: boolean; refundable: boolean; reasonIfNot?: string };
+}
+
+export interface OrderLineDetail {
+  title: string; variantTitle?: string; sku?: string;
+  quantity: number; unitPrice: Money; lineTotal: Money; imageUrl: string | null;
+}
+export interface OrderTracking { number?: string; url?: string; company?: string }
+export interface OrderRefundEvent { at: string; amount: Money; reason?: string }
+export interface OrderDetail {
+  lineItems: OrderLineDetail[];
+  itemCount: number;
+  subtotal?: Money; discounts?: Money; shipping?: Money; tax?: Money;
+  paid?: Money; outstanding?: Money;
+  tracking: OrderTracking[];
+  shippingAddress?: string; billingAddress?: string;
+  tags: string[]; cancelReason?: string;
+  refunds: OrderRefundEvent[];
+  sourceName?: string;
 }
 
 export interface CommerceSummary {
   orderCount: number;
+  /** All optional: absent means the provider gave nothing, NOT zero/empty. */
+  name?: string; email?: string; phone?: string; currency?: string;
+  averageOrderValue?: Money; customerSince?: string; note?: string;
+  defaultAddress?: string; acceptsMarketing?: boolean;
   totalSpentByCurrency: Money[];
   shopCurrencyTotal: Money | null;
   lastOrderAt: string | null;

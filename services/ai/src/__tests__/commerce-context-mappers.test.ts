@@ -169,3 +169,46 @@ describe("shipping chip only appears with real fulfillment/tracking", () => {
     expect(shippingChip({ ...ORDER, fulfillments: [{ shipment_status: "delivered" }] }, "en")).toMatchObject({ key: "delivered", tone: "positive" });
   });
 });
+
+describe("order detail money is reported, never derived (§16)", () => {
+  const { mapOrderDetail } = (__testables as any);
+  const base = { currency: "USD", total_price: "600.00", line_items: [] };
+
+  it("a refunded order does not claim the customer still owes the total", () => {
+    // Derived as total - current_total_price, a fully refunded order reads as
+    // "outstanding 600.00" - the exact opposite of what happened, and a number
+    // an agent would act on.
+    const d = mapOrderDetail(
+      { ...base, current_total_price: "0.00", financial_status: "refunded" },
+      "USD", {},
+    );
+    expect(d.outstanding).toBeUndefined();
+  });
+
+  it("reports the provider's own outstanding balance when there is one", () => {
+    const d = mapOrderDetail({ ...base, total_outstanding: "40.00" }, "USD", {});
+    expect(d.outstanding?.amount).toBe("40.00");
+  });
+
+  it("omits money lines the provider did not send, rather than sending 0.00", () => {
+    const d = mapOrderDetail(base, "USD", {});
+    expect(d.subtotal).toBeUndefined();
+    expect(d.tax).toBeUndefined();
+    expect(d.shipping).toBeUndefined();
+  });
+
+  it("keeps a real zero, which is a value the provider actually reported", () => {
+    const d = mapOrderDetail({ ...base, total_tax: "0.00" }, "USD", {});
+    expect(d.tax?.amount).toBe("0.00");
+  });
+
+  it("computes each line total from unit price and quantity", () => {
+    const d = mapOrderDetail(
+      { ...base, line_items: [{ title: "Board", quantity: 3, price: "50.00", variant_title: "L" }] },
+      "USD", {},
+    );
+    expect(d.itemCount).toBe(3);
+    expect(d.lineItems[0].lineTotal.amount).toBe("150.00");
+    expect(d.lineItems[0].variantTitle).toBe("L");
+  });
+});

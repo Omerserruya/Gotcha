@@ -925,7 +925,15 @@ const ShopifyAdapter: ProviderAdapter = {
         if (!c) throw new Error("customer_not_found");
         const orders = await customerOrders(ctx, { customer_id: String(c.id) }, { limit: 5, status: "any" });
         return {
-          customer: { id: c.id, name: [c.first_name, c.last_name].filter(Boolean).join(" "), email: c.email, phone: c.phone, tags: splitTags(c.tags), note: c.note, orders_count: c.orders_count, total_spent: c.total_spent, currency: c.currency },
+          customer: {
+            id: c.id, name: [c.first_name, c.last_name].filter(Boolean).join(" "), email: c.email, phone: c.phone,
+            tags: splitTags(c.tags), note: c.note, orders_count: c.orders_count, total_spent: c.total_spent, currency: c.currency,
+            // Additive: the agent panel shows "customer since", the default
+            // address and marketing consent. Read-only fields the account
+            // already returns; nothing new is requested from Shopify.
+            created_at: c.created_at, default_address: c.default_address,
+            accepts_marketing: c.email_marketing_consent?.state === "subscribed",
+          },
           recent_orders: (orders as any[]).map((o) => ({ id: o.id, name: o.name, created_at: o.created_at, total_price: o.total_price, financial_status: o.financial_status, fulfillment_status: o.fulfillment_status })),
         };
       }

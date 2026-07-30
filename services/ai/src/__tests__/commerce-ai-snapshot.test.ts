@@ -117,3 +117,38 @@ describe("24. tenant isolation", () => {
     expect(buildCtxMock.mock.calls[0][0].tenantId).toBe("tenant-A");
   });
 });
+
+describe("the AI never receives the agent-only order detail", () => {
+  it("drops addresses, tracking, contact details and line-item pricing", async () => {
+    // The panel now carries a full §16 detail block for the human agent:
+    // shipping and billing addresses, tracking numbers, the customer's email
+    // and phone, per-line prices. None of it belongs in a model prompt, and
+    // the snapshot must stay an explicit projection rather than a spread.
+    sotMock.mockResolvedValue({ vendor: "shopify" });
+    const rich = JSON.parse(JSON.stringify(OK_CTX));
+    rich.data.summary.email = "shopper@example.com";
+    rich.data.summary.phone = "+972500000000";
+    rich.data.summary.defaultAddress = "12 Herzl St, Tel Aviv, IL";
+    rich.data.summary.note = "VIP - handle personally";
+    rich.data.customer.tags = ["vip"];
+    rich.data.recentOrders[0].detail = {
+      lineItems: [{ title: "Nike Cryptokicks", quantity: 1, unitPrice: { amount: "120.00", currency: "USD" }, lineTotal: { amount: "120.00", currency: "USD" }, imageUrl: null }],
+      itemCount: 1,
+      tracking: [{ number: "TRK123456", url: "https://track.example/TRK123456", company: "DHL" }],
+      shippingAddress: "12 Herzl St, Tel Aviv, IL",
+      billingAddress: "12 Herzl St, Tel Aviv, IL",
+      tags: ["fragile"],
+      refunds: [],
+    };
+    buildCtxMock.mockResolvedValue(rich);
+
+    const snap: any = await buildAICommerceSnapshot({ tenantId: "t1", conversationId: "c1" });
+    const serialized = JSON.stringify(snap);
+    for (const secret of ["shopper@example.com", "+972500000000", "Herzl", "TRK123456", "DHL", "handle personally", "fragile"]) {
+      expect(serialized).not.toContain(secret);
+    }
+    expect(snap.recentOrders[0].detail).toBeUndefined();
+    // Still carries what it is supposed to.
+    expect(snap.recentOrders[0].orderNumber).toBe("#1246");
+  });
+});

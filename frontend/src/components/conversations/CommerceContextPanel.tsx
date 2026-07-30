@@ -24,6 +24,8 @@ import {
   type StatusChip,
   type CommerceActionResponse,
   type CommerceActionInput,
+  type CommerceSummary,
+  type OrderDetail,
 } from "@/lib/api-commerce";
 
 const NAV_LIMIT = 25; // how many recent orders to load for navigation
@@ -276,6 +278,10 @@ export function CommerceContextPanel({ conversationId, token, onState }: Props) 
         </div>
       )}
 
+      {/* Customer summary (spec §14). Only fields the provider actually
+          returned - an absent one says so rather than showing a blank. */}
+      {summary && <CustomerSummaryCard summary={summary} dateLocale={dateLocale} t={t} />}
+
       {/* The single selected order card */}
       {order && (
         <SingleOrderCard
@@ -480,6 +486,8 @@ function SingleOrderCard({
             <div className={clsx("text-[10px] px-2 py-1 rounded", msg.tone === "positive" ? "bg-emerald-50 text-emerald-700" : msg.tone === "danger" ? "bg-rose-50 text-rose-600" : "bg-amber-50 text-amber-700")}>{msg.text}</div>
           </div>
         )}
+
+        {order.detail && <OrderDetailSection detail={order.detail} dateLocale={dateLocale} t={t} />}
 
         {/* Order lifecycle timeline (verified Shopify data - not Shopify's native Timeline) */}
         {reached.length > 0 && (
@@ -831,6 +839,219 @@ function CustomerActions({
       {msg && (
         <div className={clsx("mt-2 text-[10px] px-2 py-1 rounded", msg.tone === "positive" ? "bg-emerald-50 text-emerald-700" : msg.tone === "danger" ? "bg-rose-50 text-rose-600" : "bg-amber-50 text-amber-700")} data-testid="customer-action-msg">
           {msg.text}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** One label/value line. Renders nothing at all when there is no value, so the
+ *  panel never shows a field with a blank beside it. */
+function Field({ label, value, testId }: { label: string; value?: string | null; testId?: string }) {
+  if (!value) return null;
+  return (
+    <div className="flex items-baseline gap-1.5 min-w-0" data-testid={testId}>
+      <span className="text-[10px] text-gray-400 shrink-0">{label}</span>
+      <span className="text-[11px] text-gray-700 truncate" dir="auto">{value}</span>
+    </div>
+  );
+}
+
+/**
+ * Customer summary (spec §14).
+ *
+ * Every field is conditional. Shopify omits plenty depending on the account
+ * and the granted scopes, and an agent reading "Total spent: 0.00" would draw
+ * a conclusion the data does not support - so a missing value is simply not
+ * shown, and the section collapses to whatever is genuinely known.
+ */
+function CustomerSummaryCard({
+  summary, dateLocale, t,
+}: {
+  summary: CommerceSummary;
+  dateLocale: string;
+  t: (k: string, v?: Record<string, string>) => string;
+}) {
+  const [open, setOpen] = useState(false);
+  const date = (iso?: string | null) =>
+    iso ? new Date(iso).toLocaleDateString(dateLocale, { day: "numeric", month: "short", year: "numeric" }) : undefined;
+
+  const extras = [
+    summary.email, summary.phone, summary.defaultAddress,
+    summary.customerSince, summary.note, summary.averageOrderValue,
+  ].filter(Boolean).length;
+
+  return (
+    <div className="px-3 py-2.5 border-b border-gray-50" data-testid="customer-summary">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          {summary.name && (
+            <p className="text-xs font-semibold text-gray-900 truncate" dir="auto" data-testid="customer-name">{summary.name}</p>
+          )}
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
+            <span className="text-[10px] text-gray-500 tabular-nums">
+              {t("commerce.orders") || "Orders"}: <span className="font-semibold text-gray-700">{summary.orderCount}</span>
+            </span>
+            {summary.repeatCustomer && (
+              <span className="text-[10px] px-1 py-0.5 rounded bg-emerald-50 text-emerald-700">{t("commerce.repeatCustomer") || "Repeat"}</span>
+            )}
+            {summary.acceptsMarketing === true && (
+              <span className="text-[10px] px-1 py-0.5 rounded bg-indigo-50 text-indigo-700">{t("commerce.subscribed") || "Subscribed"}</span>
+            )}
+          </div>
+        </div>
+        {extras > 0 && (
+          <button
+            type="button"
+            data-testid="customer-summary-toggle"
+            aria-expanded={open}
+            onClick={() => setOpen(!open)}
+            className="text-[10px] text-gray-400 hover:text-gray-600 shrink-0"
+          >
+            {open ? t("commerce.less") || "Less" : t("commerce.more") || "More"}
+          </button>
+        )}
+      </div>
+
+      {open && (
+        <div className="mt-2 space-y-0.5" data-testid="customer-summary-details">
+          <Field label={t("commerce.email") || "Email"} value={summary.email} testId="cs-email" />
+          <Field label={t("commerce.phone") || "Phone"} value={summary.phone} testId="cs-phone" />
+          <Field
+            label={t("commerce.averageOrder") || "Average order"}
+            value={summary.averageOrderValue ? money(summary.averageOrderValue) : undefined}
+            testId="cs-aov"
+          />
+          <Field label={t("commerce.customerSince") || "Customer since"} value={date(summary.customerSince)} testId="cs-since" />
+          <Field label={t("commerce.lastOrder") || "Last order"} value={date(summary.lastOrderAt)} testId="cs-last" />
+          <Field label={t("commerce.defaultAddress") || "Address"} value={summary.defaultAddress} testId="cs-address" />
+          <Field label={t("commerce.customerNote") || "Note"} value={summary.note} testId="cs-note" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Expandable order detail (spec §16).
+ *
+ * Money lines are rendered only when the provider returned them. A refund
+ * decision made against an invented subtotal is worse than one made with the
+ * line simply absent.
+ */
+function OrderDetailSection({
+  detail, dateLocale, t,
+}: {
+  detail: OrderDetail;
+  dateLocale: string;
+  t: (k: string, v?: Record<string, string>) => string;
+}) {
+  const [open, setOpen] = useState(false);
+  const row = (label: string, m?: { amount: string; currency: string }, testId?: string) =>
+    m ? (
+      <div className="flex items-center justify-between text-[11px]" data-testid={testId}>
+        <span className="text-gray-500">{label}</span>
+        <span className="text-gray-800 tabular-nums" dir="ltr">{money(m)}</span>
+      </div>
+    ) : null;
+
+  return (
+    <div className="px-3 pb-2.5">
+      <button
+        type="button"
+        data-testid="order-detail-toggle"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+        className="text-[10px] font-medium text-gray-500 hover:text-gray-700"
+      >
+        {open ? t("commerce.hideDetails") || "Hide details" : t("commerce.showDetails") || "Show details"}
+        {detail.itemCount > 0 && <span className="text-gray-400"> · {detail.itemCount} {t("commerce.items") || "items"}</span>}
+      </button>
+
+      {open && (
+        <div className="mt-2 space-y-2" data-testid="order-detail">
+          {/* Line items */}
+          {detail.lineItems.length > 0 && (
+            <ul className="space-y-1">
+              {detail.lineItems.map((li, i) => (
+                <li key={`${li.title}-${i}`} className="flex items-start justify-between gap-2 text-[11px]" data-testid="order-line">
+                  <span className="min-w-0 text-gray-700" dir="auto">
+                    <span className="tabular-nums text-gray-400">{li.quantity}× </span>
+                    {li.title}
+                    {li.variantTitle && <span className="text-gray-400"> · {li.variantTitle}</span>}
+                  </span>
+                  <span className="shrink-0 text-gray-800 tabular-nums" dir="ltr">{money(li.lineTotal)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {/* Money breakdown */}
+          <div className="space-y-0.5 pt-1.5 border-t border-gray-100">
+            {row(t("commerce.subtotal") || "Subtotal", detail.subtotal, "od-subtotal")}
+            {row(t("commerce.discounts") || "Discounts", detail.discounts, "od-discounts")}
+            {row(t("commerce.shippingCost") || "Shipping", detail.shipping, "od-shipping")}
+            {row(t("commerce.tax") || "Tax", detail.tax, "od-tax")}
+            {row(t("commerce.paid") || "Paid", detail.paid, "od-paid")}
+            {detail.outstanding && Number(detail.outstanding.amount) > 0 &&
+              row(t("commerce.outstanding") || "Outstanding", detail.outstanding, "od-outstanding")}
+          </div>
+
+          {/* Tracking */}
+          {detail.tracking.length > 0 && (
+            <div className="space-y-0.5" data-testid="order-tracking">
+              {detail.tracking.map((tr, i) => (
+                <div key={i} className="flex items-center justify-between gap-2 text-[11px]">
+                  <span className="text-gray-500 shrink-0">{tr.company || t("commerce.tracking") || "Tracking"}</span>
+                  <span className="flex items-center gap-1.5 min-w-0">
+                    {tr.url ? (
+                      <a href={tr.url} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline truncate" dir="ltr">{tr.number || t("commerce.track") || "Track"}</a>
+                    ) : (
+                      <span className="text-gray-700 truncate" dir="ltr">{tr.number}</span>
+                    )}
+                    {tr.number && (
+                      <button
+                        type="button"
+                        data-testid="copy-tracking"
+                        aria-label={t("commerce.copyTracking") || "Copy tracking number"}
+                        onClick={() => { try { navigator.clipboard?.writeText(tr.number!); } catch { /* clipboard may be unavailable */ } }}
+                        className="text-gray-400 hover:text-gray-600 shrink-0"
+                      >
+                        ⧉
+                      </button>
+                    )}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <Field label={t("commerce.shipTo") || "Ship to"} value={detail.shippingAddress} testId="od-ship-to" />
+          <Field label={t("commerce.billTo") || "Bill to"} value={detail.billingAddress} testId="od-bill-to" />
+          <Field label={t("commerce.orderSource") || "Source"} value={detail.sourceName} testId="od-source" />
+          <Field label={t("commerce.cancelReason") || "Cancellation reason"} value={detail.cancelReason} testId="od-cancel-reason" />
+
+          {detail.tags.length > 0 && (
+            <div className="flex flex-wrap gap-1" data-testid="order-tags">
+              {detail.tags.map((tag) => (
+                <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-600">{tag}</span>
+              ))}
+            </div>
+          )}
+
+          {detail.refunds.length > 0 && (
+            <ul className="space-y-0.5 pt-1.5 border-t border-gray-100" data-testid="order-refunds">
+              {detail.refunds.map((r, i) => (
+                <li key={i} className="flex items-center justify-between text-[11px]">
+                  <span className="text-gray-500">
+                    {t("commerce.refunded") || "Refunded"}
+                    <span className="text-gray-400"> · {new Date(r.at).toLocaleDateString(dateLocale, { day: "numeric", month: "short" })}</span>
+                  </span>
+                  <span className="text-gray-800 tabular-nums" dir="ltr">{money(r.amount)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
     </div>

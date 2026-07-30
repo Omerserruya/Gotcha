@@ -18,6 +18,10 @@ import type {
   CommerceContext,
   CommerceContextResponse,
   CommerceSummary,
+  OrderDetail,
+  OrderLineDetail,
+  OrderTracking,
+  OrderRefundEvent,
   CommerceCapabilities,
   OrderCard,
   StatusChip,
@@ -182,6 +186,103 @@ function adminUrl(shopDomain: string, orderId: string | number): string {
   return `https://${host}/admin/orders/${orderId}`;
 }
 
+/** Join a Shopify address into one readable line, skipping empty parts. */
+function addressLine(a: any): string | undefined {
+  if (!a || typeof a !== "object") return undefined;
+  const parts = [a.name, a.address1, a.address2, a.city, a.province, a.zip, a.country]
+    .map((x: unknown) => (x == null ? "" : String(x).trim()))
+    .filter(Boolean);
+  return parts.length ? parts.join(", ") : undefined;
+}
+
+/**
+ * The expandable order detail (spec §16).
+ *
+ * Only what Shopify actually returned. A missing subtotal stays missing rather
+ * than becoming 0.00 - the agent reads these numbers to decide whether to move
+ * money, so an invented zero is worse than a blank.
+ */
+function mapOrderDetail(order: any, currency: string, imageByProduct: Record<string, string>): OrderDetail {
+  const num = (v: unknown): number | undefined => {
+    if (v === null || v === undefined || v === "") return undefined;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : undefined;
+  };
+  const m = (v: unknown): Money | undefined => {
+    const n = num(v);
+    return n === undefined ? undefined : money(n, currency);
+  };
+
+  const lines: any[] = Array.isArray(order?.line_items) ? order.line_items : [];
+  const lineItems: OrderLineDetail[] = lines.map((li) => {
+    const qty = num(li?.quantity) ?? 1;
+    const unit = num(li?.price) ?? 0;
+    return {
+      title: String(li?.title ?? li?.name ?? "Item"),
+      ...(li?.variant_title ? { variantTitle: String(li.variant_title) } : {}),
+      ...(li?.sku ? { sku: String(li.sku) } : {}),
+      quantity: qty,
+      unitPrice: money(unit, currency),
+      lineTotal: money(unit * qty, currency),
+      imageUrl: (li?.product_id != null && imageByProduct[String(li.product_id)]) || null,
+    };
+  });
+
+  const fulfillments: any[] = Array.isArray(order?.fulfillments) ? order.fulfillments : [];
+  const tracking: OrderTracking[] = [];
+  for (const f of fulfillments) {
+    const numbers: string[] = Array.isArray(f?.tracking_numbers) ? f.tracking_numbers
+      : f?.tracking_number ? [f.tracking_number] : [];
+    const urls: string[] = Array.isArray(f?.tracking_urls) ? f.tracking_urls
+      : f?.tracking_url ? [f.tracking_url] : [];
+    if (!numbers.length && !urls.length && !f?.tracking_company) continue;
+    tracking.push({
+      ...(numbers[0] ? { number: String(numbers[0]) } : {}),
+      ...(urls[0] ? { url: String(urls[0]) } : {}),
+      ...(f?.tracking_company ? { company: String(f.tracking_company) } : {}),
+    });
+  }
+
+  const refunds: OrderRefundEvent[] = (Array.isArray(order?.refunds) ? order.refunds : [])
+    .map((r: any) => {
+      const amt = (Array.isArray(r?.transactions) ? r.transactions : [])
+        .reduce((sum: number, t: any) => sum + (num(t?.amount) ?? 0), 0);
+      return {
+        at: String(r?.created_at ?? order?.created_at ?? ""),
+        amount: money(amt, currency),
+        ...(r?.note ? { reason: String(r.note) } : {}),
+      };
+    })
+    .filter((r: OrderRefundEvent) => !!r.at);
+
+  // Outstanding comes from Shopify's own total_outstanding, never derived.
+  // Deriving it as total - current_total_price reads a REFUNDED order as one
+  // where the customer still owes the full amount, which is the opposite of
+  // what happened and exactly the kind of number an agent would act on.
+  const paidNum = num(order?.current_total_price) ?? num(order?.total_price);
+  const outstanding = num(order?.total_outstanding);
+
+  const shippingLine = Array.isArray(order?.shipping_lines) ? order.shipping_lines[0] : undefined;
+
+  return {
+    lineItems,
+    itemCount: lines.reduce((n: number, li: any) => n + (num(li?.quantity) ?? 1), 0),
+    ...(m(order?.subtotal_price) ? { subtotal: m(order?.subtotal_price)! } : {}),
+    ...(m(order?.total_discounts) ? { discounts: m(order?.total_discounts)! } : {}),
+    ...(m(shippingLine?.price) ? { shipping: m(shippingLine?.price)! } : {}),
+    ...(m(order?.total_tax) ? { tax: m(order?.total_tax)! } : {}),
+    ...(paidNum !== undefined ? { paid: money(paidNum, currency) } : {}),
+    ...(outstanding !== undefined ? { outstanding: money(outstanding, currency) } : {}),
+    tracking,
+    ...(addressLine(order?.shipping_address) ? { shippingAddress: addressLine(order?.shipping_address)! } : {}),
+    ...(addressLine(order?.billing_address) ? { billingAddress: addressLine(order?.billing_address)! } : {}),
+    tags: String(order?.tags ?? "").split(",").map((x) => x.trim()).filter(Boolean),
+    ...(order?.cancel_reason ? { cancelReason: String(order.cancel_reason) } : {}),
+    refunds,
+    ...(order?.source_name ? { sourceName: String(order.source_name) } : {}),
+  };
+}
+
 function mapOrderCard(order: any, shopDomain: string, canWrite: boolean, locale: Locale, imageByProduct: Record<string, string> = {}): OrderCard {
   const currency = order?.currency ?? order?.presentment_currency ?? "USD";
   const total = Number(order?.total_price) || 0;
@@ -217,6 +318,7 @@ function mapOrderCard(order: any, shopDomain: string, canWrite: boolean, locale:
     refundedAmount: money(refunded, currency),
     refundableMaximum: money(refundable, currency),
     timeline: buildTimeline(order, refunded, total, locale),
+    detail: mapOrderDetail(order, currency, imageByProduct),
     eligibility: {
       cancellable: canWrite && !cancelled,
       refundable: canWrite && !isFullyRefunded && refundable > 0,
@@ -414,6 +516,27 @@ async function buildCommerceContextFresh(opts: {
   const refundedOrCancelledCount = recentOrders.filter((o) => o.cancelled || o.refund).length;
   const lastOrderAt = rawOrders[0]?.created_at ?? null;
 
+  // Average order value, only when BOTH inputs are real. Dividing by a zero
+  // order count, or by a total the provider did not give us, would produce a
+  // confident number with nothing behind it.
+  const totalSpentNum = totalSpentRaw != null ? Number(totalSpentRaw) : NaN;
+  const averageOrderValue: Money | undefined =
+    Number.isFinite(totalSpentNum) && orderCount > 0
+      ? money((totalSpentNum / orderCount).toFixed(2), shopCurrency)
+      : undefined;
+
+  // Present-only spread. An absent field must stay absent so the panel can say
+  // "not available" rather than render an empty string as if it were the answer.
+  const present = <T,>(v: T | null | undefined): v is T =>
+    v !== null && v !== undefined && String(v).trim() !== "";
+
+  const addr = customer?.default_address;
+  const defaultAddress = addr
+    ? [addr.address1, addr.address2, addr.city, addr.province, addr.zip, addr.country]
+        .filter((x: unknown) => present(x))
+        .join(", ")
+    : undefined;
+
   const summary: CommerceSummary = {
     orderCount,
     totalSpentByCurrency: shopCurrencyTotal ? [shopCurrencyTotal] : [],
@@ -422,6 +545,15 @@ async function buildCommerceContextFresh(opts: {
     repeatCustomer: orderCount >= 2,
     openOrderCount,
     refundedOrCancelledCount,
+    ...(present(customer?.name) ? { name: String(customer.name) } : {}),
+    ...(present(customer?.email) ? { email: String(customer.email) } : {}),
+    ...(present(customer?.phone) ? { phone: String(customer.phone) } : {}),
+    ...(present(shopCurrency) ? { currency: shopCurrency } : {}),
+    ...(averageOrderValue ? { averageOrderValue } : {}),
+    ...(present(customer?.created_at) ? { customerSince: String(customer.created_at) } : {}),
+    ...(present(customer?.note) ? { note: String(customer.note) } : {}),
+    ...(present(defaultAddress) ? { defaultAddress } : {}),
+    ...(typeof customer?.accepts_marketing === "boolean" ? { acceptsMarketing: customer.accepts_marketing } : {}),
   };
 
   if (orderCount === 0 && recentOrders.length === 0) {
@@ -466,6 +598,7 @@ export async function orderToCard(
 
 // Exposed for unit tests (pure mappers).
 export const __testables = {
+  mapOrderDetail,
   financialChip,
   fulfillmentChip,
   refundChip,

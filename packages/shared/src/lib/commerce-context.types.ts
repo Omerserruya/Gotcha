@@ -39,6 +39,54 @@ export interface TimelineMilestone {
   reached: boolean;
 }
 
+export interface OrderLineDetail {
+  title: string;
+  variantTitle?: string;
+  sku?: string;
+  quantity: number;
+  unitPrice: Money;
+  lineTotal: Money;
+  imageUrl: string | null;
+}
+
+export interface OrderTracking {
+  number?: string;
+  url?: string;
+  company?: string;
+}
+
+export interface OrderRefundEvent {
+  at: string;
+  amount: Money;
+  reason?: string;
+}
+
+/**
+ * The expandable detail for a selected order (spec §16).
+ *
+ * Every money field is optional because Shopify omits them on some orders and
+ * a missing subtotal must render as absent, not as 0.00 - the agent is reading
+ * this to decide whether to move money.
+ */
+export interface OrderDetail {
+  lineItems: OrderLineDetail[];
+  itemCount: number;
+  subtotal?: Money;
+  discounts?: Money;
+  shipping?: Money;
+  tax?: Money;
+  paid?: Money;
+  /** total - paid, when both are known. Never negative. */
+  outstanding?: Money;
+  tracking: OrderTracking[];
+  shippingAddress?: string;
+  billingAddress?: string;
+  tags: string[];
+  cancelReason?: string;
+  refunds: OrderRefundEvent[];
+  sourceName?: string;
+}
+
 export interface OrderCard {
   orderId: string;
   orderNumber: string; // e.g. "#1246"
@@ -55,6 +103,8 @@ export interface OrderCard {
   refundedAmount: Money;
   refundableMaximum: Money; // authoritative ceiling for a refund
   timeline: TimelineMilestone[];
+  /** Progressive disclosure: the panel shows the card, the drawer shows this. */
+  detail?: OrderDetail;
   eligibility: {
     cancellable: boolean;
     refundable: boolean;
@@ -64,6 +114,22 @@ export interface OrderCard {
 
 export interface CommerceSummary {
   orderCount: number;
+  /**
+   * Identity + profile, only where the provider actually returned a value.
+   * Every field is optional on purpose: an absent email must render as "not
+   * available", never as an empty string that looks like a real answer, and a
+   * customer with no spend history must not show a confident 0.
+   */
+  name?: string;
+  email?: string;
+  phone?: string;
+  currency?: string;
+  /** total spend / order count, computed only when both are known. */
+  averageOrderValue?: Money;
+  customerSince?: string;
+  note?: string;
+  defaultAddress?: string;
+  acceptsMarketing?: boolean;
   /** Grouped by currency - NEVER combined across currencies. */
   totalSpentByCurrency: Money[];
   /** Provider shop-currency total when its meaning is unambiguous (Shopify customer.total_spent). */

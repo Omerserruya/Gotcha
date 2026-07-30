@@ -223,7 +223,14 @@ router.get("/:id", async (req: Request, res: Response) => {
       // it - a 404 here would render as "this integration does not exist".
       const catalogRow = await prisma.integrationCatalog.findUnique({
         where: { slug: id },
-        select: { slug: true, name: true, description: true, logoUrl: true, isPublished: true },
+        select: {
+          slug: true, name: true, description: true, logoUrl: true, isPublished: true,
+          // The catalog already declares how each provider connects. Returning
+          // it lets the workspace start the REAL flow instead of shipping the
+          // reader off to another screen - and without a second OAuth
+          // implementation, since the frontend calls the same init endpoint.
+          authType: true, authSchema: true,
+        },
       });
       if (!catalogRow || catalogRow.isPublished === false) {
         res.status(404).json({ error: "Integration not found" });
@@ -244,6 +251,8 @@ router.get("/:id", async (req: Request, res: Response) => {
           // What it WOULD bring, stated as such. Not a policy surface: there is
           // nothing to enforce until the tenant connects it.
           catalogToolCount,
+          authType: catalogRow.authType,
+          authSchema: catalogRow.authSchema ?? {},
           counts: { total: 0, enabled: 0, alwaysAllow: 0, requireApproval: 0, disabled: 0, unavailable: 0 },
           groups: [],
         },
