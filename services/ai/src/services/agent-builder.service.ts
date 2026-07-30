@@ -112,6 +112,16 @@ export interface BuilderDraftSnapshot {
   funnel: { id: string; funnelId: string; stageCount: number } | null;
   knowledge: Array<{ id: string; name: string }>;
   tools: Array<{ tenantToolId: string; name: string; integration: string }>;
+  /**
+   * Subjects the tenant actually has written down, by document title. The
+   * hiring consultant used to reason about what the employee "will need to
+   * know" from a one-line company overview, so its plan was guesswork - it
+   * would promise to answer from a help centre that did not exist, or ask the
+   * owner to upload a returns policy they had already given us. These are the
+   * real titles from the knowledge base, so it can name what is present and
+   * ask only for what is genuinely missing.
+   */
+  knowledgeTopics: string[];
 }
 
 export async function loadDraftSnapshot(
@@ -153,6 +163,19 @@ export async function loadDraftSnapshot(
     }
   }
 
+  // Titles only, and capped: this feeds a prompt, and the point is to let the
+  // consultant say "you already have shipping and returns" rather than to load
+  // the knowledge itself.
+  const knowledgeTopics = await prisma.knowledgeDocument
+    .findMany({
+      where: { tenantId, status: "ready" },
+      select: { title: true },
+      orderBy: { updatedAt: "desc" },
+      take: 40,
+    })
+    .then((rows) => Array.from(new Set(rows.map((r) => r.title).filter(Boolean))).slice(0, 20))
+    .catch(() => [] as string[]);
+
   const identity = (a.identity as any) || {};
   return {
     id: a.id,
@@ -174,6 +197,7 @@ export async function loadDraftSnapshot(
     channels: Array.isArray(a.channels) ? (a.channels as any[]) : [],
     funnel,
     knowledge: a.knowledgeBases.map((k: any) => ({ id: k.knowledgeBase.id, name: k.knowledgeBase.name })),
+    knowledgeTopics,
     tools: toolRows.map((t: any) => ({
       tenantToolId: t.tenantToolId,
       name: t.tenantTool.catalogTool.name,
@@ -321,6 +345,9 @@ By the end of the conversation the employee is fully hired: the work they'll han
 
 # The company is ALREADY KNOWN - do NOT ask about it
 - We already know the business from onboarding: ${snapshot.companyOverview ? `"${snapshot.companyOverview}"` : "(on file)"}.
+${snapshot.knowledgeTopics.length
+  ? `- The business has ALREADY written these subjects down, and the employee can answer from them: ${snapshot.knowledgeTopics.map((t) => `"${t}"`).join(", ")}. Name what is already covered when you set out the plan, and NEVER ask the owner to provide something on this list - they already gave it to us, and asking again is the fastest way to make them feel unheard.`
+  : `- Nothing has been written down for this business yet, so the employee currently has no knowledge to answer from. Say that plainly when you set out the plan, and be specific about the first one or two subjects worth adding.`}
 - Do NOT ask what the company does, who it serves, or for a description. Do NOT call \`set_company_overview\` unless the admin explicitly corrects a wrong detail.
 - OPEN by asking what THIS specific AI employee is for - its purpose and goal - then continue with role, personalization, escalation, flow and rules.
 
