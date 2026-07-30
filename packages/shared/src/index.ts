@@ -60,6 +60,29 @@ export {
 } from "./lib/identity-resolver";
 // Read vs write classification - ONE table, used by the Copilot's
 // who-executes decision and by the sandbox write guard in dispatchToolCall.
+// Integrations & Tools workspace classification. Strict product boundary:
+// Channels owns communication, Knowledge Manager owns knowledge sources, and
+// this workspace owns business systems + executable tool policy.
+export {
+  classifyCatalogIntegration,
+  classifyChannel,
+  classifyKnowledgeSource,
+  gotchaEntry,
+  buildWorkspaceSidebar,
+  governableToolCount,
+  GOTCHA_ENTRY_ID,
+} from "./lib/integration-workspace";
+export type {
+  WorkspaceEntry,
+  WorkspaceEntryKind,
+  WorkspaceSidebar,
+  ConnectionState,
+  ExternalOwner,
+  CatalogIntegrationInput,
+  ChannelInput,
+  KnowledgeSourceInput,
+  InternalToolsInput,
+} from "./lib/integration-workspace";
 // Tool permission explanation layer: risk grouping, and WHY a tool cannot run.
 // Deliberately not an authorization decision - evaluateToolGate owns that.
 export {
