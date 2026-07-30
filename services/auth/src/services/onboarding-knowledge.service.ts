@@ -55,7 +55,25 @@ const EMPTY_REPORT: SyncReport = {
   details: [],
 };
 
-/** The knowledge base onboarding writes into. Created once, then reused. */
+/**
+ * The knowledge base onboarding writes into. Created once, then reused.
+ *
+ * Named in the tenant's own language: this row is customer-facing, and a
+ * Hebrew workspace opening Knowledge to find an English "Company Knowledge"
+ * described in English is the same half-translated experience as a Hebrew
+ * title over an English body.
+ */
+const KB_NAMES = {
+  en: {
+    name: "Company Knowledge",
+    description: "Built from your website scan and the answers you gave during setup",
+  },
+  he: {
+    name: "ידע החברה",
+    description: "נבנה מסריקת האתר ומהתשובות שמסרתם בהגדרה",
+  },
+};
+
 export async function ensureOnboardingKnowledgeBase(
   prisma: any,
   tenantId: string,
@@ -64,13 +82,17 @@ export async function ensureOnboardingKnowledgeBase(
     .findFirst({ where: { tenantId }, select: { id: true }, orderBy: { createdAt: "asc" } })
     .catch(() => null);
   if (existing) return existing.id;
+
+  const tenant = await prisma.tenant
+    .findUnique({ where: { id: tenantId }, select: { defaultLocale: true } })
+    .catch(() => null);
+  const copy = String(tenant?.defaultLocale || "en").toLowerCase().startsWith("he")
+    ? KB_NAMES.he
+    : KB_NAMES.en;
+
   const created = await prisma.knowledgeBase
     .create({
-      data: {
-        tenantId,
-        name: "Company Knowledge",
-        description: "Built from your website scan and the answers you gave during setup",
-      },
+      data: { tenantId, name: copy.name, description: copy.description },
       select: { id: true },
     })
     .catch(() => null);

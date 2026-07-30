@@ -31,7 +31,7 @@ import {
 } from "@/lib/api";
 import clsx from "clsx";
 import { RefreshWebsiteKnowledge } from "@/components/knowledge/RefreshWebsiteKnowledge";
-import { SourceProvenance } from "@/components/knowledge/SourceProvenance";
+import { SourceProvenance, readProvenance } from "@/components/knowledge/SourceProvenance";
 import { getBusinessDiscovery } from "@/lib/api";
 
 // ─── Types ────────────────────────────────────────────────────
@@ -974,12 +974,23 @@ function KnowledgePageInner() {
                               <div className="min-w-0">
                                 <h5 className="text-sm font-medium text-gray-900 truncate">{doc.title}</h5>
                                 <p className="text-xs text-gray-400">
-                                  {doc.sourceType === "url" ? (
-                                    <span className="text-blue-500">URL</span>
-                                  ) : (
-                                    doc.sourceType
+                                  {/* Raw source identifiers like
+                                      "onboarding_scan" are internal names. When
+                                      the row carries provenance it already says
+                                      "From website scan" in the tenant's
+                                      language, so showing the raw slug next to
+                                      it is both duplicated and jargon. */}
+                                  {readProvenance(doc.metadata) ? null : (
+                                    <>
+                                      {doc.sourceType === "url" ? (
+                                        <span className="text-blue-500">URL</span>
+                                      ) : (
+                                        doc.sourceType
+                                      )}
+                                      {" "}&middot;{" "}
+                                    </>
                                   )}
-                                  {" "}&middot; {doc.chunkCount} chunks &middot;{" "}
+                                  {doc.chunkCount === 1 ? "1 chunk" : `${doc.chunkCount} chunks`} &middot;{" "}
                                   <span className={clsx(
                                     doc.status === "ready" ? "text-green-600" :
                                     doc.status === "processing" ? "text-amber-600" :
