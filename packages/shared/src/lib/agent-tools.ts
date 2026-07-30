@@ -30,6 +30,25 @@ export interface AgentToolContext {
    */
   mode?: "agent" | "copilot";
   /**
+   * Sandbox ("Test the AI Employee") execution.
+   *
+   * The whole point of a test conversation is that it behaves like the real
+   * employee, so this deliberately does NOT change the prompt, the tools the
+   * model is offered, the policy gate, or the routing - only what happens at
+   * the moment of execution:
+   *
+   *   - reads run for real against this tenant's data, because a test that
+   *     invents order history teaches the operator nothing;
+   *   - anything that mutates state is NOT executed. The model is handed a
+   *     clearly-labelled simulated result so the conversation can continue,
+   *     and the caller gets a `simulated` side effect to show in the UI.
+   *
+   * "safe" is the default for sandbox. "real" runs writes through the ordinary
+   * production path including HITL approval, and is only for an operator who
+   * explicitly opts in.
+   */
+  sandbox?: { enabled: true; writes: "safe" | "real" };
+  /**
    * Optional handler for `schedule_meeting` (Task 3). The ai service wires
    * this with its scheduling.service + calendar adapter. Lives on the
    * context so shared/agent-tools.ts stays decoupled from per-service
@@ -283,6 +302,16 @@ export interface AgentToolSideEffect {
   denied?: {
     tool: string;
     reason: string;
+  };
+  /**
+   * A sandbox ("Test the AI Employee") turn proposed a state-mutating tool and
+   * it was NOT executed. Surfaced so the UI can label the turn honestly - the
+   * tester needs to know the difference between "the employee did this" and
+   * "the employee would have done this".
+   */
+  simulated?: {
+    tool: string;
+    arguments: Record<string, unknown>;
   };
   /**
    * Copilot-mode replacement for `awaitingApproval`. The tool was gated
@@ -1234,6 +1263,36 @@ export async function dispatchToolCall(
   // them - but it means ANY new tool added to this dispatcher is
   // automatically gated through the same code path. That's the whole
   // point: replace scattered ad-hoc checks with one entry point.
+  // ── Sandbox write guard ──
+  // Placed BEFORE the policy gate on purpose. A simulated write must not create
+  // an ApprovalRequest, must not notify a human approver, and must not appear
+  // in the audit trail as an attempted action: none of that happened. The gate
+  // below is what production uses; a safe sandbox turn simply never reaches it
+  // for a mutating tool.
+  if (ctx.sandbox?.enabled && ctx.sandbox.writes !== "real") {
+    const { classifyToolEffect } = await import("./tool-effect");
+    if (classifyToolEffect(String(name || "")) === "action") {
+      return {
+        toolCallId: toolCall.id,
+        // The model is told plainly that nothing ran, so it does not go on to
+        // tell the tester "done, I've refunded that" - a false success is the
+        // exact failure this whole mode exists to prevent.
+        content: JSON.stringify({
+          ok: true,
+          simulated: true,
+          executed: false,
+          tool: name,
+          arguments: args,
+          note:
+            "SIMULATION: this is a test conversation, so the action was not performed. " +
+            "Tell the person you are talking to what you WOULD do, and that it needs " +
+            "confirmation before it happens for real. Do not claim it is done.",
+        }),
+        sideEffect: { simulated: { tool: String(name || ""), arguments: args } },
+      };
+    }
+  }
+
   try {
     const { evaluateToolGate, createApprovalRequest } = await import("./tool-gate").then(
       async (g) => ({

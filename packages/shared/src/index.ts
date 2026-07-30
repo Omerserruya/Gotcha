@@ -58,6 +58,10 @@ export {
   unifyContact,
   findSiblingContacts,
 } from "./lib/identity-resolver";
+// Read vs write classification - ONE table, used by the Copilot's
+// who-executes decision and by the sandbox write guard in dispatchToolCall.
+export { classifyToolEffect } from "./lib/tool-effect";
+export type { ToolEffect } from "./lib/tool-effect";
 export {
   evaluateToolGate,
   evaluatePolicies,

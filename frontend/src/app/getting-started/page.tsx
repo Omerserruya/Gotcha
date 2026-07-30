@@ -113,10 +113,13 @@ function GettingStartedInner() {
     setInput("");
     setChatError("");
     setSending(true);
-    const history = messages;
+    // Memory lives in the sandbox conversation on the server now, so no
+    // transcript is sent. `reset` on the first message of a fresh panel starts
+    // a clean thread instead of resuming yesterday's.
+    const isFirst = messages.length === 0;
     setMessages((m) => [...m, { role: "user", content: msg }]);
     try {
-      const r = await testAgentChat(token, employee.id, msg, history);
+      const r = await testAgentChat(token, employee.id, msg, { writes: "safe", reset: isFirst });
       setMessages((m) => [...m, { role: "assistant", content: r.data.reply }]);
     } catch {
       setChatError(t("gettingStarted.chat.error"));

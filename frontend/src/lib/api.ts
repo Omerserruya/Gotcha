@@ -2024,10 +2024,43 @@ export function deleteAIAgent(token: string, id: string) {
   return apiFetch<{ success: boolean }>(`/api/ai-agents/${id}`, { token, method: "DELETE" });
 }
 
-export function testAgentChat(token: string, agentId: string, message: string, history: Array<{role: "user"|"assistant", content: string}>) {
-  return apiFetch<{ data: { reply: string } }>(`/api/ai-agents/${agentId}/test-chat`, {
-    token, method: "POST", body: JSON.stringify({ message, history })
-  });
+/** "Why did it answer this way?" - derived from what the turn actually did. */
+export interface SandboxDiagnostics {
+  employee: { id: string; name: string; role: string | null };
+  department: { id: string; name: string } | null;
+  playbook: string | null;
+  knowledgeUsed: Array<{ title: string; sourceType: string | null }>;
+  toolsConsidered: string[];
+  simulatedActions: Array<{ tool: string; arguments: Record<string, unknown> }>;
+  awaitingApproval: { tool: string; reason: string } | null;
+  escalated: { reason: string } | null;
+  writeMode: "safe" | "real";
+  routing: string;
+  conversationId: string;
+  turnCount: number;
+}
+
+/**
+ * Talk to the real employee in a sandbox conversation.
+ *
+ * No `history` argument: memory comes from the sandbox conversation on the
+ * server, exactly as it does for a live customer. Passing a client-side
+ * transcript meant "does it remember?" only ever tested the array we sent.
+ */
+export function testAgentChat(
+  token: string,
+  agentId: string,
+  message: string,
+  opts?: { writes?: "safe" | "real"; reset?: boolean },
+) {
+  return apiFetch<{ data: { reply: string; diagnostics: SandboxDiagnostics } }>(
+    `/api/ai-agents/${agentId}/test-chat`,
+    {
+      token,
+      method: "POST",
+      body: JSON.stringify({ message, writes: opts?.writes ?? "safe", reset: opts?.reset === true }),
+    },
+  );
 }
 
 // ─── Router Rules (Main Playbook) ────────────────────────────

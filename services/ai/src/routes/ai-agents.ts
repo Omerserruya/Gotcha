@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { prisma, authenticate, resolveTenant, requireActiveTenant, requirePermissionOrRole, requireEntitlement, requireCapacity } from "@chatcenter/shared";
-import { sandboxEmployeeChat } from "../services/agent-sandbox-chat.service";
+import { runSandboxTurn } from "../services/sandbox-conversation.service";
 import { computeCalendarCapability } from "../services/calendar-capability.service";
 import { generateResponse, getDefaultModel } from "../services/ai.service";
 import { computeBehaviorState } from "../services/behavior-engine.service";
@@ -828,23 +828,45 @@ router.post("/:id/test-chat", authenticate, resolveTenant, requireActiveTenant()
       return;
     }
 
-    const { message, history = [] } = req.body as {
+    const { message, writes, reset } = req.body as {
       message: string;
-      history: Array<{ role: "user" | "assistant"; content: string }>;
+      writes?: "safe" | "real";
+      reset?: boolean;
     };
+    if (typeof message !== "string" || !message.trim()) {
+      res.status(400).json({ error: "message is required" });
+      return;
+    }
 
-    // Sandbox employee chat: the agent answers AS ITSELF, to a customer, in
-    // its production voice (identity + goal + rules + knowledge). Replaced the
-    // copilot-flavored chatWithAgent path, which read like an assistant
-    // suggesting replies instead of the employee actually talking.
-    const reply = await sandboxEmployeeChat({
+    // Runs the PRODUCTION employee (generateAIBotReply) against a real sandbox
+    // conversation, so the test uses the same prompt, playbook, knowledge,
+    // tone, tools, routing, policy and memory model as live traffic. The
+    // previous implementation was a separate, thinner lookalike that could not
+    // have matched production even in principle - see
+    // sandbox-conversation.service for the full list of what it was missing.
+    //
+    // `history` is no longer accepted from the client: memory now comes from
+    // the conversation itself, which is what production does. Trusting a
+    // client-supplied transcript also meant the tester could not actually
+    // verify that the employee remembers anything.
+    const turn = await runSandboxTurn({
       tenantId: req.tenantId! as string,
       agentId: agent.id,
+      userId: String((req as any).user?.userId || "admin"),
       message,
-      history,
+      writes: writes === "real" ? "real" : "safe",
+      reset: reset === true,
     });
 
-    res.json({ data: { reply: reply || "" } });
+    if (!turn) {
+      res.status(404).json({ error: "AI agent not found" });
+      return;
+    }
+
+    // `diagnostics` answers "why did it answer this way?". It is derived from
+    // what the turn actually did and contains no prompt text and no chain of
+    // thought - only the employee, the sources, the tools and the decisions.
+    res.json({ data: { reply: turn.reply, diagnostics: turn.diagnostics } });
   } catch (err) {
     console.error("Test chat error:", err);
     res.status(500).json({ error: "Failed to generate response" });

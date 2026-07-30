@@ -199,48 +199,13 @@ export function capabilityOfTool(name: string, hints?: Record<string, string>): 
  * SAFETY: anything ambiguous or unrecognized is treated as "action" so the
  * Copilot never auto-executes something customer-facing by mistake.
  */
-export type ToolEffect = "read" | "action";
-
-const KNOWN_READ_TOOLS = new Set<string>([
-  "check_availability",
-  "get_contact",
-  "resolve_identity",
-  "list_recent_messages",
-  "get_conversation",
-  "list_workflows",
-  "preview_broadcast",
-]);
-
-const KNOWN_ACTION_TOOLS = new Set<string>([
-  "schedule_meeting", "reschedule_meeting", "cancel_meeting",
-  "integration_create_lead", "integration_create_contact", "integration_create_deal",
-  "create_task", "create_ticket", "update_contact", "update_crm", "tag_contact",
-  "merge_contacts", "link_customer_identifier", "send_message",
-  "schedule_followup", "schedule_followup_template", "generate_followup",
-  "create_broadcast", "schedule_broadcast", "create_workflow",
-  "issue_refund", "refund", "apply_discount", "close_conversation", "escalate_to_human",
-]);
-
-// Verb at a name boundary (`get_x`, `hubspot.search_y`, `x.list`). ACTION is
-// checked FIRST: a name that carries any mutating verb is an action even if it
-// also reads (e.g. `get_or_create`).
-const ACTION_VERB_RE =
-  /(^|[._])(create|update|delete|remove|send|schedule|book|reschedule|cancel|refund|issue|charge|pay|merge|close|escalate|tag|link|apply|assign|move|convert|generate|post|set|sync|upsert)([._]|$)/i;
-const READ_VERB_RE =
-  /(^|[._])(get|list|search|find|lookup|read|fetch|describe|retrieve|check|view|query|resolve|preview|count|history)([._]|$)/i;
-
-/**
- * Classify a tool by execution effect. Pure; never throws. Safe-biased: unknown
- * or ambiguous tools resolve to "action" (the Copilot will recommend, not run).
- */
-export function classifyToolEffect(name: string): ToolEffect {
-  if (!name || name === "submit_suggestions") return "read";
-  if (KNOWN_ACTION_TOOLS.has(name)) return "action";
-  if (KNOWN_READ_TOOLS.has(name)) return "read";
-  if (ACTION_VERB_RE.test(name)) return "action";
-  if (READ_VERB_RE.test(name)) return "read";
-  return "action";
-}
+// The classifier itself now lives in @chatcenter/shared so the sandbox write
+// guard in dispatchToolCall and the Copilot's who-executes decision cannot
+// drift apart. Re-exported here because this module is its historic home and
+// many call sites import it from here.
+import { classifyToolEffect, type ToolEffect } from "@chatcenter/shared";
+export { classifyToolEffect };
+export type { ToolEffect };
 
 /** How the Copilot may run a tool this turn (the EXECUTION-ELIGIBILITY decision). */
 export type CopilotExecutionMode = "background" | "recommended" | "none";

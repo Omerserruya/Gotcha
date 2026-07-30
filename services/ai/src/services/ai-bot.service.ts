@@ -289,6 +289,13 @@ export interface AIBotReplyResult {
     body: string;
     metadata: Record<string, unknown>;
   }>;
+  /**
+   * Knowledge sources that actually fed this turn. Populated for every turn
+   * (it is one array push per retrieved chunk) and consumed by the sandbox
+   * diagnostics panel. Titles only - never chunk text, which can contain
+   * customer data.
+   */
+  knowledgeUsed?: Array<{ title: string; sourceType: string | null }>;
 }
 
 function toAgentRecord(row: any): AgentRecord {
@@ -903,6 +910,13 @@ export async function generateAIBotReply(opts: {
   /** Present only while the business is CLOSED under the "active" outside-
    *  hours policy (worker-computed from persisted tenant business hours). */
   closedHours?: ClosedHoursContext;
+  /**
+   * Set only by "Test the AI Employee". The turn is otherwise identical to a
+   * live one; this reaches the tool dispatcher, where mutating tools are
+   * simulated rather than executed unless the operator opted into "real".
+   * Never set by the incoming-worker.
+   */
+  sandbox?: { enabled: true; writes: "safe" | "real" };
 }): Promise<AIBotReplyResult> {
   // Per-conversation cancellation: if a newer inbound for this conversation
   // hits the AI service mid-turn, it calls beginTurn() again which aborts
@@ -1116,6 +1130,8 @@ async function generateAIBotReplyInner(
     aiAgentId: string;
     incomingMessage: string;
     closedHours?: ClosedHoursContext;
+    /** See generateAIBotReply - reaches the tool dispatcher only. */
+    sandbox?: { enabled: true; writes: "safe" | "real" };
   },
   signal: AbortSignal,
 ): Promise<AIBotReplyResult> {
@@ -1395,10 +1411,21 @@ async function generateAIBotReplyInner(
 
   // ── KB retrieval - strategy-controlled, NOT regex ──────
   let kbBlock: string | undefined;
+  // Which sources actually fed this answer. Recorded for the sandbox's "why did
+  // it answer this way?" panel: an operator debugging a wrong answer needs to
+  // know whether the employee read the right document or retrieved nothing at
+  // all, and guessing from the reply text is not good enough.
+  const knowledgeUsed: Array<{ title: string; sourceType: string | null }> = [];
   if (shouldRetrieveKB(behaviorState, opts.incomingMessage)) {
     try {
       const chunks = await retrieveRelevantChunks(opts.tenantId, opts.incomingMessage, 5);
       kbBlock = buildKnowledgeContext(chunks) || undefined;
+      for (const c of chunks as any[]) {
+        const title = String(c?.documentTitle ?? c?.title ?? "").trim();
+        if (title && !knowledgeUsed.some((k) => k.title === title)) {
+          knowledgeUsed.push({ title, sourceType: c?.sourceType ?? null });
+        }
+      }
     } catch (err: any) {
       console.warn("[ai-bot] Knowledge retrieval failed:", err.message);
     }
@@ -1534,6 +1561,11 @@ async function generateAIBotReplyInner(
     conversationId: opts.conversationId,
     contactId: contactRow?.id,
     authToken: process.env.INTERNAL_SERVICE_TOKEN,
+    // "Test the AI Employee" runs this exact function, so the sandbox flag has
+    // to reach the dispatcher. Everything else about the turn stays identical -
+    // same prompt, same tools offered, same policy gate - and only the moment
+    // of execution differs for mutating tools. Absent for live traffic.
+    sandbox: opts.sandbox,
     scheduleMeeting: hasConnectedCalendar
       ? makeScheduleMeetingHandler({
           tenantId: opts.tenantId,
@@ -2484,6 +2516,9 @@ async function generateAIBotReplyInner(
         const sideEffectType = result.sideEffect?.awaitingApproval ? "awaiting_approval"
           : result.sideEffect?.denied ? "denied"
           : result.sideEffect?.escalate ? "escalate"
+          // A simulated write must be visible in the log, otherwise the sandbox
+          // cannot tell the operator which action it declined to perform.
+          : result.sideEffect?.simulated ? "simulated"
           : undefined;
 
         // INVARIANT: a tool we OFFERED to the model must be dispatchable. If a
@@ -3959,6 +3994,7 @@ async function generateAIBotReplyInner(
     escalation: pendingEscalation,
     awaitingApproval,
     toolCallLog,
+    knowledgeUsed,
     modelUsed: model,
     totalTokens,
     // Only ship staged cards when there is a reply to attach them to. On

@@ -47,7 +47,13 @@ describe("capabilities - classifyToolEffect (Copilot decision engine)", () => {
   it("is safe-biased: unknown / ambiguous names resolve to 'action'", () => {
     expect(classifyToolEffect("frobnicate_widget")).toBe("action");
     expect(classifyToolEffect("custom.do_the_thing")).toBe("action");
-    expect(classifyToolEffect("")).toBe("read"); // empty/terminator is inert
+    // An empty name used to come back as "read" ("inert"), which contradicted
+    // this test's own name. It became load-bearing once the sandbox write guard
+    // started asking the same question to decide whether a tool may REALLY run
+    // during a test conversation - there, "unnamed therefore safe" is the wrong
+    // default. The terminator is still a read; empty is now an action.
+    expect(classifyToolEffect("")).toBe("action");
+    expect(classifyToolEffect("submit_suggestions")).toBe("read");
   });
 
   it("an action verb anywhere wins over a read verb (get_or_create → action)", () => {
