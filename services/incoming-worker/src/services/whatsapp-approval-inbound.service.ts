@@ -134,9 +134,13 @@ export async function handleApprovalButtonReply(
       { decisionChannel: "whatsapp", correlationId: approvalId },
     );
     await revokeApprovalRefs(approvalId);
+    // The manager is not the only person owed an answer. Without this the
+    // customer - who was told their cancellation was being handled - simply
+    // never heard again, which is indistinguishable from being ignored.
+    if (rejected) await triggerRejectedDispatch(tenantId, approvalId);
     await replyToManager(
       tenantId, senderPhone,
-      rejected ? "Rejected. The action will not run." : "This request was already decided elsewhere.",
+      rejected ? "Rejected. The action will not run, and I've let the customer know." : "This request was already decided elsewhere.",
     );
     return { handled: true };
   }
@@ -185,5 +189,34 @@ async function triggerApprovedDispatch(tenantId: string, approvalId: string): Pr
     // The row stays APPROVED + NOT_STARTED, which is exactly the state a
     // retry sweeper can pick up. Nothing is lost.
     console.error(`[wa-approval-in] dispatch call failed for ${approvalId}:`, err?.message);
+  }
+}
+
+/**
+ * Tell the customer their request was declined, through the SAME endpoint the
+ * web reject route uses - so the once-only claim, the message wording and the
+ * return of the conversation to the AI are identical on both channels.
+ *
+ * The decision is already durable when this runs; a failure here leaves a
+ * REJECTED row with no customerNotifiedAt, which is precisely what a sweeper
+ * looks for.
+ */
+async function triggerRejectedDispatch(tenantId: string, approvalId: string): Promise<void> {
+  const base = process.env.CONVERSATION_SERVICE_URL || "http://conversation:4002";
+  try {
+    const res = await fetch(`${base}/api/approvals/${approvalId}/dispatch-rejected`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Internal-Key": process.env.INTERNAL_SERVICE_KEY || "",
+        "X-Tenant-Id": tenantId,
+      },
+      body: JSON.stringify({ source: "whatsapp" }),
+    });
+    if (!res.ok) {
+      console.error(`[wa-approval-in] rejection notice failed for ${approvalId}: ${res.status}`);
+    }
+  } catch (err: any) {
+    console.error(`[wa-approval-in] rejection notice call failed for ${approvalId}:`, err?.message);
   }
 }

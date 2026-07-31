@@ -197,6 +197,28 @@ describe("buildFallbackMessage (deterministic, always safe)", () => {
     expect(validateGroundedMessage(msg, facts).ok).toBe(true);
   });
 
+  it("refuses a provider status enum pasted into a Hebrew reply", () => {
+    // Live regression: "ההזמנה #1009 הוחזרה בהצלחה, refunded, המטבע USD".
+    const facts: ExecutionFacts = { tool: "shopify.cancel_order", outcome: "succeeded", orderName: "#1009", status: "refunded" };
+    const verdict = validateGroundedMessage("ההזמנה #1009 הוחזרה בהצלחה, refunded.", facts);
+    expect(verdict.ok).toBe(false);
+    expect(verdict.problems).toContain("provider_status_token_leaked");
+  });
+
+  it("allows the same words in an English reply, where they are just words", () => {
+    const facts: ExecutionFacts = { tool: "shopify.process_refund", outcome: "succeeded", orderName: "#1009", status: "processed" };
+    expect(validateGroundedMessage("Order #1009 has been refunded.", facts).ok).toBe(true);
+  });
+
+  it("a cancel that also refunded says so in words, not in status codes", () => {
+    const facts: ExecutionFacts = { tool: "shopify.cancel_order", outcome: "succeeded", orderName: "#1009", status: "refunded" };
+    const msg = buildFallbackMessage(facts, "אני רוצה לבטל את הזמנה 1009");
+    expect(msg).toContain("בוטלה");
+    expect(msg).toContain("הוחזר");
+    expect(msg).not.toMatch(/refunded/i);
+    expect(validateGroundedMessage(msg, facts).ok).toBe(true);
+  });
+
   it("a failed action no longer promises that a person is already handling it", () => {
     const facts: ExecutionFacts = { tool: "shopify.cancel_order", outcome: "failed", errorReason: "provider_unavailable" };
     const msg = buildFallbackMessage(facts, "אני רוצה לבטל");

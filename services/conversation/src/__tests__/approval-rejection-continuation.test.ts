@@ -183,6 +183,24 @@ describe("POST /api/approvals/:id/reject", () => {
     expect(mocks.outgoingAdd).not.toHaveBeenCalled();
   });
 
+  it("names the order that was actually rejected, from the decided params", async () => {
+    // Live regression: the rejection of #1010 told the customer their
+    // cancellation of order 1007 had been declined. A rejection has no
+    // provider result, so with no order in the facts the model reached into
+    // the conversation history and picked the wrong one.
+    await request(app).post("/api/approvals/ap_r1/reject").send({ decisionReason: "no" });
+
+    const gen = (globalThis.fetch as any).mock.calls.find((c: any[]) =>
+      String(c[0]).includes("/ai-bot/execution-message"),
+    );
+    const facts = JSON.parse(gen[1].body).facts;
+    expect(facts.orderName).toBe("#1009");
+    expect(facts.outcome).toBe("rejected");
+    // No provider result exists, so nothing may be asserted about money.
+    expect(facts.amount).toBeUndefined();
+    expect(facts.status).toBeUndefined();
+  });
+
   it("still requires a reason - no silent no", async () => {
     const res = await request(app).post("/api/approvals/ap_r1/reject").send({});
     expect(res.status).toBe(400);

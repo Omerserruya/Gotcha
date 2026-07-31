@@ -341,6 +341,22 @@ function localFallbackMessage(tool: string, outcome: ContinuationOutcome, he: bo
 const HEBREW_RE = /[֐-׿]/;
 
 /**
+ * The human order name from decided arguments, e.g. "#1010".
+ *
+ * Only a NAME - a numeric Shopify internal id is not something to read out to
+ * a customer, and quoting one as though it were their order number is worse
+ * than saying nothing.
+ */
+function orderNameFromParams(params: Record<string, unknown> | undefined): string | undefined {
+  const raw = params?.order_name;
+  if (typeof raw === "string" && raw.trim()) {
+    const t = raw.trim();
+    return t.startsWith("#") ? t : `#${t}`;
+  }
+  return undefined;
+}
+
+/**
  * Tell the customer what a decided approval actually did - exactly once.
  *
  * ONE function for all three terminal outcomes (succeeded / failed / rejected)
@@ -359,6 +375,9 @@ async function sendApprovalContinuation(args: {
   outcome: ContinuationOutcome;
   result?: unknown;
   errorReason?: string;
+  /** The approved/rejected arguments - the only trustworthy source of the
+   * order name when no provider result exists. */
+  params?: Record<string, unknown>;
 }): Promise<{ sent: boolean; reason?: string }> {
   const { tenantId, approvalId, conversationId, tool, outcome } = args;
   if (!conversationId) return { sent: false, reason: "no_conversation" };
@@ -405,9 +424,24 @@ async function sendApprovalContinuation(args: {
       outcome,
       // Facts are attached only for a SUCCESS. Quoting an amount or a status
       // beside "this did not happen" is how a customer concludes it did.
-      orderName: typeof r.name === "string" ? r.name : undefined,
+      // Provider result first, then the arguments that were decided on.
+      // A rejection has NO result - nothing ran - and with no order name in
+      // the facts the model reached into the conversation history and told the
+      // customer their cancellation of order 1007 was declined when the
+      // rejected request was for 1010. An approval decision must name the
+      // order it actually concerned.
+      orderName:
+        typeof r.name === "string"
+          ? r.name
+          : orderNameFromParams(args.params),
       amount: outcome === "succeeded" && typeof r.amount === "number" ? r.amount : undefined,
-      currency: outcome === "succeeded" && typeof r.currency === "string" ? r.currency : undefined,
+      // A currency with no amount is not a fact, it is a stray field - and the
+      // model duly rendered it as "המטבע USD" in a message that quoted no
+      // money at all. Only travels with the number it denominates.
+      currency:
+        outcome === "succeeded" && typeof r.amount === "number" && typeof r.currency === "string"
+          ? r.currency
+          : undefined,
       status:
         outcome !== "succeeded"
           ? undefined
@@ -490,6 +524,31 @@ async function sendApprovalContinuation(args: {
       .updateMany({ where: { id: approvalId, tenantId }, data: { customerNotifiedAt: null } })
       .catch(() => {});
     return { sent: false, reason: err?.message };
+  }
+}
+
+/**
+ * Return a decided conversation to the AI.
+ *
+ * Only from the parked `awaiting_approval` state, and only when no human has
+ * taken it over in the meantime - approving an action must never yank a
+ * conversation back off an agent who has since picked it up.
+ */
+async function restoreAiOwnership(tenantId: string, conversationId: string): Promise<void> {
+  if (!conversationId) return;
+  try {
+    await prisma.conversation.updateMany({
+      where: {
+        id: conversationId,
+        tenantId,
+        handledBy: "awaiting_approval",
+        isHandedOver: false,
+        assignedAgentId: null,
+      },
+      data: { handledBy: "ai_agent" },
+    });
+  } catch (err: any) {
+    console.error("[approvals] failed to return conversation to the AI:", err?.message);
   }
 }
 
@@ -650,6 +709,7 @@ export async function runApprovedAction(opts: {
     tool,
     outcome: dispatch.ok ? "succeeded" : "failed",
     result: dispatch.result,
+    params: effectiveParams,
     errorReason: dispatch.ok ? undefined : toCustomerSafeReason(dispatch.error),
   });
 
@@ -659,15 +719,26 @@ export async function runApprovedAction(opts: {
   // failed - enough to offer the action that DOES work (a fulfilled order that
   // cannot be cancelled takes a return plus a refund). Escalate only once the
   // action has genuinely been attempted more than once without success.
+  let escalated = false;
   if (!dispatch.ok) {
-    await recordFailureAndMaybeEscalate({
+    ({ escalated } = await recordFailureAndMaybeEscalate({
       tenantId,
       approvalId,
       conversationId,
       tool,
       error: dispatch.error,
-    });
+    }));
   }
+
+  // ── Back to the AI ───────────────────────────────────────────────────
+  // The conversation was parked at handledBy="awaiting_approval" when the
+  // approval was raised, and nothing moved it back. The web approve route
+  // un-parked it, but the WhatsApp/internal dispatch route did not - so an
+  // approval decided on a phone left the conversation frozen in a state the
+  // incoming-worker does not treat as bot-owned, and the customer's NEXT
+  // message got no reply at all. Restoring it here means every decision
+  // channel converges on the same end state.
+  if (!escalated) await restoreAiOwnership(tenantId, conversationId);
   return { ok: dispatch.ok, error: dispatch.error };
 }
 
@@ -711,6 +782,51 @@ router.post("/:id/dispatch-approved", requireInternalKey, async (req: Request, r
     return res.json({ data: { approvalId: row.id, executed: result.ok, error: result.error ?? null } });
   } catch (err: any) {
     console.error("approvals.dispatch-approved failed:", err?.message);
+    return res.status(500).json({ error: "dispatch failed" });
+  }
+});
+
+/**
+ * POST /api/approvals/:id/dispatch-rejected  (internal, no user session)
+ *
+ * The rejection counterpart of dispatch-approved. A manager who taps "reject"
+ * on WhatsApp recorded the decision through the same atomic CAS as the web UI
+ * - and then the customer heard nothing at all, because the continuation and
+ * the ownership reset lived only in the web route's handler. The approve path
+ * had already been unified behind one endpoint for exactly this reason; the
+ * reject path had not, so "declined on a phone" and "declined in the app" were
+ * two different products.
+ */
+router.post("/:id/dispatch-rejected", requireInternalKey, async (req: Request, res: Response) => {
+  try {
+    const tenantId = String(req.headers["x-tenant-id"] || "");
+    const approvalId = req.params.id as string;
+    if (!tenantId) return res.status(400).json({ error: "X-Tenant-Id required" });
+
+    const row = await (prisma as any).approvalRequest.findFirst({
+      where: { id: approvalId, tenantId },
+    });
+    if (!row) return res.status(404).json({ error: "approval not found" });
+    // Only a genuinely rejected row may produce a rejection message. Anything
+    // else arriving here is a replay or a bug, and must not tell a customer
+    // their request was declined when it was not.
+    if (row.status !== "REJECTED") {
+      return res.status(409).json({ error: `approval is ${String(row.status).toLowerCase()}, not rejected` });
+    }
+
+    const sent = await sendApprovalContinuation({
+      tenantId,
+      approvalId: row.id,
+      conversationId: row.conversationId,
+      tool: row.tool,
+      outcome: "rejected",
+      params: (row.modifiedParams ?? row.params) as Record<string, unknown>,
+    });
+    await restoreAiOwnership(tenantId, row.conversationId);
+
+    return res.json({ data: { approvalId: row.id, notified: sent.sent, reason: sent.reason ?? null } });
+  } catch (err: any) {
+    console.error("approvals.dispatch-rejected failed:", err?.message);
     return res.status(500).json({ error: "dispatch failed" });
   }
 });
@@ -1060,6 +1176,7 @@ router.post("/:id/reject", async (req: Request, res: Response) => {
       conversationId: row.conversationId,
       tool: row.tool,
       outcome: "rejected",
+      params: (row.modifiedParams ?? row.params) as Record<string, unknown>,
     });
 
     publishEvent({

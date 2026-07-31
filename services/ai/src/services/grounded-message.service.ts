@@ -70,6 +70,13 @@ export const REASON_PHRASES: Record<string, { he: string; en: string }> = {
   unknown: { he: "", en: "" },
 };
 
+/**
+ * Provider status enums. Legitimate English words, so they are only treated as
+ * a leak when they turn up untranslated inside a Hebrew reply.
+ */
+const PROVIDER_STATUS_RE =
+  /\b(refunded|not_refunded|partially_refunded|unfulfilled|fulfilled|pending|processed|voided|authorized)\b/i;
+
 /** Tokens that identify our internals. None may appear in customer text. */
 const INTERNAL_TOKEN_RE = new RegExp(
   `\\b(${Object.keys(REASON_PHRASES).join("|")}|shopify_\\d{3}|cancel_rejected|order_not_cancellable|cancel_not_applied)\\b`,
@@ -129,6 +136,15 @@ export function validateGroundedMessage(message: string, facts: ExecutionFacts):
   // 2b. No internal vocabulary. A reason CLASS or a provider status code in
   // the text means the model echoed a field meant for us, not for them.
   if (INTERNAL_TOKEN_RE.test(text)) problems.push("internal_reason_leaked");
+
+  // 2c. A provider status ENUM sitting untranslated inside a Hebrew sentence.
+  // Live regression: "ההזמנה #1009 הוחזרה בהצלחה, refunded, המטבע USD" - the
+  // model was handed `status: "refunded"` as a verified fact and pasted the
+  // token in mid-sentence. These words are fine in an English reply; dropped
+  // raw into Hebrew they are our database talking to the customer.
+  if (HEBREW_RE.test(text) && PROVIDER_STATUS_RE.test(text)) {
+    problems.push("provider_status_token_leaked");
+  }
 
   // 3. A pending refund must never read as completed money movement.
   if (facts.outcome === "succeeded" && facts.status === "pending" && COMPLETION_RE.test(text)) {
@@ -213,9 +229,13 @@ export function buildFallbackMessage(facts: ExecutionFacts, inboundSample: strin
       : `Your refund${money ? ` of ${money}` : ""}${order ? ` for order ${order}` : ""} was processed successfully.`;
   }
   if (isCancel) {
+    // A cancel-with-refund returns the money too, and the customer cares about
+    // that more than the cancellation. Say it in words - the provider's own
+    // "refunded" is a status code, not a sentence.
+    const refunded = facts.status === "refunded" || facts.status === "partially_refunded";
     return he
-      ? `ההזמנה${order ? ` ${order}` : ""} בוטלה בהצלחה.`
-      : `Your order${order ? ` ${order}` : ""} was cancelled successfully.`;
+      ? `ההזמנה${order ? ` ${order}` : ""} בוטלה בהצלחה${refunded ? " והתשלום הוחזר" : ""}.`
+      : `Your order${order ? ` ${order}` : ""} was cancelled successfully${refunded ? " and the payment was refunded" : ""}.`;
   }
   return he ? "הפעולה שביקשת הושלמה בהצלחה." : "The action you requested was completed successfully.";
 }
