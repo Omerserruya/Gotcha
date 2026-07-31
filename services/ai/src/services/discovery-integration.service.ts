@@ -25,6 +25,13 @@ import {
 import { extractFieldsLive } from "./intelligence-live-extract.service";
 import { prisma } from "@chatcenter/shared";
 import { normalizeShopifyProducts, type ProductSearchEnvelope } from "./product-search.service";
+// STATIC import on purpose. A dynamic `await import(...)` of this module
+// resolved to a second instance whose adapter REGISTRY was empty - the
+// adapters register as an import side-effect of the connectors barrel, which
+// only the startup instance has run - so every call came back
+// `unknown_provider:shopify`. Same specifier as every other caller, same
+// instance, populated registry.
+import { executeAdapterTool } from "./connectors/integration-framework";
 
 /** Product-search tool names this typed path covers (scoped - NOT generic). */
 export function isProductSearchTool(toolName: string | undefined): boolean {
@@ -43,6 +50,57 @@ function parseBudget(v: unknown): { target: number; currency: string } | undefin
   const cur = /ILS|₪|שקל/i.test(s) ? "ILS" : /EUR|€/i.test(s) ? "EUR" : "USD";
   const t = Number(num[0].replace(/,/g, ""));
   return Number.isFinite(t) ? { target: t, currency: cur } : undefined;
+}
+
+/**
+ * The store's own currency, cached on the integration config.
+ *
+ * Shopify quotes variant prices as bare numbers with no currency attached, so
+ * without this the display currency was taken from whatever the SHOPPER said
+ * ("עד 800 שקל" → every price labelled ILS on a USD catalog). Read once from
+ * `/shop.json` and remembered, because it changes about never and every
+ * product card needs it.
+ *
+ * Returns undefined if the shop cannot be read. Callers then show the bare
+ * number: an unlabelled price is merely ambiguous, a mislabelled one is false.
+ */
+async function resolveShopCurrency(tenantId: string, config: any): Promise<string | undefined> {
+  const cached = config?.shopCurrency;
+  if (typeof cached === "string" && cached.length === 3) return cached;
+  try {
+    const res = await executeAdapterTool({
+      tenantId,
+      toolFunctionName: "shopify.get_shop",
+      args: {},
+      accessScope: "internal",
+    });
+    if (!res.ok) {
+      console.warn(`[discovery] shop currency: get_shop denied (${res.reason})`);
+      return undefined;
+    }
+    const currency = (res.result as any)?.currency;
+    if (typeof currency !== "string" || currency.length !== 3) {
+      console.warn(`[discovery] shop currency: unusable value ${JSON.stringify(currency)}`);
+      return undefined;
+    }
+    // Scope the write by PRIMARY KEY. `updateMany` does not accept a nested
+    // relation filter, so `{ integration: { slug } }` would throw here rather
+    // than match nothing - and the throw is silent behind the catch below.
+    const row = await (prisma as any).tenantIntegration.findFirst({
+      where: { tenantId, integration: { slug: "shopify" } },
+      select: { id: true },
+    });
+    if (row) {
+      await (prisma as any).tenantIntegration.update({
+        where: { id: row.id },
+        data: { config: { ...(config ?? {}), shopCurrency: currency } },
+      });
+    }
+    return currency;
+  } catch (err: any) {
+    console.warn("[discovery] shop currency lookup failed (non-fatal):", err?.message);
+    return undefined;
+  }
 }
 
 /**
@@ -77,6 +135,7 @@ export async function groundProductSearchResult(opts: {
     });
     const shopDomain = (conn?.config as any)?.shopDomain;
     if (!shopDomain) return null;
+    const shopCurrency = await resolveShopCurrency(opts.tenantId, conn?.config);
 
     const profile = getDiscoveryProfile("product_recommendation") as DiscoveryProfile;
     const session = await getOrCreateActiveSession({ tenantId: opts.tenantId, conversationId: opts.conversationId, goalKey: profile.goalKey });
@@ -87,7 +146,7 @@ export async function groundProductSearchResult(opts: {
       ...(facts.has("flex") ? ["flex"] : []),
       ...(facts.has("riding_style") ? ["riding_style"] : []),
     ];
-    return normalizeShopifyProducts(products, { shopDomain, budget, requestedFilters });
+    return normalizeShopifyProducts(products, { shopDomain, budget, requestedFilters, shopCurrency });
   } catch (err: any) {
     console.warn("[discovery] product envelope build failed (non-fatal):", err?.message);
     return null;
@@ -194,8 +253,26 @@ export async function runProductDiscoveryTurn(opts: {
     if (!readiness.ready) {
       decision = { kind: "collect" };
     } else {
+      // Readiness is STICKY - once the session has enough facts it is ready on
+      // every later turn, forever. The caller turns `execute` into a hard
+      // OpenAI toolChoice, so left alone this pins the conversation to
+      // `search_products` permanently: a shopper who asked about snowboards on
+      // Tuesday and asks "איפה המשלוח שלי?" on Wednesday gets a product
+      // catalogue, because the model was never allowed to answer the question
+      // it was actually asked.
+      //
+      // The forced search is worth exactly one turn: the moment we first have
+      // enough to search. After a search has run for this session the model
+      // keeps the tool and the snapshot, and chooses for itself.
+      const alreadySearched = await (prisma as any).discoveryActionAttempt.count({
+        where: { sessionId: session.id, actionKey: "product_search" },
+      }).catch(() => 0);
       const { available, tool } = productToolAvailable(opts.availableToolNames);
-      decision = available ? { kind: "execute", tool } : { kind: "blocked_no_tool", tool };
+      decision = alreadySearched > 0
+        ? { kind: "collect" }
+        : available
+          ? { kind: "execute", tool }
+          : { kind: "blocked_no_tool", tool };
     }
     return { active: true, goalKey: profile.goalKey, snapshot, decision, writtenFacts: written };
   } catch (err: any) {

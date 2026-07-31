@@ -32,6 +32,19 @@ export interface ProductSearchEnvelope {
   appliedFilters: string[];
   unavailableFilters: string[];
   safeModelSummary: string;
+  /**
+   * Set when the shopper named a budget in a currency the store does not price
+   * in ("עד 800 שקל" against a USD catalog).
+   *
+   * This used to be invisible, and the consequence was severe: the display
+   * currency was taken from the BUDGET, so a $749.95 board was shown to an
+   * Israeli shopper as "ILS 749.95" - the store's number wearing the
+   * customer's currency, understating the price roughly fourfold. Prices are
+   * always shown in the store's currency; when the budget is in another one we
+   * say so and stop making over/under-budget claims we cannot substantiate
+   * without an FX rate.
+   */
+  budgetCurrencyMismatch?: { budget: string; shop: string };
 }
 
 /**
@@ -130,6 +143,10 @@ function deriveMatchQuality(
   price: string | undefined,
   budget: { target: number; currency: string } | undefined,
 ): "exact" | "approximate" {
+  // `budget` is passed as undefined by the caller when its currency does not
+  // match the store's, so a shekel target is never compared against a dollar
+  // price. Comparing the raw numbers across currencies is not a rounding
+  // error, it is a different answer.
   if (!budget) return "exact";
   if (price === undefined) return "approximate";
   const numeric = Number(price);
@@ -141,6 +158,7 @@ function normalizeOne(
   raw: any,
   shopDomain: string,
   budget: { target: number; currency: string } | undefined,
+  shopCurrency: string | undefined,
 ): ProductCandidate {
   const variant = firstVariant(raw);
 
@@ -158,7 +176,11 @@ function normalizeOne(
     variant && variant.price !== undefined && variant.price !== null
       ? String(variant.price)
       : undefined;
-  const currency = budget?.currency;
+  // The STORE's currency, never the shopper's. Taking it from the budget
+  // stamped "ILS" on prices Shopify quoted in USD. When the store currency is
+  // unknown we show the bare number: an unlabelled price is ambiguous, a
+  // wrongly-labelled one is false.
+  const currency = shopCurrency;
 
   // URL is built atomically from the handle - never model-generated.
   const handle = typeof raw?.handle === "string" ? raw.handle : "";
@@ -201,19 +223,31 @@ export function normalizeShopifyProducts(
     shopDomain: string;
     budget?: { target: number; currency: string };
     requestedFilters?: string[];
+    /** The store's own currency, from Shopify. Never the shopper's. */
+    shopCurrency?: string;
   },
 ): ProductSearchEnvelope {
   const list = Array.isArray(rawProducts) ? rawProducts : [];
   const requested = opts.requestedFilters ?? [];
 
+  // A budget only counts as a budget when it is denominated in the same
+  // currency as the prices. Otherwise it is dropped for comparison purposes
+  // and reported as a mismatch, so the shopper is told the prices are in the
+  // store's currency instead of being quietly told the wrong thing.
+  const mismatch =
+    opts.budget && opts.shopCurrency && opts.budget.currency !== opts.shopCurrency
+      ? { budget: opts.budget.currency, shop: opts.shopCurrency }
+      : undefined;
+  const comparableBudget = mismatch ? undefined : opts.budget;
+
   const candidates = list.map((raw) =>
-    normalizeOne(raw, opts.shopDomain, opts.budget),
+    normalizeOne(raw, opts.shopDomain, comparableBudget, opts.shopCurrency),
   );
 
   // appliedFilters: the filters Shopify actually honored.
   const appliedFilters: string[] = [];
   if (requested.includes("query")) appliedFilters.push("query");
-  if (opts.budget) appliedFilters.push("budget");
+  if (comparableBudget) appliedFilters.push("budget");
 
   // unavailableFilters: requested discovery filters Shopify can't apply.
   const unavailableFilters = SHOPIFY_UNFILTERABLE.filter((f) =>
@@ -231,6 +265,7 @@ export function normalizeShopifyProducts(
     appliedFilters,
     unavailableFilters,
     safeModelSummary: buildSafeModelSummary(candidates),
+    ...(mismatch ? { budgetCurrencyMismatch: mismatch } : {}),
   };
 }
 
@@ -258,14 +293,29 @@ export function buildKeyedModelSummary(
       c.inventoryState === "in_stock" ? "in stock" :
       c.inventoryState === "out_of_stock" ? "out of stock" : "availability unknown";
     const match = c.matchQuality === "approximate" ? "approximate/over-budget" : "within budget";
-    const unknown = c.unknownAttributes.length ? ` | unknown: ${c.unknownAttributes.join(", ")}` : "";
+    // Unknown attributes are listed ONLY when the shopper actually asked about
+    // them. Volunteering "flex: unknown, riding style: unknown, length:
+    // unknown" reads as a system dumping empty fields at a customer who never
+    // raised them; the honesty rule is "never invent", not "always recite".
+    const askedUnknown = c.unknownAttributes.filter((a) =>
+      env.unavailableFilters.includes(a) || env.unavailableFilters.includes(a.replace("board_", "")),
+    );
+    const unknown = askedUnknown.length ? ` | unknown: ${askedUnknown.join(", ")}` : "";
     return `${key}: "${c.title}" | ${price} | ${avail} | ${match}${unknown}`;
   });
+  const fx = env.budgetCurrencyMismatch
+    ? [
+        "",
+        `BUDGET CURRENCY MISMATCH: the shopper's budget is in ${env.budgetCurrencyMismatch.budget} but this store prices in ${env.budgetCurrencyMismatch.shop}. ` +
+          `Say plainly that prices are in ${env.budgetCurrencyMismatch.shop}. Do NOT claim any product is within or over their budget, and do NOT convert - you have no exchange rate.`,
+      ]
+    : [];
   return [
     "PRODUCT_SEARCH_RESULTS (reference products ONLY by their key, e.g. PRODUCT_1):",
     ...lines,
+    ...fx,
     "",
-    "Rules: reference candidates by key. Do NOT write product URLs, prices, or availability yourself - the system attaches the exact values. Do NOT mention any product not listed above. State unknown attributes (flex/riding style/length) as unknown; never invent them.",
+    "Rules: reference candidates by key. Do NOT write product URLs, prices, or availability yourself - the system attaches the exact values below your text. Do NOT re-list the products as a bulleted catalogue either; that list is already appended, and repeating it just prints every title twice. Write only the short reasoning a person would say out loud, naming at most two or three keys inline. Do NOT mention any product not listed above. Never invent flex, riding style or board length; if the shopper asks for one and it is marked unknown, say that detail is not listed for this product.",
   ].join("\n");
 }
 
@@ -303,9 +353,18 @@ export function renderGroundedProductReply(
   const validRefs = Array.from(new Set(refTokens.filter((n) => n >= 1 && n <= env.candidates.length)));
   const blocked = Array.from(new Set(refTokens.filter((n) => n < 1 || n > env.candidates.length))).map((n) => `PRODUCT_${n}`);
 
-  // Which candidates to present: the referenced ones, else all (fallback).
-  const chosen = validRefs.length ? validRefs.map((n) => env.candidates[n - 1]) : env.candidates;
+  // Which candidates to present: the referenced ones, else a bounded head.
+  //
+  // The fallback used to emit EVERY candidate. Asked "do you have The Minimal
+  // Snowboard in a 159?" the shopper got a fourteen-product catalogue dump,
+  // because the model referenced no key and the renderer took that as licence
+  // to print the lot. When we do not know which products the answer is about,
+  // a short list is a suggestion and a long one is noise.
+  const FALLBACK_LIMIT = 5;
   const usedFallback = validRefs.length === 0;
+  const chosen = usedFallback
+    ? env.candidates.slice(0, FALLBACK_LIMIT)
+    : validRefs.map((n) => env.candidates[n - 1]);
 
   // Model prose becomes reasoning ONLY: strip any URL/price it emitted (exact
   // values come from the canonical block below), replace PRODUCT_n tokens with
@@ -338,7 +397,22 @@ export function renderGroundedProductReply(
   });
 
   const header = locale === "he" ? "הנה מה שמצאתי:" : "Here's what I found:";
-  const message = [prose, prose ? "" : header, ...blocks].filter((x) => x !== undefined && x !== null).join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
+  // The currency notice is rendered DETERMINISTICALLY, not left to the model.
+  // When no PRODUCT_n reference survives, prose is dropped entirely - and a
+  // shopper who asked "עד 800 שקל" would then receive a bare list of USD
+  // prices, several of them far above their budget, with nothing saying so.
+  // Only when the model said nothing. If it already explained the currency in
+  // its own words, appending the canned line says the same thing twice.
+  const fxNotice = env.budgetCurrencyMismatch && !prose
+    ? locale === "he"
+      ? `שים לב: המחירים בחנות הם ב-${env.budgetCurrencyMismatch.shop}, ולכן לא השוויתי אותם לתקציב שציינת ב-${env.budgetCurrencyMismatch.budget}.`
+      : `Note: this store prices in ${env.budgetCurrencyMismatch.shop}, so I have not compared these against the budget you gave in ${env.budgetCurrencyMismatch.budget}.`
+    : undefined;
+  const message = [prose, prose ? "" : header, fxNotice, ...blocks]
+    .filter((x) => x !== undefined && x !== null && x !== "")
+    .join("\n\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
   return { message, blocked, grounded: true, usedFallback };
 }
 

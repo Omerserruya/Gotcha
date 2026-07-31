@@ -31,6 +31,20 @@ export interface ToolDefinition {
   /** "LOW" | "MEDIUM" | "HIGH". HIGH-risk tools default-require approval. */
   riskLevel: "LOW" | "MEDIUM" | "HIGH";
   /**
+   * How much this tool matters when the surface must be cut, 0-100 (default 50).
+   *
+   * OpenAI hard-rejects more than 128 tools, so a merchant with many enabled
+   * integrations loses some. That cut used to run alphabetically from the end,
+   * which is unrelated to usefulness: on the Urban Supply store it silently
+   * removed `shopify.variant_information`, so "do you have this in a 159?" -
+   * one of the most common questions a shopper asks - had no tool behind it,
+   * and the model answered with a generic catalogue dump instead.
+   *
+   * Higher survives. Reserve 90+ for the handful of tools a customer
+   * conversation genuinely cannot work without.
+   */
+  priority?: number;
+  /**
    * Provider OAuth scopes this tool needs (e.g. ["write_customers"]).
    * When a connection's known-missing scopes (config.missingScopes on the
    * TenantIntegration row) intersect these, the framework short-circuits
@@ -547,6 +561,28 @@ export function registerAdapter(adapter: ProviderAdapter): void {
 
 export function getAdapter(slug: string): ProviderAdapter | null {
   return REGISTRY.get(slug) ?? null;
+}
+
+/**
+ * Declared priority for a dotted tool name ("shopify.variant_information"),
+ * or the 50 default when the provider has not ranked it.
+ *
+ * Used only when the tool surface has to be truncated. Reading it from the
+ * adapter keeps the ranking next to the tool it describes, rather than in a
+ * list somewhere else that nobody updates when a tool is added.
+ */
+export function getToolPriority(dottedName: string): number {
+  const dot = dottedName.indexOf(".");
+  if (dot < 0) return 50;
+  const adapter = REGISTRY.get(dottedName.slice(0, dot));
+  if (!adapter) return 50;
+  try {
+    const def = adapter.tools().find((t) => t.name === dottedName);
+    const p = def?.priority;
+    return typeof p === "number" && Number.isFinite(p) ? p : 50;
+  } catch {
+    return 50;
+  }
 }
 
 // ─── Adapter execution timeout ───────────────────────────────

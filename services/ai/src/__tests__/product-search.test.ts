@@ -41,6 +41,7 @@ describe("normalizeShopifyProducts", () => {
     const env = normalizeShopifyProducts([rawSnowboard()], {
       shopDomain: SHOP,
       budget: { target: 600, currency: "USD" },
+      shopCurrency: "USD",
     });
     const c = env.candidates[0];
     expect(c.price).toBe("600.00");

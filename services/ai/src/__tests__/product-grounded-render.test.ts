@@ -30,9 +30,59 @@ function env(shop = "urban-supply-gotcha-demo.myshopify.com"): ProductSearchEnve
   return normalizeShopifyProducts(RAW, {
     shopDomain: shop,
     budget: { target: 700, currency: "USD" },
+    // The display currency comes from the STORE. It used to be read off the
+    // budget, which stamped the shopper's currency onto Shopify's numbers.
+    shopCurrency: "USD",
     requestedFilters: ["query", "budget", "flex", "length", "riding_style"],
   });
 }
+
+/**
+ * A shopper naming a budget in a currency the store does not price in.
+ * Live regression: "יש סנובורד עד 800 שקל?" against this USD catalog rendered
+ * "ILS 749.95" for a $749.95 board - the store's number wearing the customer's
+ * currency, understating the price about fourfold.
+ */
+function crossCurrencyEnv(): ProductSearchEnvelope {
+  return normalizeShopifyProducts(RAW, {
+    shopDomain: "urban-supply-gotcha-demo.myshopify.com",
+    budget: { target: 800, currency: "ILS" },
+    shopCurrency: "USD",
+    requestedFilters: ["query", "budget"],
+  });
+}
+
+describe("budget currency mismatch", () => {
+  it("labels prices in the STORE currency, never the shopper's", () => {
+    const e = crossCurrencyEnv();
+    expect(e.candidates.every((c) => c.currency === "USD")).toBe(true);
+  });
+
+  it("records the mismatch instead of silently comparing", () => {
+    expect(crossCurrencyEnv().budgetCurrencyMismatch).toEqual({ budget: "ILS", shop: "USD" });
+  });
+
+  it("makes no over/under-budget claim across currencies", () => {
+    // 749.95 USD against an 800 ILS target is not "within budget" - it is not
+    // comparable at all without an exchange rate we do not have.
+    const e = crossCurrencyEnv();
+    expect(e.appliedFilters).not.toContain("budget");
+    expect(e.candidates.every((c) => c.matchQuality === "exact")).toBe(true);
+  });
+
+  it("states the currency deterministically, even when the model returns no prose", () => {
+    // The fallback path drops prose entirely, so a model-authored caveat would
+    // vanish exactly when the bare price list needs it most.
+    const r = renderGroundedProductReply("", crossCurrencyEnv(), "he");
+    expect(r.usedFallback).toBe(true);
+    expect(r.message).toContain("USD");
+    expect(r.message).toMatch(/לא השוויתי|ILS/);
+  });
+
+  it("omits the notice when the shopper's budget is already in the store currency", () => {
+    expect(renderGroundedProductReply("", env(), "he").message).not.toMatch(/לא השוויתי/);
+  });
+});
 
 describe("envelope is canonical (1-5,10)", () => {
   const e = env();

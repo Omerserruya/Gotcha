@@ -212,7 +212,8 @@ const TOOLS: ToolDefinition[] = [
   t("list_discounts", "READ", "LOW", "List the shop's price rules / discounts.",
     "You need to see active discounts.", { limit: { type: "number" } }),
   t("validate_discount", "READ", "LOW", "Look up a discount code and whether it's valid.",
-    "Customer asks 'is code X still valid?'.", { code: { type: "string" } }, ["code"]),
+    "Customer asks 'is code X still valid?'.", { code: { type: "string" } }, ["code"],
+    { priority: 85 }),
   t("get_customer_discounts", "READ", "LOW", "List discounts targeted at a specific customer.",
     "Customer asks what discounts they personally have.", P.customerSel),
   t("create_discount_code", "WRITE", "HIGH", "Create a percentage-off discount code.",
@@ -232,10 +233,13 @@ const TOOLS: ToolDefinition[] = [
     { sideEffects: "Ends the discount immediately." }),
 
   // ── Segments (graceful - tags are the supported proxy) ──
+  // Documented as unsupported over REST, so these are the cheapest thing to
+  // lose when the surface has to be cut - and they were surviving on nothing
+  // but an early letter while live shopper tools were dropped.
   t("list_segments", "READ", "LOW", "List customer segments (GraphQL - degrades gracefully).",
-    "You want the store's segments. Prefer customer tags for membership ops.", { limit: { type: "number" } }, undefined, { unsupported: "Segments are not exposed over the REST Admin API." }),
+    "You want the store's segments. Prefer customer tags for membership ops.", { limit: { type: "number" } }, undefined, { unsupported: "Segments are not exposed over the REST Admin API.", priority: 10 }),
   t("check_segment_membership", "READ", "LOW", "Check whether a customer is in a segment (degrades gracefully).",
-    "You want to know a customer's segment. Prefer get_customer_tags.", { ...P.customerSel, segment: { type: "string" } }, undefined, { unsupported: "Segments are not exposed over the REST Admin API." }),
+    "You want to know a customer's segment. Prefer get_customer_tags.", { ...P.customerSel, segment: { type: "string" } }, undefined, { unsupported: "Segments are not exposed over the REST Admin API.", priority: 10 }),
   t("add_customer_to_segment", "WRITE", "LOW", "Add a customer to a (tag-based) segment.",
     "Place a customer into a segment. Implemented via customer tags.",
     { ...P.customerSel, segment: { type: "string" } }, ["segment"]),
@@ -253,12 +257,21 @@ const TOOLS: ToolDefinition[] = [
   t("search_products", "READ", "LOW", "Search products by title, vendor, product type, tag or SKU.",
     "Customer asks 'do you sell X?' or you need candidates to recommend.",
     { query: { type: "string" }, limit: { type: "number" }, status: { type: "string", enum: ["active", "any"], description: "Default 'active' — only products a shopper can actually buy." } }, ["query"]),
+  // "is it in stock?" and "do you have it in a 159?" are the two most common
+  // pre-purchase questions there are. Both were being dropped by the 128-tool
+  // truncation, leaving the model to answer a specific size question with a
+  // generic catalogue list.
   t("inventory_status", "READ", "LOW", "Check stock for a product or variant.",
-    "Customer asks 'is X in stock?'.", { product_id: { type: "string" }, variant_id: { type: "string" } }),
+    "Customer asks 'is X in stock?'.", { product_id: { type: "string" }, variant_id: { type: "string" } },
+    undefined, { priority: 92 }),
   t("variant_information", "READ", "LOW", "Get variant details (price, SKU, options, inventory).",
-    "Customer asks about sizes/colors/price of a variant.", { variant_id: { type: "string" }, product_id: { type: "string" } }),
+    "Customer asks about sizes/colors/price of a variant.", { variant_id: { type: "string" }, product_id: { type: "string" } },
+    undefined, { priority: 92 }),
+  // Internal enrichment for the agent panel - never something a customer
+  // conversation needs, so it should be among the first to go.
   t("get_product_images", "READ", "LOW", "Batch-fetch featured image URLs for a set of product ids (store-scoped).",
-    "Internal: enrich order line items with product images for the agent panel.", { product_ids: { type: "array", items: { type: "string" } } }, ["product_ids"]),
+    "Internal: enrich order line items with product images for the agent panel.", { product_ids: { type: "array", items: { type: "string" } } }, ["product_ids"],
+    { priority: 10 }),
 
   // ── Returns (refund status is REST; Returns/RMA object is GraphQL) ──
   t("get_refund_status", "READ", "LOW", "Get refunds recorded against an order (Shopify's native refund record).",

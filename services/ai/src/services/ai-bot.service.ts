@@ -142,6 +142,7 @@ import {
   toolBlockedByMissingScopes,
   capabilityStateIsFresh,
   refreshCapabilityState,
+  getToolPriority,
 } from "./connectors/integration-framework";
 import {
   loadActionContracts,
@@ -2101,9 +2102,16 @@ async function generateAIBotReplyInner(
   //
   // Built-ins are kept whole: escalation, identity linking and scheduling are
   // the agent's own faculties, and dropping `escalate_to_human` to make room
-  // for a catalog read would be the worst possible trade. Integration tools
-  // are truncated from the end of the stable alphabetical order, so the choice
-  // is deterministic rather than dependent on which turn it is.
+  // for a catalog read would be the worst possible trade.
+  //
+  // Integration tools are dropped LOWEST-PRIORITY first (see
+  // ToolDefinition.priority), with the alphabetical order kept only as the
+  // tie-break so the choice stays deterministic. Truncating alphabetically
+  // alone cut whatever happened to sort last, which on the Urban Supply store
+  // meant `shopify.variant_information` and `shopify.validate_discount` - so
+  // "do you have it in a 159?" and "is this coupon valid?" both had no tool
+  // behind them while dozens of rarely-used tools survived on the strength of
+  // their first letter.
   //
   // Logged at ERROR because a silently smaller surface is a capability the
   // merchant thinks they have and does not: the fix is for them to disable
@@ -2113,7 +2121,14 @@ async function generateAIBotReplyInner(
     const nameOf = (x: any): string => x?.function?.name ?? "";
     const isIntegration = (n: string) => n.includes(".") || n.startsWith("integration.");
     const builtIns = (tools as any[]).filter((x) => !isIntegration(nameOf(x)));
-    const integrations = (tools as any[]).filter((x) => isIntegration(nameOf(x)));
+    const integrations = (tools as any[])
+      .filter((x) => isIntegration(nameOf(x)))
+      .sort((a: any, b: any) => {
+        const pa = getToolPriority(nameOf(a)), pb = getToolPriority(nameOf(b));
+        if (pa !== pb) return pb - pa; // highest priority survives
+        const an = nameOf(a), bn = nameOf(b);
+        return an < bn ? -1 : an > bn ? 1 : 0;
+      });
     const room = Math.max(0, OPENAI_MAX_TOOLS - builtIns.length);
     const dropped = integrations.slice(room);
     if (dropped.length) {
