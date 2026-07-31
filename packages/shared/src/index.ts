@@ -653,6 +653,17 @@ export type {
   TeaserDecisionInput,
 } from "./lib/shopify-chat-ux";
 
+// The ONE place the Meta Graph API version is decided. Replaced eight
+// independent declarations across four services that sat on three different
+// versions at once — two of them expired.
+export {
+  metaGraphVersion,
+  metaGraphBaseUrl,
+  reportMetaGraphVersion,
+  META_GRAPH_VERSION_REVIEW_BY,
+  __resetMetaGraphVersionCache,
+} from "./lib/meta-graph-version";
+
 // The ONE place the Shopify Admin API version is decided, plus the response
 // check that makes Shopify's silent fall-forward visible. A second local
 // `const API_VERSION` anywhere is how the previous 15-month drift happened.

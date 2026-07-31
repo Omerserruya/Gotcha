@@ -4,12 +4,14 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { handleApprovalButtonReply } from "../services/whatsapp-approval-inbound.service";
-import { prisma, createWorker, IncomingMessageJob, IncomingCommentJob, WebhookTriggerJob, analyticsQueue, outgoingMessageQueue, publishEvent, decryptCredentials } from "@chatcenter/shared";
+import { prisma, createWorker, IncomingMessageJob, IncomingCommentJob, WebhookTriggerJob, analyticsQueue, outgoingMessageQueue, publishEvent, decryptCredentials, metaGraphBaseUrl } from "@chatcenter/shared";
 import { processCommentTrigger } from "../services/comment-trigger.service";
 
-const FB_API_URL = process.env.FACEBOOK_API_URL || "https://graph.facebook.com/v19.0";
+const FB_API_URL = metaGraphBaseUrl(process.env.FACEBOOK_API_URL);
+// Intentionally OUTSIDE central Meta versioning: graph.instagram.com
+// (Instagram Login) rejects version-prefixed paths. See meta-graph-version.ts.
 const IG_API_URL = process.env.INSTAGRAM_API_URL || "https://graph.instagram.com";
-const WA_API_URL = process.env.WHATSAPP_API_URL || "https://graph.facebook.com/v19.0";
+const WA_API_URL = metaGraphBaseUrl(process.env.WHATSAPP_API_URL);
 const UPLOADS_DIR = process.env.UPLOADS_DIR || path.resolve(process.cwd(), "uploads");
 const UPLOADS_BASE_URL = process.env.UPLOADS_BASE_URL || "/api/uploads";
 

@@ -1,9 +1,9 @@
 import { Router, Request, Response } from "express";
-import { prisma, authenticate, resolveTenant, requireActiveTenant, requireRole, decryptCredentials, assertPublicUrl } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireActiveTenant, requireRole, decryptCredentials, assertPublicUrl, metaGraphBaseUrl } from "@chatcenter/shared";
 
 const router = Router();
 
-const FB_API_URL = process.env.FACEBOOK_API_URL || "https://graph.facebook.com/v21.0";
+const FB_API_URL = metaGraphBaseUrl(process.env.FACEBOOK_API_URL);
 const META_APP_ID = process.env.META_APP_ID || process.env.FACEBOOK_APP_ID || "";
 
 /**

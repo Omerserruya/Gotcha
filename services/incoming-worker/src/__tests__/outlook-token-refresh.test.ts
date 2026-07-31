@@ -4,6 +4,10 @@ import { describe, it, expect, vi } from "vitest";
 // exercise the pure token-exchange helper here, so stub the shared surface it
 // pulls in at module load.
 vi.mock("@chatcenter/shared", () => ({
+  // Real implementation: the version now comes from ONE shared module, so the
+  // mock must supply it too. Returning the real default keeps assertions on
+  // built URLs meaningful instead of silently producing "undefined/...".
+  metaGraphBaseUrl: (legacy?: string) => legacy || "https://graph.facebook.com/v24.0",
   prisma: { channelAccount: { findMany: vi.fn(), update: vi.fn() } },
   createWorker: vi.fn(),
   channelHealthQueue: { add: vi.fn() },

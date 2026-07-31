@@ -8,8 +8,9 @@ import type {
   NormalizedCommentEvent,
   ChannelCredentials,
 } from "./types";
+import { metaGraphBaseUrl } from "../lib/meta-graph-version";
 
-const FB_API_URL = process.env.FACEBOOK_API_URL || "https://graph.facebook.com/v19.0";
+const FB_API_URL = metaGraphBaseUrl(process.env.FACEBOOK_API_URL);
 
 // ─── Inbound Adapter ─────────────────────────────────────────
 

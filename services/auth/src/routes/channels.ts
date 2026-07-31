@@ -19,8 +19,7 @@ import {
   decryptCredentials,
   mintOAuthState,
   consumeOAuthState,
-  resolvePrincipal,
-} from "@chatcenter/shared";
+  resolvePrincipal, metaGraphBaseUrl } from "@chatcenter/shared";
 
 const router = Router();
 
@@ -42,7 +41,7 @@ const META_APP_SECRET = process.env.META_APP_SECRET || "";
 const EMBEDDED_SIGNUP_CONFIG_ID = process.env.WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID || "";
 const OAUTH_REDIRECT_URI = process.env.OAUTH_REDIRECT_URI || "";
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
-const FB_API_URL = process.env.FACEBOOK_API_URL || "https://graph.facebook.com/v21.0";
+const FB_API_URL = metaGraphBaseUrl(process.env.FACEBOOK_API_URL);
 // OAuth `state` signing only - not user auth. See getOAuthStateSecret().
 
 // Instagram API with Instagram Login (direct IG Business connect - no Facebook Page).
@@ -58,6 +57,8 @@ const INSTAGRAM_OAUTH_REDIRECT_URI = process.env.INSTAGRAM_OAUTH_REDIRECT_URI ||
 // graph.instagram.com (Instagram Login) does NOT accept a version-prefixed path
 // for these edges (/me, /access_token, /me/subscribed_apps) - a versioned path is
 // treated as an unknown node and returns "Unsupported request". Must be unversioned.
+// Intentionally OUTSIDE central Meta versioning: graph.instagram.com
+// (Instagram Login) rejects version-prefixed paths. See meta-graph-version.ts.
 const IG_API_URL = process.env.INSTAGRAM_API_URL || "https://graph.instagram.com";
 
 // Google (Gmail) OAuth
@@ -285,8 +286,17 @@ router.post("/connect/whatsapp", authenticate, resolveTenant, requirePermission(
     // FB.login popup may require redirect_uri matching, so try multiple approaches
     let accessToken: string | undefined;
 
-    // Try exchanging the popup code with various redirect_uri values and API versions
-    const v25 = "https://graph.facebook.com/v25.0";
+    // Try exchanging the popup code with various redirect_uri values and API versions.
+    //
+    // The second URL is deliberately NOT our configured Graph version: the FB
+    // JavaScript SDK mints the popup code against its OWN version, and the
+    // exchange can fail if the versions disagree. So this is a genuine
+    // SDK-compatibility fallback, not version drift — it tracks whatever the
+    // loaded SDK uses, independently of META_GRAPH_VERSION.
+    //
+    // Review together with the SDK version in the frontend when either moves.
+    const FB_JS_SDK_GRAPH_VERSION = "v25.0";
+    const v25 = `https://graph.facebook.com/${FB_JS_SDK_GRAPH_VERSION}`;
     const exchangeAttempts: Array<{ label: string; method: "get" | "post"; url: string; data: any }> = [
       // Official docs method: GET, no redirect_uri
       { label: "GET no redirect_uri", method: "get", url: `${FB_API_URL}/oauth/access_token`, data: { client_id: META_APP_ID, client_secret: META_APP_SECRET, code } },

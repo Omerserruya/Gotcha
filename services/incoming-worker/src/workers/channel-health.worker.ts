@@ -5,10 +5,11 @@ import {
   createWorker,
   channelHealthQueue,
   decryptCredentials,
-  encryptCredentials,
-} from "@chatcenter/shared";
+  encryptCredentials, metaGraphBaseUrl } from "@chatcenter/shared";
 
-const FB_API_URL = process.env.FACEBOOK_API_URL || "https://graph.facebook.com/v21.0";
+const FB_API_URL = metaGraphBaseUrl(process.env.FACEBOOK_API_URL);
+// Intentionally OUTSIDE central Meta versioning: graph.instagram.com
+// (Instagram Login) rejects version-prefixed paths. See meta-graph-version.ts.
 const IG_API_URL = process.env.INSTAGRAM_API_URL || "https://graph.instagram.com";
 const META_APP_ID = process.env.META_APP_ID || "";
 const META_APP_SECRET = process.env.META_APP_SECRET || "";

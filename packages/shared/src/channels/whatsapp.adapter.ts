@@ -9,8 +9,9 @@ import type {
   ProviderSendError,
 } from "./types";
 import { ChannelSendError } from "./types";
+import { metaGraphBaseUrl } from "../lib/meta-graph-version";
 
-const WA_API_URL = process.env.WHATSAPP_API_URL || "https://graph.facebook.com/v19.0";
+const WA_API_URL = metaGraphBaseUrl(process.env.WHATSAPP_API_URL);
 
 /**
  * Convert common Markdown to WhatsApp's own formatting so the message reads
