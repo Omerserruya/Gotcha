@@ -15,7 +15,10 @@ import { describe, it, expect, vi } from "vitest";
  * asked "נו?", asked "מה קורה?", and got nothing until an agent took over.
  *
  * `required` alone cannot say "one of these two", which is why the constraint
- * was missing rather than wrong. `anyOf` can.
+ * was missing rather than wrong. `anyOf` says it - and OpenAI rejects anyOf at
+ * the top level of a function's parameters, so shipping that 400'd every
+ * request and left the model with no tools at all. The requirement therefore
+ * lives in the description the model reads, and is ENFORCED at dispatch.
  */
 
 vi.mock("@chatcenter/shared", () => ({
@@ -48,14 +51,17 @@ const DESTRUCTIVE = [
 ];
 
 describe("destructive order tools demand a target", () => {
-  it.each(DESTRUCTIVE)("%s declares anyOf(order_id | order_name)", (slug) => {
+  it.each(DESTRUCTIVE)("%s states the identifier requirement in prose", (slug) => {
+    // NOT via `anyOf`. OpenAI rejects anyOf/oneOf/allOf at the top level of a
+    // function's parameters - shipping it 400'd every request for this tenant,
+    // which left the model with no tools at all. `required` cannot express
+    // "one of these two" either, so the requirement is stated where the model
+    // will actually read it and enforced at dispatch.
     const def: any = byName(slug);
     expect(def, `${slug} is missing from the adapter`).toBeTruthy();
-    const anyOf = def.parameters?.anyOf;
-    expect(anyOf, `${slug} does not require an order identifier`).toBeTruthy();
-    const required = anyOf.flatMap((b: any) => b.required ?? []);
-    expect(required).toContain("order_id");
-    expect(required).toContain("order_name");
+    expect(def.description).toMatch(/REQUIRED: supply either order_id or order_name/i);
+    expect(def.parameters.properties.order_id.description).toMatch(/REQUIRED/i);
+    expect(def.parameters.properties.order_name.description).toMatch(/REQUIRED/i);
   });
 
   it.each(DESTRUCTIVE)("%s still exposes BOTH identifier properties", (slug) => {
@@ -68,12 +74,9 @@ describe("destructive order tools demand a target", () => {
   it("cancel_order specifically - the call that failed", () => {
     const def: any = byName("cancel_order");
     expect(def.riskLevel).toBe("HIGH");
-    // An empty object must not satisfy the schema any more.
-    const anyOf = def.parameters.anyOf;
-    const satisfiedByEmpty = anyOf.some((branch: any) =>
-      (branch.required ?? []).every((k: string) => Object.prototype.hasOwnProperty.call({}, k)),
-    );
-    expect(satisfiedByEmpty, "cancel_order({}) still satisfies its schema").toBe(false);
+    expect(def.description).toMatch(/REQUIRED: supply either order_id or order_name/i);
+    // The enforcement lives at dispatch (see approval-needs-arguments.test.ts):
+    // an argument-less call never reaches a human as an approval.
   });
 });
 
@@ -83,7 +86,7 @@ describe("read-only order tools are left alone", () => {
     // FIND one. Over-applying the rule would break the path a customer without
     // an order number depends on.
     const search: any = byName("search_orders");
-    expect(search?.parameters?.anyOf).toBeUndefined();
+    expect(search?.description ?? "").not.toMatch(/REQUIRED: supply either order_id/i);
   });
 
   it("get_order keeps working with either identifier and no anyOf burden", () => {

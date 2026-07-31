@@ -76,27 +76,35 @@ function t(
 }
 
 /**
- * Require AT LEAST ONE order identifier.
+ * Say, in prose, that one of the two identifiers is required.
  *
- * A plain `required: ["order_id"]` cannot express "either of these two", and
- * omitting `required` entirely tells the model every parameter is optional -
- * which is exactly what happened on 2026-07-31: the model called
- * `shopify.cancel_order({})` with no order at all. The gate saw a HIGH-risk
- * tool and raised an approval, a human approved "cancel order" with nothing to
- * cancel, and the execution then failed with `order_id_or_name_required` while
- * the customer sat waiting and asked twice what was happening.
+ * This CANNOT be expressed in the schema. JSON Schema's `anyOf` is the natural
+ * way to write "one of these two", and OpenAI rejects it outright:
  *
- * `anyOf` is standard JSON Schema and is honoured by function calling, so the
- * model is told the truth: one of the two is mandatory.
+ *   400 Invalid schema for function 'shopify__cancel_order': schema must have
+ *   type 'object' and not have 'oneOf'/'anyOf'/'allOf'/... at the top level
+ *
+ * I shipped `anyOf` first and it broke every turn for this tenant - the whole
+ * request 400s, so the model gets no tools at all and can only hand the
+ * customer to a human. Exactly the failure it was meant to prevent, by a
+ * different route.
+ *
+ * `required` cannot express it either (it is AND, not OR), so the constraint
+ * lives in two places that DO work: the description the model reads, and the
+ * dispatch-time check in agent-tools.ts that refuses to raise an approval for
+ * a call with no arguments. Prose plus enforcement, rather than a schema the
+ * API will not accept.
  */
 function withOrderTarget(def: ToolDefinition): ToolDefinition {
   const params = def.parameters as Record<string, unknown>;
+  const props = { ...(params.properties as Record<string, any> | undefined) };
+  const note = " REQUIRED: supply either order_id or order_name (the customer's order number, e.g. #1006).";
+  if (props.order_id) props.order_id = { ...props.order_id, description: `${props.order_id.description ?? ""} One of order_id or order_name is REQUIRED.`.trim() };
+  if (props.order_name) props.order_name = { ...props.order_name, description: `${props.order_name.description ?? ""} One of order_id or order_name is REQUIRED.`.trim() };
   return {
     ...def,
-    parameters: {
-      ...params,
-      anyOf: [{ required: ["order_id"] }, { required: ["order_name"] }],
-    },
+    description: `${def.description}${note}`,
+    parameters: { ...params, properties: props },
   };
 }
 
