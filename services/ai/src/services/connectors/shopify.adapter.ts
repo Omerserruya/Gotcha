@@ -181,7 +181,7 @@ const TOOLS: ToolDefinition[] = [
 
   // ── Orders (actions) ──
   withOrderTarget(t("cancel_order", "ACTION", "HIGH", "Cancel an order (optionally refund + restock).",
-    "Customer asks to cancel their order. Approval is handled by the system: calling this tool is what RAISES the approval, so call it whenever the customer's request warrants it. Never wait for approval before calling, and never hand the conversation to a human merely because approval is needed.",
+    "Customer asks to cancel their order. FIRST check the order is not already fulfilled (get_fulfillment_status or get_order): a fulfilled order CANNOT be cancelled, and process_refund plus a return is the correct action instead - proposing a cancel anyway wastes a human approval on something that will be refused. Approval is handled by the system: calling this tool is what RAISES the approval, so call it whenever the customer's request warrants it. Never wait for approval before calling, and never hand the conversation to a human merely because approval is needed.",
     { ...P.orderSel, reason: { type: "string", enum: ["customer", "fraud", "inventory", "declined", "other"] }, refund: { type: "boolean" }, restock: { type: "boolean" } }, undefined,
     { sideEffects: "Cancels the order - may trigger a refund. Irreversible." })),
   withOrderTarget(t("send_invoice", "ACTION", "MEDIUM", "Send/resend the order invoice email to the customer.",
@@ -658,6 +658,28 @@ const ShopifyAdapter: ProviderAdapter = {
             id: o.id, name: o.name, cancelled_at: o.cancelled_at,
             financial_status: o.financial_status, already_cancelled: true,
           };
+        }
+        // A fulfilled order cannot be cancelled - Shopify answers
+        // `422 Cannot cancel a paid and fulfilled order`.
+        //
+        // The human-agent path (commerce-actions.service.ts) has always
+        // checked this. This path did not, so the AI proposed a cancellation
+        // that could never succeed, a human APPROVED it, and only then did
+        // Shopify refuse. The customer had already been told "I'm handling
+        // your cancellation now", and the failed execution handed them to an
+        // agent with no explanation.
+        //
+        // Failing here rather than at Shopify makes the reason legible and
+        // names the action that WOULD work, so the model can offer it instead
+        // of apologising.
+        const fulfilledNow =
+          ["fulfilled", "partial"].includes(String(o.fulfillment_status || "").toLowerCase()) ||
+          (Array.isArray(o.fulfillments) && o.fulfillments.length > 0);
+        if (fulfilledNow) {
+          throw new Error(
+            "order_not_cancellable: this order has already been fulfilled and cannot be cancelled. " +
+            "Use process_refund (and a return) instead.",
+          );
         }
         const body: any = {};
         if (args.reason) body.reason = String(args.reason);
