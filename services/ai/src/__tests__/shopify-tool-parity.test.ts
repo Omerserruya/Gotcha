@@ -123,41 +123,64 @@ describe("cancel_order", () => {
     expect(calls.some((c) => c.url.includes("/cancel.json"))).toBe(false);
   });
 
-  it("fails when Shopify 200s the cancel but the order stays uncancelled", async () => {
+  it("fails when the mutation is accepted but the order stays uncancelled", async () => {
     stubShopify({
-      "/cancel.json": () => ({ order: { id: 11, cancelled_at: null } }),
+      "/graphql.json": () => ({ data: { orderCancel: { job: { id: "j1", done: false }, orderCancelUserErrors: [] } } }),
       "/orders/11.json": () => ({ order: { id: 11, cancelled_at: null } }),
     });
     await expect(run("cancel_order", { order_id: "11" })).rejects.toThrow(/cancel_not_applied/);
   });
 
-  it("refund:true runs the REAL refund flow after cancelling (REST cancel ignores the boolean)", async () => {
+  it("refund:true is carried BY the mutation - never a second refund call", async () => {
+    // The REST cancel silently ignored the boolean, so the adapter used to fire
+    // an explicit refund afterwards. `orderCancel` honours it, and leaving that
+    // second call in place would refund an order Shopify had already refunded.
+    let cancelled = false;
     const { calls } = stubShopify({
-      "/cancel.json": () => ({ order: { id: 11, name: "#1001", cancelled_at: "2026-07-20T00:00:00Z", financial_status: "paid" } }),
+      "/graphql.json": (_u, init) => {
+        if (String(init?.body ?? "").includes("orderCancel")) cancelled = true;
+        return { data: { orderCancel: { job: { id: "j1", done: true }, orderCancelUserErrors: [] } } };
+      },
+      "/orders/11.json": () => ({
+        order: {
+          id: 11, name: "#1001",
+          cancelled_at: cancelled ? "2026-07-20T00:00:00Z" : null,
+          financial_status: cancelled ? "refunded" : "paid",
+        },
+      }),
     });
     const out: any = await run("cancel_order", { order_id: "11", refund: true, reason: "customer" });
     expect(out.cancelled_at).toBeTruthy();
-    expect(out.refund?.refund_id).toBe(91);
-    expect(calls.some((c) => c.url.includes("/refunds/calculate.json"))).toBe(true);
-    expect(calls.some((c) => c.url.includes("/refunds.json") && c.method === "POST" && !c.url.includes("calculate"))).toBe(true);
+    expect(out.refund_status).toBe("refunded");
+    expect(out.refund_verified).toBe(true);
+    // No second money movement.
+    expect(calls.some((c) => c.url.includes("/refunds.json") && c.method === "POST")).toBe(false);
+    expect(calls.some((c) => c.url.includes("/refunds/calculate.json"))).toBe(false);
   });
 
-  it("refund failure after successful cancel reports partial success, never fake full success", async () => {
+  it("a cancel whose refund did not land is reported as not_refunded, never as refunded", async () => {
+    let cancelled = false;
     stubShopify({
-      "/cancel.json": () => ({ order: { id: 11, name: "#1001", cancelled_at: "2026-07-20T00:00:00Z", financial_status: "paid" } }),
-      "/refunds/calculate.json": () => ({ __status: 403, errors: "requires merchant approval for write_orders" }),
+      "/graphql.json": (_u, init) => {
+        if (String(init?.body ?? "").includes("orderCancel")) cancelled = true;
+        return { data: { orderCancel: { job: { id: "j1", done: true }, orderCancelUserErrors: [] } } };
+      },
+      // Cancelled, but the money never moved.
+      "/orders/11.json": () => ({
+        order: { id: 11, name: "#1001", cancelled_at: cancelled ? "2026-07-20T00:00:00Z" : null, financial_status: "paid" },
+      }),
     });
     const out: any = await run("cancel_order", { order_id: "11", refund: true });
     expect(out.cancelled_at).toBeTruthy();
-    expect(out.refund_status).toBe("failed");
-    expect(out.refund_error).toContain("shopify_403");
+    expect(out.refund_status).toBe("not_refunded");
+    expect(out.refund_verified).toBe(false);
   });
 
-  it("surfaces Shopify's 422 ineligibility error verbatim", async () => {
+  it("surfaces Shopify's structured refusal, not a bare status code", async () => {
     stubShopify({
-      "/cancel.json": () => ({ __status: 422, errors: "Order cannot be cancelled: it has fulfillments" }),
+      "/graphql.json": () => ({ data: { orderCancel: { job: null, orderCancelUserErrors: [{ message: "Cannot cancel an order that has outstanding fulfillments", code: "INVALID" }] } } }),
     });
-    await expect(run("cancel_order", { order_id: "11" })).rejects.toThrow(/shopify_422/);
+    await expect(run("cancel_order", { order_id: "11" })).rejects.toThrow(/outstanding fulfillments/);
   });
 });
 

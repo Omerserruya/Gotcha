@@ -32,6 +32,7 @@ import { randomUUID } from "crypto";
 import {
   validateGroundedMessage,
   buildFallbackMessage,
+  reasonPhrase,
   type ExecutionFacts,
 } from "./grounded-message.service";
 import { validateActionHonesty } from "./action-honesty.service";
@@ -4187,7 +4188,13 @@ export async function generateExecutionMessage(opts: {
         amount: facts.amount ?? undefined,
         currency: facts.currency ?? undefined,
         status: facts.status ?? undefined,
-        failure_reason: facts.outcome === "failed" ? (facts.errorReason ?? "unknown") : undefined,
+        // The PHRASE, never the internal class. Handing the model
+        // `failure_reason: "unknown"` is how a live customer was told
+        // "(סיבה: unknown)" - it dutifully printed the token we gave it.
+        failure_reason:
+          facts.outcome === "failed"
+            ? reasonPhrase(facts.errorReason, HEBREW_RE.test(opts.inboundSample)) || undefined
+            : undefined,
       }) + "\n" +
       `Customer's recent messages (oldest → newest):\n${opts.inboundSample}\n` +
       (opts.customerName ? `Customer name: ${opts.customerName}\n` : "") +
@@ -4197,6 +4204,8 @@ export async function generateExecutionMessage(opts: {
       `- State amounts/currency/order EXACTLY as given in VERIFIED FACTS.\n` +
       `- status "pending" means the money has NOT moved yet - say it was submitted and is pending, never that it completed.\n` +
       `- outcome "failed" must never be presented as success; do not promise a specific fix.\n` +
+      `- outcome "rejected" means a person DECLINED the request: nothing was attempted and nothing is broken. Say plainly it was not approved, say the order/money is therefore unchanged, and offer to look at alternatives. Never blame a technical problem, and never say you are "working on it".\n` +
+      `- Never claim a colleague, team or courier was contacted, or that someone will get back to them, unless that is stated in VERIFIED FACTS.\n` +
       `- No em dashes, no headings, no bullet lists, no "I'm happy to assist" filler.\n` +
       `- Do NOT mention internal systems or approvals.\n`;
     const r = await generateAIBotOneshot({

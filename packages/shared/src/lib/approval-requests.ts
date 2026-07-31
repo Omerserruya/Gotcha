@@ -288,39 +288,71 @@ export async function recordExecutionOutcome(
 }
 
 /**
+ * Which terminal HITL outcome a customer continuation is being claimed for.
+ *
+ * EVERY decision owes the customer exactly one message. Previously only
+ * `succeeded` could be claimed, so an approval that was rejected, or that was
+ * approved and then failed to execute, told the customer nothing at all - the
+ * conversation simply went silent and was dumped on a human. The claim is what
+ * makes "exactly one" true for all three, not just the happy path.
+ */
+export type ContinuationOutcome = "succeeded" | "failed" | "rejected";
+
+/** CAS predicate per outcome: the row must genuinely BE in that state. */
+const CONTINUATION_PREDICATE: Record<ContinuationOutcome, Record<string, unknown>> = {
+  // Only a provider-confirmed action may produce a "we did it" message.
+  succeeded: { status: "APPROVED", executionState: "SUCCEEDED" },
+  // Approved, dispatched, and the action did not happen.
+  failed: { status: "APPROVED", executionState: "FAILED" },
+  // A human said no. Execution never ran, so executionState is irrelevant.
+  rejected: { status: "REJECTED" },
+};
+
+/**
  * Claim the right to tell the customer, exactly once.
  *
- * Only a SUCCEEDED action with no `customerNotifiedAt` may be claimed. The
- * timestamp is written as part of the claim, so a retry of the surrounding
- * job cannot produce a second "your refund is done" message. Delivery itself
- * is retried by the outbound queue, which re-sends the SAME message row rather
- * than re-running this claim.
+ * The `customerNotifiedAt` timestamp is written as part of the claim, so a
+ * retry of the surrounding job cannot produce a second message. Delivery
+ * itself is retried by the outbound queue, which re-sends the SAME message row
+ * rather than re-running this claim.
+ *
+ * The predicate always asserts the row is really in the claimed outcome, so a
+ * caller cannot send "your order was cancelled" for a row that failed.
  */
-export async function claimCustomerNotification(tenantId: string, id: string): Promise<boolean> {
-  // OPERATION-level guard first: if a SIBLING row for the same business
-  // operation already told the customer, this row must stay silent - the
-  // row-level CAS below cannot see across rows. (Read-then-claim is safe
-  // here: the worst race is two rows claiming concurrently, which the
-  // creation-time dedup already makes rare, and each still passes its own
-  // row CAS - strictly better than the old behavior of always double-sending.)
-  const row = await (prisma as any).approvalRequest.findFirst({
-    where: { id, tenantId },
-    select: { operationKey: true },
-  });
-  if (row?.operationKey) {
-    const siblingNotified = await (prisma as any).approvalRequest.findFirst({
-      where: {
-        tenantId,
-        operationKey: row.operationKey,
-        id: { not: id },
-        customerNotifiedAt: { not: null },
-      },
-      select: { id: true },
+export async function claimCustomerNotification(
+  tenantId: string,
+  id: string,
+  outcome: ContinuationOutcome = "succeeded",
+): Promise<boolean> {
+  // OPERATION-level guard: if a SIBLING row for the same business operation
+  // already told the customer it SUCCEEDED, this row must stay silent - the
+  // row-level CAS below cannot see across rows, and two rows both claiming
+  // produced two "your refund is done" messages in production.
+  //
+  // Scoped to `succeeded` deliberately. A rejection or a failure on one row is
+  // NOT made redundant by a sibling's message: refusing to speak because some
+  // other row for the same operation once spoke is how a customer ends up
+  // never hearing that THIS request was declined.
+  if (outcome === "succeeded") {
+    const row = await (prisma as any).approvalRequest.findFirst({
+      where: { id, tenantId },
+      select: { operationKey: true },
     });
-    if (siblingNotified) return false;
+    if (row?.operationKey) {
+      const siblingNotified = await (prisma as any).approvalRequest.findFirst({
+        where: {
+          tenantId,
+          operationKey: row.operationKey,
+          id: { not: id },
+          customerNotifiedAt: { not: null },
+        },
+        select: { id: true },
+      });
+      if (siblingNotified) return false;
+    }
   }
   const claimed = await (prisma as any).approvalRequest.updateMany({
-    where: { id, tenantId, status: "APPROVED", executionState: "SUCCEEDED", customerNotifiedAt: null },
+    where: { id, tenantId, ...CONTINUATION_PREDICATE[outcome], customerNotifiedAt: null },
     data: { customerNotifiedAt: new Date() },
   });
   return claimed.count > 0;

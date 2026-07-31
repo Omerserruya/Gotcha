@@ -130,4 +130,79 @@ describe("buildFallbackMessage (deterministic, always safe)", () => {
     expect(msg).toContain("#1004");
     expect(validateGroundedMessage(msg, facts).ok).toBe(true);
   });
+
+  // ── Rejection: a human said no ────────────────────────────────────────
+  // A declined request is not an outage. These lock the two ways the old
+  // code got it wrong: saying nothing at all, and (once it did speak)
+  // borrowing the failure wording, which invents a technical problem.
+
+  it("rejected cancellation says it was not approved and that the order stands", () => {
+    const facts: ExecutionFacts = { tool: "shopify.cancel_order", outcome: "rejected", orderName: "#1004" };
+    const msg = buildFallbackMessage(facts, "אני רוצה לבטל את ההזמנה");
+    expect(msg).toMatch(/לא אושרה/);
+    expect(msg).toMatch(/לא בוטלה/);
+    expect(validateGroundedMessage(msg, facts).ok).toBe(true);
+  });
+
+  it("rejected refund never implies money moved", () => {
+    const facts: ExecutionFacts = { tool: "shopify.process_refund", outcome: "rejected" };
+    const msg = buildFallbackMessage(facts, "אני רוצה החזר");
+    expect(msg).toMatch(/לא אושרה/);
+    expect(msg).not.toMatch(/בהצלחה|הוחזר הכסף/);
+    expect(validateGroundedMessage(msg, facts).ok).toBe(true);
+  });
+
+  it("a rejection dressed up as success is refused by the validator", () => {
+    const facts: ExecutionFacts = { tool: "shopify.cancel_order", outcome: "rejected", orderName: "#1004" };
+    const verdict = validateGroundedMessage("ההזמנה בוטלה בהצלחה.", facts);
+    expect(verdict.ok).toBe(false);
+    expect(verdict.problems).toContain("rejection_presented_as_success");
+  });
+
+  // ── Internal vocabulary must not reach the customer ───────────────────
+  // Live regression: a customer received
+  //   "...אבל הבקשה נכשלה (סיבה: unknown)..."
+  // because the reason CLASS was handed to the model as a verified fact.
+
+  it("refuses a message that leaks an internal reason class", () => {
+    const facts: ExecutionFacts = { tool: "shopify.cancel_order", outcome: "failed", errorReason: "unknown" };
+    const verdict = validateGroundedMessage("הבקשה נכשלה (סיבה: unknown).", facts);
+    expect(verdict.ok).toBe(false);
+    expect(verdict.problems).toContain("internal_reason_leaked");
+  });
+
+  it("refuses a message that leaks a provider status code", () => {
+    const facts: ExecutionFacts = { tool: "shopify.cancel_order", outcome: "failed", errorReason: "not_permitted" };
+    const verdict = validateGroundedMessage("לא הצלחתי, shopify_422.", facts);
+    expect(verdict.ok).toBe(false);
+    expect(verdict.problems).toContain("internal_reason_leaked");
+  });
+
+  it("turns a reason class into a plain sentence, never the token", () => {
+    const facts: ExecutionFacts = {
+      tool: "shopify.cancel_order",
+      outcome: "failed",
+      errorReason: "not_possible_after_shipping",
+    };
+    const msg = buildFallbackMessage(facts, "אני רוצה לבטל");
+    expect(msg).toContain("כבר נמסרה לטיפול המשלוח");
+    expect(msg).not.toMatch(/not_possible_after_shipping/);
+    expect(validateGroundedMessage(msg, facts).ok).toBe(true);
+  });
+
+  it("an unknown reason simply says less, rather than saying 'unknown'", () => {
+    const facts: ExecutionFacts = { tool: "shopify.cancel_order", outcome: "failed", errorReason: "unknown" };
+    const msg = buildFallbackMessage(facts, "אני רוצה לבטל");
+    expect(msg).not.toMatch(/unknown|סיבה:/);
+    expect(validateGroundedMessage(msg, facts).ok).toBe(true);
+  });
+
+  it("a failed action no longer promises that a person is already handling it", () => {
+    const facts: ExecutionFacts = { tool: "shopify.cancel_order", outcome: "failed", errorReason: "provider_unavailable" };
+    const msg = buildFallbackMessage(facts, "אני רוצה לבטל");
+    // No unsupported promise: no task, ticket or notification exists yet, so
+    // the message may not claim the team was engaged or will call back.
+    expect(msg).not.toMatch(/נציג מהצוות ממשיך|ויעדכן אותך|פניתי לצוות|נחזור אליך/);
+    expect(validateGroundedMessage(msg, facts).ok).toBe(true);
+  });
 });

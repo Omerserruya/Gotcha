@@ -277,6 +277,293 @@ export function sanitizeExecutionResult(value: unknown, depth = 0): unknown {
 
 const router = Router();
 
+/** A terminal HITL outcome that owes the customer exactly one message. */
+type ContinuationOutcome = "succeeded" | "failed" | "rejected";
+
+/**
+ * Escalate only after the action has been tried more than once. One transient
+ * provider error is not a reason to take the conversation away from an AI that
+ * can still explain itself and offer the supported alternative.
+ */
+const MAX_AUTONOMOUS_EXECUTION_ATTEMPTS = 2;
+
+/**
+ * Collapse a raw dispatch error into a SHORT, customer-safe reason class.
+ *
+ * Nothing from a provider reaches a customer verbatim. "shopify_422: Cannot
+ * cancel a paid and fulfilled order" is a sentence about our integration, not
+ * about their order, and status codes, URLs, stack frames and internal ids are
+ * all noise that erodes trust. The classes below are the only vocabulary the
+ * message generator ever sees for a failure.
+ */
+export function toCustomerSafeReason(error?: string): string {
+  const e = String(error ?? "").toLowerCase();
+  if (!e) return "unknown";
+  if (/already (cancelled|canceled|refunded)|already_(cancelled|canceled|refunded)/.test(e)) {
+    return "already_done";
+  }
+  // "outstanding fulfillments" is Shopify's real refusal for an order whose
+  // fulfillment work has been handed to a service. It must match here: it fell
+  // through to "unknown" once, and "unknown" is the one class that gives the
+  // model nothing true to say.
+  if (/fulfil|shipped|dispatched/.test(e)) return "not_possible_after_shipping";
+  if (/scope|permission|forbidden|401|403/.test(e)) return "not_permitted";
+  if (/policy|blocked|revalidat/.test(e)) return "not_permitted";
+  if (/timeout|econnrefused|enotfound|unavailable|5\d\d/.test(e)) return "provider_unavailable";
+  if (/limit|exceed|maximum|too (large|many)/.test(e)) return "exceeds_limit";
+  return "unknown";
+}
+
+/**
+ * Last-resort customer message, used only when the AI service cannot be
+ * reached. The generator owns tone and language normally; this exists so that
+ * an AI outage degrades to a plain true sentence rather than to silence, which
+ * is the failure mode this whole path was built to remove.
+ */
+function localFallbackMessage(tool: string, outcome: ContinuationOutcome, he: boolean): string {
+  const isCancel = /cancel/.test(tool);
+  const isRefund = /refund/.test(tool);
+  const actHe = isCancel ? "הביטול" : isRefund ? "ההחזר" : "הפעולה";
+  const actEn = isCancel ? "the cancellation" : isRefund ? "the refund" : "the action";
+  if (outcome === "succeeded") {
+    return he ? `${actHe} בוצע בהצלחה.` : `${actEn[0].toUpperCase()}${actEn.slice(1)} was completed successfully.`;
+  }
+  if (outcome === "rejected") {
+    return he
+      ? `הבקשה לא אושרה ולכן ${actHe} לא בוצע. אפשר לבדוק יחד אפשרות אחרת.`
+      : `The request was not approved, so ${actEn} did not go through. We can look at another option together.`;
+  }
+  return he
+    ? `הבקשה אושרה, אבל לא הצלחתי להשלים את ${actHe} כרגע. אני בודק את האפשרויות.`
+    : `The request was approved, but I could not complete ${actEn} right now. I am checking the options.`;
+}
+
+const HEBREW_RE = /[֐-׿]/;
+
+/**
+ * Tell the customer what a decided approval actually did - exactly once.
+ *
+ * ONE function for all three terminal outcomes (succeeded / failed / rejected)
+ * so a rejection cannot quietly grow different delivery, dedup or audit rules
+ * than a success. The once-only guarantee is the CAS inside
+ * claimCustomerNotification: it writes customerNotifiedAt as part of the claim
+ * and asserts the row really is in the outcome being claimed, so no caller can
+ * announce a cancellation for a row that failed, and a retry of the
+ * surrounding request can never produce a second message.
+ */
+async function sendApprovalContinuation(args: {
+  tenantId: string;
+  approvalId: string;
+  conversationId: string;
+  tool: string;
+  outcome: ContinuationOutcome;
+  result?: unknown;
+  errorReason?: string;
+}): Promise<{ sent: boolean; reason?: string }> {
+  const { tenantId, approvalId, conversationId, tool, outcome } = args;
+  if (!conversationId) return { sent: false, reason: "no_conversation" };
+
+  // Claim FIRST. Everything below is delivery; the claim is the thing that
+  // makes "exactly one" true across retries, sweepers and both decision
+  // channels (web and WhatsApp).
+  const claimed = await claimCustomerNotification(tenantId, approvalId, outcome);
+  if (!claimed) return { sent: false, reason: "already_notified" };
+
+  try {
+    const conv = await prisma.conversation.findFirst({
+      where: { id: conversationId, tenantId },
+      select: {
+        id: true,
+        channel: true,
+        channelAccountId: true,
+        customerExternalId: true,
+        customerName: true,
+        assignedAiAgentId: true,
+      },
+    });
+    if (!conv || !conv.channelAccountId || !conv.customerExternalId) {
+      throw new Error("conversation is not addressable");
+    }
+
+    // A few recent inbound messages so the generator can detect the
+    // conversation's language even when the latest message is language-less.
+    const recentInbound = await prisma.message.findMany({
+      where: { tenantId, conversationId, direction: "INBOUND" },
+      orderBy: { createdAt: "desc" },
+      take: 5,
+      select: { body: true },
+    });
+    const inboundSample = recentInbound
+      .map((m) => m.body?.trim())
+      .filter((s): s is string => !!s)
+      .reverse()
+      .join("\n");
+
+    const r = (args.result ?? {}) as Record<string, any>;
+    const facts = {
+      tool,
+      outcome,
+      // Facts are attached only for a SUCCESS. Quoting an amount or a status
+      // beside "this did not happen" is how a customer concludes it did.
+      orderName: typeof r.name === "string" ? r.name : undefined,
+      amount: outcome === "succeeded" && typeof r.amount === "number" ? r.amount : undefined,
+      currency: outcome === "succeeded" && typeof r.currency === "string" ? r.currency : undefined,
+      status:
+        outcome !== "succeeded"
+          ? undefined
+          : typeof r.refund_status === "string"
+            ? r.refund_status
+            : r.cancelled_at || r.already_cancelled
+              ? "cancelled"
+              : r.already_refunded
+                ? "refunded"
+                : undefined,
+      errorReason: args.errorReason,
+    };
+
+    let body: string | null = null;
+    const aiAgentId = (conv as any)?.assignedAiAgentId as string | undefined;
+    if (aiAgentId) {
+      const aiBase = (process.env.AI_SERVICE_URL ?? "http://ai:4006").replace(/\/$/, "");
+      try {
+        const genRes = await fetch(`${aiBase}/api/ai-bot/execution-message`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Internal-Key": getInternalServiceKey() },
+          body: JSON.stringify({
+            tenantId,
+            aiAgentId,
+            facts,
+            inboundSample,
+            customerName: conv.customerName ?? undefined,
+          }),
+        });
+        const data: any = await genRes.json().catch(() => ({}));
+        if (genRes.ok && typeof data?.reply === "string" && data.reply.trim()) {
+          body = data.reply.trim();
+        }
+      } catch (err: any) {
+        console.warn("[approvals] execution-message generation failed:", err?.message);
+      }
+    }
+    // Degrade to a plain true sentence rather than to silence.
+    if (!body) body = localFallbackMessage(tool, outcome, HEBREW_RE.test(inboundSample));
+
+    const msg = await prisma.message.create({
+      data: {
+        tenantId,
+        conversationId: conv.id,
+        channel: conv.channel,
+        direction: "OUTBOUND",
+        body,
+        senderName: "AI Bot",
+        status: "PENDING",
+        metadata: { source: "approval_continuation", approvalId, tool, outcome },
+      },
+    });
+    await linkCustomerMessage(tenantId, approvalId, msg.id);
+    await outgoingMessageQueue.add(
+      "send",
+      {
+        tenantId,
+        conversationId: conv.id,
+        channel: conv.channel,
+        channelAccountId: conv.channelAccountId,
+        recipientExternalId: conv.customerExternalId,
+        body,
+        messageType: "text",
+        senderName: "AI Bot",
+        messageId: msg.id,
+      },
+      { attempts: 3, backoff: { type: "exponential", delay: 1000 } },
+    );
+    await prisma.conversation.update({
+      where: { id: conv.id },
+      data: { lastMessageAt: new Date() },
+    });
+    return { sent: true };
+  } catch (err: any) {
+    console.error("[approvals] post-decision customer message failed:", err?.message);
+    // Release the claim so a sweeper can still deliver the outcome. Safe: the
+    // DECISION and any execution are already durable, so a retry re-sends the
+    // message only and never re-runs the business action.
+    await (prisma as any).approvalRequest
+      .updateMany({ where: { id: approvalId, tenantId }, data: { customerNotifiedAt: null } })
+      .catch(() => {});
+    return { sent: false, reason: err?.message };
+  }
+}
+
+/**
+ * Record a failed execution on the conversation, and hand over ONLY when the
+ * AI has genuinely run out of road.
+ *
+ * The system message is written either way so the inbox shows what happened;
+ * what is conditional is ownership. A conversation taken from the AI on the
+ * first provider error is a conversation no one is answering.
+ */
+async function recordFailureAndMaybeEscalate(args: {
+  tenantId: string;
+  approvalId: string;
+  conversationId: string;
+  tool: string;
+  error?: string;
+}): Promise<{ escalated: boolean }> {
+  const { tenantId, approvalId, conversationId, tool } = args;
+  let escalated = false;
+  try {
+    const [conv, row] = await Promise.all([
+      prisma.conversation.findFirst({
+        where: { id: conversationId, tenantId },
+        select: { channel: true },
+      }),
+      (prisma as any).approvalRequest.findFirst({
+        where: { id: approvalId, tenantId },
+        select: { executionAttempts: true },
+      }),
+    ]);
+
+    const attempts = Number(row?.executionAttempts ?? 1);
+    const reason = toCustomerSafeReason(args.error);
+    // "already_done" is not a failure the customer needs a human for - the
+    // world is already in the state they asked for, and the AI can say so.
+    escalated = reason !== "already_done" && attempts >= MAX_AUTONOMOUS_EXECUTION_ATTEMPTS;
+
+    if (escalated) {
+      await prisma.conversation.update({
+        where: { id: conversationId },
+        data: { handledBy: "human", isHandedOver: true, status: "WAITING" },
+      });
+    }
+
+    if (conv) {
+      await prisma.message.create({
+        data: {
+          tenantId,
+          conversationId,
+          channel: conv.channel,
+          direction: "INBOUND",
+          body: "",
+          messageType: "system",
+          senderName: "System",
+          status: "DELIVERED",
+          metadata: {
+            systemEvent: "approval_execution_failed",
+            approvalId,
+            tool,
+            error: args.error ?? "execution failed",
+            reasonClass: reason,
+            attempts,
+            escalated,
+          },
+        },
+      });
+    }
+  } catch (err: any) {
+    console.error("[approvals] failed to record execution failure:", err?.message);
+  }
+  return { escalated };
+}
+
 /**
  * Run an APPROVED action, end to end - the ONE execution path.
  *
@@ -350,182 +637,36 @@ export async function runApprovedAction(opts: {
     }
   }
 
-  // Customer-facing continuation: once the action succeeds, ask the AI
-  // agent to continue the conversation in the customer's language. The
-  // bot stays in charge - no "team member will reach out" hand-off.
-  // If the oneshot fails, fall back to silence - the next inbound
-  // message will trigger a normal bot turn anyway.
-  // ONCE-ONLY customer continuation. Two conditions, both required:
-  //   1. the action actually SUCCEEDED (execution state, not "approved"), and
-  //   2. we win the notification claim - so a retry of this request, or a
-  //      future resume sweeper, can never send a second "it's done".
-  // The claim writes customerNotifiedAt as part of its compare-and-set.
-  const mayNotify = dispatch.ok && (await claimCustomerNotification(tenantId, approvalId));
-  if (mayNotify) {
-    try {
-      const conv = await prisma.conversation.findFirst({
-        where: { id: conversationId, tenantId },
-        select: {
-          id: true,
-          channel: true,
-          channelAccountId: true,
-          customerExternalId: true,
-          customerName: true,
-          assignedAiAgentId: true,
-        },
-      });
-      // Pull a few recent inbound messages so the model can detect the
-      // conversation's language even when the most-recent message is
-      // language-less (e.g. just an email or "ok").
-      const recentInbound = await prisma.message.findMany({
-        where: { tenantId, conversationId: conversationId, direction: "INBOUND" },
-        orderBy: { createdAt: "desc" },
-        take: 5,
-        select: { body: true },
-      });
-      const inboundSample = recentInbound
-        .map((m) => m.body?.trim())
-        .filter((s): s is string => !!s)
-        .reverse()
-        .join("\n");
+  // ── Customer-facing continuation ─────────────────────────────────────
+  // EVERY decided approval owes the customer exactly one message, whether the
+  // action succeeded or failed. Gating this on success is precisely what left
+  // a customer who had just been told "I'm handling your cancellation now" in
+  // total silence when Shopify refused, with the conversation then dumped on a
+  // human who had no idea what had been promised.
+  await sendApprovalContinuation({
+    tenantId,
+    approvalId,
+    conversationId,
+    tool,
+    outcome: dispatch.ok ? "succeeded" : "failed",
+    result: dispatch.result,
+    errorReason: dispatch.ok ? undefined : toCustomerSafeReason(dispatch.error),
+  });
 
-      const aiAgentId = (conv as any)?.assignedAiAgentId as string | undefined;
-      let body: string | null = null;
-      if (conv && aiAgentId) {
-        // ONE pipeline for post-execution customer messages: the AI service's
-        // /execution-message endpoint runs generation through the shared
-        // humanizer/style layer, validates the text against the VERIFIED
-        // execution result (amounts, order, pending-vs-completed, no
-        // em-dashes), and falls back to a deterministic grounded template on
-        // any contradiction. No raw-oneshot path remains here on purpose.
-        const r = (dispatch.result ?? {}) as Record<string, any>;
-        const facts = {
-          tool,
-          outcome: "succeeded" as const,
-          orderName: typeof r.name === "string" ? r.name : undefined,
-          amount: typeof r.amount === "number" ? r.amount : undefined,
-          currency: typeof r.currency === "string" ? r.currency : undefined,
-          status:
-            typeof r.refund_status === "string"
-              ? r.refund_status
-              : r.cancelled_at || r.already_cancelled
-                ? "cancelled"
-                : r.already_refunded
-                  ? "refunded"
-                  : undefined,
-        };
-        const aiBase = (process.env.AI_SERVICE_URL ?? "http://ai:4006").replace(/\/$/, "");
-        const internalKey = getInternalServiceKey();
-        try {
-          const genRes = await fetch(`${aiBase}/api/ai-bot/execution-message`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "X-Internal-Key": internalKey },
-            body: JSON.stringify({
-              tenantId,
-              aiAgentId,
-              facts,
-              inboundSample,
-              customerName: conv.customerName ?? undefined,
-            }),
-          });
-          const data: any = await genRes.json().catch(() => ({}));
-          if (genRes.ok && data?.reply && typeof data.reply === "string") {
-            body = data.reply.trim();
-          }
-        } catch (err: any) {
-          console.warn(
-            "approvals.approve: post-execution message generation failed; staying silent:",
-            err?.message,
-          );
-        }
-      }
-
-      if (body && conv && conv.channelAccountId && conv.customerExternalId) {
-        const msg = await prisma.message.create({
-          data: {
-            tenantId,
-            conversationId: conv.id,
-            channel: conv.channel,
-            direction: "OUTBOUND",
-            body,
-            senderName: "AI Bot",
-            status: "PENDING",
-            metadata: { source: "approval_confirmation", approvalId: approvalId, tool: tool },
-          },
-        });
-        // Audit link: which message told the customer about this approval.
-        await linkCustomerMessage(tenantId, approvalId, msg.id);
-        await outgoingMessageQueue.add(
-          "send",
-          {
-            tenantId,
-            conversationId: conv.id,
-            channel: conv.channel,
-            channelAccountId: conv.channelAccountId,
-            recipientExternalId: conv.customerExternalId,
-            body,
-            messageType: "text",
-            senderName: "AI Bot",
-            messageId: msg.id,
-          },
-          { attempts: 3, backoff: { type: "exponential", delay: 1000 } },
-        );
-        await prisma.conversation.update({
-          where: { id: conv.id },
-          data: { lastMessageAt: new Date() },
-        });
-      }
-    } catch (err: any) {
-      console.error(
-        "approvals.approve: post-approval customer message failed:",
-        err?.message,
-      );
-      // Release the notification claim so the outcome can still be delivered
-      // later. Safe because the ACTION already succeeded and is recorded as
-      // SUCCEEDED - a retry re-sends the message only, never the action.
-      await (prisma as any).approvalRequest
-        .updateMany({ where: { id: approvalId, tenantId }, data: { customerNotifiedAt: null } })
-        .catch(() => {});
-    }
-  }
-
-  // EXECUTION FAILED: the customer must not be left with a bot that resumes
-  // as though the action happened. We told them nothing (the notification is
-  // gated on success), so hand the conversation to a human who can explain
-  // and recover. The failure reason is durable on the row for the inbox.
+  // ── Ownership after a failed execution ───────────────────────────────
+  // Handoff is NOT a generic error handler. The customer has now been told the
+  // truth, and the AI still holds the order, the request and the reason it
+  // failed - enough to offer the action that DOES work (a fulfilled order that
+  // cannot be cancelled takes a return plus a refund). Escalate only once the
+  // action has genuinely been attempted more than once without success.
   if (!dispatch.ok) {
-    try {
-      const conv = await prisma.conversation.findFirst({
-        where: { id: conversationId, tenantId },
-        select: { channel: true },
-      });
-      await prisma.conversation.update({
-        where: { id: conversationId },
-        data: { handledBy: "human", isHandedOver: true, status: "WAITING" },
-      });
-      if (conv) {
-        await prisma.message.create({
-          data: {
-            tenantId,
-            conversationId: conversationId,
-            channel: conv.channel,
-            direction: "INBOUND",
-            body: "",
-            messageType: "system",
-            senderName: "System",
-            status: "DELIVERED",
-            metadata: {
-              systemEvent: "approval_execution_failed",
-              approvalId: approvalId,
-              tool: tool,
-              error: dispatch.error ?? "execution failed",
-            },
-          },
-        });
-      }
-    } catch (err: any) {
-      console.error("approvals.approve: failed to escalate after execution failure:", err?.message);
-    }
+    await recordFailureAndMaybeEscalate({
+      tenantId,
+      approvalId,
+      conversationId,
+      tool,
+      error: dispatch.error,
+    });
   }
   return { ok: dispatch.ok, error: dispatch.error };
 }
@@ -882,44 +1023,44 @@ router.post("/:id/reject", async (req: Request, res: Response) => {
     }
 
     const updated = await rejectRequest(tenantId, row.id, actorId, decisionReason);
-
-    // Un-pause the conversation but route to human. Rejected actions
-    // mean the bot shouldn't retry - hand off to a human so they can
-    // respond directly.
-    try {
-      await prisma.conversation.update({
-        where: { id: row.conversationId },
-        data: { handledBy: "human", isHandedOver: true },
+    if (!updated) {
+      const current = await (prisma as any).approvalRequest.findFirst({
+        where: { id: row.id, tenantId },
+        select: { status: true },
       });
-    } catch (err: any) {
-      console.error("approvals.reject: failed to reroute conversation:", err.message);
+      return res.status(409).json({ error: `approval is already ${String(current?.status ?? "decided").toLowerCase()}` });
     }
 
-    // F7 handoff trigger: fire-and-forget analysis on the AI service so
-    // the agent about to pick this up sees a ready-made summary instead
-    // of scrolling the raw transcript.
-    (async () => {
-      try {
-        const base = process.env.AI_SERVICE_URL ?? "http://ai:4006";
-        const internalToken = process.env.INTERNAL_SERVICE_TOKEN;
-        const headers: Record<string, string> = {
-          "Content-Type": "application/json",
-          "x-tenant-id": tenantId,
-        };
-        if (internalToken) {
-          headers["Authorization"] = internalToken.startsWith("Bearer ")
-            ? internalToken
-            : `Bearer ${internalToken}`;
-        }
-        await fetch(`${base.replace(/\/$/, "")}/api/ai-assist/${row.conversationId}/analyze`, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({ tenantId, trigger: "handoff" }),
+    // A rejection is a DECISION, not an incident. Nothing was attempted, so
+    // there is nothing for a human to clean up - the AI keeps the conversation,
+    // tells the customer the request was not approved and offers what IS
+    // supported. Routing every "no" to a person was the reason a declined
+    // cancellation looked, to the customer, exactly like being ignored.
+    try {
+      const conv = await prisma.conversation.findFirst({
+        where: { id: row.conversationId, tenantId },
+        select: { isHandedOver: true, assignedAgentId: true },
+      });
+      if (conv && !conv.isHandedOver && !conv.assignedAgentId) {
+        await prisma.conversation.update({
+          where: { id: row.conversationId },
+          data: { handledBy: "ai_agent" },
         });
-      } catch (err: any) {
-        console.error("approvals.reject: analyzeConversation failed:", err?.message);
       }
-    })();
+    } catch (err: any) {
+      console.error("approvals.reject: failed to resume conversation:", err.message);
+    }
+
+    // Proactive rejection message - same once-only claim as every other
+    // outcome, so the customer never has to send another message to find out
+    // what happened to their request.
+    await sendApprovalContinuation({
+      tenantId,
+      approvalId: row.id,
+      conversationId: row.conversationId,
+      tool: row.tool,
+      outcome: "rejected",
+    });
 
     publishEvent({
       event: "approval:rejected",

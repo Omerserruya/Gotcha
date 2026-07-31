@@ -13,9 +13,12 @@
  *
  * Invariants:
  *   - transport 200 alone is NEVER success (inner ok must be true)
- *   - a failed dispatch records FAILED and never notifies the customer
+ *   - a failed dispatch records FAILED and tells the customer it FAILED
  *   - a successful dispatch records SUCCEEDED and claims the notification
  *   - a lost execution claim dispatches nothing
+ *   - handoff is not a generic error handler: a first-attempt failure leaves
+ *     the conversation with the AI, which can still explain and offer the
+ *     supported alternative
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
@@ -127,8 +130,9 @@ describe("dotted adapter tools (shopify.*)", () => {
       args: { order_name: "#1004" },
     });
     expect(recordExecutionOutcome).toHaveBeenCalledWith(TENANT, "ap_1", expect.objectContaining({ ok: true }));
-    // Success is what unlocks the customer notification claim.
-    expect(claimCustomerNotification).toHaveBeenCalledWith(TENANT, "ap_1");
+    // Success is what unlocks the customer notification claim, and the claim
+    // names the outcome so a failed row can never borrow a success message.
+    expect(claimCustomerNotification).toHaveBeenCalledWith(TENANT, "ap_1", "succeeded");
   });
 
   it("inner ok:false on HTTP 200 is a FAILURE - transport success is never enough", async () => {
@@ -141,11 +145,35 @@ describe("dotted adapter tools (shopify.*)", () => {
     expect(recordExecutionOutcome).toHaveBeenCalledWith(
       TENANT, "ap_1", expect.objectContaining({ ok: false, error: expect.stringContaining("shopify_403") }),
     );
-    // Failure NEVER notifies the customer of success...
-    expect(claimCustomerNotification).not.toHaveBeenCalled();
-    // ...and escalates the conversation to a human.
+    // Failure never claims a SUCCESS notification, but it does owe the
+    // customer a message - silence is what stranded the Matan cancellation.
+    expect(claimCustomerNotification).toHaveBeenCalledWith(TENANT, "ap_1", "failed");
+    // A first-attempt failure does NOT take the conversation from the AI.
+    expect(prismaMock.conversation.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ isHandedOver: true }) }),
+    );
+  });
+
+  it("escalates to a human only once the action has been attempted twice", async () => {
+    prismaMock.approvalRequest.findFirst.mockResolvedValue({ resumeEnvelope: null, executionAttempts: 2 });
+    stubFetch([
+      { match: "/adapter-tools/execute", body: { data: { ok: false, error: "shopify_500: upstream" } } },
+    ]);
+    const r = await runApprovedAction(baseOpts("shopify.cancel_order"));
+    expect(r.ok).toBe(false);
     expect(prismaMock.conversation.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ handledBy: "human", isHandedOver: true }) }),
+    );
+  });
+
+  it("an already-done outcome never escalates, however many attempts it took", async () => {
+    prismaMock.approvalRequest.findFirst.mockResolvedValue({ resumeEnvelope: null, executionAttempts: 5 });
+    stubFetch([
+      { match: "/adapter-tools/execute", body: { data: { ok: false, error: "already_cancelled" } } },
+    ]);
+    await runApprovedAction(baseOpts("shopify.cancel_order"));
+    expect(prismaMock.conversation.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ isHandedOver: true }) }),
     );
   });
 
@@ -216,7 +244,27 @@ describe("execution state machine honesty", () => {
     expect(recordExecutionOutcome).toHaveBeenCalledWith(
       TENANT, "ap_1", expect.objectContaining({ ok: false, error: expect.stringContaining("unsupported tool") }),
     );
-    expect(claimCustomerNotification).not.toHaveBeenCalled();
+    expect(claimCustomerNotification).toHaveBeenCalledWith(TENANT, "ap_1", "failed");
+  });
+
+  it("a failed execution that wins its claim sends a FAILURE message, not silence", async () => {
+    claimCustomerNotification.mockResolvedValue(true);
+    const { calls } = stubFetch([
+      { match: "/adapter-tools/execute", body: { data: { ok: false, error: "shopify_422: Cannot cancel a paid and fulfilled order" } } },
+      { match: "/ai-bot/execution-message", body: { reply: "הבקשה אושרה אבל לא הצלחתי להשלים את הביטול", grounded: true } },
+    ]);
+    const shared = await import("@chatcenter/shared");
+    const r = await runApprovedAction(baseOpts("shopify.cancel_order", { order_name: "#1006" }));
+    expect(r.ok).toBe(false);
+    // The customer is told, and the raw provider string never leaves the box:
+    // the generator receives a classified reason, not "shopify_422: ...".
+    const gen = calls.find((c) => c.url.includes("/ai-bot/execution-message"))!;
+    const facts = JSON.parse(gen.init.body).facts;
+    expect(facts.outcome).toBe("failed");
+    expect(facts.errorReason).toBe("not_possible_after_shipping");
+    expect(JSON.stringify(facts)).not.toContain("shopify_422");
+    expect(prismaMock.message.create).toHaveBeenCalled();
+    expect((shared as any).outgoingMessageQueue.add).toHaveBeenCalledTimes(1);
   });
 
   it("success sends exactly one customer continuation when the claim is won", async () => {

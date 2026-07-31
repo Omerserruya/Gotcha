@@ -642,7 +642,30 @@ const ShopifyAdapter: ProviderAdapter = {
       case "get_fulfillment_status": {
         const o = await resolveOrder(ctx, args);
         if (!o) throw new Error("order_not_found");
-        return { order_id: o.id, name: o.name, fulfillment_status: o.fulfillment_status, fulfillments: o.fulfillments || [] };
+        // FULFILLMENT ORDERS are included because the legacy fields lie by
+        // omission: an order can report fulfillment_status=null with an empty
+        // `fulfillments` array while Shopify still considers it to have
+        // outstanding fulfillments (live-verified on #1006). Anything deciding
+        // "has this shipped / can this be cancelled" needs the real object.
+        const fos = await fetchFulfillmentOrders(ctx, o.id);
+        return {
+          order_id: o.id,
+          name: o.name,
+          fulfillment_status: o.fulfillment_status,
+          fulfillments: o.fulfillments || [],
+          fulfillment_orders: fos.orders.map((f: any) => ({
+            id: f.id,
+            status: f.status,
+            request_status: f.request_status,
+            assigned_location_id: f.assigned_location_id,
+            line_items: (f.line_items || []).length,
+          })),
+          // `null`, not `false`, when the scope is missing: "we cannot see"
+          // must never be rendered as "there are none".
+          has_outstanding_fulfillments: fos.readable ? hasOutstandingFulfillments(fos.orders) : null,
+          fulfillment_orders_readable: fos.readable,
+          ...(fos.readable ? {} : { fulfillment_orders_error: fos.error }),
+        };
       }
 
       // ── Orders actions ──
@@ -681,40 +704,77 @@ const ShopifyAdapter: ProviderAdapter = {
             "Use process_refund (and a return) instead.",
           );
         }
-        const body: any = {};
-        if (args.reason) body.reason = String(args.reason);
-        if (args.restock != null) body.restock = !!args.restock;
-        const r: any = await sreq(ctx, "POST", `/orders/${o.id}/cancel.json`, body);
-        let cancelled = r.order || r;
-        // Shopify can 200 the cancel call while the order stays uncancelled
-        // (e.g. gateway-side rejection). Verify the business state changed
-        // before letting callers report success to a customer.
-        if (!cancelled?.cancelled_at) {
-          const check: any = await sreq(ctx, "GET", `/orders/${o.id}.json`);
-          if (!check?.order?.cancelled_at) {
-            throw new Error("cancel_not_applied: Shopify accepted the request but the order is not cancelled - check payment/fulfillment state in the Shopify admin.");
-          }
-          cancelled = check.order;
+        // CANCEL VIA GRAPHQL, not REST.
+        //
+        // `POST /orders/{id}/cancel.json` answers 422 "Cannot cancel a paid and
+        // fulfilled order" for orders that are neither - live-verified against
+        // #1006 on the dev store, which reports fulfillment_status=null and
+        // fulfillments=[] and still gets that exact refusal. The REST message is
+        // simply wrong, and because it names a state the order is not in, the
+        // guard above cannot pre-empt it and the model cannot explain it.
+        //
+        // REST has been legacy since 2024-10; `orderCancel` is the supported
+        // mutation on 2026-07 and it accepts a PAID order, which is the whole
+        // point. It is ASYNCHRONOUS - it returns a Job, so the order is not
+        // cancelled the moment the mutation returns and the state must be read
+        // back before anyone tells a customer it happened.
+        const reasonRaw = String(args.reason ?? "OTHER").toUpperCase();
+        const reason = ["CUSTOMER", "DECLINED", "FRAUD", "INVENTORY", "STAFF", "OTHER"].includes(reasonRaw)
+          ? reasonRaw
+          : "OTHER";
+        const gql = await shopifyGraphQL(ctx, ORDER_CANCEL_MUTATION, {
+          orderId: orderGid(o.id),
+          reason,
+          // `refund: true` returns the money as part of the cancellation.
+          refund: !!args.refund,
+          restock: args.restock != null ? !!args.restock : true,
+          notifyCustomer: false,
+        });
+        const userErrors = gql?.orderCancel?.orderCancelUserErrors ?? [];
+        if (userErrors.length) {
+          throw new Error(
+            `cancel_rejected: ${userErrors.map((e: any) => e?.message).filter(Boolean).join("; ").slice(0, 240)}`,
+          );
         }
-        // `refund: true` means cancel AND return the money. The REST cancel
-        // endpoint silently ignores a boolean refund param (live-verified:
-        // the order cancels but stays `paid`), so run the real refund flow
-        // explicitly. A refund failure after a successful cancel is reported
-        // as partial success - never rolled into a fake full success.
-        if (args.refund) {
-          try {
-            const fresh: any = await sreq(ctx, "GET", `/orders/${o.id}.json`);
-            const refund = await executeRefund(ctx, fresh.order ?? cancelled, {
-              restock: args.restock, reason: args.reason ?? "order cancelled",
-            });
-            return { ...cancelled, refund };
-          } catch (err: any) {
-            return {
-              ...cancelled,
-              refund_error: (err?.message || "refund_failed").slice(0, 240),
-              refund_status: "failed",
-            };
+
+        // Read the business state back. The job is async, so poll briefly
+        // rather than trusting the mutation's acknowledgement - "Shopify
+        // accepted the request" and "the order is cancelled" are different
+        // claims and only the second one may reach a customer.
+        let cancelled: any = null;
+        for (let attempt = 0; attempt < 6; attempt++) {
+          await new Promise((r) => setTimeout(r, attempt === 0 ? 400 : 800));
+          const check: any = await sreq(ctx, "GET", `/orders/${o.id}.json`);
+          if (check?.order?.cancelled_at) {
+            cancelled = check.order;
+            break;
           }
+        }
+        if (!cancelled) {
+          throw new Error(
+            "cancel_not_applied: Shopify accepted the cancellation but the order is still not cancelled - check the order in the Shopify admin before retrying.",
+          );
+        }
+        // `refund: true` means cancel AND return the money, and the GraphQL
+        // mutation ABOVE already did that - unlike the old REST call, which
+        // silently ignored the flag and left the order `paid`, forcing a
+        // second explicit refund call here.
+        //
+        // That explicit call must NOT survive the move to GraphQL: it would
+        // now be a SECOND refund on an order Shopify has already refunded.
+        // What replaces it is verification, not another mutation - read the
+        // financial state back and report what is actually true, so a refund
+        // that did not land is never reported as though it did.
+        if (args.refund) {
+          const fin = String(cancelled.financial_status ?? "").toLowerCase();
+          const refunded = fin === "refunded" || fin === "partially_refunded";
+          return {
+            ...cancelled,
+            refund_status: refunded ? fin : "not_refunded",
+            // Surfaced so the model says "cancelled, and the refund is still
+            // settling" rather than inventing a completed refund.
+            refund_verified: refunded,
+          };
         }
         return cancelled;
       }
@@ -1541,6 +1601,87 @@ async function createDiscount(ctx: Ctx, opts: { code: string; percentage: number
 function orderGid(id: string | number): string {
   return `gid://shopify/Order/${id}`;
 }
+
+/**
+ * The order's FulfillmentOrders - the object Shopify actually reasons about.
+ *
+ * `order.fulfillment_status` and `order.fulfillments` describe fulfillments
+ * that have been CREATED. They say nothing about work that has been requested
+ * from, or accepted by, a fulfillment service, which is what Shopify means by
+ * "outstanding fulfillments" when it refuses a cancellation. Reading only the
+ * legacy fields is why a demonstrably unfulfilled-looking order still could
+ * not be cancelled, with no signal anywhere that explained it.
+ *
+ * Best-effort: a shop without the fulfillment scopes returns nothing rather
+ * than throwing, so a read path degrades to the legacy fields instead of
+ * failing outright.
+ */
+async function fetchFulfillmentOrders(
+  ctx: Ctx,
+  orderId: string | number,
+): Promise<{ orders: any[]; readable: boolean; error?: string }> {
+  try {
+    const r: any = await sreq(ctx, "GET", `/orders/${orderId}/fulfillment_orders.json`);
+    return {
+      orders: Array.isArray(r?.fulfillment_orders) ? r.fulfillment_orders : [],
+      readable: true,
+    };
+  } catch (err: any) {
+    // NOT the same as "there are none". This shop's token carries no
+    // fulfillment scope, and collapsing a denial into an empty array would
+    // report `has_outstanding_fulfillments: false` for an order Shopify
+    // refuses to cancel for exactly that reason - a confident false negative,
+    // which is the one failure mode this integration must never have.
+    const msg = String(err?.message ?? "unknown");
+    console.warn(`[shopify] fulfillment_orders unreadable for order ${orderId}: ${msg}`);
+    return { orders: [], readable: false, error: msg.slice(0, 200) };
+  }
+}
+
+/**
+ * Does this order have fulfillment work Shopify will refuse to cancel over?
+ *
+ * OPEN and SCHEDULED fulfillment orders are cancelled along with the order and
+ * are NOT blocking. What blocks is work already handed to a fulfillment
+ * service: IN_PROGRESS, or a request that has been submitted or accepted.
+ */
+function hasOutstandingFulfillments(fulfillmentOrders: any[]): boolean {
+  return fulfillmentOrders.some((f: any) => {
+    const status = String(f?.status ?? "").toLowerCase();
+    const request = String(f?.request_status ?? "").toLowerCase();
+    if (["in_progress", "incomplete"].includes(status)) return true;
+    return ["submitted", "accepted"].includes(request);
+  });
+}
+
+/**
+ * The supported way to cancel an order on a current API version.
+ *
+ * Asynchronous by design: it returns a Job, so a caller that reports success
+ * on the mutation alone is guessing. `orderCancelUserErrors` carries the real
+ * refusals (already cancelled, cannot refund, and so on) as structured codes
+ * rather than the misleading blanket 422 the REST endpoint returns.
+ */
+const ORDER_CANCEL_MUTATION = `
+  mutation OrderCancel(
+    $orderId: ID!
+    $reason: OrderCancelReason!
+    $refund: Boolean!
+    $restock: Boolean!
+    $notifyCustomer: Boolean
+  ) {
+    orderCancel(
+      orderId: $orderId
+      reason: $reason
+      refund: $refund
+      restock: $restock
+      notifyCustomer: $notifyCustomer
+    ) {
+      job { id done }
+      orderCancelUserErrors { field message code }
+    }
+  }
+`;
 
 const RETURNS_QUERY = `
   query OrderReturns($id: ID!) {

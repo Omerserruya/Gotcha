@@ -57,17 +57,35 @@ const ORDER = {
  * Runs `cancel_order` against a shop whose only order is `order`.
  *
  * The stub is stateful because the adapter verifies its own write: after
- * POSTing the cancel it re-reads the order and refuses to report success
+ * issuing the cancel it re-reads the order and refuses to report success
  * unless `cancelled_at` actually came back set. A stub that answered with an
  * unchanged order would make every successful cancel look like a failure.
+ *
+ * The cancel is a GRAPHQL mutation, not `POST /orders/{id}/cancel.json`. REST
+ * answers 422 "Cannot cancel a paid and fulfilled order" for orders that are
+ * neither - live-verified on the dev store against an order reporting
+ * fulfillment_status=null and fulfillments=[]. Since the REST message names a
+ * state the order is not in, no pre-flight guard can anticipate it; the
+ * supported `orderCancel` mutation accepts the paid order the REST call
+ * refused.
  */
 function cancel(args: Record<string, unknown>, order: any = ORDER) {
   let live = { ...order };
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: any) => {
-      if (String(init?.method).toUpperCase() === "POST" && String(url).includes("/cancel")) {
-        live = { ...live, cancelled_at: "2026-07-31T15:03:41Z" };
+      const isPost = String(init?.method).toUpperCase() === "POST";
+      if (isPost && String(url).includes("/graphql.json")) {
+        const q = String(init?.body ?? "");
+        if (q.includes("orderCancel")) {
+          // Shopify's job is asynchronous; the adapter polls the order back.
+          live = { ...live, cancelled_at: "2026-07-31T15:03:41Z" };
+          const gql = { data: { orderCancel: { job: { id: "gid://shopify/Job/1", done: true }, orderCancelUserErrors: [] } } };
+          return {
+            ok: true, status: 200, headers: { get: () => null },
+            json: async () => gql, text: async () => JSON.stringify(gql),
+          };
+        }
       }
       const body = String(url).includes("orders.json") ? { orders: [live] } : { order: live };
       return {

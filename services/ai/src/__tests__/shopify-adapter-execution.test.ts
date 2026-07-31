@@ -73,14 +73,40 @@ function run(toolName: string, args: Record<string, unknown>) {
 beforeEach(() => vi.restoreAllMocks());
 
 describe("shopify.cancel_order", () => {
-  it("cancels, then VERIFIES cancelled_at before reporting success", async () => {
+  // The cancel is a GraphQL mutation. REST `/orders/{id}/cancel.json` answers
+  // 422 "Cannot cancel a paid and fulfilled order" for orders that are
+  // neither - live-verified - so it cannot be the path a customer depends on.
+  it("cancels via GraphQL, then VERIFIES cancelled_at before reporting success", async () => {
+    let cancelled = false;
     const calls = stubShopify([
-      { match: (m, u) => m === "GET" && /\/orders\/1001\.json$/.test(u), reply: () => ({ order: { id: 1001, name: "#1004", cancelled_at: null, financial_status: "paid" } }) },
-      { match: (m, u) => m === "POST" && /\/orders\/1001\/cancel\.json$/.test(u), reply: () => ({ order: { id: 1001, name: "#1004", cancelled_at: "2026-07-20T10:00:00Z", financial_status: "paid" } }) },
+      {
+        match: (m, u) => m === "GET" && /\/orders\/1001\.json$/.test(u),
+        reply: () => ({ order: { id: 1001, name: "#1004", cancelled_at: cancelled ? "2026-07-20T10:00:00Z" : null, financial_status: "paid" } }),
+      },
+      {
+        match: (m, u) => m === "POST" && /\/graphql\.json$/.test(u),
+        reply: () => { cancelled = true; return { data: { orderCancel: { job: { id: "gid://shopify/Job/1", done: true }, orderCancelUserErrors: [] } } }; },
+      },
     ]);
     const out: any = await run("cancel_order", { order_id: "1001", reason: "customer" });
     expect(out.cancelled_at).toBeTruthy();
-    expect(calls.some((c) => c.method === "POST" && c.url.includes("/cancel.json"))).toBe(true);
+    expect(calls.some((c) => c.method === "POST" && c.url.includes("/graphql.json"))).toBe(true);
+    // REST cancel must not be used at all.
+    expect(calls.some((c) => c.url.includes("/cancel.json"))).toBe(false);
+  });
+
+  it("reports Shopify's structured refusal instead of a blanket status code", async () => {
+    // orderCancelUserErrors is the whole reason to be on GraphQL: it names the
+    // real obstacle ("outstanding fulfillments") where REST claimed the order
+    // was "paid and fulfilled" - a state it was demonstrably not in.
+    stubShopify([
+      { match: (m, u) => m === "GET" && /\/orders\/1001\.json$/.test(u), reply: () => ({ order: { id: 1001, cancelled_at: null, financial_status: "paid" } }) },
+      {
+        match: (m, u) => m === "POST" && /\/graphql\.json$/.test(u),
+        reply: () => ({ data: { orderCancel: { job: null, orderCancelUserErrors: [{ field: null, message: "Cannot cancel an order that has outstanding fulfillments", code: "INVALID" }] } } }),
+      },
+    ]);
+    await expect(run("cancel_order", { order_id: "1001" })).rejects.toThrow(/outstanding fulfillments/);
   });
 
   it("is idempotent: an already-cancelled order returns already_cancelled and never re-POSTs", async () => {
@@ -92,14 +118,17 @@ describe("shopify.cancel_order", () => {
     expect(calls.filter((c) => c.method === "POST").length).toBe(0);
   });
 
-  it("FAILS when Shopify 200s the cancel but the order stays uncancelled", async () => {
+  it("FAILS when the mutation is accepted but the order stays uncancelled", async () => {
+    // The mutation returns a JOB, so acceptance is not completion. If the
+    // order never actually flips, this must be a failure - "Shopify took the
+    // request" is not a claim a customer can be told.
     let getCount = 0;
     stubShopify([
       { match: (m, u) => m === "GET" && /\/orders\/1001\.json$/.test(u), reply: () => { getCount++; return { order: { id: 1001, cancelled_at: null, financial_status: "paid" } }; } },
-      { match: (m, u) => m === "POST" && /\/cancel\.json$/.test(u), reply: () => ({ order: { id: 1001, cancelled_at: null } }) },
+      { match: (m, u) => m === "POST" && /\/graphql\.json$/.test(u), reply: () => ({ data: { orderCancel: { job: { id: "gid://shopify/Job/1", done: false }, orderCancelUserErrors: [] } } }) },
     ]);
     await expect(run("cancel_order", { order_id: "1001" })).rejects.toThrow(/cancel_not_applied/);
-    expect(getCount).toBeGreaterThanOrEqual(2); // resolve + verification re-fetch
+    expect(getCount).toBeGreaterThanOrEqual(2); // resolve + verification re-reads
   });
 
   it("fails visibly when the order does not exist", async () => {
@@ -214,9 +243,10 @@ describe("failure honesty", () => {
   });
 
   it("HTTP-level Shopify errors carry the status + body (missing write scope → 403 surfaces)", async () => {
+    // Now raised by the GraphQL transport, since that is where the cancel goes.
     stubShopify([
       { match: (m, u) => m === "GET" && /\/orders\/1001\.json$/.test(u), reply: () => ({ order: { id: 1001, cancelled_at: null } }) },
-      { match: (m, u) => m === "POST" && /\/cancel\.json$/.test(u), reply: () => ({ __status: 403, body: { errors: "write_orders scope required" } }) },
+      { match: (m, u) => m === "POST" && /\/graphql\.json$/.test(u), reply: () => ({ __status: 403, body: { errors: "write_orders scope required" } }) },
     ]);
     await expect(run("cancel_order", { order_id: "1001" })).rejects.toThrow(/shopify_403/);
   });

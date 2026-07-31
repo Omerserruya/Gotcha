@@ -117,7 +117,7 @@ describe("runApprovedAction - dotted adapter tools", () => {
     expect(shared.recordExecutionOutcome).toHaveBeenCalledWith(TENANT, "apv_1", expect.objectContaining({ ok: true }));
   });
 
-  it("inner { ok:false } from the bridge → FAILED outcome, no customer notification, human escalation", async () => {
+  it("inner { ok:false } from the bridge → FAILED outcome, a truthful customer message, and NO reflex handoff", async () => {
     fetchStub((url) =>
       url.includes("/adapter-tools/execute")
         ? { body: { data: { ok: false, error: "not_connected:shopify" } } }
@@ -132,11 +132,14 @@ describe("runApprovedAction - dotted adapter tools", () => {
     expect(shared.recordExecutionOutcome).toHaveBeenCalledWith(
       TENANT, "apv_1", expect.objectContaining({ ok: false, error: expect.stringContaining("not_connected") }),
     );
-    // Failure must NEVER reach the customer as success…
-    expect(shared.claimCustomerNotification).not.toHaveBeenCalled();
-    expect(shared.outgoingMessageQueue.add).not.toHaveBeenCalled();
-    // …and the conversation is handed to a human who can recover.
-    expect(shared.prisma.conversation.update).toHaveBeenCalledWith(
+    // Failure must never reach the customer as SUCCESS, but it must reach
+    // them: the claim is made for the "failed" outcome, whose predicate can
+    // only match a row that really is FAILED.
+    expect(shared.claimCustomerNotification).toHaveBeenCalledWith(TENANT, "apv_1", "failed");
+    // …and a first-attempt failure does NOT confiscate the conversation. The
+    // AI has the order, the request and the reason, so it can still explain
+    // and offer what is supported. Handoff is not an error handler.
+    expect(shared.prisma.conversation.update).not.toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ handledBy: "human" }) }),
     );
   });

@@ -18,7 +18,14 @@ const HEBREW_RE = /[֐-׿]/;
 /** Structured, provider-verified facts about one executed business action. */
 export interface ExecutionFacts {
   tool: string;
-  outcome: "succeeded" | "failed";
+  /**
+   * "rejected" is a first-class outcome, not a flavour of failure: the action
+   * was DECLINED by a human, so nothing was attempted and nothing broke. The
+   * customer is owed a different sentence ("this was not approved") than for a
+   * dispatch that ran and failed, and conflating the two either invents a
+   * technical problem that never happened or hides a human decision.
+   */
+  outcome: "succeeded" | "failed" | "rejected";
   /** Human order name, e.g. "#1004" (leading # optional). */
   orderName?: string | null;
   /** Money amount CONFIRMED by the provider - never the requested amount. */
@@ -37,6 +44,43 @@ export interface ExecutionFacts {
 export interface GroundedVerdict {
   ok: boolean;
   problems: string[];
+}
+
+/**
+ * Internal reason CLASSES, and the plain sentence each becomes.
+ *
+ * The classes are an engineering vocabulary. One of them ("unknown") reached a
+ * live customer as `(סיבה: unknown)` because the raw token was handed to the
+ * model as a "verified fact" and the model faithfully printed it. A customer
+ * must never see one of these strings, so the token is translated before
+ * generation and the validator below refuses any message a token survives in.
+ */
+export const REASON_PHRASES: Record<string, { he: string; en: string }> = {
+  not_possible_after_shipping: {
+    he: "ההזמנה כבר נמסרה לטיפול המשלוח",
+    en: "the order has already been handed over for shipping",
+  },
+  already_done: { he: "הפעולה כבר בוצעה קודם", en: "this had already been done" },
+  not_permitted: { he: "אין לי הרשאה לבצע את זה", en: "I am not permitted to do this" },
+  provider_unavailable: {
+    he: "המערכת של החנות לא זמינה כרגע",
+    en: "the store system is not responding right now",
+  },
+  exceeds_limit: { he: "הסכום גבוה מהמותר", en: "the amount is above what is allowed" },
+  unknown: { he: "", en: "" },
+};
+
+/** Tokens that identify our internals. None may appear in customer text. */
+const INTERNAL_TOKEN_RE = new RegExp(
+  `\\b(${Object.keys(REASON_PHRASES).join("|")}|shopify_\\d{3}|cancel_rejected|order_not_cancellable|cancel_not_applied)\\b`,
+  "i",
+);
+
+/** The customer-facing phrase for a reason class, or "" when there is none. */
+export function reasonPhrase(reason: string | null | undefined, he: boolean): string {
+  const entry = REASON_PHRASES[String(reason ?? "").toLowerCase()];
+  if (!entry) return "";
+  return he ? entry.he : entry.en;
 }
 
 // Completion claims that contradict a PENDING status (money not moved yet) or
@@ -73,10 +117,18 @@ export function validateGroundedMessage(message: string, facts: ExecutionFacts):
   // the message did not go through the shared style layer.
   if (WIDE_DASH_RE.test(text)) problems.push("em_dash_present");
 
-  // 2. A failed action must never read as success.
-  if (facts.outcome === "failed" && SUCCESS_RE.test(text)) {
-    problems.push("failure_presented_as_success");
+  // 2. An action that did not happen must never read as success. Rejection is
+  // held to the SAME bar as failure: "your cancellation is done" is equally
+  // false whether Shopify refused or a manager did.
+  if ((facts.outcome === "failed" || facts.outcome === "rejected") && SUCCESS_RE.test(text)) {
+    problems.push(
+      facts.outcome === "rejected" ? "rejection_presented_as_success" : "failure_presented_as_success",
+    );
   }
+
+  // 2b. No internal vocabulary. A reason CLASS or a provider status code in
+  // the text means the model echoed a field meant for us, not for them.
+  if (INTERNAL_TOKEN_RE.test(text)) problems.push("internal_reason_leaked");
 
   // 3. A pending refund must never read as completed money movement.
   if (facts.outcome === "succeeded" && facts.status === "pending" && COMPLETION_RE.test(text)) {
@@ -118,14 +170,37 @@ export function buildFallbackMessage(facts: ExecutionFacts, inboundSample: strin
   const money =
     facts.amount != null ? `${facts.amount.toFixed(2)} ${facts.currency ?? ""}`.trim() : null;
 
-  if (facts.outcome === "failed") {
-    return he
-      ? "לא הצלחנו להשלים את הפעולה שביקשת. נציג מהצוות ממשיך לטפל בזה ויעדכן אותך בהקדם."
-      : "We were not able to complete the action you asked for. A member of our team is on it and will update you shortly.";
-  }
-
   const isRefund = /refund/.test(facts.tool);
   const isCancel = /cancel/.test(facts.tool);
+
+  // The action in the customer's words. Used by the non-success branches so
+  // they name what did not happen instead of saying "the action" at someone
+  // who asked to cancel an order.
+  const actionHe = isCancel ? "הביטול" : isRefund ? "ההחזר" : "הפעולה";
+  const actionEn = isCancel ? "the cancellation" : isRefund ? "the refund" : "the action";
+
+  // DECLINED BY A HUMAN. Nothing was attempted, so there is no fault to report
+  // and nothing to retry - say plainly that it was not approved, state that the
+  // order is therefore unchanged, and keep the conversation open.
+  if (facts.outcome === "rejected") {
+    const subjectHe = isCancel ? "ההזמנה לא בוטלה" : isRefund ? "הכסף לא הוחזר" : "לא ביצענו את הפעולה";
+    return he
+      ? `הבקשה ל${actionHe.replace(/^ה/, "")} לא אושרה ולכן ${subjectHe}. אפשר לבדוק יחד אפשרות אחרת.`
+      : `Your request for ${actionEn} was not approved, so ${
+          isCancel ? "the order was not cancelled" : isRefund ? "no money was returned" : "no change was made"
+        }. We can look at another option together.`;
+  }
+
+  // APPROVED, DISPATCHED, DID NOT HAPPEN. Two things must be true at once: do
+  // not claim success, and do not promise a person is already working on it -
+  // no task, ticket or notification exists at this point, and claiming one is
+  // exactly the unsupported promise the quality contract forbids.
+  if (facts.outcome === "failed") {
+    const why = reasonPhrase(facts.errorReason, he);
+    return he
+      ? `הבקשה אושרה, אבל לא הצלחתי להשלים את ${actionHe} כרגע${why ? ` כי ${why}` : ""}. אני בודק את האפשרויות ואם לא אצליח אעביר אותך לנציג.`
+      : `Your request was approved, but I was not able to complete ${actionEn} right now${why ? ` because ${why}` : ""}. I am checking the options, and if I cannot resolve it I will pass you to a colleague.`;
+  }
 
   if (isRefund && facts.status === "pending") {
     return he
