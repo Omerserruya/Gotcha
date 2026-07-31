@@ -35,6 +35,19 @@ export const AUTO_PURCHASE_DEFAULTS = {
 
 // Capabilities every public plan includes.
 export const CORE_FEATURES = [
+  // The two Shopify commerce capabilities join CORE rather than a paid tier.
+  // That is not a pricing decision — it PRESERVES today's behaviour. Both were
+  // gated only by the legacy Feature enum, whose metadata default is
+  // `defaultEnabled: true`, so every tenant already has them. Putting them on a
+  // narrower tier here would silently REMOVE a capability that customers
+  // currently use. Moving them to a paid tier is a commercial decision to make
+  // deliberately, with migration, not as a side effect of adding a key.
+  //
+  // commerce.auto_buy is deliberately ABSENT: it spends a customer's money and
+  // its legacy default was already false, so granting it here would be a
+  // loosening, not a preservation.
+  "commerce.shopify_live_chat",
+  "commerce.shopify_product_messaging",
   "communication.omnichannel",
   "communication.broadcasts",
   "communication.automations",

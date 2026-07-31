@@ -493,7 +493,11 @@ router.get("/:conversationId/suggestions", requireEntitlement("ai.copilot"), asy
   }
 });
 
-router.get("/:conversationId/summary", async (req: Request, res: Response) => {
+// Gated on communication.crm_summaries — the SAME key as the background
+// pipeline, and deliberately NOT ai.copilot. Foundation denies Copilot and
+// grants summaries; gating this route on ai.copilot would break exactly the
+// plan combination the product sells.
+router.get("/:conversationId/summary", requireEntitlement("communication.crm_summaries"), async (req: Request, res: Response) => {
   try {
     const convId = req.params.conversationId as string;
     const conversation = await prisma.conversation.findFirst({ where: { id: convId, tenantId: req.tenantId! } });

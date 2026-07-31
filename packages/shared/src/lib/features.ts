@@ -1,7 +1,31 @@
 /**
- * Feature registry - single source of truth for all gateable features.
+ * Feature registry - the ACCESS axis: who may use a capability.
  *
- * Two-layer permission model:
+ * ── This is NOT the commercial catalog ───────────────────────────────
+ * There are two registries and they answer different questions. Reading
+ * either as "the" feature system leads to a consolidation that destroys a
+ * real dimension, so the boundary is spelled out here:
+ *
+ *   THIS FILE (`FEATURES` / `FeatureMetadata`) - may this ACTOR use it?
+ *     Tenant availability (`tenant_features`) AND the RBAC dimension:
+ *     `tenant_role_features`, per-user grant/revoke, `defaultAgentAccess`,
+ *     ADMIN-gets-everything, SYSTEM_ADMIN bypass. Entry point: `hasFeature`
+ *     / `requireFeature`.
+ *
+ *   `billing/feature-catalog.ts` (`FEATURE_CATALOG` / `FeatureDef`)
+ *     - did this TENANT buy it? Plan entitlements, volume options, trials,
+ *     compliance denies, numeric limits. Entry point: `isEntitled` /
+ *     `requireEntitlement`.
+ *
+ * They are LAYERED, not duplicated. `materializeEntitlements()` projects the
+ * commercial answer into `tenant_features`, and this file's resolver then
+ * applies the per-role and per-user answer on top. A capability sold to the
+ * tenant can still be denied to one agent; that is the point. Collapsing
+ * them would make every purchased capability available to every user.
+ *
+ * A gateable capability that is also SOLD needs an entry in both.
+ *
+ * Two-layer permission model within this file:
  *   1. Tenant-level (SYSTEM_ADMIN controlled) - availability per organization
  *      → backed by the `tenant_features` table.
  *   2. User-level (tenant ADMIN controlled) - access within availability

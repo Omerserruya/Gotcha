@@ -36,6 +36,10 @@ const { prismaMock, redisMock, publishEventMock } = vi.hoisted(() => {
 });
 
 vi.mock("@chatcenter/shared", () => ({
+  // Commercial gate, mocked pass-through like requireFeature: these tests
+  // cover route behaviour, not billing. The gate itself is proved in
+  // packages/shared/src/lib/billing/__tests__.
+  requireEntitlement: (_feature: string) => (_req: any, _res: any, next: any) => next(),
   // Version pins now live in shared modules, so exhaustive mocks of this
   // barrel must supply them. Returning the real defaults keeps any URL the
   // code builds meaningful instead of "undefined/...".

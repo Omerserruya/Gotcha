@@ -20,6 +20,18 @@
  * `implemented: false` is a hard commercial guard. A capability that is not
  * built cannot be entitled, cannot be attached to a plan, and never renders on a
  * pricing page - regardless of what a plan configuration asks for.
+ *
+ * Relationship to `lib/features.ts`
+ * ---------------------------------
+ * That file is the ACCESS axis (may this actor use it: role grants, per-user
+ * overrides, agent defaults). This one is the COMMERCIAL axis (did this tenant
+ * buy it). They are layered - `requireEntitlement` then `requireFeature` - and
+ * must not be merged: collapsing them makes every purchased capability
+ * available to every user in the tenant. See the header of `lib/features.ts`.
+ *
+ * `enforcementLocations` is CHECKED, not decorative:
+ * `__tests__/enforcement-contract.test.ts` fails if a capability claims
+ * enforcement that no code references. Either gate the path or drop the claim.
  */
 
 import type { EntitlementValueType } from "@prisma/client";
@@ -38,6 +50,21 @@ export interface FeatureDef {
   defaultValue: unknown;
   /** Where this key is enforced server-side. Data, so the console stays honest. */
   enforcementLocations: string[];
+  /**
+   * The `lib/features.ts` key this capability is ALSO written to when
+   * materialized.
+   *
+   * `materializeEntitlements` writes TenantFeature rows under the canonical
+   * key (`commerce.shopify_live_chat`). The product's own gate reads the
+   * legacy key (`shopify_live_chat`). Both live in `tenant_features`, but they
+   * are different rows - so without this bridge a plan could grant or withhold
+   * the capability and the gate protecting it would never notice.
+   *
+   * Set this instead of adding `requireEntitlement` next to an existing
+   * `requireFeature`: the route keeps one gate, one DB read, and no new
+   * failure mode, and the commercial answer still reaches it.
+   */
+  materializesTo?: string;
   customerVisible: boolean;
   sysadminOnly?: boolean;
   /** False = built into the catalog but NOT shipped. Never sellable. */
@@ -120,6 +147,77 @@ const COMMUNICATION: FeatureDef[] = [
     customerVisible: true,
     implemented: true,
     sortOrder: 50,
+  },
+  // ── Commerce channel capabilities ────────────────────────────────────────
+  //
+  // These three were gated ONLY by the legacy `Feature` enum (requireFeature),
+  // which resolves a tenant's access through `tenant_features`. They had no
+  // catalog key, so nothing ever materialised a row for them and
+  // `isFeatureEnabledForTenant` fell through to `FEATURE_METADATA.defaultEnabled`.
+  //
+  // The consequence was not that they were blocked — `defaultEnabled` is TRUE
+  // for the Shopify pair, so everyone had them. The consequence was that they
+  // could not be SOLD: no PlanVersion could grant or withhold them, because
+  // there was no key to grant. Availability was decided by a hardcoded default
+  // in a TypeScript file rather than by what the customer bought.
+  //
+  // `defaultValue` below deliberately mirrors today's `defaultEnabled` so this
+  // change is behaviour-preserving: adding the key must not take a capability
+  // away from a tenant who has it right now. Restricting them to specific plans
+  // is a commercial decision, made in plan seeds, not here.
+  //
+  // NOTE: this does NOT replace the requireFeature gate. That gate also carries
+  // the per-user/per-role dimension (240 tenant_role_features rows), which
+  // entitlements do not model. Billing says what the tenant bought; RBAC says
+  // which actor may use it. Both still apply.
+  {
+    key: "commerce.shopify_live_chat",
+    nameEn: "Shopify live chat",
+    nameHe: "צ'אט חי לשופיפיי",
+    descriptionEn: "Storefront chat widget for your Shopify store.",
+    descriptionHe: "ווידג'ט צ'אט בחנות השופיפיי שלך.",
+    category: "COMMUNICATION",
+    entitlementType: "BOOLEAN",
+    defaultValue: bool(true), // mirrors FEATURES.SHOPIFY_LIVE_CHAT defaultEnabled
+    enforcementLocations: ["services/ai:shopify-live-chat.routes (via requireFeature)"],
+    materializesTo: "shopify_live_chat",
+    customerVisible: true,
+    implemented: true,
+    sortOrder: 60,
+  },
+  {
+    key: "commerce.shopify_product_messaging",
+    nameEn: "Shopify product messaging",
+    nameHe: "הודעות מוצר בשופיפיי",
+    descriptionEn: "Send product cards and carousels into the conversation.",
+    descriptionHe: "שליחת כרטיסי מוצר וקרוסלות לתוך השיחה.",
+    category: "COMMUNICATION",
+    entitlementType: "BOOLEAN",
+    defaultValue: bool(true), // mirrors FEATURES.SHOPIFY_PRODUCT_MESSAGING defaultEnabled
+    enforcementLocations: ["services/ai:shopify-live-chat.routes (via requireFeature)"],
+    materializesTo: "shopify_product_messaging",
+    customerVisible: true,
+    implemented: true,
+    sortOrder: 61,
+  },
+  {
+    key: "commerce.auto_buy",
+    nameEn: "Automatic purchasing",
+    nameHe: "רכישה אוטומטית",
+    descriptionEn: "Let the AI complete a purchase on the customer's behalf.",
+    descriptionHe: "מתן אפשרות ל-AI להשלים רכישה עבור הלקוח.",
+    category: "COMMUNICATION",
+    entitlementType: "BOOLEAN",
+    // Deliberately FALSE, unlike the two above: this one spends a customer's
+    // money. `FEATURES.AUTO_BUY` has no explicit defaultEnabled, so the legacy
+    // resolver already fell back to `?? false` — this preserves that, it does
+    // not tighten it.
+    defaultValue: bool(false),
+    enforcementLocations: ["services/conversation:auto-buy.routes (via requireFeature)"],
+    materializesTo: "auto_buy",
+    customerVisible: true,
+    implemented: true,
+    sortOrder: 62,
   },
 ];
 

@@ -20,6 +20,7 @@ import { prisma } from "../prisma";
 import { invalidatePermissionsCache } from "../permissions";
 import type { EntitlementValueType, EntitlementSource } from "@prisma/client";
 import { resolveEntitlements, resolveLimit, resolveLimits, entitledIn } from "./entitlement-resolver";
+import { getFeatureDef } from "./feature-catalog";
 
 export interface EffectiveEntitlement {
   key: string;
@@ -73,6 +74,23 @@ export async function materializeEntitlements(tenantId: string, updatedBy?: stri
       create: { tenantId, feature: e.key, enabled, updatedBy },
       update: { enabled, updatedBy },
     });
+    // Some capabilities are guarded by a gate that reads the LEGACY key
+    // (`shopify_live_chat`) rather than the canonical one
+    // (`commerce.shopify_live_chat`). Both are rows in this same table, so
+    // writing only the canonical row leaves the guard reading a row this
+    // function never touches - the plan would grant or withhold the capability
+    // and the gate protecting it would never see the change.
+    //
+    // Writing the legacy row here is what makes the commercial answer reach
+    // `requireFeature`, with no second gate and no extra read on the route.
+    const legacy = getFeatureDef(e.key)?.materializesTo;
+    if (legacy) {
+      await prisma.tenantFeature.upsert({
+        where: { tenantId_feature: { tenantId, feature: legacy } },
+        create: { tenantId, feature: legacy, enabled, updatedBy },
+        update: { enabled, updatedBy },
+      });
+    }
   }
   invalidatePermissionsCache({ tenantId });
 }

@@ -752,6 +752,11 @@ export { resolveTenant, assertTenantId } from "./middleware/tenant";
 export { requireActiveTenant, requireOnboardingOrActiveTenant, requirePaymentSetupAccess } from "./middleware/tenant-status";
 export { validate } from "./middleware/validate";
 export { requireEntitlement, requireCapacity, handleEntitlementError } from "./middleware/entitlement";
+// The service-level entitlement check, for code paths with no Express request:
+// background subscribers, workers and queue consumers. `requireEntitlement` is
+// middleware and cannot reach those, which is a large part of why commercial
+// enforcement stopped at the HTTP edge.
+export { isEntitled, entitledIn, resolveEntitlements, assertEntitled } from "./lib/billing/entitlement-resolver";
 export { requirePlatformPermission } from "./middleware/platform-permission";
 
 // Shared CRM client - used by AI tools, outbound, broadcast, and any

@@ -17,7 +17,7 @@
  * "post-conversation-crm-merge").
  */
 
-import { prisma } from "@chatcenter/shared";
+import { prisma, isEntitled } from "@chatcenter/shared";
 import { summarizePostConversation } from "./post-conversation-summarizer.service";
 import { resolveEffectiveLocale } from "@chatcenter/shared";
 import { executeAction, type PlannedAction } from "./action-executor.service";
@@ -43,6 +43,38 @@ export async function runPostChatPipeline(params: {
   notes: string[];
 }> {
   const notes: string[] = [];
+
+  // 0a. Commercial gate.
+  //
+  // The catalog has always CLAIMED this is enforced here - `communication.
+  // crm_summaries` carries enforcementLocations:
+  // ["services/ai:post-conversation.summary"] - and it was not. Summaries and
+  // CRM writeback ran for every tenant regardless of plan, so the boundary
+  // existed in the catalog and nowhere else.
+  //
+  // Gated on `communication.crm_summaries` and DELIBERATELY NOT on
+  // `ai.employee` or `ai.copilot`. Foundation grants summaries while denying
+  // both of those, and that combination is a product requirement: a plan
+  // without AI employees can still get its conversations summarised. Coupling
+  // this to an AI entitlement would silently kill that.
+  //
+  // Fails OPEN on a resolution error. This is a background subscriber, not a
+  // payment path; a database blip must not silently stop summarising for
+  // paying customers, and the error is logged so it is visible.
+  try {
+    const entitled = await isEntitled(params.tenantId, "communication.crm_summaries");
+    if (!entitled) {
+      return {
+        ok: true, summarized: false, crmWritten: false, tasksCreated: 0,
+        followupScheduled: false, notes: ["not-entitled:communication.crm_summaries"],
+      };
+    }
+  } catch (err: any) {
+    console.error(
+      `[post-chat] entitlement check failed for tenant=${params.tenantId}; ` +
+        `proceeding (fail-open on a background path): ${err?.message}`,
+    );
+  }
 
   // 0. Guard - don't run twice on the same conversation.
   const existing = await prisma.callAnalysis.findUnique({
