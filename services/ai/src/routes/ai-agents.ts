@@ -495,15 +495,28 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
     // Explicit column allowlist. NEVER rest-spread req.body into the update:
     // AIAgent has tenantId (cross-tenant move) and server-owned columns
     // (readinessReport, timestamps) that must not be client-settable.
+    // `sharedPrompt`, `autonomousPrompt` and `escalationGates` are NOT here.
+    //
+    // Each existed only in this array. No UI sent them, no runtime read them -
+    // their sole appearance anywhere in the codebase was as a string in this
+    // list, which made them look supported. An API that accepts a field and
+    // then ignores it is worse than one that rejects it: an integrator sets
+    // `escalationGates`, gets a 200, and never learns the agent's escalation
+    // behaviour did not change.
+    //
+    // The COLUMNS stay. Dropping them is a separate change after a
+    // compatibility period, and `agent-field-reachability.test.ts` records
+    // which fields actually reach the runtime so this set cannot quietly grow
+    // again.
     const AGENT_EDITABLE_FIELDS = [
       "name", "role", "avatarColor", "status", "tone", "languages", "style",
       "channels", "escalationRules", "interactiveMessages", "systemPrompt",
-      "sharedPrompt", "autonomousPrompt", "model", "provider", "temperature",
+      "model", "provider", "temperature",
       "maxTokens", "persona", "identity", "goals", "toneConfig", "behavioral",
       "salesContext", "goal", "successCriteria", "maxAutonomousMessages",
       "maxAutonomousMinutes", "confidenceThreshold", "escalationMessage",
       "conversationFlow", "customGuardrails", "capabilities",
-      "behavioralAnchors", "escalationGates", "departmentId", "funnelId",
+      "behavioralAnchors", "departmentId", "funnelId",
     ] as const;
     const bodySrc = (req.body ?? {}) as Record<string, unknown>;
     const updateData: Record<string, any> = {};
@@ -927,6 +940,26 @@ router.delete("/:id", authenticate, resolveTenant, requireActiveTenant(), requir
           OR: [{ aiAgentId: agentId }, { routeType: "AI_AGENT", routeTarget: agentId }],
         },
       });
+
+      // Voice channels hold this agent id TWICE: as `ai_agent_id`, which the
+      // schema nulls for us (onDelete: SetNull), and as a mirror inside the
+      // `copilot_config` JSONB that the channel update route rewrites on every
+      // save. Nulling the column alone left the mirror pointing at an agent
+      // that no longer exists, and the copilot config loader read the blob - so
+      // the binding looked live long after the employee was gone.
+      //
+      // Raw SQL because Prisma cannot remove a key from a JSONB column. Scoped
+      // by tenant AND by the id being removed, so it cannot touch a channel
+      // bound to a different agent.
+      await tx.$executeRaw`
+        UPDATE voice_channels vc
+        SET copilot_config = vc.copilot_config - 'aiAgentId'
+        FROM communication_channels cc
+        WHERE cc.id = vc.communication_channel_id
+          AND cc.tenant_id = ${tenantId}
+          AND vc.copilot_config->>'aiAgentId' = ${agentId}
+      `;
+
       await tx.aIAgent.delete({ where: { id: agentId } });
       return count;
     });
