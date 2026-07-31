@@ -11,10 +11,6 @@ vi.mock("@chatcenter/shared", () => ({
   checkShopifyResponseVersion: () => ({ ok: true, served: "2026-07" }),
   metaGraphBaseUrl: (legacy?: string) => legacy || "https://graph.facebook.com/v24.0",
   stripeVersionHeader: () => ({ "Stripe-Version": "2026-02-25.clover" }),
-  // Real implementation: the version now comes from ONE shared module, so the
-  // mock must supply it too. Returning the real default keeps assertions on
-  // built URLs meaningful instead of silently producing "undefined/...".
-  metaGraphBaseUrl: (legacy?: string) => legacy || "https://graph.facebook.com/v24.0",
   prisma: { channelAccount: { findMany: vi.fn(), update: vi.fn() } },
   createWorker: vi.fn(),
   channelHealthQueue: { add: vi.fn() },
