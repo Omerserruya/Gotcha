@@ -1236,7 +1236,41 @@ export interface ToolCallLike {
   function: { name: string; arguments: string };
 }
 
+/**
+ * Dispatch a tool call, recording whether it worked.
+ *
+ * The recording is what gives `checkToolAttempt` (inside) something to count.
+ * A thin wrapper rather than a return-by-return edit, because the inner
+ * function has a dozen exit points and missing one would leave a failure
+ * uncounted - which is precisely the loop this is meant to stop.
+ */
 export async function dispatchToolCall(
+  toolCall: ToolCallLike,
+  ctx: AgentToolContext,
+): Promise<AgentToolDispatchResult> {
+  const toolName = String(toolCall.function?.name || "");
+  let parsedArgs: Record<string, unknown> = {};
+  try { parsedArgs = JSON.parse(toolCall.function?.arguments || "{}"); } catch { /* inner reports it */ }
+
+  const result = await dispatchToolCallInner(toolCall, ctx);
+
+  try {
+    const { recordToolAttempt } = await import("./tool-attempt-guard");
+    const payload = JSON.parse(result.content || "{}");
+    // `repeated_failure` is this guard's own refusal - counting it would let
+    // the tally climb forever on calls that never reached the provider.
+    if (!payload?.repeated_failure) {
+      recordToolAttempt(ctx.conversationId, toolName, parsedArgs, {
+        ok: payload?.ok !== false,
+        reason: payload?.error ?? payload?.reason,
+      });
+    }
+  } catch { /* unparseable content is not a countable failure */ }
+
+  return result;
+}
+
+async function dispatchToolCallInner(
   toolCall: ToolCallLike,
   ctx: AgentToolContext,
 ): Promise<AgentToolDispatchResult> {
@@ -1291,6 +1325,27 @@ export async function dispatchToolCall(
         sideEffect: { simulated: { tool: String(name || ""), arguments: args } },
       };
     }
+  }
+
+  // ── Repeat-failure brake ──
+  //
+  // Runs BEFORE the permission gate, because a call that has already proved it
+  // cannot work should not consume an approval or a provider round trip.
+  //
+  // The case it exists for: four `update_order_fulfillment` calls for one
+  // order, five minutes apart, each failing on the same unresolvable
+  // identifier, while the customer was told a shipping team was being
+  // contacted. The identifier bug is fixed; this catches the next one.
+  const { checkToolAttempt } = await import("./tool-attempt-guard");
+  const attempt = checkToolAttempt(ctx.conversationId, String(name || ""), args);
+  if (!attempt.allowed) {
+    return {
+      toolCallId: toolCall.id,
+      // The model sees WHY and what to do instead. The customer never sees any
+      // of this - the reply guard strips tool detail on the way out.
+      content: JSON.stringify({ ok: false, error: attempt.reason, repeated_failure: true }),
+      sideEffect: { denied: { tool: String(name || ""), reason: "repeated_identical_failure" } },
+    };
   }
 
   try {
