@@ -185,7 +185,11 @@ router.put(
   async (req: Request, res: Response): Promise<void> => {
     try {
       const { category, retentionDays, enabled } = req.body ?? {};
-      const allowed = new Set(["messages", "usage_logs", "audit_logs", "billing_webhook_events", "reasoner_shadow_evals"]);
+      // Must match DEFAULTABLE_CATEGORIES in retention-purge.service.ts. A
+      // category present in one and not the other is inert: either the API
+      // refuses to configure it, or the engine cannot purge it.
+      // retention-categories.test.ts asserts the two agree.
+      const allowed = new Set(["messages", "usage_logs", "audit_logs", "billing_webhook_events", "reasoner_shadow_evals", "agent_loop_runs"]);
       if (!category || !allowed.has(String(category))) {
         res.status(400).json({ error: `category must be one of: ${[...allowed].join(", ")}` });
         return;

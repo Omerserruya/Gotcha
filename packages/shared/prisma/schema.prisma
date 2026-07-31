@@ -224,7 +224,7 @@ model ConsentRecord {
 model DataRetentionPolicy {
   id            String    @id @default(cuid())
   tenantId      String    @map("tenant_id")
-  category      String // "messages" | "usage_logs" | "audit_logs" | "billing_webhook_events" | "reasoner_shadow_evals" | ...
+  category      String // "messages" | "usage_logs" | "audit_logs" | "billing_webhook_events" | "reasoner_shadow_evals" | "agent_loop_runs" | ...
   retentionDays Int       @map("retention_days") // rows older than now()-retentionDays are purged
   enabled       Boolean   @default(true)
   lastPurgeAt   DateTime? @map("last_purge_at")

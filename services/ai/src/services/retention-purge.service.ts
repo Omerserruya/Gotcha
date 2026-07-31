@@ -12,6 +12,7 @@
  *        RETENTION_DEFAULT_AUDIT_LOGS_DAYS
  *        RETENTION_DEFAULT_BILLING_WEBHOOK_EVENTS_DAYS
  *        RETENTION_DEFAULT_REASONER_SHADOW_EVALS_DAYS
+ *        RETENTION_DEFAULT_AGENT_LOOP_RUNS_DAYS
  *      Unset/empty = no default limit for that category (pre-GDPR behavior).
  *
  * Never throws out of the loop - one bad/unknown policy is logged and skipped
@@ -54,6 +55,18 @@ async function purgeCategory(tenantId: string, category: string, cutoff: Date): 
       return (await prisma.reasonerShadowEval.deleteMany({
         where: { tenantId, createdAt: { lt: cutoff } },
       })).count;
+    case "agent_loop_runs":
+      // Deleting the run takes its iterations with it (AgentLoopIteration
+      // cascades off AgentLoopRun), which is why there is no separate
+      // "agent_loop_iterations" category - it would purge half a trace and
+      // leave orphaned parents.
+      //
+      // This is the highest-volume reasoning artefact the product writes: the
+      // dev estate accumulated 2,173 iterations across 492 runs in four days,
+      // with nothing anywhere deleting either.
+      return (await (prisma as any).agentLoopRun.deleteMany({
+        where: { tenantId, createdAt: { lt: cutoff } },
+      })).count;
     default:
       throw new Error(`unknown category "${category}"`);
   }
@@ -65,6 +78,7 @@ const DEFAULTABLE_CATEGORIES = [
   "audit_logs",
   "billing_webhook_events",
   "reasoner_shadow_evals",
+  "agent_loop_runs",
 ] as const;
 
 function envDefaultDays(category: string): number | null {
