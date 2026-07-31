@@ -399,13 +399,17 @@ export function capabilityStateIsFresh(config: Record<string, any> | null | unde
  * silently trusting an unverified one).
  */
 export async function refreshCapabilityState(opts: {
+  /**
+   * Catalog slug (TenantIntegration.integration.slug), which is also the
+   * adapter registry key. There used to be an `adapterSlug` escape hatch for
+   * the one adapter registered under a different name (postgres vs
+   * postgresql); that adapter was renamed, because the divergence broke
+   * loadConnection() everywhere the escape hatch was not threaded through.
+   */
   tenantId: string;
-  /** Catalog slug (TenantIntegration.integration.slug). */
   slug: string;
-  /** Adapter registry slug when it differs from the catalog slug (postgres vs postgresql). */
-  adapterSlug?: string;
 }): Promise<{ ok: boolean; missingScopes: string[] }> {
-  const adapter = getAdapter(opts.adapterSlug ?? opts.slug);
+  const adapter = getAdapter(opts.slug);
   const conn = await loadConnection({ tenantId: opts.tenantId, slug: opts.slug });
   if (!adapter?.validate || !conn) return { ok: false, missingScopes: [] };
   let verdict: Awaited<ReturnType<NonNullable<ProviderAdapter["validate"]>>>;
@@ -545,6 +549,63 @@ export function getAdapter(slug: string): ProviderAdapter | null {
   return REGISTRY.get(slug) ?? null;
 }
 
+// ─── Adapter execution timeout ───────────────────────────────
+
+/**
+ * Every provider adapter issued a bare `fetch` with no timeout, so a hung
+ * connection blocked the caller indefinitely — and the caller is a customer
+ * conversation turn holding a worker. The custom-API path already did this
+ * correctly (`custom-api.service.ts` aborts on `AbortSignal`); the adapters
+ * simply never got it.
+ *
+ * This bounds the WAIT rather than cancelling the request. Threading an
+ * AbortSignal into each provider's fetch would be the complete fix, but it
+ * means touching all sixteen adapters and their differing HTTP clients; a
+ * lingering socket is a far smaller problem than a conversation turn that
+ * never returns. The stronger fix belongs with the per-adapter work, and the
+ * distinction is stated here so nobody reads this as full cancellation.
+ *
+ * `ADAPTER_TIMEOUT_MS` overrides the default. Deliberately generous: Shopify
+ * bulk reads and Salesforce SOQL are legitimately slow, and a timeout that
+ * fires on healthy traffic is worse than none at all.
+ *
+ * NOTE: `CatalogTool.timeoutMs` is NOT consulted. That column, along with
+ * `maxRetries`, `retryBackoffMs` and `circuitBreakerThreshold`, is read by
+ * nothing in the codebase — populating it would create configuration that
+ * appears to work and does not. See the remediation appendix; the columns
+ * should be implemented or dropped, not quietly filled in.
+ */
+const DEFAULT_ADAPTER_TIMEOUT_MS = 30_000;
+
+function adapterTimeoutMs(): number {
+  const raw = Number(process.env.ADAPTER_TIMEOUT_MS);
+  return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_ADAPTER_TIMEOUT_MS;
+}
+
+export async function withAdapterTimeout<T>(
+  slug: string,
+  toolName: string,
+  work: Promise<T>,
+): Promise<T> {
+  const ms = adapterTimeoutMs();
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      work,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`adapter_timeout_after_${ms}ms: ${slug}.${toolName}`)),
+          ms,
+        );
+      }),
+    ]);
+  } finally {
+    // Always clear: leaving it pending keeps the event loop alive for the full
+    // duration on every successful call, which in a worker is a slow leak.
+    if (timer) clearTimeout(timer);
+  }
+}
+
 export function listAdapters(): ProviderAdapter[] {
   return [...REGISTRY.values()];
 }
@@ -680,18 +741,22 @@ export async function executeAdapterTool(opts: {
   }
 
   const runExecute = (creds: Record<string, any>) =>
-    adapter.execute({
-      ctx: {
-        tenantId: opts.tenantId,
-        tenantIntegrationId: conn.tenantIntegrationId,
-        conversationId: opts.conversationId,
-        contactId: opts.contactId,
-      },
+    withAdapterTimeout(
+      slug,
       toolName,
-      args: opts.args,
-      credentials: creds,
-      config: conn.config,
-    });
+      adapter.execute({
+        ctx: {
+          tenantId: opts.tenantId,
+          tenantIntegrationId: conn.tenantIntegrationId,
+          conversationId: opts.conversationId,
+          contactId: opts.contactId,
+        },
+        toolName,
+        args: opts.args,
+        credentials: creds,
+        config: conn.config,
+      }),
+    );
   // Lenient 401/expiry detection (superset of the original `/401|unauthorized|
   // invalid.*token/`). NB: a bare `\b401\b` does NOT match "hubspot_401" (an
   // underscore is a word char, so there's no boundary before the digits) - match
