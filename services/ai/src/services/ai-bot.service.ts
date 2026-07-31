@@ -4168,7 +4168,12 @@ export async function generateAIBotOneshot(opts: {
   });
 
   return {
-    reply: result.content?.trim() || null,
+    // Style layer applies HERE, not only in the callers that remembered.
+    // The approval acknowledgement goes out through this endpoint and skipped
+    // it, so a customer was greeted with "קיבלתי — אני מטפלת בביטול" - an
+    // em dash, which the quality contract forbids precisely because it reads
+    // as machine-written. Every one-shot is customer-facing somewhere.
+    reply: humanizeReply(result.content ?? null),
     modelUsed: model,
     totalTokens: result.usage.total_tokens || 0,
   };

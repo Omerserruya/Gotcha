@@ -342,8 +342,111 @@ Every arrow emits exactly one customer continuation, claimed by CAS.
    em-dash (*"היי, מבינה — אני מטפלת..."*), which violates the no-em-dash rule.
    It came from the `bridge_ack_for_approval` path, which was not touched.
 
+---
+
+# Part 2 - Scenarios run through the real inbound webhook
+
+Everything below was driven by a **signed WhatsApp webhook** as Matan Amran
+(`972545680665`), the way a real customer message arrives. No service was
+called directly except to verify Shopify state afterwards.
+
+## Result matrix
+
+| # | Scenario | Result | Evidence |
+|---|---|---|---|
+| 1 | Latest order status | **PASS** | #1010 named, paid + unfulfilled, no HITL |
+| 2 | Order by name `#1009` | **PASS** | resolved as a NAME, not an internal id |
+| 3 | Product search by use case | **PASS** | real products/prices/links, after the "unknown attribute" fix |
+| 4 | Budget search ("עד 800 שקל") | **PASS** | after the currency fix; states prices are USD and declines to compare |
+| 6 | Variant / size 159 | **FAIL** | tool now reaches the model, but the reply is still a product list, not a variant answer |
+| 8 | "איפה המשלוח שלי?" | **PASS** | after the discovery-hijack fix |
+| 9 | No ETA available | **PASS** | "טרם נשלחה ולכן אין מספר מעקב" - no invented date |
+| 12 | Cancel eligible order + approve | **PASS** | #1008 and #1009 cancelled in Shopify, verified by read-back |
+| 13 | Reject a cancellation | **PASS** | proactive rejection message, #1010 unchanged, AI retained |
+| 14 | Cancel a fulfilled order | **FAIL** | approval still raised - see "missing scopes" |
+| 15 | Cancel an already-cancelled order | **PASS** | no approval raised, correct answer |
+| 16 | Full refund | **PASS** | 2799.80 USD on #1010, Shopify reads `refunded` |
+| 20 | Duplicate refund | **PASS** | `already_refunded: true`, no second money movement |
+| - | Approved-but-failed | **PASS** | verified live twice (#1006 cancel, #1006 refund) |
+
+**12 of 30 scenarios verified. 2 fail. 16 were not run.**
+
+## Defects found and fixed in this part
+
+1. **Currency taken from the shopper's budget.** `const currency =
+   budget?.currency` labelled a $749.95 board "ILS 749.95" - the store's number
+   wearing the customer's currency, understating it about fourfold. Currency now
+   comes from `get_shop`; a cross-currency budget produces no comparison at all.
+2. **Discovery hijacked every turn.** Readiness is sticky and the caller turns
+   it into a hard OpenAI `toolChoice`, so once a shopper had ever discussed
+   products, *every* later turn was pinned to `search_products`. "Where is my
+   shipment?" returned a catalogue. This one silently broke most support
+   scenarios. The forced search is now worth one turn.
+3. **The 128-tool cut was alphabetical.** It removed
+   `shopify.variant_information` and `shopify.validate_discount` while keeping
+   `list_segments`, which is not even supported over REST. Tools now declare a
+   priority.
+4. **Approvals raised for impossible actions.** Cancelling an already-cancelled
+   order produced "מטפלת עכשיו בביטול" and a PENDING approval. Adapters can now
+   answer "is this still possible?" before a human is asked.
+5. **Rejection on WhatsApp told the customer nothing** - the continuation lived
+   only in the web route. Both channels now share one endpoint.
+6. **Conversations froze at `awaiting_approval`** after an internally-dispatched
+   approval; the incoming-worker does not treat that as bot-owned, so the
+   customer's next message got no reply.
+7. **A rejection named the wrong order** (#1007 for a rejected #1010) - with no
+   provider result the model took an order number from history.
+8. **Internal vocabulary reaching customers**: `(סיבה: unknown)`, a bare
+   `refunded` enum inside Hebrew, `המטבע USD` with no amount, and an em dash in
+   the approval acknowledgement.
+9. **The pending-approval ack claimed work was underway** ("מטפלת עכשיו
+   בביטול") when it was awaiting a decision - the same false promise that made
+   the original silent failure so damaging.
+
+## The two failures, and why
+
+**S6 (variant/size).** `variant_information` now survives truncation, but the
+model still answers with a product list. The typed product path takes over
+whenever `search_products` runs and appends a deterministic candidate list,
+which drowns a narrow question. Not fixed.
+
+**S14 (cancel a fulfilled order).** The precheck reads
+`fulfillment_status`/`fulfillments`, which for #1006 report *unfulfilled* while
+Shopify refuses with "Cannot cancel an order that has outstanding
+fulfillments". The truth is only in `fulfillment_orders`, which returns
+**403 - the connection has no fulfillment scope**. This cannot be fixed in
+code. It degrades safely (honest failure message, no handoff), but the approval
+is still spent.
+
+## Environment notes
+
+- The agent's `maxAutonomousMessages` was **10**, which ended the test
+  conversation with an automatic handoff mid-run. Raised to 500 on the dev
+  agent to continue testing. **A real merchant on the default would see
+  frequent handoffs.**
+- **Long conversations anchor on an earlier order.** After the #1006 refund
+  failed, explicit corrections ("שכח מ1006... 1010 בלבד") could not move the
+  bot off #1006. A fresh conversation resolved #1010 immediately. Real bug,
+  not fixed.
+
+## Dev-store mutations in this part
+
+| Order | Action | Final state |
+|---|---|---|
+| #1007, #1008 | cancelled | `cancelled_at` set |
+| #1009 | cancelled + refunded | `cancelled_at` set, refunded |
+| #1010 | full refund 2799.80 USD | `financial_status: refunded` |
+| #1006 | 3 cancel attempts, 1 refund attempt | unchanged - Shopify refused every one |
+
+No other tenant or store was touched. Nothing was pushed, merged or deployed.
+
+---
+
 ## 10. Verdict
 
-**No Shopify sales-readiness verdict.** The specific regression that blocked the
-release is fixed and proven; the evidence required to call the product ready for
-merchants has not been gathered.
+**Not ready to sell.** The HITL lifecycle is now sound and proven end to end on
+all three outcomes, and nine further customer-facing defects were fixed. But 12
+of 30 scenarios are verified, 2 fail, and one of those failures needs a Shopify
+scope grant rather than code. The order-anchoring bug in long conversations and
+the default 10-message autonomy ceiling would both be visible to a real
+merchant on day one.

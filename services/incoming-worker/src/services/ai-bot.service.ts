@@ -280,9 +280,16 @@ export async function processAIBot(
           `[INTERNAL CONTEXT - do not echo to the customer]\n` +
           `Customer's recent messages (oldest → newest):\n${inboundSample || incomingMessage}\n\n` +
           `Customer's latest message: "${incomingMessage}"\n\n` +
-          `TASK: Send ONE very short reply (max one sentence) to acknowledge the customer and tell them you're handling their request right now.\n` +
+          `TASK: Send ONE very short reply (max one sentence) acknowledging the request and saying it needs a quick confirmation on our side before it goes through, and that you will update them as soon as it is decided.\n` +
           `Rules:\n` +
           `- Detect the language from the FIRST customer message above (or any earlier non-trivial message). Reply in THAT language. If any message contains Hebrew characters, the language is Hebrew. Do not default to English.\n` +
+          // The request is PENDING A DECISION, not underway. Saying "I'm
+          // cancelling your order now" and then - however the decision goes -
+          // having to walk it back is how the customer ends up feeling lied
+          // to. It also made the original silent-failure incident far worse:
+          // they had been told the cancellation was happening.
+          `- Do NOT say the action is already happening or already done ("I'm cancelling it now", "I've processed it"). It has not run yet.\n` +
+          `- Promising an update IS allowed and expected: the system sends the outcome automatically once it is decided.\n` +
           `- Do NOT say "a team member will reach out", "we'll get back to you", or anything that implies a handoff - you are handling this yourself.\n` +
           `- Do NOT mention the CRM, lead creation, or any internal system.\n` +
           `- Tone: warm, brief, like a human typing a quick "give me a sec".\n`;
