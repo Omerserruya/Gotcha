@@ -75,6 +75,31 @@ function t(
   };
 }
 
+/**
+ * Require AT LEAST ONE order identifier.
+ *
+ * A plain `required: ["order_id"]` cannot express "either of these two", and
+ * omitting `required` entirely tells the model every parameter is optional -
+ * which is exactly what happened on 2026-07-31: the model called
+ * `shopify.cancel_order({})` with no order at all. The gate saw a HIGH-risk
+ * tool and raised an approval, a human approved "cancel order" with nothing to
+ * cancel, and the execution then failed with `order_id_or_name_required` while
+ * the customer sat waiting and asked twice what was happening.
+ *
+ * `anyOf` is standard JSON Schema and is honoured by function calling, so the
+ * model is told the truth: one of the two is mandatory.
+ */
+function withOrderTarget(def: ToolDefinition): ToolDefinition {
+  const params = def.parameters as Record<string, unknown>;
+  return {
+    ...def,
+    parameters: {
+      ...params,
+      anyOf: [{ required: ["order_id"] }, { required: ["order_name"] }],
+    },
+  };
+}
+
 // Reusable parameter fragments.
 const P = {
   customerSel: {
@@ -147,23 +172,23 @@ const TOOLS: ToolDefinition[] = [
     "Customer asks 'has my order shipped?'.", P.orderSel),
 
   // ── Orders (actions) ──
-  t("cancel_order", "ACTION", "HIGH", "Cancel an order (optionally refund + restock).",
+  withOrderTarget(t("cancel_order", "ACTION", "HIGH", "Cancel an order (optionally refund + restock).",
     "Customer requests cancellation AND you have approval.",
     { ...P.orderSel, reason: { type: "string", enum: ["customer", "fraud", "inventory", "declined", "other"] }, refund: { type: "boolean" }, restock: { type: "boolean" } }, undefined,
-    { sideEffects: "Cancels the order - may trigger a refund. Irreversible." }),
-  t("send_invoice", "ACTION", "MEDIUM", "Send/resend the order invoice email to the customer.",
+    { sideEffects: "Cancels the order - may trigger a refund. Irreversible." })),
+  withOrderTarget(t("send_invoice", "ACTION", "MEDIUM", "Send/resend the order invoice email to the customer.",
     "Customer didn't receive their invoice / needs the payment link again.",
-    { ...P.orderSel, to: { type: "string", description: "Override recipient email." } }),
-  t("resend_confirmation", "ACTION", "MEDIUM", "Resend the order confirmation email.",
+    { ...P.orderSel, to: { type: "string", description: "Override recipient email." } })),
+  withOrderTarget(t("resend_confirmation", "ACTION", "MEDIUM", "Resend the order confirmation email.",
     "Customer says they never got the confirmation email.", P.orderSel, undefined,
-    { unsupported: "Shopify has no REST endpoint to resend an order confirmation." }),
-  t("edit_order", "ACTION", "HIGH", "Edit an order's line items (add/remove/adjust).",
+    { unsupported: "Shopify has no REST endpoint to resend an order confirmation." })),
+  withOrderTarget(t("edit_order", "ACTION", "HIGH", "Edit an order's line items (add/remove/adjust).",
     "You must change what's on an existing order and editing is allowed.",
     { ...P.orderSel, changes: { type: "object" } }, undefined,
     {
       sideEffects: "Mutates a placed order. Requires GraphQL orderEdit.",
       unsupported: "Editing a placed order requires the GraphQL Admin API.",
-    }),
+    })),
 
   // ── Fulfillment / shipping (read) ──
   t("get_shipment_status", "READ", "LOW", "Get the shipment status of an order's fulfillments.",
@@ -266,7 +291,7 @@ const TOOLS: ToolDefinition[] = [
     "Flag a churn-risk customer for retention.", P.customerSel),
 
   // ── Refund (money movement - always behind approval) ──
-  t("process_refund", "ACTION", "HIGH", "Refund an order: full refund by default, partial via `amount` or `line_items`.",
+  withOrderTarget(t("process_refund", "ACTION", "HIGH", "Refund an order: full refund by default, partial via `amount` or `line_items`.",
     "Customer wants money back on an order (with approval). Verifies the refundable maximum, executes via Shopify's refund calculate+create flow, and reports whether the gateway transaction is processed or still pending.",
     {
       ...P.orderSel,
@@ -277,7 +302,7 @@ const TOOLS: ToolDefinition[] = [
       reason: { type: "string" }, note: { type: "string" },
       notify: { type: "boolean", description: "Send Shopify's refund notification email (default true)." },
     }, [],
-    { sideEffects: "Moves real money back to the customer through the payment gateway." }),
+    { sideEffects: "Moves real money back to the customer through the payment gateway." })),
 
   // ── Legacy (kept for back-compat) ──
   // Description rewritten to match what this actually does.
@@ -290,10 +315,10 @@ const TOOLS: ToolDefinition[] = [
   //
   // Selector is P.orderSel like every other order tool. Hand-rolling
   // `order_id`-only is what forced "#1006" into the id namespace.
-  t("update_order_fulfillment", "WRITE", "LOW",
+  withOrderTarget(t("update_order_fulfillment", "WRITE", "LOW",
     "Adds a note and optional tag to the Shopify order. Records context on the order only: it does NOT notify, assign or contact any person or team.",
     "Use when order context should be recorded in Shopify. Never tell the customer a team, carrier or person was contacted on the strength of this tool - it reaches no one. Say a team was contacted only after a notification, task or assignment tool returns success.",
-    { ...P.orderSel, note: { type: "string" }, tag: { type: "string" } }),
+    { ...P.orderSel, note: { type: "string" }, tag: { type: "string" } })),
   t("order_lookup", "READ", "LOW", "Look up an order by id or name (alias of get_order).",
     "Legacy alias - prefer get_order.", P.orderSel),
 ];

@@ -1440,6 +1440,37 @@ async function dispatchToolCallInner(
         // create a fresh approval. Worst case: a duplicate row.
         console.warn("[agent-tools] pending-approval dedupe lookup failed:", err?.message);
       }
+      // Never ask a human to approve a call with NO arguments.
+      //
+      // On 2026-07-31 the model called `shopify.cancel_order` with `{}` - no
+      // order id, no order name. The gate saw a HIGH-risk tool and raised an
+      // approval whose summary read `shopify.cancel_order()`. A human approved
+      // it, because the inbox gave them nothing to disagree with, and the
+      // execution then failed with `order_id_or_name_required`. The customer
+      // was told his cancellation was being handled, then waited and asked
+      // twice what was happening.
+      //
+      // An approval is a human taking responsibility for a specific action. If
+      // the action has no parameters at all, there is nothing to take
+      // responsibility FOR, and approving it can only ever produce a failure
+      // after the fact. Better to bounce it back to the model, which still has
+      // the conversation and can supply the target.
+      if (!args || Object.keys(args).length === 0) {
+        return {
+          toolCallId: toolCall.id,
+          content: JSON.stringify({
+            ok: false,
+            error: "missing_arguments",
+            instruction:
+              `${name} needs its target parameters and was called with none. ` +
+              `Supply them from the conversation - for an order action that means the ` +
+              `order number the customer gave you - and call it again. Do not tell the ` +
+              `customer the action is in progress until it has actually succeeded.`,
+          }),
+          sideEffect: { denied: { tool: name, reason: "approval_requested_with_no_arguments" } },
+        };
+      }
+
       const approval = await createApprovalRequest({
         tenantId: ctx.tenantId,
         conversationId: ctx.conversationId,
