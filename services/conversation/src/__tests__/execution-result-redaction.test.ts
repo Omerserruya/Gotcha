@@ -10,6 +10,13 @@
 import { describe, it, expect, vi } from "vitest";
 
 vi.mock("@chatcenter/shared", () => ({
+  // Version pins now live in shared modules, so exhaustive mocks of this
+  // barrel must supply them. Returning the real defaults keeps any URL the
+  // code builds meaningful instead of "undefined/...".
+  shopifyApiVersion: () => "2026-07",
+  checkShopifyResponseVersion: () => ({ ok: true, served: "2026-07" }),
+  metaGraphBaseUrl: (legacy?: string) => legacy || "https://graph.facebook.com/v24.0",
+  stripeVersionHeader: () => ({ "Stripe-Version": "2026-02-25.clover" }),
   prisma: {}, authenticate: vi.fn(), resolveTenant: vi.fn(), requireActiveTenant: () => vi.fn(),
   approveRequest: vi.fn(), rejectRequest: vi.fn(), claimForExecution: vi.fn(),
   recordExecutionOutcome: vi.fn(), claimCustomerNotification: vi.fn(), linkCustomerMessage: vi.fn(),

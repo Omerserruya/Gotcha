@@ -24,6 +24,13 @@ vi.mock("nodemailer", () => ({
 }));
 
 vi.mock("@chatcenter/shared", () => ({
+  // Version pins now live in shared modules, so exhaustive mocks of this
+  // barrel must supply them. Returning the real defaults keeps any URL the
+  // code builds meaningful instead of "undefined/...".
+  shopifyApiVersion: () => "2026-07",
+  checkShopifyResponseVersion: () => ({ ok: true, served: "2026-07" }),
+  metaGraphBaseUrl: (legacy?: string) => legacy || "https://graph.facebook.com/v24.0",
+  stripeVersionHeader: () => ({ "Stripe-Version": "2026-02-25.clover" }),
   prisma: { notificationLog: { create: vi.fn().mockResolvedValue({}) } },
   publishEvent: vi.fn().mockResolvedValue(undefined),
   ensureIdentity: vi.fn(),
@@ -56,9 +63,21 @@ function sentUrls(): string[] {
 }
 
 function continuationUrl(): URL {
-  const found = sentUrls().find((u) => u.includes("token="));
+  // Matched on the checkout PATH, not on "token=". The email may now also
+  // carry an Authentik setup link, whose query contains `flow_token=` and
+  // would satisfy a looser match - picking the credential link and asserting
+  // checkout properties against it.
+  const found = sentUrls()
+    .map((u) => u.replace(/&amp;/g, "&"))
+    .find((u) => {
+      try {
+        return new URL(u).pathname === "/checkout";
+      } catch {
+        return false;
+      }
+    });
   if (!found) throw new Error("no continuation URL in the email");
-  return new URL(found.replace(/&amp;/g, "&"));
+  return new URL(found);
 }
 
 beforeEach(() => {

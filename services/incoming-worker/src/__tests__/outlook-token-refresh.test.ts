@@ -4,6 +4,13 @@ import { describe, it, expect, vi } from "vitest";
 // exercise the pure token-exchange helper here, so stub the shared surface it
 // pulls in at module load.
 vi.mock("@chatcenter/shared", () => ({
+  // Version pins now live in shared modules, so exhaustive mocks of this
+  // barrel must supply them. Returning the real defaults keeps any URL the
+  // code builds meaningful instead of "undefined/...".
+  shopifyApiVersion: () => "2026-07",
+  checkShopifyResponseVersion: () => ({ ok: true, served: "2026-07" }),
+  metaGraphBaseUrl: (legacy?: string) => legacy || "https://graph.facebook.com/v24.0",
+  stripeVersionHeader: () => ({ "Stripe-Version": "2026-02-25.clover" }),
   // Real implementation: the version now comes from ONE shared module, so the
   // mock must supply it too. Returning the real default keeps assertions on
   // built URLs meaningful instead of silently producing "undefined/...".

@@ -15,6 +15,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("@chatcenter/shared", () => ({
+  // Version pins now live in shared modules, so exhaustive mocks of this
+  // barrel must supply them. Returning the real defaults keeps any URL the
+  // code builds meaningful instead of "undefined/...".
+  shopifyApiVersion: () => "2026-07",
+  checkShopifyResponseVersion: () => ({ ok: true, served: "2026-07" }),
+  metaGraphBaseUrl: (legacy?: string) => legacy || "https://graph.facebook.com/v24.0",
+  stripeVersionHeader: () => ({ "Stripe-Version": "2026-02-25.clover" }),
   // The adapter only calls assertPublicUrl (SSRF guard). integration-framework
   // (pulled in via registerAdapter) references prisma/encryption at call time
   // only, so inert stubs are enough for module load.

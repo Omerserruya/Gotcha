@@ -653,6 +653,17 @@ export type {
   TeaserDecisionInput,
 } from "./lib/shopify-chat-ux";
 
+// Stripe pins its version IN CODE. Unlike Shopify/Meta (which expire versions
+// and fall forward), Stripe with no header uses the ACCOUNT DASHBOARD default —
+// so the contract lived in a web console until this was added.
+export {
+  stripeApiVersion,
+  stripeVersionHeader,
+  reportStripeApiVersion,
+  STRIPE_API_VERSION_REVIEW_BY,
+  __resetStripeApiVersionCache,
+} from "./lib/stripe-api-version";
+
 // The ONE place the Meta Graph API version is decided. Replaced eight
 // independent declarations across four services that sat on three different
 // versions at once — two of them expired.
