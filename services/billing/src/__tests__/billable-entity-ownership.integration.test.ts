@@ -71,34 +71,37 @@ describe("the ownership invariant", () => {
   });
 });
 
-// When the RUN started, not when this file was imported.
+// Anything older than this is garbage from a PREVIOUS session, not this one.
 //
-// `new Date()` at import would be wrong: files run serially, so every file
-// ordered before this one has already created fixtures that global-teardown
-// has not swept yet, and they would all count as "survived from an earlier
-// run". Process uptime gives the actual start of the run whatever the order.
-const SUITE_STARTED_AT = new Date(Date.now() - process.uptime() * 1000);
+// Getting "when did this run start" from inside a test is harder than it
+// looks. `new Date()` at import is wrong because files run serially and the
+// ones before this have unswept fixtures in flight. `process.uptime()` is also
+// wrong - vitest gives each file its own worker, so uptime restarts and the
+// same problem returns wearing a different hat.
+//
+// So this deliberately does not try. A full billing run takes minutes; an hour
+// is comfortably longer than any run and comfortably shorter than "left over
+// from yesterday". What it measures is unambiguous: entities that outlived a
+// whole session, which is the only thing global-teardown could have missed.
+const STALE_BEFORE = new Date(Date.now() - 60 * 60 * 1000);
 
 describe("the database is not accumulating unowned entities", () => {
   it("reports how many exist, and fails if the estate has drifted", async () => {
     const [total, tenants, strays] = await Promise.all([
       prisma.billableEntity.count(),
       prisma.tenant.count(),
-      // ACCUMULATED garbage only: entities that predate this run.
-      //
-      // Counting everything unowned would count the suite's own in-flight
-      // fixtures - the other files legitimately hold unowned entities until
-      // global-teardown sweeps them at the end - and this test would fail on a
-      // perfectly healthy run. What matters is whether garbage SURVIVES from
-      // one run to the next.
+      // Entities that survived a whole previous session. The suite's own
+      // in-flight fixtures are excluded by construction - the other files
+      // legitimately hold unowned entities until global-teardown sweeps them,
+      // and counting those would fail a perfectly healthy run.
       prisma.billableEntity.count({
-        where: { tenants: { none: {} }, createdAt: { lt: SUITE_STARTED_AT } },
+        where: { tenants: { none: {} }, createdAt: { lt: STALE_BEFORE } },
       }),
     ]);
 
     if (strays > 0) {
       console.warn(
-        `[ownership] ${strays} unowned billable entities SURVIVED from earlier runs ` +
+        `[ownership] ${strays} unowned billable entities are more than an hour old ` +
           `(${total} total, ${tenants} tenants). Each is a row nothing in the product can ` +
           `reach. If this is climbing, global-teardown.ts is not catching a shape.`,
       );

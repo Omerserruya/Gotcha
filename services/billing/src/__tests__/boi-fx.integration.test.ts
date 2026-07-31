@@ -88,9 +88,27 @@ afterEach(() => {
 });
 
 afterAll(async () => {
-  await prisma.paymentQuote.deleteMany({ where: { fxRateId: { in: rateIds } } }).catch(() => undefined);
-  await prisma.billingExchangeRate.deleteMany({
+  // Resolve the rates to remove FIRST, then remove every quote that references
+  // them, then the rates themselves.
+  //
+  // The previous order deleted quotes for `rateIds` only, then deleted rates
+  // matching `source: BOI_SOURCE` as well. That clause reaches rates the
+  // auto-fetch created during OTHER files' runs, and `payment_quotes.fx_rate_id`
+  // is ON DELETE RESTRICT - so a quote belonging to another file blocked the
+  // delete, the deleteMany threw inside afterAll, and the whole file failed
+  // with no test having failed. A cleanup whose blast radius exceeds what the
+  // file created is the same defect as a fixture it never removes.
+  const doomed = await prisma.billingExchangeRate.findMany({
     where: { OR: [{ id: { in: rateIds } }, { createdBy: { startsWith: RUN } }, { source: BOI_SOURCE }] },
+    select: { id: true },
+  });
+  const doomedIds = doomed.map((r) => r.id);
+  await prisma.paymentQuote.deleteMany({ where: { fxRateId: { in: doomedIds } } }).catch(() => undefined);
+  await prisma.billingExchangeRate.deleteMany({ where: { id: { in: doomedIds } } }).catch((err) => {
+    // Report rather than swallow: a rate that cannot be removed is still
+    // referenced by something, and silently leaving it behind is how the next
+    // file inherits a rate it did not create.
+    console.warn(`[boi-fx] could not remove ${doomedIds.length} rate(s): ${err?.message}`);
   });
   if (restoreId) {
     await prisma.billingExchangeRate.update({ where: { id: restoreId }, data: { status: "ACTIVE" } }).catch(() => undefined);

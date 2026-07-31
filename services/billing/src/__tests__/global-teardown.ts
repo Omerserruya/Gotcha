@@ -45,14 +45,40 @@ export async function teardown(): Promise<void> {
 
     const ids = orphans.map((o) => o.id);
 
-    // Children first. These have their own FKs onto the entity, and the point
-    // of the sweep is to leave nothing behind rather than to rely on whatever
-    // cascade happens to be configured.
+    // Children first. Every FK onto billable_entities is CASCADE, so this is
+    // belt-and-braces rather than required - but it keeps the sweep working if
+    // one of them is ever tightened to RESTRICT, which is exactly the change
+    // made to the catalog FKs elsewhere in this sprint.
     await prisma.subscription.deleteMany({ where: { billableEntityId: { in: ids } } });
     await prisma.billingProfile.deleteMany({ where: { billableEntityId: { in: ids } } });
     const { count } = await prisma.billableEntity.deleteMany({ where: { id: { in: ids } } });
 
-    console.log(`[billing-teardown] removed ${count} unowned billable entities created by this run`);
+    // Deleting a TENANT cascades to its link rows, which orphans entities that
+    // were still linked when the pass above listed them. One pass is therefore
+    // not always enough, and a partial sweep is worse than none: it looks like
+    // the leak is handled while the count creeps up.
+    let extra = 0;
+    for (let pass = 0; pass < 3; pass++) {
+      const more = await prisma.billableEntity.findMany({
+        where: { createdAt: { gte: SUITE_STARTED_AT }, tenants: { none: {} } },
+        select: { id: true },
+      });
+      if (more.length === 0) break;
+      const moreIds = more.map((m) => m.id);
+      await prisma.subscription.deleteMany({ where: { billableEntityId: { in: moreIds } } });
+      await prisma.billingProfile.deleteMany({ where: { billableEntityId: { in: moreIds } } });
+      extra += (await prisma.billableEntity.deleteMany({ where: { id: { in: moreIds } } })).count;
+    }
+
+    const residue = await prisma.billableEntity.count({
+      where: { createdAt: { gte: SUITE_STARTED_AT }, tenants: { none: {} } },
+    });
+    console.log(
+      `[billing-teardown] removed ${count + extra} unowned billable entities created by this run` +
+        (residue > 0
+          ? `; ${residue} could NOT be removed - the sweep is missing a shape, do not assume the leak is closed`
+          : ""),
+    );
   } catch (err: any) {
     // Never fail the suite on cleanup. A leaked row is a smell; a red build
     // from the janitor is worse, and the invariant test reports the leak
