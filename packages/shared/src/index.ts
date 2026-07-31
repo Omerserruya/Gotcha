@@ -653,6 +653,17 @@ export type {
   TeaserDecisionInput,
 } from "./lib/shopify-chat-ux";
 
+// The ONE place the Shopify Admin API version is decided, plus the response
+// check that makes Shopify's silent fall-forward visible. A second local
+// `const API_VERSION` anywhere is how the previous 15-month drift happened.
+export {
+  shopifyApiVersion,
+  reportShopifyApiVersion,
+  checkShopifyResponseVersion,
+  SHOPIFY_API_VERSION_REVIEW_BY,
+  __resetShopifyApiVersionCache,
+} from "./lib/shopify-api-version";
+
 // GOTCHA Shopify CHAT app — its own identity, verification and lifecycle.
 // Deliberately a separate module from the live-chat channel config above:
 // one describes the merchant's widget, the other the Shopify app that

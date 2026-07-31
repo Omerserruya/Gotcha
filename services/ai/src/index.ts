@@ -61,6 +61,13 @@ import postCallRoutes from "./routes/post-call";
 // registerAdapter() side-effects in each connector file.
 import "./services/connectors";
 
+// Surface the Shopify Admin API version at boot. Validates the format (throws
+// on a malformed override) and warns when the pin is outside this build's
+// known-supported set. Without this the version was invisible until someone
+// read the adapter source. See packages/shared/src/lib/shopify-api-version.ts.
+import { reportShopifyApiVersion } from "@chatcenter/shared";
+reportShopifyApiVersion();
+
 // Initialize central AI service (MUST be done before provider)
 if (process.env.OPENAI_API_KEY) {
   initAIService({

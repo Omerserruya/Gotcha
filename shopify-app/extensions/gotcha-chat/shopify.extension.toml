@@ -1,4 +1,5 @@
-api_version = "2024-04"
+# In step with shopify.app.toml and packages/shared/src/lib/shopify-api-version.ts.
+api_version = "2026-07"
 
 [[extensions]]
 uid = "5f510f68-3ef5-1b6b-e0a8-f094e72d2b00d4e88fb5"

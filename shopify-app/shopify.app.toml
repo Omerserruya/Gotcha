@@ -53,7 +53,13 @@ redirect_urls = [
 ]
 
 [webhooks]
-api_version = "2024-04"
+# Kept in step with packages/shared/src/lib/shopify-api-version.ts. Webhook
+# payload SHAPE is version-dependent, so dev and prod drifting apart meant dev
+# never exercised the payloads prod receives. 2024-04 was ~15 months past end
+# of support; 2026-07 is the newest RELEASED stable (supported to 2027-07-16).
+# NOTE: this file only takes effect when the app is deployed to the Partner
+# dashboard. Changing it here does not change the live subscription.
+api_version = "2026-07"
 
   # Chat lifecycle. Handled by services/ai, verified with the CHAT secret.
   [[webhooks.subscriptions]]

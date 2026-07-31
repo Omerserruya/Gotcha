@@ -33,9 +33,20 @@
  */
 
 import { registerAdapter, type ProviderAdapter, type ToolDefinition } from "./integration-framework";
-import { assertPublicUrl } from "@chatcenter/shared";
+import { assertPublicUrl, shopifyApiVersion, checkShopifyResponseVersion } from "@chatcenter/shared";
 
-const API_VERSION = "2024-04";
+/**
+ * Resolved from the ONE shared declaration, not pinned here. This used to be a
+ * local `const API_VERSION = "2024-04"` — roughly 15 months past end of support,
+ * which Shopify served by silently falling forward to whatever its oldest
+ * accessible version happened to be that quarter. See
+ * packages/shared/src/lib/shopify-api-version.ts for the full reasoning.
+ *
+ * Read lazily: `shopifyApiVersion()` throws on a malformed override, and doing
+ * that at module-import time would take the whole service down at boot for a
+ * typo in an env var rather than at the first Shopify call.
+ */
+const apiVersion = (): string => shopifyApiVersion();
 
 // ─── Tool-definition helper (cuts boilerplate) ──────────────
 
@@ -452,7 +463,7 @@ const ShopifyAdapter: ProviderAdapter = {
     const shop = config.shopDomain || credentials.shopDomain;
     if (!token) throw new Error("no_access_token");
     if (!shop) throw new Error("no_shop_domain");
-    const base = `https://${shop}/admin/api/${API_VERSION}`;
+    const base = `https://${shop}/admin/api/${apiVersion()}`;
     const ctx: Ctx = { token, base };
 
     switch (toolName) {
@@ -1488,6 +1499,10 @@ async function shopifyGraphQL(ctx: Ctx, query: string, variables: Record<string,
     headers: { "X-Shopify-Access-Token": ctx.token, "Content-Type": "application/json" },
     body: JSON.stringify({ query, variables }),
   });
+  // GraphQL is version-pinned by the same URL segment as REST, so it drifts
+  // identically and needs the same check. GraphQL is the stricter of the two -
+  // an unknown field fails the WHOLE query - so drift shows up here first.
+  reportVersionDrift(res, `${ctx.base}/graphql.json`, "GraphQL");
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`shopify_${res.status}: ${shopifyErrorSummary(text)}`);
@@ -1515,11 +1530,34 @@ async function shopifyRequest(token: string, method: string, url: string, body?:
     body: body ? JSON.stringify(body) : undefined,
   };
   const res = await fetch(url, init);
+  // Check BEFORE the ok/throw branch: a 4xx still carries the header, and a
+  // drifted version is a plausible cause of that 4xx. Discovering the drift
+  // only on success would hide it in exactly the case worth investigating.
+  reportVersionDrift(res, url, "REST");
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`shopify_${res.status}: ${shopifyErrorSummary(text)}`);
   }
   return await res.json();
+}
+
+/**
+ * Shopify never rejects an unsupported API version - it falls forward and
+ * serves the oldest accessible one, so the only evidence is this header.
+ * Never throws: a header disagreement must not fail a live customer request.
+ */
+function reportVersionDrift(res: Response, url: string, surface: "REST" | "GraphQL"): void {
+  try {
+    checkShopifyResponseVersion({
+      requested: apiVersion(),
+      headerValue: res.headers.get("X-Shopify-API-Version"),
+      surface,
+      // Host only - the path can carry customer ids.
+      shop: (() => { try { return new URL(url).host; } catch { return undefined; } })(),
+    });
+  } catch {
+    /* telemetry must never break a request */
+  }
 }
 
 registerAdapter(ShopifyAdapter);

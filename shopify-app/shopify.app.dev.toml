@@ -43,11 +43,13 @@ redirect_urls = [
 ]
 
 [webhooks]
-# Shopify's CLI wrote 2026-10 when it created the app; 2024-04 (this repo's
-# original value) is long past its supported window. See the report note:
-# the Admin REST version pinned in shopify.adapter.ts is a separate, older
-# concern that belongs to the CORE integration.
-api_version = "2026-10"
+# Aligned with prod and with packages/shared/src/lib/shopify-api-version.ts.
+# Previously 2026-10 — which the CLI wrote but which is ANNOUNCED, NOT YET
+# RELEASED (Shopify ships it 2026-10-01). Pinning forward is the same mistake
+# as pinning to an expired version, in the other direction: dev exercised a
+# contract that does not exist yet while prod ran 2024-04, so neither
+# environment tested what the other received.
+api_version = "2026-07"
 
   # Chat lifecycle. Handled by services/ai, verified with the CHAT secret.
   [[webhooks.subscriptions]]
