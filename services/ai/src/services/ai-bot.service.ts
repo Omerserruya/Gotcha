@@ -152,6 +152,7 @@ import {
 import { tryEmit } from "./notifications-emit";
 import { prepareShopifyTurn } from "./shopify-chat-turn.service";
 import type { SystemEventType } from "./notifications-emit";
+import { guardCustomerReply, turnEvidenceFrom } from "./reply-guard.service";
 
 /**
  * Phase 4: every chat tool call funnels through the ActionOrchestrator
@@ -3973,6 +3974,41 @@ async function generateAIBotReplyInner(
 
   // Final humanizing pass on the outgoing reply (strip machine-style dashes).
   replyText = humanizeReply(replyText);
+
+  // Deterministic guard: internal narration and unbacked promises.
+  //
+  // The prompt already forbids both, and on 2026-07-31 the model did both
+  // anyway to a live customer - narrating tool names, counting its own checks,
+  // surfacing a provider error, and promising four times to contact a shipping
+  // team it cannot reach and to send updates it never scheduled.
+  //
+  // Evidence comes from the turn's COMMITTED ledger, not from "a tool returned
+  // ok": `update_order_fulfillment` succeeding means a note was written on the
+  // order, which is not the same as anyone being told. A promise with no
+  // matching committed action is removed rather than sent.
+  if (replyText) {
+    try {
+      const guarded = guardCustomerReply(replyText, {
+        locale: replyLocale,
+        invokedTools: toolCallLog.map((t) => t.tool),
+        evidence: turnEvidenceFrom(
+          ledger.committed().map((e) => e.tool),
+          { escalated: !!awaitingApproval },
+        ),
+      });
+      if (guarded.changed) {
+        console.warn(
+          `[ai-bot] reply guard rewrote the outgoing message conv=${opts.conversationId}: ` +
+            guarded.findings.map((f) => `${f.kind}(${f.match})`).join(", "),
+        );
+        replyText = guarded.text;
+      }
+    } catch (err: any) {
+      // A guard that throws must not cost the customer their reply.
+      console.error(`[ai-bot] reply guard failed conv=${opts.conversationId}:`, err?.message);
+    }
+  }
+
 
   // Output validator - last defence against prompt-leakage and fabricated
   // execution claims ("I refunded your card" with no refund tool call).
