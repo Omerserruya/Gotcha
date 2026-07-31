@@ -34,6 +34,7 @@
 
 import { registerAdapter, type ProviderAdapter, type ToolDefinition } from "./integration-framework";
 import { assertPublicUrl, shopifyApiVersion, checkShopifyResponseVersion } from "@chatcenter/shared";
+import { orderIdentifierFromArgs } from "./shopify-order-identifier";
 
 /**
  * Resolved from the ONE shared declaration, not pinned here. This used to be a
@@ -279,8 +280,20 @@ const TOOLS: ToolDefinition[] = [
     { sideEffects: "Moves real money back to the customer through the payment gateway." }),
 
   // ── Legacy (kept for back-compat) ──
-  t("update_order_fulfillment", "WRITE", "LOW", "Add a note + tag to an order (non-destructive handoff).",
-    "Flag an order for the ops team.", { order_id: { type: "string" }, note: { type: "string" }, tag: { type: "string" } }, ["order_id"]),
+  // Description rewritten to match what this actually does.
+  //
+  // It used to say "non-destructive handoff" / "Flag an order for the ops
+  // team", and it notifies nobody: it writes a note and a tag onto the Shopify
+  // order and stops. The model relayed the tool's own claim to a customer as
+  // "אני פונה לצוות המשלוחים" - I am contacting the shipping team - which was
+  // never true. A tool description is a promise the model will repeat verbatim.
+  //
+  // Selector is P.orderSel like every other order tool. Hand-rolling
+  // `order_id`-only is what forced "#1006" into the id namespace.
+  t("update_order_fulfillment", "WRITE", "LOW",
+    "Adds a note and optional tag to the Shopify order. Records context on the order only: it does NOT notify, assign or contact any person or team.",
+    "Use when order context should be recorded in Shopify. Never tell the customer a team, carrier or person was contacted on the strength of this tool - it reaches no one. Say a team was contacted only after a notification, task or assignment tool returns success.",
+    { ...P.orderSel, note: { type: "string" }, tag: { type: "string" } }),
   t("order_lookup", "READ", "LOW", "Look up an order by id or name (alias of get_order).",
     "Legacy alias - prefer get_order.", P.orderSel),
 ];
@@ -1023,7 +1036,26 @@ const ShopifyAdapter: ProviderAdapter = {
           upd.tags = (cur.includes(tag) ? cur : [...cur, tag]).join(", ");
         }
         const r: any = await sreq(ctx, "PUT", `/orders/${o.id}.json`, { order: upd });
-        return { order_id: o.id, name: o.name, note: r.order?.note ?? null, tags: splitTags(r.order?.tags) };
+        // Explicit negatives, not just the positive result.
+        //
+        // The model previously saw `{order_id, name, note, tags}` - a success
+        // shape with nothing saying what did NOT happen - and filled the gap
+        // with "I contacted the shipping team". These four false flags close
+        // that gap at the data layer rather than hoping a prompt sentence
+        // holds.
+        return {
+          order_id: o.id,
+          name: o.name,
+          orderResolved: true,
+          noteAdded: !!note,
+          tagAdded: !!tag,
+          notificationSent: false,
+          assignmentCreated: false,
+          followUpScheduled: false,
+          recordedOnOrderOnly: true,
+          note: r.order?.note ?? null,
+          tags: splitTags(r.order?.tags),
+        };
       }
 
       case "process_refund": {
@@ -1303,16 +1335,99 @@ async function customerOrders(ctx: Ctx, args: Record<string, any>, opts: { limit
 }
 
 /** Resolve an order from { order_id | order_name }. */
-async function resolveOrder(ctx: Ctx, args: Record<string, any>): Promise<any | null> {
-  if (args.order_id) {
-    const r = await sreq(ctx, "GET", `/orders/${encodeURIComponent(String(args.order_id))}.json`);
+/** Look an order up by its internal id. Returns null on 404 rather than throwing. */
+async function orderById(ctx: Ctx, id: string): Promise<any | null> {
+  try {
+    const r = await sreq(ctx, "GET", `/orders/${encodeURIComponent(id)}.json`);
     return r.order ?? null;
+  } catch (err: any) {
+    // A wrong-namespace guess must be recoverable, not fatal: 404 means "not
+    // this id", and 400 means Shopify rejected the value as an id at all -
+    // which is exactly what "#1006" produced. Both fall through to the name
+    // lookup. Anything else (auth, rate limit, 5xx) is a real failure.
+    const m = String(err?.message ?? "");
+    if (/shopify_404|shopify_400/.test(m)) return null;
+    throw err;
   }
-  if (args.order_name) {
-    const r = await sreq(ctx, "GET", `/orders.json?name=${encodeURIComponent(String(args.order_name).replace(/^#/, ""))}&status=any&limit=1`);
-    return r.orders?.[0] ?? null;
+}
+
+/** Look an order up by its human-facing name. `#` is optional. */
+async function orderByName(ctx: Ctx, name: string): Promise<{ order: any | null; ambiguous: boolean }> {
+  const clean = name.replace(/^#/, "").trim();
+  try {
+    // limit=2 so a duplicate name is DETECTED rather than silently taking the
+    // first match. Acting on the wrong order is worse than refusing.
+    const r = await sreq(ctx, "GET", `/orders.json?name=${encodeURIComponent(clean)}&status=any&limit=2`);
+    const orders: any[] = Array.isArray(r.orders) ? r.orders : [];
+    if (orders.length > 1) return { order: null, ambiguous: true };
+    return { order: orders[0] ?? null, ambiguous: false };
+  } catch (err: any) {
+    // Same reasoning as orderById: "no order by that name" must be a miss the
+    // other namespace can still answer, not a hard failure. Shopify normally
+    // returns 200 with an empty array, but a 404/400 here is still just a miss.
+    const m = String(err?.message ?? "");
+    if (/shopify_404|shopify_400/.test(m)) return { order: null, ambiguous: false };
+    throw err;
   }
-  throw new Error("order_id_or_name_required");
+}
+
+/**
+ * THE canonical order resolver. Every Shopify order tool goes through here.
+ *
+ * It used to trust `args.order_id` as an internal id and issue a direct GET.
+ * A customer's "#1006" is an order NAME, so that produced
+ * `GET /orders/%231006.json` → 400, and the tool had no second path. See
+ * shopify-order-identifier.ts for the full account.
+ *
+ * Now the value is classified first, and when the classification is uncertain
+ * both namespaces are tried. A wrong guess costs one extra GET instead of
+ * failing the operation.
+ */
+async function resolveOrder(ctx: Ctx, args: Record<string, any>): Promise<any | null> {
+  const ident = orderIdentifierFromArgs(args ?? {});
+
+  switch (ident.kind) {
+    case "missing":
+      throw new Error("order_id_or_name_required");
+    case "malformed":
+      throw new Error(`order_identifier_invalid: ${ident.detail ?? "unrecognised"}`);
+
+    case "internal_id": {
+      const byId = await orderById(ctx, ident.id!);
+      if (byId) return byId;
+      // A long numeric that is not an id is unusual but harmless to re-check
+      // as a name before giving up.
+      const byName = await orderByName(ctx, ident.id!);
+      if (byName.ambiguous) throw new Error("order_ambiguous");
+      return byName.order;
+    }
+
+    case "order_name": {
+      const byName = await orderByName(ctx, ident.name!);
+      if (byName.ambiguous) throw new Error("order_ambiguous");
+      if (byName.order) return byName.order;
+      // Only worth an id attempt when the name could BE an id.
+      if (/^\d+$/.test(ident.name!)) return await orderById(ctx, ident.name!);
+      return null;
+    }
+
+    case "ambiguous": {
+      // Short numeric - could be either namespace. The FIELD the caller used
+      // decides which to try first (see orderIdentifierFromArgs); the other is
+      // still tried, so a wrong guess costs one extra GET, never a failure.
+      if (ident.preferred === "name") {
+        const byName = await orderByName(ctx, ident.name!);
+        if (byName.ambiguous) throw new Error("order_ambiguous");
+        if (byName.order) return byName.order;
+        return await orderById(ctx, ident.id!);
+      }
+      const byId = await orderById(ctx, ident.id!);
+      if (byId) return byId;
+      const byName = await orderByName(ctx, ident.name!);
+      if (byName.ambiguous) throw new Error("order_ambiguous");
+      return byName.order;
+    }
+  }
 }
 
 async function mutateCustomerTags(ctx: Ctx, args: Record<string, any>, tag: string, op: "add" | "remove"): Promise<any> {
