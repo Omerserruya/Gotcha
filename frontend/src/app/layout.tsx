@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter, Assistant } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
+import { LOCALE_BOOT_SCRIPT } from "@/lib/locale-boot";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
 const assistant = Assistant({ subsets: ["hebrew", "latin"], variable: "--font-assistant", display: "swap" });
@@ -70,8 +71,19 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  // `lang`/`dir` are the pre-JS defaults; the script below corrects them before
+  // the first paint, and I18nContext keeps them in sync afterwards.
+  //
+  // These were left hardcoded with only the post-hydration effect to fix them,
+  // so every Hebrew page load flashed left-to-right. Resolving it server-side
+  // would read better but `cookies()` in a root layout makes every page
+  // dynamic, and this app statically generates its public pages. See
+  // lib/locale-boot.ts.
   return (
     <html lang="en" dir="ltr">
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: LOCALE_BOOT_SCRIPT }} />
+      </head>
       <body className={`${inter.variable} ${assistant.variable} bg-gray-50 text-gray-900 min-h-screen`}>
         <Providers>{children}</Providers>
       </body>

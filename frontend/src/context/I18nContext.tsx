@@ -136,6 +136,13 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     document.documentElement.dir = localeConfig[locale].dir;
     document.documentElement.lang = locale;
+    // Mirror to a cookie so the SERVER can render the right lang/dir on the
+    // next request. localStorage cannot be read during a server render, which
+    // is why the shell used to be hardcoded to en/ltr and corrected here -
+    // after the user had already seen the wrong direction.
+    try {
+      document.cookie = `${LOCALE_CACHE_KEY}=${locale}; path=/; max-age=31536000; samesite=lax`;
+    } catch { /* cookies unavailable - the client effect above still applies */ }
   }, [locale]);
 
   const setLocale = useCallback(
