@@ -30,6 +30,91 @@ import { applyCrmPatchKindAware, createCrmTaskKindAware, getCrmIdentity } from "
 import { loadExistingActionItems } from "./existing-action-items.service";
 import { ingestConversationFacts } from "./intelligence-ingest.service";
 
+/**
+ * How long a claim is honoured before another run may take it over.
+ *
+ * The pipeline makes an LLM call and several vendor round trips, so a healthy
+ * run can legitimately take tens of seconds. The cutoff only has to exceed
+ * that; its real job is to make sure a worker that died mid-run does not lock
+ * a conversation out of summarisation forever.
+ */
+const CLAIM_STALE_MS = 10 * 60 * 1000;
+
+/**
+ * Atomically take ownership of a conversation's post-chat run.
+ *
+ * The previous guard read CallAnalysis, decided "not processed yet", and then
+ * spent seconds summarising before writing anything. Two deliveries of
+ * `conversation:closed` - a redelivery, a retry, or a close racing a reopen -
+ * both passed that read and both ran to completion. The visible result was not
+ * a duplicated row: `upsert` collapses those. It was a SECOND note on the
+ * customer's record in the merchant's CRM, and a second task, because those
+ * writes go to a vendor that has no idea we already wrote them.
+ *
+ * The claim is a conditional UPDATE, so the database decides the winner:
+ * exactly one caller sees a row count of 1.
+ *
+ * It cannot key off `status`, which looks like the obvious field. The
+ * intelligence runner (`CallAnalysisStore.ensure`) creates rows with
+ * `status: "running"` for its own reasons, so treating that as "a post-chat
+ * run owns this" would skip every conversation the runner had touched.
+ * `meta.postChatClaimAt` is written by this pipeline and nothing else.
+ */
+async function claimPostChatRun(conversationId: string, tenantId: string): Promise<boolean> {
+  // The row may not exist yet - the CAS below can only claim an existing row,
+  // and an UPDATE matching nothing is indistinguishable from losing the race.
+  try {
+    await (prisma as any).callAnalysis.upsert({
+      where: { conversationId },
+      create: { tenantId, conversationId, mode: "chat", status: "running", frames: [] },
+      update: {},
+    });
+  } catch {
+    // A concurrent create won; the row now exists either way, which is all the
+    // CAS needs.
+  }
+
+  const cutoff = new Date(Date.now() - CLAIM_STALE_MS).toISOString();
+  try {
+    const claimed: number = await (prisma as any).$executeRaw`
+      UPDATE call_analyses
+      SET meta = COALESCE(meta, '{}'::jsonb)
+                 || jsonb_build_object('postChatClaimAt', ${new Date().toISOString()})
+      WHERE conversation_id = ${conversationId}
+        AND (
+          meta->>'postChatClaimAt' IS NULL
+          OR (meta->>'postChatClaimAt') < ${cutoff}
+        )
+    `;
+    return claimed > 0;
+  } catch (err: any) {
+    // Fail OPEN. A claim that cannot be taken must not stop a paying customer's
+    // conversation being summarised; the duplicate-write risk it guards against
+    // is the lesser harm, and it is logged.
+    console.error(`[post-chat] claim failed for conv=${conversationId}, proceeding: ${err?.message}`);
+    return true;
+  }
+}
+
+/**
+ * Drop the claim so a retry can start immediately.
+ *
+ * Only for runs that ended WITHOUT writing anything downstream. A completed run
+ * leaves its claim in place and is caught by the `already-processed` fast path
+ * instead, which is keyed on the summary actually being on disk.
+ */
+async function releasePostChatRun(conversationId: string): Promise<void> {
+  try {
+    await (prisma as any).$executeRaw`
+      UPDATE call_analyses
+      SET meta = COALESCE(meta, '{}'::jsonb) - 'postChatClaimAt'
+      WHERE conversation_id = ${conversationId}
+    `;
+  } catch {
+    // Non-fatal: the claim expires on its own after CLAIM_STALE_MS.
+  }
+}
+
 export async function runPostChatPipeline(params: {
   tenantId: string;
   conversationId: string;
@@ -77,12 +162,22 @@ export async function runPostChatPipeline(params: {
   }
 
   // 0. Guard - don't run twice on the same conversation.
+  //
+  // Two layers, because they catch different things. This read catches the
+  // common case cheaply: a redelivery arriving after a previous run finished.
   const existing = await prisma.callAnalysis.findUnique({
     where: { conversationId: params.conversationId },
     select: { meta: true, finalSummary: true },
   });
   if (existing?.finalSummary && (existing.meta as any)?.structured) {
     return { ok: true, summarized: false, crmWritten: false, tasksCreated: 0, followupScheduled: false, notes: ["already-processed"] };
+  }
+
+  // The read above cannot catch a CONCURRENT delivery: both callers see no
+  // summary, both continue, and both write a note to the merchant's CRM. The
+  // claim is atomic, so exactly one proceeds.
+  if (!(await claimPostChatRun(params.conversationId, params.tenantId))) {
+    return { ok: true, summarized: false, crmWritten: false, tasksCreated: 0, followupScheduled: false, notes: ["claimed-by-another-run"] };
   }
 
   // 1. Summarize + apply tenant rule engine.
@@ -108,6 +203,9 @@ export async function runPostChatPipeline(params: {
   });
   const structured = applyPostConversationRules(raw, config);
   if (structured.empty || !structured.summary) {
+    // Nothing was written anywhere, so hand the claim back rather than making a
+    // legitimate retry wait out CLAIM_STALE_MS.
+    await releasePostChatRun(params.conversationId);
     return { ok: false, summarized: false, crmWritten: false, tasksCreated: 0, followupScheduled: false, notes: ["empty-summary"] };
   }
 

@@ -17,6 +17,7 @@
 
 import { prisma } from "@chatcenter/shared";
 import type { CRMAdapter, CrmVendor } from "./crm-adapter.types";
+import { DEFAULT_CAPABILITIES } from "./crm-adapter.types";
 import {
   HubSpotCRMAdapter,
   SalesforceCRMAdapter,
@@ -41,13 +42,39 @@ const SLUG_TO_VENDOR: Record<string, CrmVendor> = {
   custom_api: "custom_api",
   custom_db: "custom_db",
 };
-const CRM_VENDOR_SLUGS = Object.keys(SLUG_TO_VENDOR);
+/**
+ * The slugs step 2 will actually resolve a tenant's CRM from.
+ *
+ * NOT every key of SLUG_TO_VENDOR. Four of those vendors have no adapter -
+ * `instantiate()` returns NoOpCRMAdapter for pipedrive, monday, custom_api and
+ * custom_db - so matching them here could only ever DISPLACE a provider that
+ * works.
+ *
+ * That is not theoretical. `monday` is a PROJECT_MANAGEMENT integration in the
+ * catalog, connected for project work and nothing to do with customer records.
+ * Because step 2 matches on SLUG rather than category, a Shopify merchant who
+ * also connected Monday had Monday resolved as their CRM - ahead of the
+ * Shopify fallback in step 3. Every identity lookup and every timeline write
+ * then went to the NoOp adapter and returned `no_crm_configured`. The bot
+ * stopped knowing who it was talking to, and because a stub answers rather than
+ * throws, nothing anywhere reported an error.
+ *
+ * Derived from the capability table rather than hand-listed, so implementing
+ * one of these adapters is enough to make it resolvable - there is no second
+ * list to remember.
+ */
+const CRM_VENDOR_SLUGS = Object.keys(SLUG_TO_VENDOR).filter(
+  (slug) => !DEFAULT_CAPABILITIES[SLUG_TO_VENDOR[slug]]?.is_stub,
+);
 
 // Tiny per-tenant cache (TTL 30s) - avoids hitting the DB on every bot turn.
 // Resolves the CrmVendor; the adapter itself is cheap to instantiate.
 interface CachedResolution { vendor: CrmVendor | null; expiresAt: number; }
 const RESOLUTION_CACHE = new Map<string, CachedResolution>();
 const RESOLUTION_TTL_MS = 30_000;
+
+/** Test-only: which slugs step 2 will resolve from, after the stub filter. */
+export function __resolvableCrmSlugs(): string[] { return [...CRM_VENDOR_SLUGS]; }
 
 /**
  * Test-only: clear the cache between integration tests.
