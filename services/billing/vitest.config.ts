@@ -18,6 +18,15 @@ export default defineConfig({
     fileParallelism: false,
 
     /**
+     * Sweep unowned billable entities the suites leave behind.
+     *
+     * Only 2 of 41 files ever deleted the BillableEntity they created, so every
+     * run leaked rows into the shared dev database. See the file for why this
+     * lives here rather than in 39 afterAll blocks.
+     */
+    globalSetup: ["./src/__tests__/global-teardown.ts"],
+
+    /**
      * The payment capabilities are ON for the suite, and OFF everywhere else.
      *
      * They default off in production because a payment capability that switches
