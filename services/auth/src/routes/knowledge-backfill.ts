@@ -37,7 +37,21 @@ import { applyProjection } from "../services/onboarding-knowledge.service";
 
 const router = Router();
 
-router.use(authenticate, requireSystemAdmin, crossTenantMiddleware);
+// `requireSystemAdmin()` - CALLED. It is a factory that returns the middleware.
+//
+// Passed uncalled, Express invokes the factory itself as (req, res, next); it
+// ignores those arguments, returns a function, and never calls next(). The
+// request then hangs forever: no error, no log, no response, just a socket the
+// gateway eventually times out at 504.
+//
+// Scoped to this router's own path rather than left path-less. Mounted on
+// "/api/system" alongside two other routers, a bare `router.use(...)` runs for
+// EVERY /api/system/* request - so this single missing pair of parentheses
+// froze the whole sysadmin console: tenants, stats and onboarding-console all
+// hung, none of which this file has anything to do with. Unauthenticated
+// callers still got a fast 401, because `authenticate` rejected before
+// reaching the broken middleware, which is why the service looked healthy.
+router.use("/knowledge-backfill", authenticate, requireSystemAdmin(), crossTenantMiddleware);
 
 /** Outcome buckets the operator asked for, one per tenant. */
 type Bucket =
