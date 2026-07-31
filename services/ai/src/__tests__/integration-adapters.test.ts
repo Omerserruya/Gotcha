@@ -19,7 +19,7 @@ describe("integration adapter registry", () => {
     "hubspot",
     "shopify",
     "airtable",
-    "postgres",
+    "postgresql",
     "mongodb",
     // wix + square temporarily disabled - re-add when adapters are
     // re-registered in services/ai/src/services/connectors/index.ts.
@@ -56,8 +56,40 @@ describe("integration adapter registry", () => {
     }
   });
 
+  /**
+   * An adapter's slug is not a nickname - it is the integration_catalog slug,
+   * used verbatim by loadConnection() to find the tenant's connection and by
+   * the workspace to count executable tools.
+   *
+   * The postgres adapter registered itself as "postgres" while its catalog row
+   * is "postgresql". Nothing failed loudly: the tool surface still offered
+   * `postgres.query_table` (a caller-local translation map papered over it),
+   * every dispatch came back not_connected, and the Integrations screen counted
+   * 0 tools and filed PostgreSQL under "services managed elsewhere".
+   *
+   * This list mirrors integration_catalog.slug. A registry check cannot reach
+   * the DB, so the list is the contract: adding an adapter means adding its
+   * CATALOG slug here, and any divergence shows up as a failure rather than as
+   * four tools that quietly never run.
+   */
+  const CATALOG_SLUGS = new Set([
+    "shopify", "zoho_crm", "hubspot", "woocommerce", "monday", "salesforce",
+    "paypal", "stripe", "airtable", "aws_rds", "fireberry", "mongodb",
+    "postgresql", "calendly", "returngo", "google_calendar", "custom_api",
+  ]);
+
+  it("registers every adapter under its integration_catalog slug, never a nickname", () => {
+    for (const adapter of listAdapters()) {
+      expect(
+        CATALOG_SLUGS.has(adapter.slug),
+        `adapter slug "${adapter.slug}" is not an integration_catalog slug - ` +
+          "loadConnection() will never find a connection for it",
+      ).toBe(true);
+    }
+  });
+
   it("aws_rds shares its tool surface shape with postgres (RDS is engine-agnostic Postgres/MySQL)", () => {
-    const pg = getAdapter("postgres")!.tools().map((t) => t.name.split(".")[1]).sort();
+    const pg = getAdapter("postgresql")!.tools().map((t) => t.name.split(".")[1]).sort();
     const rds = getAdapter("aws_rds")!.tools().map((t) => t.name.split(".")[1]).sort();
     expect(rds).toEqual(pg);
   });

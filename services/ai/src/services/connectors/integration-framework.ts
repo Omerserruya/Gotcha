@@ -93,6 +93,31 @@ export interface ProviderAdapter {
     config: Record<string, any>;
   }): Promise<unknown>;
   /**
+   * (Optional) Can this action still happen, given the provider's CURRENT
+   * state? Consulted BEFORE an approval request is raised.
+   *
+   * Eligibility is provider knowledge, and checking it at execution time is
+   * too late: a customer asked to cancel an order that was already cancelled,
+   * and the pipeline dutifully told them "I'm handling your cancellation now",
+   * raised an approval, and put a real decision in front of a real person for
+   * an action that could not change anything. The same shape - propose,
+   * approve, discover it was impossible - is how a fulfilled order burned an
+   * approval before this existed.
+   *
+   * `call` runs another of this provider's READ tools through the normal
+   * framework path (credentials, refresh, rate limit, audit), so the check
+   * reconciles against live state rather than against what the model believed.
+   *
+   * Returning `alreadySatisfied` distinguishes "this cannot happen" from "this
+   * has already happened" - the customer is owed different sentences, and only
+   * the second one is good news.
+   */
+  precheckEligibility?(opts: {
+    toolName: string;
+    args: Record<string, unknown>;
+    call: (toolName: string, args: Record<string, unknown>) => Promise<unknown>;
+  }): Promise<{ eligible: true } | { eligible: false; reason: string; alreadySatisfied?: boolean }>;
+  /**
    * (Optional) Prove the stored credential actually works, without needing a
    * tool call. This is the connection-lifecycle probe: `/test` and the OAuth
    * callbacks use it to decide CONNECTED vs ERROR.
@@ -571,6 +596,49 @@ export function getAdapter(slug: string): ProviderAdapter | null {
  * adapter keeps the ranking next to the tool it describes, rather than in a
  * list somewhere else that nobody updates when a tool is added.
  */
+/**
+ * Ask the provider whether an action is still possible, before a human is
+ * asked to approve it.
+ *
+ * Fails OPEN: a precheck that errors, times out, or is not implemented returns
+ * eligible. This gate exists to stop pointless approvals, and turning a
+ * provider hiccup into a refused cancellation would be a worse failure than
+ * the one it prevents.
+ */
+export async function precheckAdapterAction(opts: {
+  tenantId: string;
+  conversationId?: string;
+  toolFunctionName: string;
+  args: Record<string, unknown>;
+}): Promise<{ eligible: true } | { eligible: false; reason: string; alreadySatisfied?: boolean }> {
+  const dot = opts.toolFunctionName.indexOf(".");
+  if (dot < 0) return { eligible: true };
+  const slug = opts.toolFunctionName.slice(0, dot);
+  const toolName = opts.toolFunctionName.slice(dot + 1);
+  const adapter = REGISTRY.get(slug);
+  if (!adapter?.precheckEligibility) return { eligible: true };
+  try {
+    return await adapter.precheckEligibility({
+      toolName,
+      args: opts.args,
+      call: async (t, a) => {
+        const r = await executeAdapterTool({
+          tenantId: opts.tenantId,
+          conversationId: opts.conversationId,
+          toolFunctionName: `${slug}.${t}`,
+          args: a,
+          accessScope: "internal",
+        });
+        if (!r.ok) throw new Error(r.reason);
+        return r.result;
+      },
+    });
+  } catch (err: any) {
+    console.warn(`[framework] precheck for ${opts.toolFunctionName} failed open: ${err?.message}`);
+    return { eligible: true };
+  }
+}
+
 export function getToolPriority(dottedName: string): number {
   const dot = dottedName.indexOf(".");
   if (dot < 0) return 50;

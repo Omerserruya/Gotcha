@@ -423,6 +423,59 @@ const ShopifyAdapter: ProviderAdapter = {
   tools: () => TOOLS,
 
   /**
+   * Is this order action still possible? Asked BEFORE an approval is raised.
+   *
+   * Live failures this prevents, both seen on the dev store:
+   *   - "תבטלו לי את הזמנה 1007" for an order cancelled minutes earlier. The
+   *     bot answered "מטפלת עכשיו בביטול" and raised an approval, putting a
+   *     real decision in front of a person that could not change anything.
+   *   - the same shape for a fulfilled order, which Shopify refuses outright.
+   *
+   * Only READS happen here, and only for the two money/state actions where a
+   * wasted approval is expensive. Anything unrecognised is eligible.
+   */
+  async precheckEligibility({ toolName, args, call }) {
+    if (toolName !== "cancel_order" && toolName !== "process_refund") return { eligible: true };
+    const target = args.order_id ?? args.order_name;
+    if (!target) return { eligible: true }; // resolution failure is the executor's job to report
+
+    const order: any = await call("get_order", args.order_id ? { order_id: args.order_id } : { order_name: args.order_name });
+    if (!order?.id) return { eligible: true };
+
+    if (toolName === "cancel_order") {
+      if (order.cancelled_at) {
+        return {
+          eligible: false,
+          alreadySatisfied: true,
+          reason: `order ${order.name ?? ""} was already cancelled. Tell the customer it is already cancelled and offer to check the refund status; do NOT propose cancelling it again.`.trim(),
+        };
+      }
+      // Mirrors the execution-time guard, so the impossible action is never
+      // proposed rather than merely refused after someone approves it.
+      const fulfilled =
+        ["fulfilled", "partial"].includes(String(order.fulfillment_status || "").toLowerCase()) ||
+        (Array.isArray(order.fulfillments) && order.fulfillments.length > 0);
+      if (fulfilled) {
+        return {
+          eligible: false,
+          reason: `order ${order.name ?? ""} has already been fulfilled and cannot be cancelled. Offer a return plus a refund instead.`.trim(),
+        };
+      }
+      return { eligible: true };
+    }
+
+    // process_refund: a fully refunded order has no money left to return.
+    if (String(order.financial_status || "").toLowerCase() === "refunded") {
+      return {
+        eligible: false,
+        alreadySatisfied: true,
+        reason: `order ${order.name ?? ""} is already fully refunded. Tell the customer the refund has already been issued; do NOT propose another one.`.trim(),
+      };
+    }
+    return { eligible: true };
+  },
+
+  /**
    * Live credential + scope probe for the integration "Test" button.
    * `access_scopes.json` is the cheapest authenticated call Shopify has AND
    * tells us exactly which scopes the merchant granted - so a connection

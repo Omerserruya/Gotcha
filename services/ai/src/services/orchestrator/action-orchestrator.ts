@@ -9,6 +9,7 @@ import {
   type PolicyResult,
 } from "@chatcenter/shared";
 import { CircuitBreakers, withRetry, pushToDlq } from "./runner";
+import { precheckAdapterAction } from "../connectors/integration-framework";
 import type {
   ExecutionResult,
   ProposedAction,
@@ -220,6 +221,29 @@ export class ActionOrchestrator {
     }
 
     if (gate.decision === "REQUIRE_APPROVAL") {
+      // Is the action still possible? An approval is a person's attention, and
+      // spending it on something that cannot change anything - cancelling an
+      // already-cancelled order, refunding an already-refunded one - is the
+      // shape of failure that produced "מטפלת עכשיו בביטול" for an order that
+      // had been cancelled minutes before. The provider reconciles against
+      // live state; a precheck that cannot run says eligible.
+      const pre = await precheckAdapterAction({
+        tenantId: action.tenantId,
+        conversationId: action.conversationId || undefined,
+        toolFunctionName: action.tool,
+        args: action.args,
+      });
+      if (!pre.eligible) {
+        return recordIfLedger(
+          await this.recordDeny(
+            action,
+            pre.alreadySatisfied
+              ? `already_done: ${pre.reason}`
+              : `not_possible: ${pre.reason}`,
+            "provider-precheck",
+          ),
+        );
+      }
       return recordIfLedger(await this.recordPropose(action, gate));
     }
     // ALLOW → auto-execute

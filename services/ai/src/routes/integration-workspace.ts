@@ -4,17 +4,24 @@
  * GET /api/integration-workspace          → the sidebar (classified entries)
  * GET /api/integration-workspace/:id      → one integration's tools + policy
  *
- * Composition, not unification. Three separate models feed the sidebar because
- * three separate screens own them:
+ * Composition, not unification. Two models feed the sidebar:
  *
  *   integration_catalog + tenant_integrations → business systems (this screen)
- *   channel_accounts                          → channels (Channels owns them)
  *   knowledge_integrations                    → knowledge (Knowledge Manager)
  *
- * Only the first can carry executable tools and therefore policy. The other two
- * appear as status-only entries so an admin can see a dependency is healthy
- * without this screen pretending to manage it. Classification itself is a pure
- * function in @chatcenter/shared so it is testable and cannot drift per page.
+ * Only the first can carry executable tools and therefore policy; knowledge
+ * sources appear as status-only entries so an admin can see a dependency is
+ * healthy without this screen pretending to manage it.
+ *
+ * channel_accounts is deliberately NOT a third source. Channels were listed
+ * here as status-only rows and it read as a bug: a permissions screen showing
+ * comms setup it cannot govern, mixed into business systems, every row a
+ * one-way trip to /settings/channels. Channels now appear in one place where
+ * they are actually a precondition - a dependency note on the GOTCHA tool
+ * surface, next to the delivery tools that need them.
+ *
+ * Classification itself is a pure function in @chatcenter/shared so it is
+ * testable and cannot drift per page.
  */
 
 import { Router, Request, Response } from "express";
@@ -25,10 +32,10 @@ import {
   requireActiveTenant,
   requirePermissionOrRole,
   classifyCatalogIntegration,
-  classifyChannel,
   classifyKnowledgeSource,
   gotchaEntry,
   buildWorkspaceSidebar,
+  channelDependencyFor,
   resolveToolAvailability,
   summarizeTools,
   groupByRisk,
@@ -36,6 +43,7 @@ import {
   GOTCHA_ENTRY_ID,
   toolDisplayName,
   type CatalogIntegrationInput,
+  type WorkspaceEntry,
 } from "@chatcenter/shared";
 import {
   TOOL_REGISTRY,
@@ -76,21 +84,16 @@ router.get("/", async (req: Request, res: Response) => {
   try {
     const tenantId = req.tenantId!;
 
-    const [catalog, connections, channels, knowledgeSources, governable, executableBySlug] = await Promise.all([
+    const [catalog, connections, knowledgeSources, governable, executableBySlug] = await Promise.all([
       prisma.integrationCatalog.findMany({
         select: {
           id: true, slug: true, name: true, category: true, description: true,
           logoUrl: true, isPublished: true,
-          _count: { select: { catalogTools: true } },
         },
       }).catch(() => [] as any[]),
       prisma.tenantIntegration.findMany({
         where: { tenantId },
         select: { status: true, config: true, integration: { select: { slug: true } } },
-      }).catch(() => [] as any[]),
-      prisma.channelAccount.findMany({
-        where: { tenantId },
-        select: { channel: true, connectionStatus: true },
       }).catch(() => [] as any[]),
       prisma.knowledgeIntegration.findMany({
         where: { tenantId },
@@ -125,8 +128,13 @@ router.get("/", async (req: Request, res: Response) => {
       connBySlug.set(slug, c);
     }
 
-    const entries = [
+    const entries: WorkspaceEntry[] = [
       gotchaEntry({ toolCount: internalTools().length }),
+      // classifyCatalogIntegration returns null for rows that do not belong on
+      // this screen at all (withdrawn from the catalog, or nothing to govern
+      // and nothing connected). Filtered here rather than decided here - the
+      // rule lives in shared so it cannot drift from what the detail route,
+      // which 404s on the same rows, will do when the reader clicks.
       ...(catalog as any[]).map((row) => {
         const conn = connBySlug.get(row.slug);
         const cfg = (conn?.config && typeof conn.config === "object" ? conn.config : {}) as Record<string, any>;
@@ -158,8 +166,7 @@ router.get("/", async (req: Request, res: Response) => {
             : {}),
         };
         return classifyCatalogIntegration(input);
-      }),
-      ...(channels as any[]).map((c) => classifyChannel({ channel: c.channel, connectionStatus: c.connectionStatus })),
+      }).filter((e): e is WorkspaceEntry => e !== null),
       ...(knowledgeSources as any[]).map((k) => classifyKnowledgeSource({ provider: k.provider, isActive: k.isActive })),
     ];
 
@@ -182,9 +189,16 @@ router.get("/:id", async (req: Request, res: Response) => {
     // GOTCHA: the platform's own tools. No connection, no scopes, no plan gate
     // beyond the tenant being active - it is always available.
     if (id === GOTCHA_ENTRY_ID) {
-      const perms = await prisma.tenantToolPermission
-        .findMany({ where: { tenantId } })
-        .catch(() => [] as any[]);
+      const [perms, channels] = await Promise.all([
+        prisma.tenantToolPermission.findMany({ where: { tenantId } }).catch(() => [] as any[]),
+        // The one place channels belong on this screen. Granting send_message
+        // while nothing can deliver grants the ability to send nothing, and
+        // that is worth saying HERE, beside the switch, rather than as a row in
+        // a sidebar that cannot act on it.
+        prisma.channelAccount
+          .findMany({ where: { tenantId }, select: { channel: true, connectionStatus: true } })
+          .catch(() => [] as any[]),
+      ]);
       const permByName = new Map((perms as any[]).map((p) => [p.toolName, p]));
 
       const rows = internalTools().map((t) => {
@@ -214,6 +228,15 @@ router.get("/:id", async (req: Request, res: Response) => {
           category: "SYSTEM",
           description: "Internal GOTCHA platform tools and actions.",
           connected: true,
+          // null when every channel is healthy: a note that shows up when
+          // nothing is wrong is a note people stop reading.
+          channelDependency: channelDependencyFor({
+            toolNames: rows.map((r) => r.name),
+            channels: (channels as any[]).map((c) => ({
+              channel: c.channel,
+              connectionStatus: c.connectionStatus,
+            })),
+          }),
           counts: summarizeTools(rows.map((r) => r.availability)),
           groups: groupByRisk(rows).map(([riskGroup, tools]) => ({ riskGroup, tools })),
         },
