@@ -242,6 +242,11 @@ export async function executeTool(params: {
       tenantId,
       conversationId,
       tenantToolId,
+      // Denormalised on purpose. The FK is SET NULL, so when a tenant
+      // disconnects the integration this row outlives its tenant_tool - and
+      // without the name it could no longer say what had run. Analytics has
+      // always recorded the name; the audit log did not.
+      toolName: catalogTool.name,
       input,
       output: output as any,
       success,

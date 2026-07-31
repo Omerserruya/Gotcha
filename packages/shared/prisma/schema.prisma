@@ -344,10 +344,10 @@ model ShopifyChatInstallation {
   /// Storefront hosts verified as belonging to THIS shop.
   verifiedDomains Json @default("[]") @map("verified_domains")
 
-  installedAt    DateTime  @default(now()) @map("installed_at")
-  uninstalledAt  DateTime? @map("uninstalled_at")
-  boundAt        DateTime? @map("bound_at")
-  lastVerifiedAt DateTime? @map("last_verified_at")
+  installedAt     DateTime  @default(now()) @map("installed_at")
+  uninstalledAt   DateTime? @map("uninstalled_at")
+  boundAt         DateTime? @map("bound_at")
+  lastVerifiedAt  DateTime? @map("last_verified_at")
   /// Last time the App Embed reported from a live storefront.
   lastHeartbeatAt DateTime? @map("last_heartbeat_at")
 
@@ -1537,7 +1537,12 @@ model TenantIntegration {
   createdAt      DateTime         @default(now()) @map("created_at")
   updatedAt      DateTime         @updatedAt @map("updated_at")
 
-  integration IntegrationCatalog @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  // RESTRICT, not Cascade. Deleting a catalog entry used to delete every
+  // tenant's connection to it - their credentials, their per-tool config, and
+  // (through TenantTool) their execution history. A platform-side catalog edit
+  // must not be able to reach into tenant data. Removing an integration from
+  // the catalog now requires disconnecting its tenants first, deliberately.
+  integration IntegrationCatalog @relation(fields: [integrationId], references: [id], onDelete: Restrict)
   tenantTools TenantTool[]
 
   @@unique([tenantId, integrationId])
@@ -1558,8 +1563,12 @@ model TenantTool {
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
 
+  // tenantIntegration stays Cascade: both sides are tenant-owned, and
+  // disconnecting SHOULD retire the activations.
   tenantIntegration TenantIntegration     @relation(fields: [tenantIntegrationId], references: [id], onDelete: Cascade)
-  catalogTool       CatalogTool           @relation(fields: [catalogToolId], references: [id], onDelete: Cascade)
+  // catalogTool is RESTRICT for the same reason as above: a platform-side
+  // catalog change must not silently delete tenant activations.
+  catalogTool       CatalogTool           @relation(fields: [catalogToolId], references: [id], onDelete: Restrict)
   agentPermissions  AgentToolPermission[]
   executions        ToolExecution[]
 
@@ -1797,7 +1806,17 @@ model ToolExecution {
   id             String   @id @default(cuid())
   tenantId       String   @map("tenant_id")
   conversationId String   @map("conversation_id")
-  tenantToolId   String   @map("tenant_tool_id")
+  // NULLABLE, and the FK below is SetNull rather than Cascade.
+  //
+  // Disconnecting an integration deletes the tenant's TenantTool rows
+  // (integrations.ts). Under Cascade that took this audit log with it - a
+  // merchant clicking "Disconnect" erased every record of what the AI had
+  // done through that integration, and reconnecting did not bring it back.
+  // An audit trail that a normal UI action can delete is not an audit trail.
+  tenantToolId   String?  @map("tenant_tool_id")
+  // Denormalised so the row still says WHAT ran once the link is gone.
+  // Without it a SetNull audit record survives but cannot name its tool.
+  toolName       String   @default("") @map("tool_name")
   input          Json     @default("{}")
   output         Json     @default("{}")
   success        Boolean  @default(true)
@@ -1806,7 +1825,7 @@ model ToolExecution {
   approvedBy     String?  @map("approved_by")
   createdAt      DateTime @default(now()) @map("created_at")
 
-  tenantTool TenantTool @relation(fields: [tenantToolId], references: [id], onDelete: Cascade)
+  tenantTool TenantTool? @relation(fields: [tenantToolId], references: [id], onDelete: SetNull)
 
   @@index([tenantId])
   @@index([conversationId])
