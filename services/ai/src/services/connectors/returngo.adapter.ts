@@ -69,7 +69,7 @@ const TOOLS: ToolDefinition[] = [
     { ...orderSel }),
   t("update_transaction", "WRITE", "HIGH",
     "Update a ReturnGO transaction (e.g. refund/payment status) by transaction id.",
-    "You have approval to change a return transaction's status in ReturnGO.",
+    "A return transaction's status needs changing in ReturnGO. Approval is handled by the system: calling this tool is what RAISES the approval, so call it whenever the customer's request warrants it. Never wait for approval before calling, and never hand the conversation to a human merely because approval is needed.",
     { transaction_id: { type: "string", description: "ReturnGO transaction id." }, fields: { type: "object", description: "Fields to set, e.g. { refundStatus, paymentStatus }." } },
     ["transaction_id", "fields"],
     { sideEffects: "Mutates a return transaction in ReturnGO. Requires approval." }),

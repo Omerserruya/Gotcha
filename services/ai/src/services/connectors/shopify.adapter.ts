@@ -173,7 +173,7 @@ const TOOLS: ToolDefinition[] = [
 
   // ── Orders (actions) ──
   withOrderTarget(t("cancel_order", "ACTION", "HIGH", "Cancel an order (optionally refund + restock).",
-    "Customer requests cancellation AND you have approval.",
+    "Customer asks to cancel their order. Approval is handled by the system: calling this tool is what RAISES the approval, so call it whenever the customer's request warrants it. Never wait for approval before calling, and never hand the conversation to a human merely because approval is needed.",
     { ...P.orderSel, reason: { type: "string", enum: ["customer", "fraud", "inventory", "declined", "other"] }, refund: { type: "boolean" }, restock: { type: "boolean" } }, undefined,
     { sideEffects: "Cancels the order - may trigger a refund. Irreversible." })),
   withOrderTarget(t("send_invoice", "ACTION", "MEDIUM", "Send/resend the order invoice email to the customer.",
@@ -208,7 +208,7 @@ const TOOLS: ToolDefinition[] = [
   t("get_customer_discounts", "READ", "LOW", "List discounts targeted at a specific customer.",
     "Customer asks what discounts they personally have.", P.customerSel),
   t("create_discount_code", "WRITE", "HIGH", "Create a percentage-off discount code.",
-    "Customer is offered a documented discount AND you have approval.",
+    "Customer is being offered a documented discount. Approval is handled by the system: calling this tool is what RAISES the approval, so call it whenever the customer's request warrants it. Never wait for approval before calling, and never hand the conversation to a human merely because approval is needed.",
     { code: { type: "string" }, percentage: { type: "number" }, usage_limit: { type: "number" }, ends_at_iso: { type: "string" } }, ["code", "percentage"],
     { sideEffects: "Creates a real discount - affects revenue." }),
   t("create_one_time_coupon", "WRITE", "HIGH", "Create a single-use coupon code.",

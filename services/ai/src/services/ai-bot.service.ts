@@ -1891,14 +1891,13 @@ async function generateAIBotReplyInner(
     // Slugs whose adapter tools accept a `table`/`collection` arg and benefit
     // from a tenant-curated table list with per-table notes appended to the
     // tool description (so the AI knows what each table is and when to use it).
-    const DB_SLUGS = new Set(["postgres", "mongodb", "aws_rds"]);
-    const ADAPTER_TO_CATALOG: Record<string, string> = {
-      postgres: "postgresql",
-      mongodb: "mongodb",
-      aws_rds: "aws_rds",
-    };
+    const DB_SLUGS = new Set(["postgresql", "mongodb", "aws_rds"]);
     for (const adapter of listAdapters()) {
-      const catalogSlug = ADAPTER_TO_CATALOG[adapter.slug] || adapter.slug;
+      // Adapter slug IS the catalog slug. A translation map used to live here
+      // for postgres/postgresql, which papered over the mismatch on the tool
+      // SURFACE while executeAdapterTool - which has no such map - still failed
+      // every call with not_connected. The adapter was renamed instead.
+      const catalogSlug = adapter.slug;
       if (!connectedSlugs.has(catalogSlug)) continue;
       const cfg = configBySlug.get(catalogSlug) || {};
       const reads: string[] = Array.isArray(cfg.allowReads) ? cfg.allowReads : [];
@@ -1931,7 +1930,6 @@ async function generateAIBotReplyInner(
         void refreshCapabilityState({
           tenantId: opts.tenantId,
           slug: catalogSlug,
-          adapterSlug: adapter.slug,
         }).catch((err: any) =>
           console.warn(`[ai-bot] capability refresh failed for ${catalogSlug}:`, err?.message));
       }
@@ -2084,6 +2082,51 @@ async function generateAIBotReplyInner(
     }
   } catch (err: any) {
     console.warn("[ai-bot] policy pre-filter failed (keeping full surface):", err?.message);
+  }
+
+  // ── Hard cap: OpenAI rejects a tools array longer than 128 ──
+  //
+  // Not a soft limit. The API answers 400 "Invalid 'tools': array too long"
+  // and the ENTIRE request fails - no reply, no tool calls, nothing. The turn
+  // then falls back to a tool-less generation, and a model with no tools can
+  // only apologise or hand the conversation to a human.
+  //
+  // That is exactly what a merchant saw on 2026-07-31: 62 enabled Shopify
+  // tools plus the built-ins came to 131, every turn 400'd, and a customer
+  // asking to cancel an order was told "אני מעבירה את הבקשה לצוות אנושי" -
+  // I'm passing this to a human team - three times in a row. The approval
+  // flow, the permissions and the tool itself were all fine; the request never
+  // reached the model.
+  //
+  // Built-ins are kept whole: escalation, identity linking and scheduling are
+  // the agent's own faculties, and dropping `escalate_to_human` to make room
+  // for a catalog read would be the worst possible trade. Integration tools
+  // are truncated from the end of the stable alphabetical order, so the choice
+  // is deterministic rather than dependent on which turn it is.
+  //
+  // Logged at ERROR because a silently smaller surface is a capability the
+  // merchant thinks they have and does not: the fix is for them to disable
+  // tools they do not use, and they cannot do that if nobody tells them.
+  const OPENAI_MAX_TOOLS = 128;
+  if ((tools as any[]).length > OPENAI_MAX_TOOLS) {
+    const nameOf = (x: any): string => x?.function?.name ?? "";
+    const isIntegration = (n: string) => n.includes(".") || n.startsWith("integration.");
+    const builtIns = (tools as any[]).filter((x) => !isIntegration(nameOf(x)));
+    const integrations = (tools as any[]).filter((x) => isIntegration(nameOf(x)));
+    const room = Math.max(0, OPENAI_MAX_TOOLS - builtIns.length);
+    const dropped = integrations.slice(room);
+    if (dropped.length) {
+      console.error(
+        `[ai-bot] tool surface ${(tools as any[]).length} exceeds OpenAI's ${OPENAI_MAX_TOOLS}-tool limit ` +
+          `for tenant=${opts.tenantId} agent=${config.id}. Dropping ${dropped.length} integration tool(s) ` +
+          `so the request does not fail outright: ${dropped.map(nameOf).join(", ")}. ` +
+          `Disable unused tools for this agent to choose what is lost.`,
+      );
+    }
+    tools = [...builtIns, ...integrations.slice(0, room)].sort((a: any, b: any) => {
+      const an = nameOf(a), bn = nameOf(b);
+      return an < bn ? -1 : an > bn ? 1 : 0;
+    });
   }
 
   let toolFunctionNames: string[] = (tools as any[])
@@ -4008,7 +4051,6 @@ async function generateAIBotReplyInner(
       console.error(`[ai-bot] reply guard failed conv=${opts.conversationId}:`, err?.message);
     }
   }
-
 
   // Output validator - last defence against prompt-leakage and fabricated
   // execution claims ("I refunded your card" with no refund tool call).
