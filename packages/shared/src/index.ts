@@ -751,6 +751,9 @@ export { requirePermission, requirePermissionOrRole } from "./middleware/permiss
 export { resolveTenant, assertTenantId } from "./middleware/tenant";
 export { requireActiveTenant, requireOnboardingOrActiveTenant, requirePaymentSetupAccess } from "./middleware/tenant-status";
 export { validate } from "./middleware/validate";
+// Admin-set tenant settings that must survive a restart. Postgres is the
+// source of truth; Redis stays in front as the cache the hot paths read.
+export { readDurableSetting, writeDurableSetting, settingCacheKey } from "./lib/durable-settings";
 export { requireEntitlement, requireCapacity, handleEntitlementError } from "./middleware/entitlement";
 // The service-level entitlement check, for code paths with no Express request:
 // background subscribers, workers and queue consumers. `requireEntitlement` is

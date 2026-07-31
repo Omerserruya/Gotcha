@@ -47,6 +47,12 @@ const H = vi.hoisted(() => {
 const { table, summarize } = H;
 
 vi.mock("@chatcenter/shared", () => ({
+  // Durable tenant settings (business hours, auto-greeting, SLA). Exhaustive
+  // mocks of this barrel must supply them or the read path throws instead of
+  // returning "not configured". Default: nothing configured.
+  readDurableSetting: async () => null,
+  writeDurableSetting: async () => undefined,
+  settingCacheKey: (t: string, k: string) => `tenant:${t}:${k}`,
   prisma: {
     callAnalysis: {
       findUnique: async ({ where }: any) => H.table.get(where.conversationId) ?? null,

@@ -1,4 +1,4 @@
-import { getInternalServiceKey } from "@chatcenter/shared";
+import { getInternalServiceKey, readDurableSetting } from "@chatcenter/shared";
 import { prisma, publishEvent, outgoingMessageQueue } from "@chatcenter/shared";
 import { getIO } from "../lib/socket";
 import * as messageService from "./message.service";
@@ -466,7 +466,7 @@ async function sendAutoGreeting(
   try {
     const { getRedis } = await import("@chatcenter/shared");
     const redis = getRedis();
-    const template = await redis.get(`tenant:${tenantId}:autoGreeting`);
+    const template = await readDurableSetting(tenantId, "autoGreeting");
     if (!template) return;
 
     const agent = await prisma.user.findUnique({ where: { id: agentId }, select: { name: true } });

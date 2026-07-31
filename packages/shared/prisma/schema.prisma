@@ -185,9 +185,53 @@ model Tenant {
   retentionPolicies       DataRetentionPolicy[]
   dataSubjectRequests     DataSubjectRequest[]
   approvalRecipients      ApprovalRecipient[]
+  durableSettings         TenantSetting[]
 
   @@index([status])
   @@map("tenants")
+}
+
+/// Admin-configured runtime settings that must SURVIVE a restart.
+///
+/// Business hours, the auto-greeting template and SLA targets were stored only
+/// in Redis, under keys with no TTL - a cache holding the sole copy of
+/// configuration a customer deliberately set.
+///
+/// Production Redis does have a volume and appendonly enabled (added for
+/// BullMQ, which covered these keys by accident), so this was not routinely
+/// losing data there. The dev compose file had NO volume at all, so every
+/// `docker compose down` erased it. The durable problem is the architecture
+/// rather than the volume: a FLUSHALL, an eviction, a volume migration or a
+/// Redis version change all take configuration with them, and none of those
+/// are unusual operations to perform on a cache.
+///
+/// The silence is what makes it costly. Business hours read as "open" when
+/// missing, on purpose: a widget that says "we are closed" because Redis
+/// blinked is worse than one that answers out of hours. That is right for a
+/// transient blip and wrong for a permanent loss - the tenant becomes 24/7,
+/// the AI answers at 3am as though someone were there to escalate to, and
+/// nothing anywhere reports an error, because "open" is also the healthy
+/// answer.
+///
+/// Postgres is now the source of truth; Redis stays in front as the cache the
+/// hot paths already read. The Redis keys are unchanged, so nothing that reads
+/// them had to move at once.
+model TenantSetting {
+  id        String   @id @default(cuid())
+  tenantId  String   @map("tenant_id")
+  /// The Redis key SUFFIX this mirrors: "businessHours", "sla",
+  /// "autoGreeting", or "department:{id}:sla". Kept identical to the cache key
+  /// so the two can never drift into describing different things.
+  key       String
+  value     Json
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, key])
+  @@index([tenantId])
+  @@map("tenant_settings")
 }
 
 // ─── GDPR: Consent Records (Art. 6/7) ──────────────────────────

@@ -18,6 +18,17 @@ services:
 
   redis:
     image: redis:7-alpine
+    # Append-only persistence + a volume, matching docker-compose.prod.yml.
+    #
+    # Redis is a CACHE again now that TenantSetting is the source of truth, but
+    # it had been holding the only copy of every tenant's business hours,
+    # auto-greeting and SLA targets - and dev declared no volume for it, while
+    # pgdata, qdrant_data and uploads all had one. Every `docker compose down`
+    # erased them here, silently: a missing business-hours config reads as
+    # "open" by design, so the tenant just became 24/7 with no error anywhere.
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -778,6 +789,7 @@ services:
       - /app/.next
 
 volumes:
+  redis_data:
   pgdata:
   qdrant_data:
   uploads:

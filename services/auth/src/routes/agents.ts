@@ -17,8 +17,7 @@ import {
   AuditAction,
   getLastLoginBySubject,
   normalizeE164,
-  userMayApprove,
-} from "@chatcenter/shared";
+  userMayApprove, readDurableSetting, writeDurableSetting } from "@chatcenter/shared";
 import * as invitations from "../services/invitation.service";
 
 const router = Router();
@@ -271,7 +270,7 @@ router.delete("/:id", requirePermissionOrRole("settings:members:manage", "ADMIN"
 router.get("/settings/auto-greeting", requireRole("ADMIN"), async (req: Request, res: Response) => {
   try {
     const redis = getRedis();
-    const template = await redis.get(`tenant:${req.tenantId!}:autoGreeting`) || "";
+    const template = (await readDurableSetting(req.tenantId!, "autoGreeting")) || "";
     res.json({ template });
   } catch (err) {
     console.error("Get auto-greeting error:", err);
@@ -284,9 +283,9 @@ router.put("/settings/auto-greeting", requireRole("ADMIN"), async (req: Request,
     const { template } = req.body;
     const redis = getRedis();
     if (template) {
-      await redis.set(`tenant:${req.tenantId!}:autoGreeting`, template);
+      await writeDurableSetting(req.tenantId!, "autoGreeting", template, req.user?.userId);
     } else {
-      await redis.del(`tenant:${req.tenantId!}:autoGreeting`);
+      await writeDurableSetting(req.tenantId!, "autoGreeting", null, req.user?.userId);
     }
     res.json({ template: template || "" });
   } catch (err) {
@@ -561,8 +560,7 @@ const businessHoursSchema = z.object({
 
 router.get("/settings/business-hours", requireRole("ADMIN"), async (req: Request, res: Response) => {
   try {
-    const redis = getRedis();
-    const raw = await redis.get(`tenant:${req.tenantId!}:businessHours`);
+    const raw = await readDurableSetting(req.tenantId!, "businessHours");
     if (!raw) {
       res.json({
         enabled: false,
@@ -591,8 +589,7 @@ router.get("/settings/business-hours", requireRole("ADMIN"), async (req: Request
 
 router.put("/settings/business-hours", requireRole("ADMIN"), validate(businessHoursSchema), async (req: Request, res: Response) => {
   try {
-    const redis = getRedis();
-    await redis.set(`tenant:${req.tenantId!}:businessHours`, JSON.stringify(req.body));
+    await writeDurableSetting(req.tenantId!, "businessHours", JSON.stringify(req.body), req.user?.userId);
     res.json(req.body);
   } catch (err) {
     console.error("Update business hours error:", err);
@@ -611,7 +608,7 @@ const slaSettingsSchema = z.object({
 router.get("/settings/sla", requireRole("ADMIN"), async (req: Request, res: Response) => {
   try {
     const redis = getRedis();
-    const raw = await redis.get(`tenant:${req.tenantId!}:sla`);
+    const raw = await readDurableSetting(req.tenantId!, "sla");
     if (!raw) {
       res.json({ enabled: false, slaMinutes: 30, warningThreshold: 70 });
       return;
@@ -626,7 +623,7 @@ router.get("/settings/sla", requireRole("ADMIN"), async (req: Request, res: Resp
 router.put("/settings/sla", requireRole("ADMIN"), validate(slaSettingsSchema), async (req: Request, res: Response) => {
   try {
     const redis = getRedis();
-    await redis.set(`tenant:${req.tenantId!}:sla`, JSON.stringify(req.body));
+    await writeDurableSetting(req.tenantId!, "sla", JSON.stringify(req.body), req.user?.userId);
     res.json(req.body);
   } catch (err) {
     console.error("Update SLA settings error:", err);
@@ -638,7 +635,7 @@ router.put("/settings/sla", requireRole("ADMIN"), validate(slaSettingsSchema), a
 router.get("/settings/sla/department/:departmentId", requireRole("ADMIN"), async (req: Request, res: Response) => {
   try {
     const redis = getRedis();
-    const raw = await redis.get(`department:${req.params.departmentId}:sla`);
+    const raw = await readDurableSetting(req.tenantId!, `department:${req.params.departmentId}:sla`);
     if (!raw) {
       res.json({ enabled: false, slaMinutes: null, warningThreshold: null });
       return;
@@ -659,7 +656,7 @@ router.put("/settings/sla/department/:departmentId", requireRole("ADMIN"), valid
     if (!dept) { res.status(404).json({ error: "Department not found" }); return; }
 
     const redis = getRedis();
-    await redis.set(`department:${req.params.departmentId}:sla`, JSON.stringify(req.body));
+    await writeDurableSetting(req.tenantId!, `department:${req.params.departmentId}:sla`, JSON.stringify(req.body), req.user?.userId);
     res.json(req.body);
   } catch (err) {
     console.error("Update department SLA error:", err);

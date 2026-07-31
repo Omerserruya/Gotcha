@@ -28,8 +28,7 @@ import {
   isFeatureEnabledForTenant,
   getShopifyChatAppConfig,
   buildThemeEditorDeepLink,
-  type ProductSnapshot,
-} from "@chatcenter/shared";
+  type ProductSnapshot, readDurableSetting } from "@chatcenter/shared";
 import {
   listChannels,
   loadChannel,
@@ -57,7 +56,7 @@ const router = Router();
  */
 async function tenantAvailability(tenantId: string): Promise<"online" | "offline"> {
   try {
-    const cfg = parseBusinessHours(await getRedis().get(BUSINESS_HOURS_KEY(tenantId)));
+    const cfg = parseBusinessHours(await readDurableSetting(tenantId, "businessHours"));
     return evaluateBusinessHours(cfg).open ? "online" : "offline";
   } catch {
     return "online";

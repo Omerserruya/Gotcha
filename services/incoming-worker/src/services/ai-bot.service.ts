@@ -1,4 +1,4 @@
-import { getInternalServiceKey } from "@chatcenter/shared";
+import { getInternalServiceKey, readDurableSetting } from "@chatcenter/shared";
 /**
  * Autonomous AI bot - worker side.
  *
@@ -693,7 +693,7 @@ async function getBusinessHoursState(
   tenantId: string,
 ): Promise<{ cfg: BusinessHoursConfig | null; state: BusinessOpenState }> {
   try {
-    const raw = await getRedis().get(BUSINESS_HOURS_KEY(tenantId));
+    const raw = await readDurableSetting(tenantId, "businessHours");
     const cfg = parseBusinessHours(raw);
     return { cfg, state: evaluateBusinessHours(cfg) };
   } catch (err: any) {

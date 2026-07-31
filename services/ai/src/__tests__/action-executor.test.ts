@@ -1,6 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("@chatcenter/shared", () => ({
+  // Durable tenant settings (business hours, auto-greeting, SLA). Exhaustive
+  // mocks of this barrel must supply them or the read path throws instead of
+  // returning "not configured". Default: nothing configured.
+  readDurableSetting: async () => null,
+  writeDurableSetting: async () => undefined,
+  settingCacheKey: (t: string, k: string) => `tenant:${t}:${k}`,
   // Version pins now live in shared modules, so exhaustive mocks of this
   // barrel must supply them. Returning the real defaults keeps any URL the
   // code builds meaningful instead of "undefined/...".

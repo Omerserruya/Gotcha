@@ -29,8 +29,7 @@ import {
   parseBusinessHours,
   evaluateBusinessHours,
   type ShopifyLiveChatConfig,
-  type Availability,
-} from "@chatcenter/shared";
+  type Availability, readDurableSetting } from "@chatcenter/shared";
 // Read-only question asked of the CORE integration: "is a store connected?".
 // The chat service never writes to it and never uses its token.
 import { loadConnection } from "./connectors/integration-framework";
@@ -195,7 +194,7 @@ export type BootstrapResolution =
  */
 async function resolveTenantAvailability(tenantId: string): Promise<Availability> {
   try {
-    const cfg = parseBusinessHours(await getRedis().get(BUSINESS_HOURS_KEY(tenantId)));
+    const cfg = parseBusinessHours(await readDurableSetting(tenantId, "businessHours"));
     return evaluateBusinessHours(cfg).open ? "online" : "offline";
   } catch (err: any) {
     // Config store unreachable → answer as open, matching what the AI

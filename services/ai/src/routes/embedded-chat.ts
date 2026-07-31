@@ -9,8 +9,7 @@ import {
   getRedis,
   BUSINESS_HOURS_KEY,
   parseBusinessHours,
-  evaluateBusinessHours,
-} from "@chatcenter/shared";
+  evaluateBusinessHours, readDurableSetting } from "@chatcenter/shared";
 import crypto from "crypto";
 import { sanitizeVisitorName, sanitizeUntrusted } from "../services/prompt-sanitizer.service";
 
@@ -147,7 +146,7 @@ router.post("/bootstrap", initLimiter, async (req: Request, res: Response) => {
     // the storefront widget read. One business, one schedule.
     let offline = false;
     try {
-      const hours = parseBusinessHours(await getRedis().get(BUSINESS_HOURS_KEY(account.tenantId)));
+      const hours = parseBusinessHours(await readDurableSetting(account.tenantId, "businessHours"));
       offline = !evaluateBusinessHours(hours).open;
     } catch {
       // Config store unreachable → answer as open. A widget that says
