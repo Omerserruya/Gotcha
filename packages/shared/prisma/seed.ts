@@ -1,5 +1,23 @@
 import { PrismaClient } from "@prisma/client";
+import { encryptCredentials } from "../src/lib/encryption";
 import { seedIntelligencePacks } from "./seed-intelligence-packs";
+
+// Every credential the seed writes goes through encryptCredentials, exactly as
+// the runtime writers do.
+//
+// It did not, and that was not merely untidy. Several of these read a REAL
+// token out of the environment (WHATSAPP_ACCESS_TOKEN, MESSENGER_ACCESS_TOKEN,
+// ...), so seeding a machine that had them set wrote live provider credentials
+// into the database in plaintext. Nothing complained, because every reader
+// carries a `typeof creds === "string" ? decrypt(creds) : creds` shim for
+// exactly this shape - the compatibility that kept the seed working is what
+// kept the plaintext invisible.
+//
+// Encrypting here also fixes a second, quieter bug: a seeded row was a JSON
+// object where the runtime writes a base64 string, so seeded integrations were
+// in a format `decryptCredentials` cannot read at all.
+const creds = (data: Record<string, unknown>) => encryptCredentials(data) as unknown as any;
+
 
 const prisma = new PrismaClient();
 
@@ -59,10 +77,10 @@ async function main() {
       displayName: "Demo WhatsApp",
       connectionStatus: "CONNECTED",
       connectedAt: new Date(),
-      credentials: {
+      credentials: creds({
         accessToken: process.env.WHATSAPP_ACCESS_TOKEN || "demo-token",
         webhookSecret: process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || "demo-secret",
-      },
+      }),
     },
   });
 
@@ -76,7 +94,7 @@ async function main() {
       displayName: "Demo Messenger",
       connectionStatus: "CONNECTED",
       connectedAt: new Date(),
-      credentials: { accessToken: process.env.MESSENGER_ACCESS_TOKEN || "demo-messenger-token" },
+      credentials: creds({ accessToken: process.env.MESSENGER_ACCESS_TOKEN || "demo-messenger-token" }),
     },
   });
 
@@ -90,7 +108,7 @@ async function main() {
       displayName: "Demo Instagram",
       connectionStatus: "CONNECTED",
       connectedAt: new Date(),
-      credentials: { accessToken: "demo-instagram-token" },
+      credentials: creds({ accessToken: "demo-instagram-token" }),
     },
   });
 
@@ -104,7 +122,7 @@ async function main() {
       displayName: "Demo Gmail",
       connectionStatus: "CONNECTED",
       connectedAt: new Date(),
-      credentials: { accessToken: "demo-gmail-token" },
+      credentials: creds({ accessToken: "demo-gmail-token" }),
     },
   });
 
@@ -118,7 +136,7 @@ async function main() {
       displayName: "Demo Outlook",
       connectionStatus: "CONNECTED",
       connectedAt: new Date(),
-      credentials: { accessToken: "demo-outlook-token" },
+      credentials: creds({ accessToken: "demo-outlook-token" }),
     },
   });
 
@@ -132,7 +150,7 @@ async function main() {
       displayName: "Demo Slack",
       connectionStatus: "CONNECTED",
       connectedAt: new Date(),
-      credentials: { accessToken: "demo-slack-token" },
+      credentials: creds({ accessToken: "demo-slack-token" }),
     },
   });
 
@@ -324,7 +342,7 @@ async function main() {
       tenantId: tenant.id,
       integrationId: shopifyCatalog.id,
       status: "CONNECTED",
-      credentials: { apiKey: "demo-shopify-key", apiUrl: "https://demo-store.myshopify.com" },
+      credentials: creds({ apiKey: "demo-shopify-key", apiUrl: "https://demo-store.myshopify.com" }),
       config: {},
       connectedAt: new Date(),
       lastTestedAt: new Date(),
@@ -340,7 +358,7 @@ async function main() {
       tenantId: tenant.id,
       integrationId: hubspotCatalog.id,
       status: "CONNECTED",
-      credentials: { apiKey: "demo-hubspot-key" },
+      credentials: creds({ apiKey: "demo-hubspot-key" }),
       config: {},
       connectedAt: new Date(),
       lastTestedAt: new Date(),
