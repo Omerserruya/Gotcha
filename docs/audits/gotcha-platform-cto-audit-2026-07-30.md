@@ -2293,6 +2293,18 @@ audit's were:
 The pattern: a grep or a comparison that returns a plausible number is not
 evidence. Every finding here that survived was confirmed by running something.
 
+One more, about the baseline itself. `services/ai` reports 13 failing files
+consistently, plus a FOURTEENTH that changes identity between runs -
+`crm-capability` on one run, `shopify-chat-cors` on the next. Each passes in
+isolation (25/25 and 20/20 respectively). These files share global state -
+express-rate-limit counters and database fixtures - so the set of 13 is the
+real baseline and the extra one is order-dependent noise.
+
+This matters for anyone reading a test count as a gate: "14 failed" and "13
+failed" on consecutive runs of identical code is not a regression appearing and
+disappearing, and treating it as one will send someone hunting a bug that is
+not there. Stabilising those files is unfinished work, listed below.
+
 ## IV-5. Still open
 
 **P0-1 remains open and untouched**, as instructed. The two `ai-assist` execute
@@ -2309,7 +2321,8 @@ Requiring a decision that is not mine:
    loss is silent.
 
 Not attempted: Phase 11 (observability). Test infrastructure was addressed
-through the isolation work; observability was not.
+through the isolation work; observability was not, and neither was stabilising
+the order-dependent `services/ai` files described in IV-4.
 
 Ratchets left in place deliberately, each failing only if it grows:
 `enforcement-contract` at 17 unenforced capabilities, `agent-field-reachability`
