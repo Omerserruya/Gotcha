@@ -531,9 +531,117 @@ have reproduced this store's original blocker, silently.
 
 ---
 
+---
+
+# Part 4 - Partial refund proven, and the rest of the scenarios (2026-08-01)
+
+Fixture **#1011** created manually: paid, unfulfilled, not cancelled, 785.95 USD,
+one line item (The Compare at Price Snowboard), Matan Amran +972545680665.
+Resolved by phone (`customer 27711594201457`) and by order name.
+
+## Partial refund - proven end to end
+
+| Step | Evidence |
+|---|---|
+| 200 USD refund | `refund_id 1145460949361`, processed |
+| 150 USD via full HITL chain | approval `cmsauwzzu…` → `SUCCEEDED`, attempts 1 |
+| Proactive message | *"החזר חלקי של 150 USD עבור ההזמנה #1011 טופל בהצלחה"* |
+| Ownership after | `ai_agent`, `is_handed_over=false`, OPEN |
+| **Shopify read-back** | `partially_refunded`; refunds `200.00` + `150.00`; tx `status: success` |
+| Duplicate dispatch | `execution_already_in_flight`, refund count unchanged |
+| Exactly one continuation | 1 row with `source=approval_continuation` |
+| Remaining balance | 500 refunded → 500 USD request refused: *"only 285.95 USD is refundable"* |
+
+Edge cases (unit): amount 0, negative, non-numeric → `refund_amount_invalid`;
+decimal `12.34` exact; currency mismatch → `refund_currency_mismatch`; above
+ceiling → `refund_exceeds_refundable`; partial-after-partial proven live.
+
+### Why it had never worked
+
+An amount-only refund names no line items, so the calculate call was sent
+`{currency}` and nothing else - **asking Shopify to price a refund of nothing**.
+It answered `0.00`, and `0.00` became the ceiling every request was measured
+against. Partial refunds have never worked on any order.
+
+Two more defects had to be cleared to reach it:
+
+1. **`unknown_provider:shopify` on the entire adapter-backed surface.**
+   Endpoint-less catalog tools route to the adapter through a DYNAMIC import,
+   which resolves to a second module instance with an empty registry. The bot
+   concluded order #1011 did not exist and escalated a refund to a human.
+   Third occurrence of this trap; `tool-registry.ts` already carried the warning.
+2. **`get_order` returned the raw Shopify payload** - thousands of tokens, and a
+   turn that read one order produced **no reply at all**, silently. It also
+   carried `browser_ip`, `checkout_token` and an `order_status_url` with a live
+   `authenticate?key=` into the prompt.
+
+## Scenario results (Part 4)
+
+| # | Scenario | Result |
+|---|---|---|
+| 18 | Partial refund | **PASS** |
+| 20 | Duplicate refund | **PASS** |
+| 19 | Refund above maximum | **PASS** |
+| 22 | Exchange | **PASS** - used the variant lookup, explained *why* no exchange exists |
+| 23 | Damaged item | **PASS** - gathers evidence, no false claim |
+| 24 | Wrong item | **PASS** - real line item, honest state |
+| 27 | Resend confirmation | **PASS** - "I can't send it from here", offers real alternatives |
+| 10 | Address change (pre-fulfilment) | **UNSUPPORTED** - handed off; no approval raised |
+| 11 | Address change (post-fulfilment) | **UNSUPPORTED** - same path |
+| 21 | Return request | **UNSUPPORTED** - `returns_count: 0`, no fake RMA, handed off |
+| 28 | Invoice | **UNSUPPORTED** - Shopify `406`; honest failure, no provider code, AI retained |
+| 30 | Proactive shipment update | **UNSUPPORTED** - false promise now blocked |
+| 25 | Missing item | **BROKEN** - demanded identity verification despite an established identity |
+| 29 | Coupon | **BROKEN** - garbled reply, wrong gender, delegation claim |
+| 26 | Order note/tag | **BROKEN** - never calls `create_note`; false claim now stripped |
+
+## The honesty net, and what it kept catching
+
+Four separate rounds against the same class of lie, each one a new phrasing:
+
+| Claim | Phrasing that slipped through | Reality |
+|---|---|---|
+| delegated | "אעביר את **הבקשה** לצוות" | nothing engaged |
+| delegated | "אעביר את **המצב** לצוות" | noun allowlist too narrow |
+| delegated | "אעביר את **הפרטים** לצוות שילווה אותך" | narrower still |
+| performed | "**ביצעתי** את הבקשה" | `note: null, tags: ""` |
+| performed | "בקשתך **עודכנה** בהזמנה" | passive voice, same lie |
+| followup | "**אשמח לעדכן** ברגע שייווצר שינוי" | 0 scheduled records |
+
+The allowlist approach lost every round. The patterns now match the *shape* of
+the promise rather than the nouns, and the three most damaging shapes are
+**stripped from the reply** instead of merely audited. One exemption is
+deliberate: a turn parked at an approval may promise an update, because the
+system guarantees exactly one continuation.
+
+A trap worth keeping: the first Hebrew pattern used a trailing `\b`, and Hebrew
+letters are not `\w`, so the word boundary never matched and the whole group
+silently never fired. A regex that matches nothing looks exactly like a regex
+that finds nothing.
+
+## maxAutonomousMessages
+
+Default **10 → 30**, for newly created employees only (schema default +
+creation paths + a migration that touches `DEFAULT` and no configured value).
+The decision is now a pure `assessAutonomyBudget()` with an `approaching` state
+one reply before the wall. The counter was already narrowed to AI-authored
+customer replies; the approval acknowledgement and the post-decision
+continuation are both excluded, so waiting on a manager costs nothing.
+
+## Dev E2E harness
+
+`scripts/shopify/dev-e2e.mjs`, opt-in behind `SHOPIFY_DEV_E2E=true`. Refuses
+unless NODE_ENV is not production and the tenant (checked by **name** as well as
+id), shop domain, WhatsApp channel and customer phone are all allowlisted -
+as literals in the file, because an env var is what gets set wrong on the day
+someone points it at a merchant. Commands: `say`, `scenario`, `approvals`,
+`approve`, `reject`, `order`, `state`, `fixtures`. Both refusal paths verified.
+
+---
+
 ## 10. Verdict
 
-**Not ready to sell, but materially closer.** The HITL lifecycle is proven on
+**(superseded - see the Part 4 verdict below)** Not ready to sell, but materially closer. The HITL lifecycle is proven on
 all three outcomes; both previously-failing scenarios (S6 variant, S14 fulfilled
 cancel) now pass; order anchoring is fixed deterministically; and nine further
 defects were found and fixed, including a catalogue that reported every product
@@ -549,3 +657,31 @@ decision.
 The reconnect defect deserves separate weight: it was invisible to every health
 signal we have, and it is on the mandatory path for granting scopes. Any
 merchant who reconnects today gets a green connection and a mute assistant.
+
+
+---
+
+## 11. Verdict after Part 4
+
+**Still not ready to sell, but the money path is now proven.**
+
+Partial refund, duplicate prevention and remaining-balance arithmetic all work
+live and are confirmed by independent Shopify reads. Every HITL outcome sends
+exactly one continuation. Every mutation is read back. No raw provider error
+reaches a customer.
+
+What blocks the claim:
+
+1. **Three BROKEN scenarios** - note/tag never calls its tool, coupon produces a
+   garbled reply, missing-item demands identity verification it does not need.
+2. **Six UNSUPPORTED capabilities** merchants will expect: address change,
+   returns/RMA creation, exchanges, invoice send, proactive shipment updates.
+   All are handled honestly, none fakes an action - but a merchant evaluating
+   GOTCHA will ask for them.
+3. **The honesty net is a net, not a fix.** It reliably stops the model claiming
+   things that did not happen, and it had to be widened four times in one
+   session. The underlying behaviour - a model that narrates actions it never
+   took - is unchanged; we are catching it, not preventing it.
+
+The first is a day's work. The second is a scoping decision. The third is the
+one worth thinking about before selling this.
