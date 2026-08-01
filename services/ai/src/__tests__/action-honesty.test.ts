@@ -183,3 +183,23 @@ describe("performed claims", () => {
     expect(out).not.toMatch(/ביצעתי/);
   });
 });
+
+describe("passive-voice completion claims", () => {
+  // Told that "ביצעתי" was stripped, the model switched to "בקשתך עודכנה
+  // בהזמנה" - the same false claim without the first person. Shopify still
+  // showed note: null.
+  it("flags the passive form", () => {
+    const v = validateActionHonesty("אוקיי, בקשתך שיחזרו אליך לפני המשלוח עודכנה בהזמנה.", []);
+    expect(v.ok).toBe(false);
+    expect(v.unsupported.map((c) => c.kind)).toContain("performed");
+  });
+
+  it("flags the English passive", () => {
+    expect(validateActionHonesty("Your request was added to the order.", []).ok).toBe(false);
+  });
+
+  it("still allows it when a write really executed", () => {
+    const wrote = [{ tool: "shopify.create_note", decision: "executed" }];
+    expect(validateActionHonesty("בקשתך עודכנה בהזמנה.", wrote).ok).toBe(true);
+  });
+});

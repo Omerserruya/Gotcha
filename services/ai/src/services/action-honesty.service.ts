@@ -53,7 +53,10 @@ const CLAIM_PATTERNS: Array<{ kind: UnsupportedClaimKind; re: RegExp }> = [
     // No `\b` on the Hebrew alternation: Hebrew letters are not \w, so a word
     // boundary after them never matches and the whole group silently never
     // fired. The English side keeps its boundaries.
-    re: /((ביצעתי|ביצענו|עשיתי|עשינו|רשמתי|רשמנו|הוספתי|הוספנו|עדכנתי|עדכנו|סימנתי|שמרתי|הזנתי|צירפתי|הגדרתי)|\bi(['’]ve| have)?\s*(added|noted|recorded|updated|saved|tagged|set|applied|logged)\b|\bhas been (added|noted|recorded|updated|saved|tagged|applied)\b)/i,
+    // Active AND passive. Told that "ביצעתי" was being stripped, the model
+    // simply switched to "בקשתך עודכנה בהזמנה" - same false claim, no first
+    // person. A customer cannot tell the difference and should not have to.
+    re: /((ביצעתי|ביצענו|עשיתי|עשינו|רשמתי|רשמנו|הוספתי|הוספנו|עדכנתי|עדכנו|סימנתי|שמרתי|הזנתי|צירפתי|הגדרתי)|(עודכן|עודכנה|נרשם|נרשמה|נוסף|נוספה|נשמר|נשמרה|הוזן|הוזנה|צורף|צורפה|סומן|סומנה)|\bi(['’]ve| have)?\s*(added|noted|recorded|updated|saved|tagged|set|applied|logged)\b|\b(has|have|was|were)( been)? (added|noted|recorded|updated|saved|tagged|applied)\b)/i,
   },
   {
     kind: "delegated",
