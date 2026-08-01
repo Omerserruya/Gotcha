@@ -31,14 +31,25 @@ vi.mock("@chatcenter/shared", () => ({
 
 import ShopifyAdapter from "../services/connectors/shopify.adapter";
 
-/** Run the precheck against a stubbed `get_order`. */
-function precheck(toolName: string, args: Record<string, unknown>, order: any) {
+/**
+ * Run the precheck against a stubbed `get_order` + `get_fulfillment_status`.
+ *
+ * `fulfillment` defaults to a readable, empty fulfillment state - i.e. nothing
+ * is being fulfilled - which is the only case where cancelling is allowed.
+ */
+function precheck(
+  toolName: string,
+  args: Record<string, unknown>,
+  order: any,
+  fulfillment: any = { fulfillment_orders_readable: true, has_outstanding_fulfillments: false },
+) {
   return (ShopifyAdapter as any).precheckEligibility({
     toolName,
     args,
     call: async (t: string) => {
-      if (t !== "get_order") throw new Error(`unexpected precheck read: ${t}`);
-      return order;
+      if (t === "get_order") return order;
+      if (t === "get_fulfillment_status") return fulfillment;
+      throw new Error(`unexpected precheck read: ${t}`);
     },
   });
 }
@@ -67,6 +78,35 @@ describe("cancel_order eligibility", () => {
   it("detects fulfillment from the fulfillments array alone", async () => {
     const r = await precheck("cancel_order", { order_name: "#1006" }, { ...OPEN_ORDER, fulfillment_status: null, fulfillments: [{ id: 1 }] });
     expect(r.eligible).toBe(false);
+  });
+
+  // The live #1006 shape: the ORDER looks completely unfulfilled and only the
+  // fulfillment ORDER reveals that Shopify will refuse the cancellation.
+  it("refuses when only the fulfillment ORDER shows work in progress", async () => {
+    const r = await precheck(
+      "cancel_order",
+      { order_name: "#1006" },
+      { ...OPEN_ORDER, fulfillment_status: null, fulfillments: [] },
+      { fulfillment_orders_readable: true, has_outstanding_fulfillments: true },
+    );
+    expect(r.eligible).toBe(false);
+    expect(r.reason).toMatch(/return|refund/i);
+  });
+
+  it("refuses - and says it cannot SEE - when fulfillment state is unreadable", async () => {
+    // A missing scope must never be read as "nothing is being fulfilled".
+    // Inferring cancellable from silence spends a human's approval on an
+    // action Shopify will refuse.
+    const r = await precheck(
+      "cancel_order",
+      { order_name: "#1006" },
+      { ...OPEN_ORDER, fulfillment_status: null, fulfillments: [] },
+      { fulfillment_orders_readable: false, has_outstanding_fulfillments: null },
+    );
+    expect(r.eligible).toBe(false);
+    expect(r.reason).toMatch(/cannot read|unknown|do not currently have access/i);
+    // Not "already done" - nothing happened.
+    expect(r.alreadySatisfied).toBeUndefined();
   });
 
   it("allows an ordinary open order - the guard must not make cancelling unreachable", async () => {

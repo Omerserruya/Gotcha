@@ -494,9 +494,28 @@ router.get(
     // validate_discount, get_customer_discounts, the coupon writers - 403'd with
     // "requires merchant approval for read_price_rules scope" no matter what.
     // Existing connections keep their old grant: re-connect to pick these up.
+    // FULFILLMENT ORDERS, INVENTORY and CUSTOMER WRITES were all missing here.
+    // Urban Supply Dev only had them because they were added by hand in the
+    // Partner dashboard; a merchant connecting through this flow got a
+    // connection that read every order as unfulfilled, answered "nothing has
+    // shipped" for orders in fulfillment, and offered to cancel orders Shopify
+    // would refuse. The list below is what the tool surface actually calls.
+    //
+    // Deliberately NOT requested: write_fulfillments and write_returns (no
+    // tool creates a fulfillment or an RMA), write_draft_orders and
+    // read_draft_orders (no draft-order tool exists), and the third-party
+    // fulfillment-order scopes (only meaningful for merchants using a 3PL -
+    // read_assigned_fulfillment_orders is requested for that case, and a
+    // merchant without one loses nothing by granting it).
     const scopes = [
       "read_orders", "write_orders",
-      "read_customers",
+      // Orders older than 60 days are invisible to read_orders alone, and a
+      // customer asking about last season's order is an ordinary request.
+      "read_all_orders",
+      "read_customers", "write_customers",
+      "read_merchant_managed_fulfillment_orders",
+      "read_assigned_fulfillment_orders",
+      "read_inventory",
       "read_price_rules", "write_price_rules",
       "write_discounts",
       "read_products",

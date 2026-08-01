@@ -373,18 +373,37 @@ const TOOL_SCOPES: Record<string, string[]> = {
   get_orders: ["read_orders"], get_order: ["read_orders"], order_lookup: ["read_orders"],
   search_orders: ["read_orders"], get_order_items: ["read_orders"],
   get_financial_status: ["read_orders"], check_payment_status: ["read_orders"],
-  get_fulfillment_status: ["read_orders"], get_shipment_status: ["read_orders"],
-  track_shipment: ["read_orders"], get_tracking_number: ["read_orders"],
-  get_tracking_url: ["read_orders"], get_fulfillment_events: ["read_orders"],
-  check_delivery_eta: ["read_orders"], check_pickup_point: ["read_orders"],
+  // Fulfillment questions read FULFILLMENT ORDERS, which are a separate
+  // permission from the order itself. Without them `fulfillment_status` is
+  // null on orders that are demonstrably in fulfillment, and the honest answer
+  // ("I cannot see") was being rendered as "nothing has shipped".
+  get_fulfillment_status: ["read_orders", "read_merchant_managed_fulfillment_orders"],
+  get_shipment_status: ["read_orders", "read_merchant_managed_fulfillment_orders"],
+  track_shipment: ["read_orders", "read_merchant_managed_fulfillment_orders"],
+  get_tracking_number: ["read_orders", "read_merchant_managed_fulfillment_orders"],
+  get_tracking_url: ["read_orders", "read_merchant_managed_fulfillment_orders"],
+  get_fulfillment_events: ["read_orders", "read_merchant_managed_fulfillment_orders"],
+  check_delivery_eta: ["read_orders", "read_merchant_managed_fulfillment_orders"],
+  check_pickup_point: ["read_orders"],
   get_refund_status: ["read_orders"], check_refund: ["read_orders"],
   check_return_status: ["read_orders"],
   // order actions
-  cancel_order: ["write_orders"], process_refund: ["write_orders"],
-  send_invoice: ["write_orders"], update_order_fulfillment: ["write_orders"],
+  // cancel_order READS fulfillment orders before it writes: an order in
+  // fulfillment cannot be cancelled, and finding that out from Shopify's
+  // refusal rather than from a pre-flight read is how an impossible action
+  // reached a human's approval.
+  cancel_order: ["write_orders", "read_merchant_managed_fulfillment_orders"],
+  process_refund: ["write_orders"],
+  send_invoice: ["write_orders"],
+  // Creating/updating a fulfillment is a fulfillment-order write, not an
+  // order write - `write_orders` alone has never been sufficient here.
+  update_order_fulfillment: ["write_orders", "write_merchant_managed_fulfillment_orders"],
   // products
   get_product: ["read_products"], search_products: ["read_products"],
-  inventory_status: ["read_products"], variant_information: ["read_products"],
+  // Stock questions need inventory, not just the product record: the variant's
+  // `inventory_quantity` is an aggregate and says nothing per-location.
+  inventory_status: ["read_products", "read_inventory"],
+  variant_information: ["read_products", "read_inventory"],
   get_product_images: ["read_products"],
   // discounts
   list_discounts: ["read_price_rules"], validate_discount: ["read_price_rules"],
@@ -415,6 +434,14 @@ const REQUIRED_SCOPES: Array<{ scope: string; needs: string }> = [
   { scope: "read_products", needs: "product / inventory tools" },
   { scope: "read_price_rules", needs: "discount lookup tools" },
   { scope: "write_price_rules", needs: "coupon creation tools" },
+  // Added after a live incident: without fulfillment orders the connection
+  // still "tested green" while every shipping, tracking and cancellability
+  // answer was quietly wrong - the order read as unfulfilled because the only
+  // field we could see was null. A connection missing this is not healthy, it
+  // is confidently misinformed, so it must fail the test and say so.
+  { scope: "read_merchant_managed_fulfillment_orders", needs: "fulfillment state, tracking, and cancellability" },
+  { scope: "read_inventory", needs: "stock and variant availability answers" },
+  { scope: "read_returns", needs: "return status lookups" },
 ];
 
 const ShopifyAdapter: ProviderAdapter = {
@@ -450,12 +477,39 @@ const ShopifyAdapter: ProviderAdapter = {
           reason: `order ${order.name ?? ""} was already cancelled. Tell the customer it is already cancelled and offer to check the refund status; do NOT propose cancelling it again.`.trim(),
         };
       }
-      // Mirrors the execution-time guard, so the impossible action is never
-      // proposed rather than merely refused after someone approves it.
-      const fulfilled =
+      // FULFILLMENT ORDERS are the authority here, not the legacy fields.
+      // Order #1006 reports fulfillment_status=null and fulfillments=[] while
+      // carrying a fulfillment order in `in_progress` - and Shopify refuses
+      // the cancellation with "Cannot cancel an order that has outstanding
+      // fulfillments". Reading only the legacy fields is what let that
+      // impossible action reach a human's approval twice.
+      const fs: any = await call(
+        "get_fulfillment_status",
+        args.order_id ? { order_id: args.order_id } : { order_name: args.order_name },
+      );
+      if (fs?.fulfillment_orders_readable === false) {
+        // We cannot see. Say so - do NOT infer "cancellable" from silence.
+        // A confident false negative here spends a human's approval on an
+        // action Shopify will refuse.
+        return {
+          eligible: false,
+          reason:
+            `cannot read the fulfillment state of order ${order.name ?? ""}, so whether it can still be cancelled is unknown. ` +
+            `Tell the customer you do not currently have access to the information needed to determine this, and offer a human agent.`,
+        };
+      }
+      if (fs?.has_outstanding_fulfillments === true) {
+        return {
+          eligible: false,
+          reason: `order ${order.name ?? ""} has already been handed to fulfillment and cannot be cancelled. Offer a return plus a refund instead.`.trim(),
+        };
+      }
+      // Legacy fields remain a secondary signal for shops whose fulfillment
+      // orders are empty but whose order still shows fulfillments.
+      const legacyFulfilled =
         ["fulfilled", "partial"].includes(String(order.fulfillment_status || "").toLowerCase()) ||
         (Array.isArray(order.fulfillments) && order.fulfillments.length > 0);
-      if (fulfilled) {
+      if (legacyFulfilled) {
         return {
           eligible: false,
           reason: `order ${order.name ?? ""} has already been fulfilled and cannot be cancelled. Offer a return plus a refund instead.`.trim(),
@@ -761,10 +815,15 @@ const ShopifyAdapter: ProviderAdapter = {
         // Failing here rather than at Shopify makes the reason legible and
         // names the action that WOULD work, so the model can offer it instead
         // of apologising.
-        const fulfilledNow =
+        // Same authority as the precheck: fulfillment ORDERS first, legacy
+        // fields only as a secondary signal. `fulfillment_status` is null on
+        // orders Shopify still refuses to cancel.
+        const fos = await fetchFulfillmentOrders(ctx, o.id);
+        const outstandingNow = fos.readable && hasOutstandingFulfillments(fos.orders);
+        const legacyFulfilledNow =
           ["fulfilled", "partial"].includes(String(o.fulfillment_status || "").toLowerCase()) ||
           (Array.isArray(o.fulfillments) && o.fulfillments.length > 0);
-        if (fulfilledNow) {
+        if (outstandingNow || legacyFulfilledNow) {
           throw new Error(
             "order_not_cancellable: this order has already been fulfilled and cannot be cancelled. " +
             "Use process_refund (and a return) instead.",
@@ -867,17 +926,22 @@ const ShopifyAdapter: ProviderAdapter = {
           tracking_company: f.tracking_company, tracking_number: f.tracking_number,
           tracking_url: f.tracking_url || (f.tracking_urls && f.tracking_urls[0]) || null,
         }));
-        return { order_id: o.id, name: o.name, fulfillment_status: o.fulfillment_status, shipments: fs };
+        return {
+          order_id: o.id, name: o.name, fulfillment_status: o.fulfillment_status, shipments: fs,
+          ...(await shipmentVisibility(ctx, o, fs.length)),
+        };
       }
       case "get_tracking_number": {
         const o = await resolveOrder(ctx, args);
         if (!o) throw new Error("order_not_found");
-        return { order_id: o.id, tracking_numbers: (o.fulfillments || []).flatMap((f: any) => f.tracking_numbers || (f.tracking_number ? [f.tracking_number] : [])) };
+        const nums = (o.fulfillments || []).flatMap((f: any) => f.tracking_numbers || (f.tracking_number ? [f.tracking_number] : []));
+        return { order_id: o.id, tracking_numbers: nums, ...(await shipmentVisibility(ctx, o, nums.length)) };
       }
       case "get_tracking_url": {
         const o = await resolveOrder(ctx, args);
         if (!o) throw new Error("order_not_found");
-        return { order_id: o.id, tracking_urls: (o.fulfillments || []).flatMap((f: any) => f.tracking_urls || (f.tracking_url ? [f.tracking_url] : [])) };
+        const urls = (o.fulfillments || []).flatMap((f: any) => f.tracking_urls || (f.tracking_url ? [f.tracking_url] : []));
+        return { order_id: o.id, tracking_urls: urls, ...(await shipmentVisibility(ctx, o, urls.length)) };
       }
       case "get_fulfillment_events": {
         const o = await resolveOrder(ctx, args);
@@ -1711,6 +1775,49 @@ async function fetchFulfillmentOrders(
  * are NOT blocking. What blocks is work already handed to a fulfillment
  * service: IN_PROGRESS, or a request that has been submitted or accepted.
  */
+/**
+ * Why a tracking answer is empty - which is a completely different fact from
+ * "there is no tracking".
+ *
+ * The legacy `order.fulfillments` array is `[]` on an order that Shopify is
+ * actively fulfilling (verified on #1006, which carries an `in_progress`
+ * fulfillment order). Read alone it produced "no tracking exists" for a parcel
+ * being packed, and - when the scope was missing - the same sentence for an
+ * order we simply could not see. Three states, one answer, two of them false.
+ *
+ * `tracking_state` names which one it is:
+ *   available    - there is tracking, use it
+ *   not_yet      - genuinely in fulfillment, no tracking number issued yet
+ *   none         - nothing is being fulfilled; there is nothing to track
+ *   unknown      - WE CANNOT SEE. Never render this as any of the above.
+ */
+async function shipmentVisibility(
+  ctx: Ctx,
+  order: any,
+  legacyCount: number,
+): Promise<Record<string, unknown>> {
+  if (legacyCount > 0) return { tracking_state: "available", fulfillment_visibility: "readable" };
+  const fos = await fetchFulfillmentOrders(ctx, order.id);
+  if (!fos.readable) {
+    return {
+      tracking_state: "unknown",
+      fulfillment_visibility: "unreadable",
+      fulfillment_orders_error: fos.error,
+      model_instruction:
+        "You do NOT have access to this order's fulfillment information. Say exactly that you cannot currently see what is needed to answer with certainty, and offer a human agent. Do NOT say the order has not shipped, that no tracking exists, or that nothing is being fulfilled.",
+    };
+  }
+  if (hasOutstandingFulfillments(fos.orders)) {
+    return {
+      tracking_state: "not_yet",
+      fulfillment_visibility: "readable",
+      model_instruction:
+        "The order IS being fulfilled but no tracking number has been issued yet. Do not say it has not shipped or that there is no tracking; say it is being prepared and tracking follows.",
+    };
+  }
+  return { tracking_state: "none", fulfillment_visibility: "readable" };
+}
+
 function hasOutstandingFulfillments(fulfillmentOrders: any[]): boolean {
   return fulfillmentOrders.some((f: any) => {
     const status = String(f?.status ?? "").toLowerCase();
