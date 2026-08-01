@@ -10,6 +10,7 @@ import {
   detectActionClaims,
   turnHasExecutionEvidence,
   validateActionHonesty,
+  stripUnsupportedDelegation,
 } from "../services/action-honesty.service";
 
 const EXECUTED = [{ tool: "shopify.search_products", decision: "executed", sideEffect: undefined }];
@@ -64,5 +65,81 @@ describe("validateActionHonesty (the incident)", () => {
 
   it("BLOCKS a false 'I sent it' with no email tool execution", () => {
     expect(validateActionHonesty("שלחתי לך את הקבלה", NO_TOOLS).ok).toBe(false);
+  });
+});
+
+/**
+ * Claiming another party was engaged.
+ *
+ * Three live replies, none backed by anything:
+ *   "אעביר את המצב לצוות התמיכה כדי שיאשרו"
+ *   "אעביר את הבקשה לצוות שיטפל בביטול ובהחזר"
+ *   "להזמין בדיקה אצל צוות המשלוחים"
+ *
+ * This is the most damaging shape of the five: it reads as resolution, so the
+ * customer stops chasing - and nobody is coming.
+ */
+describe("delegated claims", () => {
+  const READ_ONLY = [{ tool: "shopify.get_order", decision: "executed" }];
+  const HANDOFF = [{ tool: "escalate_to_human", decision: "executed" }];
+
+  it("flags passing the case to a team when nothing was engaged", () => {
+    const v = validateActionHonesty("אעביר את המצב לצוות התמיכה כדי שיאשרו.", READ_ONLY);
+    expect(v.ok).toBe(false);
+    expect(v.unsupported.map((c) => c.kind)).toContain("delegated");
+  });
+
+  it("flags 'the team will handle it' in English", () => {
+    expect(validateActionHonesty("I've passed this to the support team.", READ_ONLY).ok).toBe(false);
+    expect(validateActionHonesty("The team will contact you shortly.", READ_ONLY).ok).toBe(false);
+  });
+
+  it("flags claiming the courier was contacted", () => {
+    expect(validateActionHonesty("עדכנתי את חברת המשלוחים.", READ_ONLY).ok).toBe(false);
+  });
+
+  it("ALLOWS the claim when a real handoff executed this turn", () => {
+    expect(validateActionHonesty("מעבירה את הפנייה לצוות אנושי.", HANDOFF).ok).toBe(true);
+  });
+
+  it("a READ is not evidence that a person was told anything", () => {
+    // The whole point: fetching the order proves the bot did something, not
+    // that anyone was notified.
+    expect(validateActionHonesty("אעביר את הבקשה לצוות.", READ_ONLY).ok).toBe(false);
+  });
+
+  it("a note or a tag is not a team notification", () => {
+    const noted = [{ tool: "shopify.create_note", decision: "executed" }];
+    expect(validateActionHonesty("דיווחתי לצוות על התקלה.", noted).ok).toBe(false);
+  });
+
+  it("does not flag ordinary sentences that merely mention a team", () => {
+    expect(validateActionHonesty("הצוות שלנו זמין בימים א-ה.", READ_ONLY).ok).toBe(true);
+  });
+});
+
+describe("stripping an unsupported delegation", () => {
+  it("keeps the grounded part and cuts the promise", () => {
+    const out = stripUnsupportedDelegation(
+      "ההחזר עבור הזמנה 1010 כבר הושלם במלואו. אעביר את המצב לצוות התמיכה כדי שיאשרו.",
+    );
+    expect(out).toContain("1010");
+    expect(out).not.toMatch(/לצוות/);
+  });
+
+  it("returns null when there is nothing to remove", () => {
+    expect(stripUnsupportedDelegation("ההזמנה בוטלה בהצלחה.")).toBeNull();
+  });
+
+  it("returns null rather than an empty reply when the promise was the whole message", () => {
+    // Better to ship the original and let the audit catch it than to send
+    // the customer a blank message.
+    expect(stripUnsupportedDelegation("אעביר את הבקשה לצוות.")).toBeNull();
+  });
+
+  it("handles English too", () => {
+    const out = stripUnsupportedDelegation("Your order #1010 was refunded. I've passed this to the support team.");
+    expect(out).toContain("#1010");
+    expect(out).not.toMatch(/support team/i);
   });
 });

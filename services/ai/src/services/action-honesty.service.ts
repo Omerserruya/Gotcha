@@ -10,7 +10,7 @@
  * prompt to keep the model honest.
  */
 
-export type UnsupportedClaimKind = "in_progress" | "results" | "sent" | "followup";
+export type UnsupportedClaimKind = "in_progress" | "results" | "sent" | "followup" | "delegated";
 
 const CLAIM_PATTERNS: Array<{ kind: UnsupportedClaimKind; re: RegExp }> = [
   // "checking now / searching now"
@@ -21,6 +21,21 @@ const CLAIM_PATTERNS: Array<{ kind: UnsupportedClaimKind; re: RegExp }> = [
   { kind: "sent", re: /(שלחתי|שלחנו|כבר\s*שלחתי|נשלח(ה|ו)?\s*(אליך|עכשיו)|i\s*(have\s*)?sent|i['’]ve\s*sent|already\s*sent)/i },
   // "I'll get back to you / returning in a minute"  (promises later autonomous work)
   { kind: "followup", re: /(אחזור\s*אליך|מחזיר(ה)?\s*(לך)?\s*תוך|נחזור\s*אליך|חוזרת\s*אליך|i(['’]ll| will)?\s*(get|come)\s*back\s*to\s*you|i(['’]ll| will)?\s*return\s*in|i(['’]ll| will)?\s*send\s*(you\s*)?(shortly|in a))/i },
+  // "I'll pass this to the team / I've contacted the courier / support will
+  // handle it" - claims ANOTHER PARTY has been engaged.
+  //
+  // Seen live three times while nothing was engaged at all: "אעביר את המצב
+  // לצוות התמיכה כדי שיאשרו", "אעביר את הבקשה לצוות שיטפל בביטול", "להזמין
+  // בדיקה אצל צוות המשלוחים". Each one hands the customer a person who does
+  // not know they exist, and it is the single most damaging shape here
+  // because it reads as resolution and ends the conversation.
+  //
+  // A note or a tag is not a team notification. Only a real handoff or task
+  // counts as evidence.
+  {
+    kind: "delegated",
+    re: /((אעביר|מעביר(ה)?|העברתי|נעביר|אפנה|פניתי|פונה)\s*(את\s*)?(ה?(בקשה|פנייה|מקרה|נושא|מצב|טיפול)\s*)?(אל\s*|ל)(צוות|נציג|מחלק|תמיכה|שירות|חברת\s*המשלוחים|שליח)|(צוות|נציג|מחלקה)\s*(יטפל|יחזור|יבדוק|ייצור\s*קשר)|(דיווחתי|יידעתי|עדכנתי)\s*(את\s*)?[להה]?\s*(צוות|מחלקה|חברת\s*המשלוחים|תמיכה)|i(['’]ve| have)?\s*(contacted|notified|informed|escalated|forwarded|passed)\s*(this\s*)?(to\s*)?(the\s*)?(team|support|department|courier|carrier|warehouse)|(the\s*)?(team|support|department)\s*will\s*(handle|contact|reach|get)\b)/i,
+  },
 ];
 
 export interface ActionClaim {
@@ -59,6 +74,55 @@ export function turnHasExecutionEvidence(
   );
 }
 
+/**
+ * Did this turn actually engage another party?
+ *
+ * Stricter than `turnHasExecutionEvidence` on purpose: reading an order is
+ * evidence that the bot did something, but it is not evidence that a person
+ * was told anything. Only a handoff, a task, an assignment or a notification
+ * can support "I've passed this to the team" - and a note or a tag, which the
+ * model likes to treat as equivalent, deliberately cannot.
+ */
+export function turnHasHandoffEvidence(
+  toolCallLog: Array<{ tool?: string; decision?: string; sideEffect?: string }> | undefined,
+): boolean {
+  if (!toolCallLog?.length) return false;
+  return toolCallLog.some((t) => {
+    if (t.decision !== "executed" && t.decision !== "executed_on_retry") return false;
+    const name = String(t.tool ?? "").toLowerCase();
+    return /(escalate_to_human|handoff|create_task|assign|notify_|send_notification|transfer_conversation)/.test(name);
+  });
+}
+
+/** Sentence boundaries, Hebrew and English, keeping the terminator. */
+const SENTENCE_SPLIT = /(?<=[.!?׃])\s+|\n+/;
+
+/**
+ * Remove sentences that promise another party has been engaged.
+ *
+ * The honesty check has been observe-only: it logs, it audits, and the reply
+ * ships anyway. That is defensible for the vaguer claim shapes, where a false
+ * positive would mangle a good answer - but not for this one. "אעביר את המצב
+ * לצוות התמיכה" reads as resolution, so the customer stops chasing, and nobody
+ * is coming. It is the one claim where shipping it is worse than cutting it.
+ *
+ * Surgery is per SENTENCE so the grounded part of the reply survives; the
+ * model usually states the real facts first and then over-promises at the end.
+ * Returns null when nothing needed removing, so callers can tell "unchanged"
+ * from "rewritten".
+ */
+export function stripUnsupportedDelegation(text: string | null | undefined): string | null {
+  if (!text) return null;
+  const re = CLAIM_PATTERNS.find((p) => p.kind === "delegated")!.re;
+  const sentences = String(text).split(SENTENCE_SPLIT);
+  const kept = sentences.filter((s) => !re.test(s));
+  if (kept.length === sentences.length) return null;
+  const rebuilt = kept.join(" ").replace(/\s{2,}/g, " ").trim();
+  // Everything was a promise. Say the one true thing instead of nothing.
+  if (rebuilt.length < 3) return null;
+  return rebuilt;
+}
+
 export interface HonestyVerdict {
   ok: boolean;
   /** Claims that have no execution evidence to support them. */
@@ -79,8 +143,10 @@ export function validateActionHonesty(
   const claims = detectActionClaims(replyText);
   if (!claims.length) return { ok: true, unsupported: [] };
   const evidence = turnHasExecutionEvidence(toolCallLog);
+  const handoff = turnHasHandoffEvidence(toolCallLog);
   const unsupported = claims.filter((c) => {
     if (c.kind === "followup") return !opts?.hasBackgroundJob;
+    if (c.kind === "delegated") return !handoff;
     return !evidence;
   });
   return { ok: unsupported.length === 0, unsupported };

@@ -35,7 +35,7 @@ import {
   reasonPhrase,
   type ExecutionFacts,
 } from "./grounded-message.service";
-import { validateActionHonesty } from "./action-honesty.service";
+import { validateActionHonesty, stripUnsupportedDelegation } from "./action-honesty.service";
 import { assertOrderTargetMatchesTurn, isOrderStateChangingTool } from "./order-reference.service";
 import { getActionOrchestrator, type ExecutionResult } from "./orchestrator";
 import type { AgentToolContext } from "@chatcenter/shared";
@@ -3912,6 +3912,18 @@ async function generateAIBotReplyInner(
           },
         })
         .catch((err: any) => console.error("[ai-bot] honesty audit failed:", err?.message));
+
+      // ENFORCE the one shape that must not ship. A "we've passed this to the
+      // team" with nothing behind it reads as resolution: the customer stops
+      // chasing and no one is coming. The other shapes stay observe-only,
+      // where a false positive would cost more than it saves.
+      if (honesty.unsupported.some((c) => c.kind === "delegated")) {
+        const cleaned = stripUnsupportedDelegation(replyText);
+        if (cleaned) {
+          console.warn(`[ai-bot] ACTION-HONESTY: removed an unsupported delegation claim conv=${opts.conversationId}`);
+          replyText = cleaned;
+        }
+      }
     }
   } catch (err: any) {
     console.warn("[ai-bot] action-honesty check failed:", err?.message);

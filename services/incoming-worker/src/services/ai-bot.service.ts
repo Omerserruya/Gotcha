@@ -570,12 +570,25 @@ async function checkEscalationThresholds(
   config: { maxAutonomousMessages: number | null; maxAutonomousMinutes: number | null },
   incomingText?: string,
 ): Promise<string | null> {
+  // WHAT THIS COUNTS, precisely: outbound messages the AI chose to send.
+  //
+  // It is an autonomy budget - "how long has this bot been driving unattended"
+  // - so it must not be charged for messages the SYSTEM caused. The approval
+  // acknowledgement is exactly that: the customer asked for a cancellation,
+  // the tool parked at an approval gate, and the bot said "this needs a quick
+  // confirmation". Nobody chose that message, and waiting on a manager is not
+  // the bot running away with a conversation. Charging it meant a cancellation
+  // flow burned budget for the pause it was designed to take.
+  //
+  // The post-decision continuation is already exempt for a different reason:
+  // it is written with source="approval_continuation", not "ai_bot".
   const aiMessageCount = await prisma.message.count({
     where: {
       conversationId,
       tenantId,
       direction: "OUTBOUND",
       metadata: { path: ["source"], equals: "ai_bot" },
+      NOT: { metadata: { path: ["kind"], equals: "bridge_ack_for_approval" } },
     },
   });
 
