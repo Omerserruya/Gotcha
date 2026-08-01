@@ -37,6 +37,7 @@ import {
 } from "./grounded-message.service";
 import { validateActionHonesty, stripUnsupportedDelegation } from "./action-honesty.service";
 import { assertOrderTargetMatchesTurn, isOrderStateChangingTool } from "./order-reference.service";
+import { detectVariantIntent, buildVariantIntentDirective } from "./product-intent.service";
 import { getActionOrchestrator, type ExecutionResult } from "./orchestrator";
 import type { AgentToolContext } from "@chatcenter/shared";
 import { generateResponse, getDefaultModel, getMicroModel } from "./ai.service";
@@ -2352,6 +2353,27 @@ async function generateAIBotReplyInner(
     }
   } catch (err: any) {
     console.warn("[ai-bot] discovery integration failed (non-fatal):", err?.message);
+  }
+
+  // ── Variant / stock questions are a LOOKUP, not a diagnosis ──────────
+  // The support persona's objective is RESOLVE_ISSUE and it is told to ask
+  // only what it needs to diagnose - so "יש את הדגם הזה במידה 159?" got a
+  // question back about which colour was meant, on a catalogue whose products
+  // have one variant each. The answer was one call away the whole time.
+  try {
+    const variantIntent = detectVariantIntent(opts.incomingMessage);
+    const hasVariantTool = toolFunctionNames.some((n) => n.endsWith(".variant_information"));
+    console.log(
+      `[ai-bot][variant-intent] question=${variantIntent.isVariantQuestion} toolAvailable=${hasVariantTool} tools=${toolFunctionNames.length} names=${toolFunctionNames.join(",")}`,
+    );
+    if (variantIntent.isVariantQuestion && hasVariantTool) {
+      chatMessages.push({
+        role: "system",
+        content: buildVariantIntentDirective(variantIntent, replyLocale),
+      });
+    }
+  } catch (err: any) {
+    console.warn("[ai-bot] variant intent detection failed (non-fatal):", err?.message);
   }
   // Outside-hours context ("active" policy): the business is CLOSED right now.
   // The bot keeps helping, but must never imply a human is immediately

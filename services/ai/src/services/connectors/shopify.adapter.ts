@@ -264,8 +264,14 @@ const TOOLS: ToolDefinition[] = [
   t("inventory_status", "READ", "LOW", "Check stock for a product or variant.",
     "Customer asks 'is X in stock?'.", { product_id: { type: "string" }, variant_id: { type: "string" } },
     undefined, { priority: 92 }),
-  t("variant_information", "READ", "LOW", "Get variant details (price, SKU, options, inventory).",
-    "Customer asks about sizes/colors/price of a variant.", { variant_id: { type: "string" }, product_id: { type: "string" } },
+  t("variant_information", "READ", "LOW",
+    "Get a product's variants: sizes/colours/options, price, SKU and stock for each. Accepts a product NAME, so no prior lookup is needed.",
+    "ANY question about a specific size, length, colour, option, SKU or 'do you have this in X'. Call this FIRST with product_name - do not run a product search and do not ask the customer which version they mean until you have seen the real options. If the product has no options, say so.",
+    {
+      variant_id: { type: "string" },
+      product_id: { type: "string" },
+      product_name: { type: "string", description: "Product title, e.g. 'The Minimal Snowboard'." },
+    },
     undefined, { priority: 92 }),
   // Internal enrichment for the agent panel - never something a customer
   // conversation needs, so it should be among the first to go.
@@ -1134,11 +1140,48 @@ const ShopifyAdapter: ProviderAdapter = {
           const r: any = await sreq(ctx, "GET", `/variants/${encodeURIComponent(String(args.variant_id))}.json`);
           return r.variant;
         }
-        if (args.product_id) {
-          const r: any = await sreq(ctx, "GET", `/products/${encodeURIComponent(String(args.product_id))}.json`);
-          return r.product?.variants || [];
-        }
-        throw new Error("variant_id_or_product_id_required");
+        // Accept a product NAME, not just an id.
+        //
+        // "יש את הדגם הזה במידה 159?" needs two calls otherwise - search for
+        // the product, then read its variants - and the model would give up at
+        // the first step and ask the customer which version they meant. On a
+        // store whose products have a single `Default Title` variant that
+        // question has no answer, so the customer was interrogated about
+        // options that do not exist.
+        const product = args.product_id
+          ? (await sreq(ctx, "GET", `/products/${encodeURIComponent(String(args.product_id))}.json`)).product
+          : args.product_name || args.title || args.query
+            ? await findProductByName(ctx, String(args.product_name ?? args.title ?? args.query))
+            : null;
+        if (!product) throw new Error("variant_id_or_product_id_or_product_name_required");
+
+        const variants = (product.variants || []).map((v: any) => ({
+          variant_id: v.id, title: v.title, sku: v.sku, price: v.price,
+          inventory_quantity: v.inventory_quantity,
+          inventory_management: v.inventory_management,
+          in_stock: v.inventory_management == null || Number(v.inventory_quantity) > 0,
+          option1: v.option1, option2: v.option2, option3: v.option3,
+        }));
+        // `options` names what the product actually varies BY. A product whose
+        // only variant is "Default Title" varies by nothing, and saying so is
+        // the whole answer to a size question - not a follow-up question.
+        const optionNames = (product.options || []).map((o: any) => o?.name).filter(Boolean);
+        const hasRealOptions =
+          optionNames.length > 0 &&
+          !(variants.length === 1 && String(variants[0]?.title ?? "").toLowerCase() === "default title");
+        return {
+          product_id: product.id,
+          product_title: product.title,
+          option_names: optionNames,
+          has_variant_options: hasRealOptions,
+          variants,
+          ...(hasRealOptions
+            ? {}
+            : {
+                model_instruction:
+                  "This product is sold in ONE version only - it has no size, colour or other options. Answer the customer's size/variant question by saying the product does not come in different sizes, and give its stock status. Do NOT ask which version or colour they want, and do NOT list other products.",
+              }),
+        };
       }
 
       // ── Returns / refunds ──
@@ -1816,6 +1859,27 @@ async function shipmentVisibility(
     };
   }
   return { tracking_state: "none", fulfillment_visibility: "readable" };
+}
+
+/**
+ * Find ONE product by title, so a variant question can be answered in a single
+ * call instead of search-then-read. Exact title wins over a prefix match, which
+ * matters on a catalogue full of near-identical names ("The Collection
+ * Snowboard: Liquid" vs "...: Oxygen"). Returns null rather than guessing when
+ * nothing matches well.
+ */
+async function findProductByName(ctx: Ctx, name: string): Promise<any | null> {
+  const needle = String(name ?? "").trim().toLowerCase();
+  if (!needle) return null;
+  const r: any = await sreq(ctx, "GET", `/products.json?limit=250`);
+  const products: any[] = Array.isArray(r?.products) ? r.products : [];
+  const byTitle = (p: any) => String(p?.title ?? "").trim().toLowerCase();
+  return (
+    products.find((p) => byTitle(p) === needle) ??
+    products.find((p) => byTitle(p).includes(needle)) ??
+    products.find((p) => needle.includes(byTitle(p))) ??
+    null
+  );
 }
 
 function hasOutstandingFulfillments(fulfillmentOrders: any[]): boolean {

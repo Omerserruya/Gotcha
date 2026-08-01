@@ -24,6 +24,7 @@
 
 import { Router, type Request, type Response } from "express";
 import * as crypto from "crypto";
+import { enableReadToolsForIntegration } from "../services/integration-provisioning.service";
 import {
   prisma,
   authenticate,
@@ -106,11 +107,38 @@ async function upsertConnection(opts: {
     config: opts.config ?? {},
     connectedBy: opts.connectedBy ?? null,
   };
-  return await (prisma as any).tenantIntegration.upsert({
+  const row = await (prisma as any).tenantIntegration.upsert({
     where: { tenantId_integrationId: { tenantId: opts.tenantId, integrationId: opts.catalogId } },
     update: data,
     create,
   });
+
+  // A CONNECTED integration whose tools nobody granted is a connection that
+  // does nothing. The AI's tool surface is built from AgentToolPermission
+  // rows, and those were only ever created by one UI toggle - so Urban Supply
+  // Dev reconnected to grant fulfillment scopes and silently lost every
+  // Shopify tool. The connection stayed CONNECTED, the capability probe stayed
+  // green, and the assistant answered a size question by asking which colour
+  // and escalated a cancellation saying the tooling was unavailable. It was
+  // right, and nothing anywhere said so.
+  //
+  // Reads only, and never a downgrade: the helper skips rows an operator
+  // turned off, so a merchant who deliberately disabled a tool keeps that
+  // choice across a reconnect. Writes stay an explicit decision.
+  //
+  // Best-effort - a provisioning hiccup must not fail an otherwise good
+  // connection, and the next connect retries it.
+  if (opts.status === "CONNECTED") {
+    try {
+      const granted = await enableReadToolsForIntegration(opts.tenantId, row.id, opts.catalogId);
+      if (granted > 0) {
+        console.log(`[connectors] provisioned ${granted} read-tool permission(s) on connect for tenant=${opts.tenantId}`);
+      }
+    } catch (err: any) {
+      console.error("[connectors] read-tool provisioning failed on connect:", err?.message);
+    }
+  }
+  return row;
 }
 
 function dashboardRedirect(slug: string, query: Record<string, string> = {}) {
