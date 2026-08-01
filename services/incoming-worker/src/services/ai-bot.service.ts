@@ -560,6 +560,33 @@ function buildSendContext(conversation: any): SendContext | null {
 }
 
 /**
+ * Where a conversation sits against its autonomy budget.
+ *
+ * Pure, so the thresholds can be tested without a database. The budget counts
+ * AI-authored customer-facing replies and nothing else - not system messages,
+ * not tool calls, not internal state transitions, not the approval
+ * acknowledgement (a pause the system causes), and not the post-decision
+ * continuation (written under a different source). Waiting on a manager for
+ * six hours costs nothing, because the bot is not the one driving.
+ *
+ *   ok          - room to work
+ *   approaching - one reply from the wall; say so while the AI can still frame it
+ *   cap         - soft budget spent (goal-preservation may still override)
+ *   ceiling     - runaway backstop, always hands over
+ */
+export function assessAutonomyBudget(
+  aiMessageCount: number,
+  maxMsgs: number,
+): { state: "ok" | "approaching" | "cap" | "ceiling"; used: number; ceiling: number } {
+  const ceiling = maxMsgs * 2;
+  const base = { used: aiMessageCount, ceiling };
+  if (aiMessageCount >= ceiling) return { state: "ceiling", ...base };
+  if (aiMessageCount >= ceiling - 1) return { state: "approaching", ...base };
+  if (aiMessageCount >= maxMsgs) return { state: "cap", ...base };
+  return { state: "ok", ...base };
+}
+
+/**
  * Deterministic escalation gates. Returns the machine-readable CASE that
  * fired (persisted so owners can see WHY the bot handed off) or null when
  * no gate tripped.
@@ -592,11 +619,21 @@ async function checkEscalationThresholds(
     },
   });
 
-  const maxMsgs = config.maxAutonomousMessages || 10;
+  const maxMsgs = config.maxAutonomousMessages || 30;
   const hardCeiling = maxMsgs * 2;
 
+  const budget = assessAutonomyBudget(aiMessageCount, maxMsgs);
+  if (budget.state === "approaching") {
+    // Warn BEFORE the wall. A conversation that is one turn from being taken
+    // over should say so while the AI can still frame it, rather than stopping
+    // mid-sentence and reappearing as a different party.
+    console.log(
+      `[AI-Bot] autonomy budget approaching ceiling (${aiMessageCount}/${hardCeiling}) conv=${conversationId}`,
+    );
+  }
+
   // Hard ceiling - true runaway-loop backstop, always escalates.
-  if (aiMessageCount >= hardCeiling) {
+  if (budget.state === "ceiling") {
     console.log(`[AI-Bot] HARD ceiling reached (${aiMessageCount}/${hardCeiling}) for conversation ${conversationId} - escalating`);
     return "hard_message_ceiling";
   }

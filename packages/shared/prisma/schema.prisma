@@ -855,7 +855,16 @@ model AIAgent {
   successCriteria String? @map("success_criteria") @db.Text
 
   // Autonomous behavior settings
-  maxAutonomousMessages Int    @default(10) @map("max_autonomous_messages")
+  //
+  // 30, not 10. Ten AI replies is a short conversation: a product question, a
+  // size check, an order lookup and a cancellation is already most of it, and
+  // the Urban Supply dev agent hit the ceiling mid-test on an ordinary support
+  // flow. A limit that fires during normal use is not a safety rail, it is a
+  // defect the customer experiences as being abandoned.
+  //
+  // This is a DEFAULT, so it applies to newly created employees only.
+  // Existing rows keep whatever their tenant chose.
+  maxAutonomousMessages Int    @default(30) @map("max_autonomous_messages")
   maxAutonomousMinutes  Int    @default(15) @map("max_autonomous_minutes")
   confidenceThreshold   Float  @default(0.6) @map("confidence_threshold")
   escalationMessage     String @default("Let me connect you with a team member who can help further.") @map("escalation_message")

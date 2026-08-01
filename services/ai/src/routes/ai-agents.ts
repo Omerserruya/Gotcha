@@ -430,7 +430,7 @@ router.post(
         toneConfig: toneConfig || null,
         behavioral: behavioral || null,
         persona: sanitizePersona(persona) || null,
-        maxAutonomousMessages: maxAutonomousMessages ?? 10,
+        maxAutonomousMessages: maxAutonomousMessages ?? 30,
         maxAutonomousMinutes: maxAutonomousMinutes ?? 15,
         confidenceThreshold: confidenceThreshold ?? 0.6,
         escalationMessage: escalationMessage || "Let me connect you with a team member who can help further.",

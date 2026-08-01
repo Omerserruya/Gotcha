@@ -36,7 +36,7 @@ export function aiAgentCreationDefaults() {
     // Autonomy envelope: how far the employee may go before a human is pulled
     // in. Left unset, an onboarding-created employee inherited raw schema
     // defaults and could behave differently from its Studio twin.
-    maxAutonomousMessages: 10,
+    maxAutonomousMessages: 30,
     maxAutonomousMinutes: 15,
     confidenceThreshold: 0.6,
     escalationMessage: "Let me connect you with a team member who can help further.",

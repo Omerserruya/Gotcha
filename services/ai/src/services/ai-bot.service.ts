@@ -425,7 +425,7 @@ async function evaluateEscalationGates(opts: {
   // message cap) is still enforced as the safety backstop against runaway loops.
   goalViable: boolean;
 }): Promise<boolean> {
-  const maxMsgs = opts.config.maxAutonomousMessages || 10;
+  const maxMsgs = opts.config.maxAutonomousMessages || 30;
   const hardCeiling = maxMsgs * 2;
   try {
     const aiMessageCount = await prisma.message.count({
