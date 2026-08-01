@@ -146,3 +146,27 @@ describe("scope of the check", () => {
     expect(r.eligible).toBe(true);
   });
 });
+
+/**
+ * A tool the provider has declared unsupported must never reach an approval.
+ *
+ * Live: a customer asked to correct the shipping address on #1011 and the bot
+ * raised a PENDING `shopify.edit_order` approval. That tool throws
+ * `unsupported_rest` unconditionally - the request was impossible before it
+ * was made, and a merchant would have spent a real decision discovering it.
+ */
+describe("declared-unsupported tools", () => {
+  it("edit_order is declared unsupported by the adapter", () => {
+    const def = ShopifyAdapter.tools().find((t: any) => t.name === "shopify.edit_order") as any;
+    expect(def?.unsupported).toBeTruthy();
+  });
+
+  it("its handler throws rather than pretending", async () => {
+    await expect(
+      (ShopifyAdapter as any).execute({
+        ctx: {}, toolName: "edit_order", args: { order_name: "#1011" },
+        credentials: { shopDomain: "s.myshopify.com", accessToken: "t" }, config: {},
+      }),
+    ).rejects.toThrow(/unsupported_rest/);
+  });
+});

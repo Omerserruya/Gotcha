@@ -143,3 +143,43 @@ describe("stripping an unsupported delegation", () => {
     expect(out).not.toMatch(/support team/i);
   });
 });
+
+/**
+ * "I've done it" - a completed write, past tense.
+ *
+ * Live: asked to note a callback request on order #1011, the bot replied
+ * "מעולה, ביצעתי את הבקשה שיחזרו אליך לפני המשלוח". Shopify showed
+ * note: null and tags: "". Nothing was written, no tool ran, and the customer
+ * was told their request was on the order - so they stop asking.
+ */
+describe("performed claims", () => {
+  const NOTHING: any[] = [];
+  const WROTE = [{ tool: "shopify.create_note", decision: "executed" }];
+
+  it("flags the live regression", () => {
+    const v = validateActionHonesty("מעולה, ביצעתי את הבקשה שיחזרו אליך לפני המשלוח.", NOTHING);
+    expect(v.ok).toBe(false);
+    expect(v.unsupported.map((c) => c.kind)).toContain("performed");
+  });
+
+  it("flags the English shapes", () => {
+    expect(validateActionHonesty("I've added a note to your order.", NOTHING).ok).toBe(false);
+    expect(validateActionHonesty("The note has been added.", NOTHING).ok).toBe(false);
+  });
+
+  it("ALLOWS the claim when a write really executed", () => {
+    expect(validateActionHonesty("רשמתי את זה על ההזמנה.", WROTE).ok).toBe(true);
+  });
+
+  it("does not flag an ordinary future offer", () => {
+    expect(validateActionHonesty("אפשר לרשום את זה על ההזמנה, רוצה שאעשה את זה?", NOTHING).ok).toBe(true);
+  });
+
+  it("strips the false completion but keeps the rest of the reply", () => {
+    const out = stripUnsupportedDelegation(
+      "ההזמנה 1011 עדיין לא נשלחה. ביצעתי את הבקשה שיחזרו אליך.",
+    );
+    expect(out).toContain("1011");
+    expect(out).not.toMatch(/ביצעתי/);
+  });
+});

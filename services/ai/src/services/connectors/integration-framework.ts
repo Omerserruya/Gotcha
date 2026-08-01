@@ -616,7 +616,33 @@ export async function precheckAdapterAction(opts: {
   const slug = opts.toolFunctionName.slice(0, dot);
   const toolName = opts.toolFunctionName.slice(dot + 1);
   const adapter = REGISTRY.get(slug);
-  if (!adapter?.precheckEligibility) return { eligible: true };
+  if (!adapter) return { eligible: true };
+
+  // A tool the provider has DECLARED unsupported can never run, so it must
+  // never reach a person's approval queue. `shopify.edit_order` raised a
+  // PENDING approval for a customer's address change and would have thrown
+  // `unsupported_rest` the moment anyone approved it - the request was
+  // impossible before it was ever made, and the merchant would have spent a
+  // real decision discovering that.
+  //
+  // Generic on purpose: this holds for every adapter and every future tool
+  // that degrades rather than implements.
+  try {
+    const def = adapter.tools().find((t) => t.name === opts.toolFunctionName);
+    if (def?.unsupported) {
+      return {
+        eligible: false,
+        reason:
+          `${opts.toolFunctionName} is not supported by this integration: ${def.unsupported} ` +
+          `Tell the customer plainly that this cannot be done from here, and offer the nearest thing that can - ` +
+          `do not promise the change.`,
+      };
+    }
+  } catch {
+    /* tool introspection must never block a legitimate action */
+  }
+
+  if (!adapter.precheckEligibility) return { eligible: true };
   try {
     return await adapter.precheckEligibility({
       toolName,

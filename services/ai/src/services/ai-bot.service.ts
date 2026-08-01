@@ -3939,7 +3939,7 @@ async function generateAIBotReplyInner(
       // team" with nothing behind it reads as resolution: the customer stops
       // chasing and no one is coming. The other shapes stay observe-only,
       // where a false positive would cost more than it saves.
-      if (honesty.unsupported.some((c) => c.kind === "delegated")) {
+      if (honesty.unsupported.some((c) => c.kind === "delegated" || c.kind === "performed")) {
         const cleaned = stripUnsupportedDelegation(replyText);
         if (cleaned) {
           console.warn(`[ai-bot] ACTION-HONESTY: removed an unsupported delegation claim conv=${opts.conversationId}`);

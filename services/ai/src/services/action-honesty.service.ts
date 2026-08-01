@@ -10,7 +10,13 @@
  * prompt to keep the model honest.
  */
 
-export type UnsupportedClaimKind = "in_progress" | "results" | "sent" | "followup" | "delegated";
+export type UnsupportedClaimKind =
+  | "in_progress"
+  | "results"
+  | "sent"
+  | "followup"
+  | "delegated"
+  | "performed";
 
 const CLAIM_PATTERNS: Array<{ kind: UnsupportedClaimKind; re: RegExp }> = [
   // "checking now / searching now"
@@ -32,6 +38,23 @@ const CLAIM_PATTERNS: Array<{ kind: UnsupportedClaimKind; re: RegExp }> = [
   //
   // A note or a tag is not a team notification. Only a real handoff or task
   // counts as evidence.
+  // "I've done it" - a completed WRITE, past tense.
+  //
+  // Live: asked to note a callback request on an order, the bot replied
+  // "מעולה, ביצעתי את הבקשה שיחזרו אליך לפני המשלוח". Shopify showed
+  // note: null and tags: "". Nothing was written and nothing was called; the
+  // customer was told their request was on the order.
+  //
+  // The existing shapes miss this because they describe work STARTING
+  // ("checking now") or a message SENT. This is the flat claim that a change
+  // was made - the one a customer acts on and stops chasing.
+  {
+    kind: "performed",
+    // No `\b` on the Hebrew alternation: Hebrew letters are not \w, so a word
+    // boundary after them never matches and the whole group silently never
+    // fired. The English side keeps its boundaries.
+    re: /((ביצעתי|ביצענו|עשיתי|עשינו|רשמתי|רשמנו|הוספתי|הוספנו|עדכנתי|עדכנו|סימנתי|שמרתי|הזנתי|צירפתי|הגדרתי)|\bi(['’]ve| have)?\s*(added|noted|recorded|updated|saved|tagged|set|applied|logged)\b|\bhas been (added|noted|recorded|updated|saved|tagged|applied)\b)/i,
+  },
   {
     kind: "delegated",
     re: /((אעביר|מעביר(ה)?|העברתי|נעביר|אפנה|פניתי|פונה)\s*(את\s*)?(ה?(בקשה|פנייה|מקרה|נושא|מצב|טיפול)\s*)?(אל\s*|ל)(צוות|נציג|מחלק|תמיכה|שירות|חברת\s*המשלוחים|שליח)|(צוות|נציג|מחלקה)\s*(יטפל|יחזור|יבדוק|ייצור\s*קשר)|(דיווחתי|יידעתי|עדכנתי)\s*(את\s*)?[להה]?\s*(צוות|מחלקה|חברת\s*המשלוחים|תמיכה)|i(['’]ve| have)?\s*(contacted|notified|informed|escalated|forwarded|passed)\s*(this\s*)?(to\s*)?(the\s*)?(team|support|department|courier|carrier|warehouse)|(the\s*)?(team|support|department)\s*will\s*(handle|contact|reach|get)\b)/i,
@@ -111,9 +134,13 @@ const SENTENCE_SPLIT = /(?<=[.!?׃])\s+|\n+/;
  * Returns null when nothing needed removing, so callers can tell "unchanged"
  * from "rewritten".
  */
-export function stripUnsupportedDelegation(text: string | null | undefined): string | null {
+export function stripUnsupportedDelegation(
+  text: string | null | undefined,
+  kinds: UnsupportedClaimKind[] = ["delegated", "performed"],
+): string | null {
   if (!text) return null;
-  const re = CLAIM_PATTERNS.find((p) => p.kind === "delegated")!.re;
+  const res = CLAIM_PATTERNS.filter((p) => kinds.includes(p.kind)).map((p) => p.re);
+  const re = { test: (s: string) => res.some((r) => r.test(s)) };
   const sentences = String(text).split(SENTENCE_SPLIT);
   const kept = sentences.filter((s) => !re.test(s));
   if (kept.length === sentences.length) return null;
@@ -147,6 +174,8 @@ export function validateActionHonesty(
   const unsupported = claims.filter((c) => {
     if (c.kind === "followup") return !opts?.hasBackgroundJob;
     if (c.kind === "delegated") return !handoff;
+    // "performed" is a completed WRITE. Any tool that really executed this
+    // turn is evidence; nothing at all is not.
     return !evidence;
   });
   return { ok: unsupported.length === 0, unsupported };
