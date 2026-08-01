@@ -60,7 +60,12 @@ const CLAIM_PATTERNS: Array<{ kind: UnsupportedClaimKind; re: RegExp }> = [
   },
   {
     kind: "delegated",
-    re: /((אעביר|מעביר(ה)?|העברתי|נעביר|אפנה|פניתי|פונה)\s*(את\s*)?(ה?(בקשה|פנייה|מקרה|נושא|מצב|טיפול)\s*)?(אל\s*|ל)(צוות|נציג|מחלק|תמיכה|שירות|חברת\s*המשלוחים|שליח)|(צוות|נציג|מחלקה)\s*(יטפל|יחזור|יבדוק|ייצור\s*קשר)|(דיווחתי|יידעתי|עדכנתי)\s*(את\s*)?[להה]?\s*(צוות|מחלקה|חברת\s*המשלוחים|תמיכה)|i(['’]ve| have)?\s*(contacted|notified|informed|escalated|forwarded|passed)\s*(this\s*)?(to\s*)?(the\s*)?(team|support|department|courier|carrier|warehouse)|(the\s*)?(team|support|department)\s*will\s*(handle|contact|reach|get)\b)/i,
+    // The gap between the verb and the target is deliberately loose. A noun
+    // allowlist kept losing: "אעביר את הבקשה לצוות" was caught, then "אעביר
+    // את המצב לצוות", then "אעביר את הפרטים לצוות" - each a new word for the
+    // same promise. What matters is the shape "I am handing this to <someone
+    // else>", not which noun the model reached for.
+    re: /((אעביר|מעביר(ה)?|העברתי|נעביר|אפנה|פניתי|פונה|מחבר(ת)?|מקשר(ת)?)[^\n]{0,40}?(אל\s*|ל)(צוות|נציג|מחלק|תמיכה|שירות|חברת\s*המשלוחים|שליח)|(צוות|נציג|מחלקה)\s*(יטפל|יחזור|יבדוק|ייצור\s*קשר)|(דיווחתי|יידעתי|עדכנתי)\s*(את\s*)?[להה]?\s*(צוות|מחלקה|חברת\s*המשלוחים|תמיכה)|i(['’]ve| have)?\s*(contacted|notified|informed|escalated|forwarded|passed)\s*(this\s*)?(to\s*)?(the\s*)?(team|support|department|courier|carrier|warehouse)|(the\s*)?(team|support|department)\s*will\s*(handle|contact|reach|get)\b)/i,
   },
 ];
 

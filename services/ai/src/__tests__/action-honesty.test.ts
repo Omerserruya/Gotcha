@@ -203,3 +203,29 @@ describe("passive-voice completion claims", () => {
     expect(validateActionHonesty("בקשתך עודכנה בהזמנה.", wrote).ok).toBe(true);
   });
 });
+
+describe("delegation phrasings the noun allowlist kept missing", () => {
+  const READ_ONLY = [{ tool: "shopify.get_order", decision: "executed" }];
+  const HANDOFF = [{ tool: "escalate_to_human", decision: "executed" }];
+
+  it.each([
+    "אעביר את הפרטים לצוות שילווה אותך.",
+    "אעביר את המצב לצוות התמיכה.",
+    "אעביר את הבקשה לצוות שיטפל בזה.",
+    "אני מחברת אותך עכשיו לנציגת שירות.",
+    "מקשרת אותך לצוות התמיכה.",
+  ])("flags %s", (text) => {
+    expect(validateActionHonesty(text, READ_ONLY).ok).toBe(false);
+  });
+
+  it("still allows any of them when a real handoff executed", () => {
+    expect(validateActionHonesty("אני מחברת אותך עכשיו לנציגת שירות.", HANDOFF).ok).toBe(true);
+  });
+
+  it("does not reach across sentences for a false positive", () => {
+    // The verb and the target must be close together, not merely both present.
+    expect(
+      validateActionHonesty("אעביר עליך את הפרטים בהמשך. הצוות שלנו זמין בימים א-ה.", READ_ONLY).ok,
+    ).toBe(true);
+  });
+});
