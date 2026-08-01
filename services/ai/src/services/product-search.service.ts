@@ -96,6 +96,20 @@ function deriveInventoryState(
 ): "in_stock" | "out_of_stock" | "unknown" {
   if (!variant) return "unknown";
 
+  // Shopify's OWN verdict first. `availableForSale` accounts for tracking,
+  // stock, the oversell policy and location availability all at once, and the
+  // GraphQL search carries it as `available`.
+  //
+  // It has to come first, because the fallback below reads
+  // `inventory_management` - a field the GraphQL mapper does not emit. Every
+  // searched product therefore looked UNTRACKED, and untracked means "always
+  // available", so the entire catalogue rendered "במלאי". A product literally
+  // named "The Out of Stock Snowboard", sitting at inventory_quantity 0, was
+  // offered to a customer as in stock.
+  if (typeof variant.available === "boolean") {
+    return variant.available ? "in_stock" : "out_of_stock";
+  }
+
   const tracked =
     variant.inventory_management !== null &&
     variant.inventory_management !== undefined;

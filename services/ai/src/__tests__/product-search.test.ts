@@ -150,3 +150,43 @@ describe("renderCandidatesForWhatsApp", () => {
     expect(out).not.toContain("riding_style");
   });
 });
+
+/**
+ * Stock truth.
+ *
+ * The GraphQL product search does not emit `inventory_management`, so the
+ * tracked/untracked fallback read every searched product as untracked - and
+ * untracked means "always available". The whole catalogue rendered "במלאי",
+ * including a product named "The Out of Stock Snowboard" sitting at
+ * inventory_quantity 0, which was offered to a live customer as in stock.
+ */
+describe("inventory truth from a GraphQL search result", () => {
+  const SHOP = "urban-supply-gotcha-demo.myshopify.com";
+  const gqlProduct = (available: boolean, qty: number) => ({
+    id: "1", title: "The Out of Stock Snowboard", handle: "oos",
+    variants: [{ id: "v1", price: "885.95", available, inventory_quantity: qty }],
+  });
+
+  it("reports out of stock when Shopify says it is not available for sale", () => {
+    const env = normalizeShopifyProducts([gqlProduct(false, 0)], { shopDomain: SHOP, shopCurrency: "USD" });
+    expect(env.candidates[0].inventoryState).toBe("out_of_stock");
+  });
+
+  it("reports in stock when Shopify says it is available", () => {
+    const env = normalizeShopifyProducts([gqlProduct(true, 50)], { shopDomain: SHOP, shopCurrency: "USD" });
+    expect(env.candidates[0].inventoryState).toBe("in_stock");
+  });
+
+  it("still honours the REST tracked/quantity shape when there is no verdict", () => {
+    const rest = { id: "2", title: "X", handle: "x", variants: [{ id: "v", price: "1", inventory_management: "shopify", inventory_quantity: 0 }] };
+    const env = normalizeShopifyProducts([rest], { shopDomain: SHOP, shopCurrency: "USD" });
+    expect(env.candidates[0].inventoryState).toBe("out_of_stock");
+  });
+
+  it("Shopify's verdict beats a stale quantity", () => {
+    // availableForSale accounts for oversell policy and location availability;
+    // a raw quantity does not.
+    const env = normalizeShopifyProducts([gqlProduct(true, 0)], { shopDomain: SHOP, shopCurrency: "USD" });
+    expect(env.candidates[0].inventoryState).toBe("in_stock");
+  });
+});
