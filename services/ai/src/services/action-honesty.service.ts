@@ -26,7 +26,11 @@ const CLAIM_PATTERNS: Array<{ kind: UnsupportedClaimKind; re: RegExp }> = [
   // "I sent / already sent"
   { kind: "sent", re: /(שלחתי|שלחנו|כבר\s*שלחתי|נשלח(ה|ו)?\s*(אליך|עכשיו)|i\s*(have\s*)?sent|i['’]ve\s*sent|already\s*sent)/i },
   // "I'll get back to you / returning in a minute"  (promises later autonomous work)
-  { kind: "followup", re: /(אחזור\s*אליך|מחזיר(ה)?\s*(לך)?\s*תוך|נחזור\s*אליך|חוזרת\s*אליך|i(['’]ll| will)?\s*(get|come)\s*back\s*to\s*you|i(['’]ll| will)?\s*return\s*in|i(['’]ll| will)?\s*send\s*(you\s*)?(shortly|in a))/i },
+  // Promises LATER autonomous work. Includes "I'll let you know when X
+  // happens", which is the shape a shipment-update request produces:
+  // "אשמח לעדכן ברגע שייווצר שינוי במשלוח" was sent with ZERO scheduled
+  // records behind it. The customer then waits for a message nobody will send.
+  { kind: "followup", re: /(אחזור\s*אליך|מחזיר(ה)?\s*(לך)?\s*תוך|נחזור\s*אליך|חוזרת\s*אליך|(אעדכן|נעדכן|אשמח\s*לעדכן|אעדכן\s*אותך)[^\n]{0,30}?(כש|ברגע|כאשר|בהמשך|מאוחר)|i(['’]ll| will)?\s*(get|come)\s*back\s*to\s*you|i(['’]ll| will)?\s*return\s*in|i(['’]ll| will)?\s*(send|let you know|update you)\s*(you\s*)?(shortly|in a|when|as soon))/i },
   // "I'll pass this to the team / I've contacted the courier / support will
   // handle it" - claims ANOTHER PARTY has been engaged.
   //
@@ -144,7 +148,7 @@ const SENTENCE_SPLIT = /(?<=[.!?׃])\s+|\n+/;
  */
 export function stripUnsupportedDelegation(
   text: string | null | undefined,
-  kinds: UnsupportedClaimKind[] = ["delegated", "performed"],
+  kinds: UnsupportedClaimKind[] = ["delegated", "performed", "followup"],
 ): string | null {
   if (!text) return null;
   const res = CLAIM_PATTERNS.filter((p) => kinds.includes(p.kind)).map((p) => p.re);

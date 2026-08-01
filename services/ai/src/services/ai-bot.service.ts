@@ -3911,7 +3911,12 @@ async function generateAIBotReplyInner(
   // - a hard reply-rewrite here risks the over-correction the self-repetition
   // gate above was removed for; the deterministic block is a reviewed follow-up.
   try {
-    const honesty = validateActionHonesty(replyText, toolCallLog);
+    const honesty = validateActionHonesty(replyText, toolCallLog, {
+      // An approval IS a real background job: the system guarantees exactly one
+      // continuation once it is decided, so "I will update you" is a promise
+      // the product actually keeps here.
+      hasBackgroundJob: toolCallLog.some((t: any) => t?.sideEffect === "awaiting_approval"),
+    });
     if (!honesty.ok) {
       console.warn(
         `[ai-bot] ACTION-HONESTY: reply claims ${honesty.unsupported.map((c) => c.kind).join(",")} ` +
@@ -3939,7 +3944,7 @@ async function generateAIBotReplyInner(
       // team" with nothing behind it reads as resolution: the customer stops
       // chasing and no one is coming. The other shapes stay observe-only,
       // where a false positive would cost more than it saves.
-      if (honesty.unsupported.some((c) => c.kind === "delegated" || c.kind === "performed")) {
+      if (honesty.unsupported.some((c) => c.kind === "delegated" || c.kind === "performed" || c.kind === "followup")) {
         const cleaned = stripUnsupportedDelegation(replyText);
         if (cleaned) {
           console.warn(`[ai-bot] ACTION-HONESTY: removed an unsupported delegation claim conv=${opts.conversationId}`);

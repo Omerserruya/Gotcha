@@ -229,3 +229,38 @@ describe("delegation phrasings the noun allowlist kept missing", () => {
     ).toBe(true);
   });
 });
+
+/**
+ * Promising a future update with nothing scheduled.
+ *
+ * Live: "תעדכנו אותי כשיש שינוי במשלוח" got "אשמח לעדכן ברגע שייווצר שינוי
+ * במשלוח של הזמנה 1011" - and there were ZERO scheduled records. The customer
+ * then waits for a message nobody is going to send.
+ */
+describe("future-update promises", () => {
+  const READ_ONLY = [{ tool: "shopify.get_order", decision: "executed" }];
+  const PENDING_APPROVAL = [{ tool: "shopify.process_refund", decision: "executed", sideEffect: "awaiting_approval" }];
+
+  it("flags 'I'll update you when there's a change' with nothing scheduled", () => {
+    const v = validateActionHonesty("אשמח לעדכן ברגע שייווצר שינוי במשלוח.", READ_ONLY);
+    expect(v.ok).toBe(false);
+    expect(v.unsupported.map((c) => c.kind)).toContain("followup");
+  });
+
+  it("flags the English shape", () => {
+    expect(validateActionHonesty("I'll let you know when it ships.", READ_ONLY).ok).toBe(false);
+  });
+
+  it("ALLOWS it when a real background job exists", () => {
+    // An approval IS such a job: the system guarantees one continuation.
+    expect(
+      validateActionHonesty("אעדכן אותך ברגע שתתקבל החלטה.", PENDING_APPROVAL, { hasBackgroundJob: true }).ok,
+    ).toBe(true);
+  });
+
+  it("strips the promise rather than leaving the customer waiting", () => {
+    const out = stripUnsupportedDelegation("ההזמנה 1011 עדיין לא נשלחה. אעדכן אותך ברגע שיהיה שינוי.");
+    expect(out).toContain("1011");
+    expect(out).not.toMatch(/אעדכן/);
+  });
+});
