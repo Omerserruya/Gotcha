@@ -18,6 +18,17 @@ import axios from "axios";
 import { trackToolCall } from "./usage.service";
 import { logAudit } from "./audit.service";
 import { maybeRefreshZohoToken } from "./zoho.service";
+// STATIC. A dynamic `await import()` of this module resolves to a SECOND
+// instance whose adapter registry is empty - the adapters register as an
+// import side-effect of the connectors barrel, which only the startup instance
+// has run - so every endpoint-less catalog tool came back
+// `unknown_provider:shopify`. That is the entire adapter-backed surface:
+// integration_order_lookup, integration_process_refund, all of it. The bot
+// concluded the order did not exist and escalated a refund to a human.
+//
+// tool-registry.ts carries the same warning from the last time this happened.
+// Third occurrence; it is a property of dynamically importing this module.
+import { executeAdapterTool } from "./connectors/integration-framework";
 
 export async function getToolsForTenant(tenantId: string) {
   return prisma.tenantTool.findMany({
@@ -126,7 +137,6 @@ export async function executeTool(params: {
     if (!integrationSlug) {
       return { ok: false, error: `catalog tool "${catalogTool.slug}" has no endpoint configured` };
     }
-    const { executeAdapterTool } = await import("./connectors/integration-framework");
     const adapterRes = await executeAdapterTool({
       tenantId,
       conversationId,

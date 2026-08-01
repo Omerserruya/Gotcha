@@ -184,6 +184,62 @@ describe("cancel_order", () => {
   });
 });
 
+describe("amount-only partial refund", () => {
+  /**
+   * Live failure: every partial refund on a fully paid, unrefunded order died
+   * with "requested 200 USD but only 0.00 USD is refundable".
+   *
+   * An amount-only refund names no line items, so the calculate call was sent
+   * `{currency}` and nothing else - asking Shopify to price a refund of
+   * NOTHING. It answered 0.00, and 0.00 became the ceiling.
+   */
+  it("prices the ceiling against what the ORDER can still bear", async () => {
+    const { calls } = stubShopify();
+    const out: any = await run("process_refund", { order_id: "11", amount: 50 });
+    expect(out.refund_id).toBe(91);
+    const calc = calls.find((c) => c.url.includes("/refunds/calculate.json"))!;
+    // The ceiling call must describe something refundable, not an empty refund.
+    expect(calc.body.refund.refund_line_items?.length).toBeGreaterThan(0);
+    expect(calc.body.refund.shipping).toBeTruthy();
+    // Nothing is physically coming back on an arbitrary amount refund.
+    expect(calc.body.refund.refund_line_items[0].restock_type).toBe("no_restock");
+  });
+
+  it("creates the refund as amount-only, not tied to line items", async () => {
+    const { calls } = stubShopify();
+    await run("process_refund", { order_id: "11", amount: 50 });
+    const create = calls.find((c) => c.url.includes("/refunds.json") && c.method === "POST" && !c.url.includes("calculate"))!;
+    expect(create.body.refund.transactions[0].amount).toBe("50.00");
+    expect(create.body.refund.refund_line_items).toBeUndefined();
+  });
+
+  it("still refuses an amount above the real ceiling", async () => {
+    stubShopify();
+    await expect(run("process_refund", { order_id: "11", amount: 99999 })).rejects.toThrow(/refund_exceeds_refundable/);
+  });
+
+  it("rejects zero, negative and non-numeric amounts", async () => {
+    stubShopify();
+    for (const amount of [0, -5, "abc"]) {
+      await expect(run("process_refund", { order_id: "11", amount })).rejects.toThrow(/refund_amount_invalid/);
+    }
+  });
+
+  it("accepts a decimal amount exactly", async () => {
+    const { calls } = stubShopify();
+    await run("process_refund", { order_id: "11", amount: 12.34 });
+    const create = calls.find((c) => c.url.includes("/refunds.json") && c.method === "POST" && !c.url.includes("calculate"))!;
+    expect(create.body.refund.transactions[0].amount).toBe("12.34");
+  });
+
+  it("refuses a currency that is not the order's", async () => {
+    stubShopify();
+    // Not a unit conversion - a different amount of money.
+    await expect(run("process_refund", { order_id: "11", amount: 50, currency: "USD" }))
+      .rejects.toThrow(/refund_currency_mismatch/);
+  });
+});
+
 describe("process_refund", () => {
   it("full refund: calculates, creates, verifies, and reports gateway status", async () => {
     const { calls } = stubShopify();

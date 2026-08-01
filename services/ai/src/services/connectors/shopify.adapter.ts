@@ -735,13 +735,13 @@ const ShopifyAdapter: ProviderAdapter = {
         params.set("limit", String(clampLimit(args.limit, 10, 250)));
         if (args.email) params.set("email", String(args.email));
         const r: any = await sreq(ctx, "GET", `/orders.json?${params}`);
-        return r.orders;
+        return (r.orders || []).map(projectOrderForAgent);
       }
       case "get_order":
       case "order_lookup": {
         const o = await resolveOrder(ctx, args);
         if (!o) throw new Error("order_not_found");
-        return o;
+        return projectOrderForAgent(o);
       }
       case "search_orders": {
         const params = new URLSearchParams();
@@ -1514,9 +1514,33 @@ async function executeRefund(ctx: Ctx, o: any, args: Record<string, any>): Promi
   // Ask Shopify what is actually refundable (per-gateway transactions,
   // shipping, taxes) instead of guessing.
   const wantShipping = args.refund_shipping != null ? !!args.refund_shipping : !isPartialAmount;
+
+  // An amount-only partial refund names no line items, so the calculate call
+  // was being sent `{currency}` and nothing else - asking Shopify to price a
+  // refund of NOTHING. It dutifully answered 0.00, and every partial refund
+  // died on "requested 200 USD but only 0.00 USD is refundable" against a
+  // fully paid, unrefunded order.
+  //
+  // The ceiling for an arbitrary amount is what the ORDER can still bear, so
+  // price it as though everything remaining were going back. This is for the
+  // CEILING and the gateway parent transaction only - the refund created below
+  // stays amount-only, which is what Shopify wants when the money is not tied
+  // to specific lines. `no_restock` because nothing is physically returning.
+  const ceilingLineItems =
+    isPartialAmount && !refundLineItems.length
+      ? (o.line_items || [])
+          .map((li: any) => ({
+            line_item_id: Number(li.id),
+            quantity: Number(li.quantity || 0) - (refundedQty[String(li.id)] || 0),
+            restock_type: "no_restock",
+          }))
+          .filter((li: { quantity: number }) => li.quantity > 0)
+      : [];
+
   const calcBody: any = { refund: { currency: o.currency } };
   if (refundLineItems.length) calcBody.refund.refund_line_items = refundLineItems;
-  if (wantShipping) calcBody.refund.shipping = { full_refund: true };
+  else if (ceilingLineItems.length) calcBody.refund.refund_line_items = ceilingLineItems;
+  if (wantShipping || ceilingLineItems.length) calcBody.refund.shipping = { full_refund: true };
   const calc: any = await sreq(ctx, "POST", `/orders/${o.id}/refunds/calculate.json`, calcBody);
   const suggested = calc.refund;
   if (!suggested) throw new Error("refund_calculate_empty: Shopify returned no suggested refund");
@@ -1528,7 +1552,15 @@ async function executeRefund(ctx: Ctx, o: any, args: Record<string, any>): Promi
   const maxRefundable = transactions.reduce((s, t) => s + Number(t.amount || 0), 0);
   if (isPartialAmount) {
     const requested = Number(args.amount);
-    if (!(requested > 0)) throw new Error("refund_amount_invalid");
+    if (!Number.isFinite(requested) || !(requested > 0)) throw new Error("refund_amount_invalid");
+    // A currency that is not the order's is never a unit conversion - it is a
+    // different amount of money. Refuse rather than quietly refunding 200 of
+    // whatever the ORDER happens to be denominated in.
+    if (args.currency && String(args.currency).toUpperCase() !== String(o.currency).toUpperCase()) {
+      throw new Error(
+        `refund_currency_mismatch: order ${o.name} is in ${o.currency}, cannot refund in ${String(args.currency).toUpperCase()}`,
+      );
+    }
     if (requested > maxRefundable + 0.005) {
       throw new Error(`refund_exceeds_refundable: requested ${requested} ${o.currency} but only ${maxRefundable.toFixed(2)} ${o.currency} is refundable`);
     }
@@ -1880,6 +1912,84 @@ async function findProductByName(ctx: Ctx, name: string): Promise<any | null> {
     products.find((p) => needle.includes(byTitle(p))) ??
     null
   );
+}
+
+/**
+ * The order, as a support agent needs it - not as Shopify stores it.
+ *
+ * `GET /orders/{id}.json` returns several thousand tokens: presentment money
+ * sets duplicated for every total, client_details, discount_applications,
+ * per-line tax and duty arrays. Handing that to the model was expensive on
+ * every single lookup, and a turn that read one order then tried to reason
+ * about it produced NO REPLY AT ALL - the customer's message simply went
+ * unanswered, with nothing logged.
+ *
+ * It is also more than we should be putting in a prompt. The raw payload
+ * carries `browser_ip`, `checkout_token`, the order `token`, and an
+ * `order_status_url` with a live `authenticate?key=` in it. None of that helps
+ * anyone answer a question about a snowboard, and a model that can see a
+ * credential can repeat one.
+ *
+ * Everything a customer conversation actually uses survives: status, money,
+ * what was bought, where it is going, what came back, and how to reach them.
+ */
+function projectOrderForAgent(o: any): Record<string, unknown> {
+  if (!o || typeof o !== "object") return o;
+  const addr = (a: any) =>
+    a
+      ? {
+          name: a.name ?? null, address1: a.address1 ?? null, address2: a.address2 ?? null,
+          city: a.city ?? null, province: a.province ?? null, zip: a.zip ?? null,
+          country: a.country ?? null, phone: a.phone ?? null,
+        }
+      : null;
+  return {
+    id: o.id,
+    name: o.name,
+    order_number: o.order_number,
+    created_at: o.created_at,
+    currency: o.currency,
+    financial_status: o.financial_status,
+    fulfillment_status: o.fulfillment_status,
+    cancelled_at: o.cancelled_at ?? null,
+    cancel_reason: o.cancel_reason ?? null,
+    total_price: o.total_price,
+    subtotal_price: o.subtotal_price,
+    total_tax: o.total_tax,
+    total_discounts: o.total_discounts,
+    // What is still owed vs already settled - the number a refund conversation
+    // keeps coming back to.
+    total_outstanding: o.total_outstanding ?? null,
+    note: o.note ?? null,
+    tags: o.tags ?? null,
+    line_items: (o.line_items || []).map((li: any) => ({
+      id: li.id, title: li.title, variant_title: li.variant_title ?? null,
+      sku: li.sku ?? null, quantity: li.quantity,
+      fulfillable_quantity: li.fulfillable_quantity ?? null,
+      price: li.price, total_discount: li.total_discount ?? null,
+    })),
+    shipping_address: addr(o.shipping_address),
+    billing_address: addr(o.billing_address),
+    customer: o.customer
+      ? {
+          id: o.customer.id, first_name: o.customer.first_name, last_name: o.customer.last_name,
+          email: o.customer.email ?? null, phone: o.customer.phone ?? null,
+        }
+      : null,
+    fulfillments: (o.fulfillments || []).map((f: any) => ({
+      id: f.id, status: f.status, shipment_status: f.shipment_status ?? null,
+      tracking_company: f.tracking_company ?? null, tracking_number: f.tracking_number ?? null,
+      tracking_url: f.tracking_url ?? (f.tracking_urls || [])[0] ?? null,
+      created_at: f.created_at ?? null,
+    })),
+    // Money that already went back, summarised. The full refund objects carry
+    // adjustment and duty sets nobody reads.
+    refunds: (o.refunds || []).map((r: any) => ({
+      id: r.id, created_at: r.created_at, note: r.note ?? null,
+      amount: (r.transactions || []).reduce((s: number, t: any) => s + Number(t.amount || 0), 0).toFixed(2),
+    })),
+    discount_codes: (o.discount_codes || []).map((d: any) => ({ code: d.code, amount: d.amount, type: d.type })),
+  };
 }
 
 function hasOutstandingFulfillments(fulfillmentOrders: any[]): boolean {
