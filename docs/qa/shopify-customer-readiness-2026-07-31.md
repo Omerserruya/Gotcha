@@ -442,11 +442,110 @@ No other tenant or store was touched. Nothing was pushed, merged or deployed.
 
 ---
 
+---
+
+# Part 3 - After the scopes were granted (2026-08-01)
+
+The operator granted the fulfillment, inventory and returns scopes and
+reconnected the store. That unblocked the data - and immediately exposed a
+worse problem underneath it.
+
+## The reconnect broke the assistant
+
+Reconnecting is the ONLY way to grant new scopes, and it left the store
+`CONNECTED`, capability-probe green, every scope present - and the AI holding
+**7 tools**: escalate, close, and identity verification. All 62 Shopify tools
+were gone.
+
+The tool surface is built from `AgentToolPermission` rows, and those were
+provisioned in exactly one place: the "use this integration as CRM" UI toggle.
+**Connecting never created them**, so a disconnect/reconnect deleted them for
+good. Three health signals said the connection was fine, because all three ask
+about the *connection*. None asked whether the assistant could do anything.
+
+What the AI did with 7 tools is worth recording: asked about a size it asked
+which colour (asking was all it had), and asked to cancel an order it escalated
+with *"system tooling for cancellation unavailable in chat"* - which was **true**,
+and read like a model defect.
+
+Fixed at the point connection state is written, so it covers every connector and
+every OAuth path. Reads only; rows an operator turned off stay off.
+
+## Defects found and fixed in Part 3
+
+| # | Defect | Effect before |
+|---|---|---|
+| 1 | Reconnect wiped tool permissions | Store healthy, AI toolless |
+| 2 | Fulfillment read from legacy fields | Orders in fulfillment read as unfulfilled |
+| 3 | "Cannot see" rendered as "none" | A missing scope answered "no tracking exists" |
+| 4 | Order anchoring | An explicit correction could not move the bot off a stale order |
+| 5 | `variant_information` needed an ID | Size questions answered with a catalogue or a question |
+| 6 | Variant intent routed to RESOLVE_ISSUE | Support persona diagnosed instead of looking up |
+| 7 | **Whole catalogue reported in stock** | A zero-quantity product offered as available |
+| 8 | "Team is handling it" with nothing behind it | Reads as resolution; customer stops chasing |
+| 9 | Autonomy counter charged approval waits | Cancellation flows burned budget on a designed pause |
+
+**#7 is the one to note.** `deriveInventoryState` decides tracked-vs-untracked
+from `inventory_management`; the GraphQL search does not emit that field; absent
+took the permissive branch; permissive means "always available". Nothing errored.
+
+## Scenario results (Part 3)
+
+| # | Scenario | Result |
+|---|---|---|
+| 6 | Exact variant / size 159 | **PASS** - "נמכר בגרסה אחת בלבד (אין מידות שונות) וכרגע במלאי" |
+| 7 | Out of stock + restock | **PASS** - "לא במלאי כרגע", no invented restock date |
+| 8/9 | Tracking / no-ETA | **PASS** - `tracking_state` distinguishes available / not_yet / none / unknown |
+| 14 | Cancel a fulfilled order | **PASS** - refuses, offers return+refund, **no approval raised** |
+| 19 | Refund above maximum | **PASS** - read the real total, refused 5000 on a 785.95 order, no approval |
+| 18 | Partial refund | **UNSUPPORTED (fixture)** - adapter refused: "only 0.00 USD is refundable" |
+| - | Order anchoring | **PASS** - "שכח מ-1006 ... רק 1010" → "נטוש 1006 ואעבוד רק על 1010" |
+
+**Partial refund is still unproven.** Every Matan order is now cancelled,
+refunded, or in fulfillment; none has a refundable balance. The system behaved
+correctly (refused, persisted FAILED, told the customer honestly, mutated
+nothing) - but the happy path was never exercised.
+
+## Scope matrix (derived from what the code actually calls)
+
+| Capability | Endpoint | Scopes | Status |
+|---|---|---|---|
+| Order lookup / status | `GET /orders` | `read_orders`, `read_all_orders` (>60d) | granted |
+| Fulfillment / tracking | `GET /orders/{id}/fulfillment_orders` | `read_merchant_managed_fulfillment_orders`, `read_assigned_fulfillment_orders` | granted |
+| Cancellability precheck | as above + `orderCancel` | `read_merchant_managed_fulfillment_orders` + `write_orders` | granted |
+| Cancel | GraphQL `orderCancel` | `write_orders` | granted |
+| Refund | `POST /orders/{id}/refunds` | `write_orders` | granted |
+| Stock / variants | `GET /products`, GraphQL search | `read_products`, `read_inventory` | granted |
+| Customers, tags, notes | `GET/PUT /customers` | `read_customers`, `write_customers` | granted |
+| Discounts / coupons | `/price_rules`, `/discount_codes` | `read_price_rules`, `write_price_rules`, `write_discounts` | granted |
+| Return status | GraphQL `returns` | `read_returns` | granted |
+| Create a fulfillment | `POST /fulfillments` | `write_merchant_managed_fulfillment_orders` | **not granted, not requested** |
+| Create an RMA | GraphQL `returnCreate` | `write_returns` | granted but **no tool uses it** |
+
+Deliberately not requested: `write_fulfillments`, `write_draft_orders`,
+`read_draft_orders`, third-party fulfillment writes. Nothing calls them.
+
+**The OAuth request list was the real risk**: it asked for 8 scopes and none of
+the fulfillment ones, so every merchant onboarding through the normal flow would
+have reproduced this store's original blocker, silently.
+
+---
+
 ## 10. Verdict
 
-**Not ready to sell.** The HITL lifecycle is now sound and proven end to end on
-all three outcomes, and nine further customer-facing defects were fixed. But 12
-of 30 scenarios are verified, 2 fail, and one of those failures needs a Shopify
-scope grant rather than code. The order-anchoring bug in long conversations and
-the default 10-message autonomy ceiling would both be visible to a real
-merchant on day one.
+**Not ready to sell, but materially closer.** The HITL lifecycle is proven on
+all three outcomes; both previously-failing scenarios (S6 variant, S14 fulfilled
+cancel) now pass; order anchoring is fixed deterministically; and nine further
+defects were found and fixed, including a catalogue that reported every product
+in stock.
+
+What still blocks a sales claim: **partial refund is unproven** (no fixture with
+a refundable balance), **11 scenarios remain unrun** (returns, exchange, damaged,
+wrong item, missing item, note/tag, resend, invoice, coupon, proactive update,
+address change), the **permanent Dev E2E harness was not built**, and the
+**`maxAutonomousMessages` default of 10 is unchanged** pending a product
+decision.
+
+The reconnect defect deserves separate weight: it was invisible to every health
+signal we have, and it is on the mandatory path for granting scopes. Any
+merchant who reconnects today gets a green connection and a mute assistant.
