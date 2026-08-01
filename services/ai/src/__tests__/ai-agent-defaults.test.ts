@@ -20,7 +20,12 @@ describe("shared AI employee creation defaults", () => {
   it("defines the full behavioural envelope, not just model settings", () => {
     const d = aiAgentCreationDefaults();
     // Runtime-behaviour fields: the ones onboarding used to omit.
-    expect(d.maxAutonomousMessages).toBe(10);
+    // 30, not 10. Ten AI replies is a short conversation - a product question,
+    // a size check, an order lookup and a cancellation is most of it - and the
+    // dev agent hit the ceiling mid-test on an ordinary support flow. A limit
+    // that fires during normal use is a defect the customer experiences as
+    // being abandoned, not a safety rail.
+    expect(d.maxAutonomousMessages).toBe(30);
     expect(d.maxAutonomousMinutes).toBe(15);
     expect(d.confidenceThreshold).toBe(0.6);
     expect(d.escalationMessage).toBeTruthy();
