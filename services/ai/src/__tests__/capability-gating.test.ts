@@ -124,7 +124,15 @@ describe("proactive capability discovery", () => {
     prismaMock.tenantIntegration.findUnique.mockResolvedValue({
       config: { shopDomain: "s.myshopify.com", missingScopes: ["write_customers"] },
     });
-    const all = ["read_customers", "write_customers", "read_orders", "write_orders", "read_products", "read_price_rules", "write_price_rules"];
+    // "Fully granted" now includes fulfillment orders, inventory and returns.
+    // A connection without them used to test GREEN while answering every
+    // shipping and cancellability question from fields that read null, so a
+    // green connection that cannot see fulfillment is not a passing state.
+    const all = [
+      "read_customers", "write_customers", "read_orders", "write_orders",
+      "read_products", "read_price_rules", "write_price_rules",
+      "read_merchant_managed_fulfillment_orders", "read_inventory", "read_returns",
+    ];
     (globalThis as any).fetch = vi.fn(async () => ({
       ok: true, status: 200, json: async () => ({ access_scopes: all.map((handle) => ({ handle })) }),
     }));

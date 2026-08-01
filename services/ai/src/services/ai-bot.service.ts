@@ -36,6 +36,7 @@ import {
   type ExecutionFacts,
 } from "./grounded-message.service";
 import { validateActionHonesty } from "./action-honesty.service";
+import { assertOrderTargetMatchesTurn, isOrderStateChangingTool } from "./order-reference.service";
 import { getActionOrchestrator, type ExecutionResult } from "./orchestrator";
 import type { AgentToolContext } from "@chatcenter/shared";
 import { generateResponse, getDefaultModel, getMicroModel } from "./ai.service";
@@ -1737,6 +1738,30 @@ async function generateAIBotReplyInner(
       }
     },
     runAdapterTool: async ({ toolFunctionName, args }) => {
+      // ── Order anchoring fence ────────────────────────────────────────
+      // A model carrying a long history can walk a STALE order into a refund.
+      // Live: after a failed refund on #1006 the customer wrote "לא, שכח
+      // מ1006 ... ההזמנה מספר 1010 בלבד" and the bot kept acting on #1006
+      // through both the negation and the re-selection.
+      //
+      // This does not guess. It only refuses when the customer's own latest
+      // message contradicts the target - a number they excluded, or a
+      // different order they just named. A message naming no order constrains
+      // nothing, and reads are never fenced.
+      if (isOrderStateChangingTool(toolFunctionName)) {
+        const verdict = assertOrderTargetMatchesTurn({
+          message: opts.incomingMessage ?? "",
+          args: args as Record<string, unknown>,
+          isStateChanging: true,
+        });
+        if (!verdict.ok) {
+          console.warn(
+            `[ai-bot] order fence blocked ${toolFunctionName} on ${verdict.got} ` +
+              `(customer named ${JSON.stringify(verdict.expected)})`,
+          );
+          return { ok: false as const, reason: `wrong_order: ${verdict.reason}` };
+        }
+      }
       const result = await executeAdapterTool({
         tenantId: opts.tenantId,
         conversationId: opts.conversationId,
