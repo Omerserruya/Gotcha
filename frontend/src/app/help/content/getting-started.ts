@@ -72,7 +72,7 @@ One question: *where does your business live online?* Type your domain and GOTCH
 
 ## 2. Watch the investigation
 
-GOTCHA reads your site end to end - homepage, policy pages, FAQ, contact pages. You'll see each stage land as it really finishes, with live findings (channels, platform) appearing as they're discovered. Typically 30–60 seconds.
+GOTCHA reads your site end to end - homepage, policy pages, FAQ, contact pages. You'll see each stage land as it really finishes, with live findings (channels, platform) appearing as they're discovered. Typically 30-60 seconds.
 
 ## 3. Review what it learned
 
@@ -86,7 +86,7 @@ The one system that holds your customers or orders - your CRM or store. GOTCHA s
 
 Support, sales, lead qualification, operations… your answer shapes the employee.
 
-## 6–7. Integrations & knowledge
+## 6-7. Integrations & knowledge
 
 Recommended integrations based on what was found, plus knowledge intake: teach by URL, upload files (PDF/Word), or connect Google Drive.
 
@@ -105,7 +105,7 @@ One click and it's hired. You land in the inbox; connect WhatsApp and it starts 
 
 ## 2. צופים בחקירה
 
-GOTCHA קוראת את האתר מקצה לקצה - עמוד הבית, עמודי מדיניות, שאלות נפוצות, יצירת קשר. כל שלב מסומן כשהוא באמת מסתיים, וממצאים חיים (ערוצים, פלטפורמה) מופיעים תוך כדי. בדרך כלל 30–60 שניות.
+GOTCHA קוראת את האתר מקצה לקצה - עמוד הבית, עמודי מדיניות, שאלות נפוצות, יצירת קשר. כל שלב מסומן כשהוא באמת מסתיים, וממצאים חיים (ערוצים, פלטפורמה) מופיעים תוך כדי. בדרך כלל 30-60 שניות.
 
 ## 3. סוקרים את מה שנלמד
 
@@ -119,7 +119,7 @@ GOTCHA קוראת את האתר מקצה לקצה - עמוד הבית, עמוד�
 
 תמיכה, מכירות, סינון לידים, תפעול… התשובה מעצבת את העובד.
 
-## 6–7. אינטגרציות וידע
+## 6-7. אינטגרציות וידע
 
 אינטגרציות מומלצות לפי מה שנמצא, והזנת ידע: לימוד מקישור, העלאת קבצים (PDF/Word) או חיבור Google Drive.
 

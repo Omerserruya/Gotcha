@@ -146,32 +146,79 @@ In Fireberry: **Settings → Integration → API Forms → My Token**. Copy the 
       body: [
         `## Connect
 
-1. Pick **Shopify** in setup (or Settings → Integrations).
-2. Enter your store's **myshopify domain** - e.g. \`my-store.myshopify.com\` (find it in Shopify Admin → Settings → Domains).
+1. Pick **Shopify** in setup (or Settings \u2192 Integrations).
+2. Enter your store's **myshopify domain** - e.g. \`my-store.myshopify.com\` (find it in Shopify Admin \u2192 Settings \u2192 Domains).
 3. Approve the app install in the Shopify screen that opens.
 
-## What it unlocks
+## What the AI can do
 
-- **"Where's my order?"** answered automatically - the AI looks up the order by the customer's details and reports real status.
-- Product questions answered from your live catalog.
-- Customer recognition by email/phone from your store records.
-- Shopify can also serve as your **source of truth** if you don't run a separate CRM.
+**Answer questions** about orders, products, inventory, variants, shipping and returns, using your live store data.
 
-> After connecting, GOTCHA adds store-specific recommendations (like automating order-status replies) to your recommendations list.`,
-        `## חיבור
+**Take action**, when you allow it: cancel an order, refund, start a return, exchange an item, change a shipping address, update notes and tags, resend an order confirmation.
 
-1. בחרו **Shopify** בהגדרה (או בהגדרות → אינטגרציות).
-2. הזינו את דומיין ה-**myshopify** של החנות - למשל \`my-store.myshopify.com\` (נמצא ב-Shopify Admin ← Settings ← Domains).
-3. אשרו את התקנת האפליקציה במסך Shopify שנפתח.
+Money-moving and irreversible actions are held for a human by default. The AI proposes, you approve, and only then does it run. After you approve or reject, the customer gets a message telling them what actually happened.
 
-## מה זה פותח
+## Reconnecting
 
-- **"איפה ההזמנה שלי?"** נענה אוטומטית - ה-AI מאתר את ההזמנה לפי פרטי הלקוח ומדווח סטטוס אמיתי.
-- שאלות מוצר נענות מהקטלוג החי.
-- זיהוי לקוחות לפי אימייל/טלפון מרשומות החנות.
-- Shopify יכול לשמש גם כ**מקור האמת** אם אין לכם CRM נפרד.
+Some changes need you to reconnect the store:
 
-> אחרי החיבור GOTCHA מוסיפה המלצות ייעודיות לחנות (כמו אוטומציה למענה על סטטוס הזמנה) לרשימת ההמלצות שלכם.`,
+- adding a permission the AI did not have before
+- a Shopify permission that was revoked or expired
+- an error on the connection that does not clear
+
+Reconnecting is safe. **Tools you switched off stay off.** Reconnect restores what the store makes available, not your decisions about it.
+
+## Connection health
+
+Settings \u2192 Integrations shows whether the store is connected, which permissions are granted, and how many tools the AI actually holds. A connected store with missing tools is a real state and it is shown as one, because a green connection on its own does not mean the AI can do anything.
+
+## What is not supported
+
+Being straight about this is cheaper than a customer finding out mid-conversation:
+
+- **Coupons and discount codes for customers.** The AI does not create or validate them in a customer conversation.
+- **Tax invoices** need a connected invoicing provider. Shopify alone will not produce one.
+- **Address changes** are limited by fulfillment. Once an order has shipped, the address cannot be edited.
+- **Exchanges after fulfillment** go through a return, not an edit.
+- **Returns** depend on what your returns provider supports and how it is configured.
+- **A disconnected store cannot do anything.** No tool runs while the connection is down.
+- **Tools you disabled stay disabled**, including after a reconnect.
+
+## Troubleshooting
+
+**"The AI says it cannot do that."** Usually the tool is switched off in Settings, or the store is missing a Shopify permission. Both are shown on the integration page.
+
+**A permission error.** Reconnect the store and approve the requested permissions.
+
+**Customer data is not appearing.** Some Shopify data needs Protected Customer Data approval on the Shopify side. This is a Shopify setting, not a GOTCHA one.`,
+        `## \u05d7\u05d9\u05d1\u05d5\u05e8
+
+1. \u05d1\u05d7\u05e8\u05d5 **Shopify** \u05d1\u05d4\u05d2\u05d3\u05e8\u05d4 (\u05d0\u05d5 \u05d1\u05d4\u05d2\u05d3\u05e8\u05d5\u05ea \u2190 \u05d0\u05d9\u05e0\u05d8\u05d2\u05e8\u05e6\u05d9\u05d5\u05ea).
+2. \u05d4\u05d6\u05d9\u05e0\u05d5 \u05d0\u05ea \u05d3\u05d5\u05de\u05d9\u05d9\u05df \u05d4-**myshopify** \u05e9\u05dc \u05d4\u05d7\u05e0\u05d5\u05ea - \u05dc\u05de\u05e9\u05dc \`my-store.myshopify.com\`.
+3. \u05d0\u05e9\u05e8\u05d5 \u05d0\u05ea \u05d4\u05ea\u05e7\u05e0\u05ea \u05d4\u05d0\u05e4\u05dc\u05d9\u05e7\u05e6\u05d9\u05d4 \u05d1\u05de\u05e1\u05da Shopify \u05e9\u05e0\u05e4\u05ea\u05d7.
+
+## \u05de\u05d4 \u05d4-AI \u05d9\u05db\u05d5\u05dc \u05dc\u05e2\u05e9\u05d5\u05ea
+
+**\u05dc\u05e2\u05e0\u05d5\u05ea \u05e2\u05dc \u05e9\u05d0\u05dc\u05d5\u05ea** \u05d1\u05e0\u05d5\u05d2\u05e2 \u05dc\u05d4\u05d6\u05de\u05e0\u05d5\u05ea, \u05de\u05d5\u05e6\u05e8\u05d9\u05dd, \u05de\u05dc\u05d0\u05d9, \u05d5\u05e8\u05d9\u05d0\u05e0\u05d8\u05d9\u05dd, \u05de\u05e9\u05dc\u05d5\u05d7 \u05d5\u05d4\u05d7\u05d6\u05e8\u05d5\u05ea, \u05dc\u05e4\u05d9 \u05e0\u05ea\u05d5\u05e0\u05d9 \u05d4\u05d7\u05e0\u05d5\u05ea \u05d4\u05d7\u05d9\u05d9\u05dd.
+
+**\u05dc\u05d1\u05e6\u05e2 \u05e4\u05e2\u05d5\u05dc\u05d5\u05ea**, \u05db\u05e9\u05d0\u05ea\u05dd \u05de\u05e8\u05e9\u05d9\u05dd: \u05d1\u05d9\u05d8\u05d5\u05dc \u05d4\u05d6\u05de\u05e0\u05d4, \u05d6\u05d9\u05db\u05d5\u05d9, \u05e4\u05ea\u05d9\u05d7\u05ea \u05d4\u05d7\u05d6\u05e8\u05d4, \u05d4\u05d7\u05dc\u05e4\u05ea \u05e4\u05e8\u05d9\u05d8, \u05e9\u05d9\u05e0\u05d5\u05d9 \u05db\u05ea\u05d5\u05d1\u05ea \u05de\u05e9\u05dc\u05d5\u05d7, \u05e2\u05d3\u05db\u05d5\u05df \u05d4\u05e2\u05e8\u05d5\u05ea \u05d5\u05ea\u05d5\u05d9\u05d5\u05ea, \u05e9\u05dc\u05d9\u05d7\u05d4 \u05d7\u05d5\u05d6\u05e8\u05ea \u05e9\u05dc \u05d0\u05d9\u05e9\u05d5\u05e8 \u05d4\u05d6\u05de\u05e0\u05d4.
+
+\u05e4\u05e2\u05d5\u05dc\u05d5\u05ea \u05e9\u05de\u05e2\u05d5\u05e8\u05d1\u05d5\u05ea \u05d1\u05d4\u05df \u05db\u05e1\u05e3 \u05d0\u05d5 \u05e9\u05d0\u05d9\u05e0\u05df \u05d4\u05e4\u05d9\u05db\u05d5\u05ea \u05de\u05de\u05ea\u05d9\u05e0\u05d5\u05ea \u05dc\u05d0\u05d9\u05e9\u05d5\u05e8 \u05d0\u05e0\u05d5\u05e9\u05d9 \u05db\u05d1\u05e8\u05d9\u05e8\u05ea \u05de\u05d7\u05d3\u05dc. \u05d0\u05d7\u05e8\u05d9 \u05e9\u05d0\u05d9\u05e9\u05e8\u05ea\u05dd \u05d0\u05d5 \u05d3\u05d7\u05d9\u05ea\u05dd, \u05d4\u05dc\u05e7\u05d5\u05d7 \u05de\u05e7\u05d1\u05dc \u05d4\u05d5\u05d3\u05e2\u05d4 \u05e9\u05de\u05e1\u05e4\u05e8\u05ea \u05de\u05d4 \u05d1\u05d0\u05de\u05ea \u05e7\u05e8\u05d4.
+
+## \u05d7\u05d9\u05d1\u05d5\u05e8 \u05de\u05d7\u05d3\u05e9
+
+\u05dc\u05e4\u05e2\u05de\u05d9\u05dd \u05e6\u05e8\u05d9\u05da \u05dc\u05d7\u05d1\u05e8 \u05d0\u05ea \u05d4\u05d7\u05e0\u05d5\u05ea \u05de\u05d7\u05d3\u05e9: \u05db\u05e9\u05de\u05d5\u05e1\u05d9\u05e4\u05d9\u05dd \u05d4\u05e8\u05e9\u05d0\u05d4 \u05d7\u05d3\u05e9\u05d4, \u05db\u05e9\u05d4\u05e8\u05e9\u05d0\u05d4 \u05e4\u05d2\u05d4, \u05d0\u05d5 \u05db\u05e9\u05d9\u05e9 \u05e9\u05d2\u05d9\u05d0\u05d4 \u05e9\u05dc\u05d0 \u05e0\u05e1\u05d2\u05e8\u05ea.
+
+\u05d7\u05d9\u05d1\u05d5\u05e8 \u05de\u05d7\u05d3\u05e9 \u05d1\u05d8\u05d5\u05d7. **\u05db\u05dc\u05d9\u05dd \u05e9\u05db\u05d9\u05d1\u05d9\u05ea\u05dd \u05e0\u05e9\u05d0\u05e8\u05d9\u05dd \u05db\u05d1\u05d5\u05d9\u05d9\u05dd.**
+
+## \u05de\u05d4 \u05dc\u05d0 \u05e0\u05ea\u05de\u05da
+
+- **\u05e7\u05d5\u05e4\u05d5\u05e0\u05d9\u05dd \u05d5\u05e7\u05d5\u05d3\u05d9 \u05d4\u05e0\u05d7\u05d4 \u05dc\u05dc\u05e7\u05d5\u05d7\u05d5\u05ea** \u05d1\u05e9\u05d9\u05d7\u05d4.
+- **\u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05ea \u05de\u05e1** \u05d3\u05d5\u05e8\u05e9\u05ea \u05e1\u05e4\u05e7 \u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05d5\u05ea \u05de\u05d7\u05d5\u05d1\u05e8.
+- **\u05e9\u05d9\u05e0\u05d5\u05d9 \u05db\u05ea\u05d5\u05d1\u05ea** \u05de\u05d5\u05d2\u05d1\u05dc \u05d0\u05d7\u05e8\u05d9 \u05e9\u05dc\u05d9\u05d7\u05d4.
+- **\u05d4\u05d7\u05dc\u05e4\u05d4 \u05d0\u05d7\u05e8\u05d9 \u05de\u05e9\u05dc\u05d5\u05d7** \u05e2\u05d5\u05d1\u05e8\u05ea \u05d3\u05e8\u05da \u05d4\u05d7\u05d6\u05e8\u05d4.
+- **\u05d7\u05e0\u05d5\u05ea \u05de\u05e0\u05d5\u05ea\u05e7\u05ea \u05dc\u05d0 \u05de\u05d1\u05e6\u05e2\u05ea \u05db\u05dc\u05d5\u05dd.**
+- **\u05db\u05dc\u05d9\u05dd \u05e9\u05db\u05d9\u05d1\u05d9\u05ea\u05dd \u05e0\u05e9\u05d0\u05e8\u05d9\u05dd \u05db\u05d1\u05d5\u05d9\u05d9\u05dd**, \u05d2\u05dd \u05d0\u05d7\u05e8\u05d9 \u05d7\u05d9\u05d1\u05d5\u05e8 \u05de\u05d7\u05d3\u05e9.`,
       ],
     },
   ],
