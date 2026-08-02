@@ -20,6 +20,7 @@ import {
   validateOutcomeClaims,
   stripUnsupportedClaims,
   buildOutcomeFactBlock,
+  isInterimOnlyReply,
   type CustomerOutcome,
 } from "../services/customer-outcome.service";
 
@@ -373,5 +374,42 @@ describe("the normalized outcome the closure round asks for", () => {
     expect(validateOutcomeClaims("החלפתי את המידה", facts({ exchangeCompleted: true })).ok).toBe(false);
     expect(validateOutcomeClaims("פתחתי החזרה", facts({ returnCreated: true, returnId: "#R1" })).ok).toBe(false);
     expect(validateOutcomeClaims("פתחתי החזרה", facts({ returnCreated: true, returnId: "#R1", readBackVerified: true })).ok).toBe(true);
+  });
+});
+
+/**
+ * The silent turn wearing a sentence.
+ *
+ * Live (2026-08-02): asked where order #1002 was, the whole reply was "רגע
+ * אחת, בודקת את מצב המשלוח של הזמנה 1002" - a promise to go and look, with no
+ * second message to follow it, because the bot has no mechanism to send one.
+ *
+ * Every guard passed it. The honesty net saw an in_progress claim with real
+ * execution evidence, which is true. The silent-turn net saw text, also true.
+ * The turn produced no ANSWER, only an announcement that one was coming.
+ */
+describe("a reply that is only a promise to go and look", () => {
+  it("catches the live failure", () => {
+    expect(isInterimOnlyReply("רגע אחת, בודקת את מצב המשלוח של הזמנה 1002.")).toBe(true);
+  });
+
+  it("catches the usual English forms", () => {
+    for (const s of ["One moment, let me check that.", "Just a sec, checking now.", "I'll check and get back."]) {
+      expect(isInterimOnlyReply(s), s).toBe(true);
+    }
+  });
+
+  it("leaves a reply alone once it contains an actual finding", () => {
+    expect(isInterimOnlyReply("רגע אחת, בדקתי: ההזמנה נשלחה ומספר המעקב הוא 12345.")).toBe(false);
+    expect(isInterimOnlyReply("ההזמנה #1002 נשלחה, מספר מעקב 12345.")).toBe(false);
+  });
+
+  it("is not fooled by an interim sentence followed by a real one", () => {
+    expect(isInterimOnlyReply("רגע אחת. ההזמנה עדיין לא נשלחה.")).toBe(false);
+  });
+
+  it("says nothing about an empty reply - that is the silent-turn net's job", () => {
+    expect(isInterimOnlyReply("")).toBe(false);
+    expect(isInterimOnlyReply(null)).toBe(false);
   });
 });

@@ -927,3 +927,188 @@ What blocks the claim:
 The honest summary is that the *mechanisms* are now considerably stronger than
 the *behaviour* they are containing. That was true of the honesty net in Part 4
 and it is still true, one layer up.
+
+---
+
+---
+
+# Part 6 - Final sales-readiness closure (2026-08-02)
+
+The operator granted the scopes Part 5 was blocked on. This part closes the
+Shopify use case: exchange and return proven end to end for the first time, the
+`shopify_406` confirmation blocker resolved, the model removed from the driving
+seat of the irreversible flows, and a verdict.
+
+## The reconnect had disarmed the assistant
+
+Before anything else could be proven, Phase 1 found this - and found it the
+same way Part 3 found its half, by an operator reconnecting to grant scopes on
+the day those scopes were needed.
+
+| Category | Provisioned | In catalog |
+|---|---|---|
+| READ | 42 | 42 |
+| WRITE | **0** | 18 |
+| ACTION | **0** | 8 |
+
+The store was CONNECTED, the capability probe was green, every scope was
+granted, and the assistant could look up any order, customer, variant and
+fulfillment state while being unable to cancel, refund, return, exchange or
+redirect a single one.
+
+That is worse than having no tools, because the reads answer every diagnostic
+anyone thinks to run. And reconnecting is the ONLY way to grant a scope, so the
+operation a merchant performs to make the assistant more capable is the
+operation that quietly disarms it.
+
+Part 3 fixed "connecting created no permissions" by calling the provisioning
+helper from the connect path. The helper was `enableReadToolsForIntegration`,
+filtered to READ, under a comment reading *"Writes stay an explicit decision."*
+That is a reasonable sentence about a first connect and a false one about a
+reconnect: disconnect deletes tenant tools by cascade, so nobody decided
+anything - a cascade did. Provisioning now covers the whole surface; what keeps
+writes safe is where it always was, `hitl_policy`, which holds every
+money-moving tool behind a human.
+
+**Stated, not hidden:** a full disconnect deletes those rows too, so a per-tool
+"off" an operator set does not survive one. The function cannot preserve a row
+that no longer exists. Durable per-tool intent keyed by tenant and tool name
+rather than by connection is a schema change, and it is not attempted here.
+
+## Scope matrix (live probe, not cached state)
+
+`SHOPIFY_DEV_E2E=true node scripts/shopify/dev-e2e.mjs scope-check`
+
+| Capability | Operation | Scope | Granted | Tool | AI | HITL | Live verified |
+|---|---|---|---|---|---|---|---|
+| Order lookup | `GET /orders` | `read_orders`, `read_all_orders` | yes | `get_order` | yes | never | yes |
+| Fulfillment state | `GET /fulfillment_orders` | `read_merchant_managed_fulfillment_orders` | yes | `get_fulfillment_status` | yes | never | yes |
+| Cancel | `orderCancel` | `write_orders` | yes | `cancel_order` | yes | always | Parts 2-3 |
+| Refund | `POST /refunds` | `write_orders` | yes | `process_refund` | yes | always | Part 4 |
+| **Exchange** | `orderEditBegin/SetQuantity/AddVariant/Commit` | **`write_order_edits`** | **yes** | `exchange_order_item` | yes | always | **yes, #1014** |
+| **Return** | `returnCreate` | **`write_returns`** | **yes** | `create_return` | yes | always | **yes, #1003-R2 / #1002-R1** |
+| **Order confirmation** | `orderInvoiceSend` | `write_orders` | yes | `resend_confirmation` | yes | always | **yes, #1014** |
+| Profile | `PUT /customers` | `write_customers` | yes | `update_my_profile` | yes | never | yes |
+| Order address | `PUT /orders` | `write_orders` | yes | `update_order_shipping_address` | yes | always | yes, #1014 |
+| Note/tag | `PUT /orders` | `write_orders` | yes | `add_order_note` | yes | never | yes, #1014 |
+| Create fulfillment | `fulfillmentCreate` | `write_merchant_managed_fulfillment_orders` | **NO** | - | - | - | **blocked, by design** |
+| Coupons/discounts | price rules | granted | yes | 8 tools | **ASSIST only** | - | out of scope |
+
+## Exchange: three defects between the code and a completed swap
+
+Each was invisible until the edit ran against a real store.
+
+**`restock: true`.** Reducing a PAID line without it does not credit the line -
+Shopify keeps the charge and bills the replacement on top. Order #1012 went from
+2 boards at 1399.90 to a subtotal of 2099.85 and `partially_paid`: a customer
+owing money for a swap that was supposed to cost nothing. With `restock` the
+same edit nets to exactly the original subtotal.
+
+**`calculatedOrder` is not a query.** The line-id mapping comes back from
+`orderEditBegin` itself. The separate query failed with *"Field 'calculatedOrder'
+doesn't exist on type 'QueryRoot'"* - after a human had approved the exchange.
+Second time this round a GraphQL field nobody had watched execute failed a
+money-adjacent action at the last step, after `returnableFulfillments`.
+
+**`projectOrderForAgent` was stripping `product_id` and `variant_id`.** That
+projection exists to keep credentials out of the prompt and it also removed the
+two identifiers needed to act on a line - so a five-colour snowboard reported as
+"sold in one version only", from the order that contained it.
+
+### The settlement guard
+
+The quote's arithmetic says the prices match. The guard asks **Shopify** whether
+the edit it has staged changes what the customer owes, and refuses to commit
+when the delta is not zero. An uncommitted calculated order simply expires, so a
+refusal leaves the order untouched. My own arithmetic got this wrong once, which
+is the argument for not trusting it.
+
+| Relation | Behaviour |
+|---|---|
+| equal | commit, after Shopify's own delta reads 0.00 |
+| higher | refuse before `orderEditBegin`, state the exact difference, hand to a person |
+| lower | refuse before `orderEditBegin`, state the exact difference, hand to a person |
+| non-zero delta at commit time | refuse, order untouched, hand to a person |
+
+**Limitation, stated:** the zero delta is proven against API-created orders,
+whose `financial_status: "paid"` is a label rather than a transaction. A real
+gateway-paid order cannot be constructed on a dev store, so the behaviour on one
+is inferred from Shopify's arithmetic rather than observed.
+
+## The flows are no longer the model's to choose
+
+Part 5 ended with the mechanisms stronger than the behaviour they contained. The
+two failures worth naming, both live: a human approved
+`exchange_order_item({quantity: 1, order_name: "1012"})` - an exchange with
+nothing to exchange to; and a colour question was answered from a product the
+model had guessed the name of.
+
+`shopify-flow-controller.service.ts` resolves the facts before the model is
+asked to say anything - which order, which line, which options, what it costs,
+whether it is still eligible - and hands over at most ONE permitted call with
+its arguments already filled in. `assertMatchesResolvedFlow` then refuses, at
+dispatch, any critical tool called with arguments the controller did not
+compute.
+
+The difference is visible in the approval rows:
+
+```
+Part 5:  {"quantity": 1, "order_name": "1012"}
+Part 6:  {"quantity": 1, "order_name": "#1014",
+          "line_item_id": "45669159928177", "new_variant_id": "64158270882161"}
+```
+
+What stays with the model: tone, language, empathy, and every flow that is not
+irreversible. A state machine over those would be worse.
+
+## Return/RMA provider matrix
+
+| Provider | Connected | Creates returns | Reads status | Selected |
+|---|---|---|---|---|
+| Shopify native | yes | **yes** (`returnCreate`, `write_returns`) | yes | **yes** |
+| ReturnGO | no | no - the adapter has list/summarise/update and no create | n/a | no |
+| Human handoff | always | n/a | n/a | fallback |
+
+Exactly one provider creates any given return. A connected integration with no
+create endpoint is not a create-capable provider, and ReturnGO is the reason
+that sentence exists.
+
+## Document capability matrix
+
+| Document | Source | Status |
+|---|---|---|
+| Order confirmation | `orderInvoiceSend` | **PASS** - live |
+| Payment receipt | same email | PASS |
+| Refund confirmation | refund result | PASS |
+| Order summary | order read | PASS |
+| Order-status link | `order_status_url` | **refused by design** - it carries a bearer key |
+| Invoice / tax invoice / credit note | none connected | **UNSUPPORTED** - stated honestly, no provider name, no status code |
+
+## Fixture inventory
+
+| Order | Purpose | State |
+|---|---|---|
+| #1002 | fulfilled return fixture | return `#1002-R1` OPEN |
+| #1003 | fulfilled return fixture | return `#1003-R2` OPEN, `#1003-R1` CANCELED |
+| #1012 | first exchange attempt, no `restock` | `partially_paid`, left as evidence |
+| #1013 | clean settlement experiment | exchanged Ice→Dawn |
+| #1014 | full journey fixture | exchanged, address changed, note added, confirmation sent |
+
+## Shopify mutation ledger (Part 6)
+
+| Object | Mutation | Result |
+|---|---|---|
+| #1012 | order edit without `restock` | subtotal 2099.85, `partially_paid` - the defect, preserved |
+| #1012 | reverting order edit | committed |
+| #1013 | created, then Ice→Dawn | `exchange_completed: true` |
+| #1014 | created | 1399.90 |
+| #1014 | Ice→Dawn via HITL | Ice outstanding 1, Dawn outstanding 1 |
+| #1014 | shipping address via HITL | רוטשילד 5, תל אביב, 6688218 |
+| #1014 | note added | note non-empty |
+| #1014 | `orderInvoiceSend` | sent to the stored address |
+| #1003 | `returnCreate` ×2, one cancelled | `#1003-R2` OPEN |
+| #1002 | contact attached, `returnCreate` | `#1002-R1` OPEN |
+| customer 27711594201457 | email, then default address | `matan.amran.dev@example.com`, הרצל 1 חיפה |
+
+Orders #1006-#1011 unchanged from Part 4. No other tenant, store or customer
+was touched.

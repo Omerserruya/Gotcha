@@ -566,6 +566,52 @@ export function validateOutcomeClaims(
 const SENTENCE_SPLIT = /(?<=[.!?׃])\s+|\n+/;
 
 /**
+ * "רגע אחת, בודקת את מצב המשלוח" - and nothing else, ever.
+ *
+ * Live (2026-08-02): asked where order #1002 was, the whole reply was a promise
+ * to go and look. No tracking, no status, no follow-up message. The customer
+ * was left waiting for a second message that the bot has no mechanism to send.
+ *
+ * Every existing guard passed it. The honesty net saw an `in_progress` claim
+ * with real execution evidence behind it, which is true - a tool did run. The
+ * silent-turn net saw text, which is also true. It is the silent turn wearing
+ * a sentence: the turn produced no ANSWER, only an announcement that one was
+ * coming.
+ *
+ * Detected structurally rather than by keyword: a reply is interim-only when
+ * every sentence in it is an announcement of work about to happen. One real
+ * finding anywhere in the reply makes it a normal answer.
+ */
+const INTERIM_RE =
+  /^(?:[^.!?׃\n]*?)(רגע\s*אחד|רגע\s*אחת|שנייה\s*אחת|בודק(ת|ים)?\s|מחפש(ת|ים)?\s|אבדוק|נבדוק|אני\s*בודק|one\s*moment|just\s*a\s*(sec|moment)|let\s*me\s*(check|look|see)|checking\s|i'?ll\s*check)(?:[^.!?׃\n]*)$/i;
+
+/**
+ * A finding, as opposed to an announcement of one.
+ *
+ * "רגע אחת" can open a sentence that then delivers the answer - "רגע אחת,
+ * בדקתי: ההזמנה נשלחה". The opener is not the signal; the absence of any result
+ * is. Past-tense reporting verbs and the vocabulary of an actual shipment
+ * status are what distinguish the two.
+ */
+const RESULT_RE =
+  /(בדקתי|בדקנו|מצאתי|מצאנו|נשלח|נמסר|הגיע|אזל|במלאי|הסטטוס|סטטוס|מספר\s*מעקב|עדיין\s*לא|checked|found|shipped|delivered|arrived|in stock|out of stock|tracking number|status is)/i;
+
+export function isInterimOnlyReply(text: string | null | undefined): boolean {
+  const t = String(text ?? "").trim();
+  if (!t) return false;
+  // The split keeps each sentence's terminator (it is a lookbehind), and the
+  // pattern is anchored to the end - so the trailing full stop has to come off
+  // or nothing ever matches.
+  const sentences = t
+    .split(SENTENCE_SPLIT)
+    .map((s) => s.trim().replace(/[.!?׃]+$/, "").trim())
+    .filter((s) => s.length > 1);
+  if (!sentences.length) return false;
+  if (sentences.some((s) => RESULT_RE.test(s))) return false;
+  return sentences.every((s) => INTERIM_RE.test(s));
+}
+
+/**
  * Remove the sentences that make unsupported claims.
  *
  * Per sentence, so the true half of a reply survives: the model usually states

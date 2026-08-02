@@ -45,6 +45,7 @@ import {
   validateOutcomeClaims,
   stripUnsupportedClaims,
   buildOutcomeFactBlock,
+  isInterimOnlyReply,
 } from "./customer-outcome.service";
 import { assertOrderTargetMatchesTurn, isOrderStateChangingTool } from "./order-reference.service";
 import {
@@ -4177,6 +4178,19 @@ async function generateAIBotReplyInner(
         console.warn(`[ai-bot] OUTCOME-CONTRACT: removed unsupported claim(s) conv=${opts.conversationId}`);
         replyText = cleaned;
       }
+    }
+
+    // A reply that is ONLY a promise to go and look is the silent turn wearing
+    // a sentence. Live: "רגע אחת, בודקת את מצב המשלוח של הזמנה 1002" was the
+    // entire answer to "where is my shipment", and no second message exists to
+    // follow it. Blanked here so the silent-turn fallback offers something the
+    // customer can act on instead of a wait with no end.
+    if (isInterimOnlyReply(replyText)) {
+      console.error(
+        `[ai-bot] INTERIM-ONLY reply with no finding conv=${opts.conversationId} - ` +
+          `tools=${toolCallLog.map((t) => t.tool).filter(Boolean).join(",") || "none"}`,
+      );
+      replyText = null;
     }
   } catch (err: any) {
     console.warn("[ai-bot] outcome contract check failed:", err?.message);
