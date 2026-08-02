@@ -80,6 +80,43 @@ export function buildCouponUnsupportedDirective(): string {
   );
 }
 
+/**
+ * "Write this on my order."
+ *
+ * The model never called the tool. Asked to record a callback request on
+ * #1011 it replied "ביצעתי את הבקשה" and then, once that was stripped,
+ * "בקשתך עודכנה בהזמנה" - twice claiming a write while Shopify showed
+ * note: null and tags: "". The honesty net caught the claims; nothing caused
+ * the write.
+ */
+const ORDER_NOTE_RE =
+  /(תרשמו|תרשום|תכתבו|תכתוב|תוסיפו\s*הערה|הוסיפו\s*הערה|תתעדו|לתעד|תציינו|רשמו|note\s*on\s*(the\s*)?order|add\s*a?\s*note)/i;
+
+export function detectOrderNoteIntent(text: string | null | undefined): boolean {
+  return ORDER_NOTE_RE.test(String(text ?? ""));
+}
+
+/**
+ * What a note IS, and what it is not.
+ *
+ * The second half matters as much as the first. A note is a record on an
+ * order; it does not page anyone, create a task, or guarantee follow-up. The
+ * model kept treating "I wrote it down" and "I told the team" as the same
+ * sentence, which is how a customer ends up waiting for a call nobody has been
+ * asked to make.
+ */
+export function buildOrderNoteDirective(): string {
+  return (
+    `The customer is asking to record something ON their order.\n` +
+    `- Call add_order_note with the order they named (NOT create_note - that writes the customer profile and leaves the order blank) and a short, faithful summary of what they asked to record. Do this in THIS turn.\n` +
+    `- Only after it returns successfully may you say the note was added.\n` +
+    `- A note is a RECORD on the order. It does not notify anyone, does not create a task, and does not guarantee a callback.\n` +
+    `- So do NOT say or imply that a team, agent or department has been told, will look at it, or will get back to them. If they need a person, that is a separate handoff you must actually perform.\n` +
+    `- Suggested Hebrew wording on success: "ההערה נוספה להזמנה #<order>."\n` +
+    `- If the tool fails, say the note was not added and offer a real alternative. Never describe an unwritten note as written.\n`
+  );
+}
+
 export interface VariantIntent {
   /** The turn is asking about a concrete product attribute or its stock. */
   isVariantQuestion: boolean;

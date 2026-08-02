@@ -49,6 +49,8 @@ import {
   detectMissingItemIntent,
   buildMissingItemDirective,
   buildEstablishedIdentityBlock,
+  detectProfileUpdateIntent,
+  buildProfileUpdateDirective,
 } from "./customer-request-intents.service";
 import { getActionOrchestrator, type ExecutionResult } from "./orchestrator";
 import type { AgentToolContext } from "@chatcenter/shared";
@@ -2393,6 +2395,15 @@ async function generateAIBotReplyInner(
     // performing it.
     if (detectOrderNoteIntent(opts.incomingMessage)) {
       chatMessages.push({ role: "system", content: buildOrderNoteDirective() });
+    }
+    // "Change my email" - the record is theirs, and the tool takes no id.
+    if (detectProfileUpdateIntent(opts.incomingMessage)) {
+      chatMessages.push({
+        role: "system",
+        content: buildProfileUpdateDirective({
+          hasProfileTool: toolFunctionNames.some((n) => n.endsWith(".update_my_profile")),
+        }),
+      });
     }
     // A missing item is arithmetic the bot can do, not an identity check.
     if (detectMissingItemIntent(opts.incomingMessage)) {

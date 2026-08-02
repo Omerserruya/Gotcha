@@ -44,6 +44,22 @@ export const PROTECTED_SHOPIFY_TOOLS = new Set([
   "update_customer", "add_tag", "remove_tag", "update_metafield", "create_note",
 ]);
 
+/**
+ * Tools that act on the REQUESTER'S OWN record, and no one else's.
+ *
+ * These carry no customer selector in their schema at all. The difference from
+ * the protected list above is the difference between checking an answer and
+ * not asking the question: a protected tool takes a selector and we verify it,
+ * a self-scoped tool takes none and the backend supplies it. A model cannot
+ * get ownership wrong when ownership is not one of its arguments.
+ *
+ * Anything selector-shaped that arrives in the args of one of these is
+ * stripped before the adapter sees it - not honoured, not merely rejected.
+ */
+export const SELF_SCOPED_SHOPIFY_TOOLS = new Set([
+  "update_my_profile",
+]);
+
 export interface RequesterIdentity {
   /** Normalized phone suffixes (last 9 digits) proven by the channel. */
   phoneSuffixes: Set<string>;
@@ -106,6 +122,15 @@ export async function resolveRequesterIdentity(
     if (contact.email) identity.emails.add(String(contact.email).toLowerCase());
     const crmId = (contact.metadata as any)?.crmContactId;
     if (crmId) identity.customerIds.add(String(crmId));
+    // Written by `rememberShopifyCustomer` after a self-service profile
+    // change. A customer who updates their own phone number would otherwise
+    // stop matching their own orders on the very next turn - the channel
+    // sender is unchanged, but the stored phone it was being compared against
+    // is not. A separate key from crmContactId on purpose: when another CRM is
+    // the source of truth, that field means something else and must not be
+    // overwritten by a Shopify id.
+    const shopId = (contact.metadata as any)?.shopifyCustomerId;
+    if (shopId) identity.customerIds.add(String(shopId));
   }
 
   // Explicit verification grants: OTP proven against the STORED destination of
@@ -174,6 +199,93 @@ export function checkArgsAllowed(
     return { allowed: false, reason: "invoice_destination_override_denied" };
   }
   return { allowed: true };
+}
+
+/**
+ * The selector a self-scoped tool runs with - derived, never accepted.
+ *
+ * Prefers a customer id the system already knows (contact linkage or an OTP
+ * grant, both server-written) and falls back to the authenticated channel
+ * sender. Returns null when the channel proved nothing, in which case the call
+ * must fail rather than run against an unknown record.
+ *
+ * The full channel sender is used here, not the 9-digit suffix the ownership
+ * comparison works in: a suffix is enough to REFUSE a mismatch but not enough
+ * to LOOK SOMETHING UP, and quietly searching on a truncated phone would be a
+ * fine way to find the wrong person.
+ */
+export function deriveSelfSelector(identity: RequesterIdentity): Record<string, string> | null {
+  if (identity.customerIds.size === 1) {
+    return { customer_id: [...identity.customerIds][0] };
+  }
+  if (identity.channelSenderId && phoneSuffix(identity.channelSenderId)) {
+    const raw = String(identity.channelSenderId);
+    return { phone: raw.startsWith("+") ? raw : `+${raw}` };
+  }
+  if (identity.emails.size === 1) return { email: [...identity.emails][0] };
+  return null;
+}
+
+/** Selector-shaped keys a self-scoped tool must never receive from the model. */
+const SELECTOR_KEYS = ["customer_id", "customerId", "email", "phone", "id"];
+
+/**
+ * Strip every selector the model supplied and substitute the derived one.
+ *
+ * Stripping rather than rejecting is deliberate here. A rejection teaches the
+ * model to retry with a different guess; a silent substitution means the guess
+ * never mattered. The stripped keys are returned so the denial audit can record
+ * that an attempt was made.
+ */
+export function applySelfScope(
+  identity: RequesterIdentity,
+  args: Record<string, any>,
+): { args: Record<string, any>; stripped: string[] } | null {
+  const selector = deriveSelfSelector(identity);
+  if (!selector) return null;
+  const stripped: string[] = [];
+  const next: Record<string, any> = {};
+  for (const [k, v] of Object.entries(args ?? {})) {
+    if (SELECTOR_KEYS.includes(k)) {
+      if (v != null && v !== "") stripped.push(k);
+      continue;
+    }
+    next[k] = v;
+  }
+  return { args: { ...next, ...selector }, stripped };
+}
+
+/**
+ * Remember which Shopify customer this conversation is, after we have proven
+ * it by resolving one server-side.
+ *
+ * The controlled reconciliation path for an identifier change: once the id is
+ * on the contact, ownership survives the customer editing the very phone or
+ * email the ownership check was using. Never throws - failing to record this
+ * costs a later re-resolution, not access.
+ */
+export async function rememberShopifyCustomer(
+  tenantId: string,
+  conversationId: string,
+  customerId: string | number | null | undefined,
+): Promise<void> {
+  if (customerId == null || customerId === "") return;
+  try {
+    const conv = await (prisma as any).conversation.findFirst({
+      where: { id: conversationId, tenantId },
+      select: { customerExternalId: true },
+    });
+    if (!conv?.customerExternalId) return;
+    const contact = await (prisma as any).contact.findFirst({
+      where: { tenantId, externalId: conv.customerExternalId },
+      select: { id: true, metadata: true },
+    });
+    if (!contact) return;
+    const metadata = { ...((contact.metadata as any) ?? {}), shopifyCustomerId: String(customerId) };
+    await (prisma as any).contact.update({ where: { id: contact.id }, data: { metadata } });
+  } catch (err: any) {
+    console.warn("[guard] could not record resolved Shopify customer:", err?.message);
+  }
 }
 
 /** Extract owner identifiers from a Shopify order/customer-shaped object. */

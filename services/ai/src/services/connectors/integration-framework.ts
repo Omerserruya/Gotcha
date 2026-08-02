@@ -778,6 +778,33 @@ export async function executeAdapterTool(opts: {
   let guardIdentity: import("./customer-access-guard").RequesterIdentity | null = null;
   if (opts.accessScope === "customer" && slug === "shopify" && opts.conversationId) {
     const guard = await import("./customer-access-guard");
+    // Self-scoped tools carry no selector in their schema, so there is nothing
+    // to verify - only something to supply. Whatever the model sent that looks
+    // like a selector is discarded here, before the adapter, and replaced with
+    // the identity the channel authenticated.
+    if (guard.SELF_SCOPED_SHOPIFY_TOOLS.has(toolName)) {
+      guardIdentity = await guard.resolveRequesterIdentity(opts.tenantId, opts.conversationId);
+      const scoped = guardIdentity ? guard.applySelfScope(guardIdentity, opts.args as Record<string, any>) : null;
+      if (!guardIdentity || !scoped) {
+        return {
+          ok: false,
+          reason:
+            "access_denied: this conversation has no authenticated identity, so there is no profile to change. " +
+            "Do not ask the customer to supply a customer id, phone or email as proof - it would not be accepted.",
+        };
+      }
+      if (scoped.stripped.length) {
+        await guard.recordSecurityDenial({
+          tenantId: opts.tenantId,
+          conversationId: opts.conversationId,
+          channelSenderId: guardIdentity.channelSenderId,
+          toolName,
+          reason: `self_scope_selector_stripped:${scoped.stripped.join(",")}`,
+          args: opts.args as Record<string, any>,
+        });
+      }
+      opts.args = scoped.args;
+    }
     if (guard.PROTECTED_SHOPIFY_TOOLS.has(toolName)) {
       guardIdentity = await guard.resolveRequesterIdentity(opts.tenantId, opts.conversationId);
       if (!guardIdentity) {
@@ -951,6 +978,18 @@ export async function executeAdapterTool(opts: {
         };
       }
       result = post.result;
+      // A self-scoped write may have changed the very identifier ownership is
+      // compared against. Record the resolved Shopify customer id on the
+      // contact so the next turn still recognises them - the controlled
+      // reconciliation path, rather than the customer silently locking
+      // themselves out of their own orders by correcting their phone number.
+      if (
+        guard.SELF_SCOPED_SHOPIFY_TOOLS.has(toolName) &&
+        result && typeof result === "object" &&
+        (result as any).customer_id
+      ) {
+        await guard.rememberShopifyCustomer(opts.tenantId, opts.conversationId, (result as any).customer_id);
+      }
     }
     return { ok: true, result };
   } catch (err: any) {

@@ -36,6 +36,7 @@ import { registerAdapter, type ProviderAdapter, type ToolDefinition } from "./in
 import { assertPublicUrl, shopifyApiVersion, checkShopifyResponseVersion } from "@chatcenter/shared";
 import { orderIdentifierFromArgs } from "./shopify-order-identifier";
 import { reconcile } from "./shopify-item-reconciliation";
+import { validateProfilePatch, verifyReadBack, detectDuplicate } from "./shopify-profile-update";
 
 /**
  * Resolved from the ONE shared declaration, not pinned here. This used to be a
@@ -151,6 +152,28 @@ const TOOLS: ToolDefinition[] = [
     "You need to correct or enrich a customer's profile.",
     { ...P.customerSel, fields: { type: "object", description: "Fields to set: first_name, last_name, email, phone, note, tags." } }, undefined,
     { sideEffects: "Mutates the customer record." }),
+  // The customer editing THEIR OWN details.
+  //
+  // Note what is NOT in the schema: there is no customer_id, no email and no
+  // phone selector. That is the whole security design - the record acted on is
+  // derived from the authenticated channel by customer-access-guard.ts, so a
+  // model that wanted to edit someone else's profile has no argument through
+  // which to say so. `update_customer` above keeps its selector and stays for
+  // internal and human-agent use, where the operator legitimately picks who.
+  t("update_my_profile", "WRITE", "MEDIUM",
+    "Update the CURRENT customer's own Shopify profile: name, email, phone and default address. Reads the record back afterwards and reports exactly which fields changed.",
+    "The customer asks to change their own details (\"תעדכנו לי את המייל\", \"הכתובת שלי השתנתה\", \"change my phone number\"). You do NOT need their customer id, and you must not ask for one - the system knows who they are. Confirm the NEW value with them before calling, then report only the fields the read-back confirms.",
+    {
+      first_name: { type: "string" },
+      last_name: { type: "string" },
+      email: { type: "string", description: "New email. Sensitive: it can change how this customer is identified later." },
+      phone: { type: "string", description: "New phone. Sensitive: it can change how this customer is identified later." },
+      address: {
+        type: "object",
+        description: "Default address fields to change: address1, address2, city, province, zip, country, company, phone. This is the customer's SAVED address, not the shipping address of an existing order.",
+      },
+    }, undefined,
+    { sideEffects: "Mutates the customer's own Shopify record.", priority: 80 }),
   t("add_tag", "WRITE", "LOW", "Add a tag to a customer (existing tags preserved).",
     "You want to label/segment a customer (e.g. VIP, retention).",
     { ...P.customerSel, tag: { type: "string" } }, ["tag"]),
@@ -385,6 +408,7 @@ const TOOL_SCOPES: Record<string, string[]> = {
   find_delayed_order: ["read_customers", "read_orders"],
   // customer write
   create_customer: ["write_customers"], update_customer: ["write_customers"],
+  update_my_profile: ["read_customers", "write_customers"],
   add_tag: ["write_customers"], remove_tag: ["write_customers"],
   update_metafield: ["write_customers"], create_note: ["write_customers"],
   add_customer_to_segment: ["write_customers"], remove_customer_from_segment: ["write_customers"],
@@ -718,6 +742,9 @@ const ShopifyAdapter: ProviderAdapter = {
         if (f.tags != null) patch.tags = Array.isArray(f.tags) ? f.tags.join(", ") : String(f.tags);
         const r: any = await sreq(ctx, "PUT", `/customers/${c.id}.json`, { customer: patch });
         return r.customer;
+      }
+      case "update_my_profile": {
+        return await updateOwnProfile(ctx, args);
       }
       case "add_tag": {
         return await mutateCustomerTags(ctx, args, String(args.tag || ""), "add");
@@ -2079,6 +2106,108 @@ function projectOrderForAgent(o: any): Record<string, unknown> {
  * `shopify-item-reconciliation.ts` so it can be tested against real payload
  * shapes without a network.
  */
+/**
+ * The customer's own profile, changed and then independently verified.
+ *
+ * `args` arrives already scoped: customer-access-guard.ts stripped whatever
+ * selector the model supplied and substituted the authenticated one, so
+ * `resolveCustomer` here is looking up a record the system chose.
+ *
+ * The read-back is a separate GET on purpose. Shopify's PUT echoes the object
+ * it believes it saved, which is the same call reporting on itself - it cannot
+ * distinguish "saved" from "accepted, then normalised to something else", and
+ * an update that silently did not take is exactly the case a customer must not
+ * be told succeeded.
+ */
+async function updateOwnProfile(ctx: Ctx, args: Record<string, any>): Promise<Record<string, unknown>> {
+  const c = await resolveCustomer(ctx, args);
+  if (!c) throw new Error("customer_not_found");
+
+  const { address, ...flat } = args as Record<string, any>;
+  const patch = validateProfilePatch({ ...flat, ...(address ? { address } : {}) });
+  if (patch.errors.length) {
+    return {
+      customer_id: String(c.id),
+      updated: false,
+      errors: patch.errors,
+      rejected_fields: patch.rejected,
+      model_instruction:
+        "The update was NOT made. Tell the customer plainly which value was not accepted and ask for a corrected one." +
+        " Do not say anything was changed.",
+    };
+  }
+
+  // Uniqueness, before Shopify turns it into an opaque 422. A customer whose
+  // new email already sits on another account needs to hear that, not "the
+  // update failed".
+  if (patch.customer.email || patch.customer.phone) {
+    const query = patch.customer.email
+      ? `email:${patch.customer.email}`
+      : `phone:${patch.customer.phone}`;
+    let candidates: any[] = [];
+    try {
+      const r: any = await sreq(ctx, "GET", `/customers/search.json?query=${encodeURIComponent(query)}&limit=5`);
+      candidates = r.customers ?? [];
+    } catch {
+      // A search failure must not block a legitimate change; Shopify still
+      // enforces uniqueness on the write itself.
+    }
+    const dup = detectDuplicate(patch, String(c.id), candidates);
+    if (dup.conflict) {
+      return {
+        customer_id: String(c.id),
+        updated: false,
+        conflict: dup.field,
+        model_instruction:
+          `That ${dup.field} is already registered to a different account, so it cannot be moved onto this one.` +
+          " Say exactly that, and offer to hand over to a person who can merge the accounts. Do not say anything was changed.",
+      };
+    }
+  }
+
+  if (Object.keys(patch.customer).length) {
+    await sreq(ctx, "PUT", `/customers/${c.id}.json`, { customer: { id: c.id, ...patch.customer } });
+  }
+
+  if (Object.keys(patch.address).length) {
+    const existing = c.default_address ?? (c.addresses ?? [])[0] ?? null;
+    if (existing?.id) {
+      await sreq(ctx, "PUT", `/customers/${c.id}/addresses/${existing.id}.json`, {
+        address: { ...patch.address },
+      });
+    } else {
+      // No saved address at all - create one and make it the default, which is
+      // what "my address" means to a customer who has never had one.
+      const created: any = await sreq(ctx, "POST", `/customers/${c.id}/addresses.json`, {
+        address: { ...patch.address },
+      });
+      const newId = created?.customer_address?.id;
+      if (newId) await sreq(ctx, "PUT", `/customers/${c.id}/addresses/${newId}/default.json`, {});
+    }
+  }
+
+  const after: any = await sreq(ctx, "GET", `/customers/${c.id}.json`);
+  const verdict = verifyReadBack(patch, after?.customer ?? null);
+  const changed = [
+    ...Object.keys(patch.customer),
+    ...Object.keys(patch.address).map((k) => `address.${k}`),
+  ];
+
+  return {
+    customer_id: String(c.id),
+    updated: verdict.verified,
+    verified: verdict.verified,
+    changed_fields: verdict.verified ? changed : [],
+    mismatches: verdict.mismatches,
+    rejected_fields: patch.rejected,
+    sensitive_change: patch.sensitive,
+    model_instruction: verdict.verified
+      ? `The change is confirmed by an independent read of the record. Tell the customer exactly which fields changed (${changed.join(", ")}) and nothing more.`
+      : "The read-back does NOT match what was requested, so the change did not take effect as asked." +
+        " Tell the customer it did not go through and offer a person. Do NOT say it was updated.",
+  };
+}
+
 async function reconcileOrderItems(ctx: Ctx, order: any): Promise<Record<string, unknown>> {
   const fos = await fetchFulfillmentOrders(ctx, order.id);
   return reconcile(order, fos) as unknown as Record<string, unknown>;

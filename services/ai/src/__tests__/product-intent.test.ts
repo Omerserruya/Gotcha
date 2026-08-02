@@ -17,6 +17,8 @@ import {
   buildVariantIntentDirective,
   detectCouponIntent,
   buildCouponUnsupportedDirective,
+  detectOrderNoteIntent,
+  buildOrderNoteDirective,
 } from "../services/product-intent.service";
 
 describe("detecting a variant question", () => {
@@ -109,5 +111,41 @@ describe("coupon requests", () => {
     expect(d).toMatch(/Do NOT transfer the conversation/i);
     expect(d).toMatch(/Do NOT promise/i);
     expect(d).toContain("לא ניתן להפיק, לבדוק או להוסיף קופון");
+  });
+});
+
+/**
+ * "Write this on my order."
+ *
+ * The model never called the tool. Asked to record a callback request on #1011
+ * it said "ביצעתי את הבקשה", and once that was stripped it said "בקשתך עודכנה
+ * בהזמנה" - twice claiming a write while Shopify showed note: null, tags: "".
+ */
+describe("order note requests", () => {
+  it.each([
+    "תכתבו בהזמנה שאני מבקש שיחזרו אליי",
+    "תוסיפו הערה שהמוצר הגיע פגום",
+    "תתעדו שחסר פריט",
+    "תרשמו בהזמנה 1011 שאני מבקש שיחזרו אליי לפני המשלוח",
+    "please add a note on the order",
+  ])("detects %s", (t) => expect(detectOrderNoteIntent(t)).toBe(true));
+
+  it("does not fire on unrelated requests", () => {
+    expect(detectOrderNoteIntent("אני רוצה לבטל את הזמנה 1011")).toBe(false);
+    expect(detectOrderNoteIntent("איפה המשלוח שלי?")).toBe(false);
+  });
+
+  it("requires the tool to run before the claim", () => {
+    const d = buildOrderNoteDirective();
+    expect(d).toMatch(/add_order_note/);
+    expect(d).toMatch(/THIS turn/);
+    expect(d).toMatch(/Only after it returns successfully/i);
+  });
+
+  it("states plainly that a note is not a team notification", () => {
+    const d = buildOrderNoteDirective();
+    expect(d).toMatch(/does not notify anyone/i);
+    expect(d).toMatch(/do NOT say or imply that a team/i);
+    expect(d).toMatch(/separate handoff/i);
   });
 });

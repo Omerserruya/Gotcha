@@ -68,6 +68,51 @@ export function buildEstablishedIdentityBlock(conv: {
   );
 }
 
+// ── Own profile ───────────────────────────────────────────────
+
+/**
+ * "תעדכנו לי את המייל" / "הכתובת שלי השתנתה".
+ *
+ * Careful about what this must NOT catch: an ORDER's shipping address is a
+ * different request with a different eligibility rule and a different tool
+ * (Phase 4). The order words are excluded explicitly below rather than left to
+ * chance, because "תשנו לי את הכתובת במשלוח" and "תשנו לי את הכתובת" differ by
+ * one word and by everything else.
+ */
+// Both word orders. Hebrew states the change either way round - "השתנתה
+// הכתובת" and "הכתובת שלי השתנתה" are the same sentence, and a verb-first
+// pattern silently missed the one customers actually write.
+const PROFILE_UPDATE_RE =
+  /((תעדכנו|תעדכן|לעדכן|תשנו|תשנה|לשנות|תחליפו|החליפו)[^\n]{0,25}?(מייל|אימייל|טלפון|נייד|שם|כתובת)|(שיניתי|השתנה|השתנתה)\s*(ה)?(מייל|אימייל|טלפון|נייד|כתובת)|(מייל|אימייל|טלפון|נייד|כתובת)[^\n]{0,15}?(השתנה|השתנתה|שונה|שונתה)|(update|change)\s*(my)?\s*(email|phone|number|name|address)|my\s*(email|phone|address)\s*(has\s*)?changed)/i;
+
+const ORDER_SCOPED_RE =
+  /(בהזמנה|של\s*ההזמנה|למשלוח|במשלוח|של\s*המשלוח|on\s*(the|my)\s*order|shipping\s*address|delivery\s*address|for\s*order)/i;
+
+export function detectProfileUpdateIntent(text: string | null | undefined): boolean {
+  const t = String(text ?? "");
+  if (!PROFILE_UPDATE_RE.test(t)) return false;
+  // An order-scoped address change is Phase 4's flow, not this one.
+  return !ORDER_SCOPED_RE.test(t);
+}
+
+export function buildProfileUpdateDirective(opts: { hasProfileTool: boolean }): string {
+  if (!opts.hasProfileTool) {
+    return [
+      `The customer wants to change their own stored details, and you have no tool that can do it on this conversation.`,
+      `Say plainly that you cannot change it from here, and offer a person. Do NOT say it was changed or that you will pass it on unless you actually create a handoff.`,
+    ].join("\n");
+  }
+  return [
+    `The customer wants to change their OWN stored details (name, email, phone or saved address).`,
+    `Use update_my_profile. It takes ONLY the new values - there is no customer id, email or phone selector, because the system already knows which record is theirs.`,
+    `So: do NOT ask for their customer number, do NOT ask them to confirm who they are, and do NOT pass an id you found elsewhere.`,
+    `Before calling, read the NEW value back to them and get a clear yes - an email or phone change affects how they are recognised later, and a typo there is expensive.`,
+    `A saved-address change is NOT the same as changing the delivery address of an existing order. If they meant an order, say so and handle that separately.`,
+    `After the call, report ONLY the fields in changed_fields. If verified is false, tell them it did not go through - never describe an unconfirmed write as done.`,
+    `If a conflict is reported, the new email or phone already belongs to another account: say that plainly and offer a person.`,
+  ].join("\n");
+}
+
 // ── Missing item ──────────────────────────────────────────────
 
 /**
