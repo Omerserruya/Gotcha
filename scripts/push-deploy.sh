@@ -63,15 +63,27 @@ if [ -n "${FILES:-}" ]; then
 else
   SRC=(docker-compose.prod.yml)
   if [ "$WITH_ENV" -eq 1 ]; then
-    # Prefer a real .env; fall back to .env.example (lands as .env on the box).
-    if [ -f .env ]; then
-      SRC+=(.env)
+    # .env.prod FIRST, and deliberately so. This script targets the production
+    # box, while `.env` on a developer machine is the DEV environment - dev
+    # hostnames, dev Meta app, dev Shopify app, dev database password. Sending
+    # it lands as `.env` in /opt/chatcenter and the next `up -d` runs
+    # production against Dev configuration, which is both an outage and a
+    # cross-environment data leak. Preferring `.env` here was that mistake
+    # waiting to be made.
+    if [ -f .env.prod ]; then
+      ENV_SRC=".env.prod"
     elif [ -f .env.example ]; then
-      echo "NOTE: no local .env - sending .env.example (rename/edit on the box)."
-      SRC+=(.env.example)
+      echo "NOTE: no local .env.prod - sending .env.example (edit on the box)."
+      ENV_SRC=".env.example"
     else
-      echo "WARN: no .env or .env.example found locally; skipping env file." >&2
+      echo "ERROR: no .env.prod found. Refusing to send a developer .env to production." >&2
+      exit 1
     fi
+    # It has to arrive named `.env`, which is what compose reads on the box.
+    STAGED_ENV="$(mktemp -d)/.env"
+    cp "$ENV_SRC" "$STAGED_ENV"
+    echo "→ env file: $ENV_SRC (lands as .env)"
+    SRC+=("$STAGED_ENV")
   fi
 fi
 

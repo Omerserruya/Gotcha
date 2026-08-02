@@ -32,7 +32,7 @@ embedded = false
 # Where Shopify sends a merchant who opens the app. Starts the install
 # handshake when the shop is not yet bound, and lands on the onboarding
 # wizard when it is.
-application_url = "https://gotcha.co.il/api/connectors/shopify-chat/oauth/init"
+application_url = "https://app.gotcha.co.il/api/connectors/shopify-chat/oauth/init"
 
 [access_scopes]
 # EMPTY BY DESIGN.
@@ -49,7 +49,7 @@ scopes = ""
 
 [auth]
 redirect_urls = [
-  "https://gotcha.co.il/api/connectors/shopify-chat/oauth/callback",
+  "https://app.gotcha.co.il/api/connectors/shopify-chat/oauth/callback",
 ]
 
 [webhooks]
@@ -64,20 +64,20 @@ api_version = "2026-07"
   # Chat lifecycle. Handled by services/ai, verified with the CHAT secret.
   [[webhooks.subscriptions]]
   topics = [ "app/uninstalled" ]
-  uri = "https://gotcha.co.il/api/shopify-chat/webhooks/app-uninstalled"
+  uri = "https://app.gotcha.co.il/api/shopify-chat/webhooks/app-uninstalled"
 
   # Mandatory compliance topics for public App Store distribution.
   [[webhooks.subscriptions]]
   topics = [ "customers/data_request" ]
-  uri = "https://gotcha.co.il/api/shopify-chat/webhooks/customers-data-request"
+  uri = "https://app.gotcha.co.il/api/shopify-chat/webhooks/customers-data-request"
 
   [[webhooks.subscriptions]]
   topics = [ "customers/redact" ]
-  uri = "https://gotcha.co.il/api/shopify-chat/webhooks/customers-redact"
+  uri = "https://app.gotcha.co.il/api/shopify-chat/webhooks/customers-redact"
 
   [[webhooks.subscriptions]]
   topics = [ "shop/redact" ]
-  uri = "https://gotcha.co.il/api/shopify-chat/webhooks/shop-redact"
+  uri = "https://app.gotcha.co.il/api/shopify-chat/webhooks/shop-redact"
 
 [build]
 include_config_on_deploy = true
@@ -99,6 +99,6 @@ include_config_on_deploy = true
 #
 # `url` must match this config's host, or Shopify signs a request that
 # arrives nowhere.
-url = "https://gotcha.co.il/api/shopify-chat/proxy"
+url = "https://app.gotcha.co.il/api/shopify-chat/proxy"
 subpath = "gotcha-chat"
 prefix = "apps"

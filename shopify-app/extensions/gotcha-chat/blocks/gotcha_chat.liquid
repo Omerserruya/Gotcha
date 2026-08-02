@@ -46,8 +46,8 @@
 <script>
   window.__gotchaShopifyChat = {
     shopDomain: {{ shop.permanent_domain | json }},
-    apiBase: {{ block.settings.api_base | default: 'https://gotcha.co.il' | json }},
-    assetBase: {{ block.settings.asset_base | default: 'https://gotcha.co.il' | json }},
+    apiBase: {{ block.settings.api_base | default: 'https://app.gotcha.co.il' | json }},
+    assetBase: {{ block.settings.asset_base | default: 'https://app.gotcha.co.il' | json }},
     openOnLoad: {{ block.settings.open_on_load | default: false | json }},
     {%- comment -%}
       Recovery only. A merchant whose installation record was lost can be
@@ -60,7 +60,7 @@
 </script>
 
 <script
-  src="{{ block.settings.asset_base | default: 'https://gotcha.co.il' }}/widget/gotcha-shopify-bootstrap.js?b=998215613a39"
+  src="{{ block.settings.asset_base | default: 'https://app.gotcha.co.il' }}/widget/gotcha-shopify-bootstrap.js?b=998215613a39"
   async
   crossorigin="anonymous"
 ></script>

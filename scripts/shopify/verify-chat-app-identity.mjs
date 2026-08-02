@@ -165,8 +165,14 @@ if (tomlCode.includes("/api/connectors/shopify/oauth/callback")) {
   fail("Manifest contains the CORE OAuth callback path. Chat must use /api/connectors/shopify-chat/oauth/callback.");
 }
 
-// Dead hosts that have bitten this project before.
-for (const dead of ["app.gotcha.co.il", "api.gotcha.co.il"]) {
+// Hosts that have bitten this project before.
+//
+// `api.gotcha.co.il` has never existed. `gotcha.co.il` DOES exist, which makes
+// it the more dangerous of the two: it resolves, it serves the marketing site,
+// and a manifest pointing there fails by returning a 404 marketing page to
+// Shopify rather than by failing to connect. The application surface lives on
+// app.gotcha.co.il and the apex must never appear in a Chat manifest.
+for (const dead of ["api.gotcha.co.il"]) {
   if (tomlCode.includes(dead)) fail(`Manifest references ${dead}, which does not resolve.`);
 }
 
@@ -178,11 +184,50 @@ if (hosts.length > 1) {
   fail(`Manifest mixes hosts: ${hosts.join(", ")}. One environment per config file.`);
 }
 const host = hosts[0] ?? "(none)";
-if (isDev && host !== "dev.gotcha.co.il") {
-  fail(`Dev config must point at dev.gotcha.co.il, found ${host}.`);
+const PROD_HOST = "app.gotcha.co.il";
+const DEV_HOST = "dev.gotcha.co.il";
+if (isDev && host !== DEV_HOST) {
+  fail(`Dev config must point at ${DEV_HOST}, found ${host}.`);
 }
-if (!isDev && host !== "gotcha.co.il") {
-  fail(`Production config must point at gotcha.co.il, found ${host}.`);
+if (!isDev) {
+  if (host === "gotcha.co.il") {
+    fail(
+      `Production config points at gotcha.co.il, which is the MARKETING host and serves no ` +
+        `application routes. It must be ${PROD_HOST}.`,
+    );
+  } else if (host === DEV_HOST) {
+    fail(`Production config points at ${DEV_HOST}. A production manifest must never carry a Dev host.`);
+  } else if (host !== PROD_HOST) {
+    fail(`Production config must point at ${PROD_HOST}, found ${host}.`);
+  }
+}
+
+// The widget surface must agree with the API surface.
+//
+// PRODUCTION ONLY, deliberately. There is one theme extension and its liquid
+// defaults are always the production origin; a development store points itself
+// elsewhere with the `asset_base` block setting rather than by having its own
+// copy of the extension. So checking these defaults against the dev host would
+// fail every time and mean nothing. Against the production host it means a
+// great deal: the extension ships in the same app version as the manifest, so
+// a default left behind loads the widget from a host the manifest no longer
+// talks to, and the shopper sees a chat that cannot reach anything.
+if (!isDev) {
+  const blockPath = path.join(APP_DIR, "extensions/gotcha-chat/blocks/gotcha_chat.liquid");
+  if (fs.existsSync(blockPath)) {
+    const liquid = fs.readFileSync(blockPath, "utf8");
+    const expectedOrigin = `https://${PROD_HOST}`;
+    const defaults = [...liquid.matchAll(/default:\s*'(https:\/\/[^']+)'/g)].map((m) => m[1]);
+    const wrong = [...new Set(defaults.filter((d) => d !== expectedOrigin))];
+    if (wrong.length) {
+      fail(
+        `Theme extension widget origin(s) ${wrong.join(", ")} disagree with the production host ` +
+          `${expectedOrigin} (gotcha_chat.liquid api_base/asset_base/script src).`,
+      );
+    } else if (defaults.length) {
+      notes.push(`Widget origin ${expectedOrigin} - ${defaults.length} theme-extension defaults agree.`);
+    }
+  }
 }
 
 // Redirect must match what the service will send.
