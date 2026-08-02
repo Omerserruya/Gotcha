@@ -1584,6 +1584,13 @@ model TenantIntegration {
   config         Json             @default("{}")
   connectedBy    String?          @map("connected_by")
   connectedAt    DateTime?        @map("connected_at")
+  // Disconnect is a STATE TRANSITION, so it has a time and an actor like
+  // connecting does. Before this, a disconnected integration was
+  // indistinguishable from one that had never worked: same status, no record of
+  // who ended it or when, and the tool rows deleted so not even their absence
+  // could be dated.
+  disconnectedAt DateTime?        @map("disconnected_at")
+  disconnectedBy String?          @map("disconnected_by")
   lastTestedAt   DateTime?        @map("last_tested_at")
   lastTestResult Boolean?         @map("last_test_result")
   lastError      String?          @map("last_error")
@@ -1616,11 +1623,19 @@ model TenantTool {
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
 
-  // tenantIntegration stays Cascade: both sides are tenant-owned, and
-  // disconnecting SHOULD retire the activations.
+  // tenantIntegration stays Cascade: both sides are tenant-owned, and genuinely
+  // deleting a connection row should retire its activations. What must NOT
+  // happen is a DISCONNECT reaching this cascade - disconnect is now a state
+  // transition and leaves the row in place.
   tenantIntegration TenantIntegration     @relation(fields: [tenantIntegrationId], references: [id], onDelete: Cascade)
-  // catalogTool is RESTRICT for the same reason as above: a platform-side
-  // catalog change must not silently delete tenant activations.
+  // catalogTool is RESTRICT, not Cascade.
+  //
+  // A platform-side catalog edit must not be able to reach into tenant data. As
+  // Cascade, deleting or replacing one CatalogTool row silently destroyed every
+  // tenant's policy for that tool - their enabled/disabled decision, their HITL
+  // override, their per-agent permissions, and (through the ToolExecution
+  // cascade below) their execution history. Removing a tool from the catalogue
+  // now requires dealing with the tenants using it, deliberately.
   catalogTool       CatalogTool           @relation(fields: [catalogToolId], references: [id], onDelete: Restrict)
   agentPermissions  AgentToolPermission[]
   executions        ToolExecution[]

@@ -25,6 +25,7 @@
 import { Router, type Request, type Response } from "express";
 import * as crypto from "crypto";
 import { provisionIntegrationTools } from "../services/integration-provisioning.service";
+import { disconnectIntegration } from "../services/integration-lifecycle.service";
 import {
   prisma,
   authenticate,
@@ -223,11 +224,23 @@ router.post(
   async (req: Request, res: Response) => {
     const cat = await findCatalog(req.params.slug);
     if (!cat) { res.status(404).json({ error: "unknown_provider" }); return; }
-    await (prisma as any).tenantIntegration.updateMany({
-      where: { tenantId: req.tenantId, integrationId: cat.id },
-      data: { status: "DISCONNECTED" },
+    // This route used to flip the status and stop, leaving the encrypted
+    // credentials in place - so an integration the product called
+    // "disconnected" still held a usable access token. The other disconnect
+    // route had the mirror-image bug: it cleared credentials and deleted the
+    // tenant's tool policy. Both now go through one function, which clears the
+    // credentials AND keeps the policy.
+    const ti = await (prisma as any).tenantIntegration.findUnique({
+      where: { tenantId_integrationId: { tenantId: req.tenantId, integrationId: cat.id } },
     });
-    res.json({ ok: true });
+    if (!ti) { res.json({ ok: true, alreadyDisconnected: true }); return; }
+    const result = await disconnectIntegration({
+      tenantId: req.tenantId!,
+      tenantIntegrationId: ti.id,
+      slug: String(req.params.slug),
+      actorId: (req as any).userId ?? null,
+    });
+    res.json({ ok: true, policyRowsPreserved: result.policyRowsPreserved });
   },
 );
 
