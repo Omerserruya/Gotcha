@@ -40,6 +40,12 @@ import {
   containsPrivateShopifyData,
   redactString,
 } from "./connectors/shopify-safe-output";
+import {
+  buildOutcome,
+  validateOutcomeClaims,
+  stripUnsupportedClaims,
+  buildOutcomeFactBlock,
+} from "./customer-outcome.service";
 import { assertOrderTargetMatchesTurn, isOrderStateChangingTool } from "./order-reference.service";
 import {
   detectVariantIntent,
@@ -2573,6 +2579,20 @@ async function generateAIBotReplyInner(
       committedSummaryInjected = true;
     }
   };
+  // The Customer Outcome Contract, injected BEFORE the reply is written rather
+  // than validated after it. Checking output can only delete a sentence; this
+  // is what lets the reply be right the first time. Re-pushed when the facts
+  // change - a later round can complete an action the earlier block did not
+  // know about, and a stale fact list is exactly the wrong thing to hand a
+  // model that is about to speak.
+  let lastOutcomeBlock: string | null = null;
+  const injectOutcomeFacts = () => {
+    const block = buildOutcomeFactBlock(buildOutcome(toolCallLog));
+    if (block && block !== lastOutcomeBlock) {
+      chatMessages.push({ role: "system", content: block });
+      lastOutcomeBlock = block;
+    }
+  };
 
   for (let round = 0; round < 3; round++) {
     const response = await generateResponse({
@@ -2875,6 +2895,7 @@ async function generateAIBotReplyInner(
       // authoritative outcome block BEFORE the next round produces the
       // customer-facing reply, so that reply is derived from ledger truth.
       injectCommittedSummaryIfNeeded();
+      injectOutcomeFacts();
 
       if (pausedForApproval) {
         awaitingApproval = pausedForApproval;
@@ -3949,6 +3970,7 @@ async function generateAIBotReplyInner(
         `but the draft reply does not confirm it. Regenerating from ledger state.`,
     );
     injectCommittedSummaryIfNeeded();
+    injectOutcomeFacts();
     if (replyText) chatMessages.push({ role: "assistant", content: replyText });
     chatMessages.push({ role: "user", content: buildUnconfirmedCommitCorrective(kinds) + INTERNAL_NUDGE_LANGUAGE_PIN });
     const regen = await generateResponse({
@@ -4025,6 +4047,51 @@ async function generateAIBotReplyInner(
   // אופציות" across 14 turns, ZERO tool calls). Detection + audit only for now
   // - a hard reply-rewrite here risks the over-correction the self-repetition
   // gate above was removed for; the deterministic block is a reviewed follow-up.
+  // ── Customer Outcome Contract ───────────────────────────────────
+  // The primary check, and the one that asks the right question. The regex net
+  // below asks "did ANY tool run", so reading an order was evidence for "I
+  // changed your address" - the claim and the evidence were never about the
+  // same thing. Here each claim is checked against the facts that claim is
+  // about, and the facts come from tools that verified themselves by reading
+  // back. A paraphrase nobody has seen still fails, because facts do not change
+  // when wording does.
+  try {
+    const outcome = buildOutcome(toolCallLog);
+    const verdict = validateOutcomeClaims(replyText, outcome);
+    if (!verdict.ok) {
+      console.warn(
+        `[ai-bot] OUTCOME-CONTRACT: reply claims ${verdict.unsupported.map((u) => u.claim).join(",")} ` +
+          `that the turn's facts do not support conv=${opts.conversationId}`,
+      );
+      prisma.auditLog
+        .create({
+          data: {
+            tenantId: opts.tenantId,
+            actorType: "ai",
+            action: "ai.unsupported_outcome_claim",
+            targetType: "conversation",
+            targetId: opts.conversationId,
+            metadata: {
+              claims: verdict.unsupported.map((u) => u.claim),
+              matched: verdict.unsupported.map((u) => u.match).slice(0, 4),
+              requires: verdict.unsupported.map((u) => u.requires).slice(0, 4),
+              toolsThisTurn: toolCallLog.map((t) => t.tool).filter(Boolean),
+              source: "ai_bot",
+            } as any,
+          },
+        })
+        .catch((err: any) => console.error("[ai-bot] outcome audit failed:", err?.message));
+
+      const cleaned = stripUnsupportedClaims(replyText, verdict);
+      if (cleaned) {
+        console.warn(`[ai-bot] OUTCOME-CONTRACT: removed unsupported claim(s) conv=${opts.conversationId}`);
+        replyText = cleaned;
+      }
+    }
+  } catch (err: any) {
+    console.warn("[ai-bot] outcome contract check failed:", err?.message);
+  }
+
   try {
     const honesty = validateActionHonesty(replyText, toolCallLog, {
       // An approval IS a real background job: the system guarantees exactly one
