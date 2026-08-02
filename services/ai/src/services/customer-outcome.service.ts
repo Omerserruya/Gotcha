@@ -256,8 +256,16 @@ export function applyToolResult(outcome: CustomerOutcome, record: ToolCallRecord
     case "add_order_note":
     case "update_order_fulfillment":
       o.actionAttempted = true;
-      if (r.note_added === true || (r.verified === true && r.note != null)) { o.noteAdded = true; o.actionSucceeded = true; }
-      if (r.tag_added === true || (r.verified === true && r.tags != null)) { o.tagAdded = true; o.actionSucceeded = true; }
+      // Two shapes, because two tools wrote the same thing for years:
+      // `add_order_note` returns note_added / tags_added (the tags one an
+      // ARRAY), the legacy `update_order_fulfillment` returns noteAdded /
+      // tagAdded. Reading only one spelling is how a real write goes
+      // unrecorded and the reply is stripped for claiming something true.
+      if (r.note_added === true || r.noteAdded === true) { o.noteAdded = true; o.actionSucceeded = true; }
+      if (r.tagAdded === true || (Array.isArray(r.tags_added) && r.tags_added.length > 0)) {
+        o.tagAdded = true;
+        o.actionSucceeded = true;
+      }
       break;
 
     case "create_note":
