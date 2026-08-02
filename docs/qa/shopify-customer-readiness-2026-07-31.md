@@ -1247,3 +1247,205 @@ guessed product - are not reachable from here.
   address only.
 - Fulfilment creation, draft orders and third-party fulfilment writes remain
   deliberately un-requested.
+
+---
+
+---
+
+# Release addendum - the disconnect operator-intent defect (2026-08-03)
+
+Part 6 shipped the reconnect provisioning fix as PR #15 and recorded one
+limitation honestly: an operator-disabled tool did not survive a real
+disconnect. This addendum closes it. Release preparation was held until it was
+fixed and verified, as instructed.
+
+## The defect
+
+1. An operator disables `process_refund`.
+2. The tool row exists carrying that decision.
+3. Disconnect destroys integration-scoped rows.
+4. The disabled row is gone.
+5. Reconnect provisions the tool again from catalogue defaults.
+6. `process_refund` comes back **enabled**.
+
+Nobody overrode the decision. The *evidence* of it was deleted, so reconnect had
+nothing to preserve. And because reconnecting is the only way to grant an OAuth
+scope, an operator doing routine maintenance silently re-armed a money-moving
+tool they had deliberately switched off.
+
+## Root cause
+
+Credentials, connection state and tenant policy all hung off the same row, and
+three independent paths destroyed the policy:
+
+| # | Path | Nature |
+|---|---|---|
+| 1 | `integrations.ts:304` explicit `prisma.tenantTool.deleteMany` | **the observed one** - an explicit delete, commented as belt-and-braces for the cascade |
+| 2 | `TenantIntegration → TenantTool` `onDelete: Cascade` | latent - fires on real row deletion |
+| 3 | `CatalogTool → TenantTool` `onDelete: Cascade` | latent and worse - a **platform-side** catalogue edit destroys every tenant's policy, their per-agent permissions and their execution history |
+
+A fourth contributor made recovery impossible: operator decisions for
+*integration* tools were written **only** to the connection-scoped row.
+`tool-permissions.ts` routed them there deliberately, with the comment *"Writing
+to TenantToolPermission for an integration tool would silently no-op against the
+gate."* True of the gate — and precisely why no durable record ever existed.
+
+Static tools had a durable, connection-independent policy table the whole time.
+Integration tools did not.
+
+## The two disconnect routes disagreed
+
+| Route | Policy rows | Credentials |
+|---|---|---|
+| `integrations.ts` `POST /:slug/disconnect` | **deleted** | cleared |
+| `connectors-admin.ts` `POST /connectors/:slug/disconnect` | preserved | **left live** |
+
+Each had half the right answer. Depending on which button an operator pressed
+they either lost their configuration or kept a working access token on an
+integration the product called disconnected.
+
+## The fix
+
+**One canonical disconnect.** Both routes now call `disconnectIntegration()`,
+which clears credentials, preserves policy, stamps `disconnectedAt` /
+`disconnectedBy`, and writes an audit event carrying no credential material.
+Nothing executes afterwards because the tool surface already requires a
+`CONNECTED` integration — availability and policy are separate questions, and
+answering the first by destroying the answer to the second is what caused this.
+
+**A durable record of intent.** `TenantToolPermission` already existed, keyed by
+`(tenantId, toolName)` with no foreign key to any connection, and the tool-gate
+header already called it authoritative. Integration-tool policy changes now
+write **both**: `TenantTool` is the live policy the gate reads, and
+`TenantToolPermission` is the decision. Reconnect rebuilds the first from the
+second. Absence of a decision means nobody ever configured that tool, so the
+catalogue default is used — which is what stops this inventing a disabled state
+for a tool no human has touched.
+
+**The cascade.** `CatalogTool → TenantTool` is now `RESTRICT`. No amount of care
+in application code can stop a foreign key doing what it was declared to do.
+
+## Lifecycle, before and after
+
+| Concern | Before | After |
+|---|---|---|
+| Connection state | on `TenantIntegration` | unchanged |
+| Credentials | cleared by one route, left live by the other | **always cleared**, in one place |
+| Granted scopes | refreshed on reconnect | unchanged |
+| Tenant tool policy | **deleted on disconnect** | **preserved**, and restorable from a durable record even after a hard delete |
+| Disconnect metadata | none | `disconnectedAt`, `disconnectedBy`, audit event |
+| Execution gating | surface requires `CONNECTED` | unchanged — policy alone never grants execution |
+
+## Migration
+
+`20260803090000_integration_lifecycle_policy` — metadata only. No row is
+created, deleted or rewritten. Ships with `down.sql`. New columns are nullable
+with no default, because back-filling a disconnect timestamp would invent an
+event that never happened. The rollback restores the previous cascade exactly,
+and the migration notes that doing so re-enables catalogue deletions destroying
+tenant policy.
+
+## Live verification - Urban Supply Dev, 2026-08-02
+
+Tenant "Urban Supply - GOTCHA Demo", store `urban-supply-gotcha-demo.myshopify.com`,
+channel "Demo WhatsApp", customer Matan Amran `972545680665`. No production
+system was touched and no real refund was executed.
+
+### Sequence A - operator intent across a disconnect (PASS)
+
+| Step | Result |
+|---|---|
+| 1. start | ACTION 8/8, READ 42/42, WRITE 18/18 |
+| 2. operator disables `process_refund` via the canonical policy path | live row `enabled=false`; durable record `enabled=false by=live-verify` |
+| 3. real `disconnectIntegration()` | `DISCONNECTED`, credentials empty, `disconnectedAt` set, **policyRowsPreserved: 68** |
+| 4. after disconnect | **all 68 rows still present**, `process_refund` still `enabled=false` |
+| 5. SIMULATED wipe (reproducing the historical cascade) | 0/68, row absent |
+| 6. reconnect via real provisioning | `granted 67, preserved 1, restoredFromIntent 1` |
+| 7. after reconnect | READ 42/42, WRITE 18/18, ACTION 7/8 with 1 off |
+| 8. `process_refund` | **still disabled** |
+
+Step 5 is labelled simulated deliberately. It is not what a disconnect does any
+more - it is what the old cascade did, run on purpose to prove the durable
+record can rebuild the decision even after every connection-scoped row is gone.
+Steps 3-4 are the real disconnect, and there the rows never die at all.
+
+### Health signal (PASS)
+
+```
+STATUS       PARTIALLY_AVAILABLE
+SUMMARY      67 of 68 tools are enabled; 1 are switched off by tenant policy,
+             which is a decision, not a fault.
+TOOLS        expected 68, provisioned 68, enabledByPolicy 67, explicitlyDisabled 1, missing 0
+DISABLED     ["process_refund"]
+CREDENTIALS  { present: true, decryptable: true }      <- no credential material
+```
+
+### Sequence B - enabled tools still execute (PASS)
+
+Live, against the dev store, through the real dispatch path:
+
+```
+B1  shopify.get_orders     ok, 3 orders returned
+B2  target order           #1014
+B3  shopify.add_order_note ok  (real write)
+B4  read-back from Shopify note present at the provider: true
+```
+
+### Sequence C - the disabled tool stays blocked (PASS at the surface layer)
+
+The gate is `ai-bot.service.ts:1986`: the adapter-tool guest list is built from
+`AgentToolPermission.isAllowed AND TenantTool.isEnabled AND integration
+CONNECTED`. Run live against the tenant:
+
+```
+G1  shopify tools on the guest list  : 67 of 68
+G2  ACTION tools admitted            : cancel_order, create_return, edit_order,
+                                       exchange_order_item, resend_confirmation,
+                                       send_invoice, update_order_shipping_address
+G3  shopify:process_refund admitted? : false
+C4  approval requests raised         : []
+```
+
+Seven of eight ACTION tools are admitted and the eighth is refused, so the
+refusal is the operator's decision taking effect and not a dead surface. The
+model is never offered the tool, so it cannot propose it and no approval can be
+raised for it. Two bot turns asking directly for a full refund raised none.
+
+**Honest limit on what C proves.** It proves the tool is blocked *where the bot
+lives* - the surface. It does not prove the dispatch layer refuses it.
+
+## New finding, not introduced by this change: no policy gate at dispatch
+
+`executeAdapterTool` has no tenant-policy check of its own. Called directly with
+`shopify.process_refund` while that tool was disabled, it did not refuse - it
+went to Shopify, which declined only because that order had nothing refundable:
+
+```
+{"ok":false,"reason":"refund_exceeds_refundable: requested 0.01 USD but only 0.00 USD is refundable"}
+```
+
+On an order with a refundable balance the same call would have executed a real
+refund on a tool the operator had switched off.
+
+This is pre-existing on main and is not caused by, or worsened by, this change.
+It matters most on the approved-HITL path: `runApprovedAction` revalidates
+*business policy rules* and fails closed, but it does not re-check
+`TenantTool.isEnabled`. So an approval raised while a tool was enabled can still
+execute after an operator disables it.
+
+It is deliberately **not** fixed here. The correct gate sits inside
+`executeAdapterTool`, a chokepoint with roughly eighty call sites across two
+services, many of them internal reads that must keep working. Bolting a
+cross-cutting execution gate onto that immediately before a release, inside a
+PR scoped to disconnect lifecycle, would be the wrong trade. Recommended as a
+P1 follow-up with its own change and its own verification.
+
+## Not verified
+
+- The full HITL loop for this change specifically - raise approval, approve,
+  execute, read back - was proven live in Part 6 and was not re-run here. What
+  was re-run is that enabled tools still reach Shopify and mutate it (B3/B4).
+- Two bot turns produced no tool calls because the assistant asked a clarifying
+  question first. That is correct behaviour, but it means the negative result in
+  those turns carries no weight on its own; the gate query G1-G3 is what carries
+  Sequence C.
