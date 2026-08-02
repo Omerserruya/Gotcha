@@ -8,7 +8,7 @@
  * standalone /account route.
  */
 
-import { AccountExperience } from "@/app/account/page";
+import { AccountExperience } from "@/app/account/AccountExperience";
 
 export default function SettingsAccountPage() {
   return <AccountExperience embedded />;

@@ -2516,7 +2516,9 @@
       "careers": "Careers",
       "privacy": "Privacy Policy",
       "terms": "Terms of Service",
-      "copyright": "All rights reserved."
+      "copyright": "All rights reserved.",
+      "trustCenter": "Trust Center",
+      "cookies": "Cookie Policy"
     },
     "pricing": {
       "label": "Pricing",

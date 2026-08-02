@@ -178,7 +178,8 @@ describe("a checkout stuck on an unknown outcome recovers", () => {
     expect(res.phase).toBe("PAID");
 
     const t = await prisma.tenant.findUnique({ where: { id: tenant.id } });
-    expect(t?.status).toBe("ACTIVE");
+    // Recovered money lands the tenant in the same place a clean payment does.
+    expect(t?.status).toBe("PENDING_ONBOARDING");
     const lots = await prisma.aiUnitLot.findMany({ where: { tenantId: tenant.id } });
     expect(lots.reduce((n, l) => n + Number(l.unitsGranted ?? 0), 0)).toBe(2000);
 
@@ -211,7 +212,7 @@ describe("a checkout stuck on an unknown outcome recovers", () => {
     const res = await advanceCheckout(checkout.reference);
     expect(res.phase).toBe("PAID");
     const t = await prisma.tenant.findUnique({ where: { id: tenant.id } });
-    expect(t?.status).toBe("ACTIVE");
+    expect(t?.status).toBe("PENDING_ONBOARDING");
   });
 
   it("does not re-verify the card once the money is in", async () => {

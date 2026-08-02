@@ -115,7 +115,7 @@ afterAll(async () => {
 });
 
 describe("a confirmed attempt activates exactly once", () => {
-  it("43. SUCCEEDED activates, tenant becomes ACTIVE, checkout PAID", async () => {
+  it("43. SUCCEEDED activates, tenant moves to onboarding, checkout PAID", async () => {
     const { tenant, checkout, attempt } = await fixture();
 
     const res = await activatePaidCheckout({ checkoutId: checkout.id, paymentAttemptId: attempt.id });
@@ -126,7 +126,10 @@ describe("a confirmed attempt activates exactly once", () => {
       prisma.pendingCheckout.findUnique({ where: { id: checkout.id } }),
       prisma.subscription.findFirst({ where: { planKey: "ai_workforce" }, orderBy: { createdAt: "desc" } }),
     ]);
-    expect(t?.status).toBe("ACTIVE");
+    // Money settled, setup did not. The subscription is live and the checkout
+    // is PAID, but a tenant that has never onboarded goes to the wizard rather
+    // than into a product it has not been configured for.
+    expect(t?.status).toBe("PENDING_ONBOARDING");
     expect(c?.status).toBe("PAID");
     expect(sub?.status).toBe("ACTIVE");
   });

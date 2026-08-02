@@ -14,9 +14,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const getMyCheckout = vi.fn();
 vi.mock("@/lib/api-checkout", () => ({ getMyCheckout: (...a: unknown[]) => getMyCheckout(...a) }));
 
-const { destinationForTenantStatus, isPaymentRequiredError, paymentRedirectTarget } = await import(
-  "../payment-gate"
-);
+import { destinationForTenantStatus, isPaymentRequiredError, paymentRedirectTarget } from "../payment-gate";
 
 beforeEach(() => {
   getMyCheckout.mockReset();

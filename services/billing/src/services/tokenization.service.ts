@@ -263,7 +263,9 @@ export async function verifyTokenizationSession(
 
   const updated = await prisma.tokenizationSession.findUnique({ where: { id: session.id } });
   if (claimed.count !== 1) {
-    // Someone else won. Drop the duplicate we just created.
+    // Someone else won. Drop the duplicate we just created. It is not the
+    // default and never touched any other row, so deleting it leaves the
+    // winner's card exactly as the winner left it.
     await prisma.paymentMethod.delete({ where: { id: paymentMethodId } }).catch(() => {});
     return {
       verified: true,
@@ -273,7 +275,35 @@ export async function verifyTokenizationSession(
     };
   }
 
+  // Only the poll that WON the session promotes its card, and only once the
+  // win is settled. Promoting at creation time meant a LOSING poll cleared the
+  // winner's flag on its way to deleting its own row, leaving the profile with
+  // a card and no default at all.
+  await promoteToDefault(paymentMethodId);
+
   return { verified: true, session: updated!, paymentMethodId, isNewCard: true };
+}
+
+/**
+ * Make this card the profile's only default.
+ *
+ * Both statements run in one transaction: a window with two defaults, or none,
+ * would make "which card gets charged at renewal" depend on query order.
+ */
+async function promoteToDefault(paymentMethodId: string): Promise<void> {
+  const card = await prisma.paymentMethod.findUnique({
+    where: { id: paymentMethodId },
+    select: { billingProfileId: true },
+  });
+  if (!card) return;
+
+  await prisma.$transaction([
+    prisma.paymentMethod.updateMany({
+      where: { billingProfileId: card.billingProfileId, id: { not: paymentMethodId }, isDefault: true },
+      data: { isDefault: false },
+    }),
+    prisma.paymentMethod.update({ where: { id: paymentMethodId }, data: { isDefault: true } }),
+  ]);
 }
 
 /**
@@ -299,15 +329,11 @@ async function storeCard(session: TokenizationSession, card: StoredCard): Promis
       expMonth: card.expMonth ?? null,
       expYear: card.expYear ?? null,
       status: "ACTIVE",
-      isDefault: true,
+      // NOT the default yet. This row may still lose the session claim and be
+      // deleted, and a card that is about to be deleted must not be the one
+      // renewal would charge. `promoteToDefault` runs once the claim is won.
+      isDefault: false,
     },
-  });
-
-  // Exactly one default. Two would make "which card gets charged at renewal"
-  // depend on query order.
-  await prisma.paymentMethod.updateMany({
-    where: { billingProfileId: profile, id: { not: created.id }, isDefault: true },
-    data: { isDefault: false },
   });
 
   return created.id;

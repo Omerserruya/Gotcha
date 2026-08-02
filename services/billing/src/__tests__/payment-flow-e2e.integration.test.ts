@@ -171,7 +171,9 @@ describe("a customer pays and the plan goes live", () => {
     expect(activated.firstActivation).toBe(true);
 
     const t = await prisma.tenant.findUnique({ where: { id: tenant.id } });
-    expect(t?.status).toBe("ACTIVE");
+    // The PLAN goes live; the ORGANIZATION still has to be set up. Paying is
+    // the first thing a first-signup customer does, not the last.
+    expect(t?.status).toBe("PENDING_ONBOARDING");
     const sub = await prisma.subscription.findUnique({ where: { billableEntityId: entityId } });
     expect(sub?.status).toBe("ACTIVE");
     // The plan is still recorded at its USD price - conversion is a payment

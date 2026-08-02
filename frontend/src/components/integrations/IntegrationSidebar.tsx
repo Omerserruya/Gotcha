@@ -7,9 +7,12 @@
  *
  *   Tool integrations   have executable tools and policy. Selecting one shows
  *                       its tools. This is what the screen is for.
- *   Other connected     status only, owned by Channels or the Knowledge
- *     services          Manager. Not selectable here; the row opens the screen
- *                       that owns it. Never shows a tool count.
+ *   Other connected     status only, owned by the Knowledge Manager or by a
+ *     services          provider's own setup page. Not selectable here; the row
+ *                       opens the screen that owns it. Never shows a tool count.
+ *                       Every row here is something the tenant HAS connected -
+ *                       channels are gone from this list entirely, and an
+ *                       unconnected catalog row is not "other connected".
  *
  * Status is carried by the GROUPING, not by a coloured dot on every row. A dot
  * beside each name made the eye scan a column of traffic lights and told the
@@ -94,15 +97,15 @@ function ToolRow({
 
 function ExternalRow({ entry, he }: { entry: WorkspaceEntry; he: boolean }) {
   const ownerLabel = he
-    ? entry.owner === "channels" ? "ערוצים" : entry.owner === "knowledge" ? "מאגר ידע" : "הגדרות"
-    : entry.owner === "channels" ? "Channels" : entry.owner === "knowledge" ? "Knowledge" : "Setup";
+    ? entry.owner === "knowledge" ? "מאגר ידע" : "הגדרות"
+    : entry.owner === "knowledge" ? "Knowledge" : "Setup";
   return (
     <a
       href={entry.href ?? "#"}
       data-testid={`sidebar-external-${entry.id}`}
       className="group flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-start transition hover:bg-gray-50 dark:hover:bg-gray-800/60"
     >
-      <IntegrationLogo slug={entry.id.replace(/^(channel|knowledge):/, "").toLowerCase()} name={entry.name} logoUrl={entry.logoUrl} size={24} />
+      <IntegrationLogo slug={entry.id.replace(/^knowledge:/, "").toLowerCase()} name={entry.name} logoUrl={entry.logoUrl} size={24} />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[13px] text-gray-500 dark:text-gray-400">{entry.name}</span>
         {/* Says where it is managed, so nobody looks for its policy here. */}

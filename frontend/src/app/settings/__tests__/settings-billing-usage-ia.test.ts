@@ -35,6 +35,25 @@ describe("Billing IA - compact reference hierarchy", () => {
     expect(billing).toContain('can("settings:billing:cancel")');
   });
 
+  /**
+   * The section used to be wrapped in `sub && !isGrandfathered && ...`, so a
+   * workspace with no subscription lost the whole concept of cancelling -
+   * indistinguishable, to the person looking for it, from a missing button.
+   */
+  it("Cancellation section renders in every subscription state, including none", () => {
+    // The heading is not behind a subscription guard...
+    expect(billing).not.toMatch(/\{sub && !isGrandfathered[^\n]*\n\s*<Section title=\{t\("settings\.billing\.cancellation"\)\}/);
+    // ...and each state has copy of its own rather than being dropped.
+    for (const key of [
+      "settings.billing.cancelNothingToCancel",
+      "settings.billing.cancelAlreadyCanceled",
+      "settings.billing.cancelLegacyPlan",
+      "settings.billing.cancelExplain",
+    ]) {
+      expect(billing, `missing state copy: ${key}`).toContain(key);
+    }
+  });
+
   it("payment update opens the dedicated secure route, not an inline prompt", () => {
     expect(billing).toContain("/settings/billing/payment-method");
     // The dev-token prompt moved off the main page into the payment-method route.

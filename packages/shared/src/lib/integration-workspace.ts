@@ -4,7 +4,8 @@
  * The product boundary is strict and worth stating, because the obvious
  * temptation is to show everything a tenant has ever connected in one list:
  *
- *   - Channels owns communication setup and routing.
+ *   - Channels owns communication setup and routing. It is NOT represented
+ *     here at all - see "Channels are not integrations" below.
  *   - Knowledge Manager owns Drive and other knowledge sources.
  *   - Integrations & Tools owns external business systems and the permission
  *     policy for their EXECUTABLE tools.
@@ -14,15 +15,35 @@
  * lifecycle AND one or more executable tools in the catalog AND therefore a
  * meaningful Autonomous / HITL / Disabled choice.
  *
- * Everything else a tenant has connected that a tool might DEPEND on is listed
- * separately, status-only, and links to the screen that owns it. The rule that
- * matters most: a status-only entry never shows a tool count. Showing "WhatsApp
- * - 0 tools" invites the reader to conclude tools are missing or broken, when
- * the truth is that WhatsApp is a channel and tool counts do not apply to it.
+ * A tenant's OWN connections that a tool might depend on but that another
+ * screen governs are listed separately, status-only, linking to their owner.
+ * The rule that matters most: a status-only entry never shows a tool count.
+ * Showing "Google Drive - 0 tools" invites the reader to conclude tools are
+ * missing or broken, when the truth is that tool counts do not apply.
  *
  * Classification is DERIVED from the real catalog, never hardcoded per page: a
  * provider that gains its first tool becomes a full integration on its own, and
  * one whose tools are removed stops pretending to have policy.
+ *
+ * ── Channels are not integrations ───────────────────────────
+ *
+ * WhatsApp and the rest used to be listed here as status-only rows. It read as
+ * a bug and behaved like one: a permissions screen showed comms setup it could
+ * not govern, mixed into a list of business systems, and clicking a row threw
+ * the reader out to /settings/channels. Channel health belongs on the Channels
+ * page. Where the dependency actually matters - the platform's own delivery
+ * tools - it is stated on the tool surface itself, next to the tools it gates.
+ *
+ * ── Nothing to govern and nothing connected means nothing to show ──
+ *
+ * Two rows used to appear that were not merely misfiled but false. An
+ * UNPUBLISHED catalog row (calendly, deliberately withdrawn because its
+ * connector is incomplete) was advertised anyway, and the detail route 404s on
+ * exactly those - so selecting one was a dead end. And a catalog row with no
+ * executable tools that the tenant had never connected (custom_api) sat under a
+ * heading reading "connected services" while being connected to nothing. Both
+ * are dropped by `classifyCatalogIntegration` returning null. A connection the
+ * tenant DOES hold is never hidden, whatever the catalog says about it.
  */
 
 // ─── Kinds ──────────────────────────────────────────────────
@@ -37,7 +58,7 @@ export type WorkspaceEntryKind =
   | "external_connection";
 
 /** Which screen owns an external connection, so the link goes to the right place. */
-export type ExternalOwner = "channels" | "knowledge" | "integration_setup";
+export type ExternalOwner = "knowledge" | "integration_setup";
 
 export type ConnectionState =
   /** Usable right now. */
@@ -96,11 +117,6 @@ export interface CatalogIntegrationInput {
   entitled?: boolean;
 }
 
-export interface ChannelInput {
-  channel: string;
-  connectionStatus: string;
-}
-
 export interface KnowledgeSourceInput {
   provider: string;
   isActive: boolean;
@@ -112,19 +128,6 @@ export interface InternalToolsInput {
 }
 
 // ─── Naming for external connections ────────────────────────
-
-const CHANNEL_NAMES: Record<string, string> = {
-  WHATSAPP: "WhatsApp",
-  MESSENGER: "Facebook Messenger",
-  INSTAGRAM: "Instagram",
-  EMAIL: "Email",
-  GMAIL: "Gmail",
-  OUTLOOK: "Outlook",
-  SLACK: "Slack",
-  VOICE: "Voice",
-  WEBCHAT: "Website chat",
-  SHOPIFY_LIVE_CHAT: "Shopify live chat",
-};
 
 const KNOWLEDGE_NAMES: Record<string, string> = {
   google_drive: "Google Drive",
@@ -177,13 +180,26 @@ export function gotchaEntry(input: InternalToolsInput): WorkspaceEntry {
 
 /**
  * A catalog provider becomes a full integration only if it has executable
- * tools. One with none (custom_api before any tool is defined) has no policy to
- * show, so it is listed as an external connection pointing at its own setup
- * page rather than as an empty tool surface.
+ * tools. One with none has no policy to show, so it is listed as an external
+ * connection pointing at its own setup page rather than as an empty tool
+ * surface - but only when the tenant actually holds a connection to it.
+ *
+ * Returns null when the row does not belong on this screen at all:
+ *
+ *   - unpublished and unconnected. The catalog withdraws a provider by
+ *     unpublishing it (calendly, whose connector is incomplete), and the
+ *     detail route already 404s on unpublished rows - listing one produces a
+ *     link that cannot open. A tenant who connected it BEFORE it was withdrawn
+ *     still sees it, because hiding a live connection is the worse lie.
+ *   - no executable tools and no connection. There is no policy to govern and
+ *     no connection to report, so every honest thing this screen could say
+ *     about it is "nothing". Its own setup page is where it gets connected.
  */
-export function classifyCatalogIntegration(input: CatalogIntegrationInput): WorkspaceEntry {
+export function classifyCatalogIntegration(input: CatalogIntegrationInput): WorkspaceEntry | null {
   const state = connectionStateFor(input);
   const hasTools = input.toolCount > 0;
+  const hasConnection = !!input.connection;
+  if (!hasConnection && (input.isPublished === false || !hasTools)) return null;
   return {
     id: input.slug,
     name: input.name,
@@ -198,28 +214,6 @@ export function classifyCatalogIntegration(input: CatalogIntegrationInput): Work
       ? {}
       : { owner: "integration_setup" as ExternalOwner, href: `/settings/business-systems/${input.slug}` }),
     ...(warningFor(input) ? { warning: warningFor(input) } : {}),
-  };
-}
-
-/**
- * Channels are communication setup, not tool integrations. They appear only as
- * status, and only for channels the tenant has actually connected - listing
- * every supported channel here would recreate the Channels page.
- */
-export function classifyChannel(input: ChannelInput): WorkspaceEntry {
-  const status = String(input.connectionStatus || "").toUpperCase();
-  return {
-    id: `channel:${input.channel}`,
-    name: CHANNEL_NAMES[input.channel] ?? input.channel,
-    kind: "external_connection",
-    state: status === "CONNECTED" ? "connected" : status === "ERROR" ? "warning" : "disconnected",
-    category: "Channel",
-    description: null,
-    logoUrl: null,
-    toolCount: null,
-    owner: "channels",
-    href: "/settings/channels",
-    ...(status === "ERROR" ? { warning: { reason: "capability_error" as const } } : {}),
   };
 }
 
@@ -298,4 +292,85 @@ export function governableToolCount(entries: WorkspaceEntry[]): number {
   return entries
     .filter((e) => e.kind === "tool_integration")
     .reduce((n, e) => n + (e.toolCount ?? 0), 0);
+}
+
+// ─── Channel dependency ─────────────────────────────────────
+
+/**
+ * Channels do not belong in the sidebar, but they are a real precondition for
+ * some of the platform's own tools: granting `send_message` while no channel is
+ * connected grants the ability to send nothing. So the dependency is stated
+ * once, ON the tool surface that depends on it, where it is actionable.
+ */
+const CHANNEL_NAMES: Record<string, string> = {
+  WHATSAPP: "WhatsApp",
+  MESSENGER: "Facebook Messenger",
+  INSTAGRAM: "Instagram",
+  EMAIL: "Email",
+  GMAIL: "Gmail",
+  OUTLOOK: "Outlook",
+  SLACK: "Slack",
+  VOICE: "Voice",
+  WEBCHAT: "Website chat",
+  SHOPIFY_LIVE_CHAT: "Shopify live chat",
+};
+
+/**
+ * Tools that put a message in front of a customer over a channel.
+ *
+ * Deliberately narrow. `preview_broadcast` renders without sending and
+ * `escalate_to_human` hands off inside a conversation that already exists on a
+ * channel - neither needs a channel to be granted, so neither is listed. A set
+ * that over-claimed would turn this note into background noise.
+ */
+export const CHANNEL_DELIVERY_TOOLS: ReadonlySet<string> = new Set([
+  "send_message",
+  "create_broadcast",
+  "schedule_broadcast",
+  "schedule_followup",
+  "schedule_followup_template",
+]);
+
+export interface ChannelDependency {
+  /** Human names of channels that can deliver right now. */
+  connected: string[];
+  /** Connected but in ERROR: still configured, currently not delivering. */
+  degraded: string[];
+  /** How many tools on THIS surface deliver over a channel. */
+  toolCount: number;
+  href: string;
+}
+
+/**
+ * The channel note for a tool surface, or null when there is nothing to say -
+ * either no tool here delivers over a channel, or every channel is healthy and
+ * the reader needs no warning. A note that appears when all is well is a note
+ * people learn to skip.
+ */
+export function channelDependencyFor(opts: {
+  toolNames: string[];
+  channels: Array<{ channel: string; connectionStatus: string }>;
+}): ChannelDependency | null {
+  const toolCount = opts.toolNames.filter((n) => CHANNEL_DELIVERY_TOOLS.has(n)).length;
+  if (toolCount === 0) return null;
+
+  const connected: string[] = [];
+  const degraded: string[] = [];
+  const seen = new Set<string>();
+  for (const c of opts.channels) {
+    if (seen.has(c.channel)) continue;
+    seen.add(c.channel);
+    const status = String(c.connectionStatus || "").toUpperCase();
+    const name = CHANNEL_NAMES[c.channel] ?? c.channel;
+    if (status === "CONNECTED") connected.push(name);
+    else if (status === "ERROR") degraded.push(name);
+    // DISCONNECTED and friends are not a dependency problem - the tenant chose
+    // not to use that channel. Only a channel that is meant to work and does
+    // not is worth a line here.
+  }
+  connected.sort();
+  degraded.sort();
+
+  if (degraded.length === 0 && connected.length > 0) return null;
+  return { connected, degraded, toolCount, href: "/settings/channels" };
 }

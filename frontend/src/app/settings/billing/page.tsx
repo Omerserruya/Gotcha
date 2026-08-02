@@ -414,9 +414,20 @@ export default function BillingSettingsPage() {
         )}
       </Section>
 
-      {/* ── Cancellation ── */}
-      {sub && !isGrandfathered && sub.status !== "CANCELED" && (
-        <Section title={t("settings.billing.cancellation")}>
+      {/* ── Cancellation ──
+          Always present. "Where do I cancel?" must have an answer on this page
+          in every state - a workspace with no subscription used to drop the
+          section entirely, which reads as a missing button rather than as
+          nothing to cancel. */}
+      <Section title={t("settings.billing.cancellation")}>
+        {!sub ? (
+          <p className="max-w-xl text-sm text-gray-500">{t("settings.billing.cancelNothingToCancel")}</p>
+        ) : isGrandfathered ? (
+          <p className="max-w-xl text-sm text-gray-500">{t("settings.billing.cancelLegacyPlan")}</p>
+        ) : sub.status === "CANCELED" ? (
+          <p className="max-w-xl text-sm text-gray-500">{t("settings.billing.cancelAlreadyCanceled")}</p>
+        ) : (
+          <>
           {sub.cancelAtPeriodEnd ? (
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm text-amber-700">
@@ -461,8 +472,9 @@ export default function BillingSettingsPage() {
               )}
             </div>
           )}
-        </Section>
-      )}
+          </>
+        )}
+      </Section>
 
       {/* Confirmation modal - cancellation is never one stray click. */}
       {confirm && (

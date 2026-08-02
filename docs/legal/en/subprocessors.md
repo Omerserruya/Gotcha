@@ -1,6 +1,8 @@
 # Subprocessors
 
-GOTCHA, the operator of gotcha.co.il, uses a small number of third-party service providers (subprocessors) to deliver the platform. A subprocessor is a provider that GOTCHA itself engages and that may process customer personal data on GOTCHA's behalf as part of running the service. This page lists all of them.
+> This English text is a translation provided for convenience. The Hebrew version of this document is the authoritative one, and in case of any conflict or inconsistency between the versions, the Hebrew version prevails.
+
+GOTCHA by Omer Serruya, the operator of gotcha.co.il, uses a small number of third-party service providers (subprocessors) to deliver the platform. A subprocessor is a provider that GOTCHA itself engages and that may process customer personal data on GOTCHA's behalf as part of running the service. This page lists all of them.
 
 We keep this page up to date. When we add or replace a subprocessor, we update this page before the change takes effect. To receive notice of changes by email, write to privacy@gotcha.co.il and ask to be added to the subprocessor notification list.
 

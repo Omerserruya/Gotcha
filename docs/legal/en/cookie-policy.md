@@ -1,8 +1,10 @@
 # GOTCHA Cookie Policy
 
+> This English text is a translation provided for convenience. The Hebrew version of this document is the authoritative one, and in case of any conflict or inconsistency between the versions, the Hebrew version prevails.
+
 Effective date: July 18, 2026
 
-This policy explains how GOTCHA, the operator of gotcha.co.il, uses cookies and similar technologies. The short version: the GOTCHA application sets no cookies of its own, our self-hosted sign-in service sets only strictly necessary cookies, and we use no analytics, marketing, or tracking technologies at all.
+This policy explains how GOTCHA by Omer Serruya, the operator of gotcha.co.il, uses cookies and similar technologies. The short version: the GOTCHA application sets no cookies of its own, our self-hosted sign-in service sets only strictly necessary cookies, and we use no analytics, marketing, or tracking technologies at all.
 
 ## 1. Cookies set by GOTCHA
 
@@ -32,6 +34,8 @@ Instead of cookies, the GOTCHA application keeps a small number of items in your
 | Sign-in tokens (access token, refresh token, token expiry) | localStorage | Keeps you signed in to the application and refreshes your session |
 | Sign-in flow values (verifier, state, return path) | sessionStorage | Secures the sign-in redirect; single use, cleared right after sign-in completes |
 | Language preference | localStorage | Remembers your interface language (for example English or Hebrew) |
+| Workspace selection | localStorage | Remembers which workspace you are working in, when your account belongs to more than one |
+| Interface layout and list state | localStorage | Remembers layout choices such as a collapsed sidebar, and which conversations you marked as unread |
 | Onboarding and tour progress | localStorage | Remembers where you are in setup and the guided tour |
 | Notification and sound preferences | localStorage | Remembers your notification sound settings |
 | Voice call preferences and callback state | localStorage and sessionStorage | Remembers per-device voice settings and in-progress call state |

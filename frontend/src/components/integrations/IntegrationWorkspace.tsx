@@ -343,6 +343,10 @@ export function IntegrationWorkspace() {
               he={he}
             />
 
+            {detail.channelDependency && (
+              <ChannelDependencyNote dep={detail.channelDependency} he={he} />
+            )}
+
             {/* Tool search + the low-frequency actions, kept off the main axis.
                 The four bulk chips used to sit above the fold and competed with
                 the per-tool controls for attention; the per-category dropdown is
@@ -502,6 +506,50 @@ export function IntegrationWorkspace() {
   );
 }
 
+
+/**
+ * Channels, stated where they actually matter.
+ *
+ * They used to be rows in the sidebar - a permissions screen listing comms
+ * setup it cannot govern, each row a one-way trip to /settings/channels. But
+ * the dependency is real: granting `send_message` while nothing can deliver
+ * grants the ability to send nothing. So it is said once, here, beside the
+ * tools it gates, and only when something is actually wrong. The server sends
+ * nothing at all when every channel is healthy.
+ */
+function ChannelDependencyNote({
+  dep, he,
+}: {
+  dep: NonNullable<IntegrationDetail["channelDependency"]>;
+  he: boolean;
+}) {
+  const L = (en: string, hebrew: string) => (he ? hebrew : en);
+  const nothingWorks = dep.connected.length === 0;
+  return (
+    <div
+      data-testid="channel-dependency"
+      className={clsx(
+        "mb-3 flex flex-wrap items-center gap-x-1.5 gap-y-1 rounded-lg px-2.5 py-1.5 text-[11.5px]",
+        nothingWorks ? "bg-rose-50 text-rose-700" : "bg-amber-50 text-amber-800",
+      )}
+    >
+      <span>
+        {nothingWorks
+          ? L(
+              `No channel can deliver right now, so ${dep.toolCount} of these tools cannot reach anyone.`,
+              `אין כרגע ערוץ שיכול לשלוח, ולכן ${dep.toolCount} מהכלים האלה לא מגיעים לאף אחד.`,
+            )
+          : L(
+              `${dep.degraded.join(", ")} is not delivering. ${dep.toolCount} of these tools send over a channel.`,
+              `${dep.degraded.join(", ")} לא שולח כרגע. ${dep.toolCount} מהכלים האלה שולחים דרך ערוץ.`,
+            )}
+      </span>
+      <a href={dep.href} className="font-medium underline underline-offset-2">
+        {L("Open Channels", "פתיחת ערוצים")}
+      </a>
+    </div>
+  );
+}
 
 /**
  * Start the REAL connection flow without leaving the workspace (spec §3).

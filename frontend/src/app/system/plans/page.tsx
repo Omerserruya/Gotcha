@@ -52,6 +52,30 @@ import {
 
 type Tab = "plans" | "estimation" | "packages" | "currency" | "evaluation";
 
+/** The default chat tier a visitor lands on, or null when none is offered. */
+function defaultChatTier(p: AdminPlan) {
+  if (!p.chatVolumeEnabled) return null;
+  const offered = p.volumeOptions.filter((o) => o.channel === "CHAT" && o.enabled);
+  return offered.find((o) => o.isDefault) ?? offered[0] ?? null;
+}
+
+/**
+ * Credits per conversation the plan's own numbers imply: the chat allowance
+ * divided by the volume the default tier advertises.
+ *
+ * This is the reconciliation an operator cannot do in their head. A plan that
+ * includes 750 credits while advertising 250 conversations a month is implicitly
+ * promising 3 credits per conversation - and if the configured assumption says
+ * 8, one of the two numbers is wrong.
+ */
+function impliedRatioFor(p: AdminPlan): number | null {
+  const tier = defaultChatTier(p);
+  const monthly = tier?.monthlyVolume ?? 0;
+  const chatCredits = Math.max(0, p.includedCredits - p.voiceCredits);
+  if (!(monthly > 0) || !(chatCredits > 0)) return null;
+  return Math.round((chatCredits / monthly) * 10) / 10;
+}
+
 const STATUS_STYLE: Record<string, string> = {
   DRAFT: "bg-amber-50 text-amber-700 border-amber-200",
   ACTIVE: "bg-emerald-50 text-emerald-700 border-emerald-200",
@@ -261,6 +285,9 @@ export default function SystemPlansPage() {
               <PlansTab
                 plans={plans}
                 features={features}
+                globalChatRatio={
+                  estimations.find((c) => c.scope === "GLOBAL" && c.active)?.chatCreditsPerEstimatedConversation ?? null
+                }
                 onCreateVersion={doCreateVersion}
                 onPreview={doPreview}
                 onDiscard={doDiscardDraft}
@@ -269,7 +296,12 @@ export default function SystemPlansPage() {
               />
             )}
             {tab === "estimation" && (
-              <EstimationTab token={token!} configs={estimations} onPublished={() => { setMsg({ kind: "ok", text: "New estimation version published. Existing subscriptions keep their snapshot." }); reload(); }} />
+              <EstimationTab
+                token={token!}
+                configs={estimations}
+                plans={plans}
+                onPublished={() => { setMsg({ kind: "ok", text: "New estimation version published. Existing subscriptions keep their snapshot." }); reload(); }}
+              />
             )}
             {tab === "packages" && (
               <PackagesTab
@@ -329,10 +361,12 @@ const SCOPE_EMPTY: Record<PlanScope, string> = {
 };
 
 function PlansTab({
-  plans, features, onCreateVersion, onPreview, onDiscard, onCreatePlan, onSetRecommended,
+  plans, features, globalChatRatio, onCreateVersion, onPreview, onDiscard, onCreatePlan, onSetRecommended,
 }: {
   plans: AdminPlan[];
   features: AdminFeature[];
+  /** The assumption a plan follows when it has no ratio of its own. */
+  globalChatRatio: number | null;
   onCreateVersion: (key: string) => void;
   onPreview: (id: string) => void;
   onDiscard: (id: string, key: string, version: number) => void;
@@ -611,8 +645,39 @@ function PlansTab({
               <p className="mt-3 text-[11px] text-gray-400">
                 Public estimate: {p.estimation.chatCreditsPerEstimatedConversation} credits/chat ·{" "}
                 {p.estimation.voiceCreditsPerEstimatedCall} credits/call · {p.estimation.businessDaysPerMonth} business days
+                <span className="ms-1 text-gray-300">(plan-scoped v{p.estimation.version})</span>
               </p>
             )}
+
+            {/* What the plan's own numbers imply, next to what is configured.
+                The pricing page shows the advertised volume, so a divergence
+                here is a margin decision, not a display bug - and it has to be
+                visible to be decided. */}
+            {(() => {
+              const implied = impliedRatioFor(p);
+              if (implied == null) return null;
+              const configured = p.estimation?.chatCreditsPerEstimatedConversation ?? globalChatRatio;
+              const diverges = configured != null && Math.abs(configured - implied) > 0.05;
+              return (
+                <p className={clsx("mt-1 text-[11px]", diverges ? "text-amber-700" : "text-gray-400")}>
+                  Advertised {defaultChatTier(p)!.dailyVolume}/day implies{" "}
+                  <span className="font-medium tabular-nums" dir="ltr">
+                    {implied}
+                  </span>{" "}
+                  credits per conversation
+                  {diverges && (
+                    <>
+                      {" "}
+                      - the configured assumption says{" "}
+                      <span className="font-medium tabular-nums" dir="ltr">
+                        {configured}
+                      </span>
+                      . Give this plan its own ratio, or change its allowance.
+                    </>
+                  )}
+                </p>
+              );
+            })()}
           </div>
         ))}
       </div>
@@ -711,9 +776,21 @@ function Row({ label, from, to }: { label: string; from: string; to: string }) {
 // ─── Public estimation ──────────────────────────────────────────────────────
 
 function EstimationTab({
-  token, configs, onPublished,
-}: { token: string; configs: EstimationConfig[]; onPublished: () => void }) {
-  const active = configs.find((c) => c.scope === "GLOBAL" && c.active);
+  token, configs, plans, onPublished,
+}: { token: string; configs: EstimationConfig[]; plans: AdminPlan[]; onPublished: () => void }) {
+  // Scope: the global assumption, or one plan's own. A plan whose credit
+  // allowance does not divide into the volume it advertises needs its own
+  // ratio - that is exactly what a PLAN-scoped version is for.
+  const [planId, setPlanId] = useState<string>("");
+  const targetPlan = plans.find((p) => p.id === planId) ?? null;
+  const scope: "GLOBAL" | "PLAN" = planId ? "PLAN" : "GLOBAL";
+
+  const activeGlobal = configs.find((c) => c.scope === "GLOBAL" && c.active);
+  const activeForTarget = targetPlan
+    ? configs.find((c) => c.scope === "PLAN" && c.active && c.planKey === targetPlan.key)
+    : undefined;
+  const active = activeForTarget ?? activeGlobal;
+
   const [chat, setChat] = useState(active?.chatCreditsPerEstimatedConversation ?? 8);
   const [voice, setVoice] = useState(active?.voiceCreditsPerEstimatedCall ?? 20);
   const [days, setDays] = useState(active?.businessDaysPerMonth ?? 25);
@@ -721,15 +798,31 @@ function EstimationTab({
   const [preview, setPreview] = useState<EstimationPreview | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
+  // Switching scope loads the values in force for it, so an operator never
+  // publishes the global ratio onto a plan by accident.
+  const selectScope = (id: string) => {
+    setPlanId(id);
+    setPreview(null);
+    const p = plans.find((x) => x.id === id);
+    const inForce =
+      (p ? configs.find((c) => c.scope === "PLAN" && c.active && c.planKey === p.key) : undefined) ?? activeGlobal;
+    setChat(inForce?.chatCreditsPerEstimatedConversation ?? 8);
+    setVoice(inForce?.voiceCreditsPerEstimatedCall ?? 20);
+    setDays(inForce?.businessDaysPerMonth ?? 25);
+  };
+
+  const body = () => ({
+    chatCreditsPerEstimatedConversation: chat,
+    voiceCreditsPerEstimatedCall: voice,
+    businessDaysPerMonth: days,
+    scope,
+    planId: planId || null,
+  });
+
   const doPreview = async () => {
     setErr(null);
     try {
-      setPreview(await previewEstimation(token, {
-        chatCreditsPerEstimatedConversation: chat,
-        voiceCreditsPerEstimatedCall: voice,
-        businessDaysPerMonth: days,
-        scope: "GLOBAL",
-      }));
+      setPreview(await previewEstimation(token, body()));
     } catch (e: any) {
       setErr(e?.message ?? "Preview failed");
     }
@@ -738,13 +831,7 @@ function EstimationTab({
   const doPublish = async () => {
     setErr(null);
     try {
-      await publishEstimation(token, {
-        chatCreditsPerEstimatedConversation: chat,
-        voiceCreditsPerEstimatedCall: voice,
-        businessDaysPerMonth: days,
-        scope: "GLOBAL",
-        internalNote: note || null,
-      });
+      await publishEstimation(token, { ...body(), internalNote: note || null });
       setPreview(null);
       onPublished();
     } catch (e: any) {
@@ -761,6 +848,46 @@ function EstimationTab({
           actual usage. It changes what pricing pages SAY - never consumed credits, ledger balances, invoices, or the
           terms of any existing subscription.
         </p>
+        <p className="mt-2 max-w-2xl text-[11px] leading-relaxed text-gray-400">
+          Where a plan sells an explicit volume - &quot;50 conversations per business day&quot; - that volume is what the
+          pricing page shows. This ratio is the fallback for plans with no volume selector, and the yardstick the plan
+          list uses to flag an allowance that does not cover what is advertised.
+        </p>
+
+        <label className="mt-4 block">
+          <span className="text-xs font-medium uppercase tracking-wide text-gray-400">Applies to</span>
+          <select
+            value={planId}
+            onChange={(e) => selectScope(e.target.value)}
+            className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-gray-400 sm:max-w-md"
+          >
+            <option value="">All plans (global assumption)</option>
+            {plans
+              .filter((p) => p.status === "ACTIVE" || p.status === "DRAFT")
+              .map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.key} v{p.version} ({p.status.toLowerCase()}) - own ratio
+                </option>
+              ))}
+          </select>
+        </label>
+        {targetPlan && (
+          <p className="mt-1.5 text-[11px] text-gray-500">
+            {activeForTarget
+              ? `${targetPlan.key} already has its own ratio (v${activeForTarget.version}). Publishing replaces it.`
+              : `${targetPlan.key} currently follows the global assumption. Publishing gives it its own.`}
+            {impliedRatioFor(targetPlan) != null && (
+              <>
+                {" "}
+                Its default chat tier implies{" "}
+                <span className="font-medium tabular-nums" dir="ltr">
+                  {impliedRatioFor(targetPlan)}
+                </span>{" "}
+                credits per conversation.
+              </>
+            )}
+          </p>
+        )}
 
         <div className="mt-4 grid gap-4 sm:grid-cols-3">
           <Field label="Credits per estimated chat" value={chat} onChange={setChat} />

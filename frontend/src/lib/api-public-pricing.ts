@@ -23,9 +23,18 @@ export interface PublicPrice {
   chargedCurrency: string;
 }
 
+export interface PublicChannelEstimate {
+  credits: number;
+  monthly: number;
+  daily: number;
+  /** "DECLARED_VOLUME" = the volume the plan sells; "CREDIT_RATIO" = derived. */
+  basis: "DECLARED_VOLUME" | "CREDIT_RATIO";
+  creditsPerUnit: number;
+}
+
 export interface PublicEstimate {
-  chat: { credits: number; monthly: number; daily: number };
-  voice: { credits: number; monthly: number; daily: number };
+  chat: PublicChannelEstimate;
+  voice: PublicChannelEstimate;
   totalInteractions: number;
   pricePerChat: string | null;
   pricePerCall: string | null;
@@ -167,9 +176,21 @@ export interface Quote {
   estimatedChatsDaily: number;
   estimatedCallsMonthly: number;
   estimatedCallsDaily: number;
+  /**
+   * Whether the volumes above are what the plan SELLS or what its credits
+   * imply. A sold volume is a commitment and must not be hedged with a "~".
+   */
+  chatBasis: "DECLARED_VOLUME" | "CREDIT_RATIO";
+  voiceBasis: "DECLARED_VOLUME" | "CREDIT_RATIO";
   pricePerChatMinor: number | null;
   pricePerCallMinor: number | null;
   pricePerInteractionMinor: number | null;
+}
+
+/** The monthly volume an option sells, falling back to daily x business days. */
+function monthlyOf(o: PublicVolumeOption, businessDays: number): number {
+  if (o.monthlyVolume > 0) return o.monthlyVolume;
+  return Math.max(0, o.dailyVolume) * businessDays;
 }
 
 /** Money is handled in integer minor units, never floats. */
@@ -193,9 +214,10 @@ export function formatMinor(minor: number, currency: string, decimals = 0): stri
 /**
  * Price a selection from catalog values.
  *
- * Chat and voice are estimated from their own credit pools, exactly as the
- * server does, so the page never implies one allowance covers both. Zero
- * denominators yield null and render as "-" rather than Infinity.
+ * Capacity comes from the volume the selected option SELLS. Only an unselected
+ * channel falls back to its own credit pool divided by the published ratio, so
+ * the page never implies one allowance covers both. Zero denominators yield
+ * null and render as "-" rather than Infinity.
  */
 export function quoteSelection(plan: PublicPlan, selection: Selection): Quote {
   const chatOption = plan.chatVolumeEnabled
@@ -223,8 +245,23 @@ export function quoteSelection(plan: PublicPlan, selection: Selection): Quote {
 
   const r = plan.estimate.ratios;
   const days = r.businessDaysPerMonth > 0 ? r.businessDaysPerMonth : 1;
-  const chatsMonthly = r.chatCreditsPerEstimatedConversation > 0 ? chatCredits / r.chatCreditsPerEstimatedConversation : 0;
-  const callsMonthly = r.voiceCreditsPerEstimatedCall > 0 ? voiceCredits / r.voiceCreditsPerEstimatedCall : 0;
+
+  // A selected option SELLS a volume - "50 conversations per business day" - so
+  // that volume is the estimate. Dividing credits by the global ratio instead is
+  // what made the summary contradict the selector the visitor had just moved.
+  // Only a channel with no selection falls back to the ratio.
+  const chatsMonthly = chatOption
+    ? monthlyOf(chatOption, days)
+    : r.chatCreditsPerEstimatedConversation > 0
+      ? chatCredits / r.chatCreditsPerEstimatedConversation
+      : 0;
+  const callsMonthly = voiceOption
+    ? monthlyOf(voiceOption, days)
+    : r.voiceCreditsPerEstimatedCall > 0
+      ? voiceCredits / r.voiceCreditsPerEstimatedCall
+      : 0;
+  const chatsDaily = chatOption && chatOption.dailyVolume > 0 ? chatOption.dailyVolume : chatsMonthly / days;
+  const callsDaily = voiceOption && voiceOption.dailyVolume > 0 ? voiceOption.dailyVolume : callsMonthly / days;
   const total = chatsMonthly + callsMonthly;
 
   // Each channel carries the share of the price proportional to its estimated
@@ -247,9 +284,11 @@ export function quoteSelection(plan: PublicPlan, selection: Selection): Quote {
     chatOption,
     voiceOption,
     estimatedChatsMonthly: Math.round(chatsMonthly),
-    estimatedChatsDaily: Math.round((chatsMonthly / days) * 10) / 10,
+    estimatedChatsDaily: Math.round(chatsDaily * 10) / 10,
     estimatedCallsMonthly: Math.round(callsMonthly),
-    estimatedCallsDaily: Math.round((callsMonthly / days) * 10) / 10,
+    estimatedCallsDaily: Math.round(callsDaily * 10) / 10,
+    chatBasis: chatOption ? "DECLARED_VOLUME" : "CREDIT_RATIO",
+    voiceBasis: voiceOption ? "DECLARED_VOLUME" : "CREDIT_RATIO",
     pricePerChatMinor: perChat,
     pricePerCallMinor: perCall,
     pricePerInteractionMinor: total > 0 ? Math.round(monthlyMinor / total) : null,

@@ -157,7 +157,18 @@ async function loadUserRoleFeatures(userId: string): Promise<Set<string>> {
   if (cached) return cached;
 
   const assignments = await prisma.userRoleAssignment.findMany({
-    where: { userId },
+    where: {
+      userId,
+      // The role must belong to the SAME tenant this user is a member of.
+      // Without it, an assignment pointing at another organization's role row
+      // was read and honoured: the dev estate had exactly that - urban's owner
+      // wired to demo-company's Owner. It resolved to identical permissions
+      // only because both were seeded from one catalog, so nothing looked
+      // wrong; editing or deleting the other tenant's role would have silently
+      // changed or removed this user's access. A User belongs to exactly one
+      // tenant, so this reads as "the role's tenant is my tenant".
+      role: { tenant: { users: { some: { id: userId } } } },
+    },
     select: {
       role: {
         select: { features: { select: { feature: true } } },
@@ -323,7 +334,18 @@ interface RoleResolution {
 /** Load this user's role-derived permission patterns + effective scope. */
 async function loadUserRoleResolution(user: PermissionPrincipal): Promise<RoleResolution> {
   const assignments = await prisma.userRoleAssignment.findMany({
-    where: { userId: user.userId },
+    where: {
+      userId: user.userId,
+      // The role must belong to the SAME tenant this user is a member of.
+      // Without it, an assignment pointing at another organization's role row
+      // was read and honoured: the dev estate had exactly that - urban's owner
+      // wired to demo-company's Owner. It resolved to identical permissions
+      // only because both were seeded from one catalog, so nothing looked
+      // wrong; editing or deleting the other tenant's role would have silently
+      // changed or removed this user's access. A User belongs to exactly one
+      // tenant, so this reads as "the role's tenant is my tenant".
+      role: { tenant: { users: { some: { id: user.userId } } } },
+    },
     select: {
       scope: true,
       role: {
@@ -399,7 +421,18 @@ export async function getEffectiveBuiltinRole(user: PermissionPrincipal): Promis
   if (cached !== undefined) return cached;
 
   const assignment = await prisma.userRoleAssignment.findFirst({
-    where: { userId: user.userId },
+    where: {
+      userId: user.userId,
+      // The role must belong to the SAME tenant this user is a member of.
+      // Without it, an assignment pointing at another organization's role row
+      // was read and honoured: the dev estate had exactly that - urban's owner
+      // wired to demo-company's Owner. It resolved to identical permissions
+      // only because both were seeded from one catalog, so nothing looked
+      // wrong; editing or deleting the other tenant's role would have silently
+      // changed or removed this user's access. A User belongs to exactly one
+      // tenant, so this reads as "the role's tenant is my tenant".
+      role: { tenant: { users: { some: { id: user.userId } } } },
+    },
     select: { role: { select: { builtinKey: true } } },
     orderBy: { assignedAt: "desc" },
   });

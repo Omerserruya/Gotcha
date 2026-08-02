@@ -62,7 +62,7 @@ afterAll(async () => {
 });
 
 describe("an externally settled contract activates the plan", () => {
-  it("activates, marks the tenant ACTIVE and grants credits once", async () => {
+  it("activates, sends the tenant to onboarding and grants credits once", async () => {
     const { tenant, entityId } = await pendingTenant();
     const res = await activateManualContract({
       tenantId: tenant.id, amount: 499, currency: "USD", ...VALID,
@@ -70,7 +70,9 @@ describe("an externally settled contract activates the plan", () => {
     expect(res.firstActivation).toBe(true);
 
     const t = await prisma.tenant.findUnique({ where: { id: tenant.id } });
-    expect(t?.status).toBe("ACTIVE");
+    // A contract settled by bank transfer buys the same thing a card does, and
+    // leaves the organization with the same setup still to do.
+    expect(t?.status).toBe("PENDING_ONBOARDING");
 
     const sub = await prisma.subscription.findUnique({ where: { billableEntityId: entityId } });
     expect(sub?.status).toBe("ACTIVE");

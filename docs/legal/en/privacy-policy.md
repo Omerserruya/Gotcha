@@ -1,10 +1,12 @@
 # GOTCHA Privacy Policy
 
+> This English text is a translation provided for convenience. The Hebrew version of this document is the authoritative one, and in case of any conflict or inconsistency between the versions, the Hebrew version prevails.
+
 Effective date: July 18, 2026
 
 ## 1. Who we are
 
-This policy is issued by GOTCHA, the operator of gotcha.co.il ("GOTCHA", "we", "us").
+This policy is issued by GOTCHA by Omer Serruya, the operator of gotcha.co.il ("GOTCHA", "we", "us").
 
 GOTCHA is an AI-powered customer engagement platform: businesses connect their messaging channels (WhatsApp, Instagram, Facebook Messenger, email, Slack, voice) and GOTCHA provides a shared team inbox, AI assistants ("AI employees"), knowledge-base answers, and CRM/commerce integrations.
 
@@ -213,6 +215,8 @@ How rights are fulfilled on GOTCHA:
 - There is no self-service data-subject portal. Requests are handled by the tenant administrator's built-in tools or by our team via email, and identity verification is performed manually by the operator (for example, by matching the requester to the account email or working through the controller).
 - We will respond to requests without undue delay and within one month, extendable where applicable law permits for complex requests.
 
+To request deletion by email, write to privacy@gotcha.co.il with the subject line "Data Deletion Request" and include the phone number or email address associated with your data, so that we can locate the relevant records. If you contacted a business through WhatsApp or another channel, you can also ask that business directly, and its administrators can delete the conversation and contact record from their own dashboard.
+
 Exports are provided in a structured, machine-readable format (JSON). Erasure is a hard delete, and deleted data leaves backups within at most 90 days as described in section 10.
 
 ## 12. Children
@@ -228,7 +232,7 @@ We may update this policy from time to time. The effective date at the top and b
 - Privacy matters: privacy@gotcha.co.il
 - General support: support@gotcha.co.il
 
-GOTCHA, the operator of gotcha.co.il.
+GOTCHA by Omer Serruya, the operator of gotcha.co.il.
 
 Related documents: ./cookie-policy.md, ./subprocessors.md, ./terms-of-service.md.
 

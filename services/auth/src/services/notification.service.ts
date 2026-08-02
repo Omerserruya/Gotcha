@@ -848,6 +848,19 @@ export function paidOnboardingEmailHtml(a: {
   currency: string;
   includedCredits: number;
   continuationUrl: string;
+  /**
+   * One-time Authentik link where the admin sets their password FIRST.
+   *
+   * When present it is the primary call to action, and paying happens inside
+   * the app afterwards as an authenticated user. That ordering is what closes
+   * the credential gap: previously the payment link was the only thing in this
+   * email, so a customer bought the product without ever authenticating and
+   * then met a sign-in wall for a password nobody had set.
+   *
+   * Null when the admin already has a password, in which case there is nothing
+   * to set and the payment link leads.
+   */
+  setupUrl?: string | null;
   expiresAtLabel: string;
   locale?: string;
 }): string {
@@ -879,8 +892,25 @@ export function paidOnboardingEmailHtml(a: {
           : "You can complete account setup right away.",
       },
     ]),
-    cta: { label: he ? "השלמת ההגדרה" : "Complete setup", url: a.continuationUrl },
-    fallbackUrl: a.continuationUrl,
+    // Password first, payment second. Following the button leaves them signed
+    // in, and the app itself walks them to the payment screen, so they pay as
+    // somebody we can identify rather than as whoever opened a link.
+    //
+    // The payment link stays below as a secondary path on purpose: forwarding
+    // this email to whoever settles invoices is normal and useful, and that
+    // person can pay without being handed the admin's account. Only the button
+    // above establishes a credential, and only this mailbox received it.
+    cta: a.setupUrl
+      ? { label: he ? "הגדרת החשבון" : "Set up your account", url: a.setupUrl }
+      : { label: he ? "השלמת ההגדרה" : "Complete setup", url: a.continuationUrl },
+    belowCardHtml: a.setupUrl
+      ? `<p style="margin:0;font-size:13px;color:${EC.muted};line-height:1.7;text-align:${he ? "right" : "left"};">${
+          he
+            ? `משלמים בלי להיכנס למערכת? <a href="${a.continuationUrl}" style="color:${EC.violet};font-weight:600;">מסך התשלום</a>`
+            : `Paying without signing in? <a href="${a.continuationUrl}" style="color:${EC.violet};font-weight:600;">Go to the payment page</a>`
+        }</p>`
+      : undefined,
+    fallbackUrl: a.setupUrl ?? a.continuationUrl,
     expiryNote: he
       ? `הקישור בתוקף עד <strong style="color:#7C3291;">${escapeHtml(a.expiresAtLabel)}</strong>`
       : `This link is valid until <strong style="color:#7C3291;">${escapeHtml(a.expiresAtLabel)}</strong>`,
@@ -908,6 +938,8 @@ export async function sendPaidOnboardingEmail(a: {
   amount: string;
   currency: string;
   includedCredits: number;
+  /** See `paidOnboardingEmailHtml`: password first, payment second. */
+  setupUrl?: string | null;
   locale?: string;
   resend?: boolean;
 }): Promise<void> {
@@ -935,8 +967,11 @@ export async function sendPaidOnboardingEmail(a: {
         `התוכנית שנבחרה: ${a.planName}`,
         `מחיר: ${symbol}${Number(a.amount).toLocaleString("en-US")} לחודש`,
         `קרדיטים כלולים: ${a.includedCredits.toLocaleString("en-US")}`, "",
-        "השלימו את ההגדרה והתשלום כדי להפעיל את התוכנית:",
-        continuationUrl, "",
+        ...(a.setupUrl
+          ? ["התחילו בהגדרת החשבון ובחירת סיסמה:", a.setupUrl, "",
+             "משלמים בלי להיכנס למערכת? מסך התשלום:", continuationUrl]
+          : ["השלימו את ההגדרה והתשלום כדי להפעיל את התוכנית:", continuationUrl]),
+        "",
         `הקישור בתוקף עד ${expiresAtLabel}.`, "",
         "החשבון יופעל במלואו לאחר אישור התשלום.", "",
         "צוות GOTCHA.",
@@ -947,8 +982,11 @@ export async function sendPaidOnboardingEmail(a: {
         `Selected plan: ${a.planName}`,
         `Price: ${symbol}${Number(a.amount).toLocaleString("en-US")} per month`,
         `Included credits: ${a.includedCredits.toLocaleString("en-US")}`, "",
-        "Complete account setup and payment to activate the plan:",
-        continuationUrl, "",
+        ...(a.setupUrl
+          ? ["Set up your account and choose a password:", a.setupUrl, "",
+             "Paying without signing in? Go to the payment page:", continuationUrl]
+          : ["Complete account setup and payment to activate the plan:", continuationUrl]),
+        "",
         `This link is valid until ${expiresAtLabel}.`, "",
         "Your account becomes fully active once payment is confirmed.", "",
         "The GOTCHA. Team",
@@ -972,6 +1010,144 @@ export async function sendPaidOnboardingEmail(a: {
   } catch (err: any) {
     // Delivery failure activates nothing. Resend is the repair path.
     console.error("Failed to send paid onboarding email:", err?.message ?? err);
+    await logNotification(payload, "failed", err.message);
+    throw err;
+  }
+}
+
+/**
+ * "Payment confirmed, now let's set you up."
+ *
+ * The paid signup order is pay FIRST, configure second, and the payment link
+ * authorizes a checkout rather than a person - so a customer can complete the
+ * whole purchase without ever authenticating. That left the admin at a sign-in
+ * wall asking for a password nobody had ever set.
+ *
+ * This is the email that closes that gap: it is the only place the credential
+ * link is handed out, because delivery to the registered address is what
+ * proves the recipient. The payment link deliberately cannot mint one - it is
+ * routinely forwarded to whoever settles invoices, and that person must not be
+ * able to take over the admin account.
+ */
+export function paymentSucceededEmailHtml(a: {
+  adminName: string;
+  tenantName: string;
+  planName: string;
+  includedCredits: number;
+  actionUrl: string;
+  /** False when the admin already has a password and only needs the way in. */
+  needsPassword: boolean;
+  locale?: string;
+}): string {
+  const he = a.locale === "he";
+  const credits = a.includedCredits.toLocaleString("en-US");
+
+  const steps = [
+    ...(a.needsPassword
+      ? [{
+          marker: "1",
+          title: he ? "בחרו סיסמה" : "Choose your password",
+          desc: he ? "פעם אחת, ואתם בפנים." : "Once, and you're in.",
+        }]
+      : []),
+    {
+      marker: a.needsPassword ? "2" : "1",
+      title: he ? "ספרו לנו על העסק" : "Tell us about your business",
+      desc: he
+        ? "כמה שאלות, וצוות ה-AI שלכם מוכן לעבודה."
+        : "A few questions, and your AI team is ready to work.",
+    },
+    {
+      marker: "&#10003;",
+      title: he ? `${credits} קרדיטים` : `${credits} credits`,
+      desc: he ? "כלולים בכל חודש, כבר בחשבון." : "included every month, already in your account.",
+    },
+  ];
+
+  return renderBrandEmail({
+    locale: a.locale,
+    title: he ? `התשלום אושר - GOTCHA.` : `Payment confirmed - GOTCHA.`,
+    preheader: he
+      ? "התשלום התקבל. נשאר רק להגדיר את החשבון."
+      : "Payment received. All that's left is setting up your account.",
+    eyebrow: he ? "התשלום אושר" : "Payment confirmed",
+    icon: "&#127881;",
+    headline: he ? `${escapeHtml(a.tenantName)} מוכן לצאת לדרך.` : `${escapeHtml(a.tenantName)} is ready to go.`,
+    subhead: he
+      ? `${escapeHtml(a.adminName)}, התשלום התקבל והתוכנית ${escapeHtml(a.planName)} פעילה. נשאר צעד אחד קצר.`
+      : `${escapeHtml(a.adminName)}, your payment went through and ${escapeHtml(a.planName)} is live. One short step left.`,
+    bodyHtml: emailSteps(he ? "מה עכשיו" : "What happens now", steps),
+    cta: {
+      label: a.needsPassword
+        ? (he ? "הגדרת סיסמה והתחלה" : "Set your password and start")
+        : (he ? "התחלת ההגדרה" : "Start setup"),
+      url: a.actionUrl,
+    },
+    fallbackUrl: a.actionUrl,
+    footerNote: he
+      ? "קיבלתם את ההודעה הזו כי השלמתם תשלום ב-gotcha.co.il"
+      : "You're receiving this because you completed a payment on gotcha.co.il",
+  });
+}
+
+export async function sendPaymentSucceededEmail(a: {
+  tenantId: string;
+  adminEmail: string;
+  adminName: string;
+  tenantName: string;
+  planName: string;
+  includedCredits: number;
+  actionUrl: string;
+  needsPassword: boolean;
+  locale?: string;
+  resend?: boolean;
+}): Promise<void> {
+  const he = a.locale === "he";
+  const subject = he
+    ? `התשלום אושר. נגדיר את ${a.tenantName} - GOTCHA.`
+    : `Payment confirmed. Let's set up ${a.tenantName} - GOTCHA.`;
+
+  const html = paymentSucceededEmailHtml(a);
+  const text = he
+    ? [
+        `שלום ${a.adminName},`, "",
+        `התשלום התקבל והתוכנית ${a.planName} פעילה.`,
+        `${a.includedCredits.toLocaleString("en-US")} קרדיטים כבר בחשבון.`, "",
+        a.needsPassword
+          ? "בחרו סיסמה והתחילו בהגדרת החשבון:"
+          : "התחילו בהגדרת החשבון:",
+        a.actionUrl, "",
+        "צוות GOTCHA.",
+      ].join("\n")
+    : [
+        `Hello ${a.adminName},`, "",
+        `Your payment went through and ${a.planName} is live.`,
+        `${a.includedCredits.toLocaleString("en-US")} credits are already in your account.`, "",
+        a.needsPassword
+          ? "Choose a password and start setting up your account:"
+          : "Start setting up your account:",
+        a.actionUrl, "",
+        "The GOTCHA. Team",
+      ].join("\n");
+
+  const payload: NotificationPayload = {
+    tenantId: a.tenantId,
+    channel: "email",
+    type: a.resend ? "payment_succeeded_email_resent" : "payment_succeeded_email",
+    recipient: a.adminEmail,
+    subject,
+    body: text,
+    // The action URL may be a one-time credential link, so it is deliberately
+    // NOT recorded in notification metadata.
+    metadata: { planName: a.planName, needsPassword: a.needsPassword },
+  };
+
+  try {
+    await sendHtmlEmail(a.adminEmail, subject, html, text);
+    await logNotification(payload, "sent");
+  } catch (err: any) {
+    // The money is already settled; a failed email is a resend, not a rollback.
+    console.error("Failed to send payment succeeded email:", err?.message ?? err);
     await logNotification(payload, "failed", err.message);
     throw err;
   }

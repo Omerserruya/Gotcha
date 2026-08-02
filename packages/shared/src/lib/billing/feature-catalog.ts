@@ -35,6 +35,10 @@
  */
 
 import type { EntitlementValueType } from "@prisma/client";
+// The OTHER key namespace: the license keys a plan sells. Imported rather than
+// re-listed so a new permission domain cannot appear in the product and be
+// treated here as an unknown, unsellable key.
+import { ALL_LICENSE_KEYS } from "../permission-catalog";
 
 export type FeatureCategory = "COMMUNICATION" | "AI" | "VOICE" | "MANAGEMENT";
 
@@ -570,6 +574,7 @@ export const FEATURE_CATALOG: readonly FeatureDef[] = [
 ];
 
 const BY_KEY = new Map(FEATURE_CATALOG.map((f) => [f.key, f]));
+const LICENSE_KEYS = new Set(ALL_LICENSE_KEYS);
 
 export function getFeatureDef(key: string): FeatureDef | undefined {
   return BY_KEY.get(key);
@@ -580,10 +585,34 @@ export function sellableFeatureKeys(): string[] {
   return FEATURE_CATALOG.filter((f) => f.implemented).map((f) => f.key);
 }
 
-/** True when the key is unknown to the catalog or catalogued but not shipped. */
+/**
+ * True when the key is catalogued but not shipped, or is not a sellable key at
+ * all.
+ *
+ * There are TWO key namespaces and this function has to know it. This catalog
+ * holds fine-grained capabilities with dotted keys (`ai.copilot`). The
+ * permission catalog holds the LICENSE keys a plan actually sells: the
+ * top-level domains (`ai`, `conversation`, `channels`) and their colon
+ * sub-keys (`ai:employees`). They are different sets, and only the first one
+ * is in `BY_KEY`.
+ *
+ * Treating everything outside this catalog as unsellable therefore denied every
+ * license domain, permanently and silently. A plan declaring `ai: true` was
+ * overridden to false by the guard, `materializeEntitlements` wrote that false
+ * into TenantFeature, `getUserPermissions` dropped every permission licensed by
+ * the domain, and the workspace navigation lost most of its categories. The
+ * plan said yes; the tenant saw a nearly empty product.
+ *
+ * Unknown keys are still unsellable, which is the protection this guard exists
+ * for - a typo in a plan must not silently sell something that does not exist.
+ */
 export function isUnsellable(key: string): boolean {
   const def = BY_KEY.get(key);
-  return !def || !def.implemented;
+  if (def) return !def.implemented;
+  // A real license key from the other namespace. Sellable by definition: it is
+  // how packaging is expressed.
+  if (LICENSE_KEYS.has(key)) return false;
+  return true;
 }
 
 export function featuresByCategory(category: FeatureCategory): FeatureDef[] {

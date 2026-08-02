@@ -11,6 +11,7 @@ import {
 } from "../money";
 import {
   estimateChannel,
+  estimateDeclaredChannel,
   estimatePlanCapacity,
   estimatePricePerInteraction,
   estimateRemainingConversations,
@@ -170,6 +171,76 @@ describe("estimation — voice formula", () => {
     const est = estimatePlanCapacity({ chatCredits: 2000, voiceCredits: 0, ratios: RATIOS });
     expect(est.chat.estimatedMonthly).toBe(250);
     expect(est.voice.estimatedMonthly).toBe(0);
+  });
+});
+
+/**
+ * The bug these guard: a plan SELLS "10 conversations per business day" and
+ * separately carries a credit allowance. When an operator edits the allowance
+ * without touching the tiers - 2,000 credits down to 750 - dividing by the
+ * global 8-credit assumption answered ~94 a month, so the configurator
+ * contradicted the selector the visitor had just moved.
+ */
+describe("estimation — a declared volume outranks the ratio", () => {
+  it("reports the volume the plan sells, not the volume its credits imply", () => {
+    const e = estimateDeclaredChannel(750, { daily: 10, monthly: 250 }, 25);
+    expect(e.estimatedMonthly).toBe(250);
+    expect(e.estimatedDaily).toBe(10);
+    expect(e.basis).toBe("DECLARED_VOLUME");
+  });
+
+  it("reports the credits-per-conversation that volume implies", () => {
+    // 750 credits over 250 conversations is 3 each - not the configured 8.
+    expect(estimateDeclaredChannel(750, { daily: 10, monthly: 250 }, 25).creditsPerUnit).toBe(3);
+  });
+
+  it("derives the monthly figure from daily x business days when unset", () => {
+    const e = estimateDeclaredChannel(2000, { daily: 10, monthly: 0 }, 25);
+    expect(e.estimatedMonthly).toBe(250);
+    expect(e.estimatedDaily).toBe(10);
+  });
+
+  it("falls back to the ratio for a channel that declares nothing", () => {
+    const est = estimatePlanCapacity({ chatCredits: 750, voiceCredits: 0, ratios: RATIOS });
+    expect(est.chat.basis).toBe("CREDIT_RATIO");
+    expect(est.chat.estimatedMonthly).toBe(93.75);
+  });
+
+  it("applies the declared volume per channel, independently", () => {
+    const est = estimatePlanCapacity({
+      chatCredits: 750,
+      voiceCredits: 5000,
+      ratios: RATIOS,
+      chatVolume: { daily: 10, monthly: 250 },
+    });
+    expect(est.chat.estimatedMonthly).toBe(250);
+    expect(est.chat.basis).toBe("DECLARED_VOLUME");
+    // Voice declared nothing, so it still divides its own pool by its own ratio.
+    expect(est.voice.estimatedMonthly).toBe(250);
+    expect(est.voice.basis).toBe("CREDIT_RATIO");
+  });
+
+  it("ignores an empty declaration rather than reporting zero capacity", () => {
+    const est = estimatePlanCapacity({
+      chatCredits: 2000,
+      voiceCredits: 0,
+      ratios: RATIOS,
+      chatVolume: { daily: 0, monthly: 0 },
+    });
+    expect(est.chat.estimatedMonthly).toBe(250);
+    expect(est.chat.basis).toBe("CREDIT_RATIO");
+  });
+
+  it("prices per conversation against the volume actually sold", () => {
+    const est = estimatePlanCapacity({
+      chatCredits: 750,
+      voiceCredits: 0,
+      ratios: RATIOS,
+      chatVolume: { daily: 10, monthly: 250 },
+    });
+    const p = estimatePricePerInteraction(money("39.00", "USD"), est);
+    // $39 over the 250 sold, not over the 94 the credit ratio would have claimed.
+    expect(toDecimalString(p.pricePerChat!)).toBe("0.16");
   });
 });
 

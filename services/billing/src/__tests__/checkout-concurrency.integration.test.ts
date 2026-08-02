@@ -144,7 +144,9 @@ describe("eight simultaneous customers of one checkout produce one charge", () =
     expect(await ledger(tenant.id), "credits granted once").toBe(2000);
 
     const t = await prisma.tenant.findUnique({ where: { id: tenant.id } });
-    expect(t?.status).toBe("ACTIVE");
+    // Paid once, so onboarding once: eight racing activations must not leave
+    // the tenant anywhere other than the single post-payment state.
+    expect(t?.status).toBe("PENDING_ONBOARDING");
   });
 
   it("stays at one charge when the calls are staggered mid-flight", async () => {

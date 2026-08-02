@@ -24,6 +24,7 @@ import {
 } from "../services/checkout-progress.service";
 import { declineCategory } from "../lib/decline-category";
 import { buildReturnUrl } from "../lib/public-url";
+import { notifyPaymentSucceeded } from "../lib/auth-notify";
 
 const router = Router();
 
@@ -117,6 +118,44 @@ router.post("/checkout/:reference/advance", optionalAuth, async (req, res) => {
   } catch (err) {
     respondRefusal(res, err);
   }
+});
+
+/**
+ * Send the post-payment welcome email again.
+ *
+ * A paid signup can complete the entire purchase without ever authenticating,
+ * so that email is the only thing carrying the admin a way to set a password.
+ * If it does not arrive they are locked out of what they just bought, and the
+ * ordinary repair (POST /agents/:id/reset-password) requires the very
+ * permissions they cannot yet hold. This is their own way to ask again.
+ *
+ * It discloses nothing: the address is never echoed and the link never
+ * returned, so a caller who reached this without standing learns only that
+ * something was posted. Delivery to the address on file stays the sole proof
+ * of who the recipient is.
+ */
+router.post("/checkout/:reference/resend-welcome", optionalAuth, async (req, res) => {
+  const checkout = await loadAndAuthorize(req, res);
+  if (!checkout) return;
+
+  // Only once the money is in. Before that there is nothing to welcome anyone
+  // to, and this email hands out a credential link.
+  if (checkout.status !== "PAID" || !checkout.tenantId) return checkoutNotFound(res);
+
+  const [tenant, plan] = await Promise.all([
+    prisma.tenant.findUnique({ where: { id: checkout.tenantId }, select: { name: true } }),
+    prisma.plan.findFirst({ where: { key: checkout.planKey }, select: { name: true } }),
+  ]);
+
+  await notifyPaymentSucceeded({
+    tenantId: checkout.tenantId,
+    tenantName: tenant?.name ?? "your organization",
+    planName: plan?.name ?? checkout.planKey,
+    includedCredits: checkout.snapshotIncludedCredits,
+    resend: true,
+  });
+
+  res.json({ data: { sent: true } });
 });
 
 /**

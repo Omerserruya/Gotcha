@@ -1,6 +1,8 @@
 # GOTCHA Data Processing Agreement
 
-This Data Processing Agreement (the "DPA") forms part of the agreement between GOTCHA, the operator of gotcha.co.il ("GOTCHA", the "Processor"), and the customer that has an account on the GOTCHA platform (the "Customer", the "Controller"), governing use of the GOTCHA platform (the "Service") under the Terms of Service at ./terms-of-service.md (the "Agreement").
+> This English text is a translation provided for convenience. The Hebrew version of this document is the authoritative one, and in case of any conflict or inconsistency between the versions, the Hebrew version prevails.
+
+This Data Processing Agreement (the "DPA") forms part of the agreement between GOTCHA by Omer Serruya, the operator of gotcha.co.il ("GOTCHA", the "Processor"), and the customer that has an account on the GOTCHA platform (the "Customer", the "Controller"), governing use of the GOTCHA platform (the "Service") under the Terms of Service at ./terms-of-service.md (the "Agreement").
 
 This DPA applies to the extent GOTCHA processes personal data on the Customer's behalf in providing the Service. It is effective as of the date the Customer accepts the Agreement or starts using the Service, whichever is earlier.
 
@@ -147,7 +149,7 @@ The Customer is responsible for the security measures on its side, including saf
 **Parties**
 
 - Controller: the Customer, the business holding the GOTCHA account, acting for itself.
-- Processor: GOTCHA, the operator of gotcha.co.il. Contact for data protection matters: privacy@gotcha.co.il.
+- Processor: GOTCHA by Omer Serruya, the operator of gotcha.co.il. Contact for data protection matters: privacy@gotcha.co.il.
 
 **Processing overview**
 

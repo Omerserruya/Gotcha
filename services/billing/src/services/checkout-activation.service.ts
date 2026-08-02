@@ -16,6 +16,7 @@ import type { PaymentAttempt, PaymentQuote, PendingCheckout } from "@prisma/clie
 import { currentPeriod } from "../lib/period";
 import { CHARGE_CURRENCY, CHARGE_CURRENCY_ID, assertQuoteMatchesCommercial } from "./payment-quote.service";
 import { convert } from "./exchange-rate.service";
+import { notifyPaymentSucceeded } from "../lib/auth-notify";
 
 /**
  * How the payment was proven.
@@ -130,7 +131,36 @@ export async function activatePaidCheckout(args: {
     });
 
     await tx.pendingCheckout.update({ where: { id: checkout.id }, data: { status: "PAID" } });
-    await tx.tenant.update({ where: { id: checkout.tenantId! }, data: { status: "ACTIVE" } });
+
+    // Payment settles MONEY. It does not settle SETUP.
+    //
+    // A first-signup customer pays BEFORE they onboard: they are provisioned
+    // PENDING_PAYMENT and pay from an emailed link. Flipping them straight to
+    // ACTIVE claimed "fully set up" about an organization that had not answered
+    // a single question - and since both the app shell (destinationForTenantStatus)
+    // and /setup read ACTIVE as "onboarding is done", the customer who had just
+    // paid was routed PAST the wizard entirely.
+    //
+    // PENDING_ONBOARDING is the state that already means exactly this: the
+    // access policy allows the ONBOARDING scope and refuses the paid product,
+    // which is the same position an onboard-first customer occupies while they
+    // work through the wizard. `completeOnboarding` flips it to ACTIVE at the
+    // end, and finds nothing owed because this checkout is now PAID.
+    //
+    // A tenant that is ALREADY ACTIVE is never moved backwards: it has been
+    // through onboarding, whether or not the tracker existed to record it.
+    const [tenantRow, onboarding] = await Promise.all([
+      tx.tenant.findUnique({ where: { id: checkout.tenantId! }, select: { status: true } }),
+      tx.tenantOnboarding.findUnique({
+        where: { tenantId: checkout.tenantId! },
+        select: { completedAt: true },
+      }),
+    ]);
+    const alreadySetUp = tenantRow?.status === "ACTIVE" || !!onboarding?.completedAt;
+    await tx.tenant.update({
+      where: { id: checkout.tenantId! },
+      data: { status: alreadySetUp ? "ACTIVE" : "PENDING_ONBOARDING" },
+    });
 
     await tx.subscriptionEvent.create({
       data: {
@@ -158,6 +188,24 @@ export async function activatePaidCheckout(args: {
     `checkout:${checkout.reference}`,
   );
   await materializeEntitlements(checkout.tenantId!, args.actor);
+
+  // Welcome them and hand over the way in. Only the call that won the consume
+  // sends it, so a duplicate activation cannot email the customer twice.
+  //
+  // Deliberately last, and deliberately unawaited for its outcome: a paid
+  // signup can complete the whole purchase without ever authenticating, so
+  // this email is the ONLY thing that gets that admin a password. It still
+  // must not be able to fail an activation that has already taken the money.
+  const [tenant, plan] = await Promise.all([
+    prisma.tenant.findUnique({ where: { id: checkout.tenantId! }, select: { name: true } }),
+    prisma.plan.findFirst({ where: { key: checkout.planKey }, select: { name: true } }),
+  ]);
+  void notifyPaymentSucceeded({
+    tenantId: checkout.tenantId!,
+    tenantName: tenant?.name ?? "your organization",
+    planName: plan?.name ?? checkout.planKey,
+    includedCredits: checkout.snapshotIncludedCredits,
+  });
 
   return { activated: true, firstActivation: true, subscriptionId: result.subscriptionId };
 }

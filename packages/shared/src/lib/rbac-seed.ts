@@ -103,7 +103,10 @@ export async function backfillTenantAssignments(tenantId: string): Promise<numbe
       role: true,
       createdAt: true,
       departmentMembers: { select: { departmentRole: true }, orderBy: { createdAt: "asc" as const }, take: 1 },
-      roleAssignments: { select: { roleId: true }, take: 1 },
+      // The role's tenant comes too: an assignment pointing at ANOTHER
+      // organization's role is not a valid assignment, and treating it as one
+      // is how such a row survives every subsequent re-seed.
+      roleAssignments: { select: { roleId: true, role: { select: { tenantId: true } } } },
     },
   });
 
@@ -112,9 +115,25 @@ export async function backfillTenantAssignments(tenantId: string): Promise<numbe
 
   for (const u of users) {
     if (u.role === "SYSTEM_ADMIN") continue;
-    if (u.roleAssignments.length > 0) {
-      // Already has an assignment - if it's an Owner, remember that.
-      if (u.roleAssignments.some((a) => a.roleId === roleIds.owner)) ownerAssigned = true;
+
+    // Only assignments to THIS tenant's roles count as having one. A row
+    // pointing at another organization's role is repaired rather than
+    // respected - left alone it keeps this user's access hostage to a role
+    // nobody in this tenant can see or edit, and one that disappears entirely
+    // if that other organization is ever deleted.
+    const foreign = u.roleAssignments.filter((a) => a.role.tenantId !== tenantId);
+    const own = u.roleAssignments.filter((a) => a.role.tenantId === tenantId);
+
+    if (foreign.length) {
+      await prisma.userRoleAssignment.deleteMany({
+        where: { userId: u.id, roleId: { in: foreign.map((a) => a.roleId) } },
+      });
+      invalidatePermissionsCache({ userId: u.id });
+    }
+
+    if (own.length > 0) {
+      // Already correctly assigned - if it's an Owner, remember that.
+      if (own.some((a) => a.roleId === roleIds.owner)) ownerAssigned = true;
       continue;
     }
 

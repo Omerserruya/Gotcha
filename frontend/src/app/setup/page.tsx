@@ -448,7 +448,11 @@ function SetupContent() {
   // ── Boot / resume ──
   useEffect(() => {
     if (isLoading) return;
-    if (!user || !token) { router.push("/login?redirect=setup"); return; }
+    // `?next=/setup`, not `?redirect=setup`: the login shim only honours a
+    // RELATIVE path and falls back to "/" for anything else, so the bare word
+    // sent everyone who arrived here logged-out to the public site instead of
+    // back to setup - the same dead end the checkout success screen had.
+    if (!user || !token) { router.push("/login?next=/setup"); return; }
     if (user.role !== "ADMIN") { router.push("/conversations"); return; }
 
     (async () => {

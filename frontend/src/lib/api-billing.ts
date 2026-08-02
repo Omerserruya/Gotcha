@@ -136,9 +136,22 @@ export interface DisplayPrice {
   fx: { rate: string; source: string; rateDate: string; isFallback: boolean } | null;
 }
 
+export interface ChannelEstimate {
+  credits: number;
+  monthly: number;
+  daily: number;
+  /**
+   * "DECLARED_VOLUME" - the volume this plan sells, shown as-is.
+   * "CREDIT_RATIO"    - derived from the credit allowance and the published
+   *                     credits-per-conversation assumption.
+   */
+  basis: "DECLARED_VOLUME" | "CREDIT_RATIO";
+  creditsPerUnit: number;
+}
+
 export interface QuoteEstimate {
-  chat: { credits: number; monthly: number; daily: number };
-  voice: { credits: number; monthly: number; daily: number };
+  chat: ChannelEstimate;
+  voice: ChannelEstimate;
   totalInteractions: number;
   pricePerChat: string | null;
   pricePerCall: string | null;

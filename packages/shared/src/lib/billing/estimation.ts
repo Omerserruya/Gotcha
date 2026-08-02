@@ -16,6 +16,10 @@
  * The Sysadmin console may compare this ratio against actual internal usage and
  * warn when they diverge. Only an explicit operator action publishes a new
  * version.
+ *
+ * The ratio is the FALLBACK, not the first answer. Where a plan sells an
+ * explicit volume - "50 conversations per business day" - that volume is the
+ * offer and is reported as-is; see `estimateDeclaredChannel`.
  */
 import { prisma } from "../prisma";
 import { type Money, zero, multiplyMoney } from "./money";
@@ -126,9 +130,30 @@ export async function resolveEstimation(
 
 export interface ChannelEstimate {
   allocatedCredits: number;
+  /**
+   * Credits assumed per conversation / call.
+   *
+   * With `basis: "CREDIT_RATIO"` this is the configured assumption that produced
+   * the estimate. With `basis: "DECLARED_VOLUME"` it is the ratio the sold
+   * volume IMPLIES - allocated credits divided by the volume being sold - which
+   * is what a sysadmin needs to see to judge whether the two agree.
+   */
   creditsPerUnit: number;
   estimatedMonthly: number;
   estimatedDaily: number;
+  /** Where the number came from. See `estimateDeclaredChannel`. */
+  basis: EstimateBasis;
+}
+
+export type EstimateBasis = "DECLARED_VOLUME" | "CREDIT_RATIO";
+
+/**
+ * The volume a plan explicitly SELLS on a channel, as chosen in the
+ * configurator - "50 conversations per business day".
+ */
+export interface DeclaredVolume {
+  daily: number;
+  monthly: number;
 }
 
 /** estimatedMonthlyChats = allocatedChatCredits / creditsPerConversation. */
@@ -139,7 +164,13 @@ export function estimateChannel(
 ): ChannelEstimate {
   // Guard the zero denominator explicitly rather than rendering Infinity/NaN.
   if (!(creditsPerUnit > 0) || !(allocatedCredits > 0)) {
-    return { allocatedCredits: Math.max(0, allocatedCredits), creditsPerUnit, estimatedMonthly: 0, estimatedDaily: 0 };
+    return {
+      allocatedCredits: Math.max(0, allocatedCredits),
+      creditsPerUnit,
+      estimatedMonthly: 0,
+      estimatedDaily: 0,
+      basis: "CREDIT_RATIO",
+    };
   }
   const days = businessDaysPerMonth > 0 ? businessDaysPerMonth : 1;
   const monthly = allocatedCredits / creditsPerUnit;
@@ -148,6 +179,38 @@ export function estimateChannel(
     creditsPerUnit,
     estimatedMonthly: monthly,
     estimatedDaily: monthly / days,
+    basis: "CREDIT_RATIO",
+  };
+}
+
+/**
+ * Capacity for a channel whose volume was DECLARED rather than derived.
+ *
+ * When a plan sells "50 conversations per business day", that number is the
+ * offer. Re-deriving it from credits divided by the global credits-per-
+ * conversation assumption is what let the configurator contradict itself: the
+ * visitor picked 50/day and the summary underneath answered with a different
+ * number, because the plan's credit allowance and the global ratio had never
+ * been reconciled.
+ *
+ * So the declared volume wins, and the ratio it implies is reported alongside
+ * it - honestly labelled - instead of being silently substituted.
+ */
+export function estimateDeclaredChannel(
+  allocatedCredits: number,
+  declared: DeclaredVolume,
+  businessDaysPerMonth: number,
+): ChannelEstimate {
+  const days = businessDaysPerMonth > 0 ? businessDaysPerMonth : 1;
+  const monthly = declared.monthly > 0 ? declared.monthly : Math.max(0, declared.daily) * days;
+  const daily = declared.daily > 0 ? declared.daily : monthly / days;
+  const credits = Math.max(0, allocatedCredits);
+  return {
+    allocatedCredits: credits,
+    creditsPerUnit: monthly > 0 && credits > 0 ? credits / monthly : 0,
+    estimatedMonthly: monthly,
+    estimatedDaily: daily,
+    basis: "DECLARED_VOLUME",
   };
 }
 
@@ -164,21 +227,35 @@ export interface PlanEstimate {
  * their own credit allocations - the plan configuration decides how the total
  * recurring allowance is split, and no claim is made that one pool magically
  * covers both.
+ *
+ * A channel that declares the volume it sells (`chatVolume` / `voiceVolume`)
+ * is reported at that volume. Only a channel with nothing declared falls back
+ * to dividing its credits by the configured ratio.
  */
 export function estimatePlanCapacity(input: {
   chatCredits: number;
   voiceCredits: number;
   ratios: EstimationRatios;
+  chatVolume?: DeclaredVolume | null;
+  voiceVolume?: DeclaredVolume | null;
 }): PlanEstimate {
   const { ratios } = input;
-  const chat = estimateChannel(input.chatCredits, ratios.chatCreditsPerEstimatedConversation, ratios.businessDaysPerMonth);
-  const voice = estimateChannel(input.voiceCredits, ratios.voiceCreditsPerEstimatedCall, ratios.businessDaysPerMonth);
+  const chat = hasVolume(input.chatVolume)
+    ? estimateDeclaredChannel(input.chatCredits, input.chatVolume!, ratios.businessDaysPerMonth)
+    : estimateChannel(input.chatCredits, ratios.chatCreditsPerEstimatedConversation, ratios.businessDaysPerMonth);
+  const voice = hasVolume(input.voiceVolume)
+    ? estimateDeclaredChannel(input.voiceCredits, input.voiceVolume!, ratios.businessDaysPerMonth)
+    : estimateChannel(input.voiceCredits, ratios.voiceCreditsPerEstimatedCall, ratios.businessDaysPerMonth);
   return {
     chat,
     voice,
     estimatedTotalInteractions: chat.estimatedMonthly + voice.estimatedMonthly,
     ratios,
   };
+}
+
+function hasVolume(v: DeclaredVolume | null | undefined): boolean {
+  return !!v && (v.monthly > 0 || v.daily > 0);
 }
 
 export interface PriceBreakdown {

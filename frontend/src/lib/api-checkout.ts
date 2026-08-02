@@ -189,3 +189,24 @@ export async function advanceCheckout(
   if (!res.ok) throw new CheckoutUnavailable(res.status);
   return (await res.json()).data;
 }
+
+/**
+ * Ask for the welcome email again.
+ *
+ * Returns only whether something was posted. The address and the setup link
+ * stay on the server: delivery to the address on file is what establishes who
+ * the recipient is, and echoing either here would undo that.
+ */
+export async function resendWelcomeEmail(
+  reference: string,
+  opts: { token?: string | null; authToken?: string | null; signal?: AbortSignal } = {},
+): Promise<{ sent: boolean }> {
+  const res = await fetch(`${API_URL}/api/checkout/${encodeURIComponent(reference)}/resend-welcome`, {
+    method: "POST",
+    headers: authHeaders(opts),
+    body: JSON.stringify(opts.token ? { token: opts.token } : {}),
+    signal: opts.signal,
+  });
+  if (!res.ok) throw new CheckoutUnavailable(res.status);
+  return (await res.json()).data;
+}

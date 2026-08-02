@@ -1095,8 +1095,26 @@ export async function buildAgentToolsForAIAgent(
           return am.includes(allowedMode);
         })
       : rows;
-    integrationTools = filtered.map((row: any) => {
-      const ct = row.tenantTool.catalogTool;
+    integrationTools = filtered
+      // Adapter-backed catalog tools are ALREADY on the surface under their
+      // real name (`shopify.create_note`), published by the adapter itself
+      // with its own schema, whenToUse and side-effect notes. Emitting the
+      // `integration_<slug>` twin as well gave the model two names for every
+      // capability - 122 tools where 62 exist, which by itself filled the
+      // entire 128-tool budget and left nothing for any other integration.
+      //
+      // It also made tool choice a coin flip. Asked to note something on an
+      // order, the model had `integration_create_note` and
+      // `shopify.create_note` side by side and the prompt recommending the
+      // former; whichever it picked, the other was dead weight.
+      //
+      // An absent `endpoint` is exactly the adapter-backed marker: those tools
+      // have no HTTP template because a provider adapter implements them.
+      // Anything WITH an endpoint (Zoho and friends) is genuinely executed by
+      // this path and stays.
+      .filter((row: any) => !!row.tenantTool?.catalogTool?.endpoint)
+      .map((row: any) => {
+        const ct = row.tenantTool.catalogTool;
       // Prefer the catalog's own inputSchema if it's a JSON-schema object;
       // otherwise emit an empty-object schema so OpenAI will still accept
       // the tool and let the model emit a free-form payload.

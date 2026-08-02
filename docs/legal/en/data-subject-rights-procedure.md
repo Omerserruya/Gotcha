@@ -2,7 +2,7 @@
 
 Internal document
 
-This procedure describes how GOTCHA, the operator of gotcha.co.il, handles data subject rights requests (access, rectification, erasure, restriction, portability, objection, consent withdrawal). It reflects the capabilities actually built into the platform. There is no self-service data-subject portal: rights are fulfilled through the tenant administrator's built-in tools or by the operator acting on an email request. Identity verification is performed manually by the operator.
+This procedure describes how GOTCHA by Omer Serruya, the operator of gotcha.co.il, handles data subject rights requests (access, rectification, erasure, restriction, portability, objection, consent withdrawal). It reflects the capabilities actually built into the platform. There is no self-service data-subject portal: rights are fulfilled through the tenant administrator's built-in tools or by the operator acting on an email request. Identity verification is performed manually by the operator.
 
 ## 1. Roles
 

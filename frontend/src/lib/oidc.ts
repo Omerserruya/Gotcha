@@ -28,10 +28,20 @@ interface Discovery {
 
 let discoveryCache: Promise<Discovery> | null = null;
 
+/** How long we wait for the IdP before calling discovery failed. An identity
+ *  provider that hangs is indistinguishable, to the user, from one that is
+ *  down - and without this the login screen would spin forever rather than
+ *  offer a retry. */
+const DISCOVERY_TIMEOUT_MS = 10_000;
+
 function discover(): Promise<Discovery> {
   if (!ISSUER) throw new Error("NEXT_PUBLIC_OIDC_ISSUER is not configured");
   if (!discoveryCache) {
-    discoveryCache = fetch(`${ISSUER}/.well-known/openid-configuration`)
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), DISCOVERY_TIMEOUT_MS);
+    discoveryCache = fetch(`${ISSUER}/.well-known/openid-configuration`, {
+      signal: controller.signal,
+    })
       .then((r) => {
         if (!r.ok) throw new Error(`OIDC discovery failed: ${r.status}`);
         return r.json();
@@ -39,7 +49,8 @@ function discover(): Promise<Discovery> {
       .catch((e) => {
         discoveryCache = null; // never cache a failure
         throw e;
-      });
+      })
+      .finally(() => clearTimeout(timer));
   }
   return discoveryCache;
 }

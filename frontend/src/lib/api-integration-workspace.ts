@@ -35,7 +35,8 @@ async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T>
 }
 
 export type WorkspaceEntryKind = "tool_integration" | "external_connection";
-export type ExternalOwner = "channels" | "knowledge" | "integration_setup";
+/** Channels are deliberately absent - they are not listed on this screen. */
+export type ExternalOwner = "knowledge" | "integration_setup";
 export type ConnectionState =
   | "connected" | "warning" | "disconnected" | "available" | "not_entitled";
 
@@ -101,6 +102,17 @@ export interface IntegrationDetail {
   grantedScopes?: string[];
   capabilityStatus?: string | null;
   capabilityFresh?: boolean;
+  /**
+   * Set on the GOTCHA surface when its delivery tools have a channel problem
+   * worth stating. Null/absent when every channel is healthy - the server only
+   * sends it when there is something to say.
+   */
+  channelDependency?: {
+    connected: string[];
+    degraded: string[];
+    toolCount: number;
+    href: string;
+  } | null;
   counts: {
     total: number; enabled: number; alwaysAllow: number;
     requireApproval: number; disabled: number; unavailable: number;

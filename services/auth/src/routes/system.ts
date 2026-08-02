@@ -30,7 +30,7 @@ import { sendOnboardingEmail, sendPaidOnboardingEmail} from "../services/notific
 import { createProvisioningRequest, runProvisioning, provisioningStatusForTenant } from "../services/billing-provisioning.service";
 import { scheduleOnboardingNudge, triggerNudgeNow } from "../services/nudge-engine.service";
 import { listOnboardingSnapshots, getOnboardingSnapshot } from "../services/onboarding-state.service";
-import { inviteUser, syncIdentityNameByUser, syncMembershipAccess } from "../services/invitation.service";
+import { inviteUser, syncIdentityNameByUser, syncMembershipAccess, tenantAdminEntry } from "../services/invitation.service";
 
 const router = Router();
 
@@ -577,6 +577,12 @@ router.post("/tenants", authenticate, requireSystemAdmin(), validate(createTenan
 
     // Send onboarding email with magic link (non-blocking).
     if (paid && paidProvisioning) {
+      // Password FIRST, payment second. Without this the email carried only a
+      // checkout link, which authorizes a checkout and not a person - so the
+      // customer bought the product without ever authenticating and then hit a
+      // sign-in wall for a password nobody had set, with the repair route
+      // gated behind permissions they could not yet hold.
+      const entry = await tenantAdminEntry(result.tenant.id).catch(() => null);
       sendPaidOnboardingEmail({
         tenantId: result.tenant.id,
         adminEmail,
@@ -591,6 +597,7 @@ router.post("/tenants", authenticate, requireSystemAdmin(), validate(createTenan
         amount: paidProvisioning.summary.amount,
         currency: paidProvisioning.summary.currency,
         includedCredits: paidProvisioning.summary.includedCredits,
+        setupUrl: entry?.needsPassword ? entry.actionUrl : null,
       }).catch((err) => {
         // Delivery failure must not activate anything. Resend is the repair.
         console.error("Failed to send paid onboarding email:", err?.message ?? err);
@@ -814,6 +821,8 @@ router.post("/tenants/:id/repair-billing-provisioning", authenticate, requireSys
         amount: outcome.body.summary.amount,
         currency: outcome.body.summary.currency,
         includedCredits: outcome.body.summary.includedCredits,
+        setupUrl: (await tenantAdminEntry(tenantId).catch(() => null).then(
+          (e) => (e?.needsPassword ? e.actionUrl : null))),
       });
       emailSent = true;
       void writeAudit({
@@ -976,6 +985,8 @@ router.post("/tenants/:id/assign-paid-plan", authenticate, requireSystemAdmin(),
         amount: outcome.body.summary.amount,
         currency: outcome.body.summary.currency,
         includedCredits: outcome.body.summary.includedCredits,
+        setupUrl: (await tenantAdminEntry(tenantId).catch(() => null).then(
+          (e) => (e?.needsPassword ? e.actionUrl : null))),
       });
       emailSent = true;
     } catch {
@@ -1110,6 +1121,8 @@ router.post("/tenants/:id/resend-payment-link", authenticate, requireSystemAdmin
       amount: resend.body.summary.amount,
       currency: resend.body.summary.currency,
       includedCredits: resend.body.summary.includedCredits,
+      setupUrl: (await tenantAdminEntry(tenantId).catch(() => null).then(
+        (e) => (e?.needsPassword ? e.actionUrl : null))),
       resend: true,
     });
   } catch {

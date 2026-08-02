@@ -76,15 +76,17 @@ export type {
   MigrationReport,
 } from "./lib/tool-policy-migration";
 // Integrations & Tools workspace classification. Strict product boundary:
-// Channels owns communication, Knowledge Manager owns knowledge sources, and
-// this workspace owns business systems + executable tool policy.
+// Channels owns communication (and is NOT listed here - it surfaces only as a
+// dependency note on the tools that deliver over it), Knowledge Manager owns
+// knowledge sources, and this workspace owns business systems + tool policy.
 export {
   classifyCatalogIntegration,
-  classifyChannel,
   classifyKnowledgeSource,
   gotchaEntry,
   buildWorkspaceSidebar,
   governableToolCount,
+  channelDependencyFor,
+  CHANNEL_DELIVERY_TOOLS,
   GOTCHA_ENTRY_ID,
 } from "./lib/integration-workspace";
 export type {
@@ -93,8 +95,8 @@ export type {
   WorkspaceSidebar,
   ConnectionState,
   ExternalOwner,
+  ChannelDependency,
   CatalogIntegrationInput,
-  ChannelInput,
   KnowledgeSourceInput,
   InternalToolsInput,
 } from "./lib/integration-workspace";

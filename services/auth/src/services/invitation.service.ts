@@ -267,3 +267,51 @@ export async function resendSetupLink(userId: string): Promise<string> {
 
   return createRecoveryLink(identity.pk);
 }
+
+/**
+ * How a tenant's admin gets into their account.
+ *
+ * Used at both ends of a paid signup: in the provisioning email, where setting
+ * a password is the FIRST thing asked of them, and again after payment, where
+ * it is the safety net for an admin whose invoice somebody else settled.
+ *
+ * The link it mints is a credential, so it may only ever leave here by email.
+ * Delivery to the registered address is the whole of the proof that the
+ * recipient is who we think.
+ *
+ * Returns null when the tenant has no admin to send anywhere, which is a
+ * misprovisioned tenant rather than an error worth failing a payment over.
+ */
+export async function tenantAdminEntry(tenantId: string): Promise<{
+  user: { id: string; email: string; name: string };
+  /** A one-time credential link, or the ordinary way in when one is not needed. */
+  actionUrl: string;
+  needsPassword: boolean;
+} | null> {
+  const admin = await prisma.user.findFirst({
+    where: { tenantId, role: "ADMIN", isActive: true },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, email: true, name: true, identity: { select: { authentikSubject: true } } },
+  });
+  if (!admin) return null;
+
+  const identity = admin.identity?.authentikSubject
+    ? await findIdentityBySubject(admin.identity.authentikSubject)
+    : await ensureIdentity(admin.email, admin.name);
+  if (!identity) return null;
+
+  // The same rule an invite uses: someone who has signed in already has a
+  // password, and mailing them a "set your password" link reads like a phish
+  // and can lock them out.
+  const hasLoggedIn = await getUserLastLogin(identity.pk).then((v) => v != null).catch(() => false);
+  const setupUrl = hasLoggedIn ? null : await createRecoveryLink(identity.pk);
+
+  const frontend = (process.env.FRONTEND_URL || "http://localhost:3000").replace(/\/$/, "");
+  return {
+    user: { id: admin.id, email: admin.email, name: admin.name },
+    // Both roads end at onboarding; they differ only in whether a credential
+    // has to be established on the way.
+    actionUrl: setupUrl ?? `${frontend}/login?next=/setup`,
+    needsPassword: !hasLoggedIn,
+  };
+}

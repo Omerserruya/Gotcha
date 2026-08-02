@@ -2,7 +2,7 @@
 
 Internal document
 
-This record is maintained by GOTCHA, the operator of gotcha.co.il, in the spirit of Article 30 GDPR. It describes the ten processing activities carried out on the GOTCHA platform. GOTCHA acts as data controller for platform account data (tenant staff users, waitlist entries, billing contacts) and as data processor for the end-customer data of its business customers (tenants), who are the controllers of that data.
+This record is maintained by GOTCHA by Omer Serruya, the operator of gotcha.co.il, in the spirit of Article 30 GDPR. It describes the ten processing activities carried out on the GOTCHA platform. GOTCHA acts as data controller for platform account data (tenant staff users, waitlist entries, billing contacts) and as data processor for the end-customer data of its business customers (tenants), who are the controllers of that data.
 
 Shared infrastructure facts that apply to every activity below:
 
@@ -10,7 +10,7 @@ Shared infrastructure facts that apply to every activity below:
 - Cloudflare sits in front of the platform for DNS, TLS termination, and DDoS protection; it handles traffic metadata and content in transit at its global edge.
 - Backups: nightly database dumps and an uploads tarball to S3 in the same AWS account, moved to Infrequent Access at 30 days and deleted at 90 days; EBS snapshots kept 7 days. Deleted production data therefore leaves backups within at most 90 days. There is no mechanism to delete individual records from backups before they age out.
 - Erasure everywhere is hard-delete. No anonymization or pseudonymization is applied on erasure.
-- Retention purges (where a per-tenant retention policy exists) are executed by a purge routine that is triggered manually through an internal endpoint. No scheduler currently invokes it automatically.
+- Retention purges (where a per-tenant retention policy exists) are executed by a purge routine that runs automatically as a repeatable scheduled job, daily at 03:30 by default. An internal endpoint remains available for running a purge on demand.
 
 ## Activity 1: Platform account management
 
@@ -31,7 +31,7 @@ Shared infrastructure facts that apply to every activity below:
 - Data subjects: end-customers of tenants (the tenants' customers and prospects).
 - Legal basis: GOTCHA processes as processor on the documented instructions of the tenant (controller). The tenant is responsible for its own legal basis toward its end-customers.
 - Recipients: the tenant's connected messaging channels and integrations (Meta WhatsApp/Instagram/Messenger, email, Slack, CRMs, and similar), only where the tenant has connected them.
-- Retention: life of the account, unless the tenant configures a retention policy for the "messages" category; such policies are enforced by the manually triggered purge routine (see shared facts above).
+- Retention: life of the account, unless the tenant configures a retention policy for the "messages" category; such policies are enforced by the scheduled purge routine (see shared facts above).
 - Storage location: PostgreSQL in AWS il-central-1. Inbound WhatsApp media files are downloaded and stored on a local uploads volume on the same host; Messenger/Instagram media is referenced by URL, not downloaded.
 - Deletion path: admin-initiated contact erasure endpoint (hard-deletes messages, matched conversations, consent records, and contact rows including merged contacts, in a transaction); tenant erasure cascade. Known gap: uploaded media files on the uploads volume are not covered by the erasure cascade; the database references are deleted but the files themselves require manual removal.
 - Subprocessors: AWS, Cloudflare.
@@ -43,7 +43,7 @@ Shared infrastructure facts that apply to every activity below:
 - Data subjects: end-customers of tenants; tenant staff users.
 - Legal basis: processor on tenant instructions for end-customer content; performance of contract for tenant-facing features.
 - Recipients: OpenAI (United States), the sole AI provider, for chat completions and embeddings. No audio is sent to OpenAI.
-- Retention: usage logs retained for the life of the account, unless the tenant configures a "usage_logs" retention policy (manually triggered purge). AI-derived artifacts (summaries, briefs, facts) follow the conversation data lifecycle.
+- Retention: usage logs retained for the life of the account, unless the tenant configures a "usage_logs" retention policy (enforced by the scheduled purge). AI-derived artifacts (summaries, briefs, facts) follow the conversation data lifecycle.
 - Storage location: PostgreSQL in AWS il-central-1; transient processing at OpenAI in the United States under OpenAI's data processing terms.
 - Deletion path: tenant erasure deletes usage logs and AI-derived records; contact erasure deletes conversation-level content.
 - Subprocessors: OpenAI, AWS, Cloudflare.
@@ -79,7 +79,7 @@ Shared infrastructure facts that apply to every activity below:
 - Data subjects: billing contacts of tenants.
 - Legal basis: performance of contract; legal obligation (tax and accounting records).
 - Recipients: iCount (Israel), the payment and invoicing provider.
-- Retention: life of the account. Note: the retention-policy API accepts a "billing_webhook_events" category, but the purge engine has no logic for it, so such policies are silently skipped and those records are never purged automatically.
+- Retention: life of the account, unless the tenant configures a "billing_webhook_events" retention policy, which is implemented in the purge engine and enforced by the scheduled purge. Invoicing data held at iCount remains subject to statutory bookkeeping retention.
 - Storage location: PostgreSQL in AWS il-central-1; payment tokens held by iCount.
 - Deletion path: tenant erasure cascade for platform-side records. Invoicing records at iCount are subject to statutory bookkeeping retention.
 - Subprocessors: iCount, AWS, Cloudflare.
@@ -115,7 +115,7 @@ Shared infrastructure facts that apply to every activity below:
 - Data subjects: tenant staff users; occasionally end-customers where actions concern their records.
 - Legal basis: legitimate interest in security and accountability; support for legal obligations.
 - Recipients: none external. Note: there is currently no admin-facing viewer or export endpoint for audit logs, and audit logs are not included in GDPR exports. The audit writer is fail-safe: write errors are swallowed, so gaps are possible and silent.
-- Retention: life of the account, unless the tenant configures an "audit_logs" retention policy (manually triggered purge).
+- Retention: life of the account, unless the tenant configures an "audit_logs" retention policy (enforced by the scheduled purge).
 - Storage location: PostgreSQL in AWS il-central-1.
 - Deletion path: tenant erasure hard-deletes all audit rows of the tenant; per-policy purge where configured and manually run.
 - Subprocessors: AWS, Cloudflare.
@@ -134,8 +134,8 @@ Shared infrastructure facts that apply to every activity below:
 
 ## Known gaps (recorded for internal follow-up)
 
-1. Retention purge is manual: no scheduler triggers the purge routine; enforcement depends on an operator running it.
-2. No default retention: data grows unbounded unless a tenant explicitly creates a policy, and only the messages, usage_logs, and audit_logs categories are actually purged.
+1. No platform-wide default retention is in force: data grows unbounded unless a tenant explicitly creates a retention policy. The purge engine supports defaults via RETENTION_DEFAULT_<CATEGORY>_DAYS, but none is configured.
+2. Some data classes have no retention-policy category at all (AI-derived customer profiles and intelligence facts, notification logs, waitlist entries), so no scheduled purge can reach them.
 3. No legal hold mechanism exists; erasure and purges have no hold exemption.
 4. Uploaded media files are not deleted by the erasure cascade.
 5. Data-subject identity verification is manual and operator-performed; there is no self-service data-subject portal.

@@ -1154,9 +1154,13 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
               </div>
               <div>
                 <h4 className="font-medium text-gray-900 mb-3 sm:mb-4 text-[13px]">{t("landing.footer.legal")}</h4>
+                {/* Canonical /legal URLs, not the /terms and /privacy-policy
+                    redirects: those survive only for external references. */}
                 <ul className="space-y-2.5 text-[#b0b0b0]">
-                  <li><Link href="/privacy-policy" className="hover:text-gray-900 transition-colors duration-200 text-[13px]">{t("landing.footer.privacy")}</Link></li>
-                  <li><Link href="/terms" className="hover:text-gray-900 transition-colors duration-200 text-[13px]">{t("landing.footer.terms")}</Link></li>
+                  <li><Link href="/legal" className="hover:text-gray-900 transition-colors duration-200 text-[13px] font-medium text-gray-700">{t("landing.footer.trustCenter")}</Link></li>
+                  <li><Link href="/legal/privacy-policy" className="hover:text-gray-900 transition-colors duration-200 text-[13px]">{t("landing.footer.privacy")}</Link></li>
+                  <li><Link href="/legal/terms-of-service" className="hover:text-gray-900 transition-colors duration-200 text-[13px]">{t("landing.footer.terms")}</Link></li>
+                  <li><Link href="/legal/cookie-policy" className="hover:text-gray-900 transition-colors duration-200 text-[13px]">{t("landing.footer.cookies")}</Link></li>
                 </ul>
               </div>
             </div>

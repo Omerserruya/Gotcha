@@ -8,9 +8,9 @@ const tool = (over: Partial<WorkspaceEntry>): WorkspaceEntry => ({
   category: "ECOMMERCE", description: null, logoUrl: null, toolCount: 62, ...over,
 });
 const external = (over: Partial<WorkspaceEntry>): WorkspaceEntry => ({
-  id: "channel:WHATSAPP", name: "WhatsApp", kind: "external_connection", state: "connected",
-  category: "Channel", description: null, logoUrl: null, toolCount: null,
-  owner: "channels", href: "/settings/channels", ...over,
+  id: "knowledge:google_drive", name: "Google Drive", kind: "external_connection", state: "connected",
+  category: "Knowledge source", description: null, logoUrl: null, toolCount: null,
+  owner: "knowledge", href: "/ai-studio/knowledge", ...over,
 });
 
 const sidebar: WorkspaceSidebar = {
@@ -21,7 +21,9 @@ const sidebar: WorkspaceSidebar = {
   },
   externalConnections: [
     external({}),
-    external({ id: "knowledge:google_drive", name: "Google Drive", owner: "knowledge", href: "/ai-studio/knowledge", category: "Knowledge source" }),
+    // A CONNECTED provider with no governable tools: real, but managed on its
+    // own setup page. Channels are not in this list at all any more.
+    external({ id: "custom_api", name: "Custom API", owner: "integration_setup", href: "/settings/business-systems/custom_api", category: "OTHER" }),
   ],
 };
 
@@ -82,6 +84,9 @@ describe("logos, not letter tiles", () => {
     const s: WorkspaceSidebar = {
       ...sidebar,
       toolIntegrations: { ...sidebar.toolIntegrations, connected: [tool({ id: "custom_api", name: "Custom API" })] },
+      // Emptied so the one custom_api row under test is unambiguous - the
+      // fixture's external list carries a custom_api entry of its own.
+      externalConnections: [],
     };
     render(<IntegrationSidebar sidebar={s} {...base} selectedId="custom_api" />);
     const fb = screen.getByTestId("integration-logo-fallback-custom_api");
@@ -107,12 +112,19 @@ describe("selection and separation of concerns", () => {
 
   it("renders external services as links to their owning screen, with no count", () => {
     render(<IntegrationSidebar sidebar={sidebar} {...base} />);
-    const wa = screen.getByTestId("sidebar-external-channel:WHATSAPP");
-    expect(wa.tagName).toBe("A");
-    expect(wa.getAttribute("href")).toBe("/settings/channels");
-    expect(wa.textContent).toContain("Channels");
+    const drive = screen.getByTestId("sidebar-external-knowledge:google_drive");
+    expect(drive.tagName).toBe("A");
+    expect(drive.getAttribute("href")).toBe("/ai-studio/knowledge");
+    expect(drive.textContent).toContain("Knowledge");
     // A count here would read as "this has 0 tools", i.e. broken.
-    expect(wa.textContent ?? "").not.toMatch(/\d/);
+    expect(drive.textContent ?? "").not.toMatch(/\d/);
+  });
+
+  it("sends a tool-less business system to its own setup page, not to Channels", () => {
+    render(<IntegrationSidebar sidebar={sidebar} {...base} />);
+    const api = screen.getByTestId("sidebar-external-custom_api");
+    expect(api.getAttribute("href")).toBe("/settings/business-systems/custom_api");
+    expect(api.textContent).toContain("Setup");
   });
 
   it("keeps a tool count on tool integrations", () => {
