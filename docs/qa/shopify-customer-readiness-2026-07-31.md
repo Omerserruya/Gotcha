@@ -1449,3 +1449,158 @@ P1 follow-up with its own change and its own verification.
   question first. That is correct behaviour, but it means the negative result in
   those turns carries no weight on its own; the gate query G1-G3 is what carries
   Sequence C.
+
+---
+
+---
+
+# Release section - the execution boundary (2026-08-02)
+
+## What changed about the release itself
+
+The Shopify feature was never on `main`. The readiness branch carrying parts 1
+through 7 was **334 commits and 1,710 files ahead of `main`, and had never been
+pushed** - it existed on one machine. PRs #15 and #16 are small `main`-based
+integration fixes; merging them ships isolated hardening into a `main` that
+lacks the feature.
+
+Worse, the readiness branch still carried the defect #16 fixes:
+`integrations.ts:569` still ran `prisma.tenantTool.deleteMany` on disconnect,
+and neither `tool-policy-intent.service.ts` nor `integration-lifecycle.service.ts`
+existed on it. Landing #16 into `main` and then merging the readiness branch
+would have let conflict resolution decide whether an operator-disabled
+`process_refund` survives a disconnect.
+
+| PR | Base | Contents |
+|---|---|---|
+| #15 | `main` | reconnect provisioning (already present on the readiness line) |
+| #16 | #15 | disconnect policy preservation, on the `main` line |
+| #17 | `main` | the readiness branch itself, finally pushed |
+| #18 | #17 | #16's three commits ported onto the readiness line |
+| #19 | #18 | the final dispatch policy gate |
+
+## The dispatch-layer defect
+
+`executeAdapterTool` enforced no tenant tool policy. The bot surface refused a
+disabled tool correctly; a direct call did not. It reached Shopify, which
+declined only because that order had nothing left to refund:
+
+```
+refund_exceeds_refundable: requested 0.01 USD but only 0.00 USD is refundable
+```
+
+On an order with a balance the operator's decision would have been worth
+nothing. The provider, not the product, was deciding.
+
+It mattered most on the approved-HITL path. `runApprovedAction` revalidates
+business policy rules and fails closed, but never re-read `TenantTool.isEnabled`
+- so an approval raised while a tool was enabled could still execute after an
+operator switched it off. The human said yes to a question the tenant had since
+answered no to.
+
+## The gate
+
+One canonical check immediately before provider execution, adding only what
+nothing owned:
+
+1. tenant tool policy - is this tool enabled for this tenant at all
+2. actor mode - may this kind of caller run it
+3. HITL and approval - did the right human approve THIS tool with THESE arguments
+4. idempotency - has this exact operation already run
+
+Connection, credentials, granted scopes and provider capability are already
+handled upstream in the same function and are **not** re-implemented. Two
+answers to the same question is a bug waiting for the day they disagree.
+
+### Actor model
+
+`accessScope` answers whose data may be touched. `actor` answers what rights the
+caller has. They were the same question only while "internal" was treated as one
+thing - it covered the approval dispatcher, CRM writeback, the copilot and
+background jobs, four callers with four sets of rights, indistinguishable at the
+boundary. Collapsing them meant the only safe rule was the most permissive one.
+
+| Actor | Disabled tool | Mode | HITL | Notes |
+|---|---|---|---|---|
+| `customer_ai` | denied | AUTO required | enforced | most constrained |
+| `copilot` | denied | ASSIST required | enforced | may propose, never self-approve |
+| `human_agent` | denied | not mode-gated | not self-HITL | RBAC upstream |
+| `admin` | denied **unless** explicit attributed override | not mode-gated | not self-HITL | being an admin is not itself an override |
+| `internal_service` | denied | not mode-gated | not enforced | must declare a purpose |
+
+An unlabelled caller is read conservatively: `customer` becomes `customer_ai`,
+anything else becomes a purpose-tagged service rather than silently inheriting
+the rights of a human or an admin.
+
+### Caller inventory
+
+68 call sites across 11 files reach `executeAdapterTool`. `adapter.execute` is
+called in exactly **one** place - inside `executeAdapterTool` itself - so there
+is a single chokepoint and gating it covers every path, including:
+
+- the autonomous bot (`ai-bot.service.ts`)
+- commerce actions and the approval dispatcher
+- the CRM adapter (46 sites)
+- catalogue, commerce-context and discovery reads
+- **the deferred generic P0 routes** in `ai-assist.ts`
+
+The P0 routes are hardened by this change without being modified: the approval
+dispatcher in `services/conversation` reaches adapters by HTTP to
+`/api/ai-assist/:conv/adapter-tools/execute`, which calls `executeAdapterTool`,
+which now runs the gate.
+
+## Verification
+
+**Live, Urban Supply Dev, on the rebuilt Dev AI container:**
+
+```
+precondition: process_refund enabled = false
+live READ still works           : true
+customer AI  -> deny_tool_disabled: shopify.process_refund is switched off for this tenant
+unlabelled   -> deny_tool_disabled: shopify.process_refund is switched off for this tenant
+appr dispatch-> deny_tool_disabled: shopify.process_refund is switched off for this tenant
+enabled WRITE executed          : true
+read-back confirms at provider  : true
+```
+
+All three paths that previously reached Shopify now refuse. Enabled tools still
+execute and read back.
+
+**Tests.** 40 new (the 37-point security matrix plus the gate's own failure
+modes). Full suite, same worktree, same command:
+
+| | Test files | Tests | Failed | Passed |
+|---|---|---|---|---|
+| baseline (`26abf34`, before the gate) | 232 | 3234 | 71 | 3148 |
+| with the gate | 233 | 3274 | **71** | 3188 |
+
+Zero new failures. The 71 are pre-existing on the readiness branch.
+
+Two suites did fail when the gate first landed, and both were real:
+`customer-access-guard.test.ts` mocks prisma exhaustively and predates the gate,
+so the gate failed closed on the missing `tenantTool` mock and **masked the P0
+cross-customer denial** - the assertions would have started passing for the
+wrong reason. Fixture completed; 20/20 pass, attack replay included.
+`three-state-policy-enforcement.test.ts` passes in isolation (7/7) and fails
+only under full-suite parallelism; that one is interference, proven separately
+rather than assumed.
+
+## Known limitations
+
+- **Approval re-verification is not active on the approval-dispatch path.** The
+  dispatcher reaches adapters through the deferred P0 route, which does not
+  thread `approvalId`, and that route is out of scope to modify. The gate's
+  approval checks (tests 8-19) are live for `customer_ai` and `copilot`. What IS
+  closed on every path, including the dispatcher, is the disabled-tool hole.
+- **Idempotency requires an `operationKey`.** Callers that do not pass one get no
+  duplicate-execution protection from this gate.
+- **Human-agent RBAC is enforced upstream**, not here. The gate checks that the
+  tool is enabled, not that this particular person may use it.
+
+## Not done in this pass
+
+- PRs #15 and #16 were **not merged** - repository governance (CLAUDE.md rule 5)
+  reserves merges to the Deployer after explicit approval, and `main` has no
+  branch protection and no CI to appeal to instead.
+- No merchant-staging validation. Dev cannot prove real gateway settlement
+  during an exchange, or a merchant-created fulfillment lifecycle.
