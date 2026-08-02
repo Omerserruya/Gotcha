@@ -1520,10 +1520,10 @@ http {
         # /_next, or real static pages - those still resolve via $uri first.
         # Keep the .txt block first; both try $uri before the placeholder so the
         # list pages (e.g. /system/tenants/index.txt) keep serving their own file.
-        location ~ ^/(departments|integrations|voice|contacts|system/tenants|ai-studio/flows|ai-studio/marketplace|ai-studio/agents|settings/voice-channels|settings/funnels)/[^/]+/index\.txt$ {
+        location ~ ^/(departments|integrations|voice|contacts|system/tenants|ai-studio/flows|ai-studio/marketplace|ai-studio/agents|settings/voice-channels|settings/funnels|settings/business-systems|system/plans)/[^/]+/index\.txt$ {
             try_files $uri /$1/_/index.txt /index.html;
         }
-        location ~ ^/(departments|integrations|voice|contacts|system/tenants|ai-studio/flows|ai-studio/marketplace|ai-studio/agents|settings/voice-channels|settings/funnels)/[^/]+/?$ {
+        location ~ ^/(departments|integrations|voice|contacts|system/tenants|ai-studio/flows|ai-studio/marketplace|ai-studio/agents|settings/voice-channels|settings/funnels|settings/business-systems|system/plans)/[^/]+/?$ {
             try_files $uri $uri/index.html /$1/_/index.html /index.html;
         }
 
