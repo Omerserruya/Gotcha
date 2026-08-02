@@ -25,6 +25,7 @@
 import { Router, type Request, type Response } from "express";
 import jwt from "jsonwebtoken";
 import * as crypto from "crypto";
+import { provisionIntegrationTools } from "../services/integration-provisioning.service";
 import {
   prisma,
   authenticate,
@@ -79,11 +80,54 @@ async function upsertConnection(opts: {
     config: opts.config ?? {},
     connectedBy: opts.connectedBy ?? null,
   };
-  return await (prisma as any).tenantIntegration.upsert({
+  const row = await (prisma as any).tenantIntegration.upsert({
     where: { tenantId_integrationId: { tenantId: opts.tenantId, integrationId: opts.catalogId } },
     update: data,
     create,
   });
+
+  // A CONNECTED integration whose tools nobody granted is a connection that
+  // does nothing.
+  //
+  // The AI's tool surface is built from AgentToolPermission rows, and until now
+  // those were created by exactly one UI toggle ("use this integration as CRM
+  // source of truth"). Connecting created none. So a store could be CONNECTED,
+  // pass its capability probe, hold every OAuth scope it needs, and leave the
+  // assistant with nothing: it answered a size question by asking which colour,
+  // and escalated a cancellation saying the tooling was unavailable. It was
+  // telling the truth, and no health signal anywhere said so - because all of
+  // them ask about the CONNECTION, and none asks what the assistant can do.
+  //
+  // Worse, reconnecting is the ONLY way to grant a new scope, and disconnect
+  // deletes tenant tools by cascade. So the operation a merchant performs to
+  // make the assistant more capable is the operation that empties it. Verified
+  // live on a dev store: a reconnect left 42 read tools and ZERO write or
+  // action tools, and the assistant could look up any order and cancel, refund,
+  // return or exchange none of them.
+  //
+  // The whole surface is provisioned, not just reads. What keeps writes safe is
+  // where it always was: `hitl_policy` holds every money-moving tool behind a
+  // human approval, and this changes none of that. An operator's own decision
+  // is never overwritten either - a TenantTool that exists and is off, or an
+  // AgentToolPermission that exists and is denied, is skipped and counted as
+  // preserved rather than re-enabled.
+  //
+  // Best-effort: a provisioning hiccup must not fail an otherwise good
+  // connection, and the next connect retries it.
+  if (opts.status === "CONNECTED") {
+    try {
+      const r = await provisionIntegrationTools(opts.tenantId, row.id, opts.catalogId, { reason: "connect" });
+      if (r.granted > 0 || r.preserved > 0) {
+        console.log(
+          `[connectors] provisioned ${r.granted} tool permission(s) on connect for tenant=${opts.tenantId} ` +
+            `(${JSON.stringify(r.byCategory)}, ${r.preserved} left as the operator set them)`,
+        );
+      }
+    } catch (err: any) {
+      console.error("[connectors] tool provisioning failed on connect:", err?.message);
+    }
+  }
+  return row;
 }
 
 function dashboardRedirect(slug: string, query: Record<string, string> = {}) {
