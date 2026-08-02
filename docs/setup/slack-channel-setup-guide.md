@@ -235,7 +235,7 @@ SLACK_SIGNING_SECRET=your-slack-signing-secret
 |----------|---------------|---------|
 | `SLACK_CLIENT_ID` | Slack API → Basic Information → App Credentials → Client ID | `1234567890.1234567890123` |
 | `SLACK_CLIENT_SECRET` | Slack API → Basic Information → App Credentials → Client Secret | `abcdef1234567890abcdef12` |
-| `SLACK_OAUTH_REDIRECT_URI` | Must match Slack API → OAuth & Permissions → Redirect URLs | `https://gotcha.co.il/api/channels/oauth/callback` |
+| `SLACK_OAUTH_REDIRECT_URI` | Must match Slack API → OAuth & Permissions → Redirect URLs | `https://app.gotcha.co.il/api/channels/oauth/callback` |
 | `SLACK_SIGNING_SECRET` | Slack API → Basic Information → App Credentials → Signing Secret | `abcdef1234567890abcdef1234567890` |
 
 ---

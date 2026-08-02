@@ -248,9 +248,9 @@ OUTLOOK_WEBHOOK_URL=https://yourdomain.com/api/webhook/outlook
 |----------|---------------|---------|
 | `MICROSOFT_CLIENT_ID` | Azure Portal → App registrations → Overview → Application (client) ID | `a1b2c3d4-e5f6-7890-abcd-ef1234567890` |
 | `MICROSOFT_CLIENT_SECRET` | Azure Portal → App registrations → Certificates & secrets → Value | `abc~DEF123ghiJKL456` |
-| `MICROSOFT_OAUTH_REDIRECT_URI` | Must match Azure → App registrations → Authentication → Redirect URIs | `https://gotcha.co.il/api/channels/oauth/callback` |
+| `MICROSOFT_OAUTH_REDIRECT_URI` | Must match Azure → App registrations → Authentication → Redirect URIs | `https://app.gotcha.co.il/api/channels/oauth/callback` |
 | `MICROSOFT_TENANT_ID` | Azure Portal → App registrations → Overview → Directory (tenant) ID / or `common` | `common` |
-| `OUTLOOK_WEBHOOK_URL` | Your publicly accessible webhook endpoint | `https://gotcha.co.il/api/webhook/outlook` |
+| `OUTLOOK_WEBHOOK_URL` | Your publicly accessible webhook endpoint | `https://app.gotcha.co.il/api/webhook/outlook` |
 
 ---
 

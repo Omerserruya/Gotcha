@@ -193,7 +193,11 @@ export function HelpShell({ children }: { children: ReactNode }) {
               {he ? "EN" : "עברית"}
             </button>
             <a href="https://gotcha.co.il" className="hidden sm:block text-xs font-semibold text-gray-500 hover:text-gray-800">gotcha.co.il</a>
-            <a href="https://dev.gotcha.co.il/login" className="text-xs font-semibold px-3.5 py-2 rounded-xl bg-primary-500 text-white hover:bg-primary-600 transition shadow-subtle">
+            {/* The public Help Center's login button pointed at the DEV host,
+                so every visitor who clicked it was sent to an environment they
+                have no account on. The Help Center is public: it must link to
+                the canonical application. */}
+            <a href={`${process.env.NEXT_PUBLIC_APP_URL || "https://app.gotcha.co.il"}/login`} className="text-xs font-semibold px-3.5 py-2 rounded-xl bg-primary-500 text-white hover:bg-primary-600 transition shadow-subtle">
               {he ? "כניסה" : "Sign in"}
             </a>
           </div>

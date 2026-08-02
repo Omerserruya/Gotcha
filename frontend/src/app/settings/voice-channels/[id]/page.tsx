@@ -34,7 +34,23 @@ const STATUS_CLASS: Record<VoiceChannelStatus, string> = {
   ERROR: "bg-red-50 text-red-700 ring-red-200",
 };
 
-const INCOMING_WEBHOOK_URL = "https://gotcha.co.il/api/voice/incoming/voice";
+/**
+ * The URL an operator pastes into their telephony provider.
+ *
+ * This was hardcoded to `https://gotcha.co.il`, the MARKETING host, which does
+ * not serve `/api/`. Anyone who followed this screen configured their provider
+ * to deliver calls to a hostname that could not answer them, and the failure
+ * shows up as silence on a phone line rather than as an error here.
+ *
+ * Derived from the application origin now. `window.location.origin` is the
+ * right fallback specifically because this value is only ever read in the
+ * browser by a signed-in operator already sitting on the canonical app origin -
+ * it is a display string, not a security boundary.
+ */
+const INCOMING_WEBHOOK_URL = `${
+  process.env.NEXT_PUBLIC_APP_URL ||
+  (typeof window !== "undefined" ? window.location.origin : "https://app.gotcha.co.il")
+}/api/voice/incoming/voice`;
 
 function truncateSid(sid?: string): string {
   if (!sid) return "-";

@@ -30,10 +30,10 @@ Replace `gotcha.co.il` with your actual host below.
 2. Switch to your **platform** account (the one that owns the Connect integration)
 3. Go to **Settings → Connect settings**: https://dashboard.stripe.com/settings/connect
 4. Under **OAuth settings**, set:
-   - **Redirect URI**: `https://gotcha.co.il/api/connectors/stripe/oauth/callback`
+   - **Redirect URI**: `https://app.gotcha.co.il/api/connectors/stripe/oauth/callback`
 5. Copy the **Connect Client ID** (starts with `ca_…`) → `STRIPE_CLIENT_ID`
 6. Go to **Developers → API keys** (https://dashboard.stripe.com/apikeys), copy the **Secret key** (`sk_live_…` or `sk_test_…`) → `STRIPE_SECRET_KEY`
-7. The redirect URI in your env is already correct: `STRIPE_REDIRECT_URI=https://gotcha.co.il/api/connectors/stripe/oauth/callback`
+7. The redirect URI in your env is already correct: `STRIPE_REDIRECT_URI=https://app.gotcha.co.il/api/connectors/stripe/oauth/callback`
 
 ### Scopes / capabilities
 
@@ -49,7 +49,7 @@ These are configured **per Connect account type** at https://dashboard.stripe.co
 ```bash
 STRIPE_CLIENT_ID=ca_xxxxxxxxxxxx
 STRIPE_SECRET_KEY=sk_live_xxxxxxxxxxxx
-STRIPE_REDIRECT_URI=https://gotcha.co.il/api/connectors/stripe/oauth/callback
+STRIPE_REDIRECT_URI=https://app.gotcha.co.il/api/connectors/stripe/oauth/callback
 ```
 
 ### Gotchas
@@ -66,7 +66,7 @@ STRIPE_REDIRECT_URI=https://gotcha.co.il/api/connectors/stripe/oauth/callback
 1. Go to https://app.hubspot.com/developer
 2. Click **Create app** → name it (e.g. *Gotcha AI Marketplace*)
 3. Open the app → **Auth** tab
-4. Under **Redirect URL**, add: `https://gotcha.co.il/api/connectors/hubspot/oauth/callback`
+4. Under **Redirect URL**, add: `https://app.gotcha.co.il/api/connectors/hubspot/oauth/callback`
 5. Under **Scopes**, mark these as **required**:
 
    - `crm.objects.contacts.read`
@@ -94,7 +94,7 @@ The marketplace UI will still show Lead tools to all tenants - the LLM gets a gr
 ```bash
 HUBSPOT_CLIENT_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 HUBSPOT_CLIENT_SECRET=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-HUBSPOT_REDIRECT_URI=https://gotcha.co.il/api/connectors/hubspot/oauth/callback
+HUBSPOT_REDIRECT_URI=https://app.gotcha.co.il/api/connectors/hubspot/oauth/callback
 ```
 
 ---
@@ -109,7 +109,7 @@ HUBSPOT_REDIRECT_URI=https://gotcha.co.il/api/connectors/hubspot/oauth/callback
 2. App name: e.g. *Gotcha AI*
 3. Open the app → **Configuration** tab
 4. Under **App URL**, set: `https://gotcha.co.il`
-5. Under **Allowed redirection URL(s)**, add: `https://gotcha.co.il/api/connectors/shopify/oauth/callback`
+5. Under **Allowed redirection URL(s)**, add: `https://app.gotcha.co.il/api/connectors/shopify/oauth/callback`
 6. **Build → Configuration → Protected customer data access**: request access to `Email`, `Phone`, `Name`, `Address` (required for `shopify.get_customer`)
 7. Go to **API access** tab → copy:
    - **Client ID** → `SHOPIFY_API_KEY`
@@ -132,7 +132,7 @@ If you change this list in the partner dashboard, also update the `scopes` const
 ```bash
 SHOPIFY_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 SHOPIFY_API_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-SHOPIFY_REDIRECT_URI=https://gotcha.co.il/api/connectors/shopify/oauth/callback
+SHOPIFY_REDIRECT_URI=https://app.gotcha.co.il/api/connectors/shopify/oauth/callback
 ```
 
 ### Gotchas
@@ -157,7 +157,7 @@ SHOPIFY_REDIRECT_URI=https://gotcha.co.il/api/connectors/shopify/oauth/callback
 4. App name: e.g. *Gotcha AI*
 5. Left sidebar → **App Settings → URLs / Endpoints**:
    - **App URL**: `https://gotcha.co.il` (where Wix users land after install - your dashboard)
-   - **Redirect URL**: `https://gotcha.co.il/api/connectors/wix/oauth/callback`
+   - **Redirect URL**: `https://app.gotcha.co.il/api/connectors/wix/oauth/callback`
 6. Left sidebar → **Permissions** → **+ Add Permissions**, add:
    - **Wix Stores** → `Read Stores`, `Read Orders`
    - **Wix CRM (Contacts)** → `Read Contacts`, `Manage Contacts`
@@ -172,7 +172,7 @@ SHOPIFY_REDIRECT_URI=https://gotcha.co.il/api/connectors/shopify/oauth/callback
 ```bash
 WIX_CLIENT_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx     # = "App ID" in Wix dev console
 WIX_CLIENT_SECRET=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx # = "App Secret Key"
-WIX_REDIRECT_URI=https://gotcha.co.il/api/connectors/wix/oauth/callback
+WIX_REDIRECT_URI=https://app.gotcha.co.il/api/connectors/wix/oauth/callback
 ```
 
 ### How the flow looks at runtime
@@ -201,7 +201,7 @@ WIX_REDIRECT_URI=https://gotcha.co.il/api/connectors/wix/oauth/callback
 1. Sign in at https://developer.squareup.com/apps
 2. Click **+ Application** → name it
 3. Open the app → **OAuth** tab
-4. Under **Production Redirect URL**, add: `https://gotcha.co.il/api/connectors/square/oauth/callback`
+4. Under **Production Redirect URL**, add: `https://app.gotcha.co.il/api/connectors/square/oauth/callback`
 5. (Optional) Add the same URL under **Sandbox Redirect URL** for test connections
 6. Copy:
    - **Application ID** → `SQUARE_APPLICATION_ID`
@@ -224,7 +224,7 @@ These are also configurable on the OAuth tab - make sure they're enabled in the 
 ```bash
 SQUARE_APPLICATION_ID=REPLACE_ME
 SQUARE_APPLICATION_SECRET=REPLACE_ME
-SQUARE_REDIRECT_URI=https://gotcha.co.il/api/connectors/square/oauth/callback
+SQUARE_REDIRECT_URI=https://app.gotcha.co.il/api/connectors/square/oauth/callback
 ```
 
 ### Gotchas
@@ -245,7 +245,7 @@ SQUARE_REDIRECT_URI=https://gotcha.co.il/api/connectors/square/oauth/callback
    - **API Name**: auto-fills
    - **Contact Email**: your address
 4. **Enable OAuth Settings** → check
-   - **Callback URL**: `https://gotcha.co.il/api/connectors/salesforce/oauth/callback`
+   - **Callback URL**: `https://app.gotcha.co.il/api/connectors/salesforce/oauth/callback`
    - **Selected OAuth Scopes**:
      - `Manage user data via APIs (api)`
      - `Perform requests at any time (refresh_token, offline_access)`
@@ -264,7 +264,7 @@ SQUARE_REDIRECT_URI=https://gotcha.co.il/api/connectors/square/oauth/callback
 ```bash
 SALESFORCE_CLIENT_ID=3MVG9...consumer_key...
 SALESFORCE_CLIENT_SECRET=A1B2C3...consumer_secret...
-SALESFORCE_REDIRECT_URI=https://gotcha.co.il/api/connectors/salesforce/oauth/callback
+SALESFORCE_REDIRECT_URI=https://app.gotcha.co.il/api/connectors/salesforce/oauth/callback
 ```
 
 ### Gotchas
@@ -282,7 +282,7 @@ SALESFORCE_REDIRECT_URI=https://gotcha.co.il/api/connectors/salesforce/oauth/cal
 1. Sign in to https://monday.com → **Avatar → Developers** (or https://monday.com/developers/apps)
 2. **Create app** → name it
 3. **OAuth & Permissions** tab:
-   - **Redirect URLs**: `https://gotcha.co.il/api/connectors/monday/oauth/callback`
+   - **Redirect URLs**: `https://app.gotcha.co.il/api/connectors/monday/oauth/callback`
    - **Scopes**: tick
      - `boards:read`
      - `boards:write`
@@ -297,7 +297,7 @@ SALESFORCE_REDIRECT_URI=https://gotcha.co.il/api/connectors/salesforce/oauth/cal
 ```bash
 MONDAY_CLIENT_ID=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 MONDAY_CLIENT_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-MONDAY_REDIRECT_URI=https://gotcha.co.il/api/connectors/monday/oauth/callback
+MONDAY_REDIRECT_URI=https://app.gotcha.co.il/api/connectors/monday/oauth/callback
 ```
 
 ### Gotchas
@@ -312,7 +312,7 @@ MONDAY_REDIRECT_URI=https://gotcha.co.il/api/connectors/monday/oauth/callback
 `.env` already populated. For reference:
 
 - App registration: https://api-console.zoho.com → **Server-based Application**
-- Redirect URI: `https://gotcha.co.il/api/integrations/oauth/zoho_crm/callback` *(legacy path)*
+- Redirect URI: `https://app.gotcha.co.il/api/integrations/oauth/zoho_crm/callback` *(legacy path)*
 - Scopes: `ZohoCRM.modules.ALL,ZohoCRM.users.READ,ZohoCRM.org.READ`
 
 ---
@@ -322,7 +322,7 @@ MONDAY_REDIRECT_URI=https://gotcha.co.il/api/connectors/monday/oauth/callback
 `.env` already populated. For reference:
 
 - App registration: https://developer.calendly.com → **My Apps**
-- Redirect URI: `https://gotcha.co.il/api/integrations/oauth/calendly/callback` *(legacy path)*
+- Redirect URI: `https://app.gotcha.co.il/api/integrations/oauth/calendly/callback` *(legacy path)*
 - Scopes: handled implicitly - you ship a unified scope set
 
 ---
@@ -332,7 +332,7 @@ MONDAY_REDIRECT_URI=https://gotcha.co.il/api/connectors/monday/oauth/callback
 The same Google OAuth client used for Gmail also handles Calendar.
 
 - Already in `.env`: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
-- Calendar redirect URI: `https://gotcha.co.il/api/integrations/oauth/google-calendar/callback` *(set as `GOOGLE_CALENDAR_REDIRECT_URI`)*
+- Calendar redirect URI: `https://app.gotcha.co.il/api/integrations/oauth/google-calendar/callback` *(set as `GOOGLE_CALENDAR_REDIRECT_URI`)*
 - Required scopes (add at https://console.cloud.google.com → APIs & Services → OAuth consent screen):
   - `https://www.googleapis.com/auth/calendar`
   - `https://www.googleapis.com/auth/calendar.events`
