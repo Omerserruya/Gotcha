@@ -5,9 +5,6 @@ import { executeAdapterTool, getAdapter, clearMissingScopes } from "../services/
 import { invalidateCrmAdapterCache, getCrmAdapter, resolveCrmVendor } from "../services/connectors/crm-adapter-resolver";
 import { maskPhone, maskEmail } from "../lib/mask";
 import { getSourceOfTruth, type SourceOfTruthCapability } from "../services/connectors/source-of-truth";
-import { prisma, authenticate, resolveTenant, requireActiveTenant, requireRole, encryptCredentials } from "@chatcenter/shared";
-import { executeAdapterTool, getAdapter } from "../services/connectors/integration-framework";
-import { invalidateCrmAdapterCache } from "../services/connectors/crm-adapter-resolver";
 import { disconnectIntegration } from "../services/integration-lifecycle.service";
 
 const router = Router();

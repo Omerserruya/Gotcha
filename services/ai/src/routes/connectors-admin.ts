@@ -32,6 +32,7 @@ import {
   authenticate,
   resolveTenant,
   requireActiveTenant,
+  requireRole,
   requireOnboardingOrActiveTenant,
   mintOAuthState,
   consumeOAuthState,
