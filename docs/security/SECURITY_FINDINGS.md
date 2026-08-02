@@ -1,3 +1,5 @@
+> **Superseded note (2026-07-16):** Any findings or descriptions below concerning local JWT signing, bcrypt passwords, refresh tokens, magic links, or register/login endpoints are obsolete. GOTCHA's custom authentication was removed and replaced by Authentik (OIDC, RS256/JWKS). See `docs/security/authentik-architecture.md` for the current architecture; this document is kept as a historical record.
+
 # GOTCHA - Security Findings (Phase 3)
 
 > Concrete, file:line-grounded findings from inspection of the repo. Each entry has Severity · Risk · Attack path · Impact · Code location · Fix · Status.

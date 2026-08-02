@@ -1,4 +1,6 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
+import { resolveTourMock } from "./tour-mock";
+
+export const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 interface FetchOptions extends RequestInit {
   token?: string;
@@ -6,6 +8,11 @@ interface FetchOptions extends RequestInit {
 
 async function apiFetch<T = any>(path: string, options: FetchOptions = {}): Promise<T> {
   const { token, headers: extraHeaders, ...rest } = options;
+
+  // Guided-tour demo mode: while the tour walks an empty inbox, the inbox /
+  // copilot endpoints answer from local fixtures (see lib/tour-mock.ts).
+  const mocked = resolveTourMock(path, String(rest.method || "GET").toUpperCase());
+  if (mocked !== undefined) return JSON.parse(JSON.stringify(mocked)) as T;
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -20,7 +27,16 @@ async function apiFetch<T = any>(path: string, options: FetchOptions = {}): Prom
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(body.error || `Request failed: ${res.status}`);
+    // Additive: the message is unchanged for existing callers, but the status
+    // and structured code are attached so a caller can branch on WHICH failure
+    // it was rather than pattern-matching prose.
+    const err = new Error(body.error || `Request failed: ${res.status}`) as Error & {
+      status?: number; code?: string; body?: unknown;
+    };
+    err.status = res.status;
+    err.code = body.code ?? body.error;
+    err.body = body;
+    throw err;
   }
 
   return res.json();
@@ -46,46 +62,34 @@ export function submitWaitlistEntry(data: {
 }
 
 // ─── Auth ───────────────────────────────────────────────────
-
-export function login(email: string, password: string, tenantSlug: string) {
-  return apiFetch<{ token: string; refreshToken: string; user: any }>("/api/auth/login", {
-    method: "POST",
-    body: JSON.stringify({ email, password, tenantSlug }),
-  });
-}
-
-export function refreshAccessToken(refreshToken: string) {
-  return apiFetch<{ token: string; refreshToken: string; expiresIn: number }>("/api/auth/refresh", {
-    method: "POST",
-    body: JSON.stringify({ refreshToken }),
-  });
-}
+//
+// Only the profile lookup lives here. Login, refresh, and every password
+// operation are Authentik's - see @/lib/oidc. There is no GOTCHA endpoint that
+// accepts a credential.
 
 export function getMe(token: string) {
-  return apiFetch<{ user: any }>("/api/auth/me", { token });
+  return apiFetch<{
+    user: any;
+    tenantStatus?: string;
+    tenantName?: string | null;
+    memberships?: any[];
+  }>("/api/auth/me", { token });
 }
 
-// ─── Password Management ───────────────────────────────────
+/** Every workspace this identity belongs to (for the tenant picker). */
+export function getMemberships(token: string) {
+  return apiFetch<{ memberships: any[]; lastTenantId: string | null; activeTenantId: string | null }>(
+    "/api/auth/me/memberships",
+    { token },
+  );
+}
 
-export function changePassword(token: string, currentPassword: string, newPassword: string) {
-  return apiFetch<{ success: boolean }>("/api/auth/change-password", {
+/** Validate + stamp a workspace switch; the caller then reloads with the new X-Tenant-Id. */
+export function postSwitchTenant(token: string, tenantId: string) {
+  return apiFetch<{ userId: string; role: string; tenant: any }>("/api/auth/me/switch-tenant", {
     token,
     method: "POST",
-    body: JSON.stringify({ currentPassword, newPassword }),
-  });
-}
-
-export function forgotPassword(email: string, tenantSlug: string) {
-  return apiFetch<{ success: boolean; message: string }>("/api/auth/forgot-password", {
-    method: "POST",
-    body: JSON.stringify({ email, tenantSlug }),
-  });
-}
-
-export function resetPassword(resetToken: string, newPassword: string) {
-  return apiFetch<{ success: boolean }>("/api/auth/reset-password", {
-    method: "POST",
-    body: JSON.stringify({ token: resetToken, newPassword }),
+    body: JSON.stringify({ tenantId }),
   });
 }
 
@@ -109,6 +113,13 @@ export function claimConversation(token: string, id: string) {
 
 export function releaseConversation(token: string, id: string) {
   return apiFetch<{ data: any }>(`/api/conversations/${id}/release`, {
+    token,
+    method: "POST",
+  });
+}
+
+export function returnConversationToAi(token: string, id: string) {
+  return apiFetch<{ data: any }>(`/api/conversations/${id}/return-to-ai`, {
     token,
     method: "POST",
   });
@@ -252,7 +263,9 @@ export function getAgents(token: string) {
   return apiFetch<any[]>("/api/agents", { token });
 }
 
-export function createAgent(token: string, data: { name: string; email: string; password: string }) {
+// Inviting an agent takes no password: the invitee sets their own inside
+// Authentik via the returned setupLink.
+export function createAgent(token: string, data: { name: string; email: string; departmentIds?: string[] }) {
   return apiFetch<any>("/api/agents", {
     token,
     method: "POST",
@@ -276,8 +289,10 @@ export function deleteAgent(token: string, id: string) {
   return apiFetch<any>(`/api/agents/${id}`, { token, method: "DELETE" });
 }
 
-export function resetAgentPassword(token: string, id: string, newPassword: string) {
-  return apiFetch<any>(`/api/agents/${id}/reset-password`, { token, method: "POST", body: JSON.stringify({ newPassword }) });
+// Issues a fresh Authentik password-setup link for an agent. An admin can
+// restore access without ever choosing or seeing someone else's credential.
+export function resetAgentPassword(token: string, id: string) {
+  return apiFetch<{ success: boolean; setupLink: string }>(`/api/agents/${id}/reset-password`, { token, method: "POST" });
 }
 
 export function assignAgentToDepartment(token: string, departmentId: string, userId: string, departmentRole?: string) {
@@ -318,6 +333,38 @@ export function deleteChannelAccount(token: string, id: string) {
 
 export function getChannels(token: string) {
   return apiFetch<{ data: any[] }>("/api/channels", { token });
+}
+
+// Health counts only (no tokens/ids), readable by EVERY tenant member - the
+// Inbox/History empty states use it to explain WHY a list is empty.
+export interface ChannelsSummary {
+  total: number;
+  connected: number;
+  unhealthy: number;
+  pending: number;
+}
+
+export function getChannelsSummary(token: string) {
+  return apiFetch<{ data: ChannelsSummary }>("/api/channels/summary", { token });
+}
+
+// Provider OAuth/app configuration state (which providers CAN be connected
+// in this environment) - drives honest "Requires setup" cards.
+export function getChannelsOauthConfig(token: string) {
+  return apiFetch<{ data: { metaAppId?: string; oauthConfigured: boolean; whatsappConfigured: boolean; providers?: Record<string, boolean> } }>(
+    "/api/channels/config",
+    { token },
+  );
+}
+
+// Completes a WhatsApp connection whose OAuth callback could not auto-detect
+// the WABA (redirected back with ?connected=whatsapp&pending=true).
+export function connectWhatsappSession(token: string, data: { wabaId: string; phoneNumberId?: string }) {
+  return apiFetch<{ data: any[] }>("/api/channels/connect/whatsapp-session", {
+    token,
+    method: "POST",
+    body: JSON.stringify(data),
+  });
 }
 
 // Recent posts for a Facebook/Instagram channel - used by the Comment
@@ -397,10 +444,191 @@ export function getWebchatSettings(token: string, accountId: string) {
   return apiFetch<{ data: any }>(`/api/channels/webchat/${accountId}/settings`, { token });
 }
 
-export function updateWebchatSettings(token: string, accountId: string, settings: { color?: string; iconUrl?: string; title?: string; subtitle?: string; welcome?: string; position?: string }) {
+/**
+ * The website widget's configuration.
+ *
+ * Accepts the canonical shape (the same experience block the storefront
+ * widget uses) and, for anything not yet updated, the old flat fields —
+ * the server migrates those on the way in.
+ */
+export function updateWebchatSettings(token: string, accountId: string, settings: Record<string, unknown>) {
   return apiFetch<{ data: any }>(`/api/channels/webchat/${accountId}/settings`, {
     token, method: "PUT", body: JSON.stringify(settings)
   });
+}
+
+// ─── Shopify Live Chat ─────────────────────────────────────
+//
+// Merchant-facing surface only. The storefront widget talks to
+// /api/shopify-chat with a signed visitor session and never uses any of
+// these — nothing here should ever be reachable without a staff token.
+
+export interface ShopifyLiveChatChannel {
+  id: string;
+  publicKey: string;
+  displayName: string;
+  connectionStatus: string;
+  config: any;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function getShopifyStore(token: string) {
+  return apiFetch<{ data: any }>("/api/shopify-live-chat/store", { token });
+}
+
+export function listShopifyLiveChatChannels(token: string) {
+  return apiFetch<{ data: ShopifyLiveChatChannel[] }>("/api/shopify-live-chat/channels", { token });
+}
+
+export function createShopifyLiveChatChannel(token: string, displayName?: string) {
+  return apiFetch<{ data: ShopifyLiveChatChannel }>("/api/shopify-live-chat/channels", {
+    token,
+    method: "POST",
+    body: JSON.stringify({ displayName }),
+  });
+}
+
+export function updateShopifyLiveChatChannel(
+  token: string,
+  channelId: string,
+  payload: { config?: any; displayName?: string },
+) {
+  return apiFetch<{ data: ShopifyLiveChatChannel }>(
+    `/api/shopify-live-chat/channels/${channelId}`,
+    { token, method: "PUT", body: JSON.stringify(payload) },
+  );
+}
+
+export function deleteShopifyLiveChatChannel(token: string, channelId: string) {
+  return apiFetch<{ data: { deleted: boolean } }>(
+    `/api/shopify-live-chat/channels/${channelId}`,
+    { token, method: "DELETE" },
+  );
+}
+
+export function getShopifyLiveChatDiagnostics(token: string, channelId: string) {
+  return apiFetch<{ data: any }>(
+    `/api/shopify-live-chat/channels/${channelId}/diagnostics`,
+    { token },
+  );
+}
+
+export function getShopifyLiveChatInstall(token: string, channelId: string) {
+  return apiFetch<{ data: any }>(`/api/shopify-live-chat/channels/${channelId}/install`, { token });
+}
+
+export function searchShopifyProducts(
+  token: string,
+  query: string,
+  opts: { limit?: number; includeUnpublished?: boolean } = {},
+) {
+  const params = new URLSearchParams({ q: query });
+  if (opts.limit) params.set("limit", String(opts.limit));
+  if (opts.includeUnpublished) params.set("includeUnpublished", "true");
+  return apiFetch<{ data: { shopDomain: string; currency: string; products: any[] } }>(
+    `/api/shopify-live-chat/products?${params.toString()}`,
+    { token },
+  );
+}
+
+export function sendShopifyProductMessage(
+  token: string,
+  conversationId: string,
+  payload: {
+    products: Array<{ productId?: string; handle?: string; variantId?: string; reason?: string }>;
+    text?: string;
+  },
+) {
+  return apiFetch<{ data: { messageId: string; productCount: number } }>(
+    `/api/shopify-live-chat/conversations/${conversationId}/products`,
+    { token, method: "POST", body: JSON.stringify(payload) },
+  );
+}
+
+// ─── Shopify CHAT app install (App Store flow) ─────────────
+//
+// Distinct from the Shopify Live Chat channel calls above: those configure
+// a channel that already exists, these turn a verified Shopify install into
+// one. The install itself is identified by an HttpOnly cookie set by the
+// OAuth callback; `session` is the fallback for browsers that dropped it.
+
+export type ShopifyChatActivationState =
+  | "APP_NOT_INSTALLED"
+  | "INSTALLATION_UNBOUND"
+  | "CHANNEL_NOT_CREATED"
+  | "TENANT_INACTIVE"
+  | "ENTITLEMENT_DISABLED"
+  | "EMBED_NOT_ENABLED"
+  | "EMBED_ENABLED_NOT_SEEN"
+  | "STALE"
+  | "UNINSTALLED"
+  | "CORE_DISCONNECTED_PRODUCT_CHAT_UNAVAILABLE"
+  | "LIVE";
+
+export interface ShopifyChatActivation {
+  state: ShopifyChatActivationState;
+  shopDomain: string;
+  channelId: string | null;
+  channelEnabled: boolean;
+  productMessaging: boolean;
+  coreConnected: boolean;
+  verifiedDomains: string[];
+  themeEditorDeepLink: string | null;
+  lastHeartbeatAt: string | null;
+}
+
+export interface ShopifyChatInstallContext {
+  shopDomain: string;
+  status: "PENDING" | "ACTIVE" | "UNINSTALLED";
+  alreadyBound: boolean;
+  boundToThisOrganization: boolean;
+  claimedByAnotherOrganization: boolean;
+  appAdminLink: string | null;
+}
+
+function installQuery(session?: string | null): string {
+  return session ? `?session=${encodeURIComponent(session)}` : "";
+}
+
+export function getShopifyChatInstallContext(token: string, session?: string | null) {
+  return apiFetch<{ data: ShopifyChatInstallContext }>(
+    `/api/shopify-chat-install/context${installQuery(session)}`,
+    { token },
+  );
+}
+
+export function bindShopifyChatInstall(token: string, session?: string | null) {
+  return apiFetch<{
+    data: {
+      channelId: string;
+      channelCreated: boolean;
+      shopDomain: string;
+      activation: ShopifyChatActivation;
+    };
+  }>("/api/shopify-chat-install/bind", {
+    token,
+    method: "POST",
+    body: JSON.stringify({ session: session ?? undefined }),
+  });
+}
+
+export function getShopifyChatActivation(token: string, opts: { shop?: string; session?: string | null } = {}) {
+  const params = new URLSearchParams();
+  if (opts.shop) params.set("shop", opts.shop);
+  if (opts.session) params.set("session", opts.session);
+  const qs = params.toString();
+  return apiFetch<{ data: ShopifyChatActivation }>(
+    `/api/shopify-chat-install/activation${qs ? `?${qs}` : ""}`,
+    { token },
+  );
+}
+
+export function refreshShopifyChatDomains(token: string, shop: string) {
+  return apiFetch<{ data: { verifiedDomains: string[] } }>(
+    "/api/shopify-chat-install/refresh-domains",
+    { token, method: "POST", body: JSON.stringify({ shop }) },
+  );
 }
 
 // ─── Tenant Channel Config ─────────────────────────────────
@@ -644,13 +872,6 @@ export function getAgentWorkload(token: string) {
 
 // ─── System Admin ───────────────────────────────────────────
 
-export function systemLogin(email: string, password: string) {
-  return apiFetch<{ token: string; user: any }>("/api/system/login", {
-    method: "POST",
-    body: JSON.stringify({ email, password }),
-  });
-}
-
 export function getSystemStats(token: string) {
   return apiFetch<{ data: any }>("/api/system/stats", { token });
 }
@@ -664,7 +885,34 @@ export function getSystemTenant(token: string, id: string) {
   return apiFetch<{ data: any }>(`/api/system/tenants/${id}`, { token });
 }
 
-export function createTenant(token: string, data: { name: string; slug: string; adminEmail: string; adminPassword: string; adminName: string }) {
+/**
+ * Billing is REQUIRED, and is one of exactly two shapes.
+ *
+ * Typed as a union rather than a bag of optional fields so that omitting the
+ * commercial decision - or sending a POC budget on a paid plan - does not
+ * compile. The server refuses both anyway; this is so nobody writes it.
+ */
+export type CreateTenantBilling =
+  | {
+      mode: "PAID_PLAN";
+      planVersionId: string;
+      chatVolumeOptionKey?: string | null;
+      voiceVolumeOptionKey?: string | null;
+      paymentRequiredBeforeAccess?: boolean;
+      commercialNote?: string;
+    }
+  | {
+      mode: "POC";
+      pocCredits: number;
+      pocExpiresAt: string;
+      pocFeatureAreas: string[];
+      commercialNote?: string;
+    };
+
+export function createTenant(
+  token: string,
+  data: { name: string; slug: string; adminEmail: string; adminName: string; billing: CreateTenantBilling },
+) {
   return apiFetch<{ data: any }>("/api/system/tenants", { token, method: "POST", body: JSON.stringify(data) });
 }
 
@@ -672,22 +920,66 @@ export function updateTenant(token: string, id: string, data: { name?: string; i
   return apiFetch<{ data: any }>(`/api/system/tenants/${id}`, { token, method: "PATCH", body: JSON.stringify(data) });
 }
 
-export function createTenantUser(token: string, tenantId: string, data: { email: string; password: string; name: string; role?: string }) {
+export function createTenantUser(token: string, tenantId: string, data: { email: string; name: string; role?: string }) {
   return apiFetch<{ data: any }>(`/api/system/tenants/${tenantId}/users`, { token, method: "POST", body: JSON.stringify(data) });
 }
 
-export function updateTenantUser(token: string, tenantId: string, userId: string, data: { isActive?: boolean; role?: string }) {
+export function updateTenantUser(token: string, tenantId: string, userId: string, data: { isActive?: boolean; role?: string; name?: string; email?: string }) {
   return apiFetch<{ data: any }>(`/api/system/tenants/${tenantId}/users/${userId}`, { token, method: "PATCH", body: JSON.stringify(data) });
+}
+
+export function deleteTenantUser(token: string, tenantId: string, userId: string) {
+  return apiFetch<{ data: any }>(`/api/system/tenants/${tenantId}/users/${userId}`, { token, method: "DELETE" });
+}
+
+// ─── System Admin: Onboarding Console + Reset + Nudge ───────
+export interface OnboardingConsoleRow {
+  tenantId: string;
+  company: string;
+  slug: string;
+  status: string;
+  createdAt: string;
+  discoveryComplete: boolean;
+  reviewComplete: boolean;
+  goalSelected: boolean;
+  crmConnected: boolean;
+  crmSlug: string | null;
+  channelsConnected: number;
+  integrationsConnected: number;
+  knowledgeCount: number;
+  knowledgeStatus: "none" | "detected" | "imported";
+  aiEmployeeCreated: boolean;
+  aiEmployeeName: string | null;
+  currentStage: string;
+  progressPct: number;
+  health: "activated" | "on_track" | "at_risk" | "stuck";
+  nextRecommendedAction: string;
+  lastActivity: string;
+  lastNudgeSentAt: string | null;
+  gaps: string[];
+  primaryGoal: string | null;
+  assignedCsm: string | null;
+}
+export function getOnboardingConsole(token: string) {
+  return apiFetch<{ data: { rows: OnboardingConsoleRow[]; generatedAt: string } }>("/api/system/onboarding-console", { token });
+}
+export function resetTenantOnboarding(token: string, tenantId: string) {
+  return apiFetch<{ data: { reset: boolean; removed: Record<string, number>; status: string } }>(
+    `/api/system/tenants/${tenantId}/reset-onboarding`,
+    { token, method: "POST" },
+  );
+}
+export function sendTenantNudge(token: string, tenantId: string) {
+  return apiFetch<{ data: { outcome: "sent" | "skipped" | "failed" | "no_admin"; reason?: string } }>(
+    `/api/system/tenants/${tenantId}/nudge`,
+    { token, method: "POST" },
+  );
 }
 
 export function resendOnboardingLink(token: string, tenantId: string) {
   return apiFetch<{ data: { message: string; sentTo: string } }>(`/api/system/tenants/${tenantId}/resend-onboarding`, {
     token, method: "POST",
   });
-}
-
-export function seedSystemAdmin(data: { email: string; password: string; name: string; setupSecret: string }) {
-  return apiFetch<{ data: any }>("/api/system/seed", { method: "POST", body: JSON.stringify(data) });
 }
 
 // ─── System Admin Chat (RAG) ────────────────────────────────
@@ -754,15 +1046,6 @@ export function getTokenUsageByTenants(token: string, params?: Record<string, st
   return apiFetch<{ data: any[] }>(`/api/system-chat/token-usage/tenants${qs}`, { token });
 }
 
-// ─── Magic Link ────────────────────────────────────────────
-
-export function verifyMagicLink(token: string) {
-  return apiFetch<{ token: string; refreshToken: string; user: any; tenantStatus: string }>("/api/auth/verify-magic-link", {
-    method: "POST",
-    body: JSON.stringify({ token }),
-  });
-}
-
 // ─── Onboarding ────────────────────────────────────────────
 
 export function getOnboardingStatus(token: string) {
@@ -809,9 +1092,185 @@ export interface AnalyzeDomainResult {
   understanding?: BusinessUnderstanding;
   reason?: "invalid_domain" | "fetch_failed" | "ai_unavailable" | "no_summary";
 }
-export function analyzeBusinessDomain(token: string, domain: string, locale?: string) {
-  return apiFetch<{ data: AnalyzeDomainResult }>("/api/onboarding/analyze-domain", {
-    token, method: "POST", body: JSON.stringify({ domain, locale }),
+// ─── Onboarding Intelligence Engine (Business Discovery) ─────
+// The deep 5-domain scan + report + health + first recommendation. Powers
+// Movements 1-5 of the onboarding experience.
+export type FindingConfidence = "confirmed" | "likely" | "low" | "needs_verification" | "unknown";
+export interface DiscoveryChannel { type: string; identifier?: string; purpose?: string; confidence: FindingConfidence; provider?: string }
+export interface DiscoveryTechItem { slug: string; name: string; category?: string; confidence?: FindingConfidence }
+export interface DiscoveryTech {
+  platform: { slug: string; name: string; confidence: FindingConfidence } | null;
+  legacy: Array<{ slug: string; name: string }>;
+  tracking: Array<{ slug: string; name: string }>;
+  tools: DiscoveryTechItem[];
+}
+export interface PolicyFinding { found: boolean | null; confidence: FindingConfidence; url?: string }
+export interface DiscoveryBrand {
+  personality?: string; voice?: string; tone?: string; style?: string; audience?: string; positioning?: string;
+  vocabulary?: string[]; preferredTerminology?: string[]; forbiddenWords?: string[]; ctaStyle?: string;
+  greetingExample?: string; languages?: string[]; confidence?: FindingConfidence;
+}
+export interface DiscoveryGap {
+  id: string;
+  domain: "brand" | "business" | "knowledge" | "communication" | "technology" | "customers";
+  label: string;
+  severity: "high" | "medium" | "low";
+  ask: string;
+  confidence?: FindingConfidence;
+}
+export interface DiscoveryRecommendation {
+  employeeRole: "customer_support" | "sales" | "reception" | "conversation_intelligence";
+  employeeName: string;
+  reason: string;
+  systems: Array<{ slug: string; reason: string; alreadyDetected?: boolean }>;
+  knowledge: Array<{ label: string; reason: string }>;
+  channel?: string;
+}
+export interface BusinessDiscoveryRecord {
+  status: "PENDING" | "SCANNING" | "COMPLETE" | "FAILED";
+  websiteDomain?: string | null;
+  brand?: DiscoveryBrand | null;
+  business?: {
+    name?: string; country?: string; industry?: string; icp?: string; personas?: string[];
+    products?: string[]; services?: string[]; pricingModel?: string; valueProp?: string;
+    businessModel?: string; summary?: string; confidence?: FindingConfidence;
+  } | null;
+  knowledge?: {
+    hasFaq?: boolean; hasHelpCenter?: boolean; hasDocs?: boolean;
+    policies?: Record<string, PolicyFinding>; articleCountEstimate?: number | null; topics?: string[];
+  } | null;
+  communication?: { channels: DiscoveryChannel[] } | null;
+  technology?: DiscoveryTech | null;
+  gaps?: DiscoveryGap[] | null;
+  recommendation?: DiscoveryRecommendation | null;
+  health?: HealthReport | null;
+  confidence?: Record<string, number> | null;
+  report?: string | null;
+  primaryGoal?: string | null;
+  scannedAt?: string | null;
+  // Live scan phase written at REAL boundaries by /discover
+  // (homepage → pages → synthesis → done|failed). Polled by the ceremony.
+  scanPhase?: string | null;
+  // Resume checkpoint (P0): last movement reached (review..ready).
+  progress?: string | null;
+  // Movement 8 tune-chat transcript (bounded), so a reload resumes the chat.
+  tuneTranscript?: Array<{ role: "user" | "assistant"; content: string }> | null;
+}
+export interface HealthItem { label: string; ok: boolean }
+export interface HealthReport { knowledge: HealthItem[]; communication: HealthItem[]; tools: HealthItem[] }
+
+// Persistent recommendation backlog (living AI backlog).
+export interface RecommendationRow {
+  id: string; kind: string; title: string; reason?: string | null; action?: string | null;
+  targetSlug?: string | null; confidence: string; priority: number; status: string;
+  payload?: Record<string, any> | null; completedAt?: string | null;
+}
+export function getRecommendations(token: string, status = "OPEN") {
+  return apiFetch<{ data: { recommendations: RecommendationRow[] } }>(`/api/onboarding/recommendations?status=${encodeURIComponent(status)}`, { token });
+}
+export function resolveRecommendation(token: string, id: string, decision: "complete" | "dismiss" | "reopen") {
+  return apiFetch<{ data: { id: string; status: string } }>(`/api/onboarding/recommendations/${id}/${decision}`, { token, method: "POST" });
+}
+export function teachGap(token: string, label: string, method: "text" | "url" | "file", value: string) {
+  return apiFetch<{ data: { ok: boolean; reason?: string; knowledgeDocumentId?: string; documentId?: string } }>("/api/onboarding/teach", {
+    token, method: "POST", body: JSON.stringify({ label, method, value }),
+  });
+}
+
+/** Per-document outcome of a knowledge sync. Mirrors SyncReport in services/auth. */
+export interface KnowledgeSyncReport {
+  ok: boolean;
+  knowledgeBaseId: string | null;
+  added: number;
+  updated: number;
+  unchanged: number;
+  preserved: number;
+  removed: number;
+  failed: number;
+  details: Array<{
+    dedupeKey: string;
+    title?: string;
+    action: "create" | "update" | "unchanged" | "preserved" | "remove" | "failed";
+    documentId?: string;
+    reason?: string;
+  }>;
+}
+
+export function discoverBusiness(token: string, domain: string, locale?: string) {
+  return apiFetch<{ data: {
+    ok: boolean; domain?: string; reason?: string;
+    discovery?: BusinessDiscoveryRecord;
+    signals?: { channels: string[]; technology: string[] };
+    // Honest ingestion outcome. `null` means the projection threw: the UI must
+    // say the knowledge sync failed rather than imply the KB is populated.
+    knowledge?: KnowledgeSyncReport | null;
+  } }>(
+    "/api/onboarding/discover",
+    { token, method: "POST", body: JSON.stringify({ domain, locale }) },
+  );
+}
+// Fast, LLM-free plan for the discovery ceremony: business-typed steps that
+// reflect the real work the scan will do (Movement 1 - dynamic loader).
+export function discoverPlan(token: string, domain: string, locale?: string) {
+  return apiFetch<{ data: { ok: boolean; businessType: string; steps: Array<{ key: string; label: string }> } }>(
+    "/api/onboarding/discover/plan",
+    { token, method: "POST", body: JSON.stringify({ domain, locale }) },
+  );
+}
+export function getBusinessDiscovery(token: string) {
+  return apiFetch<{ data: { discovery: BusinessDiscoveryRecord | null } }>("/api/onboarding/discovery", { token });
+}
+export function patchBusinessDiscovery(token: string, patch: { business?: Record<string, unknown>; brand?: Record<string, unknown>; communication?: { channels: Array<Record<string, unknown>> }; progress?: string; employeeName?: string }) {
+  return apiFetch<{ data: { discovery: BusinessDiscoveryRecord } }>("/api/onboarding/discovery", {
+    token, method: "PATCH", body: JSON.stringify(patch),
+  });
+}
+export function getBusinessHealth(token: string) {
+  return apiFetch<{ data: { health: HealthReport | null; gaps?: DiscoveryGap[] } }>("/api/onboarding/health", { token });
+}
+// Per-item correction on the reflected-back portrait (Movement 2): remove /
+// mark-incorrect / ignore a detected channel, tool, platform, or gap. Persists
+// immediately so the AI never re-surfaces it.
+export function correctDiscovery(token: string, target: "channel" | "tool" | "platform" | "gap", action: "remove" | "incorrect" | "ignore", key: string) {
+  return apiFetch<{ data: { ok: boolean; discovery: BusinessDiscoveryRecord } }>("/api/onboarding/discovery/correct", {
+    token, method: "POST", body: JSON.stringify({ target, action, key }),
+  });
+}
+// Movement 8 - chat with the recommended employee before deploy; the returned
+// persona reflects any tuning the owner asked for ("be friendlier", …).
+export interface EmployeePersona { tone?: string; personality?: string; focus?: string; goal?: string; successCriteria?: string[]; instructions?: string[] }
+export function employeeChat(token: string, messages: Array<{ role: "user" | "assistant"; content: string }>, persona?: EmployeePersona, locale?: string) {
+  return apiFetch<{ data: { ok: boolean; reply?: string; persona?: EmployeePersona } }>("/api/onboarding/employee-chat", {
+    token, method: "POST", body: JSON.stringify({ messages, persona, locale }),
+  });
+}
+// Persist the tuned persona WITHOUT a chat turn - used when the owner adds a
+// standing rule via a quick-tune chip (rules land in the rules row, never in
+// the transcript).
+export function saveTunedPersona(token: string, persona: EmployeePersona) {
+  return apiFetch<{ data: { ok: boolean; persona?: EmployeePersona } }>("/api/onboarding/employee-chat", {
+    token, method: "POST", body: JSON.stringify({ personaOnly: true, persona }),
+  });
+}
+// Tell the GOTCHA team about an integration we don't support yet (the owner
+// flagged it during onboarding). Best-effort - resolves ok even if mail isn't
+// configured server-side, so the UI can always confirm the click.
+export function notifyIntegrationRequest(token: string, integration: string, opts?: { note?: string; source?: string }) {
+  const body: Record<string, unknown> = { integration };
+  if (opts?.note?.trim()) body.note = opts.note.trim();
+  if (opts?.source) body.source = opts.source;
+  return apiFetch<{ data: { ok: boolean; notified: boolean } }>("/api/onboarding/notify-integration", {
+    token, method: "POST", body: JSON.stringify(body),
+  });
+}
+
+export function saveOnboardingGoal(token: string, goals: string | string[], detail?: string) {
+  // Accepts a single goal (legacy) or multiple selected use-cases.
+  const list = Array.isArray(goals) ? goals : [goals];
+  const body: Record<string, unknown> = { goals: list };
+  if (detail?.trim()) body.detail = detail.trim();
+  return apiFetch<{ data: { primaryGoal: string; goals: string[] } }>("/api/onboarding/goal", {
+    token, method: "POST", body: JSON.stringify(body),
   });
 }
 
@@ -867,13 +1326,6 @@ export interface SetupTile {
   stage: "core" | "later";
   meta?: { slug?: string | null };
 }
-export function getSetupMap(token: string) {
-  return apiFetch<{ data: { tiles: SetupTile[]; sourceSystem: string | null; sourceConnected: boolean; completedCount: number; totalCount: number } }>(
-    "/api/onboarding/setup-map",
-    { token },
-  );
-}
-
 // Persistent guidance layer - per-feature first-time state.
 export type GuideState = "unseen" | "snoozed" | "done";
 export function getOnboardingGuides(token: string) {
@@ -906,34 +1358,75 @@ export function createInviteLink(token: string, role?: "ADMIN" | "AGENT") {
 
 // Public - fetch invite details by token (used by /join page).
 export function getPublicInvite(inviteToken: string) {
-  return apiFetch<{ data: { tenant: { name: string; slug: string }; email: string | null; role: string; requiresPassword: boolean } }>(`/api/public/onboarding/invite/${encodeURIComponent(inviteToken)}`, {});
+  return apiFetch<{ data: { tenant: { name: string; slug: string }; email: string | null; role: string } }>(`/api/public/onboarding/invite/${encodeURIComponent(inviteToken)}`, {});
 }
 
 // Public - accept an invite (creates the user / sets their password).
-export function acceptPublicInvite(payload: { token: string; name: string; email?: string; password: string }) {
-  return apiFetch<{ data: { ok: true; tenantId: string } }>("/api/public/onboarding/invite/accept", {
+// No password: accepting an invite links the person to the tenant and returns
+// the one-time Authentik link where they set their own credential.
+export function acceptPublicInvite(payload: { token: string; name: string; email?: string }) {
+  return apiFetch<{ data: { ok: true; tenantId: string; setupLink: string } }>("/api/public/onboarding/invite/accept", {
     method: "POST", body: JSON.stringify(payload),
   });
 }
 
 export type OnboardingMissionId =
-  | "knowledge_base"
-  | "ai_employees"
+  | "connect_source_of_truth"
   | "connect_channel"
-  | "workflows";
+  | "add_webchat"
+  | "teach_knowledge";
 
 export interface OnboardingMission {
   id: OnboardingMissionId;
   status: "done" | "active" | "pending";
   deepLink: string;
+  /** Live detail - e.g. detected channel identifiers or an open-gaps count. */
+  hint?: string;
 }
 
 export function getOnboardingMissions(token: string) {
   return apiFetch<{ data: { missions: OnboardingMission[] } }>("/api/onboarding/missions", { token });
 }
 
-export function getBusinessProfile(token: string) {
-  return apiFetch<{ data: any }>("/api/onboarding/business-profile", { token });
+// Setup readiness (GET /onboarding/journey) - THE canonical five-action
+// checklist. Every milestone is live-derived server-side from persisted
+// state; the page, the sidebar panel, and the nav badge all read this.
+export type JourneyMilestoneId =
+  | "connect_source_of_truth"
+  | "connect_channel"
+  | "connect_knowledge"
+  | "create_ai_employee"
+  | "create_process";
+
+export type JourneyMilestoneState = "done" | "in_progress" | "attention" | "not_started";
+
+export interface JourneyMilestone {
+  id: JourneyMilestoneId;
+  done: boolean;
+  state: JourneyMilestoneState;
+  /** Legacy tri-state: done / first-incomplete / rest. */
+  status: "done" | "active" | "pending";
+  deepLink: string;
+  manageLink?: string;
+  hint?: string;
+}
+
+export interface JourneyData {
+  complete: boolean;
+  summary: { done: number; total: number };
+  employee: { id: string; name: string; role: string | null; status: string } | null;
+  business: { name: string | null; industry: string | null };
+  context: {
+    coreSystem: string | null;
+    kbCount: number;
+    channelHint: string | null;
+    detectedChannelCount: number;
+  };
+  milestones: JourneyMilestone[];
+}
+
+export function getOnboardingJourney(token: string) {
+  return apiFetch<{ data: JourneyData }>("/api/onboarding/journey", { token });
 }
 
 export function saveOnboardingDepartments(token: string, data: { departments: any[] }) {
@@ -946,10 +1439,10 @@ export function getOnboardingDepartments(token: string) {
   return apiFetch<{ data: any[] }>("/api/onboarding/departments", { token });
 }
 
-export function completeOnboarding(token: string, opts?: { skipCoreSystem?: boolean }) {
+export function completeOnboarding(token: string, opts?: { skipCoreSystem?: boolean; skipEmployee?: boolean }) {
   return apiFetch<{ data: any }>("/api/onboarding/complete", {
     token, method: "POST",
-    body: JSON.stringify({ skipCoreSystem: opts?.skipCoreSystem === true }),
+    body: JSON.stringify({ skipCoreSystem: opts?.skipCoreSystem === true, skipEmployee: opts?.skipEmployee === true }),
   });
 }
 
@@ -1060,8 +1553,8 @@ export function initConfluenceOAuth(token: string, kbId: string) {
   return apiFetch<{ url: string }>(`/api/knowledge/oauth/confluence/init?kbId=${kbId}`, { token });
 }
 
-export function initGoogleDriveOAuth(token: string, kbId: string) {
-  return apiFetch<{ url: string }>(`/api/knowledge/oauth/google-drive/init?kbId=${kbId}`, { token });
+export function initGoogleDriveOAuth(token: string, kbId: string, flow?: "onboarding") {
+  return apiFetch<{ url: string }>(`/api/knowledge/oauth/google-drive/init?kbId=${kbId}${flow ? `&flow=${flow}` : ""}`, { token });
 }
 
 export function getConfluenceSpaces(token: string, intId: string) {
@@ -1094,6 +1587,13 @@ export function getDriveSharedDrives(token: string, intId: string) {
 export function syncDriveFiles(token: string, intId: string, fileIds: string[]) {
   return apiFetch<{ data: any }>(`/api/knowledge/integrations/${intId}/drive/sync`, {
     token, method: "POST", body: JSON.stringify({ fileIds }),
+  });
+}
+
+// Enable/disable hourly background auto-sync for a connected source.
+export function setKnowledgeIntegrationAutoSync(token: string, intId: string, enabled: boolean) {
+  return apiFetch<{ data: { autoSync: boolean } }>(`/api/knowledge/integrations/${intId}/auto-sync`, {
+    token, method: "PATCH", body: JSON.stringify({ enabled }),
   });
 }
 
@@ -1246,6 +1746,19 @@ export function setIntegrationCrmSource(token: string, slug: string, useAsCrm: b
   return apiFetch<{ data: { id: string; useAsCrm: boolean } }>(`/api/integrations/${slug}/crm-source`, {
     token, method: "PUT", body: JSON.stringify({ useAsCrm }),
   });
+}
+
+/** The tenant's elected customer system of record, as the AI-side resolver
+ *  sees it, with the provider's truthful capability set. */
+export interface SourceOfTruthStatus {
+  configured: boolean;
+  vendor: string | null;
+  capabilities: string[];
+  unsupported?: string[];
+  writesEnabled?: boolean;
+}
+export function getSourceOfTruthStatus(token: string) {
+  return apiFetch<{ data: SourceOfTruthStatus }>(`/api/integrations/source-of-truth`, { token });
 }
 
 /**
@@ -1483,6 +1996,26 @@ export function createAIAgent(token: string, data: Record<string, any>) {
   return apiFetch<{ data: any }>("/api/ai-agents", { token, method: "POST", body: JSON.stringify(data) });
 }
 
+export function getAIAgentReachability(token: string, id: string) {
+  return apiFetch<{ data: { hasCanvas: boolean; reachable: boolean } }>(`/api/ai-agents/${id}/reachability`, { token });
+}
+
+export interface EffectivePermissions {
+  governed: boolean;
+  allowedToolSlugs: string[];
+  effectiveOperations: string[];
+  capabilities: Array<{
+    capability: string;
+    summary: string;
+    live: boolean;
+    operations: Array<{ name: string; effective: boolean }>;
+  }>;
+}
+
+export function getAIAgentEffectivePermissions(token: string, id: string) {
+  return apiFetch<{ data: EffectivePermissions }>(`/api/ai-agents/${id}/effective-permissions`, { token });
+}
+
 export function updateAIAgent(token: string, id: string, data: Record<string, any>) {
   return apiFetch<{ data: any }>(`/api/ai-agents/${id}`, { token, method: "PATCH", body: JSON.stringify(data) });
 }
@@ -1491,10 +2024,43 @@ export function deleteAIAgent(token: string, id: string) {
   return apiFetch<{ success: boolean }>(`/api/ai-agents/${id}`, { token, method: "DELETE" });
 }
 
-export function testAgentChat(token: string, agentId: string, message: string, history: Array<{role: "user"|"assistant", content: string}>) {
-  return apiFetch<{ data: { reply: string } }>(`/api/ai-agents/${agentId}/test-chat`, {
-    token, method: "POST", body: JSON.stringify({ message, history })
-  });
+/** "Why did it answer this way?" - derived from what the turn actually did. */
+export interface SandboxDiagnostics {
+  employee: { id: string; name: string; role: string | null };
+  department: { id: string; name: string } | null;
+  knowledgeUsed: Array<{ title: string; sourceType: string | null }>;
+  toolsOffered: string[];
+  toolsCalled: string[];
+  simulatedActions: Array<{ tool: string; arguments: Record<string, unknown> }>;
+  awaitingApproval: { tool: string; reason: string } | null;
+  escalated: { reason: string } | null;
+  writeMode: "safe" | "real";
+  routing: string;
+  conversationId: string;
+  turnCount: number;
+}
+
+/**
+ * Talk to the real employee in a sandbox conversation.
+ *
+ * No `history` argument: memory comes from the sandbox conversation on the
+ * server, exactly as it does for a live customer. Passing a client-side
+ * transcript meant "does it remember?" only ever tested the array we sent.
+ */
+export function testAgentChat(
+  token: string,
+  agentId: string,
+  message: string,
+  opts?: { writes?: "safe" | "real"; reset?: boolean },
+) {
+  return apiFetch<{ data: { reply: string; diagnostics: SandboxDiagnostics } }>(
+    `/api/ai-agents/${agentId}/test-chat`,
+    {
+      token,
+      method: "POST",
+      body: JSON.stringify({ message, writes: opts?.writes ?? "safe", reset: opts?.reset === true }),
+    },
+  );
 }
 
 // ─── Router Rules (Main Playbook) ────────────────────────────
@@ -1803,6 +2369,24 @@ export function assignDepartmentAIEmployee(token: string, departmentId: string, 
   });
 }
 
+// A department can have MANY AI employees. These operate on the full roster and
+// leave the other attachments untouched.
+export function getDepartmentAIEmployees(token: string, departmentId: string) {
+  return apiFetch<{ data: any[] }>(`/api/departments/${departmentId}/ai-employees`, { token });
+}
+
+export function addDepartmentAIEmployee(token: string, departmentId: string, aiAgentId: string) {
+  return apiFetch<{ data: any; ruleId?: string }>(`/api/departments/${departmentId}/ai-employees`, {
+    token, method: "POST", body: JSON.stringify({ aiAgentId }),
+  });
+}
+
+export function removeDepartmentAIEmployee(token: string, departmentId: string, aiAgentId: string) {
+  return apiFetch<{ data: any[] }>(`/api/departments/${departmentId}/ai-employees/${aiAgentId}`, {
+    token, method: "DELETE",
+  });
+}
+
 // ─── AI Employee Creation Wizard ────────────────────────────
 
 export function generateAIEmployeeConfig(token: string, data: { answers: Record<string, string>; departmentId?: string }) {
@@ -2081,6 +2665,49 @@ export interface CreateVoiceChannelInput {
 
 export function listVoiceChannels(token: string) {
   return apiFetch<{ data: VoiceChannel[] }>("/api/voice-channels", { token });
+}
+
+// Unified customer search across the tenant's resolved source of truth
+// (dedicated CRM or Shopify-as-CRM) - the outbound dialer's search mode.
+// List rows carry MASKED identifiers only; full data comes from
+// getSotCustomerDetail after the agent explicitly selects a candidate.
+export interface SotCustomer {
+  id: string;
+  kind: string;
+  name: string | null;
+  phoneMasked: string | null;
+  emailMasked: string | null;
+  company: string | null;
+  stage: string | null;
+  vendor: string;
+  callable: boolean;
+  ordersCount: number | null;
+  totalSpent: string | null;
+  currency: string | null;
+}
+
+export function searchSotCustomers(token: string, q: string, limit = 8) {
+  return apiFetch<{ data: SotCustomer[]; meta: { configured: boolean; vendor: string | null; missingScope?: boolean } }>(
+    `/api/integrations/source-of-truth/customers?q=${encodeURIComponent(q)}&limit=${limit}`,
+    { token },
+  );
+}
+
+export interface SotCustomerDetail {
+  id: string;
+  kind: string;
+  name: string | null;
+  phone: string | null;
+  email: string | null;
+  stage: string | null;
+  vendor: string;
+}
+
+export function getSotCustomerDetail(token: string, id: string, kind: string) {
+  return apiFetch<{ data: SotCustomerDetail }>(
+    `/api/integrations/source-of-truth/customers/detail?id=${encodeURIComponent(id)}&kind=${encodeURIComponent(kind)}`,
+    { token },
+  );
 }
 
 export function getVoiceChannel(token: string, id: string) {
@@ -2532,10 +3159,40 @@ export interface TenantRole {
   name: string;
   description: string | null;
   isSystem: boolean;
+  builtinKey: string | null;
+  defaultScope: "OWN" | "TEAM" | "DEPARTMENT" | "WORKSPACE";
   createdAt: string;
   updatedAt: string;
   features: { roleId: string; feature: string; createdAt: string }[];
   _count?: { assignments: number };
+}
+
+// Hierarchical permission catalog (single source of truth, served by backend).
+export interface PermissionDef {
+  key: string;
+  domain: string;
+  feature: string;
+  subFeature: string;
+  action: string;
+  kind: "runtime" | "configuration";
+  scoped: boolean;
+  displayName: string;
+  description: string;
+}
+
+export interface BuiltinRoleDef {
+  key: string;
+  name: string;
+  description: string;
+  defaultScope: "own" | "team" | "department" | "workspace";
+  permissions: string[];
+}
+
+export interface PermissionCatalog {
+  permissions: PermissionDef[];
+  byDomain: Record<string, PermissionDef[]>;
+  builtinRoles: BuiltinRoleDef[];
+  scopes: PermissionScope[];
 }
 
 export interface UserFeatureGrantRow {
@@ -2574,6 +3231,38 @@ export function updateSystemTenantFeature(
   );
 }
 
+// SYSTEM_ADMIN - entitlements (feature licensing), credits & POC provisioning.
+export interface LicenseDomainRow { key: string; enabled: boolean; source?: string | null; expiresAt?: string | null }
+export interface TenantBillingSummary {
+  error?: string;
+  subscription?: { planKey: string; status: string; enforcementEnabled: boolean; currentPeriodEnd?: string | null; trialEndsAt?: string | null } | null;
+  balance?: { includedRemaining: number; purchasedRemaining: number; includedAllowance: number; total: number; periodKey: string | null } | null;
+}
+export function getSystemTenantEntitlements(token: string, tenantId: string) {
+  return apiFetch<{ data: { domains: LicenseDomainRow[]; billing: TenantBillingSummary } }>(
+    `/api/system/tenants/${tenantId}/entitlements`,
+    { token },
+  );
+}
+export function updateSystemTenantEntitlement(token: string, tenantId: string, key: string, enabled: boolean) {
+  return apiFetch<{ data: { key: string; enabled: boolean } }>(
+    `/api/system/tenants/${tenantId}/entitlements/${encodeURIComponent(key)}`,
+    { token, method: "PUT", body: JSON.stringify({ enabled }) },
+  );
+}
+export function setupSystemTenantPoc(token: string, tenantId: string, body: { credits: number; expiresAt?: string; features?: string[] }) {
+  return apiFetch<{ data: { ok: boolean; credits: number; expiresAt: string | null; features: string[]; balance: TenantBillingSummary["balance"] } }>(
+    `/api/system/tenants/${tenantId}/poc`,
+    { token, method: "POST", body: JSON.stringify(body) },
+  );
+}
+export function grantSystemTenantCredits(token: string, tenantId: string, units: number) {
+  return apiFetch<{ data: { ok: boolean; balance: TenantBillingSummary["balance"] } }>(
+    `/api/system/tenants/${tenantId}/credits`,
+    { token, method: "POST", body: JSON.stringify({ units }) },
+  );
+}
+
 // Tenant ADMIN - roles + grants
 
 export function getMyFeatures(token: string) {
@@ -2581,6 +3270,20 @@ export function getMyFeatures(token: string) {
     "/api/permissions/me",
     { token },
   );
+}
+
+/** Canonical RBAC surface: the caller's effective permission keys + scope. */
+export type PermissionScope = "own" | "team" | "department" | "workspace";
+export function getMyAccess(token: string) {
+  return apiFetch<{
+    data: {
+      role: string;
+      roleKey: string | null; // effective built-in role (owner|admin|department_manager|agent|system_admin)
+      permissions: string[];
+      scope: PermissionScope;
+      features: string[];
+    };
+  }>("/api/permissions/me", { token });
 }
 
 export function getPermissionsFeatureRegistry(token: string) {
@@ -2672,4 +3375,167 @@ export function unassignUserFromRole(token: string, userId: string, roleId: stri
     token,
     method: "DELETE",
   });
+}
+
+/** Read the hierarchical permission catalog + built-in roles (for the UI). */
+export function getPermissionCatalog(token: string) {
+  return apiFetch<{ data: PermissionCatalog }>("/api/permissions/catalog", { token });
+}
+
+/** A tenant member row for the User Management list (ALL users + assigned role). */
+export interface TenantMember {
+  id: string;
+  name: string;
+  email: string;
+  isActive: boolean;
+  phoneNumber: string | null;
+  legacyRole: string;
+  departmentId: string | null;
+  departmentRole: string | null;
+  departmentName: string | null;
+  // Full multi-department membership; singular fields above = primary (earliest).
+  departments?: { departmentId: string; departmentRole: string | null; departmentName: string | null }[];
+  roleId: string | null;
+  roleName: string | null;
+  roleBuiltinKey: string | null;
+  scope: "OWN" | "TEAM" | "DEPARTMENT" | "WORKSPACE" | null;
+}
+export function getTenantMembers(token: string) {
+  return apiFetch<{ data: TenantMember[] }>("/api/permissions/users", { token });
+}
+
+/** Full per-user access view for the User Management side panel. */
+export interface UserAccessView {
+  user: { id: string; role: string; email: string; name: string };
+  // roles[].scope is the raw DB enum (uppercase) override, null = inherit role default.
+  roles: { roleId: string; scope: "OWN" | "TEAM" | "DEPARTMENT" | "WORKSPACE" | null }[];
+  grants: { feature: string; granted: boolean; reason: string | null }[];
+  permissions: string[];
+  scope: PermissionScope; // effective (lowercase)
+  features: string[];
+}
+export function getUserAccess(token: string, userId: string) {
+  return apiFetch<{ data: UserAccessView }>(`/api/permissions/users/${userId}`, { token });
+}
+
+/** Set a user's primary role (+ optional scope override). Replaces existing assignment. */
+export function setUserPrimaryRole(
+  token: string,
+  userId: string,
+  body: { roleId: string; scope?: "OWN" | "TEAM" | "DEPARTMENT" | "WORKSPACE" | null },
+) {
+  return apiFetch<{ data: unknown }>(`/api/permissions/users/${userId}/role`, {
+    token,
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+// ─── Account (self-service) ─────────────────────────────────
+
+export interface AccountProfile {
+  user: { id: string; name: string; email: string; phoneNumber: string | null; locale: string | null; role: string; createdAt: string };
+  departmentName: string | null;
+  tenantName: string | null;
+  tenantDefaultLocale: string;
+}
+export function getAccount(token: string) {
+  return apiFetch<AccountProfile>("/api/account", { token });
+}
+export function updateAccount(token: string, body: { name?: string; phoneNumber?: string | null; locale?: string }) {
+  return apiFetch<{ user: AccountProfile["user"] }>("/api/account", { token, method: "PATCH", body: JSON.stringify(body) });
+}
+
+export interface AccountSecurity {
+  available: boolean;
+  reason?: string;
+  mfaEnabled?: boolean;
+  totp?: Array<{ id: string; name: string; createdAt: string | null }>;
+  passkeys?: Array<{ id: string; name: string; createdAt: string | null }>;
+  recoveryCodes?: Array<{ id: string; name: string }>;
+  lastLogin?: string | null;
+}
+export function getAccountSecurity(token: string) {
+  return apiFetch<AccountSecurity>("/api/account/security", { token });
+}
+export function getAccountPasswordLink(token: string) {
+  return apiFetch<{ link: string }>("/api/account/password-link", { token, method: "POST" });
+}
+
+export interface AccountSession {
+  id: string; current: boolean; ip: string | null; userAgent: string | null;
+  city: string | null; country: string | null; lastUsed: string | null; expires: string | null;
+}
+export function getAccountSessions(token: string) {
+  return apiFetch<{ available: boolean; sessions: AccountSession[] }>("/api/account/sessions", { token });
+}
+export function terminateAccountSession(token: string, id: string) {
+  return apiFetch<{ ok: boolean }>(`/api/account/sessions/${encodeURIComponent(id)}`, { token, method: "DELETE" });
+}
+export function terminateAllAccountSessions(token: string) {
+  return apiFetch<{ ok: boolean; terminated: number }>("/api/account/sessions", { token, method: "DELETE" });
+}
+
+export interface AccountLoginEvent {
+  id: string; action: string; success: boolean; ip: string | null;
+  city: string | null; country: string | null; userAgent: string | null; timestamp: string;
+}
+export function getAccountLoginHistory(token: string) {
+  return apiFetch<{ available: boolean; events: AccountLoginEvent[] }>("/api/account/login-history", { token });
+}
+
+export function requestEmailChange(token: string, newEmail: string) {
+  return apiFetch<{ sent: boolean }>("/api/account/email-change", { token, method: "POST", body: JSON.stringify({ newEmail }) });
+}
+export function verifyEmailChange(token: string, changeToken: string) {
+  return apiFetch<{ ok: boolean; email: string }>("/api/account/email-change/verify", { token, method: "POST", body: JSON.stringify({ token: changeToken }) });
+}
+
+export interface MemberLoginStatus { status: "active" | "invited" | "disabled"; lastLogin: string | null }
+export function getMembersLoginStatus(token: string) {
+  return apiFetch<Record<string, MemberLoginStatus>>("/api/agents/login-status", { token });
+}
+
+// ─── MFA enforcement ─────────────────────────────────────────
+
+export type MfaRequirementReason = "system_admin" | "tenant_admins" | "all_users" | null;
+export interface MfaGate {
+  required: boolean;
+  reason: MfaRequirementReason;
+  enrolled: boolean;
+  hasAuthenticator: boolean;
+  hasRecovery: boolean;
+  mustEnroll: boolean;
+  identityAvailable: boolean;
+}
+/** Is the current user required to have MFA, and have they enrolled (auth + recovery)? */
+export function getMfaGate(token: string) {
+  return apiFetch<MfaGate>("/api/account/mfa-gate", { token });
+}
+/** Remove one of the caller's own authenticator devices. */
+export function removeMfaDevice(token: string, type: "totp" | "webauthn" | "static", id: string) {
+  return apiFetch<{ ok: boolean }>(`/api/account/security/device/${type}/${encodeURIComponent(id)}`, { token, method: "DELETE" });
+}
+
+export interface TenantMfaPolicy { mfaRequiredForAdmins: boolean; mfaRequiredForAllUsers: boolean }
+export interface MfaComplianceCounts { protected: number; total: number }
+export interface TenantSecurity {
+  policy: TenantMfaPolicy;
+  systemAdminAlways: boolean;
+  idpAvailable: boolean;
+  compliance: { admins: MfaComplianceCounts; users: MfaComplianceCounts };
+}
+export function getTenantSecurity(token: string) {
+  return apiFetch<TenantSecurity>("/api/tenant/security", { token });
+}
+export function updateTenantSecurity(token: string, patch: Partial<TenantMfaPolicy>) {
+  return apiFetch<TenantSecurity>("/api/tenant/security", { token, method: "PATCH", body: JSON.stringify(patch) });
+}
+export interface TenantSecurityMember {
+  id: string; name: string; email: string; role: string; isActive: boolean;
+  hasAuthenticator: boolean; hasRecovery: boolean; enrolled: boolean;
+  required: boolean; requirementReason: MfaRequirementReason; compliant: boolean;
+}
+export function getTenantSecurityReview(token: string) {
+  return apiFetch<{ idpAvailable: boolean; members: TenantSecurityMember[] }>("/api/tenant/security/review", { token });
 }

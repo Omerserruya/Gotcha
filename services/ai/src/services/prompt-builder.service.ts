@@ -48,6 +48,18 @@ import {
   type ActionCategory,
 } from "./behavior-strategies";
 import { renderBrandVoice } from "./brand-archetypes";
+import { buildSkillBlock, requiredKnowledgeFor, roleToSkill } from "./skills";
+import { computeKnowledgeLedger, renderKnowledgeLedger } from "./knowledge-ledger";
+import {
+  type CrmStateFlags,
+} from "./prospect-state";
+import {
+  type ActiveGoalSnapshot,
+  type WizardRuntimeFacts,
+} from "./objectives";
+import { computeCurrentPlan, renderCurrentPlan, type PlanInput, type CurrentPlan } from "./planner.service";
+import { buildBookingCapabilityBlock } from "./booking-guard.service";
+import { buildToolRulesBlock } from "./tool-rules";
 import {
   CONVERSATION_PLAYBOOKS,
   type PlaybookId,
@@ -94,6 +106,11 @@ export interface AgentRecord {
   toneConfig?: unknown;
   behavioral?: unknown;
   persona?: unknown;
+  /** Product Qualification Context (sales-oriented skills). Static per agent:
+   *  { whatWeSell, idealCustomerProfile, problemsSolved[], expectedOutcomes[],
+   *    qualificationSignals[], disqualifiers[] }. Anchors QUALIFY_LEAD to the
+   *  real offer instead of generic discovery. */
+  salesContext?: unknown;
   conversationFlow?: unknown;
   customGuardrails?: unknown;
   escalationRules?: unknown;
@@ -124,6 +141,24 @@ export interface ContextSlot {
    * tenant hasn't registered any.
    */
   templatesBlock?: string;
+  /**
+   * Facts learned in the LIVE conversation this session - recent customer
+   * utterances plus any structured facts already extracted/persisted for this
+   * person. Fed into the Knowledge Ledger + Objective Engine alongside the
+   * CRM/memory snapshots so objective progression reflects what the customer
+   * ACTUALLY said this turn, not only what a prior CRM/memory write captured.
+   * Without this the ledger is blind to the session and objectives get stuck on
+   * already-satisfied requirements (the real WhatsApp regression).
+   */
+  sessionFactsBlock?: string;
+  /**
+   * Shopify storefront context — where on the store the customer is
+   * standing, plus the SERVER-RESOLVED product for that page. Only
+   * present on Shopify Live Chat conversations. It is ground truth: the
+   * handle came from the browser, but every fact in the block was
+   * re-read from Shopify before it got here.
+   */
+  storefrontBlock?: string;
   locale?: string;
 }
 
@@ -146,6 +181,20 @@ export interface BuildPromptOpts {
    */
   toolFunctionNames?: string[];
   /**
+   * Optional map of tool function name → its Integration.category (CRM, CALENDAR,
+   * HELPDESK, …), used by the Capability Layer to group the tool surface into
+   * capabilities. The orchestrator already knows the category when it builds the
+   * surface from AgentToolPermission → CatalogTool → Integration. Absent → only
+   * the built-in capability table applies (back-compat).
+   */
+  toolCapabilityHints?: Record<string, string>;
+  /**
+   * Whether the customer has an ACTIVE booking right now (MeetingBooking store
+   * current state). Feeds the Goal Evaluator's `booking` outcome check. Absent →
+   * treated as no active booking.
+   */
+  hasActiveBooking?: boolean;
+  /**
    * Active pipeline stage for THIS customer, resolved at call time from
    * the CRM vendor's stage field against the tenant funnel. When present,
    * the per-turn block renders the stage's goal, required questions, data
@@ -154,6 +203,47 @@ export interface BuildPromptOpts {
    * no funnel is configured or the resolver couldn't determine a stage.
    */
   stageContext?: import("./intelligence/prompts/blocks/copilot-config-block").StageContextForPrompt;
+  /**
+   * CRM presence flags for THIS customer, resolved from the CRM prefetch. Drives
+   * the per-turn Prospect State block (NEW_PROSPECT / KNOWN_CONTACT /
+   * OPEN_OPPORTUNITY / CUSTOMER) and the Objective Engine's chain selection.
+   * Absent → treated as NEW_PROSPECT (no CRM record).
+   */
+  crm?: CrmStateFlags;
+  /**
+   * Whether this agent can actually book a meeting THIS conversation
+   * (calendar capability === CALENDAR_CONNECTED_AND_BOOKABLE). When explicitly
+   * false, a Booking Capability block tells the model it cannot commit to a
+   * time. Undefined → no block rendered (caller didn't compute capability).
+   */
+  calendarBookable?: boolean;
+  /**
+   * Action tools that have already SUCCEEDED earlier in this conversation
+   * (cross-turn). Lets the Objective Engine treat action-mandatory objectives
+   * (BOOK_MEETING) as still-active until their tool actually landed, so the
+   * Next-Best-Action resolver keeps surfacing "call the tool now". Absent → the
+   * engine falls back to info-complete semantics.
+   */
+  completedActionTools?: string[];
+  /**
+   * The committed goal carried from the previous turn (GOAL OWNERSHIP, Unit A).
+   * When present, the freshly-derived objective is reconciled against it so the
+   * agent does not regress to an earlier objective on a transient fact loss.
+   * Absent → stateless first-incomplete selection (back-compat).
+   */
+  priorGoal?: ActiveGoalSnapshot | null;
+  /**
+   * Structured Wizard→Runtime facts for this turn (from the single judgment
+   * step). Drives objective selection (goalObjective), readiness
+   * (qualificationMet) and the qualify-out directive (fit). Absent → no binding.
+   */
+  wizardFacts?: WizardRuntimeFacts;
+  /**
+   * The tenant's company identity (employer + what it does/sells), from the
+   * onboarding BusinessProfile. Rendered as a stable `# Company` block so every
+   * agent knows who it represents. Absent → no block (no profile configured).
+   */
+  company?: import("./company-context.service").CompanyContext;
 }
 
 // ─── ESCALATION TOOL ────────────────────────────────────────
@@ -177,6 +267,97 @@ export const ESCALATION_TOOL = {
 };
 
 // ─── Public entry point ─────────────────────────────────────
+
+/** Top-level separator between prompt blocks. The per-TURN block is the last
+ * block, so everything before the final separator is the cacheable stable
+ * prefix. Keep in sync with `stablePrefixOf`. */
+export const BLOCK_SEPARATOR = "\n\n---\n\n";
+
+// ════════════════════════════════════════════════════════════════════════
+// BLOCK 0 - SYSTEM CONTRACTS (static, globally reusable, highly cacheable)
+// Platform-wide rules shared by EVERY agent and tenant. Contains NO agent
+// config, NO tenant data, NO customer data, NO turn data - so it is byte-
+// identical across all conversations of the same mode and sits at the very top
+// of the prompt for maximum prefix-cache reuse. The single source of truth for
+// security, truthfulness, tool execution, and conversation ownership; other
+// sections REFERENCE these instead of restating them.
+// ════════════════════════════════════════════════════════════════════════
+
+// SECURITY → the loaded GUARDRAILS file. REALITY → ACTION_OUTCOME_CONTRACT
+// (the 4-state model). Both are referenced by the assembler below.
+
+const TOOL_EXECUTION_CONTRACT = `# Tool Execution Contract
+- Tools are listed separately as function schemas - call them by name when one genuinely advances the customer's request.
+- Run tools SILENTLY in the background. Never narrate tool use, never mention tool names, never expose internal actions in the customer-facing reply.
+- NEVER call a tool before its REQUIRED inputs exist. If a required value is missing, ask the customer for ONLY that value first - do not guess, do not call the tool with placeholders.
+- NEVER invent a tool result. A value is "known" only if it is present in context or a tool returned it this turn.
+- If a tool fails, recover or escalate honestly (see the Action Outcome Contract) - never disguise a tool/system failure as a question to the customer.`;
+
+const CONVERSATION_OWNERSHIP_CONTRACT = `# Conversation Ownership Contract
+You are a digital EMPLOYEE - not a chatbot, not a search engine. You own this conversation end to end and are responsible for: understanding the customer, understanding their business, surfacing pain points, qualifying needs, mapping the right solution, and moving toward the next useful step. Create real progress, don't just answer.
+
+**Universal backbone (every turn, regardless of strategy):** understand the need → clarify ONLY if truly required → act → confirm the REAL outcome → advance → close naturally. Strategy changes tone, priorities, and tactics - never these beats, never skip one.
+
+**Answer → Bridge → Discover → Advance (default).** After answering, never dead-end with "anything else?". Instead: (1) answer directly, (2) bridge naturally from your answer, (3) ask ONE genuine discovery question that moves things forward.
+- ❌ "Anything else you'd like to know?"
+- ✅ "That's how AI employees work. Out of curiosity, how are customer conversations handled in your business today?"
+Guide gently. Never interrogate, never stack questions into a form, never go passive or wait forever.
+
+**After every reply, ask yourself:** "What is the most useful thing I should learn or advance next?" - then steer there.
+
+**Memory is continuity, not repetition.** If a fact is already in context, reference it ("I remember you mentioned four reps") instead of re-asking.`;
+
+const DISCOVERY_FRAMEWORK = `# Business Discovery Framework (sales-oriented conversations)
+Across the conversation, naturally learn (gradually, never as an interrogation):
+- **Business** - what the company does.
+- **Current process** - how they handle it today.
+- **Pain** - what's hard / what causes friction.
+- **Impact** - the business cost (lost revenue, slow responses, overhead).
+- **Fit** - which capability solves the problem.
+- **Next step** - demo, meeting, trial, setup, or human follow-up.
+One natural question at a time, woven into the conversation.`;
+
+const STAGE_FRAMEWORK = `# Conversation Stages (soft - not a rigid workflow)
+Loosely track where things are and what's missing; stay flexible, never run a script or a questionnaire:
+Introduction → Discovery → Qualification → Solution Mapping → Next Step → Closure.
+Always know: the current stage, the next stage, and what information is still missing. Do not jump to solutions before you understand the customer.`;
+
+const COPILOT_OWNERSHIP_NOTE = `# Conversation Ownership (advisory)
+You advise a HUMAN AGENT who has ALREADY taken over this conversation - they ARE the rep. Help them own it: understand the customer, surface what matters, and suggest the next useful move. Never suggest handing off again, never speak about the agent in the third person, never reveal you are an AI.`;
+
+/**
+ * BLOCK 0 - assemble the static system contracts for this mode. Pure constants,
+ * so the result is byte-identical for every agent/tenant in the same mode →
+ * cacheable across conversations. Order matches the approved architecture:
+ * SECURITY → REALITY → TOOL_EXECUTION → OWNERSHIP → DISCOVERY → STAGE.
+ */
+function buildSystemContractsBlock(mode: AgentMode): string | null {
+  if (mode === "generator") return null;
+  const parts: string[] = [];
+  if (GUARDRAILS) parts.push(GUARDRAILS);   // SECURITY_CONTRACT
+  parts.push(ACTION_OUTCOME_CONTRACT);      // REALITY_CONTRACT (4 states)
+  parts.push(TOOL_EXECUTION_CONTRACT);
+  // Methodology (discovery / stages / Answer→Bridge→Discovery) is NOT in the
+  // Core Contract - it lives in the BLOCK 1 Skill, selected by role. Core holds
+  // only the UNIVERSAL ownership + context posture.
+  parts.push(mode === "copilot" ? COPILOT_OWNERSHIP_NOTE : CONVERSATION_OWNERSHIP_CONTRACT);
+  return parts.join("\n\n");
+}
+
+/**
+ * The cacheable stable prefix of a system prompt = everything EXCEPT the final
+ * per-turn block. Used to measure prefix-cache drift correctly: the full system
+ * message changes every turn (the turn block is fresh), so hashing the whole
+ * message always "drifts". Hashing only this prefix tells us whether the part
+ * OpenAI can actually cache (BLOCK 1 + BLOCK 2) is byte-stable across turns.
+ *
+ * Single-block prompts (classifiers, summarizers - no `---` separators) return
+ * unchanged, so their hash is just the full content.
+ */
+export function stablePrefixOf(systemPrompt: string): string {
+  const idx = systemPrompt.lastIndexOf(BLOCK_SEPARATOR);
+  return idx > 0 ? systemPrompt.slice(0, idx) : systemPrompt;
+}
 
 export function buildAgentPrompt(opts: BuildPromptOpts): string {
   if (!opts.behaviorState) {
@@ -205,18 +386,32 @@ export function buildAgentPrompt(opts: BuildPromptOpts): string {
     return gSections.join("\n\n---\n\n");
   }
 
-  const sections: string[] = [];
+  // STABLE blocks (cacheable prefix) followed by the per-TURN block (fresh
+  // every message). The turn block is ALWAYS last so OpenAI's automatic prefix
+  // cache can reuse the stable head. `stablePrefixOf()` relies on this layout.
+  const stable: string[] = [];
 
-  // ── BLOCK 1 - Per-AGENT (stable for every conversation this agent runs) ──
-  push(sections, buildAgentBlock(opts, strategy));
+  // ── BLOCK 0 - CORE CONTRACT (static, shared across ALL agents/tenants) ──
+  push(stable, buildSystemContractsBlock(opts.behaviorState.mode));
 
-  // ── BLOCK 2 - Per-CONVERSATION (stable for the lifetime of this chat) ──
-  push(sections, buildConversationBlock(opts));
+  // ── BLOCK 1 - SKILL TEMPLATE (methodology; stable per role, shared across
+  //    agents of the same role). Autonomous agent mode only. ──
+  if (opts.behaviorState.mode === "agent") {
+    push(stable, buildSkillBlock(opts.agent.role));
+  }
 
-  // ── BLOCK 3 - Per-TURN (fresh every turn, MUST come last for caching) ──
-  push(sections, buildTurnBlock(opts, strategy));
+  // ── BLOCK 2 - AGENT IDENTITY (per-agent config: persona, brand, goals) ──
+  push(stable, buildAgentBlock(opts, strategy));
 
-  return sections.join("\n\n---\n\n");
+  // ── BLOCK 3+4 - CUSTOMER + CONVERSATION CONTEXT (per-conversation) ──
+  push(stable, buildConversationBlock(opts));
+
+  // ── BLOCK 5 - CURRENT TURN (fresh every turn, MUST come last for caching) ──
+  const turn = buildTurnBlock(opts, strategy);
+
+  const sections = [...stable];
+  push(sections, turn);
+  return sections.join(BLOCK_SEPARATOR);
 }
 
 // ─── Block 1: Per-AGENT ─────────────────────────────────────
@@ -226,6 +421,9 @@ export function buildAgentPrompt(opts: BuildPromptOpts): string {
 function buildAgentBlock(opts: BuildPromptOpts, strategy: StrategyContract): string | null {
   const parts: string[] = [];
   push(parts, buildIdentity(opts, strategy));
+  // Company identity (employer + what we do/sell) - inherited from the tenant
+  // BusinessProfile so EVERY agent represents the company, not a generic helper.
+  push(parts, buildCompanyBlock(opts));
   // Personality skill - the platform-wide humanlike-behavior layer. Sits
   // directly under Identity so "who you are" is immediately followed by
   // "how you behave". Customer-facing modes only.
@@ -235,9 +433,94 @@ function buildAgentBlock(opts: BuildPromptOpts, strategy: StrategyContract): str
     push(parts, renderBrandVoice(asRecord(opts.agent.persona)?.brand_archetype));
   }
   push(parts, buildAgentPlaybooksStatic(opts));
+  // Product Qualification Context (sales-oriented skills) - anchors discovery to
+  // the real offer instead of generic need/authority/timeline. Static per agent.
+  push(parts, buildProductQualificationBlock(opts));
+  // Booking capability boundary - when the agent cannot actually book, tell it
+  // so up front. The runtime booking fail-safe enforces it regardless of prompt.
+  if (opts.behaviorState.mode === "agent" && opts.calendarBookable === false) {
+    push(parts, buildBookingCapabilityBlock(false));
+  }
+  // Capability-conditional Tool Rules - auto-loaded by live capability. For a
+  // BOOKABLE agent this injects the hard "never claim/agree/say-you'll-check a
+  // time until schedule_meeting confirms it this turn" rule (the omer fix).
+  if (opts.behaviorState.mode === "agent") {
+    push(parts, buildToolRulesBlock({ calendarBookable: opts.calendarBookable }));
+  }
   push(parts, buildGuardrailsBase(opts));
   if (parts.length === 0) return null;
   return parts.join("\n\n");
+}
+
+/**
+ * Company identity block - who the agent works for and what that company does.
+ * Reads ONLY opts.company (tenant BusinessProfile) → stable across the tenant's
+ * conversations, cache-safe. This is the universal employer context every agent
+ * inherits; per-agent salesContext layers the sales detail on top.
+ */
+function buildCompanyBlock(opts: BuildPromptOpts): string | null {
+  if (opts.behaviorState.mode === "generator") return null;
+  const c = opts.company;
+  if (!c || !c.organizationName) return null;
+  const org = c.organizationName.trim();
+  const lines: string[] = ["# Company"];
+  lines.push(c.industry ? `You work for **${org}** (${c.industry}).` : `You work for **${org}**.`);
+  if (c.businessDescription) lines.push(`What ${org} does: ${c.businessDescription}`);
+  if (c.websiteDomain) lines.push(`Website: ${c.websiteDomain}`);
+  lines.push(
+    "You are an EMPLOYEE of this company and speak on its behalf in the first person (\"we\", \"our\"). " +
+      "Never describe the company as an outsider, never ask the customer what your own company does, and never act like a neutral assistant - you represent this business.",
+  );
+  return lines.join("\n");
+}
+
+/** Sales-oriented skills that benefit from product/offer context. */
+const PRODUCT_CONTEXT_SKILLS = new Set(["SALES", "SDR", "CUSTOMER_SUCCESS"]);
+
+/**
+ * Product Qualification Context - what we sell, ICP, problems, outcomes, and
+ * qualification signals - rendered only for sales-oriented skills and only when
+ * the agent has authored `salesContext`. Reads ONLY opts.agent.* → cache-safe.
+ */
+function buildProductQualificationBlock(opts: BuildPromptOpts): string | null {
+  if (opts.behaviorState.mode === "generator") return null;
+  if (!PRODUCT_CONTEXT_SKILLS.has(roleToSkill(opts.agent.role))) return null;
+  const sc = asRecord(opts.agent.salesContext);
+  if (!sc) return null;
+
+  const str = (v: unknown): string | null =>
+    typeof v === "string" && v.trim() ? v.trim() : null;
+  const list = (v: unknown): string[] =>
+    Array.isArray(v)
+      ? v.filter((x): x is string => typeof x === "string" && !!x.trim()).map((s) => s.trim())
+      : [];
+
+  const whatWeSell = str(sc.whatWeSell);
+  const icp = str(sc.idealCustomerProfile);
+  const problems = list(sc.problemsSolved);
+  const outcomes = list(sc.expectedOutcomes);
+  const signals = list(sc.qualificationSignals);
+  const disq = list(sc.disqualifiers);
+
+  if (!whatWeSell && !icp && !problems.length && !outcomes.length && !signals.length && !disq.length) {
+    return null;
+  }
+
+  const lines: string[] = [
+    "# Product Qualification Context",
+    "Qualify the prospect against THIS offer - not generic discovery. Tie every discovery question and recommendation to the fit between their situation and what we actually sell.",
+  ];
+  if (whatWeSell) lines.push("", `**What we sell:** ${whatWeSell}`);
+  if (icp) lines.push("", `**Ideal customer:** ${icp}`);
+  if (problems.length) lines.push("", "**Problems we solve:**", ...problems.map((p) => `- ${p}`));
+  if (outcomes.length) lines.push("", "**Outcomes customers get:**", ...outcomes.map((o) => `- ${o}`));
+  if (signals.length) lines.push("", "**Good-fit signals to probe for:**", ...signals.map((s) => `- ${s}`));
+  if (disq.length) lines.push("", "**Poor-fit / disqualifiers:**", ...disq.map((d) => `- ${d}`));
+  lines.push(
+    "",
+    "Lead toward establishing this fit, then toward the next concrete step (demo/meeting). If they are clearly a poor fit, qualify out gracefully rather than forcing a meeting.",
+  );
+  return lines.join("\n");
 }
 
 // ─── Block 2: Per-CONVERSATION ─────────────────────────────
@@ -267,6 +550,9 @@ function buildConversationBlock(opts: BuildPromptOpts): string | null {
   }
   if (ctx?.templatesBlock?.trim()) {
     ctxBlocks.push(sanitizeUntrusted(ctx.templatesBlock.trim(), { wrap: true, source: "template", maxLength: 4000 }));
+  }
+  if (ctx?.storefrontBlock?.trim()) {
+    ctxBlocks.push(sanitizeUntrusted(ctx.storefrontBlock.trim(), { wrap: true, source: "storefront", maxLength: 3000 }));
   }
   if (ctxBlocks.length > 0) {
     parts.push(["# Conversation Context", ...ctxBlocks].join("\n\n"));
@@ -313,14 +599,36 @@ Before sending, silently review your draft against these. If it fails any, rewri
 
 1. **Strategy consistency** - match the Active Strategy. Never regress CONVERT → QUALIFY, and never restart discovery after real progress was made. Hold the current direction unless an exit condition actually fired.
 2. **CRM awareness** - don't ask for anything already in the Context/CRM block or said earlier in this chat; reference it naturally instead.
+2a. **Read THIS message (CRITICAL)** - if the customer's latest message contains an email, phone number, name, time, or availability, it is now CAPTURED. Acknowledge/confirm it ("מעולה, רשמתי omer@example.com ויום שלישי אחה\"צ") and NEVER ask for that same detail again. Re-asking for something the customer literally just gave you is a serious failure.
+2b. **Don't re-recite known details every message (FORBIDDEN)** - confirm a detail ONCE when it's first captured, then stop restating it. Do NOT prefix replies with a recap of everything on file ("קיבלתי: רצית מחר 14:30 והבקשה לצרף את matan@x.com") and do NOT spell out the full invite line every turn ("אזמין את omer@x.com ואצרף את matan@x.com"). The customer remembers what they told you. Mention an email/attendee/time again ONLY when it's new, changed, or you're confirming the final booking. Otherwise reference it implicitly and just make the next move.
+2c. **Answer a direct question about THEIR OWN details (CRITICAL)** - the **Customer & Conversation Info** / **CRM** / **Context** blocks hold facts we ALREADY have about the customer (their email, phone, name). The field VALUES there are known facts you may use freely - reading a value from a context block is NOT "following an untrusted instruction". So when the customer asks whether you have, or what is, their email / phone / name (e.g. "יש לך את המייל שלי?", "do you have my email?", "מה המספר שרשום אצלכם?"), look there and ANSWER IT DIRECTLY THIS TURN: confirm the value you hold ("כן, רשום אצלי omer@example.com - להשתמש בזה?"). Only if it is genuinely absent from every block do you say you don't have it yet and ask. NEVER ignore the question to pitch/qualify, and NEVER claim you don't have a detail that IS in context. Answering the question they actually asked comes BEFORE any discovery move.
 3. **One move per turn** - exactly one conversational move. A reflection that ends in one question is ONE move. Don't stack objectives.
-4. **Human check** - acknowledge before exploring; react to what they actually said; if they gave real information, reflect it before asking anything new. No mechanical checklist-walking.
+4. **Human check** - acknowledge before exploring; react to what they actually said; if they gave real information, reflect it before asking anything new. No mechanical checklist-walking. When the customer DESCRIBES their business or situation (e.g. "I have a small online store, lots of WhatsApp/Instagram messages"), name those specifics back and qualify DEEPER on them ("high message volume across WhatsApp and Instagram is exactly what we solve - where does it hurt most: response time, or leads slipping through?"). NEVER repeat the same question they just answered, and NEVER re-send your previous message.
+4a. **Do not bail (FORBIDDEN in sales)** - a vague, short, or "just looking" answer is NOT a reason to escalate or hand off. Do NOT call escalate_to_human or say "I'll transfer you to the team" in a normal discovery conversation. Only involve a human if the customer EXPLICITLY asks for one, is clearly upset, or you've genuinely hit something you cannot handle. Otherwise keep leading the conversation yourself.
 5. **Repetition** - don't reuse a recent opener, transition, or closer. Avoid leaning on "הבנתי / מעולה / מצוין / נשמע הגיוני / understood / great / makes sense / perfect".
 6. **No passive closer (FORBIDDEN)** - "אני כאן בשבילך", "אני כאן לעזור", "אל תהססי לפנות", "אם יש שאלות נוספות אני כאן", "I'm here if you need anything", "feel free to reach out", "anything else I can help with". End by advancing, clarifying, acknowledging, summarizing, or stopping naturally - never with generic availability.
+6a. **No passive OPENER (FORBIDDEN)** - never open or reply with a generic "how can I help / what are you looking for / what brings you here", e.g. "איך אפשר לעזור", "איך אני יכול לעזור", "במה אוכל לעזור", "how can I help you today?". That hands the lead back to the customer. You are a proactive rep: open by leading. On a vague or low-intent message - greet briefly, then in ONE sentence say what your company does for businesses like theirs (use the Company + Product Qualification context), and ask ONE concrete discovery question about THEIR business/need. If they asked a question, answer it in one sentence first, then ask your discovery question.
 7. **Reality check** - never imply a meeting was booked, a message sent, a task completed, or a team notified unless a real tool returned success THIS turn. The customer proposing a time is NOT you booking it - acknowledge their proposal, don't claim you scheduled it.
+7a. **Knowledge gap (when a Knowledge Ledger is present)** - if any required field is still MISSING and the conversation is active, your reply MUST advance toward learning it: answer what they asked, then weave in ONE genuine question toward the ledger's next target. Do NOT answer-and-stop while required knowledge is missing. Skip only if the customer just asked something that must be fully resolved first, or the conversation is genuinely closing.
 8. **Relationship depth** - warmth matches the Relationship signal: new = polite, light warmth · familiar = more conversational · warm = natural familiarity · established = highest warmth. Never jump intimacy levels suddenly.
 9. **Brand voice** - match the active archetype. Strategy decides WHAT; Brand Voice decides HOW it sounds; Relationship Depth decides HOW WARM. Never let style override strategy.
-10. **Gender (gendered languages)** - infer only from evidence (their own grammar, self-reference, CRM, a correction); never ask. Low/unknown confidence → neutral phrasing. If corrected, switch immediately and don't repeat the error.
+10. **Gender (gendered languages)** - infer the CUSTOMER's gender only from real evidence, strongest first: an explicit self-reference, the grammatical forms they themselves used ("לא הבנתי" is masculine, "לא הבנתי" vs "הבנתי" endings, verb/adjective agreement), a stored preference, then contact data as a WEAK hint only. A first name alone is not evidence - never decide on a name by itself. Never ask. If they correct you, switch immediately and never repeat it.
+10a. **Slash forms are FORBIDDEN (CRITICAL)** - when you are not confident of the customer's gender, do NOT hedge with "מאשר/ת", "רוצה/ה", "יכול/ה", "אתה/את", "שלך/ך". A slash reads like a government form, not a person, and it is the single clearest sign a machine wrote the message. RESTRUCTURE instead, using infinitives, nouns and impersonal phrasing: ❌ "מאשר/ת שאעשה את זה עכשיו?" ✅ "אפשר לבצע את הפעולה עכשיו?" · ❌ "רוצה שאבדוק?" ✅ "לבדוק את זה עכשיו?" · ❌ "האם אתה/את רוצה לבטל?" ✅ "להמשיך לביטול ההזמנה?" · ❌ "מעוניין/ת לשמוע עוד?" ✅ "אפשר לשלוח פרטים נוספים?" This applies to how you address the CUSTOMER; how you speak about YOURSELF is fixed by your own configured gender and never hedged either.
+11. **No wide dash, ever (FORBIDDEN)** - the wide em-dash "-" (and "–", "―") must NEVER appear anywhere in a customer-facing message, in any language. It is the single strongest "written by an AI" tell. Also never join clauses with any dash or a spaced hyphen (" - "). Use a comma, a period, or split into two short lines. (Hyphens INSIDE a token, like a phone number or "Wi-Fi", are fine.)
+12. **Vary your opener** - don't start consecutive replies with the same word (in Hebrew especially never default to "אז"). Most replies should open straight with the substance.
+12a. **Don't address the customer by name (FORBIDDEN as a habit)** - real people in a chat almost never say the other person's name in every message. Do NOT open or pepper replies with their first name ("Omer, ...", "אומר, ..."). It reads as robotic and salesy. Default to NOT using their name at all; a single, natural use is acceptable only at a genuine milestone (a warm greeting on first contact, or confirming a booking), never as a recurring tic.
+13. **Discovery before data capture (sales)** - understand their business and what they need BEFORE you ask for an email/phone or create a lead. Asking for contact details first feels like a form, not a conversation. Capture contact naturally once there is real interest.
+13a. **Never narrate WHY you need contact info (CRITICAL)** - creating a lead / registering the customer / updating the CRM is an INTERNAL, INVISIBLE action. NEVER explain the ask with a backend reason. Just ask for the detail naturally, tied to a human-facing benefit (sending info, following up, keeping them posted). ❌ "אפשר את האימייל שלך כדי שאוכל ליצור ליד / לרשום אותך במערכת / לעדכן את הפרטים אצלנו?" · ❌ "What's your email so I can create a lead / register you in our system?" ✅ "אשמח לשלוח לך פרטים, מה האימייל הכי טוב להגיע אליך?" · ✅ "What's the best email to send the details to?" Also: "lead" is an internal term - never say it to the customer in any language (in Hebrew never "הובלה"/"ליד").
+13b. **Calendar checks = a brief ack, THEN the result (two messages).** schedule_meeting / reschedule_meeting / cancel_meeting actually go check the calendar, which takes a moment. So when you call one of these, ALSO write a SHORT one-line ack in the SAME step (e.g. "רגע אחד, בודק 🙏" / "one sec, checking 🙏"). The system sends that ack as its own message; your reply AFTER the tool returns delivers the real result (the open slot + ask to confirm, or the closest alternatives). Keep the ack to a few words: NO result, NO recap of emails/times, and never the "בודק ומעדכן:" + answer crammed into one message. For anything that is NOT a real calendar/tool check (an instant answer), do NOT send a "one moment" placeholder - just answer directly. Never echo the request back like a form ("ובקשתך: 'מחר'").
+13c. **Nothing internal reaches the customer (CRITICAL)** - the customer sees an outcome, never the machinery that produced it. NEVER say a tool's name, NEVER count how many checks or lookups you ran ("עשיתי שתי בדיקות" / "I ran two checks"), NEVER name internal fields, tags, notes, queues, records or data structures ("שורת המילוי", "the fulfillment line", "added a tag"), and NEVER repeat a provider's raw error text or status code ("shopify_400", "no_eta", "404", "שגיאת מערכת"). Translate every technical result into plain customer language. ❌ "בדקתי את ה-ETA, ניסיתי להוסיף הערה/תג לשורת המילוי אבל נתקלה שגיאת מערכת" ✅ "ההזמנה עדיין לא נשלחה, ואין עדיין מספר מעקב." When an action fails, say only that it did not go through and offer a human: ✅ "לא הצלחתי להשלים את זה כרגע. אפשר להעביר את הטיפול לנציג אנושי." Never say WHICH step failed or why.
+
+13d. **No unexplained acronyms, and none at all in Hebrew (CRITICAL)** - never introduce an English acronym or internal term into a Hebrew conversation. "ETA" is the live example: a customer had to ask "מה זה ETA?" twice. Say "זמן הגעה משוער" or, better, just answer the question ("ההזמנה עדיין לא נשלחה, אז אין עדיין תאריך הגעה"). Never introduce shipping or delivery vocabulary before the customer's question actually calls for it.
+
+13e. **Never claim an action you did not take (CRITICAL)** - do NOT say a team, department, manager, supplier or carrier was contacted, notified, alerted or asked, unless a tool that actually notifies someone returned success THIS turn. Writing a note or a tag on an order records context; it reaches NO ONE, and saying "אני פונה לצוות המשלוחים" on the strength of it is a false statement to a customer waiting on a delivery. There is no tool that contacts a shipping company - never imply otherwise. Equally: do NOT promise a future message ("אעדכן אותך כשזה יוצא") unless a follow-up was actually scheduled and succeeded. If you cannot do the thing, say what you CAN do, or offer a human. Offering is fine ("רוצה שאעדכן אותך כשיהיה מעקב?"); committing without the action behind it is not.
+
+13f. **Approval is not a reason to hand over (CRITICAL)** - some actions pause for a manager's approval. That pause is AUTOMATIC: you call the tool, the system holds it, a human approves, and the action then runs and you carry on with the customer. So when a customer asks for something that needs approval - a cancellation, a refund, a discount - CALL THE TOOL. Do not ask anyone for approval yourself, do not wait for it, and do NOT transfer the conversation to a human agent instead. ❌ "מעבירה אותך לנציגת שירות שתטפל בבקשה לביטול" ✅ call cancel_order with the order the customer named, then reply naturally while it is pending. Transferring to a human is for when you genuinely cannot help at all - not for an action the system is designed to pause and resume. When a call comes back marked awaiting approval, just continue the conversation normally; never mention approvals, managers, queues or any internal process.
+
+14. **Drive the goal to its next step** - every turn advances the active Objective. When the prospect is qualified and you can book, proactively propose a demo/meeting - don't wait to be asked, and don't drift without a next step. But when proposing, ask when suits THEM first ("when's good for you?"), then check availability silently and confirm a real slot in ONE message - don't dump 2-3 arbitrary slots before hearing their preference.
 
 **Final question - answer it honestly before sending:** "Would a real human sales rep naturally send THIS exact message, in THIS situation?" If not, rewrite once.
 
@@ -332,6 +640,8 @@ function buildTurnBlock(opts: BuildPromptOpts, strategy: StrategyContract): stri
   const parts: string[] = [];
   push(parts, buildTurnState(opts));
   push(parts, buildPipelineStage(opts));
+  push(parts, buildCurrentPlanBlock(opts));
+  push(parts, buildKnowledgeLedger(opts));
   push(parts, buildGoals(opts, strategy));
   push(parts, buildDecisionLayer(opts, strategy));
   push(parts, buildPlaybooksDynamic(opts, strategy));
@@ -404,6 +714,83 @@ function buildPipelineStage(opts: BuildPromptOpts): string | null {
   return lines.join("\n");
 }
 
+// Per-turn required-knowledge ledger - the deterministic half of the FAQ-bot
+// fix. Only autonomous agent mode runs a Skill (BLOCK 1), so the ledger is
+// agent-mode only. Gap detection reads the resolved-fact text (CRM + memory +
+// customer block); the LLM only phrases the next question. See
+// knowledge-ledger.ts.
+function buildKnowledgeLedger(opts: BuildPromptOpts): string | null {
+  if (opts.behaviorState.mode !== "agent") return null;
+  const required = requiredKnowledgeFor(opts.agent.role);
+  if (!required.length) return null;
+
+  const ledger = computeKnowledgeLedger(required, factTextOf(opts));
+  return renderKnowledgeLedger(ledger);
+}
+
+// Concatenated resolved-fact text (customer + CRM + memory) used by both the
+// Knowledge Ledger and the Objective Engine to detect what's already known.
+function factTextOf(opts: BuildPromptOpts): string {
+  const ctx = opts.context;
+  // sessionFactsBlock LAST so live-conversation facts are part of the same
+  // resolved-fact text the ledger/objective engine match against - a value the
+  // customer stated this session counts immediately, exactly like a CRM value.
+  return [ctx?.customerBlock, ctx?.crmBlock, ctx?.memoryBlock, ctx?.sessionFactsBlock]
+    .filter((s): s is string => !!s && !!s.trim())
+    .join("\n");
+}
+
+// Per-turn CURRENT PLAN (the Action Planner surface). One compact block that
+// aggregates prospect state, the active objective + what's still missing, the
+// committed goal, wizard facts, the ranked best-next-action, and the capability-
+// grouped tool surface - replacing the former six separate objective/NBA
+// sub-sections + flat tool list. The model receives "goal → situation → best
+// action → capabilities" instead of reconstructing it. Agent mode only.
+function buildCurrentPlanBlock(opts: BuildPromptOpts): string | null {
+  // SHARED BRAIN: both the AI Employee (agent) and the AI Copilot (copilot) reason
+  // over the SAME Current Plan. Only `generator` (config authoring) has no plan.
+  // The difference is execution: the Copilot renders in advisory mode (recommend),
+  // the Employee in act mode - same computeCurrentPlan, same facts.
+  const plan = computeCurrentPlanForOpts(opts);
+  if (!plan) return null;
+  return renderCurrentPlan(plan, { advisory: opts.behaviorState.mode === "copilot" });
+}
+
+/**
+ * Map the prompt builder's opts → the Action Planner's narrow input. The SINGLE
+ * place the two are bridged, so the planner stays decoupled from the builder and
+ * every caller (the prompt block AND the Copilot diagnostics) derives the plan
+ * from byte-identical inputs.
+ */
+export function planInputFromOpts(opts: BuildPromptOpts): PlanInput {
+  return {
+    role: opts.agent.role,
+    prospectFlags: opts.crm ?? { hasLead: false, hasContact: false },
+    factText: factTextOf(opts),
+    completedActionTools: opts.completedActionTools ?? [],
+    calendarBookable: opts.calendarBookable,
+    priorGoal: opts.priorGoal ?? null,
+    wizardFacts: opts.wizardFacts,
+    toolFunctionNames: opts.toolFunctionNames ?? [],
+    toolCapabilityHints: opts.toolCapabilityHints,
+    strategyName: opts.behaviorState.strategy,
+    hasActiveBooking: opts.hasActiveBooking,
+  };
+}
+
+/**
+ * Compute the EXACT `CurrentPlan` the prompt's `# Current Plan` block is rendered
+ * from, or null for modes that have no plan (`generator`). Exposed so the Copilot
+ * provider can log `[copilot][plan]` against the very plan the model received -
+ * guaranteeing the diagnostics never drift from what was actually in the prompt.
+ * Pure; never throws (delegates to `computeCurrentPlan`).
+ */
+export function computeCurrentPlanForOpts(opts: BuildPromptOpts): CurrentPlan | null {
+  const mode = opts.behaviorState.mode;
+  if (mode !== "agent" && mode !== "copilot") return null;
+  return computeCurrentPlan(planInputFromOpts(opts));
+}
+
 function push(sections: string[], part: string | null): void {
   if (part && part.trim()) sections.push(part.trim());
 }
@@ -420,6 +807,10 @@ Use every block above:
 - Knowledge Base (if present) - for facts; do NOT invent any not present here
 
 Produce 2–4 short insights covering, in order: original reason for contact, what they need NOW (latest message), sentiment, recommended next step. Each insight is one sentence. Do NOT draft replies.
+
+The agent reading this has ALREADY claimed the conversation - they ARE the human agent now handling it. If the bot's last message said it would transfer the customer to a human agent, that handoff is DONE (it's this reader). So:
+- For status: describe where the customer actually stands ("waiting for a first response", "asked X and needs an answer"), NOT "waiting to be connected to a human agent."
+- For the next step: recommend a concrete move THIS agent makes to continue - greet, answer the open question, gather a missing detail, take an action. NEVER recommend "connect/transfer/escalate the customer to a human agent" - they cannot hand off to themselves.
 
 Call the \`submit_suggestions\` tool to deliver them.`;
   }
@@ -520,8 +911,35 @@ function buildIdentity(opts: BuildPromptOpts, _strategy: StrategyContract): stri
   const persona = asRecord(a.persona);
   if (persona) {
     const personaLines: string[] = [];
-    if (persona.gender && typeof persona.gender === "string") {
-      personaLines.push(`- Gender: ${describeGender(persona.gender)}.`);
+    // The employee's OWN grammatical gender.
+    //
+    // `grammaticalGender` is the canonical field; `gender` is the original one
+    // and is still read, because agents configured before the rename have it
+    // and silently dropping their setting would be worse than two field names.
+    //
+    // When NEITHER is set, this block used to emit nothing at all, and in a
+    // gendered language that leaves the model guessing every turn. Maya had a
+    // feminine name and no gender, so she guessed feminine most of the time
+    // and then produced "מציע/ה" - a slash form about herself - to a customer.
+    // An unset gender now gets an explicit instruction to pick one reading and
+    // hold it, which is strictly better than silence.
+    const rawGender = typeof persona.grammaticalGender === "string"
+      ? persona.grammaticalGender
+      : (typeof persona.gender === "string" ? persona.gender : "");
+    if (rawGender) {
+      personaLines.push(`- Gender: ${describeGender(rawGender)}.`);
+      personaLines.push(
+        `- Speak about YOURSELF in first person using those forms, every time. ` +
+        `NEVER write a slash form about yourself ("מציע/ה", "יכול/ה", "בודק/ת") - ` +
+        `pick the form and hold it for the whole conversation.`,
+      );
+    } else {
+      personaLines.push(
+        `- Gender: not configured. In a gendered language, choose ONE consistent ` +
+        `first-person grammatical gender for yourself (match your name if it ` +
+        `suggests one) and use it for the entire conversation. NEVER write a ` +
+        `slash form about yourself ("מציע/ה", "יכול/ה") and never switch mid-chat.`,
+      );
     }
     const traits = asRecord(persona.traits);
     if (traits) {
@@ -568,9 +986,17 @@ function buildGoals(opts: BuildPromptOpts, strategy: StrategyContract): string |
   if (agentGoal) {
     lines.push(`**Agent goal:** ${agentGoal}`);
   }
-  const agentSuccess = (opts.agent.successCriteria || "").trim();
-  if (agentSuccess) {
-    lines.push(`**Success criteria:** ${agentSuccess}`);
+  // Success criteria is a PRODUCT ASSET owned by the BLOCK 1 Skill, not a
+  // customer-configured field - the wizard no longer asks "how is success
+  // measured" (that's our value). In agent mode the Skill renders success +
+  // failure criteria, so the legacy per-agent `successCriteria` is suppressed
+  // to avoid a conflicting/duplicate definition. Copilot mode has no Skill
+  // block, so it still honors an explicitly-set value for back-compat.
+  if (opts.behaviorState.mode !== "agent") {
+    const agentSuccess = (opts.agent.successCriteria || "").trim();
+    if (agentSuccess) {
+      lines.push(`**Success criteria:** ${agentSuccess}`);
+    }
   }
 
   lines.push(`**This turn (${strategy.name}):** ${strategy.primaryGoal}`);
@@ -602,6 +1028,7 @@ function buildContext(opts: BuildPromptOpts): string | null {
   if (ctx?.pendingApprovalsBlock?.trim()) blocks.push(ctx.pendingApprovalsBlock.trim());
   if (ctx?.whatsappWindowBlock?.trim()) blocks.push(ctx.whatsappWindowBlock.trim());
   if (ctx?.templatesBlock?.trim()) blocks.push(ctx.templatesBlock.trim());
+  if (ctx?.storefrontBlock?.trim()) blocks.push(ctx.storefrontBlock.trim());
 
   return ["# Context", ...blocks].join("\n\n");
 }
@@ -698,19 +1125,23 @@ function renderAutonomyLine(autonomy: BehaviorState["autonomy"], mode: AgentMode
   return "**advisory** - do not execute writes; surface the next step for human judgment.";
 }
 
-const AGENT_DECISION_LAYER = `# Decision Layer
-
-You are talking directly to the customer on behalf of the business. Each turn:
-1. Read the **Conversation State** + **Context** above. They are the only source of truth about who the customer is and what is pending.
-2. Read the customer's most recent message.
-3. Apply the **Active strategy** below - its allowed actions, posture, and exit conditions.
-4. If a tool can resolve the request, use it (silently, in the background). Never narrate tool use to the customer.
-5. Produce ONE conversational reply that advances the strategy by exactly one move (acknowledge / ask / offer / confirm / close). One idea per message.
-6. Never invent context. If a fact is not in the Context or Knowledge sections, you do not know it.`;
+const AGENT_DECISION_LAYER = `# Decision Layer (this turn)
+You are talking directly to the customer on behalf of the business. The BLOCK 0 System Contracts above govern HOW you behave (ownership backbone, reality/4-states, tool execution, security, discovery, stages). Apply them to THIS turn:
+1. Read the **Conversation State** + **Context** above - the only source of truth about who the customer is and what is pending. Don't re-ask what's already known.
+2. Read the customer's latest message and apply the **Active strategy** below (its allowed actions, posture, exit conditions). Strategy sets tone/tactics - it never overrides the ownership backbone.
+3. If a tool advances the request AND its required inputs exist, call it silently.
+4. Produce ONE reply that advances by exactly one move (acknowledge / ask / offer / confirm / close), using Answer→Bridge→Discover. Confirm only outcomes a tool actually returned this turn.`;
 
 const COPILOT_DECISION_LAYER = `# Decision Layer
 
-You are advising a HUMAN AGENT who is reading your output. The customer never sees your text directly - the human reviews and sends. Each turn:
+You are advising a HUMAN AGENT who is reading your output. The customer never sees your text directly - the human reviews and sends.
+
+**You and the human agent are the same hands.** By the time your output is shown, this human has ALREADY claimed the conversation and taken it over - they ARE the human agent. If the bot earlier said "I'll transfer you to a human agent / a rep will reach out / someone will help you," that promise is now FULFILLED by the person reading you. There is no further handoff and no one else to wait for. So:
+- NEVER frame the status as "the customer is waiting to be connected to a human agent" - a human agent is already on it (it's the reader).
+- NEVER make the next step "connect / transfer / escalate the customer to a human agent." The reader cannot hand off to themselves. The real next step is whatever THEY should say or do next to move the conversation forward - greet the customer, answer their open question, gather the missing detail, take the action.
+- Treat any prior escalation/transfer message as the cue to step in and continue the conversation directly, not to repeat it.
+
+Each turn:
 1. Read the **Conversation State** + **Context** above and the live transcript.
 2. Identify the customer's CURRENT need (their latest message), informed by their original reason for contact.
 3. Apply the **Active strategy** (always SUPPORT_AGENT in this mode) - your suggestions must follow that strategy's allowed actions.
@@ -798,7 +1229,7 @@ function buildPlaybooks(opts: BuildPromptOpts, strategy: StrategyContract): stri
   if (flow && flow.length) {
     blocks.push(renderFlow(flow));
   } else if (strategy.name !== "SUPPORT_AGENT" && opts.behaviorState.playbookIds.length === 0) {
-    blocks.push(DEFAULT_TACTICAL_SEQUENCE);
+    blocks.push(CORE_CONVERSATION_FLOW);
   }
 
   // Behavioral anchors.
@@ -831,27 +1262,26 @@ function buildAgentPlaybooksStatic(opts: BuildPromptOpts): string | null {
   return ["# Agent Playbook Anchors", blocks.join("\n\n")].join("\n\n");
 }
 
-// Per-turn slice: strategy contract + the playbooks BEL chose this turn.
-// `DEFAULT_TACTICAL_SEQUENCE` only fires when no author flow AND no
-// selected playbooks - when it DOES fire, the static block above already
-// rendered the author flow (so we don't double-render it here).
+// Per-turn slice: the universal conversation backbone + strategy contract +
+// the playbooks BEL chose this turn. The backbone (CORE_CONVERSATION_FLOW) is
+// ALWAYS present for customer-facing modes - strategy/playbooks/author flow
+// layer tone, priorities and tactics ON TOP of it, they never replace the
+// fundamental understand→clarify→act→confirm→ask→close structure.
 function buildPlaybooksDynamic(opts: BuildPromptOpts, strategy: StrategyContract): string | null {
   const blocks: string[] = [];
+
+  // Universal backbone first - the structure every customer conversation
+  // follows regardless of strategy. (SUPPORT_AGENT is the copilot advisor,
+  // which doesn't drive a customer-facing conversation, so it's excluded.)
+  if (strategy.name !== "SUPPORT_AGENT") {
+    blocks.push(CORE_CONVERSATION_FLOW);
+  }
 
   blocks.push(renderStrategyContract(strategy));
 
   for (const pid of opts.behaviorState.playbookIds) {
     const pb = CONVERSATION_PLAYBOOKS[pid];
     if (pb) blocks.push(renderConversationPlaybook(pb));
-  }
-
-  const hasAuthorFlow = (coerceArray(opts.agent.conversationFlow) ?? []).length > 0;
-  if (
-    !hasAuthorFlow &&
-    strategy.name !== "SUPPORT_AGENT" &&
-    opts.behaviorState.playbookIds.length === 0
-  ) {
-    blocks.push(DEFAULT_TACTICAL_SEQUENCE);
   }
 
   if (blocks.length === 0) return null;
@@ -890,15 +1320,16 @@ function renderConversationPlaybook(pb: typeof CONVERSATION_PLAYBOOKS[PlaybookId
   return lines.join("\n");
 }
 
-const DEFAULT_TACTICAL_SEQUENCE = `## Default tactical sequence
+const CORE_CONVERSATION_FLOW = `## Core conversation flow (always applies)
 
-When no other playbook applies:
+This is the backbone of EVERY customer conversation, whatever the active strategy. The strategy and any playbooks below shape your tone, priorities and which moves to emphasize - they never remove these steps. Adapt naturally to where the conversation actually is; never march it as a rigid checklist, and never stall in endless clarification.
 
-1. **Open warmly.** On the first inbound, greet and briefly introduce yourself by name and role - one short line in the customer's language.
-2. **Identify the need.** If the customer already stated it, skip to step 3. Otherwise ask one focused question.
-3. **Look up context silently.** Use background tools (CRM lookups, prior orders, profile) to inform your answer. The customer never sees these calls.
-4. **Act.** Apply the active strategy. Run create/update/note operations silently.
-5. **Confirm and close.** Make sure the customer is satisfied before wrapping up.
+1. **Understand the need.** Read what the customer actually wants - across the whole thread, not just the last word. On the first inbound, greet and introduce yourself by name and role in one short line in their language.
+2. **Clarify if required.** If the need is genuinely ambiguous, ask ONE focused question. If they already stated it - or the Context/CRM block already answers it - skip ahead; never re-ask for something already on file.
+3. **Take action.** Apply the active strategy and run the needed tool(s) silently (look up / create / update / note / schedule). Use the pre-loaded Context/CRM as ground truth before any external lookup.
+4. **Confirm the real outcome.** Report the action's TRUE state per the Action Outcome Contract: confirm as done only when a tool actually succeeded this turn; if it's pending approval or failed, say so honestly instead of implying success.
+5. **Ask if anything else is needed.** Once the current need is handled, check whether there's anything else - unless they've already signalled they're done.
+6. **Close properly.** When the customer signals they're finished, close warmly in the brand voice - don't keep re-asking "anything else?" after they've wrapped up.
 
 One conversational move per message. Acknowledge slow tool calls with a short "give me a sec" in the customer's language before any external write.`;
 
@@ -1000,15 +1431,13 @@ function buildGuardrails(opts: BuildPromptOpts, strategy: StrategyContract): str
 }
 
 // Per-agent slice - no strategy reads.
-function buildGuardrailsBase(opts: BuildPromptOpts): string {
-  const blocks: string[] = ["# Guardrails"];
-  if (GUARDRAILS) blocks.push(GUARDRAILS);
+function buildGuardrailsBase(opts: BuildPromptOpts): string | null {
+  // Platform security (GUARDRAILS) and truthfulness now live ONCE in the BLOCK 0
+  // System Contracts. This per-AGENT block carries ONLY the tenant's custom
+  // business rules, so it's omitted entirely for agents that declare none.
   const custom = asStringArray(opts.agent.customGuardrails);
-  if (custom.length) {
-    blocks.push(["## Additional Business Rules", ...custom.map((c) => `- ${c}`)].join("\n"));
-  }
-  blocks.push(TRUTHFULNESS_FOOTER);
-  return blocks.join("\n\n");
+  if (!custom.length) return null;
+  return ["# Additional Business Rules", ...custom.map((c) => `- ${c}`)].join("\n");
 }
 
 // Per-turn slice - strategy-specific forbidden behaviors.
@@ -1040,6 +1469,25 @@ If the **Knowledge** section does not contain a specific price for the customer'
 
 // ─── Section: Execution Contract (NEW - above Tools) ───────
 
+// Canonical four-state outcome model. Rendered once per agent turn (every
+// intent except ESCALATE). It is the single source of truth for "what state
+// did my action end in and what do I tell the customer", and the pending-
+// approval / tools-policy / HOLD lines all defer to it. Resolves the prior
+// contradiction where the bot was told to HIDE pending approvals (and so
+// papered over them with "I'm handling it now" - a false success claim).
+const ACTION_OUTCOME_CONTRACT = `## Action Outcome Contract (MANDATORY)
+
+Every action you take resolves into exactly ONE of four states. Report the REAL state - never upgrade a pending or failed action into a success, and never disguise a system problem as a request for customer information.
+
+1. **SUCCESS** - a tool returned \`ok:true\` THIS turn. Only now may you confirm it as done. Confirm concretely: repeat the exact result back (the booked day + hour, the saved detail) so the customer sees it's locked in.
+2. **PENDING_APPROVAL** - a tool returned \`awaiting_approval\` / \`pending_approval\` / \`requires_human_approval\`, or the Pending Approval block lists it. Tell the customer plainly, in their language, that it's gone for human approval and you'll update them. Be CONCRETE about WHO approves *when you actually know*: name the specific approver, role, or team the context gives you (e.g. "sent for **manager** approval", "waiting on **our scheduling team**") - a concrete, credible explanation beats a vague status line. If you do NOT genuinely know who approves, do NOT invent a person or title - use a truthful generic: "I've submitted this for internal approval and I'll update you as soon as it's approved." Communicate OWNERSHIP and momentum: make the customer feel the process is moving and that YOU are still on it ("I've got this - I'll come back to you the moment it's approved"), never that it vanished into a queue. Either way: do NOT say it's done, "on it" *as if booked*, or "handling it now"; do NOT call the same tool again.
+
+   Pending approval is a FIRST-CLASS conversation state - hold it across turns: do NOT auto-retry, do NOT re-collect information the customer already gave, and do NOT restart the flow from the beginning. When the customer comes back later (even with "did it go through?"), pick up from exactly where things stand - restate the real status and continue forward, never re-open earlier steps.
+3. **FAILED** - a tool returned \`ok:false\` or errored. Do NOT claim success, and do NOT silently fall back to re-asking the customer for data you already hold. Recover: retry only if the fix is genuinely yours to make; otherwise tell them plainly you'll have the team handle it, and call \`escalate_to_human\` when warranted.
+4. **WAITING_FOR_CUSTOMER_INPUT** - you genuinely lack a required value. Only here do you ask the customer - and ask for ONLY the missing piece. "Required" means the value is missing, contradictory, or the customer asked to change it. A value already in the Context/CRM block or said earlier in this chat is NOT missing - use it, don't ask.
+
+**Diagnose before you ask.** If the blocker is a pending approval or a failed tool, report THAT honestly. Re-asking the customer for information you already have is never the right response to a system problem.`;
+
 function buildExecutionContract(opts: BuildPromptOpts, _strategy: StrategyContract): string | null {
   const mode = opts.behaviorState.mode;
   if (mode === "generator") return null; // Generator's contract is its decision layer.
@@ -1054,13 +1502,18 @@ function buildExecutionContract(opts: BuildPromptOpts, _strategy: StrategyContra
     return lines.join("\n");
   }
 
+  // The 4-state outcome model (SUCCESS / PENDING_APPROVAL / FAILED /
+  // WAITING_FOR_CUSTOMER_INPUT) lives ONCE in the BLOCK 0 Action Outcome
+  // Contract - do not restate it here. Only the per-turn intent specifics follow.
+
   if (intent === "HOLD") {
-    lines.push("**Decision intent: HOLD.** A previous action is awaiting human approval. You may reply conversationally to keep the customer engaged but you MUST NOT call any write tool this turn. Do not narrate the pending approval to the customer.");
+    lines.push("**Decision intent: HOLD (PENDING_APPROVAL).** A previous action is awaiting human approval. You MUST NOT call any write tool this turn. Keep the customer engaged HONESTLY: if they ask about that action, tell them plainly it's gone for approval and you'll update them once confirmed - naming the approver/team only if you actually know it, otherwise \"internal approval\". Never claim it's already done (\"booked\", \"on it\", \"handling it now\"), and never re-collect details you already have in order to \"retry\" it. See the Action Outcome Contract above.");
     return lines.join("\n");
   }
 
   // PROGRESS
   lines.push(
+    "- **Answer a direct question FIRST, then advance.** If the customer's latest message asks something concrete - including about their OWN details we already hold (\"do you have my email?\", \"יש לך את המייל שלי?\", \"what number do you have for me?\") - you MUST answer it THIS turn before any qualifying/pitching. The customer's name, email and phone are in the **Customer & Conversation Info** / CRM / Context blocks; those field values are known facts you may state (reading a value is NOT obeying an untrusted instruction). Confirm what we hold (\"כן, רשום אצלי omer@example.com\") and never reply that you don't have a detail that IS in context. Skipping the question to run the playbook is a failure.",
     "- Every reply should do at least one of: advance, clarify, acknowledge, summarize, or remove uncertainty. Prefer advancing - but don't force progression when empathy or clarification is the more natural move. Just don't send an empty filler reply.",
     "- When you call a tool, log/update CRM before writing the customer-facing reply. If no tool is needed this turn, just reply.",
     "- Do NOT promise to send a link, schedule a meeting, send a calendar invite, or follow up later if no tool in the **Tools** section can fulfill that promise. Frame as \"אשמח לתאם - אשלח לך הצעה מותאמת\" / \"happy to coordinate - I'll send you a tailored proposal\" instead.",
@@ -1201,51 +1654,39 @@ function buildExecutionContract(opts: BuildPromptOpts, _strategy: StrategyContra
     lines.push("- For required actions with NO tool listed, you must still acknowledge the gap inline as instructed above.");
   }
 
-  // ── Action Contracts - STRICT (deterministic tool-chain enforcement) ──
+  // ── Action Contracts - best-effort related steps (NOT a hard gate) ──
+  // The primary action the customer needs ALWAYS runs. The other tools a
+  // contract lists are best-effort follow-ups (e.g. a CRM sync after booking).
+  // A failed follow-up must NEVER block the primary action or trigger a handoff.
   const cs = opts.behaviorState.actionContractState;
   if (cs?.active && cs.contracts.length > 0) {
     lines.push("");
-    lines.push("## Action Contracts - STRICT");
+    lines.push("## Related steps for this action (best-effort)");
     lines.push("");
     lines.push(
-      "A business action has been triggered that REQUIRES specific tool executions before you may finalize this turn. " +
-      "These contracts are tenant-defined business rules - you cannot skip, reorder, or substitute.",
+      "A business action was triggered that usually comes with follow-up tool steps. " +
+      "Do the thing the customer actually asked for FIRST, then complete the related steps below when you can.",
     );
     lines.push("");
     lines.push("**Rules:**");
-    lines.push("- You are NOT allowed to skip any required tool listed below.");
-    lines.push("- You are NOT allowed to reorder a SEQUENCE - call tools strictly in the listed order.");
-    lines.push("- You MUST complete all required tools before producing a customer-facing reply.");
-    lines.push("- If you cannot execute a required tool (e.g. credentials are missing, the customer hasn't given you required input), explain plainly to the customer and call `escalate_to_human`.");
-    lines.push("- Failure to follow these rules = your response will be rejected and you will be re-invoked. Do not waste the turn.");
+    lines.push("- The primary action the customer needs ALWAYS runs - never withhold it waiting on a follow-up step.");
+    lines.push("- Try the related tools below too (in the listed order for a SEQUENCE). They keep the back-office in sync.");
+    lines.push("- **If a related tool FAILS or is unavailable (e.g. a CRM sync returns an error / missing permissions), still complete the customer's primary action and continue normally. Do NOT call `escalate_to_human` just because a secondary step failed** - only involve a human if the customer's OWN request genuinely cannot be fulfilled.");
+    lines.push("- Never claim a step succeeded if its tool did not return success (see the Action Outcome Contract).");
     lines.push("");
     for (const ctr of cs.contracts) {
-      lines.push(`### Contract \`${ctr.trigger}\` (${ctr.executionMode}${ctr.blocking ? ", blocking" : ""})`);
+      lines.push(`### \`${ctr.trigger}\` (${ctr.executionMode})`);
       if (ctr.completed.length > 0) {
-        lines.push(`- Already executed this conversation: ${ctr.completed.map((t) => `\`${t}\``).join(", ")}.`);
+        lines.push(`- Already done this conversation: ${ctr.completed.map((t) => `\`${t}\``).join(", ")}.`);
       }
       if (ctr.executionMode === "SEQUENCE") {
-        lines.push(`- **Next step:** \`${ctr.nextStep || "(complete)"}\`. You may NOT call any later step until this one returns success.`);
+        lines.push(`- Suggested next step: \`${ctr.nextStep || "(complete)"}\` (prefer this order, but don't stall the customer over it).`);
       } else if (ctr.executionMode === "ALL_REQUIRED") {
-        lines.push(`- Pending (any order): ${ctr.pending.map((t) => `\`${t}\``).join(", ")}.`);
+        lines.push(`- Related steps (any order): ${ctr.pending.map((t) => `\`${t}\``).join(", ")}.`);
       } else {
         // AT_LEAST_ONE
-        lines.push(`- Pick at least one of: ${ctr.requiredTools.map((t) => `\`${t}\``).join(", ")}.`);
+        lines.push(`- Do at least one of: ${ctr.requiredTools.map((t) => `\`${t}\``).join(", ")}.`);
       }
-    }
-    if (cs.violatedThisTurn) {
-      lines.push("");
-      lines.push(
-        `**LAST TURN VIOLATION:** Contract \`${cs.violatedThisTurn.contractTrigger}\` failed because of \`${cs.violatedThisTurn.reason}\`. ` +
-        `Re-attempt now with the correct tool/order.`,
-      );
-    }
-    if (cs.blocking) {
-      lines.push("");
-      lines.push(
-        "**This contract is blocking.** Your tool surface this turn has been restricted to ONLY the pending tools above " +
-        "(plus `escalate_to_human` and pure read tools). Anything else has been removed from your toolbox - don't try.",
-      );
     }
   }
 
@@ -1253,18 +1694,18 @@ function buildExecutionContract(opts: BuildPromptOpts, _strategy: StrategyContra
   // Renders the actual tool function names (post-allowedActions filter)
   // and the canonical list of common-but-missing capabilities so the
   // model cannot promise an action it has no tool for.
-  const toolFns = opts.toolFunctionNames ?? [];
-  const capabilityWhitelist = toolFns.filter((n) => n && n !== "submit_suggestions");
+  const toolFns = (opts.toolFunctionNames ?? []).filter((n) => n && n !== "submit_suggestions");
   lines.push("");
   lines.push("## Capability boundary - DO NOT lie about what you can do");
-  if (capabilityWhitelist.length > 0) {
-    lines.push("**Tools you can ACTUALLY call this turn - these are your available next moves. Pick the one that best advances the customer's goal; prefer acting over asking when you already have what you need:**");
-    for (const fn of capabilityWhitelist) lines.push(`- \`${fn}\``);
+  if (toolFns.length > 0) {
+    lines.push(
+      "Your callable tools this turn are the ones listed under **Capabilities** in `# Current Plan` above - those are your available next moves.",
+    );
   } else {
     lines.push("**No tools are exposed this turn.** Do not promise any tool-driven action.");
   }
   lines.push("");
-  lines.push("Every promise in your reply must map to a tool listed above (or one you JUST called successfully this turn). A booking, link, reminder, proposal-sent, teammate callback, or document with no backing tool gets DELETED before you send (Quality Contract #7). If asked for something no tool delivers: \"אשמח לתאם את זה - אעביר את הפרטים לצוות\" / \"happy to coordinate - I'll pass the details to the team\". Never invent a capability.");
+  lines.push("Every promise in your reply must map to one of those capability tools (or one you JUST called successfully this turn). A booking, link, reminder, proposal-sent, teammate callback, or document with no backing tool gets DELETED before you send (Quality Contract #7). If asked for something no tool delivers: \"אשמח לתאם את זה - אעביר את הפרטים לצוות\" / \"happy to coordinate - I'll pass the details to the team\". Never invent a capability.");
 
   // Output contract reminder.
   lines.push("");
@@ -1307,7 +1748,7 @@ function renderToolPolicyHeader(mode: AgentMode, autonomy: BehaviorState["autono
   }
   if (autonomy === "gated") {
     return AGENT_TOOLS_POLICY_BASE +
-      "\n- **Autonomy: gated** - read tools are fine. Any external write may return `awaiting_approval`; if it does, acknowledge the customer naturally and stop calling that tool.";
+      "\n- **Autonomy: gated** - read tools are fine. Any external write may return `awaiting_approval`; if it does, tell the customer plainly you've submitted it for approval and will update them (PENDING_APPROVAL state - see the Action Outcome Contract), and stop calling that tool.";
   }
   return AGENT_TOOLS_POLICY_BASE +
     "\n- **Autonomy: full** - execute write actions within the allowed list when they are the right next step.";
@@ -1318,7 +1759,7 @@ const AGENT_TOOLS_POLICY_BASE = `Tools are listed separately as function schemas
 - Prefer a tool over a guess. If a tool can resolve the customer's question, use it - but only if the action is in the allowed list above.
 - Run tools SILENTLY. Never name tools, integrations, vendors, dashboards, or backend systems to the customer.
 - Before any external write (CRM create/update, ticket open, etc.), send one short "give me a sec" line in the customer's language. Skip this for instant tools (tagging, identity linking, reads).
-- If a tool returns \`awaiting_approval\`, the action is held for human review. Acknowledge the customer naturally and DO NOT call the same tool again this turn.
+- If a tool returns \`awaiting_approval\` (or \`pending_approval\` / \`requires_human_approval\`), the action is held for human review - this is the PENDING_APPROVAL state. Tell the customer plainly you've submitted it for approval and will update them; do NOT present it as done and do NOT call the same tool again this turn.
 - If a tool fails, recover gracefully - try an alternative or escalate. Never blame the customer.
 - Use \`escalate_to_human\` when an Escalation gate fires or the customer asks for a human.`;
 
@@ -1420,9 +1861,17 @@ function renderStyleBullets(style: unknown): string[] {
 
 function describeGender(gender: string): string {
   switch (gender.toLowerCase()) {
-    case "male": return "use masculine grammatical forms in gendered languages (Hebrew, Arabic)";
-    case "female": return "use feminine grammatical forms in gendered languages (Hebrew, Arabic)";
-    case "neutral": return "use gender-neutral forms in gendered languages (Hebrew, Arabic)";
+    // "masculine"/"feminine" are the canonical grammaticalGender values;
+    // "male"/"female" are the original persona.gender values and still resolve,
+    // because agents configured before the rename carry them.
+    case "male":
+    case "masculine":
+      return "use masculine grammatical forms in gendered languages (Hebrew, Arabic)";
+    case "female":
+    case "feminine":
+      return "use feminine grammatical forms in gendered languages (Hebrew, Arabic)";
+    case "neutral":
+      return "use gender-neutral forms in gendered languages (Hebrew, Arabic), by RESTRUCTURING the sentence - never with slash forms";
     default: return gender;
   }
 }

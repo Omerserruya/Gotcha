@@ -535,7 +535,7 @@ Customers message you from anywhere. Your team replies from one place with AI-po
 ## 11. Security & Privacy
 
 - **Encryption:** All data is encrypted in transit (TLS) and at rest
-- **Authentication:** JWT-based authentication with bcrypt password hashing
+- **Authentication:** Single sign-on via Authentik (OIDC Authorization Code + PKCE); services verify RS256 tokens through JWKS, and no passwords or credentials are stored in GOTCHA
 - **Multi-tenancy:** Complete data isolation between tenants - each business's data is fully separated
 - **Channel credentials:** Stored encrypted using a dedicated encryption key
 - **Role-based access:** Granular permissions ensure agents only see what they need

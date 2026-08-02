@@ -1,12 +1,10 @@
 import { Router, Request, Response } from "express";
-import { prisma, authenticate, resolveTenant, requireActiveTenant, requireRole } from "@chatcenter/shared";
-import jwt from "jsonwebtoken";
+import { prisma, authenticate, resolveTenant, requireActiveTenant, requireOnboardingOrActiveTenant, requireRole, mintOAuthState, consumeOAuthState } from "@chatcenter/shared";
 import * as confluenceService from "../services/confluence.service";
 import * as googleDriveService from "../services/google-drive.service";
 
 const router = Router();
 
-const JWT_SECRET = process.env.JWT_SECRET || "change-me";
 
 // ─── Confluence OAuth ───────────────────────────────────────
 
@@ -21,11 +19,9 @@ router.get("/oauth/confluence/init", authenticate, resolveTenant, requireActiveT
   const kbId = req.query.kbId as string;
   if (!kbId) { res.status(400).json({ error: "kbId is required" }); return; }
 
-  const state = jwt.sign(
-    { tenantId: req.tenantId, kbId, userId: (req as any).userId },
-    JWT_SECRET,
-    { expiresIn: "10m" }
-  );
+  // Single-use state (shared store): the jti is burned on callback so a
+  // captured state cannot be replayed within its TTL.
+  const { state } = mintOAuthState({ tenantId: req.tenantId!, provider: "confluence", kbId, userId: (req as any).userId });
 
   const scopes = "read:confluence-content.all read:confluence-space.summary offline_access";
   const authUrl = `https://auth.atlassian.com/authorize?audience=api.atlassian.com&client_id=${clientId}&scope=${encodeURIComponent(scopes)}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}&response_type=code&prompt=consent`;
@@ -38,8 +34,13 @@ router.get("/oauth/confluence/callback", async (req: Request, res: Response) => 
     const { code, state } = req.query;
     if (!code || !state) { res.status(400).json({ error: "Missing code or state" }); return; }
 
-    const payload = jwt.verify(state as string, JWT_SECRET) as any;
-    const { tenantId, kbId } = payload;
+    const consumed = await consumeOAuthState<{ tenantId: string; kbId: string }>(state as string, "confluence");
+    if (!consumed.ok) {
+      console.warn(`[confluence oauth] state rejected: ${consumed.reason}`);
+      res.status(400).json({ error: consumed.reason === "replayed" ? "state already used" : "invalid state" });
+      return;
+    }
+    const { tenantId, kbId } = consumed.claims;
 
     const clientId = process.env.CONFLUENCE_CLIENT_ID!;
     const clientSecret = process.env.CONFLUENCE_CLIENT_SECRET!;
@@ -105,7 +106,10 @@ router.get("/oauth/confluence/callback", async (req: Request, res: Response) => 
 
 // ─── Google Drive OAuth ─────────────────────────────────────
 
-router.get("/oauth/google-drive/init", authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"), (req: Request, res: Response) => {
+// PENDING_ONBOARDING allowed: onboarding Movement 6 connects Drive before the
+// tenant flips ACTIVE. `flow=onboarding` rides the state so the callback can
+// land back on /setup instead of the app's knowledge page.
+router.get("/oauth/google-drive/init", authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"), (req: Request, res: Response) => {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const redirectUri = process.env.GOOGLE_REDIRECT_URI;
   if (!clientId || !redirectUri) {
@@ -116,11 +120,10 @@ router.get("/oauth/google-drive/init", authenticate, resolveTenant, requireActiv
   const kbId = req.query.kbId as string;
   if (!kbId) { res.status(400).json({ error: "kbId is required" }); return; }
 
-  const state = jwt.sign(
-    { tenantId: req.tenantId, kbId, userId: (req as any).userId },
-    JWT_SECRET,
-    { expiresIn: "10m" }
-  );
+  const { state } = mintOAuthState({
+    tenantId: req.tenantId!, provider: "google_drive", kbId, userId: (req as any).userId,
+    flow: req.query.flow === "onboarding" ? "onboarding" : undefined,
+  });
 
   const scopes = "https://www.googleapis.com/auth/drive.readonly";
   const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scopes)}&state=${state}&access_type=offline&prompt=consent`;
@@ -133,7 +136,13 @@ router.get("/oauth/google-drive/callback", async (req: Request, res: Response) =
     const { code, state } = req.query;
     if (!code || !state) { res.status(400).json({ error: "Missing code or state" }); return; }
 
-    const payload = jwt.verify(state as string, JWT_SECRET) as any;
+    const consumed = await consumeOAuthState<{ tenantId: string; kbId: string; flow?: string }>(state as string, "google_drive");
+    if (!consumed.ok) {
+      console.warn(`[google_drive oauth] state rejected: ${consumed.reason}`);
+      res.status(400).json({ error: consumed.reason === "replayed" ? "state already used" : "invalid state" });
+      return;
+    }
+    const payload = consumed.claims;
     const { tenantId, kbId } = payload;
 
     const clientId = process.env.GOOGLE_CLIENT_ID!;
@@ -183,7 +192,9 @@ router.get("/oauth/google-drive/callback", async (req: Request, res: Response) =
     });
 
     const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
-    res.redirect(`${frontendUrl}/knowledge?connected=google_drive`);
+    // Onboarding-initiated connects return to the wizard (Movement 6 resumes
+    // via the persisted progress checkpoint); everything else to the app.
+    res.redirect(payload.flow === "onboarding" ? `${frontendUrl}/setup?connected=google_drive` : `${frontendUrl}/knowledge?connected=google_drive`);
   } catch (err: any) {
     console.error("[Google Drive OAuth] Callback error:", err.message);
     res.status(500).json({ error: "OAuth callback failed" });
@@ -192,7 +203,9 @@ router.get("/oauth/google-drive/callback", async (req: Request, res: Response) =
 
 // ─── Integration API Routes (authenticated) ──────────────────
 
-router.use(authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"));
+// PENDING_ONBOARDING allowed so the onboarding wizard can list the Drive
+// integration, browse files, and trigger the first sync (admin-only, tenant-scoped).
+router.use(authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"));
 
 // List integrations for a knowledge base
 router.get("/kb/:kbId/integrations", async (req: Request, res: Response) => {
@@ -285,13 +298,21 @@ router.post("/integrations/:intId/confluence/sync", async (req: Request, res: Re
     const { spaceKeys } = req.body;
     if (!spaceKeys?.length) { res.status(400).json({ error: "spaceKeys required" }); return; }
 
-    let totalImported = 0;
+    // Remember the selected spaces + turn on auto-sync so the hourly scheduler
+    // knows what to refresh. Mutate the in-memory config too, so syncSpace's own
+    // config write (lastSyncAt) preserves these keys instead of dropping them.
+    const cfg = (integration.config && typeof integration.config === "object" ? integration.config : {}) as Record<string, unknown>;
+    const newConfig = { ...cfg, spaceKeys, autoSync: cfg.autoSync ?? true };
+    await prisma.knowledgeIntegration.update({ where: { id: integration.id }, data: { config: newConfig } });
+    (integration as any).config = newConfig;
+
+    let totalImported = 0, totalUpdated = 0, totalSkipped = 0;
     for (const key of spaceKeys) {
       const result = await confluenceService.syncSpace(integration as any, key);
-      totalImported += result.imported;
+      totalImported += result.imported; totalUpdated += result.updated; totalSkipped += result.skipped;
     }
 
-    res.json({ data: { imported: totalImported } });
+    res.json({ data: { imported: totalImported, updated: totalUpdated, skipped: totalSkipped } });
   } catch (err: any) {
     console.error("Confluence sync error:", err.message);
     res.status(500).json({ error: "Failed to sync" });
@@ -346,11 +367,41 @@ router.post("/integrations/:intId/drive/sync", async (req: Request, res: Respons
     const { fileIds } = req.body;
     if (!fileIds?.length) { res.status(400).json({ error: "fileIds required" }); return; }
 
+    // Remember the selected files + turn on auto-sync (see Confluence note above).
+    const cfg = (integration.config && typeof integration.config === "object" ? integration.config : {}) as Record<string, unknown>;
+    const newConfig = { ...cfg, fileIds, autoSync: cfg.autoSync ?? true };
+    await prisma.knowledgeIntegration.update({ where: { id: integration.id }, data: { config: newConfig } });
+    (integration as any).config = newConfig;
+
     const result = await googleDriveService.syncFiles(integration as any, fileIds);
     res.json({ data: result });
   } catch (err: any) {
     console.error("Drive sync error:", err.message);
     res.status(500).json({ error: "Failed to sync" });
+  }
+});
+
+// ─── Auto-sync toggle ─────────────────────────────────────────
+// Enable/disable the hourly background re-sync for one integration. Stored on
+// config.autoSync; the scheduler only refreshes integrations where it's not
+// explicitly false and that have a persisted selection (spaceKeys / fileIds).
+router.patch("/integrations/:intId/auto-sync", async (req: Request, res: Response) => {
+  try {
+    const integration = await prisma.knowledgeIntegration.findFirst({
+      where: { id: String(req.params.intId), tenantId: req.tenantId! },
+    });
+    if (!integration) { res.status(404).json({ error: "Integration not found" }); return; }
+
+    const enabled = req.body?.enabled !== false; // default ON
+    const cfg = (integration.config && typeof integration.config === "object" ? integration.config : {}) as Record<string, unknown>;
+    await prisma.knowledgeIntegration.update({
+      where: { id: integration.id },
+      data: { config: { ...cfg, autoSync: enabled } },
+    });
+    res.json({ data: { autoSync: enabled } });
+  } catch (err: any) {
+    console.error("Auto-sync toggle error:", err.message);
+    res.status(500).json({ error: "Failed to update auto-sync" });
   }
 });
 

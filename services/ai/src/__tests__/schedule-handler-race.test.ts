@@ -58,6 +58,19 @@ const state: any = {
 };
 
 vi.mock("@chatcenter/shared", () => ({
+  // Durable tenant settings (business hours, auto-greeting, SLA). Exhaustive
+  // mocks of this barrel must supply them or the read path throws instead of
+  // returning "not configured". Default: nothing configured.
+  readDurableSetting: async () => null,
+  writeDurableSetting: async () => undefined,
+  settingCacheKey: (t: string, k: string) => `tenant:${t}:${k}`,
+  // Version pins now live in shared modules, so exhaustive mocks of this
+  // barrel must supply them. Returning the real defaults keeps any URL the
+  // code builds meaningful instead of "undefined/...".
+  shopifyApiVersion: () => "2026-07",
+  checkShopifyResponseVersion: () => ({ ok: true, served: "2026-07" }),
+  metaGraphBaseUrl: (legacy?: string) => legacy || "https://graph.facebook.com/v24.0",
+  stripeVersionHeader: () => ({ "Stripe-Version": "2026-02-25.clover" }),
   prisma: {
     meetingType: {
       findUnique: async ({ where }: any) => {
@@ -115,7 +128,7 @@ const REQUESTED = "2026-05-05T11:00:00+03:00";
 describe("schedule_meeting - race-condition retry", () => {
   it("VALID on first try → returns success without retrying", async () => {
     const { makeScheduleMeetingHandler } = await import("../services/schedule-handler.service");
-    const handler = makeScheduleMeetingHandler({ tenantId: TENANT, aiAgentId: AGENT });
+    const handler = makeScheduleMeetingHandler({ tenantId: TENANT, aiAgentId: AGENT, conversationId: "conv_test" });
     const r = await handler({
       duration_minutes: 30,
       meeting_type: "discovery_call",
@@ -134,7 +147,7 @@ describe("schedule_meeting - race-condition retry", () => {
       return { eventId: "evt_retry", joinUrl: "https://meet.example/retry" };
     };
     const { makeScheduleMeetingHandler } = await import("../services/schedule-handler.service");
-    const handler = makeScheduleMeetingHandler({ tenantId: TENANT, aiAgentId: AGENT });
+    const handler = makeScheduleMeetingHandler({ tenantId: TENANT, aiAgentId: AGENT, conversationId: "conv_test" });
     const r = await handler({
       duration_minutes: 30,
       meeting_type: "discovery_call",
@@ -161,7 +174,7 @@ describe("schedule_meeting - race-condition retry", () => {
       return [{ startMs: requestedMs, endMs: requestedMs + 30 * 60_000, source: "google" as const }];
     };
     const { makeScheduleMeetingHandler } = await import("../services/schedule-handler.service");
-    const handler = makeScheduleMeetingHandler({ tenantId: TENANT, aiAgentId: AGENT });
+    const handler = makeScheduleMeetingHandler({ tenantId: TENANT, aiAgentId: AGENT, conversationId: "conv_test" });
     const r = await handler({
       duration_minutes: 30,
       meeting_type: "discovery_call",
@@ -187,7 +200,7 @@ describe("schedule_meeting - race-condition retry", () => {
     };
     adapterFindBusyImpl = async () => []; // recheck stays VALID
     const { makeScheduleMeetingHandler } = await import("../services/schedule-handler.service");
-    const handler = makeScheduleMeetingHandler({ tenantId: TENANT, aiAgentId: AGENT });
+    const handler = makeScheduleMeetingHandler({ tenantId: TENANT, aiAgentId: AGENT, conversationId: "conv_test" });
     const r = await handler({
       duration_minutes: 30,
       meeting_type: "discovery_call",

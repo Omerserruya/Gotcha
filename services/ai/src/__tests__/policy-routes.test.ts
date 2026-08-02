@@ -3,6 +3,29 @@ import express from "express";
 import request from "supertest";
 
 vi.mock("@chatcenter/shared", () => ({
+  // Internal-service key gate. The Security v2 remediation removed the silent
+  // fallback that let these routes run unauthenticated, and this exhaustive
+  // mock never grew the export - so the suite failed to load rather than
+  // failing an assertion, which is why it looked like an import error. Passing
+  // through: these tests cover route behaviour, and the gate itself is proved
+  // in the security suite.
+  requireInternalKey: (_req: any, _res: any, next: any) => next(),
+  // Commercial gate, pass-through: these tests cover route behaviour, not
+  // billing. The gate itself is proved in packages/shared/src/lib/billing.
+  requireEntitlement: (_feature: string) => (_req: any, _res: any, next: any) => next(),
+  // Durable tenant settings (business hours, auto-greeting, SLA). Exhaustive
+  // mocks of this barrel must supply them or the read path throws instead of
+  // returning "not configured". Default: nothing configured.
+  readDurableSetting: async () => null,
+  writeDurableSetting: async () => undefined,
+  settingCacheKey: (t: string, k: string) => `tenant:${t}:${k}`,
+  // Version pins now live in shared modules, so exhaustive mocks of this
+  // barrel must supply them. Returning the real defaults keeps any URL the
+  // code builds meaningful instead of "undefined/...".
+  shopifyApiVersion: () => "2026-07",
+  checkShopifyResponseVersion: () => ({ ok: true, served: "2026-07" }),
+  metaGraphBaseUrl: (legacy?: string) => legacy || "https://graph.facebook.com/v24.0",
+  stripeVersionHeader: () => ({ "Stripe-Version": "2026-02-25.clover" }),
   prisma: {},
   authenticate: (req: any, _res: any, next: any) => {
     req.user = { id: "u1", role: "ADMIN" };

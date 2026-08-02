@@ -15,7 +15,7 @@ export function getTranslation(locale: Locale): typeof en {
   return translations[locale] || translations.en;
 }
 
-/** Nested key accessor with optional interpolation: t("auth.login") or t("msg", { name: "John" }) */
+/** Nested key accessor with optional interpolation: t("settings.security.title") or t("msg", { name: "John" }) */
 export function t(translations: any, key: string, vars?: Record<string, string>): string {
   let value: string = key.split(".").reduce((obj, k) => obj?.[k], translations) || key;
   if (vars) {

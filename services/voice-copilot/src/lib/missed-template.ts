@@ -1,3 +1,4 @@
+import { getInternalServiceKey } from "@chatcenter/shared";
 /**
  * Fire-and-forget hop into the local /api/voice-copilot/callbacks/missed-template
  * endpoint. The endpoint itself is idempotent (writes the message id onto
@@ -13,7 +14,7 @@
 import type { Logger } from "./logger";
 
 export function fireMissedTemplate(sessionId: string, logger: Logger): void {
-  const internalKey = process.env.INTERNAL_SERVICE_KEY || "chatcenter-internal-2026";
+  const internalKey = getInternalServiceKey();
   const port = process.env.PORT || "4007";
   void fetch(`http://localhost:${port}/api/voice-copilot/callbacks/missed-template`, {
     method: "POST",

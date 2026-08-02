@@ -1,0 +1,341 @@
+/**
+ * The single place a paid checkout becomes a live subscription.
+ *
+ * Nothing else in the system may activate a paid plan. In particular there is
+ * deliberately NO browser-callable "complete checkout" endpoint: a redirect can
+ * say which checkout the customer came back from, never that it was paid.
+ *
+ * Every invariant below is checked before anything is written, and the write
+ * itself is one transaction. The ordering matters: cheap identity checks first,
+ * money checks second, then the idempotency guard, so a mismatched request is
+ * rejected before it can touch subscription state.
+ */
+import { prisma, materializeEntitlements, rolloverIncluded } from "@chatcenter/shared";
+import { Prisma } from "@prisma/client";
+import type { PaymentAttempt, PaymentQuote, PendingCheckout } from "@prisma/client";
+import { currentPeriod } from "../lib/period";
+import { CHARGE_CURRENCY, CHARGE_CURRENCY_ID, assertQuoteMatchesCommercial } from "./payment-quote.service";
+import { convert } from "./exchange-rate.service";
+import { notifyPaymentSucceeded } from "../lib/auth-notify";
+
+/**
+ * How the payment was proven.
+ *
+ * MANUAL_EXTERNAL_CONTRACT exists so a Sysadmin-activated contract can never be
+ * mistaken, in billing history or in an audit, for a card payment that
+ * actually cleared through the provider.
+ */
+export type PaymentSource = "PROVIDER_CONFIRMED" | "MANUAL_EXTERNAL_CONTRACT";
+
+export class ActivationRefused extends Error {
+  constructor(readonly code: string, detail?: string) {
+    super(`[billing] activation refused: ${code}${detail ? ` (${detail})` : ""}`);
+    this.name = "ActivationRefused";
+  }
+}
+
+export interface ActivateResult {
+  activated: boolean;
+  /** True when this call did the work; false when it was already done. */
+  firstActivation: boolean;
+  subscriptionId?: string;
+}
+
+/**
+ * Activate a paid checkout against a CONFIRMED payment attempt.
+ *
+ * Refuses unless every one of these holds:
+ *   - the checkout exists and is not already COMPLETED, EXPIRED or CANCELED
+ *   - the attempt belongs to this checkout
+ *   - the tenant matches
+ *   - the amount matches the immutable snapshot exactly
+ *   - the currency matches
+ *   - the attempt state is SUCCEEDED
+ *   - the attempt has not already been consumed by an activation
+ *
+ * PENDING, UNKNOWN, RECONCILIATION_REQUIRED and MANUAL_REVIEW all fail. UNKNOWN
+ * is the important one: "we might have been paid" is not payment, and treating
+ * it as such would hand out a paid plan for a charge that may never have
+ * landed.
+ */
+export async function activatePaidCheckout(args: {
+  checkoutId: string;
+  paymentAttemptId: string;
+  source?: PaymentSource;
+  actor?: string;
+}): Promise<ActivateResult> {
+  const source = args.source ?? "PROVIDER_CONFIRMED";
+
+  const checkout = await prisma.pendingCheckout.findUnique({ where: { id: args.checkoutId } });
+  if (!checkout) throw new ActivationRefused("checkout_not_found");
+
+  const attempt = await prisma.paymentAttempt.findUnique({ where: { id: args.paymentAttemptId } });
+  if (!attempt) throw new ActivationRefused("attempt_not_found");
+
+  // A provider charge moved ILS while the customer agreed USD. The quote is the
+  // only record connecting the two, so it is loaded and verified here rather
+  // than trusted from whatever wrote the attempt.
+  const quote = attempt.paymentQuoteId
+    ? await prisma.paymentQuote.findUnique({ where: { id: attempt.paymentQuoteId } })
+    : null;
+  if (attempt.paymentQuoteId && !quote) throw new ActivationRefused("payment_quote_not_found");
+
+  assertActivatable(checkout, attempt, quote);
+
+  // Idempotency: a checkout already COMPLETED is a no-op, not an error and not
+  // a second grant of credits.
+  if (checkout.status === "PAID") {
+    return { activated: true, firstActivation: false };
+  }
+
+  const period = currentPeriod(new Date());
+  const entityId = await resolveEntityId(checkout.tenantId!);
+
+  const result = await prisma.$transaction(async (tx) => {
+    // Consume the attempt FIRST, conditionally. If another worker got here
+    // first this updates zero rows and we abort, so credits are granted once
+    // even under concurrent activation.
+    const consumed = await tx.paymentAttempt.updateMany({
+      where: { id: attempt.id, state: "SUCCEEDED", consumedByActivationAt: null },
+      data: { consumedByActivationAt: new Date() },
+    });
+    if (consumed.count !== 1) return { raced: true as const };
+
+    const subscription = await tx.subscription.upsert({
+      where: { billableEntityId: entityId },
+      create: {
+        billableEntityId: entityId,
+        planKey: checkout.planKey,
+        planVersion: checkout.planVersion,
+        status: "ACTIVE",
+        enforcementEnabled: true,
+        currentPeriodStart: period.start,
+        currentPeriodEnd: period.end,
+        billingInterval: "MONTHLY",
+        snapshotPrice: checkout.snapshotPrice,
+        snapshotCurrency: checkout.snapshotCurrency,
+        snapshotIncludedCredits: checkout.snapshotIncludedCredits,
+        chatVolumeOptionKey: checkout.chatVolumeOptionKey,
+        voiceVolumeOptionKey: checkout.voiceVolumeOptionKey,
+      },
+      update: {
+        status: "ACTIVE",
+        planKey: checkout.planKey,
+        planVersion: checkout.planVersion,
+        currentPeriodStart: period.start,
+        currentPeriodEnd: period.end,
+        snapshotPrice: checkout.snapshotPrice,
+        snapshotCurrency: checkout.snapshotCurrency,
+        snapshotIncludedCredits: checkout.snapshotIncludedCredits,
+      },
+    });
+
+    await tx.pendingCheckout.update({ where: { id: checkout.id }, data: { status: "PAID" } });
+
+    // Payment settles MONEY. It does not settle SETUP.
+    //
+    // A first-signup customer pays BEFORE they onboard: they are provisioned
+    // PENDING_PAYMENT and pay from an emailed link. Flipping them straight to
+    // ACTIVE claimed "fully set up" about an organization that had not answered
+    // a single question - and since both the app shell (destinationForTenantStatus)
+    // and /setup read ACTIVE as "onboarding is done", the customer who had just
+    // paid was routed PAST the wizard entirely.
+    //
+    // PENDING_ONBOARDING is the state that already means exactly this: the
+    // access policy allows the ONBOARDING scope and refuses the paid product,
+    // which is the same position an onboard-first customer occupies while they
+    // work through the wizard. `completeOnboarding` flips it to ACTIVE at the
+    // end, and finds nothing owed because this checkout is now PAID.
+    //
+    // A tenant that is ALREADY ACTIVE is never moved backwards: it has been
+    // through onboarding, whether or not the tracker existed to record it.
+    const [tenantRow, onboarding] = await Promise.all([
+      tx.tenant.findUnique({ where: { id: checkout.tenantId! }, select: { status: true } }),
+      tx.tenantOnboarding.findUnique({
+        where: { tenantId: checkout.tenantId! },
+        select: { completedAt: true },
+      }),
+    ]);
+    const alreadySetUp = tenantRow?.status === "ACTIVE" || !!onboarding?.completedAt;
+    await tx.tenant.update({
+      where: { id: checkout.tenantId! },
+      data: { status: alreadySetUp ? "ACTIVE" : "PENDING_ONBOARDING" },
+    });
+
+    await tx.subscriptionEvent.create({
+      data: {
+        subscriptionId: subscription.id,
+        type: source === "MANUAL_EXTERNAL_CONTRACT" ? "manual_contract_activated" : "checkout_activated",
+        fromStatus: null,
+        toStatus: "ACTIVE",
+        actor: args.actor ?? "system",
+        metadata: { source, checkoutId: checkout.id, paymentAttemptId: attempt.id } as any,
+      },
+    });
+
+    return { raced: false as const, subscriptionId: subscription.id };
+  });
+
+  if (result.raced) return { activated: true, firstActivation: false };
+
+  // Credits and entitlements land AFTER the transaction commits, and only on
+  // the call that won the consume - so a duplicate activation grants neither.
+  await rolloverIncluded(
+    checkout.tenantId!,
+    period.key,
+    checkout.snapshotIncludedCredits,
+    period.end,
+    `checkout:${checkout.reference}`,
+  );
+  await materializeEntitlements(checkout.tenantId!, args.actor);
+
+  // Welcome them and hand over the way in. Only the call that won the consume
+  // sends it, so a duplicate activation cannot email the customer twice.
+  //
+  // Deliberately last, and deliberately unawaited for its outcome: a paid
+  // signup can complete the whole purchase without ever authenticating, so
+  // this email is the ONLY thing that gets that admin a password. It still
+  // must not be able to fail an activation that has already taken the money.
+  const [tenant, plan] = await Promise.all([
+    prisma.tenant.findUnique({ where: { id: checkout.tenantId! }, select: { name: true } }),
+    prisma.plan.findFirst({ where: { key: checkout.planKey }, select: { name: true } }),
+  ]);
+  void notifyPaymentSucceeded({
+    tenantId: checkout.tenantId!,
+    tenantName: tenant?.name ?? "your organization",
+    planName: plan?.name ?? checkout.planKey,
+    includedCredits: checkout.snapshotIncludedCredits,
+  });
+
+  return { activated: true, firstActivation: true, subscriptionId: result.subscriptionId };
+}
+
+/** Every refusal reason, in one place so the rules are readable together. */
+export function assertActivatable(
+  checkout: PendingCheckout,
+  attempt: PaymentAttempt,
+  quote?: PaymentQuote | null,
+): void {
+  if (!checkout.tenantId) throw new ActivationRefused("checkout_has_no_tenant");
+
+  if (checkout.status === "EXPIRED") throw new ActivationRefused("checkout_expired");
+  if (checkout.status === "CANCELED") throw new ActivationRefused("checkout_canceled");
+  if (checkout.status === "FAILED") throw new ActivationRefused("checkout_failed");
+
+  if (attempt.checkoutId !== checkout.id) {
+    throw new ActivationRefused("attempt_not_for_this_checkout");
+  }
+  if (attempt.tenantId && attempt.tenantId !== checkout.tenantId) {
+    throw new ActivationRefused("tenant_mismatch");
+  }
+
+  // Money must match the frozen snapshot EXACTLY. A near-miss is a bug
+  // somewhere upstream, and activating on it would give away the difference.
+  if (Number(attempt.amount) !== Number(checkout.amount)) {
+    throw new ActivationRefused("amount_mismatch");
+  }
+  if (attempt.currency.toUpperCase() !== checkout.currency.toUpperCase()) {
+    throw new ActivationRefused("currency_mismatch");
+  }
+
+  if (attempt.state !== "SUCCEEDED") {
+    // UNKNOWN / RECONCILIATION_REQUIRED / MANUAL_REVIEW land here too:
+    // "we might have been paid" is not payment.
+    throw new ActivationRefused("attempt_not_succeeded", attempt.state);
+  }
+  if (attempt.consumedByActivationAt) {
+    throw new ActivationRefused("attempt_already_consumed");
+  }
+
+  assertQuoteInvariants(checkout, attempt, quote);
+}
+
+/**
+ * The dual-currency half of the activation contract.
+ *
+ * A provider-confirmed payment must carry a quote. Without one there is no
+ * record of what ILS figure was actually taken or at which rate, and activating
+ * would mean granting a plan against a charge nobody can reconcile.
+ *
+ * A manual contract carries none, and must not: no money moved through a
+ * provider, so there is nothing to convert.
+ */
+function assertQuoteInvariants(
+  checkout: PendingCheckout,
+  attempt: PaymentAttempt,
+  quote?: PaymentQuote | null,
+): void {
+  const source = attempt.paymentSource ?? "PROVIDER_CONFIRMED";
+
+  if (source === "MANUAL_EXTERNAL_CONTRACT") {
+    if (quote || attempt.paymentQuoteId) throw new ActivationRefused("manual_contract_must_not_have_quote");
+    return;
+  }
+
+  if (!quote) throw new ActivationRefused("provider_payment_without_quote");
+
+  if (quote.checkoutId && quote.checkoutId !== checkout.id) {
+    throw new ActivationRefused("quote_not_for_this_checkout");
+  }
+  if (quote.consumedByAttemptId && quote.consumedByAttemptId !== attempt.id) {
+    // The quote was spent by a different attempt. Honouring it here would let
+    // one frozen conversion activate two checkouts.
+    throw new ActivationRefused("quote_consumed_by_other_attempt");
+  }
+
+  // Source side: the quote must describe the agreed commercial terms, and its
+  // charge amount must still recompute from its own frozen rate.
+  try {
+    assertQuoteMatchesCommercial(quote, {
+      id: checkout.id,
+      amount: checkout.snapshotPrice,
+      currency: checkout.snapshotCurrency,
+    });
+  } catch (err: any) {
+    throw new ActivationRefused(err?.code ?? "quote_commercial_mismatch");
+  }
+
+  // Charge side: what was actually submitted must equal what the quote froze.
+  if (attempt.chargeAmount == null) throw new ActivationRefused("attempt_missing_charge_amount");
+  if (!new Prisma.Decimal(attempt.chargeAmount).equals(new Prisma.Decimal(quote.chargeAmount))) {
+    throw new ActivationRefused("charge_amount_mismatch");
+  }
+  if ((attempt.chargeCurrency ?? "").toUpperCase() !== quote.chargeCurrency.toUpperCase()) {
+    throw new ActivationRefused("charge_currency_mismatch");
+  }
+  if (quote.chargeCurrency !== CHARGE_CURRENCY) {
+    throw new ActivationRefused("charge_currency_not_ils", quote.chargeCurrency);
+  }
+  if (attempt.providerCurrencyId !== CHARGE_CURRENCY_ID || quote.providerCurrencyId !== CHARGE_CURRENCY_ID) {
+    throw new ActivationRefused("provider_currency_id_not_ils");
+  }
+
+  // Rate identity: value AND version. A matching amount under a different rate
+  // version means two rates produced the same figure by coincidence, which is
+  // not the same as the charge having been made at the approved rate.
+  const recomputed = convert(quote.commercialAmount, quote.fxRate);
+  if (!recomputed.equals(new Prisma.Decimal(quote.chargeAmount))) {
+    throw new ActivationRefused("fx_rate_does_not_produce_charge_amount");
+  }
+  // A converted quote must name the approved rate it used. An identity quote
+  // has none by definition, and is distinguished by its source rather than by
+  // an absent field, so the two cannot be confused.
+  const identity = quote.fxRateSource === "IDENTITY";
+  if (identity) {
+    if (quote.commercialCurrency !== quote.chargeCurrency) {
+      throw new ActivationRefused("identity_quote_across_currencies");
+    }
+    if (quote.fxRateId) throw new ActivationRefused("identity_quote_pins_a_rate");
+  } else {
+    if (!quote.fxRateId) throw new ActivationRefused("converted_quote_without_rate_reference");
+    if (!Number.isInteger(quote.fxRateVersion) || quote.fxRateVersion < 1) {
+      throw new ActivationRefused("fx_rate_version_invalid");
+    }
+  }
+}
+
+async function resolveEntityId(tenantId: string): Promise<string> {
+  const link = await prisma.billableEntityTenant.findUnique({ where: { tenantId } });
+  if (!link) throw new ActivationRefused("no_billable_entity");
+  return link.billableEntityId;
+}

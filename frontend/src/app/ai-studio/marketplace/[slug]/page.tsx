@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useDynamicParam } from "@/lib/useRouteParam";
+import { aiStudioHref, normalizeAiStudioTab } from "@/lib/ai-studio-tabs";
 import { AppLayout } from "@/components/AppLayout";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
@@ -82,11 +83,16 @@ function getLogoColor(name: string) {
   return LOGO_COLORS[Math.abs(hash) % LOGO_COLORS.length];
 }
 
-export default function IntegrationDetailPage() {
+function IntegrationDetailPageInner() {
   const slug = useDynamicParam("slug");
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { token } = useAuth();
   const { t } = useI18n();
+  // An integration detail belongs to the Tools tab; OAuth returns here too, so
+  // Back must land on Tools, never the Overview default.
+  const rt = searchParams.get("returnTab");
+  const returnTab = rt ? normalizeAiStudioTab(rt) : "tools";
 
   const [integration, setIntegration] = useState<any>(null);
   const [tools, setTools] = useState<any[]>([]);
@@ -259,7 +265,7 @@ export default function IntegrationDetailPage() {
       <div className="p-3 md:p-6 overflow-y-auto h-screen">
         {/* Back */}
         <button
-          onClick={() => router.push("/ai-studio")}
+          onClick={() => router.push(aiStudioHref(returnTab))}
           className="flex items-center gap-2 text-gray-400 hover:text-gray-700 text-sm mb-5 transition"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -574,5 +580,18 @@ export default function IntegrationDetailPage() {
         </div>
       </div>
     </AppLayout>
+  );
+}
+
+// useSearchParams() forces this route into client-side rendering, and Next
+// requires that bail-out to sit behind a Suspense boundary - without one the
+// production build fails at prerender (it succeeds in dev, which is why this
+// went unnoticed). The inner component holds all the logic; this wrapper exists
+// only to provide the boundary.
+export default function IntegrationDetailPage() {
+  return (
+    <Suspense fallback={null}>
+      <IntegrationDetailPageInner />
+    </Suspense>
   );
 }

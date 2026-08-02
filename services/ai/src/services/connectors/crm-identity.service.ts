@@ -288,7 +288,10 @@ export async function linkOrCreateCrmContact(args: LinkOrCreateArgs): Promise<Li
           console.log("[crm-identity] probe", JSON.stringify({ label, query, hits: contacts.length, ids: contacts.map((c) => c.id) }));
           return contacts;
         }
-        console.warn("[crm-identity] probe.miss", JSON.stringify({ label, query, error: r?.error ?? null }));
+        // CRMAdapter failures carry `reason` (CrmAdapterFindResult); only a few
+        // legacy shapes carry `error`. Reading `error` alone renders every real
+        // vendor fault as `error:null`, which hides 403s/404s behind "no match".
+        console.warn("[crm-identity] probe.miss", JSON.stringify({ label, query, reason: r?.reason ?? r?.error ?? "unknown" }));
         return [];
       })
       .catch((err: any) => {

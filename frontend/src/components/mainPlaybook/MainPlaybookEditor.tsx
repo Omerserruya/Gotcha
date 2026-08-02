@@ -12,6 +12,7 @@ import ReactFlow, {
   Background,
   BackgroundVariant,
   NodeTypes,
+  EdgeTypes,
   Panel,
   MarkerType,
   ReactFlowInstance,
@@ -20,6 +21,8 @@ import ReactFlow, {
 import "reactflow/dist/style.css";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
+import { nodeLabel, nodeDesc, nodeCategoryLabel } from "./node-i18n";
+import { leftBoundaryX, normalizeGraphPositions } from "./connection-rules";
 import {
   getAIAgents,
   getChatbotFlows,
@@ -54,11 +57,22 @@ import { ScheduleTriggerNode } from "./ScheduleTriggerNode";
 import { VoiceAddParticipantNode } from "./VoiceAddParticipantNode";
 import { TemplateGalleryModal } from "./TemplateGalleryModal";
 import { validateFlow } from "./flow-validator";
+import { validateConnection, type ConnectionError } from "./connection-rules";
 import { FlowIssuesPill } from "./FlowIssuesPill";
 import { NodeInspector } from "./NodeInspector";
 import { TRIGGER_TYPES, isTriggerNode } from "./trigger-types";
 import { TriggerCardNode } from "./TriggerCardNode";
 import { TriggerSectionHeaderNode } from "./TriggerSectionHeaderNode";
+import { DeletableEdge } from "./DeletableEdge";
+
+// ─── Edge types ────────────────────────────────────────────────
+// All edges render through DeletableEdge so a selected edge shows a ✕ to
+// unlink the two nodes. Aliased under "bezier" too, because saved canvases
+// and onConnect both create edges with type "bezier".
+const edgeTypes: EdgeTypes = {
+  deletable: DeletableEdge,
+  bezier: DeletableEdge,
+};
 
 // ─── Node types ────────────────────────────────────────────────
 const nodeTypes: NodeTypes = {
@@ -869,6 +883,8 @@ function loadLayout(): { nodes: any[]; edges: any[] } | null {
 // ─── Main Component ────────────────────────────────────────────
 interface Props {
   onBack?: () => void;
+  /** Embedded in a tab (fills its container) rather than owning the viewport. */
+  embedded?: boolean;
 }
 
 export function MainPlaybookEditor(props: Props) {
@@ -882,10 +898,29 @@ export function MainPlaybookEditor(props: Props) {
   );
 }
 
-function MainPlaybookEditorInner({ onBack }: Props) {
+function MainPlaybookEditorInner({ onBack, embedded }: Props) {
   const { token } = useAuth();
   const { t } = useI18n();
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  // Full-screen editing. This canvas had none: the Main Playbook is the widest
+  // graph in the product and was being edited inside a padded panel.
+  const [fullscreen, setFullscreen] = useState(false);
+  // Escape leaves full screen - the first thing anyone tries.
+  useEffect(() => {
+    if (!fullscreen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { e.stopPropagation(); setFullscreen(false); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [fullscreen]);
+
+  // Left boundary in GRAPH space, recomputed as nodes move.
+  const playbookExtent = useMemo(() => {
+    const left = leftBoundaryX(nodes.map((n) => ({ position: n.position, type: n.type as string })));
+    const FAR = 1_000_000;
+    return [[left, -FAR], [FAR, FAR]] as [[number, number], [number, number]];
+  }, [nodes]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -904,6 +939,7 @@ function MainPlaybookEditorInner({ onBack }: Props) {
     if (params.get("templates") === "open") setTemplateGalleryOpen(true);
   }, []);
   const [savedToast, setSavedToast] = useState<string | null>(null);
+  const [connError, setConnError] = useState<ConnectionError | null>(null);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
   // Per the Flow Builder UX spec: nodes are read-only on canvas and ALL
@@ -1004,7 +1040,11 @@ function MainPlaybookEditorInner({ onBack }: Props) {
             style: { stroke: "#c7c7cc", strokeWidth: 1.5 },
             markerEnd: { type: MarkerType.ArrowClosed, color: "#c7c7cc", width: 16, height: 16 },
           }));
-          setNodes(restoredNodes);
+          // Repair coordinates before the first render: a playbook saved by an
+          // older version can arrive with its entry node at a negative X, which
+          // would drag the left boundary out with it and open the canvas on
+          // empty space.
+          setNodes(normalizeGraphPositions(restoredNodes));
           setEdges(restoredEdges);
         } else {
           // No saved canvas yet - open the template gallery so the author
@@ -1062,6 +1102,18 @@ function MainPlaybookEditorInner({ onBack }: Props) {
 
   const onConnect = useCallback(
     (params: Connection) => {
+      // §3 semantic validation - reject invalid drops, don't create the edge.
+      const res = validateConnection(
+        params,
+        nodes.map((n) => ({ id: n.id, type: n.type as string, data: n.data })),
+        edges.map((e) => ({ id: e.id, source: e.source, target: e.target, sourceHandle: e.sourceHandle, targetHandle: (e as any).targetHandle })),
+      );
+      if (!res.ok) {
+        setConnError(res.code ?? "incompatible");
+        window.setTimeout(() => setConnError(null), 4500);
+        return;
+      }
+      setConnError(null);
       setEdges((eds) =>
         addEdge({
           ...params,
@@ -1072,7 +1124,7 @@ function MainPlaybookEditorInner({ onBack }: Props) {
         }, eds)
       );
     },
-    [setEdges]
+    [setEdges, nodes, edges]
   );
 
   function addNode(type: string) {
@@ -1192,14 +1244,20 @@ function MainPlaybookEditorInner({ onBack }: Props) {
       // Delete / Backspace work without a modifier - and without requiring
       // ReactFlow to have focus - so the popup-selected node is deletable.
       if (k === "delete" || k === "backspace") {
-        const { nodes: ns, selectedNodeId: sid } = stateRef.current;
+        const { nodes: ns, edges: es, selectedNodeId: sid } = stateRef.current;
         const targetIds = new Set(ns.filter(isSelectedFor).map((n) => n.id));
-        if (targetIds.size === 0) return;
+        // Selected edges are removed too, so the user can click an edge and
+        // hit Delete to unlink two nodes (the ✕ on the edge does the same).
+        const selectedEdgeIds = new Set(es.filter((ed) => ed.selected).map((ed) => ed.id));
+        if (targetIds.size === 0 && selectedEdgeIds.size === 0) return;
         e.preventDefault();
-        setNodes((nds) => nds.filter((n) => !targetIds.has(n.id)));
+        if (targetIds.size > 0) setNodes((nds) => nds.filter((n) => !targetIds.has(n.id)));
         setEdges((eds) =>
           eds.filter(
-            (ed) => !targetIds.has(ed.source) && !targetIds.has(ed.target),
+            (ed) =>
+              !selectedEdgeIds.has(ed.id) &&
+              !targetIds.has(ed.source) &&
+              !targetIds.has(ed.target),
           ),
         );
         if (sid && targetIds.has(sid)) setSelectedNodeId(null);
@@ -1424,7 +1482,7 @@ function MainPlaybookEditorInner({ onBack }: Props) {
     // Editor must own its own height: AppLayout's <main> is `flex-1` with no
     // explicit height, so `h-full` (= 100% of parent) collapses to auto.
     // Use viewport units, subtracting AppLayout's 8px top + 8px bottom padding.
-    <div className="h-screen md:h-[calc(100vh-1rem)] flex flex-col overflow-hidden">
+    <div className={fullscreen ? "fixed inset-0 z-40 bg-white h-screen flex flex-col overflow-hidden" : (embedded ? "h-full flex flex-col overflow-hidden" : "h-screen md:h-[calc(100vh-1rem)] flex flex-col overflow-hidden")}>
       {/* Toolbar - breadcrumb left, secondary actions middle, primary CTA right */}
       <div className="bg-white border-b border-[var(--border-hairline)] px-2 md:px-4 h-14 flex items-center gap-2 md:gap-3 z-10">
         {onBack && (
@@ -1440,6 +1498,25 @@ function MainPlaybookEditorInner({ onBack }: Props) {
           <span className="text-gray-300 hidden sm:inline">/</span>
           <span className="font-medium text-gray-900 truncate">Main Playbook</span>
         </div>
+
+        {/* Full screen. The Main Playbook is the widest graph in the product;
+            editing it inside a padded panel wasted most of the window. */}
+        <button
+          onClick={() => setFullscreen((v) => !v)}
+          data-testid="playbook-fullscreen-toggle"
+          title={fullscreen ? "Exit full screen (Esc)" : "Full screen"}
+          aria-label={fullscreen ? "Exit full screen" : "Full screen"}
+          aria-pressed={fullscreen}
+          className="px-2.5 py-1.5 rounded-md text-xs font-medium text-gray-600 hover:bg-black/[0.04] transition flex items-center gap-1.5 shrink-0"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            {fullscreen ? (
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" />
+            ) : (
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+            )}
+          </svg>
+        </button>
 
         <button
           onClick={() => setTemplateGalleryOpen(true)}
@@ -1486,13 +1563,13 @@ function MainPlaybookEditorInner({ onBack }: Props) {
         >
           <div className="p-4 space-y-5 w-[260px]">
             <div className="px-1">
-              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-[0.08em]">Node Palette</p>
-              <p className="text-[11px] text-gray-400 mt-1">Drag onto canvas, or click to add</p>
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-[0.08em]">{t("aiStudio.nodePaletteTitle")}</p>
+              <p className="text-[11px] text-gray-400 mt-1">{t("aiStudio.nodePaletteHint")}</p>
             </div>
 
             {NODE_PALETTE.map((cat) => (
               <div key={cat.category}>
-                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-[0.08em] px-1 mb-1.5">{cat.category}</p>
+                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-[0.08em] px-1 mb-1.5">{nodeCategoryLabel(cat.category, t)}</p>
                 <div className="space-y-0.5">
                   {cat.items.map((item) => (
                     <div
@@ -1506,8 +1583,8 @@ function MainPlaybookEditorInner({ onBack }: Props) {
                         {item.icon}
                       </div>
                       <div className="min-w-0">
-                        <p className="text-[13px] font-medium text-gray-800 truncate">{item.label}</p>
-                        <p className="text-[11px] text-gray-400 truncate">{item.desc}</p>
+                        <p className="text-[13px] font-medium text-gray-800 truncate">{nodeLabel(item.type, t, item.label)}</p>
+                        <p className="text-[11px] text-gray-400 truncate">{nodeDesc(item.type, t, item.desc)}</p>
                       </div>
                     </div>
                   ))}
@@ -1519,7 +1596,12 @@ function MainPlaybookEditorInner({ onBack }: Props) {
 
         {/* ReactFlow Canvas - triggers are pinned at the left as static
             (non-draggable) nodes, connected by bezier edges to the entry node. */}
-        <div className="flex-1" ref={reactFlowWrapper}>
+        <div className="flex-1 relative" ref={reactFlowWrapper}>
+          {connError && (
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 max-w-md rounded-xl bg-red-600 text-white text-xs font-medium px-3.5 py-2 shadow-lg">
+              {t(`chatbot.connErrors.${connError}`)}
+            </div>
+          )}
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -1552,6 +1634,7 @@ function MainPlaybookEditorInner({ onBack }: Props) {
               );
             }}
             nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
             connectionLineType={"bezier" as any}
             defaultEdgeOptions={{
               type: "bezier",
@@ -1561,6 +1644,12 @@ function MainPlaybookEditorInner({ onBack }: Props) {
             }}
             fitView
             fitViewOptions={{ padding: 0.2 }}
+            // Triggers anchor the LEFT edge: panning stops there and nodes
+            // cannot be dragged left of it, while rightward growth and zoom
+            // stay free. Graph-space, so it survives zoom and RTL. Same shared
+            // helper the chatbot canvas uses.
+            translateExtent={playbookExtent}
+            nodeExtent={playbookExtent}
             snapToGrid
             snapGrid={[15, 15]}
             // Delete handling is owned by our window keydown listener so it

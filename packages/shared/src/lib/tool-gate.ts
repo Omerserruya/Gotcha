@@ -68,6 +68,8 @@ const SYSTEM_TOOL_POLICIES: Record<string, HitlPolicy> = {
   close_conversation:          { mode: "never" },
   tag_contact:                 { mode: "never" },
   generate_followup:           { mode: "never" },
+  // Read-only availability lookup - never books, never needs approval.
+  check_availability:          { mode: "never" },
 
   // Write-side / external-facing - require approval by default.
   send_message:                { mode: "always" },
@@ -75,13 +77,42 @@ const SYSTEM_TOOL_POLICIES: Record<string, HitlPolicy> = {
   schedule_broadcast:          { mode: "always" },
   schedule_followup:           { mode: "always" },
   schedule_followup_template:  { mode: "always" },
-  schedule_meeting:            { mode: "always" },
+  // Risk-based, not blanket HITL: a booking is reversible (cancel_event) and is
+  // a core autonomous action, so short meetings auto-book and only longer ones
+  // need a human nod. Tune per tenant via TenantToolPermission, or widen the
+  // condition (e.g. contains(args.meeting_type, 'enterprise')).
+  schedule_meeting:            { mode: "on_condition", condition: "args.duration_minutes > 60" },
+  // Moving an existing booking is reversible and low-risk (it only shifts a
+  // meeting the customer already agreed to); cancelling is likewise reversible
+  // (re-book). Both auto-run; tighten per tenant via TenantToolPermission.
+  reschedule_meeting:          { mode: "never" },
+  cancel_meeting:              { mode: "never" },
+  // Financial actions - approval is MANDATORY per CLAUDE.md §9 (refunds,
+  // discounts). Floored to `always`; do NOT relax to a threshold that would
+  // auto-execute small amounts. Tenants may only tighten, never loosen, via
+  // TenantToolPermission. The on_condition pattern (see schedule_meeting) is
+  // reserved for REVERSIBLE actions only.
+  issue_refund:                { mode: "always" },
+  refund:                      { mode: "always" },
+  apply_discount:              { mode: "always" },
   merge_contacts:              { mode: "always" },
   update_contact:              { mode: "always" },
   update_crm:                  { mode: "always" },
   create_ticket:               { mode: "always" },
   create_task:                 { mode: "always" },
   create_workflow:             { mode: "always" },
+
+  // Vendor-neutral semantic CRM create wrappers. These dispatch through the
+  // resolved per-tenant CRMAdapter and intentionally have NO CatalogTool row,
+  // so they MUST be treated as static tools here - otherwise the dynamic
+  // catalog branch denies them for every generic-CRM tenant (Airtable,
+  // Fireberry, Monday, Shopify-as-CRM, …). Creating a lead/contact is a
+  // low-risk, additive WRITE and a core autonomous action, so it auto-runs by
+  // default - matching the HubSpot/Zoho `create_lead` catalog tool, which
+  // carries no hitlPolicy (→ "never"). Tenants can still tighten via a
+  // TenantToolPermission row keyed by this exact tool name.
+  integration_create_lead:     { mode: "never" },
+  integration_create_contact:  { mode: "never" },
 };
 
 // ─── Core evaluator ─────────────────────────────────────────
@@ -105,7 +136,35 @@ export async function evaluatePolicies(opts: {
   let tenantToolId: string | null = null;
   let tenantToolEnabled = true;
 
-  if (opts.toolName.startsWith("integration_") || opts.toolName.includes(".")) {
+  if (opts.toolName === "integration_create_lead" || opts.toolName === "integration_create_contact") {
+    // Vendor-neutral semantic create. No CatalogTool row by design - resolve
+    // its floor from SYSTEM_TOOL_POLICIES (→ "never") so it is NOT routed into
+    // the catalog-required branch below (which would deny it for generic-CRM
+    // tenants). Tenant overrides flow through the static TenantToolPermission
+    // path (tenantToolId stays null).
+    catalog = SYSTEM_TOOL_POLICIES[opts.toolName] ?? { mode: "never" };
+  } else if (opts.toolName.startsWith("custom.") || opts.toolName.startsWith("custom_db.")) {
+    // Tenant-defined custom HTTP / DB-query tools. Their definition lives in
+    // CustomApiTool / CustomDbQueryTool, NOT CatalogTool, so the dynamic branch
+    // would deny every call. Resolve a risk-based floor from the tool's own
+    // category/riskLevel instead: read-only + non-HIGH auto-runs; any
+    // write/delete/action or HIGH-risk tool requires approval (safe-by-default,
+    // matches the documented schema intent). Tenant overrides flow through the
+    // static TenantToolPermission path (tenantToolId stays null).
+    const isDb = opts.toolName.startsWith("custom_db.");
+    const slug = opts.toolName.slice((isDb ? "custom_db." : "custom.").length);
+    const model = isDb ? (prisma as any).customDbQueryTool : (prisma as any).customApiTool;
+    const row = await model?.findUnique?.({
+      where: { tenantId_slug: { tenantId: opts.tenantId, slug } },
+    }).catch(() => null);
+    if (!row || !row.isActive) {
+      return denyResult(`unknown or inactive custom tool "${opts.toolName}"`, {});
+    }
+    const cat = String(row.category || "").toUpperCase();
+    const risk = String(row.riskLevel || "").toUpperCase();
+    const autoRun = cat === "READ" && risk !== "HIGH";
+    catalog = autoRun ? { mode: "never" } : { mode: "always" };
+  } else if (opts.toolName.startsWith("integration_") || opts.toolName.includes(".")) {
     // Dynamic integration tool. Resolve via CatalogTool.
     //
     // Two name shapes flow through here:
@@ -134,8 +193,24 @@ export async function evaluatePolicies(opts: {
           ? { slug: toolSlugLookup, integration: { slug: integrationSlugLookup } }
           : { slug: toolSlugLookup },
       },
-      include: { catalogTool: true },
+      include: { catalogTool: true, tenantIntegration: { select: { status: true } } },
     });
+
+    // A tool whose provider is no longer connected cannot run, whatever the
+    // policy says. The bot's tool surface already filters on CONNECTED, so this
+    // was previously unreachable from an autonomous turn - but a human-initiated
+    // action (the customer context panel's quick actions) calls the gate
+    // directly, and there this is the ONLY connection check. Requirement: every
+    // execution verifies the integration is connected.
+    if (tenantTool) {
+      const connStatus = String(tenantTool.tenantIntegration?.status ?? "").toUpperCase();
+      if (connStatus && connStatus !== "CONNECTED") {
+        return denyResult(
+          `integration for "${toolSlugLookup}" is not connected (${connStatus.toLowerCase()})`,
+          {},
+        );
+      }
+    }
 
     if (!tenantTool) {
       const ref = integrationSlugLookup

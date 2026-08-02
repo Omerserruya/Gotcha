@@ -382,11 +382,13 @@ export function computeBehaviorState(input: ComputeBehaviorStateInput): Behavior
   // Step 1 - Resolve user type.
   const { value: userType, source: userTypeSource } = resolveUserType(input.identity);
 
-  // Step 2 - Determine conversation stage.
-  const { value: conversationStage, source: stageSource } = resolveStage(input.request, input.flags);
-
-  // Step 3 - Classify intent + urgency.
+  // Step 3 - Classify intent + urgency. Computed BEFORE stage so the stage
+  // resolver can consult the accumulated intent (a lone "problem" word during a
+  // sustained discovery shouldn't flip the whole turn to a support stage).
   const { intent, intentSource, urgency, urgencySource } = classifyIntentAndUrgency(input.request, input.flags);
+
+  // Step 2 - Determine conversation stage (intent-aware).
+  const { value: conversationStage, source: stageSource } = resolveStage(input.request, input.flags, intent);
 
   // Engagement.
   const { engagement, engagementSource } = deriveEngagement(input.identity, input.request);
@@ -614,14 +616,23 @@ function resolveUserType(id: IdentityInput): { value: UserType; source: string }
 
 // ─── Step 2 - Stage ────────────────────────────────────────
 
-function resolveStage(req: RequestInput, flags?: FlagsInput): { value: ConversationStage; source: string } {
+function resolveStage(req: RequestInput, flags?: FlagsInput, intent?: Intent): { value: ConversationStage; source: string } {
   if (flags?.escalationGateFired || flags?.humanHandoffRequested) {
     return { value: "support", source: "escalation gate or handoff request" };
   }
   if (req.messageCount <= 1) return { value: "initial", source: "messageCount<=1" };
 
   const text = (req.lastMessage || "").toLowerCase();
-  if (containsAny(text, SUPPORT_MARKERS)) return { value: "support", source: "support marker in message" };
+  if (containsAny(text, SUPPORT_MARKERS)) {
+    // Only treat the turn as a support stage when the customer's ACCUMULATED
+    // intent agrees (or is still unclear). A passing "this doesn't work" during
+    // a sustained discovery/buying thread is handled inside the active strategy
+    // (and the urgency override still forces RESOLVE if it's genuinely urgent) -
+    // it shouldn't yank the whole turn into problem-resolution mode.
+    if (!intent || intent === "support" || intent === "unclear") {
+      return { value: "support", source: "support marker + accumulated intent" };
+    }
+  }
   if (containsAny(text, OBJECTION_MARKERS)) return { value: "objection", source: "objection marker in message" };
   if (containsAny(text, DECISION_MARKERS)) return { value: "decision", source: "decision marker in message" };
   return { value: "exploration", source: "default - exploration" };
@@ -633,22 +644,66 @@ function classifyIntentAndUrgency(
   req: RequestInput,
   flags?: FlagsInput,
 ): { intent: Intent; intentSource: string; urgency: Urgency; urgencySource: string } {
-  const text = (req.lastMessage || "").toLowerCase();
+  // DYNAMIC intent: accumulate evidence across the recent inbound messages
+  // (oldest→newest) instead of classifying the latest message in isolation.
+  // This is what lets the strategy EVOLVE: a customer who opens "support" but
+  // then asks five capability questions reads as informational/discovery, not
+  // support - while a customer who stays on a problem keeps reading as support.
+  //
+  //  - Newer messages weigh more (recency ramp 1.0→2.0), so a genuine late
+  //    topic shift can overtake the opening, but the opening still counts.
+  //  - support / transactional markers are SPECIFIC (×1.5); the generic
+  //    informational/question signal is weak (×1.0) so it doesn't drown out a
+  //    real support or buying thread (almost every message is a question).
+  const texts = (req.recentInboundTexts && req.recentInboundTexts.length > 0)
+    ? req.recentInboundTexts
+    : [req.lastMessage || ""];
+  const n = texts.length;
+  const scores: Record<"support" | "transactional" | "informational", number> = {
+    support: 0, transactional: 0, informational: 0,
+  };
+  texts.forEach((raw, i) => {
+    const t = (raw || "").toLowerCase();
+    if (!t.trim()) return;
+    const recency = n > 1 ? 1 + i / (n - 1) : 1; // oldest 1.0 → newest 2.0
+    if (containsAny(t, SUPPORT_MARKERS)) scores.support += recency * 1.5;
+    if (containsAny(t, TRANSACTIONAL_MARKERS)) scores.transactional += recency * 1.5;
+    if (containsAny(t, INFORMATIONAL_MARKERS) || isQuestion(t)) scores.informational += recency * 1.0;
+  });
 
   let intent: Intent = "unclear";
-  let intentSource = "default - unclear";
-
-  if (containsAny(text, SUPPORT_MARKERS)) {
-    intent = "support";
-    intentSource = "support keywords detected";
-  } else if (containsAny(text, TRANSACTIONAL_MARKERS)) {
-    intent = "transactional";
-    intentSource = "transactional keywords detected";
-  } else if (containsAny(text, INFORMATIONAL_MARKERS) || isQuestion(text)) {
-    intent = "informational";
-    intentSource = "informational keywords or question form";
+  let intentSource = "default - unclear (no markers across recent messages)";
+  // Order matters for ties: specific intents win over generic informational.
+  const ranked: Array<[Intent, number]> = ([
+    ["support", scores.support],
+    ["transactional", scores.transactional],
+    ["informational", scores.informational],
+  ] as Array<[Intent, number]>).sort((a, b) => b[1] - a[1]);
+  const [topIntent, topScore] = ranked[0];
+  if (topScore > 0) {
+    intent = topIntent;
+    const margin = topScore - ranked[1][1];
+    intentSource = `accumulated ${topIntent} over ${n} msg (score=${topScore.toFixed(1)}, margin=${margin.toFixed(1)})`;
   }
 
+  // Scheduling-change override: managing an EXISTING booking (move / reschedule /
+  // push / cancel a meeting or demo) is a scheduling action the AI can fulfil
+  // itself, NOT a support problem - even though "cancel" is a support marker.
+  // Without this, "cancel my meeting" / "let's move the demo" scored as support →
+  // strategy RESOLVE → the AI steered to resolve/escalate instead of calling
+  // reschedule_meeting / cancel_meeting. Force transactional so the matrix routes
+  // to CONVERT (which allows scheduling actions).
+  const latest = (req.lastMessage || "").toLowerCase();
+  const MEETING_REF = /(meeting|demo|appointment|\bcall\b|booking|פגיש|דמו|תור|שיחה)/i;
+  const CHANGE_VERB = /(reschedul|postpone|push|\bmove\b|change|cancel|earlier|later|different time|another time|להזיז|לדחות|לשנות|לבטל|להקדים|מועד אחר|שעה אחרת|זמן אחר)/i;
+  if (MEETING_REF.test(latest) && CHANGE_VERB.test(latest)) {
+    intent = "transactional";
+    intentSource = "scheduling change (manage existing booking) → transactional";
+  }
+
+  // Urgency stays anchored to the CURRENT message (+ flags): a fresh problem or
+  // a "now!" should spike urgency this turn even mid-discovery.
+  const text = (req.lastMessage || "").toLowerCase();
   let urgency: Urgency = "low";
   let urgencySource = "default - low";
   if (flags?.escalationGateFired || flags?.humanHandoffRequested) {

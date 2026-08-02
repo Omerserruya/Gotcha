@@ -1,0 +1,56 @@
+# Secret-scanning configuration.
+#
+# Extends the default ruleset rather than replacing it, so every gitleaks rule
+# stays active. What follows are allowlist entries for specific, audited files -
+# not a blanket exemption for documentation or tests, because "it's only a test
+# fixture" is exactly how a real key gets committed and stays committed.
+#
+# Every entry below names the file and the reason. A new finding anywhere else,
+# including a new test file, still fails the build.
+#
+# Audited 2026-08-02 against gitleaks 8.24.3: 15 findings, 0 real secrets.
+
+[extend]
+useDefault = true
+
+[[rules]]
+# Placeholder credential values in operator setup guides. These are the literal
+# strings an operator replaces - `sk_live_xxxxxxxxxxxx`, `xoxb-your-token`,
+# `YOUR_JWT`, `A1B2C3...consumer_secret...`. Verified character by character:
+# the Stripe example is twelve literal 'x'.
+id = "docs-setup-placeholders"
+description = "Placeholder credentials in setup documentation"
+regex = '''(?i)(sk_live_x{6,}|xoxb-your-[a-z-]+|YOUR_JWT[A-Z_]*|A1B2C3\.\.\.)'''
+path = '''docs/setup/.*\.md'''
+[rules.allowlist]
+regexTarget = "match"
+regexes = ['''.*''']
+
+[allowlist]
+description = "Audited non-secrets"
+paths = [
+  # Example environment file. Its three findings are the OIDC JWKS *URL*
+  # (http://authentik-server:9000/...), matched by the generic-api-key rule
+  # because of the `=` assignment. A URL to an internal service is not a
+  # credential, and this file exists precisely so real values live elsewhere.
+  '''^\.env\.example$''',
+
+  # Operator setup guides. Placeholder values inside fenced .env and curl
+  # examples. See the rule above for the exact literals.
+  '''^docs/setup/slack-channel-setup-guide\.md$''',
+  '''^docs/setup/meta-channel-setup-guide\.md$''',
+  '''^docs/setup/marketplace-oauth-setup-guide\.md$''',
+
+  # Test fixtures, listed individually rather than by a `.*test.*` glob so that
+  # a future test file carrying a real credential is still caught.
+  '''^packages/shared/src/__tests__/oauth-state-store\.test\.ts$''',
+  '''^packages/shared/src/lib/__tests__/verify-id-token\.test\.ts$''',
+  '''^packages/shared/src/lib/billing/__tests__/payment-token-crypto\.test\.ts$''',
+  '''^services/ai/src/__tests__/shopify-chat-install-service\.test\.ts$''',
+  '''^services/auth/src/__tests__/paid-onboarding-link\.test\.ts$''',
+
+  # A deliberately malformed JWT used to prove the log redactor strips tokens.
+  # The suite's whole purpose is to hold a token-shaped string and assert it
+  # never reaches a log line.
+  '''^services/ai/src/__tests__/security/log-redact\.test\.ts$''',
+]

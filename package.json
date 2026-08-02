@@ -16,7 +16,7 @@
     "test": "npm run test --workspaces --if-present"
   },
   "dependencies": {
-    "nodemailer": "^8.0.1"
+    "nodemailer": "^9.0.3"
   },
   "devDependencies": {
     "@types/nodemailer": "^7.0.11"

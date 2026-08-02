@@ -24,7 +24,6 @@ interface InviteShape {
   tenant: { name: string; slug: string };
   email: string | null;
   role: string;
-  requiresPassword: boolean;
 }
 
 function JoinContent() {
@@ -38,7 +37,6 @@ function JoinContent() {
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [accepting, setAccepting] = useState(false);
   const [acceptError, setAcceptError] = useState("");
 
@@ -66,13 +64,19 @@ function JoinContent() {
     setAccepting(true);
     setAcceptError("");
     try {
-      await acceptPublicInvite({
+      const res = await acceptPublicInvite({
         token,
         name: name.trim(),
         email: invite.email ? undefined : email.trim().toLowerCase(),
-        password,
       });
-      router.replace(`/login?email=${encodeURIComponent(invite.email || email)}&tenant=${encodeURIComponent(invite.tenant.slug)}&fromInvite=1`);
+      // Accepting links the person to the tenant; the credential itself is set
+      // in Authentik. Hand them straight to that one-time setup link rather
+      // than to a login form they have no password for yet.
+      if (res?.data?.setupLink) {
+        window.location.assign(res.data.setupLink);
+        return;
+      }
+      router.replace("/login");
     } catch (err: any) {
       setAcceptError(err?.message || "Couldn't accept invite. Please try again.");
     } finally {
@@ -142,23 +146,14 @@ function JoinContent() {
             )}
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={8}
-              maxLength={128}
-              className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-200 focus:border-primary-300 focus:bg-white outline-none transition text-sm"
-            />
-            <p className="mt-1 text-xs text-gray-400">Minimum 8 characters.</p>
-          </div>
+          <p className="text-xs text-gray-400">
+            You will choose your password on the next screen, on our secure
+            sign-in service.
+          </p>
 
           <button
             type="submit"
-            disabled={accepting || !name.trim() || !email.trim() || password.length < 8}
+            disabled={accepting || !name.trim() || !email.trim()}
             className="w-full py-3 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-xl transition disabled:opacity-50 shadow-lg shadow-primary-500/25"
           >
             {accepting ? "Joining…" : "Join workspace"}
@@ -166,7 +161,7 @@ function JoinContent() {
 
           <p className="text-center text-xs text-gray-400">
             Already have an account?{" "}
-            <a href={`/login?tenant=${encodeURIComponent(invite.tenant.slug)}`} className="text-primary-600 hover:text-primary-700">
+            <a href="/login" className="text-primary-600 hover:text-primary-700">
               Log in
             </a>
           </p>

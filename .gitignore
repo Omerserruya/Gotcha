@@ -41,3 +41,4 @@ packages/shared/prisma/*.db
 coverage/
 .claude/
 .omc/
+graphify-out/

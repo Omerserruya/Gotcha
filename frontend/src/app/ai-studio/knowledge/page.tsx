@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useCallback, useRef, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { aiStudioHref, normalizeAiStudioTab } from "@/lib/ai-studio-tabs";
 import { AppLayout } from "@/components/AppLayout";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
@@ -24,10 +25,14 @@ import {
   getDriveFiles,
   getDriveSharedDrives,
   syncDriveFiles,
+  setKnowledgeIntegrationAutoSync,
   getAgents,
   getDepartments,
 } from "@/lib/api";
 import clsx from "clsx";
+import { RefreshWebsiteKnowledge } from "@/components/knowledge/RefreshWebsiteKnowledge";
+import { SourceProvenance, readProvenance } from "@/components/knowledge/SourceProvenance";
+import { getBusinessDiscovery } from "@/lib/api";
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -38,7 +43,10 @@ interface KnowledgeDocument {
   chunkCount: number;
   sourceType: string;
   sourceUrl?: string;
+  /** Provenance stamped by the onboarding projection - see SourceProvenance. */
+  metadata?: unknown;
   createdAt: string;
+  updatedAt?: string;
 }
 
 interface KnowledgeBase {
@@ -64,8 +72,11 @@ type ScopeOption = { value: string; label: string; type: "all" | "agent" | "depa
 
 // ─── Scope Helpers ────────────────────────────────────────────
 
-function scopeLabel(scope: string | undefined, scopeOptions: ScopeOption[]): string {
-  if (!scope || scope === "all") return "All AI";
+// `t` is threaded in rather than read from a hook: this is a module-level
+// helper, and the "All AI" default it returns is rendered as a badge on every
+// KB row - it stayed English in Hebrew until it was translated here.
+function scopeLabel(scope: string | undefined, scopeOptions: ScopeOption[], t: (k: string) => string): string {
+  if (!scope || scope === "all") return t("aiStudio.knowledge.manage.scopeAllShort");
   const opt = scopeOptions.find((o) => o.value === scope);
   return opt?.label ?? scope;
 }
@@ -79,10 +90,24 @@ function scopeBadgeColor(scope: string | undefined): string {
 
 // ─── Page ─────────────────────────────────────────────────────
 
+// useSearchParams (for the ?kb= deep link) forces this into a Suspense
+// boundary - the static build refuses to render the consumer without one.
 export default function KnowledgePage() {
+  return (
+    <Suspense fallback={null}>
+      <KnowledgePageInner />
+    </Suspense>
+  );
+}
+
+function KnowledgePageInner() {
   const { token } = useAuth();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // A knowledge source belongs to the Knowledge tab; Back must return there.
+  const rt = searchParams.get("returnTab");
+  const returnTab = rt ? normalizeAiStudioTab(rt) : "knowledge";
 
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([]);
   const [loading, setLoading] = useState(true);
@@ -90,7 +115,7 @@ export default function KnowledgePage() {
   const [detailTab, setDetailTab] = useState<"documents" | "integrations">("documents");
 
   // Scope options
-  const [scopeOptions, setScopeOptions] = useState<ScopeOption[]>([{ value: "all", label: "All AI", type: "all" }]);
+  const [scopeOptions, setScopeOptions] = useState<ScopeOption[]>([]);
 
   // Create KB
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -119,6 +144,16 @@ export default function KnowledgePage() {
   const [editName, setEditName] = useState("");
   const [editDesc, setEditDesc] = useState("");
   const [savingKB, setSavingKB] = useState(false);
+
+  // Pending destructive action. Deleting a knowledge base takes every document
+  // and embedding with it and cannot be undone, so nothing deletes until the
+  // user confirms in the dialog this drives.
+  const [confirmDelete, setConfirmDelete] = useState<
+    | { kind: "kb"; kbId: string; name: string; docCount: number }
+    | { kind: "doc"; kbId: string; docId: string; name: string }
+    | null
+  >(null);
+  const [deleting, setDeleting] = useState(false);
 
   // Browse modal (Confluence / Drive)
   const [showBrowseModal, setShowBrowseModal] = useState(false);
@@ -154,6 +189,59 @@ export default function KnowledgePage() {
     }
   }, [token]);
 
+  // The tenant's website domain, read once so the "Refresh website knowledge"
+  // action knows what to re-scan. A tenant that never ran a scan has none, and
+  // the control hides itself rather than offering a refresh of nothing.
+  const [websiteDomain, setWebsiteDomain] = useState<string | null>(null);
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    getBusinessDiscovery(token)
+      .then((r) => { if (!cancelled) setWebsiteDomain(r.data.discovery?.websiteDomain || null); })
+      .catch(() => { /* no discovery yet - the control stays hidden */ });
+    return () => { cancelled = true; };
+  }, [token]);
+
+  // Deep link from the AI Studio Knowledge tab (?kb=<id>): editing a knowledge
+  // base happens only here, so that tab links in rather than duplicating the
+  // editor. Runs once per id, and only for a KB that actually loaded, so a
+  // stale link falls back to the normal empty state instead of a blank panel.
+  const deepLinkKb = searchParams.get("kb");
+  useEffect(() => {
+    if (!deepLinkKb || !knowledgeBases.some((kb) => kb.id === deepLinkKb)) return;
+    setSelectedKb(deepLinkKb);
+    setDetailTab("documents");
+  }, [deepLinkKb, knowledgeBases]);
+
+  // §8 Deep link from the Knowledge tab's source-type cards (?add=file|url|text|
+  // drive|confluence): open the correct focused flow. file/url/text open the
+  // upload modal in that mode against the first (or a newly created) KB;
+  // drive/confluence route into the connected-source browse via the integrations
+  // tab. Runs once after KBs load.
+  const addMode = searchParams.get("add");
+  const addHandledRef = useRef(false);
+  useEffect(() => {
+    if (!addMode || addHandledRef.current || loading) return;
+    addHandledRef.current = true;
+    const firstKb = knowledgeBases[0]?.id ?? null;
+    if (addMode === "drive" || addMode === "confluence") {
+      if (firstKb) { setSelectedKb(firstKb); setDetailTab("integrations"); }
+      else { setShowCreateModal(true); }
+      return;
+    }
+    if (["file", "url", "text"].includes(addMode)) {
+      if (firstKb) {
+        setSelectedKb(firstKb);
+        setDetailTab("documents");
+        setUploadMode(addMode as "file" | "url" | "text");
+        setShowUploadModal(true);
+      } else {
+        // No KB yet - the upload needs a home; open the create flow first.
+        setShowCreateModal(true);
+      }
+    }
+  }, [addMode, loading, knowledgeBases]);
+
   const loadIntegrations = useCallback(async () => {
     if (!token || !selectedKb) return;
     try {
@@ -174,15 +262,15 @@ export default function KnowledgePage() {
       const agents = Array.isArray(agentsRes) ? agentsRes : [];
       const depts = deptsRes?.data || [];
       const opts: ScopeOption[] = [
-        { value: "all", label: "All AI", type: "all" },
+        { value: "all", label: t("aiStudio.knowledge.manage.scopeAllShort"), type: "all" },
         ...agents.map((a: any) => ({
           value: `agent:${a.id}`,
-          label: `Agent: ${a.name || a.email}`,
+          label: `${t("aiStudio.knowledge.manage.scopeAgent")}: ${a.name || a.email}`,
           type: "agent" as const,
         })),
         ...depts.map((d: any) => ({
           value: `department:${d.id}`,
-          label: `Department: ${d.name}`,
+          label: `${t("aiStudio.knowledge.manage.scopeDepartment")}: ${d.name}`,
           type: "department" as const,
         })),
       ];
@@ -225,14 +313,23 @@ export default function KnowledgePage() {
     }
   }
 
-  async function handleDeleteKb(kbId: string) {
-    if (!token) return;
+  /** Runs the pending delete once the user has confirmed it. */
+  async function runConfirmedDelete() {
+    if (!token || !confirmDelete || deleting) return;
+    setDeleting(true);
     try {
-      await deleteKnowledgeBase(token, kbId);
-      if (selectedKb === kbId) setSelectedKb(null);
+      if (confirmDelete.kind === "kb") {
+        await deleteKnowledgeBase(token, confirmDelete.kbId);
+        if (selectedKb === confirmDelete.kbId) setSelectedKb(null);
+      } else {
+        await deleteKnowledgeDocument(token, confirmDelete.kbId, confirmDelete.docId);
+      }
+      setConfirmDelete(null);
       await loadKnowledgeBases();
     } catch (err) {
-      console.error("Failed to delete KB:", err);
+      console.error("Failed to delete:", err);
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -303,15 +400,6 @@ export default function KnowledgePage() {
     setUploadMode("file");
   }
 
-  async function handleDeleteDoc(kbId: string, docId: string) {
-    if (!token) return;
-    try {
-      await deleteKnowledgeDocument(token, kbId, docId);
-      await loadKnowledgeBases();
-    } catch (err) {
-      console.error("Failed to delete document:", err);
-    }
-  }
 
   async function handleReprocessDoc(kbId: string, docId: string) {
     if (!token) return;
@@ -345,6 +433,17 @@ export default function KnowledgePage() {
       await loadIntegrations();
     } catch (err) {
       console.error("Failed to disconnect:", err);
+    }
+  }
+
+  async function handleToggleAutoSync(int: Integration) {
+    if (!token) return;
+    const next = int.config?.autoSync === false; // currently off → turn on
+    try {
+      await setKnowledgeIntegrationAutoSync(token, int.id, next);
+      await loadIntegrations();
+    } catch (err) {
+      console.error("Failed to toggle auto-sync:", err);
     }
   }
 
@@ -556,13 +655,13 @@ export default function KnowledgePage() {
       <div className="p-3 md:p-6 overflow-y-auto h-screen">
         {/* Back */}
         <button
-          onClick={() => router.push("/ai-studio")}
+          onClick={() => router.push(aiStudioHref(returnTab))}
           className="flex items-center gap-2 text-gray-400 hover:text-gray-700 text-sm mb-5 transition"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
           </svg>
-          Back to AI Studio
+          {t("aiStudio.knowledge.page.backToStudio")}
         </button>
 
         {/* Header */}
@@ -574,8 +673,8 @@ export default function KnowledgePage() {
               </svg>
             </div>
             <div>
-              <h1 className="text-xl font-bold text-gray-900">Knowledge Base</h1>
-              <p className="text-sm text-gray-400 mt-0.5">Manage knowledge sources for your AI agents and copilot</p>
+              <h1 className="text-xl font-bold text-gray-900">{t("aiStudio.knowledge.manage.title")}</h1>
+              <p className="text-sm text-gray-400 mt-0.5">{t("aiStudio.knowledge.manage.subtitle")}</p>
             </div>
           </div>
           <button
@@ -586,7 +685,7 @@ export default function KnowledgePage() {
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
             </svg>
-            New Knowledge Base
+            {t("aiStudio.knowledge.manage.newKbTitle")}
           </button>
         </div>
 
@@ -600,8 +699,8 @@ export default function KnowledgePage() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
                   </svg>
                 </div>
-                <p className="text-sm text-gray-500">No knowledge bases yet</p>
-                <p className="text-xs text-gray-400 mt-1">Create one to get started</p>
+                <p className="text-sm text-gray-500">{t("aiStudio.knowledge.manage.emptyList")}</p>
+                <p className="text-xs text-gray-400 mt-1">{t("aiStudio.knowledge.manage.emptyListHint")}</p>
               </div>
             ) : (
               knowledgeBases.map((kb) => (
@@ -622,10 +721,10 @@ export default function KnowledgePage() {
                   {kb.description && <p className="text-xs text-gray-400 truncate">{kb.description}</p>}
                   <div className="flex items-center gap-2 mt-1.5">
                     <p className="text-xs text-gray-400">
-                      {kb.documents.length} {kb.documents.length === 1 ? "document" : "documents"}
+                      {kb.documents.length} {kb.documents.length === 1 ? t("aiStudio.knowledge.manage.document") : t("aiStudio.knowledge.manage.documents")}
                     </p>
                     <span className={clsx("px-1.5 py-0.5 rounded-full text-[10px] font-medium", scopeBadgeColor(kb.scope))}>
-                      {scopeLabel(kb.scope, scopeOptions)}
+                      {scopeLabel(kb.scope, scopeOptions, t)}
                     </span>
                   </div>
                 </button>
@@ -640,7 +739,7 @@ export default function KnowledgePage() {
                 <svg className="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
                 </svg>
-                <p className="text-sm text-gray-400">Select a knowledge base to view details</p>
+                <p className="text-sm text-gray-400">{t("aiStudio.knowledge.manage.selectHint")}</p>
               </div>
             ) : (
               <div className="space-y-4">
@@ -654,13 +753,13 @@ export default function KnowledgePage() {
                             className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-400"
                             value={editName}
                             onChange={(e) => setEditName(e.target.value)}
-                            placeholder="Knowledge base name"
+                            placeholder={t("aiStudio.knowledge.manage.namePlaceholder")}
                           />
                           <input
                             className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-violet-400"
                             value={editDesc}
                             onChange={(e) => setEditDesc(e.target.value)}
-                            placeholder="Description (optional)"
+                            placeholder={t("aiStudio.knowledge.manage.descPlaceholder")}
                           />
                           <div className="flex items-center gap-2">
                             <button
@@ -686,13 +785,13 @@ export default function KnowledgePage() {
                               }}
                               className="bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white px-3 py-1 rounded-lg text-xs font-medium transition"
                             >
-                              {savingKB ? "Saving..." : "Save"}
+                              {savingKB ? t("aiStudio.knowledge.manage.saving") : t("common.save")}
                             </button>
                             <button
                               onClick={() => setEditingKB(false)}
                               className="text-gray-500 hover:text-gray-700 px-3 py-1 rounded-lg text-xs font-medium transition border border-gray-200"
                             >
-                              Cancel
+                              {t("common.cancel")}
                             </button>
                           </div>
                         </div>
@@ -701,7 +800,7 @@ export default function KnowledgePage() {
                           <div className="flex items-center gap-2">
                             <h3 className="font-bold text-lg text-gray-900">{activeKb.name}</h3>
                             <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium", scopeBadgeColor(activeKb.scope))}>
-                              {scopeLabel(activeKb.scope, scopeOptions)}
+                              {scopeLabel(activeKb.scope, scopeOptions, t)}
                             </span>
                             <button
                               onClick={() => {
@@ -710,7 +809,7 @@ export default function KnowledgePage() {
                                 setEditingKB(true);
                               }}
                               className="text-gray-400 hover:text-gray-600 transition"
-                              title="Edit knowledge base"
+                              title={t("aiStudio.knowledge.manage.editKb")}
                             >
                               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
@@ -730,7 +829,7 @@ export default function KnowledgePage() {
                         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                         </svg>
-                        Add Content
+                        {t("aiStudio.knowledge.manage.addContentTitle")}
                       </button>
 
                       {/* Connect Source dropdown */}
@@ -750,7 +849,7 @@ export default function KnowledgePage() {
                           const cfConnected = integrations.some((i: any) => i.provider === "confluence");
                           return (
                           <div className="absolute right-0 top-full mt-1 bg-white rounded-xl shadow-lg border border-gray-200 py-1.5 z-10 w-56">
-                            <p className="px-3 py-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">External Sources</p>
+                            <p className="px-3 py-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">{t("aiStudio.knowledge.manage.externalSources")}</p>
                             <button
                               onClick={() => gdConnected ? setDetailTab("integrations") : handleConnect("google_drive")}
                               className="w-full text-left px-3 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3"
@@ -785,7 +884,12 @@ export default function KnowledgePage() {
                       </div>
 
                       <button
-                        onClick={() => handleDeleteKb(activeKb.id)}
+                        onClick={() => setConfirmDelete({
+                          kind: "kb",
+                          kbId: activeKb.id,
+                          name: activeKb.name,
+                          docCount: activeKb.documents.length,
+                        })}
                         className="text-red-400 hover:text-red-600 hover:bg-red-50 p-2 rounded-xl transition"
                       >
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -795,6 +899,15 @@ export default function KnowledgePage() {
                     </div>
                   </div>
                 </div>
+
+                {/* Re-scan the tenant's site and reconcile into this KB. Only
+                    rendered once we know their domain - there is nothing to
+                    refresh otherwise. */}
+                <RefreshWebsiteKnowledge
+                  token={token || ""}
+                  domain={websiteDomain}
+                  onRefreshed={loadKnowledgeBases}
+                />
 
                 {/* Tabs */}
                 <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
@@ -828,8 +941,8 @@ export default function KnowledgePage() {
                             <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
                           </svg>
                         </div>
-                        <p className="text-sm text-gray-500">No documents yet</p>
-                        <p className="text-xs text-gray-400 mt-1">Upload files, paste content, add URLs, or connect Google Drive / Confluence</p>
+                        <p className="text-sm text-gray-500">{t("aiStudio.knowledge.manage.noDocs")}</p>
+                        <p className="text-xs text-gray-400 mt-1">{t("aiStudio.knowledge.manage.noDocsHint")}</p>
                       </div>
                     ) : (
                       <div className="space-y-2">
@@ -861,18 +974,34 @@ export default function KnowledgePage() {
                               <div className="min-w-0">
                                 <h5 className="text-sm font-medium text-gray-900 truncate">{doc.title}</h5>
                                 <p className="text-xs text-gray-400">
-                                  {doc.sourceType === "url" ? (
-                                    <span className="text-blue-500">URL</span>
-                                  ) : (
-                                    doc.sourceType
+                                  {/* Raw source identifiers like
+                                      "onboarding_scan" are internal names. When
+                                      the row carries provenance it already says
+                                      "From website scan" in the tenant's
+                                      language, so showing the raw slug next to
+                                      it is both duplicated and jargon. */}
+                                  {readProvenance(doc.metadata) ? null : (
+                                    <>
+                                      {doc.sourceType === "url" ? (
+                                        <span className="text-blue-500">URL</span>
+                                      ) : (
+                                        doc.sourceType
+                                      )}
+                                      {" "}&middot;{" "}
+                                    </>
                                   )}
-                                  {" "}&middot; {doc.chunkCount} chunks &middot;{" "}
+                                  {doc.chunkCount === 1 ? "1 chunk" : `${doc.chunkCount} chunks`} &middot;{" "}
                                   <span className={clsx(
                                     doc.status === "ready" ? "text-green-600" :
                                     doc.status === "processing" ? "text-amber-600" :
                                     doc.status === "error" ? "text-red-600" : "text-gray-400"
                                   )}>{doc.status}</span>
                                 </p>
+                                {/* Where this came from. Without it a customer
+                                    cannot tell their own writing from an entry
+                                    the scan generated - which matters before
+                                    they edit or delete one. */}
+                                <SourceProvenance metadata={doc.metadata} he={locale === "he"} />
                               </div>
                             </div>
                             <div className="flex items-center gap-1 shrink-0">
@@ -888,7 +1017,14 @@ export default function KnowledgePage() {
                                 </button>
                               )}
                               <button
-                                onClick={() => handleDeleteDoc(activeKb.id, doc.id)}
+                                onClick={() => setConfirmDelete({
+                                  kind: "doc",
+                                  kbId: activeKb.id,
+                                  docId: doc.id,
+                                  name: doc.title,
+                                })}
+                                title={t("aiStudio.knowledge.deleteDoc")}
+                                aria-label={t("aiStudio.knowledge.deleteDoc")}
                                 className="text-red-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition"
                               >
                                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -913,8 +1049,8 @@ export default function KnowledgePage() {
                             <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m9.86-2.718a4.5 4.5 0 00-1.242-7.244l4.5-4.5a4.5 4.5 0 016.364 6.364l-1.757 1.757" />
                           </svg>
                         </div>
-                        <p className="text-sm text-gray-500">No integrations connected</p>
-                        <p className="text-xs text-gray-400 mt-1">Connect Google Drive or Confluence to import content</p>
+                        <p className="text-sm text-gray-500">{t("aiStudio.knowledge.manage.noIntegrations")}</p>
+                        <p className="text-xs text-gray-400 mt-1">{t("aiStudio.knowledge.manage.noIntegrationsHint")}</p>
                       </div>
                     ) : (
                       <div className="space-y-2">
@@ -943,10 +1079,22 @@ export default function KnowledgePage() {
                             </div>
                             <div className="flex items-center gap-1.5 shrink-0">
                               <button
+                                onClick={() => handleToggleAutoSync(int)}
+                                title="Re-sync this source automatically every hour when it changes"
+                                className={clsx(
+                                  "px-2.5 py-1.5 rounded-xl text-xs font-medium transition border",
+                                  int.config?.autoSync !== false
+                                    ? "bg-green-50 text-green-700 border-green-200 hover:bg-green-100"
+                                    : "bg-gray-50 text-gray-400 border-gray-200 hover:bg-gray-100"
+                                )}
+                              >
+                                {int.config?.autoSync !== false ? "Auto-sync: On" : "Auto-sync: Off"}
+                              </button>
+                              <button
                                 onClick={() => handleBrowse(int)}
                                 className="bg-violet-50 text-violet-700 hover:bg-violet-100 px-3 py-1.5 rounded-xl text-xs font-medium transition"
                               >
-                                {int.provider === "confluence" ? "Browse Spaces" : "Browse Files"}
+                                {int.provider === "confluence" ? t("aiStudio.knowledge.manage.browseSpaces") : t("aiStudio.knowledge.manage.browseFiles")}
                               </button>
                               <button
                                 onClick={() => handleDisconnect(int.id)}
@@ -975,24 +1123,24 @@ export default function KnowledgePage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setShowCreateModal(false)} />
           <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
-            <h3 className="font-bold text-lg text-gray-900 mb-4">New Knowledge Base</h3>
+            <h3 className="font-bold text-lg text-gray-900 mb-4">{t("aiStudio.knowledge.manage.newKbTitle")}</h3>
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Name</label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">{t("aiStudio.knowledge.manage.fieldName")}</label>
                 <input
                   type="text"
                   value={newKbName}
                   onChange={(e) => setNewKbName(e.target.value)}
-                  placeholder="e.g. Product Documentation"
+                  placeholder={t("aiStudio.knowledge.manage.fieldNamePlaceholder")}
                   className={inputClass}
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Description</label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">{t("aiStudio.knowledge.manage.fieldDesc")}</label>
                 <textarea
                   value={newKbDescription}
                   onChange={(e) => setNewKbDescription(e.target.value)}
-                  placeholder="Optional description..."
+                  placeholder={t("aiStudio.knowledge.manage.fieldDescPlaceholder")}
                   rows={2}
                   className={clsx(inputClass, "resize-none")}
                 />
@@ -1000,14 +1148,14 @@ export default function KnowledgePage() {
 
               {/* Scope selector */}
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Available To</label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">{t("aiStudio.knowledge.manage.fieldScope")}</label>
                 <select
                   value={newKbScope}
                   onChange={(e) => setNewKbScope(e.target.value)}
                   className={inputClass}
                 >
                   <optgroup label="Global">
-                    <option value="all">All AI (entire tenant)</option>
+                    <option value="all">{t("aiStudio.knowledge.manage.scopeAll")}</option>
                   </optgroup>
                   {scopeOptions.filter((o) => o.type === "agent").length > 0 && (
                     <optgroup label="Specific Agent">
@@ -1031,14 +1179,14 @@ export default function KnowledgePage() {
             </div>
             <div className="flex justify-end gap-2 mt-5">
               <button onClick={() => setShowCreateModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-xl transition">
-                Cancel
+                {t("common.cancel")}
               </button>
               <button
                 onClick={handleCreateKb}
                 disabled={!newKbName.trim() || creating}
                 className="bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition disabled:opacity-50 shadow-sm"
               >
-                {creating ? "Creating..." : "Create"}
+                {creating ? t("aiStudio.knowledge.manage.creating") : t("aiStudio.knowledge.manage.create")}
               </button>
             </div>
           </div>
@@ -1050,7 +1198,7 @@ export default function KnowledgePage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={resetUploadModal} />
           <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
-            <h3 className="font-bold text-lg text-gray-900 mb-4">Add Content</h3>
+            <h3 className="font-bold text-lg text-gray-900 mb-4">{t("aiStudio.knowledge.manage.addContentTitle")}</h3>
 
             {/* Mode tabs */}
             <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-5">
@@ -1063,7 +1211,7 @@ export default function KnowledgePage() {
                     uploadMode === mode ? "bg-white shadow text-gray-900" : "text-gray-500 hover:text-gray-700"
                   )}
                 >
-                  {mode === "file" ? "Upload Files" : mode === "url" ? "Website URL" : "Paste Text"}
+                  {mode === "file" ? t("aiStudio.knowledge.manage.modeFile") : mode === "url" ? t("aiStudio.knowledge.manage.modeUrl") : t("aiStudio.knowledge.manage.modeText")}
                 </button>
               ))}
             </div>
@@ -1071,7 +1219,7 @@ export default function KnowledgePage() {
             <div className="space-y-4">
               {/* Title */}
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Title</label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">{t("aiStudio.knowledge.manage.fieldTitle")}</label>
                 <input
                   type="text"
                   value={docTitle}
@@ -1084,7 +1232,7 @@ export default function KnowledgePage() {
               {/* File upload */}
               {uploadMode === "file" && (
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">File</label>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">{t("aiStudio.knowledge.manage.fieldFile")}</label>
                   <div
                     onClick={() => fileInputRef.current?.click()}
                     className="border-2 border-dashed border-gray-200 rounded-2xl p-8 text-center cursor-pointer hover:border-violet-300 hover:bg-violet-50/30 transition"
@@ -1109,7 +1257,7 @@ export default function KnowledgePage() {
                         <svg className="w-8 h-8 text-gray-400 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
                         </svg>
-                        <p className="text-sm font-medium text-gray-700">Drop files here or click to browse</p>
+                        <p className="text-sm font-medium text-gray-700">{t("aiStudio.knowledge.manage.dropFiles")}</p>
                         <p className="text-xs text-gray-400 mt-1">PDF, DOCX, TXT, MD, CSV, XLS up to 10MB</p>
                       </div>
                     )}
@@ -1120,26 +1268,26 @@ export default function KnowledgePage() {
               {/* URL input */}
               {uploadMode === "url" && (
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Website URL</label>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">{t("aiStudio.knowledge.manage.fieldUrl")}</label>
                   <input
                     type="url"
                     value={docUrl}
                     onChange={(e) => setDocUrl(e.target.value)}
-                    placeholder="https://example.com/help"
+                    placeholder={t("aiStudio.knowledge.manage.urlPlaceholder")}
                     className={inputClass}
                   />
-                  <p className="text-xs text-gray-400 mt-1.5">We will crawl this page and extract its content automatically.</p>
+                  <p className="text-xs text-gray-400 mt-1.5">{t("aiStudio.knowledge.manage.urlHint")}</p>
                 </div>
               )}
 
               {/* Paste text */}
               {uploadMode === "text" && (
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Content</label>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">{t("aiStudio.knowledge.manage.fieldContent")}</label>
                   <textarea
                     value={docContent}
                     onChange={(e) => setDocContent(e.target.value)}
-                    placeholder="Paste your content here..."
+                    placeholder={t("aiStudio.knowledge.manage.contentPlaceholder")}
                     rows={10}
                     className={clsx(inputClass, "resize-none font-mono")}
                   />
@@ -1149,7 +1297,7 @@ export default function KnowledgePage() {
 
             <div className="flex justify-end gap-2 mt-5">
               <button onClick={resetUploadModal} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-xl transition">
-                Cancel
+                {t("common.cancel")}
               </button>
               <button
                 onClick={handleUploadDoc}
@@ -1161,7 +1309,7 @@ export default function KnowledgePage() {
                 }
                 className="bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition disabled:opacity-50 shadow-sm"
               >
-                {uploading ? "Processing..." : uploadMode === "url" ? "Crawl & Add" : "Upload"}
+                {uploading ? t("aiStudio.knowledge.manage.processing") : uploadMode === "url" ? t("aiStudio.knowledge.manage.crawlAdd") : t("aiStudio.knowledge.manage.upload")}
               </button>
             </div>
           </div>
@@ -1251,7 +1399,7 @@ export default function KnowledgePage() {
                   onClick={() => { setBrowseSpaceKey(null); setBrowsePages([]); setBrowseSelected(new Set()); setConfluencePageStack([]); }}
                   className="text-violet-600 hover:text-violet-700 font-medium shrink-0"
                 >
-                  Spaces
+                  {t("aiStudio.knowledge.manage.spaces")}
                 </button>
                 <span>/</span>
                 <button
@@ -1294,13 +1442,13 @@ export default function KnowledgePage() {
                   onClick={() => handleDriveTabSwitch("my")}
                   className={clsx("flex-1 text-sm font-medium py-1.5 rounded-lg transition", driveTab === "my" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700")}
                 >
-                  My Drive
+                  {t("aiStudio.knowledge.manage.myDrive")}
                 </button>
                 <button
                   onClick={() => handleDriveTabSwitch("shared")}
                   className={clsx("flex-1 text-sm font-medium py-1.5 rounded-lg transition", driveTab === "shared" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700")}
                 >
-                  Shared Drives
+                  {t("aiStudio.knowledge.manage.sharedDrives")}
                 </button>
               </div>
             )}
@@ -1315,7 +1463,7 @@ export default function KnowledgePage() {
               ) : browseIntegration.provider === "confluence" && !browseSpaceKey ? (
                 /* ── Confluence: Space list ── */
                 browseItems.length === 0 ? (
-                  <p className="text-sm text-gray-400 text-center py-8">No spaces found</p>
+                  <p className="text-sm text-gray-400 text-center py-8">{t("aiStudio.knowledge.manage.noSpaces")}</p>
                 ) : browseItems.map((space: any) => (
                   <div
                     key={space.key}
@@ -1347,7 +1495,7 @@ export default function KnowledgePage() {
               ) : browseIntegration.provider === "confluence" && browseSpaceKey ? (
                 /* ── Confluence: Pages with child navigation ── */
                 browsePages.length === 0 ? (
-                  <p className="text-sm text-gray-400 text-center py-8">No pages found</p>
+                  <p className="text-sm text-gray-400 text-center py-8">{t("aiStudio.knowledge.manage.noPages")}</p>
                 ) : browsePages.map((page: any) => (
                   <div
                     key={page.id}
@@ -1376,7 +1524,7 @@ export default function KnowledgePage() {
               ) : browseIntegration.provider === "google_drive" && driveTab === "shared" && driveFolderStack.length === 0 ? (
                 /* ── Drive: Shared Drives list ── */
                 sharedDrives.length === 0 ? (
-                  <p className="text-sm text-gray-400 text-center py-8">No shared drives found</p>
+                  <p className="text-sm text-gray-400 text-center py-8">{t("aiStudio.knowledge.manage.noSharedDrives")}</p>
                 ) : sharedDrives.map((drive: any) => (
                   <div
                     key={drive.id}
@@ -1394,7 +1542,7 @@ export default function KnowledgePage() {
               ) : (
                 /* ── Drive: Files & Folders with navigation ── */
                 browseItems.length === 0 ? (
-                  <p className="text-sm text-gray-400 text-center py-8">This folder is empty</p>
+                  <p className="text-sm text-gray-400 text-center py-8">{t("aiStudio.knowledge.manage.emptyFolder")}</p>
                 ) : browseItems.map((file: any) => {
                   const isFolder = file.mimeType === "application/vnd.google-apps.folder";
                   return (
@@ -1444,6 +1592,45 @@ export default function KnowledgePage() {
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirmation. Deleting is irreversible and takes every document
+          and embedding with it, so it never happens on a single stray click. */}
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => !deleting && setConfirmDelete(null)} />
+          <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl p-6">
+            <h3 className="text-lg font-bold text-gray-900">
+              {confirmDelete.kind === "kb"
+                ? t("aiStudio.knowledge.confirmDeleteKbTitle")
+                : t("aiStudio.knowledge.confirmDeleteDocTitle")}
+            </h3>
+            <p className="text-sm text-gray-500 mt-2">
+              {confirmDelete.kind === "kb"
+                ? t("aiStudio.knowledge.confirmDeleteKbBody")
+                    .replace("{name}", confirmDelete.name)
+                    .replace("{count}", String(confirmDelete.docCount))
+                : t("aiStudio.knowledge.confirmDeleteDocBody").replace("{name}", confirmDelete.name)}
+            </p>
+            <p className="text-xs text-gray-400 mt-2">{t("aiStudio.knowledge.confirmDeleteIrreversible")}</p>
+            <div className="flex items-center justify-end gap-2 mt-5">
+              <button
+                onClick={() => setConfirmDelete(null)}
+                disabled={deleting}
+                className="px-4 py-2 rounded-xl text-sm font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 transition disabled:opacity-50"
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                onClick={runConfirmedDelete}
+                disabled={deleting}
+                className="px-4 py-2 rounded-xl text-sm font-semibold text-white bg-red-600 hover:bg-red-700 transition disabled:opacity-50 shadow-sm"
+              >
+                {deleting ? t("aiStudio.knowledge.deleting") : t("aiStudio.knowledge.confirmDeleteAction")}
+              </button>
+            </div>
           </div>
         </div>
       )}

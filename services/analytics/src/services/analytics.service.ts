@@ -152,14 +152,17 @@ export async function getOverview(tenantId: string, from?: string, to?: string) 
 
   let aiHandledCount = 0;
   if (convIds.length > 0) {
-    aiHandledCount = await prisma.message.count({
+    const aiConvs = await prisma.message.findMany({
       where: {
         tenantId,
+        conversationId: { in: convIds },
         direction: "OUTBOUND",
-        createdAt: dateFilter,
         metadata: { path: ["source"], equals: "ai_bot" },
       },
+      select: { conversationId: true },
+      distinct: ["conversationId"],
     });
+    aiHandledCount = aiConvs.length;
   }
 
   const humanHandledCount = Math.max(0, totalConversations - aiHandledCount);
@@ -259,12 +262,18 @@ export async function getToolUsageStats(tenantId: string, from?: string, to?: st
   const byTool: Record<string, { toolName: string; total: number; successes: number; durations: number[] }> = {};
   for (const ex of executions) {
     const toolName = ex.tenantTool?.catalogTool?.name ?? "unknown";
-    if (!byTool[ex.tenantToolId]) {
-      byTool[ex.tenantToolId] = { toolName, total: 0, successes: 0, durations: [] };
+    // `tenantToolId` is nullable: an execution can outlive the tenant tool it
+    // ran through, and the built-in (non-catalog) tools never had one. Indexing
+    // by it directly relied on JavaScript stringifying null into a "null" key,
+    // which happened to work and is not something to keep. Unattributable
+    // executions share the one bucket the name fallback already implies.
+    const toolId = ex.tenantToolId ?? "unknown";
+    if (!byTool[toolId]) {
+      byTool[toolId] = { toolName, total: 0, successes: 0, durations: [] };
     }
-    byTool[ex.tenantToolId].total += 1;
-    if (ex.success) byTool[ex.tenantToolId].successes += 1;
-    if (ex.durationMs != null) byTool[ex.tenantToolId].durations.push(ex.durationMs);
+    byTool[toolId].total += 1;
+    if (ex.success) byTool[toolId].successes += 1;
+    if (ex.durationMs != null) byTool[toolId].durations.push(ex.durationMs);
   }
 
   return Object.entries(byTool).map(([toolId, stats]) => ({
@@ -400,7 +409,7 @@ export async function getAIPerformance(tenantId: string, from?: string, to?: str
   const { fromDate, toDate } = parseDateRange(from, to);
   const dateFilter = { gte: fromDate, lte: toDate };
 
-  const [totalAIMessages, totalOutboundMessages, intelligence, tokenSums] = await Promise.all([
+  const [totalAIMessages, totalOutboundMessages, intelligence, tokenSums, approvalRows] = await Promise.all([
     prisma.message.count({
       where: { tenantId, direction: "OUTBOUND", createdAt: dateFilter, metadata: { path: ["source"], equals: "ai_bot" } },
     }),
@@ -412,6 +421,12 @@ export async function getAIPerformance(tenantId: string, from?: string, to?: str
     prisma.usageLog.aggregate({
       where: { tenantId, type: "ai_tokens", createdAt: dateFilter },
       _sum: { quantity: true, promptTokens: true, completionTokens: true },
+    }),
+    // HITL governance rows - the source for approval rate + override rate
+    // (mandated AI metrics; previously computed nowhere).
+    prisma.approvalRequest.findMany({
+      where: { tenantId, createdAt: dateFilter },
+      select: { status: true, modifiedParams: true, createdAt: true, decidedAt: true },
     }),
   ]);
 
@@ -431,12 +446,38 @@ export async function getAIPerformance(tenantId: string, from?: string, to?: str
   const aiResolutionRate = total > 0 ? Math.round((resolvedByAI / total) * 100) : 0;
   const escalationRate = total > 0 ? Math.round((escalated / total) * 100) : 0;
 
+  // Approval governance: approval rate = approved / decided; override rate =
+  // approved-with-modified-params / approved (the human changed what the AI
+  // proposed before running it); decision latency = created → decided.
+  const approvedRows = approvalRows.filter((a: any) => a.status === "APPROVED");
+  const rejectedCount = approvalRows.filter((a: any) => a.status === "REJECTED").length;
+  const decidedCount = approvedRows.length + rejectedCount;
+  const overriddenCount = approvedRows.filter(
+    (a: any) => a.modifiedParams && typeof a.modifiedParams === "object" && Object.keys(a.modifiedParams).length > 0,
+  ).length;
+  const decisionLatencies = approvalRows
+    .filter((a: any) => a.decidedAt)
+    .map((a: any) => new Date(a.decidedAt).getTime() - new Date(a.createdAt).getTime());
+  const avgDecisionMinutes = decisionLatencies.length
+    ? Math.round(decisionLatencies.reduce((s: number, v: number) => s + v, 0) / decisionLatencies.length / 60000)
+    : null;
+
   return {
     totalAIMessages,
     totalHumanMessages,
     aiResolutionRate,
     avgAIConfidence,
     escalationRate,
+    approvals: {
+      requested: approvalRows.length,
+      approved: approvedRows.length,
+      rejected: rejectedCount,
+      pending: approvalRows.filter((a: any) => a.status === "PENDING").length,
+      expired: approvalRows.filter((a: any) => a.status === "EXPIRED").length,
+      approvalRate: decidedCount > 0 ? Math.round((approvedRows.length / decidedCount) * 100) : null,
+      overrideRate: approvedRows.length > 0 ? Math.round((overriddenCount / approvedRows.length) * 100) : null,
+      avgDecisionMinutes,
+    },
     tokenUsage: {
       total: tokenSums._sum.quantity || 0,
       prompt: tokenSums._sum.promptTokens || 0,

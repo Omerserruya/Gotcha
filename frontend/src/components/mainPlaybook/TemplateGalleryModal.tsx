@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useI18n } from "@/context/I18nContext";
+import { templateName, templateDesc } from "./node-i18n";
 import {
   FLOW_TEMPLATES,
   FlowTemplate,
@@ -105,6 +107,7 @@ function GalleryView({
   onClose: () => void;
   onPick: (t: FlowTemplate) => void;
 }) {
+  const { t: tr } = useI18n();
   return (
     <>
       <div className="px-6 py-5 border-b border-gray-100 flex items-start justify-between gap-4 shrink-0">
@@ -160,8 +163,8 @@ function GalleryView({
                       {t.category}
                     </span>
                   </div>
-                  <h3 className="text-[13px] font-semibold text-gray-900 mb-0.5 group-hover:text-violet-700 transition truncate">{t.name}</h3>
-                  <p className="text-[11.5px] text-gray-500 leading-snug line-clamp-2">{t.description}</p>
+                  <h3 className="text-[13px] font-semibold text-gray-900 mb-0.5 group-hover:text-violet-700 transition truncate">{templateName(t.id, tr, t.name)}</h3>
+                  <p className="text-[11.5px] text-gray-500 leading-snug line-clamp-2">{templateDesc(t.id, tr, t.description)}</p>
                 </div>
                 <div className="text-[11px] font-semibold text-violet-600 group-hover:underline mt-1.5">
                   {t.formFields && t.formFields.length > 0 ? "Configure & add →" : "Add to canvas →"}
@@ -188,6 +191,7 @@ function TemplateFormView({
   onClose: () => void;
   onSubmit: (values: FormValues) => void;
 }) {
+  const { t: tr } = useI18n();
   const fields = template.formFields ?? [];
   const [values, setValues] = useState<FormValues>(() => initialValues(fields));
 
@@ -215,8 +219,8 @@ function TemplateFormView({
             </svg>
           </button>
           <div className="min-w-0">
-            <h2 className="text-lg font-bold text-gray-900 truncate">{template.name}</h2>
-            <p className="text-xs text-gray-500 mt-0.5 truncate">{template.description}</p>
+            <h2 className="text-lg font-bold text-gray-900 truncate">{templateName(template.id, tr, template.name)}</h2>
+            <p className="text-xs text-gray-500 mt-0.5 truncate">{templateDesc(template.id, tr, template.description)}</p>
           </div>
         </div>
         <button

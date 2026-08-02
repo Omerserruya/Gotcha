@@ -1,3 +1,4 @@
+import { getInternalServiceKey } from "@chatcenter/shared";
 import { Router, Request, Response } from "express";
 import { prisma, authenticate, resolveTenant, requireActiveTenant, requireRole } from "@chatcenter/shared";
 
@@ -131,7 +132,15 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
       return;
     }
 
-    const updateData: any = normalizePositionInput(req.body);
+    // Explicit column allowlist. NEVER pass req.body wholesale into the
+    // update: RouterRule has tenantId (cross-tenant move) and isDefault
+    // (default-rule hijack) which must not be client-settable.
+    const normalized = normalizePositionInput(req.body ?? {});
+    const RULE_EDITABLE_FIELDS = ["name", "conditions", "routeType", "routeTarget", "enabled", "position"] as const;
+    const updateData: any = {};
+    for (const k of RULE_EDITABLE_FIELDS) {
+      if (Object.prototype.hasOwnProperty.call(normalized, k)) updateData[k] = (normalized as any)[k];
+    }
 
     // Sync aiAgentId with routeTarget when routeType is AI_AGENT
     if (updateData.routeType === "AI_AGENT" && updateData.routeTarget) {
@@ -223,7 +232,7 @@ router.post("/test", authenticate, resolveTenant, requireActiveTenant(), require
         const aiUrl = process.env.AI_SERVICE_URL || "http://ai:4006";
         const intentRes = await fetch(`${aiUrl}/api/ai-assist/intent`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", "X-Internal-Key": process.env.INTERNAL_SERVICE_KEY || "chatcenter-internal-2026" },
+          headers: { "Content-Type": "application/json", "X-Internal-Key": getInternalServiceKey() },
           body: JSON.stringify({ message, intents, tenantId: req.tenantId }),
         });
         const j: any = await intentRes.json().catch(() => ({}));

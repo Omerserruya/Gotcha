@@ -36,7 +36,17 @@ export async function loadCopilotConfigForConversation(
     if (!voiceChannel) return EMPTY_COPILOT_CONFIG;
 
     const parsed = parseCopilotConfig(voiceChannel.copilotConfig);
+    // The FK is authoritative in BOTH directions.
+    //
+    // `aiAgentId` exists twice: as this column and as a mirror inside the JSONB
+    // blob, which the update route rewrites on every channel save. Deleting an
+    // AI employee sets the COLUMN to null (onDelete: SetNull) and leaves the
+    // mirror untouched - so overwriting only when the FK is present meant a
+    // deleted agent's id survived in the blob and was handed back as current
+    // config. A dangling reference is worse than a missing one: callers cannot
+    // tell it apart from a live binding.
     if (voiceChannel.aiAgentId) parsed.aiAgentId = voiceChannel.aiAgentId;
+    else delete parsed.aiAgentId;
     return parsed;
   } catch (err) {
     console.warn(

@@ -48,6 +48,35 @@ export interface HandleSpec {
   color?: NodeColor;
 }
 
+// ─── Semantic ports (§3) ─────────────────────────────────────────
+// Connections are validated by PORT TYPE, not just by the presence of a visual
+// handle. Today the flow model is control-flow, so most ports are "flow"; the
+// taxonomy leaves room for genuinely typed ports (e.g. a participant_event
+// output that must not land on a message-content input). A node's ports are
+// DERIVED from its `handles` unless it declares an explicit `ports` override.
+export type PortType =
+  | "flow"              // ordinary control-flow step edge
+  | "branch"            // a labelled decision exit (condition true/false)
+  | "participant"       // a participant reference input
+  | "participant_event" // a participant lifecycle event output
+  | "message"           // message-content input
+  | "any";              // wildcard - accepts/produces anything
+
+export interface NodePort {
+  id: string;
+  type: PortType;
+  label?: string;
+  /** A single-input port rejects a second incoming edge unless multiple=true. */
+  multiple?: boolean;
+  /** An input that must be connected for the node to be valid. */
+  required?: boolean;
+}
+
+export interface NodePorts {
+  inputs: NodePort[];
+  outputs: NodePort[];
+}
+
 export interface NodeRegistryEntry {
   type: string;
   label: string;
@@ -73,7 +102,61 @@ export interface NodeRegistryEntry {
   // of the static `handles.sources`. Lets node types render one exit per
   // user-configured option (e.g. one exit per quick-reply button).
   getSources?: (data: any) => HandleSpec[];
+  // Optional explicit semantic ports (§3). When omitted, ports are DERIVED
+  // from `handles` (input iff a target handle exists; one flow output per
+  // source; no output when sources is empty). Declare this only for nodes
+  // that carry real type constraints beyond plain control flow.
+  ports?: NodePorts;
+  // §4 Provider dependency (metadata-driven, provider-GENERIC). A node that can
+  // only execute when an external provider is connected declares that provider
+  // key here; the resolver (nodeRequirement) is a pure lookup against
+  // PROVIDER_CONNECTIONS below - NO per-provider branching. A future Shopify,
+  // CRM or calendar node inherits the connected / missing-scope / Connect-CTA
+  // behavior by setting `requires: "shopify"` (etc.) and adding one
+  // PROVIDER_CONNECTIONS row - never a rewrite of the requirement logic.
+  requires?: ProviderKey;
 }
+
+// The set of external providers a node can depend on. Extend this union + the
+// PROVIDER_CONNECTIONS table to onboard a new provider; nodes then opt in via
+// `requires`. Kept as data so the behavior is uniform across every provider.
+export type ProviderKey = "voice" | "shopify" | "crm" | "calendar";
+
+export interface ProviderRequirement {
+  // i18n key describing WHAT capability the node needs.
+  capabilityKey: string;
+  // i18n key for the Connect CTA label.
+  connectLabelKey: string;
+  // Canonical location to connect the provider (never a duplicated flow).
+  connectHref: string;
+}
+
+// ONE table: provider key → how to describe + where to connect it. This is the
+// single extension point for integration-dependent nodes. Voice ships today;
+// the others are declared so the mechanism is demonstrably provider-generic and
+// a node can start requiring them the moment such a node is added.
+export const PROVIDER_CONNECTIONS: Record<ProviderKey, ProviderRequirement> = {
+  voice: {
+    capabilityKey: "aiStudio.nodeReq.voiceChannel",
+    connectLabelKey: "aiStudio.nodeReq.connectVoice",
+    connectHref: "/settings/channels/twilio",
+  },
+  shopify: {
+    capabilityKey: "aiStudio.nodeReq.shopify",
+    connectLabelKey: "aiStudio.nodeReq.connectProvider",
+    connectHref: "/settings/business-systems",
+  },
+  crm: {
+    capabilityKey: "aiStudio.nodeReq.crm",
+    connectLabelKey: "aiStudio.nodeReq.connectProvider",
+    connectHref: "/settings/business-systems",
+  },
+  calendar: {
+    capabilityKey: "aiStudio.nodeReq.calendar",
+    connectLabelKey: "aiStudio.nodeReq.connectProvider",
+    connectHref: "/settings/channels",
+  },
+};
 
 // ─── Tailwind color tokens ───────────────────────────────────────
 // Keep canvas + inspector visually consistent - every node in this color
@@ -643,7 +726,7 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
   // voice-flow-runner matches against. See
   // services/ai/src/services/voice-flow/voice-flow-runner.ts.
   "voice_trigger:call.incoming": {
-    type: "voice_trigger:call.incoming", label: "Voice: Incoming call", color: "emerald", icon: ICONS.phone, category: "Voice Triggers",
+    type: "voice_trigger:call.incoming", label: "Voice: Incoming call", color: "emerald", icon: ICONS.phone, category: "Voice Triggers", requires: "voice",
     handles: { sources: [{ position: "bottom" }] },
     defaultData: () => ({}),
     validate: () => "ok",
@@ -651,7 +734,7 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
     Body: () => <p className="text-xs text-gray-500">Fires for every inbound call on this channel.</p>,
   },
   "voice_trigger:call.answered": {
-    type: "voice_trigger:call.answered", label: "Voice: Call answered", color: "emerald", icon: ICONS.phone, category: "Voice Triggers",
+    type: "voice_trigger:call.answered", label: "Voice: Call answered", color: "emerald", icon: ICONS.phone, category: "Voice Triggers", requires: "voice",
     handles: { sources: [{ position: "bottom" }] },
     defaultData: () => ({}),
     validate: () => "ok",
@@ -659,7 +742,7 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
     Body: () => <p className="text-xs text-gray-500">Fires when the call transitions to ACTIVE.</p>,
   },
   "voice_trigger:call.missed": {
-    type: "voice_trigger:call.missed", label: "Voice: Missed call", color: "emerald", icon: ICONS.phoneEnd, category: "Voice Triggers",
+    type: "voice_trigger:call.missed", label: "Voice: Missed call", color: "emerald", icon: ICONS.phoneEnd, category: "Voice Triggers", requires: "voice",
     handles: { sources: [{ position: "bottom" }] },
     defaultData: () => ({}),
     validate: () => "ok",
@@ -667,7 +750,7 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
     Body: () => <p className="text-xs text-gray-500">Fires when state transitions to MISSED.</p>,
   },
   "voice_trigger:call.hangup_customer": {
-    type: "voice_trigger:call.hangup_customer", label: "Voice: Customer hung up", color: "emerald", icon: ICONS.phoneEnd, category: "Voice Triggers",
+    type: "voice_trigger:call.hangup_customer", label: "Voice: Customer hung up", color: "emerald", icon: ICONS.phoneEnd, category: "Voice Triggers", requires: "voice",
     handles: { sources: [{ position: "bottom" }] },
     defaultData: () => ({}),
     validate: () => "ok",
@@ -675,7 +758,7 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
     Body: () => <p className="text-xs text-gray-500">Fires when the call ends and the customer disconnected first.</p>,
   },
   "voice_trigger:call.hangup_agent": {
-    type: "voice_trigger:call.hangup_agent", label: "Voice: Agent hung up", color: "emerald", icon: ICONS.phoneEnd, category: "Voice Triggers",
+    type: "voice_trigger:call.hangup_agent", label: "Voice: Agent hung up", color: "emerald", icon: ICONS.phoneEnd, category: "Voice Triggers", requires: "voice",
     handles: { sources: [{ position: "bottom" }] },
     defaultData: () => ({}),
     validate: () => "ok",
@@ -683,7 +766,7 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
     Body: () => <p className="text-xs text-gray-500">Fires when the call ends and the agent disconnected first.</p>,
   },
   "voice_trigger:call.intent_detected": {
-    type: "voice_trigger:call.intent_detected", label: "Voice: Intent detected", color: "emerald", icon: ICONS.ai, category: "Voice Triggers",
+    type: "voice_trigger:call.intent_detected", label: "Voice: Intent detected", color: "emerald", icon: ICONS.ai, category: "Voice Triggers", requires: "voice",
     handles: { sources: [{ position: "bottom" }] },
     defaultData: () => ({ intent: "", minConfidence: 0.6 }),
     validate: (d) => (d.intent && String(d.intent).trim()) ? "ok" : "missing",
@@ -703,7 +786,7 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
     ),
   },
   "voice_trigger:call.keyword_spoken": {
-    type: "voice_trigger:call.keyword_spoken", label: "Voice: Keyword spoken", color: "emerald", icon: ICONS.search, category: "Voice Triggers",
+    type: "voice_trigger:call.keyword_spoken", label: "Voice: Keyword spoken", color: "emerald", icon: ICONS.search, category: "Voice Triggers", requires: "voice",
     handles: { sources: [{ position: "bottom" }] },
     defaultData: () => ({ keywords: [] }),
     validate: (d) => (Array.isArray(d.keywords) && d.keywords.length > 0) ? "ok" : "missing",
@@ -723,7 +806,7 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
 
   // ── Voice actions ─────────────────────────────────────────────
   voice_add_participant: {
-    type: "voice_add_participant", label: "Voice: Add participant", color: "indigo", icon: ICONS.phone, category: "Voice Actions",
+    type: "voice_add_participant", label: "Voice: Add participant", color: "indigo", icon: ICONS.phone, category: "Voice Actions", requires: "voice",
     handles: { target: "top", sources: [{ position: "bottom" }] },
     defaultData: () => ({ to: "", label: "" }),
     validate: (d) => (d.to && String(d.to).trim()) ? "ok" : "missing",
@@ -1568,6 +1651,33 @@ function RouteTargetBody({ data, onChange, shared }: { data: any; onChange: (p: 
           {(list || []).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
         </select>
       </Field>
+      {/* Sub-flows are reached from the node that routes into them, not from a
+          separate top-level list: the node is the only place where "which
+          sub-flow, and what happens in it" is a question the author actually
+          has. Both links open in a new tab so an unsaved canvas is never lost
+          by stepping into a sub-flow. */}
+      {routeType === "flow" && (
+        <div className="flex items-center gap-3 pt-1">
+          {data.targetId && (
+            <a
+              href={`/ai-studio/flows/${data.targetId}`}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs font-semibold text-violet-600 hover:text-violet-700"
+            >
+              Open this sub-flow →
+            </a>
+          )}
+          <a
+            href="/ai-studio/flows/new"
+            target="_blank"
+            rel="noreferrer"
+            className="text-xs font-semibold text-violet-600 hover:text-violet-700 ms-auto"
+          >
+            + Create a sub-flow
+          </a>
+        </div>
+      )}
     </div>
   );
 }

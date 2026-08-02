@@ -1,3 +1,4 @@
+import { getInternalServiceKey } from "@chatcenter/shared";
 /**
  * Identifier extraction + identity-link helper for the incoming-worker.
  *
@@ -21,7 +22,7 @@ import { prisma } from "@chatcenter/shared";
 import { parsePhoneNumberFromString, type CountryCode } from "libphonenumber-js";
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://ai:4006";
-const INTERNAL_SERVICE_KEY = process.env.INTERNAL_SERVICE_KEY || "chatcenter-internal-2026";
+const INTERNAL_SERVICE_KEY = getInternalServiceKey();
 
 export function detectIdentifier(
   text: string,

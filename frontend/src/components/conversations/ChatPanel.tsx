@@ -11,6 +11,7 @@ import {
   sendMediaMessage,
   claimConversation,
   releaseConversation,
+  returnConversationToAi,
   closeConversation,
   reassignConversation,
   getAgents,
@@ -24,10 +25,52 @@ import { ChannelBadge } from "./ChannelBadge";
 import { CustomerAvatar } from "./CustomerAvatar";
 import { CoPilotPanel } from "./CoPilotPanel";
 import { HistoryPanel } from "./HistoryPanel";
+import { DecisionTimelinePanel } from "./DecisionTimelinePanel";
 import { MessageSignals } from "./MessageSignals";
 import { AIComposeScope, AIComposeTrigger, AIComposePanel } from "@/components/ai/AIComposeInline";
 import { VoiceCallButton } from "@/components/voice/VoiceCallButton";
+import { ProductCard, ProductCarousel, type ProductView } from "@/components/shopify/ProductCard";
+import { ProductPicker } from "@/components/shopify/ProductPicker";
+import { StorefrontContextStrip } from "@/components/shopify/StorefrontContextStrip";
 import { fetchCrmContext, syncCloseToCrm, type CrmContextEnvelope } from "@/lib/api-crm";
+
+const SHOPIFY_COMMERCE_TYPES = ["shopify_product", "shopify_product_carousel"];
+
+/**
+ * Pull the commerce payload off a message, if it has one.
+ *
+ * The snapshot the server persisted is what we render, exactly as the
+ * shopper sees it. There is no second fetch here on purpose: an agent
+ * scrolling back through a conversation should see the card as it was
+ * SENT, not a silently re-priced version of it.
+ */
+function commerceOf(message: any): { products: ProductView[] } | null {
+  if (!message || !SHOPIFY_COMMERCE_TYPES.includes(message.messageType)) return null;
+  const payload = message.metadata?.shopify;
+  if (!payload || payload.kind !== "shopify_commerce") return null;
+  const products = Array.isArray(payload.products) ? payload.products : [];
+  if (!products.length) return null;
+  return {
+    products: products.map((p: any) => ({
+      productId: p.productId,
+      handle: p.handle,
+      title: p.title,
+      imageUrl: p.imageUrl,
+      productUrl: p.productUrl,
+      currency: p.currency,
+      price: p.price,
+      compareAtPrice: p.compareAtPrice,
+      available: p.available,
+      published: p.status === "active",
+      status: p.status,
+      vendor: p.vendor,
+      selectedVariantId: p.selectedVariantId,
+      optionNames: p.optionNames || [],
+      variants: p.variants || [],
+      reason: p.reason,
+    })),
+  };
+}
 
 interface Props {
   conversationId: string;
@@ -47,6 +90,7 @@ export function ChatPanel({ conversationId, onBack }: Props) {
   const [departments, setDepartments] = useState<any[]>([]);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [timelineOpen, setTimelineOpen] = useState(false);
   // CRM context is fetched once at the chat level and fed to both the Co-Pilot
   // (identity / deals / tickets / open issues) and the Context panel (activity
   // / CRM notes / recent summaries). The old standalone CRM panel was removed
@@ -73,13 +117,13 @@ export function ChatPanel({ conversationId, onBack }: Props) {
 
   // Notify AppLayout to auto-collapse sidebar when panels open
   useEffect(() => {
-    const anyPanelOpen = copilotOpen || historyOpen;
+    const anyPanelOpen = copilotOpen || historyOpen || timelineOpen;
     window.dispatchEvent(new CustomEvent("panel:toggle", { detail: { open: anyPanelOpen } }));
     return () => {
       // Restore sidebar when ChatPanel unmounts
       window.dispatchEvent(new CustomEvent("panel:toggle", { detail: { open: false } }));
     };
-  }, [copilotOpen, historyOpen]);
+  }, [copilotOpen, historyOpen, timelineOpen]);
 
   // Selection inside a customer message → show floating "Ask Co-Pilot" bubble.
   // We only react to selections initiated on the inbound message itself (the
@@ -220,7 +264,18 @@ export function ChatPanel({ conversationId, onBack }: Props) {
       if (data.conversationId === conversationId) {
         setMessages((prev) =>
           prev.map((m) =>
-            m.id === data.messageId ? { ...m, status: data.status } : m
+            m.id === data.messageId
+              ? {
+                  ...m,
+                  status: data.status,
+                  // Carry the failure reason so a FAILED message can be
+                  // diagnosed live from the Inbox, not just after a reload.
+                  ...(data.error ? { errorMessage: data.error } : {}),
+                  ...(data.sendError
+                    ? { metadata: { ...(m.metadata ?? {}), sendError: data.sendError } }
+                    : {}),
+                }
+              : m
           )
         );
       }
@@ -338,7 +393,18 @@ export function ChatPanel({ conversationId, onBack }: Props) {
     }
   }
 
+  async function handleReturnToAi() {
+    if (!token) return;
+    try {
+      await returnConversationToAi(token, conversationId);
+      fetchConversation();
+    } catch (err: any) {
+      alert(err.message);
+    }
+  }
+
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  const [productPickerOpen, setProductPickerOpen] = useState(false);
   const [closeLoading, setCloseLoading] = useState(false);
 
   function handleClose() {
@@ -437,7 +503,7 @@ export function ChatPanel({ conversationId, onBack }: Props) {
           </div>
 
           {/* Actions */}
-          <div className="flex flex-col items-end gap-1 shrink-0">
+          <div className="flex flex-col items-end gap-1 shrink-0" data-tour="chat-actions">
             {/* Top row: Agent name (full width of bottom row) */}
             {!isClosed && (
               <button
@@ -466,6 +532,21 @@ export function ChatPanel({ conversationId, onBack }: Props) {
 
             {/* Bottom row: Close, History, Co-Pilot */}
             <div className="flex items-center gap-1.5">
+              {/* Hand the conversation back to the AI employee - shown when a
+                  human owns it (handed over / assigned) and an AI employee is
+                  bound. This is the only exit from the one-way handover latch. */}
+              {!isClosed && conversation?.assignedAiAgentId && (conversation?.isHandedOver || conversation?.assignedAgentId) && (
+                <button
+                  onClick={handleReturnToAi}
+                  className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg font-medium transition shrink-0 bg-violet-50 text-violet-600 hover:bg-violet-100"
+                  title={t("conversations.returnToAiTitle")}
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                  </svg>
+                  <span className="hidden sm:inline">{t("conversations.returnToAi")}</span>
+                </button>
+              )}
               {isAssignedToMe && !isClosed && (
                 <ActionButton onClick={handleClose} variant="danger">
                   {t("conversations.close")}
@@ -495,7 +576,8 @@ export function ChatPanel({ conversationId, onBack }: Props) {
               </button>
 
               <button
-                onClick={() => { setCopilotOpen(!copilotOpen); if (!copilotOpen) setHistoryOpen(false); }}
+                data-tour="chat-copilot-toggle"
+                onClick={() => { setCopilotOpen(!copilotOpen); if (!copilotOpen) { setHistoryOpen(false); setTimelineOpen(false); } }}
                 className={clsx(
                   "flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg font-medium transition shrink-0",
                   copilotOpen
@@ -508,9 +590,38 @@ export function ChatPanel({ conversationId, onBack }: Props) {
                 </svg>
                 <span className="hidden sm:inline">{t("conversations.copilotButton")}</span>
               </button>
+
+              {/* Decision Timeline (P1-5) - admin-only "why did the AI do that?" trace. */}
+              {user?.role === "ADMIN" && (
+                <button
+                  onClick={() => { setTimelineOpen(!timelineOpen); if (!timelineOpen) { setHistoryOpen(false); setCopilotOpen(false); } }}
+                  className={clsx(
+                    "flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg font-medium transition shrink-0",
+                    timelineOpen
+                      ? "bg-slate-700 text-white shadow-sm"
+                      : "bg-slate-50 text-slate-500 hover:bg-slate-100"
+                  )}
+                  title={t("conversations.decisionTimeline.title")}
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                  </svg>
+                  <span className="hidden sm:inline">{t("conversations.decisionTimeline.button")}</span>
+                </button>
+              )}
             </div>
           </div>
         </div>
+
+        {/* Where the shopper is standing right now, for Shopify chats */}
+        <StorefrontContextStrip
+          channel={conversation?.channel}
+          messages={messages}
+          // The channel's display name is the store label the merchant
+          // chose. Reading the raw platformMeta blob here would drag the
+          // whole install config into the inbox payload for one string.
+          shopDomain={conversation?.channelAccount?.displayName ?? null}
+        />
 
         {/* Messages area */}
         <div
@@ -536,6 +647,25 @@ export function ChatPanel({ conversationId, onBack }: Props) {
           {messages.map((msg) =>
             msg.messageType === "system" ? (
               <SystemDivider key={msg.id} metadata={msg.metadata} timestamp={msg.createdAt} t={t} />
+            ) : commerceOf(msg) ? (
+              // Commerce messages render as the card itself, not as a
+              // chat bubble around a URL. An agent needs to see what the
+              // customer saw to answer the next question about it.
+              <div key={msg.id} className="flex flex-col items-end">
+                <p className="text-[10px] text-gray-400 mb-0.5 pe-1">
+                  {msg.senderName || t("shopifyChat.productMessageLabel")}
+                </p>
+                <div className="max-w-[85%] md:max-w-[75%]">
+                  {commerceOf(msg)!.products.length > 1 ? (
+                    <ProductCarousel products={commerceOf(msg)!.products} />
+                  ) : (
+                    <ProductCard product={commerceOf(msg)!.products[0]} />
+                  )}
+                </div>
+                <span className="text-[10px] text-gray-400 mt-1">
+                  {format(new Date(msg.createdAt), "HH:mm")}
+                </span>
+              </div>
             ) : (
             <div
               key={msg.id}
@@ -553,7 +683,17 @@ export function ChatPanel({ conversationId, onBack }: Props) {
                 )}
               >
                 {msg.senderName && msg.direction === "OUTBOUND" && (
-                  <p className="text-[10px] opacity-70 mb-0.5 font-medium">{msg.senderName}</p>
+                  <p className="text-[10px] opacity-70 mb-0.5 font-medium flex items-center gap-1">
+                    {msg.senderName}
+                    {msg.metadata?.source === "ai_bot" && (
+                      <span
+                        className="text-[8px] font-bold uppercase tracking-wider px-1 py-px rounded bg-white/25 ring-1 ring-white/30"
+                        title={t("conversations.aiBadgeTitle")}
+                      >
+                        AI
+                      </span>
+                    )}
+                  </p>
                 )}
                 {msg.mediaUrl && (msg.messageType === "image" || msg.mediaUrl.match(/\.(jpg|jpeg|png|gif|webp)$/i)) ? (
                   <img src={msg.mediaUrl} alt="" className="max-w-full rounded-lg mb-1 cursor-pointer" onClick={() => window.open(msg.mediaUrl, "_blank")} />
@@ -586,6 +726,13 @@ export function ChatPanel({ conversationId, onBack }: Props) {
                     <MessageStatusIcon status={msg.status} t={t} />
                   )}
                 </div>
+                {msg.direction === "OUTBOUND" && msg.status === "FAILED" && (
+                  <MessageFailureDetail
+                    errorMessage={msg.errorMessage}
+                    sendError={msg.metadata?.sendError}
+                    t={t}
+                  />
+                )}
               </div>
               {msg.direction === "INBOUND" && (
                 <MessageSignals signals={msg.metadata?.signals} />
@@ -713,6 +860,25 @@ export function ChatPanel({ conversationId, onBack }: Props) {
                 </svg>
               </button>
 
+              {/* Product picker - Shopify Live Chat conversations only.
+                  Every other channel has nowhere to render a card, so
+                  offering the button there would promise something the
+                  customer would never receive. */}
+              {conversation?.channel === "SHOPIFY_LIVE_CHAT" && (
+                <button
+                  type="button"
+                  onClick={() => setProductPickerOpen(true)}
+                  className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition flex-shrink-0"
+                  title={t("shopifyChat.products")}
+                  aria-label={t("shopifyChat.products")}
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M6 8h12l-1 12H7L6 8Z" />
+                    <path d="M9 8V6a3 3 0 0 1 6 0v2" />
+                  </svg>
+                </button>
+              )}
+
               {/* AI compose trigger - panel opens above the input */}
               <AIComposeTrigger compact />
 
@@ -761,6 +927,14 @@ export function ChatPanel({ conversationId, onBack }: Props) {
           crmLoading={crmLoading}
           onCrmNotePosted={refetchCrm}
           onClose={() => setHistoryOpen(false)}
+        />
+      )}
+
+      {/* Decision Timeline (P1-5) - admin-only kernel loop trace. */}
+      {timelineOpen && conversationId && (
+        <DecisionTimelinePanel
+          conversationId={conversationId}
+          onClose={() => setTimelineOpen(false)}
         />
       )}
 
@@ -814,6 +988,15 @@ export function ChatPanel({ conversationId, onBack }: Props) {
           onTopSuggestion={(s) => { setTopSuggestion((prev) => { if (s?.text !== prev?.text) setPopupDismissed(false); return s; }); }}
           repliesRef={repliesRef}
           prefillQuote={askPrefill}
+        />
+      )}
+
+      {productPickerOpen && conversation?.channel === "SHOPIFY_LIVE_CHAT" && (
+        <ProductPicker
+          conversationId={conversationId}
+          maxProducts={5}
+          onClose={() => setProductPickerOpen(false)}
+          onSent={() => { /* the message arrives over the socket like any other */ }}
         />
       )}
 
@@ -953,14 +1136,41 @@ function SystemDivider({ metadata, timestamp, t }: { metadata: any; timestamp: s
   let label: string;
   let colors: string;
 
+  // The specific gate/case that triggered an AI handover, localized. Falls
+  // back to the model-authored summary, then to nothing (bare label).
+  const escalationReason = (() => {
+    const rawCase = typeof metadata?.escalationCase === "string" ? metadata.escalationCase : "";
+    // Cases arrive both bare ("agent_paused") and prefixed ("budget_exceeded:tenant_day").
+    const caseKey = rawCase.split(":")[0];
+    if (caseKey) {
+      const translated = t(`conversations.escalationReason.${caseKey}`);
+      if (translated && !translated.includes("escalationReason.")) return translated;
+    }
+    if (typeof metadata?.escalationSummary === "string" && metadata.escalationSummary.trim()) {
+      return metadata.escalationSummary.trim();
+    }
+    return "";
+  })();
+
   switch (event) {
+    case "returned_to_ai":
+      icon = (
+        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+        </svg>
+      );
+      label = t("conversations.systemReturnedToAi");
+      colors = "bg-violet-50 text-violet-600";
+      break;
     case "bot_handover":
+    case "ai_bot_escalation":
       icon = (
         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
         </svg>
       );
-      label = t("conversations.systemBotHandover");
+      label = event === "ai_bot_escalation" ? t("conversations.systemAiEscalation") : t("conversations.systemBotHandover");
+      if (escalationReason) label = `${label} - ${escalationReason}`;
       colors = "bg-amber-50 text-amber-600";
       break;
     case "agent_claimed":
@@ -1014,6 +1224,65 @@ function SystemDivider({ metadata, timestamp, t }: { metadata: any; timestamp: s
         <span className="opacity-50 ml-1">{format(new Date(timestamp), "HH:mm")}</span>
       </div>
       <div className="flex-1 h-px bg-gray-200" />
+    </div>
+  );
+}
+
+// Surfaces WHY an outbound message failed, directly in the Inbox. Shows the
+// human reason inline and, on click, the full structured provider breakdown
+// (HTTP status, Meta code/subcode/type, fbtrace_id, request id, retryability)
+// so a failed send is diagnosable from the UI alone - no DB query, no logs.
+function MessageFailureDetail({
+  errorMessage,
+  sendError,
+  t,
+}: {
+  errorMessage?: string | null;
+  sendError?: any;
+  t: (key: string, vars?: Record<string, string>) => string;
+}) {
+  const [open, setOpen] = useState(false);
+  const reason = errorMessage || sendError?.message || t("conversations.messageStatus.failed");
+  const rows: Array<[string, any]> = sendError
+    ? ([
+        ["HTTP", sendError.httpStatus],
+        [t("conversations.sendError.code"), sendError.code != null ? `${sendError.code}${sendError.subcode ? " / " + sendError.subcode : ""}` : undefined],
+        [t("conversations.sendError.type"), sendError.type],
+        [t("conversations.sendError.detail"), sendError.detail],
+        ["fbtrace_id", sendError.fbtraceId],
+        [t("conversations.sendError.requestId"), sendError.requestId],
+        [t("conversations.sendError.retryable"), sendError.retryable === undefined ? undefined : (sendError.retryable ? t("common.yes") : t("common.no"))],
+        [t("conversations.sendError.at"), sendError.at],
+      ].filter(([, v]) => v !== undefined && v !== null && v !== "") as Array<[string, any]>)
+    : [];
+  const hasDetail = rows.length > 0;
+  return (
+    <div className="mt-1 flex flex-col items-end gap-0.5">
+      <button
+        type="button"
+        onClick={() => hasDetail && setOpen((v) => !v)}
+        className={clsx(
+          "text-[10px] text-red-400 max-w-[240px] text-right leading-tight",
+          hasDetail && "cursor-pointer hover:text-red-300 underline decoration-dotted underline-offset-2",
+        )}
+        title={hasDetail ? t("conversations.sendError.toggle") : undefined}
+      >
+        {t("conversations.sendError.prefix")}: {reason}
+      </button>
+      {open && hasDetail && (
+        <div className="mt-1 rounded-md border border-red-500/30 bg-red-500/5 px-2 py-1.5 text-[10px] text-red-200/90 font-mono max-w-[260px] overflow-x-auto">
+          <table className="border-collapse">
+            <tbody>
+              {rows.map(([k, v]) => (
+                <tr key={k} className="align-top">
+                  <td className="pr-2 opacity-60 whitespace-nowrap">{k}</td>
+                  <td className="break-all">{String(v)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

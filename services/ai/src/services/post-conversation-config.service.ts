@@ -189,3 +189,49 @@ export async function getSummarizerAllowedFields(tenantId: string): Promise<stri
 
   return Array.from(new Set([...builtins, ...custom, ...registry]));
 }
+
+/**
+ * Rich extraction specs (key + label + description + type + options + examples)
+ * for the live extractor. Sourced from the scope-aware FieldDefinition registry
+ * (aiExtract=true), EXCLUDING REVIEW_REQUIRED-scoped fields - those are parked
+ * until a human assigns a real scope, so there's no point extracting them.
+ * Legacy summaryFields are folded in with their description (no examples).
+ * Best-effort: returns [] on any DB hiccup so the live path never breaks.
+ */
+export async function getExtractionFieldSpecs(
+  tenantId: string,
+): Promise<Array<import("./intelligence-live-extract.service").ExtractionFieldSpec>> {
+  const out: Array<import("./intelligence-live-extract.service").ExtractionFieldSpec> = [];
+  try {
+    const cfg = await getPostConversationConfig(tenantId);
+    for (const f of cfg.summaryFields) {
+      if (f.key) out.push({ key: f.key, label: f.label, description: f.description ?? null });
+    }
+  } catch { /* ignore */ }
+
+  try {
+    const defs = await (prisma as any).fieldDefinition.findMany({
+      where: { tenantId, aiExtract: true, scope: { not: "REVIEW_REQUIRED" } },
+      select: {
+        key: true, label: true, description: true, type: true,
+        options: true, examples: true, negativeExamples: true,
+      },
+    });
+    for (const d of defs as any[]) {
+      out.push({
+        key: d.key,
+        label: d.label ?? null,
+        description: d.description ?? null,
+        type: d.type ?? null,
+        options: Array.isArray(d.options) ? d.options.map(String) : [],
+        examples: Array.isArray(d.examples) ? d.examples.map(String) : [],
+        negativeExamples: Array.isArray(d.negativeExamples) ? d.negativeExamples.map(String) : [],
+      });
+    }
+  } catch { /* ignore - registry not available */ }
+
+  // De-dupe by key (registry spec wins over a bare summaryField of the same key).
+  const byKey = new Map<string, import("./intelligence-live-extract.service").ExtractionFieldSpec>();
+  for (const s of out) if (s.key) byKey.set(s.key, { ...byKey.get(s.key), ...s });
+  return Array.from(byKey.values());
+}

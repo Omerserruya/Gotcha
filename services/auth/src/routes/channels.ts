@@ -5,24 +5,44 @@ import axios from "axios";
 import jwt from "jsonwebtoken";
 import {
   prisma,
+  // The website widget shares its experience config with the Shopify
+  // storefront widget — see packages/shared/src/lib/webchat-widget.ts.
+  normalizeWebchatConfig,
+  isLegacyWebchatSettings,
   authenticate,
   resolveTenant,
-  requireRole,
+  requirePermission,
+  requireCapacity,
   validate,
   getRedis,
   encryptCredentials,
   decryptCredentials,
-} from "@chatcenter/shared";
+  mintOAuthState,
+  consumeOAuthState,
+  resolvePrincipal, metaGraphBaseUrl } from "@chatcenter/shared";
 
 const router = Router();
+
+/**
+ * Plan channel limit.
+ *
+ * Counts the organization's CONNECTED channel accounts, so a disconnected
+ * account frees its seat rather than permanently consuming one. Applied to
+ * every direct-connect route; OAuth callbacks re-check through the same helper
+ * at the point they create the account.
+ */
+const requireChannelCapacity = requireCapacity("limit:channels", (tenantId) =>
+  prisma.channelAccount.count({ where: { tenantId, connectionStatus: { not: "DISCONNECTED" } } }),
+);
+
 
 const META_APP_ID = process.env.META_APP_ID || "";
 const META_APP_SECRET = process.env.META_APP_SECRET || "";
 const EMBEDDED_SIGNUP_CONFIG_ID = process.env.WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID || "";
 const OAUTH_REDIRECT_URI = process.env.OAUTH_REDIRECT_URI || "";
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
-const FB_API_URL = process.env.FACEBOOK_API_URL || "https://graph.facebook.com/v21.0";
-const JWT_SECRET = process.env.JWT_SECRET || "change-me";
+const FB_API_URL = metaGraphBaseUrl(process.env.FACEBOOK_API_URL);
+// OAuth `state` signing only - not user auth. See getOAuthStateSecret().
 
 // Instagram API with Instagram Login (direct IG Business connect - no Facebook Page).
 // These are the *Instagram* app credentials from the Meta App Dashboard
@@ -37,6 +57,8 @@ const INSTAGRAM_OAUTH_REDIRECT_URI = process.env.INSTAGRAM_OAUTH_REDIRECT_URI ||
 // graph.instagram.com (Instagram Login) does NOT accept a version-prefixed path
 // for these edges (/me, /access_token, /me/subscribed_apps) - a versioned path is
 // treated as an unknown node and returns "Unsupported request". Must be unversioned.
+// Intentionally OUTSIDE central Meta versioning: graph.instagram.com
+// (Instagram Login) rejects version-prefixed paths. See meta-graph-version.ts.
 const IG_API_URL = process.env.INSTAGRAM_API_URL || "https://graph.instagram.com";
 
 // Google (Gmail) OAuth
@@ -117,7 +139,7 @@ async function ensureEmailRouterRule(tenantId: string, channel: "GMAIL" | "OUTLO
 
 // ─── List Connected Channels ─────────────────────────────────
 
-router.get("/", authenticate, resolveTenant, requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.get("/", authenticate, resolveTenant, requirePermission("channels:manage:read"), async (req: Request, res: Response) => {
   try {
     const accounts = await prisma.channelAccount.findMany({
       where: { tenantId: req.tenantId! },
@@ -147,6 +169,27 @@ router.get("/", authenticate, resolveTenant, requireRole("ADMIN"), async (req: R
   }
 });
 
+// ─── Channel-connectivity summary (all roles) ─────────────────────────────
+// The Inbox/History empty states need to know WHY a list is empty ("no
+// channel connected" vs "channel broken" vs "no conversations yet"), and
+// agents see those pages too - the full listing above is ADMIN-only. This
+// returns health COUNTS only: no tokens, external ids, or error details.
+router.get("/summary", authenticate, resolveTenant, async (req: Request, res: Response) => {
+  try {
+    const rows = await prisma.channelAccount.findMany({
+      where: { tenantId: req.tenantId! },
+      select: { connectionStatus: true, isActive: true },
+    });
+    const connected = rows.filter((r) => r.connectionStatus === "CONNECTED" && r.isActive).length;
+    const unhealthy = rows.filter((r) => r.connectionStatus === "ERROR" || r.connectionStatus === "DISCONNECTED").length;
+    const pending = rows.filter((r) => r.connectionStatus === "PENDING").length;
+    res.json({ data: { total: rows.length, connected, unhealthy, pending } });
+  } catch (err) {
+    console.error("Channel summary error:", err);
+    res.status(500).json({ error: "Failed to get channel summary" });
+  }
+});
+
 // ─── List recent posts for a connected page (Comment Trigger picker) ─────
 //
 // Returns a normalized list of the page's own posts so flow authors can
@@ -156,7 +199,7 @@ router.get("/", authenticate, resolveTenant, requireRole("ADMIN"), async (req: R
 // post-URL paste field that the runtime later matches via the page webhook.
 //
 // Supports MESSENGER (Facebook page) and INSTAGRAM (IG Business account).
-router.get("/:id/posts", authenticate, resolveTenant, requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.get("/:id/posts", authenticate, resolveTenant, requirePermission("channels:manage:read"), async (req: Request, res: Response) => {
   try {
     const channelId = String(req.params.id);
     const account = await prisma.channelAccount.findFirst({
@@ -233,7 +276,7 @@ const whatsappConnectSchema = z.object({
   phoneNumberId: z.string().optional(), // From Embedded Signup session info
 });
 
-router.post("/connect/whatsapp", authenticate, resolveTenant, requireRole("ADMIN"), validate(whatsappConnectSchema), async (req: Request, res: Response) => {
+router.post("/connect/whatsapp", authenticate, resolveTenant, requirePermission("channels:manage:update"), requireChannelCapacity, validate(whatsappConnectSchema), async (req: Request, res: Response) => {
   try {
     const { code, wabaId: sessionWabaId, phoneNumberId: sessionPhoneNumberId } = req.body;
     console.log("[WA-CONNECT] Starting. Session WABA:", sessionWabaId, "Session Phone:", sessionPhoneNumberId);
@@ -243,8 +286,17 @@ router.post("/connect/whatsapp", authenticate, resolveTenant, requireRole("ADMIN
     // FB.login popup may require redirect_uri matching, so try multiple approaches
     let accessToken: string | undefined;
 
-    // Try exchanging the popup code with various redirect_uri values and API versions
-    const v25 = "https://graph.facebook.com/v25.0";
+    // Try exchanging the popup code with various redirect_uri values and API versions.
+    //
+    // The second URL is deliberately NOT our configured Graph version: the FB
+    // JavaScript SDK mints the popup code against its OWN version, and the
+    // exchange can fail if the versions disagree. So this is a genuine
+    // SDK-compatibility fallback, not version drift — it tracks whatever the
+    // loaded SDK uses, independently of META_GRAPH_VERSION.
+    //
+    // Review together with the SDK version in the frontend when either moves.
+    const FB_JS_SDK_GRAPH_VERSION = "v25.0";
+    const v25 = `https://graph.facebook.com/${FB_JS_SDK_GRAPH_VERSION}`;
     const exchangeAttempts: Array<{ label: string; method: "get" | "post"; url: string; data: any }> = [
       // Official docs method: GET, no redirect_uri
       { label: "GET no redirect_uri", method: "get", url: `${FB_API_URL}/oauth/access_token`, data: { client_id: META_APP_ID, client_secret: META_APP_SECRET, code } },
@@ -311,16 +363,22 @@ router.post("/connect/whatsapp", authenticate, resolveTenant, requireRole("ADMIN
       return;
     }
 
-    // Step 2: Subscribe app to webhooks on customer's WABA
+    // Step 2: Subscribe app to webhooks on customer's WABA. This is what
+    // makes inbound messages actually arrive - if it fails, the channel is
+    // NOT usable and must not be presented as CONNECTED.
     console.log("[WA-CONNECT] Subscribing app to WABA webhooks:", wabaId);
+    let webhookSubscribed = false;
+    let webhookError: string | null = null;
     try {
       await axios.post(
         `${FB_API_URL}/${wabaId}/subscribed_apps`,
         {},
         { headers: { Authorization: `Bearer ${accessToken}` } }
       );
+      webhookSubscribed = true;
     } catch (subErr: any) {
-      console.warn(`[WA-CONNECT] Webhook subscription warning for WABA ${wabaId}:`, subErr.response?.data?.error?.message);
+      webhookError = subErr.response?.data?.error?.message || subErr.message || "webhook subscription failed";
+      console.warn(`[WA-CONNECT] Webhook subscription FAILED for WABA ${wabaId}:`, webhookError);
     }
 
     // If we don't have phone number IDs from session info, fetch them from the WABA
@@ -383,18 +441,20 @@ router.post("/connect/whatsapp", authenticate, resolveTenant, requireRole("ADMIN
 
       const credentials = encryptCredentials({ accessToken, wabaId, phoneNumber: displayPhone });
       const tokenExpiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000); // Business tokens don't expire
+      const honestStatus = webhookSubscribed ? ("CONNECTED" as const) : ("PENDING" as const);
+      const honestError = webhookSubscribed ? null : `Webhook subscription failed - messages cannot arrive yet: ${webhookError}`;
 
       if (existing) {
         const updated = await prisma.channelAccount.update({
           where: { id: existing.id },
           data: {
             credentials,
-            connectionStatus: "CONNECTED",
+            connectionStatus: honestStatus,
             connectedAt: new Date(),
             connectedBy: req.user?.userId,
             tokenExpiresAt,
             isActive: true,
-            lastError: null,
+            lastError: honestError,
             displayName: phoneDetails.verified_name || displayPhone,
             platformMeta: { wabaId, qualityRating: phoneDetails.quality_rating },
           },
@@ -408,7 +468,8 @@ router.post("/connect/whatsapp", authenticate, resolveTenant, requireRole("ADMIN
             externalId: phoneNumberId,
             displayName: phoneDetails.verified_name || displayPhone,
             credentials,
-            connectionStatus: "CONNECTED",
+            connectionStatus: honestStatus,
+            lastError: honestError,
             connectedAt: new Date(),
             connectedBy: req.user?.userId,
             tokenExpiresAt,
@@ -427,8 +488,8 @@ router.post("/connect/whatsapp", authenticate, resolveTenant, requireRole("ADMIN
       return;
     }
 
-    console.log(`[WA-CONNECT] Successfully connected ${connectedAccounts.length} account(s)`);
-    res.status(201).json({ data: connectedAccounts });
+    console.log(`[WA-CONNECT] Persisted ${connectedAccounts.length} account(s), webhookSubscribed=${webhookSubscribed}`);
+    res.status(201).json({ data: connectedAccounts, webhookSubscribed });
   } catch (err: any) {
     console.error("[WA-CONNECT] Error:", err.response?.data || err.message);
     const metaError = err.response?.data?.error;
@@ -447,7 +508,7 @@ const whatsappSessionSchema = z.object({
   phoneNumberId: z.string().optional(),
 });
 
-router.post("/connect/whatsapp-session", authenticate, resolveTenant, requireRole("ADMIN"), validate(whatsappSessionSchema), async (req: Request, res: Response) => {
+router.post("/connect/whatsapp-session", authenticate, resolveTenant, requirePermission("channels:manage:update"), requireChannelCapacity, validate(whatsappSessionSchema), async (req: Request, res: Response) => {
   try {
     const { wabaId, phoneNumberId } = req.body;
     const redis = getRedis();
@@ -545,19 +606,25 @@ router.get("/oauth/init", async (req: Request, res: Response) => {
     return;
   }
 
-  let tokenPayload: any;
+  // This is a redirect from the frontend, so the token arrives as a query
+  // param instead of a Bearer header. Verify it the SAME way the rest of the
+  // app does - resolvePrincipal checks the Authentik RS256 signature via JWKS
+  // and resolves the local account - NOT jwt.verify() with the OAuth-state
+  // HMAC secret, which cannot validate an RS256 token and 401'd every real
+  // user after the Authentik migration.
+  let principal;
   try {
-    tokenPayload = jwt.verify(tokenParam, JWT_SECRET);
+    principal = await resolvePrincipal(tokenParam);
   } catch {
     res.status(401).json({ error: "Invalid token" });
     return;
   }
 
-  // Inject tenant/user context like middleware would
-  req.tenantId = tokenPayload.tenantId;
-  (req as any).userId = tokenPayload.userId;
+  // Inject tenant/user context like the authenticate middleware would.
+  req.tenantId = principal.tenantId;
+  (req as any).userId = principal.userId;
 
-  if (tokenPayload.role !== "ADMIN") {
+  if (principal.role !== "ADMIN") {
     res.status(403).json({ error: "Admin access required" });
     return;
   }
@@ -571,23 +638,23 @@ router.get("/oauth/init", async (req: Request, res: Response) => {
 
     // Validate platform-specific config
     if (["messenger", "whatsapp"].includes(platform) && (!META_APP_ID || !OAUTH_REDIRECT_URI)) {
-      res.status(500).json({ error: "OAuth not configured. META_APP_ID and OAUTH_REDIRECT_URI are required." });
+      res.redirect(`${FRONTEND_URL}/settings/channels?error=not_configured&platform=messenger`);
       return;
     }
     if (platform === "instagram" && (!INSTAGRAM_APP_ID || !INSTAGRAM_OAUTH_REDIRECT_URI)) {
-      res.status(500).json({ error: "Instagram OAuth not configured. INSTAGRAM_APP_ID and INSTAGRAM_OAUTH_REDIRECT_URI are required." });
+      res.redirect(`${FRONTEND_URL}/settings/channels?error=not_configured&platform=instagram`);
       return;
     }
     if (platform === "gmail" && (!GOOGLE_CLIENT_ID || !GOOGLE_OAUTH_REDIRECT_URI)) {
-      res.status(500).json({ error: "Gmail OAuth not configured. GOOGLE_CLIENT_ID and GOOGLE_OAUTH_REDIRECT_URI are required." });
+      res.redirect(`${FRONTEND_URL}/settings/channels?error=not_configured&platform=gmail`);
       return;
     }
     if (platform === "outlook" && (!MICROSOFT_CLIENT_ID || !MICROSOFT_OAUTH_REDIRECT_URI)) {
-      res.status(500).json({ error: "Outlook OAuth not configured. MICROSOFT_CLIENT_ID and MICROSOFT_OAUTH_REDIRECT_URI are required." });
+      res.redirect(`${FRONTEND_URL}/settings/channels?error=not_configured&platform=outlook`);
       return;
     }
     if (platform === "slack" && (!SLACK_CLIENT_ID || !SLACK_OAUTH_REDIRECT_URI)) {
-      res.status(500).json({ error: "Slack OAuth not configured. SLACK_CLIENT_ID and SLACK_OAUTH_REDIRECT_URI are required." });
+      res.redirect(`${FRONTEND_URL}/settings/channels?error=not_configured&platform=slack`);
       return;
     }
 
@@ -596,18 +663,19 @@ router.get("/oauth/init", async (req: Request, res: Response) => {
     const phoneNumberId = req.query.phoneNumberId as string || "";
 
     // Generate signed state JWT (anti-CSRF + tenant context + session info)
-    const state = jwt.sign(
-      {
-        tenantId: req.tenantId!,
-        userId: tokenPayload.userId,
-        platform,
-        wabaId,        // From Embedded Signup popup session info
-        phoneNumberId, // From Embedded Signup popup session info
-        nonce: Math.random().toString(36).substring(2),
-      },
-      JWT_SECRET,
-      { expiresIn: "10m" }
-    );
+    // Single-use state (shared store). `provider` is the constant
+    // "meta_channels" because this ONE callback serves whatsapp / instagram /
+    // messenger; the specific `platform` stays its own claim and is read from
+    // the verified payload, never from the query string. The jti replaces the
+    // old hand-rolled `nonce`, which was never checked against anything.
+    const { state } = mintOAuthState({
+      tenantId: req.tenantId!,
+      provider: "meta_channels",
+      userId: principal.userId,
+      platform,
+      wabaId,        // From Embedded Signup popup session info
+      phoneNumberId, // From Embedded Signup popup session info
+    });
 
     let oauthUrl: string;
 
@@ -694,16 +762,20 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
       return;
     }
 
-    // Verify state JWT
-    let statePayload: any;
-    try {
-      console.log("[OAUTH-CALLBACK] state param:", state);
-      statePayload = jwt.verify(state as string, JWT_SECRET);
-    } catch (stateErr: any) {
-      console.error("[OAUTH-CALLBACK] State JWT verify failed:", stateErr.message, "| state value:", state);
-      res.redirect(`${frontendUrl}/channels?error=invalid_state`);
+    // Verify AND consume the state - single use, so a captured callback URL
+    // cannot be replayed to re-link a channel.
+    // NOTE: the state value itself is never logged. It is a bearer token for
+    // this flow; echoing it into logs is exactly how a replay gets handed to
+    // whoever can read them.
+    const consumedState = await consumeOAuthState<{ tenantId: string; userId: string; platform: string; wabaId?: string; phoneNumberId?: string }>(
+      state as string, "meta_channels",
+    );
+    if (!consumedState.ok) {
+      console.error(`[OAUTH-CALLBACK] state rejected: ${consumedState.reason}`);
+      res.redirect(`${frontendUrl}/channels?error=${consumedState.reason === "replayed" ? "state_already_used" : "invalid_state"}`);
       return;
     }
+    const statePayload: any = consumedState.claims;
 
     const { tenantId, userId, platform } = statePayload;
 
@@ -1513,7 +1585,7 @@ const responseModeSchema = z.object({
   responseMode: z.enum(["HUMAN_WITH_COPILOT", "AI_AUTO_REPLY"]),
 });
 
-router.patch("/:id/response-mode", authenticate, resolveTenant, requireRole("ADMIN"), validate(responseModeSchema), async (req: Request, res: Response) => {
+router.patch("/:id/response-mode", authenticate, resolveTenant, requirePermission("channels:manage:update"), validate(responseModeSchema), async (req: Request, res: Response) => {
   try {
     const account = await prisma.channelAccount.findFirst({
       where: { id: req.params.id as string, tenantId: req.tenantId! },
@@ -1544,7 +1616,7 @@ router.patch("/:id/response-mode", authenticate, resolveTenant, requireRole("ADM
 
 // ─── Disconnect Channel ──────────────────────────────────────
 
-router.post("/:id/disconnect", authenticate, resolveTenant, requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.post("/:id/disconnect", authenticate, resolveTenant, requirePermission("channels:manage:update"), async (req: Request, res: Response) => {
   try {
     const account = await prisma.channelAccount.findFirst({
       where: { id: req.params.id as string, tenantId: req.tenantId! },
@@ -1634,7 +1706,7 @@ router.post("/:id/disconnect", authenticate, resolveTenant, requireRole("ADMIN")
 
 // ─── Delete Channel Account (with cascade) ───────────────────
 
-router.delete("/:id", authenticate, resolveTenant, requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.delete("/:id", authenticate, resolveTenant, requirePermission("channels:manage:update"), async (req: Request, res: Response) => {
   try {
     const account = await prisma.channelAccount.findFirst({
       where: { id: req.params.id as string, tenantId: req.tenantId! },
@@ -1677,7 +1749,7 @@ router.delete("/:id", authenticate, resolveTenant, requireRole("ADMIN"), async (
 
 // ─── Channel Health Check ────────────────────────────────────
 
-router.get("/:id/status", authenticate, resolveTenant, requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.get("/:id/status", authenticate, resolveTenant, requirePermission("channels:manage:read"), async (req: Request, res: Response) => {
   try {
     const account = await prisma.channelAccount.findFirst({
       where: { id: req.params.id as string, tenantId: req.tenantId! },
@@ -1790,7 +1862,7 @@ const connectEmailSchema = z.object({
   imapPass: z.string().optional(),
 });
 
-router.post("/connect/email", authenticate, resolveTenant, requireRole("ADMIN"), validate(connectEmailSchema), async (req: Request, res: Response) => {
+router.post("/connect/email", authenticate, resolveTenant, requirePermission("channels:manage:update"), requireChannelCapacity, validate(connectEmailSchema), async (req: Request, res: Response) => {
   try {
     const { emailAddress, displayName, smtpHost, smtpPort, smtpUser, smtpPass, imapHost, imapPort, imapUser, imapPass } = req.body;
 
@@ -1831,12 +1903,14 @@ router.post("/connect/email", authenticate, resolveTenant, requireRole("ADMIN"),
 
 // ─── Create Embedded Chat Widget ─────────────────────────────
 
-router.post("/webchat/create", authenticate, resolveTenant, async (req: Request, res: Response) => {
+router.post("/webchat/create", authenticate, resolveTenant, requirePermission("channels:manage:update"), requireChannelCapacity, async (req: Request, res: Response) => {
   try {
     const widgetId = `widget_${crypto.randomBytes(12).toString("hex")}`;
 
+    // Idempotent regardless of state: one widget per tenant. (Previously only
+    // CONNECTED rows counted, which could mint duplicates of PENDING drafts.)
     const existing = await prisma.channelAccount.findFirst({
-      where: { tenantId: req.tenantId!, channel: "WEBCHAT", connectionStatus: "CONNECTED" },
+      where: { tenantId: req.tenantId!, channel: "WEBCHAT" },
     });
 
     if (existing) {
@@ -1844,13 +1918,18 @@ router.post("/webchat/create", authenticate, resolveTenant, async (req: Request,
       return;
     }
 
+    // A freshly created widget is a DRAFT (PENDING), not a connected channel:
+    // there is nothing on the customer's website yet. The embedded-chat
+    // runtime flips it to CONNECTED on the first real widget load - that is
+    // the installation verification, and only then does it count as a
+    // connected channel anywhere in the product.
     const account = await prisma.channelAccount.create({
       data: {
         tenantId: req.tenantId!,
         channel: "WEBCHAT",
         externalId: widgetId,
         displayName: req.body.name || "Website Chat Widget",
-        connectionStatus: "CONNECTED",
+        connectionStatus: "PENDING",
         credentials: {},
       },
     });
@@ -1866,18 +1945,28 @@ router.post("/webchat/create", authenticate, resolveTenant, async (req: Request,
 
 router.put("/webchat/:id/settings", authenticate, resolveTenant, async (req: Request, res: Response) => {
   try {
-    const { color, iconUrl, title, subtitle, welcome, position } = req.body;
     const account = await prisma.channelAccount.findFirst({
       where: { id: String(req.params.id), tenantId: req.tenantId!, channel: "WEBCHAT" },
     });
     if (!account) { res.status(404).json({ error: "Widget not found" }); return; }
 
-    const settings = { color, iconUrl, title, subtitle, welcome, position };
+    // The stored blob used to be whatever six fields this route happened to
+    // destructure. It is now the same experience the storefront widget is
+    // configured with — launcher, hero, welcome, proactive teaser, sounds —
+    // normalized on the way in so nothing unvalidated can reach a visitor's
+    // browser on someone else's website.
+    //
+    // The old flat keys are still accepted: a client that has not been
+    // updated keeps working, and `normalizeWebchatConfig` migrates them.
+    const current = normalizeWebchatConfig(account.credentials);
+    const incoming = isLegacyWebchatSettings(req.body) ? req.body : { ...req.body, v: 2 };
+    const settings = normalizeWebchatConfig(incoming, current);
+
     const updated = await prisma.channelAccount.update({
       where: { id: account.id },
       data: { credentials: settings as any },
     });
-    res.json({ data: updated });
+    res.json({ data: { ...updated, config: settings } });
   } catch (err) {
     console.error("Update webchat settings error:", err);
     res.status(500).json({ error: "Failed to update widget settings" });
@@ -1892,7 +1981,10 @@ router.get("/webchat/:id/settings", authenticate, resolveTenant, async (req: Req
       where: { id: String(req.params.id), tenantId: req.tenantId!, channel: "WEBCHAT" },
     });
     if (!account) { res.status(404).json({ error: "Widget not found" }); return; }
-    res.json({ data: account.credentials || {} });
+
+    // Migrated on read, so a widget configured before the two channels
+    // shared an editor opens with its branding intact rather than reset.
+    res.json({ data: normalizeWebchatConfig(account.credentials) });
   } catch (err) {
     console.error("Get webchat settings error:", err);
     res.status(500).json({ error: "Failed to get widget settings" });
@@ -1901,13 +1993,24 @@ router.get("/webchat/:id/settings", authenticate, resolveTenant, async (req: Req
 
 // ─── Get OAuth Config (for frontend) ─────────────────────────
 
-router.get("/config", authenticate, resolveTenant, requireRole("ADMIN"), async (_req: Request, res: Response) => {
+router.get("/config", authenticate, resolveTenant, requirePermission("channels:manage:read"), async (_req: Request, res: Response) => {
   res.json({
     data: {
       metaAppId: META_APP_ID,
       embeddedSignupConfigId: EMBEDDED_SIGNUP_CONFIG_ID,
       oauthConfigured: !!(META_APP_ID && META_APP_SECRET && OAUTH_REDIRECT_URI),
       whatsappConfigured: !!(META_APP_ID && META_APP_SECRET && EMBEDDED_SIGNUP_CONFIG_ID),
+      // Per-provider readiness: a provider whose app credentials are absent
+      // can never complete OAuth - the UI shows "Requires setup" instead of
+      // a Connect button that dead-ends.
+      providers: {
+        messenger: !!(META_APP_ID && META_APP_SECRET && OAUTH_REDIRECT_URI),
+        instagram: !!(INSTAGRAM_APP_ID && INSTAGRAM_OAUTH_REDIRECT_URI),
+        gmail: !!(GOOGLE_CLIENT_ID && GOOGLE_OAUTH_REDIRECT_URI),
+        outlook: !!(process.env.MICROSOFT_CLIENT_ID && process.env.MICROSOFT_OAUTH_REDIRECT_URI),
+        slack: !!(process.env.SLACK_CLIENT_ID && process.env.SLACK_OAUTH_REDIRECT_URI),
+        whatsapp: !!(META_APP_ID && META_APP_SECRET && EMBEDDED_SIGNUP_CONFIG_ID),
+      },
     },
   });
 });

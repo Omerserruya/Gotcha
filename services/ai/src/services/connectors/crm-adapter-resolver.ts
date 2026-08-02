@@ -17,6 +17,7 @@
 
 import { prisma } from "@chatcenter/shared";
 import type { CRMAdapter, CrmVendor } from "./crm-adapter.types";
+import { DEFAULT_CAPABILITIES } from "./crm-adapter.types";
 import {
   HubSpotCRMAdapter,
   SalesforceCRMAdapter,
@@ -41,13 +42,39 @@ const SLUG_TO_VENDOR: Record<string, CrmVendor> = {
   custom_api: "custom_api",
   custom_db: "custom_db",
 };
-const CRM_VENDOR_SLUGS = Object.keys(SLUG_TO_VENDOR);
+/**
+ * The slugs step 2 will actually resolve a tenant's CRM from.
+ *
+ * NOT every key of SLUG_TO_VENDOR. Four of those vendors have no adapter -
+ * `instantiate()` returns NoOpCRMAdapter for pipedrive, monday, custom_api and
+ * custom_db - so matching them here could only ever DISPLACE a provider that
+ * works.
+ *
+ * That is not theoretical. `monday` is a PROJECT_MANAGEMENT integration in the
+ * catalog, connected for project work and nothing to do with customer records.
+ * Because step 2 matches on SLUG rather than category, a Shopify merchant who
+ * also connected Monday had Monday resolved as their CRM - ahead of the
+ * Shopify fallback in step 3. Every identity lookup and every timeline write
+ * then went to the NoOp adapter and returned `no_crm_configured`. The bot
+ * stopped knowing who it was talking to, and because a stub answers rather than
+ * throws, nothing anywhere reported an error.
+ *
+ * Derived from the capability table rather than hand-listed, so implementing
+ * one of these adapters is enough to make it resolvable - there is no second
+ * list to remember.
+ */
+const CRM_VENDOR_SLUGS = Object.keys(SLUG_TO_VENDOR).filter(
+  (slug) => !DEFAULT_CAPABILITIES[SLUG_TO_VENDOR[slug]]?.is_stub,
+);
 
 // Tiny per-tenant cache (TTL 30s) - avoids hitting the DB on every bot turn.
 // Resolves the CrmVendor; the adapter itself is cheap to instantiate.
 interface CachedResolution { vendor: CrmVendor | null; expiresAt: number; }
 const RESOLUTION_CACHE = new Map<string, CachedResolution>();
 const RESOLUTION_TTL_MS = 30_000;
+
+/** Test-only: which slugs step 2 will resolve from, after the stub filter. */
+export function __resolvableCrmSlugs(): string[] { return [...CRM_VENDOR_SLUGS]; }
 
 /**
  * Test-only: clear the cache between integration tests.
@@ -73,14 +100,26 @@ export async function getCrmAdapter(tenantId: string, vendor?: CrmVendor): Promi
 
   if (vendor) return instantiate(vendor, tenantId);
 
-  const cached = RESOLUTION_CACHE.get(tenantId);
-  if (cached && cached.expiresAt > Date.now()) {
-    return instantiate(cached.vendor, tenantId);
-  }
+  return instantiate(await resolveVendorCached(tenantId), tenantId);
+}
 
+/** Resolve (and cache) which CRM vendor backs a tenant, or null if none. */
+async function resolveVendorCached(tenantId: string): Promise<CrmVendor | null> {
+  const cached = RESOLUTION_CACHE.get(tenantId);
+  if (cached && cached.expiresAt > Date.now()) return cached.vendor;
   const resolved = await resolveFromDb(tenantId);
   RESOLUTION_CACHE.set(tenantId, { vendor: resolved, expiresAt: Date.now() + RESOLUTION_TTL_MS });
-  return instantiate(resolved, tenantId);
+  return resolved;
+}
+
+/**
+ * The tenant's resolved CRM vendor, or null if no CRM is connected. Read-only
+ * accessor over the SAME resolution `getCrmAdapter` uses (the NoOp adapter reports a
+ * placeholder vendor, so `getCrmAdapter().vendor` cannot answer "is a CRM connected?").
+ */
+export async function resolveCrmVendor(tenantId: string): Promise<CrmVendor | null> {
+  if (!tenantId) return null;
+  return resolveVendorCached(tenantId);
 }
 
 /**
@@ -102,33 +141,57 @@ async function resolveFromDb(tenantId: string): Promise<CrmVendor | null> {
     });
     if (!t) return null;
 
-    // 1.5. Shopify-as-CRM opt-in. Shopify is an ECOMMERCE integration, but a
-    //      tenant may elect it as their CRM source of truth by setting
-    //      `config.useAsCrm = true` on the connected Shopify integration
-    //      (Settings → toggle). When set, it WINS over any CRM-category
-    //      integration - the tenant explicitly chose Shopify as the truth.
-    //      When NOT set, behavior is unchanged for everyone else.
+    // 1.5. Shopify-as-CRM. Shopify is an ECOMMERCE integration, but for a
+    //      store it IS the customer source of truth. Semantics:
+    //        - `config.useAsCrm === true`  → Shopify WINS over any dedicated
+    //          CRM integration (the tenant explicitly chose it).
+    //        - `config.useAsCrm === false` → never used as CRM (explicit opt-out).
+    //        - flag ABSENT → Shopify is the DEFAULT CRM whenever no dedicated
+    //          CRM-category integration is connected (step 3 below). This is
+    //          deliberate: the opt-in-only model meant losing the flag (or
+    //          never setting it) silently killed identity-link + timeline
+    //          writeback while Shopify sat there connected as the obvious
+    //          source of truth.
+    //      ERROR status included for the same recoverable-expired-token
+    //      reason as step 2.
     const shop = await (prisma as any).tenantIntegration.findFirst({
-      where: { tenantId, status: "CONNECTED", integration: { slug: "shopify" } },
+      where: { tenantId, status: { in: ["CONNECTED", "ERROR"] }, integration: { slug: "shopify" } },
+      orderBy: { status: "asc" },
       select: { config: true },
     });
+    const shopifyOptOut = (shop?.config as any)?.useAsCrm === false;
     if (shop && (shop.config as any)?.useAsCrm === true) {
       return "shopify";
     }
 
-    // 2. First CONNECTED TenantIntegration with a CRM slug.
+    // 2. First CONNECTED (or recoverable ERROR) TenantIntegration with a CRM
+    //    slug. ERROR is included so an OAuth CRM whose access token merely
+    //    expired still resolves to its real adapter - otherwise it returns the
+    //    NoOp stub, `integration_create_lead` never surfaces, the adapter is
+    //    never used, and the expired token is never refreshed (a deadlock). On
+    //    first use the framework refreshes the token and recovers status to
+    //    CONNECTED. `orderBy status asc` prefers a CONNECTED row over an ERROR
+    //    one when a tenant has multiple CRMs. DISCONNECTED stays excluded.
     const ti = await (prisma as any).tenantIntegration.findFirst({
       where: {
         tenantId,
-        status: "CONNECTED",
+        status: { in: ["CONNECTED", "ERROR"] },
         integration: { slug: { in: CRM_VENDOR_SLUGS } },
       },
-      orderBy: { createdAt: "asc" },
+      orderBy: [{ status: "asc" }, { createdAt: "asc" }],
       include: { integration: true },
     });
-    if (!ti) return null;
-    const slug = String(ti.integration?.slug ?? "").toLowerCase();
-    return SLUG_TO_VENDOR[slug] ?? null;
+    if (ti) {
+      const slug = String(ti.integration?.slug ?? "").toLowerCase();
+      const vendor = SLUG_TO_VENDOR[slug] ?? null;
+      if (vendor) return vendor;
+    }
+
+    // 3. No dedicated CRM connected: a connected Shopify is the CRM source of
+    //    truth by default (unless explicitly opted out with useAsCrm=false).
+    if (shop && !shopifyOptOut) return "shopify";
+
+    return null;
   } catch (err: any) {
     console.warn("[crm-adapter-resolver] resolveFromDb failed:", err?.message);
     return null;

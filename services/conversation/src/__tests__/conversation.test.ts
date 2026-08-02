@@ -43,8 +43,15 @@ vi.mock("@chatcenter/shared", () => {
       next();
     },
     requireRole: (..._roles: string[]) => (_req: any, _res: any, next: any) => next(),
+    requireActiveTenant: () => (_req: any, _res: any, next: any) => next(),
     validate: (_schema: any) => (_req: any, _res: any, next: any) => next(),
     verifyToken: vi.fn(),
+    getInternalServiceKey: () => "test-internal-key",
+    verifyInternalServiceKey: () => true,
+    getRedis: () => ({ get: vi.fn(), set: vi.fn(), del: vi.fn(), publish: vi.fn() }),
+    writeAudit: vi.fn().mockResolvedValue(undefined),
+    auditUser: vi.fn().mockResolvedValue(undefined),
+    AuditAction: new Proxy({}, { get: (_t, p) => String(p) }),
     publishEvent: vi.fn().mockResolvedValue(undefined),
     outgoingMessageQueue: { add: vi.fn().mockResolvedValue(undefined) },
     createServiceApp: (config: any) => {
@@ -83,7 +90,7 @@ describe("Conversation Service", () => {
   describe("GET /api/conversations", () => {
     it("should list conversations with pagination", async () => {
       const mockConvos = [
-        { id: "c1", customerExternalId: "+123", status: "OPEN", assignedAgent: null, _count: { messages: 3 } },
+        { id: "c1", customerExternalId: "+123", status: "OPEN", assignedAgent: null, messages: [], _count: { messages: 3 } },
       ];
       (prisma.conversation.findMany as any).mockResolvedValue(mockConvos);
       (prisma.conversation.count as any).mockResolvedValue(1);

@@ -23,23 +23,38 @@
  */
 
 import { Router, type Request, type Response } from "express";
-import jwt from "jsonwebtoken";
 import * as crypto from "crypto";
+import { provisionIntegrationTools } from "../services/integration-provisioning.service";
 import {
   prisma,
   authenticate,
   resolveTenant,
   requireActiveTenant,
   requireOnboardingOrActiveTenant,
-  requireRole,
+  mintOAuthState,
+  consumeOAuthState,
+  requirePermission,
   encryptCredentials,
+  getOAuthStateSecret,
 } from "@chatcenter/shared";
 import { airtableListBases, airtableListTables, airtableListFields, airtableCreateField } from "../services/connectors/airtable.adapter";
 import { mondayListBoards } from "../services/connectors/monday.adapter";
-import { loadConnection } from "../services/connectors/integration-framework";
+import { loadConnection, refreshCapabilityState } from "../services/connectors/integration-framework";
+import { reconcileAgentToolPermissions } from "../services/tool-permission-reconcile.service";
 
 const router = Router();
-const JWT_SECRET = process.env.JWT_SECRET || "change-me";
+// OAuth `state` signing only - not user auth. See getOAuthStateSecret().
+const OAUTH_STATE_SECRET = getOAuthStateSecret();
+
+// ─── Authorization ──────────────────────────────────────────
+// Permission-based (Active Membership), never Role==ADMIN. These routes serve
+// BOTH the AI Studio marketplace (integrations:*) and Settings → Business
+// Systems (business-systems:*), so each gate accepts either domain's key
+// (requirePermission = OR semantics). Admin/Owner built-in roles hold all of
+// these; tenants can delegate narrower slices per membership.
+const canReadSystems = requirePermission("integrations:connections:read", "business-systems:connections:read");
+const canConnectSystems = requirePermission("integrations:connections:connect", "business-systems:connections:connect");
+const canManageSystems = requirePermission("integrations:connections:disconnect", "business-systems:connections:manage");
 
 // ─── Helpers ────────────────────────────────────────────────
 
@@ -56,17 +71,30 @@ async function upsertConnection(opts: {
   credentialsBlob?: string;
   config?: Record<string, any>;
   connectedBy?: string;
+  /** Why the connection is not usable. Persisted so the UI can show an
+   *  actionable reason instead of a bare ERROR chip. Cleared on success. */
+  lastError?: string;
 }) {
   const data: any = {
     status: opts.status,
     connectedAt: new Date(),
     lastTestedAt: new Date(),
     lastTestResult: opts.status === "CONNECTED",
-    lastError: null,
+    lastError: opts.status === "CONNECTED" ? null : (opts.lastError ?? null),
   };
   if (opts.credentialsBlob !== undefined) data.credentials = opts.credentialsBlob;
-  if (opts.config !== undefined) data.config = opts.config;
   if (opts.connectedBy !== undefined) data.connectedBy = opts.connectedBy;
+  // MERGE config on re-connect, never replace: config carries settings set
+  // OUTSIDE the OAuth flow (useAsCrm, sync toggles) - a re-connect passing
+  // only { shopDomain } used to wipe them (this is how Urban Supply lost
+  // useAsCrm and CRM writeback silently stopped resolving).
+  if (opts.config !== undefined) {
+    const existing = await (prisma as any).tenantIntegration.findUnique({
+      where: { tenantId_integrationId: { tenantId: opts.tenantId, integrationId: opts.catalogId } },
+      select: { config: true },
+    });
+    data.config = { ...(existing?.config ?? {}), ...opts.config };
+  }
 
   const create: any = {
     tenantId: opts.tenantId,
@@ -79,11 +107,56 @@ async function upsertConnection(opts: {
     config: opts.config ?? {},
     connectedBy: opts.connectedBy ?? null,
   };
-  return await (prisma as any).tenantIntegration.upsert({
+  const row = await (prisma as any).tenantIntegration.upsert({
     where: { tenantId_integrationId: { tenantId: opts.tenantId, integrationId: opts.catalogId } },
     update: data,
     create,
   });
+
+  // A CONNECTED integration whose tools nobody granted is a connection that
+  // does nothing. The AI's tool surface is built from AgentToolPermission
+  // rows, and those were only ever created by one UI toggle - so Urban Supply
+  // Dev reconnected to grant fulfillment scopes and silently lost every
+  // Shopify tool. The connection stayed CONNECTED, the capability probe stayed
+  // green, and the assistant answered a size question by asking which colour
+  // and escalated a cancellation saying the tooling was unavailable. It was
+  // right, and nothing anywhere said so.
+  //
+  // The FULL surface, not reads only.
+  //
+  // "Writes stay an explicit decision" is a reasonable sentence about a first
+  // connect and a false one about a reconnect: disconnect deletes tenant tools
+  // by cascade, so nobody decided anything - a cascade did. Part 6 caught this
+  // live, on the day it mattered: an operator reconnected to grant the scopes
+  // this round needed, and the reconnect left 42 of 68 tools present with every
+  // single missing one a WRITE or an ACTION. Healthy store, green probe, and an
+  // assistant that could look up any order and act on none.
+  //
+  // That is worse than having no tools, because the reads answer every
+  // diagnostic anyone thinks to run - and reconnecting is the ONLY way to grant
+  // a scope, so the operation that makes an assistant more capable is the one
+  // that quietly disarms it.
+  //
+  // What keeps writes safe is where it always was: hitl_policy holds every
+  // money-moving tool behind a human. Never a downgrade either - a row an
+  // operator switched off is skipped, not re-enabled.
+  //
+  // Best-effort - a provisioning hiccup must not fail an otherwise good
+  // connection, and the next connect retries it.
+  if (opts.status === "CONNECTED") {
+    try {
+      const r = await provisionIntegrationTools(opts.tenantId, row.id, opts.catalogId, { reason: "connect" });
+      if (r.granted > 0 || r.preserved > 0) {
+        console.log(
+          `[connectors] provisioned ${r.granted} tool permission(s) on connect for tenant=${opts.tenantId} ` +
+            `(${JSON.stringify(r.byCategory)}, ${r.preserved} left as the operator set them)`,
+        );
+      }
+    } catch (err: any) {
+      console.error("[connectors] tool provisioning failed on connect:", err?.message);
+    }
+  }
+  return row;
 }
 
 function dashboardRedirect(slug: string, query: Record<string, string> = {}) {
@@ -92,15 +165,33 @@ function dashboardRedirect(slug: string, query: Record<string, string> = {}) {
   return process.env.DASHBOARD_URL ? `${process.env.DASHBOARD_URL}${path}` : path;
 }
 
-// Where to land after an OAuth round-trip. When the connect was kicked off
-// from onboarding (state carries flow:"onboarding"), return to /setup so the
-// boot logic detects the connected core system and finishes activation.
-// Otherwise fall through to the marketplace page for the provider.
+// Allow-list of recognised OAuth `flow` values. The flow is what the SERVER
+// uses to decide where to land after the round-trip - it is NEVER a
+// browser-supplied return URL, so an attacker cannot redirect the callback to
+// an arbitrary destination. Unknown values collapse to `undefined` (the
+// default marketplace landing).
+const KNOWN_FLOWS = new Set(["onboarding", "settings_business_systems"]);
+function parseFlow(raw: unknown): string | undefined {
+  return typeof raw === "string" && KNOWN_FLOWS.has(raw) ? raw : undefined;
+}
+
+// Where to land after an OAuth round-trip. The destination is chosen from the
+// SIGNED state's `flow`, mapped to a FIXED internal path here (never a URL from
+// the browser):
+//   • onboarding                → /setup (boot logic finishes activation)
+//   • settings_business_systems → /settings/business-systems (Source-of-Truth
+//     home - so a connect started in Settings returns to Settings, not the
+//     AI Studio marketplace)
+//   • otherwise                 → the provider's marketplace page
 function postOAuthRedirect(slug: string, flow: string | undefined, query: Record<string, string> = {}) {
+  const base = process.env.FRONTEND_URL || process.env.DASHBOARD_URL || "";
   if (flow === "onboarding") {
-    const base = process.env.FRONTEND_URL || process.env.DASHBOARD_URL || "";
     const params = new URLSearchParams({ connected: slug, ...query });
     return `${base}/setup?${params.toString()}`;
+  }
+  if (flow === "settings_business_systems") {
+    const params = new URLSearchParams({ connected: slug, ...query });
+    return `${base}/settings/business-systems?${params.toString()}`;
   }
   return dashboardRedirect(slug, query);
 }
@@ -114,7 +205,7 @@ function base64url(buf: Buffer): string {
 
 router.get(
   "/connectors/:slug/status",
-  authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireActiveTenant(), canReadSystems,
   async (req: Request, res: Response) => {
     const cat = await findCatalog(req.params.slug);
     if (!cat) { res.status(404).json({ error: "unknown_provider" }); return; }
@@ -128,7 +219,7 @@ router.get(
 
 router.post(
   "/connectors/:slug/disconnect",
-  authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireActiveTenant(), canManageSystems,
   async (req: Request, res: Response) => {
     const cat = await findCatalog(req.params.slug);
     if (!cat) { res.status(404).json({ error: "unknown_provider" }); return; }
@@ -142,7 +233,7 @@ router.post(
 
 router.post(
   "/connectors/:slug/config",
-  authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireActiveTenant(), canManageSystems,
   async (req: Request, res: Response) => {
     const cat = await findCatalog(req.params.slug);
     if (!cat) { res.status(404).json({ error: "unknown_provider" }); return; }
@@ -158,9 +249,59 @@ router.post(
 
 // ─── API-key style connect (airtable, postgres, mongodb, custom api-key) ──
 
+// Verify the pasted credential actually works BEFORE storing it as CONNECTED.
+// Without this, any garbage token connected "successfully" and only failed
+// later at first sync/tool call - which reads as "the integration is broken".
+async function validateApiKeyCredentials(
+  slug: string,
+  credentials: Record<string, string>,
+): Promise<{ ok: boolean; error?: string }> {
+  const withTimeout = (ms: number) => {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), ms);
+    return { signal: ctl.signal, done: () => clearTimeout(t) };
+  };
+  try {
+    if (slug === "fireberry") {
+      const tokenid = credentials.tokenid || credentials.apiKey || credentials.token;
+      if (!tokenid) return { ok: false, error: "missing_tokenid" };
+      const t = withTimeout(8000);
+      const resp = await fetch("https://api.fireberry.com/api/query", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", tokenid },
+        body: JSON.stringify({ objecttype: 1, page_size: 1, fields: "accountid" }),
+        signal: t.signal,
+      }).finally(t.done);
+      return resp.ok
+        ? { ok: true }
+        : { ok: false, error: resp.status === 401 || resp.status === 403 ? "invalid_token" : `fireberry_http_${resp.status}` };
+    }
+    if (slug === "airtable") {
+      const pat = credentials.apiKey || credentials.token || credentials.pat;
+      if (!pat) return { ok: false, error: "missing_api_key" };
+      const t = withTimeout(8000);
+      const resp = await fetch("https://api.airtable.com/v0/meta/whoami", {
+        headers: { Authorization: `Bearer ${pat}` },
+        signal: t.signal,
+      }).finally(t.done);
+      return resp.ok
+        ? { ok: true }
+        : { ok: false, error: resp.status === 401 || resp.status === 403 ? "invalid_token" : `airtable_http_${resp.status}` };
+    }
+    return { ok: true }; // no validator for this provider - keep prior behavior
+  } catch (e: any) {
+    // Network failure/timeouts on OUR side must not hard-block connecting.
+    console.warn(`[connectors] ${slug} credential validation unreachable: ${e?.message}`);
+    return { ok: true };
+  }
+}
+
 router.post(
   "/connectors/:slug/connect",
-  authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"),
+  // Onboarding connects the CRM (Fireberry / Airtable-PAT) BEFORE the tenant is
+  // ACTIVE - connecting is what flips it. requireActiveTenant() 403'd here, which
+  // is exactly why "connect Fireberry" looked broken. Match the OAuth routes.
+  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), canConnectSystems,
   async (req: Request, res: Response) => {
     const cat = await findCatalog(req.params.slug);
     if (!cat) { res.status(404).json({ error: "unknown_provider" }); return; }
@@ -168,6 +309,11 @@ router.post(
     const config = req.body?.config || {};
     if (!credentials || Object.keys(credentials).length === 0) {
       res.status(400).json({ error: "credentials_required" });
+      return;
+    }
+    const check = await validateApiKeyCredentials(String(req.params.slug), credentials);
+    if (!check.ok) {
+      res.status(400).json({ error: "invalid_credentials", detail: check.error });
       return;
     }
     await upsertConnection({
@@ -186,12 +332,14 @@ router.post(
 
 router.get(
   "/connectors/stripe/oauth/init",
-  authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"),
+  // Onboarding-reachable like every other connector: during onboarding the
+  // tenant is PENDING_ONBOARDING, and requireActiveTenant() 403s there.
+  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), canConnectSystems,
   (req: Request, res: Response) => {
     const clientId = process.env.STRIPE_CLIENT_ID;
     const redirect = process.env.STRIPE_REDIRECT_URI;
     if (!clientId || !redirect) { res.status(500).json({ error: "stripe_oauth_not_configured" }); return; }
-    const state = jwt.sign({ tenantId: req.tenantId, provider: "stripe" }, JWT_SECRET, { expiresIn: "10m" });
+    const { state } = mintOAuthState({ tenantId: req.tenantId!, provider: "stripe", userId: (req as any).user?.userId });
     const params = new URLSearchParams({
       response_type: "code",
       client_id: clientId,
@@ -207,8 +355,14 @@ router.get("/connectors/stripe/oauth/callback", async (req: Request, res: Respon
   try {
     const { code, state } = req.query;
     if (!code || !state) { res.status(400).send("missing_code_or_state"); return; }
-    const payload = jwt.verify(state as string, JWT_SECRET) as any;
-    if (payload.provider !== "stripe") { res.status(400).send("bad_state"); return; }
+    const consumed = await consumeOAuthState<any>(state as string, "stripe");
+    if (!consumed.ok) {
+      // Replay and forgery look identical to the caller; only our logs distinguish them.
+      console.warn(`[stripe oauth] state rejected: ${consumed.reason}`);
+      res.status(400).send(consumed.reason === "replayed" ? "state_already_used" : "bad_state");
+      return;
+    }
+    const payload = consumed.claims;
 
     const secret = process.env.STRIPE_SECRET_KEY;
     if (!secret) { res.status(500).send("stripe_secret_not_configured"); return; }
@@ -250,30 +404,59 @@ router.get("/connectors/stripe/oauth/callback", async (req: Request, res: Respon
 
 router.get(
   "/connectors/hubspot/oauth/init",
-  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), canConnectSystems,
   (req: Request, res: Response) => {
     const clientId = process.env.HUBSPOT_CLIENT_ID;
     const redirect = process.env.HUBSPOT_REDIRECT_URI;
     if (!clientId || !redirect) { res.status(500).json({ error: "hubspot_oauth_not_configured" }); return; }
-    const flow = req.query.flow === "onboarding" ? "onboarding" : undefined;
-    const state = jwt.sign({ tenantId: req.tenantId, provider: "hubspot", flow }, JWT_SECRET, { expiresIn: "10m" });
-    // Includes Leads scopes - they 403 silently for tenants on Pro/Starter
-    // (no Leads object). Leaving them in keeps Enterprise install fast.
-    const scope = [
+    const flow = parseFlow(req.query.flow);
+    const { state } = mintOAuthState({ tenantId: req.tenantId!, provider: "hubspot", flow, userId: (req as any).user?.userId });
+    // HubSpot enforces an EXACT scope contract between the install URL and the
+    // app's configured scopes (HubSpot dashboard → Auth → Scopes):
+    //   1. Every scope the app marks "Required" must appear in the install URL,
+    //      else: "provided scopes are missing [...]".
+    //   2. Every scope in the install URL must be configured on the app (required
+    //      OR optional), else: "mismatch between the scopes in the install URL
+    //      and the app's configured scopes".
+    // Because that list lives in the HubSpot dashboard (not here), it is
+    // env-overridable so it can be aligned WITHOUT a rebuild. Set HUBSPOT_SCOPES
+    // (space- or comma-separated) to the app's exact required scopes; optionally
+    // set HUBSPOT_OPTIONAL_SCOPES for app-optional ones. `oauth` is always added.
+    // Default = every object the HubSpot adapter actually uses: contacts,
+    // companies, deals, and leads (the adapter has create_lead/update_lead/
+    // get_lead/search_leads via /crm/v3/objects/leads). Leads scopes 403 silently
+    // for tenants without the Leads object (Pro/Starter) - harmless.
+    // Appointments read/write are included because the CURRENT HubSpot app marks
+    // them "Required" in its dashboard - HubSpot then rejects any install URL that
+    // omits a Required scope ("provided scopes are missing [crm.objects.appointments...]").
+    // The adapter makes no appointments calls; the scope is requested only to
+    // satisfy HubSpot's exact-match contract so the connection completes. (If the
+    // dashboard later drops them as Required, remove them here or override via
+    // HUBSPOT_SCOPES.)
+    const DEFAULT_SCOPES = [
       "crm.objects.contacts.read",
       "crm.objects.contacts.write",
+      "crm.objects.companies.read",
+      "crm.objects.companies.write",
       "crm.objects.deals.read",
       "crm.objects.deals.write",
       "crm.objects.leads.read",
       "crm.objects.leads.write",
-      "oauth",
-    ].join(" ");
+      "crm.objects.appointments.read",
+      "crm.objects.appointments.write",
+    ];
+    const parseScopes = (raw: string | undefined): string[] =>
+      (raw ?? "").split(/[\s,]+/).map((s) => s.trim()).filter(Boolean);
+    const required = process.env.HUBSPOT_SCOPES ? parseScopes(process.env.HUBSPOT_SCOPES) : DEFAULT_SCOPES;
+    const scope = Array.from(new Set([...required, "oauth"])).join(" ");
+    const optionalScopes = parseScopes(process.env.HUBSPOT_OPTIONAL_SCOPES);
     const params = new URLSearchParams({
       client_id: clientId,
       redirect_uri: redirect,
       scope,
       state,
     });
+    if (optionalScopes.length) params.set("optional_scope", optionalScopes.join(" "));
     res.json({ url: `https://app.hubspot.com/oauth/authorize?${params.toString()}` });
   },
 );
@@ -282,8 +465,14 @@ router.get("/connectors/hubspot/oauth/callback", async (req: Request, res: Respo
   try {
     const { code, state } = req.query;
     if (!code || !state) { res.status(400).send("missing_code_or_state"); return; }
-    const payload = jwt.verify(state as string, JWT_SECRET) as any;
-    if (payload.provider !== "hubspot") { res.status(400).send("bad_state"); return; }
+    const consumed = await consumeOAuthState<any>(state as string, "hubspot");
+    if (!consumed.ok) {
+      // Replay and forgery look identical to the caller; only our logs distinguish them.
+      console.warn(`[hubspot oauth] state rejected: ${consumed.reason}`);
+      res.status(400).send(consumed.reason === "replayed" ? "state_already_used" : "bad_state");
+      return;
+    }
+    const payload = consumed.claims;
 
     const clientId = process.env.HUBSPOT_CLIENT_ID!;
     const clientSecret = process.env.HUBSPOT_CLIENT_SECRET!;
@@ -324,7 +513,7 @@ router.get("/connectors/hubspot/oauth/callback", async (req: Request, res: Respo
 
 router.get(
   "/connectors/shopify/oauth/init",
-  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), canConnectSystems,
   (req: Request, res: Response) => {
     const clientId = process.env.SHOPIFY_API_KEY;
     const redirect = process.env.SHOPIFY_REDIRECT_URI;
@@ -342,9 +531,52 @@ router.get(
       res.status(400).json({ error: "shop_required (e.g. my-store or my-store.myshopify.com)" });
       return;
     }
-    const flow = req.query.flow === "onboarding" ? "onboarding" : undefined;
-    const state = jwt.sign({ tenantId: req.tenantId, provider: "shopify", shop, flow }, JWT_SECRET, { expiresIn: "10m" });
-    const scopes = "read_orders,write_orders,read_customers,write_discounts,read_products,read_returns";
+    const flow = parseFlow(req.query.flow);
+    const { state } = mintOAuthState({ tenantId: req.tenantId!, provider: "shopify", shop, flow, userId: (req as any).user?.userId });
+    // Discount tools talk to the REST PriceRule/DiscountCode resources
+    // (/price_rules.json, /discount_codes/lookup.json), which are gated on
+    // read_price_rules / write_price_rules. `write_discounts` covers the newer
+    // GraphQL Discounts API instead, so every discount tool - list_discounts,
+    // validate_discount, get_customer_discounts, the coupon writers - 403'd with
+    // "requires merchant approval for read_price_rules scope" no matter what.
+    // Existing connections keep their old grant: re-connect to pick these up.
+    // FULFILLMENT ORDERS, INVENTORY and CUSTOMER WRITES were all missing here.
+    // Urban Supply Dev only had them because they were added by hand in the
+    // Partner dashboard; a merchant connecting through this flow got a
+    // connection that read every order as unfulfilled, answered "nothing has
+    // shipped" for orders in fulfillment, and offered to cancel orders Shopify
+    // would refuse. The list below is what the tool surface actually calls.
+    //
+    // `write_returns` and `write_order_edits` were on the not-requested list
+    // with the note "no tool creates an RMA / edits an order". Both tools now
+    // exist, and the note outliving the fact is how the exchange reached a
+    // live store and failed at orderEditBegin with "Requires
+    // `write_order_edits` access scope" - after eligibility passed, after the
+    // price was quoted, after a human approved it. A scope list that is a
+    // comment about the past rather than a statement about the surface fails
+    // exactly this way: silently, and only at the last step.
+    //
+    // Deliberately NOT requested: write_fulfillments (no tool creates a
+    // fulfillment), write_draft_orders and read_draft_orders (no draft-order
+    // tool exists), and the third-party fulfillment-order scopes (only
+    // meaningful for merchants using a 3PL - read_assigned_fulfillment_orders
+    // is requested for that case, and a merchant without one loses nothing by
+    // granting it).
+    const scopes = [
+      "read_orders", "write_orders",
+      // Orders older than 60 days are invisible to read_orders alone, and a
+      // customer asking about last season's order is an ordinary request.
+      "read_all_orders",
+      "read_customers", "write_customers",
+      "read_merchant_managed_fulfillment_orders",
+      "read_assigned_fulfillment_orders",
+      "read_inventory",
+      "read_price_rules", "write_price_rules",
+      "write_discounts",
+      "read_products",
+      "read_returns", "write_returns",
+      "write_order_edits",
+    ].join(",");
     const params = new URLSearchParams({
       client_id: clientId,
       scope: scopes,
@@ -359,16 +591,26 @@ router.get("/connectors/shopify/oauth/callback", async (req: Request, res: Respo
   try {
     const { code, state, shop } = req.query;
     if (!code || !state || !shop) { res.status(400).send("missing_code_or_state_or_shop"); return; }
-    const payload = jwt.verify(state as string, JWT_SECRET) as any;
-    if (payload.provider !== "shopify" || payload.shop !== shop) { res.status(400).send("bad_state"); return; }
+    const consumed = await consumeOAuthState<any>(state as string, "shopify");
+    if (!consumed.ok) {
+      // Replay and forgery look identical to the caller; only our logs distinguish them.
+      console.warn(`[shopify oauth] state rejected: ${consumed.reason}`);
+      res.status(400).send(consumed.reason === "replayed" ? "state_already_used" : "bad_state");
+      return;
+    }
+    const payload = consumed.claims;
+    if (payload.shop !== shop) { res.status(400).send("bad_state"); return; }
 
     const clientId = process.env.SHOPIFY_API_KEY!;
     const clientSecret = process.env.SHOPIFY_API_SECRET!;
 
+    // `expiring: "1"` requests Shopify's expiring offline token (access token
+    // + refresh token). Non-expiring tokens are rejected by the Admin API now;
+    // the adapter's refreshTokens() keeps the pair rotated.
     const tokenRes = await fetch(`https://${shop}/admin/oauth/access_token`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ client_id: clientId, client_secret: clientSecret, code }),
+      body: JSON.stringify({ client_id: clientId, client_secret: clientSecret, code, expiring: "1" }),
     });
     if (!tokenRes.ok) { res.status(400).send("token_exchange_failed"); return; }
     const j: any = await tokenRes.json();
@@ -380,11 +622,33 @@ router.get("/connectors/shopify/oauth/callback", async (req: Request, res: Respo
       status: "CONNECTED",
       credentialsBlob: encryptCredentials({
         accessToken: j.access_token,
+        refreshToken: j.refresh_token,
+        expiresAt: j.expires_in ? new Date(Date.now() + Number(j.expires_in) * 1000).toISOString() : undefined,
         scope: j.scope,
         shopDomain: shop,
       }),
       config: { shopDomain: shop },
     });
+    // Proactive capability discovery: enumerate granted scopes NOW, so a
+    // store connected with missing merchant approvals never exposes an
+    // unusable write tool for even one turn before the first failure.
+    // Fire-and-forget - the redirect must not wait on a Shopify roundtrip.
+    void refreshCapabilityState({ tenantId: payload.tenantId, slug: "shopify" }).then((r) => {
+      if (r.missingScopes.length) {
+        console.warn(`[shopify oauth] connected with missing scopes: ${r.missingScopes.join(",")}`);
+      }
+    }).catch((e: any) => console.warn("[shopify oauth] capability probe failed:", e?.message));
+    // Reconcile existing AI employees' desired tool permissions: employees
+    // hired BEFORE Shopify was connected were frozen with a partial tool set
+    // and never re-granted this integration's READ tools. Additive/idempotent,
+    // READ-only. Fire-and-forget - must not block the redirect.
+    void reconcileAgentToolPermissions({ tenantId: payload.tenantId, integrationSlug: "shopify" })
+      .then((r) => {
+        if (r.added.length) {
+          console.log(`[shopify oauth] reconciled ${r.added.length} agent tool grant(s)`);
+        }
+      })
+      .catch((e: any) => console.warn("[shopify oauth] tool-permission reconcile failed:", e?.message));
     res.redirect(postOAuthRedirect("shopify", payload.flow));
   } catch (err: any) {
     res.status(500).send(`shopify_callback_error:${err?.message || ""}`);
@@ -395,7 +659,7 @@ router.get("/connectors/shopify/oauth/callback", async (req: Request, res: Respo
 
 router.get(
   "/connectors/airtable/meta/bases",
-  authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireActiveTenant(), canConnectSystems,
   async (req: Request, res: Response) => {
     const pat = String(req.query.pat || "");
     if (!pat) { res.status(400).json({ error: "pat_required" }); return; }
@@ -410,7 +674,7 @@ router.get(
 
 router.get(
   "/connectors/airtable/meta/tables/:baseId",
-  authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireActiveTenant(), canConnectSystems,
   async (req: Request, res: Response) => {
     const pat = String(req.query.pat || "");
     if (!pat) { res.status(400).json({ error: "pat_required" }); return; }
@@ -433,15 +697,15 @@ router.get(
 
 router.get(
   "/connectors/airtable/oauth/init",
-  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), canConnectSystems,
   (req: Request, res: Response) => {
     const clientId = process.env.AIRTABLE_CLIENT_ID;
     const redirect = process.env.AIRTABLE_REDIRECT_URI;
     if (!clientId || !redirect) { res.status(500).json({ error: "airtable_oauth_not_configured" }); return; }
-    const flow = req.query.flow === "onboarding" ? "onboarding" : undefined;
+    const flow = parseFlow(req.query.flow);
     const verifier = base64url(crypto.randomBytes(48));
     const challenge = base64url(crypto.createHash("sha256").update(verifier).digest());
-    const state = jwt.sign({ tenantId: req.tenantId, provider: "airtable", flow, v: verifier }, JWT_SECRET, { expiresIn: "10m" });
+    const { state } = mintOAuthState({ tenantId: req.tenantId!, provider: "airtable", flow, v: verifier, userId: (req as any).user?.userId });
     const scope = "data.records:read data.records:write schema.bases:read schema.bases:write";
     const params = new URLSearchParams({
       client_id: clientId,
@@ -461,8 +725,14 @@ router.get("/connectors/airtable/oauth/callback", async (req: Request, res: Resp
     const { code, state, error } = req.query;
     if (error) { res.status(400).send(`airtable_oauth_error:${String(error)}`); return; }
     if (!code || !state) { res.status(400).send("missing_code_or_state"); return; }
-    const payload = jwt.verify(state as string, JWT_SECRET) as any;
-    if (payload.provider !== "airtable") { res.status(400).send("bad_state"); return; }
+    const consumed = await consumeOAuthState<any>(state as string, "airtable");
+    if (!consumed.ok) {
+      // Replay and forgery look identical to the caller; only our logs distinguish them.
+      console.warn(`[airtable oauth] state rejected: ${consumed.reason}`);
+      res.status(400).send(consumed.reason === "replayed" ? "state_already_used" : "bad_state");
+      return;
+    }
+    const payload = consumed.claims;
     const clientId = process.env.AIRTABLE_CLIENT_ID!;
     const clientSecret = process.env.AIRTABLE_CLIENT_SECRET || "";
     const redirect = process.env.AIRTABLE_REDIRECT_URI!;
@@ -517,7 +787,7 @@ async function airtableToken(tenantId: string): Promise<string | null> {
 
 router.get(
   "/connectors/airtable/oauth/bases",
-  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), canConnectSystems,
   async (req: Request, res: Response) => {
     const token = await airtableToken(req.tenantId!);
     if (!token) { res.status(400).json({ error: "not_connected" }); return; }
@@ -528,7 +798,7 @@ router.get(
 
 router.get(
   "/connectors/airtable/oauth/tables",
-  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), canConnectSystems,
   async (req: Request, res: Response) => {
     const token = await airtableToken(req.tenantId!);
     const baseId = String(req.query.baseId || "");
@@ -541,7 +811,7 @@ router.get(
 
 router.get(
   "/connectors/airtable/oauth/fields",
-  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), canConnectSystems,
   async (req: Request, res: Response) => {
     const token = await airtableToken(req.tenantId!);
     const baseId = String(req.query.baseId || "");
@@ -558,7 +828,7 @@ router.get(
 // create_missing=true and the token carries schema.bases:write.
 router.post(
   "/connectors/airtable/mapping",
-  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), canConnectSystems,
   async (req: Request, res: Response) => {
     const cat = await findCatalog("airtable");
     if (!cat) { res.status(404).json({ error: "unknown_provider" }); return; }
@@ -620,12 +890,14 @@ router.post(
 
 router.get(
   "/connectors/wix/oauth/init",
-  authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"),
+  // Onboarding-reachable like every other connector: during onboarding the
+  // tenant is PENDING_ONBOARDING, and requireActiveTenant() 403s there.
+  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), canConnectSystems,
   (req: Request, res: Response) => {
     const appId = process.env.WIX_CLIENT_ID;            // Wix App ID
     const redirect = process.env.WIX_REDIRECT_URI;
     if (!appId || !redirect) { res.status(500).json({ error: "wix_oauth_not_configured" }); return; }
-    const state = jwt.sign({ tenantId: req.tenantId, provider: "wix" }, JWT_SECRET, { expiresIn: "10m" });
+    const { state } = mintOAuthState({ tenantId: req.tenantId!, provider: "wix", userId: (req as any).user?.userId });
     // Wix App install flow - NOT the headless `oauth/authorize` flow.
     const params = new URLSearchParams({
       appId,
@@ -640,8 +912,14 @@ router.get("/connectors/wix/oauth/callback", async (req: Request, res: Response)
   try {
     const { code, state, instanceId } = req.query;
     if (!code || !state) { res.status(400).send("missing_code_or_state"); return; }
-    const payload = jwt.verify(state as string, JWT_SECRET) as any;
-    if (payload.provider !== "wix") { res.status(400).send("bad_state"); return; }
+    const consumed = await consumeOAuthState<any>(state as string, "wix");
+    if (!consumed.ok) {
+      // Replay and forgery look identical to the caller; only our logs distinguish them.
+      console.warn(`[wix oauth] state rejected: ${consumed.reason}`);
+      res.status(400).send(consumed.reason === "replayed" ? "state_already_used" : "bad_state");
+      return;
+    }
+    const payload = consumed.claims;
     const clientId = process.env.WIX_CLIENT_ID!;
     const clientSecret = process.env.WIX_CLIENT_SECRET!;
     const tokenRes = await fetch("https://www.wixapis.com/oauth/access", {
@@ -684,13 +962,15 @@ router.get("/connectors/wix/oauth/callback", async (req: Request, res: Response)
 
 router.get(
   "/connectors/square/oauth/init",
-  authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"),
+  // Onboarding-reachable like every other connector: during onboarding the
+  // tenant is PENDING_ONBOARDING, and requireActiveTenant() 403s there.
+  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), canConnectSystems,
   (req: Request, res: Response) => {
     const clientId = process.env.SQUARE_APPLICATION_ID;
     const redirect = process.env.SQUARE_REDIRECT_URI;
     if (!clientId || !redirect) { res.status(500).json({ error: "square_oauth_not_configured" }); return; }
     const env = String(req.query.environment || "production") === "sandbox" ? "sandbox" : "production";
-    const state = jwt.sign({ tenantId: req.tenantId, provider: "square", env }, JWT_SECRET, { expiresIn: "10m" });
+    const { state } = mintOAuthState({ tenantId: req.tenantId!, provider: "square", env, userId: (req as any).user?.userId });
     const scopes = "PAYMENTS_WRITE PAYMENTS_READ CUSTOMERS_READ CUSTOMERS_WRITE ORDERS_READ ORDERS_WRITE INVOICES_READ INVOICES_WRITE MERCHANT_PROFILE_READ";
     const host = env === "sandbox" ? "https://connect.squareupsandbox.com" : "https://connect.squareup.com";
     const params = new URLSearchParams({
@@ -708,8 +988,14 @@ router.get("/connectors/square/oauth/callback", async (req: Request, res: Respon
   try {
     const { code, state } = req.query;
     if (!code || !state) { res.status(400).send("missing_code_or_state"); return; }
-    const payload = jwt.verify(state as string, JWT_SECRET) as any;
-    if (payload.provider !== "square") { res.status(400).send("bad_state"); return; }
+    const consumed = await consumeOAuthState<any>(state as string, "square");
+    if (!consumed.ok) {
+      // Replay and forgery look identical to the caller; only our logs distinguish them.
+      console.warn(`[square oauth] state rejected: ${consumed.reason}`);
+      res.status(400).send(consumed.reason === "replayed" ? "state_already_used" : "bad_state");
+      return;
+    }
+    const payload = consumed.claims;
     const env = payload.env === "sandbox" ? "sandbox" : "production";
     const host = env === "sandbox" ? "https://connect.squareupsandbox.com" : "https://connect.squareup.com";
     const clientId = process.env.SQUARE_APPLICATION_ID!;
@@ -751,7 +1037,7 @@ router.get("/connectors/square/oauth/callback", async (req: Request, res: Respon
 
 router.get(
   "/connectors/salesforce/oauth/init",
-  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), canConnectSystems,
   (req: Request, res: Response) => {
     const clientId = process.env.SALESFORCE_CLIENT_ID;
     const redirect = process.env.SALESFORCE_REDIRECT_URI;
@@ -761,8 +1047,8 @@ router.get(
       res.status(400).json({ error: "bad_login_host (use login.salesforce.com or test.salesforce.com)" });
       return;
     }
-    const flow = req.query.flow === "onboarding" ? "onboarding" : undefined;
-    const state = jwt.sign({ tenantId: req.tenantId, provider: "salesforce", loginHost, flow }, JWT_SECRET, { expiresIn: "10m" });
+    const flow = parseFlow(req.query.flow);
+    const { state } = mintOAuthState({ tenantId: req.tenantId!, provider: "salesforce", loginHost, flow, userId: (req as any).user?.userId });
     const params = new URLSearchParams({
       response_type: "code",
       client_id: clientId,
@@ -778,8 +1064,14 @@ router.get("/connectors/salesforce/oauth/callback", async (req: Request, res: Re
   try {
     const { code, state } = req.query;
     if (!code || !state) { res.status(400).send("missing_code_or_state"); return; }
-    const payload = jwt.verify(state as string, JWT_SECRET) as any;
-    if (payload.provider !== "salesforce") { res.status(400).send("bad_state"); return; }
+    const consumed = await consumeOAuthState<any>(state as string, "salesforce");
+    if (!consumed.ok) {
+      // Replay and forgery look identical to the caller; only our logs distinguish them.
+      console.warn(`[salesforce oauth] state rejected: ${consumed.reason}`);
+      res.status(400).send(consumed.reason === "replayed" ? "state_already_used" : "bad_state");
+      return;
+    }
+    const payload = consumed.claims;
     const clientId = process.env.SALESFORCE_CLIENT_ID!;
     const clientSecret = process.env.SALESFORCE_CLIENT_SECRET!;
     const redirect = process.env.SALESFORCE_REDIRECT_URI!;
@@ -822,12 +1114,22 @@ router.get("/connectors/salesforce/oauth/callback", async (req: Request, res: Re
 
 router.get(
   "/connectors/monday/oauth/init",
-  authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"),
+  // Onboarding-reachable: during onboarding the tenant is PENDING_ONBOARDING,
+  // so requireActiveTenant() answered 403 and the connect simply died there.
+  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), canConnectSystems,
   (req: Request, res: Response) => {
     const clientId = process.env.MONDAY_CLIENT_ID;
     const redirect = process.env.MONDAY_REDIRECT_URI;
     if (!clientId || !redirect) { res.status(500).json({ error: "monday_oauth_not_configured" }); return; }
-    const state = jwt.sign({ tenantId: req.tenantId, provider: "monday" }, JWT_SECRET, { expiresIn: "10m" });
+    // SINGLE-USE state. `flow` and the initiating user ride INSIDE the signed
+    // token (never a browser-supplied return URL), and the jti is consumed on
+    // callback so a captured state cannot be replayed within its TTL.
+    const { state } = mintOAuthState({
+      tenantId: req.tenantId!,
+      provider: "monday",
+      userId: (req as any).user?.userId ?? (req as any).userId,
+      flow: parseFlow(req.query.flow),
+    });
     const params = new URLSearchParams({
       client_id: clientId,
       redirect_uri: redirect,
@@ -842,8 +1144,15 @@ router.get("/connectors/monday/oauth/callback", async (req: Request, res: Respon
   try {
     const { code, state } = req.query;
     if (!code || !state) { res.status(400).send("missing_code_or_state"); return; }
-    const payload = jwt.verify(state as string, JWT_SECRET) as any;
-    if (payload.provider !== "monday") { res.status(400).send("bad_state"); return; }
+    const consumed = await consumeOAuthState<{ tenantId: string; flow?: string }>(state as string, "monday");
+    if (!consumed.ok) {
+      // Replay and forgery are reported identically to the browser; the reason
+      // is distinguishable only in our logs.
+      console.warn(`[monday oauth] state rejected: ${consumed.reason}`);
+      res.status(400).send(consumed.reason === "replayed" ? "state_already_used" : "bad_state");
+      return;
+    }
+    const payload = consumed.claims;
     const clientId = process.env.MONDAY_CLIENT_ID!;
     const clientSecret = process.env.MONDAY_CLIENT_SECRET!;
     const redirect = process.env.MONDAY_REDIRECT_URI!;
@@ -862,18 +1171,34 @@ router.get("/connectors/monday/oauth/callback", async (req: Request, res: Respon
     const j: any = await tokenRes.json();
     const cat = await findCatalog("monday");
     if (!cat) { res.status(500).send("monday_catalog_missing"); return; }
+
+    // A token in hand is NOT a working connection. Prove the credential can
+    // actually read from Monday before we persist CONNECTED - otherwise the
+    // tile claims success and every tool call fails later.
+    const probe = await fetch("https://api.monday.com/v2", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: j.access_token },
+      body: JSON.stringify({ query: "query { me { id } }" }),
+    }).catch(() => null);
+    const probeJson: any = probe && probe.ok ? await probe.json().catch(() => null) : null;
+    const verified = !!probeJson?.data?.me?.id;
+
     await upsertConnection({
       tenantId: payload.tenantId,
       catalogId: cat.id,
-      status: "CONNECTED",
+      // Persist the credential either way (so a retry does not restart the
+      // whole OAuth dance), but only claim CONNECTED when the provider
+      // confirmed it. ERROR surfaces in the UI as "needs attention".
+      status: verified ? "CONNECTED" : "ERROR",
       credentialsBlob: encryptCredentials({
         accessToken: j.access_token,
         refreshToken: j.refresh_token,
         expiresAt: j.expires_in ? new Date(Date.now() + Number(j.expires_in) * 1000).toISOString() : undefined,
         scope: j.scope,
       }),
+      ...(verified ? {} : { lastError: "monday_validation_failed: token accepted but api.monday.com/v2 me{} query did not return an account" }),
     });
-    res.redirect(dashboardRedirect("monday"));
+    res.redirect(postOAuthRedirect("monday", payload.flow, verified ? {} : { error: "validation_failed" }));
   } catch (err: any) {
     res.status(500).send(`monday_callback_error:${err?.message || ""}`);
   }
@@ -881,7 +1206,7 @@ router.get("/connectors/monday/oauth/callback", async (req: Request, res: Respon
 
 router.get(
   "/connectors/monday/meta/boards",
-  authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireActiveTenant(), canConnectSystems,
   async (req: Request, res: Response) => {
     try {
       const cat = await findCatalog("monday");
@@ -928,7 +1253,7 @@ async function resolveConnectionString(opts: {
 
 router.post(
   "/connectors/postgres/meta/tables",
-  authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireActiveTenant(), canConnectSystems,
   async (req: Request, res: Response) => {
     const connStr = await resolveConnectionString({
       tenantId: req.tenantId!,
@@ -970,7 +1295,7 @@ router.post(
 
 router.post(
   "/connectors/mongodb/meta/collections",
-  authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireActiveTenant(), canConnectSystems,
   async (req: Request, res: Response) => {
     const connStr = await resolveConnectionString({
       tenantId: req.tenantId!,
@@ -1000,7 +1325,7 @@ router.post(
 
 router.post(
   "/connectors/mongodb/meta/databases",
-  authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireActiveTenant(), canConnectSystems,
   async (req: Request, res: Response) => {
     const connStr = await resolveConnectionString({
       tenantId: req.tenantId!,
@@ -1031,7 +1356,7 @@ router.post(
 
 router.post(
   "/connectors/aws_rds/meta/tables",
-  authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireActiveTenant(), canConnectSystems,
   async (req: Request, res: Response) => {
     const connStr = await resolveConnectionString({
       tenantId: req.tenantId!,

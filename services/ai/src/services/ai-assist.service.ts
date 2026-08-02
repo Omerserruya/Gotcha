@@ -1,10 +1,18 @@
 import { prisma } from "@chatcenter/shared";
 import { ESCALATION_TOOL, AgentRecord } from "./prompt-builder.service";
 
+export interface SentimentResult {
+  /** positive | neutral | negative | mixed */
+  sentiment: string;
+  /** -1 (very negative) .. 1 (very positive) */
+  score: number;
+}
+
 export interface AIProvider {
   suggestResponse(context: ConversationContext): Promise<AISuggestion[]>;
   summarize(context: ConversationContext): Promise<string>;
   classifyIntent(message: string): Promise<IntentClassification>;
+  classifySentiment(text: string, locale?: string): Promise<SentimentResult>;
 }
 
 export interface ConversationContext {
@@ -78,6 +86,10 @@ export interface AISuggestion {
   text: string;
   confidence: number;
   type: "reply" | "action" | "info" | "quick_action";
+  /** One-line label of the tactic this suggestion takes (model-authored). */
+  approach?: string;
+  /** WHY this suggestion fits the plan/customer right now (model-authored). */
+  rationale?: string;
   /**
    * Populated when type === "quick_action". Carries the tool name + args
    * the model proposed; the human agent in the inbox decides whether to
@@ -107,6 +119,7 @@ class StubAIProvider implements AIProvider {
   }
   async summarize(_context: ConversationContext): Promise<string> { return "AI summarization not configured."; }
   async classifyIntent(_message: string): Promise<IntentClassification> { return { intent: "unknown", confidence: 0, entities: [] }; }
+  async classifySentiment(_text: string): Promise<SentimentResult> { return { sentiment: "neutral", score: 0 }; }
 }
 
 let provider: AIProvider = new StubAIProvider();
@@ -280,6 +293,7 @@ export async function getAIEmployeeForDepartment(tenantId: string, departmentId:
 export async function getSuggestions(context: ConversationContext): Promise<AISuggestion[]> { return provider.suggestResponse(context); }
 export async function summarizeConversation(context: ConversationContext): Promise<string> { return provider.summarize(context); }
 export async function classifyMessage(message: string): Promise<IntentClassification> { return provider.classifyIntent(message); }
+export async function classifySentiment(text: string, locale?: string): Promise<SentimentResult> { return provider.classifySentiment(text, locale); }
 
 export interface AgentChatParams extends ConversationContext {
   agentMessage: string;

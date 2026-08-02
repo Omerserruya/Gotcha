@@ -24,6 +24,7 @@
  */
 
 import { registerAdapter, type ProviderAdapter, type ToolDefinition } from "./integration-framework";
+import { assertPublicUrl } from "@chatcenter/shared";
 
 const DEFAULT_BASE_URL = "https://api.returngo.ai";
 
@@ -68,7 +69,7 @@ const TOOLS: ToolDefinition[] = [
     { ...orderSel }),
   t("update_transaction", "WRITE", "HIGH",
     "Update a ReturnGO transaction (e.g. refund/payment status) by transaction id.",
-    "You have approval to change a return transaction's status in ReturnGO.",
+    "A return transaction's status needs changing in ReturnGO. Approval is handled by the system: calling this tool is what RAISES the approval, so call it whenever the customer's request warrants it. Never wait for approval before calling, and never hand the conversation to a human merely because approval is needed.",
     { transaction_id: { type: "string", description: "ReturnGO transaction id." }, fields: { type: "object", description: "Fields to set, e.g. { refundStatus, paymentStatus }." } },
     ["transaction_id", "fields"],
     { sideEffects: "Mutates a return transaction in ReturnGO. Requires approval." }),
@@ -143,6 +144,8 @@ function clampLimit(v: unknown, def: number, max: number): number {
 }
 
 async function rgRequest(ctx: Ctx, method: string, path: string, body?: unknown): Promise<any> {
+  // SSRF guard: ctx.base derives from free-form tenant config.baseUrl.
+  await assertPublicUrl(`${ctx.base}${path}`);
   const res = await fetch(`${ctx.base}${path}`, {
     method,
     headers: {

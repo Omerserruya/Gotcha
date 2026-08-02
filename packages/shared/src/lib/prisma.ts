@@ -34,7 +34,6 @@ const TENANT_SCOPED_MODELS = new Set<string>([
   "KnowledgeBase",
   "KnowledgeDocument",
   "KnowledgeIntegration",
-  "MagicLink",
   "Message",
   "NotificationLog",
   "RouterRule",
@@ -59,7 +58,13 @@ const TENANT_SCOPED_MODELS = new Set<string>([
 const crossTenantContext = new AsyncLocalStorage<boolean>();
 
 export function withCrossTenantAccess<T>(fn: () => Promise<T>): Promise<T> {
-  return crossTenantContext.run(true, fn);
+  // `await fn()` INSIDE the scope, not just `fn()`: Prisma's client returns
+  // LAZY promises that only execute when awaited/then-ed. With a plain sync
+  // thunk (`() => prisma.user.count(...)`) the run() scope would exit before
+  // the caller awaits, the query would execute OUTSIDE the AsyncLocalStorage
+  // context, and the guard would still block it. Adopting the promise here
+  // pins execution to the cross-tenant scope for both sync and async thunks.
+  return crossTenantContext.run(true, async () => await fn());
 }
 
 /**

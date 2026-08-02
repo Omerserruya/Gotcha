@@ -68,6 +68,36 @@ export function validateFlow(nodes: Node[], edges: Edge[]): FlowIssue[] {
     });
   }
 
+  // ── Rule 1b: duplicate singleton static nodes (parity with the backend
+  //    graph-validator's duplicate_entry). Two starts / default fallbacks are
+  //    ambiguous. ────────────────────────────────────────────────
+  const SINGLETON_TYPES = new Set(["start", "default_fallback"]);
+  const singletonCounts = new Map<string, number>();
+  for (const n of nodes) {
+    if (SINGLETON_TYPES.has(n.type)) singletonCounts.set(n.type, (singletonCounts.get(n.type) ?? 0) + 1);
+  }
+  for (const [type, count] of Array.from(singletonCounts.entries())) {
+    if (count > 1) {
+      issues.push({
+        id: `duplicate_${type}`,
+        severity: "error",
+        title: `More than one ${friendlyType(type)}`,
+        message: `A process can only have one ${friendlyType(type)}. Remove the extra one.`,
+      });
+    }
+  }
+
+  // ── Rule 1c: wait/delay validity (parity with backend invalid_delay) ──
+  for (const n of nodes) {
+    if (n.type !== "wait") continue;
+    const dur = (n.data as any)?.durationMs;
+    if (dur == null) {
+      issues.push({ id: `${n.id}__no_delay`, severity: "warning", nodeId: n.id, title: "Wait has no delay set", message: "Set how long this step should pause, or it will not wait." });
+    } else if (typeof dur !== "number" || !Number.isFinite(dur) || dur <= 0) {
+      issues.push({ id: `${n.id}__bad_delay`, severity: "error", nodeId: n.id, title: "Wait has an invalid delay", message: "The delay must be a positive amount of time." });
+    }
+  }
+
   // ── Rule 2: per-node required fields and outgoing edges ───────
   const defined = collectDefinedVars(nodes);
 

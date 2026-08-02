@@ -17,7 +17,7 @@
  * surfaces the computed key on the request so the model sees what was sent.
  */
 
-import { prisma, encryptCredentials, decryptCredentials } from "@chatcenter/shared";
+import { prisma, encryptCredentials, decryptCredentials, assertPublicUrl } from "@chatcenter/shared";
 import { idempotencyKey } from "./integration-framework";
 
 const PRIVATE_HOSTS = [/^localhost$/i, /^127\./, /^10\./, /^192\.168\./, /^169\.254\./, /^::1$/, /^fc[0-9a-f]{2}:/i];
@@ -93,6 +93,15 @@ export async function executeCustomApiTool(opts: {
   }
   if (PRIVATE_HOSTS.some((re) => re.test(url.hostname))) {
     return { ok: false, reason: `private_host_blocked:${url.hostname}` };
+  }
+  // DNS-resolution guard on top of the hostname allowlist: the string checks
+  // above miss a public hostname that RESOLVES to an internal/metadata IP
+  // (DNS rebinding) or an allowlisted host that points inward. assertPublicUrl
+  // resolves every A/AAAA record and blocks private/link-local/metadata ranges.
+  try {
+    await assertPublicUrl(url.toString());
+  } catch (e: any) {
+    return { ok: false, reason: `private_host_blocked:${e?.message ?? url.hostname}` };
   }
 
   // 2) Build headers + auth.

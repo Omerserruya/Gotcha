@@ -603,13 +603,13 @@ export async function executeAction(
         // it from the conversation's `assignedAiAgentId`. Required because
         // makeScheduleMeetingHandler looks up the agent's connected
         // calendar (Google / Calendly) to know which adapter to use.
-        const p = action.params as ScheduleMeetingArgs & { conversationId?: string };
+        const p = action.params as unknown as ScheduleMeetingArgs & { conversationId?: string };
         if (!p.conversationId) {
           throw new Error("schedule_meeting requires conversationId in params");
         }
         const conv = await prisma.conversation.findFirst({
           where: { id: p.conversationId, tenantId },
-          select: { assignedAiAgentId: true },
+          select: { assignedAiAgentId: true, customerExternalId: true },
         });
         const aiAgentId = (conv as any)?.assignedAiAgentId as string | null | undefined;
         if (!aiAgentId) {
@@ -617,7 +617,13 @@ export async function executeAction(
             `schedule_meeting: conversation ${p.conversationId} has no assignedAiAgentId - cannot resolve calendar adapter`,
           );
         }
-        const handler = makeScheduleMeetingHandler({ tenantId, aiAgentId });
+        const handler = makeScheduleMeetingHandler({
+          tenantId,
+          aiAgentId,
+          conversationId: p.conversationId,
+          customerExternalId: (conv as any)?.customerExternalId ?? undefined,
+          customerEmail: p.customer_email,
+        });
         const result = await handler({
           duration_minutes: p.duration_minutes,
           meeting_type: p.meeting_type,

@@ -7,7 +7,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "legal:sync": "node scripts/sync-legal-docs.mjs",
+    "legal:check": "node scripts/sync-legal-docs.mjs --check",
+    "predev": "node scripts/sync-legal-docs.mjs --if-available",
+    "prebuild": "node scripts/sync-legal-docs.mjs --if-available"
   },
   "dependencies": {
     "@reactflow/background": "^11.3.0",

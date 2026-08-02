@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useDynamicParam } from "@/lib/useRouteParam";
 import { useAuth } from "@/context/AuthContext";
+import { usePermissions } from "@/context/PermissionsContext";
 import { useI18n } from "@/context/I18nContext";
 import { useVoiceFlags } from "@/lib/use-voice-flags";
 import {
@@ -43,6 +44,7 @@ function truncateSid(sid?: string): string {
 
 export default function VoiceChannelDetailPage() {
   const { token, user } = useAuth();
+  const { atLeastRole } = usePermissions();
   const { t } = useI18n();
   const router = useRouter();
   const flags = useVoiceFlags();
@@ -235,7 +237,7 @@ export default function VoiceChannelDetailPage() {
     }
   }
 
-  if (user?.role !== "ADMIN") {
+  if (!atLeastRole("admin")) {
     return (
       <div className="flex items-center justify-center h-full">
         <p className="text-gray-400 text-sm">{t("settings.voiceChannels.adminRequired")}</p>

@@ -13,21 +13,19 @@ Fill in the organization details:
 - **Slug** - URL-safe identifier, auto-generated from name (e.g., "acme-corp")
 - **Admin Name** - name of the tenant's first admin user
 - **Admin Email** - login email for the tenant admin
-- **Admin Password** - password for the tenant admin (min 8 characters)
 
-Click **Create Tenant**. This creates the organization and its first admin user in one step.`,
+Click **Create Tenant**. This creates the organization and its first admin user in one step. The admin receives an invitation email with a secure setup link where they choose their own password.`,
   },
   {
     number: 2,
-    title: "Share Login Credentials",
-    content: `Send the tenant admin their login details:
+    title: "Point the Admin at Their Invitation",
+    content: `The tenant admin gets everything they need by email:
 
+- **Setup link**: emailed automatically when the tenant is created; they choose their own password there
 - **Login URL**: your frontend URL (e.g., \`https://app.yourdomain.com/login\`)
-- **Organization ID**: the tenant slug (e.g., \`acme-corp\`)
 - **Email**: the admin email you set
-- **Password**: the admin password you set
 
-The tenant admin uses the regular login page (not the System Admin login).`,
+If the invitation email is lost, resend the setup link from the tenant's page in the System console.`,
   },
   {
     number: 3,
@@ -47,7 +45,7 @@ Requires a Meta (Facebook) App with the appropriate permissions configured in yo
     description: "Done by the tenant admin",
     content: `The tenant admin goes to **Agents** > **Add Agent**.
 
-Enter name, email, and password for each agent. Agents can then log in with the same Organization ID and start handling conversations.`,
+Enter a name and email for each agent. The agent receives an invitation email with a secure setup link, chooses their own password, and signs in at the regular login page to start handling conversations.`,
   },
   {
     number: 5,

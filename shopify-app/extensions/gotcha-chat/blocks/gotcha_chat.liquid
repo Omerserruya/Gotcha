@@ -1,0 +1,108 @@
+{%- comment -%}
+  GOTCHA Chat — Theme App Embed block.
+
+  This is the entire storefront footprint of the app. It does three things
+  and nothing else:
+
+    1. Identifies the STORE. `shop.permanent_domain` is a public fact about
+       the storefront the shopper is already on, and the server resolves it
+       through the verified Chat installation to a channel. The merchant
+       never copies a key from anywhere: installing the app is what created
+       the binding.
+    2. Publishes the page context only Liquid can know (page type, product
+       handle, cart item count, currency, locale, theme id).
+    3. Loads the widget bootstrap asynchronously.
+
+  What it deliberately does NOT do:
+    - render markup into the theme's layout (the widget mounts itself into
+      a Shadow DOM host it creates, so no theme style can reach it and it
+      cannot reach the theme)
+    - block rendering (the script is `async`, and nothing above it is
+      render-blocking)
+    - expose any credential, tenant id, integration id or channel key
+
+  Note on the context below: every value is a HINT. The server re-resolves
+  the product from Shopify before the assistant says anything about it, and
+  never trusts a price, a stock level or a cart total from a browser.
+
+  The endpoints default to GOTCHA's production host. `api_base` /
+  `asset_base` exist for GOTCHA's own development stores and are not part
+  of merchant setup.
+{%- endcomment -%}
+
+<script type="application/json" id="gotcha-chat-context">
+  {
+    "pageType": {{ request.page_type | json }},
+    "productHandle": {%- if product -%}{{ product.handle | json }}{%- else -%}null{%- endif -%},
+    "collectionHandle": {%- if collection -%}{{ collection.handle | json }}{%- else -%}null{%- endif -%},
+    "path": {{ request.path | json }},
+    "cartItemCount": {{ cart.item_count | default: 0 | json }},
+    "currency": {{ cart.currency.iso_code | json }},
+    "locale": {{ request.locale.iso_code | json }},
+    "themeId": {{ theme.id | json }}
+  }
+</script>
+
+<script>
+  window.__gotchaShopifyChat = {
+    shopDomain: {{ shop.permanent_domain | json }},
+    apiBase: {{ block.settings.api_base | default: 'https://gotcha.co.il' | json }},
+    assetBase: {{ block.settings.asset_base | default: 'https://gotcha.co.il' | json }},
+    openOnLoad: {{ block.settings.open_on_load | default: false | json }},
+    {%- comment -%}
+      Recovery only. A merchant whose installation record was lost can be
+      given a channel key by support; the server accepts it as a fallback
+      lookup. Blank in every normal installation.
+    {%- endcomment -%}
+    channelKey: {{ block.settings.channel_key | default: '' | json }},
+    themeEditor: {%- if request.design_mode -%}true{%- else -%}false{%- endif -%}
+  };
+</script>
+
+<script
+  src="{{ block.settings.asset_base | default: 'https://gotcha.co.il' }}/widget/gotcha-shopify-bootstrap.js?b=998215613a39"
+  async
+  crossorigin="anonymous"
+></script>
+
+{% schema %}
+{
+  "name": "GOTCHA Chat",
+  "target": "body",
+  "settings": [
+    {
+      "type": "paragraph",
+      "content": "Nothing to configure here. This store is already linked to your GOTCHA workspace, and appearance, welcome copy, suggested questions and business hours are all set in GOTCHA. Turn this embed on and click Save."
+    },
+    {
+      "type": "checkbox",
+      "id": "open_on_load",
+      "label": "Open the chat automatically on page load",
+      "default": false,
+      "info": "Off by default. Opening unprompted on every page is the fastest way to make shoppers dismiss a widget permanently."
+    },
+    {
+      "type": "header",
+      "content": "Troubleshooting"
+    },
+    {
+      "type": "text",
+      "id": "channel_key",
+      "label": "Channel key (recovery only)",
+      "info": "Leave blank. GOTCHA support may give you a key if this store's link needs to be re-established."
+    },
+    {
+      "type": "text",
+      "id": "asset_base",
+      "label": "GOTCHA environment URL",
+      "info": "Leave blank on a live store. Testing against GOTCHA's development environment? Set this to https://dev.gotcha.co.il — otherwise the widget is loaded from production, which does not serve this store."
+    },
+    {
+      "type": "text",
+      "id": "api_base",
+      "label": "GOTCHA API URL (rarely needed)",
+      "info": "Leave blank. The widget already talks to whichever environment served it; set this only if GOTCHA asked you to split the two."
+    }
+  ]
+}
+{% endschema %}

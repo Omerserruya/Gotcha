@@ -8,31 +8,29 @@
  * messages on its own - it just computes the next AI move.
  */
 
-import { Router, Request, Response, NextFunction } from "express";
-import { generateAIBotReply, generateAIBotOneshot } from "../services/ai-bot.service";
+import { Router, Request, Response } from "express";
+import { requireInternalKey } from "@chatcenter/shared";
+import { generateAIBotReply, generateAIBotOneshot, generateExecutionMessage } from "../services/ai-bot.service";
 
 const router = Router();
 
-router.use((req: Request, res: Response, next: NextFunction) => {
-  const key = req.headers["x-internal-key"];
-  if (!key || key !== (process.env.INTERNAL_SERVICE_KEY || "chatcenter-internal-2026")) {
-    res.status(403).json({ error: "Forbidden" });
-    return;
-  }
-  next();
-});
+// Hardened internal gate: constant-time, fail-closed, no committed default.
+router.use(requireInternalKey);
 
 // POST /api/ai-bot/reply
-//   body: { tenantId, conversationId, aiAgentId, incomingMessage }
+//   body: { tenantId, conversationId, aiAgentId, incomingMessage, closedHours? }
+//   `closedHours` (worker-computed from the tenant's persisted business hours)
+//   marks the business as currently CLOSED with the "active" outside-hours
+//   policy - the reply must not imply immediate human availability.
 //   returns: AIBotReplyResult
 router.post("/reply", async (req: Request, res: Response) => {
   try {
-    const { tenantId, conversationId, aiAgentId, incomingMessage } = req.body || {};
+    const { tenantId, conversationId, aiAgentId, incomingMessage, closedHours } = req.body || {};
     if (!tenantId || !conversationId || !aiAgentId || typeof incomingMessage !== "string") {
       res.status(400).json({ error: "tenantId, conversationId, aiAgentId, and incomingMessage are required" });
       return;
     }
-    const result = await generateAIBotReply({ tenantId, conversationId, aiAgentId, incomingMessage });
+    const result = await generateAIBotReply({ tenantId, conversationId, aiAgentId, incomingMessage, closedHours });
     res.json(result);
   } catch (err: any) {
     const status = err?.status || 500;
@@ -55,6 +53,33 @@ router.post("/reply", async (req: Request, res: Response) => {
 // POST /api/ai-bot/oneshot
 //   body: { tenantId, aiAgentId, userInput, maxTokens?, feature? }
 //   returns: { reply, modelUsed, totalTokens }
+// POST /api/ai-bot/execution-message
+//   The ONE generator for post-execution customer messages (approval
+//   continuations, proactive completion updates). Same humanizer/style layer
+//   as live replies + deterministic grounding validation with a safe
+//   template fallback - callers always get a sendable, fact-true message.
+//   body: { tenantId, aiAgentId, facts, inboundSample?, customerName? }
+router.post("/execution-message", async (req: Request, res: Response) => {
+  try {
+    const { tenantId, aiAgentId, facts, inboundSample, customerName } = req.body || {};
+    if (!tenantId || !aiAgentId || !facts || typeof facts.tool !== "string" || !facts.outcome) {
+      res.status(400).json({ error: "tenantId, aiAgentId and facts{tool,outcome} are required" });
+      return;
+    }
+    const result = await generateExecutionMessage({
+      tenantId,
+      aiAgentId,
+      facts,
+      inboundSample: typeof inboundSample === "string" ? inboundSample : "",
+      customerName: typeof customerName === "string" ? customerName : undefined,
+    });
+    res.json(result);
+  } catch (err: any) {
+    console.error("[ai-bot/execution-message] error:", err?.message);
+    res.status(err?.status || 500).json({ error: err?.message || "Failed to generate execution message" });
+  }
+});
+
 router.post("/oneshot", async (req: Request, res: Response) => {
   try {
     const { tenantId, aiAgentId, userInput, maxTokens, feature } = req.body || {};

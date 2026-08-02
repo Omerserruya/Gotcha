@@ -1,3 +1,5 @@
+> **Superseded note (2026-07-16):** Any findings or descriptions below concerning local JWT signing, bcrypt passwords, refresh tokens, magic links, or register/login endpoints are obsolete. GOTCHA's custom authentication was removed and replaced by Authentik (OIDC, RS256/JWKS). See `docs/security/authentik-architecture.md` for the current architecture; this document is kept as a historical record.
+
 # GOTCHA - AI Threat Model
 
 > Phase 2 deliverable. STRIDE + OWASP LLM Top 10 + OWASP API Top 10 + Zero-Trust posture.

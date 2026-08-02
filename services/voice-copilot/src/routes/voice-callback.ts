@@ -18,13 +18,21 @@
 import crypto from "crypto";
 import express, { Router, Request, Response } from "express";
 import twilio from "twilio";
-import { prisma, getRedis, normalizePhone, publishEvent, outgoingMessageQueue, decryptCredentials } from "@chatcenter/shared";
+import { prisma, getRedis, normalizePhone, publishEvent, outgoingMessageQueue, decryptCredentials, verifyInternalServiceKey, getInternalServiceKey } from "@chatcenter/shared";
 import type { Logger } from "../lib/logger";
 import type { VoiceProvider, VoiceProviderResolver } from "../providers/voice-provider";
 import { NoActiveVoiceChannelError } from "../providers/resolve-provider";
 
 const VoiceResponse = twilio.twiml.VoiceResponse;
-const DEFAULT_INTERNAL_KEY = "chatcenter-internal-2026";
+
+// HMAC secret for pre-signed callback tokens. Fail-closed: with no configured
+// key, signing throws and verification always fails - never fall back to the
+// historically committed default string.
+function callbackTokenSecret(): string {
+  const secret = getInternalServiceKey();
+  if (!secret) throw new Error("INTERNAL_SERVICE_KEY not configured - cannot sign/verify callback tokens");
+  return secret;
+}
 
 // ─── Pre-signed callback URL token ─────────────────────────────
 // Customers receive a WhatsApp template with a button URL. Tapping the
@@ -54,7 +62,7 @@ function signCallbackToken(payload: Omit<CallbackTokenPayload, "exp">, ttlSecond
   const full: CallbackTokenPayload = { ...payload, exp };
   const data = b64urlEncode(JSON.stringify(full));
   const sig = crypto
-    .createHmac("sha256", process.env.INTERNAL_SERVICE_KEY || DEFAULT_INTERNAL_KEY)
+    .createHmac("sha256", callbackTokenSecret())
     .update(data)
     .digest("hex");
   return `${data}.${sig}`;
@@ -64,10 +72,13 @@ function verifyCallbackToken(token: string): CallbackTokenPayload | null {
   if (idx <= 0 || idx === token.length - 1) return null;
   const data = token.slice(0, idx);
   const sig = token.slice(idx + 1);
-  const expected = crypto
-    .createHmac("sha256", process.env.INTERNAL_SERVICE_KEY || DEFAULT_INTERNAL_KEY)
-    .update(data)
-    .digest("hex");
+  // Unconfigured key -> verification always fails (fail-closed), never throws.
+  let expected: string;
+  try {
+    expected = crypto.createHmac("sha256", callbackTokenSecret()).update(data).digest("hex");
+  } catch {
+    return null;
+  }
   if (sig.length !== expected.length) return null;
   if (!crypto.timingSafeEqual(Buffer.from(sig, "hex"), Buffer.from(expected, "hex"))) return null;
   let parsed: CallbackTokenPayload;
@@ -100,8 +111,7 @@ export function createVoiceCallbackRouter(opts: {
   // ─── POST /callbacks/initiate (internal) ───────────────────────
   router.post("/callbacks/initiate", async (req: Request, res: Response) => {
     try {
-    const expected = process.env.INTERNAL_SERVICE_KEY || DEFAULT_INTERNAL_KEY;
-    if ((req.headers["x-internal-key"] || "") !== expected) {
+    if (!verifyInternalServiceKey(req.headers["x-internal-key"])) {
       res.status(403).json({ error: "forbidden" });
       return;
     }
@@ -449,7 +459,7 @@ export function createVoiceCallbackRouter(opts: {
         if (channel.voiceChannel.outboundMode !== "AGENT_FIRST") return;
         const agentId = channel.voiceChannel.defaultAgentId;
         if (!agentId) return;
-        const internalKey = process.env.INTERNAL_SERVICE_KEY || DEFAULT_INTERNAL_KEY;
+        const internalKey = getInternalServiceKey();
         await fetch(`http://localhost:${process.env.PORT || 4007}/api/voice-copilot/callbacks/initiate`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-Internal-Key": internalKey },
@@ -482,8 +492,7 @@ export function createVoiceCallbackRouter(opts: {
   // pre-signed callback link. Idempotent per sessionId (records the
   // outgoing message id under session.meta to prevent re-sends).
   router.post("/callbacks/missed-template", async (req: Request, res: Response) => {
-    const expected = process.env.INTERNAL_SERVICE_KEY || DEFAULT_INTERNAL_KEY;
-    if ((req.headers["x-internal-key"] || "") !== expected) {
+    if (!verifyInternalServiceKey(req.headers["x-internal-key"])) {
       res.status(403).json({ error: "forbidden" });
       return;
     }
@@ -662,8 +671,7 @@ export function createVoiceCallbackRouter(opts: {
   // Returns { exists, created } so the caller can show the admin
   // whether anything new was submitted for review.
   router.post("/callbacks/ensure-template", async (req: Request, res: Response) => {
-    const expectedKey = process.env.INTERNAL_SERVICE_KEY || DEFAULT_INTERNAL_KEY;
-    if ((req.headers["x-internal-key"] || "") !== expectedKey) {
+    if (!verifyInternalServiceKey(req.headers["x-internal-key"])) {
       res.status(403).json({ error: "forbidden" });
       return;
     }

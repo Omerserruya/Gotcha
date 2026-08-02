@@ -1,5 +1,5 @@
 import { prisma, resolveEffectiveLocale } from "@chatcenter/shared";
-import { getProvider, summarizeConversation, classifyMessage, ConversationContext } from "./ai-assist.service";
+import { getProvider, summarizeConversation, classifyMessage, classifySentiment, ConversationContext } from "./ai-assist.service";
 
 export async function analyzeConversation(tenantId: string, conversationId: string) {
   const conversation = await prisma.conversation.findFirst({
@@ -55,24 +55,25 @@ export async function analyzeConversation(tenantId: string, conversationId: stri
     summary = undefined;
   }
 
-  // Determine sentiment from inbound messages using heuristics
+  // Determine sentiment from the customer's messages via the LLM (judges the
+  // substance of the whole thread - an engaged, curious customer reads as
+  // positive even without explicit "thanks"). Falls back to neutral on error.
   const inboundText = messages
     .filter((m) => m.direction === "INBOUND" && m.body)
     .map((m) => m.body!)
-    .join(" ")
-    .toLowerCase();
-
-  const positiveWords = /\b(thank|thanks|great|awesome|good|excellent|happy|satisfied|love|perfect|helpful)\b/g;
-  const negativeWords = /\b(bad|terrible|awful|worst|horrible|angry|frustrated|useless|disappointed|hate|problem|broken)\b/g;
-  const posMatches = (inboundText.match(positiveWords) || []).length;
-  const negMatches = (inboundText.match(negativeWords) || []).length;
+    .join("\n");
 
   let sentiment = "neutral";
   let sentimentScore = 0;
-  if (posMatches > 0 || negMatches > 0) {
-    const total = posMatches + negMatches;
-    sentimentScore = (posMatches - negMatches) / total;
-    sentiment = sentimentScore > 0.1 ? "positive" : sentimentScore < -0.1 ? "negative" : "neutral";
+  if (inboundText.trim()) {
+    try {
+      const s = await classifySentiment(inboundText, summaryLocale);
+      sentiment = s.sentiment;
+      sentimentScore = s.score;
+    } catch {
+      sentiment = "neutral";
+      sentimentScore = 0;
+    }
   }
 
   // Resolution outcome from conversation status

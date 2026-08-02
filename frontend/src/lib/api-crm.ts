@@ -5,9 +5,15 @@
  * Mounted via nginx at /api/crm.
  */
 
+import { resolveTourMock } from "./tour-mock";
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 async function authedFetch<T>(path: string, token: string, init: RequestInit = {}): Promise<T> {
+  // Guided-tour demo mode - same short-circuit as apiFetch in lib/api.ts.
+  const mocked = resolveTourMock(path, String(init.method || "GET").toUpperCase());
+  if (mocked !== undefined) return JSON.parse(JSON.stringify(mocked)) as T;
+
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
     headers: {

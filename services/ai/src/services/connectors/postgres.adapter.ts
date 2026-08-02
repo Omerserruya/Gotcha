@@ -17,10 +17,10 @@
  * Tools - each ENFORCES the allowlist + parameterizes values to prevent
  * SQL injection. Identifier quoting uses double-quote escaping.
  *
- *   - postgres.query_table   - SELECT * FROM <table> [WHERE …] LIMIT N
- *   - postgres.get_row       - SELECT * FROM <table> WHERE pk = $1 LIMIT 1
- *   - postgres.insert_row    - INSERT INTO <table>(…) VALUES (…) RETURNING *
- *   - postgres.update_row    - UPDATE <table> SET … WHERE pk = $1 RETURNING *
+ *   - postgresql.query_table   - SELECT * FROM <table> [WHERE …] LIMIT N
+ *   - postgresql.get_row       - SELECT * FROM <table> WHERE pk = $1 LIMIT 1
+ *   - postgresql.insert_row    - INSERT INTO <table>(…) VALUES (…) RETURNING *
+ *   - postgresql.update_row    - UPDATE <table> SET … WHERE pk = $1 RETURNING *
  *
  * Connection pooling: a single pg.Pool per (tenantIntegrationId), cached.
  */
@@ -45,7 +45,7 @@ const POOLS = new Map<string, any>();
 
 const TOOLS: ToolDefinition[] = [
   {
-    name: "postgres.query_table",
+    name: "postgresql.query_table",
     description: "SELECT rows from a whitelisted table with optional equality filters.",
     whenToUse: "You need rows matching a simple condition - e.g. orders for a customer email.",
     whenNotToUse: "You need joins or aggregations - those aren't supported here for safety.",
@@ -67,7 +67,7 @@ const TOOLS: ToolDefinition[] = [
     },
   },
   {
-    name: "postgres.get_row",
+    name: "postgresql.get_row",
     description: "Fetch a single row by primary-key column = value.",
     whenToUse: "You have a known id and want the full row.",
     category: "READ",
@@ -83,7 +83,7 @@ const TOOLS: ToolDefinition[] = [
     },
   },
   {
-    name: "postgres.insert_row",
+    name: "postgresql.insert_row",
     description: "Insert one row into a whitelisted-for-write table.",
     whenToUse: "Recording a new entity in the tenant's DB (lead/order/event).",
     category: "WRITE",
@@ -99,7 +99,7 @@ const TOOLS: ToolDefinition[] = [
     },
   },
   {
-    name: "postgres.update_row",
+    name: "postgresql.update_row",
     description: "Update one row by primary key on a whitelisted-for-write table.",
     whenToUse: "Patching status/notes on a known row.",
     category: "WRITE",
@@ -118,7 +118,14 @@ const TOOLS: ToolDefinition[] = [
 ];
 
 const PostgresAdapter: ProviderAdapter = {
-  slug: "postgres",
+  // MUST match the integration_catalog slug. It said "postgres" while the
+  // catalog row is "postgresql", and the mismatch broke this adapter end to
+  // end: loadConnection() looks the tenant's connection up by
+  // integration.slug, so every dispatch returned not_connected:postgres, and
+  // the workspace counted 0 executable tools and filed PostgreSQL away as a
+  // status-only "service managed elsewhere". Nothing here is generic over the
+  // registry key - it IS the catalog slug.
+  slug: "postgresql",
   tools: () => TOOLS,
 
   async execute({ ctx, toolName, args, credentials, config }) {

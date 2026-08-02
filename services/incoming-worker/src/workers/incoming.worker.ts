@@ -3,12 +3,15 @@ import axios from "axios";
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
-import { prisma, createWorker, IncomingMessageJob, IncomingCommentJob, WebhookTriggerJob, analyticsQueue, outgoingMessageQueue, publishEvent, decryptCredentials } from "@chatcenter/shared";
+import { handleApprovalButtonReply } from "../services/whatsapp-approval-inbound.service";
+import { prisma, createWorker, IncomingMessageJob, IncomingCommentJob, WebhookTriggerJob, analyticsQueue, outgoingMessageQueue, publishEvent, decryptCredentials, metaGraphBaseUrl } from "@chatcenter/shared";
 import { processCommentTrigger } from "../services/comment-trigger.service";
 
-const FB_API_URL = process.env.FACEBOOK_API_URL || "https://graph.facebook.com/v19.0";
+const FB_API_URL = metaGraphBaseUrl(process.env.FACEBOOK_API_URL);
+// Intentionally OUTSIDE central Meta versioning: graph.instagram.com
+// (Instagram Login) rejects version-prefixed paths. See meta-graph-version.ts.
 const IG_API_URL = process.env.INSTAGRAM_API_URL || "https://graph.instagram.com";
-const WA_API_URL = process.env.WHATSAPP_API_URL || "https://graph.facebook.com/v19.0";
+const WA_API_URL = metaGraphBaseUrl(process.env.WHATSAPP_API_URL);
 const UPLOADS_DIR = process.env.UPLOADS_DIR || path.resolve(process.cwd(), "uploads");
 const UPLOADS_BASE_URL = process.env.UPLOADS_BASE_URL || "/api/uploads";
 
@@ -118,7 +121,7 @@ async function resolveWhatsAppMedia(mediaId: string, accessToken: string, messag
     });
 
     // Determine file extension from content-type
-    const contentType = fileRes.headers["content-type"] || "";
+    const contentType = String(fileRes.headers["content-type"] ?? "");
     const ext = getExtensionFromMime(contentType, messageType);
     const fileName = `${crypto.randomUUID()}${ext}`;
     const filePath = path.join(UPLOADS_DIR, fileName);
@@ -175,6 +178,7 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
     messageType,
     interactiveReply,
     mediaUrl: rawMediaUrl,
+    metadata: producerMetadata,
   } = normalizedMessage;
 
   // Idempotency check
@@ -182,6 +186,14 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
     where: { externalMessageId },
   });
   if (existing) return;
+
+  // A manager tapping Approve/Reject on WhatsApp is NOT a customer message.
+  // Intercept before any contact/conversation is created - otherwise a staff
+  // phone number becomes a customer and gets handed to the bot.
+  if (interactiveReply?.payload) {
+    const approval = await handleApprovalButtonReply(interactiveReply.payload, senderId);
+    if (approval.handled) return;
+  }
 
   // Find or create conversation using channel-aware lookup.
   // A closed conversation stays closed - the next inbound from the same
@@ -303,7 +315,13 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
       messageType,
       senderName: displayName || senderDisplayName,
       status: "DELIVERED",
-      metadata: interactiveReply ? { interactiveReply } : undefined,
+      // Producer-supplied metadata (already sanitized at the edge) merges
+      // under the interactive reply so a channel can attach its own
+      // context — e.g. the Shopify storefront page a visitor asked from.
+      metadata:
+        interactiveReply || producerMetadata
+          ? { ...(producerMetadata ?? {}), ...(interactiveReply ? { interactiveReply } : {}) }
+          : undefined,
       mediaUrl: resolvedMediaUrl,
       fileName: resolvedFileName,
     },
@@ -419,6 +437,28 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
   // Process bot if no agent assigned
   if (!conversation.assignedAgentId && !conversation.isHandedOver) {
     try {
+      // Department / role picker override (deterministic safety net).
+      // When the customer taps a department-picker button ("מכירה" / "שירות"),
+      // route by ROLE to an ACTIVE matching employee + set the department,
+      // regardless of how the flow canvas wired the button edges. This prevents
+      // a mis-wired quick-reply node (e.g. both buttons pointing at the same
+      // route_target) from handing a sales lead to the support employee. Only
+      // fires on recognized picker payloads; ordinary quick-replies / text fall
+      // through to the normal routing path below unchanged.
+      if (interactiveReply?.payload) {
+        const { applyDepartmentPickerReply } = await import("../services/department-routing.service");
+        const picked = await applyDepartmentPickerReply({
+          tenantId,
+          conversationId: conversation.id,
+          payload: interactiveReply.payload,
+        });
+        if (picked.handled && picked.assignedAiAgentId) {
+          const { processAIBot } = await import("../services/ai-bot.service");
+          await processAIBot(tenantId, conversation.id, body, picked.assignedAiAgentId);
+          return;
+        }
+      }
+
       // Check if this is a new conversation needing routing
       const messageCount = await prisma.message.count({ where: { conversationId: conversation.id } });
 

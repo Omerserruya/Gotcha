@@ -121,7 +121,7 @@ export function CoPilotPanel({ isOpen = true, conversation, messages, crmContext
   }, [prefillQuote?.version]);
 
   // AI-powered state
-  const [aiSuggestions, setAiSuggestions] = useState<{ text: string; label: string; confidence: number; type: "reply" | "action" | "info" }[] | null>(null);
+  const [aiSuggestions, setAiSuggestions] = useState<{ text: string; label: string; confidence: number; type: "reply" | "action" | "info"; approach?: string; rationale?: string }[] | null>(null);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [copilotMode, setCopilotMode] = useState<string>("READY_MESSAGE");
@@ -258,6 +258,8 @@ export function CoPilotPanel({ isOpen = true, conversation, messages, crmContext
           type: (s.type as "reply" | "action" | "info") || "reply",
           label: s.type === "reply" ? `${t("copilot.panel.aiReplyLabel")} ${i + 1}` : s.type === "action" ? t("copilot.panel.actionLabel") : t("copilot.panel.infoLabel"),
           confidence: Math.round(s.confidence * 100),
+          approach: typeof s.approach === "string" ? s.approach : undefined,
+          rationale: typeof s.rationale === "string" ? s.rationale : undefined,
         })));
       } else {
         setAiConfigured(false);
@@ -462,7 +464,7 @@ export function CoPilotPanel({ isOpen = true, conversation, messages, crmContext
   }
 
   return (
-    <div className="fixed inset-0 z-50 md:relative md:inset-auto md:z-auto w-full md:w-[340px] bg-white flex flex-col h-full animate-slide-in-right">
+    <div className="fixed inset-0 z-50 md:relative md:inset-auto md:z-auto w-full md:w-[340px] bg-white flex flex-col h-full animate-slide-in-right" data-tour="copilot-panel">
       {/* Header */}
       <div className="px-4 py-3 shadow-subtle flex items-center gap-2.5">
         <div className="w-8 h-8 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl flex items-center justify-center shadow-sm">
@@ -737,7 +739,7 @@ export function CoPilotPanel({ isOpen = true, conversation, messages, crmContext
             </div>}
 
             {/* Suggested replies */}
-            {suggestions.length > 0 && <div ref={repliesRef}>
+            {suggestions.length > 0 && <div ref={repliesRef} data-tour="copilot-suggestions">
               <div className="flex items-center gap-1.5 mb-2 px-0.5">
                 <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
@@ -819,6 +821,13 @@ export function CoPilotPanel({ isOpen = true, conversation, messages, crmContext
                           </div>
                         </div>
                         <p className="text-xs text-gray-600 leading-relaxed">{s.text}</p>
+                        {(s.rationale || s.approach) && (
+                          <p className="mt-1.5 text-[11px] text-gray-400 leading-snug">
+                            {s.approach && <span className="font-medium text-gray-500">{s.approach}</span>}
+                            {s.approach && s.rationale && <span> · </span>}
+                            {s.rationale}
+                          </p>
+                        )}
                       </div>
                     </Wrapper>
                   );
@@ -1071,7 +1080,7 @@ function CustomerContextSection({
   }
 
   return (
-    <div className="rounded-xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+    <div className="rounded-xl border border-gray-100 bg-white shadow-sm overflow-hidden" data-tour="customer-context">
       {/* Collapsible header */}
       <button
         onClick={onToggleCollapsed}

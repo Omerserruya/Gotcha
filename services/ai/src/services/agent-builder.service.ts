@@ -95,6 +95,8 @@ export interface BuilderDraftSnapshot {
   name: string;
   role: string;
   status: string;
+  /** Wizard progress: "chat"|"kb"|"refine"|"tools" while incomplete, null once done. */
+  builderStep: string | null;
   companyOverview: string | null;
   goal: string | null;
   successCriteria: string | null;
@@ -110,6 +112,16 @@ export interface BuilderDraftSnapshot {
   funnel: { id: string; funnelId: string; stageCount: number } | null;
   knowledge: Array<{ id: string; name: string }>;
   tools: Array<{ tenantToolId: string; name: string; integration: string }>;
+  /**
+   * Subjects the tenant actually has written down, by document title. The
+   * hiring consultant used to reason about what the employee "will need to
+   * know" from a one-line company overview, so its plan was guesswork - it
+   * would promise to answer from a help centre that did not exist, or ask the
+   * owner to upload a returns policy they had already given us. These are the
+   * real titles from the knowledge base, so it can name what is present and
+   * ask only for what is genuinely missing.
+   */
+  knowledgeTopics: string[];
 }
 
 export async function loadDraftSnapshot(
@@ -151,12 +163,26 @@ export async function loadDraftSnapshot(
     }
   }
 
+  // Titles only, and capped: this feeds a prompt, and the point is to let the
+  // consultant say "you already have shipping and returns" rather than to load
+  // the knowledge itself.
+  const knowledgeTopics = await prisma.knowledgeDocument
+    .findMany({
+      where: { tenantId, status: "ready" },
+      select: { title: true },
+      orderBy: { updatedAt: "desc" },
+      take: 40,
+    })
+    .then((rows) => Array.from(new Set(rows.map((r) => r.title).filter(Boolean))).slice(0, 20))
+    .catch(() => [] as string[]);
+
   const identity = (a.identity as any) || {};
   return {
     id: a.id,
     name: a.name,
     role: a.role,
     status: a.status,
+    builderStep: (a as any).builderStep ?? null,
     companyOverview: typeof identity.companyOverview === "string" ? identity.companyOverview : null,
     goal: a.goal ?? null,
     successCriteria: a.successCriteria ?? null,
@@ -171,6 +197,7 @@ export async function loadDraftSnapshot(
     channels: Array.isArray(a.channels) ? (a.channels as any[]) : [],
     funnel,
     knowledge: a.knowledgeBases.map((k: any) => ({ id: k.knowledgeBase.id, name: k.knowledgeBase.name })),
+    knowledgeTopics,
     tools: toolRows.map((t: any) => ({
       tenantToolId: t.tenantToolId,
       name: t.tenantTool.catalogTool.name,
@@ -195,6 +222,106 @@ export function draftReadiness(d: BuilderDraftSnapshot): { ready: boolean; missi
   return { ready: missing.length === 0, missing };
 }
 
+// ─── Goal-first seeding (system-led hiring) ─────────────────
+//
+// The redesigned entry: the admin gives ONE line - the goal - and the SYSTEM
+// drafts everything else from what it already knows (business twin, profile,
+// KBs, connected integrations), mirroring the onboarding generator's behavior.
+// The chat then opens by PRESENTING the draft for co-editing instead of
+// interviewing field-by-field. Deterministic - no extra LLM call.
+
+const SALES_GOAL_HINTS = /sale|sell|lead|qualif|pipeline|deal|prospect|מכיר|מכר|ליד|לידים|עסקא|הזדמנו/i;
+const BOOKING_GOAL_HINTS = /book|appointment|schedul|meeting|slot|תור|תיאום|פגיש|קביעת/i;
+const BILLING_GOAL_HINTS = /invoice|billing|payment|charge|refund|חשבונית|תשלום|חיוב|החזר/i;
+
+function inferRoleFromGoal(goal: string, recommendedRole?: string | null): string {
+  const rec = (recommendedRole || "").toLowerCase().trim();
+  if (rec && ALL_ROLES.includes(rec)) return rec;
+  if (SALES_GOAL_HINTS.test(goal)) return "sales";
+  if (BOOKING_GOAL_HINTS.test(goal)) return "booking";
+  if (BILLING_GOAL_HINTS.test(goal)) return "billing";
+  return "customer_support";
+}
+
+export interface SeededDraftContext {
+  attachedKbCount: number;
+  grantedToolCount: number;
+  proposedName: string | null;
+}
+
+export async function seedDraftFromGoal(
+  tenantId: string,
+  agentId: string,
+  goal: string,
+): Promise<SeededDraftContext> {
+  const [discovery, profile] = await Promise.all([
+    prisma.businessDiscovery.findUnique({
+      where: { tenantId },
+      select: { recommendation: true },
+    }).catch(() => null),
+    prisma.businessProfile.findUnique({
+      where: { tenantId },
+      select: { organizationName: true },
+    }).catch(() => null),
+  ]);
+  const rec = ((discovery as any)?.recommendation || {}) as Record<string, unknown>;
+
+  const role = inferRoleFromGoal(goal, typeof rec.employeeRole === "string" ? rec.employeeRole : null);
+  const proposedName = typeof rec.employeeName === "string" && rec.employeeName.trim()
+    ? rec.employeeName.trim()
+    : null;
+
+  await prisma.aIAgent.update({
+    where: { id: agentId },
+    data: {
+      role,
+      goal: goal.trim(),
+      successCriteria: synthesizeSuccess(),
+      ...(proposedName ? { name: proposedName } : {}),
+    },
+  });
+
+  // Attach every active KB - same rationale as the onboarding generator: an
+  // employee without knowledge is a contradiction, and detaching is one click.
+  const kbs = await prisma.knowledgeBase.findMany({
+    where: { tenantId, isActive: true },
+    select: { id: true },
+  }).catch(() => [] as Array<{ id: string }>);
+  for (const kb of kbs) {
+    await prisma.aIAgentKnowledge.upsert({
+      where: { aiAgentId_knowledgeBaseId: { aiAgentId: agentId, knowledgeBaseId: kb.id } },
+      create: { aiAgentId: agentId, knowledgeBaseId: kb.id },
+      update: {},
+    }).catch((err: any) => console.warn("[builder-seed] KB link failed:", err?.message));
+  }
+
+  // Grant safe tools from CONNECTED integrations (high/critical risk stays an
+  // explicit grant - day-one authority is conservative, like the generator).
+  let granted = 0;
+  try {
+    const connectedTools = await prisma.tenantTool.findMany({
+      where: { tenantId, isEnabled: true, tenantIntegration: { status: "CONNECTED" } },
+      select: { id: true, catalogTool: { select: { riskLevel: true } } },
+      take: 200,
+    });
+    const grantable = connectedTools
+      .filter((t: any) => !/high|critical/i.test(String(t.catalogTool?.riskLevel || "")))
+      .map((t: any) => t.id);
+    if (grantable.length > 0) {
+      const r = await prisma.agentToolPermission.createMany({
+        data: grantable.map((tenantToolId: string) => ({ tenantId, aiAgentId: agentId, tenantToolId, isAllowed: true })),
+        skipDuplicates: true,
+      });
+      granted = (r as any)?.count ?? grantable.length;
+    }
+  } catch (err: any) {
+    console.warn("[builder-seed] tool auto-grant failed:", err?.message);
+  }
+
+  void profile; // org name flows through identity.companyOverview already
+  return { attachedKbCount: kbs.length, grantedToolCount: granted, proposedName };
+}
+
 // ─── System prompt ──────────────────────────────────────────
 
 const LANG_NAMES: Record<string, string> = { en: "English", he: "Hebrew (עברית)", ar: "Arabic (العربية)" };
@@ -202,26 +329,45 @@ const LANG_NAMES: Record<string, string> = { en: "English", he: "Hebrew (עבר�
 function systemPrompt(snapshot: BuilderDraftSnapshot, locale?: string): string {
   const isFunnelRole = FUNNEL_ROLES.has(snapshot.role.toLowerCase());
   const langName = LANG_NAMES[(locale || "en").toLowerCase()] || "English";
-  return `You are the **AI Employee Builder** - a proactive configuration consultant inside the GOTCHA platform. You are NOT a customer-facing bot and NOT a copilot. You interview a business ADMIN and assemble one complete, consistent AI Employee configuration for them.
+  return `You are the **hiring consultant** inside the GOTCHA platform - the person a business owner sits with to HIRE a new AI employee. You are NOT a customer-facing bot and NOT a copilot. You run a short, curious hiring conversation with the OWNER and, from their answers, quietly assemble the complete employee behind the scenes.
+
+# This is a HIRING conversation, not a configuration wizard
+- Talk like someone genuinely curious about their business and this new hire: "What kind of work do you expect them to handle?", "What should we call them?", "Which department are they joining - service, sales, operations?", "Who will they work with - customers on WhatsApp? your team too?", "What does success look like a month in?".
+- NEVER use software words with the owner: no "configure", "settings", "fields", "setup", "config", "parameters". It's a person they're hiring: talk about the job, the work, the team, the rules of the house.
+- The owner should mostly be ANSWERING easy questions and saying "yes" - you do the thinking. Every question must be one a non-technical business owner can answer without thinking about software.
 
 # Language - STRICT
 - Write EVERY message you send to the admin in **${langName}**. The greeting and all your replies must be in ${langName}, regardless of the language the admin types in.
 - You may write the captured config VALUES (goal text, rules, etc.) in ${langName} too so they read naturally for this business.
 
 # Your GOAL
-Produce a finished AI Employee config by the end of the conversation: name → role → goal → (pipeline, only if sales-type) → personalization → escalation rules → **then OFFER the optional refinements: conversation flow, business rules/guardrails, brand voice**. Knowledge & tools are chosen by the admin in a separate step (do NOT collect them over chat). Every decision is captured by calling a builder tool, which updates the live draft.
+By the end of the conversation the employee is fully hired: the work they'll handle (goal) → the department they join (role) → their name → (pipeline, only if sales-type) → the languages/persona they work in → when they should bring in a human → **then OFFER the optional extras: a working routine (conversation flow), house rules (guardrails), and how they should sound (brand voice)**. Knowledge & tools are chosen by the admin in a separate step (do NOT collect them over chat). Every decision is captured by calling a builder tool, which updates the live draft - the owner never sees the machinery.
 
 # The company is ALREADY KNOWN - do NOT ask about it
 - We already know the business from onboarding: ${snapshot.companyOverview ? `"${snapshot.companyOverview}"` : "(on file)"}.
+${snapshot.knowledgeTopics.length
+  ? `- The business has ALREADY written these subjects down, and the employee can answer from them: ${snapshot.knowledgeTopics.map((t) => `"${t}"`).join(", ")}. Name what is already covered when you set out the plan, and NEVER ask the owner to provide something on this list - they already gave it to us, and asking again is the fastest way to make them feel unheard.`
+  : `- Nothing has been written down for this business yet, so the employee currently has no knowledge to answer from. Say that plainly when you set out the plan, and be specific about the first one or two subjects worth adding.`}
 - Do NOT ask what the company does, who it serves, or for a description. Do NOT call \`set_company_overview\` unless the admin explicitly corrects a wrong detail.
 - OPEN by asking what THIS specific AI employee is for - its purpose and goal - then continue with role, personalization, escalation, flow and rules.
 
-# How to work - BALANCED proactivity
-- Drive the conversation. Ask ONE focused question at a time, in the admin's language.
-- Infer sensible defaults from what they tell you - do NOT interrogate every field. When you infer something, briefly confirm it rather than asking from scratch.
-- BUT: when an answer is ambiguous, contradictory, or a REQUIRED field is missing, you MUST ask a clarifying question. Never invent a goal, a role, an escalation rule, or pipeline stages the admin did not actually choose or clearly imply.
-- After each answer, call the matching tool(s) immediately so the draft stays in sync. You may call several tools in one turn when the admin gave you several facts at once.
-- Keep moving toward completeness. Periodically tell the admin what's still missing.
+# Seeded draft - present, don't re-interview
+- If the current draft ALREADY has a goal (see "Current draft" below), it was seeded from the admin's one-line brief plus everything we know about their business. Do NOT re-ask for the goal, role, or name from scratch.
+- In that case, treat every captured field as a PROPOSAL the admin can amend: confirm or refine, never re-collect. Focus the conversation on what's still missing (escalation, optional refinements) and on any correction the admin raises.
+- If the admin's messages show the seeded goal or role was inferred wrong, fix it immediately with the matching tool and move on - no apology tour.
+
+# The GOAL drives everything - the admin should never have to guess what to configure
+- The single most important thing is the goal. Once you have it, YOU work out what the employee needs to reach it - the admin should never sit there wondering "maybe it needs this... maybe that...".
+- As soon as the goal is set, tell the admin, in plain language, what the employee will therefore need to KNOW and be able to DO - and derive it from the goal, e.g. "To do that it'll need to answer from your help-center and pricing, and be able to look orders up in your store." Frame it as a plan you're setting up, not a quiz.
+- For each thing it needs to know: if the business likely already has it (a connected knowledge base, a connected store/CRM), say you'll use what's already there. Only ask the admin to provide or upload something when it's genuinely MISSING - and be specific about what and why.
+- Keep it to a short, confident plan the admin approves - not a long checklist they have to think through.
+
+# How to interview - curious, ONE question at a time, smart assumptions
+- Drive the conversation like a great interviewer: ask ONE focused, human question at a time, react to the answer with genuine understanding ("high WhatsApp volume after campaigns - got it"), then ask the next thing that MATTERS.
+- Infer everything you reasonably can - do NOT interrogate. When you infer, state it as a confident proposal and let them amend ("I'd put them in the service department then - sound right?"). A great hire takes 4-6 questions, not 15.
+- BUT: when an answer is ambiguous, contradictory, or something REQUIRED is missing, ask a short clarifying question. Never invent a goal, a role, an escalation rule, or pipeline stages the owner did not actually choose or clearly imply.
+- After each answer, call the matching tool(s) immediately so the draft stays in sync. You may call several tools in one turn when the owner gave you several facts at once.
+- Keep momentum: the owner should always feel the hire is progressing, never that they're filling in a form. Periodically say what's already settled and the one thing you still need.
 
 # Naming
 - EARLY in the conversation, ask the admin what to name this employee. It's their call - but skippable: if they say "you decide" or skip it, propose a fitting name and confirm. Don't make them think one up. A name is required to finish, but the admin should never feel blocked by it - always offer one. Capture with \`set_identity\`. Never leave it as "Untitled AI Employee".

@@ -13,9 +13,16 @@
 #
 # Frontend env (only when publishing `gateway` or `frontend`):
 #   NEXT_PUBLIC_API_URL, NEXT_PUBLIC_WS_URL,
-#   NEXT_PUBLIC_META_APP_ID, NEXT_PUBLIC_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID
+#   NEXT_PUBLIC_META_APP_ID, NEXT_PUBLIC_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID,
+#   NEXT_PUBLIC_OIDC_ISSUER, NEXT_PUBLIC_OIDC_CLIENT_ID,
+#   NEXT_PUBLIC_OIDC_REDIRECT_URI
 #   → baked into the static bundle by the host `npm run build` step below.
 #     Export them in your shell, or source .env before invoking the script.
+#     NEXT_PUBLIC_API_URL / _OIDC_ISSUER / _OIDC_REDIRECT_URI are REQUIRED: a
+#     bundle missing them ships with no way to reach the API or to log in, so
+#     the build fails fast rather than producing a broken artifact. Changing
+#     any of them requires a rebuild - they are frozen at build time, never
+#     read at runtime.
 #
 # Opt-outs:
 #   SKIP_FRONTEND_BUILD=1   reuse an existing frontend/out (e.g. CI artifact)
@@ -41,6 +48,7 @@ declare -A BACKEND=(
   [ai]=services/ai/Dockerfile
   [voice-copilot]=services/voice-copilot/Dockerfile
   [notifications]=services/notifications/Dockerfile
+  [billing]=services/billing/Dockerfile
   [incoming-worker]=services/incoming-worker/Dockerfile
   [outgoing-worker]=services/outgoing-worker/Dockerfile
 )
@@ -129,7 +137,14 @@ if [ -z "${SERVICES:-}" ] || [[ ",$SERVICES," == *,gateway,* ]] || [[ ",$SERVICE
       fi
     fi
     : "${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL is empty - refusing to bake a frontend with no API URL (set it in $FRONTEND_ENV or the shell)}"
+    # Same reasoning as the API URL guard: the OIDC issuer is frozen into the
+    # bundle, and a bundle without it cannot start a login at all - the app
+    # would ship with no way in. Fail the build instead of shipping that.
+    : "${NEXT_PUBLIC_OIDC_ISSUER:?NEXT_PUBLIC_OIDC_ISSUER is empty - refusing to bake a frontend that cannot log in (set it in $FRONTEND_ENV or the shell, e.g. https://auth.gotcha.co.il/application/o/gotcha/)}"
+    : "${NEXT_PUBLIC_OIDC_REDIRECT_URI:?NEXT_PUBLIC_OIDC_REDIRECT_URI is empty - refusing to bake a frontend with no OAuth callback (it must also be registered in the Authentik redirect allow-list)}"
     echo "   NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}"
+    echo "   NEXT_PUBLIC_OIDC_ISSUER=${NEXT_PUBLIC_OIDC_ISSUER}"
+    echo "   NEXT_PUBLIC_OIDC_REDIRECT_URI=${NEXT_PUBLIC_OIDC_REDIRECT_URI}"
     (
       cd frontend
       [ -d node_modules ] || npm install
@@ -139,6 +154,9 @@ if [ -z "${SERVICES:-}" ] || [[ ",$SERVICES," == *,gateway,* ]] || [[ ",$SERVICE
       NEXT_PUBLIC_WS_URL="${NEXT_PUBLIC_WS_URL:-}" \
       NEXT_PUBLIC_META_APP_ID="${NEXT_PUBLIC_META_APP_ID:-}" \
       NEXT_PUBLIC_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID="${NEXT_PUBLIC_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID:-}" \
+      NEXT_PUBLIC_OIDC_ISSUER="${NEXT_PUBLIC_OIDC_ISSUER:-}" \
+      NEXT_PUBLIC_OIDC_CLIENT_ID="${NEXT_PUBLIC_OIDC_CLIENT_ID:-gotcha-app}" \
+      NEXT_PUBLIC_OIDC_REDIRECT_URI="${NEXT_PUBLIC_OIDC_REDIRECT_URI:-}" \
         npm run build
     )
   fi

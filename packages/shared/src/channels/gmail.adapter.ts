@@ -61,10 +61,11 @@ export const gmailInboundAdapter: InboundAdapter = {
   },
 
   verifySignature(_appSecret: string, _rawBody: Buffer, _signature: string): boolean {
-    // Google Pub/Sub push endpoints are verified via subscription setup
-    // and authenticated via the OAuth token in the Authorization header.
-    // No HMAC signature verification is used.
-    return true;
+    // Google Pub/Sub push carries no reproducible HMAC. The Gmail route verifies
+    // a shared push token (verifySharedSecretToken against GMAIL_PUBSUB_TOKEN),
+    // which is the authoritative check. This stub stays fail-closed so it can
+    // never act as a silent bypass if a future caller wires it in.
+    return false;
   },
 
   getSignatureHeader(): string {

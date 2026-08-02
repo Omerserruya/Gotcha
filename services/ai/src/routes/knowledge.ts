@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { prisma, authenticate, resolveTenant, requireActiveTenant, requireRole } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireOnboardingOrActiveTenant, requirePermissionOrRole, safeFetch, requireEntitlement, requireCapacity } from "@chatcenter/shared";
 import { processDocument } from "../services/embedding.service";
 import { deleteByDocumentId, deleteByKnowledgeBaseId } from "../services/qdrant.service";
 import { parseFile, isAllowedMimeType, resolveMimeType } from "../services/file-parser.service";
@@ -12,7 +12,33 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
 });
 
-router.use(authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"));
+/**
+ * Document metadata is provenance, not a free-form bag. It is written by the
+ * onboarding projection and read back by the re-scan reconciler and the
+ * Knowledge Manager, so it is allowlisted on the way in: a client must not be
+ * able to smuggle a `tenantId` (which would be read as authoritative by a
+ * future consumer) or an unbounded blob into a Json column.
+ */
+const DOC_META_KEYS = new Set([
+  "origin", "topic", "sourceType", "dedupeKey", "sourceUrl", "normalizedUrl",
+  "checksum", "scanVersion", "language", "createdDuringOnboarding",
+  "lastRefreshedAt", "manualEdit",
+]);
+
+function sanitizeDocMetadata(raw: unknown): Record<string, unknown> | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (!DOC_META_KEYS.has(k)) continue;
+    if (typeof v === "string") out[k] = v.slice(0, 2048);
+    else if (typeof v === "number" || typeof v === "boolean") out[k] = v;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+// PENDING_ONBOARDING is allowed: Movement 6 of onboarding uploads files and
+// creates the first knowledge base BEFORE the tenant flips ACTIVE.
+router.use(authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requirePermissionOrRole("ai:knowledge:read", "ADMIN"));
 
 // List knowledge bases
 router.get("/", async (req: Request, res: Response) => {
@@ -21,7 +47,15 @@ router.get("/", async (req: Request, res: Response) => {
       where: { tenantId: req.tenantId! },
       include: {
         documents: {
-          select: { id: true, title: true, status: true, chunkCount: true, sourceType: true, createdAt: true },
+          // `metadata` and `sourceUrl` are selected because the Knowledge
+          // Manager renders provenance (where this came from, when it was last
+          // refreshed, whether a human edited it) and the re-scan reconciler
+          // matches on metadata.dedupeKey. `updatedAt` drives "last refreshed".
+          select: {
+            id: true, title: true, status: true, chunkCount: true,
+            sourceType: true, sourceUrl: true, metadata: true,
+            createdAt: true, updatedAt: true,
+          },
           orderBy: { createdAt: "desc" },
         },
       },
@@ -35,7 +69,12 @@ router.get("/", async (req: Request, res: Response) => {
 });
 
 // Create knowledge base
-router.post("/", async (req: Request, res: Response) => {
+router.post(
+  "/",
+  requirePermissionOrRole("ai:knowledge:write", "ADMIN"),
+  requireEntitlement("ai.knowledge_base"),
+  requireCapacity("limit:knowledge_sources", (tenantId) => prisma.knowledgeBase.count({ where: { tenantId } })),
+  async (req: Request, res: Response) => {
   try {
     const { name, description } = req.body;
     if (!name) {
@@ -58,7 +97,7 @@ router.post("/", async (req: Request, res: Response) => {
 });
 
 // Update knowledge base
-router.patch("/:id", async (req: Request, res: Response) => {
+router.patch("/:id", requirePermissionOrRole("ai:knowledge:write", "ADMIN"), async (req: Request, res: Response) => {
   try {
     const kb = await prisma.knowledgeBase.findFirst({
       where: { id: String(req.params.id), tenantId: req.tenantId! },
@@ -82,7 +121,7 @@ router.patch("/:id", async (req: Request, res: Response) => {
 });
 
 // Delete knowledge base
-router.delete("/:id", async (req: Request, res: Response) => {
+router.delete("/:id", requirePermissionOrRole("ai:knowledge:write", "ADMIN"), async (req: Request, res: Response) => {
   try {
     const kb = await prisma.knowledgeBase.findFirst({
       where: { id: String(req.params.id), tenantId: req.tenantId! },
@@ -99,22 +138,28 @@ router.delete("/:id", async (req: Request, res: Response) => {
 });
 
 // Upload document to knowledge base
-router.post("/:id/documents", async (req: Request, res: Response) => {
+router.post("/:id/documents", requirePermissionOrRole("ai:knowledge:write", "ADMIN"), async (req: Request, res: Response) => {
   try {
     const kb = await prisma.knowledgeBase.findFirst({
       where: { id: String(req.params.id), tenantId: req.tenantId! },
     });
     if (!kb) { res.status(404).json({ error: "Knowledge base not found" }); return; }
 
-    let { title, content, sourceType, sourceUrl } = req.body;
+    let { title, content, sourceType, sourceUrl, metadata } = req.body;
 
     if (sourceType === "url" && sourceUrl) {
       try {
-        const response = await fetch(sourceUrl, {
+        // SSRF-hardened: scheme allowlist, DNS-resolved private/metadata IP
+        // block, per-hop redirect revalidation. Never bare-fetch a URL that
+        // came from a request body.
+        const response = await safeFetch(String(sourceUrl), {
           headers: { "User-Agent": "ChatCenter-Bot/1.0" },
-          signal: AbortSignal.timeout(30000),
+          timeoutMs: 30000,
         });
-        const html = await response.text();
+        if (!response.ok && response.status === 0) {
+          throw new Error(response.error || "fetch blocked");
+        }
+        const html = response.text;
         const textContent = html
           .replace(/<script[\s\S]*?<\/script>/gi, "")
           .replace(/<style[\s\S]*?<\/style>/gi, "")
@@ -142,9 +187,24 @@ router.post("/:id/documents", async (req: Request, res: Response) => {
         content,
         sourceType: sourceType || "text",
         sourceUrl: sourceUrl || null,
+        // Provenance travels with the document: which onboarding source it
+        // came from, its content checksum and its dedupe key. Without this the
+        // re-scan has no way to recognise a page it already ingested and can
+        // only ever append, which is how a knowledge base grows a fresh copy
+        // of every page on each refresh.
+        metadata: sanitizeDocMetadata(metadata),
         status: "pending",
       },
     });
+
+    // Auto-trigger processing, same as the file-upload route. Without this a
+    // document created here stays `pending` with no embeddings, so it is never
+    // retrievable - the readiness report's "answer it now" gap resolver looked
+    // like it saved while the employee never actually learned the answer.
+    processDocument(doc.id).catch((err) => {
+      console.error(`[Knowledge] Background processing failed for ${doc.id}:`, err.message);
+    });
+
     res.status(201).json({ data: doc });
   } catch (err) {
     console.error("Upload document error:", err);
@@ -152,8 +212,73 @@ router.post("/:id/documents", async (req: Request, res: Response) => {
   }
 });
 
+// Update a document in place (content and/or provenance metadata).
+//
+// This route is what makes a website re-scan a REFRESH rather than an append.
+// Without it the only way to reflect a changed page was to create a second
+// document, so every refresh grew the knowledge base and retrieval started
+// returning several stale copies of the same page ranked above the current
+// one. Re-embedding is triggered only when the body actually changed, so an
+// unchanged page costs nothing.
+router.put("/:id/documents/:docId", requirePermissionOrRole("ai:knowledge:write", "ADMIN"), async (req: Request, res: Response) => {
+  try {
+    // Tenant scoping is on the WHERE, not on a post-hoc check: a document id
+    // from another tenant simply does not match and 404s.
+    const doc = await prisma.knowledgeDocument.findFirst({
+      where: { id: String(req.params.docId), knowledgeBaseId: String(req.params.id), tenantId: req.tenantId! },
+    });
+    if (!doc) { res.status(404).json({ error: "Document not found" }); return; }
+
+    const { title, content, metadata, manualEdit } = req.body as {
+      title?: string; content?: string; metadata?: unknown; manualEdit?: boolean;
+    };
+
+    const nextContent = typeof content === "string" && content.trim() ? content : doc.content;
+    const contentChanged = nextContent !== doc.content;
+
+    // A human editing the body stamps manualEdit, which makes later machine
+    // refreshes leave this document alone. The flag is sticky: once a person
+    // has corrected an entry, a scan must not quietly un-correct it.
+    const priorMeta = (doc.metadata && typeof doc.metadata === "object" && !Array.isArray(doc.metadata))
+      ? (doc.metadata as Record<string, unknown>)
+      : {};
+    const incoming = sanitizeDocMetadata(metadata) ?? {};
+    const nextMeta: Record<string, unknown> = { ...priorMeta, ...incoming };
+    if (manualEdit === true) nextMeta.manualEdit = true;
+    else if (priorMeta.manualEdit === true) nextMeta.manualEdit = true;
+
+    const updated = await prisma.knowledgeDocument.update({
+      where: { id: doc.id },
+      data: {
+        title: typeof title === "string" && title.trim() ? title.trim() : doc.title,
+        content: nextContent,
+        metadata: nextMeta,
+        // Only a content change invalidates the vectors.
+        status: contentChanged ? "pending" : doc.status,
+      },
+    });
+
+    if (contentChanged) {
+      // Drop the old vectors FIRST. Re-embedding without deleting leaves the
+      // superseded chunks in Qdrant, so retrieval keeps answering from text
+      // the customer already corrected.
+      await deleteByDocumentId(doc.id).catch((err) => {
+        console.error(`[Knowledge] Failed clearing vectors for ${doc.id}:`, err?.message);
+      });
+      processDocument(doc.id).catch((err) => {
+        console.error(`[Knowledge] Background reprocessing failed for ${doc.id}:`, err.message);
+      });
+    }
+
+    res.json({ data: { ...updated, reprocessing: contentChanged } });
+  } catch (err) {
+    console.error("Update document error:", err);
+    res.status(500).json({ error: "Failed to update document" });
+  }
+});
+
 // Delete document
-router.delete("/:id/documents/:docId", async (req: Request, res: Response) => {
+router.delete("/:id/documents/:docId", requirePermissionOrRole("ai:knowledge:write", "ADMIN"), async (req: Request, res: Response) => {
   try {
     const doc = await prisma.knowledgeDocument.findFirst({
       where: { id: String(req.params.docId), knowledgeBaseId: String(req.params.id), tenantId: req.tenantId! },
@@ -170,7 +295,7 @@ router.delete("/:id/documents/:docId", async (req: Request, res: Response) => {
 });
 
 // Upload file document to knowledge base
-router.post("/:id/documents/upload", upload.single("file"), async (req: Request, res: Response) => {
+router.post("/:id/documents/upload", requirePermissionOrRole("ai:knowledge:write", "ADMIN"), upload.single("file"), async (req: Request, res: Response) => {
   try {
     const kb = await prisma.knowledgeBase.findFirst({
       where: { id: String(req.params.id), tenantId: req.tenantId! },
@@ -223,7 +348,7 @@ router.post("/:id/documents/upload", upload.single("file"), async (req: Request,
 });
 
 // Trigger document processing (embedding generation)
-router.post("/:id/documents/:docId/process", async (req: Request, res: Response) => {
+router.post("/:id/documents/:docId/process", requirePermissionOrRole("ai:knowledge:write", "ADMIN"), async (req: Request, res: Response) => {
   try {
     const doc = await prisma.knowledgeDocument.findFirst({
       where: { id: String(req.params.docId), knowledgeBaseId: String(req.params.id), tenantId: req.tenantId! },

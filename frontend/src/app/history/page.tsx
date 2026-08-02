@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { AppLayout } from "@/components/AppLayout";
 import { useAuth } from "@/context/AuthContext";
+import { usePermissions } from "@/context/PermissionsContext";
 import { useI18n } from "@/context/I18nContext";
 import { getConversations, getConversation, getConversationScore, deleteConversation } from "@/lib/api";
 import ConfirmModal from "@/components/ConfirmModal";
@@ -12,6 +13,9 @@ import { ConversationReplay } from "@/components/conversations/ConversationRepla
 import { format, formatDistanceToNow } from "date-fns";
 import Image from "next/image";
 import clsx from "clsx";
+import { EmptyState } from "@/components/EmptyState";
+import { useChannelsSummary } from "@/lib/use-channels-summary";
+import { track } from "@/lib/analytics";
 
 interface CustomerGroup {
   key: string; // normalised cross-channel identity (phone digits / email / externalId)
@@ -77,6 +81,7 @@ function StarRating({ score, max = 100 }: { score: number; max?: number }) {
 
 export default function HistoryPage() {
   const { token, user } = useAuth();
+  const { atLeastRole } = usePermissions();
   const { t } = useI18n();
   const [conversations, setConversations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -103,7 +108,9 @@ export default function HistoryPage() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const contextMenuRef = useRef<HTMLDivElement>(null);
 
-  const canAccess = user?.role === "ADMIN" || user?.departmentRole === "MANAGER";
+  const canAccess = atLeastRole("department_manager");
+  // Why-aware empty states (same summary source as the Inbox).
+  const channelsSummary = useChannelsSummary(token);
 
   const handleContextMenu = useCallback((e: React.MouseEvent, convId: string) => {
     e.preventDefault();
@@ -373,12 +380,60 @@ export default function HistoryPage() {
                 <div className="w-6 h-6 border-2 border-primary-200 border-t-primary-500 rounded-full animate-spin" />
               </div>
             ) : customerGroups.length === 0 ? (
-              <div className="text-center py-12">
-                <svg className="w-12 h-12 mx-auto mb-3 text-gray-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <p className="text-sm text-gray-400">{t("common.noResults")}</p>
-              </div>
+              // Same why-aware split as the Inbox: filters vs no channel vs
+              // broken channel vs "connected but nothing closed yet".
+              (() => {
+                const hasFilters = !!search || channelFilter !== "ALL" || statusFilter !== "CLOSED";
+                const isAdmin = user?.role === "ADMIN";
+                if (hasFilters) {
+                  return (
+                    <EmptyState
+                      title={t("conversations.emptyFilteredTitle")}
+                      description={t("conversations.emptyFilteredDesc")}
+                      action={{
+                        label: t("conversations.clearFilters"),
+                        onClick: () => { setSearch(""); setChannelFilter("ALL"); setStatusFilter("CLOSED"); setPage(1); },
+                      }}
+                    />
+                  );
+                }
+                if (!channelsSummary) {
+                  return <EmptyState title={t("common.noResults")} />;
+                }
+                if (channelsSummary.connected === 0 && channelsSummary.unhealthy > 0) {
+                  return (
+                    <EmptyState
+                      tone="attention"
+                      title={t("conversations.emptyChannelBrokenTitle")}
+                      description={isAdmin ? t("conversations.emptyChannelBrokenDesc") : t("conversations.emptyNoChannelAgent")}
+                      action={isAdmin ? {
+                        label: t("conversations.fixChannelCta"),
+                        href: "/settings/channels?return=/history",
+                        onClick: () => track("connect_channel_empty_cta_clicked", { surface: "history", kind: "reconnect" }),
+                      } : undefined}
+                    />
+                  );
+                }
+                if (channelsSummary.connected === 0) {
+                  return (
+                    <EmptyState
+                      title={t("conversations.emptyNoChannelTitle")}
+                      description={isAdmin ? t("history.emptyNoChannelDesc") : t("conversations.emptyNoChannelAgent")}
+                      action={isAdmin ? {
+                        label: t("conversations.connectChannelCta"),
+                        href: "/settings/channels?return=/history",
+                        onClick: () => track("connect_channel_empty_cta_clicked", { surface: "history", kind: "connect" }),
+                      } : undefined}
+                    />
+                  );
+                }
+                return (
+                  <EmptyState
+                    title={t("history.emptyReadyTitle")}
+                    description={t("history.emptyReadyDesc")}
+                  />
+                );
+              })()
             ) : (
               <div className="bg-white rounded-2xl ring-1 ring-gray-100 shadow-sm overflow-hidden">
                 {customerGroups.map((group) => (

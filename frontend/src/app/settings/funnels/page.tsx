@@ -12,6 +12,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
+import { usePermissions } from "@/context/PermissionsContext";
 import { useI18n } from "@/context/I18nContext";
 import {
   listFunnels,
@@ -24,6 +25,7 @@ import clsx from "clsx";
 
 export default function FunnelsListPage() {
   const { token, user } = useAuth();
+  const { atLeastRole } = usePermissions();
   const { t } = useI18n();
   const router = useRouter();
   const [rows, setRows] = useState<FunnelRow[]>([]);
@@ -91,7 +93,7 @@ export default function FunnelsListPage() {
     await refresh();
   }
 
-  if (user?.role !== "ADMIN") {
+  if (!atLeastRole("admin")) {
     return (
       <div className="max-w-3xl mx-auto p-6 text-sm text-gray-500">
         {t("funnels.adminOnly")}

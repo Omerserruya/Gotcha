@@ -4,6 +4,15 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { getSystemTenants, createTenant, updateTenant, resendOnboardingLink } from "@/lib/api";
+import {
+  BillingSection, EMPTY_BILLING, tenantBillingUiState, BillingStatusBadge, TenantBillingActions,
+  PlanAccessBadge, billingSelectionComplete,
+  type BillingSelection,
+} from "@/components/system/TenantBilling";
+import {
+  getProvisioningStatus, repairBillingProvisioning, resendPaymentLink,
+  type ProvisioningQuote, type ProvisioningStatus,
+} from "@/lib/api-system-billing";
 import { SystemLayout } from "@/components/SystemLayout";
 import clsx from "clsx";
 
@@ -20,11 +29,21 @@ export default function TenantsPage() {
   const [formName, setFormName] = useState("");
   const [formSlug, setFormSlug] = useState("");
   const [formAdminEmail, setFormAdminEmail] = useState("");
-  const [formAdminPassword, setFormAdminPassword] = useState("");
   const [formAdminName, setFormAdminName] = useState("");
   const [creating, setCreating] = useState(false);
-  const [showAdminPassword, setShowAdminPassword] = useState(false);
   const [resending, setResending] = useState<string | null>(null);
+  const [billing, setBilling] = useState<BillingSelection>(EMPTY_BILLING);
+  const [quote, setQuote] = useState<ProvisioningQuote | null>(null);
+  // Provisioning state per tenant. Absent means "not loaded yet"; a
+  // PENDING_PAYMENT tenant with no COMPLETED request is treated as incomplete
+  // rather than assumed ready, because guessing wrong offers the wrong action.
+  const [provisioning, setProvisioning] = useState<Record<string, ProvisioningStatus | null>>({});
+  const [billingBusy, setBillingBusy] = useState<string | null>(null);
+  const [createResult, setCreateResult] = useState<null | {
+    kind: "ready" | "setup_incomplete" | "email_failed";
+    tenantName: string;
+    detail?: string;
+  }>(null);
 
   const showMsg = (msg: string, type: "success" | "error" = "success") => {
     setMessage(msg);
@@ -46,24 +65,120 @@ export default function TenantsPage() {
 
   useEffect(() => { fetchTenants(); }, [fetchTenants]);
 
+  // Only PENDING_PAYMENT tenants need it, and only their own request decides
+  // whether the operator should see Resend or Repair.
+  useEffect(() => {
+    if (!token) return;
+    const pending = tenants.filter((t) => t.status === "PENDING_PAYMENT");
+    if (!pending.length) return;
+    let cancelled = false;
+    Promise.all(
+      pending.map((t) =>
+        getProvisioningStatus(token, t.id)
+          .then((st) => [t.id, st] as const)
+          .catch(() => [t.id, null] as const),
+      ),
+    ).then((entries) => {
+      if (cancelled) return;
+      setProvisioning((prev) => ({ ...prev, ...Object.fromEntries(entries) }));
+    });
+    return () => { cancelled = true; };
+  }, [tenants, token]);
+
+  async function handleRepairBilling(id: string) {
+    if (!token) return;
+    setBillingBusy(id);
+    try {
+      await repairBillingProvisioning(token, id);
+      showMsg("Billing setup completed. The customer has been emailed a payment link.");
+      const st = await getProvisioningStatus(token, id).catch(() => null);
+      setProvisioning((p) => ({ ...p, [id]: st }));
+      fetchTenants();
+    } catch (err: any) {
+      showMsg(friendlyBillingError(err), "error");
+      const st = await getProvisioningStatus(token, id).catch(() => null);
+      setProvisioning((p) => ({ ...p, [id]: st }));
+    } finally {
+      setBillingBusy(null);
+    }
+  }
+
+  async function handleResendPaymentLink(id: string) {
+    if (!token) return;
+    setBillingBusy(id);
+    try {
+      await resendPaymentLink(token, id);
+      showMsg("A new payment link has been sent. The previous link no longer works.");
+    } catch (err: any) {
+      showMsg(friendlyBillingError(err), "error");
+    } finally {
+      setBillingBusy(null);
+    }
+  }
+
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     if (!token) return;
     setCreating(true);
     try {
-      await createTenant(token, {
+      const res: any = await createTenant(token, {
         name: formName,
         slug: formSlug,
         adminEmail: formAdminEmail,
-        adminPassword: formAdminPassword,
         adminName: formAdminName,
+        // Option KEYS only for the paid path. No price, credits or currency is
+        // ever submitted - the backend recomputes and rejects any smuggled
+        // commercial value. The POC credit budget is not a price; it is the
+        // allowance being given away, so it is sent, bounded and audited.
+        billing:
+          billing.mode === "PAID_PLAN"
+            ? {
+                mode: "PAID_PLAN",
+                planVersionId: billing.planVersionId,
+                chatVolumeOptionKey: billing.chatVolumeOptionKey,
+                voiceVolumeOptionKey: billing.voiceVolumeOptionKey,
+                paymentRequiredBeforeAccess: true,
+                ...(billing.commercialNote ? { commercialNote: billing.commercialNote } : {}),
+              }
+            : {
+                mode: "POC",
+                pocCredits: Number(billing.pocCredits),
+                // End of the chosen day, so "expires on the 30th" means the
+                // whole of the 30th rather than midnight at its start.
+                pocExpiresAt: new Date(`${billing.pocExpiresAt}T23:59:59.000Z`).toISOString(),
+                pocFeatureAreas: billing.pocFeatureAreas,
+                ...(billing.commercialNote ? { commercialNote: billing.commercialNote } : {}),
+              },
       });
-      showMsg("Tenant created successfully");
+
+      if (billing.mode === "PAID_PLAN") {
+        const emailSent = res?.data?.billing?.emailSent !== false;
+        setCreateResult({
+          kind: emailSent ? "ready" : "email_failed",
+          tenantName: formName,
+          detail: res?.data?.billing?.linkExpiresAt,
+        });
+      } else {
+        showMsg(
+          `${formName} created on a POC: ${Number(billing.pocCredits).toLocaleString()} credits, no charge and no renewal.`,
+        );
+      }
       setShowCreate(false);
-      setFormName(""); setFormSlug(""); setFormAdminEmail(""); setFormAdminPassword(""); setFormAdminName("");
+      setFormName(""); setFormSlug(""); setFormAdminEmail(""); setFormAdminName("");
+      setBilling(EMPTY_BILLING); setQuote(null);
       fetchTenants();
     } catch (err: any) {
-      showMsg(err.message || "Failed to create tenant", "error");
+      // Tenant created but billing setup did not complete: NOT a generic
+      // failure, and never "create the tenant again".
+      if (err?.status === 502 && err?.body?.data?.billing) {
+        setCreateResult({ kind: "setup_incomplete", tenantName: formName, detail: err?.body?.code });
+        setShowCreate(false);
+        setFormName(""); setFormSlug(""); setFormAdminEmail(""); setFormAdminName("");
+        setBilling(EMPTY_BILLING); setQuote(null);
+        fetchTenants();
+      } else {
+        showMsg(err.message || "Failed to create tenant", "error");
+      }
     } finally {
       setCreating(false);
     }
@@ -132,6 +247,51 @@ export default function TenantsPage() {
         )}
 
         {/* Create Form */}
+        {createResult && (
+          <div
+            className={`mb-4 rounded-xl border p-4 ${
+              createResult.kind === "setup_incomplete"
+                ? "border-red-200 bg-red-50"
+                : createResult.kind === "email_failed"
+                  ? "border-amber-200 bg-amber-50"
+                  : "border-green-200 bg-green-50"
+            }`}
+          >
+            <p className="text-[13px] font-semibold text-gray-900">
+              {createResult.kind === "setup_incomplete"
+                ? `${createResult.tenantName} was created, but billing setup did not complete`
+                : createResult.kind === "email_failed"
+                  ? `${createResult.tenantName} was created and billing setup is ready, but the email did not send`
+                  : `${createResult.tenantName} was created`}
+            </p>
+            <ul className="mt-2 space-y-0.5 text-[12.5px] text-gray-700">
+              {createResult.kind === "setup_incomplete" ? (
+                <>
+                  <li>No payment link was sent.</li>
+                  <li>No subscription is active and no credits were granted.</li>
+                  <li>Use Repair billing setup on the tenant row. Do not create the tenant again.</li>
+                </>
+              ) : createResult.kind === "email_failed" ? (
+                <>
+                  <li>The checkout and payment attempt already exist and were not duplicated.</li>
+                  <li>Use Resend payment link on the tenant row.</li>
+                </>
+              ) : (
+                <>
+                  <li>Status: Pending payment. The plan activates only after payment is confirmed.</li>
+                  <li>No subscription is active and no credits were granted yet.</li>
+                </>
+              )}
+            </ul>
+            <button
+              onClick={() => setCreateResult(null)}
+              className="mt-2 text-[12px] font-medium text-gray-500 hover:text-gray-800"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
         {showCreate && (
           <form onSubmit={handleCreate} className="bg-white rounded-2xl border border-gray-200 p-6 space-y-4">
             <h2 className="font-semibold text-gray-900">Create New Tenant</h2>
@@ -168,37 +328,19 @@ export default function TenantsPage() {
                   placeholder="admin@acme.com"
                 />
               </div>
-              <div className="sm:col-span-2">
-                <label className="text-xs font-medium text-gray-600 block mb-1">Admin Password</label>
-                <div className="relative">
-                  <input
-                    type={showAdminPassword ? "text" : "password"} value={formAdminPassword} onChange={(e) => setFormAdminPassword(e.target.value)} required minLength={8}
-                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 pe-10 focus:ring-2 focus:ring-orange-200 focus:border-orange-300 outline-none"
-                    placeholder="Min 8 characters"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowAdminPassword(!showAdminPassword)}
-                    className="absolute end-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition"
-                    tabIndex={-1}
-                  >
-                    {showAdminPassword ? (
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
-                      </svg>
-                    ) : (
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      </svg>
-                    )}
-                  </button>
-                </div>
-              </div>
             </div>
-            <div className="flex justify-end">
+            {token && (
+              <BillingSection token={token} value={billing} onChange={setBilling} onQuote={setQuote} />
+            )}
+
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs text-gray-500">
+                {billing.mode === "PAID_PLAN"
+                  ? "The admin receives an email with a secure setup link. The plan activates only after payment is confirmed."
+                  : "The admin receives an invitation email with a secure setup link. POC access starts immediately and is never charged."}
+              </p>
               <button
-                type="submit" disabled={creating}
+                type="submit" disabled={creating || !billingSelectionComplete(billing, !!quote)}
                 className="px-5 py-2 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition font-medium text-sm disabled:opacity-40"
               >
                 {creating ? "Creating..." : "Create Tenant"}
@@ -235,6 +377,7 @@ export default function TenantsPage() {
                   <th className="text-start text-xs font-medium text-gray-500 uppercase tracking-wider px-5 py-3">Users</th>
                   <th className="text-start text-xs font-medium text-gray-500 uppercase tracking-wider px-5 py-3">Active Chats</th>
                   <th className="text-start text-xs font-medium text-gray-500 uppercase tracking-wider px-5 py-3">Channels</th>
+                  <th className="text-start text-xs font-medium text-gray-500 uppercase tracking-wider px-5 py-3">Plan</th>
                   <th className="text-start text-xs font-medium text-gray-500 uppercase tracking-wider px-5 py-3">Status</th>
                   <th className="text-start text-xs font-medium text-gray-500 uppercase tracking-wider px-5 py-3">Actions</th>
                 </tr>
@@ -251,19 +394,35 @@ export default function TenantsPage() {
                     <td className="px-5 py-3 text-sm text-gray-600">{t._count?.users || 0}</td>
                     <td className="px-5 py-3 text-sm text-gray-600">{t._count?.conversations || 0}</td>
                     <td className="px-5 py-3 text-sm text-gray-600">{t._count?.channelAccounts || 0}</td>
+                    {/* Never blank. A tenant with no plan says so, in red. */}
+                    <td className="px-5 py-3"><PlanAccessBadge access={t.planAccess} /></td>
                     <td className="px-5 py-3">
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ring-1 ${
-                        t.status === "ACTIVE"
-                          ? "bg-green-50 text-green-600 ring-green-200"
-                          : t.status === "SUSPENDED" || !t.isActive
-                          ? "bg-red-50 text-red-600 ring-red-200"
-                          : "bg-amber-50 text-amber-600 ring-amber-200"
-                      }`}>
-                        {t.status === "ACTIVE" ? "Active" : t.status === "PENDING_ADMIN_SETUP" ? "Pending Setup" : t.status === "PENDING_ONBOARDING" ? "Onboarding" : !t.isActive ? "Disabled" : t.status}
-                      </span>
+                      {t.status === "PENDING_PAYMENT" ? (
+                        // Two different operator problems, never one badge.
+                        <BillingStatusBadge state={tenantBillingUiState(t.status, provisioning[t.id])} />
+                      ) : (
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ring-1 ${
+                          t.status === "ACTIVE"
+                            ? "bg-green-50 text-green-600 ring-green-200"
+                            : t.status === "SUSPENDED" || !t.isActive
+                            ? "bg-red-50 text-red-600 ring-red-200"
+                            : "bg-amber-50 text-amber-600 ring-amber-200"
+                        }`}>
+                          {t.status === "ACTIVE" ? "Active" : t.status === "PENDING_ADMIN_SETUP" ? "Pending Setup" : t.status === "PENDING_ONBOARDING" ? "Onboarding" : !t.isActive ? "Disabled" : t.status}
+                        </span>
+                      )}
                     </td>
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-2">
+                        {t.status === "PENDING_PAYMENT" && (
+                          <TenantBillingActions
+                            state={tenantBillingUiState(t.status, provisioning[t.id])}
+                            provisioning={provisioning[t.id]}
+                            busy={billingBusy === t.id}
+                            onResend={() => handleResendPaymentLink(t.id)}
+                            onRepair={() => handleRepairBilling(t.id)}
+                          />
+                        )}
                         <Link
                           href={`/system/tenants/${t.id}`}
                           className="text-xs text-gray-400 hover:text-orange-500 transition"
@@ -299,4 +458,22 @@ export default function TenantsPage() {
       </div>
     </SystemLayout>
   );
+}
+
+/** Structured backend codes turned into something an operator can act on. */
+function friendlyBillingError(err: any): string {
+  switch (err?.code) {
+    case "BILLING_PROVISIONING_INCOMPLETE":
+      return "Billing setup was never completed for this tenant. Repair the setup first.";
+    case "BILLING_PROVISIONING_ALREADY_COMPLETE":
+      return "Billing setup is already complete. Use Resend payment link instead.";
+    case "PAYMENT_LINK_RATE_LIMITED":
+      return `Too many sends. Try again in ${err?.body?.retryAfterSeconds ?? 60} seconds.`;
+    case "PAYMENT_LINK_NOT_AVAILABLE":
+      return "This checkout can no longer be resumed. Provision the tenant again with a new plan.";
+    case "TENANT_NOT_PENDING_PAYMENT":
+      return "This tenant is not awaiting payment.";
+    default:
+      return err?.message || "The action could not be completed.";
+  }
 }

@@ -8,7 +8,7 @@
  *   GET  /oauth/calendly/callback          - finish exchange
  *   POST /api/calendar/disconnect          - revoke local row (status=DISCONNECTED)
  *
- * State carries `{ tenantId, aiAgentId, userId }` signed with JWT_SECRET so
+ * State carries `{ tenantId, aiAgentId, userId }` signed with OAUTH_STATE_SECRET so
  * the callback can persist the right CalendarAccount row.
  *
  * Tokens are encrypted with `encryptCredentials` before storage. Same
@@ -20,14 +20,18 @@ import {
   prisma,
   authenticate,
   resolveTenant,
-  requireActiveTenant,
+  requireOnboardingOrActiveTenant,
   requireRole,
   encryptCredentials,
+  getOAuthStateSecret,
+  mintOAuthState,
+  consumeOAuthState,
 } from "@chatcenter/shared";
 import jwt from "jsonwebtoken";
 
 const router = Router();
-const JWT_SECRET = process.env.JWT_SECRET || "change-me";
+// OAuth `state` signing only - not user auth. See getOAuthStateSecret().
+const OAUTH_STATE_SECRET = getOAuthStateSecret();
 
 // ─── Google Calendar ────────────────────────────────────────
 
@@ -49,7 +53,7 @@ router.get(
   ["/oauth/google_calendar/init", "/oauth/google-calendar/init"],
   authenticate,
   resolveTenant,
-  requireActiveTenant(),
+  requireOnboardingOrActiveTenant(),
   requireRole("ADMIN"),
   async (req: Request, res: Response) => {
     const clientId = process.env.GOOGLE_CLIENT_ID;
@@ -65,11 +69,13 @@ router.get(
       res.status(400).json({ error: "no AI agent configured for this tenant" });
       return;
     }
-    const state = jwt.sign(
-      { tenantId: req.tenantId, aiAgentId, userId: (req as any).userId, provider: "google" },
-      JWT_SECRET,
-      { expiresIn: "10m" },
-    );
+    // SINGLE-USE state: `flow` and the initiating user ride inside the SIGNED
+    // token (never a browser-supplied return URL), and the jti is burned on
+    // callback so a captured state cannot be replayed within its TTL.
+    const { state } = mintOAuthState({
+      tenantId: req.tenantId!, aiAgentId, userId: (req as any).userId, provider: "google",
+      flow: typeof req.query.flow === "string" ? req.query.flow : undefined,
+    });
     const params = new URLSearchParams({
       client_id: clientId,
       redirect_uri: redirectUri,
@@ -90,11 +96,13 @@ router.get(["/oauth/google_calendar/callback", "/oauth/google-calendar/callback"
       res.status(400).json({ error: "Missing code or state" });
       return;
     }
-    const payload = jwt.verify(state as string, JWT_SECRET) as any;
-    if (payload.provider !== "google") {
-      res.status(400).json({ error: "state provider mismatch" });
+    const consumed = await consumeOAuthState<{ tenantId: string; aiAgentId: string; flow?: string }>(state as string, "google");
+    if (!consumed.ok) {
+      console.warn(`[GCal OAuth] state rejected: ${consumed.reason}`);
+      res.status(400).json({ error: consumed.reason === "replayed" ? "state already used" : "invalid state" });
       return;
     }
+    const payload = consumed.claims;
     const { tenantId, aiAgentId } = payload;
     const clientId = process.env.GOOGLE_CLIENT_ID!;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET!;
@@ -165,7 +173,7 @@ router.get(["/oauth/google_calendar/callback", "/oauth/google-calendar/callback"
     // the OAuth flow finishes.
     await markMarketplaceConnected(tenantId, "google_calendar", accountEmail);
 
-    res.redirect(connectedRedirect(aiAgentId, "google_calendar"));
+    res.redirect(connectedRedirect(aiAgentId, "google_calendar", payload.flow));
   } catch (err: any) {
     console.error("[GCal OAuth callback]", err);
     res.status(500).json({ error: err?.message || "callback failed" });
@@ -182,7 +190,7 @@ router.get(
   "/oauth/calendly/init",
   authenticate,
   resolveTenant,
-  requireActiveTenant(),
+  requireOnboardingOrActiveTenant(),
   requireRole("ADMIN"),
   async (req: Request, res: Response) => {
     const clientId = process.env.CALENDLY_CLIENT_ID;
@@ -196,11 +204,10 @@ router.get(
       res.status(400).json({ error: "no AI agent configured for this tenant" });
       return;
     }
-    const state = jwt.sign(
-      { tenantId: req.tenantId, aiAgentId, userId: (req as any).userId, provider: "calendly" },
-      JWT_SECRET,
-      { expiresIn: "10m" },
-    );
+    const { state } = mintOAuthState({
+      tenantId: req.tenantId!, aiAgentId, userId: (req as any).userId, provider: "calendly",
+      flow: typeof req.query.flow === "string" ? req.query.flow : undefined,
+    });
     const params = new URLSearchParams({
       client_id: clientId,
       redirect_uri: redirectUri,
@@ -218,11 +225,13 @@ router.get("/oauth/calendly/callback", async (req: Request, res: Response) => {
       res.status(400).json({ error: "Missing code or state" });
       return;
     }
-    const payload = jwt.verify(state as string, JWT_SECRET) as any;
-    if (payload.provider !== "calendly") {
-      res.status(400).json({ error: "state provider mismatch" });
+    const consumed = await consumeOAuthState<{ tenantId: string; aiAgentId: string; flow?: string }>(state as string, "calendly");
+    if (!consumed.ok) {
+      console.warn(`[Calendly OAuth] state rejected: ${consumed.reason}`);
+      res.status(400).json({ error: consumed.reason === "replayed" ? "state already used" : "invalid state" });
       return;
     }
+    const payload = consumed.claims;
     const { tenantId, aiAgentId } = payload;
     const clientId = process.env.CALENDLY_CLIENT_ID!;
     const clientSecret = process.env.CALENDLY_CLIENT_SECRET!;
@@ -292,7 +301,7 @@ router.get("/oauth/calendly/callback", async (req: Request, res: Response) => {
 
     await markMarketplaceConnected(tenantId, "calendly", accountEmail);
 
-    res.redirect(connectedRedirect(aiAgentId, "calendly"));
+    res.redirect(connectedRedirect(aiAgentId, "calendly", payload.flow));
   } catch (err: any) {
     console.error("[Calendly OAuth callback]", err);
     res.status(500).json({ error: err?.message || "callback failed" });
@@ -305,7 +314,7 @@ router.post(
   "/calendar/disconnect",
   authenticate,
   resolveTenant,
-  requireActiveTenant(),
+  requireOnboardingOrActiveTenant(),
   requireRole("ADMIN"),
   async (req: Request, res: Response) => {
     const { aiAgentId, provider } = req.body || {};
@@ -401,7 +410,18 @@ async function markMarketplaceConnected(
  * marketplace integration page so they can configure Meeting Types in
  * place. The provider arg picks the right slug (google_calendar / calendly).
  */
-function connectedRedirect(aiAgentId: string, provider: "google_calendar" | "calendly" = "google_calendar"): string {
+function connectedRedirect(
+  aiAgentId: string,
+  provider: "google_calendar" | "calendly" = "google_calendar",
+  flow?: string,
+): string {
+  // Return the user to where they STARTED. The origin travels in the signed
+  // OAuth state (see the init routes); without this an onboarding connect
+  // dropped the user on the marketplace page and onboarding looked reset.
+  if (flow === "onboarding") {
+    const base = process.env.FRONTEND_URL || process.env.DASHBOARD_URL || "";
+    return `${base}/setup?connected=${provider}`;
+  }
   const path = `/ai-studio/marketplace/${provider}?calendar=connected&aiAgentId=${aiAgentId}`;
   return process.env.DASHBOARD_URL ? `${process.env.DASHBOARD_URL}${path}` : path;
 }

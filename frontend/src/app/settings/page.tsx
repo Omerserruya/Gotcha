@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
+import { usePermissions } from "@/context/PermissionsContext";
 import { useI18n } from "@/context/I18nContext";
 import { Locale, localeConfig } from "@/i18n";
 import {
@@ -11,7 +12,6 @@ import {
   getIdleAutomation, updateIdleAutomation,
   getDepartments, getDepartmentSla, updateDepartmentSla,
   getTenantSettings, updateTenantSettings,
-  changePassword as changePasswordApi,
 } from "@/lib/api";
 import clsx from "clsx";
 
@@ -43,6 +43,11 @@ interface BusinessHoursConfig {
   enabled: boolean;
   timezone: string;
   autoResponse: string;
+  /** "active" = AI keeps answering while closed; "silent" = closed-hours
+   *  auto-response only. Enforced backend-side (incoming-worker gate). */
+  aiOutsideHours: "active" | "silent";
+  /** Optional owner copy appended to human handoffs while closed. */
+  outsideHoursHandoffMessage: string;
   schedule: Record<string, DaySchedule>;
 }
 
@@ -65,6 +70,8 @@ const DEFAULT_CONFIG: BusinessHoursConfig = {
   enabled: false,
   timezone: "Asia/Jerusalem",
   autoResponse: "",
+  aiOutsideHours: "active",
+  outsideHoursHandoffMessage: "",
   schedule: {
     sunday:    { enabled: true,  open: "09:00", close: "18:00" },
     monday:    { enabled: true,  open: "09:00", close: "18:00" },
@@ -93,7 +100,8 @@ const DEFAULT_IDLE: IdleAutomationConfig = {
 
 export default function SettingsPage() {
   const { token, user } = useAuth();
-  const { t, locale, setLocale, tenantDefault, userOverride, setTenantDefault } = useI18n();
+  const { atLeastRole } = usePermissions();
+  const { t, tenantDefault, setTenantDefault } = useI18n();
   const [localeSaving, setLocaleSaving] = useState(false);
   const [localeMessage, setLocaleMessage] = useState("");
   // We let users (including non-admin agents) pick their personal
@@ -112,12 +120,6 @@ export default function SettingsPage() {
   const [showDeptSla, setShowDeptSla] = useState(false);
   const [defaultCountryCode, setDefaultCountryCode] = useState<string>("IL");
   const [supportedCountries, setSupportedCountries] = useState<Array<{ code: string; callingCode: string }>>([]);
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [passwordMessage, setPasswordMessage] = useState("");
-  const [passwordError, setPasswordError] = useState("");
-  const [changingPassword, setChangingPassword] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!token) return;
@@ -130,7 +132,9 @@ export default function SettingsPage() {
         getDepartments(token).catch(() => []),
         getTenantSettings(token).catch(() => ({ data: { defaultCountryCode: "IL", supportedCountries: [] } })),
       ]);
-      setConfig(data);
+      // Merge over defaults: blobs saved before the outside-hours AI policy
+      // existed lack those fields, and the toggles need concrete values.
+      setConfig({ ...DEFAULT_CONFIG, ...data });
       setGreetingTemplate(greetingData.template || "");
       setSlaConfig(slaData);
       setIdleConfig(idleData);
@@ -206,55 +210,6 @@ export default function SettingsPage() {
     }));
   }
 
-  async function handleChangePassword() {
-    if (!token) return;
-    if (newPassword !== confirmPassword) {
-      setPasswordError(t("settings.password.errMismatch"));
-      return;
-    }
-    if (newPassword.length < 8) {
-      setPasswordError(t("settings.password.errTooShort"));
-      return;
-    }
-    setChangingPassword(true);
-    setPasswordError("");
-    setPasswordMessage("");
-    try {
-      await changePasswordApi(token, currentPassword, newPassword);
-      setPasswordMessage(t("settings.password.changed"));
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
-    } catch (err: any) {
-      setPasswordError(err.message || t("settings.password.errFail"));
-    } finally {
-      setChangingPassword(false);
-      setTimeout(() => { setPasswordMessage(""); setPasswordError(""); }, 5000);
-    }
-  }
-
-  const handleAgentLocale = useCallback(
-    async (value: string) => {
-      setLocaleSaving(true);
-      setLocaleMessage("");
-      try {
-        // "system" collapses to NULL → inherit the tenant default.
-        const next: Locale | null = value === "system" ? null : (value as Locale);
-        await setLocale(next);
-        setLocaleMessage(t("settings.language.saved"));
-      } catch (err: any) {
-        // Show the actual server reason (e.g. "unsupported_locale",
-        // "failed_to_set_locale") so the user - and we, while debugging -
-        // can tell what went wrong instead of just "try again".
-        const reason = err?.message ? ` (${err.message})` : "";
-        setLocaleMessage(`${t("settings.language.saveFailed")}${reason}`);
-      } finally {
-        setLocaleSaving(false);
-        setTimeout(() => setLocaleMessage(""), 5000);
-      }
-    },
-    [setLocale, t],
-  );
 
   const handleTenantLocale = useCallback(
     async (value: string) => {
@@ -274,13 +229,13 @@ export default function SettingsPage() {
     [setTenantDefault, t],
   );
 
-  // Language card - shown to EVERY user (including non-admin agents).
-  // Tenant-default row is admin-only inside the card; agents see only
-  // their personal override row.
-  const languageCard = (
+  // Workspace default LANGUAGE (admin only). A user's OWN language lives in
+  // Account -> Preferences, not here - General is workspace configuration, so it
+  // only carries the tenant-wide default new/unset members inherit.
+  const languageCard = atLeastRole("admin") ? (
     <div className="bg-white rounded-2xl border border-gray-200 p-4 md:p-6">
-      <h2 className="font-semibold text-gray-900">{t("settings.language.title")}</h2>
-      <p className="text-xs text-gray-500 mt-1">{t("settings.language.subtitle")}</p>
+      <h2 className="font-semibold text-gray-900">{t("settings.language.workspaceTitle")}</h2>
+      <p className="text-xs text-gray-500 mt-1">{t("settings.language.workspaceSubtitle")}</p>
 
       {localeMessage && (
         <div className="mt-3 bg-emerald-50 text-emerald-700 text-xs px-3 py-2 rounded-lg border border-emerald-200">
@@ -288,71 +243,46 @@ export default function SettingsPage() {
         </div>
       )}
 
-      <div className="mt-4 space-y-4">
-        {/* Per-agent override (everyone) */}
-        <div>
-          <label className="text-xs font-medium text-gray-600 block mb-1">
-            {t("settings.language.myLanguage")}
-          </label>
-          <select
-            value={userOverride ?? "system"}
-            onChange={(e) => handleAgentLocale(e.target.value)}
-            disabled={localeSaving}
-            className="w-full sm:max-w-xs text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white disabled:opacity-50"
-          >
-            <option value="system">
-              {t("settings.language.useTenantDefault")}
-              {tenantDefault ? ` (${localeConfig[tenantDefault]?.label ?? tenantDefault})` : ""}
+      <div className="mt-4">
+        <label className="text-xs font-medium text-gray-600 block mb-1">
+          {t("settings.language.tenantDefault")}
+        </label>
+        <select
+          value={tenantDefault ?? "en"}
+          onChange={(e) => handleTenantLocale(e.target.value)}
+          disabled={localeSaving}
+          className="w-full sm:max-w-xs text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white disabled:opacity-50"
+        >
+          {Object.entries(localeConfig).map(([key, config]) => (
+            <option key={key} value={key}>
+              {config.label}
             </option>
-            {Object.entries(localeConfig).map(([key, config]) => (
-              <option key={key} value={key}>
-                {config.label}
-              </option>
-            ))}
-          </select>
-          <p className="text-[10px] text-gray-400 mt-1">
-            {t("settings.language.myLanguageHint")
-              .replace("{effective}", localeConfig[locale]?.label ?? locale)}
-          </p>
-        </div>
-
-        {/* Tenant default (admin only) */}
-        {user?.role === "ADMIN" && (
-          <div>
-            <label className="text-xs font-medium text-gray-600 block mb-1">
-              {t("settings.language.tenantDefault")}
-            </label>
-            <select
-              value={tenantDefault ?? "en"}
-              onChange={(e) => handleTenantLocale(e.target.value)}
-              disabled={localeSaving}
-              className="w-full sm:max-w-xs text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white disabled:opacity-50"
-            >
-              {Object.entries(localeConfig).map(([key, config]) => (
-                <option key={key} value={key}>
-                  {config.label}
-                </option>
-              ))}
-            </select>
-            <p className="text-[10px] text-gray-400 mt-1">
-              {t("settings.language.tenantDefaultHint")}
-            </p>
-          </div>
-        )}
+          ))}
+        </select>
+        <p className="text-[10px] text-gray-400 mt-1">
+          {t("settings.language.tenantDefaultHint")}
+        </p>
       </div>
     </div>
-  );
+  ) : null;
 
-  if (user?.role !== "ADMIN") {
-    // Non-admins see ONLY the language card. Other admin surfaces
-    // (SLA, business hours, etc.) remain hidden behind this gate.
+  if (!atLeastRole("admin")) {
+    // Non-admins have no workspace settings to manage - their personal
+    // preferences (including language) live in Account. Point them there
+    // instead of showing an empty page.
     return (
       <div className="max-w-4xl mx-auto p-4 md:p-6 space-y-8 overflow-y-auto h-full pb-20">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 ">{t("settings.title")}</h1>
           <p className="text-sm text-gray-500 mt-1">{t("settings.personalSubtitle")}</p>
         </div>
-        {languageCard}
+        <a
+          href="/settings/account"
+          className="block bg-white rounded-2xl border border-gray-200 p-4 md:p-6 hover:border-primary-300 transition"
+        >
+          <h2 className="font-semibold text-gray-900">{t("settings.language.title")}</h2>
+          <p className="text-xs text-gray-500 mt-1">{t("settings.goToAccountForPreferences")}</p>
+        </a>
       </div>
     );
   }
@@ -360,48 +290,16 @@ export default function SettingsPage() {
   return (
     <div className="max-w-4xl mx-auto p-4 md:p-6 space-y-8 overflow-y-auto h-full pb-20">
       {/* Header */}
-      <div>
+      <div data-tour="settings-home">
         <h1 className="text-2xl font-bold text-gray-900 ">{t("settings.title")}</h1>
         <p className="text-sm text-gray-500 mt-1">{t("settings.subtitle")}</p>
       </div>
 
       {languageCard}
 
-      {/* AI Guardrails - quick links to the F8 policy + F4 tool gate admin surfaces. */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <a
-          href="/settings/policy"
-          className="group bg-white border border-gray-200 hover:border-violet-300 hover:shadow-subtle rounded-2xl p-4 transition block"
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-violet-50 flex items-center justify-center shrink-0">
-              <svg className="w-5 h-5 text-violet-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 01-1.043 3.296 3.745 3.745 0 01-3.296 1.043A3.745 3.745 0 0112 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 01-3.296-1.043 3.745 3.745 0 01-1.043-3.296A3.745 3.745 0 013 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 011.043-3.296 3.746 3.746 0 013.296-1.043A3.746 3.746 0 0112 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 013.296 1.043 3.746 3.746 0 011.043 3.296A3.745 3.745 0 0121 12z" />
-              </svg>
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-semibold text-gray-900 group-hover:text-violet-700">{t("settings.policy.title")}</div>
-              <div className="text-xs text-gray-500">{t("settings.policy.cardHint")}</div>
-            </div>
-          </div>
-        </a>
-        <a
-          href="/settings/tools"
-          className="group bg-white border border-gray-200 hover:border-violet-300 hover:shadow-subtle rounded-2xl p-4 transition block"
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-violet-50 flex items-center justify-center shrink-0">
-              <svg className="w-5 h-5 text-violet-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008z" />
-              </svg>
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-semibold text-gray-900 group-hover:text-violet-700">{t("settings.tools.title")}</div>
-              <div className="text-xs text-gray-500">{t("settings.tools.cardHint")}</div>
-            </div>
-          </div>
-        </a>
-      </div>
+      {/* Billing, tool permissions and action policies have canonical
+          homes now (Settings → Billing; AI Studio → Skills). General keeps
+          only genuine workspace defaults. */}
 
       {/* Toast message */}
       {message && (
@@ -757,6 +655,49 @@ export default function SettingsPage() {
                     })}
                   </div>
                 </div>
+
+                {/* AI employee behavior outside opening hours */}
+                <div>
+                  <label className="text-xs font-medium text-gray-600 block mb-1">{t("settings.aiOutsideHours")}</label>
+                  <p className="text-xs text-gray-400 mb-3">{t("settings.aiOutsideHoursDesc")}</p>
+                  <div className="space-y-2">
+                    {(["active", "silent"] as const).map((mode) => (
+                      <label key={mode} className={clsx(
+                        "flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition",
+                        config.aiOutsideHours === mode ? "border-primary-300 bg-primary-50/40" : "border-gray-200 bg-white hover:border-gray-300"
+                      )}>
+                        <input
+                          type="radio"
+                          name="aiOutsideHours"
+                          checked={config.aiOutsideHours === mode}
+                          onChange={() => setConfig((prev) => ({ ...prev, aiOutsideHours: mode }))}
+                          className="mt-0.5"
+                        />
+                        <span>
+                          <span className="block text-sm font-medium text-gray-900">
+                            {t(mode === "active" ? "settings.aiOutsideHoursActive" : "settings.aiOutsideHoursSilent")}
+                          </span>
+                          <span className="block text-xs text-gray-500 mt-0.5">
+                            {t(mode === "active" ? "settings.aiOutsideHoursActiveDesc" : "settings.aiOutsideHoursSilentDesc")}
+                          </span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  {config.aiOutsideHours === "active" && (
+                    <div className="mt-3">
+                      <label className="text-xs font-medium text-gray-600 block mb-1">{t("settings.outsideHoursHandoffMsg")}</label>
+                      <p className="text-xs text-gray-400 mb-2">{t("settings.outsideHoursHandoffMsgDesc")}</p>
+                      <textarea
+                        value={config.outsideHoursHandoffMessage}
+                        onChange={(e) => setConfig((prev) => ({ ...prev, outsideHoursHandoffMessage: e.target.value }))}
+                        placeholder={t("settings.outsideHoursHandoffMsgPlaceholder")}
+                        rows={2}
+                        className="w-full text-sm border border-gray-200 rounded-xl px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-300"
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -785,63 +726,6 @@ export default function SettingsPage() {
               rows={3}
               className="w-full text-sm border border-gray-200 rounded-xl px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-300"
             />
-          </div>
-
-          {/* Change Password */}
-          <div className="bg-white rounded-2xl border border-gray-200 p-4 md:p-6">
-            <h2 className="font-semibold text-gray-900 mb-1">{t("settings.password.title")}</h2>
-            <p className="text-xs text-gray-500 mb-5">{t("settings.password.subtitle")}</p>
-
-            {passwordMessage && (
-              <div className="bg-green-50 text-green-700 text-sm px-4 py-2.5 rounded-xl border border-green-200 mb-4">
-                {passwordMessage}
-              </div>
-            )}
-            {passwordError && (
-              <div className="bg-red-50 text-red-700 text-sm px-4 py-2.5 rounded-xl border border-red-200 mb-4">
-                {passwordError}
-              </div>
-            )}
-
-            <div className="space-y-4 max-w-md">
-              <div>
-                <label className="text-xs font-medium text-gray-600 block mb-1">{t("settings.password.current")}</label>
-                <input
-                  type="password"
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-300"
-                  placeholder={t("settings.password.currentPlaceholder")}
-                />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-gray-600 block mb-1">{t("settings.password.new")}</label>
-                <input
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-300"
-                  placeholder={t("settings.password.newPlaceholder")}
-                />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-gray-600 block mb-1">{t("settings.password.confirm")}</label>
-                <input
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-300"
-                  placeholder={t("settings.password.confirmPlaceholder")}
-                />
-              </div>
-              <button
-                onClick={handleChangePassword}
-                disabled={changingPassword || !currentPassword || !newPassword || !confirmPassword}
-                className="px-5 py-2.5 min-h-[44px] bg-primary-500 text-white rounded-xl hover:bg-primary-600 transition font-medium text-sm disabled:opacity-40"
-              >
-                {changingPassword ? t("settings.password.changing") : t("settings.password.action")}
-              </button>
-            </div>
           </div>
 
           {/* Save Button */}

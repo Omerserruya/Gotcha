@@ -53,6 +53,10 @@ import { ChannelEntryNode } from "../mainPlaybook/ChannelEntryNode";
 import { SendCommentReplyNode } from "../mainPlaybook/SendCommentReplyNode";
 import { NodeInspector } from "../mainPlaybook/NodeInspector";
 import { NODE_REGISTRY } from "../mainPlaybook/node-registry";
+import { validateConnection, leftBoundaryX, normalizeGraphPositions, type ConnectionError } from "../mainPlaybook/connection-rules";
+import { validateFlow } from "../mainPlaybook/flow-validator";
+import { nodeLabel, nodeDesc, nodeCategoryLabel } from "../mainPlaybook/node-i18n";
+import { NodeInfoIcon } from "../mainPlaybook/NodeInfoIcon";
 
 const nodeTypes: NodeTypes = {
   // Legacy types - still supported for existing flows
@@ -694,6 +698,9 @@ interface Props {
   flowId: string;
   onBack?: () => void;
   onCreated?: (id: string) => void;
+  /** Embedded in a tab (fills its container) rather than owning the full
+   *  viewport - used by the canvas-first Processes tab. */
+  embedded?: boolean;
 }
 
 export function FlowEditor(props: Props) {
@@ -707,7 +714,7 @@ export function FlowEditor(props: Props) {
   );
 }
 
-function FlowEditorInner({ flowId, onBack, onCreated }: Props) {
+function FlowEditorInner({ flowId, onBack, onCreated, embedded }: Props) {
   const isNew = flowId === "new";
   const { token } = useAuth();
   const { t } = useI18n();
@@ -716,8 +723,69 @@ function FlowEditorInner({ flowId, onBack, onCreated }: Props) {
   const [flowActive, setFlowActive] = useState(false);
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-  const [saving, setSaving] = useState(false);
+  // Explicit, honest save lifecycle: never claim "saved" before the backend
+  // confirms, surface unsaved edits, and block duplicate/concurrent saves.
+  // A new (never-persisted) flow starts "unsaved"; a loaded one starts "saved".
+  const [saveState, setSaveState] = useState<"saved" | "saving" | "unsaved" | "error">(isNew ? "unsaved" : "saved");
+  const saving = saveState === "saving";
+  // Guards the dirty-tracking effect so hydrating a loaded flow (or seeding the
+  // start node for a new one) doesn't immediately flag "unsaved".
+  const loadedRef = useRef(false);
+  // Stale-overwrite guard: the version we loaded. A concurrent edit that bumps
+  // it server-side makes our save a 409 instead of a silent clobber.
+  const loadedUpdatedAtRef = useRef<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  // Last rejected connection (§3) - surfaced as a concise, localized toast.
+  const [connError, setConnError] = useState<ConnectionError | null>(null);
+  const [showIssues, setShowIssues] = useState(false);
+  const [activateError, setActivateError] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(true);
+  // Live validation summary for the panel (UX). The backend re-runs the
+  // authoritative rules and is what actually gates publish.
+  const issues = validateFlow(
+    nodes.map((n) => ({ id: n.id, type: n.type as string, data: n.data })),
+    edges.map((e) => ({ id: e.id, source: e.source, target: e.target, sourceHandle: e.sourceHandle })),
+  );
+  const errorCount = issues.filter((i) => i.severity === "error").length;
+  const warnCount = issues.filter((i) => i.severity === "warning").length;
+  const focusNode = (nodeId?: string) => {
+    if (!nodeId) return;
+    setSelectedNodeId(nodeId);
+    const n = nodes.find((x) => x.id === nodeId);
+    if (n && reactFlowInstance) reactFlowInstance.setCenter(n.position.x + 120, n.position.y + 40, { zoom: 1, duration: 400 });
+  };
+
+  // §7 Static entry boundary: entry/trigger nodes anchor the LEFT edge of the
+  // editable graph. Panning stops there and nodes can't be dragged left of it;
+  // rightward expansion + zoom stay free. GRAPH-SPACE (survives zoom + RTL).
+  const leftBound = leftBoundaryX(nodes.map((n) => ({ position: n.position, type: n.type as string })));
+  const FAR = 1_000_000;
+  const translateExtent: [[number, number], [number, number]] = [[leftBound, -FAR], [FAR, FAR]];
+  const nodeExtent: [[number, number], [number, number]] = [[leftBound, -FAR], [FAR, FAR]];
+  // Full-screen editing: the editor fills the page (canvas maximised) while
+  // keeping its own toolbar (Back + save + Exit) so navigation is never lost.
+  const [fullscreen, setFullscreen] = useState(false);
+  // Escape leaves full screen. Without this the only way out is the toolbar
+  // button, which is the one thing a maximised canvas makes easy to lose track
+  // of - and Escape is what everyone tries first.
+  useEffect(() => {
+    if (!fullscreen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { e.stopPropagation(); setFullscreen(false); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [fullscreen]);
+
+  // Unsaved-changes guard on reload / tab close. The in-app Back button has its
+  // own confirm; this covers the browser paths it cannot intercept.
+  useEffect(() => {
+    if (saveState !== "unsaved") return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [saveState]);
+
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
   // Selection drives the side-panel Inspector (unified nodes only - the
@@ -765,12 +833,15 @@ function FlowEditorInner({ flowId, onBack, onCreated }: Props) {
       setFlowName("New Flow");
       const startNode: Node = { id: "start-1", type: "start", position: { x: 250, y: 50 }, data: {} };
       setNodes([startNode]);
+      // Defer arming dirty-tracking to after this render commits the seed node.
+      requestAnimationFrame(() => { loadedRef.current = true; });
       return;
     }
     getChatbotFlow(token, flowId).then((data) => {
       setFlow(data);
       setFlowName(data.name);
       setFlowActive(data.isActive ?? false);
+      loadedUpdatedAtRef.current = data.updatedAt ?? null;
 
       const rawNodes = data.nodes as any[];
       const rawEdges = data.edges as any[];
@@ -785,7 +856,11 @@ function FlowEditorInner({ flowId, onBack, onCreated }: Props) {
           position: n.position,
           data: n.data || {},
         }));
-        setNodes(rfNodes);
+        // Repair coordinates BEFORE the first render. A workflow saved by an
+        // older version (or hand-edited) can arrive with its trigger at a wild
+        // negative X; leftBoundaryX would then follow it out and the canvas
+        // would open on empty space with the start node off screen.
+        setNodes(normalizeGraphPositions(rfNodes));
       } else {
         setNodes(autoLayout(rawNodes, rawEdges));
       }
@@ -802,11 +877,31 @@ function FlowEditorInner({ flowId, onBack, onCreated }: Props) {
           markerEnd: { type: MarkerType.ArrowClosed, color: "#c7c7cc", width: 16, height: 16 },
         }))
       );
+      setSaveState("saved");
+      requestAnimationFrame(() => { loadedRef.current = true; });
     });
   }, [token, flowId]);
 
+  // Dirty tracking: any change to the graph or name after load flags "unsaved"
+  // (unless a save is already in flight, which will resolve the state itself).
+  useEffect(() => {
+    if (!loadedRef.current) return;
+    setSaveState((s) => (s === "saving" ? s : "unsaved"));
+  }, [nodes, edges, flowName]);
+
   const onConnect = useCallback(
     (params: Connection) => {
+      // Validate the connection semantically (§3): reject invalid drops, keep
+      // the edge from being created, and explain why in business language.
+      const graphNodes = nodes.map((n) => ({ id: n.id, type: n.type as string, data: n.data }));
+      const graphEdges = edges.map((e) => ({ id: e.id, source: e.source, target: e.target, sourceHandle: e.sourceHandle, targetHandle: (e as any).targetHandle }));
+      const res = validateConnection(params, graphNodes, graphEdges);
+      if (!res.ok) {
+        setConnError(res.code ?? "incompatible");
+        window.setTimeout(() => setConnError(null), 4500);
+        return;
+      }
+      setConnError(null);
       setEdges((eds) =>
         addEdge({
           ...params,
@@ -817,7 +912,7 @@ function FlowEditorInner({ flowId, onBack, onCreated }: Props) {
         }, eds)
       );
     },
-    [setEdges]
+    [setEdges, nodes, edges]
   );
 
   function addNode(type: string) {
@@ -840,22 +935,37 @@ function FlowEditorInner({ flowId, onBack, onCreated }: Props) {
 
   async function handleToggleActive() {
     if (!token || !flow || isNew) return;
+    setActivateError(null);
     try {
       if (flowActive) {
         await deactivateChatbotFlow(token, flowId);
         setFlowActive(false);
       } else {
+        // Client-side pre-block for immediate feedback; the backend re-checks
+        // authoritatively and rejects (422) regardless.
+        if (errorCount > 0) {
+          setActivateError(t("chatbot.publishBlocked"));
+          setShowIssues(true);
+          return;
+        }
         await activateChatbotFlow(token, flowId);
         setFlowActive(true);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Toggle active error:", err);
+      if (/validation_failed/i.test(String(err?.message || ""))) {
+        setActivateError(t("chatbot.publishBlocked"));
+        setShowIssues(true);
+      }
     }
   }
 
   async function handleSave() {
-    if (!token) return;
-    setSaving(true);
+    // Block duplicate/concurrent saves - a second click while a save is in
+    // flight must not fire a second request or race the version guard.
+    if (!token || saveState === "saving") return;
+    setSaveState("saving");
+    setSaveError(null);
     try {
       const backendNodes = nodes.map((n) => ({
         id: n.id,
@@ -877,24 +987,32 @@ function FlowEditorInner({ flowId, onBack, onCreated }: Props) {
           edges: backendEdges,
         });
         setFlow(created);
+        loadedUpdatedAtRef.current = created?.updatedAt ?? null;
         onCreated?.(created.id);
       } else {
-        await updateChatbotFlow(token, flow?.id || flowId, {
+        const updated = await updateChatbotFlow(token, flow?.id || flowId, {
           name: flowName,
           description: flow?.description || "",
           nodes: backendNodes,
           edges: backendEdges,
-        });
+          // Optimistic concurrency: the backend rejects (409) when another
+          // edit advanced the row past what we loaded, so we never clobber.
+          expectedUpdatedAt: loadedUpdatedAtRef.current ?? undefined,
+        } as any);
+        if (updated?.updatedAt) loadedUpdatedAtRef.current = updated.updatedAt;
       }
-    } catch (err) {
+      // Only NOW - after the backend confirmed - is it truly saved.
+      setSaveState("saved");
+    } catch (err: any) {
       console.error("Save error:", err);
-    } finally {
-      setSaving(false);
+      const conflict = err?.status === 409 || /conflict|stale|expectedUpdatedAt/i.test(String(err?.message || ""));
+      setSaveError(conflict ? t("chatbot.saveConflict") : t("chatbot.saveFailed"));
+      setSaveState("error");
     }
   }
 
   return (
-    <div className="h-screen flex flex-col">
+    <div className={fullscreen ? "fixed inset-0 z-40 bg-white h-screen flex flex-col" : (embedded ? "h-full flex flex-col" : "h-screen flex flex-col")}>
       {/* Toolbar */}
       <div className="bg-white border-b border-gray-100 px-2 md:px-4 py-2 md:py-3 flex items-center gap-2 md:gap-3 shadow-sm">
         {onBack && (
@@ -937,23 +1055,86 @@ function FlowEditorInner({ flowId, onBack, onCreated }: Props) {
           </svg>
           <span className="hidden sm:inline">Layout</span>
         </button>
+        {/* Validation summary pill (§3) - opens the issues panel. */}
+        {issues.length > 0 && (
+          <button
+            onClick={() => setShowIssues((v) => !v)}
+            className={`px-2 md:px-3 py-2 rounded-xl text-xs font-medium transition flex items-center gap-1.5 shrink-0 ${
+              errorCount > 0 ? "bg-red-50 text-red-600 ring-1 ring-red-200" : "bg-amber-50 text-amber-600 ring-1 ring-amber-200"
+            }`}
+            title={t("chatbot.validation")}
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+            </svg>
+            <span className="hidden sm:inline">
+              {errorCount > 0
+                ? `${errorCount} ${errorCount === 1 ? t("chatbot.errorOne") : t("chatbot.errorMany")}`
+                : `${warnCount} ${warnCount === 1 ? t("chatbot.warnOne") : t("chatbot.warnMany")}`}
+            </span>
+          </button>
+        )}
+
         <button
           onClick={handleToggleActive}
-          className={`px-2 md:px-3 py-2 rounded-xl text-xs font-medium transition flex items-center gap-1.5 shrink-0 ${
+          disabled={!flowActive && errorCount > 0}
+          className={`px-2 md:px-3 py-2 rounded-xl text-xs font-medium transition flex items-center gap-1.5 shrink-0 disabled:opacity-40 disabled:cursor-not-allowed ${
             flowActive
               ? "bg-green-50 text-green-600 hover:bg-green-100 ring-1 ring-green-200"
               : "bg-gray-100 text-gray-500 hover:bg-gray-200"
           }`}
+          title={!flowActive && errorCount > 0 ? t("chatbot.publishBlocked") : undefined}
         >
           <span className={`w-2 h-2 rounded-full ${flowActive ? "bg-green-500" : "bg-gray-400"}`} />
           <span className="hidden sm:inline">{flowActive ? t("chatbot.deactivate") : t("chatbot.activate")}</span>
         </button>
+        {/* Honest save-state indicator - reflects backend-confirmed state,
+            never claims Saved on a click alone. */}
+        <span
+          className={`hidden md:inline-flex items-center gap-1.5 text-xs font-medium shrink-0 ${
+            saveState === "saved" ? "text-green-600"
+              : saveState === "saving" ? "text-gray-500"
+              : saveState === "error" ? "text-red-600"
+              : "text-amber-600"
+          }`}
+          title={saveError || undefined}
+          data-save-state={saveState}
+        >
+          <span className={`w-1.5 h-1.5 rounded-full ${
+            saveState === "saved" ? "bg-green-500"
+              : saveState === "saving" ? "bg-gray-400 animate-pulse"
+              : saveState === "error" ? "bg-red-500"
+              : "bg-amber-500"
+          }`} />
+          {saveState === "saved" ? t("chatbot.stateSaved")
+            : saveState === "saving" ? t("chatbot.stateSaving")
+            : saveState === "error" ? (saveError || t("chatbot.saveFailed"))
+            : t("chatbot.stateUnsaved")}
+        </span>
+
+        {/* Full-screen toggle */}
+        <button
+          onClick={() => setFullscreen((v) => !v)}
+          className="bg-gray-50 hover:bg-gray-100 text-gray-600 p-2 rounded-xl transition shrink-0"
+          title={fullscreen ? t("chatbot.exitFullscreen") : t("chatbot.fullscreen")}
+          aria-label={fullscreen ? t("chatbot.exitFullscreen") : t("chatbot.fullscreen")}
+        >
+          {fullscreen ? (
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" /></svg>
+          ) : (
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" /></svg>
+          )}
+        </button>
+
         <button
           onClick={handleSave}
           disabled={saving}
           className="bg-primary-500 hover:bg-primary-600 text-white px-3 md:px-4 py-2 rounded-xl text-xs md:text-sm font-medium transition disabled:opacity-50 shadow-sm shrink-0"
         >
-          {saving ? t("common.loading") : t("chatbot.save")}
+          {saveState === "saving" ? t("chatbot.stateSaving")
+            : saveState === "error" ? t("chatbot.retrySave")
+            : saveState === "saved" ? t("chatbot.stateSaved")
+            : t("chatbot.save")}
         </button>
       </div>
 
@@ -973,15 +1154,15 @@ function FlowEditorInner({ flowId, onBack, onCreated }: Props) {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25a2.25 2.25 0 01-2.25-2.25v-2.25z" />
                 </svg>
               </div>
-              <span className="text-xs font-semibold text-gray-700 tracking-wide">Node Palette</span>
+              <span className="text-xs font-semibold text-gray-700 tracking-wide">{t("aiStudio.nodePaletteTitle")}</span>
             </div>
 
-            <p className="text-[10px] text-gray-400 px-1">Drag nodes to the canvas or click to add</p>
+            <p className="text-[10px] text-gray-400 px-1">{t("aiStudio.nodePaletteHint")}</p>
 
             {/* Categories */}
             {NODE_PALETTE.map((cat) => (
               <div key={cat.category}>
-                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-1 mb-1.5">{cat.category}</p>
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-1 mb-1.5">{nodeCategoryLabel(cat.category, t)}</p>
                 <div className="space-y-1.5">
                   {cat.items.map((item) => (
                     <div
@@ -995,10 +1176,12 @@ function FlowEditorInner({ flowId, onBack, onCreated }: Props) {
                         {item.icon}
                       </div>
                       <div className="min-w-0">
-                        <p className={`text-xs font-semibold ${item.text} leading-tight`}>{item.label}</p>
-                        <p className="text-[10px] text-gray-400 leading-tight mt-0.5 truncate">{item.desc}</p>
+                        <p className={`text-xs font-semibold ${item.text} leading-tight`}>{nodeLabel(item.type, t, item.label)}</p>
+                        <p className="text-[10px] text-gray-400 leading-tight mt-0.5 truncate">{nodeDesc(item.type, t, item.desc)}</p>
                       </div>
-                      <div className={`ms-auto w-1.5 h-1.5 rounded-full ${item.dot} opacity-60 shrink-0`} />
+                      {NODE_REGISTRY[item.type]
+                        ? <NodeInfoIcon type={item.type} className="ms-auto shrink-0" />
+                        : <div className={`ms-auto w-1.5 h-1.5 rounded-full ${item.dot} opacity-60 shrink-0`} />}
                     </div>
                   ))}
                 </div>
@@ -1015,7 +1198,51 @@ function FlowEditorInner({ flowId, onBack, onCreated }: Props) {
         </div>
 
         {/* Canvas */}
-        <div className="flex-1" ref={reactFlowWrapper}>
+        <div className="flex-1 relative" ref={reactFlowWrapper}>
+          {connError && (
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 max-w-md rounded-xl bg-red-600 text-white text-xs font-medium px-3.5 py-2 shadow-lg">
+              {t(`chatbot.connErrors.${connError}`)}
+            </div>
+          )}
+          {activateError && (
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 max-w-md rounded-xl bg-red-600 text-white text-xs font-medium px-3.5 py-2 shadow-lg">
+              {activateError}
+            </div>
+          )}
+          {/* Validation panel (§3): grouped issues, click focuses the node. */}
+          {showIssues && issues.length > 0 && (
+            <div className="absolute top-3 right-3 z-20 w-72 max-h-[75%] overflow-y-auto rounded-xl bg-white border border-gray-200 shadow-lg">
+              <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 sticky top-0 bg-white">
+                <span className="text-xs font-semibold text-gray-700">{t("chatbot.validation")}</span>
+                <button onClick={() => setShowIssues(false)} className="text-gray-400 hover:text-gray-600" aria-label={t("chatbot.close")}>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+              <div className="p-2 space-y-1">
+                {(["error", "warning"] as const).map((sev) => {
+                  const group = issues.filter((i) => i.severity === sev);
+                  if (group.length === 0) return null;
+                  return (
+                    <div key={sev}>
+                      <p className={`text-[10px] font-semibold uppercase tracking-wider px-1.5 mt-1 mb-0.5 ${sev === "error" ? "text-red-500" : "text-amber-500"}`}>
+                        {sev === "error" ? t("chatbot.errorMany") : t("chatbot.warnMany")} ({group.length})
+                      </p>
+                      {group.map((iss) => (
+                        <button
+                          key={iss.id}
+                          onClick={() => focusNode(iss.nodeId)}
+                          className={`w-full text-start px-2 py-1.5 rounded-lg text-xs transition ${iss.nodeId ? "hover:bg-gray-50 cursor-pointer" : "cursor-default"} ${sev === "error" ? "text-red-700" : "text-amber-700"}`}
+                        >
+                          <span className="font-medium">{iss.title}</span>
+                          <span className="block text-[11px] text-gray-400 mt-0.5">{iss.message}</span>
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -1037,6 +1264,8 @@ function FlowEditorInner({ flowId, onBack, onCreated }: Props) {
             }}
             fitView
             fitViewOptions={{ padding: 0.3 }}
+            translateExtent={translateExtent}
+            nodeExtent={nodeExtent}
             snapToGrid
             snapGrid={[15, 15]}
             minZoom={0.2}
