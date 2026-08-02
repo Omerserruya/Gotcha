@@ -51,6 +51,8 @@ import {
   buildEstablishedIdentityBlock,
   detectProfileUpdateIntent,
   buildProfileUpdateDirective,
+  detectOrderAddressIntent,
+  buildOrderAddressDirective,
 } from "./customer-request-intents.service";
 import { getActionOrchestrator, type ExecutionResult } from "./orchestrator";
 import type { AgentToolContext } from "@chatcenter/shared";
@@ -2402,6 +2404,15 @@ async function generateAIBotReplyInner(
         role: "system",
         content: buildProfileUpdateDirective({
           hasProfileTool: toolFunctionNames.some((n) => n.endsWith(".update_my_profile")),
+        }),
+      });
+    }
+    // Redirecting an order: possible before dispatch, and a lie after it.
+    if (detectOrderAddressIntent(opts.incomingMessage)) {
+      chatMessages.push({
+        role: "system",
+        content: buildOrderAddressDirective({
+          hasAddressTool: toolFunctionNames.some((n) => n.endsWith(".update_order_shipping_address")),
         }),
       });
     }

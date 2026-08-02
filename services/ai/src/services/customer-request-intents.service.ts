@@ -113,6 +113,47 @@ export function buildProfileUpdateDirective(opts: { hasProfileTool: boolean }): 
   ].join("\n");
 }
 
+// ── Order shipping address ────────────────────────────────────
+
+const ORDER_ADDRESS_RE =
+  /((תשנו|תשנה|לשנות|תעדכנו|תעדכן|לעדכן|להחליף|תחליפו)[^\n]{0,30}?(כתובת|יעד|משלוח)|(כתובת|יעד)[^\n]{0,20}?(משלוח|למשלוח|ההזמנה)|(change|update)[^\n]{0,20}?(shipping|delivery)\s*address|(ship|deliver)\s*(it\s*)?to\s*(a\s*)?(different|another|new)\s*address)/i;
+
+export function detectOrderAddressIntent(text: string | null | undefined): boolean {
+  const t = String(text ?? "");
+  if (!ORDER_ADDRESS_RE.test(t)) return false;
+  // "הכתובת שלי השתנתה" with no order in sight is a profile change.
+  return ORDER_SCOPED_RE.test(t) || /(הזמנה|order)\s*#?\d/i.test(t);
+}
+
+/**
+ * The two halves of this flow fail in opposite directions.
+ *
+ * Before dispatch the model under-acts: it hands the conversation to a person
+ * for something it can do (scenario 10, "UNSUPPORTED - handed off"). After
+ * dispatch it over-claims: it says the address was changed, or that the
+ * courier has been contacted, neither of which any tool here can make true.
+ */
+export function buildOrderAddressDirective(opts: { hasAddressTool: boolean }): string {
+  if (!opts.hasAddressTool) {
+    return [
+      `The customer wants to change the delivery address of an existing order, and you have no tool for it here.`,
+      `Say plainly that you cannot change it from this chat, and offer a person.`,
+      `Do NOT say the address was changed. Do NOT say the courier, carrier or warehouse was contacted - you have not contacted anyone.`,
+    ].join("\n");
+  }
+  return [
+    `The customer wants to change the delivery address of an existing ORDER (not their saved profile address).`,
+    `Identity is already established - do not re-verify.`,
+    `Collect the FULL new address first: street, city, country at minimum, plus postal code and province where they apply. Read it back to them before calling.`,
+    `Then call update_order_shipping_address. It checks eligibility from the order's fulfillment orders, so you do not have to guess whether it has shipped.`,
+    `If it returns eligible: false, the order is already on its way. Say exactly the reason given and stop:`,
+    `- do NOT say the address was changed`,
+    `- do NOT say the carrier, courier or warehouse has been contacted, or that anyone will intercept the parcel`,
+    `- you may offer the tracking link if one exists, and a real handover to a person if they want one`,
+    `If it returns address_updated: true, tell them the new city and country. If verified is false, say it did not go through.`,
+  ].join("\n");
+}
+
 // ── Missing item ──────────────────────────────────────────────
 
 /**

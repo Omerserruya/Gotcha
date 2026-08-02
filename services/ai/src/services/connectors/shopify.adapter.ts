@@ -37,6 +37,11 @@ import { assertPublicUrl, shopifyApiVersion, checkShopifyResponseVersion } from 
 import { orderIdentifierFromArgs } from "./shopify-order-identifier";
 import { reconcile } from "./shopify-item-reconciliation";
 import { validateProfilePatch, verifyReadBack, detectDuplicate } from "./shopify-profile-update";
+import {
+  assessMutability,
+  validateShippingAddress,
+  verifyShippingAddress,
+} from "./shopify-order-mutability";
 
 /**
  * Resolved from the ONE shared declaration, not pinned here. This used to be a
@@ -221,6 +226,23 @@ const TOOLS: ToolDefinition[] = [
     "Customer asks to cancel their order. FIRST check the order is not already fulfilled (get_fulfillment_status or get_order): a fulfilled order CANNOT be cancelled, and process_refund plus a return is the correct action instead - proposing a cancel anyway wastes a human approval on something that will be refused. Approval is handled by the system: calling this tool is what RAISES the approval, so call it whenever the customer's request warrants it. Never wait for approval before calling, and never hand the conversation to a human merely because approval is needed.",
     { ...P.orderSel, reason: { type: "string", enum: ["customer", "fraud", "inventory", "declined", "other"] }, refund: { type: "boolean" }, restock: { type: "boolean" } }, undefined,
     { sideEffects: "Cancels the order - may trigger a refund. Irreversible." })),
+  // Changing where an order is going, which is only possible before it goes.
+  //
+  // Separate from the customer's SAVED address (update_my_profile) on purpose:
+  // they are different objects with different consequences, and a customer who
+  // has moved usually wants both. Conflating them silently changes one and
+  // reports the other.
+  withOrderTarget(t("update_order_shipping_address", "ACTION", "HIGH",
+    "Change the shipping address of an order that has NOT been dispatched, then read the order back and verify the address.",
+    "Customer asks to change where an existing order is being sent (\"תשנו לי את הכתובת בהזמנה\", \"change the delivery address for order 1011\"). Eligibility is checked from fulfillment orders, not from fulfillment_status - if the order is already being prepared this tool refuses, and you must NOT claim the address was changed or that a carrier was contacted. Approval is handled by the system: calling this tool is what RAISES the approval, so call it whenever the customer's request warrants it.",
+    {
+      ...P.orderSel,
+      address: {
+        type: "object",
+        description: "The FULL new address: address1, address2, city, province, zip, country, phone, first_name, last_name. address1, city and country are required.",
+      },
+    }, undefined,
+    { sideEffects: "Changes where a placed order will be delivered.", priority: 84 })),
   withOrderTarget(t("send_invoice", "ACTION", "MEDIUM", "Send/resend the order invoice email to the customer.",
     "Customer didn't receive their invoice / needs the payment link again.",
     { ...P.orderSel, to: { type: "string", description: "Override recipient email." } })),
@@ -442,6 +464,10 @@ const TOOL_SCOPES: Record<string, string[]> = {
   // reached a human's approval.
   cancel_order: ["write_orders", "read_merchant_managed_fulfillment_orders"],
   process_refund: ["write_orders"],
+  // Same reasoning as cancel_order: eligibility is a fulfillment-order READ,
+  // and getting it from the legacy field is how a parcel already in a box gets
+  // its address "changed".
+  update_order_shipping_address: ["write_orders", "read_merchant_managed_fulfillment_orders"],
   send_invoice: ["write_orders"],
   add_order_note: ["write_orders"],
   // Creating/updating a fulfillment is a fulfillment-order write, not an
@@ -511,12 +537,55 @@ const ShopifyAdapter: ProviderAdapter = {
    * wasted approval is expensive. Anything unrecognised is eligible.
    */
   async precheckEligibility({ toolName, args, call }) {
-    if (toolName !== "cancel_order" && toolName !== "process_refund") return { eligible: true };
+    const PRECHECKED = ["cancel_order", "process_refund", "update_order_shipping_address"];
+    if (!PRECHECKED.includes(toolName)) return { eligible: true };
     const target = args.order_id ?? args.order_name;
     if (!target) return { eligible: true }; // resolution failure is the executor's job to report
 
     const order: any = await call("get_order", args.order_id ? { order_id: args.order_id } : { order_name: args.order_name });
     if (!order?.id) return { eligible: true };
+
+    // An address change on an order already in the warehouse is the clearest
+    // case there is for asking BEFORE a human is asked: nobody should be
+    // approving a redirection that Shopify will apply to a parcel that has
+    // already been packed against the old label.
+    if (toolName === "update_order_shipping_address") {
+      const fs: any = await call(
+        "get_fulfillment_status",
+        args.order_id ? { order_id: args.order_id } : { order_name: args.order_name },
+      );
+      const m = assessMutability(order, {
+        orders: fs?.fulfillment_orders ?? [],
+        readable: fs?.fulfillment_orders_readable !== false,
+      });
+      if (m.verdict === "editable") {
+        const addr = validateShippingAddress((args.address as Record<string, unknown>) ?? {});
+        if (addr.missing.length) {
+          return {
+            eligible: false,
+            reason:
+              `the new address for order ${order.name ?? ""} is incomplete - ${addr.missing.join(", ")} still needed. ` +
+              `Ask the customer for the missing part and do NOT say the address was changed.`,
+          };
+        }
+        if (addr.errors.length) {
+          return {
+            eligible: false,
+            reason:
+              `the new address for order ${order.name ?? ""} was not accepted (${addr.errors.join(", ")}). ` +
+              `Ask the customer to confirm it and do NOT say the address was changed.`,
+          };
+        }
+        return { eligible: true };
+      }
+      return {
+        eligible: false,
+        reason:
+          `${m.customer_explanation} ` +
+          `Tell the customer exactly that. Do NOT say the address was changed, and do NOT claim the carrier, courier or ` +
+          `warehouse has been contacted - nothing here reaches them. Offer a real handover to a person if they need one.`,
+      };
+    }
 
     if (toolName === "cancel_order") {
       if (order.cancelled_at) {
@@ -858,6 +927,11 @@ const ShopifyAdapter: ProviderAdapter = {
         const o = await resolveOrder(ctx, args);
         if (!o) throw new Error("order_not_found");
         return o.line_items || [];
+      }
+      case "update_order_shipping_address": {
+        const o = await resolveOrder(ctx, args);
+        if (!o) throw new Error("order_not_found");
+        return await updateOrderShippingAddress(ctx, o, (args.address as Record<string, unknown>) ?? {});
       }
       case "reconcile_order_items": {
         const o = await resolveOrder(ctx, args);
@@ -2205,6 +2279,79 @@ async function updateOwnProfile(ctx: Ctx, args: Record<string, any>): Promise<Re
       ? `The change is confirmed by an independent read of the record. Tell the customer exactly which fields changed (${changed.join(", ")}) and nothing more.`
       : "The read-back does NOT match what was requested, so the change did not take effect as asked." +
         " Tell the customer it did not go through and offer a person. Do NOT say it was updated.",
+  };
+}
+
+/**
+ * Redirect an order that has not left yet.
+ *
+ * The eligibility check runs again here even though `precheckEligibility`
+ * already ran it. That is not redundancy: the precheck happens before a human
+ * approves, and an approval can sit for minutes or hours. The warehouse does
+ * not wait for it. Between the question and the answer the order may have been
+ * picked, and applying the approved address then would be Shopify accepting a
+ * write against a parcel that is already labelled.
+ */
+async function updateOrderShippingAddress(
+  ctx: Ctx,
+  order: any,
+  address: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const fos = await fetchFulfillmentOrders(ctx, order.id);
+  const m = assessMutability(order, fos);
+  if (m.verdict !== "editable") {
+    return {
+      order_id: String(order.id),
+      name: order.name,
+      address_updated: false,
+      eligible: false,
+      reason: m.reason,
+      fulfillment_states: m.fulfillment_states,
+      model_instruction:
+        `${m.customer_explanation} Say exactly that. Do NOT say the address was changed. ` +
+        `Do NOT say the carrier, courier or warehouse has been contacted - nothing in this tool reaches them. ` +
+        `If a tracking link exists you may offer it, and if they need a person, create a real handover.`,
+    };
+  }
+
+  const patch = validateShippingAddress(address);
+  if (patch.missing.length || patch.errors.length) {
+    return {
+      order_id: String(order.id),
+      name: order.name,
+      address_updated: false,
+      eligible: true,
+      missing_fields: patch.missing,
+      errors: patch.errors,
+      model_instruction:
+        "The address was NOT changed because it is incomplete or invalid. Ask the customer for the missing or corrected " +
+        "part, then try again. Do not say anything was changed.",
+    };
+  }
+
+  const before = order.shipping_address ?? {};
+  await sreq(ctx, "PUT", `/orders/${order.id}.json`, {
+    order: { id: order.id, shipping_address: { ...before, ...patch.fields } },
+  });
+
+  const after: any = await sreq(ctx, "GET", `/orders/${order.id}.json`);
+  const verdict = verifyShippingAddress(patch, after?.order ?? null);
+
+  return {
+    order_id: String(order.id),
+    name: order.name,
+    address_updated: verdict.verified,
+    verified: verdict.verified,
+    changed_fields: verdict.verified ? Object.keys(patch.fields) : [],
+    mismatches: verdict.mismatches,
+    // City and country only. An approval card and a chat transcript are both
+    // read by people who do not need the customer's street address to
+    // understand what is being decided.
+    from: { city: before.city ?? null, country: before.country ?? null },
+    to: { city: patch.fields.city ?? before.city ?? null, country: patch.fields.country ?? before.country ?? null },
+    model_instruction: verdict.verified
+      ? `The order's delivery address is confirmed changed by an independent read of the order. Tell the customer the new city and country, and nothing about carriers.`
+      : `The read-back does NOT match the requested address, so the change did not take effect. Tell the customer it did not go through and offer a person. Do NOT say the address was changed.`,
   };
 }
 
