@@ -152,6 +152,39 @@ describe("production hostname model", () => {
     it("names the application host explicitly", () => {
       expect(conf).toMatch(/server_name\s+app\.gotcha\.co\.il/);
     });
+
+    /**
+     * envsubst in gateway/Dockerfile.prod takes an ALLOWLIST, and leaves
+     * anything not on it as literal text. nginx then accepts the literal
+     * without complaint, so the mistake ships and fails silently at runtime.
+     *
+     * That is exactly what happened to $PUBLIC_PRICING_ENABLED: the map
+     * evaluated to the string "${PUBLIC_PRICING_ENABLED}", which is never
+     * "true", so /pricing redirected to /early-access in production
+     * regardless of configuration. The dev gateway's command had it; the
+     * production Dockerfile did not.
+     */
+    it("substitutes every variable the template uses", () => {
+      const dockerfile = read("gateway/Dockerfile.prod");
+      // The CMD line only. Comments in this file discuss the very variables
+      // being checked, so scanning the whole file (or slicing from the first
+      // "envsubst", which appears in a comment) reads the prose as if it were
+      // the allowlist and the assertion silently passes.
+      const cmdLine = dockerfile
+        .split("\n")
+        .find((l) => l.startsWith("CMD") && l.includes("envsubst"));
+      expect(cmdLine, "no CMD line invoking envsubst").toBeTruthy();
+      const quoted = /envsubst\s+'([^']*)'/.exec(cmdLine!);
+      expect(quoted, "envsubst allowlist is not a single-quoted string").toBeTruthy();
+      const allowlist = new Set((quoted![1].match(/\$[A-Z][A-Z0-9_]*/g) ?? []).map((v) => v.slice(1)));
+
+      // `${VAR}` in the template is an envsubst placeholder. Bare `$var`
+      // (lowercase) is an nginx runtime variable and must NOT be substituted.
+      const used = new Set((conf.match(/\$\{([A-Z][A-Z0-9_]*)\}/g) ?? []).map((v) => v.slice(2, -1)));
+
+      const unsubstituted = [...used].filter((v) => !allowlist.has(v)).sort();
+      expect(unsubstituted, "template variables missing from the Dockerfile envsubst allowlist").toEqual([]);
+    });
   });
 
   // ── Code-level defaults that ship inside an image ──────────────────

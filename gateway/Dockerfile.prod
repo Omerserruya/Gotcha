@@ -31,7 +31,26 @@ FROM nginx:alpine
 COPY frontend/out /usr/share/nginx/html
 
 # Proxy config template. Rendered at container start by the entrypoint
-# script (envsubst over the *_PORT variables, same as the dev gateway).
+# script (envsubst over the variables listed in CMD, same as the dev gateway).
 COPY gateway/nginx.prod.conf.template /etc/nginx/nginx.conf.template
 
-CMD ["sh", "-c", "envsubst '$AUTH_PORT $CONVERSATION_PORT $WEBHOOK_PORT $ANALYTICS_PORT $CHATBOT_PORT $AI_PORT $VOICE_COPILOT_PORT $NOTIFICATIONS_PORT $BILLING_PORT $AUTHENTIK_PORT' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf && nginx -g 'daemon off;'"]
+# The list below is an ALLOWLIST: envsubst leaves anything not named here as
+# literal text. That is the desirable behaviour - it stops `$host`,
+# `$remote_addr` and every other nginx runtime variable from being eaten at
+# render time - but it means a variable the template uses and this list omits
+# survives verbatim into nginx.conf, and nginx accepts it without complaint.
+#
+# `$PUBLIC_PRICING_ENABLED` was missing. `map $host $public_pricing_enabled`
+# therefore evaluated to the literal string "${PUBLIC_PRICING_ENABLED}", which
+# is never "true", so /pricing 302'd to /early-access in production no matter
+# what the environment said. It failed SAFE - prices stayed hidden, which is
+# the flag's default posture - so nothing looked broken; the switch was simply
+# welded off and could not be turned on. The dev gateway's command already
+# included it, which is why this only ever bit production.
+#
+# Keep this list in step with the template. `production-urls.test.ts` asserts
+# the two agree, so an omission fails CI rather than shipping.
+#
+# FRONTEND_PORT is deliberately absent: prod has no frontend upstream, it
+# serves the static export baked in above.
+CMD ["sh", "-c", "envsubst '$AUTH_PORT $CONVERSATION_PORT $WEBHOOK_PORT $ANALYTICS_PORT $CHATBOT_PORT $AI_PORT $VOICE_COPILOT_PORT $NOTIFICATIONS_PORT $BILLING_PORT $AUTHENTIK_PORT $PUBLIC_PRICING_ENABLED' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf && nginx -g 'daemon off;'"]
