@@ -481,6 +481,14 @@ async function sendApprovalContinuation(args: {
                 ? "refunded"
                 : undefined,
       errorReason: args.errorReason,
+      // The reference a successful action produced, so the customer can quote
+      // it back. A return opened without one is a return they cannot ask about.
+      reference:
+        outcome === "succeeded"
+          ? (typeof r.return_name === "string" && r.return_name) ||
+            (typeof r.return_id === "string" && r.return_id) ||
+            null
+          : null,
     };
 
     let body: string | null = null;

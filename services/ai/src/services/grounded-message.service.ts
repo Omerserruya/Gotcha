@@ -39,6 +39,16 @@ export interface ExecutionFacts {
   status?: string | null;
   /** Safe short failure reason (already sanitized) when outcome=failed. */
   errorReason?: string | null;
+  /**
+   * The customer-quotable reference a successful action produced - a return
+   * name like "#1003-R2", an exchange's new variant, a document id.
+   *
+   * Added because a return was opened correctly, read back correctly, and
+   * announced as "פתחתי עבורך החזרה" with no reference in it. The claim was
+   * true and the message was still less than the customer needed: a return
+   * nobody can quote a number for is one they cannot ask about later.
+   */
+  reference?: string | null;
 }
 
 export interface GroundedVerdict {
@@ -101,7 +111,14 @@ const WIDE_DASH_RE = /[–—―]/;
 
 /** Every digit-run in the text, normalized (strips thousands separators). */
 function numbersIn(text: string): string[] {
-  return (text.match(/\d[\d,.]*/g) ?? []).map((n) => n.replace(/,(?=\d{3}\b)/g, ""));
+  return (text.match(/\d[\d,.]*/g) ?? [])
+    .map((n) => n.replace(/,(?=\d{3}\b)/g, ""))
+    // A trailing separator is punctuation, not part of the number. Without
+    // this, "אסמכתא #1002-R1." yields "1." - which matches no known form and
+    // gets reported as a contradicting amount, so a correct message quoting a
+    // correct reference fails validation for ending in a full stop.
+    .map((n) => n.replace(/[.,]+$/, ""))
+    .filter(Boolean);
 }
 
 function amountForms(amount: number): string[] {
@@ -157,8 +174,13 @@ export function validateGroundedMessage(message: string, facts: ExecutionFacts):
     const present = forms.some((f) => text.includes(f));
     if (!present) problems.push("amount_missing");
     const orderDigits = (facts.orderName ?? "").replace(/\D/g, "");
+    // A reference like "#1002-R1" is digits the customer is SUPPOSED to see,
+    // so it must not be mistaken for a contradicting amount.
+    const refDigits = new Set(
+      String(facts.reference ?? "").split(/\D+/).filter(Boolean),
+    );
     const foreign = numbersIn(text).filter(
-      (n) => !forms.some((f) => n === f || Number(n) === Number(f)) && n !== orderDigits,
+      (n) => !forms.some((f) => n === f || Number(n) === Number(f)) && n !== orderDigits && !refDigits.has(n),
     );
     if (foreign.length) problems.push("contradicting_number_present");
   }
@@ -172,7 +194,35 @@ export function validateGroundedMessage(message: string, facts: ExecutionFacts):
     }
   }
 
+  // 6. A reference the action produced must be quoted.
+  //
+  // Live (2026-08-02): a return was opened correctly, read back correctly, and
+  // announced as "פתחתי עבורך החזרה" with no reference in it - twice, on two
+  // different orders, with the reference sitting in the verified facts and a
+  // prompt line asking for it. True, and less than the customer needed: a
+  // return nobody can quote a number for is one they cannot ask about later.
+  // A soft instruction the model followed inconsistently becomes a hard rule
+  // that falls back to a template which always includes it.
+  if (facts.outcome === "succeeded" && facts.reference) {
+    const ref = String(facts.reference);
+    // Compare on the human part. `gid://shopify/Return/56386093425` is an
+    // internal id we would never want quoted anyway; only a customer-facing
+    // reference like "#1002-R1" is required to appear.
+    if (isCustomerQuotableReference(ref) && !text.includes(ref)) problems.push("reference_missing");
+  }
+
   return { ok: problems.length === 0, problems };
+}
+
+/**
+ * Is this reference something a customer should see?
+ *
+ * A Shopify GID is an internal identifier: quoting it would be leaking our
+ * plumbing into a chat, which rule 2b exists to prevent. A name like "#1002-R1"
+ * is what the merchant's own admin shows and what a customer can quote back.
+ */
+export function isCustomerQuotableReference(ref: string): boolean {
+  return !/^gid:\/\//.test(ref) && ref.length <= 40;
 }
 
 /**
@@ -237,5 +287,16 @@ export function buildFallbackMessage(facts: ExecutionFacts, inboundSample: strin
       ? `ההזמנה${order ? ` ${order}` : ""} בוטלה בהצלחה${refunded ? " והתשלום הוחזר" : ""}.`
       : `Your order${order ? ` ${order}` : ""} was cancelled successfully${refunded ? " and the payment was refunded" : ""}.`;
   }
-  return he ? "הפעולה שביקשת הושלמה בהצלחה." : "The action you requested was completed successfully.";
+  // Anything else that succeeded and produced a reference the customer can use
+  // - a return, most often. The reference is the point of the sentence.
+  const ref = facts.reference && isCustomerQuotableReference(String(facts.reference)) ? String(facts.reference) : null;
+  const isReturn = /return/.test(facts.tool);
+  if (isReturn) {
+    return he
+      ? `פתחתי בקשת החזרה${order ? ` עבור הזמנה ${order}` : ""}${ref ? `, מספר האסמכתא הוא ${ref}` : ""}.`
+      : `I have opened a return request${order ? ` for order ${order}` : ""}${ref ? `, reference ${ref}` : ""}.`;
+  }
+  return he
+    ? `הפעולה שביקשת הושלמה בהצלחה${ref ? `, מספר האסמכתא הוא ${ref}` : ""}.`
+    : `The action you requested was completed successfully${ref ? `, reference ${ref}` : ""}.`;
 }

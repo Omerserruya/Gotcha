@@ -4600,6 +4600,7 @@ export async function generateExecutionMessage(opts: {
         amount: facts.amount ?? undefined,
         currency: facts.currency ?? undefined,
         status: facts.status ?? undefined,
+        reference: facts.reference ?? undefined,
         // The PHRASE, never the internal class. Handing the model
         // `failure_reason: "unknown"` is how a live customer was told
         // "(סיבה: unknown)" - it dutifully printed the token we gave it.
@@ -4630,6 +4631,9 @@ export async function generateExecutionMessage(opts: {
       // already been handed to shipping" - a specific, plausible and invented
       // cause. A failure whose reason we do not have is a failure, full stop.
       `- Do NOT invent a CAUSE for a failure. If failure_reason is absent, say it did not go through and stop; never supply a plausible-sounding explanation of your own.\n` +
+      // A return was opened correctly, read back correctly, and announced with
+      // no reference in it. True, and less than the customer needed.
+      `- When VERIFIED FACTS carry a `+"`reference`"+`, quote it exactly. It is what the customer needs to ask about this later.\n` +
       `- No em dashes, no headings, no bullet lists, no "I'm happy to assist" filler.\n` +
       `- Do NOT mention internal systems or approvals.\n`;
     const r = await generateAIBotOneshot({

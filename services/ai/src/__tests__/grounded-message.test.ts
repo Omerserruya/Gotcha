@@ -228,3 +228,57 @@ describe("buildFallbackMessage (deterministic, always safe)", () => {
     expect(validateGroundedMessage(msg, facts).ok).toBe(true);
   });
 });
+
+/**
+ * A reference the action produced must reach the customer.
+ *
+ * Live (2026-08-02): a return was opened correctly, read back correctly, and
+ * announced as "פתחתי עבורך החזרה" with no reference in it - twice, on two
+ * different orders, with the reference sitting in the verified facts and a
+ * prompt line asking for it. True, and less than the customer needed. A soft
+ * instruction the model followed inconsistently is now a hard rule.
+ */
+describe("a reference the customer can quote", () => {
+  const facts = (over: Partial<ExecutionFacts> = {}): ExecutionFacts => ({
+    tool: "shopify.create_return", outcome: "succeeded", orderName: "#1002", reference: "#1002-R1", ...over,
+  });
+
+  it("rejects a success message that omits the reference", () => {
+    const v = validateGroundedMessage("פתחתי עבורך בקשת החזרה עבור ההזמנה #1002.", facts());
+    expect(v.ok).toBe(false);
+    expect(v.problems).toContain("reference_missing");
+  });
+
+  it("accepts one that quotes it", () => {
+    expect(validateGroundedMessage("פתחתי בקשת החזרה עבור הזמנה #1002, מספר האסמכתא הוא #1002-R1.", facts()).ok).toBe(true);
+  });
+
+  it("never demands an internal GID be shown to a customer", () => {
+    const v = validateGroundedMessage("פתחתי בקשת החזרה עבור הזמנה #1002.", facts({ reference: "gid://shopify/Return/56386093425" }));
+    expect(v.problems).not.toContain("reference_missing");
+  });
+
+  it("does not require a reference on a failure", () => {
+    const v = validateGroundedMessage("לא הצלחתי להשלים את הפעולה כרגע.", facts({ outcome: "failed" }));
+    expect(v.problems).not.toContain("reference_missing");
+  });
+
+  it("does not mistake the reference's digits for a contradicting amount", () => {
+    const v = validateGroundedMessage(
+      "ההחזר על סך 150.00 USD עבור הזמנה #1002 בוצע, אסמכתא #1002-R1.",
+      facts({ tool: "shopify.process_refund", amount: 150, currency: "USD" }),
+    );
+    expect(v.problems).not.toContain("contradicting_number_present");
+  });
+
+  it("the deterministic fallback always carries it", () => {
+    const msg = buildFallbackMessage(facts(), "אני רוצה להחזיר");
+    expect(msg).toContain("#1002-R1");
+    expect(msg).toContain("#1002");
+  });
+
+  it("the fallback omits an internal GID rather than printing it", () => {
+    const msg = buildFallbackMessage(facts({ reference: "gid://shopify/Return/1" }), "אני רוצה להחזיר");
+    expect(msg).not.toContain("gid://");
+  });
+});
