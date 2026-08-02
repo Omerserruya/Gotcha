@@ -124,6 +124,8 @@ export interface ReadBackVerdict {
   verified: boolean;
   /** Fields that were requested and do NOT match what Shopify now holds. */
   mismatches: Array<{ field: string; requested: string; actual: string | null }>;
+  /** Fields Shopify accepted and rewrote into its own canonical form. */
+  normalized: Array<{ field: string; requested: string; actual: string }>;
 }
 
 /**
@@ -143,7 +145,10 @@ export function verifyReadBack(
   customer: Record<string, any> | null,
 ): ReadBackVerdict {
   const mismatches: ReadBackVerdict["mismatches"] = [];
-  if (!customer) return { verified: false, mismatches: [{ field: "customer", requested: "read back", actual: null }] };
+  const normalized: ReadBackVerdict["normalized"] = [];
+  if (!customer) {
+    return { verified: false, mismatches: [{ field: "customer", requested: "read back", actual: null }], normalized: [] };
+  }
 
   for (const [field, requested] of Object.entries(patch.customer)) {
     const actual = customer[field] == null ? null : String(customer[field]);
@@ -153,9 +158,25 @@ export function verifyReadBack(
   const addr = customer.default_address ?? null;
   for (const [field, requested] of Object.entries(patch.address)) {
     const actual = addr?.[field] == null ? null : String(addr[field]);
-    if (!matches(field, requested, actual)) mismatches.push({ field: `address.${field}`, requested, actual });
+    if (matches(field, requested, actual)) continue;
+
+    // Shopify rewrites a country name into its canonical English form: a
+    // customer writing "ישראל" gets "Israel" stored, with a country_code of
+    // "IL". The ORDER address verifier learned this in Part 5; the PROFILE one
+    // did not, so the identical write reported as a failure here - and the
+    // model, told the change had not gone through, asked the customer which
+    // spelling of their own country to use.
+    if (field === "country" && actual) {
+      const code = String(addr?.country_code ?? "").trim().toLowerCase();
+      if (code && code === requested.trim().toLowerCase()) continue;
+      if (/[^\x00-\x7F]/.test(requested)) {
+        normalized.push({ field, requested, actual });
+        continue;
+      }
+    }
+    mismatches.push({ field: `address.${field}`, requested, actual });
   }
-  return { verified: mismatches.length === 0, mismatches };
+  return { verified: mismatches.length === 0, mismatches, normalized };
 }
 
 function matches(field: string, requested: string, actual: string | null): boolean {

@@ -240,3 +240,40 @@ describe("the profile-update directive", () => {
     expect(d).toContain("unless you actually create a handoff");
   });
 });
+
+/**
+ * Shopify rewrites a country name, and the profile verifier did not know.
+ *
+ * The ORDER address verifier learned this in Part 5: a customer writing "ישראל"
+ * gets "Israel" stored. The PROFILE verifier did not, so the identical write
+ * reported as a failure - and the model, told the change had not gone through,
+ * asked the customer which spelling of their own country it should use.
+ */
+describe("the country Shopify stores is not always the country asked for", () => {
+  it("accepts the canonical rewrite of a non-ASCII country name", () => {
+    const p = validateProfilePatch({ address: { address1: "הרצל 1", city: "חיפה", country: "ישראל", zip: "3100000" } });
+    const v = verifyReadBack(p, {
+      default_address: { address1: "הרצל 1", city: "חיפה", country: "Israel", country_code: "IL", zip: "3100000" },
+    });
+    expect(v.verified).toBe(true);
+    expect(v.normalized).toEqual([{ field: "country", requested: "ישראל", actual: "Israel" }]);
+  });
+
+  it("matches on the country CODE when that is what was asked for", () => {
+    const p = validateProfilePatch({ address: { address1: "Herzl 1", city: "Haifa", country: "IL" } });
+    expect(verifyReadBack(p, { default_address: { address1: "Herzl 1", city: "Haifa", country: "Israel", country_code: "IL" } }).verified).toBe(true);
+  });
+
+  it("still fails when an ASCII country comes back as a different country", () => {
+    const p = validateProfilePatch({ address: { address1: "Herzl 1", city: "Haifa", country: "Israel" } });
+    const v = verifyReadBack(p, { default_address: { address1: "Herzl 1", city: "Haifa", country: "United States", country_code: "US" } });
+    expect(v.verified).toBe(false);
+  });
+
+  it("a wrong city still fails alongside a normalised country", () => {
+    const p = validateProfilePatch({ address: { address1: "הרצל 1", city: "חיפה", country: "ישראל" } });
+    const v = verifyReadBack(p, { default_address: { address1: "הרצל 1", city: "Tel Aviv", country: "Israel", country_code: "IL" } });
+    expect(v.verified).toBe(false);
+    expect(v.mismatches.map((m) => m.field)).toEqual(["address.city"]);
+  });
+});

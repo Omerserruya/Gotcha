@@ -31,9 +31,28 @@
 // ─── The facts ──────────────────────────────────────────────
 
 export interface CustomerOutcome {
+  /** The tool this outcome is about, once one has run. */
+  action: string | null;
   customerResolved: boolean;
   orderResolved: boolean;
+  customerId: string | null;
+  orderId: string | null;
   orderName: string | null;
+  /**
+   * Ownership and eligibility, recorded rather than assumed.
+   *
+   * `ownershipVerified` is true because the access guard let the call through -
+   * it refuses a resource belonging to anyone else before the model sees it, so
+   * a resolved resource IS a verified one. `eligibilityVerified` is true when a
+   * tool that checks fulfillment state ran its check.
+   */
+  ownershipVerified: boolean;
+  eligibilityVerified: boolean;
+  approvalRequired: boolean;
+  approvalDecision: "approved" | "rejected" | "pending" | null;
+  executionState: "not_started" | "succeeded" | "failed" | "awaiting_approval";
+  /** The mutation was confirmed by an INDEPENDENT read, not by its own echo. */
+  readBackVerified: boolean;
 
   actionAttempted: boolean;
   actionSucceeded: boolean;
@@ -74,6 +93,8 @@ export interface CustomerOutcome {
   approvalContinuationGuaranteed: boolean;
 
   trackingAvailable: boolean;
+  /** Kept as an alias of trackingAvailable - the contract names it both ways. */
+  trackingKnown: boolean;
   inventoryKnown: boolean;
 
   safeFailureReason: string | null;
@@ -82,9 +103,18 @@ export interface CustomerOutcome {
 
 export function emptyOutcome(): CustomerOutcome {
   return {
+    action: null,
     customerResolved: false,
     orderResolved: false,
+    customerId: null,
+    orderId: null,
     orderName: null,
+    ownershipVerified: false,
+    eligibilityVerified: false,
+    approvalRequired: false,
+    approvalDecision: null,
+    executionState: "not_started",
+    readBackVerified: false,
     actionAttempted: false,
     actionSucceeded: false,
     orderCancelled: false,
@@ -115,6 +145,7 @@ export function emptyOutcome(): CustomerOutcome {
     followUpScheduled: false,
     approvalContinuationGuaranteed: false,
     trackingAvailable: false,
+    trackingKnown: false,
     inventoryKnown: false,
     safeFailureReason: null,
     supportedAlternatives: [],
@@ -189,27 +220,56 @@ export function applyToolResult(outcome: CustomerOutcome, record: ToolCallRecord
     // Not a completed action, but it IS a real guarantee: the approval routes
     // produce exactly one continuation whichever way the decision goes, so
     // "I'll come back to you" is a promise the product keeps here.
+    o.action = name;
     o.actionAttempted = true;
+    o.approvalRequired = true;
+    o.approvalDecision = "pending";
+    o.executionState = "awaiting_approval";
     o.approvalContinuationGuaranteed = true;
     return o;
   }
 
   if (!executed) return o;
 
-  if (r.ok === false || r.error || r.reason) {
+  // `reason` means two different things and only one of them is a failure.
+  //
+  // `executeAdapterTool` fails as `{ ok: false, reason }`. But a SUCCESSFUL
+  // call can also carry a `reason` - the eligibility refusals do exactly that:
+  // `{ ok: true, eligible: false, reason: "fulfillment_in_progress" }` is the
+  // tool working correctly and reporting that the action is not available.
+  // Treating that as an execution failure loses the distinction between "we
+  // could not run the check" and "we ran it and the answer is no".
+  const failed = r.ok === false || !!r.error;
+  if (failed) {
+    o.action = name;
+    o.executionState = "failed";
     o.actionAttempted = true;
-    // `reason` as well as `error`: executeAdapterTool's failure shape is
-    // `{ ok: false, reason }`, and reading only `error` loses why.
     const why = typeof r.error === "string" ? r.error : typeof r.reason === "string" ? r.reason : null;
     if (why && !o.safeFailureReason) o.safeFailureReason = why;
     return o;
   }
 
-  if (r.customer_id || r.customer) o.customerResolved = true;
+  // A resolved resource IS an owned one. `customer-access-guard.ts` refuses
+  // anything belonging to somebody else before the model sees it, so reaching
+  // this line with a customer or an order in hand is the verification.
+  if (r.customer_id || r.customer) {
+    o.customerResolved = true;
+    o.ownershipVerified = true;
+    if (r.customer_id != null) o.customerId = String(r.customer_id);
+    else if (r.customer?.id != null) o.customerId = String(r.customer.id);
+  }
   if (r.order_id || r.name || r.order_name) {
     o.orderResolved = true;
+    o.ownershipVerified = true;
+    if (r.order_id != null) o.orderId = String(r.order_id);
     if (typeof r.name === "string" && r.name.startsWith("#")) o.orderName = r.name;
   }
+  // A tool that reports fulfillment state has checked it.
+  if (r.eligible != null || r.fulfillment_states || r.fulfillment_orders_readable != null) {
+    o.eligibilityVerified = true;
+  }
+  // `verified` is only ever set by a tool that re-read its own write.
+  if (r.verified === true) o.readBackVerified = true;
 
   switch (name) {
     case "cancel_order":
@@ -330,7 +390,10 @@ export function applyToolResult(outcome: CustomerOutcome, record: ToolCallRecord
     case "get_tracking_url":
     case "track_shipment":
     case "get_shipment_status":
-      if (r.tracking_state === "available") o.trackingAvailable = true;
+      if (r.tracking_state === "available") {
+        o.trackingAvailable = true;
+        o.trackingKnown = true;
+      }
       break;
 
     case "inventory_status":
@@ -346,6 +409,10 @@ export function applyToolResult(outcome: CustomerOutcome, record: ToolCallRecord
   }
 
   if (Array.isArray(r.safeAlternatives)) o.supportedAlternatives = r.safeAlternatives.map(String);
+  // Recorded LAST so it reflects the branch above rather than anticipating it.
+  if (o.actionAttempted && o.action == null) o.action = name;
+  if (o.actionSucceeded) o.executionState = "succeeded";
+  else if (o.actionAttempted && o.executionState === "not_started") o.executionState = "failed";
   return o;
 }
 
@@ -431,13 +498,22 @@ const CLAIM_PATTERNS: Array<{ claim: OutcomeClaim; re: RegExp }> = [
   },
 ];
 
+/**
+ * Each claim, and the facts that would make it true.
+ *
+ * The three that mutate an order additionally require `readBackVerified`. That
+ * is not belt-and-braces: those flags are only set by a tool that re-read its
+ * own write, so requiring both says "the tool believed it AND the record agrees"
+ * - and a tool whose read-back disagreed is exactly the case where the customer
+ * must not be told it worked.
+ */
 const REQUIREMENTS: Record<OutcomeClaim, (o: CustomerOutcome) => boolean> = {
   delegated: (o) => o.handoffCreated || o.taskCreated || o.notificationSent,
   followup: (o) => o.followUpScheduled || o.approvalContinuationGuaranteed,
   document_sent: (o) => o.documentSent || o.invoiceSent || o.confirmationSent,
-  address_changed: (o) => o.shippingAddressUpdated,
-  exchanged: (o) => o.exchangeCompleted,
-  return_opened: (o) => o.returnCreated && !!o.returnId,
+  address_changed: (o) => o.shippingAddressUpdated && o.readBackVerified,
+  exchanged: (o) => o.exchangeCompleted && o.readBackVerified,
+  return_opened: (o) => o.returnCreated && !!o.returnId && o.readBackVerified,
   refunded: (o) => o.refundCreated,
   cancelled: (o) => o.orderCancelled,
   profile_updated: (o) => o.customerUpdated,
@@ -452,7 +528,7 @@ export const CLAIM_REQUIREMENT_TEXT: Record<OutcomeClaim, string> = {
   document_sent: "a document send that returned success",
   address_changed: "an order address change confirmed by reading the order back",
   exchanged: "an exchange confirmed by reading the order back",
-  return_opened: "a return that came back with a provider return id",
+  return_opened: "a return with a provider return id, confirmed by reading the order back",
   refunded: "a refund that was actually created",
   cancelled: "an order that is actually cancelled",
   profile_updated: "a profile change confirmed by reading the customer back",

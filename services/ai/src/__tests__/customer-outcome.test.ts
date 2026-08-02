@@ -169,7 +169,7 @@ describe("Hebrew paraphrases cannot outrun the facts", () => {
     },
     {
       claim: "address_changed",
-      supported: { shippingAddressUpdated: true },
+      supported: { shippingAddressUpdated: true, readBackVerified: true },
       phrases: [
         "שיניתי את הכתובת",
         "עדכנתי את כתובת המשלוח",
@@ -180,12 +180,12 @@ describe("Hebrew paraphrases cannot outrun the facts", () => {
     },
     {
       claim: "exchanged",
-      supported: { exchangeCompleted: true },
+      supported: { exchangeCompleted: true, readBackVerified: true },
       phrases: ["החלפתי את המידה", "המידה הוחלפה", "הפריט הוחלף", "swapped it for you"],
     },
     {
       claim: "return_opened",
-      supported: { returnCreated: true, returnId: "gid://shopify/Return/1" },
+      supported: { returnCreated: true, returnId: "gid://shopify/Return/1", readBackVerified: true },
       phrases: ["פתחתי החזרה", "נפתחה בקשת החזרה", "opened a return"],
     },
     {
@@ -315,5 +315,63 @@ describe("the fact block the model writes from", () => {
   it("carries the return id, which is what a customer is actually given", () => {
     const b = buildOutcomeFactBlock(facts({ returnCreated: true, returnId: "#R1" }))!;
     expect(b).toContain("#R1");
+  });
+});
+
+/**
+ * The full contract field set - the closure round's requirement.
+ *
+ * Ownership and eligibility are RECORDED rather than assumed. `ownershipVerified`
+ * is true because the access guard let the call through: it refuses a resource
+ * belonging to anyone else before the model sees it, so a resolved resource is a
+ * verified one. `readBackVerified` is set only by a tool that re-read its own
+ * write, which is why the three order-mutating claims now require it.
+ */
+describe("the normalized outcome the closure round asks for", () => {
+  it("records the action, the ids, ownership and read-back", () => {
+    const o = buildOutcome([
+      executed("shopify.update_order_shipping_address", {
+        order_id: "16993274364273", name: "#1014", address_updated: true, verified: true,
+      }),
+    ]);
+    expect(o.action).toBe("update_order_shipping_address");
+    expect(o.orderId).toBe("16993274364273");
+    expect(o.orderName).toBe("#1014");
+    expect(o.ownershipVerified).toBe(true);
+    expect(o.readBackVerified).toBe(true);
+    expect(o.executionState).toBe("succeeded");
+  });
+
+  it("records an approval pause as pending, not as a completed action", () => {
+    const o = buildOutcome([{ tool: "shopify.exchange_order_item", result: "{}", decision: "executed", sideEffect: "awaiting_approval" }]);
+    expect(o.approvalRequired).toBe(true);
+    expect(o.approvalDecision).toBe("pending");
+    expect(o.executionState).toBe("awaiting_approval");
+    expect(o.actionSucceeded).toBe(false);
+  });
+
+  it("records eligibility when a tool actually checked it", () => {
+    const o = buildOutcome([executed("shopify.exchange_order_item", { order_id: "1", eligible: false, reason: "fulfillment_in_progress" })]);
+    expect(o.eligibilityVerified).toBe(true);
+  });
+
+  it("marks a failed execution as failed, not as untouched", () => {
+    const o = buildOutcome([executed("shopify.create_return", { ok: false, reason: "shopify_422" })]);
+    expect(o.executionState).toBe("failed");
+    expect(o.action).toBe("create_return");
+  });
+
+  it("an unverified order mutation cannot support its claim, even with the flag set", () => {
+    // Both halves matter: the tool believed it AND the record agrees.
+    const unverified = facts({ shippingAddressUpdated: true, readBackVerified: false });
+    expect(validateOutcomeClaims("שיניתי את הכתובת", unverified).ok).toBe(false);
+    const verified = facts({ shippingAddressUpdated: true, readBackVerified: true });
+    expect(validateOutcomeClaims("שיניתי את הכתובת", verified).ok).toBe(true);
+  });
+
+  it("the same rule holds for an exchange and a return", () => {
+    expect(validateOutcomeClaims("החלפתי את המידה", facts({ exchangeCompleted: true })).ok).toBe(false);
+    expect(validateOutcomeClaims("פתחתי החזרה", facts({ returnCreated: true, returnId: "#R1" })).ok).toBe(false);
+    expect(validateOutcomeClaims("פתחתי החזרה", facts({ returnCreated: true, returnId: "#R1", readBackVerified: true })).ok).toBe(true);
   });
 });

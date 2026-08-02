@@ -2505,6 +2505,7 @@ async function updateOwnProfile(ctx: Ctx, args: Record<string, any>): Promise<Re
     verified: verdict.verified,
     changed_fields: verdict.verified ? changed : [],
     mismatches: verdict.mismatches,
+    normalized_fields: verdict.normalized,
     rejected_fields: patch.rejected,
     sensitive_change: patch.sensitive,
     // Only on a verified write. The ledger treats an id as proof the action is

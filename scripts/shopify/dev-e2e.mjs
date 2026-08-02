@@ -35,6 +35,7 @@
  */
 
 import { execFileSync } from "node:child_process";
+import { writeFileSync } from "node:fs";
 import crypto from "node:crypto";
 
 // ─── Allowlists. Deliberately literal. ──────────────────────────────────────
@@ -337,6 +338,81 @@ const SCENARIOS = {
   },
 };
 
+/**
+ * The scopes Shopify says are granted, read live from the store.
+ *
+ * Not the cached capability state: a reconnect changes what the store granted
+ * and nothing local knows until something asks. This asks.
+ */
+function scopeCheck() {
+  // Through `tsx`, because the shared package inside the service container is
+  // TypeScript source: a plain `node -e` that requires it dies on the first
+  // `export`. Same route the ad-hoc probes take.
+  const ts = `
+    import { prisma, decryptCredentials } from "@chatcenter/shared";
+    (async () => {
+      const ti: any = await (prisma as any).tenantIntegration.findFirst({
+        where: { tenantId: "${ALLOW.tenantId}", integration: { slug: "shopify" } },
+      });
+      const c: any = typeof ti.credentials === "string" ? decryptCredentials(ti.credentials) : ti.credentials;
+      const shop = (ti.config as any).shopDomain;
+      const r = await fetch(\`https://\${shop}/admin/oauth/access_scopes.json\`, {
+        headers: { "X-Shopify-Access-Token": c.accessToken },
+      });
+      const j: any = await r.json();
+      console.log(JSON.stringify({ status: r.status, shop, granted: (j.access_scopes || []).map((s: any) => s.handle).sort() }));
+      process.exit(0);
+    })();
+  `;
+  const file = `/tmp/dev-e2e-scope-${process.pid}.ts`;
+  writeFileSync(file, ts, "utf8");
+  docker(["compose", "cp", file, "ai:/app/services/ai/dev-e2e-scope.ts"]);
+  const out = docker(["compose", "exec", "-T", "ai", "npx", "tsx", "dev-e2e-scope.ts"]).trim();
+  const line = out.split("\n").filter((l) => l.trim().startsWith("{")).pop();
+  if (!line) die(`scope probe returned nothing usable:\n${out.slice(0, 400)}`);
+  return JSON.parse(line);
+}
+
+/** Every Shopify mutation this round made, newest first. The audit trail. */
+function mutationLedger(limit = 40) {
+  const rows = sql(
+    `select created_at::text, action, coalesce(metadata->>'tool',''), left(coalesce(metadata::text,''), 160)
+     from audit_logs where tenant_id='${ALLOW.tenantId}'
+       and (action like '%adapter%' or action like '%approval%' or action like 'security.%')
+     order by created_at desc limit ${Number(limit) || 40}`,
+  );
+  return rows ? rows.split("\n").map((l) => l.split("\t")) : [];
+}
+
+/** The turn's normalized outcome, as the contract recorded it. */
+function outcomes(limit = 10) {
+  const rows = sql(
+    `select created_at::text, action, left(metadata::text, 200)
+     from audit_logs where tenant_id='${ALLOW.tenantId}'
+       and action in ('ai.unsupported_outcome_claim','ai.unsupported_action_claim','security.private_url_in_reply')
+     order by created_at desc limit ${Number(limit) || 10}`,
+  );
+  return rows ? rows.split("\n").map((l) => l.split("\t")) : [];
+}
+
+/**
+ * What this run left behind on the store, for the closure report.
+ *
+ * Deliberately a REPORT and not a cleanup: a harness that tidies up after
+ * itself destroys the evidence that it ran.
+ */
+function cleanupReport() {
+  const orders = ["#1002", "#1003", "#1006", "#1011", "#1012", "#1013", "#1014"];
+  return orders.map((n) => {
+    try {
+      const o = readOrder(n);
+      return { order: n, state: o.cancelled_at ? "cancelled" : o.financial_status, fulfillment: o.fulfillment_status ?? "unfulfilled", total: `${o.total_price} ${o.currency}` };
+    } catch {
+      return { order: n, state: "unreadable" };
+    }
+  });
+}
+
 // ─── Fixture manifest ───────────────────────────────────────────────────────
 
 function fixtures() {
@@ -422,6 +498,58 @@ async function main() {
       console.log(JSON.stringify(readCustomer(rest[0]), null, 1));
       break;
 
+    case "scope-check": {
+      const s = scopeCheck();
+      const NEEDED = [
+        "read_orders", "write_orders", "read_all_orders", "read_customers", "write_customers",
+        "read_products", "read_inventory", "read_returns", "write_returns", "write_order_edits",
+        "read_merchant_managed_fulfillment_orders", "read_assigned_fulfillment_orders", "read_fulfillments",
+      ];
+      console.log(`# shop=${s.shop} status=${s.status} granted=${s.granted.length}`);
+      for (const n of NEEDED) console.log(`${s.granted.includes(n) ? "GRANTED " : "MISSING "} ${n}`);
+      const extra = s.granted.filter((g) => !NEEDED.includes(g));
+      if (extra.length) console.log(`# also granted: ${extra.join(", ")}`);
+      break;
+    }
+
+    case "ledger":
+      for (const r of mutationLedger(rest[0])) console.log(r.join(" | "));
+      break;
+
+    case "outcome":
+      for (const r of outcomes(rest[0])) console.log(r.join(" | "));
+      break;
+
+    case "cleanup-report":
+      console.table(cleanupReport());
+      break;
+
+    case "full-suite": {
+      // Everything that can be asserted without a human approving something.
+      console.log("### SCOPES");
+      const s = scopeCheck();
+      console.log(`granted ${s.granted.length} on ${s.shop}`);
+      console.log("\n### TOOL SURFACE");
+      const rows = toolSurface();
+      console.log(`${rows.length} shopify tools permissioned`);
+      console.log("\n### FIXTURES");
+      console.table(cleanupReport());
+      console.log("\n### SCENARIOS");
+      for (const name of Object.keys(SCENARIOS)) {
+        const since = nowIso();
+        console.log(`\n──── ${name}`);
+        console.log(`> ${SCENARIOS[name].say}`);
+        sendInbound(SCENARIOS[name].say);
+        await sleep(Number(rest[0] || 55));
+        for (const [dir, type, source, body] of transcript(since)) {
+          console.log(`${dir}${source ? ` (${source})` : ""}: ${body || `[${type}]`}`);
+        }
+        for (const a of approvals(since)) console.log(`APPROVAL: ${a.join(" | ")}`);
+        for (const o of ownership()) console.log(`OWNERSHIP: ${o.join(" | ")}`);
+      }
+      break;
+    }
+
     case "tools": {
       const rows = toolSurface();
       console.log(`# ${rows.length} shopify tools permissioned for this tenant's AI`);
@@ -464,7 +592,8 @@ async function main() {
 
     default:
       console.log(
-        "commands: say | scenario | suite [name] | approvals | approve | reject | order | customer | tools | state | fixtures\n" +
+        "commands: say | scenario | suite [name] | full-suite | scope-check | tools | order | customer |\n" +
+          "          approvals | approve | reject | ledger | outcome | state | fixtures | cleanup-report\n" +
           `suite scenarios: ${Object.keys(SCENARIOS).join(", ")}`,
       );
       process.exit(1);
