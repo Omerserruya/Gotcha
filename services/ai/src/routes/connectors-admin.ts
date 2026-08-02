@@ -24,7 +24,7 @@
 
 import { Router, type Request, type Response } from "express";
 import * as crypto from "crypto";
-import { enableReadToolsForIntegration } from "../services/integration-provisioning.service";
+import { provisionIntegrationTools } from "../services/integration-provisioning.service";
 import {
   prisma,
   authenticate,
@@ -122,20 +122,38 @@ async function upsertConnection(opts: {
   // and escalated a cancellation saying the tooling was unavailable. It was
   // right, and nothing anywhere said so.
   //
-  // Reads only, and never a downgrade: the helper skips rows an operator
-  // turned off, so a merchant who deliberately disabled a tool keeps that
-  // choice across a reconnect. Writes stay an explicit decision.
+  // The FULL surface, not reads only.
+  //
+  // "Writes stay an explicit decision" is a reasonable sentence about a first
+  // connect and a false one about a reconnect: disconnect deletes tenant tools
+  // by cascade, so nobody decided anything - a cascade did. Part 6 caught this
+  // live, on the day it mattered: an operator reconnected to grant the scopes
+  // this round needed, and the reconnect left 42 of 68 tools present with every
+  // single missing one a WRITE or an ACTION. Healthy store, green probe, and an
+  // assistant that could look up any order and act on none.
+  //
+  // That is worse than having no tools, because the reads answer every
+  // diagnostic anyone thinks to run - and reconnecting is the ONLY way to grant
+  // a scope, so the operation that makes an assistant more capable is the one
+  // that quietly disarms it.
+  //
+  // What keeps writes safe is where it always was: hitl_policy holds every
+  // money-moving tool behind a human. Never a downgrade either - a row an
+  // operator switched off is skipped, not re-enabled.
   //
   // Best-effort - a provisioning hiccup must not fail an otherwise good
   // connection, and the next connect retries it.
   if (opts.status === "CONNECTED") {
     try {
-      const granted = await enableReadToolsForIntegration(opts.tenantId, row.id, opts.catalogId);
-      if (granted > 0) {
-        console.log(`[connectors] provisioned ${granted} read-tool permission(s) on connect for tenant=${opts.tenantId}`);
+      const r = await provisionIntegrationTools(opts.tenantId, row.id, opts.catalogId, { reason: "connect" });
+      if (r.granted > 0 || r.preserved > 0) {
+        console.log(
+          `[connectors] provisioned ${r.granted} tool permission(s) on connect for tenant=${opts.tenantId} ` +
+            `(${JSON.stringify(r.byCategory)}, ${r.preserved} left as the operator set them)`,
+        );
       }
     } catch (err: any) {
-      console.error("[connectors] read-tool provisioning failed on connect:", err?.message);
+      console.error("[connectors] tool provisioning failed on connect:", err?.message);
     }
   }
   return row;
