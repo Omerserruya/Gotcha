@@ -17,7 +17,9 @@
 
 import type { Job, Worker } from "bullmq";
 import nodemailer, { type Transporter } from "nodemailer";
-import { prisma, getRedis, createWorker } from "@chatcenter/shared";
+import { prisma, getRedis, createWorker,
+  resolveAppPublicUrl,
+} from "@chatcenter/shared";
 import { NOTIFICATIONS_EMAIL_QUEUE_NAME } from "./queues";
 
 export interface EmailJobData {
@@ -88,7 +90,7 @@ async function checkRateLimit(userId: string): Promise<{ allowed: boolean; retry
 function renderHtml(body: string, link?: string): string {
   // Absolutize relative dashboard paths - mail clients have no base URL,
   // so a bare "/approvals" becomes "http://approvals/" when clicked.
-  const baseUrl = (process.env.FRONTEND_URL || "").replace(/\/$/, "");
+  const baseUrl = resolveAppPublicUrl(process.env);
   const fullLink = link && !/^https?:\/\//i.test(link) ? `${baseUrl}${link}` : link;
   const linkBlock = fullLink
     ? `<p style="margin-top:24px"><a href="${fullLink}" style="background:#7c5cfc;color:#fff;padding:8px 16px;border-radius:6px;text-decoration:none">Open in dashboard</a></p>`

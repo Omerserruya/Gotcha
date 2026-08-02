@@ -26,6 +26,7 @@ import {
   getOAuthStateSecret,
   mintOAuthState,
   consumeOAuthState,
+  resolveAppPublicUrl,
 } from "@chatcenter/shared";
 import jwt from "jsonwebtoken";
 
@@ -419,7 +420,7 @@ function connectedRedirect(
   // OAuth state (see the init routes); without this an onboarding connect
   // dropped the user on the marketplace page and onboarding looked reset.
   if (flow === "onboarding") {
-    const base = process.env.FRONTEND_URL || process.env.DASHBOARD_URL || "";
+    const base = resolveAppPublicUrl(process.env);
     return `${base}/setup?connected=${provider}`;
   }
   const path = `/ai-studio/marketplace/${provider}?calendar=connected&aiAgentId=${aiAgentId}`;

@@ -14,7 +14,9 @@
  * trust anchor on the callback - so the callback is safe to leave public.
  */
 import { Router, Request, Response } from "express";
-import { prisma, authenticate, resolveTenant, requireOnboardingOrActiveTenant, requireRole, mintOAuthState, consumeOAuthState } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireOnboardingOrActiveTenant, requireRole, mintOAuthState, consumeOAuthState,
+  resolveAppPublicUrl,
+} from "@chatcenter/shared";
 import {
   exchangeZohoCode,
   getZohoAccountsUrl,
@@ -64,7 +66,7 @@ router.get(
 );
 
 router.get("/oauth/zoho_crm/callback", async (req: Request, res: Response) => {
-  const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+  const frontendUrl = resolveAppPublicUrl(process.env);
   try {
     const { code, state, error: zohoError } = req.query;
 

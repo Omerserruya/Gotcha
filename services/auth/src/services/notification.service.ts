@@ -1,6 +1,8 @@
 import crypto from "crypto";
 import nodemailer from "nodemailer";
-import { prisma, publishEvent, ensureIdentity, createRecoveryLink, findIdentityBySubject } from "@chatcenter/shared";
+import { prisma, publishEvent, ensureIdentity, createRecoveryLink, findIdentityBySubject,
+  resolveAppPublicUrl,
+} from "@chatcenter/shared";
 
 type NotificationChannel = "email" | "slack" | "webhook" | "internal";
 
@@ -112,7 +114,7 @@ export async function createSetupLink(userId: string): Promise<string> {
  * if they still have a session they land straight in the workspace.
  */
 export function signInUrl(): string {
-  return process.env.FRONTEND_URL || "http://localhost:3000";
+  return resolveAppPublicUrl(process.env);
 }
 
 // ─── Brand Email System (light, premium, RTL-aware) ─────────
@@ -452,7 +454,7 @@ export async function sendOnboardingEmail(
   tenantSlug: string,
   adminUserId: string,
 ): Promise<void> {
-  const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+  const frontendUrl = resolveAppPublicUrl(process.env);
 
   // One-time Authentik link: the admin sets their password there, then lands
   // back in GOTCHA authenticated. GOTCHA never issues the credential.
@@ -562,7 +564,7 @@ export async function sendActivationConfirmation(tenantId: string): Promise<void
   const admin = tenant.users[0];
   if (!admin) return;
 
-  const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+  const frontendUrl = resolveAppPublicUrl(process.env);
   const dashboardUrl = `${frontendUrl}/conversations`;
 
   const departments = tenant.departments.map((d) => {
@@ -943,7 +945,7 @@ export async function sendPaidOnboardingEmail(a: {
   locale?: string;
   resend?: boolean;
 }): Promise<void> {
-  const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+  const frontendUrl = resolveAppPublicUrl(process.env);
   // Both parts are needed, and they do different jobs: `ref` says WHICH
   // checkout, `token` proves the holder may act on it. The entry page strips
   // the token out of the address bar on arrival.

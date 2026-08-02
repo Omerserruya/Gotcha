@@ -1,4 +1,6 @@
-import { getInternalServiceKey, safeFetch } from "@chatcenter/shared";
+import { getInternalServiceKey, safeFetch,
+  resolveAppPublicUrl,
+} from "@chatcenter/shared";
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import * as crypto from "crypto";
@@ -3114,7 +3116,7 @@ router.post("/invite-team", requireRole("ADMIN"), validate(inviteTeamSchema), as
           // An identity that already signed in elsewhere has no password to
           // set - the invite just points them at the app to pick the tenant.
           setupUrl: invited.setupLink
-            ?? (process.env.FRONTEND_URL || "http://localhost:3000").replace(/\/$/, "") + "/",
+            ?? resolveAppPublicUrl(process.env) + "/",
         });
 
         results.push({ email, status: "sent" });
@@ -3157,7 +3159,7 @@ router.post("/invite-link", requireRole("ADMIN"), async (req: Request, res: Resp
       },
     });
 
-    const frontendUrl = process.env.FRONTEND_URL || "https://gotcha.co.il";
+    const frontendUrl = resolveAppPublicUrl(process.env);
     const url = `${frontendUrl}/join?token=${token}`;
     res.json({ data: { url, token, expiresAt } });
   } catch (err) {

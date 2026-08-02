@@ -12,6 +12,14 @@ import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import { searchHelp, type HelpSearchResult } from "./content";
 
+// The Help Center is served from help.gotcha.co.il, so "Sign in" has to be an
+// absolute URL to the APPLICATION host - a relative /login would resolve to
+// help.gotcha.co.il/login, which is the Help Center's own 404. This used to be
+// hardcoded to the Dev host, which sent every production visitor to Dev.
+const APP_URL = (
+  process.env.NEXT_PUBLIC_API_URL || "https://app.gotcha.co.il"
+).replace(/\/+$/, "");
+
 // ─── Locale ─────────────────────────────────────────────────
 
 interface HelpLocaleState { he: boolean; toggle: () => void }
@@ -193,7 +201,7 @@ export function HelpShell({ children }: { children: ReactNode }) {
               {he ? "EN" : "עברית"}
             </button>
             <a href="https://gotcha.co.il" className="hidden sm:block text-xs font-semibold text-gray-500 hover:text-gray-800">gotcha.co.il</a>
-            <a href="https://dev.gotcha.co.il/login" className="text-xs font-semibold px-3.5 py-2 rounded-xl bg-primary-500 text-white hover:bg-primary-600 transition shadow-subtle">
+            <a href={`${APP_URL}/login`} className="text-xs font-semibold px-3.5 py-2 rounded-xl bg-primary-500 text-white hover:bg-primary-600 transition shadow-subtle">
               {he ? "כניסה" : "Sign in"}
             </a>
           </div>

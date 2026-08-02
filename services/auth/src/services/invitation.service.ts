@@ -9,6 +9,7 @@ import {
   findIdentityBySubject,
   getUserLastLogin,
   terminateAllUserSessions,
+  resolveAppPublicUrl,
 } from "@chatcenter/shared";
 import { sendTeamInviteEmail } from "./notification.service";
 
@@ -120,7 +121,7 @@ export async function inviteUser(
   void (async () => {
     const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { name: true } });
     const target = tenant?.name || "your team";
-    const link = setupLink ?? `${(process.env.FRONTEND_URL || "http://localhost:3000").replace(/\/$/, "")}/`;
+    const link = setupLink ?? `${resolveAppPublicUrl(process.env)}/`;
     await sendTeamInviteEmail(email, name, target, link);
   })().catch((err) => console.warn("[invitation] invite email failed:", err?.message ?? err));
 
@@ -306,7 +307,7 @@ export async function tenantAdminEntry(tenantId: string): Promise<{
   const hasLoggedIn = await getUserLastLogin(identity.pk).then((v) => v != null).catch(() => false);
   const setupUrl = hasLoggedIn ? null : await createRecoveryLink(identity.pk);
 
-  const frontend = (process.env.FRONTEND_URL || "http://localhost:3000").replace(/\/$/, "");
+  const frontend = resolveAppPublicUrl(process.env);
   return {
     user: { id: admin.id, email: admin.email, name: admin.name },
     // Both roads end at onboarding; they differ only in whether a credential
