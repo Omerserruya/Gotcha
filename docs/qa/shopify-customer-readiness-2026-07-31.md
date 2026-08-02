@@ -685,3 +685,245 @@ What blocks the claim:
 
 The first is a day's work. The second is a scoping decision. The third is the
 one worth thinking about before selling this.
+
+---
+
+---
+
+# Part 5 - The self-service capabilities, and what building them exposed (2026-08-02)
+
+Ten phases of scope: coupons out, missing items, self-service profile changes,
+order address changes, exchanges, returns, documents, a structured outcome
+contract, order notes, and a rerun of everything through the real signed
+WhatsApp webhook.
+
+The capabilities are the smaller half of what follows. The larger half is that
+building them exposed a class of defect the previous four parts never hit,
+because the previous four parts were about a bot claiming things it had not
+done. This one is about the opposite.
+
+## The inverse failure
+
+Five separate defects, all found by running the scenarios live, all of the same
+shape: **a real change reported as a failure.**
+
+| # | Where | What the customer was told | What had happened |
+|---|---|---|---|
+| 1 | `extractExternalRef` | "I couldn't add the note" | the note was on the order |
+| 2 | outcome contract's parser | "I couldn't add the note" | the ledger had committed it |
+| 3 | self-scope selector | "nothing to update" | the customer had just confirmed the change |
+| 4 | address verifier | (would have said) "it didn't go through" | street, city and zip were all correct |
+| 5 | approval continuation | *nothing at all* | the action had run |
+
+This matters more than a symmetrical list of bugs. A false success is produced
+by a model improvising; a false failure is produced by the machinery built to
+catch the model, and it arrives with that machinery's authority. It is also
+much harder to notice: nobody complains that the bot was too cautious.
+
+The causes are worth naming individually, because each is a different way of
+being wrong about the same thing - the shape of a tool result.
+
+**`extractExternalRef` never looked inside `output`**, which is the envelope
+every integration tool returns. So no adapter tool had ever produced a real
+external ref; all of them logged `LEDGER_GAP`; every one was recorded as
+`succeeded_unverified`, meaning "deduped, but not confidently claimable". The
+explicit-`externalRef` branch also searched fewer scopes than the key fallback,
+so a handler that did exactly what the warning asked for was still missed.
+
+**The outcome contract's own parser read the raw tool fields**, and
+`toolCallLog` carries the wrapper. `note_added` was one level down, the fact
+block therefore said nothing had happened, and the model faithfully relayed it.
+
+**The self-scope selector was merged into the tool arguments**, where on
+`update_my_profile` the arguments *are* the new values. An injected
+`{ phone: … }` is indistinguishable from "set my phone to this"; an injected
+`{ customer_id: … }` was rejected by the field validator, which then reported
+`nothing_to_update`.
+
+**The address verifier treated Shopify's country normalisation as a mismatch.**
+"ישראל" is stored as "Israel". Everything else about the write was exactly
+right.
+
+**And the approval continuation derived its outcome from `dispatch.ok` alone**,
+so it told the customer their address had changed while the result beside it
+said `verified: false`. Fixing that in the continuation alone then produced a
+*worse* bug for one build: `claimCustomerNotification` asserts the row really is
+in the outcome being claimed, so persisting `SUCCEEDED` and claiming a `failed`
+continuation matched nothing and the customer got **no message at all** - the
+exact silent failure Part 1 exists to end, reintroduced from the other side.
+
+## Silence is not an outcome
+
+A turn can end with no text whatsoever: the model spends its round on tool calls
+and returns nothing. Every guard downstream is satisfied, because there is
+nothing to object to.
+
+Part 4 recorded this once - "a turn that read one order produced no reply at
+all, silently" - and fixed the payload that caused it. It recurred here on a
+different pair of reads (`get_order_items` + `variant_information`), which says
+the shape of that fix was too specific. There is now a terminal net: a turn that
+produces nothing, and is neither an escalation nor an approval pause, sends a
+sentence that admits only what is certainly true and offers a person.
+
+## The scope list was a comment about the past
+
+The exchange reached the live store, passed eligibility, quoted the price, took
+a human's approval, and failed at `orderEditBegin`:
+
+```
+Requires `write_order_edits` access scope
+```
+
+Four things had to be wrong at once for a missing scope to get that far:
+
+1. `exchange_order_item` did not declare it, so the capability gate saw a store
+   that could do this and never short-circuited.
+2. The connection test did not ask for it, so the merchant was never told.
+3. The OAuth request list did not include it, under a comment reading *"no tool
+   edits an order"* that had outlived the fact by one commit. The same note
+   excluded `write_returns`, which `create_return` needs.
+4. The GraphQL denial handler appended *"re-connect Shopify to grant the
+   read_returns scope"* to **every** access-denied error, because it was written
+   when returns were the only GraphQL surface. An `orderEdit` refusal told the
+   operator to grant an unrelated scope they already had.
+
+Part 3 called the OAuth request list "the real risk". It was right, and the
+mechanism is worse than a missing entry: the list carried prose about what tools
+did *not* exist, and prose does not fail a build when it stops being true.
+
+## Capabilities built
+
+| Capability | Tool | How it refuses |
+|---|---|---|
+| Missing item | `reconcile_order_items` | names the item, or asks only when genuinely ambiguous |
+| Own profile | `update_my_profile` | **no customer selector in its schema at all** |
+| Order address | `update_order_shipping_address` | fulfillment orders, three-valued; unknown never edits |
+| Exchange | `exchange_order_item` | same price only; any gap is a person's job |
+| Return | `create_return` | nothing shipped, nothing to return |
+| Documents | `document-request.service` | a tax invoice is not an order summary |
+
+Two design notes carry most of the safety.
+
+**Ownership is answered by construction, not by checking.** `update_my_profile`
+has no `customer_id`, `email` or `phone` selector. The guard derives the record
+from the authenticated channel and strips anything selector-shaped the model
+sent - stripping rather than rejecting, because a rejection teaches the model to
+retry with a different guess while a substitution means the guess never
+mattered. A model cannot get ownership wrong when ownership is not one of its
+arguments.
+
+**Money stops the exchange before anything is written.** A Shopify order edit
+does not settle itself: a dearer variant leaves the order owing, a cheaper one
+leaves the shop owing, and no customer-facing payment flow exists to close
+either. Both are refused *before* `orderEditBegin`, because an aborted order
+edit still exists as a calculated order. The tempting alternative - commit, then
+chain a refund - would manufacture a compensation mechanism out of two separate
+approvals.
+
+## The Customer Outcome Contract
+
+The honesty net was widened four times in one session, each round against a new
+phrasing of the same lie. The allowlist lost every round; matching the *shape*
+of a promise won the last one and will lose eventually too, because a regex over
+output can only describe lies somebody has already seen.
+
+The deeper problem was what "supported" meant. `turnHasExecutionEvidence`
+answers *did any tool execute*, so reading an order was evidence for "I have
+changed your address". The claim and the evidence were never about the same
+thing.
+
+Now each claim names the facts that would make it true:
+
+| Claim | Requires |
+|---|---|
+| "שיניתי את הכתובת" | `shippingAddressUpdated` |
+| "החלפתי את המידה" | `exchangeCompleted` |
+| "פתחתי החזרה" | `returnCreated` **and** a `returnId` |
+| "פניתי לצוות" | a handoff, task or notification that succeeded |
+| "שלחתי את החשבונית" | a document send that returned success |
+
+The facts are strict about provenance: `address_updated` is not "the PUT
+returned 200", it is "an independent GET shows the new address". Reads set
+resolution flags and nothing else, so no amount of looking becomes evidence for
+having changed something. And the facts are injected *before* the reply is
+written, not only checked after - validation can only delete a sentence.
+
+A paraphrase nobody has seen still fails, because facts do not change when
+wording does. The regex net stays, unchanged, behind it - as the last line
+rather than the arbiter.
+
+## Scenario results (Part 5, live, signed WhatsApp webhook, Matan Amran)
+
+| # | Scenario | Result | Evidence |
+|---|---|---|---|
+| 25 | Missing item | **PASS** | `reconcile_order_items` on #1011; named the item and the pending shipment; **no identity re-verification** |
+| 26 | Order note/tag | **PASS** | "ההערה נוספה להזמנה #1011."; Shopify `note` non-empty; no team claim |
+| 29 | Coupon | **UNSUPPORTED (product decision)** | exact sentence; no tool, no approval, no handoff |
+| - | Own email change | **PASS** | Shopify read-back `matan.amran.dev@example.com`; identity survived via `Contact.metadata.shopifyCustomerId` |
+| 10 | Address change, pre-fulfilment | **PASS** | HITL `cmsbkjqx…` → SUCCEEDED; read-back הרצל 1, חיפה, 3100000; one continuation; AI retained |
+| 21 | Return, unfulfilled order | **PASS (correct refusal)** | no approval raised; "a return covers items you've actually received"; alternatives offered |
+| 28 | Tax invoice | **UNSUPPORTED (no provider)** | honest, no provider name, no status code, explicitly *not* an order summary |
+| 27 | Order confirmation | **BROKEN** | Shopify `406`; message honest, but the continuation asked which email to use |
+| 22 | Exchange | **BLOCKED (scope)** | `write_order_edits` not granted; quote, eligibility and refusal all correct |
+| - | Return, delivered item | **UNPROVEN** | cannot fulfil an order: `write_merchant_managed_fulfillment_orders` deliberately not requested |
+
+## Dev-store mutations in this part
+
+| Object | Action | Final state |
+|---|---|---|
+| Order **#1012** | created as a fixture (The Complete Snowboard / Ice ×2) | paid, unfulfilled, 1399.90 USD |
+| Order #1012 | shipping address changed via approved HITL | הרצל 1, חיפה, 3100000, Israel |
+| Order #1011 | notes appended (4 runs) | `note` non-empty, `tags` empty |
+| Order #1012 | note appended | `note` non-empty |
+| Customer 27711594201457 | email changed | `matan.amran.dev@example.com` |
+
+Orders #1006–#1011 are otherwise unchanged from Part 4. No other tenant, store
+or customer was touched.
+
+## Tests
+
+| Suite | Command | Exit | Result |
+|---|---|---|---|
+| AI | `npx vitest run` (services/ai) | 1 | 25 failed / 2106 passed |
+| Conversation | `npx vitest run` (services/conversation) | 1 | 1 failed / 69 passed |
+| Shared | `npx vitest run` (packages/shared) | 1 | 49 failed / 958 passed |
+| Incoming worker | `npx vitest run` (services/incoming-worker) | 1 | 0 failed / 43 passed |
+| Typecheck | `npx tsc --noEmit` (ai, conversation) | 0 | clean |
+
+**Baseline comparison.** The starting commit `f040686` was checked out into a
+separate worktree and the same suites run there. AI: **39 failing tests at
+baseline, 25 now, and the set of failures at HEAD is a strict subset** - zero
+new. Conversation and incoming-worker: identical failures at both. Shared: the
+three extra failures are `role-assignment-tenant-scope.test.ts`, an untracked
+file belonging to other uncommitted work on this branch, which does not exist at
+the baseline commit.
+
+## Verdict after Part 5
+
+**Closer than Part 4, and still not ready to sell.**
+
+What is genuinely better: six capabilities that did not exist, each refusing
+correctly when it cannot proceed; ownership that a model cannot get wrong
+because it is not one of the model's arguments; and claims now checked against
+the facts those claims are about rather than against "something ran".
+
+What blocks the claim:
+
+1. **The exchange has never completed against a real store.** The code is
+   unit-proven and the refusals are right, but `write_order_edits` was never
+   granted, and a capability whose happy path has not run once is not a
+   capability yet.
+2. **`send_invoice` returns 406 on this store**, so order-confirmation delivery
+   is unproven end to end.
+3. **The return happy path is unprovable here** - fulfilling an order needs a
+   scope deliberately not requested. The refusal path is proven; the creation
+   path is not.
+4. **The model's multi-step flows are the weakest link now, not the tools.** It
+   raised an exchange approval with no replacement variant; it reached for
+   `link_customer_identifier` instead of the Shopify write; it produced two
+   silent turns. Every one was contained - by a precheck, by a directive, by the
+   silent-turn net - but containment is not the same as the flow working.
+
+The honest summary is that the *mechanisms* are now considerably stronger than
+the *behaviour* they are containing. That was true of the honesty net in Part 4
+and it is still true, one layer up.
