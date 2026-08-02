@@ -10,6 +10,9 @@ vi.mock("@chatcenter/shared", () => ({
   // through: these tests cover route behaviour, and the gate itself is proved
   // in the security suite.
   requireInternalKey: (_req: any, _res: any, next: any) => next(),
+  // Commercial gate, pass-through: these tests cover route behaviour, not
+  // billing. The gate itself is proved in packages/shared/src/lib/billing.
+  requireEntitlement: (_feature: string) => (_req: any, _res: any, next: any) => next(),
   // Durable tenant settings (business hours, auto-greeting, SLA). Exhaustive
   // mocks of this barrel must supply them or the read path throws instead of
   // returning "not configured". Default: nothing configured.

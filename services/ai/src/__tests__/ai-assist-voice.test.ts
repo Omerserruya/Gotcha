@@ -43,6 +43,15 @@ vi.mock("@chatcenter/shared", () => ({
   // through: these tests cover route behaviour, and the gate itself is proved
   // in the security suite.
   requireInternalKey: (_req: any, _res: any, next: any) => next(),
+  // The route's own internalAuth calls this directly, so a pass-through would
+  // make the 401 cases pass for the wrong reason. Mirrors the real check:
+  // compare against the configured key, fail closed on anything absent.
+  verifyInternalServiceKey: (header: unknown) => {
+    const provided = Array.isArray(header) ? header[0] : header;
+    if (typeof provided !== "string" || provided.length === 0) return false;
+    const secret = process.env.INTERNAL_SERVICE_KEY || process.env.INTERNAL_SERVICE_TOKEN;
+    return typeof secret === "string" && secret.length > 0 && provided === secret;
+  },
   // Durable tenant settings (business hours, auto-greeting, SLA). Exhaustive
   // mocks of this barrel must supply them or the read path throws instead of
   // returning "not configured". Default: nothing configured.
