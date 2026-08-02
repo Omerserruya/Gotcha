@@ -53,6 +53,8 @@ import {
   buildProfileUpdateDirective,
   detectOrderAddressIntent,
   buildOrderAddressDirective,
+  detectExchangeIntent,
+  buildExchangeDirective,
 } from "./customer-request-intents.service";
 import { getActionOrchestrator, type ExecutionResult } from "./orchestrator";
 import type { AgentToolContext } from "@chatcenter/shared";
@@ -2413,6 +2415,15 @@ async function generateAIBotReplyInner(
         role: "system",
         content: buildOrderAddressDirective({
           hasAddressTool: toolFunctionNames.some((n) => n.endsWith(".update_order_shipping_address")),
+        }),
+      });
+    }
+    // An exchange is an order edit before dispatch and a return after it.
+    if (detectExchangeIntent(opts.incomingMessage)) {
+      chatMessages.push({
+        role: "system",
+        content: buildExchangeDirective({
+          hasExchangeTool: toolFunctionNames.some((n) => n.endsWith(".exchange_order_item")),
         }),
       });
     }

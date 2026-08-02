@@ -42,6 +42,7 @@ import {
   validateShippingAddress,
   verifyShippingAddress,
 } from "./shopify-order-mutability";
+import { quoteExchange, verifyExchange } from "./shopify-exchange";
 
 /**
  * Resolved from the ONE shared declaration, not pinned here. This used to be a
@@ -249,6 +250,23 @@ const TOOLS: ToolDefinition[] = [
   withOrderTarget(t("resend_confirmation", "ACTION", "MEDIUM", "Resend the order confirmation email.",
     "Customer says they never got the confirmation email.", P.orderSel, undefined,
     { unsupported: "Shopify has no REST endpoint to resend an order confirmation." })),
+  // "156 → 159", before anything ships.
+  //
+  // Narrower than edit_order on purpose: one line item, one replacement
+  // variant, a quantity. A general order editor in a customer conversation is
+  // a way to rewrite someone's order by accident; this can only ever swap one
+  // thing the customer already bought for another thing in the same shop.
+  withOrderTarget(t("exchange_order_item", "ACTION", "HIGH",
+    "Replace one line item on an UNDISPATCHED order with a different variant or product, then read the order back and verify both sides of the swap.",
+    "Customer wants a different size, colour or variant of something they already ordered and it has not shipped (\"אפשר להחליף למידה 159?\", \"can I swap it for the black one?\"). Call variant_information FIRST so you know the replacement exists and is in stock. This refuses when the price differs - an order edit does not settle its own payment, so a cheaper or dearer swap has to be handled by a person. It also refuses once fulfillment has started, where the correct route is a return plus a replacement. Approval is handled by the system: calling this tool is what RAISES the approval.",
+    {
+      ...P.orderSel,
+      line_item_id: { type: "string", description: "The order line to replace. Omit on a single-line order." },
+      current_variant_id: { type: "string", description: "Alternative to line_item_id: the variant currently on the order." },
+      new_variant_id: { type: "string", description: "The replacement variant id (from variant_information)." },
+      quantity: { type: "number", description: "How many units to swap. Default: all of that line." },
+    }, undefined,
+    { sideEffects: "Rewrites what a placed order contains.", priority: 84 })),
   withOrderTarget(t("edit_order", "ACTION", "HIGH", "Edit an order's line items (add/remove/adjust).",
     "You must change what's on an existing order and editing is allowed.",
     { ...P.orderSel, changes: { type: "object" } }, undefined,
@@ -468,6 +486,11 @@ const TOOL_SCOPES: Record<string, string[]> = {
   // and getting it from the legacy field is how a parcel already in a box gets
   // its address "changed".
   update_order_shipping_address: ["write_orders", "read_merchant_managed_fulfillment_orders"],
+  // An exchange reads the replacement's stock before it decides anything, so
+  // inventory is as required as the order write itself.
+  exchange_order_item: [
+    "write_orders", "read_merchant_managed_fulfillment_orders", "read_products", "read_inventory",
+  ],
   send_invoice: ["write_orders"],
   add_order_note: ["write_orders"],
   // Creating/updating a fulfillment is a fulfillment-order write, not an
@@ -537,13 +560,39 @@ const ShopifyAdapter: ProviderAdapter = {
    * wasted approval is expensive. Anything unrecognised is eligible.
    */
   async precheckEligibility({ toolName, args, call }) {
-    const PRECHECKED = ["cancel_order", "process_refund", "update_order_shipping_address"];
+    const PRECHECKED = [
+      "cancel_order", "process_refund", "update_order_shipping_address", "exchange_order_item",
+    ];
     if (!PRECHECKED.includes(toolName)) return { eligible: true };
     const target = args.order_id ?? args.order_name;
     if (!target) return { eligible: true }; // resolution failure is the executor's job to report
 
     const order: any = await call("get_order", args.order_id ? { order_id: args.order_id } : { order_name: args.order_name });
     if (!order?.id) return { eligible: true };
+
+    // An exchange that is out of stock, or whose price differs, cannot be
+    // completed by anyone approving it - so no approval is raised. The refusal
+    // reasons are the tool's own, so the answer here and the answer at
+    // execution time are the same sentence.
+    if (toolName === "exchange_order_item") {
+      const fs: any = await call(
+        "get_fulfillment_status",
+        args.order_id ? { order_id: args.order_id } : { order_name: args.order_name },
+      );
+      const m = assessMutability(order, {
+        orders: fs?.fulfillment_orders ?? [],
+        readable: fs?.fulfillment_orders_readable !== false,
+      });
+      if (m.verdict !== "editable") {
+        return {
+          eligible: false,
+          reason:
+            `${m.customer_explanation} An exchange at this point has to be a RETURN plus a replacement, not an order edit. ` +
+            `Explain that and offer the return route. Do NOT say the item was exchanged.`,
+        };
+      }
+      return { eligible: true };
+    }
 
     // An address change on an order already in the warehouse is the clearest
     // case there is for asking BEFORE a human is asked: nobody should be
@@ -927,6 +976,11 @@ const ShopifyAdapter: ProviderAdapter = {
         const o = await resolveOrder(ctx, args);
         if (!o) throw new Error("order_not_found");
         return o.line_items || [];
+      }
+      case "exchange_order_item": {
+        const o = await resolveOrder(ctx, args);
+        if (!o) throw new Error("order_not_found");
+        return await exchangeOrderItem(ctx, o, args);
       }
       case "update_order_shipping_address": {
         const o = await resolveOrder(ctx, args);
@@ -2280,6 +2334,229 @@ async function updateOwnProfile(ctx: Ctx, args: Record<string, any>): Promise<Re
       : "The read-back does NOT match what was requested, so the change did not take effect as asked." +
         " Tell the customer it did not go through and offer a person. Do NOT say it was updated.",
   };
+}
+
+// ─── Order edit (exchange) ──────────────────────────────────
+//
+// The REST Admin API cannot edit a placed order at all; `orderEdit` is
+// GraphQL-only. It is a three-step session - begin, mutate the calculated
+// order, commit - and nothing is real until the commit, which is what makes a
+// pre-flight refusal safe: an exchange we decline never existed.
+
+const ORDER_EDIT_BEGIN = `
+  mutation OrderEditBegin($id: ID!) {
+    orderEditBegin(id: $id) {
+      calculatedOrder { id }
+      userErrors { field message }
+    }
+  }
+`;
+
+const ORDER_EDIT_SET_QUANTITY = `
+  mutation OrderEditSetQuantity($id: ID!, $lineItemId: ID!, $quantity: Int!) {
+    orderEditSetQuantity(id: $id, lineItemId: $lineItemId, quantity: $quantity) {
+      calculatedOrder { id }
+      userErrors { field message }
+    }
+  }
+`;
+
+const ORDER_EDIT_ADD_VARIANT = `
+  mutation OrderEditAddVariant($id: ID!, $variantId: ID!, $quantity: Int!) {
+    orderEditAddVariant(id: $id, variantId: $variantId, quantity: $quantity) {
+      calculatedOrder { id }
+      userErrors { field message }
+    }
+  }
+`;
+
+const ORDER_EDIT_COMMIT = `
+  mutation OrderEditCommit($id: ID!, $notifyCustomer: Boolean, $staffNote: String) {
+    orderEditCommit(id: $id, notifyCustomer: $notifyCustomer, staffNote: $staffNote) {
+      order { id name }
+      userErrors { field message }
+    }
+  }
+`;
+
+/**
+ * The CALCULATED order's line ids are not the order's line ids.
+ *
+ * `orderEditSetQuantity` wants a `CalculatedLineItem` gid, and passing the
+ * order's own `LineItem` gid fails with a message about an invalid id that
+ * reads like a permissions problem. The calculated order has to be queried for
+ * the mapping after `orderEditBegin`.
+ */
+const CALCULATED_ORDER_LINES = `
+  query CalculatedOrderLines($id: ID!) {
+    calculatedOrder(id: $id) {
+      id
+      lineItems(first: 100) {
+        nodes { id quantity variant { id } }
+      }
+    }
+  }
+`;
+
+function firstUserError(payload: any): string | null {
+  const errs = payload?.userErrors;
+  if (Array.isArray(errs) && errs.length) {
+    return errs.map((e: any) => e?.message).filter(Boolean).join("; ") || "order_edit_rejected";
+  }
+  return null;
+}
+
+/**
+ * Swap one line item for a different variant on an order that has not shipped.
+ *
+ * The order of operations is deliberate and every step before the commit is a
+ * refusal point: eligibility, then the quote, then the edit. Nothing is written
+ * until all three pass, so a refused exchange leaves no half-applied state
+ * behind - which matters because an aborted order edit is worse than none.
+ */
+async function exchangeOrderItem(
+  ctx: Ctx,
+  order: any,
+  args: Record<string, any>,
+): Promise<Record<string, unknown>> {
+  // 1. Has it left yet? Same authority as the address change, re-read here
+  //    because an approval may have been sitting for an hour.
+  const fos = await fetchFulfillmentOrders(ctx, order.id);
+  const m = assessMutability(order, fos);
+  if (m.verdict !== "editable") {
+    return {
+      order_id: String(order.id),
+      name: order.name,
+      exchange_completed: false,
+      eligible: false,
+      reason: m.reason,
+      fulfillment_states: m.fulfillment_states,
+      model_instruction:
+        `${m.customer_explanation} An exchange is no longer an order edit at this point - it has to be a RETURN plus a ` +
+        `replacement. Explain that, and take the return route if one is configured. Do NOT say the item was exchanged, ` +
+        `and do NOT say a warehouse or courier was contacted.`,
+    };
+  }
+
+  // 2. Which line, and which replacement?
+  const lines: any[] = order.line_items ?? [];
+  const lineItem =
+    (args.line_item_id && lines.find((l) => String(l.id) === String(args.line_item_id))) ||
+    (args.current_variant_id && lines.find((l) => String(l.variant_id) === String(args.current_variant_id))) ||
+    (lines.length === 1 ? lines[0] : null);
+
+  let variant: any = null;
+  let productTitle = "";
+  if (args.new_variant_id) {
+    try {
+      const vr: any = await sreq(ctx, "GET", `/variants/${encodeURIComponent(String(args.new_variant_id))}.json`);
+      variant = vr?.variant ?? null;
+      if (variant?.product_id) {
+        const pr: any = await sreq(ctx, "GET", `/products/${variant.product_id}.json`);
+        productTitle = pr?.product?.title ?? "";
+      }
+    } catch {
+      variant = null;
+    }
+  }
+
+  const quoted = quoteExchange({
+    orderName: String(order.name ?? ""),
+    currency: String(order.currency ?? ""),
+    lineItem: lineItem ?? null,
+    variant,
+    productTitle,
+    quantity: args.quantity != null ? Number(args.quantity) : Number(lineItem?.quantity ?? 1),
+  });
+
+  if (!quoted.ok) {
+    return {
+      order_id: String(order.id),
+      name: order.name,
+      exchange_completed: false,
+      eligible: false,
+      reason: quoted.reason,
+      quote: quoted.quote ?? null,
+      model_instruction: exchangeRefusalInstruction(quoted.reason, quoted.detail),
+    };
+  }
+  const quote = quoted.quote;
+
+  // 3. The edit itself.
+  const begun = await shopifyGraphQL(ctx, ORDER_EDIT_BEGIN, { id: orderGid(order.id) });
+  const beginErr = firstUserError(begun?.orderEditBegin);
+  if (beginErr) throw new Error(`shopify_order_edit_begin: ${beginErr}`);
+  const calcId = begun?.orderEditBegin?.calculatedOrder?.id;
+  if (!calcId) throw new Error("shopify_order_edit_begin: no calculated order returned");
+
+  const calc = await shopifyGraphQL(ctx, CALCULATED_ORDER_LINES, { id: calcId });
+  const calcLine = (calc?.calculatedOrder?.lineItems?.nodes ?? []).find(
+    (n: any) => String(n?.variant?.id ?? "").endsWith(`/${quote.current_variant_id}`),
+  );
+  if (!calcLine?.id) throw new Error("shopify_order_edit: could not locate the line to replace");
+
+  const remaining = Math.max(0, quote.original_quantity - quote.quantity);
+  const setQty = await shopifyGraphQL(ctx, ORDER_EDIT_SET_QUANTITY, {
+    id: calcId,
+    lineItemId: calcLine.id,
+    quantity: remaining,
+  });
+  const setErr = firstUserError(setQty?.orderEditSetQuantity);
+  if (setErr) throw new Error(`shopify_order_edit_set_quantity: ${setErr}`);
+
+  const added = await shopifyGraphQL(ctx, ORDER_EDIT_ADD_VARIANT, {
+    id: calcId,
+    variantId: `gid://shopify/ProductVariant/${quote.requested_variant_id}`,
+    quantity: quote.quantity,
+  });
+  const addErr = firstUserError(added?.orderEditAddVariant);
+  if (addErr) throw new Error(`shopify_order_edit_add_variant: ${addErr}`);
+
+  const committed = await shopifyGraphQL(ctx, ORDER_EDIT_COMMIT, {
+    id: calcId,
+    notifyCustomer: false,
+    staffNote: `Exchange requested in chat: ${quote.current_variant ?? quote.current_title} → ${quote.requested_variant ?? quote.requested_title}`,
+  });
+  const commitErr = firstUserError(committed?.orderEditCommit);
+  if (commitErr) throw new Error(`shopify_order_edit_commit: ${commitErr}`);
+
+  // 4. Read the order back independently and check BOTH sides of the swap.
+  const after: any = await sreq(ctx, "GET", `/orders/${order.id}.json`);
+  const verdict = verifyExchange(quote, after?.order ?? null);
+
+  return {
+    order_id: String(order.id),
+    name: order.name,
+    exchange_completed: verdict.verified,
+    verified: verdict.verified,
+    problems: verdict.problems,
+    quote,
+    order_total: after?.order?.total_price ?? null,
+    model_instruction: verdict.verified
+      ? `The exchange is confirmed by an independent read of the order: ${quote.current_variant ?? quote.current_title} was replaced with ${quote.requested_variant ?? quote.requested_title}. Tell the customer exactly that. There is nothing further to pay.`
+      : `The order does NOT read back as expected after the edit (${verdict.problems.join(", ")}). Tell the customer the exchange did not complete and hand over to a person. Do NOT say the item was exchanged.`,
+  };
+}
+
+/** What the model may say about each way an exchange can be refused. */
+function exchangeRefusalInstruction(reason: string, detail: string): string {
+  const base = `${detail} Do NOT say the item was exchanged.`;
+  switch (reason) {
+    case "price_difference_requires_payment":
+      return (
+        `${base} Say plainly that the difference has to be paid and that you cannot take payment here, then offer a real ` +
+        `handover to a person who can. Do NOT offer a discount, a coupon or a free upgrade to close the gap - none of those exist.`
+      );
+    case "price_difference_requires_refund":
+      return (
+        `${base} Say plainly that the replacement is cheaper and the difference has to be settled separately, then offer a real ` +
+        `handover to a person. Do NOT promise a refund yourself and do NOT invent store credit.`
+      );
+    case "out_of_stock":
+      return `${base} Offer the options that ARE available, from a real variant lookup - do not guess at alternatives.`;
+    default:
+      return `${base} Ask for what you actually need, or offer a person if the request cannot be met.`;
+  }
 }
 
 /**

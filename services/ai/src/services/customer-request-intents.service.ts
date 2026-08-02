@@ -154,6 +154,48 @@ export function buildOrderAddressDirective(opts: { hasAddressTool: boolean }): s
   ].join("\n");
 }
 
+// ── Exchange ──────────────────────────────────────────────────
+
+const EXCHANGE_RE =
+  /(להחליף|תחליפו|תחליף|החלפה|להמיר|במקום\s*(ה)?(מידה|צבע|דגם)|מידה\s*אחרת|צבע\s*אחר|exchange|swap|different\s*(size|colour|color)|instead\s*of\s*(the|it))/i;
+
+export function detectExchangeIntent(text: string | null | undefined): boolean {
+  return EXCHANGE_RE.test(String(text ?? ""));
+}
+
+/**
+ * The failure this replaces was not dishonest, just unhelpful: scenario 22
+ * "PASSED" by looking up the variant and explaining that no exchange existed.
+ * Now one does, and the interesting constraint is the money.
+ *
+ * An order edit does not settle its own payment. A dearer swap leaves the
+ * order owing; a cheaper one leaves the shop owing. There is no customer-facing
+ * payment flow here to close either gap, so both are refused before anything is
+ * written - and the directive spends most of its length on what the model must
+ * NOT reach for instead, because "I'll just give you a discount to cover it" is
+ * exactly the improvisation a blocked model produces.
+ */
+export function buildExchangeDirective(opts: { hasExchangeTool: boolean }): string {
+  if (!opts.hasExchangeTool) {
+    return [
+      `The customer wants to exchange something they ordered, and you have no tool for it here.`,
+      `Say plainly that you cannot make the swap from this chat, and offer a person or the return route if one exists.`,
+      `Do NOT say the item was exchanged, and do NOT offer a coupon or discount as a substitute.`,
+    ].join("\n");
+  }
+  return [
+    `The customer wants a different variant of something they already ordered.`,
+    `First call variant_information so you know the replacement actually exists and what it costs. Do not guess at sizes or colours.`,
+    `Then call exchange_order_item with the new variant id. It checks fulfillment state, stock and price itself.`,
+    `An exchange is only possible before dispatch. If it refuses on fulfillment, the route is a RETURN plus a replacement - say that, and do not claim anything was swapped.`,
+    `If it refuses on price, the difference has to be settled by a person. Say so plainly and offer a real handover.`,
+    `- do NOT offer a coupon, a discount or a free upgrade to close a price gap - none of those exist here`,
+    `- do NOT promise a refund of the difference yourself`,
+    `- do NOT invent store credit`,
+    `Only when exchange_completed is true may you say the item was exchanged, and then name the old and new variant exactly.`,
+  ].join("\n");
+}
+
 // ── Missing item ──────────────────────────────────────────────
 
 /**
