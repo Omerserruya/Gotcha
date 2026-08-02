@@ -466,7 +466,7 @@ services:
       SHOPIFY_CHAT_APP_CLIENT_ID: ${SHOPIFY_CHAT_APP_CLIENT_ID:-}
       SHOPIFY_CHAT_APP_SECRET: ${SHOPIFY_CHAT_APP_SECRET:-}
       SHOPIFY_CHAT_APP_URL: ${SHOPIFY_CHAT_APP_URL:-https://gotcha.co.il}
-      SHOPIFY_CHAT_REDIRECT_URI: ${SHOPIFY_CHAT_REDIRECT_URI:-https://gotcha.co.il/api/connectors/shopify-chat/oauth/callback}
+      SHOPIFY_CHAT_REDIRECT_URI: ${SHOPIFY_CHAT_REDIRECT_URI:-https://app.gotcha.co.il/api/connectors/shopify-chat/oauth/callback}
       # The App Embed BLOCK handle is the .liquid file name (underscore),
       # NOT the extension handle (hyphen). The Theme Editor deep link is
       # built from it and silently opens nothing when it is wrong.

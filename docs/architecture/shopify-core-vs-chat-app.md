@@ -22,7 +22,7 @@ Two products are described here. They are never referred to jointly as
 | App identity | `SHOPIFY_API_KEY` / `SHOPIFY_API_SECRET` | `services/ai/src/routes/connectors-admin.ts:472`, `docker-compose.yml:429` |
 | OAuth init | `GET /api/connectors/shopify/oauth/init?shop=` — authenticated, tenant-scoped, `canConnectSystems` | `connectors-admin.ts:468` |
 | OAuth callback | `GET /api/connectors/shopify/oauth/callback` | `connectors-admin.ts:515`, nginx `location /api/connectors` (`nginx/nginx.conf.template:693`) |
-| Redirect URI (real) | dev `https://dev.gotcha.co.il/api/connectors/shopify/oauth/callback`; prod `https://gotcha.co.il/api/connectors/shopify/oauth/callback` | `.env:172`, `.env.prod:160` |
+| Redirect URI (real) | dev `https://dev.gotcha.co.il/api/connectors/shopify/oauth/callback`; prod `https://app.gotcha.co.il/api/connectors/shopify/oauth/callback` | `.env:172`, `.env.prod:160` |
 | Scopes requested | `read_orders, write_orders, read_customers, read_price_rules, write_price_rules, write_discounts, read_products, read_returns` | `connectors-admin.ts:497-504` |
 | Scopes used but **not** requested | `write_customers` (tags, notes, customer updates) — every customer write 403s | `shopify.adapter.ts:293-297`, `docs/integrations/shopify-tool-audit-2026-07-20.md` §6 |
 | Token type | Expiring offline token (`expiring: "1"`) + refresh grant; legacy non-expiring tokens migrate via token exchange | `connectors-admin.ts:532-539`, `shopify.adapter.ts` header |

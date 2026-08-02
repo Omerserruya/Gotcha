@@ -250,7 +250,7 @@ GMAIL_PUBSUB_TOPIC=projects/your-project-id/topics/gmail-notifications
 |----------|---------------|---------|
 | `GOOGLE_CLIENT_ID` | Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client ID | `123456789-abcdef.apps.googleusercontent.com` |
 | `GOOGLE_CLIENT_SECRET` | Same location → Client Secret | `GOCSPX-abcdefgh123456` |
-| `GOOGLE_OAUTH_REDIRECT_URI` | Must match what's configured in the OAuth client | `https://gotcha.co.il/api/channels/oauth/callback` |
+| `GOOGLE_OAUTH_REDIRECT_URI` | Must match what's configured in the OAuth client | `https://app.gotcha.co.il/api/channels/oauth/callback` |
 | `GMAIL_PUBSUB_TOPIC` | Google Cloud Console → Pub/Sub → Topic → Full topic name | `projects/gotcha-prod/topics/gmail-notifications` |
 
 > **Note:** If you already have `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` set (e.g., for Google Drive Knowledge Base), you don't need to create new ones. Just ensure the OAuth client has the Gmail scopes and the redirect URI added.

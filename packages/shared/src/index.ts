@@ -425,6 +425,23 @@ export {
   type OriginPolicy,
 } from "./lib/app-origins";
 export {
+  publicOrigin,
+  publicUrl,
+  appUrl,
+  marketingUrl,
+  authUrl,
+  helpUrl,
+  voiceUrl,
+  oauthRedirectUri,
+  webhookUrl,
+  normalisePublicOrigin,
+  publicUrlDiagnostics,
+  assertPublicUrlsReady,
+  PublicUrlError,
+  type PublicSurface,
+  type PublicUrlDiagnostics,
+} from "./lib/app-urls";
+export {
   readSessionFlags,
   sessionInfraEnabled,
   type SessionFlags,
