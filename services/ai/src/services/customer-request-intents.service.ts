@@ -173,8 +173,12 @@ export function detectReturnIntent(text: string | null | undefined): boolean {
 
 // ── Exchange ──────────────────────────────────────────────────
 
+// `החלף` on its own is the bare imperative, and it was missing - the list had
+// the infinitive and the plural imperative but not the singular one a customer
+// actually types. A detector that misses the shortest form of the word is the
+// kind of gap that only shows up in a test written after the fact.
 const EXCHANGE_RE =
-  /(להחליף|תחליפו|תחליף|החלפה|להמיר|במקום\s*(ה)?(מידה|צבע|דגם)|מידה\s*אחרת|צבע\s*אחר|exchange|swap|different\s*(size|colour|color)|instead\s*of\s*(the|it))/i;
+  /(להחליף|תחליפו|תחליף|החליפו|החלף|החלפה|להמיר|במקום\s*(ה)?(מידה|צבע|דגם)|מידה\s*אחרת|צבע\s*אחר|exchange|swap|different\s*(size|colour|color)|instead\s*of\s*(the|it))/i;
 
 export function detectExchangeIntent(text: string | null | undefined): boolean {
   return EXCHANGE_RE.test(String(text ?? ""));

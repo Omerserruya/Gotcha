@@ -210,8 +210,22 @@ export function verifyExchange(
   const problems: string[] = [];
   const lines: any[] = Array.isArray(order?.line_items) ? order.line_items : [];
 
+  // The OUTSTANDING quantity, not the ordered one.
+  //
+  // An order edit does not rewrite history: reducing a paid line leaves
+  // `quantity` at what the customer originally bought and expresses the
+  // reduction as `fulfillable_quantity`. Live (2026-08-02) a correct swap read
+  // back as `original_quantity_2_expected_1` and was reported to the customer
+  // as a failure, because the verifier was comparing the field that by design
+  // does not change.
+  //
+  // Exchange only ever runs on an order with nothing fulfilled, so outstanding
+  // and ordered agree everywhere except on the line the edit just touched -
+  // which is exactly the line being checked.
   const qtyOf = (variantId: string) =>
-    lines.filter((l) => String(l.variant_id) === variantId).reduce((s, l) => s + Number(l.quantity ?? 0), 0);
+    lines
+      .filter((l) => String(l.variant_id) === variantId)
+      .reduce((s, l) => s + Number(l.fulfillable_quantity ?? l.quantity ?? 0), 0);
 
   const newQty = qtyOf(quote.requested_variant_id);
   if (newQty < quote.quantity) {

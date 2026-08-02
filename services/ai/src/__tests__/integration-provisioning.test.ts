@@ -17,17 +17,20 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const prismaMock: any = {
-  catalogTool: { findMany: vi.fn() },
-  tenantTool: { findMany: vi.fn(), createMany: vi.fn() },
-  aIAgent: { findMany: vi.fn() },
-  agentToolPermission: { findMany: vi.fn(), createMany: vi.fn() },
-};
+// `vi.hoisted`, because `vi.mock` is lifted above every const in the file and a
+// factory that closes over a plain `const` reads it before initialisation.
+const prismaMock: any = vi.hoisted(() => ({
+  catalogTool: { findMany: undefined as any },
+  tenantTool: { findMany: undefined as any, createMany: undefined as any },
+  aIAgent: { findMany: undefined as any },
+  agentToolPermission: { findMany: undefined as any, createMany: undefined as any },
+}));
 vi.mock("@chatcenter/shared", () => ({ prisma: prismaMock }));
 
-const { provisionIntegrationTools, enableReadToolsForIntegration } = await import(
-  "../services/integration-provisioning.service"
-);
+import {
+  provisionIntegrationTools,
+  enableReadToolsForIntegration,
+} from "../services/integration-provisioning.service";
 
 const CATALOG = [
   { id: "r1", category: "READ", slug: "get_order" },
@@ -38,7 +41,12 @@ const CATALOG = [
 ];
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  prismaMock.catalogTool.findMany = vi.fn();
+  prismaMock.tenantTool.findMany = vi.fn();
+  prismaMock.tenantTool.createMany = vi.fn();
+  prismaMock.aIAgent.findMany = vi.fn();
+  prismaMock.agentToolPermission.findMany = vi.fn();
+  prismaMock.agentToolPermission.createMany = vi.fn();
   prismaMock.catalogTool.findMany.mockImplementation(async ({ where }: any) => {
     const cats = where?.category?.in as string[] | undefined;
     return cats ? CATALOG.filter((t) => cats.includes(t.category)) : CATALOG;

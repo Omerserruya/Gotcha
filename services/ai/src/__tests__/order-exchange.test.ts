@@ -162,6 +162,36 @@ describe("verifying the committed edit", () => {
     expect(v.verified).toBe(true);
   });
 
+  // An order edit does not rewrite history. Reducing a paid line leaves
+  // `quantity` at what the customer originally bought and expresses the
+  // reduction as `fulfillable_quantity`. Live (2026-08-02) a correct swap read
+  // back as `original_quantity_2_expected_1` and was reported as a failure,
+  // because the verifier compared the field that by design does not change.
+  it("reads the OUTSTANDING quantity Shopify actually leaves behind", () => {
+    const q = quote({ lineItem: line({ quantity: 2 }), quantity: 1 });
+    if (!q.ok) throw new Error("setup");
+    const v = verifyExchange(q.quote, {
+      line_items: [
+        { variant_id: 5001, quantity: 2, fulfillable_quantity: 1 }, // reduced, not rewritten
+        { variant_id: 5002, quantity: 1, fulfillable_quantity: 1 },
+      ],
+    });
+    expect(v.verified).toBe(true);
+  });
+
+  it("still catches a swap that genuinely did not reduce the old line", () => {
+    const q = quote({ lineItem: line({ quantity: 2 }), quantity: 1 });
+    if (!q.ok) throw new Error("setup");
+    const v = verifyExchange(q.quote, {
+      line_items: [
+        { variant_id: 5001, quantity: 2, fulfillable_quantity: 2 }, // nothing credited
+        { variant_id: 5002, quantity: 1, fulfillable_quantity: 1 },
+      ],
+    });
+    expect(v.verified).toBe(false);
+    expect(v.problems.join()).toContain("original_quantity_2_expected_1");
+  });
+
   it("catches an edit that added the new line and left the old one", () => {
     const v = verifyExchange(base(), {
       line_items: [{ variant_id: 5001, quantity: 1 }, { variant_id: 5002, quantity: 1 }],

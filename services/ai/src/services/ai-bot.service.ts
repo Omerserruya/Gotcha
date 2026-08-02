@@ -69,6 +69,13 @@ import {
 } from "./customer-request-intents.service";
 import { getReturnProvider, buildReturnDirective } from "./return-provider.service";
 import {
+  runFlowController,
+  renderFlowDirective,
+  assertMatchesResolvedFlow,
+  orderNameFromMessage,
+  type FlowDecision,
+} from "./shopify-flow-controller.service";
+import {
   detectDocumentRequest,
   resolveDocumentCapability,
   buildDocumentDirective,
@@ -1630,6 +1637,21 @@ async function generateAIBotReplyInner(
   if (shopifyTurn?.storefrontBlock) {
     ctxSlot.storefrontBlock = shopifyTurn.storefrontBlock;
   }
+  // Set later in the turn, read by runAdapterTool's gate below. Declared here
+  // because the tool context closes over it and is built before the controller
+  // runs; the closure reads it at call time, by which point it is resolved.
+  let resolvedFlow: FlowDecision | null = null;
+
+  // The order the conversation is already about. The controller uses it only
+  // when the customer names none, and never to override one they did.
+  const anchoredOrderName = ((): string | null => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const named = orderNameFromMessage(messages[i]?.body ?? "");
+      if (named) return named;
+    }
+    return null;
+  })();
+
   const agentToolCtx: AgentToolContext = {
     sendShopifyProducts: shopifyTurn?.sendShopifyProducts,
     tenantId: opts.tenantId,
@@ -1799,6 +1821,20 @@ async function generateAIBotReplyInner(
       }
     },
     runAdapterTool: async ({ toolFunctionName, args }) => {
+      // ── Resolved-flow gate ───────────────────────────────────────────
+      // The flow controller decided this turn's move from verified facts. This
+      // is what makes that decision binding rather than advisory: a critical
+      // tool called with arguments the controller did not compute is refused.
+      // That is the shape of every expensive mistake in Parts 1-5 - an approval
+      // raised for an exchange with no variant in it, a refund against a stale
+      // order, a lookup of a product the model guessed the name of.
+      {
+        const verdict = assertMatchesResolvedFlow(resolvedFlow, toolFunctionName, args as Record<string, any>);
+        if (!verdict.ok) {
+          console.warn(`[ai-bot][flow] refused ${toolFunctionName}: ${verdict.reason}`);
+          return { ok: false as const, reason: verdict.reason };
+        }
+      }
       // ── Order anchoring fence ────────────────────────────────────────
       // A model carrying a long history can walk a STALE order into a refund.
       // Live: after a failed refund on #1006 the customer wrote "לא, שכח
@@ -2493,6 +2529,46 @@ async function generateAIBotReplyInner(
     }
   } catch (err: any) {
     console.warn("[ai-bot] coupon intent detection failed (non-fatal):", err?.message);
+  }
+
+  // ── Deterministic flow control for the irreversible Shopify flows ──────
+  //
+  // The directives above tell the model what to do. This decides it. For the
+  // flows where a mistake is irreversible or spends a human decision, the facts
+  // are resolved here - which order, which line, which variant, what it costs,
+  // whether it is still eligible - before the model is asked to say anything.
+  // It receives verified facts and at most ONE permitted call with its
+  // arguments already filled in.
+  //
+  // Part 5 ended with the mechanisms stronger than the behaviour they were
+  // containing: a human approved an exchange with no replacement variant in it,
+  // and a colour question was answered from a product the model had guessed.
+  // Both are gone when the model no longer chooses the move.
+  try {
+    resolvedFlow = await runFlowController({
+      message: opts.incomingMessage ?? "",
+      anchoredOrderName: anchoredOrderName ?? null,
+      availableTools: toolFunctionNames,
+      call: async (tool, args) => {
+        const r = await executeAdapterTool({
+          tenantId: opts.tenantId,
+          conversationId: opts.conversationId,
+          contactId: contactRow?.id,
+          toolFunctionName: tool,
+          args,
+          accessScope: "customer",
+        });
+        if (!r.ok) throw new Error(r.reason);
+        return r.result;
+      },
+    });
+    const block = renderFlowDirective(resolvedFlow);
+    if (block) {
+      console.log(`[ai-bot][flow] ${resolvedFlow.kind} intent=${(resolvedFlow as any).intent} conv=${opts.conversationId}`);
+      chatMessages.push({ role: "system", content: block });
+    }
+  } catch (err: any) {
+    console.warn("[ai-bot] flow controller failed (non-fatal):", err?.message);
   }
 
   try {

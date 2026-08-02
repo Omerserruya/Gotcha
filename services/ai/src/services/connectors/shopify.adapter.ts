@@ -2328,8 +2328,20 @@ function projectOrderForAgent(o: any): Record<string, unknown> {
     total_outstanding: o.total_outstanding ?? null,
     note: o.note ?? null,
     tags: o.tags ?? null,
+    // `product_id` and `variant_id` are here because acting on a line needs
+    // them. This projection was written to strip credentials out of the raw
+    // payload and it also stripped these - so an exchange resolved the order,
+    // found the line, and could not look up the product it belonged to. Live
+    // (2026-08-02) that made a five-colour snowboard report as "sold in one
+    // version only", from the order that contained it.
+    //
+    // Neither is a secret: both are public catalogue identifiers that appear in
+    // every storefront URL. The things worth stripping - tokens, checkout
+    // sessions, the authenticated status URL - are stripped elsewhere and by
+    // name.
     line_items: (o.line_items || []).map((li: any) => ({
-      id: li.id, title: li.title, variant_title: li.variant_title ?? null,
+      id: li.id, product_id: li.product_id ?? null, variant_id: li.variant_id ?? null,
+      title: li.title, variant_title: li.variant_title ?? null,
       sku: li.sku ?? null, quantity: li.quantity,
       fulfillable_quantity: li.fulfillable_quantity ?? null,
       price: li.price, total_discount: li.total_discount ?? null,
@@ -2675,19 +2687,49 @@ async function createShopifyReturn(
 // order, commit - and nothing is real until the commit, which is what makes a
 // pre-flight refusal safe: an exchange we decline never existed.
 
+// The calculated order's LINE ITEMS come back from this mutation, because there
+// is no top-level `calculatedOrder` query to fetch them with afterwards. The
+// first version issued one - `Field 'calculatedOrder' doesn't exist on type
+// 'QueryRoot'` - which failed after a human had approved the exchange. Same
+// lesson as `returnableFulfillments`: GraphQL fails the whole document on one
+// unknown field, so a money-adjacent action must not be built on a field nobody
+// has watched execute.
 const ORDER_EDIT_BEGIN = `
   mutation OrderEditBegin($id: ID!) {
     orderEditBegin(id: $id) {
-      calculatedOrder { id }
+      calculatedOrder {
+        id
+        subtotalPriceSet { shopMoney { amount currencyCode } }
+        totalOutstandingSet { shopMoney { amount } }
+        lineItems(first: 100) {
+          nodes { id quantity variant { id } }
+        }
+      }
       userErrors { field message }
     }
   }
 `;
 
+// `restock` is not optional in practice, and leaving it out is what turned a
+// same-price swap into a 50% larger bill.
+//
+// Reducing a PAID line without it does not credit the line: Shopify keeps the
+// charge and the added variant is billed on top. Live (2026-08-02) order #1012
+// went from 2 boards at 1399.90 to a subtotal of 2099.85 and
+// `financial_status: partially_paid` - a customer owing money for a swap that
+// was supposed to cost nothing. With `restock: true` the same edit nets to
+// exactly the original subtotal.
+//
+// Both mutations return the running totals so the caller can check the money
+// BEFORE committing, using Shopify's arithmetic rather than its own.
 const ORDER_EDIT_SET_QUANTITY = `
-  mutation OrderEditSetQuantity($id: ID!, $lineItemId: ID!, $quantity: Int!) {
-    orderEditSetQuantity(id: $id, lineItemId: $lineItemId, quantity: $quantity) {
-      calculatedOrder { id }
+  mutation OrderEditSetQuantity($id: ID!, $lineItemId: ID!, $quantity: Int!, $restock: Boolean) {
+    orderEditSetQuantity(id: $id, lineItemId: $lineItemId, quantity: $quantity, restock: $restock) {
+      calculatedOrder {
+        id
+        subtotalPriceSet { shopMoney { amount currencyCode } }
+        totalOutstandingSet { shopMoney { amount } }
+      }
       userErrors { field message }
     }
   }
@@ -2696,7 +2738,11 @@ const ORDER_EDIT_SET_QUANTITY = `
 const ORDER_EDIT_ADD_VARIANT = `
   mutation OrderEditAddVariant($id: ID!, $variantId: ID!, $quantity: Int!) {
     orderEditAddVariant(id: $id, variantId: $variantId, quantity: $quantity) {
-      calculatedOrder { id }
+      calculatedOrder {
+        id
+        subtotalPriceSet { shopMoney { amount currencyCode } }
+        totalOutstandingSet { shopMoney { amount } }
+      }
       userErrors { field message }
     }
   }
@@ -2711,24 +2757,14 @@ const ORDER_EDIT_COMMIT = `
   }
 `;
 
-/**
- * The CALCULATED order's line ids are not the order's line ids.
- *
- * `orderEditSetQuantity` wants a `CalculatedLineItem` gid, and passing the
- * order's own `LineItem` gid fails with a message about an invalid id that
- * reads like a permissions problem. The calculated order has to be queried for
- * the mapping after `orderEditBegin`.
- */
-const CALCULATED_ORDER_LINES = `
-  query CalculatedOrderLines($id: ID!) {
-    calculatedOrder(id: $id) {
-      id
-      lineItems(first: 100) {
-        nodes { id quantity variant { id } }
-      }
-    }
-  }
-`;
+/** A Shopify MoneyBag's amount, or NaN-free zero when it is absent. */
+function money(set: any): number {
+  const n = Number(set?.shopMoney?.amount);
+  return Number.isFinite(n) ? n : 0;
+}
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
 
 function firstUserError(payload: any): string | null {
   const errs = payload?.userErrors;
@@ -2841,17 +2877,26 @@ async function exchangeOrderItem(
   const calcId = begun?.orderEditBegin?.calculatedOrder?.id;
   if (!calcId) throw new Error("shopify_order_edit_begin: no calculated order returned");
 
-  const calc = await shopifyGraphQL(ctx, CALCULATED_ORDER_LINES, { id: calcId });
-  const calcLine = (calc?.calculatedOrder?.lineItems?.nodes ?? []).find(
+  // The CALCULATED order's line ids are not the order's line ids.
+  // `orderEditSetQuantity` wants a `CalculatedLineItem` gid, and passing the
+  // order's own `LineItem` gid fails with a message about an invalid id that
+  // reads like a permissions problem. The mapping comes back from the begin
+  // mutation itself.
+  const calcLine = (begun?.orderEditBegin?.calculatedOrder?.lineItems?.nodes ?? []).find(
     (n: any) => String(n?.variant?.id ?? "").endsWith(`/${quote.current_variant_id}`),
   );
   if (!calcLine?.id) throw new Error("shopify_order_edit: could not locate the line to replace");
+
+  const outstandingBefore = money(begun?.orderEditBegin?.calculatedOrder?.totalOutstandingSet);
 
   const remaining = Math.max(0, quote.original_quantity - quote.quantity);
   const setQty = await shopifyGraphQL(ctx, ORDER_EDIT_SET_QUANTITY, {
     id: calcId,
     lineItemId: calcLine.id,
     quantity: remaining,
+    // Credits the reduced line. Without it Shopify keeps the charge and bills
+    // the replacement on top - a same-price swap that costs the customer money.
+    restock: true,
   });
   const setErr = firstUserError(setQty?.orderEditSetQuantity);
   if (setErr) throw new Error(`shopify_order_edit_set_quantity: ${setErr}`);
@@ -2863,6 +2908,32 @@ async function exchangeOrderItem(
   });
   const addErr = firstUserError(added?.orderEditAddVariant);
   if (addErr) throw new Error(`shopify_order_edit_add_variant: ${addErr}`);
+
+  // THE settlement guard, and the last point at which nothing has happened yet.
+  //
+  // The quote's arithmetic says the prices match. This asks SHOPIFY whether the
+  // edit it has actually staged leaves the customer owing anything different
+  // from what they owed before - which is the only question that matters, and
+  // the one my own arithmetic got wrong once already. An uncommitted calculated
+  // order simply expires, so refusing here leaves the order untouched.
+  const outstandingAfter = money(added?.orderEditAddVariant?.calculatedOrder?.totalOutstandingSet);
+  const delta = round2(outstandingAfter - outstandingBefore);
+  if (Math.abs(delta) >= 0.005) {
+    return {
+      order_id: String(order.id),
+      name: order.name,
+      exchange_completed: false,
+      eligible: false,
+      reason: "settlement_delta_not_zero",
+      settlement_delta: delta.toFixed(2),
+      quote,
+      model_instruction:
+        `This exchange would leave the order ${delta > 0 ? "owing" : "owed"} ${Math.abs(delta).toFixed(2)} ${quote.currency}, ` +
+        `so it was NOT applied and the order is unchanged. Tell the customer the swap cannot be completed as an even exchange ` +
+        `and offer a real handover to a person who can settle the difference. Do NOT say the item was exchanged, and do NOT ` +
+        `offer a discount, coupon or store credit to close the gap.`,
+    };
+  }
 
   const committed = await shopifyGraphQL(ctx, ORDER_EDIT_COMMIT, {
     id: calcId,
