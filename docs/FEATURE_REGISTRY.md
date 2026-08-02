@@ -13,7 +13,7 @@ Source of truth: [`packages/shared/src/lib/features.ts`](../packages/shared/src/
 
 ---
 
-## Messaging (16)
+## Messaging (17)
 
 | Key | Display Name | AGENT Default | Description |
 |---|---|---|---|
@@ -25,6 +25,7 @@ Source of truth: [`packages/shared/src/lib/features.ts`](../packages/shared/src/
 | `channel_outlook` | Outlook Channel | all | Send and receive messages via Outlook |
 | `channel_slack` | Slack Channel | all | Send and receive messages via Slack |
 | `channel_webchat` | Webchat Channel | all | Embedded chat widget on websites |
+| `shopify_live_chat` | Shopify Live Chat | all | Branded live chat installed on a Shopify storefront through a Theme App Extension |
 | `conversation_management` | Conversation Management | all | View and manage customer conversations |
 | `close_conversation` | Close Conversation | all | Agents can close conversations |
 | `reassign_conversation` | Reassign Conversation | all | Transfer a conversation to another agent |
@@ -94,12 +95,13 @@ Source of truth: [`packages/shared/src/lib/features.ts`](../packages/shared/src/
 | `funnel_administration` | Funnels | all | Create sales/support funnels with stages |
 | `action_contracts` | Action Contracts | all | Pre-defined action templates for workflows |
 
-## Commerce (2)
+## Commerce (3)
 
 | Key | Display Name | AGENT Default | Description |
 |---|---|---|---|
 | `auto_buy` | Auto-Buy | **none** | Automated purchasing flows triggered from conversations |
 | `order_management` | Order Management | all | Look up and manage orders from e-commerce systems |
+| `shopify_product_messaging` | Shopify Product Messaging | all | Send Shopify product cards, carousels and Add to Cart actions inside a conversation |
 
 ## Integrations (16)
 
@@ -217,3 +219,4 @@ router.post(
   handler,
 );
 ```
+| `shopify_product_messaging` | Shopify Product Messaging | all | Send Shopify product cards, carousels and Add to Cart actions inside a conversation |

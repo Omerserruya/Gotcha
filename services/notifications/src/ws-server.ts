@@ -14,7 +14,7 @@
 import type { Server as HttpServer, IncomingMessage } from "http";
 import type { Duplex } from "stream";
 import { WebSocketServer, WebSocket } from "ws";
-import { verifyToken, subscribeToEvents, type ServiceEvent } from "@chatcenter/shared";
+import { resolvePrincipal, subscribeToEvents, type ServiceEvent } from "@chatcenter/shared";
 
 interface Client {
   ws: WebSocket;
@@ -31,7 +31,7 @@ export function startNotificationWsServer(httpServer: HttpServer): void {
   const wss = new WebSocketServer({ noServer: true });
   const clients = new Set<Client>();
 
-  httpServer.on("upgrade", (req: IncomingMessage, socket: Duplex, head: Buffer) => {
+  httpServer.on("upgrade", async (req: IncomingMessage, socket: Duplex, head: Buffer) => {
     if (!req.url || !req.url.startsWith("/ws")) {
       // Not for us - let other listeners handle, or close.
       // No other ws listeners on this server, so reject.
@@ -45,8 +45,8 @@ export function startNotificationWsServer(httpServer: HttpServer): void {
       const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
       const token = url.searchParams.get("token");
       if (!token) throw new Error("missing token");
-      const payload: any = verifyToken(token);
-      if (!payload?.userId || !payload?.tenantId) throw new Error("malformed token");
+      // Active-tenant hint (validated against memberships, never trusted raw).
+      const payload = await resolvePrincipal(token, url.searchParams.get("tenant"));
       userId = payload.userId;
       tenantId = payload.tenantId;
     } catch (err: any) {

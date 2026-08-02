@@ -5,13 +5,19 @@ import {
   createWorker,
   channelHealthQueue,
   decryptCredentials,
-  encryptCredentials,
-} from "@chatcenter/shared";
+  encryptCredentials, metaGraphBaseUrl } from "@chatcenter/shared";
 
-const FB_API_URL = process.env.FACEBOOK_API_URL || "https://graph.facebook.com/v21.0";
+const FB_API_URL = metaGraphBaseUrl(process.env.FACEBOOK_API_URL);
+// Intentionally OUTSIDE central Meta versioning: graph.instagram.com
+// (Instagram Login) rejects version-prefixed paths. See meta-graph-version.ts.
 const IG_API_URL = process.env.INSTAGRAM_API_URL || "https://graph.instagram.com";
 const META_APP_ID = process.env.META_APP_ID || "";
 const META_APP_SECRET = process.env.META_APP_SECRET || "";
+const OUTLOOK_WEBHOOK_URL = process.env.OUTLOOK_WEBHOOK_URL || "";
+// Same Graph scopes the Outlook OAuth callback requested (channels.ts) - the
+// refresh grant must ask for the identical scope set to get a usable token back.
+const OUTLOOK_SCOPES =
+  "https://graph.microsoft.com/Mail.ReadWrite https://graph.microsoft.com/Mail.Send https://graph.microsoft.com/User.Read offline_access";
 
 interface ChannelHealthJob {
   type: "health_check" | "token_refresh" | "gmail_watch_renew";
@@ -22,6 +28,10 @@ async function processChannelHealth(job: Job<ChannelHealthJob>): Promise<void> {
 
   if (type === "health_check") {
     await runHealthCheck();
+    // Outlook is not a Meta channel and is skipped by runHealthCheck's
+    // debug_token path; it gets its own refresh-then-probe pass so its badge
+    // reflects the real token state instead of a stale/self-inflicted status.
+    await runOutlookHealth();
   } else if (type === "token_refresh") {
     await runTokenRefresh();
   } else if (type === "gmail_watch_renew") {
@@ -340,6 +350,140 @@ async function runGmailWatchRenewal(): Promise<void> {
   console.log(`[channel-health] Gmail watch renewal complete: ${renewed} renewed, ${failed} failed, ${accounts.length} total`);
 }
 
+// ─── Outlook Health + Token Refresh ──────────────────────────
+//
+// Microsoft Graph access tokens live ~1h, so the token stored at connect time
+// is almost always stale by the time this worker runs. Unlike Meta channels,
+// Outlook cannot be validated with Facebook's debug_token, and it was NOT
+// covered by any refresh or health path before - which produced two wrong
+// states: a self-inflicted ERROR ~1h after connect (an expired-but-refreshable
+// token), and a stale CONNECTED badge on a genuinely-dead channel that nothing
+// ever re-checked. This pass refreshes the token FIRST (using the long-lived
+// refresh token stored at connect), then probes /me, so the persisted status is
+// the truth: valid refresh token -> CONNECTED, revoked -> ERROR.
+
+interface OutlookRefreshResult {
+  accessToken: string;
+  refreshToken?: string;
+  expiresIn: number;
+}
+
+// Exchange the stored refresh token for a fresh access token. `post` is
+// injectable so the exchange (endpoint, params, expiry math, refresh-token
+// rotation) is unit-testable without network or prisma.
+export async function refreshOutlookAccessToken(
+  creds: { refreshToken?: string; clientId?: string; clientSecret?: string; tenantIdAzure?: string },
+  post: (url: string, body: string, config: unknown) => Promise<{ data?: any }> = (url, body, config) => axios.post(url, body, config as any),
+): Promise<OutlookRefreshResult | null> {
+  if (!creds.refreshToken || !creds.clientId || !creds.clientSecret) return null;
+  const tenant = creds.tenantIdAzure || "common";
+  const resp = await post(
+    `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`,
+    new URLSearchParams({
+      client_id: creds.clientId,
+      client_secret: creds.clientSecret,
+      refresh_token: creds.refreshToken,
+      grant_type: "refresh_token",
+      scope: OUTLOOK_SCOPES,
+    }).toString(),
+    { headers: { "Content-Type": "application/x-www-form-urlencoded" } },
+  );
+  const accessToken = resp.data?.access_token;
+  if (!accessToken) return null;
+  return {
+    accessToken,
+    // Azure rotates the refresh token on some grants; persist the new one when present.
+    refreshToken: resp.data?.refresh_token,
+    expiresIn: resp.data?.expires_in || 3600,
+  };
+}
+
+async function runOutlookHealth(): Promise<void> {
+  console.log("[channel-health] Running Outlook health...");
+
+  // Include ERROR rows so a channel whose token merely lapsed can RECOVER once
+  // its refresh token works again. A user-initiated disconnect uses DISCONNECTED,
+  // not ERROR, so it is not resurrected here.
+  const accounts = await prisma.channelAccount.findMany({
+    where: { isActive: true, channel: "OUTLOOK", connectionStatus: { in: ["CONNECTED", "ERROR"] } },
+  });
+
+  let ok = 0, recovered = 0, errors = 0;
+
+  for (const account of accounts) {
+    let credentials: any;
+    try {
+      credentials = typeof account.credentials === "string"
+        ? decryptCredentials(account.credentials as string)
+        : account.credentials;
+    } catch {
+      credentials = account.credentials;
+    }
+
+    try {
+      const refreshed = await refreshOutlookAccessToken(credentials || {});
+      if (!refreshed) {
+        await prisma.channelAccount.update({
+          where: { id: account.id },
+          data: { connectionStatus: "ERROR", lastError: "Outlook: missing refresh credentials", lastHealthCheck: new Date() },
+        });
+        errors++;
+        continue;
+      }
+
+      // Probe with the FRESH token - proves the mailbox is actually reachable,
+      // not just that the token endpoint returned something.
+      await axios.get("https://graph.microsoft.com/v1.0/me", {
+        headers: { Authorization: `Bearer ${refreshed.accessToken}` },
+      });
+
+      const updatedCredentials = {
+        ...credentials,
+        accessToken: refreshed.accessToken,
+        ...(refreshed.refreshToken ? { refreshToken: refreshed.refreshToken } : {}),
+      };
+      const wasError = account.connectionStatus === "ERROR";
+      await prisma.channelAccount.update({
+        where: { id: account.id },
+        data: {
+          credentials: encryptCredentials(updatedCredentials),
+          tokenExpiresAt: new Date(Date.now() + refreshed.expiresIn * 1000),
+          connectionStatus: "CONNECTED",
+          lastError: null,
+          lastHealthCheck: new Date(),
+        },
+      });
+      ok++;
+      if (wasError) recovered++;
+
+      // Best-effort: renew the Graph mail subscription (max 3-day expiry) so
+      // inbound mail keeps arriving. A renewal failure must NOT flip health -
+      // the probe above already decided it.
+      const subId = (account.platformMeta as Record<string, unknown> | null)?.subscriptionId as string | undefined;
+      if (subId && OUTLOOK_WEBHOOK_URL) {
+        try {
+          await axios.patch(
+            `https://graph.microsoft.com/v1.0/subscriptions/${subId}`,
+            { expirationDateTime: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString() },
+            { headers: { Authorization: `Bearer ${refreshed.accessToken}`, "Content-Type": "application/json" } },
+          );
+        } catch (subErr: any) {
+          console.warn(`[channel-health] Outlook subscription renew failed for ${account.externalId}:`, subErr.response?.data?.error?.message || subErr.message);
+        }
+      }
+    } catch (err: any) {
+      const msg = err.response?.data?.error?.message || err.message;
+      await prisma.channelAccount.update({
+        where: { id: account.id },
+        data: { connectionStatus: "ERROR", lastError: `Outlook token is invalid or expired: ${msg}`, lastHealthCheck: new Date() },
+      });
+      errors++;
+    }
+  }
+
+  console.log(`[channel-health] Outlook health complete: ${ok} ok (${recovered} recovered), ${errors} errors, ${accounts.length} total`);
+}
+
 // ─── Setup Repeatable Jobs + Start Worker ────────────────────
 
 export async function startChannelHealthWorker(): Promise<void> {
@@ -380,5 +524,5 @@ export async function startChannelHealthWorker(): Promise<void> {
   // Start the worker
   createWorker<ChannelHealthJob>("channel-health", processChannelHealth, 1);
 
-  console.log("[channel-health] Worker started with repeatable health check (6h), token refresh (12h), Gmail watch renewal (daily)");
+  console.log("[channel-health] Worker started with repeatable health check (6h, incl. Outlook refresh-and-probe), token refresh (12h), Gmail watch renewal (daily)");
 }

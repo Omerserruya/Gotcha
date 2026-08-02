@@ -16,18 +16,27 @@
  */
 
 import { Router, type Request, type Response } from "express";
-import { authenticate, resolveTenant, requireActiveTenant, requireRole, prisma } from "@chatcenter/shared";
+import { authenticate, resolveTenant, requireOnboardingOrActiveTenant, requireRole, prisma } from "@chatcenter/shared";
 import {
   runBuilder,
   loadDraftSnapshot,
   draftReadiness,
+  seedDraftFromGoal,
   type BuilderEvent,
+  type BuilderDraftSnapshot,
+  type SeededDraftContext,
 } from "../services/agent-builder.service";
 import { generateReadinessReport } from "../services/agent-readiness.service";
+import { generateSalesContext } from "../services/sales-context-generator.service";
 
 const router = Router();
 
-router.use(authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"));
+// Onboarding renders this SAME wizard (setup Movement 8 mounts the shared
+// components/aiEmployee/AgentBuilder), and during onboarding the tenant is
+// PENDING_ONBOARDING - requireActiveTenant() answered 403 for every builder
+// call, so the embedded wizard could not even start. Building the first
+// employee is precisely an onboarding activity.
+router.use(authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"));
 
 // Localized opening line. The builder agent itself replies in the admin's
 // language (system prompt), but the very first message is static so we map it.
@@ -41,6 +50,46 @@ function buildGreeting(lang: string, orgName: string): string {
   if (lang === "ar") return `مرحبًا! أعرف عملك${whoAr} بالفعل من الإعداد، لذا سنتخطى ذلك. لنحدد موظف الذكاء الاصطناعي هذا - ما هدفه وما الذي يجب أن يتولاه مع العملاء؟`;
   return `Hi! I already know your business${who} from onboarding, so we'll skip that. Let's define this AI employee - what's its purpose, and what should it handle for your customers?`;
 }
+// Goal-first opener: the system just drafted the whole employee from the
+// admin's one-line goal + the business twin - present the draft and invite
+// corrections. Deterministic (no LLM), mirrors buildGreeting's localization.
+function buildSeededGreeting(lang: string, draft: BuilderDraftSnapshot, seeded: SeededDraftContext): string {
+  const name = draft.name && draft.name !== "Untitled AI Employee" ? draft.name : null;
+  const roleLabelHe: Record<string, string> = {
+    customer_support: "שירות לקוחות", sales: "מכירות", sdr: "טיפול בלידים", recruiting: "גיוס",
+    booking: "תיאום תורים", billing: "חיובים ותשלומים", research: "מענה מבוסס ידע", custom: "מותאם אישית",
+  };
+  const roleLabelEn: Record<string, string> = {
+    customer_support: "customer support", sales: "sales", sdr: "lead qualification", recruiting: "recruiting",
+    booking: "booking", billing: "billing", research: "knowledge answers", custom: "custom",
+  };
+  if (lang === "he") {
+    const lines = [
+      `הכנתי טיוטה מלאה של העובד לפי המטרה שנתתם ולפי מה שאני כבר יודע על העסק:`,
+      `• **תפקיד:** ${roleLabelHe[draft.role] || draft.role}${name ? `  ·  **שם מוצע:** ${name}` : ""}`,
+      `• **מטרה:** ${draft.goal}`,
+      seeded.attachedKbCount > 0 ? `• חיברתי ${seeded.attachedKbCount} מאגרי ידע קיימים` : null,
+      seeded.grantedToolCount > 0 ? `• נתתי גישה ל-${seeded.grantedToolCount} כלים מהמערכות המחוברות (ללא פעולות רגישות)` : null,
+      ``,
+      `מה תרצו לשנות או לחדד? אפשר גם פשוט לומר "ממשיכים" ונסגור יחד את כללי ההסלמה.`,
+    ].filter((l): l is string => l !== null);
+    return lines.join("\n");
+  }
+  if (lang === "ar") {
+    return `أعددت مسودة كاملة للموظف بناءً على هدفك وما أعرفه عن عملك - الدور: ${draft.role}، الهدف: ${draft.goal}. ما الذي تريد تعديله؟ أو قل "تابع" وسننهي قواعد التصعيد معًا.`;
+  }
+  const lines = [
+    `I've drafted the whole employee from your goal plus everything I already know about your business:`,
+    `• **Role:** ${roleLabelEn[draft.role] || draft.role}${name ? `  ·  **Proposed name:** ${name}` : ""}`,
+    `• **Goal:** ${draft.goal}`,
+    seeded.attachedKbCount > 0 ? `• Attached ${seeded.attachedKbCount} existing knowledge base${seeded.attachedKbCount > 1 ? "s" : ""}` : null,
+    seeded.grantedToolCount > 0 ? `• Granted ${seeded.grantedToolCount} tools from your connected systems (no sensitive actions)` : null,
+    ``,
+    `What would you like to change or sharpen? Or just say "continue" and we'll settle the escalation rules together.`,
+  ].filter((l): l is string => l !== null);
+  return lines.join("\n");
+}
+
 async function resolveLocale(tenantId: string, bodyLocale: unknown): Promise<string> {
   if (typeof bodyLocale === "string" && bodyLocale.length >= 2) return bodyLocale.toLowerCase();
   try {
@@ -55,8 +104,9 @@ async function resolveLocale(tenantId: string, bodyLocale: unknown): Promise<str
 router.post("/start", async (req: Request, res: Response) => {
   try {
     const tenantId = req.tenantId! as string;
-    const { departmentId, locale } = req.body || {};
+    const { departmentId, locale, forceNew, goal } = req.body || {};
     const lang = await resolveLocale(tenantId, locale);
+    const goalText = typeof goal === "string" ? goal.trim().slice(0, 600) : "";
 
     // The company is already known from onboarding - seed it onto the draft so
     // the builder never has to ask "what does your business do?".
@@ -67,23 +117,54 @@ router.post("/start", async (req: Request, res: Response) => {
     const companyOverview = (profile?.businessDescription || "").trim();
     const orgName = (profile?.organizationName || "").trim();
 
-    const agent = await prisma.aIAgent.create({
-      data: {
-        tenantId,
-        name: "Untitled AI Employee",
-        role: "customer_support",
-        status: "DRAFT",
-        departmentId: departmentId || null,
-        ...(companyOverview ? { identity: { companyOverview } } : {}),
-      },
-    });
+    // Resume the tenant's most-recent INCOMPLETE wizard draft instead of
+    // spawning a new orphan every time "New AI Employee" is opened. This is
+    // what keeps abandoned sessions from polluting the account. `forceNew`
+    // lets the caller explicitly start a second one.
+    let agent = forceNew
+      ? null
+      : await prisma.aIAgent.findFirst({
+          where: { tenantId, status: "DRAFT", builderStep: { not: null } },
+          orderBy: { updatedAt: "desc" },
+        });
+    const resumed = !!agent;
+
+    if (!agent) {
+      agent = await prisma.aIAgent.create({
+        data: {
+          tenantId,
+          name: "Untitled AI Employee",
+          role: "customer_support",
+          status: "DRAFT",
+          builderStep: "chat",
+          departmentId: departmentId || null,
+          ...(companyOverview ? { identity: { companyOverview } } : {}),
+        },
+      });
+    }
+
+    // Goal-first (system-led) entry: the admin gave a one-line goal, so the
+    // SYSTEM drafts the rest from the business twin + connected surface, and
+    // the chat opens by presenting that draft instead of interviewing.
+    // Never overwrite a goal an existing (resumed) draft already captured.
+    let seeded: Awaited<ReturnType<typeof seedDraftFromGoal>> | null = null;
+    if (goalText && !(agent as any).goal) {
+      try {
+        seeded = await seedDraftFromGoal(tenantId, agent.id, goalText);
+      } catch (e: any) {
+        console.warn("Builder goal-seed failed (falling back to interview):", e?.message);
+      }
+    }
 
     const draft = await loadDraftSnapshot(tenantId, agent.id);
     res.status(201).json({
       data: {
         agentId: agent.id,
         draft,
-        greeting: buildGreeting(lang, orgName),
+        resumed,
+        greeting: seeded && draft
+          ? buildSeededGreeting(lang, draft, seeded)
+          : buildGreeting(lang, orgName),
       },
     });
   } catch (err: any) {
@@ -163,6 +244,45 @@ router.post("/:id/tool", async (req: Request, res: Response) => {
   }
 });
 
+// POST /:id/tools/bulk - attach/detach many tools at once (Select all /
+// per-category select-all in the wizard). Validates ids against the tenant,
+// then flips them in two queries instead of one round-trip per tool.
+router.post("/:id/tools/bulk", async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId! as string;
+    const agentId = req.params.id as string;
+    const { tenantToolIds, attach } = req.body || {};
+    const agent = await prisma.aIAgent.findFirst({ where: { id: agentId, tenantId }, select: { id: true } });
+    if (!agent) { res.status(404).json({ error: "draft not found" }); return; }
+
+    const requested = Array.isArray(tenantToolIds) ? tenantToolIds.map(String) : [];
+    if (requested.length > 0) {
+      // Only act on tools that genuinely belong to this tenant.
+      const valid = await prisma.tenantTool.findMany({ where: { tenantId, id: { in: requested } }, select: { id: true } });
+      const ids = valid.map((v) => v.id);
+      if (ids.length > 0) {
+        if (attach !== false) {
+          await prisma.agentToolPermission.createMany({
+            data: ids.map((id) => ({ tenantId, aiAgentId: agentId, tenantToolId: id, isAllowed: true })),
+            skipDuplicates: true,
+          });
+          // Flip any rows that already existed but were disabled.
+          await prisma.agentToolPermission.updateMany({
+            where: { tenantId, aiAgentId: agentId, tenantToolId: { in: ids } },
+            data: { isAllowed: true },
+          });
+        } else {
+          await prisma.agentToolPermission.deleteMany({ where: { tenantId, aiAgentId: agentId, tenantToolId: { in: ids } } });
+        }
+      }
+    }
+    res.json({ data: { draft: await loadDraftSnapshot(tenantId, agentId) } });
+  } catch (err: any) {
+    console.error("Builder bulk tools error:", err);
+    res.status(500).json({ error: "Failed to update tools" });
+  }
+});
+
 // POST /:id/knowledge - attach/detach one knowledge base to the draft.
 router.post("/:id/knowledge", async (req: Request, res: Response) => {
   try {
@@ -198,11 +318,24 @@ router.post("/:id/refinements", async (req: Request, res: Response) => {
     const agent = await prisma.aIAgent.findFirst({ where: { id: agentId, tenantId }, select: { id: true } });
     if (!agent) { res.status(404).json({ error: "draft not found" }); return; }
 
-    const { name, conversationFlow, customGuardrails } = req.body || {};
+    const { name, conversationFlow, customGuardrails, brandArchetype } = req.body || {};
     const data: any = {};
 
     if (typeof name === "string" && name.trim()) {
       data.name = name.trim().slice(0, 120);
+    }
+
+    // Brand voice / personalization: an archetype that shapes HOW the employee
+    // sounds. Stored on persona.brand_archetype, merged so we never wipe other
+    // persona keys (gender/traits) - mirrors the editor's Brand Voice control.
+    if (typeof brandArchetype === "string") {
+      const cur = await prisma.aIAgent.findFirst({ where: { id: agentId, tenantId }, select: { persona: true } });
+      const persona: Record<string, unknown> =
+        cur?.persona && typeof cur.persona === "object" ? { ...(cur.persona as any) } : {};
+      const v = brandArchetype.trim().slice(0, 60);
+      if (v) persona.brand_archetype = v;
+      else delete persona.brand_archetype;
+      data.persona = Object.keys(persona).length ? persona : null;
     }
 
     if (Array.isArray(conversationFlow)) {
@@ -232,6 +365,87 @@ router.post("/:id/refinements", async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error("Builder refinements error:", err);
     res.status(500).json({ error: "Failed to save refinements" });
+  }
+});
+
+// ─── Persist wizard progress (resumable creation) ───────────
+// The frontend posts the current step on every transition so an abandoned
+// session can be resumed from exactly where the admin stopped. Only moves
+// the pointer while the agent is still a DRAFT - never resurrects a
+// completed/active agent back into the wizard.
+const BUILDER_STEPS = new Set(["chat", "kb", "refine", "tools"]);
+router.post("/:id/step", async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId! as string;
+    const agentId = req.params.id as string;
+    const step = String(req.body?.step || "");
+    if (!BUILDER_STEPS.has(step)) {
+      res.status(400).json({ error: "invalid step" });
+      return;
+    }
+    const agent = await prisma.aIAgent.findFirst({ where: { id: agentId, tenantId }, select: { id: true, status: true } });
+    if (!agent) { res.status(404).json({ error: "draft not found" }); return; }
+    if (agent.status === "DRAFT") {
+      await prisma.aIAgent.update({ where: { id: agentId }, data: { builderStep: step } });
+    }
+    res.json({ data: { ok: true, step } });
+  } catch (err: any) {
+    console.error("Builder step error:", err);
+    res.status(500).json({ error: "Failed to save step" });
+  }
+});
+
+// ─── Complete the creation wizard ───────────────────────────
+// Called when the wizard hands the admin off to the editor (readiness panel
+// "Save live" / "Skip to editor"). Clears the resumable progress pointer so
+// the editor renders instead of re-entering the builder, and promotes the
+// finished employee DRAFT → ACTIVE. PAUSED/ACTIVE agents keep their status
+// (only the step pointer is cleared) so this can't reactivate a paused agent.
+router.post("/:id/complete", async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId! as string;
+    const agentId = req.params.id as string;
+    const agent = await prisma.aIAgent.findFirst({ where: { id: agentId, tenantId }, select: { id: true, status: true, salesContext: true } });
+    if (!agent) { res.status(404).json({ error: "draft not found" }); return; }
+
+    // Server-side readiness gate: promotion to ACTIVE is only legal when the
+    // draft actually satisfies the same rules the wizard shows (name, role,
+    // goal-or-funnel, >=1 knowledge base). The frontend gates this too, but
+    // any API client could otherwise activate an empty employee.
+    if (agent.status === "DRAFT") {
+      const snapshot = await loadDraftSnapshot(tenantId, agentId);
+      const readiness = snapshot ? draftReadiness(snapshot) : { ready: false, missing: ["draft"] };
+      if (!readiness.ready) {
+        res.status(422).json({ error: "draft_not_ready", missing: readiness.missing });
+        return;
+      }
+    }
+
+    // Auto-fill the Sales Context (Product Qualification Context) the first time
+    // an employee finishes the wizard, so the admin lands in the editor with the
+    // six fields pre-proposed (still fully editable) instead of blank. Only when
+    // the admin hasn't authored one already. Best-effort - never blocks the
+    // promotion. See sales-context-generator.service.ts.
+    let salesContext: unknown = undefined;
+    const hasSalesContext =
+      agent.salesContext && typeof agent.salesContext === "object" && Object.keys(agent.salesContext as object).length > 0;
+    if (!hasSalesContext) {
+      const generated = await generateSalesContext(tenantId, agentId);
+      if (generated) salesContext = generated;
+    }
+
+    await prisma.aIAgent.update({
+      where: { id: agentId },
+      data: {
+        builderStep: null,
+        ...(agent.status === "DRAFT" ? { status: "ACTIVE" as const } : {}),
+        ...(salesContext !== undefined ? { salesContext: salesContext as any } : {}),
+      },
+    });
+    res.json({ data: { ok: true, salesContextAutofilled: salesContext !== undefined } });
+  } catch (err: any) {
+    console.error("Builder complete error:", err);
+    res.status(500).json({ error: "Failed to complete builder" });
   }
 });
 
@@ -282,6 +496,16 @@ router.post("/:id/readiness-test", async (req: Request, res: Response) => {
     if ("error" in report) {
       res.status(report.error === "agent_not_found" ? 404 : 502).json({ error: report.error });
       return;
+    }
+    // Persist so the owner can re-view without re-running the generator (P1-5).
+    // Best-effort: a persistence failure never blocks returning the report.
+    try {
+      await prisma.aIAgent.update({
+        where: { id: agentId },
+        data: { readinessReport: report as any },
+      });
+    } catch (persistErr: any) {
+      console.warn("[readiness-test] persist failed (non-fatal):", persistErr?.message);
     }
     res.json({ data: report });
   } catch (err: any) {

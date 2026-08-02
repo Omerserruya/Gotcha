@@ -3,7 +3,23 @@
     "name": "GOTCHA",
     "loading": "Loading..."
   },
+  "tenant": {
+    "pickerTitle": "Choose a workspace",
+    "pickerSubtitle": "{name}, you're a member of several workspaces",
+    "searchPlaceholder": "Search workspaces...",
+    "noResults": "No workspace matches your search",
+    "lastUsed": "last used {when}",
+    "switchWorkspace": "Switch workspace",
+    "workspaces": "Workspaces",
+    "signOut": "Sign out",
+    "role": {
+      "ADMIN": "Admin",
+      "AGENT": "Agent",
+      "SYSTEM_ADMIN": "System admin"
+    }
+  },
   "nav": {
+    "gettingStarted": "Getting started",
     "home": "Home",
     "conversations": "Inbox",
     "dashboard": "Dashboard",
@@ -19,21 +35,13 @@
     "settings": "Settings",
     "more": "More",
     "logout": "Logout",
+    "account": "Account & Security",
     "tools": "Tools",
     "integrations": "Integrations",
     "aiStudio": "AI Studio",
     "outbound": "Outbound",
     "usage": "Usage",
     "approvals": "Approvals"
-  },
-  "auth": {
-    "login": "Login",
-    "email": "Email",
-    "password": "Password",
-    "tenant": "Organization ID",
-    "loginButton": "Sign In",
-    "loginError": "Invalid email or password",
-    "welcome": "Welcome back"
   },
   "conversations": {
     "title": "Inbox",
@@ -90,6 +98,16 @@
     "newConversation": "New Conversation",
     "historyButton": "Context",
     "copilotButton": "Co-Pilot",
+    "decisionTimeline": {
+      "button": "Why",
+      "title": "Decision Timeline",
+      "subtitle": "How the AI reasoned this conversation",
+      "empty": "No AI decision trace for this conversation yet.",
+      "noGoal": "No committed goal",
+      "billing": "billing",
+      "allowed": "allowed ops",
+      "termination": "ended"
+    },
     "dropFilesHere": "Drop files here",
     "addCaption": "Add a caption...",
     "downloadFile": "Download file",
@@ -106,6 +124,16 @@
       "delivered": "Delivered",
       "read": "Read",
       "failed": "Failed to send"
+    },
+    "sendError": {
+      "prefix": "Failed to send",
+      "toggle": "Show error details",
+      "code": "Code",
+      "type": "Type",
+      "detail": "Detail",
+      "requestId": "Request ID",
+      "retryable": "Retryable",
+      "at": "Time"
     },
     "historyPanel": {
       "title": "History & Notes",
@@ -155,7 +183,36 @@
       "success": "Conversation started",
       "error": "Failed to start conversation"
     },
-    "attach": "Attach"
+    "attach": "Attach",
+    "systemAiEscalation": "AI handed off to a human",
+    "escalationReason": {
+      "agent_paused": "the AI employee is paused",
+      "customer_requested_human": "customer asked for a person",
+      "hard_message_ceiling": "reached its message limit",
+      "autonomous_message_cap": "reached its autonomy limit",
+      "autonomous_time_cap": "ran past its time limit",
+      "agent_inactive": "the AI employee is inactive",
+      "budget_exceeded": "AI usage limit reached",
+      "units_exhausted": "AI credits exhausted",
+      "ai_service_failure": "the AI could not reply in time"
+    },
+    "aiBadgeTitle": "Sent automatically by your AI employee",
+    "systemReturnedToAi": "Conversation returned to the AI employee",
+    "returnToAi": "Return to AI",
+    "returnToAiTitle": "Hand this conversation back to the AI employee",
+    "emptyFilteredTitle": "No conversations match the current filters",
+    "emptyFilteredDesc": "Try widening the search or clearing the filters.",
+    "clearFilters": "Clear filters",
+    "emptyNoChannelTitle": "The workspace can't receive conversations yet",
+    "emptyNoChannelDesc": "Messages and conversation history will appear here as soon as a communication channel is connected.",
+    "emptyNoChannelAgent": "Ask your workspace admin to connect a communication channel.",
+    "emptyChannelBrokenTitle": "A channel connection needs fixing",
+    "emptyChannelBrokenDesc": "A connected channel stopped working, so new messages can't arrive. Reconnect it to keep receiving conversations.",
+    "connectChannelCta": "Connect a channel",
+    "fixChannelCta": "Fix connection",
+    "emptyReadyTitle": "The channel is ready, no conversations have arrived yet",
+    "emptyReadyDesc": "As soon as a customer writes to you, the conversation will appear here.",
+    "viewChannels": "View connected channels"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -185,6 +242,29 @@
     "flowName": "Flow Name",
     "description": "Description",
     "save": "Save",
+    "stateSaved": "Saved",
+    "stateSaving": "Saving…",
+    "stateUnsaved": "Unsaved changes",
+    "saveFailed": "Save failed",
+    "retrySave": "Retry save",
+    "saveConflict": "This process changed elsewhere. Reload before saving.",
+    "fullscreen": "Full screen",
+    "exitFullscreen": "Exit full screen",
+    "connErrors": {
+      "self_loop": "A step can't connect to itself.",
+      "no_input": "This is a starting step, so nothing can connect into it.",
+      "no_output": "This step has no matching exit to connect from.",
+      "single_input": "That step already has an incoming connection.",
+      "incompatible": "This exit produces something the target step can't accept.",
+      "cycle": "That would create a loop - the process must flow forward."
+    },
+    "validation": "Validation",
+    "errorOne": "error",
+    "errorMany": "errors",
+    "warnOne": "warning",
+    "warnMany": "warnings",
+    "publishBlocked": "Fix the validation errors before publishing.",
+    "close": "Close",
     "activate": "Activate",
     "deactivate": "Deactivate",
     "delete": "Delete",
@@ -210,7 +290,6 @@
     "inactive": "Inactive",
     "addAgent": "Add Agent",
     "registerAgent": "Register New Agent",
-    "password": "Password",
     "registerButton": "Create Agent",
     "registerSuccess": "Agent created successfully",
     "editAgent": "Edit Agent",
@@ -222,10 +301,8 @@
     "phoneNumberHint": "E.164 mobile (e.g. +972501234567). Used to forward voice calls to this agent and to recognize them when they call the business number back.",
     "agentIsActive": "This agent can receive and handle conversations",
     "agentIsInactive": "This agent is deactivated and cannot handle conversations",
-    "resetPassword": "Reset Password",
-    "newPasswordPlaceholder": "New password (min. 8 characters)",
-    "passwordReset": "Password Reset",
-    "passwordResetSuccess": "Password has been reset successfully",
+    "resetPassword": "Generate password setup link",
+    "passwordResetSuccess": "Link created. Share it with them - it can be used once.",
     "dangerZone": "Danger Zone",
     "autoGreeting": "Auto-Greeting Template",
     "autoGreetingDesc": "This message is sent automatically when an agent claims a chat. Use {agentName} as a placeholder.",
@@ -254,7 +331,103 @@
     "copilotActive": "Co-Pilot Active",
     "copilotActiveDesc": "Enable or disable the AI co-pilot for this organization.",
     "saveCopilot": "Save Settings",
-    "copilotSaved": "Co-Pilot settings saved"
+    "copilotSaved": "Co-Pilot settings saved",
+    "invitePasswordNote": "We'll email them a one-time setup link to choose their password on our secure sign-in service. You'll also get the link here in case you want to share it directly.",
+    "resetPasswordNote": "Generate a one-time link this person can use to set a new password. You never see or choose their password."
+  },
+  "commerce": {
+    "title": "Shopify",
+    "orders": "Orders",
+    "totalSpent": "Total spent",
+    "lastOrder": "Last order",
+    "openOrders": "Open orders",
+    "repeat": "Repeat",
+    "items": "items",
+    "cancelled": "Cancelled",
+    "openInShopify": "Open in Shopify",
+    "refund": "Refund",
+    "cancel": "Cancel",
+    "refresh": "Refresh",
+    "retry": "Retry",
+    "showMore": "Show all",
+    "showLess": "Show less",
+    "noOrders": "No Shopify orders found for this customer.",
+    "connectionUnhealthy": "Shopify connection needs attention.",
+    "customerNotLinked": "No linked Shopify customer for this contact yet.",
+    "prevOrder": "Previous order",
+    "nextOrder": "Next order",
+    "more": "More",
+    "refreshOrder": "Refresh this order",
+    "copyOrderNumber": "Copy order number",
+    "temporarilyUnavailable": "Order info is temporarily unavailable.",
+    "missingScopes": "Some actions need additional store permissions.",
+    "order": "Order",
+    "total": "Total",
+    "refundableUpTo": "Refundable up to",
+    "confirmRefund": "Refund this order?",
+    "confirmCancel": "Cancel this order?",
+    "actionSubjectToApproval": "Subject to your store's rules and may require approval.",
+    "back": "Back",
+    "actionDone": "Done",
+    "pendingApproval": "Sent for approval",
+    "denied": "Not allowed",
+    "unavailable": "Unavailable",
+    "actionFailed": "Action failed",
+    "add": "Add",
+    "addNote": "Add a note",
+    "addTag": "Add a tag",
+    "cancelDoesNotRefund": "Cancelling does not refund. Refund is a separate action.",
+    "customerTags": "Customer tags",
+    "noTags": "No tags",
+    "noteAdded": "Note added",
+    "notePlaceholder": "Internal note about this customer",
+    "notifyCustomer": "Email the customer",
+    "reasonOptional": "Reason (optional)",
+    "refundAmount": "Refund amount",
+    "refundFull": "Full",
+    "refundOverMax": "More than this order can be refunded.",
+    "refundPartial": "Partial",
+    "refundShipping": "Also refund shipping",
+    "removeTag": "Remove tag",
+    "restock": "Return items to inventory",
+    "saveNote": "Save note",
+    "tagsUnknown": "Not loaded",
+    "averageOrder": "Average order",
+    "billTo": "Bill to",
+    "cancelReason": "Cancellation reason",
+    "copyTracking": "Copy tracking number",
+    "customerNote": "Note",
+    "customerSince": "Customer since",
+    "defaultAddress": "Address",
+    "discounts": "Discounts",
+    "email": "Email",
+    "hideDetails": "Hide details",
+    "less": "Less",
+    "orderSource": "Source",
+    "outstanding": "Outstanding",
+    "paid": "Paid",
+    "phone": "Phone",
+    "refunded": "Refunded",
+    "repeatCustomer": "Repeat",
+    "shipTo": "Ship to",
+    "shippingCost": "Shipping",
+    "showDetails": "Show details",
+    "subscribed": "Subscribed",
+    "subtotal": "Subtotal",
+    "tax": "Tax",
+    "track": "Track",
+    "tracking": "Tracking",
+    "byAi": "AI",
+    "byGotcha": "GOTCHA",
+    "resendConfirmation": "Resend confirmation email",
+    "loadMore": "Load more",
+    "showingOf": "Showing {shown} of {total}",
+    "alreadyFulfilled": "Fulfilled orders cannot be cancelled",
+    "notRestocked": "items were not restocked (no inventory location)",
+    "reasonFulfilled": "Cannot cancel a fulfilled order",
+    "reasonCancelled": "This order is already cancelled",
+    "reasonRefunded": "This order is already fully refunded",
+    "reasonScope": "The store connection is missing write permissions"
   },
   "crmPanel": {
     "title": "CRM Context",
@@ -566,16 +739,71 @@
     "embeddedChat": "Embedded Chat",
     "embeddedChatDesc": "Add a chat widget to your website",
     "createWidget": "Create Widget",
-    "embedTitle": "Embed Chat Widget"
+    "embedTitle": "Embed Chat Widget",
+    "backToInbox": "Back to Inbox",
+    "backToHistory": "Back to History",
+    "requiresSetupHint": "Requires setup: this provider's app credentials are not configured for this environment yet. Contact support to enable it.",
+    "notConfigured": "This provider ({platform}) is not configured for this environment yet, so it cannot be connected.",
+    "statusRequiresAction": "Requires action",
+    "statusWidgetPending": "Waiting for installation",
+    "statusOff": "Off",
+    "catMessaging": "Messaging",
+    "catEmail": "Email",
+    "catTeam": "Team channels",
+    "catWebsite": "Website chat",
+    "catVoice": "Voice & phone",
+    "voiceNone": "No phone channel connected. Connect a phone provider to receive and place calls.",
+    "voiceConnect": "Connect phone channel",
+    "voiceManage": "Manage",
+    "voiceNoNumbers": "No active numbers",
+    "twilio": "Twilio",
+    "twilioDesc": "Voice & phone",
+    "open": "Open",
+    "fix": "Fix",
+    "twilioPage": {
+      "back": "Back to Channels",
+      "subtitle": "Voice & phone channel: numbers, connection health and calling.",
+      "none": "No Twilio phone channel connected yet.",
+      "reconnect": "Reconnect",
+      "configure": "Configure",
+      "disconnect": "Disconnect",
+      "disconnectTitle": "Disconnect Twilio?",
+      "disconnectConfirm": "This removes the phone channel and its numbers. Calls will stop routing here. You can reconnect later.",
+      "disconnected": "Twilio channel disconnected",
+      "refreshed": "Connection refreshed",
+      "number": "Phone number",
+      "noNumber": "No active number",
+      "account": "Twilio account",
+      "inbound": "Inbound",
+      "outbound": "Outbound",
+      "on": "On",
+      "off": "Off",
+      "webhook": "Webhook",
+      "configured": "Configured",
+      "missing": "Needs setup",
+      "health": "Health",
+      "unknown": "Not checked"
+    },
+    "waPendingTitle": "One more step to finish WhatsApp",
+    "waPendingDesc": "We saved the authorization but could not detect your WhatsApp Business Account automatically. Paste its ID from Meta Business Manager to finish the connection.",
+    "waPendingPlaceholder": "WhatsApp Business Account ID",
+    "waPendingFinish": "Finish connection",
+    "shopifyLiveChat": "Shopify Live Chat",
+    "shopifyLiveChatDesc": "Branded chat on your Shopify storefront, with product cards and Add to Cart.",
+    "configureShopifyLiveChat": "Set up",
+    "deleteWidgetMsg": "This removes the chat widget from your website and permanently deletes its conversations and messages. The script on your site will stop showing anything. This cannot be undone.",
+    "widgetSaved": "Widget settings saved",
+    "embedInstall": "Install",
+    "embedCustomise": "Customise"
   },
   "departments": {
     "title": "Departments",
     "subtitle": "Manage departments and team assignments",
     "name": "Name",
     "description": "Description",
-    "queueMode": "Queue Mode",
-    "claim": "Claim (Manual)",
-    "roundRobin": "Round Robin (Auto)",
+    "queueMode": "How conversations are assigned on transfer",
+    "claim": "Shared queue - agents claim",
+    "roundRobin": "Auto-assign to least busy",
     "members": "Members",
     "memberCount": "{count} members",
     "conversations": "Conversations",
@@ -605,13 +833,24 @@
     "noAgents": "No agents assigned",
     "aiAgent": "AI Agent",
     "aiEmployee": "AI Employee",
-    "aiEmployeeDesc": "Assign an AI Employee to handle conversations in this department",
+    "aiEmployees": "AI employees",
+    "aiEmployeeDesc": "Attach one or more AI Employees to handle conversations in this department",
     "currentAIEmployee": "Currently assigned",
+    "attachedAIEmployees": "Attached AI employees",
+    "noAttachedAIEmployees": "No AI employees attached yet.",
     "assignAIEmployee": "Select an AI Employee to assign",
+    "addAIEmployee": "Add an AI employee",
+    "add": "Add",
+    "remove": "Remove",
+    "allAIEmployeesAttached": "All AI employees are already attached.",
     "changeAIEmployee": "Change AI Employee",
     "unassign": "Unassign",
     "noAIEmployees": "No AI Employees created yet",
-    "createAIEmployee": "Create AI Employee"
+    "createAIEmployee": "Create AI Employee",
+    "queueModeHint": "How new conversations transferred to this department reach an agent.",
+    "claimDesc": "Conversations wait in a shared queue and any agent picks them up.",
+    "roundRobinDesc": "Conversations are assigned automatically to the available agent with the fewest open chats.",
+    "transferOnlyNote": "Applies when a conversation is transferred to this department. Automatic inbound routing is configured in the AI Studio flows."
   },
   "copilotMode": {
     "label": "Co-Pilot Mode",
@@ -633,7 +872,10 @@
     "next": "Next",
     "noMessages": "No messages",
     "aiReplay": "AI Replay",
-    "hideReplay": "Hide Replay"
+    "hideReplay": "Hide Replay",
+    "emptyNoChannelDesc": "Conversation history will appear here after a channel is connected and conversations start arriving.",
+    "emptyReadyTitle": "No closed conversations yet",
+    "emptyReadyDesc": "Once conversations are closed, their full history is kept here."
   },
   "knowledge": {
     "title": "Knowledge Base",
@@ -649,6 +891,7 @@
     "sourceType": "Source Type",
     "content": "Content",
     "upload": "Upload & Process",
+    "answerDirectly": "Answer a question",
     "pasteText": "Paste Text",
     "uploadFile": "Upload File",
     "connectSource": "Connect Source",
@@ -676,7 +919,16 @@
     "selectSpaces": "Select spaces to import",
     "importSelected": "Import Selected",
     "connecting": "Connecting...",
-    "oauthNotConfigured": "This integration is not configured. Contact your administrator."
+    "oauthNotConfigured": "This integration is not configured. Contact your administrator.",
+    "sourcesTab": "Sources",
+    "sourceConnected": "Connected - browse and import in Manage Knowledge",
+    "sourceNotConnected": "Not connected",
+    "sourceConnect": "Connect",
+    "sourceConnecting": "Connecting...",
+    "sourceBrowse": "Browse",
+    "active": "Active",
+    "inactive": "Inactive",
+    "docTitlePlaceholder": "Document title"
   },
   "settings": {
     "nav": {
@@ -684,8 +936,18 @@
       "general": "General",
       "integrations": "Integrations",
       "policy": "Policy",
+      "security": "Security",
       "tools": "Tools",
-      "voiceCopilot": "Voice Copilot"
+      "voiceCopilot": "Voice Copilot",
+      "intelligence": "Intelligence",
+      "funnels": "Pipeline funnels",
+      "permissions": "Roles & permissions",
+      "account": "Account",
+      "billing": "Billing",
+      "people": "People & Teams",
+      "businessSystems": "Business Systems",
+      "groupAccount": "Account",
+      "groupWorkspace": "Workspace"
     },
     "voiceChannels": {
       "title": "Voice channels",
@@ -728,7 +990,8 @@
         "deleting": "Disabling…",
         "deleteConfirm": "This will disable the channel and completely stop receiving calls. Continue?",
         "outboundProvisioningFailed": "Outbound dialing isn't fully configured - inbound calls still work.",
-        "retryProvisioning": "Retry provisioning"
+        "retryProvisioning": "Retry provisioning",
+        "aiEmployeeSaved": "AI Employee saved."
       },
       "wizard": {
         "backLink": "Back to voice channels",
@@ -775,6 +1038,15 @@
     "schedule": "Schedule",
     "businessHours": "Business hours",
     "businessHoursDesc": "Set the hours your team is available.",
+    "aiOutsideHours": "AI employee outside opening hours",
+    "aiOutsideHoursDesc": "Choose what your AI employee does when the business is closed.",
+    "aiOutsideHoursActive": "Keep answering",
+    "aiOutsideHoursActiveDesc": "The AI employee keeps helping customers. If a human is needed, it explains the team is away and when it will be back - based on your real opening hours.",
+    "aiOutsideHoursSilent": "Don't answer while closed",
+    "aiOutsideHoursSilentDesc": "The AI employee stays silent outside opening hours. Customers receive your closed-hours auto-response instead.",
+    "outsideHoursHandoffMsg": "Handoff message while closed (optional)",
+    "outsideHoursHandoffMsgDesc": "Shown when a conversation needs a human while you're closed. Leave empty to auto-generate one with the actual next opening time.",
+    "outsideHoursHandoffMsgPlaceholder": "e.g. Our team is out of office - we'll get back to you as soon as we reopen.",
     "autoGreeting": "Auto-greeting",
     "autoGreetingDesc": "Greeting message sent to new conversations.",
     "autoGreetingPlaceholder": "Hi! Thanks for reaching out…",
@@ -792,6 +1064,8 @@
     "language": {
       "title": "Language",
       "subtitle": "Sets the language for the dashboard UI and AI-generated content (briefs, summaries, co-pilot insights, post-call notes). Suggested replies still match the customer's language.",
+      "workspaceTitle": "Workspace language",
+      "workspaceSubtitle": "The default language new members inherit. Each member can override it for themselves in Account.",
       "myLanguage": "My language",
       "myLanguageHint": "Currently: {effective}",
       "useTenantDefault": "Use organization default",
@@ -801,6 +1075,7 @@
       "savedTenant": "Organization default saved",
       "saveFailed": "Couldn't save language. Try again."
     },
+    "goToAccountForPreferences": "Manage your language and personal preferences in Account.",
     "phoneCountry": "Default country",
     "phoneCountryHelp": "Used to format bare phone numbers into international form.",
     "reminderDelay": "Reminder delay (minutes)",
@@ -1016,22 +1291,6 @@
     "adminRequired": "Admin access required",
     "closed": "Closed",
     "defaultLabel": "default",
-    "password": {
-      "title": "Change Password",
-      "subtitle": "Update your account password",
-      "current": "Current password",
-      "currentPlaceholder": "Enter current password",
-      "new": "New password",
-      "newPlaceholder": "Enter new password (min 8 characters)",
-      "confirm": "Confirm new password",
-      "confirmPlaceholder": "Confirm new password",
-      "action": "Change password",
-      "changing": "Changing…",
-      "changed": "Password changed successfully",
-      "errMismatch": "Passwords do not match",
-      "errTooShort": "Password must be at least 8 characters",
-      "errFail": "Failed to change password"
-    },
     "days": {
       "sunday": "Sunday",
       "monday": "Monday",
@@ -1040,6 +1299,219 @@
       "thursday": "Thursday",
       "friday": "Friday",
       "saturday": "Saturday"
+    },
+    "integrations": {
+      "crmTitle": "CRM Integrations",
+      "crmSubtitle": "Connect your CRM (Zoho, HubSpot, Salesforce, Monday) - or use Shopify as your source of truth. The platform's audience builder, broadcasts, and AI handoffs read from the connected CRM.",
+      "systemOfRecord": {
+        "currentTitle": "Active system of record",
+        "capUnsupported": "Not supported by this system",
+        "caps": {
+          "identify_customer": "Customer lookup",
+          "customer_context": "Customer & order context",
+          "related_business_context": "Timeline & history",
+          "write_conversation_summary": "Conversation summaries",
+          "write_interaction": "Interaction notes",
+          "update_customer_fields": "Update customer fields",
+          "create_task": "Create tasks",
+          "merge_contacts": "Merge duplicates"
+        },
+        "title": "Customer system of record",
+        "subtitle": "Which connected system answers “who is this customer?”. Your AI reads identity, history and summaries from it, and writes notes and tags back to it.",
+        "active": "Active - this is your customer system of record",
+        "inactiveHint": "Connected, but not used as your customer system of record",
+        "note": "When on, this takes precedence over any connected CRM. Turning it off restores your CRM. All read tools for this system are enabled automatically."
+      }
+    },
+    "people": {
+      "title": "People & Teams",
+      "subtitle": "The humans of your workspace: members, roles and departments.",
+      "tab": {
+        "users": "Users",
+        "departments": "Departments"
+      }
+    },
+    "businessSystems": {
+      "title": "Business Systems",
+      "subtitle": "Your source of truth and core systems: connect the CRM or store that holds your customers, orders and business data.",
+      "sotLabel": "Source of truth",
+      "writeback": "Writeback",
+      "enabled": "Enabled",
+      "readOnly": "Read only",
+      "aiTools": "AI tools",
+      "toolsEnabled": "{enabled} of {total} enabled",
+      "manageTools": "Manage in AI Studio",
+      "connectionAttention": "Connection needs attention"
+    },
+    "billing": {
+      "title": "Billing & Subscription",
+      "subtitle": "Your plan, payment method and invoices. Credits and auto-purchase live on the Usage page.",
+      "loadFailed": "Failed to load billing",
+      "actionFailed": "Action failed",
+      "current": "Current subscription",
+      "noSubscription": "No subscription yet.",
+      "plan": "Plan",
+      "perMonth": "/ month",
+      "includedCredits": "{n} monthly credits included",
+      "period": "Current period",
+      "trialEnds": "Trial ends",
+      "renews": "Renews",
+      "pastDueHint": "The last payment failed. Update your payment method to keep the subscription active.",
+      "cancelScheduled": "The subscription is scheduled to cancel on {date}.",
+      "downgradeScheduled": "Changes to {plan} on {date}.",
+      "legacyHint": "Legacy plan. Choose a paid plan below to migrate (one-way).",
+      "resumeCta": "Resume subscription",
+      "resumed": "Subscription resumed",
+      "cancelTitle": "Cancel subscription?",
+      "cancelBody": "Your workspace keeps full access until {date}. Remaining monthly credits expire then; purchased credits stay on the account. Your data is not deleted. You can resume any time before that date.",
+      "cancelCta": "Cancel subscription",
+      "cancelDone": "Cancellation scheduled for the end of the period",
+      "plans": "Plans",
+      "custom": "Custom",
+      "contactSales": "Contact sales",
+      "creditsPerMonth": "{n} credits / month",
+      "currentPlan": "Current plan",
+      "upgrade": "Upgrade",
+      "downgrade": "Downgrade",
+      "choosePlan": "Choose plan",
+      "changeTitle": "Switch to {plan}?",
+      "upgradeBody": "The upgrade applies immediately. You will be charged the prorated difference for the rest of the current period, and the new monthly credits become available right away.",
+      "downgradeBody": "The downgrade takes effect at the next renewal ({date}). Until then you keep the current plan and credits.",
+      "migrateBody": "Migrating to {plan} starts a paid subscription now. This is one-way.",
+      "confirmChange": "Confirm change",
+      "changeDone": "Plan change to {plan} applied",
+      "prorationNote": "Upgrades apply immediately (prorated). Downgrades take effect at the next renewal.",
+      "creditsMoved": "Looking for credits and auto-purchase?",
+      "creditsMovedLink": "They live on the Usage page",
+      "payment": "Payment method",
+      "replaceCard": "Replace card",
+      "addCard": "Add card",
+      "noCard": "No card on file. Cards are stored securely by the payment provider; GOTCHA never sees your card number.",
+      "defaultCard": "default",
+      "removeCard": "Remove",
+      "cardRemoved": "Card removed",
+      "cardSaved": "Payment method saved",
+      "devTokenPrompt": "Enter PayPage token (dev/mock):",
+      "invoices": "Invoices & payments",
+      "noInvoices": "No invoices yet.",
+      "invDate": "Date",
+      "invType": "Type",
+      "invAmount": "Amount",
+      "invStatus": "Status",
+      "invTypes": {
+        "SUBSCRIPTION": "Subscription",
+        "CREDIT_PURCHASE": "Credit purchase",
+        "AUTO_PURCHASE": "Automatic top-up"
+      },
+      "invStatuses": {
+        "DRAFT": "Draft",
+        "ISSUED": "Issued",
+        "PAID": "Paid",
+        "OPEN": "Open",
+        "PENDING": "Pending",
+        "FAILED": "Failed",
+        "REFUNDED": "Refunded",
+        "VOID": "Voided",
+        "VOIDED": "Voided"
+      },
+      "invAction": "Action",
+      "view": "View",
+      "adjustPlan": "Adjust plan",
+      "adjustPlanSubtitle": "Compare plans and switch. Upgrades apply immediately (prorated); downgrades take effect at the next renewal.",
+      "backToBilling": "Back to Billing",
+      "renewsOn": "Renews on {date}",
+      "update": "Update",
+      "cardEndingIn": "{brand} ending in {last4}",
+      "expires": "Expires",
+      "paymentSubtitle": "The card used for your subscription and automatic top-ups.",
+      "pciNote": "Card details are captured and stored by our PCI-compliant payment provider. GOTCHA never sees or stores your full card number.",
+      "payPageCancelled": "Card setup was cancelled. No changes were made.",
+      "payPageTimeout": "The payment page timed out before completing. No changes were made - please try again.",
+      "payPageBlocked": "The browser blocked the payment window. Allow pop-ups for this site and try again.",
+      "cancellation": "Cancellation",
+      "cancelExplain": "Your subscription renews on {date}. Cancelling keeps full access until then; remaining monthly credits expire at period end, purchased credits stay on the account, and your data is not deleted. You can resume any time before that date.",
+      "cancelNoPermission": "Only an owner can cancel the subscription.",
+      "cancelNothingToCancel": "This workspace is not on a paid subscription, so there is nothing to cancel. Choose a plan whenever you are ready.",
+      "cancelAlreadyCanceled": "This subscription is already cancelled. Choose a plan to start again.",
+      "cancelLegacyPlan": "This workspace is on a legacy plan that is not billed through the subscription system. Contact support to close it.",
+      "interval": {
+        "MONTHLY": "month",
+        "QUARTERLY": "quarter",
+        "ANNUAL": "year",
+        "YEARLY": "year"
+      },
+      "planDesc": {
+        "light": "For small teams getting started",
+        "pro": "For growing support and sales teams",
+        "business": "For busy teams that need more headroom",
+        "enterprise": "For large operations with custom needs"
+      },
+      "back": "Back",
+      "status": {
+        "ACTIVE": "Active",
+        "TRIALING": "Trial",
+        "PAST_DUE": "Past due",
+        "SUSPENDED": "Suspended",
+        "CANCELED": "Cancelled",
+        "GRANDFATHERED": "Legacy",
+        "PENDING": "Pending",
+        "PAUSED": "Paused",
+        "scheduledCancel": "Scheduled to cancel"
+      },
+      "pricing": {
+        "title": "Choose your plan",
+        "subtitle": "Every plan includes the shared inbox and the AI that understands your business. Pick the capacity that matches how much you talk to customers.",
+        "currencyLabel": "Show prices in",
+        "month": "month",
+        "recommended": "Recommended",
+        "choose": "Select",
+        "configuring": "Configuring",
+        "includedCredits": "Included credits",
+        "creditsWord": "credits",
+        "estimatedChats": "Estimated conversations",
+        "estimatedCalls": "Estimated calls",
+        "perDayShort": "a business day",
+        "perBusinessDay": "per business day",
+        "included": "Included",
+        "customizeTitle": "Customize {plan}",
+        "customizeSubtitle": "Set the volume you expect. The credit allowance and the price update together.",
+        "noVolumeSelector": "This plan has a fixed monthly credit allowance. You can buy extra credits at any time, or move up a plan for a larger recurring allowance.",
+        "chatVolume": "Chat conversations",
+        "voiceVolume": "Voice calls",
+        "summary": "Your plan",
+        "updating": "updating…",
+        "pricePerChat": "Per conversation",
+        "pricePerCall": "Per call",
+        "blended": "Per interaction",
+        "monthlyTotal": "Monthly total",
+        "continue": "Continue",
+        "currentSelection": "This is your current plan",
+        "showCompare": "Compare all capabilities",
+        "hideCompare": "Hide comparison",
+        "capability": "Capability",
+        "customTitle": "Need something different?",
+        "customBody": "If your volumes, channels or contract terms do not fit these plans, we will build one that does - with the same capabilities and limits, priced for your business.",
+        "customCta": "Talk to us about a custom plan",
+        "confirmUp": "This starts today. You will be charged the difference for the rest of the current billing period, and the new credit allowance is available immediately.",
+        "confirmDown": "Your current plan stays exactly as it is until your renewal date. Nothing is removed before then, and the new plan starts at renewal.",
+        "chargedIn": "Charged in {currency}:",
+        "fxNote": "{display} prices are an estimated conversion at the official representative rate. You will be charged in {charged}.",
+        "category": {
+          "COMMUNICATION": "Communication",
+          "AI": "AI and data",
+          "VOICE": "Voice",
+          "MANAGEMENT": "Management",
+          "LIMITS": "Limits"
+        },
+        "limit": {
+          "users": "Team members",
+          "ai_employees": "AI employees",
+          "channels": "Connected channels",
+          "knowledge_sources": "Knowledge sources"
+        },
+        "everythingIn": "Everything in {plan}, plus"
+      },
+      "paymentSetupUnavailable": "Secure payment setup is not enabled in this environment."
     }
   },
   "outbound": {
@@ -1394,7 +1866,7 @@
       "title": "New outbound call",
       "subtitle": "Dial a number directly or pick an existing contact.",
       "searchLabel": "Search contacts (optional)",
-      "searchPlaceholder": "Name, phone, or email",
+      "searchPlaceholder": "Search by name, phone, or email",
       "phone": "Phone number",
       "notes": "Notes (optional)",
       "notesPlaceholder": "Why you're calling - visible to the AI co-pilot during the call.",
@@ -1423,7 +1895,32 @@
       "muteMic": "Mute microphone",
       "unmuteMic": "Unmute microphone",
       "hangup": "Hang up",
-      "micMuted": "Microphone muted"
+      "micMuted": "Microphone muted",
+      "mode": {
+        "number": "Enter number",
+        "search": "Search customers",
+        "recent": "Recent"
+      },
+      "startCall": "Start call",
+      "validating": "Validating",
+      "connected": "Connected",
+      "clear": "Clear",
+      "sourceManual": "Manual",
+      "unknownCustomer": "New number",
+      "searching": "Searching...",
+      "noRecent": "No recent conversations with a verified phone number yet.",
+      "noCallableNumber": "No callable number",
+      "noSourceConfigured": "No customer source is connected yet. Connect a CRM or Shopify to search customers.",
+      "noChannelTitle": "Connect a phone channel to start calling",
+      "noChannelDesc": "Outbound calls need a connected phone provider. Connect one and this page becomes your dialer.",
+      "noChannelAgent": "Ask your workspace admin to connect a phone channel.",
+      "channelBrokenTitle": "The phone channel needs reconnecting",
+      "channelBrokenDesc": "Your phone provider connection stopped working, so calls can't be placed right now.",
+      "connectChannelCta": "Connect phone channel",
+      "reconnectChannelCta": "Reconnect phone channel",
+      "missingCustomerScope": "The connected store does not allow customer reads yet. Reconnect it with customer access to search.",
+      "noSearchResults": "No customers found. Try a different name, phone, or email.",
+      "ordersCount": "{n} orders"
     }
   },
   "newConversation": {
@@ -1504,7 +2001,14 @@
     "enable": "Enable",
     "create": "Create",
     "saving": "Saving...",
-    "send": "Send"
+    "send": "Send",
+    "copy": "Copy",
+    "saved": "Saved",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "connected": "Connected",
+    "notConnected": "Not connected",
+    "unsavedChanges": "Unsaved changes"
   },
   "onboarding": {
     "channelsBanner": "Pick WhatsApp, Instagram, or Email to connect your first channel.",
@@ -1521,14 +2025,21 @@
         "knowledge_base": "Connect a knowledge base",
         "ai_employees": "Set up your AI Employee",
         "connect_channel": "Connect a channel",
-        "workflows": "Set up your workflow"
+        "workflows": "Set up your workflow",
+        "connect_source_of_truth": "Connect your source of truth",
+        "add_webchat": "Add live chat to your site",
+        "teach_knowledge": "Teach the remaining knowledge"
       },
       "descriptions": {
         "knowledge_base": "Add docs, FAQs, or a website so your AI can answer accurately.",
         "ai_employees": "Create and configure the AI Employee that will handle conversations.",
         "connect_channel": "Link WhatsApp, Instagram, or web chat to start receiving messages.",
-        "workflows": "Wire channels to your AI Employee, teams, and subflows in the main workflow."
-      }
+        "workflows": "Wire channels to your AI Employee, teams, and subflows in the main workflow.",
+        "connect_source_of_truth": "Your CRM or store - so your AI knows every customer.",
+        "add_webchat": "No chat widget was found on your site - let visitors talk to your AI right on the page.",
+        "teach_knowledge": "A few gaps are still open - add them in Knowledge."
+      },
+      "viewBusiness": "See your full business profile →"
     }
   },
   "setup": {
@@ -1979,7 +2490,7 @@
     },
     "cta": {
       "title": "Be first to put your AI Employee to work",
-      "subtitle": "Leave your details and we'll set you up with early access — no credit card, no commitment.",
+      "subtitle": "Leave your details and we'll set you up with early access - no credit card, no commitment.",
       "button": "Get Early Access",
       "form": {
         "namePlaceholder": "Your name",
@@ -2006,6 +2517,20 @@
       "privacy": "Privacy Policy",
       "terms": "Terms of Service",
       "copyright": "All rights reserved."
+    },
+    "pricing": {
+      "label": "Pricing",
+      "title": "Priced around your conversation volume",
+      "subtitle": "Every plan includes the shared inbox, the connected channels and the AI that understands your business. Choose the capacity that matches how much you talk to customers.",
+      "viewAll": "See full pricing",
+      "note": "Conversation estimates are based on the plan configuration. Actual credit consumption varies by conversation length, channel, AI actions, enabled features and voice duration.",
+      "exampleChats": "For example, around {daily} conversations a day comes to about {monthly} a month.",
+      "exampleBoth": "For example, around {chatsDaily} chat conversations and {callsDaily} calls a day comes to about {chatsMonthly} conversations and {callsMonthly} calls a month."
+    },
+    "social": {
+      "instagram": "GOTCHA on Instagram",
+      "facebook": "GOTCHA on Facebook",
+      "whatsapp": "Message GOTCHA on WhatsApp"
     }
   },
   "earlyAccess": {
@@ -2113,35 +2638,52 @@
       "avgResponseTime": "Avg Response Time",
       "avgResolutionTime": "Avg Resolution Time",
       "customerSatisfaction": "Customer Satisfaction",
-      "aiResolutionRate": "AI Resolution Rate"
+      "aiResolutionRate": "AI Resolution Rate",
+      "aiHandledShare": "AI-handled share",
+      "approvalRate": "Approval rate"
     },
     "aiPerformance": {
       "title": "AI Agent Performance",
       "conversationsHandled": "Conversations Handled",
       "avgResolutionTime": "Avg Resolution Time",
       "escalationRate": "Escalation Rate",
-      "topCategories": "Top Resolved Categories"
+      "topCategories": "Top Resolved Categories",
+      "aiMessages": "AI messages",
+      "resolved": "Resolved",
+      "escalated": "Escalated",
+      "governance": "Approval governance",
+      "approvalRate": "Approval rate",
+      "overrideRate": "Override rate",
+      "pendingApprovals": "Pending",
+      "avgDecision": "Avg approval decision time: {minutes}m"
     },
     "humanPerformance": {
       "title": "Human Agent Performance",
       "conversationsHandled": "Conversations Handled",
       "avgResolutionTime": "Avg Resolution Time",
       "satisfactionScore": "Satisfaction Score",
-      "topAgents": "Top Agents"
+      "topAgents": "Top Agents",
+      "agent": "Agent",
+      "active": "Active",
+      "claimedToday": "Claimed today",
+      "avgResponse": "Avg response"
     },
     "topQuestions": {
       "title": "Top Customer Questions",
       "subtitle": "Most frequently asked questions and automation opportunities",
       "count": "Count",
       "category": "Category",
-      "canAutomate": "Automation Opportunity"
+      "canAutomate": "Automation Opportunity",
+      "times": "{count} times",
+      "automate": "Automate"
     },
     "toolUsage": {
       "title": "Tool Usage",
       "subtitle": "How AI tools are being utilized",
       "tool": "Tool",
       "usage": "Usage",
-      "successRate": "Success Rate"
+      "successRate": "Success Rate",
+      "uses": "{count} uses"
     },
     "channelPerformance": {
       "title": "Channel Performance",
@@ -2153,16 +2695,30 @@
       "conversations": "Conversations",
       "responseTime": "Response Time",
       "resolutionRate": "Resolution Rate",
-      "slaCompliance": "SLA Compliance"
+      "slaCompliance": "SLA Compliance",
+      "agents": "Agents",
+      "resolution": "Resolution"
     },
     "insights": {
       "title": "AI Insights",
       "subtitle": "Suggested automations and improvements",
       "automationOpportunity": "Automation Opportunity",
       "createFlow": "Create Flow",
-      "setupIntegration": "Setup Integration"
+      "setupIntegration": "Setup Integration",
+      "highImpact": "High impact"
     },
-    "noData": "No analytics data available for this period"
+    "noData": "No analytics data available for this period",
+    "partialData": "Some analytics are temporarily unavailable - showing what we have.",
+    "noDataYet": "No data for this period yet.",
+    "noAgentsYet": "No human agents yet.",
+    "noToolUsageYet": "The AI hasn't used any tools in this period.",
+    "noInsightsYet": "Not enough activity yet to generate insights.",
+    "trend": {
+      "title": "Message volume",
+      "subtitle": "Daily inbound vs outbound messages",
+      "inbound": "Inbound",
+      "outbound": "Outbound"
+    }
   },
   "replay": {
     "title": "Conversation Replay",
@@ -2236,6 +2792,8 @@
     "score": "Score"
   },
   "marketplace": {
+    "crmMovedHint": "Looking for your CRM or customer system of record? That is a business-level choice, configured in",
+    "crmMovedLink": "Settings → Business Systems",
     "title": "Integrations Marketplace",
     "search": "Search integrations...",
     "allCategories": "All",
@@ -2270,7 +2828,13 @@
     "usedByDepartments": "Used by {count} departments",
     "categoryShipping": "Shipping",
     "categoryProjectManagement": "Project Management",
-    "categoryCalendar": "Calendar"
+    "categoryCalendar": "Calendar",
+    "subtitle": "Connect external services to power your AI agents",
+    "systemOfRecordActive": "Your customer system of record",
+    "manageInSettings": "Manage in Settings →",
+    "selectAllTools": "Select all",
+    "clearAllTools": "Clear all",
+    "applying": "Applying..."
   },
   "usage": {
     "title": "Usage",
@@ -2291,17 +2855,120 @@
     "type": "Type",
     "quantity": "Quantity",
     "date": "Date",
-    "ai_tokens": "AI Tokens",
+    "ai_tokens": "AI activity",
     "message_sent": "Messages",
     "tool_call": "Tool Calls",
     "automation_run": "Automations",
     "allTenants": "All Tenants",
     "tenant": "Tenant",
     "totalUsage": "Total Usage",
-    "byTenant": "By Tenant"
+    "byTenant": "By Tenant",
+    "credits": {
+      "title": "Monthly credits",
+      "period": "Billing period",
+      "monthly": "monthly credits",
+      "remaining": "Remaining",
+      "purchased": "Extra credits",
+      "pace": "About {n} credits per day",
+      "runsOut": "At this pace, credits run out around {date}",
+      "exhausted": "Credits are used up. AI employees pause replying until credits renew or more are purchased.",
+      "exhaustedAuto": "Credits are used up. Auto-purchase will top up within your monthly spending cap."
+    },
+    "eventsCount": "{n} events",
+    "actionFailed": "Action failed",
+    "buy": {
+      "title": "Buy additional credits",
+      "subtitle": "Extra credits never expire and are used after your monthly credits.",
+      "credits": "{n} credits",
+      "cta": "Buy",
+      "confirmTitle": "Confirm purchase",
+      "confirmBody": "Buy {n} credits for {price}? Your saved payment method will be charged now.",
+      "confirmCta": "Confirm purchase",
+      "cancel": "Back",
+      "failed": "Purchase failed",
+      "done": "{n} credits added",
+      "pageTitle": "Buy usage credits",
+      "pageSubtitle": "Extra credits never expire and are used after your monthly plan credits.",
+      "back": "Back to Usage",
+      "processing": "Processing...",
+      "noPackages": "No credit packages are available right now.",
+      "receiptNote": "Payment is processed by our provider. Your balance updates only after the payment is confirmed, and a receipt becomes available on the Billing page.",
+      "checking": "We are confirming this payment with your bank. Your credits will appear here shortly - please do not pay again."
+    },
+    "planCredits": {
+      "title": "Plan credits",
+      "unit": "credits",
+      "resets": "Resets {date}",
+      "pctUsed": "{n}% used",
+      "remaining": "{n} credits remaining"
+    },
+    "breakdown": {
+      "title": "Available credits",
+      "planAllowance": "Plan allowance",
+      "purchased": "Purchased package balance",
+      "total": "Total available",
+      "order": "Credits are consumed in order: monthly plan credits first, then your purchased balance.",
+      "promotional": "Promotional",
+      "trialOrPoc": "Trial / pilot"
+    },
+    "usageCredits": {
+      "title": "Usage credits",
+      "onDesc": "Automatic top-ups keep your AI running after plan credits are used up, within your monthly spending limit.",
+      "offDesc": "Turn on usage credits to keep operating after your included plan credits are exhausted.",
+      "offHint": "When plan credits run out, AI employees pause replying until credits renew or you buy more.",
+      "enable": "Enable",
+      "adjustLimit": "Adjust limit",
+      "spent": "spent",
+      "limitLabel": "Monthly spend limit"
+    },
+    "balance": {
+      "title": "Current balance",
+      "buy": "Buy credits"
+    },
+    "manageSubscription": "Manage or cancel subscription",
+    "limit": {
+      "back": "Back to Usage",
+      "title": "Usage-credit spending limit",
+      "subtitle": "Automatic top-ups keep the AI operating after plan credits run out, up to a monthly money limit you set.",
+      "enableTitle": "Usage credits",
+      "enableDesc": "Automatically buy more credits when plan credits run low.",
+      "maxSpend": "Maximum additional monthly spend",
+      "maxSpendHint": "The billing service will not auto-purchase beyond this amount in a month.",
+      "threshold": "Trigger threshold",
+      "thresholdHint": "Top up when remaining plan credits drop to this percentage.",
+      "package": "Top-up package",
+      "packageHint": "Which credit package to buy each time the threshold is reached.",
+      "atLimitNote": "When the monthly limit is reached, automatic purchases stop for the rest of the month and you are notified. You can still buy credits manually at any time.",
+      "cancel": "Cancel",
+      "save": "Save limit"
+    },
+    "auto": {
+      "title": "Automatic credit top-up",
+      "subtitle": "Top up automatically when credits run low, within a monthly spending cap you set.",
+      "enable": "Automatically buy more credits when running low",
+      "threshold": "Trigger at remaining %",
+      "package": "Package",
+      "maxSpend": "Max additional monthly spend (₪)",
+      "capNote": "The cap is enforced by the billing service before every automatic charge. Once reached, no more automatic purchases happen this month.",
+      "save": "Save",
+      "saved": "Auto-purchase settings saved"
+    },
+    "estimatedRemaining": {
+      "chats": "Estimated conversations left:",
+      "calls": "Estimated calls left:"
+    },
+    "evaluation": {
+      "trialTitle": "You are on a trial",
+      "pocTitle": "You are on a pilot",
+      "expires": "Ends {date}",
+      "body": "Every capability is unlocked, with {credits} credits for the evaluation. You have {remaining} left.",
+      "convertCta": "Choose a plan"
+    }
   },
   "aiStudio": {
     "title": "AI Studio",
+    "nodePaletteTitle": "Node Palette",
+    "nodePaletteHint": "Drag onto canvas, or click to add",
     "subtitle": "Create AI employees, define what they know, and manage how they handle conversations",
     "wizard": {
       "title": "Create AI Employee",
@@ -2323,10 +2990,226 @@
     "edit": "Edit",
     "test": "Test",
     "tabs": {
-      "team": "Team Members",
-      "playbooks": "Playbooks",
+      "employees": "AI Employees",
       "knowledge": "Knowledge",
-      "skills": "Skills & Integrations"
+      "processes": "Processes",
+      "tools": "Tools & Integrations"
+    },
+    "portTypes": {
+      "flow": "flow",
+      "branch": "branch",
+      "participant": "participant",
+      "participant_event": "participant event",
+      "message": "message",
+      "any": "anything"
+    },
+    "nodeInfo": {
+      "about": "About {node}",
+      "receives": "Receives: {types}",
+      "produces": "Produces: {types}",
+      "noInput": "Starting step - receives nothing.",
+      "noOutput": "Terminal step - produces nothing."
+    },
+    "nodeReq": {
+      "voiceChannel": "Requires a connected voice channel to run.",
+      "connectVoice": "Connect it in Settings → Channels → Twilio.",
+      "shopify": "Requires a connected Shopify store to run.",
+      "crm": "Requires a connected CRM to run.",
+      "calendar": "Requires a connected calendar to run.",
+      "connectProvider": "Connect it in Settings before publishing."
+    },
+    "nodeCategories": {
+      "triggers": "Triggers",
+      "flow_control": "Flow Control",
+      "logic": "Logic",
+      "messages": "Messages",
+      "actions": "Actions",
+      "integrations": "Integrations",
+      "customer_data": "Customer Data",
+      "voice_actions": "Voice Actions",
+      "voice_triggers": "Voice Triggers",
+      "routing": "Routing",
+      "data": "Data",
+      "destinations": "Destinations"
+    },
+    "nodes": {
+      "channel_entry": {
+        "label": "Channel Entry",
+        "desc": "Where messages from a channel enter the process."
+      },
+      "start": {
+        "label": "Start",
+        "desc": "The starting point of the process."
+      },
+      "end": {
+        "label": "End",
+        "desc": "Ends this branch of the process."
+      },
+      "wait": {
+        "label": "Wait",
+        "desc": "Pause for a set time before the next step."
+      },
+      "condition_group": {
+        "label": "Condition",
+        "desc": "Branch based on a rule (match / no match)."
+      },
+      "send_message_text": {
+        "label": "Send Text",
+        "desc": "Send a text message to the customer."
+      },
+      "send_message_interactive": {
+        "label": "Send Interactive (Link)",
+        "desc": "Send a message with a link button."
+      },
+      "send_message_quick_reply": {
+        "label": "Send Quick Reply",
+        "desc": "Show tappable reply buttons."
+      },
+      "send_message_image": {
+        "label": "Send Image",
+        "desc": "Send an image."
+      },
+      "send_message_file": {
+        "label": "Send File",
+        "desc": "Send a file or document."
+      },
+      "send_message_template": {
+        "label": "Send WhatsApp Template",
+        "desc": "Send an approved WhatsApp template."
+      },
+      "send_comment_reply": {
+        "label": "Reply to Comment",
+        "desc": "Reply publicly to a social comment."
+      },
+      "collect_input": {
+        "label": "Collect Input",
+        "desc": "Ask a question and store the answer."
+      },
+      "set_variable": {
+        "label": "Set Variable",
+        "desc": "Store or compute a value for later steps."
+      },
+      "http_request": {
+        "label": "HTTP Request",
+        "desc": "Call an external API."
+      },
+      "ai_generate": {
+        "label": "AI Generate",
+        "desc": "Generate text with the AI."
+      },
+      "update_customer": {
+        "label": "Update Customer",
+        "desc": "Set a tag or attribute on the customer."
+      },
+      "bring_user_data": {
+        "label": "Bring User Data",
+        "desc": "Load customer fields from the source of truth."
+      },
+      "comment_trigger": {
+        "label": "Trigger: Comment",
+        "desc": "Start when a social comment arrives."
+      },
+      "keyword_trigger": {
+        "label": "Trigger: Keyword",
+        "desc": "Start when a message matches a keyword."
+      },
+      "schedule_trigger": {
+        "label": "Trigger: Schedule",
+        "desc": "Start on a schedule."
+      },
+      "webhook_trigger": {
+        "label": "Trigger: Webhook",
+        "desc": "Start when an external webhook fires."
+      },
+      "voice_add_participant": {
+        "label": "Voice: Add participant",
+        "desc": "Add a participant to the live call.",
+        "limitation": "Its output is a participant event and can't connect to a message-content input."
+      },
+      "route_target": {
+        "label": "Route Target",
+        "desc": "Route the conversation to an agent, flow or department."
+      },
+      "voice_trigger:call": {
+        "incoming": {
+          "label": "Voice: Incoming call",
+          "desc": "Start when an inbound call arrives."
+        },
+        "answered": {
+          "label": "Voice: Call answered",
+          "desc": "Start when a call is answered."
+        },
+        "missed": {
+          "label": "Voice: Missed call",
+          "desc": "Start when a call is missed."
+        },
+        "hangup_customer": {
+          "label": "Voice: Customer hung up",
+          "desc": "Start when the customer hangs up."
+        },
+        "hangup_agent": {
+          "label": "Voice: Agent hung up",
+          "desc": "Start when the agent hangs up."
+        },
+        "intent_detected": {
+          "label": "Voice: Intent detected",
+          "desc": "Start when the AI detects an intent during the call."
+        },
+        "keyword_spoken": {
+          "label": "Voice: Keyword spoken",
+          "desc": "Start when a keyword is spoken during the call."
+        }
+      },
+      "default_fallback": {
+        "label": "Default Fallback",
+        "desc": "Catch-all for unmatched"
+      }
+    },
+    "templates": {
+      "welcome": {
+        "name": "Welcome new contact",
+        "desc": "Greet every new message, ask for their name, and use it in the reply."
+      },
+      "faq_menu": {
+        "name": "FAQ menu",
+        "desc": "Show the most common questions as tappable buttons, each with a canned answer."
+      },
+      "human_handoff": {
+        "name": "Talk to human (keyword)",
+        "desc": "When someone types \"agent\", \"human\" or \"help\", route to a live teammate."
+      },
+      "lead_qualification": {
+        "name": "Lead qualification",
+        "desc": "Capture email + company, tag the contact as a lead, then hand off to sales."
+      },
+      "drip_followup": {
+        "name": "Delayed follow-up",
+        "desc": "Answer now, then follow up later with a link - handy for pricing nudges."
+      },
+      "comment_to_dm_lead_magnet": {
+        "name": "Comment → DM lead magnet",
+        "desc": "A keyword on a post → public reply + DM the resource + capture email."
+      },
+      "giveaway_entry": {
+        "name": "Giveaway entry capture",
+        "desc": "Comment to enter → DM confirmation + email capture + giveaway tag."
+      },
+      "appointment_booking": {
+        "name": "Appointment booking",
+        "desc": "Pick a time slot, capture name + phone, route to a teammate to confirm."
+      },
+      "support_triage": {
+        "name": "Support triage",
+        "desc": "Pick a category and route to the right team."
+      },
+      "ai_first_response": {
+        "name": "AI auto-reply",
+        "desc": "Let the AI answer first from your knowledge base; fall through to a human."
+      },
+      "order_status_lookup": {
+        "name": "Order status lookup",
+        "desc": "Collect the order ID, fetch status from your API, and reply."
+      }
     },
     "stats": {
       "teamMembers": "Team Members",
@@ -2343,7 +3226,7 @@
     "team": {
       "title": "Team Members",
       "subtitle": "Your AI employees that handle customer conversations",
-      "addMember": "Add Team Member",
+      "addMember": "Hire an AI Employee",
       "addMemberHint": "Create a new AI employee for your team",
       "knowledge": "knowledge",
       "skills": "skills",
@@ -2352,7 +3235,8 @@
       "modeAutonomous": "Autonomous",
       "modeCopilot": "Co-Pilot",
       "modeHuman": "Human Only",
-      "noAgents": "No AI employees yet. Create your first team member to get started."
+      "noAgents": "No AI employees yet. Create your first team member to get started.",
+      "readinessTitle": "Readiness score. Click for the full report"
     },
     "playbooks": {
       "title": "Playbooks",
@@ -2364,9 +3248,18 @@
       "editMainPlaybook": "Edit Playbook",
       "mainPlaybookHint": "Steps are evaluated top to bottom. First match routes the conversation.",
       "subPlaybooks": "Sub-Playbooks",
+      "process": "Process",
+      "newProcess": "New process",
+      "newProcessOption": "New process (unsaved)",
+      "templates": "Templates",
+      "statusPublished": "Published",
+      "statusDraft": "Draft",
       "routeSubflow": "Playbook",
       "routeAgent": "Team Member",
-      "routeHuman": "Human"
+      "routeHuman": "Human",
+      "connectionNote": "Each process states when it fires and what your employee does, the visual editor is one click deeper.",
+      "running": "Running",
+      "pausedFlow": "Paused"
     },
     "resources": {
       "title": "Team Resources",
@@ -2374,7 +3267,7 @@
       "knowledge": "Knowledge",
       "sources": "sources",
       "manage": "Manage",
-      "skillsAndTools": "Skills & Tools",
+      "skillsAndTools": "Integrations & Tools",
       "browseMarketplace": "Browse Marketplace",
       "toolsActive": "tools active",
       "connected": "Connected",
@@ -2440,7 +3333,11 @@
           "addMore": "Add more tools from Integrations",
           "panelDesc": "Connect integrations and enable tools for this agent",
           "notConnected": "Not connected",
-          "connectIntegration": "Connect this integration"
+          "connectIntegration": "Connect this integration",
+          "collapseAll": "Collapse all",
+          "expandAll": "Expand all",
+          "enableGroup": "Enable all",
+          "clearGroup": "Clear all"
         },
         "knowledge": {
           "title": "Knowledge",
@@ -2514,6 +3411,24 @@
           "previewBtn1": "Track Order",
           "previewBtn2": "Return Item",
           "previewBtn3": "Talk to Agent"
+        },
+        "reachability": {
+          "title": "This employee isn't receiving conversations yet",
+          "noNode": "It's live, but no playbook routes conversations to it. Add it to your Main Playbook so customers actually reach it.",
+          "noCanvas": "It's live, but you don't have a playbook yet - without one, no conversations are routed to any AI employee.",
+          "cta": "Open Playbooks"
+        },
+        "effectivePerms": {
+          "title": "What this employee can do",
+          "subtitle": "Actions it can actually take right now - a capability must be connected AND the action allowed for this employee.",
+          "allowed": "Allowed",
+          "blocked": "Not available (capability off or not granted)"
+        },
+        "readiness": {
+          "title": "Readiness report",
+          "subtitle": "What your employee already answers well, and what it's still missing. Close gaps to raise the score.",
+          "open": "Open report",
+          "run": "Run test"
         }
       }
     },
@@ -2566,6 +3481,32 @@
       "status": "Status",
       "lastSync": "Last Synced",
       "manageKnowledge": "Manage Knowledge",
+      "explain": "Every knowledge source your AI employees learn from, including websites, documents, FAQs, and connected sources.",
+      "activeSources": "Active sources",
+      "itemsCol": "Items",
+      "cardFilesDesc": "Upload PDFs, docs and more.",
+      "cardWebsiteDesc": "Crawl a page or a whole site.",
+      "cardDriveDesc": "Sync files from Google Drive.",
+      "cardFaqDesc": "Write questions and answers.",
+      "cardConfluence": "Confluence",
+      "cardConfluenceDesc": "Sync spaces and pages.",
+      "typeLabels": {
+        "file": "Files",
+        "url": "Website",
+        "text": "Manual",
+        "mixed": "Mixed",
+        "empty": "Empty",
+        "drive": "Google Drive",
+        "confluence": "Confluence"
+      },
+      "statusLabels": {
+        "ready": "Ready",
+        "processing": "Processing",
+        "error": "Error",
+        "empty": "Empty",
+        "synced": "Synced",
+        "syncing": "Syncing"
+      },
       "page": {
         "backToStudio": "Back to AI Studio",
         "title": "Knowledge Sources",
@@ -2590,11 +3531,86 @@
         "deleteMsg": "This will permanently remove this knowledge source and unassign it from all team members.",
         "cancel": "Cancel",
         "delete": "Delete"
-      }
+      },
+      "addTitle": "Teach your employee something new",
+      "addSub": "Anything a good employee would look up before answering: prices, policies, delivery, FAQs, how-tos.",
+      "addAnswer": "Answer a question",
+      "addUrl": "Add a page",
+      "addFiles": "Upload files",
+      "addDrive": "Connect a drive",
+      "whyTitle": "Why this matters",
+      "why1": "Your employee only answers from what you give it. No knowledge means an honest \"I'll check\" instead of an answer.",
+      "why2": "Every source raises its readiness score, fewer questions it has to hand off.",
+      "why3": "You teach once, it answers forever, on every channel and in every language you support.",
+      "editInManage": "Edit in Manage Knowledge",
+      "deleteDoc": "Delete document",
+      "deleting": "Deleting...",
+      "confirmDeleteKbTitle": "Delete this knowledge base?",
+      "confirmDeleteKbBody": "“{name}” and its {count} document(s) will be removed. Your employees will stop answering from it.",
+      "confirmDeleteDocTitle": "Delete this document?",
+      "confirmDeleteDocBody": "“{name}” will be removed from this knowledge base.",
+      "confirmDeleteIrreversible": "This cannot be undone.",
+      "confirmDeleteAction": "Delete",
+      "manage": {
+        "title": "Knowledge Base",
+        "subtitle": "Manage knowledge sources for your AI agents and copilot",
+        "emptyList": "No knowledge bases yet",
+        "emptyListHint": "Create one to get started",
+        "selectHint": "Select a knowledge base to view details",
+        "namePlaceholder": "Knowledge base name",
+        "descPlaceholder": "Description (optional)",
+        "saving": "Saving...",
+        "editKb": "Edit knowledge base",
+        "externalSources": "External Sources",
+        "noDocs": "No documents yet",
+        "noDocsHint": "Upload files, paste content, add URLs, or connect Google Drive / Confluence",
+        "noIntegrations": "No integrations connected",
+        "noIntegrationsHint": "Connect Google Drive or Confluence to import content",
+        "browseSpaces": "Browse Spaces",
+        "browseFiles": "Browse Files",
+        "newKbTitle": "New Knowledge Base",
+        "fieldName": "Name",
+        "fieldNamePlaceholder": "e.g. Product Documentation",
+        "fieldDesc": "Description",
+        "fieldDescPlaceholder": "Optional description...",
+        "fieldScope": "Available To",
+        "scopeAll": "All AI (entire tenant)",
+        "creating": "Creating...",
+        "create": "Create",
+        "addContentTitle": "Add Content",
+        "modeFile": "Upload Files",
+        "modeUrl": "Website URL",
+        "modeText": "Paste Text",
+        "fieldTitle": "Title",
+        "fieldFile": "File",
+        "dropFiles": "Drop files here or click to browse",
+        "fieldUrl": "Website URL",
+        "urlPlaceholder": "https://example.com/help",
+        "urlHint": "We will crawl this page and extract its content automatically.",
+        "fieldContent": "Content",
+        "contentPlaceholder": "Paste your content here...",
+        "processing": "Processing...",
+        "crawlAdd": "Crawl & Add",
+        "upload": "Upload",
+        "noSpaces": "No spaces found",
+        "noPages": "No pages found",
+        "noSharedDrives": "No shared drives found",
+        "emptyFolder": "This folder is empty",
+        "scopeAllShort": "All AI",
+        "scopeAgent": "Agent",
+        "scopeDepartment": "Department",
+        "document": "document",
+        "documents": "documents",
+        "spaces": "Spaces",
+        "myDrive": "My Drive",
+        "sharedDrives": "Shared Drives"
+      },
+      "removeKb": "Remove knowledge base",
+      "confirmRemoveKbBody": "“{name}” and all of its documents will be removed. Your employees will stop answering from it."
     },
     "tools": {
       "title": "Connected Tools",
-      "subtitle": "Actions AI team members can perform via external integrations",
+      "subtitle": "What your AI team is allowed to do through your connected business systems",
       "openMarketplace": "Browse Marketplace",
       "usedBy": "Used by",
       "notAssigned": "Not assigned",
@@ -2603,7 +3619,53 @@
       "disabled": "Disabled",
       "enabled": "Enabled",
       "noneConnected": "No tools connected",
-      "noTools": "No tools available"
+      "noTools": "No tools available",
+      "enables": "Enables",
+      "actionsLive": "actions for your employee",
+      "wouldEnable": "Would enable:",
+      "governanceTab": "Permissions & Policies",
+      "workspaceTab": "Tools & Permissions"
+    },
+    "workspace": {
+      "overview": "Overview",
+      "working": "Working",
+      "paused": "Paused",
+      "readiness": "Readiness",
+      "talk": "Talk",
+      "edit": "Settings",
+      "hire": "+ Hire",
+      "attention": "Needs your attention",
+      "allSet": "All set. Your employee has everything it needs right now.",
+      "finishHiring": "Finish hiring",
+      "newEmployee": "a new employee",
+      "finishHiringSub": "Resume right where you stopped",
+      "noChannel": "Connect a channel so customers can reach them",
+      "noChannelSub": "WhatsApp, Instagram or webchat, one click",
+      "open": "Open",
+      "cards": {
+        "knowledge": "Knowledge sources",
+        "knowledgeSub": "What they answer from",
+        "tools": "Connected tools",
+        "toolsSub": "What they can do",
+        "processes": "Processes",
+        "processesSub": "How their work flows",
+        "inbox": "Inbox",
+        "inboxSub": "Watch conversations as they happen",
+        "analytics": "Analytics",
+        "analyticsSub": "What the work produced"
+      },
+      "mapAria": "How the employee's systems work together",
+      "map": {
+        "employee": "your employee",
+        "knowledge": "Knowledge",
+        "knowledgeSub": "what they know",
+        "tools": "Integrations",
+        "toolsSub": "what they can do",
+        "processes": "Processes",
+        "processesSub": "how they work",
+        "channels": "Channels",
+        "channelsSub": "where they talk"
+      }
     }
   },
   "confirm": {
@@ -2822,7 +3884,8 @@
       "header": {
         "muteButton": "Mute",
         "unmuteButton": "Unmute",
-        "hangupButton": "Hang up"
+        "hangupButton": "Hang up",
+        "contextTitle": "Context"
       },
       "declined": {
         "noAnswer": "Customer didn't answer - closing.",
@@ -2962,6 +4025,7 @@
     "rejecting": "Rejecting…",
     "running": "Running…",
     "approveAndRun": "Approve & run",
+    "retryExecution": "Retry action",
     "confirmReject": "Confirm reject",
     "rejectReasonPlaceholder": "Why are you rejecting? (required - used to craft the bot's fallback reply)",
     "note": "Note",
@@ -3150,6 +4214,980 @@
       "tierJuniorDesc": "More cues, all lanes, animations on",
       "tierMidDesc": "Default",
       "tierSeniorDesc": "Whisper mode - pulse only"
+    }
+  },
+  "gettingStarted": {
+    "tourCta": "Take the guided tour",
+    "title": "Welcome to GOTCHA",
+    "titleWithBiz": "Welcome, {business}",
+    "subtitle": "Your AI employee already knows your business. Take your first steps - talk to it, take it live, and watch it work.",
+    "progress": "First steps",
+    "chips": {
+      "core": "Connected to {system}",
+      "kb": "Knowledge loaded",
+      "channels": "{n} channels detected"
+    },
+    "chat": {
+      "title": "Talk to {name}",
+      "subtitle": "A private sandbox - nothing is sent to customers.",
+      "ready": "Ready to work",
+      "empty": "Say hello - ask anything a customer would.",
+      "s1": "What do you know about our business?",
+      "s2": "How would you answer a customer asking about prices?",
+      "s3": "What can you do for me?",
+      "placeholder": "Write a message…",
+      "send": "Send",
+      "error": "Something went wrong - try again.",
+      "noEmployeeTitle": "Create your AI employee",
+      "noEmployeeSub": "You skipped this during setup",
+      "noEmployeeBody": "Your workspace is ready - all that's missing is the employee. It takes about two minutes: tell us the goal and we'll draft everything else.",
+      "createCta": "Create my AI employee"
+    },
+    "milestones": {
+      "title": "Your first steps",
+      "meet_employee": {
+        "title": "Meet your AI employee",
+        "desc": "See its profile, persona and skills"
+      },
+      "first_chat": {
+        "title": "Have your first conversation",
+        "desc": "Ask it anything in the sandbox"
+      },
+      "go_live_channel": {
+        "title": "Go live on a channel",
+        "desc": "Connect WhatsApp, Instagram or webchat"
+      },
+      "first_customer": {
+        "title": "First real customer answered",
+        "desc": "Happens on its own once you're live"
+      },
+      "teach_knowledge": {
+        "title": "Teach what's missing",
+        "desc": "Close the open knowledge gaps"
+      }
+    },
+    "features": {
+      "title": "Get to know the platform",
+      "inbox": "Inbox",
+      "aiStudio": "AI Studio",
+      "channels": "Channels",
+      "knowledge": "Knowledge",
+      "analytics": "Analytics"
+    }
+  },
+  "businessRules": {
+    "title": "Business Rules",
+    "subtitle": "Decide what your AI employee may offer and execute for refunds, cancellations and compensation. These rules are enforced by the system itself, before an offer is made, before an approval is requested, and again right before execution.",
+    "kind": {
+      "COMPENSATION": "Compensation coupons",
+      "COUPON": "Discount coupons",
+      "REFUND": "Refunds",
+      "CANCEL_ORDER": "Order cancellations"
+    },
+    "enabled": "Enabled",
+    "version": "Version",
+    "approvedReasons": "Approved reasons",
+    "reasonsHint": "If none are selected, any reason is acceptable. When selected, the AI may only proceed for these reasons.",
+    "reason": {
+      "late_delivery": "Delivery was materially late",
+      "damaged_or_wrong_item": "Damaged or wrong item",
+      "confirmed_business_error": "Confirmed business error",
+      "just_because": "Other (not approved)"
+    },
+    "maxAmount": "Maximum amount",
+    "maxPercent": "Max % of order value",
+    "managerAbove": "Manager approval above",
+    "preventDuplicate": "Prevent a second compensation for the same incident",
+    "save": "Save rules",
+    "saving": "Saving...",
+    "saved": "Saved. A new version is now active.",
+    "previewTitle": "Test these rules",
+    "previewAmount": "Requested amount",
+    "previewReason": "Reason",
+    "previewRun": "Check decision",
+    "previewFailed": "Could not evaluate the sample.",
+    "maxLabel": "max allowed",
+    "decision": {
+      "ALLOWED": "Allowed",
+      "DENIED": "Denied",
+      "REQUIRES_INFORMATION": "Needs more information",
+      "REQUIRES_EVIDENCE": "Needs evidence",
+      "REQUIRES_HUMAN_APPROVAL": "Needs manager approval",
+      "ALLOWED_WITH_LIMIT": "Allowed up to the limit",
+      "FAIL_CLOSED": "Blocked (safety)"
+    },
+    "defaultNote": {
+      "COMPENSATION": "No policy is configured yet. Until you save one, the AI will not offer or issue compensation coupons at all. Saving a policy is what turns this on.",
+      "COUPON": "No policy is configured yet. Until you save one, the AI will not create or manage discount coupons.",
+      "REFUND": "No policy is configured yet. Default: customers may request refunds and the AI can prepare them, but every refund still requires human approval, and amounts always come from verified store data.",
+      "CANCEL_ORDER": "No policy is configured yet. Default: customers may request cancellations and the AI can prepare them, but every cancellation still requires human approval."
+    }
+  },
+  "setupChecklist": {
+    "title": "Complete setup",
+    "subtitle": "Five steps and you're live",
+    "show": "Complete setup",
+    "dismiss": "Hide checklist",
+    "next": "Next",
+    "openPage": "Open the full checklist",
+    "manage": "Manage",
+    "fix": "Fix connection",
+    "error": "We couldn't load your setup status.",
+    "retry": "Try again",
+    "status": {
+      "notStarted": "Not started",
+      "inProgress": "In progress",
+      "attention": "Needs attention",
+      "done": "Done"
+    },
+    "items": {
+      "connect_source_of_truth": {
+        "title": "Connect a source of truth",
+        "why": "Orders and customer data flow in, so every answer is grounded in your real business.",
+        "cta": "Connect source of truth",
+        "attention": "The connection stopped working. Reconnect it to keep customer data flowing.",
+        "inProgress": "Connection started. Finish the remaining setup to put it to work."
+      },
+      "connect_channel": {
+        "title": "Connect communication channels",
+        "why": "WhatsApp, Instagram or email: the places your customers already write to.",
+        "cta": "Connect a channel",
+        "attention": "A channel lost its connection. Reconnect it so messages can arrive.",
+        "inProgress": "A channel connection is pending. Complete it to start receiving messages."
+      },
+      "connect_knowledge": {
+        "title": "Connect knowledge",
+        "why": "Price lists, policies and your website teach the AI to answer from your truth.",
+        "cta": "Add knowledge",
+        "attention": "Your knowledge source needs attention.",
+        "inProgress": "Knowledge setup started. Add at least one source to finish."
+      },
+      "create_ai_employee": {
+        "title": "Create an AI employee",
+        "why": "Your first digital team member answers customers around the clock.",
+        "cta": "Create AI employee",
+        "attention": "Your AI employee needs attention.",
+        "inProgress": "A draft is waiting. Finish hiring to put it to work."
+      },
+      "create_process": {
+        "title": "Create a process",
+        "why": "Route conversations, collect details and hand off to a human automatically.",
+        "cta": "Create a process",
+        "attention": "Your process needs attention.",
+        "inProgress": "A process is in the works. Finish building it to switch it on."
+      }
+    }
+  },
+  "users": {
+    "pageTitle": "Users & Roles",
+    "pageSubtitle": "Manage workspace members, roles, and permission overrides.",
+    "tabs": {
+      "members": "Members",
+      "roles": "Roles"
+    },
+    "loadFailed": "Failed to load data",
+    "scope": {
+      "own": "Own",
+      "team": "Team",
+      "department": "Department",
+      "workspace": "Workspace"
+    },
+    "badge": {
+      "inheritedFromRole": "Inherited from Role",
+      "additional": "Additional",
+      "revoked": "Revoked",
+      "config": "Config",
+      "runtime": "Runtime",
+      "system": "System",
+      "custom": "Custom"
+    },
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive",
+      "invited": "Invited",
+      "invitedTooltip": "Invite sent - hasn't signed in yet",
+      "lastSignIn": "Last sign-in: {date}"
+    },
+    "common": {
+      "saving": "Saving…",
+      "creating": "Creating…",
+      "cancel": "Cancel",
+      "save": "Save"
+    },
+    "members": {
+      "searchPlaceholder": "Search by name or email…",
+      "addUser": "Add user",
+      "table": {
+        "name": "Name",
+        "email": "Email",
+        "department": "Department",
+        "status": "Status",
+        "role": "Role"
+      },
+      "noMatch": "No users match your search.",
+      "noUsers": "No users found.",
+      "removedToast": "{name} removed",
+      "removeModalDefaultName": "this user",
+      "deleteFailedToast": "Failed to delete user",
+      "removeModal": {
+        "title": "Remove user",
+        "message": "Remove {name} from the workspace? This cannot be undone.",
+        "confirmText": "Remove"
+      }
+    },
+    "panel": {
+      "closeAria": "Close panel",
+      "userDetails": "User details",
+      "profile": "Profile",
+      "nameEmailRequired": "Name and email are required.",
+      "genericError": "An error occurred",
+      "loadAccessFailedToast": "Failed to load user access",
+      "nameLabel": "Name",
+      "emailLabel": "Email",
+      "phoneLabel": "Phone number",
+      "phonePlaceholder": "+972501234567",
+      "phoneHelper": "Used for voice channel routing and smart callbacks.",
+      "createHelper": "They will set their own password on our secure sign-in service. You will get a one-time setup link to share with them.",
+      "departmentLabel": "Department",
+      "noDepartment": "No department",
+      "roleLabel": "Role",
+      "selectRolePlaceholder": "Select a role…",
+      "addedToast": "{name} added",
+      "profileUpdatedToast": "Profile updated",
+      "deactivatedToast": "User deactivated",
+      "activatedToast": "User activated",
+      "statusUpdateFailedToast": "Failed to update status",
+      "resetPasswordFailedToast": "Failed to reset password",
+      "roleUpdatedToast": "Role updated",
+      "roleUpdateFailedToast": "Failed to update role",
+      "scopeUpdatedToast": "Scope updated",
+      "scopeUpdateFailedToast": "Failed to update scope",
+      "permissionUpdateFailedToast": "Failed to update permission",
+      "statusSection": "Status",
+      "activeHelper": "User can sign in and receive conversations.",
+      "inactiveHelper": "User is suspended and cannot sign in.",
+      "toggleActiveAria": "Toggle active",
+      "securitySection": "Security",
+      "resetPassword": "Reset password",
+      "resetPasswordHelper": "Generate a one-time link this person can use to set a new password. You never see or choose their password.",
+      "creatingLink": "Creating link…",
+      "generateSetupLink": "Generate password setup link",
+      "linkCreated": "Link created. It can be used once.",
+      "roleSection": "Role",
+      "scopeOverrideSection": "Scope Override",
+      "scopeOverrideHelper": "\"Inherit\" uses the role's default scope.",
+      "inherit": "Inherit",
+      "additionalPermissions": "Additional Permissions",
+      "effectiveCount": "Effective: {n}",
+      "permissionsHelper": "Click to cycle state. Inherited → Revoked → (clear) or None → Granted → (clear).",
+      "dangerZone": "Danger zone",
+      "removeUser": "Remove user",
+      "saveProfile": "Save profile"
+    },
+    "roles": {
+      "systemRoles": "System roles",
+      "customRoles": "Custom roles",
+      "newRole": "+ New role",
+      "namePlaceholder": "Role name (e.g. Sales Manager)",
+      "descriptionPlaceholder": "Description (optional)",
+      "createRole": "Create role",
+      "emptyCustom": "No custom roles yet. Built-in roles cover most use cases; create a custom role for unique permission sets.",
+      "createdToast": "Role \"{name}\" created",
+      "createFailedToast": "Failed to create role",
+      "deletedToast": "Role \"{name}\" deleted",
+      "deleteFailedToast": "Failed to delete role",
+      "deleteModal": {
+        "title": "Delete role",
+        "message": "Delete \"{name}\"? Users assigned to it will lose its permissions.",
+        "confirmText": "Delete"
+      }
+    },
+    "roleRow": {
+      "permissionsCount": "{n} permissions",
+      "membersCount": "{n} members",
+      "permissionsSavedToast": "\"{name}\" permissions saved",
+      "permissionsSaveFailedToast": "Failed to save permissions",
+      "roleUpdatedToast": "Role updated",
+      "roleUpdateFailedToast": "Failed to update role",
+      "namePlaceholder": "Role name",
+      "descriptionPlaceholder": "Description (optional)",
+      "noDescription": "No description",
+      "editName": "Edit name",
+      "permissionsSection": "Permissions",
+      "reset": "Reset",
+      "saveChanges": "Save changes",
+      "deleteRole": "Delete role"
+    },
+    "inviteDepartments": "Departments",
+    "inviteDepartmentsHint": "Choose none, one or several departments for this member.",
+    "inviteDepartmentsSearch": "Search departments...",
+    "inviteSummary": "The invite email goes to {email}. They set their own password on the secure sign-in service; the setup link can be used once."
+  },
+  "businessPage": {
+    "rescanTitle": "Rescan your business?",
+    "rescanBody": "I will scan your website again (homepage, key pages and public signals) and refresh what I know: description, channels, systems and brand voice. Suggestions may change. Information you approved or taught me stays and is never silently overwritten. The scan takes a couple of minutes; your AI employees get the updated context afterwards.",
+    "rescanConfirm": "Start rescan",
+    "rescanCancel": "Not now",
+    "completedTitle": "Completed",
+    "completedEmpty": "Nothing completed yet.",
+    "completedAt": "Done {date}",
+    "reopen": "Reopen",
+    "reopenTitle": "Reopen this recommendation?",
+    "reopenBody": "It returns to the open list exactly as before it was marked done. Nothing else changes.",
+    "reopenConfirm": "Reopen",
+    "uploadFile": "Upload file",
+    "uploadHint": "PDF, Word, Markdown or text, up to 10MB",
+    "uploading": "Uploading...",
+    "uploadDone": "File added to my knowledge",
+    "uploadFailed": "Upload failed. Try a different file.",
+    "editProfile": "Edit business profile",
+    "editProfileTitle": "What I understand about your business",
+    "editVoice": "Brand voice",
+    "editTone": "Tone",
+    "editLanguages": "Languages (comma separated)",
+    "editDescription": "Business description",
+    "profileSaved": "Saved. I answer from this from now on.",
+    "profileSaveFailed": "Saving failed. Try again.",
+    "save": "Save",
+    "cancel": "Cancel"
+  },
+  "pricing": {
+    "recommended": "Recommended",
+    "currentPlan": "Current plan",
+    "custom": {
+      "label": "Custom plan",
+      "title": "Built around how your business actually runs",
+      "body": "If your volumes, channels, limits or contract terms do not fit these plans, we will configure one that does. A custom plan sets its own capabilities, numeric limits, credit allocation and chat and voice volumes, on commercial terms agreed with you.",
+      "cta": "Contact sales",
+      "i1": "Feature selection and numeric limits set per organization",
+      "i2": "Credit allocation and chat and voice volumes agreed up front",
+      "i3": "Monthly or annual terms with a defined contract period",
+      "i4": "Priced for your business rather than a published tier"
+    },
+    "month": "month",
+    "perMonth": "a month",
+    "perDayShort": "a business day",
+    "perBusinessDay": "per business day",
+    "included": "Included",
+    "includedCredits": "Included credits",
+    "creditsWord": "credits",
+    "chatsWord": "conversations",
+    "estimatedChats": "Estimated conversations",
+    "estimatedCalls": "Estimated calls",
+    "perConversation": "Per conversation",
+    "perCall": "Per call",
+    "blended": "Per interaction",
+    "everythingIn": "Everything in {plan}, plus",
+    "seeDetails": "See details",
+    "configureVolume": "Configure volume",
+    "managePlan": "Manage plan",
+    "currencyLabel": "Prices in",
+    "plansHeading": "Plans",
+    "configureHeading": "Configure your plan",
+    "approxIn": "Approximately, in {display}. Charged in {charged}:",
+    "hero": {
+      "label": "Pricing",
+      "title": "Pricing that follows how much you talk to customers",
+      "subtitle": "Every plan includes the shared inbox, the connected channels and the AI that understands your business. You choose the conversation capacity.",
+      "creditsNote": "One unit runs through the whole product: credits. Each plan includes a monthly credit allowance, and a conversation draws on it as the AI reads, replies and acts. Buy more at any time, or set an automatic top-up with a monthly spending limit."
+    },
+    "cta": {
+      "getStarted": "Get started",
+      "managePlan": "Manage plan",
+      "contactSales": "Contact sales"
+    },
+    "configureTitle": "Configure {plan}",
+    "configureSubtitle": "Set the volume you expect. The credit allowance and the price move together.",
+    "fixedAllowance": "This plan comes with a fixed monthly credit allowance. Buy extra credits whenever you need them, or move up a plan for a larger recurring allowance.",
+    "chatVolume": "Chat conversations",
+    "voiceVolume": "Voice calls",
+    "yourPlan": "Your plan",
+    "planCredits": "Plan credits",
+    "addedCredits": "Added by your selection",
+    "totalCredits": "Total monthly credits",
+    "extraCredits": "Extra credits",
+    "extraCreditsAvailable": "Available",
+    "autoTopUp": "Automatic top-up",
+    "autoTopUpAvailable": "Available",
+    "fxNote": "{display} prices are an estimated conversion at the official representative rate. You are charged in {charged}.",
+    "a11y": {
+      "totalChanged": "{plan}: {total} per month, {credits} credits included.",
+      "skipToPlans": "Skip to plans",
+      "volumeValue": "{volume} {hint}, {cost}"
+    },
+    "comparison": {
+      "label": "Compare",
+      "title": "What each plan includes",
+      "subtitle": "The differences that matter, in full. Capabilities not listed are not part of the product yet.",
+      "caption": "Capability comparison across GOTCHA plans",
+      "capability": "Capability",
+      "included": "Included",
+      "notIncluded": "Not included",
+      "unlimited": "Unlimited",
+      "compareA": "Compare",
+      "compareB": "With",
+      "differences": "{n} differ",
+      "category": {
+        "COMMUNICATION": "Communication",
+        "AI": "AI workforce",
+        "VOICE": "Voice",
+        "MANAGEMENT": "Management and reporting",
+        "LIMITS": "Limits"
+      },
+      "limit": {
+        "users": "Team members",
+        "ai_employees": "AI employees",
+        "channels": "Connected channels",
+        "departments": "Departments",
+        "knowledge_sources": "Knowledge sources",
+        "workflows": "Automations"
+      }
+    },
+    "credits": {
+      "label": "Credits",
+      "title": "One unit, across the whole product",
+      "intro": "Credits are how GOTCHA measures AI work. A conversation consumes credits as the AI reads it, drafts a reply, retrieves knowledge, updates your CRM and summarises the outcome. Longer conversations, voice calls and more AI actions consume more.",
+      "p1": {
+        "title": "Included every month",
+        "body": "Each plan includes a monthly allowance. It resets on your renewal date and does not roll over."
+      },
+      "p2": {
+        "title": "Buy more at any time",
+        "body": "Prepaid credit packages are added to your balance and stay there until you use them. Plan credits are consumed first."
+      },
+      "p3": {
+        "title": "Automatic top-up, on your terms",
+        "body": "Turn on automatic top-up and set a monthly spending limit. Nothing is charged beyond the limit you set."
+      },
+      "p4": {
+        "title": "When credits run out",
+        "body": "AI actions stop until credits are added. Your inbox, history and human agents keep working, and nothing is deleted."
+      }
+    },
+    "faq": {
+      "label": "Questions",
+      "title": "Before you decide",
+      "items": [
+        {
+          "q": "What is a credit?",
+          "a": "A credit is how GOTCHA measures AI work. Reading a message, drafting a reply, retrieving knowledge, updating your CRM and summarising a conversation all draw on your balance. Credits are the only unit you are billed in."
+        },
+        {
+          "q": "How are conversation estimates calculated?",
+          "a": "Each plan is configured with a commercial assumption about how many credits an average conversation uses, and how many business days a month contains. The estimate divides the plan's credit allowance by that assumption. It describes the plan configuration, not a measurement of anyone's usage."
+        },
+        {
+          "q": "Will my usage match the estimate?",
+          "a": "Not exactly. Actual credit consumption varies by conversation length, channel, AI actions, enabled features and voice duration. The estimate is there to size a plan, not to predict a bill."
+        },
+        {
+          "q": "What happens when credits run out?",
+          "a": "AI actions stop until credits are added. Your shared inbox, conversation history and human agents keep working, and no data is removed. You can buy credits or enable automatic top-up."
+        },
+        {
+          "q": "How does automatic top-up work?",
+          "a": "You choose when it triggers, how much it buys, and a monthly spending limit. Once the limit is reached nothing further is charged, and you are notified so you can decide what to do."
+        },
+        {
+          "q": "Can I buy extra credits without changing plan?",
+          "a": "Yes. Prepaid credit packages are added to your balance and stay there until consumed. Included plan credits are always used first."
+        },
+        {
+          "q": "What happens when I upgrade?",
+          "a": "An upgrade starts immediately. You are charged the prorated difference for the rest of the current billing period, and the larger credit allowance is available straight away."
+        },
+        {
+          "q": "What happens when I downgrade?",
+          "a": "Your current plan stays exactly as it is until your renewal date. Nothing is removed before then, and the smaller plan starts at renewal."
+        },
+        {
+          "q": "What happens if I cancel?",
+          "a": "Cancellation takes effect at the end of the current billing period. You keep full access until your renewal date, and you can resume before it. Your data is not deleted when the subscription ends."
+        },
+        {
+          "q": "Why are prices shown in dollars?",
+          "a": "Prices are set in US dollars. Shekel amounts are a display conversion at the official representative rate, rounded up, and are marked as an estimate. The currency you will actually be charged in is shown before you confirm."
+        },
+        {
+          "q": "Do you offer a trial or a pilot?",
+          "a": "Trials and pilots are arranged with our team rather than started self-serve, so the credit budget and duration can be set to match what you want to evaluate. Ask us when you get in touch."
+        },
+        {
+          "q": "Can we get a custom plan?",
+          "a": "Yes. Custom plans set their own capabilities, limits, credit allocation and volumes, with commercial terms agreed with you."
+        }
+      ]
+    },
+    "closing": {
+      "title": "Start with a conversation",
+      "body": "Tell us how your team handles customers today and we will show you what GOTCHA changes."
+    },
+    "state": {
+      "disabled": {
+        "title": "Pricing is not published yet",
+        "body": "We are finalising public pricing. Join early access and we will get in touch with plans and pricing directly."
+      },
+      "empty": {
+        "title": "Pricing is not available right now",
+        "body": "There are no published plans to show. Join early access and we will be in touch."
+      },
+      "error": {
+        "title": "We could not load pricing",
+        "body": "Something went wrong on our side. Try again in a moment, or join early access and we will get in touch."
+      },
+      "retry": "Try again",
+      "earlyAccess": "Get early access"
+    },
+    "volumeHint": "Drag the bar, or use the arrow keys.",
+    "alsoIncludes": "Also includes:"
+  },
+  "checkout": {
+    "opening": {
+      "eyebrow": "Checkout",
+      "title": "Opening your checkout",
+      "body": "One moment while we look up the plan for your organization."
+    },
+    "summary": {
+      "plan": "Plan",
+      "recurring": "Recurring",
+      "credits": "Included credits",
+      "activationNote": "Your organization becomes fully active once payment is confirmed.",
+      "charged": "Charged today",
+      "rateSettled": "Converted at {rate} ILS per USD, the rate applied to this payment.",
+      "rateIndicative": "Your card is charged in shekels, at {rate} ILS per USD.",
+      "interval": "Billing",
+      "intervalMonthly": "Monthly",
+      "intervalAnnual": "Yearly",
+      "offerValid": "Offer valid until"
+    },
+    "action": {
+      "startPayment": "Set up payment",
+      "tryAgain": "Try again",
+      "contactSupport": "Contact support",
+      "requestNewLink": "Request a new link",
+      "continue": "Continue to GOTCHA",
+      "backHome": "Back to homepage",
+      "retryPayment": "Try a different card",
+      "resendEmail": "Send it again",
+      "resending": "Sending..."
+    },
+    "paymentRequired": {
+      "eyebrow": "Payment",
+      "title": "One step left",
+      "body": "Set up payment to activate the plan chosen for your organization.",
+      "unavailable": "Secure payment setup is not available yet. We will be in touch as soon as it is ready, and nothing has been charged."
+    },
+    "processing": {
+      "eyebrow": "Payment",
+      "title": "Confirming your payment",
+      "body": "This usually takes a few moments. You can leave this page open.",
+      "status": "Waiting for confirmation"
+    },
+    "manualReview": {
+      "title": "We are checking one thing",
+      "body": "Your payment needs a quick manual check before your plan activates. Nothing further is required from you.",
+      "status": "Under review by our team"
+    },
+    "failed": {
+      "eyebrow": "Payment",
+      "title": "That payment did not go through",
+      "body": "No charge was made. You can try again, or contact us and we will sort it out with you."
+    },
+    "expired": {
+      "eyebrow": "Link",
+      "title": "This link has expired",
+      "body": "For security, payment links are valid for a limited time. Ask your administrator for a new one, or contact us."
+    },
+    "completed": {
+      "eyebrow": "Confirmed",
+      "title": "Your plan is active",
+      "body": "Payment is confirmed and your organization is ready to use.",
+      "noEmailYet": "No welcome email yet?",
+      "resendDone": "Sent. Check your inbox again in a moment.",
+      "resendFailed": "We couldn't send it just now. Try again in a moment."
+    },
+    "unavailable": {
+      "eyebrow": "Link",
+      "title": "We could not open this page",
+      "body": "This link may have expired or already been used. Contact your administrator for a new one."
+    },
+    "error": {
+      "paymentSetupFailed": "We could not open the payment page. Please try again in a moment."
+    },
+    "decline": {
+      "CARD_EXPIRED": "That card has expired.",
+      "INSUFFICIENT_FUNDS": "The payment was declined for insufficient funds.",
+      "CARD_UNUSABLE": "That card could not be used.",
+      "DECLINED": "The payment was declined by the card issuer.",
+      "tryAnother": "Please try a different card."
+    },
+    "unresolved": {
+      "title": "We are checking with your bank",
+      "body": "Your payment is being confirmed with the card issuer. This can take longer than usual, and you do not need to wait here - we will email you as soon as we know. Please do not pay again in the meantime.",
+      "status": "Checking with the card issuer"
+    },
+    "cancelled": {
+      "eyebrow": "Payment not completed",
+      "title": "You closed the payment page",
+      "body": "Nothing was charged and no card was saved. Your plan is still waiting, and you can pick up where you left off whenever you are ready."
+    }
+  },
+  "shopifyChat": {
+    "title": "Shopify Live Chat",
+    "subtitle": "A branded chat on your Shopify storefront that can answer product questions and add items to the cart.",
+    "lockedTitle": "Shopify Live Chat is not enabled for this workspace",
+    "lockedBody": "Your Shopify store stays connected. The live chat channel itself is not part of this workspace's plan yet, so its settings cannot be opened. Contact support to have it enabled.",
+    "loadFailedTitle": "Could not load Shopify Live Chat",
+    "retry": "Try again",
+    "noShopDomainTitle": "Your Shopify integration has no store address",
+    "noShopDomainBody": "The integration is connected but no myshopify.com domain was recorded for it, and the chat has to know which store it is bound to. Reconnect the integration to record it.",
+    "noStoreTitle": "Connect your Shopify store first",
+    "noStoreBody": "Shopify Live Chat is bound to one connected store. Prices, stock and product details always come from that store, so the connection has to exist before the channel does.",
+    "goToIntegrations": "Go to Integrations",
+    "connectedTo": "Connected store",
+    "createIntro": "Create the channel, configure it, then activate it on your storefront. Nothing goes live until you turn it on.",
+    "createChannel": "Create Shopify Live Chat channel",
+    "created": "Channel created. It is off until you enable it.",
+    "deleted": "Channel deleted.",
+    "statusLive": "The widget is live on your storefront",
+    "statusOff": "The widget is off",
+    "statusHint": "Turn this on once the App embed is activated in your theme.",
+    "enabled": "Enabled",
+    "sections": "Settings sections",
+    "unsaved": "You have unsaved changes",
+    "copied": "Copied",
+    "section": {
+      "store": "Store",
+      "installation": "Installation",
+      "appearance": "Appearance",
+      "welcome": "Welcome experience",
+      "questions": "Suggested questions",
+      "handoff": "Human handoff",
+      "hours": "Availability",
+      "privacy": "Privacy",
+      "diagnostics": "Status",
+      "launcher": "Launcher",
+      "hero": "Welcome hero",
+      "proactive": "Proactive engagement",
+      "sounds": "Sounds",
+      "behavior": "Behaviour",
+      "commerce": "Products & cart"
+    },
+    "shopDomain": "Shop domain",
+    "currency": "Currency",
+    "productAccess": "Product access",
+    "productAccessOk": "Products, prices and inventory are readable",
+    "productAccessNo": "Products could not be read",
+    "storeBindingNote": "This channel is permanently bound to this store. Product cards from another store can never appear in these conversations.",
+    "channelKey": "Channel key",
+    "channelKeyHint": "Paste this into the GOTCHA Chat app embed in your theme. It is a public identifier, not a secret, and it only works from your own storefront.",
+    "openThemeEditor": "Open the Shopify Theme Editor",
+    "noDeepLink": "Open your Shopify admin, go to Online Store, then Themes, then Customize, then App embeds.",
+    "storefrontDomains": "Storefront domains",
+    "storefrontDomainsHint": "One per line. Shoppers browse your custom domain, not the .myshopify.com one, so the widget will be refused there until you add it here.",
+    "primaryColor": "Brand colour",
+    "contrastColor": "Colour on top of brand",
+    "logoUrl": "Store logo",
+    "avatarUrl": "Assistant avatar",
+    "httpsOnly": "Must be an https address.",
+    "launcherIcon": "Launcher icon",
+    "icon": {
+      "chat": "Chat bubble",
+      "sparkle": "Sparkle",
+      "bag": "Shopping bag",
+      "question": "Question mark"
+    },
+    "position": "Position",
+    "right": "Right",
+    "left": "Left",
+    "cornerRadius": "Corner radius",
+    "cornerRadiusHint": "Kept within a safe range so the widget stays usable on every theme.",
+    "language": "Language",
+    "langAuto": "Follow the storefront",
+    "direction": "Text direction",
+    "showPoweredBy": "Show \"Powered by GOTCHA\"",
+    "assistantName": "Assistant name",
+    "headline": "Welcome headline",
+    "subline": "Welcome message",
+    "questionsHint": "Up to five. These are the first thing a shopper sees, so make them the questions you actually want to answer.",
+    "addQuestion": "Add a question",
+    "aiEmployee": "AI employee",
+    "aiEmployeeHint": "Handles the conversation first. Without one, every chat waits for a human.",
+    "noAiEmployee": "None",
+    "productMessaging": "Send product cards",
+    "productMessagingHint": "Lets the AI employee and your agents send real products with live prices and stock.",
+    "addToCartEnabled": "Allow Add to Cart from chat",
+    "carouselSize": "Products per carousel",
+    "carouselSizeHint": "Three is usually right. Chat is not a collection page.",
+    "allowUnpublished": "Allow draft and archived products",
+    "allowUnpublishedHint": "Off by default. When on, unpublished products are clearly marked.",
+    "department": "Department",
+    "departmentHint": "Where a chat goes when it reaches a human.",
+    "noDepartment": "None",
+    "allowHumanHandoff": "Let shoppers ask for a person",
+    "allowHumanHandoffHint": "Shows a \"Talk to a person\" link in the widget.",
+    "allowReturnToAi": "Allow handing back to the AI employee",
+    "hoursEnabled": "Use business hours",
+    "hoursEnabledHint": "Outside these hours the widget shows as away.",
+    "timezone": "Time zone",
+    "day": {
+      "0": "Sunday",
+      "1": "Monday",
+      "2": "Tuesday",
+      "3": "Wednesday",
+      "4": "Thursday",
+      "5": "Friday",
+      "6": "Saturday"
+    },
+    "offlineBehavior": "Outside business hours",
+    "offlineAi": "The AI employee keeps answering",
+    "offlineForm": "Show a contact form",
+    "offlineMessageOnly": "Show a message only",
+    "offlineMessage": "Away message",
+    "useCartContext": "Use the shopper's cart contents",
+    "useCartContextHint": "Off by default. Only the number of items is ever read, never the contents or the total.",
+    "requireOfflineConsent": "Ask for consent on the contact form",
+    "requireOfflineConsentHint": "Recommended wherever you collect an email address.",
+    "consentText": "Consent wording",
+    "privacyNote": "Shoppers are anonymous by default. A logged-in Shopify customer id from the browser is never trusted, and order lookups still require the usual GOTCHA verification.",
+    "deleteChannel": "Delete this channel",
+    "deleteTitle": "Delete Shopify Live Chat?",
+    "deleteMessage": "The widget stops loading on your storefront immediately and the conversations from this channel are removed. This cannot be undone.",
+    "preview": {
+      "welcome": "Welcome",
+      "conversation": "Conversation",
+      "product": "Product card",
+      "carousel": "Carousel",
+      "offline": "Away",
+      "desktop": "Desktop",
+      "mobile": "Mobile"
+    },
+    "previewAria": "Preview of the storefront chat widget",
+    "soldOut": "Sold out",
+    "notPublished": "Not published",
+    "addToCart": "Add to cart",
+    "viewProduct": "View product",
+    "products": "Products",
+    "pickerTitle": "Send a product",
+    "pickerHint": "Search your Shopify catalogue. Prices and stock come straight from the store.",
+    "searchProducts": "Search products",
+    "noProducts": "No products matched that search.",
+    "selectedCount": "{count} selected",
+    "sendProducts": "Send",
+    "addNote": "Add a note before the card (optional)",
+    "productMessageLabel": "Product card",
+    "carouselLabel": "Product carousel",
+    "pickerUnavailable": "Shopify products are unavailable right now.",
+    "maxSelected": "You can send up to {max} products in one message.",
+    "page": {
+      "product": "Product page",
+      "collection": "Collection",
+      "cart": "Cart",
+      "search": "Search",
+      "index": "Home",
+      "page": "Page",
+      "blog": "Blog",
+      "other": "Storefront"
+    },
+    "cartItems": "{count} in cart",
+    "activationIntro": "Your store is connected. The last step is switching the GOTCHA Chat app embed on in your live theme and saving.",
+    "advancedTroubleshooting": "Advanced troubleshooting",
+    "advancedIntro": "You do not need these for a normal installation. They exist so support can re-establish a store's link if its installation record is lost.",
+    "launcherHint": "How the chat button looks and where it sits on your storefront.",
+    "launcherShape": "Shape",
+    "launcherSize": "Size",
+    "launcherBg": "Background",
+    "launcherFg": "Icon colour",
+    "mobilePosition": "Position on mobile",
+    "offsetBottom": "Distance from bottom",
+    "offsetSide": "Distance from side",
+    "shadow": "Shadow",
+    "launcherIconUrl": "Custom icon URL",
+    "showLabel": "Show a label next to the icon",
+    "launcherLabel": "Label",
+    "launcherLabelPlaceholder": "Need help?",
+    "showBorder": "Add a border",
+    "showUnreadBadge": "Show unread count",
+    "shape": {
+      "circle": "Circle",
+      "rounded": "Rounded square",
+      "pill": "Pill"
+    },
+    "heroHint": "A picture, GIF or short video at the top of the first screen a shopper sees.",
+    "heroMediaType": "Media",
+    "heroMediaUrl": "Media URL",
+    "heroPoster": "Poster image",
+    "heroPosterHint": "Shown before the video plays, and whenever the browser refuses to autoplay.",
+    "heroHeight": "Height",
+    "heroMobileHeight": "Height on mobile",
+    "heroFade": "Fade into chat",
+    "heroOverlay": "Darken",
+    "heroAvatar": "Avatar or logo",
+    "heroAvatarSize": "Avatar size",
+    "heroOverlap": "Avatar overlap",
+    "videoLoop": "Loop the video",
+    "videoAutoplay": "Play automatically",
+    "videoAutoplayHint": "Always muted. Shoppers who asked for reduced motion see the poster instead.",
+    "media": {
+      "none": "No media",
+      "image": "Image",
+      "gif": "Animated GIF",
+      "video": "Video"
+    },
+    "mediaHint": "HTTPS only. SVG is not accepted. Keep images under 1.5 MB and videos under 5 MB and 12 seconds.",
+    "proactiveHint": "Offer help before the shopper asks. Off by default, and deliberately hard to make annoying.",
+    "proactiveEnabled": "Offer help proactively",
+    "proactiveEnabledHint": "Shows a small card beside the chat button. It can always be dismissed.",
+    "trigger": {
+      "time_on_page": "Time on page",
+      "page_views": "Number of pages viewed",
+      "scroll_depth": "Scroll depth",
+      "exit_intent": "About to leave (desktop)",
+      "product_page": "On a product page",
+      "cart_page": "On the cart page",
+      "inactivity": "Inactivity",
+      "custom_event": "Custom storefront event"
+    },
+    "delay": "Delay",
+    "mobileDelay": "Delay on mobile",
+    "teaserTitle": "Title",
+    "teaserMessage": "Message",
+    "teaserAction": "Button label",
+    "maxPerSession": "Times per visit",
+    "cooldown": "Wait after dismissal",
+    "autoOpen": "Open the chat instead of showing a card",
+    "autoOpenHint": "Off is kinder. Opening unprompted is the fastest way to be dismissed for good.",
+    "desktopEnabled": "Show on desktop",
+    "mobileEnabled": "Show on mobile",
+    "respectHours": "Stay quiet outside business hours",
+    "soundsHint": "Short, subtle, never looped. Off by default, and a shopper can always mute from inside the chat.",
+    "soundsEnabled": "Play sounds",
+    "soundPack": "Sound",
+    "volume": "Volume",
+    "pack": {
+      "subtle": "Subtle",
+      "classic": "Classic"
+    },
+    "sound": {
+      "outgoing": "Sent",
+      "incoming_ai": "Assistant reply",
+      "incoming_human": "Team reply",
+      "proactive": "Proactive card"
+    },
+    "soundOutgoing": "When the shopper sends a message",
+    "soundIncomingAi": "When the assistant replies",
+    "soundIncomingHuman": "When a team member replies",
+    "soundProactive": "When the proactive card appears",
+    "soundWhenClosed": "Also when the chat is closed",
+    "soundWhenTabActive": "Also when the tab is in focus",
+    "openOnLoad": "Open the chat on page load",
+    "openOnLoadHint": "Rarely a good idea on a storefront.",
+    "closeOnOutsideClick": "Close when clicking outside",
+    "rememberOpenState": "Remember it was open across pages",
+    "mobileFullScreen": "Full screen on mobile",
+    "keepHeaderMedia": "Keep a small image in the chat header",
+    "keepHeaderMediaHint": "Off by default: once a conversation starts, the messages should own the space.",
+    "previewTitle": "Widget preview",
+    "welcomeSectionHint": "The first screen a shopper sees. Everything on it is edited here, in one place.",
+    "assistantNameHint": "Shown in the conversation header and above each reply.",
+    "textAlign": "Text alignment",
+    "alignCenter": "Centered",
+    "alignStart": "Aligned to the start",
+    "avatarCard": "Assistant avatar",
+    "avatarCardHint": "The face on the welcome screen and in the conversation header.",
+    "heroOverlapHint": "How far the avatar hangs below the image.",
+    "heroTight": "The panel is not tall enough for this height, so the storefront will show a shorter image. The preview reflects what shoppers will actually see.",
+    "heroDropped": "This height leaves too little room for the rest of the panel, so the image will not be shown at all. Try a smaller value.",
+    "mediaRejected": "This address cannot be used. It must start with https:// and end in a supported file type.",
+    "mediaHintImage": "https:// only. Up to {mb}MB, best at {w}x{h}. JPG, PNG, WebP, AVIF or GIF.",
+    "mediaHintVideo": "https:// only. Up to {mb}MB and {secs} seconds. MP4 or WebM.",
+    "triggerLabel": "When to offer help",
+    "hoursMovedHint": "Opening hours are set once for your business and apply to every channel, so the widget always agrees with your AI employee about whether you are open.",
+    "hoursMovedLink": "Set your business hours",
+    "routingMovedHint": "Who answers a new chat is decided by your Main Playbook, the same as every other channel.",
+    "routingMovedLink": "Open the Main Playbook",
+    "desktop": "Desktop",
+    "mobile": "Mobile"
+  },
+  "shopifyInstall": {
+    "title": "Set up GOTCHA Chat",
+    "subtitle": "A few steps and your storefront has a chat that knows your catalogue.",
+    "step1Title": "Shopify app installed",
+    "step1Verified": "Verified store",
+    "step2Title": "Sign in to GOTCHA",
+    "step2Body": "Sign in with your GOTCHA account, or create one. Your store stays connected while you do.",
+    "step2Cta": "Sign in to GOTCHA",
+    "step2SignedIn": "Signed in as",
+    "step3Title": "Choose your organization",
+    "step3Body": "Pick the workspace this store belongs to. We create the chat channel for you.",
+    "step4Done": "Connected. The chat channel is ready.",
+    "step4Cta": "Connect this store",
+    "connecting": "Connecting...",
+    "step5Title": "Turn on the chat in your theme",
+    "step5Body": "Shopify keeps app embeds switched off until you enable them. This link opens your live theme with GOTCHA Chat ready to turn on. Switch it on, then click Save.",
+    "step5Cta": "Open the Shopify Theme Editor",
+    "step5AfterSave": "After you save, open your storefront once. We watch for the first page load and confirm it here.",
+    "step6Title": "Verify on your storefront",
+    "step7Title": "You are set up",
+    "checkAgain": "Check again",
+    "watching": "Watching for your storefront...",
+    "noDeepLink": "The activation link is not available yet. Open Online Store, then Themes, then Customize, then App embeds, and turn on GOTCHA Chat.",
+    "noSession": "We could not find a recent Shopify installation for this browser. Start again from your Shopify admin.",
+    "stepLocked": "Finish the step above first.",
+    "noOrganizations": "This account has no active organization that can hold a channel. Ask an administrator to invite you, or create one first.",
+    "claimedElsewhere": "This store is already connected to a different GOTCHA organization. Sign in with an account in that organization, or contact support to move it.",
+    "bindFailed": "We could not connect the store.",
+    "failedTitle": "Installation did not complete",
+    "failedBody": "Shopify could not finish the installation.",
+    "failedRetry": "Open the app again from your Shopify admin to retry.",
+    "openSettings": "Open chat settings",
+    "openStorefront": "Open my storefront",
+    "advanced": "Advanced troubleshooting",
+    "advancedDomains": "Storefront domains we accept:",
+    "advancedManual": "A channel key and manual domain entry exist in chat settings for recovery only. A normal installation never needs them.",
+    "factStore": "Store",
+    "factChannel": "Chat channel",
+    "factEmbed": "App embed",
+    "factChat": "Chat",
+    "factProducts": "Product messaging",
+    "factCore": "Shopify commerce integration",
+    "factActive": "Active",
+    "factInactive": "Not active yet",
+    "factProductsOff": "Off",
+    "state": {
+      "APP_NOT_INSTALLED": "The app is not installed on this store.",
+      "INSTALLATION_UNBOUND": "The store is installed but not connected to an organization yet.",
+      "CHANNEL_NOT_CREATED": "The chat channel has not been created yet.",
+      "TENANT_INACTIVE": "This organization is not active, so the widget cannot serve shoppers.",
+      "ENTITLEMENT_DISABLED": "This organization's plan does not include Shopify Live Chat.",
+      "EMBED_NOT_ENABLED": "The chat is off. Turn on the app embed in your theme and save.",
+      "EMBED_ENABLED_NOT_SEEN": "Waiting for the first page load on your storefront.",
+      "STALE": "We have not seen your storefront recently. If you changed theme, turn the app embed on again.",
+      "UNINSTALLED": "The app was removed from this store.",
+      "CORE_DISCONNECTED_PRODUCT_CHAT_UNAVAILABLE": "Chat is live. Product cards are off until the Shopify commerce integration is connected.",
+      "LIVE": "Live on your storefront."
+    },
+    "error": {
+      "app_not_configured": "GOTCHA Chat is not configured on this environment yet.",
+      "invalid_shop": "That does not look like a Shopify store address.",
+      "invalid_signature": "We could not verify that request came from Shopify.",
+      "token_exchange_failed": "Shopify did not complete the authorization.",
+      "install_failed": "Something went wrong finishing the installation."
+    },
+    "bindError": {
+      "not_entitled": "This organization's plan does not include Shopify Live Chat. Add it, then try again.",
+      "shop_taken": "This store is already connected to another organization.",
+      "bound_to_other_tenant": "This store is already connected to another organization.",
+      "installation_uninstalled": "This installation was removed. Install GOTCHA Chat again from Shopify.",
+      "installation_not_found": "We could not find that installation.",
+      "NO_INSTALL_SESSION": "We could not find a recent Shopify installation for this browser."
+    },
+    "step1PendingSignIn": "Shopify sent you here after authorizing GOTCHA Chat. Sign in below and we will confirm which store it was."
+  },
+  "permissions": {
+    "noAccess": {
+      "title": "You don't have access to this page",
+      "subtitle": "Ask a workspace admin if you need access."
     }
   }
 }

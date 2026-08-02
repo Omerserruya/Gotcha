@@ -34,4 +34,4 @@ COPY frontend/out /usr/share/nginx/html
 # script (envsubst over the *_PORT variables, same as the dev gateway).
 COPY gateway/nginx.prod.conf.template /etc/nginx/nginx.conf.template
 
-CMD ["sh", "-c", "envsubst '$AUTH_PORT $CONVERSATION_PORT $WEBHOOK_PORT $ANALYTICS_PORT $CHATBOT_PORT $AI_PORT $VOICE_COPILOT_PORT $NOTIFICATIONS_PORT' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf && nginx -g 'daemon off;'"]
+CMD ["sh", "-c", "envsubst '$AUTH_PORT $CONVERSATION_PORT $WEBHOOK_PORT $ANALYTICS_PORT $CHATBOT_PORT $AI_PORT $VOICE_COPILOT_PORT $NOTIFICATIONS_PORT $BILLING_PORT $AUTHENTIK_PORT' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf && nginx -g 'daemon off;'"]

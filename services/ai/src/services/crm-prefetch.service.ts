@@ -22,6 +22,7 @@
 
 import { prisma, normalizePhone as sharedNormalizePhone } from "@chatcenter/shared";
 import { executeTool } from "./tool-execution.service";
+import { getCrmAdapter } from "./connectors/crm-adapter-resolver";
 
 // ─── Per-conversation cache ─────────────────────────────────
 //
@@ -137,7 +138,23 @@ export async function prefetchCrmContext(
       findTenantToolBySlug(tenantId, "get_lead_notes"),
       findTenantToolBySlug(tenantId, "get_contact_notes"),
     ]);
-  if (!leadSearchTool && !contactSearchTool) return null;
+  // No Zoho-style search slugs configured (e.g. HubSpot, Salesforce, Airtable,
+  // Fireberry … whose catalog slugs differ). Fall back to the vendor-neutral
+  // CRMAdapter.findCustomer - the SAME resolver the bot uses to create/dedup
+  // leads - so the bot still gets the customer's CRM record (incl. email) in
+  // context regardless of vendor. Without this, non-Zoho tenants got an empty
+  // CRM block and the bot wrongly told customers "we have no email on record".
+  if (!leadSearchTool && !contactSearchTool) {
+    const viaAdapter = await findViaAdapter(tenantId, phone, email);
+    if (viaAdapter) {
+      result.leadMatches = viaAdapter.filter((r) => r._kind === "lead").map(stripKind);
+      result.contactMatches = viaAdapter.filter((r) => r._kind !== "lead").map(stripKind);
+      result.leadMatches.sort(byCreatedDesc);
+      result.contactMatches.sort(byCreatedDesc);
+    }
+    cache.set(key, { result, hintsKey: hk, expiresAt: Date.now() + CACHE_TTL_MS });
+    return result;
+  }
 
   // ── Lead search ─────────────────────────────────────────────
   if (leadSearchTool) {
@@ -313,6 +330,55 @@ ${sections.join("\n\n")}${removedNote}`;
 }
 
 // ─── helpers ────────────────────────────────────────────────
+
+type CrmRecordWithKind = CrmRecord & { _kind: "lead" | "contact" };
+
+function stripKind(r: CrmRecordWithKind): CrmRecord {
+  const { _kind, ...rest } = r;
+  return rest;
+}
+
+/**
+ * Vendor-neutral fallback used when the tenant's CRM has no Zoho-style
+ * lead_search/contact_search catalog tools. Resolves the customer through the
+ * per-tenant CRMAdapter (the SAME resolver the bot uses to create/dedup leads),
+ * so HubSpot/Salesforce/Airtable/Fireberry/… all surface the customer's record
+ * (incl. email) into the bot's context. Maps CanonicalCrmContact → CrmRecord so
+ * the render + dedup path downstream is unchanged. Returns null on stub/no-match.
+ */
+async function findViaAdapter(
+  tenantId: string,
+  phone: string | undefined,
+  email: string | undefined,
+): Promise<CrmRecordWithKind[] | null> {
+  if (!phone && !email) return null;
+  try {
+    const adapter = await getCrmAdapter(tenantId);
+    if (adapter.capabilities?.is_stub) return null;
+    const found = await adapter.findCustomer({ phone, email });
+    if (!found?.ok || !found.contacts?.length) return null;
+    const seen = new Set<string>();
+    const out: CrmRecordWithKind[] = [];
+    for (const c of found.contacts) {
+      if (!c.id || seen.has(c.id)) continue;
+      seen.add(c.id);
+      out.push({
+        id: c.id,
+        name: c.display_name ?? undefined,
+        email: c.email ?? undefined,
+        phone: c.phone ?? undefined,
+        createdAt: c.vendor_updated_at,
+        modifiedAt: c.vendor_updated_at,
+        _kind: c.kind === "lead" ? "lead" : "contact",
+      });
+    }
+    console.log(`[crm-prefetch] adapter findCustomer matched=${out.length} tenant=${tenantId}`);
+    return out.length ? out : null;
+  } catch (err: any) {
+    console.warn("[crm-prefetch] adapter findCustomer failed:", err?.message);
+    return null;
+  }
+}
 
 async function findTenantToolBySlug(tenantId: string, slug: string) {
   try {

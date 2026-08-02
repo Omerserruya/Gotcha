@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
+import { usePermissions } from "@/context/PermissionsContext";
 import { useI18n } from "@/context/I18nContext";
 import { useVoiceFlags } from "@/lib/use-voice-flags";
 import {
@@ -39,6 +40,7 @@ interface ActivationProgress {
 
 export default function NewVoiceChannelPage() {
   const { token, user } = useAuth();
+  const { atLeastRole } = usePermissions();
   const { t } = useI18n();
   const router = useRouter();
   const flags = useVoiceFlags();
@@ -79,7 +81,7 @@ export default function NewVoiceChannelPage() {
     [form, accountSidValid, byoSubmitting],
   );
 
-  if (user?.role !== "ADMIN") {
+  if (!atLeastRole("admin")) {
     return (
       <div className="flex items-center justify-center h-full">
         <p className="text-gray-400 text-sm">{t("settings.voiceChannels.adminRequired")}</p>

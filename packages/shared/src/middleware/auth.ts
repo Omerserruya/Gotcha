@@ -1,54 +1,130 @@
 import { Request, Response, NextFunction } from "express";
-import { verifyToken } from "../lib/jwt";
+import crypto from "crypto";
+import { resolvePrincipal, AuthError } from "../lib/principal";
 import { prisma } from "../lib/prisma";
 
-export function authenticate(req: Request, res: Response, next: NextFunction): void {
+/**
+ * Constant-time secret comparison.
+ *
+ * `===` on a secret leaks its length and matching prefix through timing.
+ * `timingSafeEqual` requires equal lengths, so hash both sides to a fixed
+ * width first.
+ */
+function secretMatches(candidate: string, expected: string): boolean {
+  const a = crypto.createHash("sha256").update(candidate).digest();
+  const b = crypto.createHash("sha256").update(expected).digest();
+  return crypto.timingSafeEqual(a, b);
+}
+
+function internalSecrets(): string[] {
+  return [process.env.INTERNAL_SERVICE_KEY, process.env.INTERNAL_SERVICE_TOKEN]
+    .filter((v): v is string => !!v && v.length > 0);
+}
+
+/**
+ * Service-to-service authentication.
+ *
+ * Internal callers present a shared secret instead of a user token, plus an
+ * `x-tenant-id` naming the tenant scope to act in. We accept either
+ * INTERNAL_SERVICE_KEY or INTERNAL_SERVICE_TOKEN: services historically
+ * populated different ones, and a mismatch surfaces as a misleading 401.
+ *
+ * SECURITY: the tenant header is caller-supplied, so it is only ever as
+ * trustworthy as the secret accompanying it. Holding the secret means a caller
+ * can act in ANY tenant - inherent to one shared secret, and not fixed by
+ * validating the header. What is enforced here:
+ *   - the secret is compared in constant time;
+ *   - a weak/placeholder secret refuses to authenticate in production, so a
+ *     forgotten env var fails closed rather than granting cross-tenant access;
+ *   - the named tenant must exist, so a probe or typo cannot land in an
+ *     empty-string tenant scope that some queries would read as "unscoped";
+ *   - the principal is tagged `isInternal`, letting routes tell a service
+ *     apart from a human admin.
+ * Narrowing further (per-service scoped keys, or mTLS) is an authorization
+ * change tracked separately from this migration.
+ */
+async function tryInternalAuth(req: Request, token: string): Promise<boolean> {
+  const secrets = internalSecrets();
+  if (secrets.length === 0) return false;
+  if (!secrets.some((s) => secretMatches(token, s))) return false;
+
+  if (process.env.NODE_ENV === "production") {
+    const weak = secrets.some((s) => s.length < 32 || /change-me|placeholder/i.test(s));
+    if (weak) {
+      throw new Error(
+        "[auth] INTERNAL_SERVICE_KEY is weak or a placeholder. Refusing internal auth in production.",
+      );
+    }
+  }
+
+  const tenantId = req.headers["x-tenant-id"];
+  if (typeof tenantId !== "string" || tenantId.length === 0) {
+    throw new Error("[auth] internal call missing x-tenant-id");
+  }
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { id: true },
+  });
+  if (!tenant) throw new Error("[auth] internal call names an unknown tenant");
+
+  req.user = { userId: "system", role: "ADMIN", tenantId, isInternal: true } as any;
+  req.tenantId = tenantId;
+  return true;
+}
+
+/**
+ * The single authentication gate for every GOTCHA service.
+ *
+ * A request arrives bearing an Authentik-issued access token. We verify it
+ * against Authentik's JWKS, then resolve the token's `sub` to a local user to
+ * load tenancy and role. Authentik proves WHO you are; the local database
+ * decides WHAT you may do - Authentik never carries authorization data.
+ */
+export async function authenticate(req: Request, res: Response, next: NextFunction): Promise<void> {
   const header = req.headers.authorization;
   if (!header?.startsWith("Bearer ")) {
     res.status(401).json({ error: "Missing or invalid authorization header" });
     return;
   }
+  const token = header.slice(7);
 
   try {
-    const token = header.slice(7);
-
-    // Internal service-to-service calls use a shared secret instead of a JWT.
-    // The caller must also set x-tenant-id so we know which tenant scope to
-    // use. We accept EITHER `INTERNAL_SERVICE_KEY` or `INTERNAL_SERVICE_TOKEN`
-    // - different services historically populated/sent different ones, and
-    // mismatches surface as a misleading "Invalid or expired token" 401 that
-    // looks like a Zoho/JWT issue but is actually our own auth gate. Accepting
-    // either keeps the gate just as strict (each is still a shared secret)
-    // while removing the cross-service env-var coordination footgun.
-    const internalKey = process.env.INTERNAL_SERVICE_KEY;
-    const internalToken = process.env.INTERNAL_SERVICE_TOKEN;
-    if ((internalKey && token === internalKey) || (internalToken && token === internalToken)) {
-      const tenantId = req.headers["x-tenant-id"] as string | undefined;
-      req.user = { userId: "system", role: "ADMIN", tenantId: tenantId || "" } as any;
-      req.tenantId = tenantId || undefined;
+    if (await tryInternalAuth(req, token)) {
       next();
       return;
     }
-
-    const payload = verifyToken(token);
-    req.user = payload;
-    req.tenantId = payload.tenantId;
-
-    // Verify user is still active (lightweight DB check)
-    prisma.user.findUnique({
-      where: { id: payload.userId },
-      select: { isActive: true },
-    }).then((user) => {
-      if (!user || !user.isActive) {
-        res.status(401).json({ error: "Account has been deactivated" });
-        return;
-      }
-      next();
-    }).catch(() => {
-      // If DB check fails, allow request to proceed (fail-open for availability)
-      next();
-    });
   } catch {
-    res.status(401).json({ error: "Invalid or expired token" });
+    res.status(401).json({ error: "Invalid internal service credentials" });
+    return;
+  }
+
+  try {
+    // The ACTIVE-tenant hint. Client-supplied, therefore never trusted as-is:
+    // resolvePrincipal validates it against the identity's memberships and
+    // rejects a tenant the caller does not belong to. Absent header = the
+    // identity's default tenant (single-membership users need no header).
+    const rawHint = req.headers["x-tenant-id"];
+    const tenantHint = typeof rawHint === "string" && rawHint.length > 0 ? rawHint : null;
+    const principal = await resolvePrincipal(token, tenantHint);
+    req.user = principal as any;
+    req.tenantId = principal.tenantId;
+    next();
+  } catch (err) {
+    if (err instanceof AuthError) {
+      // A valid token whose subject has no GOTCHA user means the identity is
+      // real but was never invited here (or was removed). Authentication
+      // succeeded; access does not follow from it - hence 403, not 401.
+      // Same for a hint naming a tenant the identity has no membership in.
+      const status = err.code === "no_account" || err.code === "tenant_denied" ? 403 : 401;
+      res.status(status).json({ error: err.message, code: err.code });
+      return;
+    }
+    // SECURITY: fail CLOSED. The previous implementation called next() when
+    // the lookup threw, so a database blip admitted deactivated users and
+    // requests with no resolved tenant. Availability is not a reason to skip
+    // an authorization decision.
+    console.error("[auth] identity resolution failed:", err);
+    res.status(503).json({ error: "Authentication temporarily unavailable" });
   }
 }

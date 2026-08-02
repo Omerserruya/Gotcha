@@ -4,6 +4,7 @@ import {
   authenticate,
   resolveTenant,
   requireActiveTenant,
+  requirePermissionOrRole,
   requireRole,
   outgoingMessageQueue,
   searchLeads as crmSearchLeads,
@@ -14,6 +15,10 @@ import {
 
 const router = Router();
 router.use(authenticate, resolveTenant, requireActiveTenant());
+// Customer-context reads are permissioned (crm:contacts:read is part of every
+// built-in role that handles conversations); ADMIN fallback covers tenants
+// whose role rows predate the permission catalog.
+router.use(requirePermissionOrRole("crm:contacts:read", "ADMIN"));
 
 // GET / - Search contacts in the connected CRM only.
 //

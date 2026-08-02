@@ -1,4 +1,5 @@
 import { io, Socket } from "socket.io-client";
+import { getActiveTenantId } from "./active-tenant";
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "";
 
@@ -8,7 +9,9 @@ export function connectSocket(token: string): Socket {
   if (socket?.connected) return socket;
 
   socket = io(WS_URL, {
-    auth: { token },
+    // tenantId = the active-tenant hint; the server validates it against the
+    // identity's memberships exactly like the HTTP X-Tenant-Id header.
+    auth: { token, tenantId: getActiveTenantId() || undefined },
     transports: ["websocket", "polling"],
   });
 

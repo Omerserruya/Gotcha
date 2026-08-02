@@ -20,6 +20,13 @@ enum ChannelType {
   SLACK
   VOICE
   WEBCHAT
+  // Shopify storefront live chat. Distinct from WEBCHAT: the widget is
+  // installed through a Shopify Theme App Extension, is bound to ONE
+  // connected Shopify store (TenantIntegration slug="shopify"), and can
+  // carry structured commerce messages (product cards / carousels).
+  // Channel config lives in ChannelAccount.platformMeta; the storefront
+  // only ever sees ChannelAccount.externalId (the public channel key).
+  SHOPIFY_LIVE_CHAT
 }
 
 enum ChannelConnectionStatus {
@@ -44,6 +51,10 @@ enum ChannelResponseMode {
 enum TenantStatus {
   PENDING_ADMIN_SETUP
   PENDING_ONBOARDING
+  /// Provisioned on a PAID plan whose first payment has not been verified.
+  /// Identity onboarding and payment setup are allowed; paid application
+  /// access and paid entitlements are not.
+  PENDING_PAYMENT
   ACTIVE
   SUSPENDED
 }
@@ -91,6 +102,16 @@ model Tenant {
   // affecting the rest of the org. ISO-639-1; today: "en" | "he".
   defaultLocale String @default("en") @map("default_locale")
 
+  // Multi-factor authentication policy (set by a TENANT ADMIN in
+  // Workspace -> Security). Both default OFF so every existing/new tenant is
+  // unchanged until an admin opts in. Enforcement is hierarchical and lives in
+  // GOTCHA (not Authentik's shared login flow): SYSTEM_ADMIN always requires
+  // MFA regardless of these flags; ADMINs require it when either flag is on;
+  // AGENTs require it only when mfaRequiredForAllUsers is on. See
+  // `mfaRequirementFor` in @chatcenter/shared and the account /mfa-gate route.
+  mfaRequiredForAdmins   Boolean @default(false) @map("mfa_required_for_admins")
+  mfaRequiredForAllUsers Boolean @default(false) @map("mfa_required_for_all_users")
+
   // Feature flags (set by SYSTEM_ADMIN)
   botEnabled           Boolean  @default(false) @map("bot_enabled")
   botType              BotType? @map("bot_type")
@@ -120,10 +141,14 @@ model Tenant {
   messages                Message[]
   chatbotFlows            ChatbotFlow[]
   channelAccounts         ChannelAccount[]
+  shopifyChatInstalls     ShopifyChatInstallation[]
   channelConfig           TenantChannelConfig?
   departments             Department[]
   departmentMembers       DepartmentMember[]
   businessProfile         BusinessProfile?
+  businessDiscovery       BusinessDiscovery?
+  scheduledNudges         ScheduledNudge[]
+  recommendations         Recommendation[]
   onboarding              TenantOnboarding?
   knowledgeBases          KnowledgeBase[]
   aiAgents                AIAgent[]
@@ -146,9 +171,140 @@ model Tenant {
   tenantRoles             TenantRole[]
   invites                 TenantInvite[]
   webhookTriggers         WebhookTrigger[]
+  // Billing & AI Units. The MONEY side (subscription/profile/invoices) binds to
+  // a BillableEntity, NOT directly to a tenant - see BillableEntityTenant. The
+  // WALLET + ENTITLEMENT side stays tenant-scoped (a tenant consumes capability
+  // and AI Units). In V1 these are 1:1; the abstraction lets them diverge later.
+  billableEntityLink      BillableEntityTenant?
+  aiUnitLots              AiUnitLot[]
+  aiUnitLedger            AiUnitLedgerEntry[]
+  aiBalance               TenantAiBalance?
+  tenantEntitlements      TenantEntitlement[]
+  // GDPR data-lifecycle machinery.
+  consentRecords          ConsentRecord[]
+  retentionPolicies       DataRetentionPolicy[]
+  dataSubjectRequests     DataSubjectRequest[]
+  approvalRecipients      ApprovalRecipient[]
+  durableSettings         TenantSetting[]
 
   @@index([status])
   @@map("tenants")
+}
+
+/// Admin-configured runtime settings that must SURVIVE a restart.
+///
+/// Business hours, the auto-greeting template and SLA targets were stored only
+/// in Redis, under keys with no TTL - a cache holding the sole copy of
+/// configuration a customer deliberately set.
+///
+/// Production Redis does have a volume and appendonly enabled (added for
+/// BullMQ, which covered these keys by accident), so this was not routinely
+/// losing data there. The dev compose file had NO volume at all, so every
+/// `docker compose down` erased it. The durable problem is the architecture
+/// rather than the volume: a FLUSHALL, an eviction, a volume migration or a
+/// Redis version change all take configuration with them, and none of those
+/// are unusual operations to perform on a cache.
+///
+/// The silence is what makes it costly. Business hours read as "open" when
+/// missing, on purpose: a widget that says "we are closed" because Redis
+/// blinked is worse than one that answers out of hours. That is right for a
+/// transient blip and wrong for a permanent loss - the tenant becomes 24/7,
+/// the AI answers at 3am as though someone were there to escalate to, and
+/// nothing anywhere reports an error, because "open" is also the healthy
+/// answer.
+///
+/// Postgres is now the source of truth; Redis stays in front as the cache the
+/// hot paths already read. The Redis keys are unchanged, so nothing that reads
+/// them had to move at once.
+model TenantSetting {
+  id        String   @id @default(cuid())
+  tenantId  String   @map("tenant_id")
+  /// The Redis key SUFFIX this mirrors: "businessHours", "sla",
+  /// "autoGreeting", or "department:{id}:sla". Kept identical to the cache key
+  /// so the two can never drift into describing different things.
+  key       String
+  value     Json
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, key])
+  @@index([tenantId])
+  @@map("tenant_settings")
+}
+
+// ─── GDPR: Consent Records (Art. 6/7) ──────────────────────────
+// Proof-of-consent ledger. Append-only: a withdrawal is a NEW row with
+// granted=false, never a mutation of the prior grant, so the full consent
+// history is auditable. `subjectType`+`subjectId` identify who consented
+// (a Contact, a User, or a raw identifier like an email/phone captured
+// before a Contact row exists). `purpose` is the processing purpose
+// (e.g. "marketing_whatsapp", "cookies_functional", "data_processing").
+model ConsentRecord {
+  id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
+  subjectType String   @map("subject_type") // "contact" | "user" | "identifier"
+  subjectId   String   @map("subject_id") // Contact.id | User.id | raw email/phone
+  purpose     String // "marketing_whatsapp" | "cookies_functional" | "data_processing" | ...
+  granted     Boolean // true = consent given, false = withdrawn
+  source      String? // "onboarding" | "widget" | "import" | "api" | ...
+  evidence    Json? // { ip, userAgent, capturedText, channel, ... } - proof of consent
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([tenantId, subjectType, subjectId])
+  @@index([tenantId, purpose])
+  @@map("consent_records")
+}
+
+// ─── GDPR: Data Retention Policies (Art. 5(1)(e)) ──────────────
+// Per-tenant retention windows. A purge job reads the ACTIVE policy for a
+// given data category and hard-deletes rows older than `retentionDays`.
+// One row per (tenantId, category); NULL/absent = no limit (grows unbounded,
+// which is the pre-GDPR default we are closing).
+model DataRetentionPolicy {
+  id            String    @id @default(cuid())
+  tenantId      String    @map("tenant_id")
+  category      String // "messages" | "usage_logs" | "audit_logs" | "billing_webhook_events" | "reasoner_shadow_evals" | "agent_loop_runs" | ...
+  retentionDays Int       @map("retention_days") // rows older than now()-retentionDays are purged
+  enabled       Boolean   @default(true)
+  lastPurgeAt   DateTime? @map("last_purge_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, category])
+  @@index([tenantId])
+  @@map("data_retention_policies")
+}
+
+// ─── GDPR: Data Subject Requests (Art. 15/17/20/30) ────────────
+// Tracks every access/portability/erasure request and its execution, so
+// the platform can prove (Art. 30 record of processing) that a DSR was
+// received and fulfilled, and within what window.
+model DataSubjectRequest {
+  id          String    @id @default(cuid())
+  tenantId    String    @map("tenant_id")
+  requestType String    @map("request_type") // "export" | "erasure"
+  subjectType String    @map("subject_type") // "contact" | "user" | "tenant"
+  subjectId   String    @map("subject_id")
+  status      String    @default("PENDING") // "PENDING" | "COMPLETED" | "FAILED"
+  requestedBy String?   @map("requested_by") // userId who initiated (null = self-service)
+  result      Json? // summary of what was exported/erased (counts per store)
+  error       String? // failure reason when status=FAILED
+  createdAt   DateTime  @default(now()) @map("created_at")
+  completedAt DateTime? @map("completed_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([tenantId, requestType])
+  @@index([tenantId, subjectType, subjectId])
+  @@map("data_subject_requests")
 }
 
 // ─── Channel Accounts ────────────────────────────────────────
@@ -177,15 +333,78 @@ model ChannelAccount {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  tenant        Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  conversations Conversation[]
-  templates     MessageTemplate[]
+  tenant                   Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversations            Conversation[]
+  templates                MessageTemplate[]
+  shopifyChatInstallations ShopifyChatInstallation[]
 
   @@unique([channel, externalId])
   @@index([tenantId])
   @@index([connectionStatus])
   @@index([tokenExpiresAt])
   @@map("channel_accounts")
+}
+
+// ─── Shopify Chat App installation ───────────────────────────
+//
+// The GOTCHA Shopify CHAT app's own install record. Deliberately NOT
+// TenantIntegration: that table belongs to the GOTCHA Core Shopify
+// Integration (Admin API, orders, refunds), and letting a chat uninstall
+// touch a row in it would let the storefront widget revoke a merchant's
+// commerce connection.
+//
+// A row exists from the moment Shopify authorization completes, which is
+// BEFORE we know which GOTCHA organization the merchant belongs to -
+// `tenantId` and `channelAccountId` stay null until the merchant signs in
+// and binds. Uninstalled rows are kept for audit; only one row per shop may
+// be un-uninstalled at a time.
+
+enum ShopifyChatInstallStatus {
+  /// Shopify authorization done, no GOTCHA organization chosen yet.
+  PENDING
+  /// Bound to a tenant and a channel.
+  ACTIVE
+  /// app/uninstalled received, or the merchant disconnected it.
+  UNINSTALLED
+}
+
+model ShopifyChatInstallation {
+  id         String                   @id @default(cuid())
+  shopDomain String                   @map("shop_domain")
+  status     ShopifyChatInstallStatus @default(PENDING)
+
+  /// Which Shopify app this row came from - future-proofs a second surface.
+  appIdentity String @default("gotcha-chat") @map("app_identity")
+
+  /// Encrypted Chat access token, only when the app actually requests
+  /// scopes. Version 1 requests none, so this is null and there is nothing
+  /// to leak. Never returned to any browser.
+  accessToken String? @map("access_token")
+  tokenScopes String? @map("token_scopes")
+
+  tenantId         String? @map("tenant_id")
+  channelAccountId String? @map("channel_account_id")
+
+  /// Storefront hosts verified as belonging to THIS shop.
+  verifiedDomains Json @default("[]") @map("verified_domains")
+
+  installedAt     DateTime  @default(now()) @map("installed_at")
+  uninstalledAt   DateTime? @map("uninstalled_at")
+  boundAt         DateTime? @map("bound_at")
+  lastVerifiedAt  DateTime? @map("last_verified_at")
+  /// Last time the App Embed reported from a live storefront.
+  lastHeartbeatAt DateTime? @map("last_heartbeat_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant         Tenant?         @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  channelAccount ChannelAccount? @relation(fields: [channelAccountId], references: [id], onDelete: SetNull)
+
+  @@index([shopDomain])
+  @@index([tenantId])
+  @@index([status])
+  @@map("shopify_chat_installations")
 }
 
 // ─── Tenant Channel Config ───────────────────────────────────
@@ -227,45 +446,221 @@ enum Role {
   AGENT
 }
 
+// Data-reach dimension, INDEPENDENT of which permissions a role holds.
+// Carried on the role (defaultScope) and optionally overridden per
+// assignment. Future "Team Leader" vs "Department Manager" differ only here.
+// See packages/shared/src/lib/permission-catalog.ts (SCOPE_ORDER).
+enum PermissionScope {
+  OWN
+  TEAM
+  DEPARTMENT
+  WORKSPACE
+}
+
+// ─── Identity (the PERSON, cross-tenant) ─────────────────────
+// One row per human being, joined to Authentik by `authentikSubject` (the
+// OIDC `sub` claim). GOTCHA stores no credentials of any kind: authentication,
+// passwords, MFA, and sessions all live in Authentik. An Identity owns any
+// number of tenant MEMBERSHIPS (User rows) - the same person can work in
+// unlimited tenants, with a different role/department/permissions in each.
+//
+//   Identity  ──1:N──▶  User (membership in ONE tenant)
+//
+// Identity-level truth lives here (subject, canonical email/name, MFA
+// enrolment stamp); everything tenant-scoped stays on the membership row.
+model Identity {
+  id               String    @id @default(cuid())
+  // Authentik's immutable user UUID (sub_mode=user_uuid). Nullable only for
+  // the window between "invited" and "identity provisioned" - in practice
+  // ensureIdentity() binds it at invite time.
+  authentikSubject String?   @unique @map("authentik_subject")
+  // Canonical email, lowercased. Authentik pins username to this; membership
+  // rows carry a per-tenant display mirror that is synced from here.
+  email            String    @unique
+  name             String
+  // Identity-level MFA enrolment mirror (an authenticator AND recovery codes
+  // exist in Authentik). MFA is a property of the PERSON, not of any one
+  // tenant membership - stamped by the account /mfa-gate check and the
+  // tenant-security backfill.
+  mfaEnrolledAt    DateTime? @map("mfa_enrolled_at")
+  // Last tenant this identity actively used - the default the tenant picker
+  // preselects and the tenant a hint-less API call resolves to. Soft
+  // reference (no FK): a deleted tenant must not break the identity.
+  lastTenantId     String?   @map("last_tenant_id")
+  // Global session generation for this Identity. The BFF app-session migration
+  // (docs/security/bff-session-migration-map.md) snapshots this onto every
+  // UserSession at creation; a bump here (logout-all, credential/MFA reset,
+  // identity disabled, forced re-auth) makes every session with an older
+  // snapshot invalid - the "global reauthentication" mechanism. Additive and
+  // inert until cookie sessions are enabled by feature flag.
+  sessionVersion   Int       @default(0) @map("session_version")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  memberships User[]
+  sessions    UserSession[]
+
+  @@map("identities")
+}
+
+/// Server-side application session for the BFF/HttpOnly-cookie auth model.
+/// The browser holds only an opaque random identifier in an HttpOnly cookie;
+/// the raw value is NEVER stored - only its SHA-256 hash (sessionTokenHash) is,
+/// so a database leak does not yield forgeable cookies. OIDC access/refresh
+/// tokens live here encrypted with SESSION_ENCRYPTION_KEY (see
+/// lib/session-crypto.ts), never in plaintext and never in the browser.
+/// A session belongs to an IDENTITY, not a tenant; the active tenant is
+/// resolved through activeMembership (a per-tenant User row), never a raw
+/// tenantId. Additive infrastructure: no runtime path reads this until the
+/// cookie feature flags are enabled in a later commit.
+model UserSession {
+  id String @id @default(cuid())
+
+  // Ownership: the Identity this session authenticates. Global re-auth compares
+  // sessionVersion against Identity.sessionVersion.
+  identityId     String @map("identity_id")
+  sessionVersion Int    @default(0) @map("session_version")
+
+  // Active membership = the per-tenant User row this session currently acts as.
+  // Nullable: a multi-workspace identity with no selection yet is gated behind
+  // the tenant picker. SetNull on membership delete forces re-selection rather
+  // than leaving a dangling tenant reference (never coupled directly to Tenant).
+  activeMembershipId String? @map("active_membership_id")
+
+  // Lookup key: SHA-256 of the opaque cookie identifier. Unique + indexed.
+  // The raw identifier is never persisted or logged.
+  sessionTokenHash String @unique @map("session_token_hash")
+
+  // Provider tokens, sealed by lib/session-crypto (AES-256-GCM, versioned,
+  // AAD-bound to purpose + owner). Never plaintext.
+  encryptedAccessToken  String    @map("encrypted_access_token")
+  encryptedRefreshToken String?   @map("encrypted_refresh_token")
+  tokenExpiresAt        DateTime? @map("token_expires_at")
+  oidcSessionId         String?   @map("oidc_session_id")
+
+  // CSRF binding secret (double-submit HMAC). Server-side only; never sent to
+  // the browser and never logged.
+  csrfSecret String @map("csrf_secret")
+
+  // Lifecycle.
+  rememberMe       Boolean   @default(false) @map("remember_me")
+  lastActivityAt   DateTime  @default(now()) @map("last_activity_at")
+  expiresAt        DateTime  @map("expires_at")
+  revokedAt        DateTime? @map("revoked_at")
+  revocationReason String?   @map("revocation_reason")
+
+  // Session metadata for the session-list UI + audit (no secrets). IP is stored
+  // as a salted hash only where retained, never raw.
+  browser         String?
+  device          String?
+  operatingSystem String? @map("operating_system")
+  userAgentHash   String? @map("user_agent_hash")
+  ipHash          String? @map("ip_hash")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  identity         Identity @relation(fields: [identityId], references: [id], onDelete: Cascade)
+  activeMembership User?    @relation("ActiveMembershipSessions", fields: [activeMembershipId], references: [id], onDelete: SetNull)
+
+  // sessionTokenHash is already uniquely indexed (cookie -> hash -> record).
+  @@index([identityId]) // identity session listing + global invalidation
+  @@index([identityId, sessionVersion]) // stale-version invalidation
+  @@index([activeMembershipId]) // membership-context invalidation
+  @@index([expiresAt]) // expiry cleanup
+  @@index([revokedAt]) // revocation queries
+  @@map("user_sessions")
+}
+
+/// Short-lived, single-use OIDC login handshake state for the server-side
+/// Authorization-Code + PKCE flow (BFF migration §A5). Created when the browser
+/// starts login (GET /api/auth/login) and consumed exactly once on the backend
+/// callback (GET /api/auth/callback). The PKCE `codeVerifier` never reaches the
+/// browser - it lives here and is presented at token exchange server-side.
+/// Rows are single-use (consumedAt) and TTL-bounded (~10 min); expired/consumed
+/// rows are safe to purge. Additive infra, inert until SESSION_COOKIE_CREATE.
+model OidcLoginState {
+  id           String    @id @default(cuid())
+  // CSRF/replay guard echoed by the IdP; unique so a state can be consumed once.
+  state        String    @unique
+  // Replay-binding for the id_token.
+  nonce        String
+  // PKCE verifier (single-use, ~10 min). Presented at token exchange; never sent
+  // to the browser.
+  codeVerifier String    @map("code_verifier")
+  // Validated relative return path (defaults to root).
+  returnTo     String    @default("/") @map("return_to")
+  rememberMe   Boolean   @default(false) @map("remember_me")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  expiresAt    DateTime  @map("expires_at")
+  consumedAt   DateTime? @map("consumed_at")
+
+  @@index([expiresAt])
+  @@map("oidc_login_states")
+}
+
+// A User row is ONE TENANT MEMBERSHIP of an Identity: the person's role,
+// department, permissions, feature grants, and activity inside that single
+// tenant. All business authorization keys off this row; the Identity above
+// only answers "who is this person".
 model User {
-  id                       String   @id @default(cuid())
-  tenantId                 String   @map("tenant_id")
+  id                       String    @id @default(cuid())
+  tenantId                 String    @map("tenant_id")
+  // The person this membership belongs to. Everything Authentik-related is
+  // resolved through this relation - the membership row itself never talks
+  // to the IdP.
+  identityId               String    @map("identity_id")
+  // Per-tenant display mirror of Identity.email/name (kept in sync by the
+  // profile/email-change flows). Reads all over the codebase use these; the
+  // Identity row is the source of truth.
   email                    String
-  password                 String
   name                     String
-  role                     Role     @default(AGENT)
-  isActive                 Boolean  @default(true) @map("is_active")
-  notificationSoundEnabled Boolean  @default(true) @map("notification_sound_enabled")
+  role                     Role      @default(AGENT)
+  isActive                 Boolean   @default(true) @map("is_active")
+  notificationSoundEnabled Boolean   @default(true) @map("notification_sound_enabled")
   // E.164 personal/mobile number. Used for FORWARD_TO_AGENT inbound mode
   // and smart-callback recognition (when the agent calls the business
   // number back from this device, we identify them by `From === phoneNumber`).
-  phoneNumber              String?  @map("phone_number")
+  phoneNumber              String?   @map("phone_number")
   // Per-agent system-language override. NULL means "inherit from
   // `Tenant.defaultLocale`". Drives both UI strings and all AI-generated
   // content the agent consumes. ISO-639-1; today: "en" | "he".
-  locale                   String?  @map("locale")
+  locale                   String?   @map("locale")
   // Per-feature first-time guidance state for the persistent onboarding
   // layer. Map of feature key -> "unseen" | "snoozed" | "done", e.g.
   // {"knowledge":"done","ai-studio":"snoozed"}. NULL = nothing seen yet.
-  onboardingGuides         Json?    @map("onboarding_guides")
-  createdAt                DateTime @default(now()) @map("created_at")
-  updatedAt                DateTime @updatedAt @map("updated_at")
+  onboardingGuides         Json?     @map("onboarding_guides")
+  // When this MEMBERSHIP was last actively used (stamped on authenticated
+  // requests, throttled). Drives the tenant picker's "last used" ordering and
+  // the default-tenant resolution for hint-less API calls.
+  lastActiveAt             DateTime? @map("last_active_at")
+  createdAt                DateTime  @default(now()) @map("created_at")
+  updatedAt                DateTime  @updatedAt @map("updated_at")
 
-  tenant             Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  conversations      Conversation[]      @relation("AssignedAgent")
-  departmentMember   DepartmentMember?
-  inAppNotifications InAppNotification[]
+  identity                Identity             @relation(fields: [identityId], references: [id], onDelete: Cascade)
+  // Sessions currently acting as THIS membership (BFF app-session model). Used
+  // for membership-context invalidation when a membership is suspended/removed.
+  activeSessions          UserSession[]        @relation("ActiveMembershipSessions")
+  tenant                  Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversations           Conversation[]       @relation("AssignedAgent")
+  departmentMembers       DepartmentMember[]
+  inAppNotifications      InAppNotification[]
   // Voice channels where this user is the default-ring target for inbound calls.
-  defaultVoiceChannels VoiceChannel[]    @relation("VoiceChannelDefaultAgent")
+  defaultVoiceChannels    VoiceChannel[]       @relation("VoiceChannelDefaultAgent")
   // Voice channels where this user is the AGENT_FIRST outbound target
   // (separate from the inbound default agent so outbound can route to a
   // different person - e.g. sales rep for outbound, support rep for inbound).
-  agentFirstVoiceChannels VoiceChannel[] @relation("VoiceChannelAgentFirstAgent")
+  agentFirstVoiceChannels VoiceChannel[]       @relation("VoiceChannelAgentFirstAgent")
   roleAssignments         UserRoleAssignment[]
   featureGrants           UserFeatureGrant[]
+  approvalRecipients      ApprovalRecipient[]
 
   @@unique([tenantId, email])
+  // One membership per identity per tenant - the same person cannot hold two
+  // accounts in one workspace, but CAN hold one in each of many workspaces.
+  @@unique([tenantId, identityId])
   @@index([tenantId])
+  @@index([identityId])
   @@map("users")
 }
 
@@ -407,6 +802,13 @@ model AIAgent {
   role                String        @default("customer_support") // customer_support, sales, booking, billing, custom
   avatarColor         String        @default("#7c5cfc") @map("avatar_color")
   status              AIAgentStatus @default(DRAFT)
+  // Creation-wizard progress. Set to "chat" when the builder creates the
+  // DRAFT, advanced through chat→kb→refine→tools as the admin proceeds, and
+  // cleared (null) once the agent is saved from the editor (= wizard done).
+  // An INCOMPLETE wizard draft is `status=DRAFT AND builderStep IS NOT NULL`:
+  // those are surfaced as "resume setup" and excluded from the active
+  // employees list, so abandoned sessions never pollute the account.
+  builderStep         String?       @map("builder_step")
   tone                String        @default("professional") // professional, friendly, casual, formal
   languages           Json          @default("{\"english\":true}") // { english: bool, hebrew: bool, arabic: bool }
   style               Json          @default("{}") // { useEmojis, concise, useFirstName, proactive }
@@ -418,7 +820,7 @@ model AIAgent {
   systemPrompt     String  @default("") @map("system_prompt")
   sharedPrompt     String? @map("shared_prompt")
   autonomousPrompt String? @map("autonomous_prompt")
-  model            String  @default("gpt-4o-mini")
+  model            String  @default("gpt-5-mini")
   provider         String  @default("openai")
   temperature      Float   @default(0.7)
   maxTokens        Int     @default(1024) @map("max_tokens")
@@ -432,6 +834,17 @@ model AIAgent {
   toneConfig Json? @map("tone_config") // { formalityLevel, empathyLevel, assertiveness }
   behavioral Json? // { escalationTriggers[], forbiddenActions[], safetyBoundaries[] }
 
+  // Product Qualification Context (sales-oriented skills). Static per agent so
+  // it is cache-safe in the prompt. Drives needs-vs-product qualification
+  // instead of generic discovery.
+  // { whatWeSell, idealCustomerProfile, problemsSolved[], expectedOutcomes[], qualificationSignals[], disqualifiers[] }
+  salesContext Json? @map("sales_context")
+
+  // Last readiness-test report (P1-5): persisted so the owner can re-view the
+  // coverage result without re-running the LLM-costly generator each time.
+  // { score, coverage[], gaps[], generatedAt }
+  readinessReport Json? @map("readiness_report")
+
   // First-class goal + success criteria. Always rendered into the system
   // prompt by buildGoals() - so non-funnel agents (Support, Research)
   // have meaningful per-agent goal text. For Sales/SDR/Recruiting these
@@ -442,7 +855,16 @@ model AIAgent {
   successCriteria String? @map("success_criteria") @db.Text
 
   // Autonomous behavior settings
-  maxAutonomousMessages Int    @default(10) @map("max_autonomous_messages")
+  //
+  // 30, not 10. Ten AI replies is a short conversation: a product question, a
+  // size check, an order lookup and a cancellation is already most of it, and
+  // the Urban Supply dev agent hit the ceiling mid-test on an ordinary support
+  // flow. A limit that fires during normal use is not a safety rail, it is a
+  // defect the customer experiences as being abandoned.
+  //
+  // This is a DEFAULT, so it applies to newly created employees only.
+  // Existing rows keep whatever their tenant chose.
+  maxAutonomousMessages Int    @default(30) @map("max_autonomous_messages")
   maxAutonomousMinutes  Int    @default(15) @map("max_autonomous_minutes")
   confidenceThreshold   Float  @default(0.6) @map("confidence_threshold")
   escalationMessage     String @default("Let me connect you with a team member who can help further.") @map("escalation_message")
@@ -666,7 +1088,9 @@ model Department {
 model DepartmentMember {
   id             String         @id @default(cuid())
   tenantId       String         @map("tenant_id")
-  userId         String         @unique @map("user_id")
+  // NOT unique: a user can belong to SEVERAL departments (People & Teams
+  // multi-department membership). Pair-uniqueness below prevents duplicates.
+  userId         String         @map("user_id")
   departmentId   String         @map("department_id")
   departmentRole DepartmentRole @default(AGENT) @map("department_role")
   createdAt      DateTime       @default(now()) @map("created_at")
@@ -720,6 +1144,140 @@ model BusinessProfile {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@map("business_profiles")
+}
+
+// ─── Business Discovery (Onboarding Intelligence Engine) ────
+// The "opening balance" of the AI Readiness spine. Produced by the deep
+// 5-domain website scan at the very start of onboarding (Movements 1-2 of
+// the Onboarding Bible). Persisted so the report survives a refresh / an
+// OAuth round-trip, and so Business Health (Movement 3) and the first
+// AI Recommendation (Movement 4) can be derived from it without re-running
+// the LLM-costly scan. One row per tenant.
+//
+// Every JSON blob is the *structured understanding* the AI reflected back -
+// never silently ingested. `report` is the first-person narrated briefing
+// the customer reads ("I analyzed your business. I found 126 products…").
+// `gaps` are first-class findings ("I couldn't find a refund policy").
+model BusinessDiscovery {
+  id            String  @id @default(cuid())
+  tenantId      String  @unique @map("tenant_id")
+  websiteDomain String? @map("website_domain")
+  // Lifecycle: PENDING (scan queued) → SCANNING → COMPLETE → FAILED.
+  status        String  @default("PENDING")
+
+  // The five intelligence domains (Bible Part II). Each is the structured
+  // extraction the customer can see, confirm, and correct.
+  brand         Json? // { voice, tone, style, vocabulary[], forbiddenWords[], ctaStyle, languages[], positioning }
+  business      Json? // { industry, icp, personas[], products[], services[], pricingModel, valueProp, businessModel, summary }
+  knowledge     Json? // { faq, helpCenter, docs, policies{shipping,returns,refunds,terms,privacy}, articleCount }
+  communication Json? // { channels: [{ type, detail, confidence }] }
+  technology    Json? // { storefront, cms, tools: [{ slug, name, category }] }
+
+  // Findings + honest gaps + the first recommendation + a calibrated
+  // confidence read per domain. All reflected back in the UI.
+  gaps           Json? // [{ id, domain, label, severity, ask }]
+  recommendation Json? // { employeeRole, employeeName, reason, systems: [{ slug, reason }], knowledge: [{ label, reason }], channel }
+  health         Json? // { knowledge: [{ label, ok }], communication: [...], tools: [...] } snapshot at scan time
+  confidence     Json? // { business, brand, knowledge, customers, communication, integrations }  (0-100)
+
+  // First-person narrated briefing (Movement 1 / Output 1).
+  report String? @db.Text
+
+  // The single earned question (Movement 5): primary business goal slug.
+  primaryGoal String? @map("primary_goal")
+
+  // Resume checkpoint (P0): the last movement key the owner reached
+  // (review|connect|goal|integrations|knowledge|recommendation|tune|ready).
+  // Derived state stays authoritative for stage; `progress` only refines the
+  // resume position WITHIN the review→ready band so a reload during movements
+  // 6-9 returns to that movement instead of falling back to integrations.
+  progress String?
+
+  // Live ceremony phase (Movement 1) - updated between scan phases so the
+  // loader's checkmarks land on real events, not a timer:
+  // homepage|links|pages|signals|synthesis|normalizing|done.
+  scanPhase String? @map("scan_phase")
+
+  // Movement 8 tune-chat transcript, persisted (bounded to the last 20 turns)
+  // so a reload mid-tune resumes the conversation instead of losing it.
+  tuneTranscript Json? @map("tune_transcript")
+
+  scannedAt DateTime? @map("scanned_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("business_discoveries")
+}
+
+// ─── Recommendations (living AI backlog) ────────────────────
+// A recommendation is NOT an onboarding step. It is a persistent, evolving
+// suggestion the AI produces as it learns the business ("connect Shopify",
+// "import your refund policy", "hire a Support employee"). Onboarding is merely
+// the FIRST surface that shows them; later they populate the Home dashboard.
+//
+// A recommendation lives until it is completed, dismissed, or REPLACED by a
+// better one. Idempotent via unique (tenantId, dedupeKey): a re-scan updates
+// the same logical rec instead of duplicating, and never resurrects one the
+// customer already completed or dismissed.
+model Recommendation {
+  id          String    @id @default(cuid())
+  tenantId    String    @map("tenant_id")
+  source      String    @default("discovery") // discovery | store_inspection | manual
+  kind        String // hire_employee | connect_system | connect_channel | import_knowledge | setup_workflow | tool_detected (detected on site, no connector - acknowledgment only)
+  title       String
+  reason      String?   @db.Text
+  action      String? // machine hint, e.g. "connect:shopify" | "hire:customer_support" | "teach:refund_policy"
+  targetSlug  String?   @map("target_slug") // shopify | hubspot | whatsapp | ...
+  confidence  String    @default("likely")
+  priority    Int       @default(0) // higher = surfaced first (already-detected systems rank up)
+  status      String    @default("OPEN") // OPEN | COMPLETED | DISMISSED | REPLACED
+  dedupeKey   String    @map("dedupe_key")
+  payload     Json?
+  completedAt DateTime? @map("completed_at")
+  dismissedAt DateTime? @map("dismissed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, dedupeKey])
+  @@index([tenantId, status, priority])
+  @@map("recommendations")
+}
+
+// ─── Scheduled Nudges (Lifecycle Nudge Engine) ──────────────
+// A generic, restart-safe, idempotent scheduler for lifecycle nudges. The DB
+// row is the source of truth (survives a Redis flush); a repeatable BullMQ
+// sweep sends the due ones. Onboarding is the first consumer, but `kind` keeps
+// it generic for future lifecycle nudges (trial-ending, re-engagement, …).
+//
+// Idempotency: unique (tenantId, dedupeKey) - scheduling the same logical nudge
+// again UPDATES the existing PENDING row (reschedule) instead of duplicating.
+// Content is computed at SEND time from live state, so a nudge whose reason no
+// longer holds (the customer already did the thing) is marked SKIPPED, not sent.
+model ScheduledNudge {
+  id           String    @id @default(cuid())
+  tenantId     String    @map("tenant_id")
+  kind         String // "onboarding" | future lifecycle kinds
+  dedupeKey    String    @map("dedupe_key") // stable per logical nudge, e.g. "onboarding_next_step"
+  scheduledFor DateTime  @map("scheduled_for")
+  status       String    @default("PENDING") // PENDING | SENT | CANCELLED | SKIPPED | FAILED
+  channel      String    @default("email") // email | in_app | both
+  attempts     Int       @default(0)
+  lastError    String?   @map("last_error")
+  sentAt       DateTime? @map("sent_at")
+  payload      Json? // optional context for content computation / templating
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, dedupeKey])
+  @@index([status, scheduledFor])
+  @@index([tenantId, status])
+  @@map("scheduled_nudges")
 }
 
 // ─── Tenant Invitations ─────────────────────────────────────
@@ -846,22 +1404,6 @@ model KnowledgeChunk {
 
 // ─── Token Usage Logs ────────────────────────────────────────
 
-// ─── Magic Links (passwordless onboarding) ──────────────────
-
-model MagicLink {
-  id        String    @id @default(cuid())
-  token     String    @unique
-  tenantId  String    @map("tenant_id")
-  userId    String    @map("user_id")
-  expiresAt DateTime  @map("expires_at")
-  usedAt    DateTime? @map("used_at")
-  createdAt DateTime  @default(now()) @map("created_at")
-
-  @@index([token])
-  @@index([tenantId])
-  @@map("magic_links")
-}
-
 // ─── Lead Status ────────────────────────────────────────────
 
 enum LeadStatus {
@@ -894,21 +1436,6 @@ model WaitlistEntry {
   @@index([status])
   @@index([email])
   @@map("waitlist_entries")
-}
-
-// ─── Refresh Tokens ─────────────────────────────────────────
-
-model RefreshToken {
-  id        String   @id @default(cuid())
-  token     String   @unique
-  userId    String   @map("user_id")
-  tenantId  String   @map("tenant_id")
-  expiresAt DateTime @map("expires_at")
-  createdAt DateTime @default(now()) @map("created_at")
-
-  @@index([token])
-  @@index([userId])
-  @@map("refresh_tokens")
 }
 
 // ─── Integration Catalog (system-wide, not per-tenant) ──────
@@ -1063,7 +1590,12 @@ model TenantIntegration {
   createdAt      DateTime         @default(now()) @map("created_at")
   updatedAt      DateTime         @updatedAt @map("updated_at")
 
-  integration IntegrationCatalog @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  // RESTRICT, not Cascade. Deleting a catalog entry used to delete every
+  // tenant's connection to it - their credentials, their per-tool config, and
+  // (through TenantTool) their execution history. A platform-side catalog edit
+  // must not be able to reach into tenant data. Removing an integration from
+  // the catalog now requires disconnecting its tenants first, deliberately.
+  integration IntegrationCatalog @relation(fields: [integrationId], references: [id], onDelete: Restrict)
   tenantTools TenantTool[]
 
   @@unique([tenantId, integrationId])
@@ -1084,8 +1616,12 @@ model TenantTool {
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
 
+  // tenantIntegration stays Cascade: both sides are tenant-owned, and
+  // disconnecting SHOULD retire the activations.
   tenantIntegration TenantIntegration     @relation(fields: [tenantIntegrationId], references: [id], onDelete: Cascade)
-  catalogTool       CatalogTool           @relation(fields: [catalogToolId], references: [id], onDelete: Cascade)
+  // catalogTool is RESTRICT for the same reason as above: a platform-side
+  // catalog change must not silently delete tenant activations.
+  catalogTool       CatalogTool           @relation(fields: [catalogToolId], references: [id], onDelete: Restrict)
   agentPermissions  AgentToolPermission[]
   executions        ToolExecution[]
 
@@ -1164,15 +1700,96 @@ model ApprovalRequest {
   decidedAt      DateTime?      @map("decided_at")
   decisionReason String?        @map("decision_reason")
   modifiedParams Json?          @map("modified_params") // if approver edited before running
+  // Kernel resume envelope (P1-3/B6): when the request originated from the
+  // Capability Runtime's approval gate, the FULL ExecutionRequest is stored so
+  // approval-resume re-enters the Runtime (invariants apply on HITL writes)
+  // instead of the legacy tool executor. Null for legacy-brain requests.
+  resumeEnvelope Json?          @map("resume_envelope")
   expiresAt      DateTime       @map("expires_at")
   createdAt      DateTime       @default(now()) @map("created_at")
   updatedAt      DateTime       @updatedAt @map("updated_at")
 
+  // ── Execution lifecycle (separate from the DECISION above) ──
+  // A manager approving is not the action happening. `status` records the
+  // human decision; `executionState` records what the system then did. Both
+  // are needed: without this, a dispatch that failed left an APPROVED row
+  // indistinguishable from one that succeeded, nothing could retry it, and
+  // the customer was simply never told anything.
+  executionState      ExecutionState @default(NOT_STARTED) @map("execution_state")
+  executionStartedAt  DateTime?      @map("execution_started_at")
+  executionEndedAt    DateTime?      @map("execution_ended_at")
+  /// Provider/tool result summary. NEVER the raw credential-bearing payload.
+  executionResult     Json?          @map("execution_result")
+  executionError      String?        @map("execution_error")
+  executionAttempts   Int            @default(0) @map("execution_attempts")
+  /// Set once the customer has been told the outcome. Presence of this value
+  /// is the once-only guard for the continuation message: delivery may be
+  /// retried, but the business action behind it is never re-run.
+  customerNotifiedAt  DateTime?      @map("customer_notified_at")
+  /// Id of the OUTBOUND message that carried the outcome to the customer.
+  customerMessageId   String?        @map("customer_message_id")
+  /// How the decision arrived - web UI, WhatsApp button, API. Audit trail.
+  decisionChannel     String?        @map("decision_channel")
+  /// Ties every log line of one approval together across services.
+  correlationId       String?        @map("correlation_id")
+  /// Out-of-band (WhatsApp) manager notification: "sent" | "skipped" | "failed".
+  /// `skipped` is a FIRST-CLASS state - the inbox renders the reason so an
+  /// unconfigured tenant sees an actionable setup prompt rather than silence.
+  managerNotifyState  String?        @map("manager_notify_state")
+  managerNotifyReason String?        @map("manager_notify_reason")
+  managerNotifiedAt   DateTime?      @map("manager_notified_at")
+  /// Deterministic fingerprint of the BUSINESS operation (tool + normalized
+  /// identifying args, e.g. "shopify.process_refund:order=1004"). Row-level
+  /// guards are not enough when TWO rows describe the SAME operation - the
+  /// customer got two "your refund is done" messages that way. This key dedups
+  /// HITL creation (an open sibling wins) and the completion notification
+  /// (any notified sibling wins).
+  operationKey        String?        @map("operation_key")
+
+  @@index([tenantId, operationKey])
   @@index([tenantId, status])
   @@index([tenantId, conversationId])
   @@index([tenantId, contactId])
   @@index([expiresAt])
+  // Drives the resume sweeper: find approvals whose action still needs to run
+  // or whose customer was never told.
+  @@index([status, executionState])
   @@map("approval_requests")
+}
+
+/// Who may be pinged on WhatsApp to decide an approval, and where.
+///
+/// EXPLICIT ONLY. There is deliberately no "fall back to the tenant owner /
+/// first admin" path: silently routing a refund approval to whoever happens to
+/// be an admin is how the wrong person ends up authorising money movement.
+/// A row must exist, be `enabled`, point at a real ACTIVE membership of the
+/// tenant, and carry a validated E.164 number - otherwise the request simply
+/// stays in the in-app approval inbox and says why it was not sent.
+model ApprovalRecipient {
+  id           String   @id @default(cuid())
+  tenantId     String   @map("tenant_id")
+  /// The GOTCHA membership authorised to decide. Authorisation is re-checked
+  /// at decision time, never trusted from the notification itself.
+  userId       String   @map("user_id")
+  /// Delivery channel. Only "whatsapp" today; the column exists so adding
+  /// SMS/Telegram later does not need a migration.
+  channel      String   @default("whatsapp")
+  /// E.164, validated on write (normalised, digits only, leading +).
+  phoneE164    String   @map("phone_e164")
+  /// OFF by default - a tenant must deliberately turn this on.
+  enabled      Boolean  @default(false)
+  /// Cap what may be decided from a phone. HIGH-risk actions can be forced to
+  /// the web UI ("Open in GOTCHA") instead of one-tap approval.
+  maxRiskLevel String   @default("medium") @map("max_risk_level")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId, channel])
+  @@index([tenantId, enabled])
+  @@map("approval_recipients")
 }
 
 enum ApprovalStatus {
@@ -1183,17 +1800,36 @@ enum ApprovalStatus {
   CANCELLED
 }
 
+/// What happened to the ACTION after a human said yes. Distinct from
+/// ApprovalStatus, which only records the human decision.
+///   NOT_STARTED - no decision yet, or the decision was no.
+///   EXECUTING   - dispatch in flight (claimed by exactly one worker).
+///   SUCCEEDED   - the provider confirmed the action. ONLY this state may
+///                 produce a "we did it" message to the customer.
+///   FAILED      - dispatch ran and did not succeed; retryable or terminal.
+enum ExecutionState {
+  NOT_STARTED
+  EXECUTING
+  SUCCEEDED
+  FAILED
+  // Historical rows approved BEFORE the execution state machine existed. Their
+  // dispatch outcome was never recorded (many provably never ran). They must
+  // not read as SUCCEEDED (that falsifies history) and must not be retryable
+  // (re-running an old refund/booking is worse). Terminal, audit-only state.
+  LEGACY_UNVERIFIED
+}
+
 // ─── Agent Tool Permissions ─────────────────────────────────
 
 model AgentToolPermission {
-  id              String   @id @default(cuid())
-  tenantId        String   @map("tenant_id")
-  departmentId    String?  @map("department_id")
-  agentId         String?  @map("agent_id") // human agent (User) ID
-  aiAgentId       String?  @map("ai_agent_id") // AI agent ID
-  tenantToolId    String   @map("tenant_tool_id")
-  isAllowed       Boolean  @default(true) @map("is_allowed")
-  requireApproval Boolean  @default(false) @map("require_approval")
+  id              String  @id @default(cuid())
+  tenantId        String  @map("tenant_id")
+  departmentId    String? @map("department_id")
+  agentId         String? @map("agent_id") // human agent (User) ID
+  aiAgentId       String? @map("ai_agent_id") // AI agent ID
+  tenantToolId    String  @map("tenant_tool_id")
+  isAllowed       Boolean @default(true) @map("is_allowed")
+  requireApproval Boolean @default(false) @map("require_approval")
 
   // Per-agent tool SEMANTICS (Tier 2). Override what the tool MEANS to
   // THIS agent - e.g. the same `create_task` is "schedule SDR callback"
@@ -1203,8 +1839,8 @@ model AgentToolPermission {
   description String? @db.Text // what this tool does FOR THIS AGENT
   usageRule   String? @map("usage_rule") @db.Text // when to use / preconditions / forbidden contexts for THIS AGENT
 
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   tenantTool TenantTool  @relation(fields: [tenantToolId], references: [id], onDelete: Cascade)
   department Department? @relation(fields: [departmentId], references: [id], onDelete: Cascade)
@@ -1223,7 +1859,17 @@ model ToolExecution {
   id             String   @id @default(cuid())
   tenantId       String   @map("tenant_id")
   conversationId String   @map("conversation_id")
-  tenantToolId   String   @map("tenant_tool_id")
+  // NULLABLE, and the FK below is SetNull rather than Cascade.
+  //
+  // Disconnecting an integration deletes the tenant's TenantTool rows
+  // (integrations.ts). Under Cascade that took this audit log with it - a
+  // merchant clicking "Disconnect" erased every record of what the AI had
+  // done through that integration, and reconnecting did not bring it back.
+  // An audit trail that a normal UI action can delete is not an audit trail.
+  tenantToolId   String?  @map("tenant_tool_id")
+  // Denormalised so the row still says WHAT ran once the link is gone.
+  // Without it a SetNull audit record survives but cannot name its tool.
+  toolName       String   @default("") @map("tool_name")
   input          Json     @default("{}")
   output         Json     @default("{}")
   success        Boolean  @default(true)
@@ -1232,7 +1878,7 @@ model ToolExecution {
   approvedBy     String?  @map("approved_by")
   createdAt      DateTime @default(now()) @map("created_at")
 
-  tenantTool TenantTool @relation(fields: [tenantToolId], references: [id], onDelete: Cascade)
+  tenantTool TenantTool? @relation(fields: [tenantToolId], references: [id], onDelete: SetNull)
 
   @@index([tenantId])
   @@index([conversationId])
@@ -1668,6 +2314,20 @@ model UsageLog {
   promptTokens     Int?     @map("prompt_tokens")
   completionTokens Int?     @map("completion_tokens")
   costUsd          Decimal? @map("cost_usd") @db.Decimal(12, 6)
+  // Billing / AI-Units (populated when type="ai_tokens" once metering is live).
+  // unitsConsumed = (providerCost x categoryMultiplier x marginFactor) / unitCostBasis.
+  // This is the profitability ledger row; the coarse wallet movement lives in
+  // AiUnitLedgerEntry (linked via ledgerEntryId). billedPeriodKey ties the spend
+  // to a subscription billing period for reset/aggregation.
+  unitsConsumed    Decimal? @map("units_consumed") @db.Decimal(16, 6)
+  billedPeriodKey  String?  @map("billed_period_key")
+  ledgerEntryId    String?  @map("ledger_entry_id")
+  // Per-turn attribution (P1-6): turnId groups every micro-call of ONE customer
+  // turn; durationMs is that call's wall time; aiAgentId denormalizes the
+  // employee so per-employee cost/latency rollups don't join through metadata.
+  turnId           String?  @map("turn_id")
+  durationMs       Int?     @map("duration_ms")
+  aiAgentId        String?  @map("ai_agent_id")
   metadata         Json? // { channel, tool, conversationId, messageId, ... }
   createdAt        DateTime @default(now()) @map("created_at")
 
@@ -1676,10 +2336,15 @@ model UsageLog {
   @@index([tenantId, createdAt])
   @@index([tenantId, feature])
   @@index([tenantId, model])
+  @@index([tenantId, billedPeriodKey])
+  @@index([tenantId, aiAgentId])
+  @@index([tenantId, turnId])
   @@map("usage_logs")
 }
 
-// ─── Credit Transactions (Usage → Credits) ─────────────────
+// ─── Credit Transactions (DEPRECATED) ──────────────────────
+// Superseded by AiUnitLedgerEntry + AiUnitLot. Never written in production;
+// kept only to avoid a destructive migration. Do not use in new code.
 
 model CreditTransaction {
   id          String   @id @default(cuid())
@@ -1693,6 +2358,1759 @@ model CreditTransaction {
   @@index([tenantId, source])
   @@index([tenantId, createdAt])
   @@map("credit_transactions")
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// BILLING · SUBSCRIPTION · LICENSING · AI UNITS
+// Design dossier: docs / plan i-want-to-design-async-muffin.md
+// Separation of concerns:
+//   • MONEY      (BillableEntity → BillingProfile/Subscription/Invoice/Charge)
+//   • WALLET     (tenant-scoped AiUnitLot/AiUnitLedgerEntry/TenantAiBalance)
+//   • ENTITLEMENT(tenant-scoped TenantEntitlement → materialized TenantFeature)
+//   • CATALOG    (Plan/PlanEntitlement/CreditPackage/BillableModel/UnitPricingConfig)
+// ════════════════════════════════════════════════════════════════════════
+
+enum BillableEntityKind {
+  TENANT // V1: one BillableEntity per tenant. Future: ACCOUNT (one payer, N tenants).
+  ACCOUNT
+}
+
+enum SubscriptionStatus {
+  PENDING // created, card not yet on file
+  TRIALING
+  ACTIVE
+  PAST_DUE // renewal charge failed; in dunning
+  SUSPENDED // dunning exhausted; AI gated, platform read-only
+  CANCELED
+  PAUSED
+  GRANDFATHERED // temporary one-way compatibility state (enforcement + billing OFF)
+}
+
+enum BillingProfileStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum PaymentMethodStatus {
+  ACTIVE
+  EXPIRED
+  REMOVED
+}
+
+enum BillingProvider {
+  ICOUNT
+  STRIPE
+  MANUAL // grandfathered / admin-managed; no real provider
+}
+
+enum InvoiceType {
+  SUBSCRIPTION
+  CREDIT_PURCHASE
+  AUTO_PURCHASE
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PAID
+  FAILED
+  VOID
+}
+
+enum ChargeStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+  /// Submitted, but the outcome never came back. Distinct from FAILED because
+  /// FAILED invites a retry and this one must be reconciled instead.
+  UNKNOWN
+}
+
+enum BillingInterval {
+  MONTHLY
+  ANNUAL
+}
+
+enum PendingChangeType {
+  DOWNGRADE
+  CANCEL
+  UPGRADE // scheduled (non-immediate) upgrade
+  VOLUME_CHANGE // chat/voice volume selector change only, same plan
+}
+
+enum AiUnitBucket {
+  INCLUDED // monthly plan allotment; expires at renewal (use-it-or-lose-it)
+  PURCHASED // bought or auto-purchased; never expires; consumed FIFO after INCLUDED
+}
+
+enum AiUnitGrantType {
+  PLAN
+  PURCHASE
+  AUTO
+  PROMO
+  TRIAL
+}
+
+enum AiUnitEntryType {
+  GRANT
+  CONSUME
+  EXPIRE
+  ADJUST
+  REFUND
+}
+
+enum EntitlementValueType {
+  BOOLEAN
+  COUNTER // numeric limit (max users, AI employees, channels, storage…)
+  CONFIG // arbitrary JSON config
+  // Added by the pricing round. COUNTER remains the integer limit type (the
+  // catalog's "Integer"); these cover the remaining entitlement shapes.
+  DECIMAL // fractional limit (e.g. storage GB with a decimal component)
+  ENUM // one of a fixed option set (e.g. support level: standard|priority)
+  LIST // an allow-list of string values (e.g. permitted channels)
+  UNLIMITED // explicitly unbounded - beats any numeric limit
+  METERED // consumption-metered, enforced by the credit ledger, not a cap
+}
+
+enum EntitlementSource {
+  PLAN_DEFAULT
+  OVERRIDE
+  PROMO
+  TRIAL
+  ADDON
+  BETA
+  // Added by the pricing round.
+  VOLUME_OPTION // granted by the selected chat/voice volume option
+  COMPLIANCE_DENY // security/compliance kill switch - always wins, always denies
+}
+
+// ─── Billable Entity (the payer abstraction) ───────────────
+// Money/subscription models reference billableEntityId, NEVER tenantId, so a
+// future BillingAccount → many tenants needs no redesign. V1 seeds one
+// TENANT-kind entity per tenant via the BillableEntityTenant link.
+
+model BillableEntity {
+  id          String             @id @default(cuid())
+  kind        BillableEntityKind @default(TENANT)
+  displayName String?            @map("display_name")
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+
+  tenants            BillableEntityTenant[]
+  billingProfile     BillingProfile?
+  subscription       Subscription?
+  invoices           Invoice[]
+  autoPurchasePolicy AutoPurchasePolicy?
+
+  @@map("billable_entities")
+}
+
+model BillableEntityTenant {
+  id               String   @id @default(cuid())
+  billableEntityId String   @map("billable_entity_id")
+  // @unique enforces V1's one-entity-per-tenant. Dropping this unique later
+  // (without touching downstream models) is what enables multi-tenant accounts.
+  tenantId         String   @unique @map("tenant_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  entity BillableEntity @relation(fields: [billableEntityId], references: [id], onDelete: Cascade)
+  tenant Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([billableEntityId])
+  @@map("billable_entity_tenants")
+}
+
+// ─── Plan & Pricing Catalog ────────────────────────────────
+
+// A `Plan` row IS a PlanVersion: `key` groups the versions of one commercial
+// product and `version` identifies the immutable commercial revision. Editing a
+// price/feature/limit means publishing a NEW version - never mutating an ACTIVE
+// one - so existing subscriptions (which pin key+version) keep their terms.
+//
+//   Draft → Active → Retired → Archived
+//
+// `kind` separates the self-serve catalog (PUBLIC) from negotiated
+// organization-specific plans (CUSTOM, scoped by tenantId), Sysadmin-only
+// evaluation plans (POC / TRIAL), and pre-existing rows preserved for
+// grandfathering (LEGACY).
+model Plan {
+  id              String          @id @default(cuid())
+  key             String // foundation | ai_workforce | ai_voice | custom_* | poc | legacy keys
+  name            String
+  version         Int             @default(1)
+  billingInterval BillingInterval @default(MONTHLY) @map("billing_interval")
+  basePrice       Decimal?        @map("base_price") @db.Decimal(12, 2) // null for sales-only / grandfathered
+  currency        String          @default("ILS")
+  includedAiUnits Int             @default(0) @map("included_ai_units")
+  salesOnly       Boolean         @default(false) @map("sales_only") // Enterprise = true (no public price)
+  active          Boolean         @default(true)
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+
+  // ── Lifecycle & catalog presentation (pricing round) ──
+  status        PlanStatus @default(ACTIVE)
+  kind          PlanKind   @default(PUBLIC)
+  // CUSTOM plans only: the single organization this negotiated plan belongs to.
+  // NULL for every catalog plan. Enforced in application code, not by FK
+  // cascade, so deleting a tenant never silently drops commercial history.
+  tenantId      String?    @map("tenant_id")
+  nameHe        String?    @map("name_he")
+  descriptionEn String?    @map("description_en")
+  descriptionHe String?    @map("description_he")
+  sortOrder     Int        @default(0) @map("sort_order") // also the upgrade/downgrade rank
+  recommended   Boolean    @default(false)
+  effectiveFrom DateTime?  @map("effective_from")
+  effectiveTo   DateTime?  @map("effective_to")
+  publishedAt   DateTime?  @map("published_at")
+  publishedBy   String?    @map("published_by")
+  internalNote  String?    @map("internal_note")
+
+  // ── Commercial configuration (all data, never code) ──
+  supportLevel           String?   @map("support_level") // standard | priority | dedicated
+  dataRetentionDays      Int?      @map("data_retention_days")
+  autoPurchaseEligible   Boolean   @default(true) @map("auto_purchase_eligible")
+  creditPackagesEligible Boolean   @default(true) @map("credit_packages_eligible")
+  // Whether the customer may pick a recurring chat / voice volume. Foundation
+  // ships with both OFF; flipping either ON is a data change.
+  chatVolumeEnabled      Boolean   @default(false) @map("chat_volume_enabled")
+  voiceVolumeEnabled     Boolean   @default(false) @map("voice_volume_enabled")
+  // Contract terms for CUSTOM plans.
+  contractStart          DateTime? @map("contract_start")
+  contractEnd            DateTime? @map("contract_end")
+  approvalState          String?   @map("approval_state") // PENDING | APPROVED | REJECTED
+  approvedBy             String?   @map("approved_by")
+  approvedAt             DateTime? @map("approved_at")
+
+  entitlements  PlanEntitlement[]
+  volumeOptions PlanVolumeOption[]
+  estimations   PublicEstimationConfig[]
+
+  @@unique([key, version])
+  @@index([key])
+  @@index([status, kind])
+  @@index([tenantId])
+  @@map("plans")
+}
+
+enum PlanStatus {
+  DRAFT // editable; never resolvable by a subscription
+  ACTIVE // the version new subscribers receive
+  RETIRED // no new subscribers; existing subscriptions keep running on it
+  ARCHIVED // historical only
+}
+
+enum PlanKind {
+  PUBLIC // self-serve catalog
+  CUSTOM // negotiated, scoped to one organization
+  POC // Sysadmin-provisioned proof of concept
+  TRIAL // Sysadmin-provisioned trial
+  LEGACY // pre-existing plan preserved for grandfathering
+}
+
+model PlanEntitlement {
+  id             String               @id @default(cuid())
+  planId         String               @map("plan_id")
+  entitlementKey String               @map("entitlement_key") // license key OR limit key
+  valueType      EntitlementValueType @map("value_type")
+  value          Json // { bool } | { count } | arbitrary config
+  createdAt      DateTime             @default(now()) @map("created_at")
+
+  plan Plan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, entitlementKey])
+  @@index([planId])
+  @@map("plan_entitlements")
+}
+
+model CreditPackage {
+  id               String   @id @default(cuid())
+  key              String   @unique
+  name             String
+  units            Int
+  price            Decimal  @db.Decimal(12, 2)
+  currency         String   @default("ILS")
+  providerPriceRef String?  @map("provider_price_ref")
+  active           Boolean  @default(true)
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  // ── Catalog configuration (pricing round) ──
+  nameHe              String?            @map("name_he")
+  status              PlanStatus         @default(ACTIVE) // Draft → Active → Retired
+  // NULL = every plan. Otherwise an array of plan keys, e.g. ["ai_workforce"].
+  eligiblePlanKeys    Json?              @map("eligible_plan_keys")
+  activeFrom          DateTime?          @map("active_from")
+  activeTo            DateTime?          @map("active_to")
+  expiryPolicy        CreditExpiryPolicy @default(NEVER) @map("expiry_policy")
+  expiryDays          Int?               @map("expiry_days") // DAYS_AFTER_PURCHASE only
+  customerVisible     Boolean            @default(true) @map("customer_visible")
+  maxPurchaseQuantity Int?               @map("max_purchase_quantity")
+  discountLabel       String?            @map("discount_label")
+  sortOrder           Int                @default(0) @map("sort_order")
+  // A future price that takes effect on its own date without touching `price`
+  // until then - so scheduling a price change is not a live price change.
+  scheduledPrice      Decimal?           @map("scheduled_price") @db.Decimal(12, 2)
+  scheduledPriceFrom  DateTime?          @map("scheduled_price_from")
+  internalNote        String?            @map("internal_note")
+  updatedAt           DateTime           @default(now()) @updatedAt @map("updated_at")
+
+  @@index([status, sortOrder])
+  @@map("credit_packages")
+}
+
+enum CreditExpiryPolicy {
+  NEVER // purchased credits persist until consumed
+  DAYS_AFTER_PURCHASE // expire `expiryDays` after the grant
+  PERIOD_END // expire with the billing period (like INCLUDED)
+}
+
+// Cost-driven pricing engine. AI Units are an abstraction over real provider
+// COST, not raw tokens. Adding a model / changing prices / adjusting margin =
+// data change only (no code). Versioned by effectiveFrom (newest active wins).
+
+model BillableModel {
+  id                   String   @id @default(cuid())
+  model                String // e.g. "gpt-5-mini"
+  provider             String   @default("openai")
+  kind                 String   @default("CHAT") // CHAT | EMBEDDING | VOICE | DEEP_RESEARCH
+  inputCostPer1M       Decimal  @map("input_cost_per_1m") @db.Decimal(12, 6)
+  outputCostPer1M      Decimal  @map("output_cost_per_1m") @db.Decimal(12, 6)
+  cachedInputCostPer1M Decimal? @map("cached_input_cost_per_1m") @db.Decimal(12, 6)
+  categoryMultiplier   Decimal  @default(1) @map("category_multiplier") @db.Decimal(8, 4) // voice 2x, deep-research 10x
+  active               Boolean  @default(true)
+  effectiveFrom        DateTime @default(now()) @map("effective_from")
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  @@index([model, active, effectiveFrom])
+  @@map("billable_models")
+}
+
+model UnitPricingConfig {
+  id               String   @id @default(cuid())
+  // The real provider cost (USD) that equals exactly 1 AI Unit (e.g. the cost
+  // of 10k gpt-5-mini tokens @ 80/20). marginFactor scales cost→Units to set
+  // commercial margin. Both are data so margin/cost changes never touch code.
+  unitCostBasisUsd Decimal  @map("unit_cost_basis_usd") @db.Decimal(12, 8)
+  marginFactor     Decimal  @default(1) @map("margin_factor") @db.Decimal(8, 4)
+  currency         String   @default("USD")
+  active           Boolean  @default(true)
+  effectiveFrom    DateTime @default(now()) @map("effective_from")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@index([active, effectiveFrom])
+  @@map("unit_pricing_configs")
+}
+
+// ─── Entitlement layering (feeds the existing permission resolver) ──
+// Override layer behind the materialized TenantFeature read cache. Carries
+// source + expiry so plan defaults, promos, trials, beta and manual overrides
+// coexist without destroying each other.
+
+model TenantEntitlement {
+  id             String               @id @default(cuid())
+  tenantId       String               @map("tenant_id")
+  entitlementKey String               @map("entitlement_key")
+  valueType      EntitlementValueType @map("value_type")
+  value          Json
+  source         EntitlementSource
+  expiresAt      DateTime?            @map("expires_at") // temporary features (beta/promo/trial)
+  reason         String?
+  createdBy      String?              @map("created_by")
+  createdAt      DateTime             @default(now()) @map("created_at")
+  updatedAt      DateTime             @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, entitlementKey, source])
+  @@index([tenantId])
+  @@index([tenantId, entitlementKey])
+  @@map("tenant_entitlements")
+}
+
+// ─── Wallet (tenant-scoped AI Units) ───────────────────────
+// Two buckets: INCLUDED (monthly, expires at renewal) and PURCHASED (never
+// expires, FIFO). Balance = Σ ledger, reconcilable against lot.unitsRemaining.
+
+model AiUnitLot {
+  id             String          @id @default(cuid())
+  tenantId       String          @map("tenant_id")
+  bucket         AiUnitBucket
+  grantType      AiUnitGrantType @map("grant_type")
+  unitsGranted   Decimal         @map("units_granted") @db.Decimal(16, 6)
+  unitsRemaining Decimal         @map("units_remaining") @db.Decimal(16, 6)
+  periodKey      String?         @map("period_key") // INCLUDED only - the billing period this allotment belongs to
+  expiresAt      DateTime?       @map("expires_at") // INCLUDED → period end; PURCHASED → null
+  source         String? // "plan:pro" | "package:5000" | "promo:launch" | "auto"
+  referenceId    String?         @map("reference_id") // invoice / order / subscription id
+  createdAt      DateTime        @default(now()) @map("created_at")
+
+  tenant  Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  entries AiUnitLedgerEntry[]
+
+  // FIFO consumption order: INCLUDED current period first, then PURCHASED oldest-first.
+  @@index([tenantId, bucket, createdAt])
+  @@index([tenantId, periodKey])
+  @@map("ai_unit_lots")
+}
+
+model AiUnitLedgerEntry {
+  id          String          @id @default(cuid())
+  tenantId    String          @map("tenant_id")
+  lotId       String?         @map("lot_id")
+  entryType   AiUnitEntryType @map("entry_type")
+  bucket      AiUnitBucket
+  units       Decimal         @db.Decimal(16, 6) // signed: GRANT/REFUND +, CONSUME/EXPIRE -
+  periodKey   String?         @map("period_key")
+  source      String?
+  referenceId String?         @map("reference_id") // usage turn / invoice / order
+  createdAt   DateTime        @default(now()) @map("created_at")
+
+  tenant Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lot    AiUnitLot? @relation(fields: [lotId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, entryType])
+  @@index([tenantId, periodKey])
+  @@map("ai_unit_ledger_entries")
+}
+
+// Materialized snapshot for the hot-path pre-flight gate + UI. Derived from the
+// ledger/lots; kept in sync transactionally. Shows INCLUDED vs PURCHASED apart.
+model TenantAiBalance {
+  tenantId           String   @id @map("tenant_id")
+  includedRemaining  Decimal  @default(0) @map("included_remaining") @db.Decimal(16, 6)
+  purchasedRemaining Decimal  @default(0) @map("purchased_remaining") @db.Decimal(16, 6)
+  includedAllowance  Decimal  @default(0) @map("included_allowance") @db.Decimal(16, 6) // current plan's monthly grant (for % calc)
+  periodKey          String?  @map("period_key")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_ai_balances")
+}
+
+// ─── Money primitives (keyed by billableEntityId) ──────────
+
+model BillingProfile {
+  id                 String               @id @default(cuid())
+  billableEntityId   String               @unique @map("billable_entity_id")
+  provider           BillingProvider      @default(ICOUNT)
+  providerCustomerId String?              @map("provider_customer_id")
+  currency           String               @default("ILS")
+  billingEmail       String?              @map("billing_email")
+  vatId              String?              @map("vat_id")
+  status             BillingProfileStatus @default(ACTIVE)
+  createdAt          DateTime             @default(now()) @map("created_at")
+  updatedAt          DateTime             @updatedAt @map("updated_at")
+
+  entity         BillableEntity  @relation(fields: [billableEntityId], references: [id], onDelete: Cascade)
+  paymentMethods PaymentMethod[]
+
+  @@map("billing_profiles")
+}
+
+model PaymentMethod {
+  id               String              @id @default(cuid())
+  billingProfileId String              @map("billing_profile_id")
+  provider         BillingProvider     @default(ICOUNT)
+  // Tokenized reference only - raw PAN is NEVER stored (iCount is the PCI vault).
+  // Encrypted at rest with the dedicated billing payment-token key; the version
+  // records WHICH key, so rotation does not orphan existing rows.
+  token            String
+  tokenKeyVersion  String?             @map("token_key_version")
+  brand            String?
+  last4            String?
+  expMonth         Int?                @map("exp_month")
+  expYear          Int?                @map("exp_year")
+  isDefault        Boolean             @default(false) @map("is_default")
+  status           PaymentMethodStatus @default(ACTIVE)
+  createdAt        DateTime            @default(now()) @map("created_at")
+  updatedAt        DateTime            @updatedAt @map("updated_at")
+
+  profile BillingProfile @relation(fields: [billingProfileId], references: [id], onDelete: Cascade)
+
+  @@index([billingProfileId])
+  @@map("payment_methods")
+}
+
+model Subscription {
+  id                      String             @id @default(cuid())
+  billableEntityId        String             @unique @map("billable_entity_id") // V1: one active subscription per entity
+  billingProfileId        String?            @map("billing_profile_id")
+  planKey                 String             @map("plan_key")
+  planVersion             Int                @default(1) @map("plan_version")
+  status                  SubscriptionStatus @default(PENDING)
+  // When false (GRANDFATHERED), the AI runtime gate is skipped and no billing
+  // runs. NOT an infinite-units balance - financial state stays deterministic.
+  enforcementEnabled      Boolean            @default(true) @map("enforcement_enabled")
+  trialEndsAt             DateTime?          @map("trial_ends_at")
+  currentPeriodStart      DateTime?          @map("current_period_start")
+  currentPeriodEnd        DateTime?          @map("current_period_end")
+  cancelAtPeriodEnd       Boolean            @default(false) @map("cancel_at_period_end")
+  providerSubscriptionRef String?            @map("provider_subscription_ref")
+  createdAt               DateTime           @default(now()) @map("created_at")
+  updatedAt               DateTime           @updatedAt @map("updated_at")
+
+  // ── Commercial snapshot (pricing round) ──
+  // What the customer actually agreed to, captured at subscribe / plan-change /
+  // renewal time. Read for display, invoicing and estimation INSTEAD of the live
+  // Plan row, so publishing a new plan version can never retroactively rewrite an
+  // existing customer's price, included credits, or conversation estimate.
+  billingInterval         BillingInterval @default(MONTHLY) @map("billing_interval")
+  snapshotPrice           Decimal?        @map("snapshot_price") @db.Decimal(12, 2)
+  snapshotCurrency        String?         @map("snapshot_currency")
+  snapshotIncludedCredits Int?            @map("snapshot_included_credits")
+  // { chatCreditsPerEstimatedConversation, voiceCreditsPerEstimatedCall,
+  //   businessDaysPerMonth, version, configId } - the PUBLIC commercial
+  //   assumption in force when this subscription was priced.
+  snapshotEstimation      Json?           @map("snapshot_estimation")
+  snapshotAt              DateTime?       @map("snapshot_at")
+  // Selected recurring volume presets (PlanVolumeOption.key), null when the
+  // plan's selector is disabled or the base option is in effect.
+  chatVolumeOptionKey     String?         @map("chat_volume_option_key")
+  voiceVolumeOptionKey    String?         @map("voice_volume_option_key")
+  // Sysadmin-provisioned evaluation subscriptions.
+  trialPocTemplateKey     String?         @map("trial_poc_template_key")
+
+  entity        BillableEntity             @relation(fields: [billableEntityId], references: [id], onDelete: Cascade)
+  pendingChange PendingSubscriptionChange?
+  events        SubscriptionEvent[]
+  dunning       DunningState?
+
+  @@index([status])
+  @@index([currentPeriodEnd])
+  @@index([trialEndsAt])
+  @@map("subscriptions")
+}
+
+model PendingSubscriptionChange {
+  id                   String            @id @default(cuid())
+  subscriptionId       String            @unique @map("subscription_id")
+  changeType           PendingChangeType @map("change_type")
+  targetPlanKey        String?           @map("target_plan_key")
+  targetPlanVersion    Int?              @map("target_plan_version")
+  effectiveAt          DateTime          @map("effective_at") // = currentPeriodEnd
+  createdBy            String?           @map("created_by")
+  createdAt            DateTime          @default(now()) @map("created_at")
+  appliedAt            DateTime?         @map("applied_at")
+  // Scheduled volume-selector change (pricing round). Applied together with the
+  // plan change, or on its own for changeType = VOLUME_CHANGE.
+  targetChatVolumeKey  String?           @map("target_chat_volume_key")
+  targetVoiceVolumeKey String?           @map("target_voice_volume_key")
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([effectiveAt, appliedAt])
+  @@map("pending_subscription_changes")
+}
+
+model SubscriptionEvent {
+  id             String              @id @default(cuid())
+  subscriptionId String              @map("subscription_id")
+  type           String // "trial_started" | "activated" | "plan_changed" | "suspended" | ...
+  fromStatus     SubscriptionStatus? @map("from_status")
+  toStatus       SubscriptionStatus? @map("to_status")
+  actor          String? // user id | "system" | "scheduler"
+  metadata       Json?
+  at             DateTime            @default(now())
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([subscriptionId, at])
+  @@map("subscription_events")
+}
+
+model Invoice {
+  id                 String          @id @default(cuid())
+  billableEntityId   String          @map("billable_entity_id")
+  provider           BillingProvider @default(ICOUNT)
+  // Reference to the iCount-issued legal tax document (חשבונית מס) - the
+  // authoritative record. This row is a thin mirror for in-app display.
+  providerInvoiceRef String?         @map("provider_invoice_ref")
+  providerPdfUrl     String?         @map("provider_pdf_url")
+  type               InvoiceType
+  amount             Decimal         @db.Decimal(12, 2)
+  currency           String          @default("ILS")
+  vat                Decimal?        @db.Decimal(12, 2)
+  status             InvoiceStatus   @default(DRAFT)
+  lineItems          Json?           @map("line_items")
+  issuedAt           DateTime?       @map("issued_at")
+  paidAt             DateTime?       @map("paid_at")
+  createdAt          DateTime        @default(now()) @map("created_at")
+  updatedAt          DateTime        @updatedAt @map("updated_at")
+
+  entity  BillableEntity @relation(fields: [billableEntityId], references: [id], onDelete: Cascade)
+  charges Charge[]
+
+  @@index([billableEntityId, createdAt])
+  @@index([status])
+  @@map("invoices")
+}
+
+model Charge {
+  id                String          @id @default(cuid())
+  invoiceId         String          @map("invoice_id")
+  provider          BillingProvider @default(ICOUNT)
+  providerChargeRef String?         @map("provider_charge_ref")
+  /// The agreed commercial figure, in the commercial currency.
+  amount            Decimal         @db.Decimal(12, 2)
+  currency          String          @default("ILS")
+
+  /// What was actually submitted to the provider, and the frozen conversion
+  /// behind it. Keeping only the commercial figure would make "how much was
+  /// taken from the card" unanswerable.
+  paymentQuoteId     String?  @map("payment_quote_id")
+  chargeAmount       Decimal? @map("charge_amount") @db.Decimal(12, 2)
+  chargeCurrency     String?  @map("charge_currency")
+  providerCurrencyId Int?     @map("provider_currency_id")
+  fxRate             Decimal? @map("fx_rate") @db.Decimal(18, 8)
+  fxRateVersion      Int?     @map("fx_rate_version")
+
+  status         ChargeStatus @default(PENDING)
+  attemptNumber  Int          @default(1) @map("attempt_number")
+  failureCode    String?      @map("failure_code")
+  idempotencyKey String       @unique @map("idempotency_key")
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@map("charges")
+}
+
+enum CheckoutStatus {
+  PENDING // created; customer not yet sent to the provider
+  AWAITING_PROVIDER // customer redirected; waiting for SERVER-SIDE confirmation
+  TOKENIZED // card stored and verified server-side; plan not yet charged
+  PAID // plan charge succeeded - the only state that may provision
+  EXPIRED
+  CANCELED
+  FAILED
+}
+
+/// An immutable record of what the customer chose, created BEFORE they are sent
+/// to the provider.
+///
+/// Everything commercial is frozen here: no price, plan or credit figure is
+/// ever accepted back from the browser or from a provider callback. The
+/// callback carries only `reference`, which is opaque and reveals nothing.
+model PendingCheckout {
+  id String @id @default(cuid())
+
+  /// The ONLY checkout identifier that leaves the server. Opaque: it encodes no
+  /// tenant, plan, price or customer information.
+  reference String @unique
+
+  /// Null for a pre-tenant signup; the tenant is created after payment.
+  tenantId      String? @map("tenant_id")
+  signupContext Json?   @map("signup_context")
+
+  planKey              String  @map("plan_key")
+  planVersion          Int     @map("plan_version")
+  chatVolumeOptionKey  String? @map("chat_volume_option_key")
+  voiceVolumeOptionKey String? @map("voice_volume_option_key")
+
+  /// The commercial snapshot the customer actually saw, frozen at creation.
+  snapshotPrice           Decimal @map("snapshot_price") @db.Decimal(12, 2)
+  snapshotCurrency        String  @map("snapshot_currency")
+  snapshotIncludedCredits Int     @map("snapshot_included_credits")
+
+  amount   Decimal @db.Decimal(12, 2)
+  currency String
+
+  /// Whether this checkout is allowed to provision without an initial charge
+  /// (Sysadmin trial/POC policy only). Defaults to "none": pay first.
+  trialBehavior String @default("none") @map("trial_behavior")
+
+  status    CheckoutStatus @default(PENDING)
+  expiresAt DateTime       @map("expires_at")
+
+  /// Deterministic key for the eventual plan charge, so a replayed callback
+  /// cannot produce a second one.
+  idempotencyKey String @unique @map("idempotency_key")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  attempts          PaymentAttempt[]
+  continuationLinks PaymentContinuationLink[]
+
+  @@index([tenantId])
+  @@index([status, expiresAt])
+  @@map("pending_checkouts")
+}
+
+enum ProviderCustomerStatus {
+  ACTIVE
+  /// The provider no longer recognises the mapping; re-resolve before use.
+  STALE
+  REVOKED
+}
+
+/// Durable mapping between a GOTCHA billable entity and a provider customer.
+///
+/// Email is deliberately NOT the join key: two tenants can share a billing
+/// contact, and a provider customer belonging to one tenant must never be
+/// reachable by another. The join is (provider, environment, billableEntityId),
+/// with the provider's own id stored alongside a stable opaque reference we
+/// control.
+model ProviderCustomer {
+  id String @id @default(cuid())
+
+  provider    BillingProvider @default(ICOUNT)
+  /// "mock" | "simulator" | "live". A simulator customer id is meaningless in
+  /// production, so the environment is part of the identity.
+  environment String          @default("mock")
+
+  tenantId         String @map("tenant_id")
+  billableEntityId String @map("billable_entity_id")
+
+  /// The provider's own customer id.
+  providerCustomerId String @map("provider_customer_id")
+
+  /// Stable opaque reference WE generate and send to the provider, so a
+  /// customer can be re-found without relying on their id or on email.
+  externalReference String @unique @map("external_reference")
+
+  status       ProviderCustomerStatus @default(ACTIVE)
+  lastSyncedAt DateTime?              @map("last_synced_at")
+  createdAt    DateTime               @default(now()) @map("created_at")
+  updatedAt    DateTime               @updatedAt @map("updated_at")
+
+  /// One mapping per entity per provider per environment.
+  @@unique([provider, environment, billableEntityId])
+  /// A provider customer id may not be claimed by two entities.
+  @@unique([provider, environment, providerCustomerId], map: "provider_customers_provider_environment_provider_customer_id_ke")
+  @@index([tenantId])
+  @@map("provider_customers")
+}
+
+enum ProviderEventVerification {
+  UNVERIFIED
+  VERIFIED
+  INVALID
+  UNSUPPORTED
+}
+
+enum ProviderEventProcessing {
+  RECEIVED
+  VERIFIED
+  REJECTED
+  PROCESSING
+  PROCESSED
+  DUPLICATE
+  FAILED
+  MANUAL_REVIEW
+}
+
+/// Provider-neutral inbound event storage.
+///
+/// Deliberately holds NO provider-specific field names: the iCount callback
+/// contract is not verified, and inventing its shape here is exactly the
+/// mistake that produced the fabricated endpoints. The payload is stored
+/// redacted, and the route that writes it stays disabled until the callback
+/// authentication contract is known.
+model ProviderBillingEvent {
+  id String @id @default(cuid())
+
+  provider    BillingProvider @default(ICOUNT)
+  environment String          @default("mock")
+
+  /// The provider's event id when it supplies one. Null is expected until the
+  /// contract is verified, which is why dedup also uses the payload hash.
+  externalEventId String? @map("external_event_id")
+
+  /// SHA-256 of the raw body. Duplicate detection when no event id exists -
+  /// but an identical hash is NOT proof of business-level duplication.
+  payloadHash String @map("payload_hash")
+
+  /// Redacted. Never an Authorization header, card token, PAN or CVV.
+  redactedPayload Json @map("redacted_payload")
+
+  receivedAt   DateTime                  @default(now()) @map("received_at")
+  verification ProviderEventVerification @default(UNVERIFIED)
+  processing   ProviderEventProcessing   @default(RECEIVED)
+
+  checkoutId       String? @map("checkout_id")
+  paymentAttemptId String? @map("payment_attempt_id")
+  duplicateOfId    String? @map("duplicate_of_id")
+
+  failureCode   String?   @map("failure_code")
+  failureReason String?   @map("failure_reason")
+  processedAt   DateTime? @map("processed_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  @@unique([provider, environment, externalEventId], map: "provider_billing_events_provider_environment_external_event_id_")
+  @@index([provider, payloadHash])
+  @@index([processing])
+  @@index([checkoutId])
+  @@map("provider_billing_events")
+}
+
+enum BillingProvisioningState {
+  PENDING
+  PROCESSING
+  COMPLETED
+  /// A transient failure (billing unreachable, timeout). Safe to retry.
+  FAILED_RETRYABLE
+  /// A validation failure that retrying cannot fix - a retired plan, an invalid
+  /// volume key. Retrying blindly would just fail again, so it does not.
+  FAILED_PERMANENT
+  CANCELLED
+}
+
+/// The durable record of what a Sysadmin ASKED for.
+///
+/// It exists because tenant creation and billing provisioning live in different
+/// services and cannot share a transaction. Without it, a billing failure left
+/// the tenant in PENDING_PAYMENT with the requested plan recorded nowhere:
+/// resend could not recreate the missing checkout, and retrying creation was
+/// blocked by slug uniqueness. That was a dead end, not a recoverable state.
+///
+/// This is a provisioning workflow record, not a billing ledger entry. It holds
+/// the REQUEST, never prices, provider payloads, credentials or tokens - every
+/// commercial value is recomputed server-side from these keys.
+model TenantBillingProvisioningRequest {
+  id       String @id @default(cuid())
+  tenantId String @map("tenant_id")
+
+  requestedBy String? @map("requested_by")
+  /// "PAID_PLAN" | "POC". The two ways an organization may be created.
+  mode        String  @default("PAID_PLAN")
+
+  /// Null for a POC, which is provisioned onto the internal POC plan rather
+  /// than a chosen catalog version.
+  planVersionId        String? @map("plan_version_id")
+  chatVolumeOptionKey  String? @map("chat_volume_option_key")
+  voiceVolumeOptionKey String? @map("voice_volume_option_key")
+  billingInterval      String? @map("billing_interval")
+  commercialNote       String? @map("commercial_note")
+
+  // ── POC selection ──
+  // Held here for the same reason the paid selection is: if the call into
+  // billing fails, the operator's choices must survive it, or repair would mean
+  // re-entering a credit budget and an expiry from memory.
+  pocCredits      Int?      @map("poc_credits")
+  pocExpiresAt    DateTime? @map("poc_expires_at")
+  /// License domains the POC may use. Empty means every domain.
+  pocFeatureAreas String[]  @map("poc_feature_areas")
+
+  /// Deterministic, derived from this request. Billing keys the checkout and
+  /// the initial attempt on it, so any number of retries converge on one set
+  /// of records rather than creating a new one each time.
+  idempotencyKey String @unique @map("idempotency_key")
+
+  state      BillingProvisioningState @default(PENDING)
+  checkoutId String?                  @map("checkout_id")
+
+  attemptCount  Int       @default(0) @map("attempt_count")
+  lastAttemptAt DateTime? @map("last_attempt_at")
+  nextRetryAt   DateTime? @map("next_retry_at")
+
+  /// Sanitized. A provider or transport message is never stored verbatim.
+  lastFailureCode    String? @map("last_failure_code")
+  lastFailureMessage String? @map("last_failure_message")
+
+  createdAt   DateTime  @default(now()) @map("created_at")
+  completedAt DateTime? @map("completed_at")
+
+  @@index([tenantId])
+  @@index([state, nextRetryAt])
+  @@map("tenant_billing_provisioning_requests")
+}
+
+enum ContinuationLinkPurpose {
+  /// Lets a newly provisioned paid tenant finish identity setup and reach the
+  /// payment continuation flow. Grants nothing on its own.
+  PAID_TENANT_ONBOARDING
+}
+
+/// A short-lived, revocable capability to continue a specific checkout.
+///
+/// Only a HASH is stored. The raw token exists for exactly as long as it takes
+/// to put it in one email, and is never persisted, logged or returned again -
+/// so a database dump, a log leak or a stolen backup cannot reconstruct a
+/// working link.
+///
+/// It is bound to one tenant, one checkout and one purpose, so a token that
+/// does leak cannot be aimed at anything else.
+model PaymentContinuationLink {
+  id String @id @default(cuid())
+
+  checkoutId String @map("checkout_id")
+  tenantId   String @map("tenant_id")
+
+  /// SHA-256 of the raw token. Unique so a lookup is a single indexed probe
+  /// with no scan, and so two links can never collide.
+  tokenHash String @unique @map("token_hash")
+
+  purpose ContinuationLinkPurpose @default(PAID_TENANT_ONBOARDING)
+
+  expiresAt DateTime  @map("expires_at")
+  /// Multi-use until expiry: onboarding is several steps across possibly
+  /// several sittings, and a single-use link would strand a customer who
+  /// refreshed. Recorded on FIRST use for audit; revocation and expiry are the
+  /// controls that actually end it.
+  usedAt    DateTime? @map("used_at")
+  revokedAt DateTime? @map("revoked_at")
+
+  createdBy String?  @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  checkout PendingCheckout @relation(fields: [checkoutId], references: [id], onDelete: Cascade)
+
+  @@index([checkoutId])
+  @@index([tenantId])
+  @@index([expiresAt])
+  @@map("payment_continuation_links")
+}
+
+enum PaymentAttemptState {
+  PENDING
+  SUCCEEDED
+  FAILED
+  /// The outcome is genuinely unknown - a timeout, or a crash between request
+  /// and response. MUST NOT be retried: reconcile against the provider first.
+  UNKNOWN
+  /// A lease expired at a point where a provider request may already have been
+  /// submitted. Distinct from UNKNOWN only in provenance; both forbid a retry
+  /// until reconciliation proves no charge exists.
+  RECONCILIATION_REQUIRED
+  /// Reconciliation could not decide (for example several equal candidate
+  /// transactions). Requires a human; never auto-retried.
+  MANUAL_REVIEW
+}
+
+/// One row per logical charge.
+///
+/// `attemptKey` is the uniqueness that actually prevents a double charge: a
+/// second attempt for the same logical charge is a database conflict rather
+/// than a second call to the provider. This matters because iCount has not
+/// confirmed any provider-side idempotency mechanism, so GOTCHA's own
+/// uniqueness is currently the ONLY guarantee.
+model PaymentAttempt {
+  id String @id @default(cuid())
+
+  attemptKey String @unique @map("attempt_key")
+
+  checkoutId String? @map("checkout_id")
+  tenantId   String? @map("tenant_id")
+
+  /// SUBSCRIPTION_INITIAL | RENEWAL | CREDIT_PURCHASE | AUTO_TOPUP
+  purpose String
+
+  amount   Decimal @db.Decimal(12, 2)
+  currency String
+
+  state PaymentAttemptState @default(PENDING)
+
+  /// ── Cross-instance execution ownership ──────────────────────────────────
+  /// The unique attemptKey above stops two ROWS existing. These stop two
+  /// WORKERS executing the one row. Ownership is taken with a single atomic
+  /// conditional UPDATE, never read-then-write, so exactly one worker can win.
+  executionOwner          String?   @map("execution_owner")
+  executionLeaseExpiresAt DateTime? @map("execution_lease_expires_at")
+  executionStartedAt      DateTime? @map("execution_started_at")
+  lastHeartbeatAt         DateTime? @map("last_heartbeat_at")
+  attemptNumber           Int       @default(0) @map("attempt_number")
+
+  /// The two timestamps that decide whether an expired lease is safe to
+  /// reclaim. If a request was started and no response was recorded, a charge
+  /// may exist at the provider and reclaiming for a NEW call could double it.
+  providerRequestStartedAt   DateTime? @map("provider_request_started_at")
+  providerResponseReceivedAt DateTime? @map("provider_response_received_at")
+
+  providerChargeRef String? @map("provider_charge_ref")
+  failureCode       String? @map("failure_code")
+
+  /// Set when an activation has consumed this attempt. The conditional update
+  /// on this column is what makes duplicate activation grant credits once.
+  consumedByActivationAt DateTime? @map("consumed_by_activation_at")
+
+  /// The frozen conversion this charge used. Null for manual contracts, which
+  /// move no money through a provider.
+  paymentQuoteId     String?  @map("payment_quote_id")
+  chargeAmount       Decimal? @map("charge_amount") @db.Decimal(12, 2)
+  chargeCurrency     String?  @map("charge_currency")
+  providerCurrencyId Int?     @map("provider_currency_id")
+
+  /// How the money was proven: PROVIDER_CONFIRMED or MANUAL_EXTERNAL_CONTRACT.
+  /// Recorded on the attempt itself so billing history can never present a
+  /// Sysadmin-activated contract as a card payment that actually cleared.
+  paymentSource String @default("PROVIDER_CONFIRMED") @map("payment_source")
+
+  /// Manual-contract provenance. Null for provider-confirmed attempts.
+  externalReference   String? @map("external_reference")
+  manualReason        String? @map("manual_reason")
+  manualPaymentSource String? @map("manual_payment_source")
+
+  /// Reconciliation bookkeeping, for resolving an UNKNOWN outcome.
+  reconciledAt   DateTime? @map("reconciled_at")
+  candidateCount Int?      @map("candidate_count")
+  reviewReason   String?   @map("review_reason")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  checkout PendingCheckout? @relation(fields: [checkoutId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([state])
+  @@index([checkoutId])
+  @@index([executionLeaseExpiresAt])
+  // Both created by migrations and previously undeclared here, so a fresh
+  // database had indexes the schema did not know about - which shows up as
+  // drift and, worse, would be silently dropped by anyone regenerating.
+  @@index([paymentQuoteId], map: "payment_attempts_payment_quote_id_idx")
+  @@index([paymentSource], map: "payment_attempts_payment_source_idx")
+  @@map("payment_attempts")
+}
+
+model AutoPurchasePolicy {
+  id               String    @id @default(cuid())
+  billableEntityId String    @unique @map("billable_entity_id")
+  enabled          Boolean   @default(false)
+  thresholdPct     Int       @default(10) @map("threshold_pct") // trigger when remaining <= this % of allowance
+  packageKey       String?   @map("package_key")
+  maxMonthlySpend  Decimal?  @map("max_monthly_spend") @db.Decimal(12, 2)
+  currency         String    @default("ILS")
+  monthSpendKey    String?   @map("month_spend_key") // current spend window (billing-cycle anchored)
+  monthSpentAmount Decimal   @default(0) @map("month_spent_amount") @db.Decimal(12, 2)
+  lastTriggeredAt  DateTime? @map("last_triggered_at")
+  updatedBy        String?   @map("updated_by")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  // ── Pricing round ──
+  // Notify the owner at this consumption %, ahead of the purchase threshold.
+  warningThresholdPct Int                       @default(80) @map("warning_threshold_pct")
+  // Increment-based top-up: buy `incrementCredits` at `pricePerCredit` instead
+  // of a fixed package. Takes precedence over packageKey when both are set.
+  incrementCredits    Int?                      @map("increment_credits")
+  pricePerCredit      Decimal?                  @map("price_per_credit") @db.Decimal(12, 6)
+  // What happens once the monthly ceiling is reached (or auto-purchase is off)
+  // and the balance hits zero. Enforced server-side by the AI runtime gate.
+  limitBehavior       AutoPurchaseLimitBehavior @default(STOP_AI) @map("limit_behavior")
+  // Single-flight lock. A purchase attempt CAS-claims the policy row; a stale
+  // lock (older than the TTL) is reclaimable so a crashed worker cannot wedge
+  // auto-purchase permanently.
+  lockedAt            DateTime?                 @map("locked_at")
+  lockToken           String?                   @map("lock_token")
+
+  entity BillableEntity @relation(fields: [billableEntityId], references: [id], onDelete: Cascade)
+
+  @@map("auto_purchase_policies")
+}
+
+enum AutoPurchaseLimitBehavior {
+  STOP_AI // block AI execution at zero credits (default)
+  HUMAN_ONLY // AI stops, human agents keep working
+  REQUIRE_APPROVAL // each further AI action needs an authorized approval
+  PREPAID_ONLY // never auto-purchase; consume prepaid balance only
+}
+
+model DunningState {
+  id              String    @id @default(cuid())
+  subscriptionId  String    @unique @map("subscription_id")
+  stage           Int       @default(0)
+  nextRetryAt     DateTime? @map("next_retry_at")
+  attempts        Int       @default(0)
+  lastFailureCode String?   @map("last_failure_code")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([nextRetryAt])
+  @@map("dunning_states")
+}
+
+// Immutable log of every provider webhook received - the audit + idempotency
+// spine for refunds/chargebacks/payment confirmations. `providerEventId` is
+// unique so a redelivered webhook is processed at most once; the raw payload is
+// retained so any money event can be reconstructed months later.
+model BillingWebhookEvent {
+  id              String          @id @default(cuid())
+  provider        BillingProvider @default(ICOUNT)
+  providerEventId String          @unique @map("provider_event_id")
+  eventType       String          @map("event_type")
+  tenantId        String?         @map("tenant_id")
+  payload         Json
+  status          String          @default("RECEIVED") // RECEIVED | PROCESSED | IGNORED | FAILED
+  error           String?
+  receivedAt      DateTime        @default(now()) @map("received_at")
+  processedAt     DateTime?       @map("processed_at")
+
+  @@index([provider, eventType])
+  @@index([tenantId])
+  @@index([receivedAt])
+  @@map("billing_webhook_events")
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// PRICING · FEATURE CATALOG · PUBLIC ESTIMATION · VOLUME · CURRENCY
+//
+// Three layers that must never bleed into each other:
+//
+//   A. ACTUAL INTERNAL USAGE  - UsageLog + ConversationUsageAggregate.
+//      Real tokens, real provider cost, real credits. SYSADMIN ONLY. Never
+//      crosses a tenant-facing API boundary.
+//
+//   B. PUBLIC COMMERCIAL ESTIMATION - PublicEstimationConfig. A MANUALLY set
+//      commercial assumption ("8 credits ≈ one chat"). Versioned, Sysadmin-
+//      edited, NEVER derived from layer A, and used only to render capacity
+//      estimates and price-per-conversation. Changing it never writes to the
+//      ledger, an invoice, or an existing subscription's snapshot.
+//
+//   C. ACTUAL CREDIT ACCOUNTING - AiUnitLot / AiUnitLedgerEntry (unchanged).
+//      The source of truth for granted / consumed / purchased / expired /
+//      refunded / remaining credits.
+// ════════════════════════════════════════════════════════════════════════
+
+// ─── Feature catalog ───────────────────────────────────────
+// The canonical list of sellable capabilities, keyed by STABLE keys (never
+// translated labels). A plan entitles a subset; the entitlement resolver reads
+// this catalog to know each key's type, default and customer visibility.
+//
+// `implemented=false` means the capability exists in the catalog but is NOT
+// built yet - it can never be entitled, sold, or shown on a pricing page.
+model FeatureDefinition {
+  id                   String               @id @default(cuid())
+  key                  String               @unique // "ai.employee", "voice.call_pilot"
+  nameEn               String               @map("name_en")
+  nameHe               String               @map("name_he")
+  descriptionEn        String?              @map("description_en")
+  descriptionHe        String?              @map("description_he")
+  category             FeatureCategory
+  entitlementType      EntitlementValueType @default(BOOLEAN) @map("entitlement_type")
+  // Applied when no plan or override supplies a value. { bool } | { count } | …
+  defaultValue         Json?                @map("default_value")
+  // Free-form list of where this key is enforced server-side, e.g.
+  // ["services/ai:employee.create", "packages/shared:assertFeature"]. Kept as
+  // data so the Sysadmin console can show the enforcement surface honestly.
+  enforcementLocations Json?                @map("enforcement_locations")
+  customerVisible      Boolean              @default(true) @map("customer_visible")
+  sysadminOnly         Boolean              @default(false) @map("sysadmin_only")
+  implemented          Boolean              @default(true)
+  sortOrder            Int                  @default(0) @map("sort_order")
+  createdAt            DateTime             @default(now()) @map("created_at")
+  updatedAt            DateTime             @default(now()) @updatedAt @map("updated_at")
+
+  @@index([category, sortOrder])
+  @@map("feature_definitions")
+}
+
+enum FeatureCategory {
+  COMMUNICATION
+  AI
+  VOICE
+  MANAGEMENT
+}
+
+// ─── Recurring volume options (commercial presets) ─────────
+// A business-friendly selector ("50 chats per business day") that maps to a
+// recurring credit allocation and an added monthly price. The SELECTOR is
+// presentation; the CREDIT ALLOCATION is what actually gets granted, and the
+// ledger remains the billing source of truth.
+model PlanVolumeOption {
+  id                   String        @id @default(cuid())
+  planId               String        @map("plan_id")
+  key                  String // "chat_50" | "voice_25"
+  channel              VolumeChannel
+  dailyVolume          Int           @map("daily_volume") // 50
+  businessDaysPerMonth Int           @default(25) @map("business_days_per_month")
+  monthlyVolume        Int           @map("monthly_volume") // 1250 (denormalized presentation value)
+  // The PUBLIC commercial assumption this option was priced against. Snapshotted
+  // here so re-pointing the global estimation config never silently restates a
+  // published option's advertised capacity.
+  creditsPerUnit       Decimal       @map("credits_per_unit") @db.Decimal(12, 4)
+  // Recurring credits this option ADDS on top of the plan's base allowance.
+  additionalCredits    Int           @default(0) @map("additional_credits")
+  // Fixed commercial price - NOT derived from a formula unless the operator
+  // chooses to enter a derived number.
+  additionalPrice      Decimal       @default(0) @map("additional_price") @db.Decimal(12, 2)
+  currency             String        @default("USD")
+  isDefault            Boolean       @default(false) @map("is_default")
+  sortOrder            Int           @default(0) @map("sort_order")
+  enabled              Boolean       @default(true)
+  activeFrom           DateTime?     @map("active_from")
+  activeTo             DateTime?     @map("active_to")
+  internalNote         String?       @map("internal_note")
+  createdAt            DateTime      @default(now()) @map("created_at")
+  updatedAt            DateTime      @default(now()) @updatedAt @map("updated_at")
+
+  plan        Plan                     @relation(fields: [planId], references: [id], onDelete: Cascade)
+  estimations PublicEstimationConfig[]
+
+  @@unique([planId, key])
+  @@index([planId, channel, sortOrder])
+  @@map("plan_volume_options")
+}
+
+enum VolumeChannel {
+  CHAT
+  VOICE
+}
+
+// ─── Public commercial estimation (layer B) ────────────────
+// MANUALLY configured. Never derived from analytics, never auto-updated. The
+// Sysadmin console may WARN that actual usage diverges; only an explicit
+// operator action creates and publishes a new version.
+model PublicEstimationConfig {
+  id             String          @id @default(cuid())
+  scope          EstimationScope @default(GLOBAL)
+  planId         String?         @map("plan_id") // scope = PLAN
+  volumeOptionId String?         @map("volume_option_id") // scope = VOLUME_OPTION
+  version        Int             @default(1)
+
+  chatCreditsPerEstimatedConversation Decimal @map("chat_credits_per_estimated_conversation") @db.Decimal(12, 4)
+  voiceCreditsPerEstimatedCall        Decimal @map("voice_credits_per_estimated_call") @db.Decimal(12, 4)
+  businessDaysPerMonth                Int     @default(25) @map("business_days_per_month")
+
+  effectiveFrom DateTime  @default(now()) @map("effective_from")
+  active        Boolean   @default(true)
+  internalNote  String?   @map("internal_note")
+  createdBy     String?   @map("created_by")
+  publishedAt   DateTime? @map("published_at")
+  publishedBy   String?   @map("published_by")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  plan         Plan?             @relation(fields: [planId], references: [id], onDelete: Cascade)
+  volumeOption PlanVolumeOption? @relation(fields: [volumeOptionId], references: [id], onDelete: Cascade)
+
+  @@index([scope, active, effectiveFrom])
+  @@index([planId, active])
+  @@index([volumeOptionId, active])
+  @@map("public_estimation_configs")
+}
+
+enum EstimationScope {
+  GLOBAL
+  PLAN
+  VOLUME_OPTION
+}
+
+// ─── Currency display ──────────────────────────────────────
+// USD is the canonical public pricing currency. ILS is a DISPLAY conversion
+// using an official representative rate, rounded upward by a configurable
+// increment. Display currency and charged currency are different things and the
+// UI must say so.
+model PricingCurrencyConfig {
+  id                      String   @id @default(cuid())
+  baseCurrency            String   @default("USD") @map("base_currency")
+  displayCurrencies       Json     @map("display_currencies") // ["USD","ILS"]
+  ilsRoundingIncrement    Int      @default(5) @map("ils_rounding_increment") // ₪1 | ₪5 | ₪10 | ₪50
+  roundingMode            String   @default("UP") @map("rounding_mode")
+  fxSource                String   @default("boi") @map("fx_source") // Bank of Israel representative rate
+  fxRefreshHours          Int      @default(24) @map("fx_refresh_hours")
+  fallbackUsdIls          Decimal  @default(3.700000) @map("fallback_usd_ils") @db.Decimal(18, 6)
+  // When true, checkout charges the display currency; when false (default) ILS
+  // is labelled as an estimate and the charge happens in `baseCurrency`.
+  chargeInDisplayCurrency Boolean  @default(false) @map("charge_in_display_currency")
+  active                  Boolean  @default(true)
+  updatedBy               String?  @map("updated_by")
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("pricing_currency_configs")
+}
+
+// Server-side daily cache of the representative rate. Never client-supplied.
+model FxRateSnapshot {
+  id            String   @id @default(cuid())
+  baseCurrency  String   @default("USD") @map("base_currency")
+  quoteCurrency String   @default("ILS") @map("quote_currency")
+  rate          Decimal  @db.Decimal(18, 8)
+  source        String // "boi" | "fallback" | "manual"
+  rateDate      String   @map("rate_date") // "2026-07-26" - the rate's own date, not fetch time
+  fetchedAt     DateTime @default(now()) @map("fetched_at")
+
+  @@unique([baseCurrency, quoteCurrency, rateDate, source])
+  @@index([baseCurrency, quoteCurrency, fetchedAt])
+  @@map("fx_rate_snapshots")
+}
+
+enum TokenizationSessionStatus {
+  /// Created, customer not sent yet.
+  PENDING
+  /// Customer is on the hosted page. Says nothing about whether they paid.
+  AWAITING_RETURN
+  /// A NEW card was confirmed to exist by querying the provider.
+  VERIFIED
+  FAILED
+  EXPIRED
+  /// Customer left without storing a card.
+  ABANDONED
+}
+
+/// One attempt to have a customer store a card on the hosted page.
+///
+/// The interesting field is `baselineFingerprints`. Before the customer is sent
+/// anywhere, we record which card tokens the provider ALREADY has for them.
+/// Afterwards we pull again and look for one that is new.
+///
+/// Without that baseline, "the customer has a stored card" would be accepted as
+/// proof that THIS session stored one - so a customer who already had a card on
+/// file, or a stale session replayed later, would appear to have paid when
+/// nothing happened. The baseline turns a existence check into a change check.
+///
+/// Only fingerprints are kept here. The usable token lives encrypted on
+/// PaymentMethod; duplicating it would double the number of places a card token
+/// can leak from.
+model TokenizationSession {
+  id String @id @default(cuid())
+
+  tenantId   String  @map("tenant_id")
+  checkoutId String? @map("checkout_id")
+
+  /// Our opaque reference, sent as custom_client_id and echoed back.
+  customClientId   String  @unique @map("custom_client_id")
+  providerClientId String? @map("provider_client_id")
+  pageId           String  @map("page_id")
+
+  status TokenizationSessionStatus @default(PENDING)
+
+  /// SHA-256 of each token the provider held BEFORE this session.
+  baselineFingerprints String[] @default([]) @map("baseline_fingerprints")
+  /// SHA-256 of the token this session produced.
+  resolvedFingerprint  String?  @map("resolved_fingerprint")
+  paymentMethodId      String?  @map("payment_method_id")
+
+  /// How many times the server has polled the provider for the new card.
+  verificationAttempts Int       @default(0) @map("verification_attempts")
+  lastVerifiedAt       DateTime? @map("last_verified_at")
+  failureReason        String?   @map("failure_reason")
+
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([tenantId])
+  @@index([checkoutId])
+  @@index([status, expiresAt], map: "tokenization_sessions_status_expires_idx")
+  @@map("tokenization_sessions")
+}
+
+enum BillingExchangeRateStatus {
+  /// Proposed manually and awaiting a second administrator. Never chargeable.
+  DRAFT
+  /// Usable for real charges. At most one per currency pair.
+  ACTIVE
+  RETIRED
+}
+
+enum FxRateOrigin {
+  /// Fetched automatically from the official source. No approval required -
+  /// requiring two people to sign off the central bank's own daily number
+  /// would mean charging stops every weekend nobody is watching.
+  AUTOMATIC_OFFICIAL
+  /// Entered by a person. Requires a second administrator, because a typed
+  /// rate is the one number here nobody else has checked.
+  MANUAL_OVERRIDE
+  /// Entered by a person because the official source was unreachable past the
+  /// permitted staleness window. Also requires two people.
+  EMERGENCY_FALLBACK
+}
+
+enum FxVerificationState {
+  /// Parsed from a well-formed official response.
+  VERIFIED_OFFICIAL
+  /// A human asserted it. Approved by a second human.
+  MANUALLY_APPROVED
+  /// Retrieved but failed a sanity check. Never chargeable.
+  REJECTED
+}
+
+/// The rate money is actually charged at.
+///
+/// Deliberately NOT FxRateSnapshot. That one refreshes itself from an external
+/// source during use and falls back to a hardcoded 3.7 when the fetch fails -
+/// acceptable for showing an approximate price, unacceptable for deciding what
+/// to charge someone. A silent fallback would mean billing a customer at a rate
+/// nobody chose.
+///
+/// This one is entered and approved by a human, versioned, and windowed. It
+/// never fetches anything. If no ACTIVE rate exists, charging fails closed.
+model BillingExchangeRate {
+  id String @id @default(cuid())
+
+  baseCurrency  String @default("USD") @map("base_currency")
+  quoteCurrency String @default("ILS") @map("quote_currency")
+
+  rate Decimal @db.Decimal(18, 8)
+
+  /// BANK_OF_ISRAEL_REPRESENTATIVE for the automatic path.
+  source  String @default("BANK_OF_ISRAEL_REPRESENTATIVE")
+  version Int
+
+  /// How this rate came to exist, and therefore what approval it needed.
+  origin FxRateOrigin @default(AUTOMATIC_OFFICIAL)
+
+  verificationState FxVerificationState @default(VERIFIED_OFFICIAL) @map("verification_state")
+
+  /// When the SOURCE published it, distinct from when we fetched it. A rate
+  /// retrieved on Sunday still carries Friday's publication date, and that is
+  /// the date a customer or an auditor would recognise.
+  officialDate DateTime? @map("official_date")
+  retrievedAt  DateTime? @map("retrieved_at")
+
+  /// SHA-256 of the raw provider response. Lets a disputed charge be traced
+  /// back to the exact bytes we were served, without storing the payload.
+  rawResponseHash String? @map("raw_response_hash")
+
+  /// Hard expiry. Past this the rate is not "old", it is unusable - charging
+  /// stops rather than quietly using a stale number.
+  maxUseUntil DateTime? @map("max_use_until")
+
+  /// Set only on a manual override or emergency fallback.
+  overrideReason   String? @map("override_reason")
+  overrideOfRateId String? @map("override_of_rate_id")
+
+  activeFrom  DateTime  @map("active_from")
+  activeUntil DateTime? @map("active_until")
+
+  status BillingExchangeRateStatus @default(DRAFT)
+
+  /// Approval is separate from creation on purpose: the person who types a
+  /// rate should not be the only one who can make it chargeable.
+  createdBy  String?   @map("created_by")
+  approvedBy String?   @map("approved_by")
+  approvedAt DateTime? @map("approved_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  quotes PaymentQuote[]
+
+  @@unique([baseCurrency, quoteCurrency, version], map: "billing_exchange_rates_base_quote_version_key")
+  @@index([baseCurrency, quoteCurrency, status, activeFrom], map: "billing_exchange_rates_lookup_idx")
+  @@map("billing_exchange_rates")
+}
+
+enum PaymentQuoteStatus {
+  ACTIVE
+  CONSUMED
+  EXPIRED
+  SUPERSEDED
+}
+
+/// An immutable, frozen conversion: what was agreed, and what will be charged.
+///
+/// The customer agrees a USD figure; iCount is charged in ILS. Without freezing
+/// the conversion, the amount could move between the screen that showed it and
+/// the request that charges it - so the rate, its version and the resulting ILS
+/// figure are captured together and never recalculated.
+model PaymentQuote {
+  id String @id @default(cuid())
+
+  tenantId       String? @map("tenant_id")
+  checkoutId     String? @map("checkout_id")
+  subscriptionId String? @map("subscription_id")
+
+  /// SUBSCRIPTION_INITIAL | RENEWAL | CREDIT_PACKAGE | AUTO_TOPUP | UPGRADE
+  purpose String
+
+  /// What the customer agreed to, in the commercial currency.
+  commercialAmount   Decimal @map("commercial_amount") @db.Decimal(12, 2)
+  commercialCurrency String  @map("commercial_currency")
+
+  /// The exact rate used, pinned by id AND copied by value, so the numbers
+  /// survive even if the rate row is later retired or corrected.
+  /// Null only for an identity quote (same currency both sides), where there is
+  /// no conversion and therefore no approved rate to pin. A CHECK constraint
+  /// keeps the two cases from being confused.
+  fxRateId      String?  @map("fx_rate_id")
+  fxRate        Decimal  @map("fx_rate") @db.Decimal(18, 8)
+  fxRateSource  String   @map("fx_rate_source")
+  fxRateVersion Int      @map("fx_rate_version")
+  fxQuotedAt    DateTime @map("fx_quoted_at")
+
+  /// What the provider is actually asked to charge.
+  chargeAmount       Decimal @map("charge_amount") @db.Decimal(12, 2)
+  chargeCurrency     String  @map("charge_currency")
+  /// iCount currency id. 1 = ILS, 2 = USD. Policy pins this to 1 for now.
+  providerCurrencyId Int     @map("provider_currency_id")
+  roundingMode       String  @default("HALF_UP") @map("rounding_mode")
+
+  expiresAt DateTime           @map("expires_at")
+  status    PaymentQuoteStatus @default(ACTIVE)
+
+  /// Set when an attempt consumes this quote. One quote, one charge.
+  consumedByAttemptId String?   @unique @map("consumed_by_attempt_id")
+  consumedAt          DateTime? @map("consumed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  /// Restrict, NOT SetNull. A consumed quote is the record of what a customer
+  /// was charged and at what rate; nulling its rate reference when a rate row is
+  /// removed would quietly destroy that evidence. The schema said SetNull by
+  /// omission while the migration said Restrict - they now agree.
+  fxRateRef BillingExchangeRate? @relation(fields: [fxRateId], references: [id], onDelete: Restrict)
+
+  @@index([checkoutId])
+  @@index([tenantId])
+  @@index([status, expiresAt], map: "payment_quotes_status_expires_idx")
+  @@map("payment_quotes")
+}
+
+// ─── POC / Trial templates (Sysadmin-only) ─────────────────
+// Operator-editable defaults for evaluation access. POC and Trial share the
+// infrastructure but keep separate labels and configuration.
+model TrialPocTemplate {
+  id                       String   @id @default(cuid())
+  key                      String   @unique // "trial" | "poc"
+  nameEn                   String   @map("name_en")
+  nameHe                   String   @map("name_he")
+  durationDays             Int      @map("duration_days")
+  creditCap                Int      @map("credit_cap")
+  allFeatures              Boolean  @default(true) @map("all_features")
+  autoRenew                Boolean  @default(false) @map("auto_renew")
+  autoPurchaseEnabled      Boolean  @default(false) @map("auto_purchase_enabled")
+  customerSelfActivate     Boolean  @default(false) @map("customer_self_activate")
+  // Optional restrictions applied to the evaluation tenant, e.g.
+  // { "providers": ["shopify"], "limits": { "limit:ai_employees": 2 } }.
+  restrictions             Json?
+  // Whether unused evaluation credits survive conversion to a paid plan.
+  transferRemainingCredits Boolean  @default(false) @map("transfer_remaining_credits")
+  bannerKind               String   @default("TRIAL") @map("banner_kind") // TRIAL | POC
+  active                   Boolean  @default(true)
+  updatedBy                String?  @map("updated_by")
+  createdAt                DateTime @default(now()) @map("created_at")
+  updatedAt                DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("trial_poc_templates")
+}
+
+// ─── Actual per-conversation usage (layer A · SYSADMIN ONLY) ──
+// Rolls every attributable AI job for one conversation - replies, employee
+// execution, summaries, CRM writeback, sentiment, classification, routing,
+// retrieval, tool selection, voice transcription/synthesis, post-close jobs -
+// into one settleable record. Never exposed through a tenant-facing API.
+model ConversationUsageAggregate {
+  id               String  @id @default(cuid())
+  conversationId   String  @unique @map("conversation_id")
+  tenantId         String  @map("tenant_id")
+  channel          String // ChannelType as text - voice sessions have no ChannelType row
+  conversationType String  @map("conversation_type") // CHAT | VOICE
+  planKey          String? @map("plan_key") // plan in force at finalization
+  aiAgentId        String? @map("ai_agent_id")
+  primaryModel     String? @map("primary_model") // highest-cost model in the window
+
+  startedAt   DateTime  @map("started_at")
+  resolvedAt  DateTime? @map("resolved_at") // conversation closed / call ended
+  finalizedAt DateTime? @map("finalized_at") // settlement window elapsed
+
+  totalCredits      Decimal @default(0) @map("total_credits") @db.Decimal(16, 6)
+  totalInputTokens  Int     @default(0) @map("total_input_tokens")
+  totalOutputTokens Int     @default(0) @map("total_output_tokens")
+  totalTokens       Int     @default(0) @map("total_tokens")
+  modelCostUsd      Decimal @default(0) @map("model_cost_usd") @db.Decimal(16, 8)
+  eventCount        Int     @default(0) @map("event_count")
+
+  summaryIncluded Boolean @default(false) @map("summary_included")
+  voiceIncluded   Boolean @default(false) @map("voice_included")
+
+  status             ConversationUsageStatus @default(OPEN)
+  // Bumped when the attribution rules change, so historical rows stay
+  // interpretable and a recalculation is explicit rather than silent.
+  calculationVersion Int                     @default(1) @map("calculation_version")
+  excludedReason     String?                 @map("excluded_reason") // "test" | "merged_into:<id>" | …
+  mergedIntoId       String?                 @map("merged_into_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  links ConversationUsageEventLink[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, conversationType, finalizedAt])
+  @@index([status, resolvedAt])
+  @@index([finalizedAt])
+  @@index([tenantId, planKey, finalizedAt])
+  @@map("conversation_usage_aggregates")
+}
+
+enum ConversationUsageStatus {
+  OPEN // conversation live; usage still accruing
+  SETTLING // closed, waiting out the late-job settlement window
+  FINALIZED // counted in averages
+  REOPENED // reopened after finalization; excluded until re-settled
+  EXCLUDED // test / merged / not attributable
+}
+
+// One row per attributed UsageLog event. `usageLogId` is UNIQUE, which is what
+// makes aggregation idempotent: replaying the roll-up, or a late event arriving
+// twice, can never double-count.
+model ConversationUsageEventLink {
+  id           String   @id @default(cuid())
+  aggregateId  String   @map("aggregate_id")
+  usageLogId   String   @unique @map("usage_log_id")
+  credits      Decimal  @default(0) @db.Decimal(16, 6)
+  inputTokens  Int      @default(0) @map("input_tokens")
+  outputTokens Int      @default(0) @map("output_tokens")
+  costUsd      Decimal  @default(0) @map("cost_usd") @db.Decimal(16, 8)
+  feature      String?
+  model        String?
+  occurredAt   DateTime @map("occurred_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  aggregate ConversationUsageAggregate @relation(fields: [aggregateId], references: [id], onDelete: Cascade)
+
+  @@index([aggregateId])
+  @@map("conversation_usage_event_links")
+}
+
+// PERMANENT, provider-neutral evaluation corpus: one row per turn comparing the
+// (temporary) Planner's decision to the (shadow) Reasoner's decision over the
+// SAME Oracle Facts. Foundation for prompt eval, regression detection, model
+// comparison, fine-tuning, Planner-retirement decisions, and future automated
+// evals. `reasonerInput` stores the full neutral input so any FUTURE model can
+// be replayed against the exact same inputs. NEVER stores provider-specific
+// request/response - that stays behind the ReasonerProvider boundary.
+model ReasonerShadowEval {
+  id            String   @id @default(cuid())
+  schemaVersion Int      @default(1) @map("schema_version")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  tenantId       String  @map("tenant_id")
+  conversationId String  @map("conversation_id")
+  turnId         String  @map("turn_id")
+  agentId        String? @map("agent_id")
+
+  /// Replayable, provider-neutral input (Facts + Context + Memory).
+  reasonerInput Json @map("reasoner_input")
+
+  /// Both decisions in the ONE canonical vocabulary.
+  plannerDecision  Json @map("planner_decision")
+  reasonerDecision Json @map("reasoner_decision")
+
+  /// Agreement classification.
+  agree          Boolean
+  moveTypeMatch  Boolean @map("move_type_match")
+  detailMatch    Boolean @map("detail_match")
+  divergenceAxis String  @map("divergence_axis") // none | move_type | operation | field
+
+  /// Live-turn correlation (the Planner drove production; nullable/backfilled).
+  executedOperation    String? @map("executed_operation")
+  runtimeResult        String? @map("runtime_result")
+  finalBusinessOutcome String? @map("final_business_outcome")
+
+  /// Provenance / eval axes (provider-neutral).
+  provider      String
+  model         String
+  promptVersion String @map("prompt_version")
+  latencyMs     Int?   @map("latency_ms")
+  inputTokens   Int?   @map("input_tokens")
+  outputTokens  Int?   @map("output_tokens")
+
+  /// Untrusted reasoning rationale (audit/eval only).
+  reasoningTrace String? @map("reasoning_trace")
+  metadata       Json?
+
+  @@index([tenantId, createdAt])
+  @@index([conversationId])
+  @@index([divergenceAxis])
+  @@index([agree])
+  @@index([provider, model, promptVersion])
+  @@map("reasoner_shadow_evals")
+}
+
+// ─── Agent Loop (autonomous reasoning loop - observability corpus) ─────────
+// One run per loop; one iteration row per reason→execute cycle. Fully replayable
+// (each iteration stores the provider-neutral Oracle Facts snapshot the Reasoner
+// saw). Additive + flag-gated; the legacy Planner remains production.
+
+model AgentLoopRun {
+  id        String   @id @default(cuid())
+  loopId    String   @unique @map("loop_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenantId       String  @map("tenant_id")
+  conversationId String  @map("conversation_id")
+  turnId         String  @map("turn_id")
+  agentId        String? @map("agent_id")
+
+  /// The business outcome the loop drove toward.
+  goal              String?
+  /// Exactly one TerminationReason (finish/need_input/escalate/max_iterations/…).
+  terminationReason String  @map("termination_reason")
+  iterationCount    Int     @map("iteration_count")
+  spentUnits        Int     @map("spent_units")
+  wallMs            Int     @map("wall_ms")
+  /// advisory | autonomous
+  mode              String
+
+  finalDecision    Json    @map("final_decision")
+  finalReplyIntent Json    @map("final_reply_intent")
+  /// The single customer-facing message the Writer produced.
+  reply            String?
+
+  provider      String
+  model         String
+  promptVersion String @map("prompt_version")
+
+  iterations AgentLoopIteration[]
+
+  @@index([tenantId, createdAt])
+  @@index([conversationId])
+  @@index([terminationReason])
+  @@index([goal])
+  @@map("agent_loop_runs")
+}
+
+model AgentLoopIteration {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+
+  loopId String       @map("loop_id")
+  run    AgentLoopRun @relation(fields: [loopId], references: [loopId], onDelete: Cascade)
+
+  tenantId       String @map("tenant_id")
+  conversationId String @map("conversation_id")
+  iteration      Int
+
+  goal                String?
+  /// Provider-neutral Facts snapshot the Reasoner saw this iteration (replayable).
+  oracleFactsSnapshot Json    @map("oracle_facts_snapshot")
+  /// Short WHY from the Reasoner read (situation/rationale) - audit only.
+  reasoningSummary    String  @map("reasoning_summary")
+
+  decisionType      String   @map("decision_type")
+  proposedOperation String?  @map("proposed_operation")
+  proposedParams    Json?    @map("proposed_params")
+  /// ExecutionResult status if an operation ran (EXECUTED/NEEDS_INPUT/FAILED/…).
+  runtimeResult     String?  @map("runtime_result")
+  /// Neutral Observation projection (status/outcome/reason/invariants).
+  observation       Json?
+  /// Goal-relevant Facts signature - powers goal-based progress detection.
+  factsSignature    String?  @map("facts_signature")
+  progressed        Boolean?
+
+  inputTokens  Int? @map("input_tokens")
+  outputTokens Int? @map("output_tokens")
+  latencyMs    Int? @map("latency_ms")
+
+  @@unique([loopId, iteration])
+  @@index([tenantId, createdAt])
+  @@index([conversationId])
+  @@map("agent_loop_iterations")
+}
+
+/// Agent Loop cross-turn memory - the Reasoner's carried-forward conclusions
+/// (AgentMemory: committedGoal, workingHypotheses, alreadyAsked, priorReads,
+/// openCommitments), scoped per agent × customer so memory follows the customer
+/// across conversations. ADVISORY continuity only - Facts always override it.
+model AgentCustomerMemory {
+  id                 String   @id @default(cuid())
+  tenantId           String   @map("tenant_id")
+  agentId            String   @map("agent_id")
+  customerExternalId String   @map("customer_external_id")
+  /// The bounded AgentMemory JSON (last turn's Reasoner memoryUpdate).
+  memory             Json
+  updatedAt          DateTime @updatedAt @map("updated_at")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  @@unique([tenantId, agentId, customerExternalId])
+  @@index([tenantId, updatedAt])
+  @@map("agent_customer_memory")
 }
 
 // ─── Audit Logs (Full System Audit Trail) ──────────────────
@@ -1892,6 +4310,58 @@ model MeetingType {
   @@unique([tenantId, slug])
   @@index([tenantId, isActive])
   @@map("meeting_types")
+}
+
+// ─── Meeting Bookings (source of truth for booked calendar events) ─
+//
+// One row per calendar event the bot books, keyed by the customer (not the
+// conversation), so reschedule/cancel resolve the EXACT event to act on even
+// across separate conversations - and so the bot never invents a duplicate by
+// calling schedule_meeting again on a "move it" intent.
+//
+// Invariant the handlers enforce: at most ONE ACTIVE booking per customer per
+// agent. schedule_meeting reschedules the existing ACTIVE booking instead of
+// creating a second event; cancel/reschedule look up `eventId` from here.
+//
+// Replaces the fragile audit-log + email-attendee scan that locked onto the
+// wrong duplicate once any existed (the audit scan remains a read-only fallback
+// to backfill bookings made before this table existed).
+model MeetingBooking {
+  id                 String           @id @default(cuid())
+  tenantId           String           @map("tenant_id")
+  /// The AIAgent that owns the calendar this event lives on.
+  aiAgentId          String           @map("ai_agent_id")
+  /// Conversation the booking was made in (context only; lookup is by customer).
+  conversationId     String           @map("conversation_id")
+  /// Stable customer key (WhatsApp phone / channel external id). Same value
+  /// across the customer's conversations → reschedule/cancel work cross-thread.
+  customerExternalId String?          @map("customer_external_id")
+  /// Calendar attendee email (Google invite target), when known.
+  customerEmail      String?          @map("customer_email")
+  provider           CalendarProvider
+  calendarAccountId  String           @map("calendar_account_id")
+  /// Source-of-truth calendar event id - what reschedule/cancel PATCH/DELETE.
+  eventId            String           @map("event_id")
+  meetingTypeSlug    String?          @map("meeting_type_slug")
+  startAt            DateTime         @map("start_at")
+  endAt              DateTime         @map("end_at")
+  customerTimezone   String?          @map("customer_timezone")
+  joinUrl            String?          @map("join_url")
+  status             BookingStatus    @default(ACTIVE)
+  createdAt          DateTime         @default(now()) @map("created_at")
+  updatedAt          DateTime         @updatedAt @map("updated_at")
+
+  @@unique([provider, eventId])
+  @@index([tenantId, customerExternalId, status])
+  @@index([tenantId, conversationId, status])
+  @@index([tenantId, aiAgentId, status])
+  @@map("meeting_bookings")
+}
+
+enum BookingStatus {
+  ACTIVE
+  CANCELLED
+  COMPLETED
 }
 
 // ─── Tenant Funnel (Task 2 - configurable funnel + playbooks) ─
@@ -2224,9 +4694,9 @@ model VoiceCallSession {
   // any browser context) still clears the inbox correctly.
   handledAt       DateTime?  @map("handled_at")
 
-  tenant         Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  conversation   Conversation             @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  channel        CommunicationChannel?    @relation(fields: [channelId], references: [id])
+  tenant         Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversation   Conversation              @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  channel        CommunicationChannel?     @relation(fields: [channelId], references: [id])
   postProcessing VoiceCallPostProcessing?
   actionItems    VoiceCallActionItem[]
   participants   VoiceSessionParticipant[]
@@ -2264,29 +4734,29 @@ enum VoiceParticipantStatus {
 }
 
 model VoiceSessionParticipant {
-  id            String                 @id @default(cuid())
-  sessionId     String                 @map("session_id")
-  role          VoiceParticipantRole
-  status        VoiceParticipantStatus @default(DIALING)
+  id          String                 @id @default(cuid())
+  sessionId   String                 @map("session_id")
+  role        VoiceParticipantRole
+  status      VoiceParticipantStatus @default(DIALING)
   // Provider leg SID (Twilio CallSid). Null until participant-join fires
   // for ADDED rows (we dial first, learn the SID from the webhook).
-  callSid       String?                @map("call_sid")
+  callSid     String?                @map("call_sid")
   // Free-form display label. For ADDED rows this is the label passed to
   // add-participant (used to match the webhook back to this row). For
   // AGENT/CUSTOMER rows it's a stable identifier ("agent"/"customer").
-  label         String?
-  phoneNumber   String?                @map("phone_number")
-  displayName   String?                @map("display_name")
+  label       String?
+  phoneNumber String?                @map("phone_number")
+  displayName String?                @map("display_name")
   // Optional FK to a Contact in this tenant matched by phone at
   // participant-join time. Drives multi-contact summary attribution.
-  contactId     String?                @map("contact_id")
+  contactId   String?                @map("contact_id")
   // Whisper/consult mode: true when the leg is parked on hold music.
-  onHold        Boolean                @default(false) @map("on_hold")
-  joinedAt      DateTime?              @map("joined_at")
-  leftAt        DateTime?              @map("left_at")
-  endReason     String?                @map("end_reason")
-  createdAt     DateTime               @default(now()) @map("created_at")
-  updatedAt     DateTime               @updatedAt @map("updated_at")
+  onHold      Boolean                @default(false) @map("on_hold")
+  joinedAt    DateTime?              @map("joined_at")
+  leftAt      DateTime?              @map("left_at")
+  endReason   String?                @map("end_reason")
+  createdAt   DateTime               @default(now()) @map("created_at")
+  updatedAt   DateTime               @updatedAt @map("updated_at")
 
   session VoiceCallSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   contact Contact?         @relation(fields: [contactId], references: [id], onDelete: SetNull)
@@ -2756,40 +5226,40 @@ model VoiceCallActionItem {
 // Locale stored explicitly so a tenant with Hebrew + English agents gets one
 // brief per language without re-asking the LLM each time.
 model CustomerBrief {
-  id                String   @id @default(cuid())
-  tenantId          String   @map("tenant_id")
+  id       String @id @default(cuid())
+  tenantId String @map("tenant_id")
 
-  identityKey       String   @map("identity_key")
-  personId          String?  @map("person_id")
-  crmContactId     String?  @map("crm_contact_id")
-  crmObjectKind     String?  @map("crm_object_kind")
-  contactId         String?  @map("contact_id")
+  identityKey   String  @map("identity_key")
+  personId      String? @map("person_id")
+  crmContactId  String? @map("crm_contact_id")
+  crmObjectKind String? @map("crm_object_kind")
+  contactId     String? @map("contact_id")
 
-  locale            String   @default("en")
+  locale String @default("en")
 
   // Headline behavioral briefing (3-5 sentences). Plain prose, agent-facing.
-  brief             String
+  brief String
 
   // Short "things to keep in mind RIGHT NOW" phrases (≤5 items).
-  signals           Json     @default("[]")
+  signals Json @default("[]")
 
   // Behavioral tags - nullable so the LLM can omit when it lacks signal.
-  tone              String?
-  mood              String?
+  tone                 String?
+  mood                 String?
   // Free-form list of recommended behaviors for THIS customer (e.g.
   // "lead with empathy", "skip small talk", "confirm next step in writing").
-  recommendedBehaviors Json  @default("[]") @map("recommended_behaviors")
+  recommendedBehaviors Json    @default("[]") @map("recommended_behaviors")
 
   // Provenance - what the brief is summarizing.
-  channels          Json     @default("[]")
-  conversationCount Int      @default(0) @map("conversation_count")
-  lastSourceChannel String?  @map("last_source_channel")
-  lastSourceConvId  String?  @map("last_source_conv_id")
-  lastSourceEvent   String?  @map("last_source_event")
+  channels          Json    @default("[]")
+  conversationCount Int     @default(0) @map("conversation_count")
+  lastSourceChannel String? @map("last_source_channel")
+  lastSourceConvId  String? @map("last_source_conv_id")
+  lastSourceEvent   String? @map("last_source_event")
 
-  generatedAt       DateTime @default(now()) @map("generated_at")
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
+  generatedAt DateTime @default(now()) @map("generated_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
   @@unique([tenantId, identityKey, locale])
   @@index([tenantId])
@@ -2846,7 +5316,7 @@ model CopilotCueOutcome {
 model TenantFeature {
   id        String   @id @default(cuid())
   tenantId  String   @map("tenant_id")
-  feature   String   // matches FEATURES key
+  feature   String // matches FEATURES key
   enabled   Boolean  @default(false)
   // Optional feature-specific config (e.g. auto-buy spending limits).
   config    Json?
@@ -2863,15 +5333,22 @@ model TenantFeature {
 }
 
 model TenantRole {
-  id          String   @id @default(cuid())
-  tenantId    String   @map("tenant_id")
-  name        String
-  description String?
+  id           String          @id @default(cuid())
+  tenantId     String          @map("tenant_id")
+  name         String
+  description  String?
   // System-managed roles (e.g. seeded "Default Agent") cannot be deleted
   // by tenant admins. Custom roles created by the tenant admin can.
-  isSystem    Boolean  @default(false) @map("is_system")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  isSystem     Boolean         @default(false) @map("is_system")
+  // Stable key for built-in roles (owner|admin|department_manager|agent).
+  // NULL for tenant-created custom roles. Lets the resolver/seed identify
+  // built-ins without matching on the (localizable) display name.
+  builtinKey   String?         @map("builtin_key")
+  // Default data-reach for users assigned this role. Overridable per
+  // assignment (UserRoleAssignment.scope).
+  defaultScope PermissionScope @default(OWN) @map("default_scope")
+  createdAt    DateTime        @default(now()) @map("created_at")
+  updatedAt    DateTime        @updatedAt @map("updated_at")
 
   tenant      Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   features    TenantRoleFeature[]
@@ -2884,7 +5361,7 @@ model TenantRole {
 
 model TenantRoleFeature {
   roleId    String   @map("role_id")
-  feature   String   // matches FEATURES key
+  feature   String // matches FEATURES key
   createdAt DateTime @default(now()) @map("created_at")
 
   role TenantRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
@@ -2895,10 +5372,12 @@ model TenantRoleFeature {
 }
 
 model UserRoleAssignment {
-  userId     String   @map("user_id")
-  roleId     String   @map("role_id")
-  assignedAt DateTime @default(now()) @map("assigned_at")
-  assignedBy String?  @map("assigned_by")
+  userId     String           @map("user_id")
+  roleId     String           @map("role_id")
+  // Per-assignment scope override. NULL = inherit the role's defaultScope.
+  scope      PermissionScope? @map("scope")
+  assignedAt DateTime         @default(now()) @map("assigned_at")
+  assignedBy String?          @map("assigned_by")
 
   user User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   role TenantRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
@@ -2911,7 +5390,7 @@ model UserRoleAssignment {
 model UserFeatureGrant {
   id        String   @id @default(cuid())
   userId    String   @map("user_id")
-  feature   String   // matches FEATURES key
+  feature   String // matches FEATURES key
   // true  = explicit grant (overrides "no role grant")
   // false = explicit revoke (overrides "role grants this")
   granted   Boolean
@@ -2946,6 +5425,12 @@ enum IntelligenceScope {
   CUSTOMER
   OPPORTUNITY
   CONVERSATION
+  // Migration-safety scope: a field whose true scope could not be determined
+  // automatically (e.g. backfilled from legacy summaryFields). The ingest
+  // layer NEVER routes/writes a REVIEW_REQUIRED field - it is parked until a
+  // human assigns a real scope in the Fields Builder. Incorrect scope is worse
+  // than manual review.
+  REVIEW_REQUIRED
 }
 
 enum FieldType {
@@ -3030,7 +5515,7 @@ model Opportunity {
   nextAction        String?           @map("next_action")
 
   // Denormalized snapshot of OPPORTUNITY-scope facts: { fieldKey: value }.
-  facts Json @default("{}")
+  facts         Json @default("{}")
   // Cross-entity edges (implicit graph): decision_maker, proposed_entity, …
   relationships Json @default("{}")
 
@@ -3072,22 +5557,32 @@ model IntelligencePack {
 // Per-tenant active schema registry. Each field declares the SCOPE it owns
 // (customer/opportunity/conversation) - the core anti-overwrite mechanic.
 model FieldDefinition {
-  id          String            @id @default(cuid())
-  tenantId    String            @map("tenant_id")
-  key         String // stable snake_case
-  label       String
-  description String?
-  type        FieldType         @default(TEXT)
-  scope       IntelligenceScope @default(OPPORTUNITY)
-  options     Json              @default("[]") // enum values
-  required    Boolean           @default(false)
+  id                  String            @id @default(cuid())
+  tenantId            String            @map("tenant_id")
+  key                 String // stable snake_case
+  label               String
+  description         String?
+  type                FieldType         @default(TEXT)
+  scope               IntelligenceScope @default(OPPORTUNITY)
+  options             Json              @default("[]") // enum values
+  required            Boolean           @default(false)
+  // Few-shot extraction hints shown to the LLM: array of plain strings, e.g.
+  // ["around 300 guests", "we're 250 people"]. Sharpen extraction accuracy.
+  examples            Json              @default("[]")
+  // Phrases that look similar but must NOT fill this field (optional). Kills
+  // common false positives. Array of plain strings.
+  negativeExamples    Json              @default("[]") @map("negative_examples")
+  // Minimum extraction confidence (0-1) before a value is auto-applied. Below
+  // this, the value is routed to the human-review queue instead of the CRM.
+  // null → tenant/global default applies.
+  confidenceThreshold Float?            @map("confidence_threshold")
   // Stages where the field is expected (Missing-Info engine).
-  stageRelevance Json    @default("[]") @map("stage_relevance")
-  aiExtract      Boolean @default(true) @map("ai_extract")
-  syncToCrm      Boolean @default(true) @map("sync_to_crm")
-  crmFieldMap    Json?   @map("crm_field_map")
-  origin         FieldOrigin @default(CUSTOM)
-  packSlug       String?     @map("pack_slug")
+  stageRelevance      Json              @default("[]") @map("stage_relevance")
+  aiExtract           Boolean           @default(true) @map("ai_extract")
+  syncToCrm           Boolean           @default(true) @map("sync_to_crm")
+  crmFieldMap         Json?             @map("crm_field_map")
+  origin              FieldOrigin       @default(CUSTOM)
+  packSlug            String?           @map("pack_slug")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -3110,6 +5605,10 @@ model IntelligenceFact {
   value      Json
   confidence Float             @default(1)
   source     FactSource
+  // Verbatim snippet from the source conversation that justifies this value,
+  // e.g. "We provide healthcare services". The provenance the UI shows so users
+  // trust AI-generated intelligence. Null for non-conversational sources.
+  evidence   String?
   observedAt DateTime          @default(now()) @map("observed_at")
 
   conversationId String?   @map("conversation_id")
@@ -3122,4 +5621,264 @@ model IntelligenceFact {
   @@index([tenantId, entityType, entityId])
   @@index([tenantId, entityType, entityId, fieldKey])
   @@map("intelligence_facts")
+}
+
+enum IntelligenceReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// Human-review queue for uncertain intelligence updates. The ingest layer
+// routes a value here (instead of auto-applying it) when its confidence is
+// below the field threshold, OR when it CONFLICTS with a confidently-held
+// current value. A human approves (→ applied as a MANUAL fact) or rejects.
+// This is what keeps low-confidence AI guesses out of the CRM.
+model IntelligenceReview {
+  id         String            @id @default(cuid())
+  tenantId   String            @map("tenant_id")
+  entityType IntelligenceScope @map("entity_type")
+  entityId   String            @map("entity_id")
+  fieldKey   String            @map("field_key")
+
+  proposedValue Json    @map("proposed_value")
+  currentValue  Json?   @map("current_value")
+  confidence    Float   @default(0)
+  evidence      String?
+  // Why it landed in review: "low_confidence" | "conflict" | "scope_review".
+  reason        String
+
+  status         IntelligenceReviewStatus @default(PENDING)
+  source         FactSource
+  conversationId String?                  @map("conversation_id")
+
+  resolvedAt DateTime? @map("resolved_at")
+  resolvedBy String?   @map("resolved_by") // userId
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  @@index([tenantId, status])
+  @@index([tenantId, entityType, entityId])
+  @@map("intelligence_reviews")
+}
+
+// ─── Business action policies (deterministic AI-action rules) ───────────────
+//
+// Tenant-configured rules for sensitive AI actions (refunds, cancellations,
+// coupons/compensation, customer-data writes). The AI may EXPLAIN these rules,
+// but enforcement is this data + packages/shared/lib/business-policy.ts,
+// evaluated deterministically at three points: before the AI offers the
+// action, before the HITL request is created, and again immediately before
+// execution after approval. Prompts can never bypass it.
+
+model BusinessActionPolicy {
+  id            String   @id @default(cuid())
+  tenantId      String   @map("tenant_id")
+  /// REFUND | CANCEL_ORDER | COUPON | COMPENSATION | DISCOUNT | CUSTOMER_WRITE
+  actionKind    String   @map("action_kind")
+  enabled       Boolean  @default(true)
+  /// Policies are IMMUTABLE per version: an update writes a NEW row with
+  /// version+1. Historical PolicyDecision rows keep pointing at the version
+  /// that actually decided them - changing a rule never rewrites history.
+  version       Int      @default(1)
+  effectiveFrom DateTime @default(now()) @map("effective_from")
+  /// Rule payload - see BusinessPolicyConfig in business-policy.ts.
+  config        Json     @default("{}")
+  createdBy     String?  @map("created_by")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, actionKind, version])
+  @@index([tenantId, actionKind])
+  @@map("business_action_policies")
+}
+
+/// Append-only audit of every policy evaluation - the reproducibility record.
+model PolicyDecision {
+  id              String   @id @default(cuid())
+  tenantId        String   @map("tenant_id")
+  policyId        String?  @map("policy_id")
+  policyVersion   Int?     @map("policy_version")
+  actionKind      String   @map("action_kind")
+  /// OFFER | HITL_CREATE | PRE_EXECUTION
+  evaluationPoint String   @map("evaluation_point")
+  conversationId  String?  @map("conversation_id")
+  contactId       String?  @map("contact_id")
+  aiEmployeeId    String?  @map("ai_employee_id")
+  tool            String?
+  /// Snapshot of the structured facts the decision was computed FROM.
+  inputFacts      Json     @default("{}") @map("input_facts")
+  /// ALLOWED | DENIED | REQUIRES_INFORMATION | REQUIRES_EVIDENCE |
+  /// REQUIRES_HUMAN_APPROVAL | ALLOWED_WITH_LIMIT | ALTERNATIVE_ACTION_REQUIRED |
+  /// FAIL_CLOSED
+  decision        String
+  matchedRules    Json     @default("[]") @map("matched_rules")
+  reasonCodes     Json     @default("[]") @map("reason_codes")
+  maxAmount       Float?   @map("max_amount")
+  correlationId   String?  @map("correlation_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, actionKind])
+  @@map("policy_decisions")
+}
+
+/// Explicit customer identity verification for cross-identity access.
+///
+/// The ONLY way a chat participant may access another customer's records: an
+/// OTP delivered to the destination ALREADY STORED on that customer (never to
+/// a destination supplied in chat), confirmed in this conversation. Grants are
+/// tenant-, conversation- and customer-scoped, short-lived, attempt-limited
+/// and auditable. Verification of customer A never authorizes customer B: the
+/// access guard matches grants by the TARGET identifiers on the row.
+model CustomerVerification {
+  id               String    @id @default(cuid())
+  tenantId         String    @map("tenant_id")
+  conversationId   String    @map("conversation_id")
+  /// Authenticated channel sender the grant is bound to (wa phone).
+  channelSenderId  String?   @map("channel_sender_id")
+  /// Target customer's identifiers as stored in the Source of Truth.
+  targetCustomerId String?   @map("target_customer_id")
+  targetPhone      String?   @map("target_phone")
+  targetEmail      String?   @map("target_email")
+  /// "otp_whatsapp_stored_phone" | "otp_email_stored" | "human_agent"
+  method           String
+  codeHash         String    @map("code_hash")
+  /// Code expiry before verification; GRANT expiry after (short-lived).
+  expiresAt        DateTime  @map("expires_at")
+  attempts         Int       @default(0)
+  maxAttempts      Int       @default(5) @map("max_attempts")
+  verifiedAt       DateTime? @map("verified_at")
+  /// Permitted resource scope of the grant.
+  scope            String    @default("customer_read")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  @@index([tenantId, conversationId])
+  @@index([tenantId, expiresAt])
+  @@map("customer_verifications")
+}
+
+// ─── Discovery State (structured conversational memory) ─────────────────────
+//
+// Authoritative, tenant- + conversation-scoped memory of what a customer has
+// told the AI during a goal-driven conversation (e.g. a product search):
+// facts collected, questions asked/answered, readiness for a provider action,
+// and the actions attempted. The model PROPOSES fact updates via extraction;
+// the backend (packages/shared/lib/discovery-state.ts) validates, normalizes,
+// authorizes and persists them. Keys are derived from trusted server context
+// only - never from model tool arguments. Fixes the "transcript-only memory"
+// gap that caused repeated questions and fabricated searches.
+
+enum DiscoveryStatus {
+  active
+  ready_for_action
+  awaiting_customer
+  action_in_progress
+  fulfilled
+  abandoned
+  superseded
+}
+
+model DiscoverySession {
+  id             String          @id @default(cuid())
+  tenantId       String          @map("tenant_id")
+  conversationId String          @map("conversation_id")
+  aiAgentId      String?         @map("ai_agent_id")
+  goalKey        String          @map("goal_key")
+  status         DiscoveryStatus @default(active)
+  /// Optimistic-concurrency guard: a write must CAS on the version it read so
+  /// two concurrent inbound messages cannot clobber the newer state.
+  version        Int             @default(0)
+  schemaVersion  Int             @default(1) @map("schema_version")
+  startedAt      DateTime        @default(now()) @map("started_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+  completedAt    DateTime?       @map("completed_at")
+  expiresAt      DateTime?       @map("expires_at")
+
+  facts     DiscoveryFact[]
+  questions DiscoveryQuestion[]
+  actions   DiscoveryActionAttempt[]
+
+  // One ACTIVE session per (tenant, conversation, goal). A topic change opens
+  // a new session and supersedes the old (status=superseded).
+  @@index([tenantId, conversationId, status])
+  @@index([tenantId, expiresAt])
+  @@map("discovery_sessions")
+}
+
+model DiscoveryFact {
+  id                   String   @id @default(cuid())
+  sessionId            String   @map("session_id")
+  tenantId             String   @map("tenant_id")
+  key                  String
+  /// Canonical semantic key (deduped across languages/synonyms).
+  normalizedKey        String   @map("normalized_key")
+  valueType            String   @map("value_type") // string|number|boolean|enum|range
+  valueJson            Json     @map("value_json")
+  normalizedValueJson  Json?    @map("normalized_value_json")
+  /// customer_explicit | customer_correction | provider | tenant_configuration | knowledge_base | model_inference
+  source               String
+  confidence           Float    @default(0.9)
+  /// active | superseded | rejected
+  status               String   @default("active")
+  sourceMessageId      String?  @map("source_message_id")
+  explicitlyConfirmed  Boolean  @default(false) @map("explicitly_confirmed")
+  requiresConfirmation Boolean  @default(false) @map("requires_confirmation")
+  /// Sensitivity class for retention/promotion decisions: normal|sensitive.
+  sensitivity          String   @default("normal")
+  supersedesFactId     String?  @map("supersedes_fact_id")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  session DiscoverySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, status])
+  @@index([sessionId, normalizedKey, status])
+  @@map("discovery_facts")
+}
+
+model DiscoveryQuestion {
+  id                    String    @id @default(cuid())
+  sessionId             String    @map("session_id")
+  tenantId              String    @map("tenant_id")
+  /// The fact/requirement this question is trying to fill.
+  requirementKey        String    @map("requirement_key")
+  normalizedQuestionKey String    @map("normalized_question_key")
+  /// planned | asked | answered | skipped | no_longer_required
+  status                String    @default("planned")
+  askedMessageId        String?   @map("asked_message_id")
+  answeredMessageId     String?   @map("answered_message_id")
+  askedAt               DateTime? @map("asked_at")
+  answeredAt            DateTime? @map("answered_at")
+  attemptCount          Int       @default(0) @map("attempt_count")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  session DiscoverySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, status])
+  @@index([sessionId, normalizedQuestionKey])
+  @@map("discovery_questions")
+}
+
+model DiscoveryActionAttempt {
+  id               String   @id @default(cuid())
+  sessionId        String   @map("session_id")
+  tenantId         String   @map("tenant_id")
+  actionKey        String   @map("action_key")
+  /// Snapshot of the criteria/facts the action ran with (for reproducibility).
+  criteriaJson     Json     @map("criteria_json")
+  toolName         String?  @map("tool_name")
+  executionId      String?  @map("execution_id")
+  /// pending | succeeded | failed | no_results | blocked
+  resultStatus     String   @map("result_status")
+  /// Provider result references (order/product ids, refund id, …) - atoms only.
+  resultRefs       Json?    @map("result_refs")
+  /// Product/resource ids actually SHOWN to the customer (dedupe re-shows).
+  shownResourceIds Json?    @map("shown_resource_ids")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  session DiscoverySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt])
+  @@map("discovery_action_attempts")
 }

@@ -1,3 +1,4 @@
+import { getInternalServiceKey, readDurableSetting } from "@chatcenter/shared";
 /**
  * Autonomous AI bot - worker side.
  *
@@ -25,14 +26,20 @@ import {
   getOutboundAdapter,
   decryptCredentials,
   publishEvent,
+  describeSendError,
+  getRedis,
+  BUSINESS_HOURS_KEY,
+  parseBusinessHours,
+  evaluateBusinessHours,
+  describeNextOpening,
 } from "@chatcenter/shared";
-import type { ChannelCredentials } from "@chatcenter/shared";
+import type { ChannelCredentials, ProviderSendError, BusinessHoursConfig, BusinessOpenState } from "@chatcenter/shared";
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://ai:4006";
-const INTERNAL_SERVICE_KEY = process.env.INTERNAL_SERVICE_KEY || "chatcenter-internal-2026";
+const INTERNAL_SERVICE_KEY = getInternalServiceKey();
 
 interface SendContext {
-  channel: "WHATSAPP" | "MESSENGER" | "INSTAGRAM";
+  channel: "WHATSAPP" | "MESSENGER" | "INSTAGRAM" | "SHOPIFY_LIVE_CHAT";
   channelAccountExternalId: string;
   credentials: ChannelCredentials;
   recipientId: string;
@@ -40,6 +47,8 @@ interface SendContext {
 
 interface AIBotReplyResult {
   reply: string | null;
+  /** Short acks (e.g. "one moment, checking") to send as their own bubble(s) before `reply`. */
+  interimMessages?: string[];
   escalation: { reason: string; priority?: "low" | "medium" | "high"; summary?: string } | null;
   awaitingApproval: { approvalRequestId: string; tool: string; reason: string } | null;
   toolCallLog: Array<{
@@ -51,6 +60,16 @@ interface AIBotReplyResult {
   }>;
   modelUsed: string;
   totalTokens: number;
+  /**
+   * Messages the AI service prepared but deliberately did not persist, so
+   * they land AFTER the text reply. Shopify product cards use this: the
+   * bot says why it recommends something, then the card appears.
+   */
+  structuredMessages?: Array<{
+    messageType: string;
+    body: string;
+    metadata: Record<string, unknown>;
+  }>;
 }
 
 export async function processAIBot(
@@ -89,18 +108,56 @@ export async function processAIBot(
   const sendContext = buildSendContext(conversation);
   if (!sendContext) return false;
 
+  // Enforce the agent's lifecycle status at dispatch. "Pause" must actually
+  // pause: a PAUSED employee hands the conversation to a human instead of
+  // silently continuing to answer; a DRAFT (or any non-ACTIVE) employee is
+  // never dispatched at all.
+  if (agentLite.status !== "ACTIVE") {
+    if (agentLite.status === "PAUSED") {
+      console.warn(`[AI-Bot] agent ${agentLite.id} is PAUSED - escalating conv=${conversationId} to human`);
+      await escalateToHuman(tenantId, conversationId, sendContext, agentLite.escalationMessage, agentLite.id, {
+        case: "agent_paused",
+        summary: "The AI employee is paused, so the conversation was handed to a human.",
+      });
+      return true;
+    }
+    console.warn(`[AI-Bot] agent ${agentLite.id} status=${agentLite.status} - not dispatching conv=${conversationId}`);
+    return false;
+  }
+
+  // ── Business-hours gate (side-effect decision → worker-owned) ──
+  // Evaluated from the tenant's PERSISTED config (shared evaluator), never
+  // from frontend state. "silent" policy: while closed the AI does not answer
+  // at all - the configured closed-hours response (or a generated default
+  // with the REAL next opening time) is sent once per closed window.
+  // "active" policy (default): the AI keeps answering; the closed context is
+  // passed to the AI service so it never implies immediate human availability.
+  const bizHours = await getBusinessHoursState(tenantId);
+  if (bizHours.state.configured && !bizHours.state.open) {
+    if ((bizHours.cfg?.aiOutsideHours || "active") === "silent") {
+      await sendClosedHoursAutoReply(tenantId, conversationId, incomingMessage, sendContext, bizHours);
+      return true;
+    }
+  }
+
   // Pre-check: hard limits set on the agent row. These are enforced by the
   // worker, not the AI service, because they're side-effect decisions
   // (escalate vs. continue) tied to the conversation's channel pipeline.
-  const shouldEscalate = await checkEscalationThresholds(conversationId, tenantId, agentLite);
-  if (shouldEscalate) {
-    await escalateToHuman(tenantId, conversationId, sendContext, agentLite.escalationMessage, agentLite.id);
+  const escalationCase = await checkEscalationThresholds(conversationId, tenantId, agentLite, incomingMessage);
+  if (escalationCase) {
+    await escalateToHuman(tenantId, conversationId, sendContext, agentLite.escalationMessage, agentLite.id, {
+      case: escalationCase,
+      summary: "The AI reached its autonomy limit for this conversation.",
+    });
     return true;
   }
 
   // Pre-check: explicit human request - short-circuits the LLM call.
   if (isHumanRequest(incomingMessage)) {
-    await escalateToHuman(tenantId, conversationId, sendContext, agentLite.escalationMessage, agentLite.id);
+    await escalateToHuman(tenantId, conversationId, sendContext, agentLite.escalationMessage, agentLite.id, {
+      case: "customer_requested_human",
+      summary: "The customer explicitly asked for a person.",
+    });
     return true;
   }
 
@@ -119,6 +176,22 @@ export async function processAIBot(
         conversationId,
         aiAgentId: resolvedAgentId,
         incomingMessage,
+        // Closed + "active" policy: the AI answers, but must speak truthfully
+        // about human availability. Localized next-opening wording is computed
+        // HERE (the tenant config lives on this side) and injected as prompt
+        // context by the AI service.
+        ...(bizHours.state.configured && !bizHours.state.open
+          ? {
+              closedHours: {
+                nextOpeningIso: bizHours.state.nextOpening?.toISOString() ?? null,
+                timezone: bizHours.state.timezone,
+                nextOpeningText: {
+                  en: describeNextOpening(bizHours.state, "en"),
+                  he: describeNextOpening(bizHours.state, "he"),
+                },
+              },
+            }
+          : {}),
       },
       {
         headers: { "X-Internal-Key": INTERNAL_SERVICE_KEY, "Content-Type": "application/json" },
@@ -139,7 +212,20 @@ export async function processAIBot(
       return false;
     }
     console.error("[AI-Bot] AI service /reply call failed:", err.response?.data || err.message);
-    return false;
+    // NEVER leave the customer in silence: an AI-service failure/timeout hands
+    // the conversation to a human with the warm handoff line. (The handoff
+    // copy generator also lives in the AI service - escalateToHuman already
+    // falls back to the agent's static escalationMessage when it's down.)
+    try {
+      await escalateToHuman(tenantId, conversationId, sendContext, agentLite.escalationMessage, agentLite.id, {
+        case: "ai_service_failure",
+        summary: "The AI could not produce a reply (service error or timeout), so the conversation was handed to a human.",
+      });
+      return true;
+    } catch (escErr: any) {
+      console.error("[AI-Bot] failure-escalation also failed:", escErr?.message);
+      return false;
+    }
   }
 
   // Side-effect: pause for human approval. Don't reply - set state, audit,
@@ -194,9 +280,16 @@ export async function processAIBot(
           `[INTERNAL CONTEXT - do not echo to the customer]\n` +
           `Customer's recent messages (oldest → newest):\n${inboundSample || incomingMessage}\n\n` +
           `Customer's latest message: "${incomingMessage}"\n\n` +
-          `TASK: Send ONE very short reply (max one sentence) to acknowledge the customer and tell them you're handling their request right now.\n` +
+          `TASK: Send ONE very short reply (max one sentence) acknowledging the request and saying it needs a quick confirmation on our side before it goes through, and that you will update them as soon as it is decided.\n` +
           `Rules:\n` +
           `- Detect the language from the FIRST customer message above (or any earlier non-trivial message). Reply in THAT language. If any message contains Hebrew characters, the language is Hebrew. Do not default to English.\n` +
+          // The request is PENDING A DECISION, not underway. Saying "I'm
+          // cancelling your order now" and then - however the decision goes -
+          // having to walk it back is how the customer ends up feeling lied
+          // to. It also made the original silent-failure incident far worse:
+          // they had been told the cancellation was happening.
+          `- Do NOT say the action is already happening or already done ("I'm cancelling it now", "I've processed it"). It has not run yet.\n` +
+          `- Promising an update IS allowed and expected: the system sends the outcome automatically once it is decided.\n` +
           `- Do NOT say "a team member will reach out", "we'll get back to you", or anything that implies a handoff - you are handling this yourself.\n` +
           `- Do NOT mention the CRM, lead creation, or any internal system.\n` +
           `- Tone: warm, brief, like a human typing a quick "give me a sec".\n`;
@@ -252,7 +345,10 @@ export async function processAIBot(
 
   // Side-effect: model decided to escalate (via the escalate_to_human tool).
   if (result.escalation) {
-    await escalateToHuman(tenantId, conversationId, sendContext, agentLite.escalationMessage, agentLite.id);
+    await escalateToHuman(tenantId, conversationId, sendContext, agentLite.escalationMessage, agentLite.id, {
+      case: result.escalation.reason || "ai_decided",
+      summary: result.escalation.summary,
+    });
     return true;
   }
 
@@ -265,12 +361,71 @@ export async function processAIBot(
     return false;
   }
 
-  const extId = await adapter.sendTextMessage(
-    sendContext.credentials,
-    sendContext.channelAccountExternalId,
-    sendContext.recipientId,
-    result.reply,
-  );
+  // Two-bubble flow: send any pre-tool acks ("one moment, checking") as their
+  // own message(s) first, then a brief pause so the result reads like the bot
+  // actually went and checked, then the real reply. Best-effort: a failed
+  // interim send never blocks the real reply.
+  if (result.interimMessages?.length) {
+    for (const interim of result.interimMessages) {
+      if (!interim?.trim()) continue;
+      try {
+        const interimExtId = await adapter.sendTextMessage(
+          sendContext.credentials,
+          sendContext.channelAccountExternalId,
+          sendContext.recipientId,
+          interim,
+        );
+        const interimMsg = await prisma.message.create({
+          data: {
+            tenantId,
+            conversationId,
+            channel: sendContext.channel,
+            direction: "OUTBOUND",
+            body: interim,
+            senderName: "AI Bot",
+            externalMessageId: interimExtId,
+            status: interimExtId ? "SENT" : "FAILED",
+            metadata: { source: "ai_bot", kind: "interim_ack" },
+          },
+        });
+        await prisma.conversation.update({
+          where: { id: conversationId },
+          data: { lastMessageAt: new Date() },
+        });
+        await publishEvent({
+          event: "message:new",
+          tenantId,
+          data: { message: interimMsg, conversationId, channel: sendContext.channel },
+        });
+      } catch (err: any) {
+        console.warn("[AI-Bot] interim ack send failed (continuing to reply):", err?.message);
+      }
+    }
+    // Small human-feeling gap between "checking…" and the result.
+    await new Promise((resolve) => setTimeout(resolve, 900));
+  }
+
+  // Adapter throws on provider errors despite the `string | null` signature.
+  // A failed send must still persist the reply row as FAILED (visible in the
+  // inbox) instead of crashing the job into a retry loop with no record.
+  let extId: string | null = null;
+  let sendErrorDetail: ProviderSendError | null = null;
+  let sendErrorMessage: string | null = null;
+  try {
+    extId = await adapter.sendTextMessage(
+      sendContext.credentials,
+      sendContext.channelAccountExternalId,
+      sendContext.recipientId,
+      result.reply,
+    );
+  } catch (err: any) {
+    const described = describeSendError(err, sendContext.channel);
+    sendErrorDetail = described.sendError;
+    sendErrorMessage = described.errorMessage;
+    // Full provider breakdown is persisted below (errorMessage + metadata.sendError)
+    // so the failed send is diagnosable from the DB/UI without server logs.
+    console.error(`[AI-Bot] reply send failed (persisting FAILED message):`, JSON.stringify(sendErrorDetail));
+  }
 
   const aiMessage = await prisma.message.create({
     data: {
@@ -282,11 +437,13 @@ export async function processAIBot(
       senderName: "AI Bot",
       externalMessageId: extId,
       status: extId ? "SENT" : "FAILED",
+      errorMessage: sendErrorMessage || undefined,
       metadata: {
         source: "ai_bot",
         ...(result.toolCallLog.length > 0 && {
           toolCalls: result.toolCallLog.map((tc) => ({ tool: tc.tool, decision: tc.decision })),
         }),
+        ...(sendErrorDetail ? { sendError: sendErrorDetail } : {}),
       },
     },
   });
@@ -303,6 +460,41 @@ export async function processAIBot(
     tenantId,
     data: { message: aiMessage, conversationId, channel: sendContext.channel },
   });
+
+  // Structured follow-ups (Shopify product cards). Persisted after the
+  // text so the customer reads the reasoning before the card. Their
+  // content was already resolved and validated by the AI service — the
+  // worker only owns the write and the realtime fan-out.
+  for (const extra of result.structuredMessages ?? []) {
+    try {
+      const structured = await prisma.message.create({
+        data: {
+          tenantId,
+          conversationId,
+          channel: sendContext.channel,
+          direction: "OUTBOUND",
+          body: extra.body,
+          messageType: extra.messageType,
+          senderName: "AI Bot",
+          status: "SENT",
+          metadata: extra.metadata as any,
+        },
+      });
+      await prisma.conversation.update({
+        where: { id: conversationId },
+        data: { lastMessageAt: structured.createdAt },
+      });
+      await publishEvent({
+        event: "message:new",
+        tenantId,
+        data: { message: structured, conversationId, channel: sendContext.channel },
+      });
+    } catch (err: any) {
+      // A card that fails to persist must not lose the reply that was
+      // already delivered — log and move on.
+      console.error("[AI-Bot] structured message persist failed:", err?.message);
+    }
+  }
 
   // If the bot called close_conversation this turn, the dispatcher already
   // flipped the conversation row to CLOSED (see agent-tools.ts close handler)
@@ -367,52 +559,274 @@ function buildSendContext(conversation: any): SendContext | null {
   };
 }
 
+/**
+ * Where a conversation sits against its autonomy budget.
+ *
+ * Pure, so the thresholds can be tested without a database. The budget counts
+ * AI-authored customer-facing replies and nothing else - not system messages,
+ * not tool calls, not internal state transitions, not the approval
+ * acknowledgement (a pause the system causes), and not the post-decision
+ * continuation (written under a different source). Waiting on a manager for
+ * six hours costs nothing, because the bot is not the one driving.
+ *
+ *   ok          - room to work
+ *   approaching - one reply from the wall; say so while the AI can still frame it
+ *   cap         - soft budget spent (goal-preservation may still override)
+ *   ceiling     - runaway backstop, always hands over
+ */
+export function assessAutonomyBudget(
+  aiMessageCount: number,
+  maxMsgs: number,
+): { state: "ok" | "approaching" | "cap" | "ceiling"; used: number; ceiling: number } {
+  const ceiling = maxMsgs * 2;
+  const base = { used: aiMessageCount, ceiling };
+  if (aiMessageCount >= ceiling) return { state: "ceiling", ...base };
+  if (aiMessageCount >= ceiling - 1) return { state: "approaching", ...base };
+  if (aiMessageCount >= maxMsgs) return { state: "cap", ...base };
+  return { state: "ok", ...base };
+}
+
+/**
+ * Deterministic escalation gates. Returns the machine-readable CASE that
+ * fired (persisted so owners can see WHY the bot handed off) or null when
+ * no gate tripped.
+ */
 async function checkEscalationThresholds(
   conversationId: string,
   tenantId: string,
   config: { maxAutonomousMessages: number | null; maxAutonomousMinutes: number | null },
-): Promise<boolean> {
+  incomingText?: string,
+): Promise<string | null> {
+  // WHAT THIS COUNTS, precisely: outbound messages the AI chose to send.
+  //
+  // It is an autonomy budget - "how long has this bot been driving unattended"
+  // - so it must not be charged for messages the SYSTEM caused. The approval
+  // acknowledgement is exactly that: the customer asked for a cancellation,
+  // the tool parked at an approval gate, and the bot said "this needs a quick
+  // confirmation". Nobody chose that message, and waiting on a manager is not
+  // the bot running away with a conversation. Charging it meant a cancellation
+  // flow burned budget for the pause it was designed to take.
+  //
+  // The post-decision continuation is already exempt for a different reason:
+  // it is written with source="approval_continuation", not "ai_bot".
   const aiMessageCount = await prisma.message.count({
     where: {
       conversationId,
       tenantId,
       direction: "OUTBOUND",
       metadata: { path: ["source"], equals: "ai_bot" },
+      NOT: { metadata: { path: ["kind"], equals: "bridge_ack_for_approval" } },
     },
   });
 
-  const maxMsgs = config.maxAutonomousMessages || 10;
-  if (aiMessageCount >= maxMsgs) {
-    console.log(`[AI-Bot] Max messages reached (${aiMessageCount}/${maxMsgs}) for conversation ${conversationId}`);
-    return true;
+  const maxMsgs = config.maxAutonomousMessages || 30;
+  const hardCeiling = maxMsgs * 2;
+
+  const budget = assessAutonomyBudget(aiMessageCount, maxMsgs);
+  if (budget.state === "approaching") {
+    // Warn BEFORE the wall. A conversation that is one turn from being taken
+    // over should say so while the AI can still frame it, rather than stopping
+    // mid-sentence and reappearing as a different party.
+    console.log(
+      `[AI-Bot] autonomy budget approaching ceiling (${aiMessageCount}/${hardCeiling}) conv=${conversationId}`,
+    );
   }
 
+  // Hard ceiling - true runaway-loop backstop, always escalates.
+  if (budget.state === "ceiling") {
+    console.log(`[AI-Bot] HARD ceiling reached (${aiMessageCount}/${hardCeiling}) for conversation ${conversationId} - escalating`);
+    return "hard_message_ceiling";
+  }
+
+  // GOAL PRESERVATION: the soft message/time caps are autonomous-budget limits,
+  // not a reason to abandon a live deal. When the objective is still viable - we
+  // have a way to reach the customer (a contact email/phone) and they're engaged
+  // (this runs on a fresh inbound) - suppress the soft caps so a hot lead one
+  // message from booking isn't handed to a human just for crossing a counter.
   const conversation = await prisma.conversation.findUnique({
     where: { id: conversationId },
-    select: { createdAt: true },
+    select: { createdAt: true, channel: true, customerExternalId: true },
   });
+  let hasReachPath = false;
+  try {
+    if (conversation) {
+      const contact = await prisma.contact.findFirst({
+        where: { tenantId, channel: conversation.channel, externalId: conversation.customerExternalId },
+        select: { email: true, phone: true },
+      });
+      hasReachPath = !!(contact?.email || contact?.phone);
+    }
+  } catch (err: any) {
+    console.warn("[AI-Bot] reach-path lookup failed (non-fatal):", err?.message);
+  }
+  // A scheduling request (book / move / cancel a meeting or demo) is an action
+  // the AI can complete - never hand it to a human for crossing a counter. This
+  // is the main reason a returning customer ("can we move the demo?") used to
+  // auto-escalate. Treat such a turn as goal-viable.
+  const schedulingIntent =
+    /(reschedul|postpone|\bmove\b|cancel|book|schedule|לקבוע|לתאם|להזיז|לדחות|לבטל|לשנות|פגיש|דמו|demo|meeting)/i.test(
+      incomingText || "",
+    );
+  const goalViable = hasReachPath || schedulingIntent; // engagement implied: runs on an inbound
 
-  if (conversation) {
-    const minutesElapsed = (Date.now() - conversation.createdAt.getTime()) / 60000;
-    const maxMins = config.maxAutonomousMinutes || 15;
-    if (minutesElapsed >= maxMins) {
-      console.log(`[AI-Bot] Max time reached (${Math.round(minutesElapsed)}m/${maxMins}m) for conversation ${conversationId}`);
-      return true;
+  if (aiMessageCount >= maxMsgs) {
+    if (goalViable) {
+      console.log(`[AI-Bot] soft msg cap (${aiMessageCount}/${maxMsgs}) reached but objective viable - NOT escalating (goal preservation) conv=${conversationId}`);
+    } else {
+      console.log(`[AI-Bot] Max messages reached (${aiMessageCount}/${maxMsgs}) for conversation ${conversationId}`);
+      return "autonomous_message_cap";
     }
   }
 
+  if (conversation) {
+    // Measure the CURRENT autonomous burst, not the conversation's lifetime age.
+    // A burst resets after a quiet gap (≥30m), so a customer returning hours/days
+    // later doesn't trip the "AI ran too long" cap the instant they message.
+    const BURST_RESET_MS = 30 * 60_000;
+    let autonomousSinceMs = conversation.createdAt.getTime();
+    try {
+      const recent = await prisma.message.findMany({
+        where: { conversationId, tenantId },
+        orderBy: { createdAt: "asc" },
+        take: 50,
+        select: { createdAt: true },
+      });
+      for (let i = 1; i < recent.length; i++) {
+        const prev = new Date(recent[i - 1].createdAt).getTime();
+        const cur = new Date(recent[i].createdAt).getTime();
+        if (cur - prev >= BURST_RESET_MS) autonomousSinceMs = cur;
+      }
+      if (recent.length > 0) {
+        const lastMs = new Date(recent[recent.length - 1].createdAt).getTime();
+        if (Date.now() - lastMs >= BURST_RESET_MS) autonomousSinceMs = Date.now();
+      }
+    } catch (err: any) {
+      console.warn("[AI-Bot] burst-start lookup failed (non-fatal):", err?.message);
+    }
+    const minutesElapsed = (Date.now() - autonomousSinceMs) / 60000;
+    const maxMins = config.maxAutonomousMinutes || 15;
+    if (minutesElapsed >= maxMins && !goalViable) {
+      console.log(`[AI-Bot] Max burst time reached (${Math.round(minutesElapsed)}m/${maxMins}m) for conversation ${conversationId}`);
+      return "autonomous_time_cap";
+    }
+  }
+
+  return null;
+}
+
+// A bare keyword like "נציג"/"agent"/"representative" is NOT a handoff request:
+// it fires on questions ABOUT agents ("how many agents do you support?",
+// "מה קורה כשזה מגיע לנציג?"). This short-circuits the LLM, so it must detect
+// the customer's INTENT to reach a human - i.e. an ask/request verb paired with
+// the human noun - not the noun alone. Mirrors the AI service's
+// detectHumanHandoff() (services/ai/src/services/ai-bot.service.ts).
+//
+// \b doesn't work for Hebrew in JS (non-ASCII aren't word chars), so Hebrew
+// patterns anchor on whitespace/start/end instead.
+const HUMAN_HANDOFF_PATTERNS: RegExp[] = [
+  // English - explicit request to be connected to a person.
+  // `(?:an?\s+|the\s+)?` tolerates "a/an/the agent" (and no article).
+  /\b(speak|talk|connect|chat|transfer|put me through)\s+(to|with|me)\s+(?:to\s+)?(?:an?\s+|the\s+)?(human|agent|person|someone|rep|representative)\b/i,
+  /\b(can\s+i|i\s+(?:want|need|wanna|would like))\s+(to\s+)?(speak|talk|chat)\s+(to|with)\s+(?:an?\s+|the\s+)?(human|agent|person|someone|rep)\b/i,
+  /\b(give|get|connect)\s+me\s+(?:to\s+)?(?:an?\s+|the\s+)?(human|agent|person|rep)\b/i,
+  /\bnot\s+a\s+bot\b/i,
+  // Hebrew - explicit request only
+  /(?:^|\s)לדבר עם\s+(אדם|נציג|נציגה|מישהו|בנאדם)/,
+  /(?:^|\s)תעבירו? אותי\s+(?:ל|אל)\s*(אדם|נציג|נציגה|מישהו)/,
+  /(?:^|\s)(?:אני רוצה|אני צריך|תן לי|תני לי|אפשר)\s+(?:לדבר עם\s+)?(אדם|נציג|נציגה|בנאדם|אנושי)(?:\s|$|[.,!?])/,
+  /(?:^|\s)נציג\s+(אנושי|אמיתי|בבקשה)(?:\s|$|[.,!?])/,
+  /(?:^|\s)(אדם|בנאדם)\s+(אמיתי|אנושי)(?:\s|$|[.,!?])/,
+];
+function isHumanRequest(message: string): boolean {
+  if (!message) return false;
+  for (const re of HUMAN_HANDOFF_PATTERNS) if (re.test(message)) return true;
   return false;
 }
 
-function isHumanRequest(message: string): boolean {
-  const lower = message.toLowerCase().trim();
-  const humanKeywords = [
-    "speak to a human", "talk to a human", "human agent", "real person",
-    "speak to someone", "talk to someone", "agent please", "representative",
-    "speak to agent", "talk to agent", "transfer me", "connect me",
-    "נציג", "נציג אנושי", "לדבר עם נציג", "אדם אמיתי",
-  ];
-  return humanKeywords.some((kw) => lower.includes(kw));
+// ─── Business hours (tenant-persisted; shared evaluator) ─────
+const HEBREW_RE = /[֐-׿]/;
+
+async function getBusinessHoursState(
+  tenantId: string,
+): Promise<{ cfg: BusinessHoursConfig | null; state: BusinessOpenState }> {
+  try {
+    const raw = await readDurableSetting(tenantId, "businessHours");
+    const cfg = parseBusinessHours(raw);
+    return { cfg, state: evaluateBusinessHours(cfg) };
+  } catch (err: any) {
+    // Config store unreachable → behave as always-open. The bot answering
+    // during closed hours is recoverable; the bot going mute is not.
+    console.warn("[AI-Bot] business-hours read failed (treating as open):", err?.message);
+    return { cfg: null, state: { configured: false, open: true, nextOpening: null, timezone: "UTC" } };
+  }
+}
+
+/**
+ * "silent" outside-hours policy: send the configured closed-hours response
+ * (or a generated default carrying the REAL next opening time) instead of an
+ * AI reply - at most once per closed window per conversation, so a customer
+ * sending three messages overnight gets one notice, not three.
+ */
+async function sendClosedHoursAutoReply(
+  tenantId: string,
+  conversationId: string,
+  incomingMessage: string,
+  sendContext: SendContext,
+  biz: { cfg: BusinessHoursConfig | null; state: BusinessOpenState },
+): Promise<void> {
+  // Dedupe: an auto-reply already sent after the last opening? The next
+  // opening is at most a week away, so "within the last 24h" bounds one
+  // closed window for any realistic schedule without tracking window edges.
+  const recent = await prisma.message.findFirst({
+    where: {
+      tenantId,
+      conversationId,
+      direction: "OUTBOUND",
+      createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+      metadata: { path: ["closedHoursAutoReply"], equals: true },
+    },
+    select: { id: true },
+  });
+  if (recent) return;
+
+  const he = HEBREW_RE.test(incomingMessage || "");
+  const when = describeNextOpening(biz.state, he ? "he" : "en");
+  const body =
+    biz.cfg?.autoResponse?.trim() ||
+    (he
+      ? `תודה שפניתם אלינו! אנחנו כרגע סגורים. נחזור לפעילות ${when} ונענה לכם אז.`
+      : `Thanks for reaching out! We're currently closed. We'll be back ${when} and will reply then.`);
+
+  const adapter = getOutboundAdapter(sendContext.channel);
+  if (!adapter) return;
+  let extId: string | null = null;
+  let sendErrorMessage: string | null = null;
+  try {
+    extId = await adapter.sendTextMessage(
+      sendContext.credentials,
+      sendContext.channelAccountExternalId,
+      sendContext.recipientId,
+      body,
+    );
+  } catch (err: any) {
+    sendErrorMessage = describeSendError(err, sendContext.channel).errorMessage;
+    console.warn("[AI-Bot] closed-hours auto-reply send failed:", sendErrorMessage);
+  }
+  await prisma.message.create({
+    data: {
+      tenantId,
+      conversationId,
+      channel: sendContext.channel,
+      direction: "OUTBOUND",
+      body,
+      senderName: "AI Bot",
+      externalMessageId: extId,
+      status: extId ? "SENT" : "FAILED",
+      errorMessage: sendErrorMessage || undefined,
+      metadata: { source: "ai_bot", closedHoursAutoReply: true },
+    },
+  });
+  await publishEvent({ event: "conversation:updated", tenantId, data: { id: conversationId } });
 }
 
 async function escalateToHuman(
@@ -421,28 +835,66 @@ async function escalateToHuman(
   sendContext: SendContext,
   fallbackMessage: string,
   aiAgentId?: string,
+  reason?: { case: string; summary?: string },
 ): Promise<void> {
   const adapter = getOutboundAdapter(sendContext.channel);
   if (!adapter) return;
+
+  // Every handoff must know whether the business is OPEN: telling a customer
+  // "connecting you with a person" at 2am implies availability that doesn't
+  // exist. Evaluated here - the single choke point every escalation path
+  // (limits, keywords, model-decided, AI failure, paused agent) runs through.
+  const biz = await getBusinessHoursState(tenantId);
+  const closed = biz.state.configured && !biz.state.open;
 
   // Generate the customer-facing handoff message via AI so it lands in
   // the conversation's language (Hebrew/English/Arabic/…) and stays in
   // the agent's voice. Falls back to the agent's configured static
   // `escalationMessage` if the oneshot fails - never block the actual
   // escalation just because copywriting hiccupped.
-  const escalationMessage = await generateEscalationHandoff(
+  let escalationMessage = await generateEscalationHandoff(
     tenantId,
     conversationId,
     aiAgentId,
     fallbackMessage,
+    closed,
   );
 
-  const extId = await adapter.sendTextMessage(
-    sendContext.credentials,
-    sendContext.channelAccountExternalId,
-    sendContext.recipientId,
-    escalationMessage,
-  );
+  if (closed) {
+    // Deterministic availability line - appended AFTER generation so the real
+    // next-opening time always reaches the customer even when the oneshot
+    // fell back to the static message. Owner-written copy wins when set.
+    const he = HEBREW_RE.test(escalationMessage);
+    const custom = biz.cfg?.outsideHoursHandoffMessage?.trim();
+    const when = describeNextOpening(biz.state, he ? "he" : "en");
+    const line = custom ||
+      (he
+        ? `הצוות שלנו כרגע מחוץ לשעות הפעילות - נציג יחזור אליכם ${when}.`
+        : `Our team is currently outside business hours - a representative will get back to you ${when}.`);
+    escalationMessage = `${escalationMessage}\n${line}`;
+  }
+
+  // The adapter THROWS on provider errors (bad number, closed 24h window,
+  // template required) despite the `string | null` signature. A failed SEND
+  // must never abort the ESCALATION itself - the human takeover and the
+  // audit trail matter more than the courtesy message. Degrade to a FAILED
+  // message row and continue.
+  let extId: string | null = null;
+  let escSendError: ProviderSendError | null = null;
+  let escSendErrorMessage: string | null = null;
+  try {
+    extId = await adapter.sendTextMessage(
+      sendContext.credentials,
+      sendContext.channelAccountExternalId,
+      sendContext.recipientId,
+      escalationMessage,
+    );
+  } catch (err: any) {
+    const described = describeSendError(err, sendContext.channel);
+    escSendError = described.sendError;
+    escSendErrorMessage = described.errorMessage;
+    console.warn(`[AI-Bot] escalation handoff send failed (continuing with handover):`, JSON.stringify(escSendError));
+  }
 
   await prisma.message.create({
     data: {
@@ -454,7 +906,14 @@ async function escalateToHuman(
       senderName: "AI Bot",
       externalMessageId: extId,
       status: extId ? "SENT" : "FAILED",
-      metadata: { source: "ai_bot", escalation: true, aiGenerated: escalationMessage !== fallbackMessage },
+      errorMessage: escSendErrorMessage || undefined,
+      metadata: {
+        source: "ai_bot",
+        escalation: true,
+        aiGenerated: escalationMessage !== fallbackMessage,
+        ...(reason ? { escalationCase: reason.case, ...(reason.summary ? { escalationSummary: reason.summary } : {}) } : {}),
+        ...(escSendError ? { sendError: escSendError } : {}),
+      },
     },
   });
 
@@ -476,14 +935,19 @@ async function escalateToHuman(
       messageType: "system",
       senderName: "System",
       status: "DELIVERED",
-      metadata: { systemEvent: "ai_bot_escalation" },
+      metadata: {
+        systemEvent: "ai_bot_escalation",
+        // Why the bot handed off - rendered on the inbox divider so the
+        // handover is explainable, not a bare label.
+        ...(reason ? { escalationCase: reason.case, ...(reason.summary ? { escalationSummary: reason.summary } : {}) } : {}),
+      },
     },
   });
 
   await publishEvent({
     event: "conversation:updated",
     tenantId,
-    data: { id: conversationId, isHandedOver: true, status: "WAITING" },
+    data: { id: conversationId, isHandedOver: true, status: "WAITING", ...(reason ? { escalationCase: reason.case } : {}) },
   });
 }
 
@@ -504,6 +968,7 @@ async function generateEscalationHandoff(
   conversationId: string,
   aiAgentId: string | undefined,
   fallback: string,
+  outsideBusinessHours = false,
 ): Promise<string> {
   if (!aiAgentId) return fallback;
   try {
@@ -529,7 +994,10 @@ async function generateEscalationHandoff(
       `- Tone: warm, brief, like a human typing a quick handoff note.\n` +
       `- Do NOT mention the CRM, lead creation, or any internal system.\n` +
       `- Do NOT promise a specific response time unless it is implicit in the conversation.\n` +
-      `- Do NOT add greetings like "Hi" or sign-offs.\n`;
+      `- Do NOT add greetings like "Hi" or sign-offs.\n` +
+      (outsideBusinessHours
+        ? `- The human team is OUTSIDE business hours right now: say a team member will follow up, but do NOT imply anyone is available immediately (no "right away", "shortly", "connecting you now").\n`
+        : "");
 
     const res = await axios.post(
       `${AI_SERVICE_URL}/api/ai-bot/oneshot`,

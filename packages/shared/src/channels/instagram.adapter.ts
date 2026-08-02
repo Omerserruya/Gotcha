@@ -8,8 +8,9 @@ import type {
   NormalizedCommentEvent,
   ChannelCredentials,
 } from "./types";
+import { metaGraphBaseUrl } from "../lib/meta-graph-version";
 
-const FB_API_URL = process.env.FACEBOOK_API_URL || "https://graph.facebook.com/v21.0";
+const FB_API_URL = metaGraphBaseUrl(process.env.FACEBOOK_API_URL);
 // Unversioned: graph.instagram.com (Instagram Login) rejects version-prefixed paths.
 const IG_API_URL = process.env.INSTAGRAM_API_URL || "https://graph.instagram.com";
 

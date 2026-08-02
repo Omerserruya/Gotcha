@@ -1,6 +1,7 @@
 import axios from "axios";
+import { metaGraphBaseUrl } from "@chatcenter/shared";
 
-const WA_API_URL = process.env.WHATSAPP_API_URL || "https://graph.facebook.com/v19.0";
+const WA_API_URL = metaGraphBaseUrl(process.env.WHATSAPP_API_URL);
 
 export async function sendWhatsAppMessage(phoneNumberId: string, accessToken: string, to: string, text: string): Promise<string | null> {
   try {

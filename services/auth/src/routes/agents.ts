@@ -5,16 +5,26 @@ import {
   authenticate,
   resolveTenant,
   requireRole,
+  requirePermissionOrRole,
+  enforceMfaEnrollment,
   validate,
+  requireCapacity,
   getRedis,
   resolveEffectiveLocale,
   isSupportedLocale,
   SUPPORTED_LOCALES,
-} from "@chatcenter/shared";
-import * as authService from "../services/auth.service";
+  writeAudit,
+  AuditAction,
+  getLastLoginBySubject,
+  normalizeE164,
+  userMayApprove, readDurableSetting, writeDurableSetting } from "@chatcenter/shared";
+import * as invitations from "../services/invitation.service";
 
 const router = Router();
-router.use(authenticate, resolveTenant);
+// API-level MFA enforcement: a required-but-unenrolled caller is 403'd here, not
+// just blocked by the client gate. Reference mount - the same one-liner should
+// be added to the other services' protected routers to close the API path fully.
+router.use(authenticate, resolveTenant, enforceMfaEnrollment());
 
 router.get("/", async (req: Request, res: Response) => {
   try {
@@ -24,19 +34,27 @@ router.get("/", async (req: Request, res: Response) => {
         id: true, name: true, email: true, isActive: true, createdAt: true,
         phoneNumber: true,
         _count: { select: { conversations: { where: { status: { not: "CLOSED" } } } } },
-        departmentMember: {
+        departmentMembers: {
           select: { departmentId: true, departmentRole: true, department: { select: { name: true } } },
+          orderBy: { createdAt: "asc" as const },
         },
       },
     });
-    // Flatten department info
+    // Multi-department membership: `departments` carries the full list; the
+    // singular fields stay (first membership) for legacy consumers.
     const data = agents.map((a) => {
-      const { departmentMember, ...rest } = a;
+      const { departmentMembers, ...rest } = a;
+      const first = departmentMembers[0];
       return {
         ...rest,
-        departmentId: departmentMember?.departmentId || null,
-        departmentRole: departmentMember?.departmentRole || null,
-        departmentName: departmentMember?.department?.name || null,
+        departments: departmentMembers.map((m) => ({
+          departmentId: m.departmentId,
+          departmentRole: m.departmentRole,
+          departmentName: m.department?.name || null,
+        })),
+        departmentId: first?.departmentId || null,
+        departmentRole: first?.departmentRole || null,
+        departmentName: first?.department?.name || null,
       };
     });
     res.json(data);
@@ -46,25 +64,93 @@ router.get("/", async (req: Request, res: Response) => {
   }
 });
 
-// Register a new agent (admin only)
-const createAgentSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8),
-  name: z.string().min(1),
+// Login/invitation status for the tenant's members (admin only, lazy-loaded by
+// the Users page so the main list stays fast). For each user we ask Authentik
+// for last_login in one call and derive a status:
+//   disabled       - GOTCHA isActive=false
+//   invited        - active, never signed in (invite pending / link unused)
+//   active         - active, has signed in (returns lastLogin)
+router.get("/login-status", requirePermissionOrRole("settings:members:manage", "ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const users = await prisma.user.findMany({
+      where: { tenantId: req.tenantId!, role: "AGENT" },
+      select: { id: true, isActive: true, identity: { select: { authentikSubject: true } } },
+    });
+    const entries = await Promise.all(users.map(async (u) => {
+      let lastLogin: string | null = null;
+      if (u.identity?.authentikSubject) {
+        try { lastLogin = await getLastLoginBySubject(u.identity.authentikSubject); } catch { /* best-effort */ }
+      }
+      const status = !u.isActive ? "disabled" : lastLogin ? "active" : "invited";
+      return [u.id, { status, lastLogin }] as const;
+    }));
+    res.json(Object.fromEntries(entries));
+  } catch (err) {
+    console.error("Login status error:", err);
+    res.status(500).json({ error: "Failed to load login status" });
+  }
 });
 
-router.post("/", requireRole("ADMIN"), validate(createAgentSchema), async (req: Request, res: Response) => {
+// Invite a new agent (admin only).
+//
+// No password is accepted: an admin cannot choose someone else's credential.
+// We create the identity in Authentik and hand back a one-time setup link that
+// the invitee uses to set their own password there.
+const inviteAgentSchema = z.object({
+  email: z.string().email(),
+  name: z.string().min(1),
+  // Zero, one or many departments. Every id is validated against the ACTIVE
+  // tenant below - ids arriving from frontend state are never trusted as-is.
+  departmentIds: z.array(z.string().min(1)).max(20).optional(),
+});
+
+// Seat limit. Counts ACTIVE members only, so deactivating someone frees their
+// seat rather than permanently consuming it.
+router.post(
+  "/",
+  requirePermissionOrRole("settings:members:manage", "ADMIN"),
+  requireCapacity("limit:users", (tenantId) => prisma.user.count({ where: { tenantId, isActive: true } })),
+  validate(inviteAgentSchema),
+  async (req: Request, res: Response) => {
   try {
-    const { email, password, name } = req.body;
-    const result = await authService.register(req.tenantId!, email, password, name, "AGENT");
+    const { email, name, departmentIds } = req.body as { email: string; name: string; departmentIds?: string[] };
+    // Validate EVERY requested department against the active tenant first -
+    // a foreign/unknown id fails the whole invite (no partial memberships).
+    const wantedDepts = Array.from(new Set(departmentIds ?? []));
+    if (wantedDepts.length > 0) {
+      const found = await prisma.department.findMany({
+        where: { id: { in: wantedDepts }, tenantId: req.tenantId! },
+        select: { id: true },
+      });
+      if (found.length !== wantedDepts.length) {
+        res.status(400).json({ error: "One or more departments do not belong to this workspace" });
+        return;
+      }
+    }
+    const result = await invitations.inviteUser(req.tenantId!, email, name, "AGENT");
+    if (wantedDepts.length > 0) {
+      await prisma.departmentMember.createMany({
+        data: wantedDepts.map((departmentId) => ({
+          tenantId: req.tenantId!,
+          userId: result.user.id,
+          departmentId,
+        })),
+        skipDuplicates: true,
+      });
+    }
+    void writeAudit({
+      tenantId: req.tenantId!, actorType: "user", actorId: (req as any).user?.userId,
+      action: AuditAction.INVITE_CREATED, targetType: "user", targetId: result.user.id,
+      metadata: { email, role: "AGENT", departmentIds: wantedDepts },
+    });
     res.status(201).json(result);
   } catch (err: any) {
-    if (err.message?.includes("already exists")) {
+    if (err.message?.includes("already exists") || err.message?.includes("already linked") || err.message?.includes("already a member")) {
       res.status(409).json({ error: err.message });
       return;
     }
-    console.error("Create agent error:", err);
-    res.status(500).json({ error: "Failed to create agent" });
+    console.error("Invite agent error:", err);
+    res.status(500).json({ error: "Failed to invite agent" });
   }
 });
 
@@ -77,16 +163,43 @@ const updateAgentSchema = z.object({
   phoneNumber: z.string().nullable().optional(),
 });
 
-router.patch("/:id", requireRole("ADMIN"), validate(updateAgentSchema), async (req: Request, res: Response) => {
+router.patch("/:id", requirePermissionOrRole("settings:members:manage", "ADMIN"), validate(updateAgentSchema), async (req: Request, res: Response) => {
   try {
     const agent = await prisma.user.findFirst({
       where: { id: req.params.id as string, tenantId: req.tenantId!, role: "AGENT" },
     });
     if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+    // Explicit allowlist. NEVER pass req.body straight into a user write: role,
+    // tenantId, and authentikSubject (the auth join key) must never be settable
+    // from a request body.
+    const { name, isActive, phoneNumber } = req.body as {
+      name?: string; isActive?: boolean; phoneNumber?: string | null;
+    };
+    const data: Record<string, unknown> = {};
+    if (name !== undefined) data.name = name;
+    if (isActive !== undefined) data.isActive = isActive;
+    if (phoneNumber !== undefined) data.phoneNumber = phoneNumber;
     const updated = await prisma.user.update({
       where: { id: req.params.id as string },
-      data: req.body,
+      data,
       select: { id: true, name: true, email: true, isActive: true, phoneNumber: true },
+    });
+    // Keep Authentik's display name in sync on a rename so the IdP login card,
+    // account portal, and emails don't show the stale name. Fire-and-forget.
+    if (name !== undefined && name !== agent.name) {
+      void invitations.syncIdentityNameByUser(agent.id, updated.name);
+    }
+    // Disabling in GOTCHA must also disable authentication at the IdP (when
+    // this was the person's last active tenant) AND kill live sessions - else
+    // a disabled user keeps a working Authentik session until token expiry.
+    if (isActive !== undefined && isActive !== agent.isActive) {
+      void invitations.syncMembershipAccess(agent.id, isActive);
+    }
+    void writeAudit({
+      tenantId: req.tenantId!, actorType: "user", actorId: (req as any).user?.userId,
+      action: isActive === false ? AuditAction.USER_DEACTIVATED
+        : isActive === true ? AuditAction.USER_ACTIVATED : AuditAction.USER_UPDATED,
+      targetType: "user", targetId: updated.id, metadata: { fields: Object.keys(data) },
     });
     res.json(updated);
   } catch (err) {
@@ -95,43 +208,57 @@ router.patch("/:id", requireRole("ADMIN"), validate(updateAgentSchema), async (r
   }
 });
 
-// Admin reset agent password
-const resetAgentPasswordSchema = z.object({
-  newPassword: z.string().min(8),
-});
-
-router.post("/:id/reset-password", requireRole("ADMIN"), validate(resetAgentPasswordSchema), async (req: Request, res: Response) => {
+// Re-issue an agent's password-setup link (admin only).
+//
+// This replaces the old admin-sets-a-password endpoint. An admin can help
+// someone regain access, but never learns or chooses their credential: all
+// this returns is a one-time link into Authentik's recovery flow.
+router.post("/:id/reset-password", requirePermissionOrRole("settings:members:manage", "ADMIN"), async (req: Request, res: Response) => {
   try {
     const agent = await prisma.user.findFirst({
       where: { id: req.params.id as string, tenantId: req.tenantId!, role: "AGENT" },
     });
     if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
 
-    const bcrypt = require("bcryptjs");
-    const hashed = await bcrypt.hash(req.body.newPassword, 12);
-    await prisma.user.update({ where: { id: agent.id }, data: { password: hashed } });
-    res.json({ success: true });
+    const setupLink = await invitations.resendSetupLink(agent.id);
+    void writeAudit({
+      tenantId: req.tenantId!, actorType: "user", actorId: (req as any).user?.userId,
+      action: AuditAction.PASSWORD_RESET_REQUESTED, targetType: "user", targetId: agent.id,
+    });
+    res.json({ success: true, setupLink });
   } catch (err) {
-    console.error("Reset agent password error:", err);
-    res.status(500).json({ error: "Failed to reset password" });
+    console.error("Resend agent setup link error:", err);
+    res.status(500).json({ error: "Failed to issue password setup link" });
   }
 });
 
 // Delete agent (admin only)
-router.delete("/:id", requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.delete("/:id", requirePermissionOrRole("settings:members:manage", "ADMIN"), async (req: Request, res: Response) => {
   try {
     const agent = await prisma.user.findFirst({
       where: { id: req.params.id as string, tenantId: req.tenantId!, role: "AGENT" },
     });
     if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
 
-    // Unassign from conversations first
+    // Unassign from conversations first (tenant-scoped: the membership being
+    // removed only ever held conversations in ITS tenant).
     await prisma.conversation.updateMany({
-      where: { assignedAgentId: agent.id },
+      where: { tenantId: req.tenantId!, assignedAgentId: agent.id },
       data: { assignedAgentId: null },
     });
 
+    // Disable the identity BEFORE dropping the row. Deleting locally alone
+    // would leave a live Authentik session that still authenticates - the
+    // token would simply resolve to no user. Belt-and-braces: authenticate()
+    // 403s an unlinked subject, but the identity should not stay usable.
+    await invitations.revokeUserAccess(agent.id);
+
     await prisma.user.delete({ where: { id: agent.id } });
+    void writeAudit({
+      tenantId: req.tenantId!, actorType: "user", actorId: (req as any).user?.userId,
+      action: AuditAction.USER_DELETED, targetType: "user", targetId: agent.id,
+      metadata: { email: agent.email, role: agent.role },
+    });
     res.json({ success: true });
   } catch (err) {
     console.error("Delete agent error:", err);
@@ -143,7 +270,7 @@ router.delete("/:id", requireRole("ADMIN"), async (req: Request, res: Response) 
 router.get("/settings/auto-greeting", requireRole("ADMIN"), async (req: Request, res: Response) => {
   try {
     const redis = getRedis();
-    const template = await redis.get(`tenant:${req.tenantId!}:autoGreeting`) || "";
+    const template = (await readDurableSetting(req.tenantId!, "autoGreeting")) || "";
     res.json({ template });
   } catch (err) {
     console.error("Get auto-greeting error:", err);
@@ -156,9 +283,9 @@ router.put("/settings/auto-greeting", requireRole("ADMIN"), async (req: Request,
     const { template } = req.body;
     const redis = getRedis();
     if (template) {
-      await redis.set(`tenant:${req.tenantId!}:autoGreeting`, template);
+      await writeDurableSetting(req.tenantId!, "autoGreeting", template, req.user?.userId);
     } else {
-      await redis.del(`tenant:${req.tenantId!}:autoGreeting`);
+      await writeDurableSetting(req.tenantId!, "autoGreeting", null, req.user?.userId);
     }
     res.json({ template: template || "" });
   } catch (err) {
@@ -244,9 +371,17 @@ router.patch("/settings/channels/:id", requireRole("ADMIN"), validate(updateChan
     });
     if (!account) { res.status(404).json({ error: "Channel account not found" }); return; }
 
+    // Explicit allowlist (updateChannelSchema fields only).
+    const { displayName, credentials, isActive } = req.body as {
+      displayName?: string; credentials?: unknown; isActive?: boolean;
+    };
+    const data: Record<string, unknown> = {};
+    if (displayName !== undefined) data.displayName = displayName;
+    if (credentials !== undefined) data.credentials = credentials;
+    if (isActive !== undefined) data.isActive = isActive;
     const updated = await prisma.channelAccount.update({
       where: { id: req.params.id as string },
-      data: req.body,
+      data,
     });
     res.json({ data: updated });
   } catch (err) {
@@ -306,6 +441,92 @@ router.put("/settings/channel-config", requireRole("ADMIN"), validate(channelCon
   }
 });
 
+// ─── Approval Recipient (WhatsApp one-tap approvals) ─────────
+//
+// EXPLICIT opt-in. Nothing is ever sent unless a row exists AND is enabled -
+// there is deliberately no "notify the owner" fallback, because routing a
+// refund approval at whoever happens to be an admin is how the wrong person
+// authorises money movement.
+
+const approvalRecipientSchema = z.object({
+  /** Membership authorised to decide. Validated against THIS tenant below. */
+  userId: z.string().min(1),
+  /** Free-form on input; normalised to E.164 before storage. */
+  phone: z.string().min(6).max(24),
+  enabled: z.boolean().optional().default(false),
+  /** Ceiling for one-tap decisions; higher-risk actions go to the web UI. */
+  maxRiskLevel: z.enum(["low", "medium", "high"]).optional().default("medium"),
+});
+
+router.get("/settings/approval-recipient", requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const row = await (prisma as any).approvalRecipient.findFirst({
+      where: { tenantId: req.tenantId!, channel: "whatsapp" },
+      include: { user: { select: { id: true, name: true, email: true, isActive: true } } },
+    });
+    res.json({ data: row ?? null });
+  } catch (err) {
+    console.error("Get approval recipient error:", err);
+    res.status(500).json({ error: "Failed to load approval recipient" });
+  }
+});
+
+router.put("/settings/approval-recipient", requireRole("ADMIN"), validate(approvalRecipientSchema), async (req: Request, res: Response) => {
+  try {
+    const { userId, phone, enabled, maxRiskLevel } = req.body as z.infer<typeof approvalRecipientSchema>;
+
+    // The approver must be an ACTIVE member of the CALLER's tenant. Never
+    // trust a userId from the browser without this check.
+    const member = await prisma.user.findFirst({
+      where: { id: userId, tenantId: req.tenantId!, isActive: true },
+      select: { id: true },
+    });
+    if (!member) {
+      res.status(400).json({ error: "That user is not an active member of this workspace" });
+      return;
+    }
+    // …and must actually be allowed to approve, so we cannot configure a
+    // recipient who would be refused at decision time.
+    if (!(await userMayApprove(req.tenantId!, userId))) {
+      res.status(400).json({ error: "That user does not have permission to approve actions" });
+      return;
+    }
+
+    // INTERNATIONAL FORMAT ONLY. `Tenant.defaultCountryCode` holds an ISO-2
+    // code ("IL"), not a dialling code, and inventing an ISO->dial mapping to
+    // expand a bare "0501234567" is how an approval request for one business
+    // gets delivered to a stranger in another country. The number an approver
+    // is reached on is worth one extra "+" of friction.
+    const e164 = normalizeE164(phone);
+    if (!e164) {
+      res.status(400).json({ error: "Enter a valid phone number in international format (e.g. +972501234567)" });
+      return;
+    }
+
+    const saved = await (prisma as any).approvalRecipient.upsert({
+      where: { tenantId_userId_channel: { tenantId: req.tenantId!, userId, channel: "whatsapp" } },
+      update: { phoneE164: e164, enabled, maxRiskLevel },
+      create: { tenantId: req.tenantId!, userId, channel: "whatsapp", phoneE164: e164, enabled, maxRiskLevel },
+    });
+    res.json({ data: saved });
+  } catch (err) {
+    console.error("Update approval recipient error:", err);
+    res.status(500).json({ error: "Failed to save approval recipient" });
+  }
+});
+
+router.delete("/settings/approval-recipient/:userId", requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    await (prisma as any).approvalRecipient.deleteMany({
+      where: { tenantId: req.tenantId!, userId: req.params.userId, channel: "whatsapp" },
+    });
+    res.json({ data: { removed: true } });
+  } catch (err) {
+    console.error("Delete approval recipient error:", err);
+    res.status(500).json({ error: "Failed to remove approval recipient" });
+  }
+});
+
 // ─── Business Hours Settings ─────────────────────────────────
 
 const dayScheduleSchema = z.object({
@@ -318,6 +539,14 @@ const businessHoursSchema = z.object({
   enabled: z.boolean(),
   timezone: z.string().min(1),
   autoResponse: z.string().optional().default(""),
+  // Outside-hours AI policy (shared/lib/business-hours.ts owns the semantics):
+  // "active" = the AI employee keeps answering while closed (handoffs must say
+  // the team is away and when it returns); "silent" = no AI replies while
+  // closed - the autoResponse (or a generated default) is sent instead.
+  aiOutsideHours: z.enum(["active", "silent"]).optional().default("active"),
+  // Optional owner-written line appended to human-handoff messages while
+  // closed (a generated line with the real next opening time is the default).
+  outsideHoursHandoffMessage: z.string().max(500).optional().default(""),
   schedule: z.object({
     sunday: dayScheduleSchema,
     monday: dayScheduleSchema,
@@ -331,13 +560,14 @@ const businessHoursSchema = z.object({
 
 router.get("/settings/business-hours", requireRole("ADMIN"), async (req: Request, res: Response) => {
   try {
-    const redis = getRedis();
-    const raw = await redis.get(`tenant:${req.tenantId!}:businessHours`);
+    const raw = await readDurableSetting(req.tenantId!, "businessHours");
     if (!raw) {
       res.json({
         enabled: false,
         timezone: "Asia/Jerusalem",
         autoResponse: "",
+        aiOutsideHours: "active",
+        outsideHoursHandoffMessage: "",
         schedule: {
           sunday:    { enabled: true,  open: "09:00", close: "18:00" },
           monday:    { enabled: true,  open: "09:00", close: "18:00" },
@@ -359,8 +589,7 @@ router.get("/settings/business-hours", requireRole("ADMIN"), async (req: Request
 
 router.put("/settings/business-hours", requireRole("ADMIN"), validate(businessHoursSchema), async (req: Request, res: Response) => {
   try {
-    const redis = getRedis();
-    await redis.set(`tenant:${req.tenantId!}:businessHours`, JSON.stringify(req.body));
+    await writeDurableSetting(req.tenantId!, "businessHours", JSON.stringify(req.body), req.user?.userId);
     res.json(req.body);
   } catch (err) {
     console.error("Update business hours error:", err);
@@ -379,7 +608,7 @@ const slaSettingsSchema = z.object({
 router.get("/settings/sla", requireRole("ADMIN"), async (req: Request, res: Response) => {
   try {
     const redis = getRedis();
-    const raw = await redis.get(`tenant:${req.tenantId!}:sla`);
+    const raw = await readDurableSetting(req.tenantId!, "sla");
     if (!raw) {
       res.json({ enabled: false, slaMinutes: 30, warningThreshold: 70 });
       return;
@@ -394,7 +623,7 @@ router.get("/settings/sla", requireRole("ADMIN"), async (req: Request, res: Resp
 router.put("/settings/sla", requireRole("ADMIN"), validate(slaSettingsSchema), async (req: Request, res: Response) => {
   try {
     const redis = getRedis();
-    await redis.set(`tenant:${req.tenantId!}:sla`, JSON.stringify(req.body));
+    await writeDurableSetting(req.tenantId!, "sla", JSON.stringify(req.body), req.user?.userId);
     res.json(req.body);
   } catch (err) {
     console.error("Update SLA settings error:", err);
@@ -406,7 +635,7 @@ router.put("/settings/sla", requireRole("ADMIN"), validate(slaSettingsSchema), a
 router.get("/settings/sla/department/:departmentId", requireRole("ADMIN"), async (req: Request, res: Response) => {
   try {
     const redis = getRedis();
-    const raw = await redis.get(`department:${req.params.departmentId}:sla`);
+    const raw = await readDurableSetting(req.tenantId!, `department:${req.params.departmentId}:sla`);
     if (!raw) {
       res.json({ enabled: false, slaMinutes: null, warningThreshold: null });
       return;
@@ -427,7 +656,7 @@ router.put("/settings/sla/department/:departmentId", requireRole("ADMIN"), valid
     if (!dept) { res.status(404).json({ error: "Department not found" }); return; }
 
     const redis = getRedis();
-    await redis.set(`department:${req.params.departmentId}:sla`, JSON.stringify(req.body));
+    await writeDurableSetting(req.tenantId!, `department:${req.params.departmentId}:sla`, JSON.stringify(req.body), req.user?.userId);
     res.json(req.body);
   } catch (err) {
     console.error("Update department SLA error:", err);

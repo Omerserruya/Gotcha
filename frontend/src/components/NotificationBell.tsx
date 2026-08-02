@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
+import { getActiveTenantId } from "@/lib/active-tenant";
 import clsx from "clsx";
 import {
   listNotifications,
@@ -113,7 +114,10 @@ export function useNotificationStream(
 
     try {
       const proto = window.location.protocol === "https:" ? "wss" : "ws";
-      const ws = new WebSocket(`${proto}://${window.location.host}/ws?token=${token}`);
+      const tenant = getActiveTenantId();
+      const ws = new WebSocket(
+        `${proto}://${window.location.host}/ws?token=${token}${tenant ? `&tenant=${encodeURIComponent(tenant)}` : ""}`,
+      );
       wsRef.current = ws;
 
       ws.onopen = () => {

@@ -13,12 +13,10 @@
  * second terminate for an already-finished call returns 200 with `noop=true`.
  */
 import { Router, Request, Response } from "express";
-import { prisma } from "@chatcenter/shared";
+import { prisma, verifyInternalServiceKey } from "@chatcenter/shared";
 import type { Logger } from "../lib/logger";
 import type { VoiceProviderResolver } from "../providers/voice-provider";
 import { NoActiveVoiceChannelError } from "../providers/resolve-provider";
-
-const DEFAULT_INTERNAL_KEY = "chatcenter-internal-2026";
 
 export function createVoiceTerminateRouter(opts: {
   resolveProvider: VoiceProviderResolver;
@@ -28,9 +26,7 @@ export function createVoiceTerminateRouter(opts: {
   const { resolveProvider, logger } = opts;
 
   router.post("/sessions/:sessionId/terminate", async (req: Request, res: Response) => {
-    const expected = process.env.INTERNAL_SERVICE_KEY || DEFAULT_INTERNAL_KEY;
-    const got = req.headers["x-internal-key"];
-    if (!got || got !== expected) {
+    if (!verifyInternalServiceKey(req.headers["x-internal-key"])) {
       res.status(403).json({ error: "forbidden" });
       return;
     }

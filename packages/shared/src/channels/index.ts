@@ -8,7 +8,10 @@ export type {
   ChannelCredentials,
   InboundAdapter,
   OutboundAdapter,
+  ProviderSendError,
 } from "./types";
+
+export { ChannelSendError, describeSendError } from "./types";
 
 export {
   detectInboundAdapter,
@@ -25,3 +28,5 @@ export { gmailInboundAdapter, gmailOutboundAdapter, resolveAccessToken as gmailR
 export type { GmailFetchedMessage } from "./gmail.adapter";
 export { outlookInboundAdapter, outlookOutboundAdapter } from "./outlook.adapter";
 export { slackInboundAdapter, slackOutboundAdapter } from "./slack.adapter";
+export { webchatOutboundAdapter } from "./webchat.adapter";
+export { shopifyLiveChatOutboundAdapter } from "./shopify-live-chat.adapter";

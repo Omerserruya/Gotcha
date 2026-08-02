@@ -40,6 +40,8 @@ import {
   type CrmFindByCustomFieldArgs,
   type CrmMergeArgs,
   type CrmMergeResult,
+  type CrmNameSearchCandidate,
+  type CrmNameSearchResult,
   type CrmObjectKind,
   type CrmTask,
   type CrmTicket,
@@ -281,14 +283,24 @@ export class HubSpotCRMAdapter implements CRMAdapter {
     if (!email && !phone) {
       return { ok: false, kind: "contact", reason: "email_or_phone_required" };
     }
+    // Name may arrive split (first_name/last_name) or as a single display_name
+    // (the AI bot passes display_name). Derive first/last so the name is never
+    // dropped on create - same split used by enrichContact below.
+    let firstname = payload.first_name;
+    let lastname = payload.last_name;
+    if (!firstname && !lastname && payload.display_name) {
+      const [first, ...rest] = payload.display_name.trim().split(/\s+/);
+      if (first) firstname = first;
+      if (rest.length) lastname = rest.join(" ");
+    }
     if (email) {
       const r = await executeAdapterTool({
         tenantId: this.tenantId,
         toolFunctionName: "hubspot.create_contact",
         args: {
           email,
-          firstname: payload.first_name,
-          lastname: payload.last_name,
+          firstname,
+          lastname,
           phone: phone ?? undefined,
           company: payload.company,
           source: payload.source ?? "GOTCHA",
@@ -352,18 +364,29 @@ export class HubSpotCRMAdapter implements CRMAdapter {
     due_at?: string;
     source_interaction_id?: string;
   }): Promise<CrmAdapterWriteResult> {
-    // HubSpot's adapter tool surface today is `hubspot.log_activity` with
-    // kinds NOTE/EMAIL/CALL - no first-class TASK. Degrade by writing a NOTE
-    // prefixed with "TODO:" so the action is at least visible on the
-    // record's timeline (and search-discoverable in HubSpot).
-    const head = `TODO: ${args.subject}` + (args.priority ? ` [priority=${args.priority}]` : "")
-      + (args.due_at ? ` (due ${args.due_at})` : "");
-    const body = args.body ? `${head}\n\n${args.body}` : head;
-    const finalBody = augmentBodyWithMarker(body, args.source_interaction_id, undefined, undefined);
+    // Create a FIRST-CLASS HubSpot task (hubspot.create_task → /objects/tasks),
+    // so it lands in the rep's task queue with a real status/priority/due date -
+    // not a "TODO:" note buried in the timeline. The body keeps the
+    // source-interaction marker for idempotency/traceability.
+    const PRIORITY_MAP: Record<string, string> = {
+      low: "LOW",
+      normal: "MEDIUM",
+      high: "HIGH",
+      urgent: "HIGH",
+    };
+    const hsPriority = args.priority ? PRIORITY_MAP[args.priority] ?? "NONE" : "NONE";
+    const body = augmentBodyWithMarker(args.body ?? "", args.source_interaction_id, undefined, undefined);
+    const due_ts = args.due_at ? Date.parse(args.due_at) : undefined;
     const r = await executeAdapterTool({
       tenantId: this.tenantId,
-      toolFunctionName: "hubspot.log_activity",
-      args: { contact_id: args.contact_id, kind: "NOTE", body: finalBody },
+      toolFunctionName: "hubspot.create_task",
+      args: {
+        contact_id: args.contact_id,
+        subject: args.subject,
+        body: body || undefined,
+        priority: hsPriority,
+        due_ts: Number.isFinite(due_ts) ? due_ts : undefined,
+      },
     });
     if (!r.ok) return { ok: false, reason: r.reason };
     return { ok: true, id: (r.result as any)?.id, was_update: false };
@@ -767,7 +790,7 @@ function escapeSoql(s: string): string {
 // (e.g. https://www.zohoapis.com / .eu / .in). Token refresh routed through
 // the existing zoho.service.ts so 1h expiry is handled transparently.
 
-import { prisma } from "@chatcenter/shared";
+import { prisma, assertPublicUrl } from "@chatcenter/shared";
 import { maybeRefreshZohoToken } from "../zoho.service";
 
 interface ZohoConnection {
@@ -810,6 +833,8 @@ async function loadZohoConnection(tenantId: string): Promise<{ ok: true; conn: Z
 
 async function zohoFetch(conn: ZohoConnection, method: string, path: string, body?: unknown): Promise<{ ok: boolean; status: number; data?: any; reason?: string }> {
   const url = `${conn.baseUrl}${path}`;
+  // SSRF guard: conn.baseUrl is OAuth-seeded but a mutable tenant config field.
+  try { await assertPublicUrl(url); } catch (e: any) { return { ok: false, status: 0, reason: `blocked_host:${e?.message ?? "ssrf"}` }; }
   const headers: Record<string, string> = {
     "Authorization": `Zoho-oauthtoken ${conn.accessToken}`,
     "Content-Type": "application/json",
@@ -1226,10 +1251,109 @@ export class ZohoCRMAdapter implements CRMAdapter {
 // Shopify customer tools in shopify.adapter.ts: a Shopify "customer" is our
 // canonical "contact", order history projects onto `deals`, and notes/
 // interactions are appended to the customer's free-text `note` field.
+// ─── Shopify name-search query building (exported for tests) ───────
+//
+// Shopify's customer search (REST /customers/search.json and the GraphQL
+// `customers` query share the same query syntax) treats `:`, quotes,
+// parentheses, wildcards, boolean keywords and a leading `-` as OPERATORS.
+// A customer-typed name must never be able to smuggle one in, so field
+// values are always double-quoted with backslash/quote escaping, and the
+// free-text form strips the structural characters instead.
+
+/** Escape a value for use inside a quoted Shopify query string. */
+export function escapeShopifyQueryValue(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+/**
+ * Build the Shopify search queries for a free-text name input.
+ * Always includes the safe default text search; when the input splits
+ * reliably into exactly two tokens (typical "First Last"), also includes an
+ * explicit `first_name:"..." last_name:"..."` filter - the default search
+ * can rank exact name matches below fuzzy ones, the filter pins them.
+ */
+export function buildShopifyNameQueries(name: string): string[] {
+  const trimmed = String(name || "").trim().replace(/\s+/g, " ");
+  if (!trimmed) return [];
+  // Free-text form: neutralize structural syntax, keep letters (any script),
+  // digits, apostrophes, dots and hyphens inside words.
+  const freeText = trimmed.replace(/[:"()*\\]/g, " ").replace(/(^|\s)-+/g, "$1").replace(/\s+/g, " ").trim();
+  const queries: string[] = [];
+  // Unquoted on purpose: a quoted phrase is exact-match and breaks PARTIAL
+  // name search (Shopify prefix-matches unquoted terms). The sanitization
+  // above already removed every structural character.
+  if (freeText) queries.push(freeText);
+  const tokens = trimmed.split(" ");
+  if (tokens.length === 2 && tokens.every((t) => t.length >= 2)) {
+    queries.push(`first_name:"${escapeShopifyQueryValue(tokens[0])}" last_name:"${escapeShopifyQueryValue(tokens[1])}"`);
+  }
+  return queries;
+}
+
+function mapShopifyNameCandidate(raw: unknown): CrmNameSearchCandidate | null {
+  if (!raw || typeof raw !== "object") return null;
+  const c: any = raw;
+  if (c.id == null) return null;
+  const name = [c.first_name, c.last_name].filter(Boolean).join(" ").trim()
+    || c.default_address?.name || null;
+  return {
+    id: String(c.id),
+    kind: "contact",
+    display_name: name,
+    email: c.email ?? null,
+    phone: c.phone ?? c.default_address?.phone ?? null,
+    orders_count: typeof c.orders_count === "number" ? c.orders_count : c.orders_count != null ? Number(c.orders_count) : null,
+    total_spent: c.total_spent != null ? String(c.total_spent) : null,
+    currency: c.currency ?? null,
+  };
+}
+
 export class ShopifyCRMAdapter implements CRMAdapter {
   readonly vendor: CrmVendor = "shopify";
   readonly capabilities: CrmAdapterCapabilities = DEFAULT_CAPABILITIES.shopify;
   constructor(public readonly tenantId: string) {}
+
+  /**
+   * Free-text name search over the tenant's OWN Shopify connection.
+   * Routed through executeAdapterTool → `shopify.search_customers`, which
+   * gives tenant scoping, the `read_customers` scope gate, OAuth refresh,
+   * rate limiting and audit for free. Returns ALL candidates (deduped,
+   * capped) - the caller shows a picker and never auto-selects.
+   */
+  async searchByName(name: string, limit = 8): Promise<CrmNameSearchResult> {
+    const queries = buildShopifyNameQueries(name);
+    if (queries.length === 0) return { ok: false, candidates: [], reason: "no_query" };
+    const cap = Math.min(Math.max(1, limit), 25);
+
+    const results = await Promise.all(
+      queries.map((query) =>
+        executeAdapterTool({
+          tenantId: this.tenantId,
+          toolFunctionName: "shopify.search_customers",
+          args: { query, limit: cap },
+        }),
+      ),
+    );
+
+    // A failed default search fails the call (scope missing, vendor down);
+    // a failed SECONDARY filter query degrades silently to the primary.
+    if (!results[0].ok) return { ok: false, candidates: [], reason: results[0].reason };
+
+    const seen = new Set<string>();
+    const candidates: CrmNameSearchCandidate[] = [];
+    for (const r of results) {
+      if (!r.ok || !Array.isArray(r.result)) continue;
+      for (const raw of r.result as unknown[]) {
+        const c = mapShopifyNameCandidate(raw);
+        if (!c || seen.has(c.id)) continue;
+        seen.add(c.id);
+        candidates.push(c);
+        if (candidates.length >= cap) break;
+      }
+      if (candidates.length >= cap) break;
+    }
+    return { ok: true, candidates };
+  }
 
   async findCustomer(query: { phone?: string; email?: string; external_id?: string }): Promise<CrmAdapterFindResult> {
     const email = normalizeEmail(query.email);

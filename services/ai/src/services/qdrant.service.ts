@@ -88,6 +88,17 @@ export async function deleteByKnowledgeBaseId(knowledgeBaseId: string): Promise<
   });
 }
 
+export async function deleteByTenantId(tenantId: string): Promise<void> {
+  await ensureCollection();
+  const qdrant = getQdrantClient();
+
+  await qdrant.delete(COLLECTION_NAME, {
+    filter: {
+      must: [{ key: "tenantId", match: { value: tenantId } }],
+    },
+  });
+}
+
 export interface SearchResult {
   content: string;
   score: number;

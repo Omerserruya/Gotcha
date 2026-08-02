@@ -30,7 +30,13 @@
 
 import { prisma } from "@chatcenter/shared";
 
-const TOKENS_PER_TURN_DEFAULT = 25_000;
+// The per-turn cap must comfortably exceed (system prompt × rounds). The agent
+// system prompt is ~16k tokens, and a single turn legitimately runs the initial
+// call + a tool round + ONE objective-enforcement regen (~3 rounds). At 25k the
+// cap aborted mid-turn and SILENTLY DISABLED objective enforcement (real Omer
+// regression: tokensUsed=34571 > cap=25000). Sized for ~3 full rounds; still
+// env-overridable via AI_BUDGET_TOKENS_PER_TURN.
+const TOKENS_PER_TURN_DEFAULT = 60_000;
 const TOKENS_PER_CONV_DEFAULT = 250_000;
 const TOKENS_PER_TENANT_DAY_DEFAULT = 5_000_000;
 

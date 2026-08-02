@@ -402,22 +402,22 @@ describe("Airtable adapter", () => {
 
 describe("Postgres adapter - table allowlist enforcement", () => {
   it("BLOCKS read on table not in allowReads", async () => {
-    mockConnected("postgres", { connectionString: "postgres://x" }, { allowReads: ["customers"], allowWrites: [] });
-    const r = await executeAdapterTool({ tenantId: "t1", toolFunctionName: "postgres.query_table", args: { table: "secrets" } });
+    mockConnected("postgresql", { connectionString: "postgres://x" }, { allowReads: ["customers"], allowWrites: [] });
+    const r = await executeAdapterTool({ tenantId: "t1", toolFunctionName: "postgresql.query_table", args: { table: "secrets" } });
     expect(r.ok).toBe(false);
     expect((r as any).reason).toMatch(/table_not_in_read_allowlist:secrets/);
   });
 
   it("BLOCKS write on table not in allowWrites (even if in allowReads)", async () => {
-    mockConnected("postgres", { connectionString: "postgres://x" }, { allowReads: ["customers"], allowWrites: [] });
-    const r = await executeAdapterTool({ tenantId: "t1", toolFunctionName: "postgres.insert_row", args: { table: "customers", row: { name: "x" } } });
+    mockConnected("postgresql", { connectionString: "postgres://x" }, { allowReads: ["customers"], allowWrites: [] });
+    const r = await executeAdapterTool({ tenantId: "t1", toolFunctionName: "postgresql.insert_row", args: { table: "customers", row: { name: "x" } } });
     expect(r.ok).toBe(false);
     expect((r as any).reason).toMatch(/table_not_in_write_allowlist:customers/);
   });
 
   it("FAIL-SECURE: empty allowReads blocks all reads", async () => {
-    mockConnected("postgres", { connectionString: "postgres://x" }, {});
-    const r = await executeAdapterTool({ tenantId: "t1", toolFunctionName: "postgres.query_table", args: { table: "anything" } });
+    mockConnected("postgresql", { connectionString: "postgres://x" }, {});
+    const r = await executeAdapterTool({ tenantId: "t1", toolFunctionName: "postgresql.query_table", args: { table: "anything" } });
     expect(r.ok).toBe(false);
     expect((r as any).reason).toMatch(/table_not_in_read_allowlist/);
   });

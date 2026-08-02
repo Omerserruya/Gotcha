@@ -1,0 +1,36 @@
+// Legacy Settings routes → their canonical new homes.
+//
+// The Settings IA cleanup gave every configuration concept ONE canonical
+// location (Settings owns workspace/business config; AI Studio owns tool,
+// policy and HITL config). Old routes stay alive as redirects so saved
+// links, bookmarks and in-product references never break. Persisted
+// configuration is untouched - only the UI location moved.
+//
+// Exported as data (not buried in page files) so tests can assert the map
+// and the redirect stubs stay in sync.
+
+export const LEGACY_SETTINGS_REDIRECTS: Record<string, string> = {
+  // Users + Departments merged into People & Teams (tabs).
+  "/settings/users": "/settings/people?tab=users",
+  "/settings/departments": "/settings/people?tab=departments",
+  // Generic "Integrations" renamed: this page is the tenant's Source of
+  // Truth / business-systems home, not a marketplace.
+  "/settings/integrations": "/settings/business-systems",
+  // Tool + policy configuration lives with the AI employees that use it.
+  // §9: policy is no longer a standalone tab - the business-policy caps live
+  // inside the unified Tool governance surface (view=permissions), next to the
+  // per-tool HITL toggle. Old /settings/policy|business-rules links land there.
+  "/settings/tools": "/ai-studio?tab=tools&view=permissions",
+  "/settings/policy": "/ai-studio?tab=tools&view=permissions",
+  "/settings/business-rules": "/ai-studio?tab=tools&view=permissions",
+  // Voice/phone is a communication channel: the list view now lives in
+  // Channels (Voice section). Detail/new wizard routes are still real pages.
+  "/settings/voice-channels": "/settings/channels",
+  // "Your Business" is retired as a product area. Everything it displayed -
+  // the scanned profile, the policies, the products, the FAQs - is now
+  // projected into real Knowledge Base entries the AI employee can actually
+  // retrieve, so Knowledge is where those links belong. The scanned profile
+  // was never editable configuration; it was knowledge shown in the wrong
+  // place.
+  "/settings/business": "/ai-studio/knowledge",
+};

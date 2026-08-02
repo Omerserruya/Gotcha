@@ -36,6 +36,23 @@ const { prismaMock, redisMock, publishEventMock } = vi.hoisted(() => {
 });
 
 vi.mock("@chatcenter/shared", () => ({
+  // Durable tenant settings (business hours, auto-greeting, SLA). Exhaustive
+  // mocks of this barrel must supply them or the read path throws instead of
+  // returning "not configured". Default: nothing configured.
+  readDurableSetting: async () => null,
+  writeDurableSetting: async () => undefined,
+  settingCacheKey: (t: string, k: string) => `tenant:${t}:${k}`,
+  // Commercial gate, mocked pass-through like requireFeature: these tests
+  // cover route behaviour, not billing. The gate itself is proved in
+  // packages/shared/src/lib/billing/__tests__.
+  requireEntitlement: (_feature: string) => (_req: any, _res: any, next: any) => next(),
+  // Version pins now live in shared modules, so exhaustive mocks of this
+  // barrel must supply them. Returning the real defaults keeps any URL the
+  // code builds meaningful instead of "undefined/...".
+  shopifyApiVersion: () => "2026-07",
+  checkShopifyResponseVersion: () => ({ ok: true, served: "2026-07" }),
+  metaGraphBaseUrl: (legacy?: string) => legacy || "https://graph.facebook.com/v24.0",
+  stripeVersionHeader: () => ({ "Stripe-Version": "2026-02-25.clover" }),
   prisma: prismaMock,
   getRedis: () => redisMock,
   publishEvent: publishEventMock,

@@ -1,22 +1,28 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useDynamicParam } from "@/lib/useRouteParam";
+import { aiStudioHref, normalizeAiStudioTab } from "@/lib/ai-studio-tabs";
 import { AppLayout } from "@/components/AppLayout";
 import { useI18n } from "@/context/I18nContext";
 import { useAuth } from "@/context/AuthContext";
-import { getAIAgent, createAIAgent, updateAIAgent, deleteAIAgent, getDepartments, getMarketplaceIntegrations, getSystemKnowledgeBases } from "@/lib/api";
+import { getAIAgent, getAIAgentReachability, getAIAgentEffectivePermissions, createAIAgent, updateAIAgent, deleteAIAgent, getDepartments, getMarketplaceIntegrations, getSystemKnowledgeBases, type EffectivePermissions } from "@/lib/api";
 import { listFunnelSummaries, type FunnelSummary } from "@/lib/api-funnel";
+import { getGoogleCalendarConnectUrl } from "@/lib/api-scheduler";
 import clsx from "clsx";
 import IntegrationDrawer from "@/components/IntegrationDrawer";
 import KnowledgeDrawer from "@/components/KnowledgeDrawer";
 import TestChatModal from "@/components/TestChatModal";
+import { ReadinessReportModal, readinessScoreColor } from "@/components/ReadinessReport";
+import { builderReadinessTest, type ReadinessReport } from "@/lib/gotcha-api";
 // FunnelSection import removed - funnels are now managed at /settings/funnels.
 // The agent is funnel-guided at runtime via resolveActiveStage; there is no
 // per-agent funnel override config to edit on this page.
-import ActionContractsSection from "@/components/ActionContractsSection";
-import AgentBuilder from "./AgentBuilder";
+// Shared AI-employee creation experience. Lives in components/aiEmployee
+// so onboarding renders the SAME wizard instead of maintaining a second,
+// divergent one (see components/aiEmployee/AgentBuilder.tsx header).
+import AgentBuilder from "@/components/aiEmployee/AgentBuilder";
 
 // ─── Types ────────────────────────────────────────────────────
 // (Tone type removed - personality is governed by the platform skill now.)
@@ -109,6 +115,14 @@ interface AgentFormData {
   // brand_archetype edit doesn't wipe gender/traits set elsewhere - the PATCH
   // route replaces the whole persona object.
   persona: Record<string, unknown>;
+  salesContext: {
+    whatWeSell: string;
+    idealCustomerProfile: string;
+    problemsSolved: string[];
+    expectedOutcomes: string[];
+    qualificationSignals: string[];
+    disqualifiers: string[];
+  };
 }
 
 // ─── Constants ─────────────────────────────────────────────────
@@ -204,6 +218,14 @@ function mapApiToForm(agent: any): AgentFormData {
     conversationFlow: Array.isArray(agent.conversationFlow) ? agent.conversationFlow : [],
     customGuardrails: Array.isArray(agent.customGuardrails) ? agent.customGuardrails : [],
     persona: parsePersona(agent.persona),
+    salesContext: {
+      whatWeSell: agent.salesContext?.whatWeSell || "",
+      idealCustomerProfile: agent.salesContext?.idealCustomerProfile || "",
+      problemsSolved: agent.salesContext?.problemsSolved || [],
+      expectedOutcomes: agent.salesContext?.expectedOutcomes || [],
+      qualificationSignals: agent.salesContext?.qualificationSignals || [],
+      disqualifiers: agent.salesContext?.disqualifiers || [],
+    },
   };
 }
 
@@ -249,6 +271,14 @@ const NEW_AGENT_DEFAULT: AgentFormData = {
   conversationFlow: [],
   customGuardrails: [],
   persona: {},
+  salesContext: {
+    whatWeSell: "",
+    idealCustomerProfile: "",
+    problemsSolved: [],
+    expectedOutcomes: [],
+    qualificationSignals: [],
+    disqualifiers: [],
+  },
 };
 
 // Brand Voice archetypes - keys MUST match services/ai/src/services/brand-archetypes.ts.
@@ -325,9 +355,13 @@ function StatusDot({ status }: { status: "synced" | "syncing" | "error" }) {
 }
 
 // ─── Main page ─────────────────────────────────────────────────
-export default function AgentEditorPage() {
+function AgentEditorPageInner() {
   const id = useDynamicParam();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // An employee editor belongs to Overview; explicit ?returnTab= overrides.
+  const _rt = searchParams.get("returnTab");
+  const returnTab = _rt ? normalizeAiStudioTab(_rt) : "employees";
   const { t, locale } = useI18n();
   const { token } = useAuth();
 
@@ -339,6 +373,9 @@ export default function AgentEditorPage() {
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // Set when the loaded agent is an INCOMPLETE wizard draft - we then resume
+  // the builder at this step instead of dropping the user into the full editor.
+  const [resumeStep, setResumeStep] = useState<string | null>(null);
   const [customRuleInput, setCustomRuleInput] = useState("");
   const [showCustomRuleInput, setShowCustomRuleInput] = useState(false);
   const [departments, setDepartments] = useState<any[]>([]);
@@ -346,9 +383,39 @@ export default function AgentEditorPage() {
   const [showSkillsPanel, setShowSkillsPanel] = useState(false);
   const [showKnowledgePanel, setShowKnowledgePanel] = useState(false);
   const [showTestChat, setShowTestChat] = useState(false);
+  // Readiness as an ongoing improvement loop: last persisted report + rerun,
+  // accessible from the "what this employee can do" area of the editor.
+  const [readinessReport, setReadinessReport] = useState<ReadinessReport | null>(null);
+  const [readinessKbId, setReadinessKbId] = useState<string | null>(null);
+  const [readinessOpen, setReadinessOpen] = useState(false);
+  const [readinessBusy, setReadinessBusy] = useState(false);
   const [marketplaceIntegrations, setMarketplaceIntegrations] = useState<any[]>([]);
+  // Integration groups the user has expanded in the Skills section. Groups start
+  // collapsed: a tenant with several integrations connected has hundreds of
+  // tools, which buries every other section on the page.
+  const [expandedToolGroups, setExpandedToolGroups] = useState<Set<string>>(new Set());
   const [knowledgeBases, setKnowledgeBases] = useState<any[]>([]);
   const [panelLoading, setPanelLoading] = useState(false);
+  const [calendarCapability, setCalendarCapability] = useState<{
+    capability: string;
+    bookable: boolean;
+    providers: string[];
+    activeMeetingTypes: number;
+    lastError: string | null;
+  } | null>(null);
+
+  const [reachability, setReachability] = useState<{ hasCanvas: boolean; reachable: boolean } | null>(null);
+  const [effectivePerms, setEffectivePerms] = useState<EffectivePermissions | null>(null);
+
+  useEffect(() => {
+    if (isNew || !token) return;
+    getAIAgentReachability(token, id)
+      .then((res) => setReachability(res.data))
+      .catch(() => setReachability(null));
+    getAIAgentEffectivePermissions(token, id)
+      .then((res) => setEffectivePerms(res.data))
+      .catch(() => setEffectivePerms(null));
+  }, [isNew, token, id]);
 
   useEffect(() => {
     if (isNew || !token) return;
@@ -358,6 +425,20 @@ export default function AgentEditorPage() {
       .then((res) => {
         if (res.data) {
           setForm(mapApiToForm(res.data));
+          setCalendarCapability(res.data.calendarCapability ?? null);
+          setReadinessReport((res.data.readinessReport as ReadinessReport | null) || null);
+          setReadinessKbId(
+            res.data.knowledgeSources?.[0]?.id
+              || res.data.knowledgeBases?.[0]?.knowledgeBase?.id
+              || null,
+          );
+          // Incomplete wizard draft → resume the builder at its saved step.
+          const status = String(res.data.status || "").toUpperCase();
+          if (status === "DRAFT" && res.data.builderStep) {
+            setResumeStep(String(res.data.builderStep));
+          } else {
+            setResumeStep(null);
+          }
         }
       })
       .catch((err: any) => {
@@ -367,7 +448,7 @@ export default function AgentEditorPage() {
         // from operators trying to debug prod.
         const msg = err?.message || err?.error || "Failed to load AI Employee.";
         if (err?.status === 404) {
-          router.push("/ai-studio");
+          router.push(aiStudioHref(returnTab));
         } else {
           setLoadError(typeof msg === "string" ? msg : "Failed to load AI Employee.");
         }
@@ -437,6 +518,19 @@ export default function AgentEditorPage() {
         toolIds,
         tools,
         knowledgeBaseIds,
+        salesContext: (() => {
+          const sc = form.salesContext;
+          return (sc.whatWeSell.trim() || sc.idealCustomerProfile.trim() || sc.problemsSolved.length || sc.expectedOutcomes.length || sc.qualificationSignals.length || sc.disqualifiers.length)
+            ? {
+                whatWeSell: sc.whatWeSell.trim(),
+                idealCustomerProfile: sc.idealCustomerProfile.trim(),
+                problemsSolved: sc.problemsSolved,
+                expectedOutcomes: sc.expectedOutcomes,
+                qualificationSignals: sc.qualificationSignals,
+                disqualifiers: sc.disqualifiers,
+              }
+            : null;
+        })(),
       };
 
       if (isNew) {
@@ -463,7 +557,7 @@ export default function AgentEditorPage() {
     if (!token || isNew) return;
     try {
       await deleteAIAgent(token, id);
-      router.push("/ai-studio");
+      router.push(aiStudioHref(returnTab));
     } catch (err) {
       console.error("Delete failed:", err);
     }
@@ -525,6 +619,29 @@ export default function AgentEditorPage() {
     return acc;
   }, {});
 
+  const toolGroupNames = Object.keys(toolsByIntegration);
+  const allToolGroupsExpanded = toolGroupNames.length > 0 && toolGroupNames.every((g) => expandedToolGroups.has(g));
+
+  function toggleToolGroup(integration: string) {
+    setExpandedToolGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(integration)) next.delete(integration);
+      else next.add(integration);
+      return next;
+    });
+  }
+
+  function toggleAllToolGroups() {
+    setExpandedToolGroups(allToolGroupsExpanded ? new Set() : new Set(toolGroupNames));
+  }
+
+  /** Enable/disable every tool belonging to one integration in a single patch. */
+  function setIntegrationToolsEnabled(integration: string, enabled: boolean) {
+    patch({
+      tools: form.tools.map((t) => (t.integration === integration ? { ...t, enabled } : t)),
+    });
+  }
+
   const pageTitle = isNew
     ? t("aiStudio.agents.editor.newAgent")
     : (form.name || t("aiStudio.agents.editor.editAgent"));
@@ -548,7 +665,7 @@ export default function AgentEditorPage() {
             <p className="text-sm text-gray-500">{loadError}</p>
             <div className="flex gap-2 justify-center">
               <button
-                onClick={() => router.push("/ai-studio")}
+                onClick={() => router.push(aiStudioHref(returnTab))}
                 className="px-3 py-1.5 rounded-xl border border-gray-200 text-sm text-gray-700 hover:bg-gray-50"
               >
                 Back to AI Studio
@@ -574,7 +691,22 @@ export default function AgentEditorPage() {
   if (isNew) {
     return (
       <AppLayout>
-        <AgentBuilder token={token || ""} onCancel={() => router.push("/ai-studio")} />
+        <AgentBuilder token={token || ""} onCancel={() => router.push(aiStudioHref(returnTab))} />
+      </AppLayout>
+    );
+  }
+
+  // Incomplete wizard draft → resume the builder at its saved step instead of
+  // the full editor, so the user continues exactly where they stopped.
+  if (resumeStep) {
+    return (
+      <AppLayout>
+        <AgentBuilder
+          token={token || ""}
+          resumeAgentId={id}
+          resumeStep={resumeStep as "chat" | "kb" | "refine" | "tools"}
+          onCancel={() => router.push(aiStudioHref(returnTab))}
+        />
       </AppLayout>
     );
   }
@@ -584,7 +716,7 @@ export default function AgentEditorPage() {
       <div className="p-3 md:p-6 overflow-y-auto h-screen">
         {/* Back button */}
         <button
-          onClick={() => router.push("/ai-studio")}
+          onClick={() => router.push(aiStudioHref(returnTab))}
           className="flex items-center gap-2 text-gray-400 hover:text-gray-700 text-sm mb-5 transition"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -640,6 +772,94 @@ export default function AgentEditorPage() {
               )}
             </div>
           </div>
+
+          {/* Go-live honesty: an ACTIVE employee no playbook node routes to
+              never receives a conversation. Say so instead of letting "live"
+              be a broken promise. */}
+          {reachability && !reachability.reachable && String(form.status).toUpperCase() === "ACTIVE" && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+              <p className="text-sm font-semibold text-amber-800 mb-1">
+                ⚠️ {t("aiStudio.agents.editor.reachability.title")}
+              </p>
+              <p className="text-xs text-amber-700 mb-3">
+                {reachability.hasCanvas
+                  ? t("aiStudio.agents.editor.reachability.noNode")
+                  : t("aiStudio.agents.editor.reachability.noCanvas")}
+              </p>
+              <button
+                type="button"
+                onClick={() => router.push(aiStudioHref("processes"))}
+                className="text-xs font-medium px-3 py-1.5 rounded-lg bg-amber-600 text-white hover:bg-amber-700 transition"
+              >
+                {t("aiStudio.agents.editor.reachability.cta")}
+              </button>
+            </div>
+          )}
+
+          {/* Effective permissions (P1-8): the runtime AND-rule made visible -
+              what this employee can ACTUALLY do right now (capability live AND
+              granted). Only shown for saved employees with at least one live
+              capability. */}
+          {effectivePerms && effectivePerms.capabilities.some((c) => c.live) && (
+            <div className="rounded-xl border border-gray-200 bg-white p-4">
+              <p className="text-sm font-semibold text-gray-800 mb-1">
+                {t("aiStudio.agents.editor.effectivePerms.title")}
+              </p>
+              <p className="text-xs text-gray-400 mb-3">
+                {t("aiStudio.agents.editor.effectivePerms.subtitle")}
+              </p>
+              <div className="space-y-2.5">
+                {effectivePerms.capabilities.filter((c) => c.live).map((cap) => (
+                  <div key={cap.capability}>
+                    <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">{cap.capability}</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {cap.operations.map((op) => (
+                        <span
+                          key={op.name}
+                          className={clsx(
+                            "text-[11px] font-mono px-2 py-0.5 rounded border",
+                            op.effective
+                              ? "bg-green-50 text-green-700 border-green-200"
+                              : "bg-gray-50 text-gray-400 border-gray-200 line-through"
+                          )}
+                          title={op.effective
+                            ? t("aiStudio.agents.editor.effectivePerms.allowed")
+                            : t("aiStudio.agents.editor.effectivePerms.blocked")}
+                        >
+                          {op.name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Readiness - the permanent "what is it still missing" loop. Lives
+              next to "what this employee can do" so improving the employee is
+              one click away, not buried in the onboarding wizard. */}
+          {!isNew && (
+            <div className="rounded-xl border border-gray-200 bg-white p-4 flex items-center gap-4">
+              <div className={clsx("text-3xl font-bold shrink-0", readinessReport ? readinessScoreColor(readinessReport.score) : "text-gray-300")}>
+                {readinessReport ? `${readinessReport.score}%` : "-"}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-gray-800">{t("aiStudio.agents.editor.readiness.title")}</p>
+                <p className="text-xs text-gray-400">{t("aiStudio.agents.editor.readiness.subtitle")}</p>
+              </div>
+              {/* Opening only opens. The readiness test is an expensive LLM run,
+                  so it fires solely from an explicit user action - the modal's
+                  own "Run"/"Re-run" button - never as a side effect of viewing. */}
+              <button
+                type="button"
+                onClick={() => setReadinessOpen(true)}
+                className="shrink-0 text-xs font-semibold px-3.5 py-1.5 rounded-lg bg-violet-50 text-violet-700 hover:bg-violet-100 transition"
+              >
+                {readinessReport ? t("aiStudio.agents.editor.readiness.open") : t("aiStudio.agents.editor.readiness.run")}
+              </button>
+            </div>
+          )}
 
           {/* ── Section 1: Agent Setup ── */}
           <SectionCard
@@ -698,7 +918,14 @@ export default function AgentEditorPage() {
               </label>
               <select
                 value={form.role}
-                onChange={(e) => patch({ role: e.target.value as AgentRole })}
+                onChange={(e) => {
+                  const role = e.target.value as AgentRole;
+                  // The funnel picker only renders for pipeline roles, so drop
+                  // any existing binding when moving off one - otherwise the
+                  // agent stays bound to a funnel through a control the user
+                  // can no longer see.
+                  patch(roleRequiresFunnel(role) ? { role } : { role, funnelId: "" });
+                }}
                 className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition"
               >
                 <option value="customer_support">{t("aiStudio.agents.editor.setup.roleSupport")}</option>
@@ -819,19 +1046,111 @@ export default function AgentEditorPage() {
             title={t("aiStudio.agents.editor.skills.title")}
             subtitle={t("aiStudio.agents.editor.skills.subtitle")}
           >
-            {Object.entries(toolsByIntegration).map(([integration, tools]) => (
+            {/* Calendar capability warning banner */}
+            {calendarCapability && !calendarCapability.bookable && form.tools.some(t => t.enabled && /calendar|calendly/i.test(t.integration)) && (
+              <div className={clsx(
+                "mb-4 rounded-xl border p-4",
+                calendarCapability.capability === "NO_CALENDAR"
+                  ? "border-red-200 bg-red-50"
+                  : "border-amber-200 bg-amber-50"
+              )}>
+                <p className={clsx(
+                  "text-sm font-semibold mb-1",
+                  calendarCapability.capability === "NO_CALENDAR" ? "text-red-800" : "text-amber-800"
+                )}>
+                  ⚠️{" "}
+                  {calendarCapability.capability === "NO_CALENDAR"
+                    ? "This AI Employee cannot book meetings"
+                    : "No bookable meeting types"}
+                </p>
+                <p className={clsx(
+                  "text-xs mb-3",
+                  calendarCapability.capability === "NO_CALENDAR" ? "text-red-700" : "text-amber-700"
+                )}>
+                  {calendarCapability.capability === "NO_CALENDAR"
+                    ? "Calendar tools are enabled but no calendar account is connected, so it cannot book meetings."
+                    : "A calendar is connected, but there are no active meeting types, so this AI Employee still can’t book. Add a meeting type in Scheduling settings."}
+                </p>
+                {calendarCapability.capability === "NO_CALENDAR" && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const { url } = await getGoogleCalendarConnectUrl(token!, id);
+                        window.location.href = url;
+                      } catch (err) {
+                        console.error("Failed to get calendar connect URL:", err);
+                      }
+                    }}
+                    className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-medium rounded-lg transition"
+                  >
+                    Connect Google Calendar
+                  </button>
+                )}
+              </div>
+            )}
+
+            {toolGroupNames.length > 1 && (
+              <div className="flex justify-end mb-2">
+                <button
+                  type="button"
+                  onClick={toggleAllToolGroups}
+                  className="text-xs font-medium text-violet-600 hover:text-violet-700 px-2 py-1 rounded hover:bg-violet-50 transition"
+                >
+                  {allToolGroupsExpanded
+                    ? t("aiStudio.agents.editor.skills.collapseAll")
+                    : t("aiStudio.agents.editor.skills.expandAll")}
+                </button>
+              </div>
+            )}
+
+            {Object.entries(toolsByIntegration).map(([integration, tools]) => {
+              const groupExpanded = expandedToolGroups.has(integration);
+              const enabledCount = tools.filter((t) => t.enabled).length;
+              const allEnabled = enabledCount === tools.length;
+              return (
               <div key={integration} className="mb-4 last:mb-0">
-                {/* Integration header */}
+                {/* Integration header - click to expand/collapse this group */}
                 <div className="flex items-center gap-2 mb-2">
-                  <div className="w-6 h-6 rounded-lg bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-500">
-                    {integration.charAt(0)}
-                  </div>
-                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                    {integration}
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => toggleToolGroup(integration)}
+                    aria-expanded={groupExpanded}
+                    className="flex items-center gap-2 flex-1 min-w-0 text-left rounded-lg px-1 py-1 -mx-1 hover:bg-gray-50 transition"
+                  >
+                    <svg
+                      className={clsx("w-3.5 h-3.5 text-gray-400 shrink-0 transition-transform", groupExpanded && "rotate-90")}
+                      fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
+                    <div className="w-6 h-6 rounded-lg bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-500 shrink-0">
+                      {integration.charAt(0)}
+                    </div>
+                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide truncate">
+                      {integration}
+                    </span>
+                    <span className={clsx(
+                      "px-2 py-0.5 rounded-full text-[10px] font-medium border shrink-0",
+                      enabledCount > 0
+                        ? "bg-violet-50 text-violet-600 border-violet-200"
+                        : "bg-gray-50 text-gray-400 border-gray-200"
+                    )}>
+                      {enabledCount}/{tools.length}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIntegrationToolsEnabled(integration, !allEnabled)}
+                    className="text-xs font-medium text-violet-600 hover:text-violet-700 px-2 py-1 rounded hover:bg-violet-50 transition shrink-0"
+                  >
+                    {allEnabled
+                      ? t("aiStudio.agents.editor.skills.clearGroup")
+                      : t("aiStudio.agents.editor.skills.enableGroup")}
+                  </button>
                 </div>
 
-                <div className="space-y-2">
+                <div className={clsx("space-y-2", !groupExpanded && "hidden")}>
                   {tools.map((tool) => {
                     const hasOverrides = (tool.description ?? "").trim().length > 0 || (tool.usageRule ?? "").trim().length > 0;
                     return (
@@ -915,7 +1234,8 @@ export default function AgentEditorPage() {
                   })}
                 </div>
               </div>
-            ))}
+              );
+            })}
 
             <button
               type="button"
@@ -934,6 +1254,93 @@ export default function AgentEditorPage() {
               {t("aiStudio.agents.editor.skills.addMore")}
             </button>
           </SectionCard>
+
+          {/* ── Sales Context (sales-oriented roles only) ── */}
+          {(["sales", "sdr", "customer_success"] as string[]).includes(form.role) && (
+            <SectionCard
+              title="Sales Context"
+              subtitle="What you sell and who you sell to - used to qualify prospects against your actual offer."
+            >
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    What we sell
+                  </label>
+                  <textarea
+                    value={form.salesContext.whatWeSell}
+                    onChange={(e) => patch({ salesContext: { ...form.salesContext, whatWeSell: e.target.value } })}
+                    placeholder="Describe your product or service in 1–2 sentences."
+                    rows={2}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition resize-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Ideal customer profile
+                  </label>
+                  <textarea
+                    value={form.salesContext.idealCustomerProfile}
+                    onChange={(e) => patch({ salesContext: { ...form.salesContext, idealCustomerProfile: e.target.value } })}
+                    placeholder="Who is the perfect customer? E.g. company size, industry, role, pain points."
+                    rows={2}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition resize-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Problems solved
+                    <span className="text-gray-400 font-normal ml-1 text-xs">(one per line)</span>
+                  </label>
+                  <textarea
+                    value={form.salesContext.problemsSolved.join("\n")}
+                    onChange={(e) => patch({ salesContext: { ...form.salesContext, problemsSolved: e.target.value.split("\n").map(s => s.trim()).filter(Boolean) } })}
+                    placeholder={"Manual process taking too long\nNo visibility into pipeline\nHigh churn from poor onboarding"}
+                    rows={3}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition resize-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Expected outcomes
+                    <span className="text-gray-400 font-normal ml-1 text-xs">(one per line)</span>
+                  </label>
+                  <textarea
+                    value={form.salesContext.expectedOutcomes.join("\n")}
+                    onChange={(e) => patch({ salesContext: { ...form.salesContext, expectedOutcomes: e.target.value.split("\n").map(s => s.trim()).filter(Boolean) } })}
+                    placeholder={"50% reduction in manual work\nFull pipeline visibility\n3x faster onboarding"}
+                    rows={3}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition resize-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Qualification signals
+                    <span className="text-gray-400 font-normal ml-1 text-xs">(one per line)</span>
+                  </label>
+                  <textarea
+                    value={form.salesContext.qualificationSignals.join("\n")}
+                    onChange={(e) => patch({ salesContext: { ...form.salesContext, qualificationSignals: e.target.value.split("\n").map(s => s.trim()).filter(Boolean) } })}
+                    placeholder={"Budget > $10k/yr confirmed\nDecision maker in the call\nActive evaluation underway"}
+                    rows={3}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition resize-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Disqualifiers
+                    <span className="text-gray-400 font-normal ml-1 text-xs">(one per line)</span>
+                  </label>
+                  <textarea
+                    value={form.salesContext.disqualifiers.join("\n")}
+                    onChange={(e) => patch({ salesContext: { ...form.salesContext, disqualifiers: e.target.value.split("\n").map(s => s.trim()).filter(Boolean) } })}
+                    placeholder={"Fewer than 10 employees\nNo budget for current quarter\nAlready locked in a contract"}
+                    rows={3}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition resize-none"
+                  />
+                </div>
+              </div>
+            </SectionCard>
+          )}
 
           {/* ── Section 4: Knowledge ── */}
           <SectionCard
@@ -988,37 +1395,35 @@ export default function AgentEditorPage() {
               stage's goal, required questions, data fields, and exit
               criteria into the prompt. Picker below pins a specific
               funnel to THIS agent; leaving it blank falls through to the
-              channel override → department → tenant default. */}
+              channel override → department → tenant default.
+
+              Only pipeline roles see this. A support or billing employee has
+              no pipeline to run, so the picker was pure noise for them. The
+              gate deliberately matches the SERVER's FUNNEL_REQUIRED_ROLES
+              (ai-agents.ts) rather than a hand-written sales/sdr list: those
+              roles 422 on save without a funnel, so hiding the only control
+              that sets one would make them impossible to save. */}
+          {roleRequiresFunnel(form.role) && (
           <SectionCard
             title={
               <span className="inline-flex items-center gap-1.5">
                 Funnel
-                {roleRequiresFunnel(form.role) && (
-                  <span className="text-red-400 text-sm">*</span>
-                )}
+                <span className="text-red-400 text-sm">*</span>
               </span>
             }
-            subtitle={
-              roleRequiresFunnel(form.role)
-                ? "Pipeline this AI employee runs - REQUIRED for this role."
-                : "Pipeline this AI employee runs. Blank = use the department/tenant default."
-            }
+            subtitle="Pipeline this AI employee runs - REQUIRED for this role."
           >
             <select
               value={form.funnelId}
               onChange={(e) => patch({ funnelId: e.target.value })}
               className={clsx(
                 "w-full px-4 py-2.5 bg-gray-50 border rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:bg-white outline-none transition",
-                roleRequiresFunnel(form.role) && !form.funnelId
+                !form.funnelId
                   ? "border-red-300 focus:border-red-400"
                   : "border-gray-200 focus:border-violet-300"
               )}
             >
-              <option value="">
-                {roleRequiresFunnel(form.role)
-                  ? "- Select a funnel (required) -"
-                  : "Use department / tenant default"}
-              </option>
+              <option value="">- Select a funnel (required) -</option>
               {funnels.map((f) => (
                 <option key={f.id} value={f.id}>
                   {f.funnelId}
@@ -1029,9 +1434,7 @@ export default function AgentEditorPage() {
               ))}
             </select>
             <p className="text-xs text-gray-400 mt-2">
-              {roleRequiresFunnel(form.role)
-                ? "Save will fail with 422 if no funnel is selected."
-                : "Per-turn goal, required questions, data fields, and exit criteria are read from the resolved funnel's active stage on every turn."}
+              Save will fail with 422 if no funnel is selected.
             </p>
             <a
               href="/settings/funnels"
@@ -1040,14 +1443,11 @@ export default function AgentEditorPage() {
               Manage funnels in Settings →
             </a>
           </SectionCard>
+          )}
 
-          {/* ── Section 6: Action Contracts (deterministic tool chains) ── */}
-          <SectionCard
-            title="Action Contracts"
-            subtitle="When a business action fires, the bot is forced to call specific tools - no skipping, no reordering."
-          >
-            <ActionContractsSection />
-          </SectionCard>
+          {/* Action Contracts removed: the planner, capability layer and
+              objective engine now decide the tool chain at runtime, so hand-wired
+              deterministic contracts are no longer part of setting up an employee. */}
 
           {/* ── Section 7: Escalation Rules ── */}
           <SectionCard
@@ -1293,7 +1693,7 @@ export default function AgentEditorPage() {
             </button>
             <button
               type="button"
-              onClick={() => router.push("/ai-studio")}
+              onClick={() => router.push(aiStudioHref(returnTab))}
               className="px-4 py-3 text-gray-500 hover:text-gray-700 text-sm transition"
             >
               {t("common.cancel")}
@@ -1373,6 +1773,38 @@ export default function AgentEditorPage() {
         avatarColor={form.avatarColor}
         token={token || ""}
       />
+
+      <ReadinessReportModal
+        open={readinessOpen}
+        onClose={() => setReadinessOpen(false)}
+        report={readinessReport}
+        token={token || ""}
+        kbId={readinessKbId}
+        busy={readinessBusy}
+        agentName={form.name || undefined}
+        onRerun={async () => {
+          if (!token || readinessBusy) return;
+          setReadinessBusy(true);
+          try {
+            const res = await builderReadinessTest(token, id, locale);
+            setReadinessReport(res.data);
+          } catch { /* keep last report */ }
+          finally { setReadinessBusy(false); }
+        }}
+      />
     </AppLayout>
+  );
+}
+
+// useSearchParams() forces this route into client-side rendering, and Next
+// requires that bail-out to sit behind a Suspense boundary - without one the
+// production build fails at prerender (it succeeds in dev, which is why this
+// went unnoticed). The inner component holds all the logic; this wrapper exists
+// only to provide the boundary.
+export default function AgentEditorPage() {
+  return (
+    <Suspense fallback={null}>
+      <AgentEditorPageInner />
+    </Suspense>
   );
 }

@@ -1,3 +1,4 @@
+import { getInternalServiceKey, readDurableSetting } from "@chatcenter/shared";
 import { prisma, publishEvent, outgoingMessageQueue } from "@chatcenter/shared";
 import { getIO } from "../lib/socket";
 import * as messageService from "./message.service";
@@ -195,6 +196,31 @@ export async function release(tenantId: string, conversationId: string) {
   return updated;
 }
 
+/**
+ * Hand a human-owned conversation BACK to the AI employee. The inverse of
+ * escalation/claim: clears the human assignment AND the isHandedOver latch
+ * (which nothing else in the system ever clears), so the bot resumes on the
+ * next inbound. Requires an AI employee to actually be bound to the
+ * conversation - otherwise there is nobody to hand back to.
+ */
+export async function returnToAi(tenantId: string, conversationId: string) {
+  const conversation = await prisma.conversation.findFirst({ where: { id: conversationId, tenantId } });
+  if (!conversation) throw Object.assign(new Error("Conversation not found"), { status: 404 });
+  if (!(conversation as any).assignedAiAgentId) {
+    throw Object.assign(new Error("No AI employee is bound to this conversation"), { status: 409 });
+  }
+
+  const updated = await prisma.conversation.update({
+    where: { id: conversationId },
+    data: { assignedAgentId: null, isHandedOver: false, handledBy: "ai_agent", status: "OPEN" },
+    include: { assignedAgent: { select: { id: true, name: true, email: true } } },
+  });
+
+  await createSystemMessage(tenantId, conversationId, "returned_to_ai", {});
+  emitToTenant(tenantId, "conversation:updated", updated);
+  return updated;
+}
+
 export async function reassign(tenantId: string, conversationId: string, newAgentId: string) {
   const conversation = await prisma.conversation.findFirst({
     where: { id: conversationId, tenantId },
@@ -250,7 +276,7 @@ export async function getAgentWorkload(tenantId: string) {
 }
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://ai:4006";
-const INTERNAL_SERVICE_KEY = process.env.INTERNAL_SERVICE_KEY || "chatcenter-internal-2026";
+const INTERNAL_SERVICE_KEY = getInternalServiceKey();
 
 /**
  * Ask the AI service for the CRM-side identifiers (phone, email, every
@@ -440,7 +466,7 @@ async function sendAutoGreeting(
   try {
     const { getRedis } = await import("@chatcenter/shared");
     const redis = getRedis();
-    const template = await redis.get(`tenant:${tenantId}:autoGreeting`);
+    const template = await readDurableSetting(tenantId, "autoGreeting");
     if (!template) return;
 
     const agent = await prisma.user.findUnique({ where: { id: agentId }, select: { name: true } });

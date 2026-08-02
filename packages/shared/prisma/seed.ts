@@ -1,5 +1,23 @@
 import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
+import { encryptCredentials } from "../src/lib/encryption";
+import { seedIntelligencePacks } from "./seed-intelligence-packs";
+
+// Every credential the seed writes goes through encryptCredentials, exactly as
+// the runtime writers do.
+//
+// It did not, and that was not merely untidy. Several of these read a REAL
+// token out of the environment (WHATSAPP_ACCESS_TOKEN, MESSENGER_ACCESS_TOKEN,
+// ...), so seeding a machine that had them set wrote live provider credentials
+// into the database in plaintext. Nothing complained, because every reader
+// carries a `typeof creds === "string" ? decrypt(creds) : creds` shim for
+// exactly this shape - the compatibility that kept the seed working is what
+// kept the plaintext invisible.
+//
+// Encrypting here also fixes a second, quieter bug: a seeded row was a JSON
+// object where the runtime writes a base64 string, so seeded integrations were
+// in a format `decryptCredentials` cannot read at all.
+const creds = (data: Record<string, unknown>) => encryptCredentials(data) as unknown as any;
+
 
 const prisma = new PrismaClient();
 
@@ -59,10 +77,10 @@ async function main() {
       displayName: "Demo WhatsApp",
       connectionStatus: "CONNECTED",
       connectedAt: new Date(),
-      credentials: {
+      credentials: creds({
         accessToken: process.env.WHATSAPP_ACCESS_TOKEN || "demo-token",
         webhookSecret: process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || "demo-secret",
-      },
+      }),
     },
   });
 
@@ -76,7 +94,7 @@ async function main() {
       displayName: "Demo Messenger",
       connectionStatus: "CONNECTED",
       connectedAt: new Date(),
-      credentials: { accessToken: process.env.MESSENGER_ACCESS_TOKEN || "demo-messenger-token" },
+      credentials: creds({ accessToken: process.env.MESSENGER_ACCESS_TOKEN || "demo-messenger-token" }),
     },
   });
 
@@ -90,7 +108,7 @@ async function main() {
       displayName: "Demo Instagram",
       connectionStatus: "CONNECTED",
       connectedAt: new Date(),
-      credentials: { accessToken: "demo-instagram-token" },
+      credentials: creds({ accessToken: "demo-instagram-token" }),
     },
   });
 
@@ -104,7 +122,7 @@ async function main() {
       displayName: "Demo Gmail",
       connectionStatus: "CONNECTED",
       connectedAt: new Date(),
-      credentials: { accessToken: "demo-gmail-token" },
+      credentials: creds({ accessToken: "demo-gmail-token" }),
     },
   });
 
@@ -118,7 +136,7 @@ async function main() {
       displayName: "Demo Outlook",
       connectionStatus: "CONNECTED",
       connectedAt: new Date(),
-      credentials: { accessToken: "demo-outlook-token" },
+      credentials: creds({ accessToken: "demo-outlook-token" }),
     },
   });
 
@@ -132,7 +150,7 @@ async function main() {
       displayName: "Demo Slack",
       connectionStatus: "CONNECTED",
       connectedAt: new Date(),
-      credentials: { accessToken: "demo-slack-token" },
+      credentials: creds({ accessToken: "demo-slack-token" }),
     },
   });
 
@@ -146,32 +164,75 @@ async function main() {
   });
 
   // ─── Users ───────────────────────────────────────────────────
-  const adminPassword = await bcrypt.hash("admin123", 10);
-  const agentPassword = await bcrypt.hash("agent123", 10);
+  //
+  // Seeded users need an Authentik identity or nobody can log in as them:
+  // GOTCHA stores no credential, so a user row without a subject is inert.
+  // We provision the identity and set a well-known dev password through
+  // Authentik's admin API.
+  //
+  // DEV SEED ONLY. This is the single place in the repo that puts a password
+  // anywhere, it talks to Authentik rather than storing anything locally, and
+  // it refuses to run against a production database.
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("[seed] refusing to seed demo users with known passwords in production");
+  }
+
+  const AK_URL = process.env.AUTHENTIK_URL || "http://localhost:9000";
+  const AK_TOKEN = process.env.AUTHENTIK_API_TOKEN || process.env.AUTHENTIK_BOOTSTRAP_TOKEN;
+
+  async function seedIdentity(email: string, name: string, password: string): Promise<string> {
+    if (!AK_TOKEN) throw new Error("[seed] AUTHENTIK_BOOTSTRAP_TOKEN required to seed users");
+    const h = { Authorization: `Bearer ${AK_TOKEN}`, "Content-Type": "application/json" };
+
+    const found = await fetch(`${AK_URL}/api/v3/core/users/?email=${encodeURIComponent(email)}`, { headers: h })
+      .then((r) => r.json());
+    let user = found.results?.find((u: any) => u.email === email);
+
+    if (!user) {
+      const res = await fetch(`${AK_URL}/api/v3/core/users/`, {
+        method: "POST",
+        headers: h,
+        body: JSON.stringify({ username: email, email, name, is_active: true, path: "users", type: "internal" }),
+      });
+      if (!res.ok) throw new Error(`[seed] create identity failed: ${await res.text()}`);
+      user = await res.json();
+    }
+
+    const pw = await fetch(`${AK_URL}/api/v3/core/users/${user.pk}/set_password/`, {
+      method: "POST",
+      headers: h,
+      body: JSON.stringify({ password }),
+    });
+    if (!pw.ok) throw new Error(`[seed] set password failed: ${await pw.text()}`);
+
+    return user.uuid;
+  }
 
   // System Admin
+  const sysAdminSubject = await seedIdentity("system@demo.com", "System Admin", "admin123");
   const sysAdmin = await prisma.user.upsert({
     where: { tenantId_email: { tenantId: tenant.id, email: "system@demo.com" } },
-    update: {},
+    update: { authentikSubject: sysAdminSubject },
     create: {
       tenantId: tenant.id,
       email: "system@demo.com",
-      password: adminPassword,
       name: "System Admin",
       role: "SYSTEM_ADMIN",
+      authentikSubject: sysAdminSubject,
     },
   });
 
   // Admin
+  const adminSubject = await seedIdentity("admin@demo.com", "Admin User", "admin123");
   const admin = await prisma.user.upsert({
     where: { tenantId_email: { tenantId: tenant.id, email: "admin@demo.com" } },
-    update: {},
+    update: { authentikSubject: adminSubject },
     create: {
       tenantId: tenant.id,
       email: "admin@demo.com",
-      password: adminPassword,
       name: "Admin User",
       role: "ADMIN",
+      authentikSubject: adminSubject,
     },
   });
 
@@ -184,10 +245,11 @@ async function main() {
     { email: "eli@demo.com", name: "Eli Rosenberg" },
   ];
   for (const a of agentData) {
+    const subject = await seedIdentity(a.email, a.name, "agent123");
     const agent = await prisma.user.upsert({
       where: { tenantId_email: { tenantId: tenant.id, email: a.email } },
-      update: {},
-      create: { tenantId: tenant.id, email: a.email, password: agentPassword, name: a.name, role: "AGENT" },
+      update: { authentikSubject: subject },
+      create: { tenantId: tenant.id, email: a.email, name: a.name, role: "AGENT", authentikSubject: subject },
     });
     agents.push(agent);
   }
@@ -280,7 +342,7 @@ async function main() {
       tenantId: tenant.id,
       integrationId: shopifyCatalog.id,
       status: "CONNECTED",
-      credentials: { apiKey: "demo-shopify-key", apiUrl: "https://demo-store.myshopify.com" },
+      credentials: creds({ apiKey: "demo-shopify-key", apiUrl: "https://demo-store.myshopify.com" }),
       config: {},
       connectedAt: new Date(),
       lastTestedAt: new Date(),
@@ -296,7 +358,7 @@ async function main() {
       tenantId: tenant.id,
       integrationId: hubspotCatalog.id,
       status: "CONNECTED",
-      credentials: { apiKey: "demo-hubspot-key" },
+      credentials: creds({ apiKey: "demo-hubspot-key" }),
       config: {},
       connectedAt: new Date(),
       lastTestedAt: new Date(),
@@ -726,8 +788,13 @@ async function main() {
   // bot enforces them out of the box.
   const ACTION_CONTRACTS = [
     {
+      // Booking a meeting requires ONLY the booking tool. A CRM sync must never
+      // be a BLOCKING prerequisite of booking - if the CRM write fails (e.g.
+      // missing OAuth scopes), the bot would otherwise be unable to "complete"
+      // the booking and would escalate to a human instead of just scheduling
+      // the demo. CRM updates happen via the normal lead create/update flow.
       trigger: "booking",
-      requiredTools: [{ name: "schedule_meeting" }, { name: "integration_update_lead" }],
+      requiredTools: [{ name: "schedule_meeting" }],
       executionMode: "ALL_REQUIRED",
       order: null as string[] | null,
       blocking: true,
@@ -775,86 +842,7 @@ async function main() {
   // per-tenant FieldDefinition rows when applied. scope/type are lowercase
   // here and normalized to the Prisma enums by the apply route.
   // See docs/customer-intelligence-domain-model.md §4.4.
-  type PackField = {
-    key: string;
-    label: string;
-    type: "text" | "number" | "boolean" | "enum" | "date";
-    scope: "customer" | "opportunity" | "conversation";
-    options?: string[];
-    required?: boolean;
-  };
-  const SYSTEM_PACKS: { slug: string; name: string; fields: PackField[] }[] = [
-    {
-      slug: "event_hall",
-      name: "Event Hall",
-      fields: [
-        { key: "event_type", label: "Event Type", type: "enum", scope: "opportunity", options: ["wedding", "bar_mitzvah", "bat_mitzvah", "brit", "corporate", "other"] },
-        { key: "event_date", label: "Event Date", type: "text", scope: "opportunity" },
-        { key: "event_time", label: "Event Time", type: "text", scope: "opportunity" },
-        { key: "guest_count", label: "Guest Count", type: "number", scope: "opportunity", required: true },
-        { key: "budget", label: "Budget", type: "number", scope: "opportunity" },
-        { key: "kosher_level", label: "Kosher Level", type: "enum", scope: "opportunity", options: ["regular", "mehadrin", "badatz"] },
-        { key: "outdoor_ceremony", label: "Outdoor Ceremony", type: "boolean", scope: "opportunity" },
-        { key: "parking_required", label: "Parking Required", type: "boolean", scope: "opportunity" },
-        { key: "special_requests", label: "Special Requests", type: "text", scope: "opportunity" },
-        { key: "bride_name", label: "Bride Name", type: "text", scope: "opportunity" },
-        { key: "groom_name", label: "Groom Name", type: "text", scope: "opportunity" },
-      ],
-    },
-    {
-      slug: "real_estate",
-      name: "Real Estate",
-      fields: [
-        { key: "property_type", label: "Property Type", type: "enum", scope: "opportunity", options: ["apartment", "house", "penthouse", "commercial", "land"] },
-        { key: "rooms", label: "Rooms", type: "number", scope: "opportunity" },
-        { key: "budget", label: "Budget", type: "number", scope: "opportunity" },
-        { key: "location", label: "Location", type: "text", scope: "opportunity" },
-        { key: "move_date", label: "Move Date", type: "text", scope: "opportunity" },
-        { key: "mortgage_required", label: "Mortgage Required", type: "boolean", scope: "opportunity" },
-      ],
-    },
-    {
-      slug: "recruiting",
-      name: "Recruiting",
-      fields: [
-        { key: "desired_position", label: "Desired Position", type: "text", scope: "opportunity" },
-        { key: "expected_salary", label: "Expected Salary", type: "number", scope: "opportunity" },
-        { key: "availability", label: "Availability", type: "text", scope: "opportunity" },
-        { key: "experience_years", label: "Years of Experience", type: "number", scope: "customer" },
-        { key: "security_clearance", label: "Security Clearance", type: "boolean", scope: "customer" },
-      ],
-    },
-    {
-      slug: "ecommerce",
-      name: "E-commerce",
-      fields: [
-        { key: "order_number", label: "Order Number", type: "text", scope: "opportunity" },
-        { key: "order_status", label: "Order Status", type: "enum", scope: "opportunity", options: ["pending", "shipped", "delivered", "returned", "cancelled"] },
-        { key: "product", label: "Product", type: "text", scope: "opportunity" },
-        { key: "refund_requested", label: "Refund Requested", type: "boolean", scope: "opportunity" },
-        { key: "shipping_issue", label: "Shipping Issue", type: "boolean", scope: "opportunity" },
-        { key: "delivery_date", label: "Delivery Date", type: "text", scope: "opportunity" },
-      ],
-    },
-  ];
-  for (const pack of SYSTEM_PACKS) {
-    // tenantId is null for system packs; the (tenantId, slug) unique index
-    // treats NULLs as distinct, so use findFirst + update/create for idempotency.
-    const existing = await prisma.intelligencePack.findFirst({
-      where: { tenantId: null, slug: pack.slug },
-    });
-    if (existing) {
-      await prisma.intelligencePack.update({
-        where: { id: existing.id },
-        data: { name: pack.name, fields: pack.fields as any, isSystem: true },
-      });
-    } else {
-      await prisma.intelligencePack.create({
-        data: { tenantId: null, slug: pack.slug, name: pack.name, fields: pack.fields as any, isSystem: true },
-      });
-    }
-  }
-  console.log(`Industry packs: ${SYSTEM_PACKS.map((p) => p.slug).join(", ")}`);
+  await seedIntelligencePacks(prisma);
 
   // ─── Done ───────────────────────────────────────────────────
   console.log("\n✅ Seed complete!\n");

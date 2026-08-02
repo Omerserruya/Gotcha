@@ -115,6 +115,24 @@ const TOOLS: ToolDefinition[] = [
     },
   },
   {
+    name: "hubspot.create_task",
+    description: "Create a first-class HubSpot TASK (not a note) on a contact's timeline.",
+    whenToUse: "Materializing a follow-up/to-do so it shows in HubSpot's task queue with status + due date.",
+    category: "WRITE",
+    riskLevel: "LOW",
+    parameters: {
+      type: "object",
+      properties: {
+        contact_id: { type: "string" },
+        subject: { type: "string", description: "Task title (hs_task_subject)." },
+        body: { type: "string", description: "Task details (hs_task_body)." },
+        priority: { type: "string", enum: ["LOW", "MEDIUM", "HIGH", "NONE"], description: "hs_task_priority." },
+        due_ts: { type: "number", description: "Due date as epoch ms (hs_timestamp). Defaults to now." },
+      },
+      required: ["contact_id", "subject"],
+    },
+  },
+  {
     name: "hubspot.create_deal",
     description: "Open a new deal in a HubSpot pipeline, optionally associated to a contact.",
     whenToUse: "Customer has agreed to move forward and a deal record should track the opportunity.",
@@ -268,18 +286,35 @@ const HubSpotAdapter: ProviderAdapter = {
     if (!token) throw new Error("no_access_token");
     switch (toolName) {
       case "create_contact": {
+        // NOTE: do NOT send `hs_lead_source` here - it is a property of the
+        // HubSpot *Leads* object, NOT Contacts, so portals without it reject the
+        // whole upsert with PROPERTY_DOESNT_EXIST. That failure used to bubble up
+        // as a tool failure and make the bot escalate the conversation to a human
+        // on every lead capture. `args.source` is recorded via the conversation /
+        // notes instead.
         const props = stripEmpty({
           email: args.email,
           firstname: args.firstname,
           lastname: args.lastname,
           phone: args.phone,
           company: args.company,
-          hs_lead_source: args.source,
         });
-        // Upsert via /contacts batch with idProperty=email
-        const r = await hsRequest(token, "POST", "/crm/v3/objects/contacts/batch/upsert", {
-          inputs: [{ idProperty: "email", id: args.email, properties: props }],
-        });
+        // Upsert via /contacts batch with idProperty=email. Safety net: if the
+        // portal is missing ANY property we send (custom field not provisioned),
+        // strip the offending one and retry once rather than failing the capture.
+        const upsert = (p: Record<string, unknown>) =>
+          hsRequest(token, "POST", "/crm/v3/objects/contacts/batch/upsert", {
+            inputs: [{ idProperty: "email", id: args.email, properties: p }],
+          });
+        let r: unknown;
+        try {
+          r = await upsert(props);
+        } catch (e: any) {
+          const missing = missingHubspotProperty(e?.message, props);
+          if (!missing) throw e;
+          delete props[missing];
+          r = await upsert(props);
+        }
         return (r as any).results?.[0] ?? r;
       }
       case "update_contact":
@@ -319,6 +354,31 @@ const HubSpotAdapter: ProviderAdapter = {
             `/crm/v3/objects/${path}/${(created as any).id}/associations/contacts/${args.contact_id}/${path === "notes" ? "note_to_contact" : path === "emails" ? "email_to_contact" : "call_to_contact"}`,
             null,
           );
+        }
+        return created;
+      }
+      case "create_task": {
+        // First-class HubSpot task object - shows in the task queue with a real
+        // status/priority/due date, instead of a "TODO:" note on the timeline.
+        const PRIO = new Set(["LOW", "MEDIUM", "HIGH", "NONE"]);
+        const priority = PRIO.has(String(args.priority).toUpperCase())
+          ? String(args.priority).toUpperCase()
+          : "NONE";
+        const props = stripEmpty({
+          hs_task_subject: args.subject,
+          hs_task_body: args.body,
+          hs_task_status: "NOT_STARTED",
+          hs_task_priority: priority,
+          hs_task_type: "TODO",
+          // hs_timestamp is the task's DUE date for tasks (required).
+          hs_timestamp: Number(args.due_ts) > 0 ? Number(args.due_ts) : Date.now(),
+        });
+        const created = await hsRequest(token, "POST", "/crm/v3/objects/tasks", { properties: props });
+        if (args.contact_id) {
+          await hsRequest(token, "PUT",
+            `/crm/v3/objects/tasks/${(created as any).id}/associations/contacts/${args.contact_id}/task_to_contact`,
+            null,
+          ).catch((err: any) => console.warn("[hubspot-adapter] task→contact association failed:", err?.message));
         }
         return created;
       }
@@ -411,6 +471,24 @@ const HubSpotAdapter: ProviderAdapter = {
     }
   },
 };
+
+// Given a HubSpot error message and the properties we sent, return the key of a
+// property the portal says does not exist (PROPERTY_DOESNT_EXIST) so the caller
+// can strip it and retry. `email` is never stripped (it is the upsert key).
+function missingHubspotProperty(
+  msg: string | undefined,
+  props: Record<string, unknown>,
+): string | null {
+  if (!msg || !/does not exist|PROPERTY_DOESNT_EXIST/i.test(msg)) return null;
+  // Prefer an exact quoted match (e.g. ... "hs_lead_source" does not exist),
+  // then fall back to any sent key referenced anywhere in the error body.
+  const keys = Object.keys(props).filter((k) => k !== "email");
+  return (
+    keys.find((k) => msg.includes(`"${k}"`)) ??
+    keys.find((k) => msg.includes(k)) ??
+    null
+  );
+}
 
 async function hsRequest(token: string, method: string, path: string, body: unknown | null): Promise<unknown> {
   const init: RequestInit = {

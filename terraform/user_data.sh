@@ -127,6 +127,20 @@ if docker compose -f /opt/chatcenter/docker-compose.yml ps db --status running -
   aws s3 cp "\$TMPDIR/db-\$STAMP.sql.gz" "s3://\$BUCKET/db/db-\$STAMP.sql.gz"
 fi
 
+# Authentik identity database. SEPARATE dump - it lives in its own container
+# and its own schema, so the GOTCHA dump above does not contain it.
+#
+# This is the most important thing on the box. It holds every credential and
+# MFA secret. Lose it and every user is locked out permanently: the GOTCHA
+# rows survive, but the identities they join to via User.authentikSubject do
+# not, and nobody can authenticate to recreate them.
+if docker compose -f /opt/chatcenter/docker-compose.yml ps authentik-db --status running -q | grep -q .; then
+  docker compose -f /opt/chatcenter/docker-compose.yml exec -T authentik-db \
+    pg_dump -U "\$${AUTHENTIK_PG_USER:-authentik}" "\$${AUTHENTIK_PG_DB:-authentik}" \
+    | gzip > "\$TMPDIR/authentik-\$STAMP.sql.gz"
+  aws s3 cp "\$TMPDIR/authentik-\$STAMP.sql.gz" "s3://\$BUCKET/authentik/authentik-\$STAMP.sql.gz"
+fi
+
 # Uploads volume tarball.
 UPLOADS_PATH="/var/lib/docker/volumes/chatcenter_uploads/_data"
 if [ -d "\$UPLOADS_PATH" ]; then

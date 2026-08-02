@@ -1,10 +1,13 @@
 import { Router, Request, Response } from "express";
-import { prisma, authenticate, resolveTenant, requireActiveTenant, requireRole } from "@chatcenter/shared";
-import { buildConfigFromAIAgent, chatWithAgent } from "../services/ai-assist.service";
-import { generateResponse } from "../services/ai.service";
+import { prisma, authenticate, resolveTenant, requireActiveTenant, requirePermissionOrRole, requireEntitlement, requireCapacity } from "@chatcenter/shared";
+import { runSandboxTurn } from "../services/sandbox-conversation.service";
+import { computeCalendarCapability } from "../services/calendar-capability.service";
+import { generateResponse, getDefaultModel } from "../services/ai.service";
 import { computeBehaviorState } from "../services/behavior-engine.service";
 import { buildAgentPrompt, GENERATOR_BUILTIN_AGENT } from "../services/prompt-builder.service";
 import { isBrandArchetype } from "../services/brand-archetypes";
+import { loadToolGrants, deriveAllowedOperations } from "../services/agent-loop/permissions-bridge";
+import { ensureCapabilitiesRegistered, describeAllWorlds } from "../services/capability-plane";
 
 const router = Router();
 
@@ -22,8 +25,42 @@ function sanitizePersona<T>(persona: T): T {
   return persona;
 }
 
+/**
+ * Normalize the Product Qualification Context (agent.salesContext). Trims the
+ * two string fields, cleans the four string-array fields, and collapses an
+ * all-empty object to NULL so the prompt block is skipped. Unknown keys are
+ * dropped. Returns null for non-object input.
+ */
+function normalizeSalesContext(raw: unknown): Record<string, unknown> | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const r = raw as Record<string, unknown>;
+  const str = (v: unknown): string | undefined =>
+    typeof v === "string" && v.trim() ? v.trim() : undefined;
+  const list = (v: unknown): string[] =>
+    Array.isArray(v)
+      ? v.filter((x): x is string => typeof x === "string" && !!x.trim()).map((s) => s.trim())
+      : [];
+
+  const out: Record<string, unknown> = {};
+  const whatWeSell = str(r.whatWeSell);
+  const idealCustomerProfile = str(r.idealCustomerProfile);
+  const problemsSolved = list(r.problemsSolved);
+  const expectedOutcomes = list(r.expectedOutcomes);
+  const qualificationSignals = list(r.qualificationSignals);
+  const disqualifiers = list(r.disqualifiers);
+
+  if (whatWeSell) out.whatWeSell = whatWeSell;
+  if (idealCustomerProfile) out.idealCustomerProfile = idealCustomerProfile;
+  if (problemsSolved.length) out.problemsSolved = problemsSolved;
+  if (expectedOutcomes.length) out.expectedOutcomes = expectedOutcomes;
+  if (qualificationSignals.length) out.qualificationSignals = qualificationSignals;
+  if (disqualifiers.length) out.disqualifiers = disqualifiers;
+
+  return Object.keys(out).length ? out : null;
+}
+
 // ─── List AI Agents ──────────────────────────────────────────
-router.get("/", authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.get("/", authenticate, resolveTenant, requireActiveTenant(), requirePermissionOrRole("ai:employees:read", "ADMIN"), async (req: Request, res: Response) => {
   try {
     const agents = await prisma.aIAgent.findMany({
       where: { tenantId: req.tenantId! as string },
@@ -35,15 +72,35 @@ router.get("/", authenticate, resolveTenant, requireActiveTenant(), requireRole(
       orderBy: { createdAt: "desc" },
     });
 
-    // Enrich with tool count
+    // Departments resolved once rather than per agent.
+    const departments = await prisma.department.findMany({
+      where: { tenantId: req.tenantId! as string },
+      select: { id: true, name: true },
+    }).catch(() => [] as Array<{ id: string; name: string }>);
+    const deptById = new Map(departments.map((d) => [d.id, d.name]));
+
+    // Enrich with tool count, department name and when it was last tested.
     const enriched = await Promise.all(agents.map(async (agent) => {
       const toolCount = await prisma.agentToolPermission.count({
         where: { tenantId: req.tenantId! as string, aiAgentId: agent.id, isAllowed: true },
       });
+      // "Last tested" is read from the sandbox conversation the test chat keeps,
+      // so it reflects a real conversation rather than a separate counter that
+      // could drift from whether anyone actually tried the employee.
+      const sandbox = await prisma.conversation.findFirst({
+        where: {
+          tenantId: req.tenantId! as string,
+          customerExternalId: { startsWith: `sandbox:${agent.id}:` },
+        },
+        select: { lastMessageAt: true, updatedAt: true },
+        orderBy: { updatedAt: "desc" },
+      }).catch(() => null);
       return {
         ...agent,
         knowledgeSources: agent.knowledgeBases.map((ak: any) => ak.knowledgeBase),
         toolCount,
+        departmentName: agent.departmentId ? deptById.get(agent.departmentId) ?? null : null,
+        lastTestedAt: sandbox ? (sandbox.lastMessageAt ?? sandbox.updatedAt) : null,
       };
     }));
 
@@ -55,7 +112,7 @@ router.get("/", authenticate, resolveTenant, requireActiveTenant(), requireRole(
 });
 
 // ─── Generate AI Employee Config from Wizard Answers ────────
-router.post("/generate", authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.post("/generate", authenticate, resolveTenant, requireActiveTenant(), requirePermissionOrRole("ai:employees:update", "ADMIN"), async (req: Request, res: Response) => {
   try {
     const { answers, departmentId } = req.body;
     if (!answers || typeof answers !== "object") {
@@ -190,7 +247,7 @@ router.post("/generate", authenticate, resolveTenant, requireActiveTenant(), req
 });
 
 // ─── Get AI Agent by ID ──────────────────────────────────────
-router.get("/:id", authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.get("/:id", authenticate, resolveTenant, requireActiveTenant(), requirePermissionOrRole("ai:employees:read", "ADMIN"), async (req: Request, res: Response) => {
   try {
     const agent = await prisma.aIAgent.findFirst({
       where: { id: req.params.id as string, tenantId: req.tenantId! as string },
@@ -221,26 +278,43 @@ router.get("/:id", authenticate, resolveTenant, requireActiveTenant(), requireRo
       },
     });
 
-    const tools = toolPermissions.map(tp => ({
-      id: tp.tenantTool.catalogTool.id,
-      tenantToolId: tp.tenantToolId,
-      name: tp.tenantTool.catalogTool.name,
-      slug: tp.tenantTool.catalogTool.slug,
-      risk: tp.tenantTool.catalogTool.riskLevel,
-      integration: tp.tenantTool.tenantIntegration.integration.name,
-      enabled: tp.isAllowed,
-      requireApproval: tp.requireApproval,
-      // Per-agent semantics (Tier 2). NULL when the operator hasn't
-      // customized - composeToolDescription falls back to catalog defaults.
-      description: (tp as any).description ?? null,
-      usageRule: (tp as any).usageRule ?? null,
-    }));
+    // Dedupe by tenantToolId: one tenant-tool is one logical tool. Duplicate
+    // permission rows can exist (the unique key includes the NULLABLE
+    // departmentId, and Postgres treats NULLs as distinct, so a department-less
+    // re-assign inserts a second row). Collapse them so the UI never shows the
+    // same action twice. Keep the first (lowest id wins via createdAt order).
+    const seenTenantTool = new Set<string>();
+    const tools = toolPermissions
+      .filter((tp) => {
+        if (seenTenantTool.has(tp.tenantToolId)) return false;
+        seenTenantTool.add(tp.tenantToolId);
+        return true;
+      })
+      .map(tp => ({
+        id: tp.tenantTool.catalogTool.id,
+        tenantToolId: tp.tenantToolId,
+        name: tp.tenantTool.catalogTool.name,
+        slug: tp.tenantTool.catalogTool.slug,
+        risk: tp.tenantTool.catalogTool.riskLevel,
+        integration: tp.tenantTool.tenantIntegration.integration.name,
+        enabled: tp.isAllowed,
+        requireApproval: tp.requireApproval,
+        // Per-agent semantics (Tier 2). NULL when the operator hasn't
+        // customized - composeToolDescription falls back to catalog defaults.
+        description: (tp as any).description ?? null,
+        usageRule: (tp as any).usageRule ?? null,
+      }));
+
+    // Single calendar-capability signal so the builder can warn accurately
+    // when calendar tools are enabled but the agent cannot actually book.
+    const calendarCapability = await computeCalendarCapability(req.tenantId! as string, agent.id);
 
     res.json({
       data: {
         ...agent,
         knowledgeSources: agent.knowledgeBases.map((ak: any) => ak.knowledgeBase),
         tools,
+        calendarCapability,
       },
     });
   } catch (err) {
@@ -262,7 +336,23 @@ function requiresFunnel(role: string | undefined | null): boolean {
 }
 
 // ─── Create AI Agent ─────────────────────────────────────────
-router.post("/", authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"), async (req: Request, res: Response) => {
+// Plan gates run BEFORE the handler:
+//   requireEntitlement("ai.employee")     - is this capability sold on the plan?
+//   requireCapacity("limit:ai_employees") - is there headroom under the limit?
+// Both return a structured 402 the frontend can act on. Hiding the "New
+// employee" button is not enforcement; this is.
+router.post(
+  "/",
+  authenticate,
+  resolveTenant,
+  requireActiveTenant(),
+  requirePermissionOrRole("ai:employees:create", "ADMIN"),
+  requireEntitlement("ai.employee"),
+  // Every employee counts, including DRAFT and PAUSED: a draft can be activated
+  // at any moment, so excluding it would let an organization stage its way past
+  // the limit and then flip them all on.
+  requireCapacity("limit:ai_employees", (tenantId) => prisma.aIAgent.count({ where: { tenantId } })),
+  async (req: Request, res: Response) => {
   try {
     const {
       name, role, description, avatarColor, status,
@@ -272,7 +362,7 @@ router.post("/", authenticate, resolveTenant, requireActiveTenant(), requireRole
       behavioral, persona, maxAutonomousMessages, maxAutonomousMinutes,
       confidenceThreshold, escalationMessage, conversationFlow, customGuardrails,
       departmentId, funnelId,
-      goal, successCriteria,
+      goal, successCriteria, salesContext,
       knowledgeBaseIds, toolIds,
     } = req.body;
 
@@ -296,6 +386,17 @@ router.post("/", authenticate, resolveTenant, requireActiveTenant(), requireRole
         return;
       }
     }
+    // An explicitly-ACTIVE create must satisfy the same readiness rule the
+    // wizard enforces: at least one knowledge base. Otherwise any API client
+    // can mint a live employee with nothing grounded to answer from.
+    if (String(status || "").toUpperCase() === "ACTIVE" && (!Array.isArray(knowledgeBaseIds) || knowledgeBaseIds.length === 0)) {
+      res.status(422).json({
+        error: "knowledge_required_for_active",
+        message: "An ACTIVE AI employee needs at least one knowledge base. Create as DRAFT or attach knowledgeBaseIds.",
+      });
+      return;
+    }
+
     const normalizedGoal: string | null = (() => {
       if (typeof goal === "string" && goal.trim()) return goal.trim();
       if (requiresFunnel(effectiveRole)) return null;
@@ -320,7 +421,7 @@ router.post("/", authenticate, resolveTenant, requireActiveTenant(), requireRole
         escalationRules: escalationRules || [],
         interactiveMessages: interactiveMessages || {},
         systemPrompt: systemPrompt || "",
-        model: model || "gpt-4o-mini",
+        model: model || getDefaultModel(),
         provider: provider || "openai",
         temperature: temperature ?? 0.7,
         maxTokens: maxTokens ?? 1024,
@@ -329,7 +430,7 @@ router.post("/", authenticate, resolveTenant, requireActiveTenant(), requireRole
         toneConfig: toneConfig || null,
         behavioral: behavioral || null,
         persona: sanitizePersona(persona) || null,
-        maxAutonomousMessages: maxAutonomousMessages ?? 10,
+        maxAutonomousMessages: maxAutonomousMessages ?? 30,
         maxAutonomousMinutes: maxAutonomousMinutes ?? 15,
         confidenceThreshold: confidenceThreshold ?? 0.6,
         escalationMessage: escalationMessage || "Let me connect you with a team member who can help further.",
@@ -339,6 +440,9 @@ router.post("/", authenticate, resolveTenant, requireActiveTenant(), requireRole
         funnelId: funnelId || null,
         goal: normalizedGoal,
         successCriteria: typeof successCriteria === "string" ? successCriteria.trim() || null : null,
+        // Cast matches the loosely-typed sibling Json fields (identity/behavioral
+        // are `any` from req.body); null → SQL NULL, same as those.
+        salesContext: normalizeSalesContext(salesContext) as any,
       },
     });
 
@@ -375,7 +479,7 @@ router.post("/", authenticate, resolveTenant, requireActiveTenant(), requireRole
 });
 
 // ─── Update AI Agent ─────────────────────────────────────────
-router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), requirePermissionOrRole("ai:employees:update", "ADMIN"), async (req: Request, res: Response) => {
   try {
     const existing = await prisma.aIAgent.findFirst({
       where: { id: req.params.id as string, tenantId: req.tenantId! as string },
@@ -386,7 +490,39 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
       return;
     }
 
-    const { knowledgeBaseIds, toolIds, tools: toolsWithOverrides, mode: _dropMode, ...updateData } = req.body;
+    const { knowledgeBaseIds, toolIds, tools: toolsWithOverrides } = req.body;
+
+    // Explicit column allowlist. NEVER rest-spread req.body into the update:
+    // AIAgent has tenantId (cross-tenant move) and server-owned columns
+    // (readinessReport, timestamps) that must not be client-settable.
+    // `sharedPrompt`, `autonomousPrompt` and `escalationGates` are NOT here.
+    //
+    // Each existed only in this array. No UI sent them, no runtime read them -
+    // their sole appearance anywhere in the codebase was as a string in this
+    // list, which made them look supported. An API that accepts a field and
+    // then ignores it is worse than one that rejects it: an integrator sets
+    // `escalationGates`, gets a 200, and never learns the agent's escalation
+    // behaviour did not change.
+    //
+    // The COLUMNS stay. Dropping them is a separate change after a
+    // compatibility period, and `agent-field-reachability.test.ts` records
+    // which fields actually reach the runtime so this set cannot quietly grow
+    // again.
+    const AGENT_EDITABLE_FIELDS = [
+      "name", "role", "avatarColor", "status", "tone", "languages", "style",
+      "channels", "escalationRules", "interactiveMessages", "systemPrompt",
+      "model", "provider", "temperature",
+      "maxTokens", "persona", "identity", "goals", "toneConfig", "behavioral",
+      "salesContext", "goal", "successCriteria", "maxAutonomousMessages",
+      "maxAutonomousMinutes", "confidenceThreshold", "escalationMessage",
+      "conversationFlow", "customGuardrails", "capabilities",
+      "behavioralAnchors", "departmentId", "funnelId",
+    ] as const;
+    const bodySrc = (req.body ?? {}) as Record<string, unknown>;
+    const updateData: Record<string, any> = {};
+    for (const k of AGENT_EDITABLE_FIELDS) {
+      if (Object.prototype.hasOwnProperty.call(bodySrc, k)) updateData[k] = bodySrc[k];
+    }
 
     // Empty strings from the dropdowns mean "no binding" - coerce to NULL
     // so the FK constraint accepts it (Postgres won't accept "" as a cuid).
@@ -417,6 +553,12 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
         : null;
     }
 
+    // Product Qualification Context (sales). Clean strings/arrays; an
+    // all-empty object collapses to NULL so the prompt block is skipped.
+    if (Object.prototype.hasOwnProperty.call(updateData, "salesContext")) {
+      updateData.salesContext = normalizeSalesContext(updateData.salesContext);
+    }
+
     // Role-driven guardrails on update - funnel binding is still required
     // for pipeline roles (Sales/SDR/Recruiting) because stages drive
     // behavior. `goal` is preferred but not blocking on PATCH - legacy
@@ -430,10 +572,62 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
       return;
     }
 
+    // Saving from the editor means the creation wizard is finished - clear the
+    // resumable progress pointer so the agent leaves the "resume setup" list
+    // and is treated as a fully-configured employee.
+    const wasIncompleteWizard = existing.status === "DRAFT" && (existing as any).builderStep != null;
+    updateData.builderStep = null;
+
+    // Only mark the employee ACTIVE once the creation wizard actually
+    // completes (was an incomplete DRAFT, now being saved). Guarded so a
+    // PAUSED agent edited later is never silently reactivated. Promotion
+    // (auto OR explicit `status:"ACTIVE"` in the body) additionally requires
+    // server-side readiness (real name + goal-or-funnel + >=1 knowledge
+    // base) - an unready draft SAVES fine but stays DRAFT.
+    const explicitStatus = Object.prototype.hasOwnProperty.call(updateData, "status");
+    if (existing.status === "DRAFT" && (wasIncompleteWizard || (explicitStatus && updateData.status === "ACTIVE"))) {
+      const promotedName = String(merged.name ?? "").trim();
+      const hasIdentity = !!promotedName && promotedName !== "Untitled AI Employee";
+      const hasGoalOrFunnel = requiresFunnel(merged.role)
+        ? !!merged.funnelId
+        : !!String(merged.goal ?? "").trim();
+      const kbCount = Array.isArray(knowledgeBaseIds)
+        ? knowledgeBaseIds.length
+        : await prisma.aIAgentKnowledge.count({ where: { aiAgentId: req.params.id as string } });
+      const ready = hasIdentity && hasGoalOrFunnel && kbCount > 0;
+      if (explicitStatus && updateData.status === "ACTIVE" && !ready) {
+        const missing = [
+          ...(hasIdentity ? [] : ["name"]),
+          ...(hasGoalOrFunnel ? [] : [requiresFunnel(merged.role) ? "funnel" : "goal"]),
+          ...(kbCount > 0 ? [] : ["knowledge"]),
+        ];
+        res.status(422).json({ error: "draft_not_ready", missing });
+        return;
+      }
+      if (!explicitStatus && wasIncompleteWizard) {
+        if (ready) {
+          updateData.status = "ACTIVE";
+        } else {
+          console.warn(`[ai-agents] draft ${req.params.id} saved but NOT promoted (readiness unmet: identity=${hasIdentity} goalOrFunnel=${hasGoalOrFunnel} kb=${kbCount})`);
+        }
+      }
+    }
+
     const agent = await prisma.aIAgent.update({
       where: { id: req.params.id as string },
       data: updateData,
     });
+
+    // Keep the linked RouterRule label in sync with the employee's name on a
+    // rename - onboarding already does this at hire time; the editor must too, or
+    // the routing/inbox label keeps showing the OLD name after a rename (part of
+    // "the name change doesn't take effect").
+    if (Object.prototype.hasOwnProperty.call(updateData, "name") && typeof agent.name === "string" && agent.name.trim() && agent.name !== existing.name) {
+      await prisma.routerRule.updateMany({
+        where: { tenantId: req.tenantId! as string, aiAgentId: agent.id },
+        data: { name: agent.name.trim() },
+      }).catch(() => { /* label sync is cosmetic - never fail the save on it */ });
+    }
 
     // Update knowledge base assignments if provided
     if (knowledgeBaseIds && Array.isArray(knowledgeBaseIds)) {
@@ -513,7 +707,7 @@ router.put(
   authenticate,
   resolveTenant,
   requireActiveTenant(),
-  requireRole("ADMIN"),
+  requirePermissionOrRole("ai:tools:assign", "ADMIN"),
   async (req: Request, res: Response) => {
     try {
       const tenantId = req.tenantId! as string;
@@ -577,8 +771,86 @@ router.put(
   },
 );
 
+// ─── Reachability ────────────────────────────────────────────
+// Runtime routing is exclusively the FlowCanvas graph: an ACTIVE employee
+// with no agent-node targeting it NEVER receives a conversation. This
+// endpoint tells the UI the truth so "go live" can't be a broken promise.
+router.get("/:id/reachability", authenticate, resolveTenant, requireActiveTenant(), requirePermissionOrRole("ai:employees:read", "ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const agent = await prisma.aIAgent.findFirst({
+      where: { id: req.params.id as string, tenantId: req.tenantId! as string },
+      select: { id: true },
+    });
+    if (!agent) { res.status(404).json({ error: "AI agent not found" }); return; }
+
+    const canvas = await (prisma as any).flowCanvas.findUnique({
+      where: { tenantId: req.tenantId! as string },
+      select: { nodes: true },
+    });
+    const nodes: any[] = Array.isArray(canvas?.nodes) ? (canvas!.nodes as any[]) : [];
+    // A node routes to this employee when its routeType is (or defaults to)
+    // "agent" and targetId matches - mirrors flow-executor's dispatchRoute.
+    const reachable = nodes.some((n) => {
+      const routeType = n?.data?.routeType ?? "agent";
+      return routeType === "agent" && n?.data?.targetId === agent.id;
+    });
+    res.json({ data: { hasCanvas: !!canvas, reachable } });
+  } catch (err) {
+    console.error("Reachability check error:", err);
+    res.status(500).json({ error: "Failed to check reachability" });
+  }
+});
+
+// ─── Effective permissions (P1-8) ────────────────────────────
+// The SINGLE source of truth for "what can this employee actually do right
+// now": the runtime AND-rule - an operation is EFFECTIVE only when its
+// capability is live (CONNECTED / bookable / KB attached) AND (for tool-governed
+// domains) an AgentToolPermission grants it. Reuses the exact permissions bridge
+// + capability world the kernel uses, so the UI never disagrees with the runtime.
+router.get("/:id/effective-permissions", authenticate, resolveTenant, requireActiveTenant(), requirePermissionOrRole("ai:employees:read", "ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId! as string;
+    const agentId = req.params.id as string;
+    const agent = await prisma.aIAgent.findFirst({ where: { id: agentId, tenantId }, select: { id: true } });
+    if (!agent) { res.status(404).json({ error: "AI agent not found" }); return; }
+
+    ensureCapabilitiesRegistered();
+    const [grants, world] = await Promise.all([
+      loadToolGrants(tenantId, agentId),
+      describeAllWorlds({ tenantId, aiAgentId: agentId, conversationId: "effective-permissions-probe" }),
+    ]);
+    const exposedOps = world.flatMap((w) => w.operations.map((o) => o.name));
+    const allowed = deriveAllowedOperations(grants, exposedOps);
+    const unrestricted = allowed.length === 0; // kernel convention: [] = all exposed ops
+    const allowedSet = new Set(allowed);
+
+    // Per-capability breakdown so the UI shows WHY an op is on/off.
+    const capabilities = world.map((w) => ({
+      capability: w.capability,
+      summary: w.summary,
+      live: w.operations.length > 0,
+      operations: w.operations.map((o) => ({
+        name: o.name,
+        effective: unrestricted || allowedSet.has(o.name),
+      })),
+    }));
+
+    res.json({
+      data: {
+        governed: grants.governed,
+        allowedToolSlugs: [...grants.allowedToolSlugs],
+        effectiveOperations: unrestricted ? exposedOps : allowed.filter((op) => op !== "__no_operations_granted__"),
+        capabilities,
+      },
+    });
+  } catch (err: any) {
+    console.error("Effective-permissions error:", err?.message);
+    res.status(500).json({ error: "Failed to compute effective permissions" });
+  }
+});
+
 // ─── Test Chat ───────────────────────────────────────────────
-router.post("/:id/test-chat", authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.post("/:id/test-chat", authenticate, resolveTenant, requireActiveTenant(), requirePermissionOrRole("ai:employees:read", "ADMIN"), async (req: Request, res: Response) => {
   try {
     const agent = await prisma.aIAgent.findFirst({
       where: { id: req.params.id as string, tenantId: req.tenantId! as string },
@@ -589,22 +861,45 @@ router.post("/:id/test-chat", authenticate, resolveTenant, requireActiveTenant()
       return;
     }
 
-    const { message, history = [] } = req.body as {
+    const { message, writes, reset } = req.body as {
       message: string;
-      history: Array<{ role: "user" | "assistant"; content: string }>;
+      writes?: "safe" | "real";
+      reset?: boolean;
     };
+    if (typeof message !== "string" || !message.trim()) {
+      res.status(400).json({ error: "message is required" });
+      return;
+    }
 
-    const config = buildConfigFromAIAgent(agent as any, "agent");
-    const reply = await chatWithAgent({
+    // Runs the PRODUCTION employee (generateAIBotReply) against a real sandbox
+    // conversation, so the test uses the same prompt, playbook, knowledge,
+    // tone, tools, routing, policy and memory model as live traffic. The
+    // previous implementation was a separate, thinner lookalike that could not
+    // have matched production even in principle - see
+    // sandbox-conversation.service for the full list of what it was missing.
+    //
+    // `history` is no longer accepted from the client: memory now comes from
+    // the conversation itself, which is what production does. Trusting a
+    // client-supplied transcript also meant the tester could not actually
+    // verify that the employee remembers anything.
+    const turn = await runSandboxTurn({
       tenantId: req.tenantId! as string,
-      conversationId: `test-${agent.id}`,
-      messages: [],
-      copilotConfig: config,
-      agentMessage: message,
-      chatHistory: history,
+      agentId: agent.id,
+      userId: String((req as any).user?.userId || "admin"),
+      message,
+      writes: writes === "real" ? "real" : "safe",
+      reset: reset === true,
     });
 
-    res.json({ data: { reply } });
+    if (!turn) {
+      res.status(404).json({ error: "AI agent not found" });
+      return;
+    }
+
+    // `diagnostics` answers "why did it answer this way?". It is derived from
+    // what the turn actually did and contains no prompt text and no chain of
+    // thought - only the employee, the sources, the tools and the decisions.
+    res.json({ data: { reply: turn.reply, diagnostics: turn.diagnostics } });
   } catch (err) {
     console.error("Test chat error:", err);
     res.status(500).json({ error: "Failed to generate response" });
@@ -612,7 +907,7 @@ router.post("/:id/test-chat", authenticate, resolveTenant, requireActiveTenant()
 });
 
 // ─── Delete AI Agent ─────────────────────────────────────────
-router.delete("/:id", authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.delete("/:id", authenticate, resolveTenant, requireActiveTenant(), requirePermissionOrRole("ai:employees:delete", "ADMIN"), async (req: Request, res: Response) => {
   try {
     const existing = await prisma.aIAgent.findFirst({
       where: { id: req.params.id as string, tenantId: req.tenantId! as string },
@@ -623,23 +918,53 @@ router.delete("/:id", authenticate, resolveTenant, requireActiveTenant(), requir
       return;
     }
 
-    // Check if any router rules reference this agent. Must be tenant-scoped -
-    // the shared TenantGuard rejects any query whose where clause is missing
-    // tenantId (a count without it 500s instead of returning a number).
-    const ruleCount = await prisma.routerRule.count({
-      where: { tenantId: req.tenantId! as string, aiAgentId: req.params.id as string, enabled: true },
+    // Router rules that point at this agent are deleted WITH it, in one
+    // transaction. Blocking the delete instead (the old 409) made every
+    // onboarding-created employee permanently undeletable, because onboarding
+    // always seeds a RouterRule for the employee it creates.
+    //
+    // The rules cannot simply be left behind: the schema relation is
+    // onDelete:SetNull, so an AI_AGENT rule would survive with aiAgentId=null
+    // and route to nothing. `routeTarget` holds the same id for AI_AGENT rules
+    // and has no FK at all, so it is matched explicitly.
+    //
+    // Queries stay tenant-scoped - the shared TenantGuard rejects any where
+    // clause missing tenantId (it 500s rather than returning a result).
+    const agentId = req.params.id as string;
+    const tenantId = req.tenantId! as string;
+
+    const removedRules = await prisma.$transaction(async (tx) => {
+      const { count } = await tx.routerRule.deleteMany({
+        where: {
+          tenantId,
+          OR: [{ aiAgentId: agentId }, { routeType: "AI_AGENT", routeTarget: agentId }],
+        },
+      });
+
+      // Voice channels hold this agent id TWICE: as `ai_agent_id`, which the
+      // schema nulls for us (onDelete: SetNull), and as a mirror inside the
+      // `copilot_config` JSONB that the channel update route rewrites on every
+      // save. Nulling the column alone left the mirror pointing at an agent
+      // that no longer exists, and the copilot config loader read the blob - so
+      // the binding looked live long after the employee was gone.
+      //
+      // Raw SQL because Prisma cannot remove a key from a JSONB column. Scoped
+      // by tenant AND by the id being removed, so it cannot touch a channel
+      // bound to a different agent.
+      await tx.$executeRaw`
+        UPDATE voice_channels vc
+        SET copilot_config = vc.copilot_config - 'aiAgentId'
+        FROM communication_channels cc
+        WHERE cc.id = vc.communication_channel_id
+          AND cc.tenant_id = ${tenantId}
+          AND vc.copilot_config->>'aiAgentId' = ${agentId}
+      `;
+
+      await tx.aIAgent.delete({ where: { id: agentId } });
+      return count;
     });
 
-    if (ruleCount > 0) {
-      res.status(409).json({
-        error: "Cannot delete AI agent that is referenced by active routing rules",
-        activeRules: ruleCount,
-      });
-      return;
-    }
-
-    await prisma.aIAgent.delete({ where: { id: req.params.id as string } });
-    res.json({ success: true });
+    res.json({ success: true, removedRoutingRules: removedRules });
   } catch (err) {
     console.error("Delete AI agent error:", err);
     res.status(500).json({ error: "Failed to delete AI agent" });

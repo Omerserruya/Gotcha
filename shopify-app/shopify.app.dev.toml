@@ -1,0 +1,103 @@
+# GOTCHA Chat — DEVELOPMENT app manifest.
+#
+# A second Partner app, used only against development stores. Same code,
+# different identity and different host, so a development install can never
+# reach production data and a production listing can never be reconfigured
+# by a developer's `shopify app deploy`.
+#
+# Select it with:   shopify app config use shopify.app.dev.toml
+# Verify it with:   node scripts/shopify/verify-chat-app-identity.mjs --config shopify.app.dev.toml
+#
+# `dev.gotcha.co.il` is the only non-production host that actually resolves
+# and serves both the API and the widget assets. `app.gotcha.co.il` and
+# `api.gotcha.co.il` do NOT exist — do not reintroduce them.
+#
+# NOTE: `shopify app config link` rewrote this file with Shopify's defaults
+# when it created the app (embedded = true, placeholder application_url and
+# redirect_urls, automatically_update_urls_on_dev = true). Those are
+# restored below to the values this architecture actually needs. If you
+# re-run `config link`, re-check every value in this file afterwards.
+
+client_id = "96c9417a8e0b8b7ea17b8c9bf7f4c3ad"
+name = "GOTCHA Chat (Dev)"
+handle = "gotcha-chat-dev"
+
+# Non-embedded: GOTCHA's merchant UI is its own application, not an iframe
+# inside Shopify admin. There is no App Bridge and no session-token code,
+# which is also why the authorization-code flow (not token exchange) is the
+# correct install path for this app.
+embedded = false
+
+# Where Shopify sends a merchant who opens the app. Starts the install
+# handshake when the shop is not yet bound, and lands on the onboarding
+# wizard when it is.
+application_url = "https://dev.gotcha.co.il/api/connectors/shopify-chat/oauth/init"
+
+[access_scopes]
+# EMPTY BY DESIGN — the storefront widget needs no Admin API access.
+scopes = ""
+
+[auth]
+redirect_urls = [
+  "https://dev.gotcha.co.il/api/connectors/shopify-chat/oauth/callback",
+]
+
+[webhooks]
+# Aligned with prod and with packages/shared/src/lib/shopify-api-version.ts.
+# Previously 2026-10 — which the CLI wrote but which is ANNOUNCED, NOT YET
+# RELEASED (Shopify ships it 2026-10-01). Pinning forward is the same mistake
+# as pinning to an expired version, in the other direction: dev exercised a
+# contract that does not exist yet while prod ran 2024-04, so neither
+# environment tested what the other received.
+api_version = "2026-07"
+
+  # Chat lifecycle. Handled by services/ai, verified with the CHAT secret.
+  [[webhooks.subscriptions]]
+  topics = [ "app/uninstalled" ]
+  uri = "https://dev.gotcha.co.il/api/shopify-chat/webhooks/app-uninstalled"
+
+  # Mandatory compliance topics for public App Store distribution.
+  #
+  # These are NOT ordinary subscriptions. Declaring them as
+  # `[[webhooks.subscriptions]]` is rejected outright — "The following
+  # topic is invalid: customers/data_request" — because Shopify treats the
+  # privacy trio as a distinct, named block. The endpoints behind them are
+  # the same handlers either way.
+  [webhooks.privacy_compliance]
+  customer_data_request_url = "https://dev.gotcha.co.il/api/shopify-chat/webhooks/customers-data-request"
+  customer_deletion_url = "https://dev.gotcha.co.il/api/shopify-chat/webhooks/customers-redact"
+  shop_deletion_url = "https://dev.gotcha.co.il/api/shopify-chat/webhooks/shop-redact"
+
+[build]
+# OFF deliberately. With this on, `shopify app dev` rewrites
+# application_url and redirect_urls to a tunnel address and leaves them
+# there — which is exactly how an app quietly stops pointing at
+# dev.gotcha.co.il.
+automatically_update_urls_on_dev = false
+# NOTE: `include_config_on_deploy` used to live here and was removed by the
+# CLI on link — it is deprecated in 3.x, and configuration is now ALWAYS
+# uploaded by `app deploy`. That makes the identity check in
+# scripts/shopify/verify-chat-app-identity.mjs more load-bearing, not less:
+# there is no longer any flag standing between a mis-linked project and the
+# Core connector's configuration.
+
+[app_proxy]
+# The ONLY way the storefront can prove which customer is chatting.
+#
+# The shopper's browser calls the merchant's own origin
+# (https://<shop>/apps/gotcha-chat/...); Shopify then calls `url`
+# server-to-server with `logged_in_customer_id` and a `signature` made
+# with this app's secret. The browser never holds the secret, so it
+# cannot forge the claim — which is exactly why Liquid's `customer.id`
+# is not usable for this.
+#
+# No access scope is involved: identity comes from Shopify's signature,
+# not from the Admin API. Reading that customer's ORDERS would need
+# read_customers/read_orders and Protected Customer Data approval, which
+# this app deliberately does not hold.
+#
+# `url` must match this config's host, or Shopify signs a request that
+# arrives nowhere.
+url = "https://dev.gotcha.co.il/api/shopify-chat/proxy"
+subpath = "gotcha-chat"
+prefix = "apps"

@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { z } from "zod";
-import { authenticate, resolveTenant, requireActiveTenant, publishEvent, prisma } from "@chatcenter/shared";
+import { authenticate, resolveTenant, requireActiveTenant, publishEvent, prisma, verifyInternalServiceKey } from "@chatcenter/shared";
 import { handleVoiceStream } from "../services/voice-assist.service";
 
 // ─── Zod schemas ─────────────────────────────────────────────
@@ -39,8 +39,8 @@ function internalAuth(req: Request, res: Response, next: NextFunction): void {
     token = authHeader.replace(/^Bearer\s+/i, "");
   }
 
-  const expected = process.env.INTERNAL_SERVICE_KEY || "chatcenter-internal-2026";
-  if (!token || token !== expected) {
+  // Hardened check: constant-time, fail-closed, no committed default.
+  if (!verifyInternalServiceKey(token)) {
     res.status(401).json({ error: "unauthorized" });
     return;
   }

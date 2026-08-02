@@ -24,8 +24,11 @@ export type {
   ChannelCredentials,
   InboundAdapter,
   OutboundAdapter,
+  ProviderSendError,
 } from "./channels";
 export {
+  ChannelSendError,
+  describeSendError,
   detectInboundAdapter,
   getOutboundAdapter,
   getInboundAdapters,
@@ -55,6 +58,70 @@ export {
   unifyContact,
   findSiblingContacts,
 } from "./lib/identity-resolver";
+// Read vs write classification - ONE table, used by the Copilot's
+// who-executes decision and by the sandbox write guard in dispatchToolCall.
+// Migrating existing tool policy into the three-state model. Conservative by
+// construction: never enables a disabled tool, never makes an approval-gated
+// tool autonomous, and reports impossible states instead of guessing.
+export {
+  decideMigration,
+  buildMigrationReport,
+  migrationWrites,
+} from "./lib/tool-policy-migration";
+export type {
+  ThreeState,
+  MigrationOutcome,
+  LegacyPolicy,
+  MigrationDecision,
+  MigrationReport,
+} from "./lib/tool-policy-migration";
+// Integrations & Tools workspace classification. Strict product boundary:
+// Channels owns communication, Knowledge Manager owns knowledge sources, and
+// this workspace owns business systems + executable tool policy.
+export {
+  classifyCatalogIntegration,
+  classifyChannel,
+  classifyKnowledgeSource,
+  gotchaEntry,
+  buildWorkspaceSidebar,
+  governableToolCount,
+  GOTCHA_ENTRY_ID,
+} from "./lib/integration-workspace";
+export type {
+  WorkspaceEntry,
+  WorkspaceEntryKind,
+  WorkspaceSidebar,
+  ConnectionState,
+  ExternalOwner,
+  CatalogIntegrationInput,
+  ChannelInput,
+  KnowledgeSourceInput,
+  InternalToolsInput,
+} from "./lib/integration-workspace";
+// Tool permission explanation layer: risk grouping, and WHY a tool cannot run.
+// Deliberately not an authorization decision - evaluateToolGate owns that.
+export {
+  RISK_GROUPS,
+  riskGroupFor,
+  mayBeAlwaysAllowed,
+  recommendedState,
+  resolveToolAvailability,
+  summarizeTools,
+  groupByRisk,
+  planBulkAction,
+  bulkActionNeedsConfirmation,
+} from "./lib/tool-availability";
+export type {
+  RiskGroup,
+  PermissionState,
+  UnavailableReason,
+  ToolAvailabilityInput,
+  ToolAvailability,
+  ToolCounts,
+  BulkAction,
+} from "./lib/tool-availability";
+export { classifyToolEffect } from "./lib/tool-effect";
+export type { ToolEffect } from "./lib/tool-effect";
 export {
   evaluateToolGate,
   evaluatePolicies,
@@ -70,13 +137,89 @@ export type {
 } from "./lib/tool-gate";
 export {
   createApprovalRequest,
+  computeOperationKey,
   findPendingByConversation,
   approveRequest,
   rejectRequest,
+  claimForExecution,
+  recordExecutionOutcome,
+  claimCustomerNotification,
+  linkCustomerMessage,
 } from "./lib/approval-requests";
 export type { CreateApprovalRequestInput } from "./lib/approval-requests";
-export { trackAIUsage, estimateAICost, AI_MODEL_PRICING } from "./lib/ai-usage";
-export type { AIUsageEvent } from "./lib/ai-usage";
+export { sanitizeCustomerText, hasAiSignaturePunctuation, withProtectedAtoms } from "./lib/customer-text";
+export { issueCustomerVerification, confirmCustomerVerification } from "./lib/customer-verification";
+export {
+  getOrCreateActiveSession,
+  activeFacts,
+  applyExtractedFacts,
+  recordQuestionAsked,
+  markAnswered,
+  computeReadiness,
+  shouldBlockQuestion,
+  recordActionAttempt,
+  buildDiscoverySnapshot,
+  type FactSource,
+  type ProposedFact,
+  type ReadinessResult,
+} from "./lib/discovery-state";
+export {
+  getDiscoveryProfile,
+  normalizeFactKey,
+  aliasMap,
+  PRODUCT_RECOMMENDATION_PROFILE,
+  type DiscoveryProfile,
+  type FactSpec,
+  type FactValueType,
+} from "./lib/discovery-profiles";
+export {
+  evaluateBusinessPolicy,
+  evaluateConfig,
+  actionKindForTool,
+  revalidateBeforeExecution,
+} from "./lib/business-policy";
+export type {
+  BusinessActionKind,
+  BusinessPolicyConfig,
+  BusinessPolicyFacts,
+  BusinessPolicyResult,
+  PolicyDecisionKind,
+  PolicyEvaluationPoint,
+} from "./lib/business-policy";
+export type {
+  Money,
+  ChipTone,
+  StatusChip,
+  OrderItem,
+  TimelineMilestone,
+  TimelineSource,
+  TimelineActor,
+  OrderCard,
+  OrderDetail,
+  OrderLineDetail,
+  OrderTracking,
+  OrderRefundEvent,
+  CommerceSummary,
+  CommerceCapabilities,
+  CommerceContext,
+  CommerceContextResponse,
+  AICommerceOrder,
+  AICommerceSnapshot,
+  CommerceActionKind,
+  CommerceActionRequest,
+  CommerceOrderActionKind,
+  CommerceCustomerActionKind,
+  CommerceActionResponse,
+} from "./lib/commerce-context.types";
+export { toolDisplayName, humanizeToolName, looksLikeRawToolId } from "./lib/tool-display-names";
+export {
+  COMMERCE_ORDER_ACTIONS,
+  COMMERCE_CUSTOMER_ACTIONS,
+  isCustomerScopedAction,
+  isOrderScopedAction,
+} from "./lib/commerce-context.types";
+export { trackAIUsage, estimateAICost, computeAICostUsd, resolveModelPricing, AI_MODEL_PRICING, getEmployeeUsageRollup } from "./lib/ai-usage";
+export type { AIUsageEvent, EmployeeUsageRollup } from "./lib/ai-usage";
 export {
   AI_FEATURE_CATEGORIES,
   AI_CATEGORY_ORDER,
@@ -86,7 +229,75 @@ export {
 } from "./lib/ai-feature-categories";
 export type { AiFeatureCategory, AiFeatureCategoryDef } from "./lib/ai-feature-categories";
 export { getRedis, closeRedis } from "./lib/redis";
-export { signToken, verifyToken, generateRefreshToken, getJwtExpiresInMs } from "./lib/jwt";
+export {
+  mintApprovalRefs,
+  consumeApprovalRef,
+  revokeApprovalRefs,
+  isApprovalRef,
+  normalizeE164,
+} from "./lib/approval-refs";
+export type { ApprovalRefBinding, ApprovalDecision } from "./lib/approval-refs";
+export {
+  resolveApprovalRecipient,
+  userMayApprove,
+  recipientRejectionMessage,
+} from "./lib/approval-recipients";
+export type { EligibleRecipient, RecipientRejection } from "./lib/approval-recipients";
+export {
+  BUSINESS_HOURS_KEY,
+  parseBusinessHours,
+  evaluateBusinessHours,
+  describeNextOpening,
+  DAY_KEYS,
+} from "./lib/business-hours";
+export type { BusinessHoursConfig, BusinessOpenState, DayKey, DaySchedule } from "./lib/business-hours";
+export { verifyAccessToken, verifyIdToken } from "./lib/jwt";
+export { resolvePrincipal, AuthError } from "./lib/principal";
+export { getOAuthStateSecret } from "./lib/oauth-state";
+export { mintOAuthState, consumeOAuthState, returnPathForFlow } from "./lib/oauth-state-store";
+export type { OAuthStateClaims, MintedState, ConsumeResult } from "./lib/oauth-state-store";
+export { verifyInternalServiceKey, requireInternalKey, getInternalServiceKey } from "./lib/internal-key";
+export { safeFetch, assertPublicUrl, isBlockedIp, SsrfError } from "./lib/safe-fetch";
+export type { SafeFetchOptions, SafeFetchResult } from "./lib/safe-fetch";
+export { verifyWebhookSignature, verifySharedSecretToken, timingSafeEqualStr } from "./lib/webhook-verify";
+export type { WebhookVerifyResult } from "./lib/webhook-verify";
+export { writeAudit, auditUser, auditSystem, AuditAction } from "./lib/audit";
+export type { AuditEventInput, AuditActorType, AuditActionValue } from "./lib/audit";
+export {
+  ensureIdentity,
+  createRecoveryLink,
+  deactivateIdentity,
+  setIdentityActive,
+  deleteIdentity,
+  updateIdentity,
+  findIdentityBySubject,
+  publicAuthentikOrigin,
+  listUserSessions,
+  terminateSession,
+  terminateAllUserSessions,
+  listUserLoginEvents,
+  listUserDevices,
+  deleteUserDevice,
+  getMfaEnrollmentMap,
+  getUserLastLogin,
+  getLastLoginBySubject,
+  type AuthentikIdentity,
+  type AuthentikSession,
+  type AuthentikLoginEvent,
+  type AuthentikDevice,
+  type AuthentikSecuritySummary,
+  type MfaEnrollmentState,
+  type RemovableDeviceType,
+} from "./lib/authentik";
+export {
+  mfaRequirementFor,
+  isEnrolledWithRecovery,
+  type MfaRole,
+  type TenantMfaPolicy,
+  type MfaRequirement,
+  type MfaRequirementReason,
+  type MfaFactorCounts,
+} from "./lib/mfa";
 export {
   FEATURES,
   FEATURE_METADATA,
@@ -104,10 +315,138 @@ export {
   assertFeature,
   invalidatePermissionsCache,
   FeatureGateError,
+  // Hierarchical permission resolver (canonical RBAC path).
+  hasPermission,
+  assertPermission,
+  getUserPermissions,
+  getEffectiveAccess,
+  getEffectiveBuiltinRole,
+  resolveUserScope,
+  isPermissionLicensed,
+  scopeToDb,
+  PermissionDeniedError,
 } from "./lib/permissions";
-export type { PermissionUser } from "./lib/permissions";
+export type { PermissionUser, PermissionPrincipal } from "./lib/permissions";
+
+// Permission catalog - single source of truth for RBAC, licensing, packaging.
+export {
+  PERMISSIONS,
+  ALL_PERMISSION_KEYS,
+  ALL_LICENSE_KEYS,
+  SCOPE_ORDER,
+  BUILTIN_ROLES,
+  BUILTIN_ROLE_ORDER,
+  isPermissionKey,
+  getPermission,
+  listPermissionsByDomain,
+  expandPermissionPattern,
+  expandPermissionPatterns,
+  featureLicenseKey,
+  subFeatureLicenseKey,
+  licenseKeysFor,
+  builtinRoleForLegacy,
+  maxScope,
+} from "./lib/permission-catalog";
+export type {
+  PermissionDef,
+  PermissionScope,
+  PermissionKind,
+  PermissionDomain,
+  PermissionKey,
+  BuiltinRoleKey,
+  BuiltinRoleDef,
+} from "./lib/permission-catalog";
+
+// Outbound-call destination validation (server-side E.164 gate).
+export { validateE164 } from "./lib/phone-validation";
+export type { E164Validation } from "./lib/phone-validation";
+
+// RBAC seed + backfill.
+export {
+  seedTenantRoles,
+  backfillTenantAssignments,
+  seedTenantRbac,
+  seedAllTenantsRbac,
+} from "./lib/rbac-seed";
+
+// Packaging / plans (License layer presets).
+export {
+  PLAN_PRESETS,
+  PLAN_ORDER,
+  PLAN_DOMAINS,
+  applyPlanToTenant,
+  planDomains,
+} from "./lib/plans";
+export type { PlanKey, PlanDef } from "./lib/plans";
+
+// Billing · Subscription · AI Units (pricing engine, wallet, entitlement layering).
+export * from "./lib/billing";
+export {
+  PLATFORM_PERMISSIONS,
+  PLATFORM_PERMISSION_CATALOG,
+  ALL_PLATFORM_PERMISSION_KEYS,
+  isPlatformPermission,
+} from "./lib/platform-permissions";
+export type { PlatformPermission, PlatformPermissionDef } from "./lib/platform-permissions";
 export { encryptCredentials, decryptCredentials, isEncrypted } from "./lib/encryption";
+
+// BFF app-session infrastructure (additive; inert until cookie flags enabled).
+// See docs/security/bff-session-migration-map.md §A18 commit 1.
+export {
+  sealSessionSecret,
+  openSessionSecret,
+  loadSessionKeyring,
+  assertSessionEncryptionReady,
+  SessionCryptoError,
+  type SessionCryptoContext,
+} from "./lib/session-crypto";
+export {
+  generateSessionToken,
+  hashSessionToken,
+  isWellFormedSessionToken,
+  isWellFormedTokenHash,
+} from "./lib/session-token";
+export {
+  parseSessionCookie,
+  serializeSessionCookie,
+  serializeClearedSessionCookie,
+  resolveSessionCookieContract,
+  SessionCookieError,
+  PROD_SESSION_COOKIE_NAME,
+  DEV_SESSION_COOKIE_NAME,
+  type SessionCookieContract,
+} from "./lib/session-cookie";
+export {
+  normalizeOrigin,
+  loadOriginPolicy,
+  isAllowedOrigin,
+  assertAppOriginReady,
+  AppOriginError,
+  type OriginPolicy,
+} from "./lib/app-origins";
+export {
+  readSessionFlags,
+  sessionInfraEnabled,
+  type SessionFlags,
+} from "./lib/session-flags";
+export {
+  REVOCATION_REASON,
+  readSessionTtl,
+  expiredSessionsWhere,
+  revokedSessionsWhere,
+  identitySessionsWhere,
+  staleVersionSessionsWhere,
+  membershipSessionsWhere,
+  isSessionUsable,
+  toSafeSessionView,
+  assertSessionInfraReady,
+  SESSION_SECRET_FIELDS,
+  type RevocationReason,
+  type SafeSessionView,
+  type SessionTtl,
+} from "./lib/session-store";
 export { redact, safeLogger } from "./lib/log-redact";
+export * from "./lib/tenant-access-policy";
 export {
   incomingMessageQueue,
   outgoingMessageQueue,
@@ -125,6 +464,10 @@ export { createServiceApp, startService } from "./lib/service-app";
 export {
   LINK_IDENTIFIER_TOOL,
   ESCALATE_TOOL,
+  INTEGRATION_CREATE_LEAD_TOOL,
+  INTEGRATION_CREATE_CONTACT_TOOL,
+  SEND_PRODUCT_CARD_TOOL,
+  SEND_PRODUCT_CAROUSEL_TOOL,
   buildAgentTools,
   buildAgentToolsForAIAgent,
   dispatchToolCall,
@@ -137,7 +480,263 @@ export type {
   ToolCallLike,
   ScheduleMeetingArgs,
   ScheduleMeetingResult,
+  RescheduleMeetingArgs,
+  RescheduleMeetingResult,
+  CancelMeetingResult,
+  CheckAvailabilityArgs,
+  CheckAvailabilityResult,
+  WorkingHoursWindow,
+  SendShopifyProductsArgs,
+  SendShopifyProductsResult,
 } from "./lib/agent-tools";
+
+// Business discovery: shape guarantees for the Json columns whose
+// collections several writers populate inconsistently.
+export {
+  normalizeDiscoveryTechnology,
+  normalizeDiscoveryCommunication,
+  normalizeDiscoveryRecord,
+  DISCOVERY_TECH_COLLECTIONS,
+} from "./lib/business-discovery-shape";
+export type {
+  DiscoveryConfidence,
+  DiscoveryTechItem,
+  DiscoveryPlatform,
+  DiscoveryTechnology,
+  DiscoveryChannel,
+  DiscoveryCommunication,
+} from "./lib/business-discovery-shape";
+
+// Onboarding → Knowledge Base projection. Pure: what SHOULD exist in the
+// knowledge base given what onboarding learned, plus the deterministic
+// reconciliation that makes a website re-scan refresh rather than duplicate.
+export {
+  KB_TOPICS,
+  SCAN_VERSION,
+  normalizeUrl,
+  normalizeContent,
+  checksumOf,
+  dedupeKeyFor,
+  buildEntry,
+  reconcile,
+} from "./lib/knowledge/onboarding-projection";
+export type {
+  KbTopic,
+  KbSourceType,
+  KbSourceMetadata,
+  ProjectedEntry,
+  ExistingDoc,
+  ReconcileAction,
+  ReconcileItem,
+  ReconcilePlan,
+} from "./lib/knowledge/onboarding-projection";
+export {
+  projectDiscoveryTopics,
+  projectPages,
+  projectReadinessAnswers,
+  projectExternalSources,
+  titleFor,
+} from "./lib/knowledge/discovery-to-knowledge";
+export type {
+  DiscoveryInput,
+  ProfileInput,
+  ReadinessAnswer,
+  PageInput,
+  ExternalSourceInput,
+  ProjectionContext,
+} from "./lib/knowledge/discovery-to-knowledge";
+
+// Shopify Live Chat - channel config, visitor sessions, product snapshots.
+export {
+  SHOPIFY_LIVE_CHAT_CHANNEL,
+  SHOPIFY_MESSAGE_TYPES,
+  MAX_CAROUSEL_ITEMS,
+  DEFAULT_CAROUSEL_ITEMS,
+  MAX_VISITOR_MESSAGE_CHARS,
+  VISITOR_SESSION_TTL_SECONDS,
+  DEFAULT_SUGGESTED_QUESTIONS,
+  isShopifyCommerceMessageType,
+  normalizeShopDomain,
+  normalizeStorefrontDomain,
+  buildAllowedOrigins,
+  isOriginAllowed,
+  defaultShopifyLiveChatConfig,
+  normalizeShopifyLiveChatConfig,
+  readShopifyLiveChatConfig,
+  sanitizeToken,
+  sanitizeAssetUrl,
+  sanitizeProductImageUrl,
+  buildProductUrl,
+  buildProductSnapshot,
+  signVisitorSession,
+  verifyVisitorSession,
+  newVisitorId,
+  normalizeStorefrontContext,
+  isRenderableCommercePayload,
+  projectVisitorMessage,
+} from "./lib/shopify-live-chat";
+export type {
+  ShopifyMessageType,
+  ShopifyLiveChatConfig,
+  ShopifyLiveChatAppearance,
+  ShopifyLiveChatWelcome,
+  ShopifyLiveChatHours,
+  ShopifyLiveChatRouting,
+  ShopifyLiveChatCommerce,
+  ShopifyLiveChatPrivacy,
+  ShopifyLiveChatInstall,
+  Availability,
+  VisitorSessionPayload,
+  StorefrontContext,
+  StorefrontPageType,
+  ProductSnapshot,
+  ProductVariantSnapshot,
+  ShopifyCommerceMessagePayload,
+  BuildProductSnapshotInput,
+  VisitorMessageView,
+  VisitorProjectionContext,
+} from "./lib/shopify-live-chat";
+
+// Shopify chat EXPERIENCE: launcher, hero, proactive teaser, sounds and
+// the widget state machine. Separate from the channel contract above.
+export {
+  SHOPIFY_CHAT_UX_SCHEMA_VERSION,
+  WIDGET_STATES,
+  resolveWidgetState,
+  showsHero,
+  sanitizeMediaUrl,
+  HERO_IMAGE_EXTENSIONS,
+  HERO_VIDEO_EXTENSIONS,
+  MEDIA_GUIDANCE,
+  LAUNCHER_SHAPES,
+  LAUNCHER_ICON_NAMES,
+  HERO_MEDIA_TYPES,
+  PROACTIVE_TRIGGERS,
+  SOUND_PACKS,
+  defaultWelcome,
+  normalizeWelcome,
+  migrateLegacyWelcome,
+  resolveHeroHeight,
+  heroHeightWarning,
+  DEFAULT_WELCOME_QUESTIONS,
+  defaultLauncher,
+  normalizeLauncher,
+  defaultHero,
+  normalizeHero,
+  defaultProactive,
+  normalizeProactive,
+  shouldShowTeaser,
+  defaultSounds,
+  normalizeSounds,
+  shouldPlaySound,
+  defaultBehavior,
+  normalizeBehavior,
+  defaultShopifyChatUx,
+  normalizeShopifyChatUx,
+  publicUxConfig,
+} from "./lib/shopify-chat-ux";
+export type {
+  WidgetState,
+  LauncherShape,
+  LauncherIconName,
+  HeroMediaType,
+  ProactiveTrigger,
+  SoundPack,
+  SoundEvent,
+  ShopifyChatWelcome,
+  ShopifyChatLauncher,
+  ShopifyChatHero,
+  ShopifyChatProactive,
+  ShopifyChatSounds,
+  ShopifyChatBehavior,
+  ShopifyChatUx,
+  TeaserDecisionInput,
+} from "./lib/shopify-chat-ux";
+
+// Stripe pins its version IN CODE. Unlike Shopify/Meta (which expire versions
+// and fall forward), Stripe with no header uses the ACCOUNT DASHBOARD default —
+// so the contract lived in a web console until this was added.
+export {
+  stripeApiVersion,
+  stripeVersionHeader,
+  reportStripeApiVersion,
+  STRIPE_API_VERSION_REVIEW_BY,
+  __resetStripeApiVersionCache,
+} from "./lib/stripe-api-version";
+
+// The ONE place the Meta Graph API version is decided. Replaced eight
+// independent declarations across four services that sat on three different
+// versions at once — two of them expired.
+export {
+  metaGraphVersion,
+  metaGraphBaseUrl,
+  reportMetaGraphVersion,
+  META_GRAPH_VERSION_REVIEW_BY,
+  __resetMetaGraphVersionCache,
+} from "./lib/meta-graph-version";
+
+// The ONE place the Shopify Admin API version is decided, plus the response
+// check that makes Shopify's silent fall-forward visible. A second local
+// `const API_VERSION` anywhere is how the previous 15-month drift happened.
+export {
+  shopifyApiVersion,
+  reportShopifyApiVersion,
+  checkShopifyResponseVersion,
+  SHOPIFY_API_VERSION_REVIEW_BY,
+  __resetShopifyApiVersionCache,
+} from "./lib/shopify-api-version";
+
+// GOTCHA Shopify CHAT app — its own identity, verification and lifecycle.
+// Deliberately a separate module from the live-chat channel config above:
+// one describes the merchant's widget, the other the Shopify app that
+// installs it. See docs/architecture/shopify-core-vs-chat-app.md.
+export {
+  getShopifyChatAppConfig,
+  validateChatAppConfig,
+  isChatAppConfigured,
+  normalizeShopifyShopDomain,
+  normalizeStorefrontHost,
+  verifyShopifyQueryHmac,
+  verifyShopifyWebhookHmac,
+  buildThemeEditorDeepLink,
+  buildAppAdminLink,
+  resolveChatActivationState,
+  isServingState,
+  HEARTBEAT_FRESH_MS,
+  HEARTBEAT_GRACE_MS,
+} from "./lib/shopify-chat-app";
+export type {
+  ShopifyChatAppConfig,
+  ChatAppConfigProblem,
+  ChatActivationState,
+  ChatActivationInput,
+} from "./lib/shopify-chat-app";
+
+// The App Proxy — the only path by which the storefront can PROVE which
+// customer is chatting. See lib/shopify-app-proxy.ts for why Liquid's
+// customer.id is not proof.
+export {
+  IDENTITY_TOKEN_TTL_SECONDS,
+  verifyAppProxySignature,
+  loggedInCustomerId,
+  signCustomerIdentity,
+  verifyCustomerIdentity,
+  verifiedCustomerExternalId,
+  isVerifiedCustomerExternalId,
+} from "./lib/shopify-app-proxy";
+export type { ShopifyCustomerIdentity } from "./lib/shopify-app-proxy";
+
+// The website chat widget. Shares its experience block with the Shopify
+// storefront widget on purpose — see lib/webchat-widget.ts.
+export {
+  WEBCHAT_CHANNEL,
+  defaultWebchatConfig,
+  normalizeWebchatConfig,
+  migrateLegacyWebchat,
+  isLegacyWebchatSettings,
+  publicWebchatConfig,
+} from "./lib/webchat-widget";
+export type { WebchatConfig, LegacyWebchatSettings, WebchatPosition } from "./lib/webchat-widget";
 
 // Secrets
 export { getSecret, requireSecret, setSecretProvider, resetSecretProvider } from "./secrets";
@@ -146,10 +745,22 @@ export type { SecretProvider } from "./secrets";
 // Middleware
 export { authenticate } from "./middleware/auth";
 export { requireRole, requireSystemAdmin, requireDepartmentRole } from "./middleware/rbac";
+export { enforceMfaEnrollment } from "./middleware/mfa-guard";
 export { requireFeature, requireTenantFeature } from "./middleware/feature-gate";
+export { requirePermission, requirePermissionOrRole } from "./middleware/permission-gate";
 export { resolveTenant, assertTenantId } from "./middleware/tenant";
-export { requireActiveTenant, requireOnboardingOrActiveTenant } from "./middleware/tenant-status";
+export { requireActiveTenant, requireOnboardingOrActiveTenant, requirePaymentSetupAccess } from "./middleware/tenant-status";
 export { validate } from "./middleware/validate";
+// Admin-set tenant settings that must survive a restart. Postgres is the
+// source of truth; Redis stays in front as the cache the hot paths read.
+export { readDurableSetting, writeDurableSetting, settingCacheKey } from "./lib/durable-settings";
+export { requireEntitlement, requireCapacity, handleEntitlementError } from "./middleware/entitlement";
+// The service-level entitlement check, for code paths with no Express request:
+// background subscribers, workers and queue consumers. `requireEntitlement` is
+// middleware and cannot reach those, which is a large part of why commercial
+// enforcement stopped at the HTTP edge.
+export { isEntitled, entitledIn, resolveEntitlements, assertEntitled } from "./lib/billing/entitlement-resolver";
+export { requirePlatformPermission } from "./middleware/platform-permission";
 
 // Shared CRM client - used by AI tools, outbound, broadcast, and any
 // caller that needs CRM lookup/segmentation. Provider-agnostic.
@@ -267,6 +878,15 @@ export {
   type SupportedLocale,
   type ResolvedLocale,
 } from "./lib/locale";
+
+// Capability Runtime (operation contracts + pure resolver). Strategy/provider
+// impls live in services/ai and are injected via RuntimeBindings.
+export * from "./lib/capability-runtime";
+
+// Agent Contract (FROZEN architecture, Phase 1: envelope only - pure types +
+// pure binder + master flag, not wired into the live path). The kernel above
+// stays the single execution authority; an Agent only proposes through it.
+export * from "./lib/agent";
 
 // Types import (side-effect for Express augmentation)
 import "./types/express.d";

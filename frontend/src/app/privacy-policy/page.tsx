@@ -118,10 +118,10 @@ export default function PrivacyPolicyPage() {
               <li><strong>Conversation Data:</strong> Message content and conversation records are retained for the duration of the business customer&apos;s subscription, plus a reasonable period thereafter (not exceeding 90 days) to facilitate service continuity and account recovery.</li>
               <li><strong>Agent and Administrator Data:</strong> Account data is retained for the duration of the user&apos;s active account. Upon account deletion, personal data is removed within 30 days, except where retention is required for legal or audit purposes.</li>
               <li><strong>Analytics Data:</strong> Aggregated and anonymized analytics data may be retained for up to 24 months for service improvement purposes.</li>
-              <li><strong>Backup Data:</strong> Encrypted backups may retain data for up to 30 days beyond the primary deletion date for disaster recovery purposes.</li>
+              <li><strong>Backup Data:</strong> Encrypted backups may retain data for up to 90 days beyond the primary deletion date for disaster recovery purposes.</li>
             </ul>
             <p>
-              Business customers may request earlier deletion of their data by contacting us at [Contact Email].
+              Business customers may request earlier deletion of their data by contacting us at privacy@gotcha.co.il.
             </p>
           </section>
 
@@ -130,7 +130,7 @@ export default function PrivacyPolicyPage() {
             <p>We implement appropriate technical and organizational measures to protect personal data, including:</p>
             <ul className="list-disc pl-6 space-y-1">
               <li>Encryption of data in transit using TLS/SSL protocols</li>
-              <li>Secure hashing of authentication credentials (bcrypt)</li>
+              <li>Authentication handled by a dedicated identity provider, so we never store your password. Sign-in supports two-factor authentication and passkeys</li>
               <li>Role-based access controls with principle of least privilege</li>
               <li>Multi-tenant data isolation at the application and database levels</li>
               <li>Regular security assessments and vulnerability monitoring</li>
@@ -153,7 +153,7 @@ export default function PrivacyPolicyPage() {
               <li><strong>Right to Withdraw Consent:</strong> Where processing is based on consent, you may withdraw your consent at any time.</li>
             </ul>
             <p>
-              To exercise any of these rights, please contact us at <strong>[Contact Email]</strong>. We will respond to your request within 30 days, as required by applicable law.
+              To exercise any of these rights, please contact us at <strong>privacy@gotcha.co.il</strong>. We will respond to your request within 30 days, as required by applicable law.
             </p>
             <p>
               If you are an end-customer who communicated with a business via WhatsApp, please direct your data rights requests to the business you communicated with, as they are the data controller for your conversation data. We will cooperate with the business to fulfill such requests.
@@ -167,7 +167,7 @@ export default function PrivacyPolicyPage() {
               <p>If you wish to have your data deleted from our system, you may do so through any of the following methods:</p>
               <ol className="list-decimal pl-6 space-y-2 mt-3">
                 <li>
-                  <strong>Email Request:</strong> Send an email to <strong>[Contact Email]</strong> with the subject line &quot;Data Deletion Request&quot;. Include the phone number or email address associated with your data so we can locate and remove your records.
+                  <strong>Email Request:</strong> Send an email to <strong>privacy@gotcha.co.il</strong> with the subject line &quot;Data Deletion Request&quot;. Include the phone number or email address associated with your data so we can locate and remove your records.
                 </li>
                 <li>
                   <strong>Business Contact:</strong> Contact the business you communicated with via WhatsApp and request that they delete your conversation data through their administrator dashboard.
@@ -218,7 +218,7 @@ export default function PrivacyPolicyPage() {
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 mt-4">
               <p><strong>[Company Name]</strong></p>
               <p className="text-gray-600">[Registered Address]</p>
-              <p className="text-gray-600">Email: <strong>[Contact Email]</strong></p>
+              <p className="text-gray-600">Email: <strong>privacy@gotcha.co.il</strong></p>
               <p className="text-gray-600">Website: [Website URL]</p>
             </div>
             <p className="mt-4">
@@ -355,7 +355,7 @@ export default function PrivacyPolicyPage() {
             <p>אנו מיישמים אמצעים טכניים וארגוניים מתאימים להגנה על מידע אישי, כולל:</p>
             <ul className="list-disc pr-6 space-y-1">
               <li>הצפנת מידע בזמן העברה באמצעות פרוטוקולי TLS/SSL</li>
-              <li>הצפנה מאובטחת של פרטי הזדהות (bcrypt)</li>
+              <li>ההזדהות מתבצעת בשירות זהויות ייעודי, ולכן הסיסמה שלכם לעולם לא נשמרת אצלנו. ההתחברות תומכת באימות דו-שלבי ובמפתחות גישה</li>
               <li>בקרות גישה מבוססות תפקיד עם עיקרון ההרשאה המינימלית</li>
               <li>בידוד מידע רב-דיירי ברמת היישום ובסיס הנתונים</li>
               <li>הערכות אבטחה סדירות וניטור פגיעויות</li>

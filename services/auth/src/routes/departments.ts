@@ -1,9 +1,9 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
-import { prisma, authenticate, resolveTenant, requireRole, requireDepartmentRole, validate } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireRole, requirePermission, requireDepartmentRole, enforceMfaEnrollment, validate, requireCapacity } from "@chatcenter/shared";
 
 const router = Router();
-router.use(authenticate, resolveTenant);
+router.use(authenticate, resolveTenant, enforceMfaEnrollment());
 
 // GET / - List departments (any authenticated user)
 router.get("/", async (req: Request, res: Response) => {
@@ -53,8 +53,25 @@ router.get("/tree", async (req: Request, res: Response) => {
       select: { id: true, name: true, role: true, avatarColor: true },
     });
 
+    // Map department → its attached AI employees (many per department). Each
+    // attachment is a RouterRule; grouping by routeTarget gives the roster the
+    // overview shows inline next to human members.
+    const aiRules = await prisma.routerRule.findMany({
+      where: { tenantId: req.tenantId!, routeType: "AI_AGENT", aiAgentId: { not: null } },
+      orderBy: { position: "asc" },
+      select: { aiAgentId: true, routeTarget: true },
+    });
+    const agentById = new Map(aiAgents.map((a) => [a.id, a]));
+    const aiByDept = new Map<string, any[]>();
+    for (const r of aiRules) {
+      if (!r.routeTarget || !r.aiAgentId) continue;
+      const agent = agentById.get(r.aiAgentId);
+      if (!agent) continue; // tenant-scoped list already; drops stale ids
+      (aiByDept.get(r.routeTarget) ?? aiByDept.set(r.routeTarget, []).get(r.routeTarget)!).push(agent);
+    }
+
     // Build tree: root departments (no parent) with nested children
-    const deptMap = new Map(departments.map(d => [d.id, { ...d, children: [] as any[] }]));
+    const deptMap = new Map(departments.map(d => [d.id, { ...d, aiEmployees: aiByDept.get(d.id) ?? [], children: [] as any[] }]));
     const roots: any[] = [];
     for (const dept of deptMap.values()) {
       if (dept.parentId && deptMap.has(dept.parentId)) {
@@ -79,7 +96,13 @@ const createDepartmentSchema = z.object({
   parentId: z.string().optional(),
 });
 
-router.post("/", requireRole("ADMIN"), validate(createDepartmentSchema), async (req: Request, res: Response) => {
+// Plan limit enforced before the create runs, not after.
+router.post(
+  "/",
+  requireRole("ADMIN"),
+  requireCapacity("limit:departments", (tenantId) => prisma.department.count({ where: { tenantId } })),
+  validate(createDepartmentSchema),
+  async (req: Request, res: Response) => {
   try {
     const { name, description, queueMode, parentId } = req.body;
     const existing = await prisma.department.findUnique({
@@ -117,9 +140,17 @@ router.patch("/:id", requireRole("ADMIN"), validate(updateDepartmentSchema), asy
     const dept = await prisma.department.findFirst({ where: { id: String(req.params.id), tenantId: req.tenantId! } });
     if (!dept) { res.status(404).json({ error: "Department not found" }); return; }
 
+    // Explicit allowlist (updateDepartmentSchema fields); tenantId never settable.
+    const { name, description, queueMode, isActive, parentId } = req.body as Record<string, unknown>;
+    const data: Record<string, unknown> = {};
+    if (name !== undefined) data.name = name;
+    if (description !== undefined) data.description = description;
+    if (queueMode !== undefined) data.queueMode = queueMode;
+    if (isActive !== undefined) data.isActive = isActive;
+    if (parentId !== undefined) data.parentId = parentId;
     const updated = await prisma.department.update({
       where: { id: String(req.params.id) },
-      data: req.body,
+      data,
     });
     res.json({ data: updated });
   } catch (err) {
@@ -179,9 +210,12 @@ router.post("/:id/members", requireRole("ADMIN"), validate(addMemberSchema), asy
     const user = await prisma.user.findFirst({ where: { id: req.body.userId, tenantId: req.tenantId! } });
     if (!user) { res.status(404).json({ error: "User not found" }); return; }
 
-    // Check if user already belongs to a department
-    const existing = await prisma.departmentMember.findUnique({ where: { userId: req.body.userId } });
-    if (existing) { res.status(409).json({ error: "User already belongs to a department" }); return; }
+    // Multi-department membership: a user may belong to several departments;
+    // only a duplicate membership in THIS department is refused.
+    const existing = await prisma.departmentMember.findFirst({
+      where: { tenantId: req.tenantId!, userId: req.body.userId, departmentId: String(req.params.id) },
+    });
+    if (existing) { res.status(409).json({ error: "User is already a member of this department" }); return; }
 
     const member = await prisma.departmentMember.create({
       data: {
@@ -207,7 +241,7 @@ const updateMemberSchema = z.object({
 router.patch("/:id/members/:userId", requireRole("ADMIN"), validate(updateMemberSchema), async (req: Request, res: Response) => {
   try {
     const member = await prisma.departmentMember.findFirst({
-      where: { userId: String(req.params.userId), departmentId: String(req.params.id) },
+      where: { tenantId: req.tenantId!, userId: String(req.params.userId), departmentId: String(req.params.id) },
     });
     if (!member) { res.status(404).json({ error: "Member not found" }); return; }
 
@@ -227,7 +261,7 @@ router.patch("/:id/members/:userId", requireRole("ADMIN"), validate(updateMember
 router.delete("/:id/members/:userId", requireRole("ADMIN"), async (req: Request, res: Response) => {
   try {
     const member = await prisma.departmentMember.findFirst({
-      where: { userId: String(req.params.userId), departmentId: String(req.params.id) },
+      where: { tenantId: req.tenantId!, userId: String(req.params.userId), departmentId: String(req.params.id) },
     });
     if (!member) { res.status(404).json({ error: "Member not found" }); return; }
 
@@ -372,7 +406,7 @@ router.get("/:id/ai-employee", requireDepartmentRole("MANAGER"), async (req: Req
     if (rule?.aiAgentId) {
       const agent = await prisma.aIAgent.findUnique({
         where: { id: rule.aiAgentId },
-        select: { id: true, name: true, role: true, status: true, avatarColor: true, description: true },
+        select: { id: true, name: true, role: true, status: true, avatarColor: true },
       });
       res.json({ data: agent, ruleId: rule.id });
       return;
@@ -451,6 +485,106 @@ router.put("/:id/ai-employee", requireRole("ADMIN"), validate(assignAIEmployeeSc
   } catch (err) {
     console.error("Assign AI employee error:", err);
     res.status(500).json({ error: "Failed to assign AI employee" });
+  }
+});
+
+// ── Multiple AI employees per department ──
+// A department may have MANY AI employees. Each attachment is its own
+// RouterRule (routeType=AI_AGENT, routeTarget=<departmentId>) - so adding or
+// removing one never disturbs the others. The FIRST rule by position remains
+// the "primary" that resolveDepartmentAIAgent / copilot config use.
+
+async function listDepartmentAIEmployees(tenantId: string, departmentId: string) {
+  const rules = await prisma.routerRule.findMany({
+    where: { tenantId, routeType: "AI_AGENT", aiAgentId: { not: null }, routeTarget: departmentId },
+    orderBy: { position: "asc" },
+  });
+  const ids = rules.map((r) => r.aiAgentId!).filter(Boolean);
+  if (ids.length === 0) return [];
+  // Tenant-scoped lookup: an id that isn't this tenant's agent is silently
+  // dropped, so a stale/cross-tenant rule can never leak another org's agent.
+  const agents = await prisma.aIAgent.findMany({
+    where: { id: { in: ids }, tenantId },
+    select: { id: true, name: true, role: true, status: true, avatarColor: true },
+  });
+  const byId = new Map(agents.map((a) => [a.id, a]));
+  return rules
+    .map((r) => (byId.has(r.aiAgentId!) ? { ...byId.get(r.aiAgentId!)!, ruleId: r.id } : null))
+    .filter((x): x is NonNullable<typeof x> => x !== null);
+}
+
+// GET /:id/ai-employees - list ALL AI employees attached to the department
+router.get("/:id/ai-employees", requireDepartmentRole("MANAGER"), async (req: Request, res: Response) => {
+  try {
+    const dept = await prisma.department.findFirst({ where: { id: String(req.params.id), tenantId: req.tenantId! } });
+    if (!dept) { res.status(404).json({ error: "Department not found" }); return; }
+    res.json({ data: await listDepartmentAIEmployees(req.tenantId!, dept.id) });
+  } catch (err) {
+    console.error("List dept AI employees error:", err);
+    res.status(500).json({ error: "Failed to list department AI employees" });
+  }
+});
+
+// POST /:id/ai-employees - attach one more AI employee (idempotent per agent)
+const attachAIEmployeeSchema = z.object({ aiAgentId: z.string().min(1) });
+router.post("/:id/ai-employees", requirePermission("settings:members:manage"), validate(attachAIEmployeeSchema), async (req: Request, res: Response) => {
+  try {
+    const dept = await prisma.department.findFirst({ where: { id: String(req.params.id), tenantId: req.tenantId! } });
+    if (!dept) { res.status(404).json({ error: "Department not found" }); return; }
+
+    const { aiAgentId } = req.body as { aiAgentId: string };
+    // Cross-tenant guard: the agent MUST belong to the active tenant.
+    const agent = await prisma.aIAgent.findFirst({
+      where: { id: aiAgentId, tenantId: req.tenantId! },
+      select: { id: true, name: true, role: true, status: true, avatarColor: true },
+    });
+    if (!agent) { res.status(404).json({ error: "AI Employee not found" }); return; }
+
+    const existing = await prisma.routerRule.findFirst({
+      where: { tenantId: req.tenantId!, routeType: "AI_AGENT", routeTarget: dept.id, aiAgentId },
+    });
+    if (existing) {
+      // Already attached - re-enable if it was disabled, otherwise no-op.
+      if (!existing.enabled) await prisma.routerRule.update({ where: { id: existing.id }, data: { enabled: true } });
+      res.json({ data: agent, ruleId: existing.id });
+      return;
+    }
+
+    const maxPriority = await prisma.routerRule.aggregate({ where: { tenantId: req.tenantId! }, _max: { position: true } });
+    const rule = await prisma.routerRule.create({
+      data: {
+        tenantId: req.tenantId!,
+        name: `${dept.name} AI Employee (${agent.name})`,
+        position: (maxPriority._max?.position ?? 0) + 1,
+        conditions: [{ field: "department", operator: "equals", value: dept.id }],
+        logic: "AND",
+        routeType: "AI_AGENT",
+        routeTarget: dept.id,
+        aiAgentId,
+        enabled: true,
+      },
+    });
+    res.status(201).json({ data: agent, ruleId: rule.id });
+  } catch (err) {
+    console.error("Attach dept AI employee error:", err);
+    res.status(500).json({ error: "Failed to attach AI employee" });
+  }
+});
+
+// DELETE /:id/ai-employees/:aiAgentId - detach ONE AI employee, leaving the rest
+router.delete("/:id/ai-employees/:aiAgentId", requirePermission("settings:members:manage"), async (req: Request, res: Response) => {
+  try {
+    const dept = await prisma.department.findFirst({ where: { id: String(req.params.id), tenantId: req.tenantId! } });
+    if (!dept) { res.status(404).json({ error: "Department not found" }); return; }
+    // Scope the delete to this tenant + department + agent so removing one
+    // attachment can never touch another department's or tenant's rules.
+    await prisma.routerRule.deleteMany({
+      where: { tenantId: req.tenantId!, routeType: "AI_AGENT", routeTarget: dept.id, aiAgentId: String(req.params.aiAgentId) },
+    });
+    res.json({ data: await listDepartmentAIEmployees(req.tenantId!, dept.id) });
+  } catch (err) {
+    console.error("Detach dept AI employee error:", err);
+    res.status(500).json({ error: "Failed to detach AI employee" });
   }
 });
 

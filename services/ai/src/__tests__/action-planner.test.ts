@@ -3,6 +3,19 @@ import express from "express";
 import request from "supertest";
 
 vi.mock("@chatcenter/shared", () => ({
+  // Durable tenant settings (business hours, auto-greeting, SLA). Exhaustive
+  // mocks of this barrel must supply them or the read path throws instead of
+  // returning "not configured". Default: nothing configured.
+  readDurableSetting: async () => null,
+  writeDurableSetting: async () => undefined,
+  settingCacheKey: (t: string, k: string) => `tenant:${t}:${k}`,
+  // Version pins now live in shared modules, so exhaustive mocks of this
+  // barrel must supply them. Returning the real defaults keeps any URL the
+  // code builds meaningful instead of "undefined/...".
+  shopifyApiVersion: () => "2026-07",
+  checkShopifyResponseVersion: () => ({ ok: true, served: "2026-07" }),
+  metaGraphBaseUrl: (legacy?: string) => legacy || "https://graph.facebook.com/v24.0",
+  stripeVersionHeader: () => ({ "Stripe-Version": "2026-02-25.clover" }),
   prisma: {
     auditLog: {
       create: vi.fn().mockResolvedValue({}),

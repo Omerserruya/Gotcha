@@ -9,10 +9,18 @@ import { CommandCenterProvider } from "./CommandCenter/CommandCenterProvider";
 import { CommandCenterTrigger } from "./CommandCenter/CommandCenterTrigger";
 import { MobileHeader, MobileBottomNav } from "./MobileNav";
 import { FeatureGuides } from "./onboarding/FeatureGuides";
+import { GuidedTour } from "./onboarding/GuidedTour";
+import { CreditAlertBanner } from "./CreditAlertBanner";
 import { getOnboardingStatus } from "@/lib/api";
+import { destinationForTenantStatus } from "@/lib/payment-gate";
+import { setAnalyticsToken } from "@/lib/analytics";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, token, isLoading } = useAuth();
+
+  // Product analytics need the session token; wiring it here covers every
+  // page without threading it through each track() call site.
+  useEffect(() => { setAnalyticsToken(token || null); }, [token]);
   const { t } = useI18n();
   const router = useRouter();
   const pathname = usePathname();
@@ -66,17 +74,35 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     });
   }
 
-  // Check tenant onboarding status and redirect if needed
+  // Where this organization belongs, if not here.
+  //
+  // Two changes from the version that let a paid tenant into the product. It no
+  // longer sends every not-yet-active tenant to /setup: one that owes money
+  // goes to the payment screen, because /setup was the way around paying. And
+  // it is no longer ADMIN-only - the paid product is denied to every member of
+  // an unpaid organization, so showing them the app to have the API refuse each
+  // call was a worse experience than saying why.
+  //
+  // The server decides; this only obeys. A member of an unpaid organization is
+  // refused at the API with 402 whatever happens here.
   useEffect(() => {
-    if (!isLoading && user && user.role === "ADMIN" && token && !pathname.startsWith("/setup")) {
-      getOnboardingStatus(token)
-        .then((res) => {
-          if (res.data.tenant.status !== "ACTIVE") {
-            router.replace("/setup");
-          }
-        })
-        .catch(() => {}); // Ignore errors (e.g. system admin)
-    }
+    if (isLoading || !user || !token) return;
+    if (user.role === "SYSTEM_ADMIN") return; // has no tenant of their own
+    let cancelled = false;
+
+    getOnboardingStatus(token)
+      .then(async (res) => {
+        const target = await destinationForTenantStatus(res.data.tenant.status, {
+          authToken: token,
+          pathname,
+        });
+        if (!cancelled && target) router.replace(target);
+      })
+      .catch(() => {}); // Ignore errors (e.g. system admin, or no tenant yet)
+
+    return () => {
+      cancelled = true;
+    };
   }, [user, isLoading, token, router, pathname]);
 
   useEffect(() => {
@@ -121,6 +147,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
           {/* Main content - add bottom padding on mobile for admin bottom nav (not when chat is open) */}
           <main className={`flex-1 overflow-hidden w-full relative z-10 ${user?.role === "ADMIN" && !chatOpen ? "md:pb-0 pb-[68px]" : ""}`}>
+            <CreditAlertBanner />
             {children}
           </main>
 
@@ -132,6 +159,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             Employees, Workflows, or Settings. Skippable + snoozable, state
             stored per-user in the DB. Renders nothing otherwise. */}
         <FeatureGuides />
+        {/* First-run journey - boots once, right after onboarding completes
+            (armed via localStorage "onboarding.launchTour"). Renders nothing
+            otherwise. Was never mounted before, so the tour never appeared. */}
+        <GuidedTour />
       </div>
     </CommandCenterProvider>
   );

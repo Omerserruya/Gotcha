@@ -1,3 +1,11 @@
+import { getAdapter } from "./connectors/integration-framework";
+// Importing the barrel guarantees every adapter has run its registerAdapter()
+// side effect before getAdapter() is consulted. A DYNAMIC import here resolved
+// to a different module instance than the static chain index.ts uses, so the
+// registry read back empty and every adapter-backed tool was silently
+// classified as a dead seed.
+import "./connectors";
+
 /**
  * Tool Registry - single source of truth for the AI tool surface.
  *
@@ -326,7 +334,28 @@ export async function getAvailableTools(
       },
       include: { catalogTool: true },
     });
-    integrationTools = rows.map((r: any) => ({
+    // Guard: the generic executor (tool-execution.service.ts) hard-fails any
+    // catalog tool with no `endpoint` ("has no endpoint configured"). Such
+    // rows are misconfigured stubs (e.g. the seeded calendar tools
+    // create_event/list_events) - exposing them can ONLY ever fail and traps
+    // the bot into calling a dead tool instead of the real path (calendar
+    // booking goes through `schedule_meeting` → GoogleCalendarAdapter, not a
+    // generic HTTP endpoint). Drop them from the surface so the model never
+    // sees a tool it cannot successfully call.
+    const usableRows = rows.filter(
+      (r: any) => typeof r.catalogTool?.endpoint === "string" && r.catalogTool.endpoint.trim().length > 0,
+    );
+    const droppedNoEndpoint = rows.length - usableRows.length;
+    if (droppedNoEndpoint > 0) {
+      console.warn(
+        `[tool-registry] tenant=${tenantId} dropped ${droppedNoEndpoint} enabled catalog tool(s) with no endpoint ` +
+          `from the bot surface: ${rows
+            .filter((r: any) => !(typeof r.catalogTool?.endpoint === "string" && r.catalogTool.endpoint.trim()))
+            .map((r: any) => r.catalogTool?.slug)
+            .join(", ")}. Fix the catalog seed or disable these tenant tools.`,
+      );
+    }
+    integrationTools = usableRows.map((r: any) => ({
       name: `integration.${r.catalogTool.slug}`,
       kind: "integration" as const,
       category: "meta" as const,
@@ -403,4 +432,189 @@ export function renderToolRegistryForPrompt(): string {
     lines.push(`- ${t.name}(${schema}) - ${t.description}`);
   }
   return lines.join("\n");
+}
+
+// ─── Governable surface (settings) vs executable surface (planner) ──────────
+//
+// These are genuinely different questions and conflating them is what left the
+// tool-permissions page unable to show a single Shopify tool.
+//
+// `getAvailableTools` answers "what can the generic HTTP executor call RIGHT
+// NOW", so it drops catalog tools with no `endpoint` - correct for the planner,
+// because such a tool can only ever fail.
+//
+// This answers "what can an admin set a POLICY on", which is a superset:
+//   - adapter-backed tools (shopify.*, hubspot.*, ...) legitimately have no
+//     endpoint. They execute through executeAdapterTool, not HTTP. Every
+//     Shopify tool is in this category, which is why the settings page showed
+//     none of them.
+//   - a tool with no TenantTool row yet is still governable. The catalog decides
+//     what is LISTED; the row is what provisioning creates the moment an admin
+//     picks a policy other than Disabled. Requiring the row first meant writes
+//     like cancel_order could never be enabled at all, since provisioning only
+//     ever creates read tools.
+//
+// A tool is excluded only when it is genuinely dead: no endpoint AND no adapter
+// that exposes it. Those are misconfigured seeds and policy on them is a lie.
+
+export interface GovernableTool {
+  /** Dotted adapter name (`shopify.cancel_order`) or `integration.<slug>`. */
+  name: string;
+  integrationSlug: string;
+  slug: string;
+  displayName: string;
+  description: string;
+  /** READ | WRITE | DELETE | ACTION from the catalog. */
+  catalogCategory: string | null;
+  riskLevel: string | null;
+  /** Seed HITL mode from CatalogTool.hitlPolicy. */
+  catalogHitlMode: string;
+  /** Provider scopes the adapter declares for this tool. */
+  requiredScopes: string[];
+  /** How it executes, which decides whether an endpoint is required. */
+  execution: "adapter" | "http";
+  /** Does a TenantTool row exist yet? False means "policy will provision it". */
+  provisioned: boolean;
+  tenantToolId: string | null;
+  /** Tenant override mode, when a row exists and carries one. */
+  overrideHitlMode: string | null;
+  isEnabled: boolean;
+  updatedAt: string | null;
+}
+
+/**
+ * How many EXECUTABLE tools each catalog integration has, per slug, regardless
+ * of whether this tenant has connected it.
+ *
+ * getGovernableIntegrationTools answers a different question - "what can this
+ * tenant set policy on right now" - and is connected-only by design. Using it
+ * to classify the sidebar gave every unconnected integration a count of 0, so
+ * they were all filed as status-only external connections and the "Available"
+ * group could never contain anything. An integration the tenant has not
+ * connected still HAS tools; that is the reason to connect it.
+ *
+ * "Executable" still excludes dead seeds - a catalog row with neither an
+ * endpoint nor an adapter cannot run, so counting it would oversell.
+ */
+export async function getExecutableToolCountsBySlug(): Promise<Map<string, number>> {
+  const { prisma } = await import("@chatcenter/shared");
+
+  const rows = await prisma.catalogTool.findMany({
+    select: { slug: true, endpoint: true, integration: { select: { slug: true } } },
+  });
+
+  const adapterDefsBySlug = new Map<string, Map<string, any>>();
+  const counts = new Map<string, number>();
+
+  for (const ct of rows as any[]) {
+    const integrationSlug = ct.integration?.slug;
+    if (!integrationSlug) continue;
+
+    if (!adapterDefsBySlug.has(integrationSlug)) {
+      const defs = new Map<string, any>();
+      const adapter = getAdapter(integrationSlug);
+      try {
+        for (const def of adapter?.tools?.() ?? []) {
+          if (def?.name) defs.set(def.name.slice(def.name.indexOf(".") + 1), def);
+        }
+      } catch { /* a broken adapter must not hide the rest of the catalog */ }
+      adapterDefsBySlug.set(integrationSlug, defs);
+    }
+
+    const hasEndpoint = typeof ct.endpoint === "string" && ct.endpoint.trim().length > 0;
+    const def = adapterDefsBySlug.get(integrationSlug)?.get(ct.slug);
+    if (!hasEndpoint && !def) continue;
+    if (def?.unsupported) continue;
+    counts.set(integrationSlug, (counts.get(integrationSlug) ?? 0) + 1);
+  }
+
+  return counts;
+}
+
+export async function getGovernableIntegrationTools(
+  tenantId: string,
+): Promise<GovernableTool[]> {
+  const { prisma } = await import("@chatcenter/shared");
+
+  // Connected integrations only: policy on a provider the tenant has not
+  // connected is not actionable, and the workspace lists those separately.
+  const connections = await prisma.tenantIntegration.findMany({
+    where: { tenantId, status: "CONNECTED" },
+    select: { id: true, integration: { select: { id: true, slug: true } } },
+  });
+  if (connections.length === 0) return [];
+
+  // De-duplicate by slug. The dev estate has three Shopify connection rows for
+  // one tenant; keying by slug means the tool list is not tripled.
+  const bySlug = new Map<string, { tenantIntegrationId: string; integrationId: string }>();
+  for (const c of connections) {
+    const slug = c.integration?.slug;
+    if (!slug || bySlug.has(slug)) continue;
+    bySlug.set(slug, { tenantIntegrationId: c.id, integrationId: c.integration!.id });
+  }
+
+  const [catalogTools, tenantTools] = await Promise.all([
+    prisma.catalogTool.findMany({
+      where: { integrationId: { in: [...bySlug.values()].map((v) => v.integrationId) } },
+    }),
+    prisma.tenantTool.findMany({
+      where: { tenantId },
+      select: { id: true, catalogToolId: true, isEnabled: true, configOverrides: true, updatedAt: true },
+    }),
+  ]);
+
+  const rowByCatalogId = new Map(tenantTools.map((t: any) => [t.catalogToolId, t]));
+  const slugByIntegrationId = new Map([...bySlug.entries()].map(([slug, v]) => [v.integrationId, slug]));
+
+  // Adapter tool names per integration, so we can tell "adapter-backed" from
+  // "dead seed" and pick up the declared scopes.
+  const adapterToolsBySlug = new Map<string, Map<string, any>>();
+  for (const slug of bySlug.keys()) {
+    const adapter = getAdapter(slug);
+    if (!adapter?.tools) continue;
+    const map = new Map<string, any>();
+    try {
+      for (const def of adapter.tools()) {
+        if (!def?.name) continue;
+        map.set(def.name.slice(def.name.indexOf(".") + 1), def);
+      }
+    } catch { /* a broken adapter must not hide the rest of the catalog */ }
+    adapterToolsBySlug.set(slug, map);
+  }
+
+  const out: GovernableTool[] = [];
+  for (const ct of catalogTools as any[]) {
+    const integrationSlug = slugByIntegrationId.get(ct.integrationId);
+    if (!integrationSlug) continue;
+
+    const adapterDef = adapterToolsBySlug.get(integrationSlug)?.get(ct.slug);
+    const hasEndpoint = typeof ct.endpoint === "string" && ct.endpoint.trim().length > 0;
+    // Genuinely dead: nothing can execute it, so offering policy would be a lie.
+    if (!adapterDef && !hasEndpoint) continue;
+    // Declared but not executable on this provider's API. Its handler always
+    // throws, so a permission control over it is a decision with no effect -
+    // and the failure only shows up later as a raw provider error.
+    if (adapterDef?.unsupported) continue;
+
+    const row = rowByCatalogId.get(ct.id) as any;
+    out.push({
+      name: adapterDef ? `${integrationSlug}.${ct.slug}` : `integration.${ct.slug}`,
+      integrationSlug,
+      slug: ct.slug,
+      displayName: ct.name ?? ct.slug,
+      description: ct.description ?? "",
+      catalogCategory: ct.category ?? null,
+      riskLevel: ct.riskLevel ?? null,
+      catalogHitlMode: (ct.hitlPolicy as any)?.mode ?? "never",
+      requiredScopes: Array.isArray(adapterDef?.requiredScopes) ? adapterDef.requiredScopes : [],
+      execution: adapterDef ? "adapter" : "http",
+      provisioned: !!row,
+      tenantToolId: row?.id ?? null,
+      overrideHitlMode: (row?.configOverrides as any)?.hitlPolicy?.mode ?? null,
+      // An unprovisioned tool is not "enabled" - it has no row at all.
+      isEnabled: row ? row.isEnabled !== false : false,
+      updatedAt: row?.updatedAt ? new Date(row.updatedAt).toISOString() : null,
+    });
+  }
+  return out;
 }

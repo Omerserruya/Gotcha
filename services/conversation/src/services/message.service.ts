@@ -1,4 +1,4 @@
-import { prisma, publishEvent } from "@chatcenter/shared";
+import { prisma, publishEvent, type ChannelType } from "@chatcenter/shared";
 import { getIO } from "../lib/socket";
 
 interface CreateMessageData {
@@ -9,7 +9,7 @@ interface CreateMessageData {
   messageType?: string;
   senderName?: string;
   externalMessageId?: string;
-  channel?: "WHATSAPP" | "MESSENGER";
+  channel?: ChannelType;
   metadata?: any;
   mediaUrl?: string;
   fileName?: string;

@@ -26,6 +26,12 @@ vi.mock("@chatcenter/shared", () => {
       next();
     },
     requireRole: (..._roles: string[]) => (_req: any, _res: any, next: any) => next(),
+    requirePermissionOrRole: (_perm: string, ..._roles: string[]) => (_req: any, _res: any, next: any) => next(),
+    // Plan-entitlement gates. Pass-through here: what they DENY is covered by
+    // the resolver's own suite and the billing boundary tests, not by mocking
+    // them into always-allow in a route test.
+    requireEntitlement: (_feature: string) => (_req: any, _res: any, next: any) => next(),
+    requireCapacity: (..._args: any[]) => (_req: any, _res: any, next: any) => next(),
     validate: (_schema: any) => (_req: any, _res: any, next: any) => next(),
     createServiceApp: (config: any) => {
       const app = express();
@@ -121,9 +127,22 @@ describe("Chatbot Service", () => {
   });
 
   describe("POST /api/chatbot-flows/:id/activate", () => {
-    it("should activate a flow and deactivate others", async () => {
-      (prisma.chatbotFlow.findFirst as any).mockResolvedValue({ id: "f1" });
-      (prisma.chatbotFlow.updateMany as any).mockResolvedValue({ count: 1 });
+    // A VALID process graph (§3): publishing requires it to pass the
+    // authoritative validator (start → step → end).
+    const validGraph = {
+      nodes: [
+        { id: "s", type: "start" },
+        { id: "m", type: "send_message_text", data: { text: "hi" } },
+        { id: "e", type: "end" },
+      ],
+      edges: [
+        { source: "s", target: "m" },
+        { source: "m", target: "e" },
+      ],
+    };
+
+    it("should activate a valid flow", async () => {
+      (prisma.chatbotFlow.findFirst as any).mockResolvedValue({ id: "f1", ...validGraph });
       (prisma.chatbotFlow.update as any).mockResolvedValue({ id: "f1", isActive: true });
 
       const app = createTestApp();
@@ -131,7 +150,17 @@ describe("Chatbot Service", () => {
 
       expect(res.status).toBe(200);
       expect(res.body.isActive).toBe(true);
-      expect(prisma.chatbotFlow.updateMany).toHaveBeenCalled();
+    });
+
+    it("§3 blocks publishing an invalid graph with 422 + errors", async () => {
+      (prisma.chatbotFlow.findFirst as any).mockResolvedValue({ id: "f1", nodes: [], edges: [] });
+      const app = createTestApp();
+      const res = await request(app).post("/api/chatbot-flows/f1/activate");
+
+      expect(res.status).toBe(422);
+      expect(res.body.error).toBe("validation_failed");
+      expect(Array.isArray(res.body.errors)).toBe(true);
+      expect(res.body.errors.length).toBeGreaterThan(0);
     });
   });
 });

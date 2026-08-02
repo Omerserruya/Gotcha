@@ -12,7 +12,7 @@ ENV WATCHPACK_POLLING=true
 ENV CHOKIDAR_USEPOLLING=true
 
 COPY package.json package-lock.json* ./
-RUN npm install
+RUN npm install --maxsockets=3 --fetch-timeout=90000 --fetch-retries=12 --fetch-retry-mintimeout=3000 --fetch-retry-maxtimeout=30000
 
 COPY . .
 

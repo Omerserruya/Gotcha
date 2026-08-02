@@ -1,11 +1,28 @@
 import { Router, Request, Response } from "express";
-import { prisma, authenticate, resolveTenant, requireActiveTenant, requireRole, encryptCredentials } from "@chatcenter/shared";
-import { executeAdapterTool, getAdapter } from "../services/connectors/integration-framework";
-import { invalidateCrmAdapterCache } from "../services/connectors/crm-adapter-resolver";
+import { enableReadToolsForIntegration } from "../services/integration-provisioning.service";
+import { prisma, authenticate, resolveTenant, requireOnboardingOrActiveTenant, requirePermission, requirePermissionOrRole, encryptCredentials, decryptCredentials, searchLeads as crmSearchLeads, searchContacts as crmSearchContacts } from "@chatcenter/shared";
+import { executeAdapterTool, getAdapter, clearMissingScopes } from "../services/connectors/integration-framework";
+import { invalidateCrmAdapterCache, getCrmAdapter, resolveCrmVendor } from "../services/connectors/crm-adapter-resolver";
+import { maskPhone, maskEmail } from "../lib/mask";
+import { getSourceOfTruth, type SourceOfTruthCapability } from "../services/connectors/source-of-truth";
 
 const router = Router();
 
-router.use(authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"));
+// PENDING_ONBOARDING tenants may browse and connect the marketplace too - the
+// setup wizard's integrations movement matches detected tools against this
+// catalog and offers real connects. requireActiveTenant() 403'd during
+// onboarding, which made EVERY detected tool (ReturnGO included) render as
+// "not supported yet" because the catalog fetch came back empty.
+// Authorization is permission-based (Active Membership), never Role==ADMIN.
+// This router serves BOTH the AI Studio marketplace (integrations:*) and
+// Settings → Business Systems (business-systems:*), so gates accept either
+// domain's key. The router-level gate is the READ floor; mutating routes add
+// stronger per-route gates below.
+const canReadSystems = requirePermission("integrations:connections:read", "business-systems:connections:read");
+const canConnectSystems = requirePermission("integrations:connections:connect", "business-systems:connections:connect");
+const canManageSystems = requirePermission("integrations:connections:disconnect", "business-systems:connections:manage");
+const canSelectSot = requirePermission("business-systems:sot:select");
+router.use(authenticate, resolveTenant, requireOnboardingOrActiveTenant(), canReadSystems);
 
 // GET / - List all published catalog integrations with tenant connection status
 router.get("/", async (req: Request, res: Response) => {
@@ -28,7 +45,13 @@ router.get("/", async (req: Request, res: Response) => {
         },
         tenantConnections: {
           where: { tenantId: req.tenantId! },
-          select: { id: true, status: true, createdAt: true },
+          // `config` carries non-secret per-tenant settings (useAsCrm,
+          // shopDomain, …) and the detail route already returns it. Without it
+          // here, list consumers cannot tell an elected customer system of
+          // record from a plain connection: the Settings toggle rendered OFF
+          // for a tenant whose config.useAsCrm was true. `credentials` stays
+          // out - it is the encrypted secret and no list view needs it.
+          select: { id: true, status: true, createdAt: true, config: true },
         },
       },
       orderBy: { sortOrder: "asc" },
@@ -51,6 +74,212 @@ router.get("/", async (req: Request, res: Response) => {
   } catch (err) {
     console.error("List catalog integrations error:", err);
     res.status(500).json({ error: "Failed to list integrations" });
+  }
+});
+
+// GET /source-of-truth - the tenant's ELECTED customer system of record as
+// the AI-side resolver actually sees it, with its truthful capability set.
+// This is what the UI must render (never frontend guesses): which system
+// answers "who is this customer", whether back-office writes are available,
+// and which operations the provider genuinely supports. Registered BEFORE
+// /:slug so the literal path wins.
+router.get("/source-of-truth", async (req: Request, res: Response) => {
+  try {
+    const provider = await getSourceOfTruth(req.tenantId!);
+    if (!provider) {
+      res.json({ data: { configured: false, vendor: null, capabilities: [] } });
+      return;
+    }
+    const all: SourceOfTruthCapability[] = [
+      "identify_customer", "customer_context", "related_business_context",
+      "write_conversation_summary", "write_interaction", "update_customer_fields",
+      "create_task", "merge_contacts",
+    ];
+    res.json({
+      data: {
+        configured: true,
+        vendor: provider.vendor,
+        capabilities: provider.capabilities(),
+        unsupported: all.filter((c) => !provider.supports(c)),
+        writesEnabled: provider.supports("write_conversation_summary"),
+      },
+    });
+  } catch (err) {
+    console.error("source-of-truth status error:", err);
+    res.status(500).json({ error: "Failed to resolve source of truth" });
+  }
+});
+
+// GET /source-of-truth/customers?q= - unified, tenant-scoped customer search
+// for outbound calling. Searches THE resolved source of truth (Shopify-as-CRM
+// included), so the dialer offers the same identities that answer "who is
+// this customer" everywhere else - never another tenant's data, never a
+// free-text number promoted to an identity.
+//
+// Query detection: phone-shaped and email-shaped inputs go through the
+// vendor-neutral adapter's identifier lookup; everything else is a NAME
+// search - adapter-native when the adapter implements searchByName (Shopify:
+// default text search + first_name/last_name filters, `read_customers`
+// enforced by the tool plane), shared CRM lead/contact search otherwise.
+//
+// The list is a PICKER: identifiers come back MASKED. Full contact data is
+// served by /source-of-truth/customers/detail only after the human selects a
+// candidate - a search never auto-resolves to "the first match".
+// Registered BEFORE /:slug so the literal path wins.
+router.get("/source-of-truth/customers", requirePermissionOrRole("crm:contacts:read", "ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId!;
+    const q = String(req.query.q ?? "").trim();
+    const limit = Math.min(parseInt(String(req.query.limit ?? "8"), 10) || 8, 20);
+    const vendor = await resolveCrmVendor(tenantId);
+    if (!vendor) {
+      res.json({ data: [], meta: { configured: false, vendor: null } });
+      return;
+    }
+    if (!q) {
+      res.json({ data: [], meta: { configured: true, vendor } });
+      return;
+    }
+
+    type Row = {
+      id: string;
+      kind: string;
+      name: string | null;
+      phoneMasked: string | null;
+      emailMasked: string | null;
+      company: string | null;
+      stage: string | null;
+      vendor: string;
+      callable: boolean;
+      ordersCount: number | null;
+      totalSpent: string | null;
+      currency: string | null;
+    };
+    const rows: Row[] = [];
+    let searchFailed: string | null = null;
+
+    const looksLikeEmail = /@/.test(q);
+    const phoneish = q.replace(/[\s\-().]/g, "");
+    const looksLikePhone = /^\+?\d{5,15}$/.test(phoneish);
+
+    if (looksLikeEmail || looksLikePhone) {
+      const adapter = await getCrmAdapter(tenantId);
+      const r = await adapter.findCustomer(looksLikeEmail ? { email: q } : { phone: phoneish });
+      if (!r.ok && r.reason) searchFailed = r.reason;
+      for (const c of r.ok ? r.contacts : []) {
+        rows.push({
+          id: c.id,
+          kind: c.kind,
+          name: c.display_name,
+          phoneMasked: maskPhone(c.phone),
+          emailMasked: maskEmail(c.email),
+          company: null,
+          stage: c.stage,
+          vendor,
+          callable: !!c.phone,
+          ordersCount: null,
+          totalSpent: null,
+          currency: null,
+        });
+      }
+    } else {
+      const adapter = await getCrmAdapter(tenantId);
+      if (typeof adapter.searchByName === "function") {
+        const r = await adapter.searchByName(q, limit);
+        if (!r.ok && r.reason) searchFailed = r.reason;
+        for (const c of r.ok ? r.candidates : []) {
+          rows.push({
+            id: c.id,
+            kind: c.kind,
+            name: c.display_name,
+            phoneMasked: maskPhone(c.phone),
+            emailMasked: maskEmail(c.email),
+            company: null,
+            stage: null,
+            vendor,
+            callable: !!c.phone,
+            ordersCount: c.orders_count,
+            totalSpent: c.total_spent,
+            currency: c.currency,
+          });
+        }
+      } else {
+        // Shared vendor-native free-text search (dedicated CRMs). Best-effort.
+        const [leads, contacts] = await Promise.all([
+          crmSearchLeads(tenantId, { name: q }).catch(() => []),
+          crmSearchContacts(tenantId, { name: q }).catch(() => []),
+        ]);
+        const seen = new Set<string>();
+        for (const r of [...contacts, ...leads]) {
+          const key = (r.email || r.phone || r.id || "").toLowerCase();
+          if (key && seen.has(key)) continue;
+          if (key) seen.add(key);
+          rows.push({
+            id: r.id,
+            kind: "contact",
+            name: r.name ?? null,
+            phoneMasked: maskPhone(r.phone ?? null),
+            emailMasked: maskEmail(r.email ?? null),
+            company: (r as { company?: string }).company ?? null,
+            stage: null,
+            vendor,
+            callable: !!r.phone,
+            ordersCount: null,
+            totalSpent: null,
+            currency: null,
+          });
+        }
+      }
+    }
+
+    // A missing vendor scope is an actionable state, not an empty result -
+    // the UI tells the admin to re-connect with customer-read access.
+    const missingScope = !!searchFailed && /scope|read_customers|access/i.test(searchFailed);
+    res.json({ data: rows.slice(0, limit), meta: { configured: true, vendor, missingScope } });
+  } catch (err) {
+    console.error("source-of-truth customer search error:", err);
+    res.status(500).json({ error: "Failed to search customers" });
+  }
+});
+
+// GET /source-of-truth/customers/detail?id=&kind= - full contact data for ONE
+// explicitly selected candidate (the list above is masked). Same permission
+// gate; the adapter resolves within the active tenant's own connection, so a
+// foreign id can never cross tenants - it simply doesn't exist there.
+router.get("/source-of-truth/customers/detail", requirePermissionOrRole("crm:contacts:read", "ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId!;
+    const id = String(req.query.id ?? "").trim();
+    if (!id) {
+      res.status(400).json({ error: "id is required" });
+      return;
+    }
+    const vendor = await resolveCrmVendor(tenantId);
+    if (!vendor) {
+      res.status(404).json({ error: "No source of truth connected" });
+      return;
+    }
+    const adapter = await getCrmAdapter(tenantId);
+    const r = await adapter.findCustomer({ external_id: id });
+    const c = r.ok ? r.contacts[0] : undefined;
+    if (!c) {
+      res.status(404).json({ error: "Customer not found" });
+      return;
+    }
+    res.json({
+      data: {
+        id: c.id,
+        kind: c.kind,
+        name: c.display_name,
+        phone: c.phone,
+        email: c.email,
+        stage: c.stage,
+        vendor,
+      },
+    });
+  } catch (err) {
+    console.error("source-of-truth customer detail error:", err);
+    res.status(500).json({ error: "Failed to load customer" });
   }
 });
 
@@ -100,7 +329,7 @@ router.get("/:slug", async (req: Request, res: Response) => {
 // persistence (the adapter framework decrypts on load). Existing connections
 // are updated in-place rather than rejected, so the marketplace can re-bind
 // credentials without forcing a disconnect first.
-router.post("/:slug/connect", async (req: Request, res: Response) => {
+router.post("/:slug/connect", canConnectSystems, async (req: Request, res: Response) => {
   try {
     const slug = req.params.slug as string;
     const { credentials, config } = req.body;
@@ -178,7 +407,7 @@ router.post("/:slug/connect", async (req: Request, res: Response) => {
 //
 // Marks the integration CONNECTED on success and ERROR (with lastError) on
 // failure, so the marketplace UI reflects reality.
-router.post("/:slug/test", async (req: Request, res: Response) => {
+router.post("/:slug/test", canConnectSystems, async (req: Request, res: Response) => {
   try {
     const slug = req.params.slug as string;
 
@@ -205,6 +434,42 @@ router.post("/:slug/test", async (req: Request, res: Response) => {
         where: { id: tenantIntegration.id },
         data: { status: "CONNECTED" as any },
       });
+
+      // Prefer the adapter's own probe when it has one. The read-tool fallback
+      // below calls a tool with `{}`, which is meaningless for providers whose
+      // reads have required arguments (google_calendar.list_events) - those
+      // could never pass a test and sat permanently in ERROR.
+      if (typeof adapter.validate === "function") {
+        const creds = tenantIntegration.credentials
+          ? (decryptCredentials(tenantIntegration.credentials as any) as Record<string, any>)
+          : {};
+        const verdict = await adapter
+          .validate({
+            ctx: { tenantId: req.tenantId!, tenantIntegrationId: tenantIntegration.id },
+            credentials: creds,
+            config: (tenantIntegration.config as Record<string, any>) || {},
+          })
+          .catch((e: any) => ({ ok: false, error: e?.message || "validation failed" }));
+        // A fully-passing probe proves every required scope is granted - clear
+        // the persisted missing-scope state so gated tools resurface and the
+        // executeAdapterTool short-circuit lifts.
+        if (verdict.ok) {
+          await clearMissingScopes(tenantIntegration.id).catch((e: any) =>
+            console.warn("[integrations] clearMissingScopes after validate failed:", e?.message));
+        }
+        const updated = await prisma.tenantIntegration.update({
+          where: { id: tenantIntegration.id },
+          data: {
+            status: (verdict.ok ? "CONNECTED" : "ERROR") as any,
+            lastTestedAt: new Date(),
+            lastTestResult: verdict.ok,
+            lastError: verdict.ok ? null : (verdict.error ?? "validation failed"),
+          },
+        });
+        res.status(verdict.ok ? 200 : 400).json(verdict.ok ? { data: updated } : { error: verdict.error, data: updated });
+        return;
+      }
+
       const readTool = adapter.tools().find((t) => t.category === "READ");
       if (!readTool) {
         const updated = await prisma.tenantIntegration.update({
@@ -280,7 +545,7 @@ router.post("/:slug/test", async (req: Request, res: Response) => {
 });
 
 // POST /:slug/disconnect - Disconnect and delete tenant tools (cascade handles child rows)
-router.post("/:slug/disconnect", async (req: Request, res: Response) => {
+router.post("/:slug/disconnect", canManageSystems, async (req: Request, res: Response) => {
   try {
     const slug = req.params.slug as string;
 
@@ -318,7 +583,7 @@ router.post("/:slug/disconnect", async (req: Request, res: Response) => {
 });
 
 // PUT /:slug/credentials - Update credentials (encrypted, in place)
-router.put("/:slug/credentials", async (req: Request, res: Response) => {
+router.put("/:slug/credentials", canConnectSystems, async (req: Request, res: Response) => {
   try {
     const slug = req.params.slug as string;
     const { credentials, config } = req.body;
@@ -366,7 +631,7 @@ router.put("/:slug/credentials", async (req: Request, res: Response) => {
 // turn reads customer context from Shopify instead of any CRM-category
 // integration. Toggling OFF restores the default resolution order - it never
 // disturbs tenants who don't opt in.
-router.put("/:slug/crm-source", async (req: Request, res: Response) => {
+router.put("/:slug/crm-source", canSelectSot, async (req: Request, res: Response) => {
   try {
     const slug = req.params.slug as string;
     if (slug !== "shopify") {
@@ -402,7 +667,15 @@ router.put("/:slug/crm-source", async (req: Request, res: Response) => {
     });
     invalidateCrmAdapterCache(req.tenantId!);
 
-    res.json({ data: { id: updated.id, useAsCrm, config: updated.config } });
+    // Electing a source of truth is a statement about where customer data
+    // LIVES, so every read of that system must follow automatically. Without
+    // this the resolver routes customer lookups at Shopify while the tool gate
+    // still denies the reads (surface requires CONNECTED *and* an allowing
+    // AgentToolPermission), and the employee goes blind on both known and
+    // unknown callers. READ only - writes stay an explicit per-agent decision.
+    const readToolsEnabled = useAsCrm ? await enableReadToolsForIntegration(req.tenantId!, ti.id, entry.id) : 0;
+
+    res.json({ data: { id: updated.id, useAsCrm, config: updated.config, readToolsEnabled } });
   } catch (err) {
     console.error("crm-source toggle error:", err);
     res.status(500).json({ error: "Failed to update CRM source" });
@@ -483,7 +756,7 @@ router.get("/:slug/tools", async (req: Request, res: Response) => {
 });
 
 // PUT /:slug/tools/:toolSlug - Toggle tool enabled/disabled for tenant
-router.put("/:slug/tools/:toolSlug", async (req: Request, res: Response) => {
+router.put("/:slug/tools/:toolSlug", canManageSystems, async (req: Request, res: Response) => {
   try {
     const slug = req.params.slug as string;
     const toolSlug = req.params.toolSlug as string;
@@ -588,7 +861,7 @@ router.get("/:slug/monday-boards", async (req: Request, res: Response) => {
 // the audience builder uses onto concrete boards. The shared CRM client
 // reads these from `tenant_integrations.config` when it dispatches
 // describe/search calls.
-router.put("/:slug/audience-config", async (req: Request, res: Response) => {
+router.put("/:slug/audience-config", canManageSystems, async (req: Request, res: Response) => {
   try {
     const slug = req.params.slug as string;
     const { leadsBoardId, contactsBoardId } = req.body || {};

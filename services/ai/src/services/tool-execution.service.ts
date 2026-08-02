@@ -13,11 +13,22 @@
  * No silent fallback: missing endpoint, unreachable host, 4xx/5xx →
  * structured failure with { ok:false, error }.
  */
-import { prisma, analyticsQueue } from "@chatcenter/shared";
+import { prisma, analyticsQueue, assertPublicUrl } from "@chatcenter/shared";
 import axios from "axios";
 import { trackToolCall } from "./usage.service";
 import { logAudit } from "./audit.service";
 import { maybeRefreshZohoToken } from "./zoho.service";
+// STATIC. A dynamic `await import()` of this module resolves to a SECOND
+// instance whose adapter registry is empty - the adapters register as an
+// import side-effect of the connectors barrel, which only the startup instance
+// has run - so every endpoint-less catalog tool came back
+// `unknown_provider:shopify`. That is the entire adapter-backed surface:
+// integration_order_lookup, integration_process_refund, all of it. The bot
+// concluded the order did not exist and escalated a refund to a human.
+//
+// tool-registry.ts carries the same warning from the last time this happened.
+// Third occurrence; it is a property of dynamically importing this module.
+import { executeAdapterTool } from "./connectors/integration-framework";
 
 export async function getToolsForTenant(tenantId: string) {
   return prisma.tenantTool.findMany({
@@ -116,9 +127,35 @@ export async function executeTool(params: {
     }
   }
 
-  // Fail loudly on missing endpoint - no silent fallback.
+  // Endpoint-less catalog tools are backed by a provider ADAPTER (HubSpot,
+  // Salesforce, Monday, …) rather than an HTTP template. Route them to the
+  // adapter framework instead of failing - otherwise the bot's CRM action tools
+  // (create_lead/create_contact/create_deal on HubSpot/Salesforce) are dead and
+  // every lead-creation attempt errors. Providers WITH an HTTP template (Zoho,
+  // …) keep the endpoint path below.
   if (!catalogTool.endpoint) {
-    return { ok: false, error: `catalog tool "${catalogTool.slug}" has no endpoint configured` };
+    if (!integrationSlug) {
+      return { ok: false, error: `catalog tool "${catalogTool.slug}" has no endpoint configured` };
+    }
+    const adapterRes = await executeAdapterTool({
+      tenantId,
+      conversationId,
+      toolFunctionName: `${integrationSlug}.${catalogTool.slug}`,
+      args: input,
+    });
+    // Mutating writes change the lead/contact rows the prefetch cache is keyed
+    // on - invalidate so the next bot turn rebuilds context against fresh data.
+    if (adapterRes.ok && CRM_MUTATING_SLUGS.has(catalogTool.slug || "")) {
+      try {
+        const { invalidateCrmPrefetch } = await import("./crm-prefetch.service");
+        invalidateCrmPrefetch(tenantId, conversationId);
+      } catch (err: any) {
+        console.warn("[ToolExec] crm-prefetch invalidate (adapter) failed:", err?.message);
+      }
+    }
+    return adapterRes.ok
+      ? { ok: true, output: (adapterRes as any).result ?? null, error: undefined }
+      : { ok: false, output: null, error: (adapterRes as any).reason || "adapter_failed" };
   }
 
   // Validate params against catalog schema before dispatching.
@@ -170,6 +207,11 @@ export async function executeTool(params: {
   let errorMessage: string | undefined;
 
   try {
+    // SSRF guard: for relative catalog endpoints the host comes from tenant
+    // integrationConfig.baseUrl. Block private/link-local/metadata targets at
+    // DNS resolution before dispatching. (Absolute catalog URLs are platform-
+    // authored, but validating uniformly costs nothing and is defense in depth.)
+    await assertPublicUrl(url);
     const axiosConfig: any = {
       url,
       method,
@@ -210,6 +252,11 @@ export async function executeTool(params: {
       tenantId,
       conversationId,
       tenantToolId,
+      // Denormalised on purpose. The FK is SET NULL, so when a tenant
+      // disconnects the integration this row outlives its tenant_tool - and
+      // without the name it could no longer say what had run. Analytics has
+      // always recorded the name; the audit log did not.
+      toolName: catalogTool.name,
       input,
       output: output as any,
       success,

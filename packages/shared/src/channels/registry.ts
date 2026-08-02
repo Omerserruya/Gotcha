@@ -7,6 +7,7 @@ import { gmailInboundAdapter, gmailOutboundAdapter } from "./gmail.adapter";
 import { outlookInboundAdapter, outlookOutboundAdapter } from "./outlook.adapter";
 import { slackInboundAdapter, slackOutboundAdapter } from "./slack.adapter";
 import { webchatOutboundAdapter } from "./webchat.adapter";
+import { shopifyLiveChatOutboundAdapter } from "./shopify-live-chat.adapter";
 
 // ─── Channel Registry ────────────────────────────────────────
 
@@ -29,6 +30,7 @@ const outboundAdapters: Map<ChannelType, OutboundAdapter> = new Map([
   ["OUTLOOK", outlookOutboundAdapter],
   ["SLACK", slackOutboundAdapter],
   ["WEBCHAT", webchatOutboundAdapter],
+  ["SHOPIFY_LIVE_CHAT", shopifyLiveChatOutboundAdapter],
 ]);
 
 /**

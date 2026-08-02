@@ -12,6 +12,7 @@
 
 import { subscribeToEvents, type ServiceEvent } from "@chatcenter/shared";
 import { tryEmit } from "./event-emitter.service";
+import { notifyManagerOfApproval } from "./whatsapp-approval.service";
 
 let _started = false;
 let _sub: ReturnType<typeof subscribeToEvents> | null = null;
@@ -38,6 +39,13 @@ export function startNotificationEventBridge(): void {
               conversationId: evt.data?.conversationId ?? undefined,
             },
           });
+
+          // Out-of-band manager ping (opt-in per tenant). Fire-and-forget:
+          // the approval already exists in the in-app inbox, so a WhatsApp
+          // problem must never break the in-app notification above.
+          void notifyManagerOfApproval(evt.tenantId, evt.data ?? {}).catch((err: any) =>
+            console.warn("[notifications.bridge] whatsapp approval notify failed:", err?.message),
+          );
         }
       } catch (err: any) {
         console.warn("[notifications.bridge] handler failed:", err?.message);

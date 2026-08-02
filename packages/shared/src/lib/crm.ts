@@ -432,26 +432,31 @@ async function runSearch(
   ctx?: Partial<AgentToolContext>,
 ): Promise<CrmRecord[]> {
   const conn = await getConnectedCrm(tenantId);
-  if (!conn) return [];
 
   // Resolve the catalog tool the connected CRM exposes for this slug.
-  // Each CRM provider that supports the operation will have its own
-  // `lead_search` / `contact_search` catalog row tied to the integration.
-  const tenantTool = await (prisma as any).tenantTool.findFirst({
-    where: {
-      tenantId,
-      isEnabled: true,
-      tenantIntegrationId: conn.id,
-      catalogTool: { slug: toolSlug },
-    },
-    select: { id: true },
-  });
+  // Zoho-style providers register their own `lead_search` / `contact_search`
+  // catalog row tied to the integration. Providers that DON'T (HubSpot,
+  // Salesforce, Shopify, Fireberry, Airtable, ...) fall through to the
+  // uniform CRMAdapter path below so they're searchable too. `conn` may be
+  // null for source-of-truth systems that aren't category="CRM" (e.g.
+  // Shopify) - those still resolve a CRMAdapter on the AI service side.
+  const tenantTool = conn
+    ? await (prisma as any).tenantTool.findFirst({
+        where: {
+          tenantId,
+          isEnabled: true,
+          tenantIntegrationId: conn.id,
+          catalogTool: { slug: toolSlug },
+        },
+        select: { id: true },
+      })
+    : null;
   if (!tenantTool) {
-    // CRM is connected but the search tool isn't enabled - caller gets
-    // an empty result. The Settings → Integrations page is where the
-    // operator turns the tool on; this is a config gap, not a bug.
-    return [];
+    return runAdapterSearchFallback(tenantId, conn, toolSlug, args, ctx);
   }
+  // tenantTool is only queried when `conn` exists, so this is unreachable;
+  // it narrows `conn` to non-null for the catalog path below.
+  if (!conn) return [];
 
   // Call the AI service's tool executor over HTTP. We pass a synthetic
   // conversation id of "system" because the executor only uses the
@@ -504,6 +509,118 @@ async function runSearch(
   const exec = payload?.data;
   if (!exec?.ok) return [];
   return normalizeRows(conn.slug, exec.output ?? []);
+}
+
+/**
+ * Search fallback for source-of-truth integrations that don't register
+ * Zoho-style `lead_search`/`contact_search` catalog tools - HubSpot,
+ * Salesforce, Shopify, Fireberry, Airtable, and any future vendor. Routes
+ * through the uniform CRMAdapter interface on the AI service:
+ *   - identity lookups (email/phone) → findCustomer  (covers EVERY vendor)
+ *   - name/company/criteria search   → searchByRules (per-vendor builders
+ *     where one exists; best-effort/no-op otherwise)
+ *
+ * This is what makes "search for contact" work on outbound for every
+ * connected system-of-record instead of only Zoho.
+ */
+async function runAdapterSearchFallback(
+  tenantId: string,
+  conn: CrmConnection | null,
+  toolSlug: "lead_search" | "contact_search",
+  args: CrmLookupArgs,
+  ctx?: Partial<AgentToolContext>,
+): Promise<CrmRecord[]> {
+  const kind: "lead" | "contact" = toolSlug === "lead_search" ? "lead" : "contact";
+  const hasAttribute = !!(args.name || args.company || args.criteria);
+
+  // 1) Identity lookup - uniform findCustomer across all source-of-truth systems.
+  if (args.email || args.phone) {
+    const rows = await runAdapterFind(
+      tenantId,
+      { email: args.email, phone: args.phone },
+      ctx,
+    );
+    if (rows.length) {
+      // Prefer rows whose kind matches the requested module. Adapters that
+      // don't distinguish leads from contacts tag everything 'contact' - in
+      // that case the contact_search call carries them and lead_search
+      // yields none, so a caller that merges leads + contacts gets no dupes.
+      const matched = rows.filter((r) => crmKindOf(r) === kind);
+      if (matched.length) return matched;
+      if (kind === "contact") return rows.filter((r) => crmKindOf(r) !== "lead");
+      // lead_search with only contact-kind hits: nothing to add from identity.
+      if (!hasAttribute) return [];
+    } else if (!hasAttribute) {
+      return [];
+    }
+  }
+
+  // 2) Name / company / criteria - per-vendor attribute search. Only the
+  //    adapter-framework CRMs with a criteria builder (HubSpot, Salesforce,
+  //    Monday) honor this; others return [] rather than erroring.
+  if (conn && hasAttribute) {
+    const module: CrmSearchModule = kind === "lead" ? "leads" : "contacts";
+    const { rows } = await searchByRules(tenantId, args, [], ctx, module);
+    return rows;
+  }
+
+  return [];
+}
+
+/** Read the canonical `kind` stashed on a fallback CrmRecord's raw row. */
+function crmKindOf(r: CrmRecord): string | undefined {
+  const k = (r.raw as any)?.kind;
+  return typeof k === "string" ? k : undefined;
+}
+
+/**
+ * Call the AI service's uniform CRM find bridge (CRMAdapter.findCustomer).
+ * Returns normalized records - empty on any error (best-effort, mirroring
+ * the rest of this module).
+ */
+async function runAdapterFind(
+  tenantId: string,
+  ids: { email?: string; phone?: string; external_id?: string },
+  ctx?: Partial<AgentToolContext>,
+): Promise<CrmRecord[]> {
+  const conversationId = ctx?.conversationId || "system";
+  try {
+    const res = await fetch(
+      `${aiServiceBaseUrl()}/api/ai-assist/${encodeURIComponent(conversationId)}/crm/find`,
+      {
+        method: "POST",
+        headers: buildHeaders(tenantId, ctx),
+        body: JSON.stringify(ids),
+      },
+    );
+    const payload: any = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      console.warn("[crm.find] HTTP", res.status, payload?.error);
+      return [];
+    }
+    const data = payload?.data;
+    if (!data?.ok) return [];
+    return canonicalContactsToRecords(Array.isArray(data.contacts) ? data.contacts : []);
+  } catch (err: any) {
+    console.warn("[crm.find] fetch failed:", err?.message);
+    return [];
+  }
+}
+
+/** Map CanonicalCrmContact rows from the find bridge into CrmRecord. */
+function canonicalContactsToRecords(contacts: any[]): CrmRecord[] {
+  return contacts.map((c) => ({
+    id: String(c.id ?? ""),
+    name: c.display_name ?? undefined,
+    email: c.email ?? undefined,
+    phone: c.phone ?? undefined,
+    company:
+      (typeof c.custom_fields?.company === "string" && c.custom_fields.company) ||
+      (typeof c.custom_fields?.Company === "string" && c.custom_fields.Company) ||
+      undefined,
+    modifiedAt: c.vendor_updated_at ?? undefined,
+    raw: c,
+  }));
 }
 
 /**

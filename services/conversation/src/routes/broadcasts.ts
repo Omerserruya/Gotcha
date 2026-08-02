@@ -10,6 +10,7 @@ import {
   resolveAudience,
   normalizePhone,
   previewAudience,
+  requireEntitlement,
 } from "@chatcenter/shared";
 import type { BroadcastJob, AudienceDefinition } from "@chatcenter/shared";
 import { Prisma } from "@prisma/client";
@@ -374,7 +375,9 @@ router.get("/:id/recipients", async (req: Request, res: Response) => {
 });
 
 // ─── Create Broadcast ────────────────────────────────────────
-router.post("/", async (req: Request, res: Response) => {
+// Broadcasts are a sold capability, so the gate is server-side. Hiding the
+// Broadcasts nav item is presentation, not enforcement.
+router.post("/", requireEntitlement("communication.broadcasts"), async (req: Request, res: Response) => {
   try {
     const { name, channel, channelAccountId, templateId, body, variables, scheduledAt, flowId, audience, headerMediaUrl } = req.body;
 

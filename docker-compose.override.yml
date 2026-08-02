@@ -1,0 +1,18 @@
+# Dev-only override (auto-loaded by `docker compose`).
+#
+# The AI service Dockerfile runs `tsx src/index.ts` directly (no compiled dist),
+# but bakes `services/ai/src` at BUILD time - so code changes don't go live
+# until the image is rebuilt, and the COPY layer frequently cache-hits. This
+# bind-mounts the live working-tree source over the baked copy so the container
+# always runs the current code; a plain `docker compose restart ai` picks up
+# edits with no rebuild.
+#
+# Also pins OpenAI debug logging on for live behaviour validation. Remove this
+# file (or `docker compose -f docker-compose.yml ...`) to run the baked image.
+services:
+  ai:
+    environment:
+      OPENAI_LOG: debug
+      NODE_OPTIONS: --require /app/tools/inspect-deep.js
+    volumes:
+      - ./services/ai/src:/app/services/ai/src

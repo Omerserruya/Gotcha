@@ -233,6 +233,32 @@ export interface CrmAdapterContextResult {
   reason?: string;
 }
 
+/**
+ * A free-text NAME search candidate. Deliberately a slim list-row shape (not
+ * a CanonicalCrmContact): the search list is a picking surface, and callers
+ * mask identifiers before showing it - full contact data is fetched only
+ * after the human explicitly selects a candidate.
+ */
+export interface CrmNameSearchCandidate {
+  id: string;
+  kind: CrmObjectKind;
+  display_name: string | null;
+  email: string | null;
+  phone: string | null;
+  /** Lifetime order count, when the vendor returns it (Shopify). */
+  orders_count: number | null;
+  /** Lifetime spend as a decimal string, when the vendor permits it. */
+  total_spent: string | null;
+  currency: string | null;
+}
+
+export interface CrmNameSearchResult {
+  ok: boolean;
+  candidates: CrmNameSearchCandidate[];
+  /** e.g. "missing_scopes:read_customers", vendor-down codes, ... */
+  reason?: string;
+}
+
 export interface CrmAdapterWriteResult {
   ok: boolean;
   id?: string;
@@ -250,6 +276,15 @@ export interface CRMAdapter {
 
   /** Look up a contact/lead by phone, email, or external id. */
   findCustomer(query: { phone?: string; email?: string; external_id?: string }): Promise<CrmAdapterFindResult>;
+
+  /**
+   * Free-text customer search by full or partial NAME. Optional - vendors
+   * whose adapter implements it get name search in the unified
+   * source-of-truth customer search; the rest fall back to the shared CRM
+   * lead/contact search. Never auto-picks: always returns ALL candidates and
+   * lets the human choose (ambiguous names are common).
+   */
+  searchByName?(name: string, limit?: number): Promise<CrmNameSearchResult>;
 
   /** Hydrate a contact + recent activities + open deals + open tickets. */
   getCustomerContext(args: { contact_id: string; kind: CrmObjectKind }): Promise<CrmAdapterContextResult>;

@@ -3,7 +3,23 @@
     "name": "GOTCHA",
     "loading": "טוען..."
   },
+  "tenant": {
+    "pickerTitle": "בחירת סביבת עבודה",
+    "pickerSubtitle": "{name}, יש לך חברות בכמה סביבות עבודה",
+    "searchPlaceholder": "חיפוש סביבת עבודה...",
+    "noResults": "לא נמצאה סביבת עבודה מתאימה",
+    "lastUsed": "שימוש אחרון {when}",
+    "switchWorkspace": "החלפת סביבת עבודה",
+    "workspaces": "סביבות עבודה",
+    "signOut": "התנתקות",
+    "role": {
+      "ADMIN": "מנהל/ת",
+      "AGENT": "נציג/ה",
+      "SYSTEM_ADMIN": "מנהל/ת מערכת"
+    }
+  },
   "nav": {
+    "gettingStarted": "צעדים ראשונים",
     "home": "בית",
     "conversations": "תיבת דואר",
     "dashboard": "לוח בקרה",
@@ -19,21 +35,13 @@
     "settings": "הגדרות",
     "more": "עוד",
     "logout": "התנתק",
+    "account": "חשבון ואבטחה",
     "tools": "כלים",
     "integrations": "אינטגרציות",
     "aiStudio": "סטודיו AI",
     "outbound": "יוצא",
     "usage": "צריכה",
     "approvals": "אישורים"
-  },
-  "auth": {
-    "login": "התחברות",
-    "email": "אימייל",
-    "password": "סיסמה",
-    "tenant": "מזהה ארגון",
-    "loginButton": "התחבר",
-    "loginError": "אימייל או סיסמה שגויים",
-    "welcome": "ברוך שובך"
   },
   "conversations": {
     "title": "תיבת דואר",
@@ -90,6 +98,16 @@
     "newConversation": "שיחה חדשה",
     "historyButton": "הקשר",
     "copilotButton": "עוזר AI",
+    "decisionTimeline": {
+      "button": "למה",
+      "title": "ציר החלטות",
+      "subtitle": "איך ה‑AI חשב בשיחה הזו",
+      "empty": "אין עדיין תיעוד החלטות AI לשיחה זו.",
+      "noGoal": "אין יעד מחויב",
+      "billing": "חיוב",
+      "allowed": "פעולות מותרות",
+      "termination": "הסתיים"
+    },
     "dropFilesHere": "שחרר קבצים כאן",
     "addCaption": "הוסף כיתוב...",
     "downloadFile": "הורד קובץ",
@@ -106,6 +124,16 @@
       "delivered": "נמסר",
       "read": "נקרא",
       "failed": "שליחה נכשלה"
+    },
+    "sendError": {
+      "prefix": "שליחה נכשלה",
+      "toggle": "הצג פרטי שגיאה",
+      "code": "קוד",
+      "type": "סוג",
+      "detail": "פירוט",
+      "requestId": "מזהה בקשה",
+      "retryable": "ניתן לנסות שוב",
+      "at": "זמן"
     },
     "historyPanel": {
       "title": "היסטוריה והערות",
@@ -155,7 +183,36 @@
       "success": "השיחה נפתחה",
       "error": "שגיאה בפתיחת שיחה"
     },
-    "attach": "צרף"
+    "attach": "צרף",
+    "systemAiEscalation": "ה-AI העביר לנציג אנושי",
+    "escalationReason": {
+      "agent_paused": "העובד הדיגיטלי מושהה",
+      "customer_requested_human": "הלקוח ביקש נציג אנושי",
+      "hard_message_ceiling": "הגיע למגבלת ההודעות",
+      "autonomous_message_cap": "הגיע למגבלת האוטונומיה",
+      "autonomous_time_cap": "חרג ממגבלת הזמן",
+      "agent_inactive": "העובד הדיגיטלי אינו פעיל",
+      "budget_exceeded": "נוצלה מכסת השימוש ב-AI",
+      "units_exhausted": "נגמרו יחידות ה-AI",
+      "ai_service_failure": "ה-AI לא הצליח להשיב בזמן"
+    },
+    "aiBadgeTitle": "נשלח אוטומטית על ידי העובד הדיגיטלי",
+    "systemReturnedToAi": "השיחה הוחזרה לעובד הדיגיטלי",
+    "returnToAi": "החזרה ל-AI",
+    "returnToAiTitle": "החזירו את השיחה לטיפול העובד הדיגיטלי",
+    "emptyFilteredTitle": "אין שיחות שתואמות את הסינון הנוכחי",
+    "emptyFilteredDesc": "נסו להרחיב את החיפוש או לנקות את הסינון.",
+    "clearFilters": "ניקוי סינון",
+    "emptyNoChannelTitle": "סביבת העבודה עדיין לא יכולה לקבל שיחות",
+    "emptyNoChannelDesc": "הודעות והיסטוריית שיחות יופיעו כאן ברגע שיחובר ערוץ תקשורת.",
+    "emptyNoChannelAgent": "בקשו ממנהל סביבת העבודה לחבר ערוץ תקשורת.",
+    "emptyChannelBrokenTitle": "חיבור ערוץ דורש תיקון",
+    "emptyChannelBrokenDesc": "ערוץ מחובר הפסיק לעבוד ולכן הודעות חדשות לא יכולות להגיע. חברו אותו מחדש כדי להמשיך לקבל שיחות.",
+    "connectChannelCta": "חברו ערוץ",
+    "fixChannelCta": "תיקון החיבור",
+    "emptyReadyTitle": "הערוץ מוכן, עדיין לא הגיעו שיחות",
+    "emptyReadyDesc": "ברגע שלקוח יכתוב לכם, השיחה תופיע כאן.",
+    "viewChannels": "צפייה בערוצים המחוברים"
   },
   "dashboard": {
     "title": "לוח בקרה",
@@ -185,6 +242,29 @@
     "flowName": "שם התהליך",
     "description": "תיאור",
     "save": "שמור",
+    "stateSaved": "נשמר",
+    "stateSaving": "שומר…",
+    "stateUnsaved": "שינויים שלא נשמרו",
+    "saveFailed": "השמירה נכשלה",
+    "retrySave": "נסו לשמור שוב",
+    "saveConflict": "התהליך השתנה במקום אחר. טענו מחדש לפני השמירה.",
+    "fullscreen": "מסך מלא",
+    "exitFullscreen": "יציאה ממסך מלא",
+    "connErrors": {
+      "self_loop": "שלב לא יכול להתחבר לעצמו.",
+      "no_input": "זהו שלב פתיחה, ולכן דבר לא יכול להתחבר אליו.",
+      "no_output": "לשלב הזה אין יציאה מתאימה להתחבר ממנה.",
+      "single_input": "לשלב הזה כבר יש חיבור נכנס.",
+      "incompatible": "היציאה הזו מפיקה משהו שהשלב היעד לא יכול לקבל.",
+      "cycle": "זה ייצור לולאה - התהליך חייב לזרום קדימה."
+    },
+    "validation": "אימות",
+    "errorOne": "שגיאה",
+    "errorMany": "שגיאות",
+    "warnOne": "אזהרה",
+    "warnMany": "אזהרות",
+    "publishBlocked": "תקנו את שגיאות האימות לפני הפרסום.",
+    "close": "סגירה",
     "activate": "הפעל",
     "deactivate": "השבת",
     "delete": "מחק",
@@ -210,7 +290,6 @@
     "inactive": "לא פעיל",
     "addAgent": "הוסף נציג",
     "registerAgent": "רשום נציג חדש",
-    "password": "סיסמה",
     "registerButton": "צור נציג",
     "registerSuccess": "הנציג נוצר בהצלחה",
     "editAgent": "ערוך נציג",
@@ -222,10 +301,8 @@
     "phoneNumberHint": "מספר נייד בפורמט E.164 (לדוגמה +972501234567). משמש להעברת שיחות קוליות לנציג ולזיהויו כשהוא מתקשר חזרה למספר העסקי.",
     "agentIsActive": "נציג זה יכול לקבל ולטפל בשיחות",
     "agentIsInactive": "נציג זה מושבת ולא יכול לטפל בשיחות",
-    "resetPassword": "איפוס סיסמה",
-    "newPasswordPlaceholder": "סיסמה חדשה (מינימום 8 תווים)",
-    "passwordReset": "הסיסמה אופסה",
-    "passwordResetSuccess": "הסיסמה אופסה בהצלחה",
+    "resetPassword": "יצירת קישור להגדרת סיסמה",
+    "passwordResetSuccess": "הקישור נוצר. העבירו אותו אליהם - ניתן להשתמש בו פעם אחת.",
     "dangerZone": "אזור מסוכן",
     "autoGreeting": "תבנית ברכה אוטומטית",
     "autoGreetingDesc": "הודעה זו נשלחת אוטומטית כשנציג מקבל שיחה. השתמש ב-{agentName} כמציין מיקום.",
@@ -254,7 +331,103 @@
     "copilotActive": "עוזר AI פעיל",
     "copilotActiveDesc": "הפעל או השבת את עוזר ה-AI עבור ארגון זה.",
     "saveCopilot": "שמור הגדרות",
-    "copilotSaved": "הגדרות העוזר נשמרו"
+    "copilotSaved": "הגדרות העוזר נשמרו",
+    "invitePasswordNote": "נשלח אליהם במייל קישור חד-פעמי להגדרת סיסמה בשירות ההתחברות המאובטח שלנו. הקישור יוצג גם כאן אם תרצו לשתף אותו ישירות.",
+    "resetPasswordNote": "יצירת קישור חד-פעמי שבאמצעותו אפשר להגדיר סיסמה חדשה. אתם לא רואים ולא בוחרים את הסיסמה."
+  },
+  "commerce": {
+    "title": "Shopify",
+    "orders": "הזמנות",
+    "totalSpent": "סך רכישות",
+    "lastOrder": "הזמנה אחרונה",
+    "openOrders": "הזמנות פתוחות",
+    "repeat": "לקוח חוזר",
+    "items": "פריטים",
+    "cancelled": "בוטל",
+    "openInShopify": "פתח ב-Shopify",
+    "refund": "החזר כספי",
+    "cancel": "ביטול",
+    "refresh": "רענון",
+    "retry": "נסה שוב",
+    "showMore": "הצג הכל",
+    "showLess": "הצג פחות",
+    "noOrders": "לא נמצאו הזמנות Shopify עבור לקוח זה.",
+    "connectionUnhealthy": "חיבור ה-Shopify דורש טיפול.",
+    "customerNotLinked": "אין לקוח Shopify מקושר לאיש קשר זה עדיין.",
+    "prevOrder": "הזמנה קודמת",
+    "nextOrder": "הזמנה הבאה",
+    "more": "עוד",
+    "refreshOrder": "רענן הזמנה זו",
+    "copyOrderNumber": "העתק מספר הזמנה",
+    "temporarilyUnavailable": "מידע ההזמנות אינו זמין כרגע.",
+    "missingScopes": "חלק מהפעולות דורשות הרשאות חנות נוספות.",
+    "order": "הזמנה",
+    "total": "סה\"כ",
+    "refundableUpTo": "ניתן להחזר עד",
+    "confirmRefund": "להחזיר כספית הזמנה זו?",
+    "confirmCancel": "לבטל הזמנה זו?",
+    "actionSubjectToApproval": "כפוף לכללי החנות שלך ועשוי לדרוש אישור.",
+    "back": "חזרה",
+    "actionDone": "בוצע",
+    "pendingApproval": "נשלח לאישור",
+    "denied": "לא מורשה",
+    "unavailable": "לא זמין",
+    "actionFailed": "הפעולה נכשלה",
+    "add": "הוספה",
+    "addNote": "הוספת הערה",
+    "addTag": "הוספת תגית",
+    "cancelDoesNotRefund": "ביטול לא מחזיר כסף. החזר כספי הוא פעולה נפרדת.",
+    "customerTags": "תגיות לקוח",
+    "noTags": "אין תגיות",
+    "noteAdded": "ההערה נוספה",
+    "notePlaceholder": "הערה פנימית על הלקוח",
+    "notifyCustomer": "שליחת מייל ללקוח",
+    "reasonOptional": "סיבה (לא חובה)",
+    "refundAmount": "סכום ההחזר",
+    "refundFull": "מלא",
+    "refundOverMax": "הסכום גבוה ממה שניתן להחזיר בהזמנה הזו.",
+    "refundPartial": "חלקי",
+    "refundShipping": "להחזיר גם את דמי המשלוח",
+    "removeTag": "הסרת תגית",
+    "restock": "החזרת הפריטים למלאי",
+    "saveNote": "שמירת הערה",
+    "tagsUnknown": "לא נטען",
+    "averageOrder": "הזמנה ממוצעת",
+    "billTo": "חיוב אל",
+    "cancelReason": "סיבת הביטול",
+    "copyTracking": "העתקת מספר מעקב",
+    "customerNote": "הערה",
+    "customerSince": "לקוח מאז",
+    "defaultAddress": "כתובת",
+    "discounts": "הנחות",
+    "email": "אימייל",
+    "hideDetails": "הסתרת פרטים",
+    "less": "פחות",
+    "orderSource": "מקור",
+    "outstanding": "יתרה לתשלום",
+    "paid": "שולם",
+    "phone": "טלפון",
+    "refunded": "הוחזר",
+    "repeatCustomer": "לקוח חוזר",
+    "shipTo": "משלוח אל",
+    "shippingCost": "משלוח",
+    "showDetails": "הצגת פרטים",
+    "subscribed": "רשום לדיוור",
+    "subtotal": "סכום ביניים",
+    "tax": "מס",
+    "track": "מעקב",
+    "tracking": "מעקב משלוח",
+    "byAi": "AI",
+    "byGotcha": "GOTCHA",
+    "resendConfirmation": "שליחה חוזרת של מייל האישור",
+    "loadMore": "טעינת עוד",
+    "showingOf": "מוצגות {shown} מתוך {total}",
+    "alreadyFulfilled": "לא ניתן לבטל הזמנה שכבר נשלחה",
+    "notRestocked": "הפריטים לא הוחזרו למלאי (אין מיקום מלאי)",
+    "reasonFulfilled": "לא ניתן לבטל הזמנה שכבר נשלחה",
+    "reasonCancelled": "ההזמנה כבר בוטלה",
+    "reasonRefunded": "ההזמנה כבר הוחזרה במלואה",
+    "reasonScope": "חסרות הרשאות כתיבה בחיבור לחנות"
   },
   "crmPanel": {
     "title": "הקשר CRM",
@@ -566,16 +739,71 @@
     "embeddedChat": "צ'אט מוטמע",
     "embeddedChatDesc": "הוסף ויידג'ט צ'אט לאתר שלך",
     "createWidget": "צור ויידג'ט",
-    "embedTitle": "הטמע ויידג'ט צ'אט"
+    "embedTitle": "הטמע ויידג'ט צ'אט",
+    "backToInbox": "חזרה לתיבת הדואר",
+    "backToHistory": "חזרה להיסטוריה",
+    "requiresSetupHint": "דורש הגדרה: פרטי האפליקציה של הספק עדיין לא הוגדרו בסביבה הזו. פנו לתמיכה כדי להפעיל אותו.",
+    "notConfigured": "הספק ({platform}) עדיין לא מוגדר בסביבה הזו, ולכן אי אפשר לחבר אותו.",
+    "statusRequiresAction": "דורש טיפול",
+    "statusWidgetPending": "ממתין להתקנה",
+    "statusOff": "כבוי",
+    "catMessaging": "הודעות",
+    "catEmail": "מייל",
+    "catTeam": "ערוצי צוות",
+    "catWebsite": "צ'אט לאתר",
+    "catVoice": "קול וטלפוניה",
+    "voiceNone": "אין ערוץ טלפוניה מחובר. חברו ספק טלפוניה כדי לקבל ולבצע שיחות.",
+    "voiceConnect": "חברו ערוץ טלפוניה",
+    "voiceManage": "ניהול",
+    "voiceNoNumbers": "אין מספרים פעילים",
+    "twilio": "Twilio",
+    "twilioDesc": "קול וטלפוניה",
+    "open": "פתיחה",
+    "fix": "תיקון",
+    "twilioPage": {
+      "back": "חזרה לערוצים",
+      "subtitle": "ערוץ קול וטלפוניה: מספרים, תקינות חיבור ושיחות.",
+      "none": "עדיין אין ערוץ טלפוניה של Twilio מחובר.",
+      "reconnect": "חיבור מחדש",
+      "configure": "הגדרה",
+      "disconnect": "ניתוק",
+      "disconnectTitle": "לנתק את Twilio?",
+      "disconnectConfirm": "פעולה זו מסירה את ערוץ הטלפוניה ואת המספרים שלו. שיחות יפסיקו להיות מנותבות לכאן. אפשר לחבר מחדש מאוחר יותר.",
+      "disconnected": "ערוץ Twilio נותק",
+      "refreshed": "החיבור רוענן",
+      "number": "מספר טלפון",
+      "noNumber": "אין מספר פעיל",
+      "account": "חשבון Twilio",
+      "inbound": "נכנס",
+      "outbound": "יוצא",
+      "on": "פעיל",
+      "off": "כבוי",
+      "webhook": "Webhook",
+      "configured": "מוגדר",
+      "missing": "דורש הגדרה",
+      "health": "תקינות",
+      "unknown": "לא נבדק"
+    },
+    "waPendingTitle": "עוד צעד אחד לסיום חיבור הוואטסאפ",
+    "waPendingDesc": "שמרנו את ההרשאה אבל לא הצלחנו לזהות אוטומטית את חשבון הוואטסאפ העסקי שלכם. הדביקו את המזהה שלו מ-Meta Business Manager כדי לסיים את החיבור.",
+    "waPendingPlaceholder": "מזהה חשבון WhatsApp Business",
+    "waPendingFinish": "סיום החיבור",
+    "shopifyLiveChat": "צ׳אט חי לשופיפיי",
+    "shopifyLiveChatDesc": "צ׳אט ממותג בחנות השופיפיי, עם כרטיסי מוצר והוספה לסל.",
+    "configureShopifyLiveChat": "הגדרה",
+    "deleteWidgetMsg": "הפעולה מסירה את הצ׳אט מהאתר שלכם ומוחקת לצמיתות את השיחות וההודעות שלו. הסקריפט באתר יפסיק להציג דבר. לא ניתן לבטל.",
+    "widgetSaved": "הגדרות הצ׳אט נשמרו",
+    "embedInstall": "התקנה",
+    "embedCustomise": "התאמה אישית"
   },
   "departments": {
     "title": "מחלקות",
     "subtitle": "ניהול מחלקות והקצאות צוות",
     "name": "שם",
     "description": "תיאור",
-    "queueMode": "מצב תור",
-    "claim": "ידני (Claim)",
-    "roundRobin": "אוטומטי (Round Robin)",
+    "queueMode": "איך שיחות משובצות בהעברה",
+    "claim": "תור משותף - נציגים לוקחים",
+    "roundRobin": "שיבוץ אוטומטי לפנוי ביותר",
     "members": "חברים",
     "memberCount": "{count} חברים",
     "conversations": "שיחות",
@@ -605,13 +833,24 @@
     "noAgents": "אין נציגים משויכים",
     "aiAgent": "נציג AI",
     "aiEmployee": "עובד AI",
-    "aiEmployeeDesc": "שייך עובד AI לטיפול בשיחות במחלקה זו",
+    "aiEmployees": "עובדי AI",
+    "aiEmployeeDesc": "שייך עובד AI אחד או יותר לטיפול בשיחות במחלקה זו",
     "currentAIEmployee": "משויך כעת",
+    "attachedAIEmployees": "עובדי AI משויכים",
+    "noAttachedAIEmployees": "אין עובדי AI משויכים עדיין.",
     "assignAIEmployee": "בחר עובד AI לשיוך",
+    "addAIEmployee": "הוספת עובד AI",
+    "add": "הוסף",
+    "remove": "הסר",
+    "allAIEmployeesAttached": "כל עובדי ה-AI כבר משויכים.",
     "changeAIEmployee": "החלף עובד AI",
     "unassign": "בטל שיוך",
     "noAIEmployees": "לא נוצרו עובדי AI עדיין",
-    "createAIEmployee": "צור עובד AI"
+    "createAIEmployee": "צור עובד AI",
+    "queueModeHint": "איך שיחות שמועברות למחלקה הזו מגיעות לנציג.",
+    "claimDesc": "שיחות ממתינות בתור משותף וכל נציג לוקח מהן.",
+    "roundRobinDesc": "שיחות משובצות אוטומטית לנציג הזמין עם הכי מעט שיחות פתוחות.",
+    "transferOnlyNote": "חל כששיחה מועברת למחלקה הזו. ניתוב אוטומטי של פניות נכנסות מוגדר בתהליכים בסטודיו ה-AI."
   },
   "copilotMode": {
     "label": "מצב עוזר AI",
@@ -633,7 +872,10 @@
     "next": "הבא",
     "noMessages": "אין הודעות",
     "aiReplay": "הקרנה חוזרת AI",
-    "hideReplay": "הסתר הקרנה"
+    "hideReplay": "הסתר הקרנה",
+    "emptyNoChannelDesc": "היסטוריית שיחות תופיע כאן אחרי שיחובר ערוץ ושיחות יתחילו להגיע.",
+    "emptyReadyTitle": "עדיין אין שיחות סגורות",
+    "emptyReadyDesc": "כששיחות ייסגרו, ההיסטוריה המלאה שלהן תישמר כאן."
   },
   "knowledge": {
     "title": "בסיס ידע",
@@ -649,6 +891,7 @@
     "sourceType": "סוג מקור",
     "content": "תוכן",
     "upload": "העלה ועבד",
+    "answerDirectly": "מענה על שאלה",
     "pasteText": "הדבק טקסט",
     "uploadFile": "העלה קובץ",
     "connectSource": "חבר מקור",
@@ -676,7 +919,16 @@
     "selectSpaces": "בחר spaces לייבוא",
     "importSelected": "ייבא נבחרים",
     "connecting": "מתחבר...",
-    "oauthNotConfigured": "אינטגרציה זו לא מוגדרת. פנה למנהל המערכת."
+    "oauthNotConfigured": "אינטגרציה זו לא מוגדרת. פנה למנהל המערכת.",
+    "sourcesTab": "מקורות",
+    "sourceConnected": "מחובר - עיון וייבוא בניהול הידע",
+    "sourceNotConnected": "לא מחובר",
+    "sourceConnect": "חיבור",
+    "sourceConnecting": "מתחבר...",
+    "sourceBrowse": "עיון",
+    "active": "פעיל",
+    "inactive": "לא פעיל",
+    "docTitlePlaceholder": "כותרת המסמך"
   },
   "settings": {
     "nav": {
@@ -684,8 +936,18 @@
       "general": "כללי",
       "integrations": "אינטגרציות",
       "policy": "מדיניות",
+      "security": "אבטחה",
       "tools": "כלים",
-      "voiceCopilot": "Voice Copilot"
+      "voiceCopilot": "Voice Copilot",
+      "intelligence": "מודיעין",
+      "funnels": "משפכי פייפליין",
+      "permissions": "תפקידים והרשאות",
+      "account": "חשבון",
+      "billing": "חיובים",
+      "people": "אנשים וצוותים",
+      "businessSystems": "מערכות העסק",
+      "groupAccount": "חשבון",
+      "groupWorkspace": "סביבת העבודה"
     },
     "voiceChannels": {
       "title": "ערוצי קול",
@@ -728,7 +990,8 @@
         "deleting": "משבית…",
         "deleteConfirm": "פעולה זו תשבית את הערוץ ותפסיק לחלוטין את קליטת השיחות. להמשיך?",
         "outboundProvisioningFailed": "חיוג יוצא אינו מוגדר במלואו - שיחות נכנסות עדיין עובדות.",
-        "retryProvisioning": "נסה שוב"
+        "retryProvisioning": "נסה שוב",
+        "aiEmployeeSaved": "עובד ה-AI נשמר."
       },
       "wizard": {
         "backLink": "חזרה לערוצי קול",
@@ -775,6 +1038,15 @@
     "schedule": "לוח זמנים",
     "businessHours": "שעות פעילות",
     "businessHoursDesc": "הגדר את שעות הפעילות של הצוות.",
+    "aiOutsideHours": "עובד ה-AI מחוץ לשעות הפעילות",
+    "aiOutsideHoursDesc": "בחרו מה עובד ה-AI עושה כשהעסק סגור.",
+    "aiOutsideHoursActive": "ממשיך לענות",
+    "aiOutsideHoursActiveDesc": "עובד ה-AI ממשיך לעזור ללקוחות. אם נדרש נציג אנושי, הוא מסביר שהצוות לא זמין ומתי יחזור - לפי שעות הפעילות האמיתיות שלכם.",
+    "aiOutsideHoursSilent": "לא עונה כשהעסק סגור",
+    "aiOutsideHoursSilentDesc": "עובד ה-AI שותק מחוץ לשעות הפעילות. הלקוחות מקבלים את הודעת המענה האוטומטי לשעות סגירה.",
+    "outsideHoursHandoffMsg": "הודעת העברה לנציג בשעות סגירה (אופציונלי)",
+    "outsideHoursHandoffMsgDesc": "מוצגת כששיחה דורשת נציג אנושי בזמן שאתם סגורים. השאירו ריק ליצירה אוטומטית עם מועד הפתיחה הבא.",
+    "outsideHoursHandoffMsgPlaceholder": "לדוגמה: הצוות שלנו לא זמין כעת - נחזור אליכם מיד כשנפתח.",
     "autoGreeting": "ברכת פתיחה אוטומטית",
     "autoGreetingDesc": "הודעת פתיחה שתישלח לשיחות חדשות.",
     "autoGreetingPlaceholder": "שלום! תודה שפנית אלינו…",
@@ -792,6 +1064,8 @@
     "language": {
       "title": "שפה",
       "subtitle": "קובע את שפת הדאשבורד והתוכן שה-AI יוצר (תקצירים, סיכומים, תובנות קופיילוט, הערות שיחה). תגובות מוצעות עדיין מותאמות לשפת הלקוח.",
+      "workspaceTitle": "שפת סביבת העבודה",
+      "workspaceSubtitle": "שפת ברירת המחדל שחברים חדשים יורשים. כל חבר יכול לשנות אותה עבור עצמו ב„חשבון”.",
       "myLanguage": "השפה שלי",
       "myLanguageHint": "כרגע: {effective}",
       "useTenantDefault": "השתמש בברירת המחדל של הארגון",
@@ -801,6 +1075,7 @@
       "savedTenant": "ברירת המחדל של הארגון נשמרה",
       "saveFailed": "לא ניתן לשמור את השפה. נסה שוב."
     },
+    "goToAccountForPreferences": "נהל את השפה וההעדפות האישיות שלך ב„חשבון”.",
     "phoneCountry": "מדינה ברירת מחדל",
     "phoneCountryHelp": "משמש לעיצוב מספרי טלפון לפורמט בינלאומי.",
     "reminderDelay": "השהיית תזכורת (דקות)",
@@ -1016,22 +1291,6 @@
     "adminRequired": "נדרשת הרשאת מנהל",
     "closed": "סגור",
     "defaultLabel": "ברירת מחדל",
-    "password": {
-      "title": "שינוי סיסמה",
-      "subtitle": "עדכון סיסמת החשבון",
-      "current": "סיסמה נוכחית",
-      "currentPlaceholder": "הזן סיסמה נוכחית",
-      "new": "סיסמה חדשה",
-      "newPlaceholder": "הזן סיסמה חדשה (לפחות 8 תווים)",
-      "confirm": "אישור סיסמה חדשה",
-      "confirmPlaceholder": "אישור סיסמה חדשה",
-      "action": "שנה סיסמה",
-      "changing": "משנה…",
-      "changed": "הסיסמה שונתה בהצלחה",
-      "errMismatch": "הסיסמאות אינן תואמות",
-      "errTooShort": "הסיסמה חייבת להיות באורך 8 תווים לפחות",
-      "errFail": "שינוי הסיסמה נכשל"
-    },
     "days": {
       "sunday": "ראשון",
       "monday": "שני",
@@ -1040,6 +1299,219 @@
       "thursday": "חמישי",
       "friday": "שישי",
       "saturday": "שבת"
+    },
+    "integrations": {
+      "crmTitle": "אינטגרציות CRM",
+      "crmSubtitle": "חברו את ה-CRM שלכם (Zoho, HubSpot, Salesforce, Monday) - או השתמשו ב-Shopify כמקור האמת. בונה הקהלים, השידורים והעברות ה-AI של הפלטפורמה קוראים מה-CRM המחובר.",
+      "systemOfRecord": {
+        "currentTitle": "מערכת הלקוחות הפעילה",
+        "capUnsupported": "לא נתמך במערכת זו",
+        "caps": {
+          "identify_customer": "איתור לקוח",
+          "customer_context": "הקשר לקוח והזמנות",
+          "related_business_context": "היסטוריה וציר זמן",
+          "write_conversation_summary": "סיכומי שיחה",
+          "write_interaction": "תיעוד אינטראקציות",
+          "update_customer_fields": "עדכון שדות לקוח",
+          "create_task": "יצירת משימות",
+          "merge_contacts": "מיזוג כפילויות"
+        },
+        "title": "מערכת האמת ללקוחות",
+        "subtitle": "איזו מערכת מחוברת עונה על השאלה “מי הלקוח הזה?”. ה-AI קורא ממנה זהות, היסטוריה וסיכומים, וכותב אליה הערות ותגיות.",
+        "active": "פעיל - זו מערכת האמת ללקוחות שלכם",
+        "inactiveHint": "מחובר, אך לא משמש כמערכת האמת ללקוחות",
+        "note": "כשמופעל, זה גובר על כל CRM מחובר. כיבוי מחזיר את ה-CRM. כל כלי הקריאה של המערכת הזו מופעלים אוטומטית."
+      }
+    },
+    "people": {
+      "title": "אנשים וצוותים",
+      "subtitle": "האנשים של סביבת העבודה: משתמשים, תפקידים ומחלקות.",
+      "tab": {
+        "users": "משתמשים",
+        "departments": "מחלקות"
+      }
+    },
+    "businessSystems": {
+      "title": "מערכות העסק",
+      "subtitle": "מקור האמת והמערכות המרכזיות: חברו את ה-CRM או החנות שמחזיקים את הלקוחות, ההזמנות והנתונים העסקיים שלכם.",
+      "sotLabel": "מקור האמת",
+      "writeback": "כתיבה חזרה",
+      "enabled": "פעילה",
+      "readOnly": "קריאה בלבד",
+      "aiTools": "כלי AI",
+      "toolsEnabled": "{enabled} מתוך {total} פעילים",
+      "manageTools": "ניהול בסטודיו ה-AI",
+      "connectionAttention": "החיבור דורש טיפול"
+    },
+    "billing": {
+      "title": "חיובים ומינוי",
+      "subtitle": "התוכנית, אמצעי התשלום והחשבוניות שלכם. קרדיטים ורכישה אוטומטית נמצאים בעמוד הצריכה.",
+      "loadFailed": "טעינת נתוני החיוב נכשלה",
+      "actionFailed": "הפעולה נכשלה",
+      "current": "המינוי הנוכחי",
+      "noSubscription": "עדיין אין מינוי.",
+      "plan": "תוכנית",
+      "perMonth": "/ לחודש",
+      "includedCredits": "{n} קרדיטים חודשיים כלולים",
+      "period": "התקופה הנוכחית",
+      "trialEnds": "תקופת הניסיון מסתיימת",
+      "renews": "מתחדש",
+      "pastDueHint": "התשלום האחרון נכשל. עדכנו את אמצעי התשלום כדי שהמינוי יישאר פעיל.",
+      "cancelScheduled": "המינוי מתוזמן לביטול בתאריך {date}.",
+      "downgradeScheduled": "עובר ל{plan} בתאריך {date}.",
+      "legacyHint": "תוכנית ותיקה. בחרו תוכנית בתשלום למטה כדי לעבור (חד-כיווני).",
+      "resumeCta": "חידוש המינוי",
+      "resumed": "המינוי חודש",
+      "cancelTitle": "לבטל את המינוי?",
+      "cancelBody": "סביבת העבודה שומרת גישה מלאה עד {date}. קרדיטים חודשיים שנותרו יפוגו אז; קרדיטים שנרכשו נשארים בחשבון. הנתונים שלכם לא נמחקים. אפשר לחדש בכל רגע עד לתאריך הזה.",
+      "cancelCta": "ביטול המינוי",
+      "cancelDone": "הביטול תוזמן לסוף התקופה",
+      "plans": "תוכניות",
+      "custom": "מותאם",
+      "contactSales": "דברו עם מכירות",
+      "creditsPerMonth": "{n} קרדיטים / חודש",
+      "currentPlan": "התוכנית הנוכחית",
+      "upgrade": "שדרוג",
+      "downgrade": "הורדת תוכנית",
+      "choosePlan": "בחירת תוכנית",
+      "changeTitle": "לעבור ל{plan}?",
+      "upgradeBody": "השדרוג חל מיידית. תחויבו בהפרש היחסי עד סוף התקופה הנוכחית, והקרדיטים החודשיים החדשים זמינים מיד.",
+      "downgradeBody": "הורדת התוכנית תיכנס לתוקף בחידוש הבא ({date}). עד אז נשארת התוכנית הנוכחית עם הקרדיטים שלה.",
+      "migrateBody": "מעבר ל{plan} מתחיל מינוי בתשלום עכשיו. המעבר חד-כיווני.",
+      "confirmChange": "אישור השינוי",
+      "changeDone": "המעבר ל{plan} בוצע",
+      "prorationNote": "שדרוגים חלים מיידית (חיוב יחסי). הורדות תוכנית נכנסות לתוקף בחידוש הבא.",
+      "creditsMoved": "מחפשים קרדיטים ורכישה אוטומטית?",
+      "creditsMovedLink": "הם נמצאים בעמוד הצריכה",
+      "payment": "אמצעי תשלום",
+      "replaceCard": "החלפת כרטיס",
+      "addCard": "הוספת כרטיס",
+      "noCard": "אין כרטיס שמור. הכרטיסים נשמרים באופן מאובטח אצל ספק הסליקה; GOTCHA לעולם לא רואה את מספר הכרטיס.",
+      "defaultCard": "ברירת מחדל",
+      "removeCard": "הסרה",
+      "cardRemoved": "הכרטיס הוסר",
+      "cardSaved": "אמצעי התשלום נשמר",
+      "devTokenPrompt": "הזינו טוקן PayPage (פיתוח/דמו):",
+      "invoices": "חשבוניות ותשלומים",
+      "noInvoices": "עדיין אין חשבוניות.",
+      "invDate": "תאריך",
+      "invType": "סוג",
+      "invAmount": "סכום",
+      "invStatus": "סטטוס",
+      "invTypes": {
+        "SUBSCRIPTION": "מינוי",
+        "CREDIT_PURCHASE": "רכישת קרדיטים",
+        "AUTO_PURCHASE": "טעינה אוטומטית"
+      },
+      "invStatuses": {
+        "DRAFT": "טיוטה",
+        "ISSUED": "הונפקה",
+        "PAID": "שולמה",
+        "OPEN": "פתוחה",
+        "PENDING": "ממתינה",
+        "FAILED": "נכשלה",
+        "REFUNDED": "זוכתה",
+        "VOID": "בוטלה",
+        "VOIDED": "בוטלה"
+      },
+      "invAction": "פעולה",
+      "view": "הצגה",
+      "adjustPlan": "שינוי תוכנית",
+      "adjustPlanSubtitle": "השוו תוכניות והחליפו. שדרוגים חלים מיידית (חיוב יחסי); הורדות נכנסות לתוקף בחידוש הבא.",
+      "backToBilling": "חזרה לחיוב",
+      "renewsOn": "מתחדש ב-{date}",
+      "update": "עדכון",
+      "cardEndingIn": "{brand} המסתיים ב-{last4}",
+      "expires": "בתוקף עד",
+      "paymentSubtitle": "הכרטיס המשמש למנוי ולרכישות אוטומטיות.",
+      "pciNote": "פרטי הכרטיס נאספים ונשמרים אצל ספק הסליקה התואם PCI. GOTCHA לעולם אינה רואה או שומרת את מספר הכרטיס המלא.",
+      "payPageCancelled": "הגדרת הכרטיס בוטלה. לא בוצעו שינויים.",
+      "payPageTimeout": "עמוד התשלום לא הושלם בזמן. לא בוצעו שינויים - נסו שוב.",
+      "payPageBlocked": "הדפדפן חסם את חלון התשלום. אפשרו חלונות קופצים לאתר ונסו שוב.",
+      "cancellation": "ביטול מנוי",
+      "cancelExplain": "המנוי מתחדש ב-{date}. ביטול משאיר גישה מלאה עד אז; קרדיטים חודשיים שנותרו יפוגו בסוף התקופה, קרדיטים שנרכשו נשארים בחשבון, והנתונים אינם נמחקים. אפשר לחדש בכל עת לפני מועד זה.",
+      "cancelNoPermission": "רק בעלים יכול לבטל את המנוי.",
+      "cancelNothingToCancel": "לסביבת העבודה הזו אין מנוי בתשלום, ולכן אין מה לבטל. אפשר לבחור תוכנית בכל שלב.",
+      "cancelAlreadyCanceled": "המנוי כבר בוטל. בחרו תוכנית כדי להתחיל מחדש.",
+      "cancelLegacyPlan": "סביבת העבודה נמצאת בתוכנית ותיקה שאינה מחויבת דרך מערכת המנויים. פנו לתמיכה כדי לסגור אותה.",
+      "interval": {
+        "MONTHLY": "חודש",
+        "QUARTERLY": "רבעון",
+        "ANNUAL": "שנה",
+        "YEARLY": "שנה"
+      },
+      "planDesc": {
+        "light": "לצוותים קטנים שרק מתחילים",
+        "pro": "לצוותי תמיכה ומכירות שצומחים",
+        "business": "לצוותים עמוסים שצריכים יותר מרחב",
+        "enterprise": "לפעילות גדולה עם צרכים מותאמים"
+      },
+      "back": "חזרה",
+      "status": {
+        "ACTIVE": "פעיל",
+        "TRIALING": "ניסיון",
+        "PAST_DUE": "תשלום באיחור",
+        "SUSPENDED": "מושהה",
+        "CANCELED": "בוטל",
+        "GRANDFATHERED": "ותיק",
+        "PENDING": "ממתין",
+        "PAUSED": "מושהה",
+        "scheduledCancel": "מתוזמן לביטול"
+      },
+      "pricing": {
+        "title": "בחירת תוכנית",
+        "subtitle": "כל תוכנית כוללת את התיבה המשותפת ואת ה-AI שמבין את העסק שלך. בחרו את הנפח שמתאים לכמות השיחות שלכם עם לקוחות.",
+        "currencyLabel": "הצגת מחירים ב",
+        "month": "חודש",
+        "recommended": "מומלץ",
+        "choose": "בחירה",
+        "configuring": "בהגדרה",
+        "includedCredits": "קרדיטים כלולים",
+        "creditsWord": "קרדיטים",
+        "estimatedChats": "שיחות משוערות",
+        "estimatedCalls": "שיחות קול משוערות",
+        "perDayShort": "ביום עסקים",
+        "perBusinessDay": "ליום עסקים",
+        "included": "כלול",
+        "customizeTitle": "התאמת {plan}",
+        "customizeSubtitle": "קבעו את הנפח הצפוי. מכסת הקרדיטים והמחיר מתעדכנים יחד.",
+        "noVolumeSelector": "לתוכנית זו מכסת קרדיטים חודשית קבועה. אפשר לרכוש קרדיטים נוספים בכל עת, או לעבור לתוכנית גבוהה יותר עם מכסה חודשית גדולה יותר.",
+        "chatVolume": "שיחות צ'אט",
+        "voiceVolume": "שיחות קול",
+        "summary": "התוכנית שלך",
+        "updating": "מתעדכן…",
+        "pricePerChat": "לשיחה",
+        "pricePerCall": "לשיחת קול",
+        "blended": "לאינטראקציה",
+        "monthlyTotal": "סה\"כ חודשי",
+        "continue": "המשך",
+        "currentSelection": "זו התוכנית הנוכחית שלך",
+        "showCompare": "השוואת כל היכולות",
+        "hideCompare": "הסתרת ההשוואה",
+        "capability": "יכולת",
+        "customTitle": "צריכים משהו אחר?",
+        "customBody": "אם הנפחים, הערוצים או תנאי ההתקשרות שלכם לא מתאימים לתוכניות האלה, נבנה תוכנית שכן מתאימה - עם אותן יכולות ומגבלות, במחיר שמתאים לעסק שלכם.",
+        "customCta": "דברו איתנו על תוכנית מותאמת",
+        "confirmUp": "השינוי נכנס לתוקף היום. תחויבו בהפרש עבור שארית תקופת החיוב הנוכחית, ומכסת הקרדיטים החדשה זמינה מיד.",
+        "confirmDown": "התוכנית הנוכחית נשארת בדיוק כפי שהיא עד מועד החידוש. שום דבר לא נלקח לפני כן, והתוכנית החדשה מתחילה בחידוש.",
+        "chargedIn": "החיוב מתבצע ב-{currency}:",
+        "fxNote": "מחירי {display} הם המרה משוערת לפי השער היציג הרשמי. החיוב בפועל מתבצע ב-{charged}.",
+        "category": {
+          "COMMUNICATION": "תקשורת",
+          "AI": "AI ונתונים",
+          "VOICE": "קול",
+          "MANAGEMENT": "ניהול",
+          "LIMITS": "מגבלות"
+        },
+        "limit": {
+          "users": "חברי צוות",
+          "ai_employees": "עובדי AI",
+          "channels": "ערוצים מחוברים",
+          "knowledge_sources": "מקורות ידע"
+        },
+        "everythingIn": "כל היכולות של {plan}, ובנוסף"
+      },
+      "paymentSetupUnavailable": "הגדרת תשלום מאובטח אינה זמינה בסביבה הזו."
     }
   },
   "outbound": {
@@ -1395,7 +1867,7 @@
       "title": "שיחה יוצאת חדשה",
       "subtitle": "חייג מספר ישירות או בחר איש קשר קיים.",
       "searchLabel": "חפש אנשי קשר (אופציונלי)",
-      "searchPlaceholder": "שם, טלפון או אימייל",
+      "searchPlaceholder": "חיפוש לפי שם, טלפון או מייל",
       "phone": "מספר טלפון",
       "notes": "הערות (אופציונלי)",
       "notesPlaceholder": "סיבת השיחה - יוצג לקופיילוט ה-AI במהלך השיחה.",
@@ -1424,7 +1896,32 @@
       "muteMic": "השתק מיקרופון",
       "unmuteMic": "בטל השתקת מיקרופון",
       "hangup": "נתק",
-      "micMuted": "המיקרופון מושתק"
+      "micMuted": "המיקרופון מושתק",
+      "mode": {
+        "number": "הקלדת מספר",
+        "search": "חיפוש לקוחות",
+        "recent": "אחרונים"
+      },
+      "startCall": "התחלת שיחה",
+      "validating": "בבדיקה",
+      "connected": "מחובר",
+      "clear": "ניקוי",
+      "sourceManual": "ידני",
+      "unknownCustomer": "מספר חדש",
+      "searching": "מחפש...",
+      "noRecent": "עדיין אין שיחות אחרונות עם מספר טלפון מאומת.",
+      "noCallableNumber": "אין מספר זמין לחיוג",
+      "noSourceConfigured": "עדיין לא מחובר מקור לקוחות. חברו CRM או Shopify כדי לחפש לקוחות.",
+      "noChannelTitle": "חברו ערוץ טלפוניה כדי להתחיל להתקשר",
+      "noChannelDesc": "שיחות יוצאות דורשות ספק טלפוניה מחובר. חברו אחד והעמוד הזה יהפוך לחייגן שלכם.",
+      "noChannelAgent": "בקשו ממנהל סביבת העבודה לחבר ערוץ טלפוניה.",
+      "channelBrokenTitle": "ערוץ הטלפוניה דורש חיבור מחדש",
+      "channelBrokenDesc": "החיבור לספק הטלפוניה הפסיק לעבוד, ולכן אי אפשר לבצע שיחות כרגע.",
+      "connectChannelCta": "חברו ערוץ טלפוניה",
+      "reconnectChannelCta": "חברו מחדש את ערוץ הטלפוניה",
+      "missingCustomerScope": "החנות המחוברת עדיין לא מאפשרת קריאת לקוחות. חברו אותה מחדש עם הרשאת לקוחות כדי לחפש.",
+      "noSearchResults": "לא נמצאו לקוחות. נסו שם, טלפון או מייל אחרים.",
+      "ordersCount": "{n} הזמנות"
     }
   },
   "newConversation": {
@@ -1505,7 +2002,14 @@
     "enable": "הפעל",
     "create": "צור",
     "saving": "שומר...",
-    "send": "שלח"
+    "send": "שלח",
+    "copy": "העתקה",
+    "saved": "נשמר",
+    "enabled": "מופעל",
+    "disabled": "כבוי",
+    "connected": "מחובר",
+    "notConnected": "לא מחובר",
+    "unsavedChanges": "יש שינויים שלא נשמרו"
   },
   "onboarding": {
     "channelsBanner": "בחרו WhatsApp, אינסטגרם או אימייל כדי לחבר את הערוץ הראשון.",
@@ -1522,14 +2026,21 @@
         "knowledge_base": "חיבור מאגר ידע",
         "ai_employees": "הגדרת עובד ה-AI",
         "connect_channel": "חיבור ערוץ",
-        "workflows": "הגדרת תהליך העבודה"
+        "workflows": "הגדרת תהליך העבודה",
+        "connect_source_of_truth": "חברו את מקור האמת",
+        "add_webchat": "הוסיפו צ'אט חי לאתר",
+        "teach_knowledge": "למדו את הידע שנותר"
       },
       "descriptions": {
         "knowledge_base": "הוסיפו מסמכים, שאלות נפוצות או אתר כדי שה-AI יענה במדויק.",
         "ai_employees": "צרו והגדירו את עובד ה-AI שינהל את השיחות.",
         "connect_channel": "חברו וואטסאפ, אינסטגרם או צ'אט באתר כדי להתחיל לקבל הודעות.",
-        "workflows": "חברו ערוצים לעובד ה-AI, לצוותים ולתת-תהליכים בתהליך הראשי."
-      }
+        "workflows": "חברו ערוצים לעובד ה-AI, לצוותים ולתת-תהליכים בתהליך הראשי.",
+        "connect_source_of_truth": "ה-CRM או החנות שלכם - כדי שה-AI יכיר כל לקוח.",
+        "add_webchat": "לא נמצא וידג'ט צ'אט באתר - תנו למבקרים לדבר עם ה-AI ישירות בעמוד.",
+        "teach_knowledge": "נשארו כמה פערים פתוחים - הוסיפו אותם במאגר הידע."
+      },
+      "viewBusiness": "לפרופיל העסק המלא ←"
     }
   },
   "setup": {
@@ -1980,7 +2491,7 @@
     },
     "cta": {
       "title": "היו הראשונים להעסיק את עובד ה-AI שלכם",
-      "subtitle": "השאירו פרטים ונחבר אתכם לגישה מוקדמת — בלי כרטיס אשראי, בלי התחייבות.",
+      "subtitle": "השאירו פרטים ונחבר אתכם לגישה מוקדמת - בלי כרטיס אשראי, בלי התחייבות.",
       "button": "הירשמו לרשימת ההמתנה",
       "form": {
         "namePlaceholder": "השם שלך",
@@ -2007,6 +2518,20 @@
       "privacy": "מדיניות פרטיות",
       "terms": "תנאי שימוש",
       "copyright": "כל הזכויות שמורות."
+    },
+    "pricing": {
+      "label": "מחירים",
+      "title": "תמחור שנגזר מנפח השיחות שלכם",
+      "subtitle": "כל תוכנית כוללת את התיבה המשותפת, הערוצים המחוברים וה-AI שמבין את העסק שלכם. בחרו את הנפח שמתאים לכמות השיחות שלכם עם לקוחות.",
+      "viewAll": "לתמחור המלא",
+      "note": "הערכות השיחות מבוססות על תצורת התוכנית. צריכת הקרדיטים בפועל משתנה לפי אורך השיחה, הערוץ, פעולות ה-AI, היכולות שהופעלו ומשך שיחות הקול.",
+      "exampleChats": "לדוגמה, כ-{daily} שיחות ביום מגיעות לכ-{monthly} בחודש.",
+      "exampleBoth": "לדוגמה, כ-{chatsDaily} שיחות צ'אט ו-{callsDaily} שיחות קול ביום מגיעות לכ-{chatsMonthly} שיחות צ'אט ו-{callsMonthly} שיחות קול בחודש."
+    },
+    "social": {
+      "instagram": "GOTCHA באינסטגרם",
+      "facebook": "GOTCHA בפייסבוק",
+      "whatsapp": "שליחת הודעה ל-GOTCHA בוואטסאפ"
     }
   },
   "earlyAccess": {
@@ -2114,35 +2639,52 @@
       "avgResponseTime": "זמן תגובה ממוצע",
       "avgResolutionTime": "זמן פתרון ממוצע",
       "customerSatisfaction": "שביעות רצון לקוחות",
-      "aiResolutionRate": "שיעור פתרון AI"
+      "aiResolutionRate": "שיעור פתרון AI",
+      "aiHandledShare": "נתח טיפול AI",
+      "approvalRate": "שיעור אישורים"
     },
     "aiPerformance": {
       "title": "ביצועי סוכן AI",
       "conversationsHandled": "שיחות שטופלו",
       "avgResolutionTime": "זמן פתרון ממוצע",
       "escalationRate": "שיעור הסלמה",
-      "topCategories": "קטגוריות מובילות"
+      "topCategories": "קטגוריות מובילות",
+      "aiMessages": "הודעות AI",
+      "resolved": "נפתרו",
+      "escalated": "הוסלמו",
+      "governance": "בקרת אישורים",
+      "approvalRate": "שיעור אישור",
+      "overrideRate": "שיעור שינוי",
+      "pendingApprovals": "ממתינים",
+      "avgDecision": "זמן החלטה ממוצע לאישור: {minutes} דק'"
     },
     "humanPerformance": {
       "title": "ביצועי נציגים",
       "conversationsHandled": "שיחות שטופלו",
       "avgResolutionTime": "זמן פתרון ממוצע",
       "satisfactionScore": "ציון שביעות רצון",
-      "topAgents": "נציגים מובילים"
+      "topAgents": "נציגים מובילים",
+      "agent": "נציג",
+      "active": "פעילות",
+      "claimedToday": "נתפסו היום",
+      "avgResponse": "מענה ממוצע"
     },
     "topQuestions": {
       "title": "שאלות נפוצות",
       "subtitle": "שאלות הנשאלות לעתים קרובות והזדמנויות אוטומציה",
       "count": "כמות",
       "category": "קטגוריה",
-      "canAutomate": "הזדמנות אוטומציה"
+      "canAutomate": "הזדמנות אוטומציה",
+      "times": "{count} פעמים",
+      "automate": "אוטומציה"
     },
     "toolUsage": {
       "title": "שימוש בכלים",
       "subtitle": "כיצד כלי ה-AI מנוצלים",
       "tool": "כלי",
       "usage": "שימוש",
-      "successRate": "שיעור הצלחה"
+      "successRate": "שיעור הצלחה",
+      "uses": "{count} שימושים"
     },
     "channelPerformance": {
       "title": "ביצועי ערוצים",
@@ -2154,16 +2696,30 @@
       "conversations": "שיחות",
       "responseTime": "זמן תגובה",
       "resolutionRate": "שיעור פתרון",
-      "slaCompliance": "עמידה ב-SLA"
+      "slaCompliance": "עמידה ב-SLA",
+      "agents": "נציגים",
+      "resolution": "פתרון"
     },
     "insights": {
       "title": "תובנות AI",
       "subtitle": "הצעות אוטומציה ושיפורים",
       "automationOpportunity": "הזדמנות אוטומציה",
       "createFlow": "צור תהליך",
-      "setupIntegration": "הגדר אינטגרציה"
+      "setupIntegration": "הגדר אינטגרציה",
+      "highImpact": "השפעה גבוהה"
     },
-    "noData": "אין נתוני אנליטיקס זמינים לתקופה זו"
+    "noData": "אין נתוני אנליטיקס זמינים לתקופה זו",
+    "partialData": "חלק מהנתונים אינו זמין כרגע - מציגים את מה שיש.",
+    "noDataYet": "אין עדיין נתונים לתקופה זו.",
+    "noAgentsYet": "אין עדיין נציגים אנושיים.",
+    "noToolUsageYet": "ה-AI לא השתמש בכלים בתקופה זו.",
+    "noInsightsYet": "אין עדיין מספיק פעילות להפקת תובנות.",
+    "trend": {
+      "title": "נפח הודעות",
+      "subtitle": "הודעות נכנסות מול יוצאות ביום",
+      "inbound": "נכנסות",
+      "outbound": "יוצאות"
+    }
   },
   "replay": {
     "title": "הפעלה חוזרת של שיחה",
@@ -2237,6 +2793,8 @@
     "score": "ציון"
   },
   "marketplace": {
+    "crmMovedHint": "מחפשים את ה-CRM או מערכת הלקוחות הראשית? זו החלטה עסקית, שמוגדרת ב",
+    "crmMovedLink": "הגדרות ← מערכות העסק",
     "title": "שוק האינטגרציות",
     "search": "חפש אינטגרציות...",
     "allCategories": "הכל",
@@ -2271,7 +2829,13 @@
     "usedByDepartments": "בשימוש על ידי {count} מחלקות",
     "categoryShipping": "משלוחים",
     "categoryProjectManagement": "ניהול פרויקטים",
-    "categoryCalendar": "לוח שנה"
+    "categoryCalendar": "לוח שנה",
+    "subtitle": "חברו שירותים חיצוניים כדי להפעיל את סוכני ה-AI שלכם",
+    "systemOfRecordActive": "מערכת האמת ללקוחות שלכם",
+    "manageInSettings": "ניהול בהגדרות ←",
+    "selectAllTools": "בחר הכל",
+    "clearAllTools": "נקה הכל",
+    "applying": "מחיל..."
   },
   "usage": {
     "title": "צריכה",
@@ -2292,17 +2856,120 @@
     "type": "סוג",
     "quantity": "כמות",
     "date": "תאריך",
-    "ai_tokens": "טוקנים AI",
+    "ai_tokens": "פעילות AI",
     "message_sent": "הודעות",
     "tool_call": "הפעלות כלים",
     "automation_run": "אוטומציות",
     "allTenants": "כל הלקוחות",
     "tenant": "לקוח",
     "totalUsage": "שימוש כולל",
-    "byTenant": "לפי לקוח"
+    "byTenant": "לפי לקוח",
+    "credits": {
+      "title": "קרדיטים חודשיים",
+      "period": "תקופת חיוב",
+      "monthly": "קרדיטים חודשיים",
+      "remaining": "נותרו",
+      "purchased": "קרדיטים נוספים",
+      "pace": "בערך {n} קרדיטים ביום",
+      "runsOut": "בקצב הזה הקרדיטים ייגמרו בסביבות {date}",
+      "exhausted": "הקרדיטים נגמרו. עובדי ה-AI מפסיקים לענות עד לחידוש הקרדיטים או לרכישה נוספת.",
+      "exhaustedAuto": "הקרדיטים נגמרו. הרכישה האוטומטית תטעין קרדיטים במסגרת תקרת ההוצאה החודשית שלכם."
+    },
+    "eventsCount": "{n} אירועים",
+    "actionFailed": "הפעולה נכשלה",
+    "buy": {
+      "title": "רכישת קרדיטים נוספים",
+      "subtitle": "קרדיטים נוספים לא פגים ונצרכים אחרי הקרדיטים החודשיים.",
+      "credits": "{n} קרדיטים",
+      "cta": "רכישה",
+      "confirmTitle": "אישור רכישה",
+      "confirmBody": "לרכוש {n} קרדיטים תמורת {price}? אמצעי התשלום השמור יחויב עכשיו.",
+      "confirmCta": "אישור רכישה",
+      "cancel": "חזרה",
+      "failed": "הרכישה נכשלה",
+      "done": "{n} קרדיטים נוספו",
+      "pageTitle": "רכישת קרדיטים",
+      "pageSubtitle": "קרדיטים נוספים לא פגים ומשמשים לאחר הקרדיטים החודשיים של התוכנית.",
+      "back": "חזרה לשימוש",
+      "processing": "מעבד...",
+      "noPackages": "אין חבילות קרדיט זמינות כרגע.",
+      "receiptNote": "התשלום מעובד על ידי ספק הסליקה. היתרה מתעדכנת רק לאחר אישור התשלום, וקבלה זמינה בעמוד החיוב.",
+      "checking": "אנחנו מאמתים את התשלום מול חברת האשראי. הקרדיטים יופיעו כאן בקרוב - אין צורך לשלם שוב."
+    },
+    "planCredits": {
+      "title": "קרדיטים בתוכנית",
+      "unit": "קרדיטים",
+      "resets": "מתאפס ב-{date}",
+      "pctUsed": "{n}% נוצלו",
+      "remaining": "נותרו {n} קרדיטים"
+    },
+    "breakdown": {
+      "title": "קרדיטים זמינים",
+      "planAllowance": "מכסת התוכנית",
+      "purchased": "יתרת חבילה שנרכשה",
+      "total": "סך זמין",
+      "order": "הקרדיטים נצרכים לפי סדר: תחילה הקרדיטים החודשיים של התוכנית, ואז היתרה שנרכשה.",
+      "promotional": "מבצע",
+      "trialOrPoc": "ניסיון / פיילוט"
+    },
+    "usageCredits": {
+      "title": "קרדיטים לשימוש",
+      "onDesc": "רכישות אוטומטיות שומרות על פעילות ה-AI לאחר ניצול קרדיטי התוכנית, עד לתקרת ההוצאה החודשית.",
+      "offDesc": "הפעילו קרדיטים לשימוש כדי להמשיך לפעול לאחר ניצול קרדיטי התוכנית.",
+      "offHint": "כשקרדיטי התוכנית נגמרים, עובדי ה-AI מפסיקים להשיב עד לחידוש הקרדיטים או רכישת נוספים.",
+      "enable": "הפעלה",
+      "adjustLimit": "עדכון תקרה",
+      "spent": "הוצאו",
+      "limitLabel": "תקרת הוצאה חודשית"
+    },
+    "balance": {
+      "title": "יתרה נוכחית",
+      "buy": "רכישת קרדיטים"
+    },
+    "manageSubscription": "ניהול או ביטול מנוי",
+    "limit": {
+      "back": "חזרה לשימוש",
+      "title": "תקרת הוצאה לקרדיטים",
+      "subtitle": "רכישות אוטומטיות שומרות על פעילות ה-AI לאחר ניצול קרדיטי התוכנית, עד לתקרת כסף חודשית שתגדירו.",
+      "enableTitle": "קרדיטים לשימוש",
+      "enableDesc": "רכישה אוטומטית של קרדיטים נוספים כשקרדיטי התוכנית אוזלים.",
+      "maxSpend": "הוצאה חודשית נוספת מרבית",
+      "maxSpendHint": "שירות החיוב לא ירכוש אוטומטית מעבר לסכום זה בחודש.",
+      "threshold": "סף הפעלה",
+      "thresholdHint": "בצעו תגבור כשקרדיטי התוכנית שנותרו יורדים לאחוז זה.",
+      "package": "חבילת תגבור",
+      "packageHint": "איזו חבילת קרדיט לרכוש בכל פעם שהסף מושג.",
+      "atLimitNote": "כשמושגת התקרה החודשית, הרכישות האוטומטיות נעצרות עד סוף החודש ותקבלו התראה. עדיין אפשר לרכוש קרדיטים ידנית בכל עת.",
+      "cancel": "ביטול",
+      "save": "שמירת תקרה"
+    },
+    "auto": {
+      "title": "טעינת קרדיטים אוטומטית",
+      "subtitle": "טעינה אוטומטית כשהקרדיטים אוזלים, במסגרת תקרת הוצאה חודשית שאתם קובעים.",
+      "enable": "לרכוש אוטומטית קרדיטים נוספים כשהיתרה נמוכה",
+      "threshold": "הפעלה כשנותרו %",
+      "package": "חבילה",
+      "maxSpend": "תקרת הוצאה חודשית נוספת (₪)",
+      "capNote": "התקרה נאכפת בשירות החיוב לפני כל חיוב אוטומטי. אחרי שהיא מגיעה, לא מתבצעות עוד רכישות אוטומטיות החודש.",
+      "save": "שמירה",
+      "saved": "הגדרות הרכישה האוטומטית נשמרו"
+    },
+    "estimatedRemaining": {
+      "chats": "שיחות משוערות שנותרו:",
+      "calls": "שיחות קול משוערות שנותרו:"
+    },
+    "evaluation": {
+      "trialTitle": "אתם בתקופת ניסיון",
+      "pocTitle": "אתם בפיילוט",
+      "expires": "מסתיים ב-{date}",
+      "body": "כל היכולות פתוחות, עם {credits} קרדיטים לתקופת ההתנסות. נותרו לכם {remaining}.",
+      "convertCta": "בחירת תוכנית"
+    }
   },
   "aiStudio": {
     "title": "סטודיו AI",
+    "nodePaletteTitle": "מאגר צמתים",
+    "nodePaletteHint": "גררו לקנבס או לחצו כדי להוסיף",
     "subtitle": "צור עובדי AI, הגדר מה הם יודעים, ונהל כיצד הם מטפלים בשיחות",
     "wizard": {
       "title": "יצירת עובד AI",
@@ -2324,10 +2991,226 @@
     "edit": "ערוך",
     "test": "בדוק",
     "tabs": {
-      "team": "חברי צוות",
-      "playbooks": "תהליכים",
+      "employees": "עובדי AI",
       "knowledge": "ידע",
-      "skills": "כישורים ואינטגרציות"
+      "processes": "תהליכים",
+      "tools": "כלים ואינטגרציות"
+    },
+    "portTypes": {
+      "flow": "זרימה",
+      "branch": "הסתעפות",
+      "participant": "משתתף",
+      "participant_event": "אירוע משתתף",
+      "message": "הודעה",
+      "any": "כל דבר"
+    },
+    "nodeInfo": {
+      "about": "אודות {node}",
+      "receives": "מקבל: {types}",
+      "produces": "מפיק: {types}",
+      "noInput": "שלב פתיחה - אינו מקבל דבר.",
+      "noOutput": "שלב סופי - אינו מפיק דבר."
+    },
+    "nodeReq": {
+      "voiceChannel": "נדרש ערוץ קולי מחובר כדי לפעול.",
+      "connectVoice": "חברו אותו בהגדרות ← ערוצים ← Twilio.",
+      "shopify": "נדרשת חנות Shopify מחוברת כדי לפעול.",
+      "crm": "נדרשת מערכת CRM מחוברת כדי לפעול.",
+      "calendar": "נדרש יומן מחובר כדי לפעול.",
+      "connectProvider": "חברו אותו בהגדרות לפני הפרסום."
+    },
+    "nodeCategories": {
+      "triggers": "טריגרים",
+      "flow_control": "בקרת זרימה",
+      "logic": "לוגיקה",
+      "messages": "הודעות",
+      "actions": "פעולות",
+      "integrations": "אינטגרציות",
+      "customer_data": "נתוני לקוח",
+      "voice_actions": "פעולות קוליות",
+      "voice_triggers": "טריגרים קוליים",
+      "routing": "ניתוב",
+      "data": "נתונים",
+      "destinations": "יעדים"
+    },
+    "nodes": {
+      "channel_entry": {
+        "label": "כניסת ערוץ",
+        "desc": "המקום שבו הודעות מערוץ נכנסות לתהליך."
+      },
+      "start": {
+        "label": "התחלה",
+        "desc": "נקודת ההתחלה של התהליך."
+      },
+      "end": {
+        "label": "סיום",
+        "desc": "מסיים את הענף הזה בתהליך."
+      },
+      "wait": {
+        "label": "המתנה",
+        "desc": "השהיה למשך זמן מוגדר לפני השלב הבא."
+      },
+      "condition_group": {
+        "label": "תנאי",
+        "desc": "הסתעפות לפי כלל (התאמה / אין התאמה)."
+      },
+      "send_message_text": {
+        "label": "שליחת טקסט",
+        "desc": "שליחת הודעת טקסט ללקוח."
+      },
+      "send_message_interactive": {
+        "label": "שליחת הודעה עם קישור",
+        "desc": "שליחת הודעה עם כפתור קישור."
+      },
+      "send_message_quick_reply": {
+        "label": "שליחת תגובה מהירה",
+        "desc": "הצגת כפתורי תגובה ללחיצה."
+      },
+      "send_message_image": {
+        "label": "שליחת תמונה",
+        "desc": "שליחת תמונה."
+      },
+      "send_message_file": {
+        "label": "שליחת קובץ",
+        "desc": "שליחת קובץ או מסמך."
+      },
+      "send_message_template": {
+        "label": "שליחת תבנית וואטסאפ",
+        "desc": "שליחת תבנית וואטסאפ מאושרת."
+      },
+      "send_comment_reply": {
+        "label": "תגובה לתגובה",
+        "desc": "מענה פומבי לתגובה ברשת חברתית."
+      },
+      "collect_input": {
+        "label": "איסוף קלט",
+        "desc": "שאלת שאלה ושמירת התשובה."
+      },
+      "set_variable": {
+        "label": "הגדרת משתנה",
+        "desc": "שמירה או חישוב של ערך לשלבים הבאים."
+      },
+      "http_request": {
+        "label": "בקשת HTTP",
+        "desc": "קריאה ל-API חיצוני."
+      },
+      "ai_generate": {
+        "label": "יצירת AI",
+        "desc": "יצירת טקסט באמצעות ה-AI."
+      },
+      "update_customer": {
+        "label": "עדכון לקוח",
+        "desc": "הגדרת תגית או מאפיין על הלקוח."
+      },
+      "bring_user_data": {
+        "label": "הבאת נתוני משתמש",
+        "desc": "טעינת שדות לקוח ממערכת המקור."
+      },
+      "comment_trigger": {
+        "label": "טריגר: תגובה",
+        "desc": "התחלה כשמתקבלת תגובה ברשת חברתית."
+      },
+      "keyword_trigger": {
+        "label": "טריגר: מילת מפתח",
+        "desc": "התחלה כשהודעה תואמת מילת מפתח."
+      },
+      "schedule_trigger": {
+        "label": "טריגר: תזמון",
+        "desc": "התחלה לפי לוח זמנים."
+      },
+      "webhook_trigger": {
+        "label": "טריגר: Webhook",
+        "desc": "התחלה כשמתקבל webhook חיצוני."
+      },
+      "voice_add_participant": {
+        "label": "קול: הוספת משתתף",
+        "desc": "הוספת משתתף לשיחה החיה.",
+        "limitation": "הפלט הוא אירוע משתתף ולא יכול להתחבר לקלט של תוכן הודעה."
+      },
+      "route_target": {
+        "label": "יעד ניתוב",
+        "desc": "ניתוב השיחה לנציג, תהליך או מחלקה."
+      },
+      "voice_trigger:call": {
+        "incoming": {
+          "label": "קול: שיחה נכנסת",
+          "desc": "התחלה כשמתקבלת שיחה נכנסת."
+        },
+        "answered": {
+          "label": "קול: שיחה נענתה",
+          "desc": "התחלה כששיחה נענית."
+        },
+        "missed": {
+          "label": "קול: שיחה שלא נענתה",
+          "desc": "התחלה כששיחה לא נענית."
+        },
+        "hangup_customer": {
+          "label": "קול: הלקוח ניתק",
+          "desc": "התחלה כשהלקוח מנתק."
+        },
+        "hangup_agent": {
+          "label": "קול: הנציג ניתק",
+          "desc": "התחלה כשהנציג מנתק."
+        },
+        "intent_detected": {
+          "label": "קול: זוהתה כוונה",
+          "desc": "התחלה כשה-AI מזהה כוונה במהלך השיחה."
+        },
+        "keyword_spoken": {
+          "label": "קול: נאמרה מילת מפתח",
+          "desc": "התחלה כשנאמרת מילת מפתח במהלך השיחה."
+        }
+      },
+      "default_fallback": {
+        "label": "ברירת מחדל",
+        "desc": "תפיסת כל מה שלא הותאם"
+      }
+    },
+    "templates": {
+      "welcome": {
+        "name": "קבלת פנים ללקוח חדש",
+        "desc": "ברכו כל הודעה חדשה, בקשו את השם והשתמשו בו בתגובה."
+      },
+      "faq_menu": {
+        "name": "תפריט שאלות נפוצות",
+        "desc": "הציגו את השאלות הנפוצות ככפתורים, כל אחד עם תשובה מוכנה."
+      },
+      "human_handoff": {
+        "name": "מעבר לנציג (מילת מפתח)",
+        "desc": "כשמישהו כותב \"נציג\", \"אנושי\" או \"עזרה\", נתבו לנציג אנושי."
+      },
+      "lead_qualification": {
+        "name": "הסמכת ליד",
+        "desc": "אספו אימייל וחברה, תייגו את הליד, והעבירו למכירות."
+      },
+      "drip_followup": {
+        "name": "מעקב מושהה",
+        "desc": "ענו עכשיו, ואז עקבו מאוחר יותר עם קישור - שימושי לתזכורות מחיר."
+      },
+      "comment_to_dm_lead_magnet": {
+        "name": "תגובה ← לוכד לידים בהודעה",
+        "desc": "מילת מפתח בפוסט ← תגובה פומבית + שליחת המשאב + איסוף אימייל."
+      },
+      "giveaway_entry": {
+        "name": "רישום להגרלה",
+        "desc": "תגובה להשתתפות ← אישור בהודעה + איסוף אימייל + תיוג להגרלה."
+      },
+      "appointment_booking": {
+        "name": "קביעת פגישה",
+        "desc": "בחירת מועד, איסוף שם וטלפון, וניתוב לנציג לאישור."
+      },
+      "support_triage": {
+        "name": "מיון תמיכה",
+        "desc": "בחירת קטגוריה וניתוב לצוות הנכון."
+      },
+      "ai_first_response": {
+        "name": "מענה אוטומטי של AI",
+        "desc": "תנו ל-AI לענות ראשון ממאגר הידע; מעבר לאדם אם צריך."
+      },
+      "order_status_lookup": {
+        "name": "בדיקת סטטוס הזמנה",
+        "desc": "אספו מספר הזמנה, משכו סטטוס מה-API, והשיבו."
+      }
     },
     "stats": {
       "teamMembers": "חברי צוות",
@@ -2344,7 +3227,7 @@
     "team": {
       "title": "חברי צוות",
       "subtitle": "עובדי ה-AI שלך שמטפלים בשיחות עם לקוחות",
-      "addMember": "הוסף חבר צוות",
+      "addMember": "גייסו עובד AI",
       "addMemberHint": "צור עובד AI חדש לצוות שלך",
       "knowledge": "ידע",
       "skills": "כישורים",
@@ -2353,7 +3236,8 @@
       "modeAutonomous": "אוטונומי",
       "modeCopilot": "עוזר AI",
       "modeHuman": "אנושי בלבד",
-      "noAgents": "אין עדיין עובדי AI. צור את חבר הצוות הראשון שלך כדי להתחיל."
+      "noAgents": "אין עדיין עובדי AI. צור את חבר הצוות הראשון שלך כדי להתחיל.",
+      "readinessTitle": "ציון מוכנות. לחצו לדוח המלא"
     },
     "playbooks": {
       "title": "תהליכים",
@@ -2365,9 +3249,18 @@
       "editMainPlaybook": "ערוך תהליך",
       "mainPlaybookHint": "השלבים מוערכים מלמעלה למטה. ההתאמה הראשונה מנתבת את השיחה.",
       "subPlaybooks": "תת-תהליכים",
+      "process": "תהליך",
+      "newProcess": "תהליך חדש",
+      "newProcessOption": "תהליך חדש (לא נשמר)",
+      "templates": "תבניות",
+      "statusPublished": "פורסם",
+      "statusDraft": "טיוטה",
       "routeSubflow": "תהליך",
       "routeAgent": "חבר צוות",
-      "routeHuman": "אנושי"
+      "routeHuman": "אנושי",
+      "connectionNote": "כל תהליך אומר מתי הוא מופעל ומה העובד/ת עושה, העורך הוויזואלי במרחק לחיצה.",
+      "running": "פעיל",
+      "pausedFlow": "מושהה"
     },
     "resources": {
       "title": "משאבי צוות",
@@ -2375,7 +3268,7 @@
       "knowledge": "ידע",
       "sources": "מקורות",
       "manage": "נהל",
-      "skillsAndTools": "כישורים וכלים",
+      "skillsAndTools": "אינטגרציות וכלים",
       "browseMarketplace": "עיין בשוק",
       "toolsActive": "כלים פעילים",
       "connected": "מחובר",
@@ -2441,7 +3334,11 @@
           "addMore": "הוסף כלים נוספים מאינטגרציות",
           "panelDesc": "חבר אינטגרציות והפעל כלים עבור סוכן זה",
           "notConnected": "לא מחובר",
-          "connectIntegration": "חבר אינטגרציה זו"
+          "connectIntegration": "חבר אינטגרציה זו",
+          "collapseAll": "כווץ הכל",
+          "expandAll": "הרחב הכל",
+          "enableGroup": "הפעל הכל",
+          "clearGroup": "נקה הכל"
         },
         "knowledge": {
           "title": "ידע",
@@ -2515,6 +3412,24 @@
           "previewBtn1": "מעקב הזמנה",
           "previewBtn2": "החזרת פריט",
           "previewBtn3": "דבר עם נציג"
+        },
+        "reachability": {
+          "title": "העובד הזה עדיין לא מקבל שיחות",
+          "noNode": "הוא פעיל, אבל אף פלייבוק לא מנתב אליו שיחות. הוסיפו אותו לפלייבוק הראשי כדי שלקוחות באמת יגיעו אליו.",
+          "noCanvas": "הוא פעיל, אבל עדיין אין לכם פלייבוק - בלעדיו אף שיחה לא מנותבת לעובד דיגיטלי.",
+          "cta": "פתחו את הפלייבוקים"
+        },
+        "effectivePerms": {
+          "title": "מה העובד הזה יכול לעשות",
+          "subtitle": "הפעולות שהוא באמת יכול לבצע כרגע - היכולת צריכה להיות מחוברת וגם הפעולה מותרת לעובד הזה.",
+          "allowed": "מותר",
+          "blocked": "לא זמין (היכולת כבויה או לא הוענקה)"
+        },
+        "readiness": {
+          "title": "דוח מוכנות",
+          "subtitle": "מה העובד/ת כבר עונה טוב, ומה עוד חסר. סגרו פערים כדי להעלות את הציון.",
+          "open": "פתחו דוח",
+          "run": "הריצו בדיקה"
         }
       }
     },
@@ -2567,6 +3482,32 @@
       "status": "סטטוס",
       "lastSync": "סנכרון אחרון",
       "manageKnowledge": "נהל ידע",
+      "explain": "כל מקור ידע שעובדי ה-AI שלכם לומדים ממנו, כולל אתרים, מסמכים, שאלות נפוצות ומקורות מחוברים.",
+      "activeSources": "מקורות פעילים",
+      "itemsCol": "פריטים",
+      "cardFilesDesc": "העלו PDF, מסמכים ועוד.",
+      "cardWebsiteDesc": "סרקו עמוד או אתר שלם.",
+      "cardDriveDesc": "סנכרנו קבצים מ-Google Drive.",
+      "cardFaqDesc": "כתבו שאלות ותשובות.",
+      "cardConfluence": "Confluence",
+      "cardConfluenceDesc": "סנכרנו מרחבים ועמודים.",
+      "typeLabels": {
+        "file": "קבצים",
+        "url": "אתר",
+        "text": "ידני",
+        "mixed": "מעורב",
+        "empty": "ריק",
+        "drive": "Google Drive",
+        "confluence": "Confluence"
+      },
+      "statusLabels": {
+        "ready": "מוכן",
+        "processing": "מעבד",
+        "error": "שגיאה",
+        "empty": "ריק",
+        "synced": "מסונכרן",
+        "syncing": "מסנכרן"
+      },
       "page": {
         "backToStudio": "חזרה לסטודיו AI",
         "title": "מקורות ידע",
@@ -2591,11 +3532,86 @@
         "deleteMsg": "פעולה זו תמחק לצמיתות את מקור הידע ותבטל את הקצאתו מכל חברי הצוות.",
         "cancel": "ביטול",
         "delete": "מחק"
-      }
+      },
+      "addTitle": "למדו את העובד/ת משהו חדש",
+      "addSub": "כל מה שעובד טוב היה בודק לפני שהוא עונה: מחירים, מדיניות, משלוחים, שאלות נפוצות, מדריכים.",
+      "addAnswer": "ענו על שאלה",
+      "addUrl": "הוסיפו עמוד",
+      "addFiles": "העלו קבצים",
+      "addDrive": "חברו דרייב",
+      "whyTitle": "למה זה חשוב",
+      "why1": "העובד/ת עונה רק ממה שנתתם לו/ה. בלי ידע תקבלו \"אבדוק\" כן, אבל לא תשובה.",
+      "why2": "כל מקור מעלה את ציון המוכנות, פחות שאלות שעוברות לצוות.",
+      "why3": "מלמדים פעם אחת, והוא/היא עונה תמיד, בכל ערוץ ובכל שפה שאתם תומכים בה.",
+      "editInManage": "עריכה בניהול הידע",
+      "deleteDoc": "מחיקת מסמך",
+      "deleting": "מוחק...",
+      "confirmDeleteKbTitle": "למחוק את מאגר הידע?",
+      "confirmDeleteKbBody": "“{name}” והמסמכים שבו ({count}) יוסרו. העובדים שלכם יפסיקו לענות ממנו.",
+      "confirmDeleteDocTitle": "למחוק את המסמך?",
+      "confirmDeleteDocBody": "“{name}” יוסר ממאגר הידע הזה.",
+      "confirmDeleteIrreversible": "לא ניתן לבטל פעולה זו.",
+      "confirmDeleteAction": "מחק",
+      "manage": {
+        "title": "מאגר ידע",
+        "subtitle": "ניהול מקורות הידע של הסוכנים והקופילוט",
+        "emptyList": "עדיין אין מאגרי ידע",
+        "emptyListHint": "צרו אחד כדי להתחיל",
+        "selectHint": "בחרו מאגר ידע כדי לראות פרטים",
+        "namePlaceholder": "שם מאגר הידע",
+        "descPlaceholder": "תיאור (לא חובה)",
+        "saving": "שומר...",
+        "editKb": "עריכת מאגר הידע",
+        "externalSources": "מקורות חיצוניים",
+        "noDocs": "עדיין אין מסמכים",
+        "noDocsHint": "העלו קבצים, הדביקו תוכן, הוסיפו קישורים או חברו Google Drive / Confluence",
+        "noIntegrations": "אין אינטגרציות מחוברות",
+        "noIntegrationsHint": "חברו Google Drive או Confluence כדי לייבא תוכן",
+        "browseSpaces": "עיון במרחבים",
+        "browseFiles": "עיון בקבצים",
+        "newKbTitle": "מאגר ידע חדש",
+        "fieldName": "שם",
+        "fieldNamePlaceholder": "לדוגמה: תיעוד מוצר",
+        "fieldDesc": "תיאור",
+        "fieldDescPlaceholder": "תיאור (לא חובה)...",
+        "fieldScope": "זמין עבור",
+        "scopeAll": "כל הסוכנים (כל החשבון)",
+        "creating": "יוצר...",
+        "create": "צור",
+        "addContentTitle": "הוספת תוכן",
+        "modeFile": "העלאת קבצים",
+        "modeUrl": "כתובת אתר",
+        "modeText": "הדבקת טקסט",
+        "fieldTitle": "כותרת",
+        "fieldFile": "קובץ",
+        "dropFiles": "גררו קבצים לכאן או לחצו לבחירה",
+        "fieldUrl": "כתובת אתר",
+        "urlPlaceholder": "https://example.com/help",
+        "urlHint": "נסרוק את העמוד ונחלץ את התוכן אוטומטית.",
+        "fieldContent": "תוכן",
+        "contentPlaceholder": "הדביקו כאן את התוכן...",
+        "processing": "מעבד...",
+        "crawlAdd": "סרוק והוסף",
+        "upload": "העלאה",
+        "noSpaces": "לא נמצאו מרחבים",
+        "noPages": "לא נמצאו עמודים",
+        "noSharedDrives": "לא נמצאו כוננים משותפים",
+        "emptyFolder": "התיקייה ריקה",
+        "scopeAllShort": "כל הסוכנים",
+        "scopeAgent": "סוכן",
+        "scopeDepartment": "מחלקה",
+        "document": "מסמך",
+        "documents": "מסמכים",
+        "spaces": "מרחבים",
+        "myDrive": "הדרייב שלי",
+        "sharedDrives": "כוננים משותפים"
+      },
+      "removeKb": "הסרת מאגר ידע",
+      "confirmRemoveKbBody": "“{name}” וכל המסמכים שבו יוסרו. העובדים שלכם יפסיקו לענות ממנו."
     },
     "tools": {
       "title": "כלים מחוברים",
-      "subtitle": "פעולות שחברי צוות ה-AI יכולים לבצע דרך אינטגרציות חיצוניות",
+      "subtitle": "מה צוות ה-AI שלכם רשאי לעשות דרך המערכות העסקיות שחיברתם",
       "openMarketplace": "עיין בשוק",
       "usedBy": "בשימוש של",
       "notAssigned": "לא מוקצה",
@@ -2604,7 +3620,53 @@
       "disabled": "מושבת",
       "enabled": "פעיל",
       "noneConnected": "אין כלים מחוברים",
-      "noTools": "אין כלים זמינים"
+      "noTools": "אין כלים זמינים",
+      "enables": "מאפשר",
+      "actionsLive": "פעולות לעובד/ת",
+      "wouldEnable": "יאפשר:",
+      "governanceTab": "הרשאות ומדיניות",
+      "workspaceTab": "כלים והרשאות"
+    },
+    "workspace": {
+      "overview": "סקירה",
+      "working": "עובד/ת",
+      "paused": "מושהה",
+      "readiness": "מוכנות",
+      "talk": "דברו איתי",
+      "edit": "הגדרות",
+      "hire": "+ גיוס",
+      "attention": "דורש את תשומת הלב שלכם",
+      "allSet": "הכול מסודר. לעובד/ת יש כרגע את כל מה שצריך.",
+      "finishHiring": "סיימו את הגיוס של",
+      "newEmployee": "עובד/ת חדש/ה",
+      "finishHiringSub": "המשיכו בדיוק מאיפה שעצרתם",
+      "noChannel": "חברו ערוץ כדי שלקוחות יגיעו אליו/ה",
+      "noChannelSub": "וואטסאפ, אינסטגרם או צ'אט לאתר, בלחיצה אחת",
+      "open": "פתחו",
+      "cards": {
+        "knowledge": "מקורות ידע",
+        "knowledgeSub": "ממה הוא/היא עונה",
+        "tools": "כלים מחוברים",
+        "toolsSub": "מה אפשר לבצע",
+        "processes": "תהליכים",
+        "processesSub": "איך העבודה זורמת",
+        "inbox": "תיבת השיחות",
+        "inboxSub": "צפו בשיחות בזמן אמת",
+        "analytics": "אנליטיקות",
+        "analyticsSub": "מה יצא מהעבודה"
+      },
+      "mapAria": "איך המערכות של העובד/ת עובדות יחד",
+      "map": {
+        "employee": "העובד/ת שלכם",
+        "knowledge": "ידע",
+        "knowledgeSub": "מה הוא/היא יודע/ת",
+        "tools": "אינטגרציות",
+        "toolsSub": "מה אפשר לעשות",
+        "processes": "תהליכים",
+        "processesSub": "איך עובדים",
+        "channels": "ערוצים",
+        "channelsSub": "איפה מדברים"
+      }
     }
   },
   "confirm": {
@@ -2823,7 +3885,8 @@
       "header": {
         "muteButton": "השתק",
         "unmuteButton": "בטל השתקה",
-        "hangupButton": "נתק"
+        "hangupButton": "נתק",
+        "contextTitle": "הקשר"
       },
       "declined": {
         "noAnswer": "הלקוח לא ענה - סוגרים.",
@@ -2963,6 +4026,7 @@
     "rejecting": "דוחה…",
     "running": "מריץ…",
     "approveAndRun": "אשר והרץ",
+    "retryExecution": "הרץ שוב",
     "confirmReject": "אשר דחייה",
     "rejectReasonPlaceholder": "מדוע אתה דוחה? (חובה - משמש לניסוח תשובת הגיבוי של הבוט)",
     "note": "הערה",
@@ -3151,6 +4215,980 @@
       "tierJuniorDesc": "יותר רמזים, כל המסלולים, אנימציות פעילות",
       "tierMidDesc": "ברירת מחדל",
       "tierSeniorDesc": "מצב לחישה - רק דופק"
+    }
+  },
+  "gettingStarted": {
+    "tourCta": "צאו לסיור מודרך",
+    "title": "ברוכים הבאים ל-GOTCHA",
+    "titleWithBiz": "ברוכים הבאים, {business}",
+    "subtitle": "העובד הדיגיטלי שלכם כבר מכיר את העסק. אלו הצעדים הראשונים - דברו איתו, חברו ערוץ, ותראו אותו עובד.",
+    "progress": "צעדים ראשונים",
+    "chips": {
+      "core": "מחובר ל-{system}",
+      "kb": "ידע נטען",
+      "channels": "זוהו {n} ערוצים"
+    },
+    "chat": {
+      "title": "דברו עם {name}",
+      "subtitle": "סביבת ניסוי פרטית - שום דבר לא נשלח ללקוחות.",
+      "ready": "מוכן לעבודה",
+      "empty": "תגידו שלום - שאלו כל דבר שלקוח היה שואל.",
+      "s1": "מה אתם יודעים על העסק שלנו?",
+      "s2": "איך תענו ללקוח ששואל על מחירים?",
+      "s3": "מה אתם יכולים לעשות בשבילי?",
+      "placeholder": "כתבו הודעה…",
+      "send": "שליחה",
+      "error": "משהו השתבש - נסו שוב.",
+      "noEmployeeTitle": "צרו את העובד הדיגיטלי שלכם",
+      "noEmployeeSub": "דילגתם על זה בהקמה",
+      "noEmployeeBody": "סביבת העבודה מוכנה - חסר רק העובד. זה לוקח בערך שתי דקות: ספרו לנו את המטרה ואנחנו ננסח את כל השאר.",
+      "createCta": "צרו לי עובד דיגיטלי"
+    },
+    "milestones": {
+      "title": "הצעדים הראשונים שלכם",
+      "meet_employee": {
+        "title": "הכירו את העובד הדיגיטלי",
+        "desc": "צפו בפרופיל, באישיות וביכולות"
+      },
+      "first_chat": {
+        "title": "השיחה הראשונה שלכם",
+        "desc": "שאלו אותו כל דבר בסביבת הניסוי"
+      },
+      "go_live_channel": {
+        "title": "עלו לאוויר בערוץ",
+        "desc": "חברו וואטסאפ, אינסטגרם או צ'אט לאתר"
+      },
+      "first_customer": {
+        "title": "לקוח אמיתי ראשון נענה",
+        "desc": "קורה מעצמו ברגע שאתם באוויר"
+      },
+      "teach_knowledge": {
+        "title": "השלימו ידע חסר",
+        "desc": "סגרו את פערי הידע הפתוחים"
+      }
+    },
+    "features": {
+      "title": "הכירו את הפלטפורמה",
+      "inbox": "תיבת שיחות",
+      "aiStudio": "סטודיו AI",
+      "channels": "ערוצים",
+      "knowledge": "מאגר ידע",
+      "analytics": "אנליטיקות"
+    }
+  },
+  "businessRules": {
+    "title": "כללי עסק",
+    "subtitle": "כאן קובעים מה העובד הדיגיטלי רשאי להציע ולבצע בהחזרים, ביטולים ופיצויים. הכללים נאכפים על ידי המערכת עצמה: לפני שמוצעת הצעה, לפני שנפתחת בקשת אישור, ושוב רגע לפני הביצוע.",
+    "kind": {
+      "COMPENSATION": "קופוני פיצוי",
+      "COUPON": "קופוני הנחה",
+      "REFUND": "החזרים כספיים",
+      "CANCEL_ORDER": "ביטולי הזמנות"
+    },
+    "enabled": "פעיל",
+    "version": "גרסה",
+    "approvedReasons": "סיבות מאושרות",
+    "reasonsHint": "אם לא נבחרה אף סיבה, כל סיבה מתקבלת. כאשר נבחרו סיבות, ההצעה תתאפשר רק עבורן.",
+    "reason": {
+      "late_delivery": "המשלוח התעכב משמעותית",
+      "damaged_or_wrong_item": "מוצר פגום או שגוי",
+      "confirmed_business_error": "טעות מאומתת של העסק",
+      "just_because": "אחר (לא מאושר)"
+    },
+    "maxAmount": "סכום מקסימלי",
+    "maxPercent": "אחוז מקסימלי מערך ההזמנה",
+    "managerAbove": "אישור מנהל מעל",
+    "preventDuplicate": "למנוע פיצוי נוסף עבור אותה תקלה",
+    "save": "שמירת כללים",
+    "saving": "שומר...",
+    "saved": "נשמר. גרסה חדשה פעילה כעת.",
+    "previewTitle": "בדיקת הכללים",
+    "previewAmount": "סכום מבוקש",
+    "previewReason": "סיבה",
+    "previewRun": "בדיקת החלטה",
+    "previewFailed": "לא ניתן היה להעריך את הדוגמה.",
+    "maxLabel": "מקסימום מותר",
+    "decision": {
+      "ALLOWED": "מאושר",
+      "DENIED": "נדחה",
+      "REQUIRES_INFORMATION": "נדרש מידע נוסף",
+      "REQUIRES_EVIDENCE": "נדרשת אסמכתה",
+      "REQUIRES_HUMAN_APPROVAL": "נדרש אישור מנהל",
+      "ALLOWED_WITH_LIMIT": "מאושר עד התקרה",
+      "FAIL_CLOSED": "נחסם (בטיחות)"
+    },
+    "defaultNote": {
+      "COMPENSATION": "עדיין לא הוגדרה מדיניות. עד שתישמר מדיניות, העובד הדיגיטלי לא יציע ולא ינפיק קופוני פיצוי כלל. שמירת מדיניות היא שמפעילה את היכולת.",
+      "COUPON": "עדיין לא הוגדרה מדיניות. עד שתישמר מדיניות, העובד הדיגיטלי לא ייצור ולא ינהל קופוני הנחה.",
+      "REFUND": "עדיין לא הוגדרה מדיניות. ברירת המחדל: לקוחות יכולים לבקש החזר והעובד הדיגיטלי יכין אותו, אך כל החזר עדיין מחייב אישור אנושי, והסכומים מגיעים תמיד מנתוני החנות המאומתים.",
+      "CANCEL_ORDER": "עדיין לא הוגדרה מדיניות. ברירת המחדל: לקוחות יכולים לבקש ביטול והעובד הדיגיטלי יכין אותו, אך כל ביטול עדיין מחייב אישור אנושי."
+    }
+  },
+  "setupChecklist": {
+    "title": "השלמת ההקמה",
+    "subtitle": "חמישה צעדים ואתם באוויר",
+    "show": "השלמת ההקמה",
+    "dismiss": "הסתרת הרשימה",
+    "next": "הבא",
+    "openPage": "לרשימה המלאה",
+    "manage": "ניהול",
+    "fix": "תיקון החיבור",
+    "error": "לא הצלחנו לטעון את סטטוס ההקמה.",
+    "retry": "נסו שוב",
+    "status": {
+      "notStarted": "טרם התחיל",
+      "inProgress": "בתהליך",
+      "attention": "דורש טיפול",
+      "done": "הושלם"
+    },
+    "items": {
+      "connect_source_of_truth": {
+        "title": "חיבור מערכת מקור",
+        "why": "הזמנות ונתוני לקוחות זורמים פנימה, וכל תשובה מבוססת על העסק האמיתי שלכם.",
+        "cta": "חברו מערכת מקור",
+        "attention": "החיבור הפסיק לעבוד. חברו מחדש כדי שנתוני הלקוחות ימשיכו לזרום.",
+        "inProgress": "החיבור התחיל. השלימו את ההגדרות שנותרו כדי להפעיל אותו."
+      },
+      "connect_channel": {
+        "title": "חיבור ערוצי תקשורת",
+        "why": "וואטסאפ, אינסטגרם או מייל: המקומות שבהם הלקוחות שלכם כבר כותבים.",
+        "cta": "חברו ערוץ",
+        "attention": "ערוץ איבד את החיבור. חברו אותו מחדש כדי שהודעות יוכלו להגיע.",
+        "inProgress": "חיבור ערוץ ממתין להשלמה. סיימו אותו כדי להתחיל לקבל הודעות."
+      },
+      "connect_knowledge": {
+        "title": "חיבור ידע",
+        "why": "מחירון, מדיניות והאתר שלכם מלמדים את ה-AI לענות מהאמת שלכם.",
+        "cta": "הוסיפו ידע",
+        "attention": "מקור הידע שלכם דורש טיפול.",
+        "inProgress": "הקמת הידע התחילה. הוסיפו לפחות מקור אחד כדי לסיים."
+      },
+      "create_ai_employee": {
+        "title": "יצירת עובד AI",
+        "why": "חבר הצוות הדיגיטלי הראשון שלכם עונה ללקוחות מסביב לשעון.",
+        "cta": "צרו עובד AI",
+        "attention": "עובד ה-AI שלכם דורש טיפול.",
+        "inProgress": "טיוטה ממתינה. סיימו את הגיוס כדי להכניס אותו לעבודה."
+      },
+      "create_process": {
+        "title": "יצירת תהליך",
+        "why": "נתבו שיחות, אספו פרטים והעבירו לנציג אנושי באופן אוטומטי.",
+        "cta": "צרו תהליך",
+        "attention": "התהליך שלכם דורש טיפול.",
+        "inProgress": "תהליך נמצא בבנייה. סיימו אותו כדי להפעיל."
+      }
+    }
+  },
+  "users": {
+    "pageTitle": "משתמשים ותפקידים",
+    "pageSubtitle": "נהלו את חברי הצוות בסביבת העבודה, התפקידים וחריגות ההרשאות.",
+    "tabs": {
+      "members": "חברי צוות",
+      "roles": "תפקידים"
+    },
+    "loadFailed": "טעינת הנתונים נכשלה",
+    "scope": {
+      "own": "אישי",
+      "team": "צוות",
+      "department": "מחלקה",
+      "workspace": "סביבת עבודה"
+    },
+    "badge": {
+      "inheritedFromRole": "בירושה מהתפקיד",
+      "additional": "נוסף",
+      "revoked": "בוטל",
+      "config": "תצורה",
+      "runtime": "זמן ריצה",
+      "system": "מובנה",
+      "custom": "מותאם אישית"
+    },
+    "status": {
+      "active": "פעיל",
+      "inactive": "לא פעיל",
+      "invited": "הוזמן",
+      "invitedTooltip": "ההזמנה נשלחה, המשתמש עדיין לא התחבר",
+      "lastSignIn": "התחברות אחרונה: {date}"
+    },
+    "common": {
+      "saving": "שומר...",
+      "creating": "יוצר...",
+      "cancel": "ביטול",
+      "save": "שמירה"
+    },
+    "members": {
+      "searchPlaceholder": "חפשו לפי שם או מייל...",
+      "addUser": "הוספת משתמש",
+      "table": {
+        "name": "שם",
+        "email": "מייל",
+        "department": "מחלקה",
+        "status": "סטטוס",
+        "role": "תפקיד"
+      },
+      "noMatch": "לא נמצאו משתמשים התואמים את החיפוש.",
+      "noUsers": "לא נמצאו משתמשים.",
+      "removedToast": "{name} הוסר מסביבת העבודה",
+      "removeModalDefaultName": "המשתמש הזה",
+      "deleteFailedToast": "מחיקת המשתמש נכשלה",
+      "removeModal": {
+        "title": "הסרת משתמש",
+        "message": "להסיר את {name} מסביבת העבודה? לא ניתן לבטל פעולה זו.",
+        "confirmText": "הסרה"
+      }
+    },
+    "panel": {
+      "closeAria": "סגירת הפאנל",
+      "userDetails": "פרטי משתמש",
+      "profile": "פרופיל",
+      "nameEmailRequired": "יש להזין שם וכתובת מייל.",
+      "genericError": "אירעה שגיאה",
+      "loadAccessFailedToast": "טעינת ההרשאות של המשתמש נכשלה",
+      "nameLabel": "שם",
+      "emailLabel": "מייל",
+      "phoneLabel": "מספר טלפון",
+      "phonePlaceholder": "+972501234567",
+      "phoneHelper": "משמש לניתוב שיחות בערוץ הקולי ולהחזרות שיחה חכמות.",
+      "createHelper": "המשתמש יגדיר לעצמו סיסמה בשירות ההתחברות המאובטח שלנו. תקבלו קישור הגדרה חד-פעמי לשיתוף איתו.",
+      "departmentLabel": "מחלקה",
+      "noDepartment": "ללא מחלקה",
+      "roleLabel": "תפקיד",
+      "selectRolePlaceholder": "בחרו תפקיד...",
+      "addedToast": "{name} נוסף לסביבת העבודה",
+      "profileUpdatedToast": "הפרופיל עודכן",
+      "deactivatedToast": "המשתמש הושבת",
+      "activatedToast": "המשתמש הופעל",
+      "statusUpdateFailedToast": "עדכון הסטטוס נכשל",
+      "resetPasswordFailedToast": "איפוס הסיסמה נכשל",
+      "roleUpdatedToast": "התפקיד עודכן",
+      "roleUpdateFailedToast": "עדכון התפקיד נכשל",
+      "scopeUpdatedToast": "היקף ההרשאה עודכן",
+      "scopeUpdateFailedToast": "עדכון היקף ההרשאה נכשל",
+      "permissionUpdateFailedToast": "עדכון ההרשאה נכשל",
+      "statusSection": "סטטוס",
+      "activeHelper": "המשתמש יכול להתחבר ולקבל שיחות.",
+      "inactiveHelper": "המשתמש מושהה ולא יכול להתחבר.",
+      "toggleActiveAria": "החלפת מצב פעילות",
+      "securitySection": "אבטחה",
+      "resetPassword": "איפוס סיסמה",
+      "resetPasswordHelper": "צרו קישור חד-פעמי שהמשתמש יוכל להשתמש בו כדי להגדיר סיסמה חדשה. אתם אף פעם לא רואים או בוחרים את הסיסמה שלו.",
+      "creatingLink": "יוצר קישור...",
+      "generateSetupLink": "יצירת קישור הגדרת סיסמה",
+      "linkCreated": "הקישור נוצר. ניתן להשתמש בו פעם אחת בלבד.",
+      "roleSection": "תפקיד",
+      "scopeOverrideSection": "דריסת היקף הרשאה",
+      "scopeOverrideHelper": "\"בירושה\" משתמש בהיקף ברירת המחדל של התפקיד.",
+      "inherit": "בירושה",
+      "additionalPermissions": "הרשאות נוספות",
+      "effectiveCount": "בפועל: {n}",
+      "permissionsHelper": "לחצו כדי לעבור בין המצבים: בירושה ← בוטל ← איפוס, או ללא ← ניתן ← איפוס.",
+      "dangerZone": "אזור מסוכן",
+      "removeUser": "הסרת משתמש",
+      "saveProfile": "שמירת פרופיל"
+    },
+    "roles": {
+      "systemRoles": "תפקידי מערכת",
+      "customRoles": "תפקידים מותאמים אישית",
+      "newRole": "+ תפקיד חדש",
+      "namePlaceholder": "שם התפקיד (למשל, מנהל מכירות)",
+      "descriptionPlaceholder": "תיאור (אופציונלי)",
+      "createRole": "יצירת תפקיד",
+      "emptyCustom": "עדיין אין תפקידים מותאמים אישית. תפקידי המערכת מכסים את רוב המקרים; צרו תפקיד מותאם אישית עבור קבוצות הרשאות ייחודיות.",
+      "createdToast": "התפקיד \"{name}\" נוצר",
+      "createFailedToast": "יצירת התפקיד נכשלה",
+      "deletedToast": "התפקיד \"{name}\" נמחק",
+      "deleteFailedToast": "מחיקת התפקיד נכשלה",
+      "deleteModal": {
+        "title": "מחיקת תפקיד",
+        "message": "למחוק את \"{name}\"? משתמשים המשויכים לתפקיד זה יאבדו את ההרשאות שלו.",
+        "confirmText": "מחיקה"
+      }
+    },
+    "roleRow": {
+      "permissionsCount": "{n} הרשאות",
+      "membersCount": "{n} חברי צוות",
+      "permissionsSavedToast": "ההרשאות של \"{name}\" נשמרו",
+      "permissionsSaveFailedToast": "שמירת ההרשאות נכשלה",
+      "roleUpdatedToast": "התפקיד עודכן",
+      "roleUpdateFailedToast": "עדכון התפקיד נכשל",
+      "namePlaceholder": "שם התפקיד",
+      "descriptionPlaceholder": "תיאור (אופציונלי)",
+      "noDescription": "אין תיאור",
+      "editName": "עריכת שם",
+      "permissionsSection": "הרשאות",
+      "reset": "איפוס",
+      "saveChanges": "שמירת שינויים",
+      "deleteRole": "מחיקת תפקיד"
+    },
+    "inviteDepartments": "מחלקות",
+    "inviteDepartmentsHint": "בחרו אף מחלקה, מחלקה אחת או כמה מחלקות לחבר הצוות.",
+    "inviteDepartmentsSearch": "חיפוש מחלקות...",
+    "inviteSummary": "מייל ההזמנה נשלח אל {email}. הם קובעים סיסמה בעצמם בשירות ההזדהות המאובטח; קישור ההקמה חד-פעמי."
+  },
+  "businessPage": {
+    "rescanTitle": "לסרוק את העסק מחדש?",
+    "rescanBody": "אסרוק שוב את האתר שלכם (עמוד הבית, עמודים מרכזיים וסימנים פומביים) וארענן את מה שאני יודע: תיאור, ערוצים, מערכות וקול המותג. ההמלצות עשויות להשתנות. מידע שאישרתם או שלימדתם אותי נשאר ולעולם לא נדרס בשקט. הסריקה אורכת כמה דקות; עובדי ה-AI מקבלים אחריה את ההקשר המעודכן.",
+    "rescanConfirm": "התחלת סריקה",
+    "rescanCancel": "לא עכשיו",
+    "completedTitle": "הושלמו",
+    "completedEmpty": "עדיין לא הושלם דבר.",
+    "completedAt": "הושלם {date}",
+    "reopen": "פתיחה מחדש",
+    "reopenTitle": "לפתוח מחדש את ההמלצה?",
+    "reopenBody": "היא חוזרת לרשימה הפתוחה בדיוק כפי שהייתה לפני שסומנה כבוצעה. שום דבר אחר לא משתנה.",
+    "reopenConfirm": "פתיחה מחדש",
+    "uploadFile": "העלאת קובץ",
+    "uploadHint": "PDF, Word, Markdown או טקסט, עד 10MB",
+    "uploading": "מעלה...",
+    "uploadDone": "הקובץ נוסף לידע שלי",
+    "uploadFailed": "ההעלאה נכשלה. נסו קובץ אחר.",
+    "editProfile": "עריכת פרופיל העסק",
+    "editProfileTitle": "מה אני מבין על העסק שלכם",
+    "editVoice": "קול המותג",
+    "editTone": "טון",
+    "editLanguages": "שפות (מופרדות בפסיק)",
+    "editDescription": "תיאור העסק",
+    "profileSaved": "נשמר. מעכשיו אני עונה לפי זה.",
+    "profileSaveFailed": "השמירה נכשלה. נסו שוב.",
+    "save": "שמירה",
+    "cancel": "ביטול"
+  },
+  "pricing": {
+    "recommended": "מומלץ",
+    "currentPlan": "התוכנית שלכם",
+    "custom": {
+      "label": "תוכנית מותאמת",
+      "title": "בנויה סביב הדרך שבה העסק שלכם באמת עובד",
+      "body": "אם הנפחים, הערוצים, המגבלות או תנאי ההתקשרות שלכם לא מתאימים לתוכניות האלה, נגדיר תוכנית שכן מתאימה. תוכנית מותאמת קובעת יכולות, מגבלות מספריות, הקצאת קרדיטים ונפחי צ'אט וקול משלה, בתנאים מסחריים שנסכם איתכם.",
+      "cta": "דברו איתנו",
+      "i1": "בחירת יכולות ומגבלות מספריות לכל ארגון",
+      "i2": "הקצאת קרדיטים ונפחי צ'אט וקול שמוסכמים מראש",
+      "i3": "תנאים חודשיים או שנתיים עם תקופת התקשרות מוגדרת",
+      "i4": "תמחור לפי העסק שלכם ולא לפי מדרגה מפורסמת"
+    },
+    "month": "חודש",
+    "perMonth": "בחודש",
+    "perDayShort": "ביום עסקים",
+    "perBusinessDay": "ליום עסקים",
+    "included": "כלול",
+    "includedCredits": "קרדיטים כלולים",
+    "creditsWord": "קרדיטים",
+    "chatsWord": "שיחות",
+    "estimatedChats": "שיחות משוערות",
+    "estimatedCalls": "שיחות קול משוערות",
+    "perConversation": "לשיחה",
+    "perCall": "לשיחת קול",
+    "blended": "לאינטראקציה",
+    "everythingIn": "כל היכולות של {plan}, ובנוסף",
+    "seeDetails": "לפרטים",
+    "configureVolume": "התאמת נפח",
+    "managePlan": "ניהול התוכנית",
+    "currencyLabel": "מחירים ב",
+    "plansHeading": "תוכניות",
+    "configureHeading": "התאמת התוכנית",
+    "approxIn": "בקירוב, ב-{display}. החיוב מתבצע ב-{charged}:",
+    "hero": {
+      "label": "מחירים",
+      "title": "מחיר שנגזר מכמות השיחות שלכם עם לקוחות",
+      "subtitle": "כל תוכנית כוללת את התיבה המשותפת, הערוצים המחוברים וה-AI שמבין את העסק שלכם. אתם בוחרים את נפח השיחות.",
+      "creditsNote": "יחידה אחת עוברת דרך כל המוצר: קרדיטים. כל תוכנית כוללת מכסת קרדיטים חודשית, וכל שיחה צורכת ממנה בזמן שה-AI קורא, משיב ופועל. אפשר לרכוש עוד בכל רגע, או להגדיר טעינה אוטומטית עם תקרת הוצאה חודשית."
+    },
+    "cta": {
+      "getStarted": "התחילו עכשיו",
+      "managePlan": "ניהול התוכנית",
+      "contactSales": "דברו איתנו"
+    },
+    "configureTitle": "התאמת {plan}",
+    "configureSubtitle": "בחרו את הנפח הצפוי. מכסת הקרדיטים והמחיר מתעדכנים יחד.",
+    "fixedAllowance": "לתוכנית הזו מכסת קרדיטים חודשית קבועה. אפשר לרכוש קרדיטים נוספים בכל עת, או לעבור לתוכנית גבוהה יותר עם מכסה חודשית גדולה יותר.",
+    "chatVolume": "שיחות צ'אט",
+    "voiceVolume": "שיחות קול",
+    "yourPlan": "התוכנית שלכם",
+    "planCredits": "קרדיטים בתוכנית",
+    "addedCredits": "נוספו לפי הבחירה שלכם",
+    "totalCredits": "סה\"כ קרדיטים חודשיים",
+    "extraCredits": "קרדיטים נוספים",
+    "extraCreditsAvailable": "זמין",
+    "autoTopUp": "טעינה אוטומטית",
+    "autoTopUpAvailable": "זמין",
+    "fxNote": "מחירי {display} הם המרה משוערת לפי השער היציג הרשמי. החיוב בפועל מתבצע ב-{charged}.",
+    "a11y": {
+      "totalChanged": "{plan}: {total} לחודש, {credits} קרדיטים כלולים.",
+      "skipToPlans": "דילוג לתוכניות",
+      "volumeValue": "{volume} {hint}, {cost}"
+    },
+    "comparison": {
+      "label": "השוואה",
+      "title": "מה כוללת כל תוכנית",
+      "subtitle": "כל ההבדלים שחשובים. יכולות שאינן מופיעות עדיין אינן חלק מהמוצר.",
+      "caption": "השוואת יכולות בין תוכניות GOTCHA",
+      "capability": "יכולת",
+      "included": "כלול",
+      "notIncluded": "לא כלול",
+      "unlimited": "ללא הגבלה",
+      "compareA": "השוואה בין",
+      "compareB": "לבין",
+      "differences": "{n} הבדלים",
+      "category": {
+        "COMMUNICATION": "תקשורת",
+        "AI": "כוח עבודה AI",
+        "VOICE": "קול",
+        "MANAGEMENT": "ניהול ודיווח",
+        "LIMITS": "מגבלות"
+      },
+      "limit": {
+        "users": "חברי צוות",
+        "ai_employees": "עובדי AI",
+        "channels": "ערוצים מחוברים",
+        "departments": "מחלקות",
+        "knowledge_sources": "מקורות ידע",
+        "workflows": "אוטומציות"
+      }
+    },
+    "credits": {
+      "label": "קרדיטים",
+      "title": "יחידה אחת, לכל אורך המוצר",
+      "intro": "קרדיטים הם הדרך שבה GOTCHA מודדת עבודת AI. שיחה צורכת קרדיטים כשה-AI קורא אותה, מנסח תשובה, שולף ידע, מעדכן את ה-CRM ומסכם את התוצאה. שיחות ארוכות, שיחות קול ויותר פעולות AI צורכות יותר.",
+      "p1": {
+        "title": "כלול בכל חודש",
+        "body": "כל תוכנית כוללת מכסה חודשית. היא מתאפסת במועד החידוש ואינה מצטברת לחודש הבא."
+      },
+      "p2": {
+        "title": "אפשר לרכוש עוד בכל רגע",
+        "body": "חבילות קרדיטים נוספות ליתרה ונשארות בה עד לניצולן. קרדיטי התוכנית נצרכים תחילה."
+      },
+      "p3": {
+        "title": "טעינה אוטומטית, בתנאים שלכם",
+        "body": "אפשר להפעיל טעינה אוטומטית ולקבוע תקרת הוצאה חודשית. מעבר לתקרה שקבעתם לא מתבצע חיוב."
+      },
+      "p4": {
+        "title": "כשנגמרים הקרדיטים",
+        "body": "פעולות ה-AI נעצרות עד להוספת קרדיטים. התיבה, ההיסטוריה והנציגים האנושיים ממשיכים לעבוד, ושום דבר לא נמחק."
+      }
+    },
+    "faq": {
+      "label": "שאלות",
+      "title": "לפני שמחליטים",
+      "items": [
+        {
+          "q": "מה זה קרדיט?",
+          "a": "קרדיט הוא הדרך שבה GOTCHA מודדת עבודת AI. קריאת הודעה, ניסוח תשובה, שליפת ידע, עדכון ה-CRM וסיכום שיחה - כולם נגרעים מהיתרה. קרדיטים הם היחידה היחידה שבה אתם מחויבים."
+        },
+        {
+          "q": "איך מחושבות הערכות השיחות?",
+          "a": "לכל תוכנית מוגדרת הנחה מסחרית לגבי כמות הקרדיטים שצורכת שיחה ממוצעת, וכמה ימי עסקים יש בחודש. ההערכה מחלקת את מכסת הקרדיטים של התוכנית בהנחה הזו. היא מתארת את תצורת התוכנית, ולא מדידה של שימוש של מישהו."
+        },
+        {
+          "q": "האם השימוש שלי יתאים להערכה?",
+          "a": "לא במדויק. צריכת הקרדיטים בפועל משתנה לפי אורך השיחה, הערוץ, פעולות ה-AI, היכולות שהופעלו ומשך שיחות הקול. ההערכה נועדה להתאים תוכנית, לא לחזות חשבון."
+        },
+        {
+          "q": "מה קורה כשנגמרים הקרדיטים?",
+          "a": "פעולות ה-AI נעצרות עד להוספת קרדיטים. התיבה המשותפת, היסטוריית השיחות והנציגים האנושיים ממשיכים לעבוד, ושום מידע לא נמחק. אפשר לרכוש קרדיטים או להפעיל טעינה אוטומטית."
+        },
+        {
+          "q": "איך עובדת הטעינה האוטומטית?",
+          "a": "אתם קובעים מתי היא מופעלת, כמה היא רוכשת, ומהי תקרת ההוצאה החודשית. כשמגיעים לתקרה לא מתבצע חיוב נוסף, ואתם מקבלים התראה כדי להחליט מה הלאה."
+        },
+        {
+          "q": "אפשר לרכוש קרדיטים בלי להחליף תוכנית?",
+          "a": "כן. חבילות קרדיטים נוספות ליתרה ונשארות בה עד לניצולן. קרדיטי התוכנית הכלולים נצרכים תמיד קודם."
+        },
+        {
+          "q": "מה קורה בשדרוג?",
+          "a": "שדרוג נכנס לתוקף מיד. תחויבו בהפרש היחסי עבור שארית תקופת החיוב הנוכחית, ומכסת הקרדיטים הגדולה יותר זמינה מיד."
+        },
+        {
+          "q": "מה קורה בהורדת תוכנית?",
+          "a": "התוכנית הנוכחית נשארת בדיוק כפי שהיא עד מועד החידוש. שום דבר לא נלקח לפני כן, והתוכנית הקטנה יותר מתחילה בחידוש."
+        },
+        {
+          "q": "מה קורה אם מבטלים?",
+          "a": "הביטול נכנס לתוקף בסוף תקופת החיוב הנוכחית. הגישה נשמרת במלואה עד מועד החידוש, ואפשר לחדש לפניו. המידע שלכם אינו נמחק בתום המנוי."
+        },
+        {
+          "q": "למה המחירים מוצגים בדולרים?",
+          "a": "המחירים נקבעים בדולר אמריקאי. סכומים בשקלים הם המרה לתצוגה לפי השער היציג הרשמי, מעוגלים כלפי מעלה, ומסומנים כהערכה. המטבע שבו תחויבו בפועל מוצג לפני האישור."
+        },
+        {
+          "q": "יש תקופת ניסיון או פיילוט?",
+          "a": "ניסיונות ופיילוטים מסודרים מול הצוות שלנו ולא נפתחים בשירות עצמי, כדי שאפשר יהיה להתאים את תקציב הקרדיטים ואת משך התקופה למה שאתם רוצים לבחון. דברו איתנו."
+        },
+        {
+          "q": "אפשר לקבל תוכנית מותאמת?",
+          "a": "כן. תוכניות מותאמות קובעות יכולות, מגבלות, הקצאת קרדיטים ונפחים משלהן, בתנאים מסחריים שנסכם איתכם."
+        }
+      ]
+    },
+    "closing": {
+      "title": "מתחילים בשיחה",
+      "body": "ספרו לנו איך הצוות שלכם מטפל היום בלקוחות, ונראה לכם מה GOTCHA משנה."
+    },
+    "state": {
+      "disabled": {
+        "title": "המחירים טרם פורסמו",
+        "body": "אנחנו משלימים את התמחור הפומבי. הצטרפו לגישה המוקדמת ונחזור אליכם עם תוכניות ומחירים."
+      },
+      "empty": {
+        "title": "המחירים אינם זמינים כרגע",
+        "body": "אין תוכניות מפורסמות להצגה. הצטרפו לגישה המוקדמת ונחזור אליכם."
+      },
+      "error": {
+        "title": "לא הצלחנו לטעון את המחירים",
+        "body": "משהו השתבש אצלנו. נסו שוב בעוד רגע, או הצטרפו לגישה המוקדמת ונחזור אליכם."
+      },
+      "retry": "נסו שוב",
+      "earlyAccess": "לגישה מוקדמת"
+    },
+    "volumeHint": "גררו את הסרגל או השתמשו במקשי החיצים.",
+    "alsoIncludes": "כולל גם:"
+  },
+  "checkout": {
+    "opening": {
+      "eyebrow": "תשלום",
+      "title": "פותחים את התשלום",
+      "body": "רגע אחד, אנחנו טוענים את התוכנית של הארגון שלכם."
+    },
+    "summary": {
+      "plan": "תוכנית",
+      "recurring": "חיוב חוזר",
+      "credits": "קרדיטים כלולים",
+      "activationNote": "הארגון שלכם יופעל במלואו לאחר אישור התשלום.",
+      "charged": "לחיוב היום",
+      "rateSettled": "הומר לפי {rate} שקלים לדולר, השער שחל על תשלום זה.",
+      "rateIndicative": "הכרטיס שלך מחויב בשקלים, לפי {rate} שקלים לדולר.",
+      "interval": "חיוב",
+      "intervalMonthly": "חודשי",
+      "intervalAnnual": "שנתי",
+      "offerValid": "ההצעה בתוקף עד"
+    },
+    "action": {
+      "startPayment": "הגדרת תשלום",
+      "tryAgain": "נסו שוב",
+      "contactSupport": "פנייה לתמיכה",
+      "requestNewLink": "בקשת קישור חדש",
+      "continue": "המשך ל-GOTCHA",
+      "backHome": "חזרה לדף הבית",
+      "retryPayment": "נסו כרטיס אחר",
+      "resendEmail": "שליחה מחדש",
+      "resending": "שולח..."
+    },
+    "paymentRequired": {
+      "eyebrow": "תשלום",
+      "title": "נשאר צעד אחד",
+      "body": "הגדירו תשלום כדי להפעיל את התוכנית שנבחרה לארגון שלכם.",
+      "unavailable": "הגדרת תשלום מאובטח אינה זמינה עדיין. נעדכן אתכם ברגע שתהיה מוכנה, ולא בוצע שום חיוב."
+    },
+    "processing": {
+      "eyebrow": "תשלום",
+      "title": "מאשרים את התשלום",
+      "body": "זה בדרך כלל לוקח רגע. אפשר להשאיר את הדף פתוח.",
+      "status": "ממתינים לאישור"
+    },
+    "manualReview": {
+      "title": "אנחנו בודקים דבר אחד",
+      "body": "התשלום דורש בדיקה ידנית קצרה לפני הפעלת התוכנית. לא נדרשת מכם פעולה נוספת.",
+      "status": "בבדיקה אצל הצוות שלנו"
+    },
+    "failed": {
+      "eyebrow": "תשלום",
+      "title": "התשלום לא עבר",
+      "body": "לא בוצע חיוב. אפשר לנסות שוב, או לפנות אלינו ונסדר את זה יחד."
+    },
+    "expired": {
+      "eyebrow": "קישור",
+      "title": "הקישור פג תוקף",
+      "body": "מטעמי אבטחה קישורי תשלום תקפים לזמן מוגבל. בקשו קישור חדש מהמנהל שלכם, או פנו אלינו."
+    },
+    "completed": {
+      "eyebrow": "אושר",
+      "title": "התוכנית פעילה",
+      "body": "התשלום אושר והארגון שלכם מוכן לשימוש.",
+      "noEmailYet": "לא הגיע מייל?",
+      "resendDone": "נשלח. בדקו את תיבת הדואר שוב בעוד רגע.",
+      "resendFailed": "לא הצלחנו לשלוח כרגע. נסו שוב בעוד רגע."
+    },
+    "unavailable": {
+      "eyebrow": "קישור",
+      "title": "לא הצלחנו לפתוח את הדף",
+      "body": "ייתכן שהקישור פג תוקף או שכבר נעשה בו שימוש. פנו למנהל שלכם לקבלת קישור חדש."
+    },
+    "error": {
+      "paymentSetupFailed": "לא הצלחנו לפתוח את דף התשלום. נסו שוב בעוד רגע."
+    },
+    "decline": {
+      "CARD_EXPIRED": "תוקף הכרטיס פג.",
+      "INSUFFICIENT_FUNDS": "התשלום נדחה בשל יתרה לא מספקת.",
+      "CARD_UNUSABLE": "לא ניתן להשתמש בכרטיס הזה.",
+      "DECLINED": "התשלום נדחה על ידי חברת האשראי.",
+      "tryAnother": "אנא נסו כרטיס אחר."
+    },
+    "unresolved": {
+      "title": "אנחנו בודקים מול חברת האשראי",
+      "body": "התשלום נמצא באימות מול חברת האשראי. זה עשוי לקחת יותר זמן מהרגיל, ואין צורך להמתין כאן - נשלח לכם מייל ברגע שנדע. בינתיים אנא אל תשלמו שוב.",
+      "status": "בבדיקה מול חברת האשראי"
+    },
+    "cancelled": {
+      "eyebrow": "התשלום לא הושלם",
+      "title": "סגרתם את דף התשלום",
+      "body": "לא בוצע חיוב ולא נשמר כרטיס. התוכנית עדיין ממתינה, ואפשר להמשיך מהנקודה שבה הפסקתם בכל רגע."
+    }
+  },
+  "shopifyChat": {
+    "title": "צ׳אט חי לשופיפיי",
+    "subtitle": "צ׳אט ממותג בחנות השופיפיי שלכם שיודע לענות על שאלות מוצר ולהוסיף פריטים לסל.",
+    "lockedTitle": "צ׳אט חי לשופיפיי אינו מופעל בסביבת העבודה הזו",
+    "lockedBody": "חנות השופיפיי שלכם נשארת מחוברת. ערוץ הצ׳אט עצמו עדיין לא נכלל בחבילה של סביבת העבודה, ולכן אי אפשר לפתוח את ההגדרות שלו. פנו לתמיכה כדי להפעיל אותו.",
+    "loadFailedTitle": "לא הצלחנו לטעון את הצ׳אט החי לשופיפיי",
+    "retry": "נסו שוב",
+    "noShopDomainTitle": "לאינטגרציית השופיפיי אין כתובת חנות",
+    "noShopDomainBody": "האינטגרציה מחוברת אבל לא נשמרה עבורה כתובת myshopify.com, והצ׳אט חייב לדעת לאיזו חנות הוא מקושר. חברו מחדש את האינטגרציה כדי לשמור אותה.",
+    "noStoreTitle": "קודם צריך לחבר את חנות השופיפיי",
+    "noStoreBody": "הערוץ מקושר לחנות אחת. מחירים, מלאי ופרטי מוצר תמיד מגיעים מאותה חנות, ולכן החיבור צריך להתקיים לפני הערוץ.",
+    "goToIntegrations": "למסך האינטגרציות",
+    "connectedTo": "החנות המחוברת",
+    "createIntro": "צרו את הערוץ, הגדירו אותו, ורק אז הפעילו אותו בחנות. שום דבר לא עולה לאוויר עד שתפעילו.",
+    "createChannel": "יצירת ערוץ צ׳אט לשופיפיי",
+    "created": "הערוץ נוצר. הוא כבוי עד שתפעילו אותו.",
+    "deleted": "הערוץ נמחק.",
+    "statusLive": "הווידג׳ט פעיל בחנות",
+    "statusOff": "הווידג׳ט כבוי",
+    "statusHint": "הפעילו אחרי שהאמבד הופעל בערכת העיצוב.",
+    "enabled": "פעיל",
+    "sections": "מקטעי הגדרות",
+    "unsaved": "יש שינויים שלא נשמרו",
+    "copied": "הועתק",
+    "section": {
+      "store": "חנות",
+      "installation": "התקנה",
+      "appearance": "עיצוב",
+      "welcome": "חוויית הפתיחה",
+      "questions": "שאלות מוצעות",
+      "handoff": "מעבר לנציג",
+      "hours": "זמינות",
+      "privacy": "פרטיות",
+      "diagnostics": "סטטוס",
+      "launcher": "כפתור הצ׳אט",
+      "hero": "מסך הפתיחה",
+      "proactive": "פנייה יזומה",
+      "sounds": "צלילים",
+      "behavior": "התנהגות",
+      "commerce": "מוצרים ועגלה"
+    },
+    "shopDomain": "כתובת החנות",
+    "currency": "מטבע",
+    "productAccess": "גישה למוצרים",
+    "productAccessOk": "מוצרים, מחירים ומלאי נקראים בהצלחה",
+    "productAccessNo": "לא ניתן לקרוא מוצרים",
+    "storeBindingNote": "הערוץ קשור לצמיתות לחנות הזו. כרטיס מוצר מחנות אחרת לא יוכל להופיע בשיחות האלה.",
+    "channelKey": "מפתח הערוץ",
+    "channelKeyHint": "הדביקו את זה באמבד של GOTCHA Chat בערכת העיצוב. זה מזהה ציבורי, לא סוד, והוא עובד רק מהחנות שלכם.",
+    "openThemeEditor": "פתיחת עורך העיצוב בשופיפיי",
+    "noDeepLink": "היכנסו לניהול שופיפיי, לחנות המקוונת, לערכות עיצוב, להתאמה אישית ואז לאמבדים של אפליקציות.",
+    "storefrontDomains": "כתובות החנות",
+    "storefrontDomainsHint": "אחת בכל שורה. הלקוחות גולשים בדומיין שלכם ולא בכתובת myshopify.com, ולכן הווידג׳ט יידחה שם עד שתוסיפו אותה כאן.",
+    "primaryColor": "צבע המותג",
+    "contrastColor": "צבע על גבי המותג",
+    "logoUrl": "לוגו החנות",
+    "avatarUrl": "תמונת העוזר",
+    "httpsOnly": "חייבת להיות כתובת https.",
+    "launcherIcon": "אייקון הפתיחה",
+    "icon": {
+      "chat": "בועת שיחה",
+      "sparkle": "ניצוץ",
+      "bag": "שקית קניות",
+      "question": "סימן שאלה"
+    },
+    "position": "מיקום",
+    "right": "ימין",
+    "left": "שמאל",
+    "cornerRadius": "עיגול פינות",
+    "cornerRadiusHint": "מוגבל לטווח בטוח כדי שהווידג׳ט יישאר שמיש בכל ערכת עיצוב.",
+    "language": "שפה",
+    "langAuto": "לפי החנות",
+    "direction": "כיוון טקסט",
+    "showPoweredBy": "הצגת \"מופעל על ידי GOTCHA\"",
+    "assistantName": "שם העוזר",
+    "headline": "כותרת פתיחה",
+    "subline": "הודעת פתיחה",
+    "questionsHint": "עד חמש. זה הדבר הראשון שלקוח רואה, אז כדאי שאלה יהיו השאלות שאתם באמת רוצים לענות עליהן.",
+    "addQuestion": "הוספת שאלה",
+    "aiEmployee": "עובד AI",
+    "aiEmployeeHint": "מטפל בשיחה ראשון. בלעדיו כל שיחה מחכה לנציג אנושי.",
+    "noAiEmployee": "ללא",
+    "productMessaging": "שליחת כרטיסי מוצר",
+    "productMessagingHint": "מאפשר לעובד ה-AI ולנציגים לשלוח מוצרים אמיתיים עם מחיר ומלאי מעודכנים.",
+    "addToCartEnabled": "אפשרות הוספה לסל מתוך הצ׳אט",
+    "carouselSize": "מוצרים בקרוסלה",
+    "carouselSizeHint": "שלושה בדרך כלל נכון. צ׳אט הוא לא עמוד קטגוריה.",
+    "allowUnpublished": "אפשר מוצרים בטיוטה ובארכיון",
+    "allowUnpublishedHint": "כבוי כברירת מחדל. כשמפעילים, מוצרים לא מפורסמים מסומנים בבירור.",
+    "department": "מחלקה",
+    "departmentHint": "לאן מגיעה שיחה כשהיא עוברת לנציג.",
+    "noDepartment": "ללא",
+    "allowHumanHandoff": "לאפשר ללקוח לבקש נציג",
+    "allowHumanHandoffHint": "מציג קישור \"לדבר עם נציג\" בווידג׳ט.",
+    "allowReturnToAi": "לאפשר החזרה לעובד ה-AI",
+    "hoursEnabled": "שימוש בשעות פעילות",
+    "hoursEnabledHint": "מחוץ לשעות האלה הווידג׳ט מוצג כלא זמין.",
+    "timezone": "אזור זמן",
+    "day": {
+      "0": "ראשון",
+      "1": "שני",
+      "2": "שלישי",
+      "3": "רביעי",
+      "4": "חמישי",
+      "5": "שישי",
+      "6": "שבת"
+    },
+    "offlineBehavior": "מחוץ לשעות הפעילות",
+    "offlineAi": "עובד ה-AI ממשיך לענות",
+    "offlineForm": "הצגת טופס יצירת קשר",
+    "offlineMessageOnly": "הצגת הודעה בלבד",
+    "offlineMessage": "הודעת אי-זמינות",
+    "useCartContext": "שימוש בתוכן הסל של הלקוח",
+    "useCartContextHint": "כבוי כברירת מחדל. נקרא רק מספר הפריטים, אף פעם לא התוכן או הסכום.",
+    "requireOfflineConsent": "בקשת הסכמה בטופס יצירת הקשר",
+    "requireOfflineConsentHint": "מומלץ בכל מקום שבו אתם אוספים כתובת אימייל.",
+    "consentText": "נוסח ההסכמה",
+    "privacyNote": "לקוחות אנונימיים כברירת מחדל. מזהה לקוח שופיפיי שמגיע מהדפדפן לא נחשב אמין, ובדיקת הזמנות עדיין דורשת את אימות הזהות הרגיל של GOTCHA.",
+    "deleteChannel": "מחיקת הערוץ",
+    "deleteTitle": "למחוק את הצ׳אט לשופיפיי?",
+    "deleteMessage": "הווידג׳ט יפסיק להיטען בחנות מיד והשיחות מהערוץ הזה יימחקו. אי אפשר לבטל את הפעולה.",
+    "preview": {
+      "welcome": "פתיחה",
+      "conversation": "שיחה",
+      "product": "כרטיס מוצר",
+      "carousel": "קרוסלה",
+      "offline": "לא זמין",
+      "desktop": "מחשב",
+      "mobile": "נייד"
+    },
+    "previewAria": "תצוגה מקדימה של ווידג׳ט הצ׳אט",
+    "soldOut": "אזל מהמלאי",
+    "notPublished": "לא מפורסם",
+    "addToCart": "הוספה לסל",
+    "viewProduct": "למוצר",
+    "products": "מוצרים",
+    "pickerTitle": "שליחת מוצר",
+    "pickerHint": "חיפוש בקטלוג השופיפיי שלכם. מחירים ומלאי מגיעים ישירות מהחנות.",
+    "searchProducts": "חיפוש מוצרים",
+    "noProducts": "לא נמצאו מוצרים תואמים.",
+    "selectedCount": "{count} נבחרו",
+    "sendProducts": "שליחה",
+    "addNote": "הוספת הודעה לפני הכרטיס (רשות)",
+    "productMessageLabel": "כרטיס מוצר",
+    "carouselLabel": "קרוסלת מוצרים",
+    "pickerUnavailable": "מוצרי שופיפיי אינם זמינים כרגע.",
+    "maxSelected": "אפשר לשלוח עד {max} מוצרים בהודעה אחת.",
+    "page": {
+      "product": "עמוד מוצר",
+      "collection": "קטגוריה",
+      "cart": "סל",
+      "search": "חיפוש",
+      "index": "דף הבית",
+      "page": "עמוד",
+      "blog": "בלוג",
+      "other": "החנות"
+    },
+    "cartItems": "{count} בסל",
+    "activationIntro": "החנות מחוברת. הצעד האחרון הוא להפעיל את תוסף GOTCHA Chat בעיצוב הפעיל ולשמור.",
+    "advancedTroubleshooting": "פתרון תקלות מתקדם",
+    "advancedIntro": "בהתקנה רגילה לא צריך את אלה. הם קיימים כדי שהתמיכה תוכל לשחזר את הקישור של החנות אם רשומת ההתקנה אבדה.",
+    "launcherHint": "איך נראה כפתור הצ׳אט ואיפה הוא יושב בחנות.",
+    "launcherShape": "צורה",
+    "launcherSize": "גודל",
+    "launcherBg": "רקע",
+    "launcherFg": "צבע האייקון",
+    "mobilePosition": "מיקום במובייל",
+    "offsetBottom": "מרחק מלמטה",
+    "offsetSide": "מרחק מהצד",
+    "shadow": "צל",
+    "launcherIconUrl": "כתובת אייקון מותאם",
+    "showLabel": "הצגת טקסט ליד האייקון",
+    "launcherLabel": "טקסט",
+    "launcherLabelPlaceholder": "צריכים עזרה?",
+    "showBorder": "הוספת מסגרת",
+    "showUnreadBadge": "הצגת מונה הודעות",
+    "shape": {
+      "circle": "עיגול",
+      "rounded": "ריבוע מעוגל",
+      "pill": "גלולה"
+    },
+    "heroHint": "תמונה, GIF או סרטון קצר בראש המסך הראשון שהלקוח רואה.",
+    "heroMediaType": "מדיה",
+    "heroMediaUrl": "כתובת המדיה",
+    "heroPoster": "תמונת פוסטר",
+    "heroPosterHint": "מוצגת לפני שהסרטון מתנגן, ובכל פעם שהדפדפן מסרב להפעיל אוטומטית.",
+    "heroHeight": "גובה",
+    "heroMobileHeight": "גובה במובייל",
+    "heroFade": "מעבר רך לצ׳אט",
+    "heroOverlay": "החשכה",
+    "heroAvatar": "אווטאר או לוגו",
+    "heroAvatarSize": "גודל האווטאר",
+    "heroOverlap": "חפיפת האווטאר",
+    "videoLoop": "ניגון בלולאה",
+    "videoAutoplay": "ניגון אוטומטי",
+    "videoAutoplayHint": "תמיד מושתק. מי שביקש פחות תנועה יראה את הפוסטר.",
+    "media": {
+      "none": "ללא מדיה",
+      "image": "תמונה",
+      "gif": "GIF מונפש",
+      "video": "סרטון"
+    },
+    "mediaHint": "HTTPS בלבד. SVG אינו נתמך. תמונות עד 1.5MB, סרטונים עד 5MB ו‑12 שניות.",
+    "proactiveHint": "הצעת עזרה עוד לפני שהלקוח שואל. כבוי כברירת מחדל, ובכוונה קשה להפוך אותו למטריד.",
+    "proactiveEnabled": "הצעת עזרה יזומה",
+    "proactiveEnabledHint": "מציג כרטיס קטן ליד כפתור הצ׳אט. תמיד אפשר לסגור אותו.",
+    "trigger": {
+      "time_on_page": "זמן בעמוד",
+      "page_views": "מספר עמודים שנצפו",
+      "scroll_depth": "עומק גלילה",
+      "exit_intent": "רגע לפני יציאה (דסקטופ)",
+      "product_page": "בעמוד מוצר",
+      "cart_page": "בעמוד הסל",
+      "inactivity": "חוסר פעילות",
+      "custom_event": "אירוע מותאם בחנות"
+    },
+    "delay": "השהיה",
+    "mobileDelay": "השהיה במובייל",
+    "teaserTitle": "כותרת",
+    "teaserMessage": "הודעה",
+    "teaserAction": "טקסט הכפתור",
+    "maxPerSession": "פעמים בביקור",
+    "cooldown": "המתנה אחרי סגירה",
+    "autoOpen": "פתיחת הצ׳אט במקום כרטיס",
+    "autoOpenHint": "עדיף כבוי. פתיחה ללא בקשה היא הדרך המהירה להיסגר לתמיד.",
+    "desktopEnabled": "הצגה בדסקטופ",
+    "mobileEnabled": "הצגה במובייל",
+    "respectHours": "שקט מחוץ לשעות הפעילות",
+    "soundsHint": "קצרים, עדינים, ולעולם לא בלולאה. כבוי כברירת מחדל, והלקוח תמיד יכול להשתיק מתוך הצ׳אט.",
+    "soundsEnabled": "השמעת צלילים",
+    "soundPack": "צליל",
+    "volume": "עוצמה",
+    "pack": {
+      "subtle": "עדין",
+      "classic": "קלאסי"
+    },
+    "sound": {
+      "outgoing": "נשלח",
+      "incoming_ai": "תשובת העוזר",
+      "incoming_human": "תשובת נציג",
+      "proactive": "כרטיס יזום"
+    },
+    "soundOutgoing": "כשהלקוח שולח הודעה",
+    "soundIncomingAi": "כשהעוזר עונה",
+    "soundIncomingHuman": "כשנציג עונה",
+    "soundProactive": "כשמופיע הכרטיס היזום",
+    "soundWhenClosed": "גם כשהצ׳אט סגור",
+    "soundWhenTabActive": "גם כשהלשונית בפוקוס",
+    "openOnLoad": "פתיחת הצ׳אט עם טעינת העמוד",
+    "openOnLoadHint": "לרוב לא רעיון טוב בחנות.",
+    "closeOnOutsideClick": "סגירה בלחיצה מחוץ לחלון",
+    "rememberOpenState": "לזכור שהיה פתוח בין עמודים",
+    "mobileFullScreen": "מסך מלא במובייל",
+    "keepHeaderMedia": "השארת תמונה קטנה בכותרת הצ׳אט",
+    "keepHeaderMediaHint": "כבוי כברירת מחדל: ברגע שנפתחה שיחה, ההודעות צריכות לקבל את המקום.",
+    "previewTitle": "תצוגה מקדימה של הווידג׳ט",
+    "welcomeSectionHint": "המסך הראשון שהלקוח רואה. כל מה שמופיע בו נערך כאן, במקום אחד.",
+    "assistantNameHint": "מוצג בכותרת השיחה ומעל כל תשובה.",
+    "textAlign": "יישור טקסט",
+    "alignCenter": "ממורכז",
+    "alignStart": "יישור לתחילת השורה",
+    "avatarCard": "תמונת הנציג",
+    "avatarCardHint": "התמונה במסך הפתיחה ובכותרת השיחה.",
+    "heroOverlapHint": "כמה התמונה העגולה יורדת מתחת לתמונה הראשית.",
+    "heroTight": "החלון אינו גבוה מספיק לגובה הזה, ולכן בחנות תוצג תמונה נמוכה יותר. התצוגה המקדימה מראה את מה שהלקוחות באמת יראו.",
+    "heroDropped": "הגובה הזה אינו משאיר מספיק מקום לשאר החלון, ולכן התמונה לא תוצג כלל. כדאי לבחור ערך נמוך יותר.",
+    "mediaRejected": "לא ניתן להשתמש בכתובת הזו. היא חייבת להתחיל ב-https:// ולהסתיים בסוג קובץ נתמך.",
+    "mediaHintImage": "https:// בלבד. עד {mb}MB, מומלץ {w}x{h}. JPG, PNG, WebP, AVIF או GIF.",
+    "mediaHintVideo": "https:// בלבד. עד {mb}MB ו-{secs} שניות. MP4 או WebM.",
+    "triggerLabel": "מתי להציע עזרה",
+    "hoursMovedHint": "שעות הפעילות נקבעות פעם אחת לעסק וחלות על כל הערוצים, כך שהווידג׳ט תמיד מסכים עם הנציג החכם על השאלה אם אתם פתוחים.",
+    "hoursMovedLink": "הגדרת שעות הפעילות",
+    "routingMovedHint": "מי עונה לשיחה חדשה נקבע ב-Main Playbook, בדיוק כמו בכל ערוץ אחר.",
+    "routingMovedLink": "פתיחת ה-Main Playbook",
+    "desktop": "מחשב",
+    "mobile": "נייד"
+  },
+  "shopifyInstall": {
+    "title": "התקנת GOTCHA Chat",
+    "subtitle": "עוד כמה צעדים ובחנות שלכם יהיה צ׳אט שמכיר את הקטלוג.",
+    "step1Title": "אפליקציית שופיפיי הותקנה",
+    "step1Verified": "חנות מאומתת",
+    "step2Title": "התחברות ל‑GOTCHA",
+    "step2Body": "התחברו עם חשבון GOTCHA, או פתחו חשבון חדש. החנות נשארת מחוברת בינתיים.",
+    "step2Cta": "התחברות ל‑GOTCHA",
+    "step2SignedIn": "מחוברים כ‑",
+    "step3Title": "בחירת הארגון",
+    "step3Body": "בחרו לאיזה ארגון שייכת החנות. את ערוץ הצ׳אט ניצור עבורכם.",
+    "step4Done": "מחובר. ערוץ הצ׳אט מוכן.",
+    "step4Cta": "חיבור החנות",
+    "connecting": "מחברים...",
+    "step5Title": "הפעלת הצ׳אט בעיצוב החנות",
+    "step5Body": "שופיפיי משאירה תוספי אפליקציה כבויים עד שמפעילים אותם. הקישור פותח את העיצוב הפעיל עם GOTCHA Chat מוכן להפעלה. הפעילו ולחצו שמירה.",
+    "step5Cta": "פתיחת עורך העיצוב בשופיפיי",
+    "step5AfterSave": "אחרי השמירה, פתחו פעם אחת את החנות. אנחנו מזהים את הטעינה הראשונה ומאשרים כאן.",
+    "step6Title": "אימות בחנות",
+    "step7Title": "הכול מוכן",
+    "checkAgain": "בדיקה חוזרת",
+    "watching": "ממתינים לחנות שלכם...",
+    "noDeepLink": "קישור ההפעלה עדיין לא זמין. היכנסו לחנות מקוונת, ערכות עיצוב, התאמה אישית, תוספי אפליקציה והפעילו את GOTCHA Chat.",
+    "noSession": "לא מצאנו התקנת שופיפיי עדכנית בדפדפן הזה. התחילו מחדש מניהול החנות בשופיפיי.",
+    "stepLocked": "השלימו קודם את השלב שמעל.",
+    "noOrganizations": "לחשבון הזה אין ארגון פעיל שיכול להחזיק ערוץ. בקשו ממנהל להזמין אתכם, או צרו ארגון קודם.",
+    "claimedElsewhere": "החנות כבר מחוברת לארגון אחר ב‑GOTCHA. התחברו עם חשבון מאותו ארגון, או פנו לתמיכה כדי להעביר אותה.",
+    "bindFailed": "לא הצלחנו לחבר את החנות.",
+    "failedTitle": "ההתקנה לא הושלמה",
+    "failedBody": "שופיפיי לא סיימה את ההתקנה.",
+    "failedRetry": "פתחו את האפליקציה שוב מניהול החנות כדי לנסות מחדש.",
+    "openSettings": "פתיחת הגדרות הצ׳אט",
+    "openStorefront": "פתיחת החנות",
+    "advanced": "פתרון תקלות מתקדם",
+    "advancedDomains": "כתובות החנות שאנחנו מקבלים:",
+    "advancedManual": "מפתח ערוץ והזנת דומיין ידנית קיימים בהגדרות הצ׳אט לשחזור בלבד. התקנה רגילה לא זקוקה להם.",
+    "factStore": "חנות",
+    "factChannel": "ערוץ צ׳אט",
+    "factEmbed": "תוסף האפליקציה",
+    "factChat": "צ׳אט",
+    "factProducts": "הודעות מוצר",
+    "factCore": "אינטגרציית המסחר של שופיפיי",
+    "factActive": "פעיל",
+    "factInactive": "עדיין לא פעיל",
+    "factProductsOff": "כבוי",
+    "state": {
+      "APP_NOT_INSTALLED": "האפליקציה אינה מותקנת בחנות הזו.",
+      "INSTALLATION_UNBOUND": "החנות מותקנת אך עדיין לא מחוברת לארגון.",
+      "CHANNEL_NOT_CREATED": "ערוץ הצ׳אט עדיין לא נוצר.",
+      "TENANT_INACTIVE": "הארגון אינו פעיל, ולכן הווידג׳ט לא יכול לשרת לקוחות.",
+      "ENTITLEMENT_DISABLED": "החבילה של הארגון אינה כוללת צ׳אט חי לשופיפיי.",
+      "EMBED_NOT_ENABLED": "הצ׳אט כבוי. הפעילו את תוסף האפליקציה בעיצוב ושמרו.",
+      "EMBED_ENABLED_NOT_SEEN": "ממתינים לטעינת העמוד הראשונה בחנות.",
+      "STALE": "לא ראינו את החנות שלכם לאחרונה. אם החלפתם עיצוב, הפעילו שוב את תוסף האפליקציה.",
+      "UNINSTALLED": "האפליקציה הוסרה מהחנות.",
+      "CORE_DISCONNECTED_PRODUCT_CHAT_UNAVAILABLE": "הצ׳אט פעיל. כרטיסי מוצר כבויים עד שאינטגרציית המסחר תחובר.",
+      "LIVE": "פעיל בחנות שלכם."
+    },
+    "error": {
+      "app_not_configured": "GOTCHA Chat עדיין לא מוגדר בסביבה הזו.",
+      "invalid_shop": "זו לא נראית ככתובת של חנות שופיפיי.",
+      "invalid_signature": "לא הצלחנו לאמת שהבקשה הגיעה משופיפיי.",
+      "token_exchange_failed": "שופיפיי לא השלימה את ההרשאה.",
+      "install_failed": "משהו השתבש בסיום ההתקנה."
+    },
+    "bindError": {
+      "not_entitled": "החבילה של הארגון אינה כוללת צ׳אט חי לשופיפיי. הוסיפו אותו ונסו שוב.",
+      "shop_taken": "החנות כבר מחוברת לארגון אחר.",
+      "bound_to_other_tenant": "החנות כבר מחוברת לארגון אחר.",
+      "installation_uninstalled": "ההתקנה הוסרה. התקינו שוב את GOTCHA Chat משופיפיי.",
+      "installation_not_found": "לא מצאנו את ההתקנה הזו.",
+      "NO_INSTALL_SESSION": "לא מצאנו התקנת שופיפיי עדכנית בדפדפן הזה."
+    },
+    "step1PendingSignIn": "שופיפיי הפנתה אתכם לכאן אחרי אישור GOTCHA Chat. התחברו למטה ונאשר על איזו חנות מדובר."
+  },
+  "permissions": {
+    "noAccess": {
+      "title": "אין לך הרשאה לעמוד הזה",
+      "subtitle": "אם צריך גישה, בקשו ממנהל סביבת העבודה."
     }
   }
 }

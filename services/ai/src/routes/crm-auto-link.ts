@@ -22,7 +22,7 @@
  */
 
 import { Router, Request, Response, NextFunction } from "express";
-import { prisma } from "@chatcenter/shared";
+import { prisma, requireInternalKey } from "@chatcenter/shared";
 import { getCrmAdapter } from "../services/connectors/crm-adapter-resolver";
 import {
   linkOrCreateCrmContact,
@@ -32,14 +32,10 @@ import {
 
 const router = Router();
 
-router.use((req: Request, res: Response, next: NextFunction) => {
-  const key = req.headers["x-internal-key"];
-  if (!key || key !== (process.env.INTERNAL_SERVICE_KEY || "chatcenter-internal-2026")) {
-    res.status(403).json({ error: "Forbidden" });
-    return;
-  }
-  next();
-});
+// Hardened internal gate: constant-time, fail-closed, no committed default.
+// This router is gateway-exposed at /api/crm, so a weak inline check here was
+// the worst instance of the H-4 finding.
+router.use(requireInternalKey);
 
 function channelToStrong(channel: string | null | undefined): StrongChannel | null {
   const c = (channel || "").toLowerCase();
@@ -210,7 +206,7 @@ router.post("/auto-link-identifier", async (req: Request, res: Response) => {
     // Hint guard - if neither identifier NOR a strong channel external_id is
     // available, linkOrCreateCrmContact would refuse with "no_identifiers".
     // Bail early with a clear reason so the caller can see why we skipped.
-    if (!hints.email && !hints.phone && hints.channels.length === 0) {
+    if (!hints.email && !hints.phone && !hints.channels?.length) {
       res.json({ ok: false, outcome: "no_identifiers", reason: "nothing-to-search-by" });
       return;
     }

@@ -33,6 +33,49 @@ const DEFAULT_IDLE: IdleAutomationConfig = {
 async function processIdleConversations(job: Job<IdleConversationJob>): Promise<void> {
   console.log("[idle-check] Running idle conversation check...");
 
+  // ── Stranded-execution sweep ────────────────────────────
+  // An APPROVED row whose execution never started (crash between the
+  // decision CAS and the dispatch, AI service briefly down, dispatch HTTP
+  // lost) sits at executionState=NOT_STARTED forever - the human believes
+  // the action ran, the provider was never called. Re-dispatch through the
+  // ONE execution path (dispatch-approved), whose claimForExecution CAS
+  // makes a concurrent/duplicate sweep a no-op. Grace period keeps us from
+  // racing an in-flight synchronous dispatch.
+  try {
+    const graceMs = 3 * 60 * 1000;
+    const stranded = await (prisma as any).approvalRequest.findMany({
+      where: {
+        status: "APPROVED",
+        executionState: "NOT_STARTED",
+        decidedAt: { lt: new Date(Date.now() - graceMs) },
+      },
+      take: 25,
+      select: { id: true, tenantId: true, tool: true },
+    });
+    const convBase = process.env.CONVERSATION_SERVICE_URL || "http://conversation:4002";
+    for (const ar of stranded) {
+      try {
+        console.warn(`[idle-check] re-dispatching stranded approval ${ar.id} (${ar.tool})`);
+        const res = await fetch(`${convBase}/api/approvals/${ar.id}/dispatch-approved`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Internal-Key": process.env.INTERNAL_SERVICE_KEY || "",
+            "X-Tenant-Id": ar.tenantId,
+          },
+          body: JSON.stringify({ source: "sweeper" }),
+        });
+        if (!res.ok) {
+          console.error(`[idle-check] stranded re-dispatch failed for ${ar.id}: ${res.status}`);
+        }
+      } catch (err: any) {
+        console.error(`[idle-check] stranded re-dispatch error for ${ar.id}:`, err?.message);
+      }
+    }
+  } catch (err: any) {
+    console.error("[idle-check] stranded-execution sweep failed:", err?.message);
+  }
+
   // ── F4 approval expiry sweep ────────────────────────────
   // PENDING approvals past their expiresAt get EXPIRED status and the
   // underlying conversation is routed to a human so the customer isn't

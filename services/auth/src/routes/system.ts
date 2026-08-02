@@ -1,25 +1,49 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
-import bcrypt from "bcryptjs";
 import {
   prisma,
   authenticate,
   requireSystemAdmin,
+  requirePlatformPermission,
+  PLATFORM_PERMISSIONS,
   validate,
-  signToken,
+  ensureIdentity,
+  createRecoveryLink,
   publishEvent,
   crossTenantMiddleware,
   AI_MODEL_PRICING,
+  resolveModelPricing,
   AI_FEATURE_CATEGORIES,
   AI_CATEGORY_ORDER,
   categorySqlCase,
   categoryLabel,
   type AiFeatureCategory,
+  writeAudit,
+  AuditAction,
+  seedTenantRbac,
+  ALL_LICENSE_KEYS,
+  resolveTenantPlanAccess,
+  resolveTenantPlanAccessBatch,
 } from "@chatcenter/shared";
-import { sendOnboardingEmail } from "../services/notification.service";
+import { eraseTenant } from "../services/gdpr.service";
+import { sendOnboardingEmail, sendPaidOnboardingEmail} from "../services/notification.service";
+import { createProvisioningRequest, runProvisioning, provisioningStatusForTenant } from "../services/billing-provisioning.service";
+import { scheduleOnboardingNudge, triggerNudgeNow } from "../services/nudge-engine.service";
+import { listOnboardingSnapshots, getOnboardingSnapshot } from "../services/onboarding-state.service";
+import { inviteUser, syncIdentityNameByUser, syncMembershipAccess } from "../services/invitation.service";
 
 const router = Router();
-const SALT_ROUNDS = 10;
+
+/**
+ * The license domains a POC's feature areas are chosen from.
+ *
+ * Derived from the permission catalog, not listed, so a domain added to the
+ * product cannot go missing here - and under default-ALLOW license semantics, a
+ * missing domain is a GRANTED one.
+ */
+const LICENSE_DOMAINS: string[] = Array.from(
+  new Set(ALL_LICENSE_KEYS.map((k) => k.split(":")[0] as string)),
+).sort();
 
 // System-admin routes legitimately need cross-tenant reads (list all
 // tenants, aggregate usage across tenants, create new tenant admins,
@@ -28,54 +52,12 @@ const SALT_ROUNDS = 10;
 // requireSystemAdmin() - only SYSTEM_ADMIN users ever reach this code.
 router.use(crossTenantMiddleware);
 
-// ─── System Admin Login (no tenant slug needed) ──────────────
-
-const systemLoginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(1),
-});
-
-router.post("/login", validate(systemLoginSchema), async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { email, password } = req.body;
-
-    // Find user with SYSTEM_ADMIN role across all tenants
-    const user = await prisma.user.findFirst({
-      where: { email, role: "SYSTEM_ADMIN", isActive: true },
-    });
-    if (!user) {
-      res.status(401).json({ error: "Invalid credentials" });
-      return;
-    }
-
-    const isValid = await bcrypt.compare(password, user.password);
-    if (!isValid) {
-      res.status(401).json({ error: "Invalid credentials" });
-      return;
-    }
-
-    const token = signToken({
-      userId: user.id,
-      tenantId: user.tenantId,
-      role: user.role,
-      email: user.email,
-    });
-
-    res.json({
-      token,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-        tenantId: user.tenantId,
-      },
-    });
-  } catch (err) {
-    console.error("System login error:", err);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
+// ─── System Admin Login ──────────────────────────────────────
+//
+// REMOVED. System admins authenticate through Authentik like everyone else;
+// there is no second password login. SYSTEM_ADMIN is a local RBAC role, so
+// requireSystemAdmin() still gates every route below - the role is read from
+// the database after Authentik proves the identity.
 
 // ─── System Stats ────────────────────────────────────────────
 
@@ -152,7 +134,32 @@ router.get("/tenants", authenticate, requireSystemAdmin(), async (req: Request, 
       prisma.tenant.count({ where }),
     ]);
 
-    res.json({ data: tenants, meta: { total, page, limit } });
+    // Every row carries its plan state. The console used to show status alone,
+    // which meant an ACTIVE tenant with no plan at all looked exactly like a
+    // paying one - the single most expensive thing this screen can get wrong.
+    const access = await resolveTenantPlanAccessBatch(tenants.map((t) => t.id));
+
+    res.json({
+      data: tenants.map((t) => {
+        const v = access.get(t.id);
+        return {
+          ...t,
+          planAccess: v
+            ? {
+                state: v.state,
+                label: v.label,
+                source: v.source,
+                active: v.active,
+                planKey: v.planKey,
+                expiresAt: v.expiresAt,
+                needsReview: v.needsReview,
+                reviewReason: v.reviewReason ?? null,
+              }
+            : null,
+        };
+      }),
+      meta: { total, page, limit },
+    });
   } catch (err) {
     console.error("List tenants error:", err);
     res.status(500).json({ error: "Failed to list tenants" });
@@ -204,12 +211,25 @@ router.get("/tenants/:id", authenticate, requireSystemAdmin(), async (req: Reque
       orderBy: { name: "asc" },
     });
 
+    const planAccess = await resolveTenantPlanAccess(tenant.id);
+
     res.json({
       data: {
         ...tenant,
         users,
         channels,
         departments,
+        planAccess: {
+          state: planAccess.state,
+          label: planAccess.label,
+          source: planAccess.source,
+          active: planAccess.active,
+          planKey: planAccess.planKey,
+          planName: planAccess.planName,
+          expiresAt: planAccess.expiresAt,
+          needsReview: planAccess.needsReview,
+          reviewReason: planAccess.reviewReason ?? null,
+        },
       },
     });
   } catch (err) {
@@ -218,19 +238,155 @@ router.get("/tenants/:id", authenticate, requireSystemAdmin(), async (req: Reque
   }
 });
 
+const BILLING_SERVICE_URL = process.env.BILLING_SERVICE_URL || "http://billing:4009";
+
+/** Internal GET against the billing service. Never throws. */
+async function callBillingGet(path: string): Promise<{ ok: boolean; body: any }> {
+  try {
+    const res = await fetch(`${BILLING_SERVICE_URL}/api/internal/billing/${path}`, {
+      headers: { "X-Internal-Key": process.env.INTERNAL_SERVICE_KEY || "" },
+      signal: AbortSignal.timeout(15_000),
+    });
+    return { ok: res.ok, body: await res.json().catch(() => ({})) };
+  } catch (err: any) {
+    return { ok: false, body: { error: "billing_unreachable", message: err?.message } };
+  }
+}
+
+/** One internal call to the billing service. Never throws; returns a verdict. */
+async function callBilling(
+  path: string,
+  body: Record<string, unknown>,
+): Promise<{ ok: boolean; body: any }> {
+  try {
+    const res = await fetch(`${BILLING_SERVICE_URL}/api/internal/billing/${path}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Internal-Key": process.env.INTERNAL_SERVICE_KEY || "",
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(15_000),
+    });
+    const parsed = await res.json().catch(() => ({}));
+    return { ok: res.ok, body: parsed };
+  } catch (err: any) {
+    // A billing outage must not silently produce a tenant with no billing
+    // state, so this is reported as a failure rather than swallowed.
+    return { ok: false, body: { error: "billing_unreachable", message: err?.message } };
+  }
+}
+
 // ─── Create Tenant ───────────────────────────────────────────
 
-const createTenantSchema = z.object({
+/**
+ * Mandatory billing provisioning.
+ *
+ * Exactly one of PAID_PLAN or POC. "No billing" is gone: it created an
+ * organization with full product access and no commercial record of why, and
+ * every such tenant then had to be noticed by a person before it was ever
+ * reconciled. An evaluation is a legitimate reason to not be charging someone;
+ * having never decided is not.
+ *
+ * TRIAL, CUSTOM_PLAN and MANUAL_CONTRACT keep their own explicit paths with
+ * their own rules - a manual contract in particular activates a paid plan on an
+ * operator's word alone and sits behind a stronger permission than this.
+ *
+ * There is deliberately no price, credit or currency field for the paid path:
+ * every commercial value is recomputed server-side from the option keys, and
+ * sending one is a 400 rather than a silent no-op. The POC credit budget is
+ * different in kind - it is not a price, it is the allowance an operator is
+ * choosing to give away - so it is accepted, bounded, and audited.
+ */
+const billingSchema = z
+  .object({
+    mode: z.enum(["PAID_PLAN", "POC"]),
+    planVersionId: z.string().min(1).optional(),
+    chatVolumeOptionKey: z.string().min(1).nullable().optional(),
+    voiceVolumeOptionKey: z.string().min(1).nullable().optional(),
+    billingInterval: z.enum(["MONTHLY", "ANNUAL"]).optional(),
+    paymentRequiredBeforeAccess: z.boolean().optional(),
+    commercialNote: z.string().max(2000).optional(),
+    // ── POC ──
+    pocCredits: z.number().int().positive().max(1_000_000).optional(),
+    pocExpiresAt: z.string().datetime().optional(),
+    pocFeatureAreas: z.array(z.string().min(1)).optional(),
+  })
+  // strict() BEFORE refine(): a stray `price` or `credits` is rejected, not
+  // silently ignored, so a caller cannot keep sending one believing it works.
+  .strict()
+  .refine((b) => b.mode !== "PAID_PLAN" || !!b.planVersionId, {
+    message: "planVersionId is required for PAID_PLAN",
+    path: ["planVersionId"],
+  })
+  .refine((b) => b.mode !== "POC" || typeof b.pocCredits === "number", {
+    message: "pocCredits is required for POC",
+    path: ["pocCredits"],
+  })
+  .refine((b) => b.mode !== "POC" || !!b.pocExpiresAt, {
+    // An evaluation with no end is not an evaluation, it is free product.
+    message: "pocExpiresAt is required for POC",
+    path: ["pocExpiresAt"],
+  })
+  .refine((b) => b.mode !== "POC" || (b.pocFeatureAreas?.length ?? 0) > 0, {
+    message: "pocFeatureAreas must name at least one feature area",
+    path: ["pocFeatureAreas"],
+  });
+
+/** Exported so the policy can be tested as the rule it is, not via a mock. */
+export const createTenantSchema = z.object({
   name: z.string().min(1).max(100),
   slug: z.string().min(2).max(50).regex(/^[a-z0-9-]+$/, "Slug must be lowercase alphanumeric with hyphens"),
   adminEmail: z.string().email(),
-  adminPassword: z.string().min(8),
   adminName: z.string().min(1),
+  // Required. An organization without a commercial decision is the thing this
+  // whole route now exists to prevent.
+  billing: billingSchema,
 });
 
 router.post("/tenants", authenticate, requireSystemAdmin(), validate(createTenantSchema), async (req: Request, res: Response): Promise<void> => {
   try {
-    const { name, slug, adminEmail, adminPassword, adminName } = req.body;
+    const { name, slug, adminEmail, adminName, billing } = req.body;
+    const paid = billing.mode === "PAID_PLAN";
+    const isPoc = billing.mode === "POC";
+    const actorId = (req as any).user?.userId as string | undefined;
+
+    // Validate the POC selection BEFORE anything is created, for the same
+    // reason the paid one is: a rejected expiry or an unknown feature area must
+    // fail while there is still no tenant to roll back.
+    const pocExpiresAt = isPoc ? new Date(billing.pocExpiresAt) : null;
+    if (isPoc) {
+      if (!pocExpiresAt || Number.isNaN(pocExpiresAt.getTime()) || pocExpiresAt <= new Date()) {
+        res.status(400).json({ error: "Invalid billing selection", code: "expiry_must_be_in_the_future" });
+        return;
+      }
+      const unknown = (billing.pocFeatureAreas as string[]).filter((f) => !LICENSE_DOMAINS.includes(f));
+      if (unknown.length) {
+        res.status(400).json({ error: "Invalid billing selection", code: "unknown_feature_domain", domains: unknown });
+        return;
+      }
+    }
+
+    // Validate the commercial selection BEFORE anything is created. A bad plan
+    // or volume key must fail while there is still no tenant to roll back.
+    if (paid) {
+      const check = await callBilling("validate-paid-plan", {
+        planVersionId: billing.planVersionId,
+        chatVolumeOptionKey: billing.chatVolumeOptionKey ?? null,
+        voiceVolumeOptionKey: billing.voiceVolumeOptionKey ?? null,
+        billingInterval: billing.billingInterval,
+      });
+      if (!check.ok) {
+        res.status(400).json({ error: "Invalid billing selection", code: check.body?.error });
+        return;
+      }
+      void writeAudit({
+        tenantId: null as any, actorType: "user", actorId,
+        action: AuditAction.PAID_TENANT_PROVISIONING_REQUESTED,
+        targetType: "plan_version", targetId: billing.planVersionId,
+        metadata: { slug, chatVolumeOptionKey: billing.chatVolumeOptionKey ?? null, voiceVolumeOptionKey: billing.voiceVolumeOptionKey ?? null },
+      });
+    }
 
     // Check slug uniqueness
     const existing = await prisma.tenant.findUnique({ where: { slug } });
@@ -239,18 +395,38 @@ router.post("/tenants", authenticate, requireSystemAdmin(), validate(createTenan
       return;
     }
 
-    // Create tenant + admin user + onboarding tracker in transaction
+    // Provision the identity BEFORE the transaction. Authentik is a remote
+    // system and cannot participate in a database transaction; doing it first
+    // means a failure here aborts cleanly with no tenant created, rather than
+    // leaving a tenant whose admin can never log in.
+    const identity = await ensureIdentity(adminEmail, adminName);
+
+    // Create tenant + admin membership + onboarding tracker in transaction.
+    // The Identity row is upserted first (outside the tx is fine - it is
+    // keyed by the immutable subject and safe to leave behind on rollback).
+    const localIdentity = await prisma.identity.upsert({
+      where: { authentikSubject: identity.subject },
+      update: {},
+      create: {
+        authentikSubject: identity.subject,
+        email: adminEmail.toLowerCase(),
+        name: adminName,
+      },
+    });
+
     const result = await prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.create({
-        data: { name, slug, status: "PENDING_ADMIN_SETUP" },
+        // A paid tenant starts owing money. PENDING_PAYMENT denies the paid
+        // product at the shared access matrix while still permitting identity
+        // onboarding and payment setup.
+        data: { name, slug, status: paid ? "PENDING_PAYMENT" : "PENDING_ADMIN_SETUP" },
       });
 
-      const hashedPassword = await bcrypt.hash(adminPassword, SALT_ROUNDS);
       const admin = await tx.user.create({
         data: {
           tenantId: tenant.id,
+          identityId: localIdentity.id,
           email: adminEmail,
-          password: hashedPassword,
           name: adminName,
           role: "ADMIN",
         },
@@ -262,6 +438,24 @@ router.post("/tenants", authenticate, requireSystemAdmin(), validate(createTenan
       });
 
       return { tenant, admin };
+    });
+
+    // Seed the built-in TenantRole rows + the admin's role assignment so the
+    // Users page role picker and fine-grained permissions work from day one.
+    // Degrade-soft: the boot-time sweep re-covers any tenant this misses.
+    await seedTenantRbac(result.tenant.id).catch((err) =>
+      console.error("[system] rbac seed for new tenant failed:", err?.message),
+    );
+
+    void writeAudit({
+      tenantId: result.tenant.id, actorType: "user", actorId: (req as any).user?.userId,
+      action: AuditAction.TENANT_CREATED, targetType: "tenant", targetId: result.tenant.id,
+      metadata: { name, slug, adminEmail },
+    });
+    void writeAudit({
+      tenantId: result.tenant.id, actorType: "user", actorId: (req as any).user?.userId,
+      action: AuditAction.USER_CREATED, targetType: "user", targetId: result.admin.id,
+      metadata: { email: adminEmail, role: "ADMIN" },
     });
 
     // Publish TenantCreated event
@@ -276,21 +470,676 @@ router.post("/tenants", authenticate, requireSystemAdmin(), validate(createTenan
       },
     });
 
-    // Send onboarding email with magic link (non-blocking)
-    sendOnboardingEmail(result.tenant.id, adminEmail, adminName, name, slug, result.admin.id).catch((err) => {
-      console.error("Failed to send onboarding email:", err);
-    });
+    // Billing scaffolding. The REQUEST is made durable first, so a billing
+    // failure leaves a recoverable state rather than a tenant whose requested
+    // plan is recorded nowhere. Both modes go through this: a POC that failed
+    // halfway is exactly as stuck as a paid one, and just as repairable.
+    let paidProvisioning: any = null;
+    let pocProvisioning: any = null;
+    {
+      const provRequest = await createProvisioningRequest({
+        tenantId: result.tenant.id,
+        requestedBy: actorId ?? null,
+        selection: paid
+          ? {
+              mode: "PAID_PLAN",
+              planVersionId: billing.planVersionId,
+              chatVolumeOptionKey: billing.chatVolumeOptionKey ?? null,
+              voiceVolumeOptionKey: billing.voiceVolumeOptionKey ?? null,
+              billingInterval: billing.billingInterval ?? null,
+              commercialNote: billing.commercialNote ?? null,
+            }
+          : {
+              mode: "POC",
+              planVersionId: null,
+              commercialNote: billing.commercialNote ?? null,
+              pocCredits: billing.pocCredits,
+              pocExpiresAt,
+              pocFeatureAreas: billing.pocFeatureAreas ?? [],
+            },
+      });
+
+      const outcome = await runProvisioning(provRequest.id);
+      const prov = { ok: outcome.ok, body: outcome.body ?? { error: outcome.failureCode } };
+
+      if (!prov.ok) {
+        // The tenant exists but plan setup did not complete. It is inert: a
+        // PENDING_PAYMENT tenant is denied the paid product by the access
+        // matrix, and a POC tenant that never got its subscription has no
+        // access source, which the same matrix now also denies. The durable
+        // provisioning request holds exactly what was requested, so REPAIR can
+        // finish the job without the operator re-entering anything. No email is
+        // sent, because there is nothing yet to send anyone to.
+        void writeAudit({
+          tenantId: result.tenant.id, actorType: "user", actorId,
+          action: AuditAction.PAID_TENANT_PROVISIONING_FAILED,
+          targetType: "tenant", targetId: result.tenant.id,
+          metadata: { mode: billing.mode, failureCode: prov.body?.error ?? "unknown" },
+        });
+        res.status(502).json({
+          error: "Tenant created but plan setup did not complete",
+          code: outcome.failureCode ?? "provisioning_failed",
+          data: {
+            tenant: { id: result.tenant.id, name, slug, status: result.tenant.status },
+            admin: { id: result.admin.id, email: adminEmail, name: adminName },
+            billing: {
+              mode: billing.mode,
+              provisioningState: outcome.state,
+              // Repair, not "create the tenant again".
+              canRepair: outcome.state === "FAILED_RETRYABLE" || outcome.state === "PENDING",
+              paidAccessGranted: false,
+              emailSent: false,
+            },
+          },
+        });
+        return;
+      }
+
+      if (isPoc) {
+        pocProvisioning = prov.body;
+        void writeAudit({
+          tenantId: result.tenant.id, actorType: "user", actorId,
+          action: AuditAction.POC_PROVISIONED,
+          targetType: "tenant", targetId: result.tenant.id,
+          metadata: {
+            credits: billing.pocCredits,
+            expiresAt: pocExpiresAt?.toISOString() ?? null,
+            featuresEnabled: pocProvisioning?.featuresEnabled ?? billing.pocFeatureAreas,
+            note: billing.commercialNote ?? null,
+          },
+        });
+      } else {
+        paidProvisioning = prov.body;
+      }
+    }
+
+    if (paid) {
+      void writeAudit({
+        tenantId: result.tenant.id, actorType: "user", actorId,
+        action: AuditAction.PAID_TENANT_CREATED,
+        targetType: "tenant", targetId: result.tenant.id,
+        metadata: { planKey: paidProvisioning.summary?.planKey, planVersion: paidProvisioning.summary?.planVersion },
+      });
+      void writeAudit({
+        tenantId: result.tenant.id, actorType: "user", actorId,
+        action: AuditAction.PENDING_CHECKOUT_CREATED,
+        targetType: "checkout", targetId: paidProvisioning.checkoutReference,
+        metadata: { amount: paidProvisioning.summary?.amount, currency: paidProvisioning.summary?.currency },
+      });
+      // The link id is audited; the raw token never is.
+      void writeAudit({
+        tenantId: result.tenant.id, actorType: "user", actorId,
+        action: AuditAction.PAYMENT_CONTINUATION_LINK_CREATED,
+        targetType: "continuation_link", targetId: paidProvisioning.link?.id,
+        metadata: { expiresAt: paidProvisioning.link?.expiresAt },
+      });
+    }
+
+    // Send onboarding email with magic link (non-blocking).
+    if (paid && paidProvisioning) {
+      sendPaidOnboardingEmail({
+        tenantId: result.tenant.id,
+        adminEmail,
+        adminName,
+        tenantName: name,
+        adminUserId: result.admin.id,
+        continuationToken: paidProvisioning.link.token,
+        checkoutReference: paidProvisioning.checkoutReference,
+        linkExpiresAt: new Date(paidProvisioning.link.expiresAt),
+        // Rendered from the IMMUTABLE snapshot, never the live plan row.
+        planName: paidProvisioning.summary.planName,
+        amount: paidProvisioning.summary.amount,
+        currency: paidProvisioning.summary.currency,
+        includedCredits: paidProvisioning.summary.includedCredits,
+      }).catch((err) => {
+        // Delivery failure must not activate anything. Resend is the repair.
+        console.error("Failed to send paid onboarding email:", err?.message ?? err);
+      });
+    } else {
+      sendOnboardingEmail(result.tenant.id, adminEmail, adminName, name, slug, result.admin.id).catch((err) => {
+        console.error("Failed to send onboarding email:", err);
+      });
+    }
+
+    // Arm the onboarding nudge so a tenant that never starts gets a follow-up.
+    scheduleOnboardingNudge(result.tenant.id, "1d").catch(() => {});
 
     res.status(201).json({
       data: {
         tenant: { id: result.tenant.id, name: result.tenant.name, slug: result.tenant.slug, status: result.tenant.status },
         admin: { id: result.admin.id, email: result.admin.email, name: result.admin.name },
+        // Safe summary only. The raw continuation token is never returned by
+        // any API - it exists solely for the one email that carries it.
+        ...(pocProvisioning
+          ? {
+              billing: {
+                mode: "POC",
+                credits: pocProvisioning.credits,
+                expiresAt: pocProvisioning.expiresAt,
+                featuresEnabled: pocProvisioning.featuresEnabled,
+                featuresDenied: pocProvisioning.featuresDenied,
+                // Said plainly, because the operator is giving product away and
+                // should be certain nothing will ever be charged for it.
+                charges: "none",
+                renewal: "none",
+                paidAccessGranted: true,
+              },
+            }
+          : {}),
+        ...(paidProvisioning
+          ? {
+              billing: {
+                mode: "PAID_PLAN",
+                checkoutReference: paidProvisioning.checkoutReference,
+                planName: paidProvisioning.summary.planName,
+                amount: paidProvisioning.summary.amount,
+                currency: paidProvisioning.summary.currency,
+                includedCredits: paidProvisioning.summary.includedCredits,
+                billingInterval: paidProvisioning.summary.billingInterval,
+                linkExpiresAt: paidProvisioning.link.expiresAt,
+                paidAccessGranted: false,
+              },
+            }
+          : {}),
       },
     });
   } catch (err) {
     console.error("Create tenant error:", err);
     res.status(500).json({ error: "Failed to create tenant" });
   }
+});
+
+// ─── Manual External Contract ───────────────────────────────
+
+/**
+ * Activate a tenant whose payment arrived outside the product.
+ *
+ * Behind a STRONGER permission than provisioning, because it activates a paid
+ * subscription with no payment processor involved: the only evidence is an
+ * operator asserting the money arrived. Every field below is therefore
+ * mandatory, and all of it is audited.
+ *
+ * It never claims an iCount payment occurred and creates no Charge row.
+ */
+const manualContractSchema = z
+  .object({
+    amount: z.number().positive(),
+    currency: z.string().min(3).max(3),
+    externalReference: z.string().min(1).max(200),
+    paymentSourceDescription: z.string().min(1).max(200),
+    reason: z.string().min(1).max(1000),
+  })
+  .strict();
+
+router.post(
+  "/tenants/:id/activate-manual-contract",
+  authenticate,
+  requirePlatformPermission(PLATFORM_PERMISSIONS.BILLING_MANUAL_ACTIVATE),
+  validate(manualContractSchema),
+  async (req: Request, res: Response): Promise<void> => {
+    const tenantId = req.params.id as string;
+    const actorId = (req as any).user?.userId as string | undefined;
+    const { amount, currency, externalReference, paymentSourceDescription, reason } = req.body;
+
+    const result = await callBilling("activate-manual-contract", {
+      tenantId, amount, currency, externalReference, paymentSourceDescription, reason,
+      actor: actorId ?? null,
+    });
+
+    if (!result.ok) {
+      void writeAudit({
+        tenantId, actorType: "user", actorId,
+        action: AuditAction.PAID_TENANT_PROVISIONING_FAILED,
+        targetType: "manual_contract", targetId: tenantId,
+        metadata: { failureCode: result.body?.error },
+      });
+      res.status(400).json({ error: result.body?.error ?? "manual_contract_failed" });
+      return;
+    }
+
+    // Audited with the external reference and reason, never with a provider
+    // transaction id - there isn't one, and implying otherwise would be false.
+    void writeAudit({
+      tenantId, actorType: "user", actorId,
+      action: AuditAction.MANUAL_CONTRACT_ACTIVATED,
+      targetType: "tenant", targetId: tenantId,
+      metadata: {
+        externalReference, paymentSource: paymentSourceDescription, reason,
+        amount: String(amount), currency,
+        firstActivation: result.body?.firstActivation,
+      },
+    });
+
+    res.json({
+      data: {
+        activated: true,
+        firstActivation: result.body?.firstActivation,
+        tenantStatus: "ACTIVE",
+        paymentSource: "MANUAL_EXTERNAL_CONTRACT",
+        providerTransaction: null,
+      },
+    });
+  },
+);
+
+/** Manual contracts on record, for the Sysadmin billing history view. */
+router.get(
+  "/tenants/:id/manual-contracts",
+  authenticate,
+  requirePlatformPermission(PLATFORM_PERMISSIONS.BILLING_READ),
+  async (req: Request, res: Response): Promise<void> => {
+    const result = await callBillingGet(`manual-contracts/${req.params.id}`);
+    res.json({ data: result.ok ? result.body?.data ?? [] : [] });
+  },
+);
+
+// ─── Repair Billing Provisioning ────────────────────────────
+
+/**
+ * Finish billing setup for a tenant whose provisioning did not complete.
+ *
+ * Distinct from resend on purpose. Resend REUSES an existing checkout; repair
+ * CREATES the records that were never made. Letting one button do both would
+ * hide a broken provisioning behind an action that looks like it worked.
+ *
+ * Idempotent: billing converges on the request's deterministic key, so calling
+ * this repeatedly - or concurrently - yields one checkout, one initial payment
+ * attempt and one active link.
+ */
+router.post("/tenants/:id/repair-billing-provisioning", authenticate, requireSystemAdmin(), async (req: Request, res: Response): Promise<void> => {
+  const tenantId = req.params.id as string;
+  const actorId = (req as any).user?.userId as string | undefined;
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { id: true, name: true, status: true },
+  });
+  if (!tenant) {
+    res.status(404).json({ error: "Tenant not found" });
+    return;
+  }
+  const status = await provisioningStatusForTenant(tenantId);
+  if (!status) {
+    res.status(409).json({ error: "NO_PROVISIONING_REQUEST" });
+    return;
+  }
+  // The status guard belongs to the PAID path only. A paid tenant that is not
+  // PENDING_PAYMENT has either already paid or was never awaiting payment, and
+  // "repairing" it would create a checkout for an organization that does not owe
+  // anything. A POC tenant is never PENDING_PAYMENT at all - it owes nothing -
+  // so applying the same guard to it would make a half-provisioned POC
+  // permanently unrepairable, which is the exact state repair exists for.
+  if (status.mode !== "POC" && tenant.status !== "PENDING_PAYMENT") {
+    res.status(409).json({ error: "TENANT_NOT_PENDING_PAYMENT", tenantStatus: tenant.status });
+    return;
+  }
+  if (status.state === "COMPLETED") {
+    // Nothing to repair. Resend is the right action here.
+    res.status(409).json({ error: "BILLING_PROVISIONING_ALREADY_COMPLETE" });
+    return;
+  }
+
+  const outcome = await runProvisioning(status.id);
+  if (!outcome.ok) {
+    res.status(502).json({
+      error: "BILLING_PROVISIONING_FAILED",
+      code: outcome.failureCode,
+      state: outcome.state,
+      canRepair: outcome.state === "FAILED_RETRYABLE",
+    });
+    return;
+  }
+
+  // The link and the email happen only AFTER a checkout exists, so a broken
+  // link can never be sent.
+  const admin = await prisma.user.findFirst({
+    where: { tenantId, role: "ADMIN" },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, email: true, name: true },
+  });
+
+  let emailSent = false;
+  if (admin && outcome.body?.link?.token) {
+    try {
+      await sendPaidOnboardingEmail({
+        tenantId,
+        adminEmail: admin.email,
+        adminName: admin.name ?? admin.email,
+        tenantName: tenant.name,
+        adminUserId: admin.id,
+        continuationToken: outcome.body.link.token,
+        checkoutReference: outcome.body.checkoutReference,
+        linkExpiresAt: new Date(outcome.body.link.expiresAt),
+        planName: outcome.body.summary.planName,
+        amount: outcome.body.summary.amount,
+        currency: outcome.body.summary.currency,
+        includedCredits: outcome.body.summary.includedCredits,
+      });
+      emailSent = true;
+      void writeAudit({
+        tenantId, actorType: "user", actorId,
+        action: AuditAction.PAID_TENANT_EMAIL_SENT,
+        targetType: "tenant", targetId: tenantId,
+      });
+    } catch {
+      // Billing setup is now correct; only delivery failed. Resend repairs that.
+      void writeAudit({
+        tenantId, actorType: "user", actorId,
+        action: AuditAction.PAID_TENANT_EMAIL_FAILED,
+        targetType: "tenant", targetId: tenantId,
+      });
+    }
+  }
+
+  void writeAudit({
+    tenantId, actorType: "user", actorId,
+    action: AuditAction.BILLING_PROVISIONING_REPAIRED,
+    targetType: "provisioning_request", targetId: status.id,
+    metadata: { checkoutReference: outcome.body?.checkoutReference, emailSent },
+  });
+
+  res.json({
+    data: {
+      repaired: true,
+      tenantStatus: tenant.status,
+      billing: {
+        mode: status.mode,
+        provisioningState: "COMPLETED",
+        ...(status.mode === "POC"
+          ? {
+              credits: outcome.body?.credits,
+              expiresAt: outcome.body?.expiresAt,
+              featuresEnabled: outcome.body?.featuresEnabled,
+              paidAccessGranted: true,
+            }
+          : {
+              checkoutReference: outcome.body?.checkoutReference,
+              planName: outcome.body?.summary?.planName,
+              amount: outcome.body?.summary?.amount,
+              currency: outcome.body?.summary?.currency,
+              linkExpiresAt: outcome.body?.link?.expiresAt,
+              emailSent,
+              paidAccessGranted: false,
+            }),
+      },
+    },
+  });
+});
+
+/** Safe provisioning state for the Sysadmin tenant UI. */
+router.get("/tenants/:id/billing-provisioning", authenticate, requireSystemAdmin(), async (req: Request, res: Response): Promise<void> => {
+  const status = await provisioningStatusForTenant(req.params.id as string);
+  res.json({ data: status });
+});
+
+// ─── Remediation: give an existing plan-less tenant a plan ──
+
+/**
+ * Assign a paid plan to an organization that has none.
+ *
+ * The other half of what the audit offers. A tenant with no plan can already be
+ * given a POC from its own page; without this it could not be given a paid plan
+ * at all, and the only remaining route would have been to create a second
+ * organization and move people to it.
+ *
+ * It refuses a tenant that already holds access. Re-pointing a live plan is a
+ * plan CHANGE - it has to reckon with an existing subscription, a period, and
+ * money already taken - and doing it through a route meant for the empty case
+ * would silently skip all of that.
+ */
+const assignPaidPlanSchema = z
+  .object({
+    planVersionId: z.string().min(1),
+    chatVolumeOptionKey: z.string().min(1).nullable().optional(),
+    voiceVolumeOptionKey: z.string().min(1).nullable().optional(),
+    billingInterval: z.enum(["MONTHLY", "ANNUAL"]).optional(),
+    commercialNote: z.string().max(2000).optional(),
+  })
+  .strict();
+
+router.post("/tenants/:id/assign-paid-plan", authenticate, requireSystemAdmin(), validate(assignPaidPlanSchema), async (req: Request, res: Response): Promise<void> => {
+  const tenantId = req.params.id as string;
+  const actorId = (req as any).user?.userId as string | undefined;
+  const { planVersionId, chatVolumeOptionKey, voiceVolumeOptionKey, billingInterval, commercialNote } = req.body;
+
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { id: true, name: true, status: true } });
+  if (!tenant) {
+    res.status(404).json({ error: "Tenant not found" });
+    return;
+  }
+
+  const access = await resolveTenantPlanAccess(tenantId);
+  if (access.active) {
+    res.status(409).json({ error: "TENANT_ALREADY_HAS_A_PLAN", state: access.state, label: access.label });
+    return;
+  }
+
+  const check = await callBilling("validate-paid-plan", {
+    planVersionId,
+    chatVolumeOptionKey: chatVolumeOptionKey ?? null,
+    voiceVolumeOptionKey: voiceVolumeOptionKey ?? null,
+    billingInterval,
+  });
+  if (!check.ok) {
+    res.status(400).json({ error: "Invalid billing selection", code: check.body?.error });
+    return;
+  }
+
+  // The tenant now owes its first payment, which is what PENDING_PAYMENT means.
+  // Set BEFORE provisioning: if billing fails, the tenant must be left in the
+  // state that denies the paid product, not the one that grants it.
+  await prisma.tenant.update({ where: { id: tenantId }, data: { status: "PENDING_PAYMENT" } });
+
+  const provRequest = await createProvisioningRequest({
+    tenantId,
+    requestedBy: actorId ?? null,
+    selection: {
+      mode: "PAID_PLAN",
+      planVersionId,
+      chatVolumeOptionKey: chatVolumeOptionKey ?? null,
+      voiceVolumeOptionKey: voiceVolumeOptionKey ?? null,
+      billingInterval: billingInterval ?? null,
+      commercialNote: commercialNote ?? null,
+    },
+  });
+
+  const outcome = await runProvisioning(provRequest.id);
+  if (!outcome.ok) {
+    res.status(502).json({
+      error: "BILLING_PROVISIONING_FAILED",
+      code: outcome.failureCode,
+      state: outcome.state,
+      canRepair: outcome.state === "FAILED_RETRYABLE" || outcome.state === "PENDING",
+    });
+    return;
+  }
+
+  const admin = await prisma.user.findFirst({
+    where: { tenantId, role: "ADMIN" },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, email: true, name: true },
+  });
+
+  let emailSent = false;
+  if (admin && outcome.body?.link?.token) {
+    try {
+      await sendPaidOnboardingEmail({
+        tenantId,
+        adminEmail: admin.email,
+        adminName: admin.name ?? admin.email,
+        tenantName: tenant.name,
+        adminUserId: admin.id,
+        continuationToken: outcome.body.link.token,
+        checkoutReference: outcome.body.checkoutReference,
+        linkExpiresAt: new Date(outcome.body.link.expiresAt),
+        planName: outcome.body.summary.planName,
+        amount: outcome.body.summary.amount,
+        currency: outcome.body.summary.currency,
+        includedCredits: outcome.body.summary.includedCredits,
+      });
+      emailSent = true;
+    } catch {
+      // Setup is correct; only delivery failed. Resend repairs that.
+    }
+  }
+
+  void writeAudit({
+    tenantId, actorType: "user", actorId,
+    action: AuditAction.PAID_TENANT_CREATED,
+    targetType: "tenant", targetId: tenantId,
+    metadata: { assignedToExistingTenant: true, planKey: outcome.body?.summary?.planKey, emailSent },
+  });
+
+  res.json({
+    data: {
+      tenantStatus: "PENDING_PAYMENT",
+      billing: {
+        mode: "PAID_PLAN",
+        checkoutReference: outcome.body?.checkoutReference,
+        planName: outcome.body?.summary?.planName,
+        amount: outcome.body?.summary?.amount,
+        currency: outcome.body?.summary?.currency,
+        emailSent,
+        paidAccessGranted: false,
+      },
+    },
+  });
+});
+
+/**
+ * The feature areas a POC may be scoped to.
+ *
+ * Served rather than hardcoded in the UI so the picker cannot fall behind the
+ * catalog - a domain missing from the picker is one an operator cannot grant,
+ * and, under default-ALLOW, one they cannot deny either.
+ */
+router.get("/poc-feature-domains", authenticate, requireSystemAdmin(), async (_req: Request, res: Response): Promise<void> => {
+  res.json({ data: LICENSE_DOMAINS });
+});
+
+// ─── Estate-wide plan audit ─────────────────────────────────
+
+/**
+ * Every tenant, grouped by how it holds access.
+ *
+ * Read-only. A tenant with no plan is REPORTED, never repaired automatically:
+ * assigning a paid plan would invent a commercial agreement nobody made, and
+ * granting credits would just make the anomaly stop showing up.
+ */
+router.get("/tenants-plan-audit", authenticate, requireSystemAdmin(), async (_req: Request, res: Response): Promise<void> => {
+  const report = await callBillingGet("tenant-plan-audit");
+  if (!report.ok) {
+    res.status(502).json({ error: "PLAN_AUDIT_UNAVAILABLE", code: report.body?.error });
+    return;
+  }
+  res.json({ data: report.body });
+});
+
+// ─── Resend Paid Payment / Onboarding Link ──────────────────
+
+/**
+ * Issue a replacement continuation link for a tenant awaiting payment.
+ *
+ * Reuses the SAME checkout and the SAME payment attempt: a resend is a new
+ * envelope for the existing offer, never a new offer, so the customer cannot be
+ * re-priced by an administrator clicking a button. Issuing revokes the previous
+ * link, so at most one is ever valid.
+ */
+router.post("/tenants/:id/resend-payment-link", authenticate, requireSystemAdmin(), async (req: Request, res: Response): Promise<void> => {
+  const tenantId = req.params.id as string;
+  const actorId = (req as any).user?.userId as string | undefined;
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { id: true, name: true, status: true },
+  });
+  if (!tenant) {
+    res.status(404).json({ error: "Tenant not found" });
+    return;
+  }
+  if (tenant.status !== "PENDING_PAYMENT") {
+    res.status(409).json({ error: "Tenant is not awaiting payment", tenantStatus: tenant.status });
+    return;
+  }
+
+  const admin = await prisma.user.findFirst({
+    where: { tenantId, role: "ADMIN" },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, email: true, name: true },
+  });
+  if (!admin) {
+    res.status(409).json({ error: "Tenant has no administrator to send to" });
+    return;
+  }
+
+  // Resend reuses an existing checkout. If provisioning never completed there
+  // is nothing to reuse, and the operator needs repair instead.
+  const provStatus = await provisioningStatusForTenant(tenantId);
+  if (provStatus && provStatus.state !== "COMPLETED") {
+    res.status(409).json({ error: "BILLING_PROVISIONING_INCOMPLETE", canRepair: provStatus.canRepair });
+    return;
+  }
+
+  const resend = await callBilling("resend-payment-link", { tenantId, actor: actorId ?? null });
+  if (!resend.ok) {
+    const code = resend.body?.error ?? "PAYMENT_LINK_NOT_AVAILABLE";
+    const httpStatus = code === "PAYMENT_LINK_RATE_LIMITED" ? 429 : code === "BILLING_PROVISIONING_INCOMPLETE" ? 409 : 400;
+    res.status(httpStatus).json({
+      error: code,
+      ...(resend.body?.retryAfterSeconds ? { retryAfterSeconds: resend.body.retryAfterSeconds } : {}),
+    });
+    return;
+  }
+
+  const planRow = await prisma.plan.findFirst({
+    where: { key: resend.body.summary.planKey, version: resend.body.summary.planVersion },
+    select: { name: true },
+  });
+
+  try {
+    await sendPaidOnboardingEmail({
+      tenantId,
+      adminEmail: admin.email,
+      adminName: admin.name ?? admin.email,
+      tenantName: tenant.name,
+      adminUserId: admin.id,
+      continuationToken: resend.body.link.token,
+      checkoutReference: resend.body.checkoutReference,
+      linkExpiresAt: new Date(resend.body.link.expiresAt),
+      planName: planRow?.name ?? resend.body.summary.planKey,
+      amount: resend.body.summary.amount,
+      currency: resend.body.summary.currency,
+      includedCredits: resend.body.summary.includedCredits,
+      resend: true,
+    });
+  } catch {
+    // The new link exists and the old one is revoked either way; the admin can
+    // try again once the mail transport recovers.
+    res.status(502).json({ error: "link_issued_but_email_failed", recoverable: true });
+    return;
+  }
+
+  void writeAudit({
+    tenantId, actorType: "user", actorId,
+    action: AuditAction.PAYMENT_CONTINUATION_LINK_REVOKED,
+    targetType: "checkout", targetId: resend.body.checkoutReference,
+  });
+  void writeAudit({
+    tenantId, actorType: "user", actorId,
+    action: AuditAction.PAYMENT_CONTINUATION_LINK_RESENT,
+    targetType: "continuation_link", targetId: resend.body.link.id,
+    metadata: { expiresAt: resend.body.link.expiresAt },
+  });
+
+  // Safe response: never the raw token.
+  res.json({
+    data: {
+      resent: true,
+      sentTo: admin.email,
+      linkExpiresAt: resend.body.link.expiresAt,
+      checkoutReference: resend.body.checkoutReference,
+    },
+  });
 });
 
 // ─── Resend Onboarding Link ─────────────────────────────────
@@ -311,6 +1160,27 @@ router.post("/tenants/:id/resend-onboarding", authenticate, requireSystemAdmin()
       return;
     }
 
+    // A paid tenant has TWO front doors, and only one of them asks for money.
+    //
+    // This email carries an Authentik setup link that lands the customer
+    // authenticated inside the setup wizard - it says so in as many words: "no
+    // login required". Sent to a tenant that owes money, it hands over the
+    // identity and the wizard while the checkout sits untouched, which is
+    // exactly how a paid workspace was reached without paying: the operator
+    // clicked Resend onboarding, the customer followed it, created their
+    // account, landed in /setup, and never saw a payment screen.
+    //
+    // The payment link is a different button, so this refuses and names it
+    // rather than sending the customer through the wrong door politely.
+    if (tenant.status === "PENDING_PAYMENT") {
+      res.status(409).json({
+        error: "TENANT_AWAITING_PAYMENT",
+        hint: "This organization is on a paid plan and has not paid. Use Resend payment link; the onboarding email would let them into setup without paying.",
+        tenantStatus: tenant.status,
+      });
+      return;
+    }
+
     // Find the admin user for this tenant
     const admin = await prisma.user.findFirst({
       where: { tenantId: tenant.id, role: "ADMIN", isActive: true },
@@ -321,11 +1191,8 @@ router.post("/tenants/:id/resend-onboarding", authenticate, requireSystemAdmin()
       return;
     }
 
-    // Invalidate previous unused magic links
-    await prisma.magicLink.updateMany({
-      where: { tenantId: tenant.id, usedAt: null },
-      data: { expiresAt: new Date() },
-    });
+    // Previous links do not need invalidating here: Authentik owns the
+    // lifetime of its own recovery links.
 
     // Send new onboarding email with fresh magic link
     await sendOnboardingEmail(tenant.id, admin.email, admin.name, tenant.name, tenant.slug, admin.id);
@@ -364,26 +1231,114 @@ router.delete("/tenants/:id", authenticate, requireSystemAdmin(), async (req: Re
       return;
     }
 
-    // Cascade delete everything in a transaction
-    await prisma.$transaction([
-      prisma.magicLink.deleteMany({ where: { tenantId } }),
-      prisma.notificationLog.deleteMany({ where: { tenantId } }),
-      prisma.message.deleteMany({ where: { tenantId } }),
-      prisma.conversation.deleteMany({ where: { tenantId } }),
-      prisma.departmentMember.deleteMany({ where: { department: { tenantId } } }),
-      prisma.department.deleteMany({ where: { tenantId } }),
-      prisma.channelAccount.deleteMany({ where: { tenantId } }),
-      prisma.businessProfile.deleteMany({ where: { tenantId } }),
-      prisma.tenantOnboarding.deleteMany({ where: { tenantId } }),
-      prisma.chatbotFlow.deleteMany({ where: { tenantId } }),
-      prisma.user.deleteMany({ where: { tenantId } }),
-      prisma.tenant.delete({ where: { id: tenantId } }),
-    ]);
+    // Comprehensive GDPR off-boarding purge: DB (all tenant-scoped rows,
+    // including UsageLog/AuditLog/consent/retention that the FK cascade misses)
+    // + Qdrant vectors + Authentik identities, with a DataSubjectRequest and
+    // audit trail recorded before the tenant row is removed. Replaces the old
+    // partial cascade that orphaned Qdrant, UsageLog, AuditLog, and IdP data.
+    const purge = await eraseTenant(tenantId, (req as any).user?.userId);
 
-    res.json({ data: { deleted: true, tenantId, tenantName: tenant.name } });
+    res.json({ data: { deleted: true, tenantId, tenantName: tenant.name, ...purge } });
   } catch (err: any) {
     console.error("Delete tenant error:", err);
     res.status(500).json({ error: "Failed to delete tenant" });
+  }
+});
+
+// ─── Reset Onboarding (non-destructive) ─────────────────────
+//
+// Returns a tenant to a brand-new onboarding state WITHOUT deleting the tenant
+// or its people. Deterministic + idempotent.
+//
+// DELETED (everything onboarding created / derived):
+//   BusinessDiscovery (discovery, health, readiness, goals, recommendations,
+//   the narrated report), BusinessProfile (the confirmed understanding),
+//   TenantOnboarding tracker, the generated AI employee(s) + their
+//   AIAgentKnowledge links + RouterRules, onboarding departments + members,
+//   and all ScheduledNudges. Tenant.status → PENDING_ONBOARDING.
+//
+// PRESERVED (deliberately - not onboarding artifacts, and unsafe to destroy):
+//   the tenant row, its users, connected OAuth integrations + channels
+//   (revoking live tokens is irreversible), and imported KnowledgeBases
+//   (real customer content). The next login runs onboarding from scratch;
+//   any already-connected system is simply detected as already-connected.
+router.post("/tenants/:id/reset-onboarding", authenticate, requireSystemAdmin(), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const tenantId = req.params.id as string;
+    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { id: true, name: true } });
+    if (!tenant) {
+      res.status(404).json({ error: "Tenant not found" });
+      return;
+    }
+
+    const removed = await prisma.$transaction(async (tx) => {
+      const agents = await tx.aIAgent.findMany({ where: { tenantId }, select: { id: true } });
+      const agentIds = agents.map((a) => a.id);
+
+      const r = {
+        aiAgentKnowledge: (await tx.aIAgentKnowledge.deleteMany({ where: { aiAgentId: { in: agentIds } } })).count,
+        routerRules: (await tx.routerRule.deleteMany({ where: { tenantId } })).count,
+        aiAgents: (await tx.aIAgent.deleteMany({ where: { tenantId } })).count,
+        departmentMembers: (await tx.departmentMember.deleteMany({ where: { department: { tenantId } } })).count,
+        departments: (await tx.department.deleteMany({ where: { tenantId } })).count,
+        businessDiscovery: (await (tx as any).businessDiscovery.deleteMany({ where: { tenantId } })).count,
+        businessProfile: (await tx.businessProfile.deleteMany({ where: { tenantId } })).count,
+        onboarding: (await tx.tenantOnboarding.deleteMany({ where: { tenantId } })).count,
+        scheduledNudges: (await (tx as any).scheduledNudge.deleteMany({ where: { tenantId } })).count,
+      };
+
+      // Return to a fresh onboarding state (admin already exists → PENDING_ONBOARDING).
+      await tx.tenant.update({ where: { id: tenantId }, data: { status: "PENDING_ONBOARDING" } });
+      return r;
+    });
+
+    // Re-arm a fresh onboarding nudge so a reset tenant that never restarts is
+    // followed up like any brand-new tenant.
+    scheduleOnboardingNudge(tenantId, "1d").catch(() => {});
+
+    res.json({ data: { reset: true, tenantId, tenantName: tenant.name, removed, status: "PENDING_ONBOARDING" } });
+  } catch (err: any) {
+    console.error("Reset onboarding error:", err);
+    res.status(500).json({ error: "Failed to reset onboarding" });
+  }
+});
+
+// ─── System Admin: Onboarding Console ───────────────────────
+// One row per tenant with every onboarding milestone, derived progress,
+// health, and the Next Recommended Action. The operational board.
+router.get("/onboarding-console", authenticate, requireSystemAdmin(), async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const rows = await listOnboardingSnapshots();
+    res.json({ data: { rows, generatedAt: new Date().toISOString() } });
+  } catch (err: any) {
+    console.error("Onboarding console error:", err);
+    res.status(500).json({ error: "Failed to load onboarding console" });
+  }
+});
+
+// Single-tenant snapshot (used by the tenant detail drawer).
+router.get("/tenants/:id/onboarding-snapshot", authenticate, requireSystemAdmin(), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const snapshot = await getOnboardingSnapshot(req.params.id as string);
+    if (!snapshot) { res.status(404).json({ error: "Tenant not found" }); return; }
+    res.json({ data: { snapshot } });
+  } catch (err: any) {
+    console.error("Onboarding snapshot error:", err);
+    res.status(500).json({ error: "Failed to load snapshot" });
+  }
+});
+
+// Admin-triggered manual nudge - arms + delivers immediately, returns outcome.
+router.post("/tenants/:id/nudge", authenticate, requireSystemAdmin(), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const tenantId = req.params.id as string;
+    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { id: true } });
+    if (!tenant) { res.status(404).json({ error: "Tenant not found" }); return; }
+    const result = await triggerNudgeNow(tenantId);
+    res.json({ data: result });
+  } catch (err: any) {
+    console.error("Manual nudge error:", err);
+    res.status(500).json({ error: "Failed to send nudge" });
   }
 });
 
@@ -408,12 +1363,27 @@ router.patch("/tenants/:id", authenticate, requireSystemAdmin(), validate(update
       return;
     }
 
+    // Explicit allowlist (updateTenantSchema fields). slug is intentionally
+    // immutable and never accepted from the body.
+    const { name, isActive, voiceCopilotEnabled, voiceInboxUiEnabled, voiceIncomingEnabled } = req.body as Record<string, unknown>;
+    const data: Record<string, unknown> = {};
+    if (name !== undefined) data.name = name;
+    if (isActive !== undefined) data.isActive = isActive;
+    if (voiceCopilotEnabled !== undefined) data.voiceCopilotEnabled = voiceCopilotEnabled;
+    if (voiceInboxUiEnabled !== undefined) data.voiceInboxUiEnabled = voiceInboxUiEnabled;
+    if (voiceIncomingEnabled !== undefined) data.voiceIncomingEnabled = voiceIncomingEnabled;
     const updated = await prisma.tenant.update({
       where: { id: req.params.id as string },
-      data: req.body,
+      data,
       select: { id: true, name: true, slug: true, isActive: true, updatedAt: true },
     });
 
+    void writeAudit({
+      tenantId: updated.id, actorType: "user", actorId: (req as any).user?.userId,
+      action: isActive === false ? AuditAction.TENANT_DEACTIVATED
+        : isActive === true ? AuditAction.TENANT_ACTIVATED : AuditAction.TENANT_UPDATED,
+      targetType: "tenant", targetId: updated.id, metadata: { fields: Object.keys(data) },
+    });
     res.json({ data: updated });
   } catch (err) {
     console.error("Update tenant error:", err);
@@ -423,9 +1393,10 @@ router.patch("/tenants/:id", authenticate, requireSystemAdmin(), validate(update
 
 // ─── Create User in Tenant ───────────────────────────────────
 
+// No password field: the invite provisions an Authentik identity and the user
+// chooses their password through the emailed setup link.
 const createUserSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(8),
   name: z.string().min(1),
   role: z.enum(["ADMIN", "AGENT"]).optional().default("AGENT"),
 });
@@ -438,30 +1409,31 @@ router.post("/tenants/:id/users", authenticate, requireSystemAdmin(), validate(c
       return;
     }
 
-    const { email, password, name, role } = req.body;
+    const { email, name, role } = req.body;
 
-    const existing = await prisma.user.findFirst({ where: { tenantId: tenant.id, email } });
-    if (existing) {
-      res.status(409).json({ error: "User with this email already exists in this tenant" });
-      return;
-    }
-
-    const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
-    const user = await prisma.user.create({
-      data: { tenantId: tenant.id, email, password: hashedPassword, name, role: role as any },
-      select: { id: true, email: true, name: true, role: true, isActive: true, createdAt: true },
+    const result = await inviteUser(tenant.id, email, name, role);
+    void writeAudit({
+      tenantId: tenant.id, actorType: "user", actorId: (req as any).user?.userId,
+      action: AuditAction.USER_CREATED, targetType: "user", targetId: result.user.id,
+      metadata: { email, role },
     });
-
-    res.status(201).json({ data: user });
+    res.status(201).json({ data: result.user, setupLink: result.setupLink });
   } catch (err) {
     console.error("Create user error:", err);
     res.status(500).json({ error: "Failed to create user" });
   }
 });
 
-// ─── Toggle User Active Status ───────────────────────────────
+// ─── Update User (SysAdmin: name, email, role, active) ──
 
-router.patch("/tenants/:id/users/:userId", authenticate, requireSystemAdmin(), async (req: Request, res: Response): Promise<void> => {
+const updateUserSchema = z.object({
+  name: z.string().min(1).max(120).optional(),
+  email: z.string().email().optional(),
+  role: z.enum(["ADMIN", "AGENT"]).optional(),
+  isActive: z.boolean().optional(),
+});
+
+router.patch("/tenants/:id/users/:userId", authenticate, requireSystemAdmin(), validate(updateUserSchema), async (req: Request, res: Response): Promise<void> => {
   try {
     const user = await prisma.user.findFirst({
       where: { id: req.params.userId as string, tenantId: req.params.id as string },
@@ -471,10 +1443,29 @@ router.patch("/tenants/:id/users/:userId", authenticate, requireSystemAdmin(), a
       return;
     }
 
-    const { isActive, role } = req.body;
+    const { isActive, role, name, email } = req.body;
     const data: any = {};
     if (typeof isActive === "boolean") data.isActive = isActive;
-    if (role && ["ADMIN", "AGENT"].includes(role)) data.role = role;
+    // Never alter a SYSTEM_ADMIN's role through the tenant-scoped endpoint.
+    if (role && ["ADMIN", "AGENT"].includes(role) && user.role !== "SYSTEM_ADMIN") data.role = role;
+    if (typeof name === "string" && name.trim()) data.name = name.trim();
+    if (typeof email === "string" && email.trim()) {
+      const nextEmail = email.trim();
+      if (nextEmail !== user.email) {
+        const clash = await prisma.user.findFirst({
+          where: { tenantId: req.params.id as string, email: nextEmail, id: { not: user.id } },
+          select: { id: true },
+        });
+        if (clash) {
+          res.status(409).json({ error: "Another user in this tenant already uses this email" });
+          return;
+        }
+        data.email = nextEmail;
+      }
+    }
+    // Passwords are not GOTCHA's to set. A system admin who needs to restore
+    // access issues a setup link via POST /agents/:id/reset-password, which
+    // routes through Authentik's recovery flow.
 
     const updated = await prisma.user.update({
       where: { id: user.id },
@@ -482,10 +1473,64 @@ router.patch("/tenants/:id/users/:userId", authenticate, requireSystemAdmin(), a
       select: { id: true, email: true, name: true, role: true, isActive: true },
     });
 
+    // Keep Authentik's display name in sync on a rename. (Email/username change
+    // is intentionally NOT propagated to Authentik here - that is a
+    // verification-gated identity change; see the identity operations guide.)
+    if (typeof data.name === "string" && data.name !== user.name) {
+      void syncIdentityNameByUser(user.id, updated.name);
+    }
+    // Enable/disable must be consistent across both systems (see agents.ts).
+    if (typeof data.isActive === "boolean" && data.isActive !== user.isActive) {
+      void syncMembershipAccess(user.id, data.isActive);
+    }
+
+    void writeAudit({
+      tenantId: req.params.id as string, actorType: "user", actorId: (req as any).user?.userId,
+      action: (data as any).role !== undefined ? AuditAction.ROLE_CHANGED : AuditAction.USER_UPDATED,
+      targetType: "user", targetId: updated.id, metadata: { fields: Object.keys(data) },
+    });
     res.json({ data: updated });
   } catch (err) {
     console.error("Update user error:", err);
     res.status(500).json({ error: "Failed to update user" });
+  }
+});
+
+// ─── Delete User (SysAdmin) ──────────────────────────────────
+
+router.delete("/tenants/:id/users/:userId", authenticate, requireSystemAdmin(), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const currentUserId = (req as any).user?.userId as string | undefined;
+    const user = await prisma.user.findFirst({
+      where: { id: req.params.userId as string, tenantId: req.params.id as string },
+      select: { id: true, role: true, name: true },
+    });
+    if (!user) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+    if (user.role === "SYSTEM_ADMIN") {
+      res.status(400).json({ error: "Cannot delete a system admin user" });
+      return;
+    }
+    if (currentUserId && user.id === currentUserId) {
+      res.status(400).json({ error: "You cannot delete your own account" });
+      return;
+    }
+
+    // User relations cascade / SetNull at the DB level (conversations →
+    // assignedAgentId SetNull, departmentMember → Cascade), so a single
+    // delete cleans up cleanly.
+    await prisma.user.delete({ where: { id: user.id } });
+    void writeAudit({
+      tenantId: req.params.id as string, actorType: "user", actorId: (req as any).user?.userId,
+      action: AuditAction.USER_DELETED, targetType: "user", targetId: user.id,
+      metadata: { name: user.name, role: user.role },
+    });
+    res.json({ data: { deleted: true, userId: user.id, name: user.name } });
+  } catch (err) {
+    console.error("Delete user error:", err);
+    res.status(500).json({ error: "Failed to delete user" });
   }
 });
 
@@ -564,18 +1609,18 @@ router.patch("/tenants/:id/first-take-care", authenticate, requireSystemAdmin(),
 
 const seedSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(8),
   name: z.string().min(1),
   setupSecret: z.string().min(1),
 });
 
 router.post("/seed", validate(seedSchema), async (req: Request, res: Response): Promise<void> => {
   try {
-    const { email, password, name, setupSecret } = req.body;
+    const { email, name, setupSecret } = req.body;
 
-    // Verify setup secret (use JWT_SECRET as the setup key)
-    const expectedSecret = process.env.SYSTEM_ADMIN_SETUP_SECRET || process.env.JWT_SECRET;
-    if (setupSecret !== expectedSecret) {
+    // JWT_SECRET is gone with the local signing key, so the setup secret must
+    // now be configured explicitly rather than silently borrowing it.
+    const expectedSecret = process.env.SYSTEM_ADMIN_SETUP_SECRET;
+    if (!expectedSecret || setupSecret !== expectedSecret) {
       res.status(403).json({ error: "Invalid setup secret" });
       return;
     }
@@ -595,28 +1640,31 @@ router.post("/seed", validate(seedSchema), async (req: Request, res: Response): 
       });
     }
 
-    const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
+    const identity = await ensureIdentity(email, name);
+    const localIdentity = await prisma.identity.upsert({
+      where: { authentikSubject: identity.subject },
+      update: {},
+      create: { authentikSubject: identity.subject, email: email.toLowerCase(), name },
+    });
     const admin = await prisma.user.create({
       data: {
         tenantId: systemTenant.id,
+        identityId: localIdentity.id,
         email,
-        password: hashedPassword,
         name,
         role: "SYSTEM_ADMIN",
       },
     });
 
-    const token = signToken({
-      userId: admin.id,
-      tenantId: systemTenant.id,
-      role: admin.role,
-      email: admin.email,
-    });
+    // No token is returned: GOTCHA cannot mint one. The new system admin sets
+    // a password via this link and then logs in through Authentik like anyone
+    // else.
+    const setupLink = await createRecoveryLink(identity.pk);
 
     res.status(201).json({
       data: {
         user: { id: admin.id, email: admin.email, name: admin.name, role: admin.role },
-        token,
+        setupLink,
       },
     });
   } catch (err) {
@@ -956,7 +2004,6 @@ router.get("/pricing/unit-costs", authenticate, requireSystemAdmin(), async (req
       modelMixByCategory.set(k, arr);
     }
 
-    const defaultPricing = AI_MODEL_PRICING["gpt-4o-mini"]!;
     const categoryDefMap = new Map(AI_FEATURE_CATEGORIES.map((d) => [d.key, d] as const));
 
     const categories = byCategory.map((row) => {
@@ -968,19 +2015,20 @@ router.get("/pricing/unit-costs", authenticate, requireSystemAdmin(), async (req
       const conversations = Number(row.conversations);
       const costUsd = Number(row.cost_usd ?? 0);
 
-      // Per-model split: bill uncached prompt at full rate, cached at 50%,
-      // completion at full rate. Mirrors trackAIUsage()'s accounting.
+      // Per-model split: bill uncached prompt at full rate, cached at the
+      // model's cached rate, completion at full rate. Mirrors trackAIUsage()'s
+      // accounting via the same shared resolver (prefix-aware, gpt-5-safe).
       let inputCostUsd = 0;
       let outputCostUsd = 0;
       const modelMix = (modelMixByCategory.get(row.category) ?? []).map((m) => {
-        const pricing = (m.model && AI_MODEL_PRICING[m.model]) || defaultPricing;
+        const pricing = resolveModelPricing(m.model);
         const mPrompt = Number(m.prompt_tokens);
         const mCompletion = Number(m.completion_tokens);
         const mCached = Math.min(Number(m.cached_prompt_tokens), mPrompt);
         const mUncached = Math.max(0, mPrompt - mCached);
         const mIn =
           (mUncached / 1_000_000) * pricing.prompt +
-          (mCached / 1_000_000) * pricing.prompt * 0.5;
+          (mCached / 1_000_000) * (pricing.cachedPrompt ?? pricing.prompt * 0.5);
         const mOut = (mCompletion / 1_000_000) * pricing.completion;
         inputCostUsd += mIn;
         outputCostUsd += mOut;

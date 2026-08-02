@@ -1,3 +1,4 @@
+import { getInternalServiceKey } from "@chatcenter/shared";
 /**
  * Central AI Service - ALL LLM calls MUST go through this service.
  *
@@ -9,8 +10,9 @@
  */
 
 import OpenAI from "openai";
-import { trackAIUsage } from "@chatcenter/shared";
+import { trackAIUsage, assertAiAllowed, meterAiUnits } from "@chatcenter/shared";
 import { logAudit } from "./audit.service";
+import { stablePrefixOf } from "./prompt-builder.service";
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -23,6 +25,8 @@ export interface AIRequestParams {
   metadata?: {
     conversationId?: string;
     aiAgentId?: string;
+    /** Per-turn attribution (P1-6): groups every micro-call of one customer turn. */
+    turnId?: string;
     type?: string; // "suggestion" | "chat" | "summary" | "classification" | "onboarding"
     /**
      * Hash of the cached system prefix (SYSTEM_CORE + SESSION_PROFILE).
@@ -97,7 +101,11 @@ export interface EmbeddingResponse {
 // ─── Singleton Client ───────────────────────────────────────
 
 let openaiClient: OpenAI | null = null;
-let defaultModel = "gpt-4o-mini";
+// Single source of truth for the default chat model. Overridden at init() from
+// OPENAI_DEFAULT_MODEL (see index.ts). All call sites resolve the model via
+// getDefaultModel() rather than hardcoding a literal, so swapping models is a
+// one-env-var change.
+let defaultModel = "gpt-5-mini";
 let defaultEmbeddingModel = "text-embedding-3-small";
 
 export function initAIService(config: {
@@ -177,17 +185,177 @@ function recordAndAssertPrefix(
   return { hash, drift: false, isFirstCall: false };
 }
 
+// OpenAI requires tool function names to match ^[a-zA-Z0-9_-]+$ - but adapter
+// tools are named `<provider>.<tool>` (e.g. "hubspot.create_lead"), and the dot
+// is load-bearing for dispatch routing. Sanitize names for the API call (dots →
+// "__", any other illegal char → "_") and map them back on the returned tool
+// calls so downstream dispatch still sees the original dotted name. A single
+// bad name otherwise 400s the WHOLE completion (the bot can't reply at all).
+const ILLEGAL_TOOL_NAME_CHARS = /[^a-zA-Z0-9_-]/g;
+function sanitizeToolName(name: string): string {
+  return name.replace(/\./g, "__").replace(ILLEGAL_TOOL_NAME_CHARS, "_");
+}
+// A forced tool_choice must name the SANITIZED tool (OpenAI rejects the dotted
+// adapter name `shopify.search_products`). Applied wherever tool_choice is set
+// so a dotted forced tool (e.g. the Discovery-ready product search) works.
+function sanitizeToolChoice(choice: any): any {
+  if (choice && typeof choice === "object" && choice.type === "function" && choice.function?.name) {
+    return { ...choice, function: { ...choice.function, name: sanitizeToolName(String(choice.function.name)) } };
+  }
+  return choice;
+}
+function sanitizeToolsForOpenAI(
+  tools: any[],
+): { tools: any[]; nameMap: Map<string, string> } {
+  const nameMap = new Map<string, string>();
+  let changed = false;
+  const out = tools.map((t) => {
+    const orig = t?.function?.name;
+    if (typeof orig !== "string") return t;
+    const safe = sanitizeToolName(orig);
+    if (safe === orig) return t;
+    changed = true;
+    nameMap.set(safe, orig);
+    return { ...t, function: { ...t.function, name: safe } };
+  });
+  return { tools: changed ? out : tools, nameMap };
+}
+function restoreToolCallNames(
+  toolCalls: any[] | undefined,
+  nameMap: Map<string, string> | null,
+): any[] | undefined {
+  if (!toolCalls || !nameMap || nameMap.size === 0) return toolCalls;
+  return toolCalls.map((tc) => {
+    const orig = tc?.function?.name ? nameMap.get(tc.function.name) : undefined;
+    return orig ? { ...tc, function: { ...tc.function, name: orig } } : tc;
+  });
+}
+// Same constraint, history side. After a tool round, callers echo the prior
+// assistant message back to us with its `tool_calls` carrying the RESTORED
+// dotted name (e.g. "google_calendar.check_availability") - because dispatch
+// routing needs the dotted form. But that name now rides in `messages[].
+// tool_calls[].function.name`, which OpenAI validates against the SAME
+// ^[a-zA-Z0-9_-]+$ pattern as the tools array. An un-sanitized dotted name
+// here 400s the follow-up completion ("not retryable") - the tool ran, but the
+// bot can never turn the result into a reply, so the turn dies silently. Mirror
+// the tools-array sanitization on the outgoing messages. tool_call_id (not the
+// name) is what links assistant tool_calls to their tool results, so renaming
+// is protocol-safe. Idempotent: already-"__" names are unchanged, preserving
+// prefix-cache byte stability.
+function sanitizeMessagesForOpenAI(messages: any[]): any[] {
+  let changed = false;
+  const out = messages.map((m) => {
+    const toolCalls = m?.tool_calls;
+    if (!Array.isArray(toolCalls) || toolCalls.length === 0) return m;
+    let msgChanged = false;
+    const safeCalls = toolCalls.map((tc: any) => {
+      const name = tc?.function?.name;
+      if (typeof name !== "string") return tc;
+      const safe = sanitizeToolName(name);
+      if (safe === name) return tc;
+      msgChanged = true;
+      return { ...tc, function: { ...tc.function, name: safe } };
+    });
+    if (!msgChanged) return m;
+    changed = true;
+    return { ...m, tool_calls: safeCalls };
+  });
+  return changed ? out : messages;
+}
+
+// gpt-5 family + o-series reasoning models changed the chat-completions
+// contract: `max_tokens` is rejected (use `max_completion_tokens`), and only the
+// default temperature (1) is accepted. Detect by model id so a single
+// OPENAI_DEFAULT_MODEL swap doesn't 400 every call.
+function modelRequiresCompletionTokens(model: string): boolean {
+  return /^(gpt-5|o[1-9])/i.test(model);
+}
+
+// Set the token cap + temperature on a chat-completions request in the shape the
+// target model accepts. Mutates `req`.
+function applyTokenAndTemperatureParams(
+  req: Record<string, any>,
+  model: string,
+  temperature: number | undefined,
+  maxTokens: number | undefined,
+): void {
+  const tokens = maxTokens ?? 1024;
+  if (modelRequiresCompletionTokens(model)) {
+    // Reasoning models (gpt-5 / o-series) spend HIDDEN reasoning tokens BEFORE
+    // any visible output, and `max_completion_tokens` caps the COMBINED total.
+    // Capping at just the intended output size starves the reply: the whole
+    // budget goes to reasoning and content comes back '' with
+    // finish_reason='length' (the bot then "doesn't respond"). So add reasoning
+    // headroom ON TOP of the requested output budget. This is only a ceiling -
+    // you pay for tokens actually generated, so a generous cap is safe.
+    const headroom = Number(process.env.OPENAI_REASONING_HEADROOM_TOKENS) || 2048;
+    req.max_completion_tokens = tokens + headroom;
+    // Keep reasoning light so the bot stays responsive (default 'medium' on
+    // gpt-5 makes chat turns slow and reasoning-token heavy). Override via env;
+    // "none" omits the param entirely.
+    const effort = process.env.OPENAI_REASONING_EFFORT || "low";
+    if (effort && effort !== "none") req.reasoning_effort = effort;
+    // Only the default temperature (1) is supported - send it only when it is
+    // exactly the default, otherwise omit so the model uses its required value.
+    if (temperature === 1) req.temperature = temperature;
+  } else {
+    req.max_tokens = tokens;
+    req.temperature = temperature ?? 0.7;
+  }
+}
+
+const BILLING_SERVICE_URL = process.env.BILLING_SERVICE_URL || "http://billing:4009";
+
+/**
+ * Debit AI Units for a completed model call and, when balance crosses an alert
+ * threshold (80/90/95/100%), notify billing so it can fan out owner alerts and
+ * trigger auto-purchase. Fully best-effort: any failure is logged, never thrown.
+ */
+async function meterAndReact(
+  tenantId: string,
+  model: string,
+  usage: { input_tokens: number; output_tokens: number; cached_tokens: number },
+  conversationId?: string,
+): Promise<void> {
+  try {
+    const m = await meterAiUnits({
+      tenantId,
+      model,
+      inputTokens: usage.input_tokens,
+      outputTokens: usage.output_tokens,
+      cachedInputTokens: usage.cached_tokens,
+      referenceId: conversationId,
+    });
+    if (!m || m.thresholds.length === 0) return;
+    await fetch(`${BILLING_SERVICE_URL}/api/internal/billing/usage-threshold`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-internal-key": getInternalServiceKey(),
+      },
+      body: JSON.stringify({ tenantId, thresholds: m.thresholds }),
+    }).catch(() => {});
+  } catch (err: any) {
+    console.error("[aiService] meterAndReact failed:", err?.message ?? err);
+  }
+}
+
 export async function generateResponse(params: AIRequestParams): Promise<AIResponse> {
   const client = getClient();
   const model = params.model || defaultModel;
   const type = params.metadata?.type || "chat";
 
+  // Billing pre-flight: refuse AI when the tenant is out of AI Units or the
+  // subscription isn't serviceable. Throws AiUnitsExhaustedError ONLY in
+  // BILLING_ENFORCEMENT_MODE=hard; off/observe/soft never block. Callers map
+  // the error to graceful degradation (bot escalates, copilot disables).
+  await assertAiAllowed(params.tenantId);
+
   const requestParams: OpenAI.ChatCompletionCreateParamsNonStreaming = {
     model,
-    messages: params.messages,
-    temperature: params.temperature ?? 0.7,
-    max_tokens: params.maxTokens ?? 1024,
+    messages: sanitizeMessagesForOpenAI(params.messages),
   };
+  applyTokenAndTemperatureParams(requestParams as any, model, params.temperature, params.maxTokens);
 
   // Pin to a stable backend route so OpenAI's automatic prefix cache can
   // hit consistently across turns in the same conversation/call.
@@ -198,27 +366,39 @@ export async function generateResponse(params: AIRequestParams): Promise<AIRespo
   if (params.responseFormat) {
     requestParams.response_format = params.responseFormat;
   }
+  let toolNameMap: Map<string, string> | null = null;
   if (params.tools && params.tools.length > 0) {
-    (requestParams as any).tools = params.tools;
-    if (params.toolChoice) (requestParams as any).tool_choice = params.toolChoice;
+    const s = sanitizeToolsForOpenAI(params.tools);
+    (requestParams as any).tools = s.tools;
+    toolNameMap = s.nameMap.size > 0 ? s.nameMap : null;
+    if (params.toolChoice) (requestParams as any).tool_choice = sanitizeToolChoice(params.toolChoice);
   }
 
   // Compute + compare the per-session system-prompt-prefix hash BEFORE the
-  // API call so any drift is logged even if the call throws. The "prefix"
-  // is the first system message (the per-agent + per-conv stable blocks).
+  // API call so any drift is logged even if the call throws. We hash ONLY the
+  // STABLE prefix (BLOCK 1 + BLOCK 2) - NOT the per-turn block, which is fresh
+  // every message and would otherwise make the hash "drift" every turn even
+  // when the cacheable prefix is perfectly stable. `stablePrefixOf` strips the
+  // final per-turn block; single-block system prompts hash in full.
   let prefixAssertion: { hash: string; drift: boolean; isFirstCall: boolean } | null = null;
   if (params.sessionId) {
     const firstSystem = params.messages.find((m: any) => m.role === "system");
-    const systemPrefix = typeof firstSystem?.content === "string" ? firstSystem.content : "";
+    const systemContent = typeof firstSystem?.content === "string" ? firstSystem.content : "";
+    const systemPrefix = systemContent ? stablePrefixOf(systemContent) : "";
     if (systemPrefix) {
       prefixAssertion = recordAndAssertPrefix(params.sessionId, systemPrefix);
     }
   }
 
-  const response = await client.chat.completions.create(
-    requestParams,
-    params.signal ? { signal: params.signal } : undefined,
+  const llmStartedAt = Date.now();
+  const response = await callWithRetry(
+    () => client.chat.completions.create(
+      requestParams,
+      params.signal ? { signal: params.signal } : undefined,
+    ),
+    params.signal,
   );
+  const llmDurationMs = Date.now() - llmStartedAt;
 
   const cachedTokens =
     (response.usage as any)?.prompt_tokens_details?.cached_tokens ?? 0;
@@ -247,9 +427,18 @@ export async function generateResponse(params: AIRequestParams): Promise<AIRespo
       `Likely cause: prompt prefix < 1024 tokens, or >5min since last call (cache TTL).`,
     );
   }
+  // Positive telemetry too - operators need cache HEALTH visible in both directions.
+  if (params.sessionId && cachedTokens > 0) {
+    console.log(
+      `[aiService] cache HIT sessionId=${params.sessionId} cached=${cachedTokens}/${usage.input_tokens} promptTokens`,
+    );
+  }
 
   const content = response.choices[0]?.message?.content || "";
-  const rawToolCalls = (response.choices[0]?.message as any)?.tool_calls as any[] | undefined;
+  const rawToolCalls = restoreToolCallNames(
+    (response.choices[0]?.message as any)?.tool_calls as any[] | undefined,
+    toolNameMap,
+  );
 
   // Track usage (fire-and-forget, never block the response)
   trackAIUsage({
@@ -260,9 +449,15 @@ export async function generateResponse(params: AIRequestParams): Promise<AIRespo
     completionTokens: usage.output_tokens,
     totalTokens: usage.total_tokens,
     cachedPromptTokens: cachedTokens,
+    // Per-turn attribution (P1-6): wall time of THIS call; turnId + aiAgentId
+    // from the caller's metadata so every micro-call of one turn shares a key.
+    durationMs: llmDurationMs,
+    turnId: params.metadata?.turnId,
+    aiAgentId: params.metadata?.aiAgentId,
     metadata: {
       conversationId: params.metadata?.conversationId,
       aiAgentId: params.metadata?.aiAgentId,
+      turnId: params.metadata?.turnId,
       sessionId: params.sessionId,
       // Spec assertion fields surfaced on every usage row so the platform
       // dashboard can detect violations: hash drift = prompt instability;
@@ -272,6 +467,10 @@ export async function generateResponse(params: AIRequestParams): Promise<AIRespo
       cachedPrefixUsed: cachedTokens > 0,
     },
   }).catch((err) => console.error("[aiService] Usage tracking failed:", err.message));
+
+  // Meter AI Units (cost-driven debit) + react to crossed thresholds. No-op
+  // when BILLING_ENFORCEMENT_MODE=off. Fire-and-forget: never delays the reply.
+  void meterAndReact(params.tenantId, model, usage, params.metadata?.conversationId);
 
   // Audit log (fire-and-forget)
   logAudit({
@@ -358,20 +557,29 @@ export async function* streamResponse(params: AIRequestParams): AsyncGenerator<A
   const model = params.model || defaultModel;
   const type = params.metadata?.type || "chat";
 
+  // Billing pre-flight - identical gate to the non-streaming generateResponse().
+  // Without this, every streamed AI path (autonomous worker, agent-runtime,
+  // agent-builder) would bypass the AI-Unit gate entirely. Throws
+  // AiUnitsExhaustedError ONLY in BILLING_ENFORCEMENT_MODE=hard; off/observe/soft
+  // never block. Callers map the error to graceful degradation.
+  await assertAiAllowed(params.tenantId);
+
   const requestParams: OpenAI.ChatCompletionCreateParamsStreaming = {
     model,
-    messages: params.messages,
-    temperature: params.temperature ?? 0.7,
-    max_tokens: params.maxTokens ?? 1024,
+    messages: sanitizeMessagesForOpenAI(params.messages),
     stream: true,
     stream_options: { include_usage: true },
   };
+  applyTokenAndTemperatureParams(requestParams as any, model, params.temperature, params.maxTokens);
   if (params.sessionId) {
     (requestParams as any).user = params.sessionId;
   }
+  let toolNameMap: Map<string, string> | null = null;
   if (params.tools && params.tools.length > 0) {
-    (requestParams as any).tools = params.tools;
-    if (params.toolChoice) (requestParams as any).tool_choice = params.toolChoice;
+    const s = sanitizeToolsForOpenAI(params.tools);
+    (requestParams as any).tools = s.tools;
+    toolNameMap = s.nameMap.size > 0 ? s.nameMap : null;
+    if (params.toolChoice) (requestParams as any).tool_choice = sanitizeToolChoice(params.toolChoice);
   }
 
   const stream = await client.chat.completions.create(requestParams);
@@ -410,15 +618,23 @@ export async function* streamResponse(params: AIRequestParams): AsyncGenerator<A
     }
   }
 
-  const finalToolCalls = Object.values(toolCallAcc)
-    .filter((s) => s.id && s.function.name)
-    .map((s) => ({
-      id: s.id!,
-      type: "function" as const,
-      function: { name: s.function.name!, arguments: s.function.arguments || "{}" },
-    }));
+  const finalToolCalls = restoreToolCallNames(
+    Object.values(toolCallAcc)
+      .filter((s) => s.id && s.function.name)
+      .map((s) => ({
+        id: s.id!,
+        type: "function" as const,
+        function: { name: s.function.name!, arguments: s.function.arguments || "{}" },
+      })),
+    toolNameMap,
+  )!;
 
-  // Same fire-and-forget tracking + audit as the non-streaming path.
+  // Same fire-and-forget tracking + audit + AI-Unit metering as the
+  // non-streaming path. meterAndReact debits the wallet, writes the billing
+  // ledger, and fires threshold notifications - without it the streaming path
+  // would consume model capacity without ever billing it.
+  void meterAndReact(params.tenantId, model, usage, params.metadata?.conversationId);
+
   trackAIUsage({
     tenantId: params.tenantId,
     feature: type,
@@ -460,6 +676,65 @@ export function getDefaultModel(): string {
   return defaultModel;
 }
 
+/**
+ * Micro-call tier (P1-7). The cheap, high-frequency helper calls that block
+ * EVERY turn (knowledge_resolve, wizard_binding) don't need the flagship
+ * reasoning model - they extract/classify from a bounded prompt. Route them to
+ * a smaller/faster model (default gpt-5-nano) to cut per-turn latency and cost.
+ * Override with OPENAI_MICRO_MODEL; falls back to the default model if unset so
+ * the tier can be disabled by pointing it at the same model.
+ */
+export function getMicroModel(): string {
+  return process.env.OPENAI_MICRO_MODEL || "gpt-5-nano";
+}
+
 export function getDefaultEmbeddingModel(): string {
   return defaultEmbeddingModel;
+}
+
+// ─── Provider retry/backoff (P1-7) ──────────────────────────
+// The OpenAI SDK retries some errors itself, but not uniformly and not with a
+// jittered backoff we control. Wrap terminal LLM calls so a transient 429/5xx
+// or network blip doesn't fail a whole customer turn. NEVER retries a user
+// abort (turn cancellation) or a non-retryable 4xx (bad request / auth).
+const RETRYABLE_STATUS = new Set([408, 409, 429, 500, 502, 503, 504]);
+
+function isAbort(err: any): boolean {
+  return err?.name === "APIUserAbortError" || err?.name === "AbortError" || err?.code === "ABORT_ERR";
+}
+function isRetryable(err: any): boolean {
+  if (isAbort(err)) return false;
+  const status = err?.status ?? err?.response?.status;
+  if (typeof status === "number") return RETRYABLE_STATUS.has(status);
+  // No HTTP status → network/timeout class (ECONNRESET, ETIMEDOUT, fetch failed).
+  return true;
+}
+
+export async function callWithRetry<T>(
+  fn: () => Promise<T>,
+  signal?: AbortSignal,
+  opts: { maxRetries?: number; baseDelayMs?: number } = {},
+): Promise<T> {
+  const maxRetries = opts.maxRetries ?? 2;
+  const baseDelayMs = opts.baseDelayMs ?? 400;
+  let lastErr: any;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err: any) {
+      lastErr = err;
+      if (attempt === maxRetries || !isRetryable(err) || signal?.aborted) throw err;
+      // Exponential backoff with jitter; honour a Retry-After header when present.
+      const retryAfterSec = Number(err?.headers?.["retry-after"] ?? err?.response?.headers?.get?.("retry-after"));
+      const backoff = Number.isFinite(retryAfterSec) && retryAfterSec > 0
+        ? retryAfterSec * 1000
+        : baseDelayMs * 2 ** attempt + Math.floor(Math.random() * baseDelayMs);
+      console.warn(`[aiService] LLM call failed (attempt ${attempt + 1}/${maxRetries + 1}, status=${err?.status ?? "net"}); retrying in ${backoff}ms`);
+      await new Promise<void>((resolve, reject) => {
+        const t = setTimeout(resolve, backoff);
+        signal?.addEventListener("abort", () => { clearTimeout(t); reject(err); }, { once: true });
+      });
+    }
+  }
+  throw lastErr;
 }

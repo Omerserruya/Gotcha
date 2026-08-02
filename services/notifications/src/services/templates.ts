@@ -144,6 +144,110 @@ const TEMPLATES: Record<SystemEventType, TemplateFn> = {
       link: "/system/health",
     };
   },
+
+  // ── Billing · subscription · AI Units ──────────────────────────────────────
+  "subscription.trial_started": (e) => {
+    const ends = safe(e.data.trialEndsAt, "");
+    return {
+      title: `Your free trial has started`,
+      body: `Your 14-day trial is active${ends ? ` until ${ends}` : ""}. Your card will be charged automatically when it ends.\n\n- Hebrew -\nתקופת הניסיון בת 14 הימים החלה${ends ? ` עד ${ends}` : ""}.`,
+      link: "/settings/billing",
+    };
+  },
+  "subscription.trial_ending": (e) => {
+    const ends = safe(e.data.trialEndsAt, "soon");
+    return {
+      title: `Your trial ends ${ends}`,
+      body: `Your trial ends ${ends} and your first charge will run automatically.\n\n- Hebrew -\nתקופת הניסיון מסתיימת ${ends} והחיוב הראשון יבוצע אוטומטית.`,
+      link: "/settings/billing",
+    };
+  },
+  "subscription.activated": (e) => {
+    const plan = safe(e.data.planKey, "");
+    return {
+      title: `Subscription active`,
+      body: `Your ${plan} subscription is active.\n\n- Hebrew -\nהמנוי שלך פעיל${plan ? ` (${plan})` : ""}.`,
+      link: "/settings/billing",
+    };
+  },
+  "subscription.plan_changed": (e) => {
+    const to = safe(e.data.to, "");
+    const when = safe(e.data.when, "");
+    return {
+      title: `Plan change ${when === "immediate" ? "applied" : "scheduled"}`,
+      body: `Your plan will change to ${to}${when === "period_end" ? " at the end of the current billing period" : " now"}.\n\n- Hebrew -\nתוכנית המנוי תשתנה ל-${to}.`,
+      link: "/settings/billing",
+    };
+  },
+  "subscription.canceled": (e) => {
+    const at = safe(e.data.effectiveAt, "");
+    return {
+      title: `Subscription cancellation scheduled`,
+      body: `Your subscription will end${at ? ` on ${at}` : " at the end of the current period"}. You can resume anytime before then.\n\n- Hebrew -\nהמנוי יסתיים${at ? ` בתאריך ${at}` : ""}. ניתן לחדש עד אז.`,
+      link: "/settings/billing",
+    };
+  },
+  "subscription.resumed": () => ({
+    title: `Subscription resumed`,
+    body: `Your subscription will continue as normal.\n\n- Hebrew -\nהמנוי שלך ימשיך כרגיל.`,
+    link: "/settings/billing",
+  }),
+  "subscription.suspended": (e) => {
+    const reason = safe(e.data.reason, "");
+    return {
+      title: `Subscription suspended`,
+      body: `AI features are paused due to a billing issue${reason ? ` (${reason})` : ""}. Update your payment method to restore service.\n\n- Hebrew -\nהמנוי הושעה עקב בעיית תשלום. עדכנו את אמצעי התשלום כדי לחדש את השירות.`,
+      link: "/settings/billing",
+    };
+  },
+  "subscription.past_due": () => ({
+    title: `Payment overdue`,
+    body: `We couldn't renew your subscription. We'll retry shortly - please check your payment method.\n\n- Hebrew -\nלא הצלחנו לחדש את המנוי. נסו לעדכן את אמצעי התשלום.`,
+    link: "/settings/billing",
+  }),
+  "invoice.issued": (e) => ({
+    title: `New invoice`,
+    body: `A new invoice was issued (${safe(e.data.amount, "")}).\n\n- Hebrew -\nהונפקה חשבונית חדשה.`,
+    link: "/settings/billing/invoices",
+  }),
+  "invoice.paid": (e) => ({
+    title: `Payment received`,
+    body: `Your payment of ${safe(e.data.amount, "")} was received. Thank you!\n\n- Hebrew -\nהתשלום התקבל. תודה!`,
+    link: "/settings/billing/invoices",
+  }),
+  "payment_method.expiring": (e) => ({
+    title: `Card expiring soon`,
+    body: `Your card ending ${safe(e.data.last4, "")} is expiring. Update it to avoid service interruption.\n\n- Hebrew -\nתוקף הכרטיס עומד לפוג. עדכנו אותו כדי למנוע הפסקת שירות.`,
+    link: "/settings/billing",
+  }),
+  "credit.threshold": (e) => {
+    const pct = safe(e.data.pct, "");
+    return {
+      title: `AI Units: ${pct}% used`,
+      body: `You've used ${pct}% of your monthly AI Units. Buy more or enable auto-purchase to avoid interruption.\n\n- Hebrew -\nניצלתם ${pct}% מיחידות ה-AI החודשיות. ניתן לרכוש עוד או להפעיל רכישה אוטומטית.`,
+      link: "/settings/billing/credits",
+    };
+  },
+  "credit.exhausted": () => ({
+    title: `AI Units exhausted`,
+    body: `Your AI Units are used up. AI features are paused until you add more; the rest of the platform works normally.\n\n- Hebrew -\nיחידות ה-AI אזלו. תכונות ה-AI מושהות עד לרכישה נוספת; שאר המערכת פועלת כרגיל.`,
+    link: "/settings/billing/credits",
+  }),
+  "credit.auto_purchase_succeeded": (e) => ({
+    title: `Auto-purchase successful`,
+    body: `${safe(e.data.units, "")} AI Units were added automatically.\n\n- Hebrew -\nנוספו יחידות AI אוטומטית.`,
+    link: "/settings/billing/credits",
+  }),
+  "credit.auto_purchase_failed": () => ({
+    title: `Auto-purchase failed`,
+    body: `We couldn't auto-purchase AI Units. Please check your payment method.\n\n- Hebrew -\nרכישת ה-AI האוטומטית נכשלה. בדקו את אמצעי התשלום.`,
+    link: "/settings/billing/credits",
+  }),
+  "credit.auto_purchase_ceiling_reached": (e) => ({
+    title: `Auto-purchase monthly limit reached`,
+    body: `Auto-purchase hit your monthly spend limit (${safe(e.data.ceiling, "")}). Buy AI Units manually to continue.\n\n- Hebrew -\nרכישה אוטומטית הגיעה לתקרת ההוצאה החודשית. ניתן לרכוש יחידות AI ידנית.`,
+    link: "/settings/billing/credits",
+  }),
 };
 
 export function renderTemplate(event: SystemEvent): RenderedTemplate {

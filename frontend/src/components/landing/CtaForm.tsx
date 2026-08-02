@@ -4,7 +4,7 @@ import { useState } from "react";
 import { submitWaitlistEntry } from "@/lib/api";
 
 /**
- * Embedded early-access form for the landing CTA — a lightweight version of
+ * Embedded early-access form for the landing CTA - a lightweight version of
  * /early-access asking only name, phone and industry. Submits to the same
  * waitlist endpoint with source "landing-cta".
  */

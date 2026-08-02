@@ -22,7 +22,20 @@ async function req<T = any>(
     },
     body: body ? JSON.stringify(body) : undefined,
   });
-  if (!res.ok) throw new Error(`${method} ${path} failed: ${res.status}`);
+  if (!res.ok) {
+    // Preserve the server's answer. Routes reject with an actionable JSON body
+    // (e.g. /builder/:id/complete → 422 `{error:"draft_not_ready", missing:[…]}`),
+    // and throwing a bare "failed: 422" discarded exactly the detail the UI
+    // needs to tell the user WHY - which is how a blocked "go live" ended up
+    // looking like a dead button.
+    const body = await res.json().catch(() => null as any);
+    const err = new Error(
+      body?.error
+        ? `${body.error}${body.message ? `: ${body.message}` : ""}`
+        : `${method} ${path} failed: ${res.status}`,
+    );
+    throw Object.assign(err, { status: res.status, body });
+  }
   return (await res.json()) as T;
 }
 
@@ -187,6 +200,8 @@ export interface BuilderDraftSnapshot {
   name: string;
   role: string;
   status: string;
+  /** Wizard progress: "chat"|"kb"|"refine"|"tools" while incomplete, null once done. */
+  builderStep: string | null;
   companyOverview: string | null;
   goal: string | null;
   successCriteria: string | null;
@@ -216,12 +231,35 @@ export type BuilderSSEEvent =
   | { type: "error"; message: string }
   | { type: "close" };
 
-export function builderStart(token: string, departmentId?: string | null, locale?: string) {
-  return req<{ data: { agentId: string; draft: BuilderDraftSnapshot; greeting: string } }>(
+// `goal` activates the goal-first (system-led) entry: the backend seeds the
+// whole draft from the goal + business twin and the greeting presents it.
+export function builderStart(token: string, departmentId?: string | null, locale?: string, forceNew?: boolean, goal?: string) {
+  return req<{ data: { agentId: string; draft: BuilderDraftSnapshot; greeting: string; resumed?: boolean } }>(
     "POST",
     "/api/ai-agents/builder/start",
     token,
-    { departmentId: departmentId ?? null, locale },
+    { departmentId: departmentId ?? null, locale, forceNew: !!forceNew, ...(goal ? { goal } : {}) },
+  );
+}
+
+// Persist wizard progress so an abandoned session resumes from this step.
+export function builderSaveStep(token: string, agentId: string, step: string) {
+  return req<{ data: { ok: boolean; step: string } }>(
+    "POST",
+    `/api/ai-agents/builder/${agentId}/step`,
+    token,
+    { step },
+  );
+}
+
+// Finish the wizard: clears the resume pointer and promotes DRAFT → ACTIVE so
+// the hand-off lands in the editor (not back in the builder).
+export function builderComplete(token: string, agentId: string) {
+  return req<{ data: { ok: boolean } }>(
+    "POST",
+    `/api/ai-agents/builder/${agentId}/complete`,
+    token,
+    {},
   );
 }
 
@@ -259,6 +297,15 @@ export function builderToggleKnowledge(token: string, agentId: string, knowledge
     { knowledgeBaseId, attach },
   );
 }
+// Attach/detach many tools at once (Select all / per-category select-all).
+export function builderToggleToolsBulk(token: string, agentId: string, tenantToolIds: string[], attach: boolean) {
+  return req<{ data: { draft: BuilderDraftSnapshot } }>(
+    "POST",
+    `/api/ai-agents/builder/${agentId}/tools/bulk`,
+    token,
+    { tenantToolIds, attach },
+  );
+}
 
 // Optional creation-wizard refinements (name / conversation flow / guardrails).
 // Saved deterministically from the dedicated wizard step. Send only the fields
@@ -267,6 +314,8 @@ export interface BuilderRefinements {
   name?: string;
   conversationFlow?: Array<{ id?: string; action: string; details?: string }>;
   customGuardrails?: string[];
+  /** Brand-voice archetype key (persona.brand_archetype). "" clears it. */
+  brandArchetype?: string;
 }
 export function builderSaveRefinements(token: string, agentId: string, refinements: BuilderRefinements) {
   return req<{ data: { draft: BuilderDraftSnapshot } }>(
@@ -370,6 +419,16 @@ export interface ApprovalRequestRow {
   riskLevel: "low" | "medium" | "high";
   riskTags: string[];
   status: "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED" | "CANCELLED";
+  /** What happened to the ACTION after a human said yes (distinct from the
+   *  decision above): a manager approving is not the action succeeding. */
+  executionState?: "NOT_STARTED" | "EXECUTING" | "SUCCEEDED" | "FAILED" | "LEGACY_UNVERIFIED";
+  executionError?: string | null;
+  customerNotifiedAt?: string | null;
+  decisionChannel?: string | null;
+  /** Out-of-band WhatsApp ping: "sent" | "skipped" | "failed". `skipped` is a
+   *  first-class state carrying an actionable reason. */
+  managerNotifyState?: "sent" | "skipped" | "failed" | null;
+  managerNotifyReason?: string | null;
   requestedBy: string;
   decidedBy: string | null;
   decidedAt: string | null;
@@ -426,6 +485,15 @@ export function approveApproval(
 
 export function rejectApproval(token: string, id: string, decisionReason: string) {
   return req("POST", `/api/approvals/${id}/reject`, token, { decisionReason });
+}
+
+/** Re-run an approved action whose execution FAILED. The decision stands. */
+export function retryApprovalExecution(token: string, id: string) {
+  return req<{ data: { approvalId: string; executed: boolean; error: string | null } }>(
+    "POST",
+    `/api/approvals/${id}/retry-execution`,
+    token,
+  );
 }
 
 export interface SimulateResponse {
@@ -555,6 +623,14 @@ export interface ToolPermissionRow {
   expiresAfterMin: number;
   allowModification: boolean;
   updatedAt: string | null;
+  /** Display grouping + policy floor, from the canonical shared table. */
+  riskGroup?: import("./tool-availability-client").RiskGroup;
+  /** Facts that decide availability. Absent means "not blocking". */
+  integration?: string | null;
+  integrationConnected?: boolean;
+  requiredScopes?: string[];
+  grantedScopes?: string[];
+  hasCatalogEntry?: boolean;
 }
 
 export function listToolPermissions(token: string) {
@@ -571,7 +647,7 @@ export function updateToolPermission(
 
 // ─── Customer Intelligence V2 - Industry Packs + Field Registry ──
 
-export type FieldScope = "customer" | "opportunity" | "conversation";
+export type FieldScope = "customer" | "opportunity" | "conversation" | "review_required";
 export type FieldTypeName = "text" | "number" | "boolean" | "enum" | "date" | "entity_ref";
 export type FieldOriginName = "pack" | "custom" | "discovered";
 
@@ -590,6 +666,9 @@ export interface FieldDefinition {
   crmFieldMap?: Record<string, unknown> | null;
   origin: FieldOriginName;
   packSlug?: string | null;
+  examples?: string[];
+  negativeExamples?: string[];
+  confidenceThreshold?: number | null;
 }
 
 export interface PackFieldTemplate {
@@ -707,4 +786,76 @@ export function getCustomerSnapshot(token: string, opts: { conversationId?: stri
   if (opts.conversationId) q.set("conversationId", opts.conversationId);
   if (opts.identityKey) q.set("identityKey", opts.identityKey);
   return req<{ ok: boolean; snapshot: CustomerSnapshot }>("GET", `/api/customer-snapshot?${q.toString()}`, token);
+}
+
+// ─── Customer Intelligence V2 - Review Queue ─────────────────
+
+export interface IntelligenceReview {
+  id: string;
+  entityType: string;
+  entityId: string;
+  fieldKey: string;
+  proposedValue: unknown;
+  currentValue: unknown;
+  confidence: number;
+  evidence: string | null;
+  reason: string;
+  status: string;
+  conversationId: string | null;
+  createdAt: string;
+}
+
+export function listIntelligenceReviews(token: string) {
+  return req<{ reviews: IntelligenceReview[]; pending: number }>(
+    "GET",
+    "/api/intelligence-reviews",
+    token,
+  );
+}
+
+export function approveIntelligenceReview(token: string, id: string) {
+  return req("POST", `/api/intelligence-reviews/${encodeURIComponent(id)}/approve`, token);
+}
+
+export function rejectIntelligenceReview(token: string, id: string) {
+  return req("POST", `/api/intelligence-reviews/${encodeURIComponent(id)}/reject`, token);
+}
+
+// ─── Business Rules (AI action policies) ─────────────────────
+
+export interface BusinessPolicyRow {
+  id: string;
+  actionKind: string;
+  enabled: boolean;
+  version: number;
+  config: Record<string, unknown>;
+}
+
+export function listBusinessPolicies(token: string) {
+  return req<{ data: { actionKinds: string[]; policies: BusinessPolicyRow[] } }>(
+    "GET",
+    "/api/business-policies",
+    token,
+  );
+}
+
+export function saveBusinessPolicy(
+  token: string,
+  actionKind: string,
+  body: { enabled: boolean; config: Record<string, unknown> },
+) {
+  return req<{ data: BusinessPolicyRow }>("PUT", `/api/business-policies/${actionKind}`, token, body);
+}
+
+export function previewBusinessPolicy(
+  token: string,
+  actionKind: string,
+  facts: Record<string, unknown>,
+) {
+  return req<{ data: { decision: string; maxAmount?: number; reasonCodes: string[] } }>(
+    "POST",
+    `/api/business-policies/${actionKind}/preview`,
+    token,
+    { facts },
+  );
 }

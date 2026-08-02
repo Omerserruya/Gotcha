@@ -11,7 +11,12 @@ import {
   slackInboundAdapter,
   decryptCredentials,
   crossTenantMiddleware,
+  verifyWebhookSignature,
+  verifySharedSecretToken,
+  timingSafeEqualStr,
 } from "@chatcenter/shared";
+
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
 import type { NormalizedInboundMessage, NormalizedStatusUpdate } from "@chatcenter/shared";
 
 const router = Router();
@@ -82,17 +87,20 @@ router.post("/", async (req: Request, res: Response) => {
       return;
     }
 
-    // Step 2: Verify signature
-    const signatureHeader = adapter.getSignatureHeader();
-    const signature = req.headers[signatureHeader] as string;
-    if (signature) {
-      // Try channel account secret first, fall back to app secret
-      const appSecret = process.env.WHATSAPP_APP_SECRET || process.env.META_APP_SECRET;
-      const rawBody = (req as any).rawBody;
-      if (appSecret && rawBody && !adapter.verifySignature(appSecret, rawBody, signature)) {
-        console.error(`Invalid webhook signature for ${adapter.channel}`);
-        return;
-      }
+    // Step 2: Verify signature (MANDATORY, fail-closed). Verification is done
+    // via the shared verifier so no route can regress to the old "skip when the
+    // header is absent" bypass. A missing signature, missing/unconfigured app
+    // secret, or HMAC mismatch all drop the request.
+    const appSecret = process.env.WHATSAPP_APP_SECRET || process.env.META_APP_SECRET;
+    const verdict = verifyWebhookSignature({
+      secret: appSecret,
+      rawBody: (req as any).rawBody,
+      signature: req.headers[adapter.getSignatureHeader()] as string | undefined,
+      verify: (s, b, sig) => adapter.verifySignature(s, b, sig),
+    });
+    if (!verdict.ok) {
+      console.error(`[WEBHOOK] Rejected ${adapter.channel} webhook: ${verdict.reason}`);
+      return;
     }
 
     // Step 2.5: Template-related updates from WhatsApp arrive at the WABA level
@@ -327,14 +335,31 @@ async function handleStatusUpdate(tenantId: string, status: NormalizedStatusUpda
 
   if (message) {
     // Persist Meta's failure reason when present so the operator can see
-    // *why* - empty error_message after a FAILED webhook is unhelpful.
+    // *why* - empty error_message after a FAILED webhook is unhelpful. Store
+    // BOTH the human string (errorMessage column) and the full structured
+    // provider breakdown (metadata.sendError) so an async delivery failure is
+    // as diagnosable as a synchronous send failure.
+    const failureData =
+      mappedStatus === "FAILED" && (status.errorMessage || status.error)
+        ? {
+            ...(status.errorMessage ? { errorMessage: status.errorMessage } : {}),
+            ...(status.error
+              ? {
+                  metadata: {
+                    ...((message.metadata && typeof message.metadata === "object")
+                      ? (message.metadata as Record<string, any>)
+                      : {}),
+                    sendError: status.error,
+                  },
+                }
+              : {}),
+          }
+        : {};
     await prisma.message.update({
       where: { id: message.id },
       data: {
         status: mappedStatus as any,
-        ...(mappedStatus === "FAILED" && status.errorMessage
-          ? { errorMessage: status.errorMessage }
-          : {}),
+        ...failureData,
       },
     });
     // Mirror onto ScheduledMessage so its UI reflects the real outcome
@@ -360,6 +385,7 @@ async function handleStatusUpdate(tenantId: string, status: NormalizedStatusUpda
         conversationId: message.conversationId,
         status: mappedStatus,
         error: mappedStatus === "FAILED" ? status.errorMessage ?? null : null,
+        sendError: mappedStatus === "FAILED" ? status.error ?? null : null,
         scheduledMessageId: (message as any).scheduledMessageId ?? null,
       },
     });
@@ -376,6 +402,21 @@ router.post("/email", async (req: Request, res: Response) => {
 
     // Use the email adapter directly
     const { emailInboundAdapter } = await import("@chatcenter/shared");
+
+    // MANDATORY signature verification (fail-closed). The inbound-email provider
+    // signs the raw body with EMAIL_WEBHOOK_SECRET (HMAC-SHA256). Without this,
+    // the tenant is resolved from the attacker-controlled recipient address and
+    // anyone could inject a forged customer email into any tenant.
+    const emailVerdict = verifyWebhookSignature({
+      secret: process.env.EMAIL_WEBHOOK_SECRET,
+      rawBody: (req as any).rawBody,
+      signature: req.headers[emailInboundAdapter.getSignatureHeader()] as string | undefined,
+      verify: (s, b, sig) => emailInboundAdapter.verifySignature(s, b, sig),
+    });
+    if (!emailVerdict.ok) {
+      console.error(`[WEBHOOK] Rejected email webhook: ${emailVerdict.reason}`);
+      return;
+    }
 
     if (!emailInboundAdapter.canHandle(body)) {
       console.warn("Email webhook: invalid payload");
@@ -436,6 +477,20 @@ router.post("/gmail", async (req: Request, res: Response) => {
   try {
     const body = req.body;
     console.log(`[WEBHOOK] Gmail push notification received`);
+
+    // Verify the Google Pub/Sub push token. Configure the push subscription URL
+    // with ?token=<GMAIL_PUBSUB_TOKEN>; Google echoes it on every push. Missing
+    // or mismatched token is dropped (fail-closed in production).
+    const gmailVerdict = verifySharedSecretToken({
+      expected: process.env.GMAIL_PUBSUB_TOKEN,
+      provided: (req.query.token as string | undefined) ?? undefined,
+      isProduction: IS_PRODUCTION,
+      label: "Gmail Pub/Sub",
+    });
+    if (!gmailVerdict.ok) {
+      console.error(`[WEBHOOK] Rejected Gmail webhook: ${gmailVerdict.reason}`);
+      return;
+    }
 
     if (!gmailInboundAdapter.canHandle(body)) {
       console.warn("Gmail webhook: invalid payload");
@@ -549,6 +604,23 @@ router.post("/outlook", async (req: Request, res: Response) => {
     const body = req.body;
     console.log(`[WEBHOOK] Outlook notification received, count=${body?.value?.length || 0}`);
 
+    // Verify the Microsoft Graph clientState (set at subscription creation).
+    // Every notification must carry the matching secret, else it is dropped
+    // (fail-closed in production).
+    const notifications: any[] = Array.isArray(body?.value) ? body.value : [];
+    for (const n of notifications) {
+      const outlookVerdict = verifySharedSecretToken({
+        expected: process.env.OUTLOOK_WEBHOOK_CLIENT_STATE,
+        provided: n?.clientState,
+        isProduction: IS_PRODUCTION,
+        label: "Outlook clientState",
+      });
+      if (!outlookVerdict.ok) {
+        console.error(`[WEBHOOK] Rejected Outlook webhook: ${outlookVerdict.reason}`);
+        return;
+      }
+    }
+
     if (!outlookInboundAdapter.canHandle(body)) {
       console.warn("Outlook webhook: invalid payload");
       return;
@@ -616,35 +688,45 @@ router.post("/slack", async (req: Request, res: Response) => {
     return;
   }
 
-  // Verify Slack request signature
-  const slackSigningSecret = process.env.SLACK_SIGNING_SECRET || "";
-  if (slackSigningSecret) {
-    const timestamp = req.headers["x-slack-request-timestamp"] as string;
-    const slackSignature = req.headers["x-slack-signature"] as string;
-    const rawBody = (req as any).rawBody;
+  // MANDATORY Slack signature verification (fail-closed). Slack signs
+  // `v0:timestamp:rawBody` with SLACK_SIGNING_SECRET (HMAC-SHA256) and sends
+  // it in x-slack-signature. The old code only verified when the secret was
+  // set AND all headers were present, so an unset secret OR an omitted
+  // signature header bypassed verification entirely - identical to the C-2
+  // Meta bypass. Now: unset secret rejects in production; a missing timestamp,
+  // signature, or raw body rejects; a stale timestamp or HMAC mismatch rejects.
+  // Every drop returns BEFORE the message is enqueued.
+  const slackSigningSecret = process.env.SLACK_SIGNING_SECRET;
+  const timestamp = req.headers["x-slack-request-timestamp"] as string | undefined;
+  const slackSignature = req.headers["x-slack-signature"] as string | undefined;
+  const rawBody = (req as any).rawBody as Buffer | undefined;
 
-    if (timestamp && slackSignature && rawBody) {
-      const fiveMinutesAgo = Math.floor(Date.now() / 1000) - 300;
-      if (parseInt(timestamp) < fiveMinutesAgo) {
-        console.warn("[WEBHOOK] Slack request too old, possible replay attack");
-        res.sendStatus(403);
-        return;
-      }
-
-      const sigBasestring = `v0:${timestamp}:${rawBody.toString()}`;
-      const mySignature = "v0=" + crypto.createHmac("sha256", slackSigningSecret).update(sigBasestring).digest("hex");
-
-      try {
-        if (!crypto.timingSafeEqual(Buffer.from(mySignature), Buffer.from(slackSignature))) {
-          console.error("[WEBHOOK] Invalid Slack signature");
-          res.sendStatus(403);
-          return;
-        }
-      } catch {
-        console.error("[WEBHOOK] Slack signature verification failed");
-        res.sendStatus(403);
-        return;
-      }
+  if (!slackSigningSecret) {
+    if (IS_PRODUCTION) {
+      console.error("[WEBHOOK] Rejected Slack webhook: SLACK_SIGNING_SECRET not configured");
+      res.sendStatus(403);
+      return;
+    }
+    console.warn("[WEBHOOK] SLACK_SIGNING_SECRET not set; allowing Slack webhook in non-production only");
+  } else {
+    if (!timestamp || !slackSignature || !rawBody) {
+      console.error("[WEBHOOK] Rejected Slack webhook: missing signature material");
+      res.sendStatus(403);
+      return;
+    }
+    const ts = parseInt(timestamp, 10);
+    const fiveMinutesAgo = Math.floor(Date.now() / 1000) - 300;
+    if (!Number.isFinite(ts) || ts < fiveMinutesAgo) {
+      console.warn("[WEBHOOK] Rejected Slack webhook: stale/invalid timestamp (possible replay)");
+      res.sendStatus(403);
+      return;
+    }
+    const sigBasestring = `v0:${timestamp}:${rawBody.toString()}`;
+    const mySignature = "v0=" + crypto.createHmac("sha256", slackSigningSecret).update(sigBasestring).digest("hex");
+    if (!timingSafeEqualStr(mySignature, slackSignature)) {
+      console.error("[WEBHOOK] Rejected Slack webhook: signature mismatch");
+      res.sendStatus(403);
+      return;
     }
   }
 

@@ -64,9 +64,11 @@ export const outlookInboundAdapter: InboundAdapter = {
 
   verifySignature(_appSecret: string, _rawBody: Buffer, signature: string): boolean {
     // Microsoft Graph validates subscriptions via a clientState value
-    // included in the subscription creation request
-    // The clientState is sent back in every notification
-    if (!signature || !_appSecret) return true;
+    // included in the subscription creation request; the clientState is sent
+    // back in every notification. Route-level verification uses
+    // verifySharedSecretToken against OUTLOOK_WEBHOOK_CLIENT_STATE; this method
+    // stays fail-closed so it is never a bypass if called directly.
+    if (!signature || !_appSecret) return false;
     try {
       return crypto.timingSafeEqual(
         Buffer.from(_appSecret),

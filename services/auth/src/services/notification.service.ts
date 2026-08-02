@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import nodemailer from "nodemailer";
-import { prisma, publishEvent } from "@chatcenter/shared";
+import { prisma, publishEvent, ensureIdentity, createRecoveryLink, findIdentityBySubject } from "@chatcenter/shared";
 
 type NotificationChannel = "email" | "slack" | "webhook" | "internal";
 
@@ -48,6 +48,16 @@ function getTransporter(): nodemailer.Transporter {
   return transporter;
 }
 
+/**
+ * True only when real SMTP creds are configured. Without them, getTransporter
+ * returns a STUB that only console.logs - so callers that must report HONEST
+ * delivery (the Nudge Engine / the AI's Voice) check this to avoid marking an
+ * un-sent email as SENT (T-4: "the Voice is mute but the system reports speaking").
+ */
+export function isEmailTransportConfigured(): boolean {
+  return !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+}
+
 async function logNotification(payload: NotificationPayload, status: "sent" | "failed", error?: string) {
   await prisma.notificationLog.create({
     data: {
@@ -72,192 +82,258 @@ async function sendHtmlEmail(to: string, subject: string, html: string, text: st
   console.log(`[EMAIL] Sent to: ${to} | Subject: ${subject}`);
 }
 
-// ─── Magic Link Token Generation ────────────────────────────
+// ─── Setup / Sign-in Links ──────────────────────────────────
 
-const MAGIC_LINK_EXPIRY_HOURS = 48;
-
-export async function createMagicLink(tenantId: string, userId: string): Promise<string> {
-  const token = crypto.randomBytes(32).toString("hex");
-  const expiresAt = new Date(Date.now() + MAGIC_LINK_EXPIRY_HOURS * 60 * 60 * 1000);
-
-  await prisma.magicLink.create({
-    data: { token, tenantId, userId, expiresAt },
+/**
+ * One-time link that drops a user into Authentik to set their password.
+ *
+ * This replaces the old home-grown magic link. GOTCHA no longer mints
+ * credentials-bearing tokens of any kind: the link is issued by Authentik,
+ * expires on Authentik's schedule, and is single-use by Authentik's rules.
+ */
+export async function createSetupLink(userId: string): Promise<string> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { email: true, name: true, identity: { select: { authentikSubject: true } } },
   });
+  if (!user) throw new Error("User not found");
 
-  return token;
+  const identity = user.identity?.authentikSubject
+    ? await findIdentityBySubject(user.identity.authentikSubject)
+    : await ensureIdentity(user.email, user.name);
+  if (!identity) throw new Error("No Authentik identity for user");
+
+  return createRecoveryLink(identity.pk);
 }
 
-// ─── HTML Email Templates ───────────────────────────────────
+/**
+ * Where to send someone who just needs to log in (nudge emails, "come back"
+ * links). There is no token to embed: the app bounces them to Authentik, and
+ * if they still have a session they land straight in the workspace.
+ */
+export function signInUrl(): string {
+  return process.env.FRONTEND_URL || "http://localhost:3000";
+}
 
-function onboardingEmailHtml(adminName: string, tenantName: string, setupUrl: string): string {
-  const frontendUrl = process.env.FRONTEND_URL || "https://gotcha.co.il";
-  const logoUrl = `${frontendUrl}/logo.png`;
+// ─── Brand Email System (light, premium, RTL-aware) ─────────
+//
+// One visual system for every email the product sends: a soft light canvas, a
+// single white card with a brand-gradient hairline, generous whitespace, and
+// the brand palette used as accents - never as a wall of color. Every template
+// below composes this shell; the Nudge Engine imports it too, so the AI's
+// Voice and the product's transactional mail read as one product.
 
+const EC = {
+  canvas: "#f4f3f9",
+  border: "#eae7f2",
+  divider: "#f0eef6",
+  ink: "#1d1a26",
+  body: "#5b556b",
+  muted: "#8f89a0",
+  faint: "#b3adc2",
+  violet: "#7C3291",
+  chipBg: "#f6f1fa",
+  tint: "#faf9fc",
+  tintBorder: "#edeaf3",
+  grad: "linear-gradient(90deg,#7C3291 0%,#5A72B3 55%,#6DCED9 100%)",
+  gradBtn: "linear-gradient(135deg,#7C3291 0%,#5A72B3 100%)",
+} as const;
+
+const EMAIL_FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif";
+
+export function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string));
+}
+
+export interface BrandEmailArgs {
+  title: string;               // <title>
+  preheader?: string;          // hidden inbox preview line
+  eyebrow?: string;            // small uppercase label above the headline
+  icon?: string;               // emoji / HTML entity rendered in a soft chip
+  headline: string;            // escape dynamic parts at the call site
+  subhead?: string;
+  bodyHtml?: string;           // inner card rows (use the email* helpers)
+  cta?: { label: string; url: string };
+  fallbackUrl?: string;        // "button not working?" link
+  expiryNote?: string;
+  closingHtml?: string;        // replaces the default sign-off when set
+  belowCardHtml?: string;      // extra block between the card and the footer
+  footerNote?: string;         // the "why you got this" line
+  locale?: string;             // "he" → RTL
+}
+
+export function renderBrandEmail(a: BrandEmailArgs): string {
+  const he = a.locale === "he";
+  const dir = he ? "rtl" : "ltr";
+  const align = he ? "right" : "left";
+  const closing = a.closingHtml ?? `
+      <p style="margin:0 0 14px;font-size:14px;color:${EC.muted};line-height:1.6;">${he ? "צריכים עזרה? פשוט השיבו למייל - בן אדם אמיתי קורא כל הודעה." : "Need help? Just hit reply &mdash; a real human reads every message."}</p>
+      <p style="margin:0;font-size:14px;color:${EC.muted};">${he ? "נתראה בקרוב," : "Talk soon,"}<br><strong style="color:${EC.ink};">${he ? "צוות GOTCHA." : "The GOTCHA. Team"}</strong></p>`;
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${he ? "he" : "en"}" dir="${dir}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Set up ${tenantName} &mdash; GOTCHA.</title>
-  <!--[if mso]>
-  <style>table,td{font-family:Arial,sans-serif;}</style>
-  <![endif]-->
+  <title>${a.title}</title>
+  <!--[if mso]><style>table,td{font-family:Arial,sans-serif;}</style><![endif]-->
 </head>
-<body style="margin:0;padding:0;background-color:#08080c;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;-webkit-font-smoothing:antialiased;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#08080c;">
-    <tr>
-      <td align="center" style="padding:40px 16px 20px;">
+<body dir="${dir}" style="margin:0;padding:0;background-color:${EC.canvas};font-family:${EMAIL_FONT};-webkit-font-smoothing:antialiased;">
+  ${a.preheader ? `<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">${a.preheader}</div>` : ""}
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:${EC.canvas};">
+    <tr><td align="center" style="padding:48px 16px 24px;">
 
-        <!-- ━━━ Logo ━━━ -->
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
-          <tr>
-            <td align="center" style="padding-bottom:32px;">
-              <img src="${logoUrl}" alt="GOTCHA." width="140" style="display:block;border:0;outline:none;max-width:140px;height:auto;" />
-            </td>
-          </tr>
-        </table>
+      <!-- wordmark -->
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:560px;">
+        <tr><td align="center" style="padding-bottom:26px;">
+          <span style="font-size:15px;font-weight:800;letter-spacing:4px;color:${EC.ink};">GOTCHA<span style="color:${EC.violet};">.</span></span>
+        </td></tr>
+      </table>
 
-        <!-- ━━━ Hero Banner ━━━ -->
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
-          <tr>
-            <td style="background:linear-gradient(135deg,#7C3291 0%,#5A72B3 50%,#6DCED9 100%);border-radius:20px 20px 0 0;padding:48px 40px 40px;text-align:center;">
-              <!-- Lightning circle -->
-              <div style="margin:0 auto 20px;width:68px;height:68px;border-radius:50%;background-color:rgba(255,255,255,0.18);line-height:68px;text-align:center;">
-                <span style="font-size:34px;color:#ffffff;">&#9889;</span>
-              </div>
-              <h1 style="margin:0 0 8px;font-size:30px;font-weight:800;color:#ffffff;line-height:1.2;letter-spacing:-0.5px;">
-                Let's set up ${tenantName}.
-              </h1>
-              <p style="margin:0;font-size:16px;color:rgba(255,255,255,0.85);line-height:1.5;font-weight:400;">
-                Your workspace is ready, ${adminName}.
-              </p>
-            </td>
-          </tr>
-        </table>
+      <!-- card -->
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" dir="${dir}" style="width:100%;max-width:560px;background-color:#ffffff;border:1px solid ${EC.border};border-radius:24px;overflow:hidden;box-shadow:0 12px 40px rgba(29,26,38,0.06);">
+        <tr><td style="height:5px;background:${EC.grad};font-size:0;line-height:0;">&nbsp;</td></tr>
+        <tr><td style="padding:44px 44px 0;text-align:${align};">
+          ${a.icon ? `<div style="width:58px;height:58px;border-radius:18px;background-color:${EC.chipBg};text-align:center;line-height:58px;font-size:27px;margin-bottom:22px;">${a.icon}</div>` : ""}
+          ${a.eyebrow ? `<p style="margin:0 0 10px;font-size:11px;font-weight:700;color:${EC.violet};text-transform:uppercase;letter-spacing:2px;">${a.eyebrow}</p>` : ""}
+          <h1 style="margin:0;font-size:28px;font-weight:800;color:${EC.ink};line-height:1.25;letter-spacing:-0.4px;">${a.headline}</h1>
+          ${a.subhead ? `<p style="margin:10px 0 0;font-size:16px;color:${EC.body};line-height:1.6;">${a.subhead}</p>` : ""}
+        </td></tr>
+        ${a.bodyHtml || ""}
+        ${a.cta ? `<tr><td style="padding:34px 44px 6px;text-align:${align};">
+          <a href="${a.cta.url}" target="_blank" style="display:inline-block;background:${EC.gradBtn};color:#ffffff;font-size:16px;font-weight:700;text-decoration:none;padding:15px 38px;border-radius:14px;box-shadow:0 8px 22px rgba(124,50,145,0.28);mso-padding-alt:15px 38px;">${a.cta.label} ${he ? "&larr;" : "&rarr;"}</a>
+        </td></tr>` : ""}
+        ${a.fallbackUrl ? `<tr><td style="padding:28px 44px 0;text-align:${align};">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid ${EC.divider};"><tr><td style="padding:20px 0 0;">
+            <p style="margin:0;font-size:12px;color:${EC.muted};line-height:1.6;">${he ? "הכפתור לא עובד? העתיקו את הקישור:" : "Button not working? Copy this link:"}<br>
+              <a href="${a.fallbackUrl}" style="color:${EC.violet};word-break:break-all;font-size:12px;">${a.fallbackUrl}</a></p>
+            ${a.expiryNote ? `<p style="margin:8px 0 0;font-size:12px;color:${EC.faint};">${a.expiryNote}</p>` : ""}
+          </td></tr></table>
+        </td></tr>` : ""}
+        <tr><td style="padding:32px 44px 42px;text-align:${align};">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid ${EC.divider};"><tr><td style="padding:24px 0 0;">${closing}</td></tr></table>
+        </td></tr>
+      </table>
 
-        <!-- ━━━ CTA Button ━━━ -->
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
-          <tr>
-            <td style="background-color:#0f0f16;padding:36px 40px 32px;text-align:center;">
-              <a href="${setupUrl}" target="_blank" style="display:inline-block;background-color:#7C3291;color:#ffffff;font-size:16px;font-weight:700;text-decoration:none;padding:14px 40px;border-radius:12px;mso-padding-alt:14px 40px;">
-                Start Setup Wizard &rarr;
-              </a>
-            </td>
-          </tr>
-        </table>
+      ${a.belowCardHtml || ""}
 
-        <!-- ━━━ Timeline Steps ━━━ -->
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
-          <tr>
-            <td style="background-color:#0f0f16;padding:0 40px 32px;">
-              <p style="margin:0 0 22px;font-size:11px;font-weight:700;color:#7C3291;text-transform:uppercase;letter-spacing:1.2px;">What you'll do</p>
+      <!-- footer -->
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:560px;">
+        <tr><td align="center" style="padding:26px 16px 8px;">
+          <p style="margin:0;color:${EC.muted};font-size:11px;line-height:1.7;">${he ? "GOTCHA. - בונים את עתיד התקשורת עם הלקוחות." : "GOTCHA. &mdash; Building the future of customer communication."}</p>
+          ${a.footerNote ? `<p style="margin:6px 0 0;color:${EC.faint};font-size:11px;line-height:1.7;">${a.footerNote}</p>` : ""}
+        </td></tr>
+      </table>
 
-              <!-- Step 1 -->
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:4px;">
-                <tr>
-                  <td style="width:40px;vertical-align:top;padding-top:2px;">
-                    <div style="width:30px;height:30px;background:linear-gradient(135deg,#7C3291,#5A72B3);border-radius:50%;text-align:center;line-height:30px;color:#fff;font-size:13px;font-weight:800;">1</div>
-                  </td>
-                  <td style="vertical-align:top;padding-bottom:22px;border-left:2px solid rgba(124,50,145,0.2);padding-left:20px;">
-                    <p style="margin:0;font-size:15px;font-weight:700;color:#e4e4e7;">Business Profile</p>
-                    <p style="margin:5px 0 0;font-size:13px;color:#71717a;line-height:1.55;">Industry, priorities, and preferences</p>
-                  </td>
-                </tr>
-              </table>
-
-              <!-- Step 2 -->
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:4px;">
-                <tr>
-                  <td style="width:40px;vertical-align:top;padding-top:2px;">
-                    <div style="width:30px;height:30px;background:linear-gradient(135deg,#5A72B3,#6DCED9);border-radius:50%;text-align:center;line-height:30px;color:#fff;font-size:13px;font-weight:800;">2</div>
-                  </td>
-                  <td style="vertical-align:top;padding-bottom:22px;border-left:2px solid rgba(90,114,179,0.2);padding-left:20px;">
-                    <p style="margin:0;font-size:15px;font-weight:700;color:#e4e4e7;">Departments &amp; SLAs</p>
-                    <p style="margin:5px 0 0;font-size:13px;color:#71717a;line-height:1.55;">Teams, response targets, and automation rules</p>
-                  </td>
-                </tr>
-              </table>
-
-              <!-- Step 3 -->
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-                <tr>
-                  <td style="width:40px;vertical-align:top;padding-top:2px;">
-                    <div style="width:30px;height:30px;background:linear-gradient(135deg,#10b981,#6DCED9);border-radius:50%;text-align:center;line-height:30px;color:#fff;font-size:15px;font-weight:800;">&#10003;</div>
-                  </td>
-                  <td style="vertical-align:top;padding-left:20px;">
-                    <p style="margin:0;font-size:15px;font-weight:700;color:#e4e4e7;">AI Agents</p>
-                    <p style="margin:5px 0 0;font-size:13px;color:#71717a;line-height:1.55;">Auto-configured for each department</p>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-        </table>
-
-        <!-- ━━━ Fallback Link + Expiry ━━━ -->
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
-          <tr>
-            <td style="background-color:#0f0f16;padding:0 40px 32px;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid rgba(255,255,255,0.06);">
-                <tr>
-                  <td style="padding:24px 0 0;">
-                    <p style="margin:0;font-size:12px;color:#71717a;line-height:1.6;">
-                      Button not working? Copy this link:<br>
-                      <a href="${setupUrl}" style="color:#6DCED9;word-break:break-all;font-size:12px;">${setupUrl}</a>
-                    </p>
-                    <p style="margin:10px 0 0;font-size:12px;color:#52525b;">
-                      This link expires in <strong style="color:#6DCED9;">48 hours</strong> &bull; No login required
-                    </p>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-        </table>
-
-        <!-- ━━━ Closing ━━━ -->
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
-          <tr>
-            <td style="background-color:#0f0f16;border-radius:0 0 20px 20px;padding:0 40px 40px;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid rgba(255,255,255,0.06);">
-                <tr>
-                  <td style="padding:28px 0 0;text-align:center;">
-                    <p style="margin:0 0 20px;font-size:14px;color:#71717a;line-height:1.6;">
-                      Need help? Just hit reply &mdash; a real human reads every message.
-                    </p>
-                    <p style="margin:0;font-size:14px;color:#52525b;">
-                      Talk soon,<br>
-                      <strong style="color:#e4e4e7;">The GOTCHA. Team</strong>
-                    </p>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-        </table>
-
-        <!-- ━━━ Footer ━━━ -->
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
-          <tr>
-            <td align="center" style="padding:28px 16px 12px;">
-              <p style="margin:0;color:#3f3f46;font-size:11px;line-height:18px;">
-                GOTCHA. &mdash; Smart messaging for modern teams.
-              </p>
-              <p style="margin:8px 0 0;color:#27272a;font-size:11px;">
-                You're receiving this because your workspace was created on gotcha.co.il
-              </p>
-            </td>
-          </tr>
-        </table>
-
-      </td>
-    </tr>
+    </td></tr>
   </table>
 </body>
 </html>`;
 }
 
-function activationEmailHtml(
+// Section builders - each returns a full-width card row (<tr>…</tr>).
+
+export function emailParagraph(html: string, locale?: string): string {
+  const align = locale === "he" ? "right" : "left";
+  return `<tr><td style="padding:26px 44px 0;text-align:${align};"><p style="margin:0;font-size:15px;color:${EC.body};line-height:1.75;">${html}</p></td></tr>`;
+}
+
+function emailSteps(caption: string, steps: Array<{ marker: string; title: string; desc: string }>): string {
+  const rows = steps.map((s, i) => `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:${i === steps.length - 1 ? "0" : "18px"};">
+      <tr>
+        <td style="width:42px;vertical-align:top;padding-top:1px;">
+          <div style="width:30px;height:30px;background:${EC.gradBtn};border-radius:50%;text-align:center;line-height:30px;color:#ffffff;font-size:13px;font-weight:800;">${s.marker}</div>
+        </td>
+        <td style="vertical-align:top;padding-left:14px;">
+          <p style="margin:0;font-size:15px;font-weight:700;color:${EC.ink};">${s.title}</p>
+          <p style="margin:4px 0 0;font-size:13px;color:${EC.muted};line-height:1.6;">${s.desc}</p>
+        </td>
+      </tr>
+    </table>`).join("");
+  return `<tr><td style="padding:32px 44px 0;">
+    <p style="margin:0 0 18px;font-size:11px;font-weight:700;color:${EC.violet};text-transform:uppercase;letter-spacing:2px;">${caption}</p>
+    ${rows}
+  </td></tr>`;
+}
+
+function emailStatCards(cards: Array<{ label: string; value: string }>): string {
+  const w = Math.floor(100 / Math.max(cards.length, 1));
+  const tds = cards.map((c) => `
+    <td style="width:${w}%;padding:0 4px;vertical-align:top;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:${EC.tint};border:1px solid ${EC.tintBorder};border-radius:14px;">
+        <tr><td style="padding:16px 12px;text-align:center;">
+          <p style="margin:0;font-size:10px;font-weight:700;color:${EC.violet};text-transform:uppercase;letter-spacing:1px;">${c.label}</p>
+          <p style="margin:6px 0 0;font-size:14px;font-weight:700;color:${EC.ink};">${c.value}</p>
+        </td></tr>
+      </table>
+    </td>`).join("");
+  return `<tr><td style="padding:30px 40px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>${tds}</tr></table>
+  </td></tr>`;
+}
+
+function emailKeyValueTable(headers: [string, string], rows: Array<[string, string]>): string {
+  const body = rows.map(([k, v]) => `
+      <tr>
+        <td style="padding:12px 16px;border-top:1px solid ${EC.divider};font-size:14px;color:${EC.ink};">${k}</td>
+        <td style="padding:12px 16px;border-top:1px solid ${EC.divider};text-align:center;font-size:14px;color:${EC.muted};">${v}</td>
+      </tr>`).join("");
+  return `<tr><td style="padding:26px 44px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:${EC.tint};border:1px solid ${EC.tintBorder};border-radius:14px;overflow:hidden;">
+      <tr>
+        <td style="padding:12px 16px;font-size:11px;font-weight:700;color:${EC.muted};text-transform:uppercase;letter-spacing:1px;">${headers[0]}</td>
+        <td style="padding:12px 16px;font-size:11px;font-weight:700;color:${EC.muted};text-transform:uppercase;letter-spacing:1px;text-align:center;">${headers[1]}</td>
+      </tr>
+      ${body}
+    </table>
+  </td></tr>`;
+}
+
+function emailBadge(caption: string, value: string): string {
+  return `<tr><td style="padding:30px 44px 0;" align="center">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;background-color:${EC.chipBg};border:1px solid ${EC.tintBorder};border-radius:16px;">
+      <tr><td style="padding:16px 36px;text-align:center;">
+        <p style="margin:0 0 2px;font-size:10px;font-weight:700;color:${EC.violet};text-transform:uppercase;letter-spacing:2px;">${caption}</p>
+        <p style="margin:0;font-size:34px;font-weight:800;color:${EC.ink};letter-spacing:-1px;">${value}</p>
+      </td></tr>
+    </table>
+  </td></tr>`;
+}
+
+function emailPills(caption: string, items: string[]): string {
+  const rows = items.map((t) => `
+      <tr><td style="padding:6px 0;"><span style="font-size:13px;color:${EC.body};"><span style="color:${EC.violet};">&#9670;</span>&nbsp;&nbsp;${t}</span></td></tr>`).join("");
+  return `<tr><td style="padding:28px 44px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:${EC.tint};border:1px solid ${EC.tintBorder};border-radius:14px;">
+      <tr><td style="padding:18px 24px 6px;"><p style="margin:0;font-size:10px;font-weight:700;color:${EC.muted};text-transform:uppercase;letter-spacing:1px;">${caption}</p></td></tr>
+      <tr><td style="padding:0 24px 16px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${rows}</table></td></tr>
+    </table>
+  </td></tr>`;
+}
+
+// ─── HTML Email Templates ───────────────────────────────────
+
+export function onboardingEmailHtml(adminName: string, tenantName: string, setupUrl: string): string {
+  return renderBrandEmail({
+    title: `Set up ${escapeHtml(tenantName)} - GOTCHA.`,
+    preheader: "Your workspace is ready - your AI wants to meet your business.",
+    eyebrow: "Your workspace is ready",
+    icon: "&#9889;",
+    headline: `Let's set up ${escapeHtml(tenantName)}.`,
+    subhead: `${escapeHtml(adminName)}, your AI employee is ready to meet your business &mdash; it does the reading, you do the approving.`,
+    bodyHtml: emailSteps("What happens next", [
+      { marker: "1", title: "Watch it investigate your business", desc: "It reads your website end to end and shows you everything it learned." },
+      { marker: "2", title: "Meet your first AI employee", desc: "Tuned to your brand voice &mdash; chat with it and shape it before it starts." },
+      { marker: "&#10003;", title: "Put it to work", desc: "Connect your channels and it handles real customer conversations from day one." },
+    ]),
+    cta: { label: "Start setup", url: setupUrl },
+    fallbackUrl: setupUrl,
+    expiryNote: `This link expires in <strong style="color:#7C3291;">48 hours</strong> &bull; No login required`,
+    footerNote: "You're receiving this because your workspace was created on gotcha.co.il",
+  });
+}
+
+export function activationEmailHtml(
   adminName: string,
   tenantName: string,
   industry: string,
@@ -265,429 +341,73 @@ function activationEmailHtml(
   departments: { name: string; sla: string }[],
   dashboardUrl: string,
 ): string {
-  const frontendUrl = process.env.FRONTEND_URL || "https://gotcha.co.il";
-  const logoUrl = `${frontendUrl}/logo.png`;
-
-  const deptRows = departments
-    .map(
-      (d) => `
-                      <tr>
-                        <td style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.06);font-size:14px;color:#e4e4e7;">${d.name}</td>
-                        <td style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.06);text-align:center;font-size:14px;color:#a1a1aa;">${d.sla}</td>
-                      </tr>`,
-    )
-    .join("");
-
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${tenantName} is live &mdash; GOTCHA.</title>
-  <!--[if mso]>
-  <style>table,td{font-family:Arial,sans-serif;}</style>
-  <![endif]-->
-</head>
-<body style="margin:0;padding:0;background-color:#08080c;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;-webkit-font-smoothing:antialiased;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#08080c;">
-    <tr>
-      <td align="center" style="padding:40px 16px 20px;">
-
-        <!-- ━━━ Logo ━━━ -->
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
-          <tr>
-            <td align="center" style="padding-bottom:32px;">
-              <img src="${logoUrl}" alt="GOTCHA." width="140" style="display:block;border:0;outline:none;max-width:140px;height:auto;" />
-            </td>
-          </tr>
-        </table>
-
-        <!-- ━━━ Hero Banner ━━━ -->
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
-          <tr>
-            <td style="background:linear-gradient(135deg,#7C3291 0%,#5A72B3 50%,#6DCED9 100%);border-radius:20px 20px 0 0;padding:48px 40px 40px;text-align:center;">
-              <!-- Checkmark circle -->
-              <div style="margin:0 auto 20px;width:68px;height:68px;border-radius:50%;background-color:rgba(255,255,255,0.18);line-height:68px;text-align:center;">
-                <span style="font-size:34px;color:#ffffff;">&#10003;</span>
-              </div>
-              <h1 style="margin:0 0 8px;font-size:30px;font-weight:800;color:#ffffff;line-height:1.2;letter-spacing:-0.5px;">
-                ${tenantName} is live.
-              </h1>
-              <p style="margin:0;font-size:16px;color:rgba(255,255,255,0.85);line-height:1.5;font-weight:400;">
-                Everything's set up and ready to go, ${adminName}.
-              </p>
-            </td>
-          </tr>
-        </table>
-
-        <!-- ━━━ Summary Cards ━━━ -->
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
-          <tr>
-            <td style="background-color:#0f0f16;padding:32px 40px 28px;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-                <tr>
-                  <td style="width:33%;padding-right:6px;vertical-align:top;">
-                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.06);border-radius:14px;">
-                      <tr>
-                        <td style="padding:16px 12px;text-align:center;">
-                          <p style="margin:0;font-size:10px;font-weight:700;color:#7C3291;text-transform:uppercase;letter-spacing:0.5px;">Industry</p>
-                          <p style="margin:6px 0 0;font-size:13px;font-weight:600;color:#e4e4e7;">${industry}</p>
-                        </td>
-                      </tr>
-                    </table>
-                  </td>
-                  <td style="width:33%;padding:0 3px;vertical-align:top;">
-                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.06);border-radius:14px;">
-                      <tr>
-                        <td style="padding:16px 12px;text-align:center;">
-                          <p style="margin:0;font-size:10px;font-weight:700;color:#5A72B3;text-transform:uppercase;letter-spacing:0.5px;">Priority</p>
-                          <p style="margin:6px 0 0;font-size:13px;font-weight:600;color:#e4e4e7;">${priority.replace(/_/g, " ")}</p>
-                        </td>
-                      </tr>
-                    </table>
-                  </td>
-                  <td style="width:33%;padding-left:6px;vertical-align:top;">
-                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.06);border-radius:14px;">
-                      <tr>
-                        <td style="padding:16px 12px;text-align:center;">
-                          <p style="margin:0;font-size:10px;font-weight:700;color:#6DCED9;text-transform:uppercase;letter-spacing:0.5px;">AI Copilot</p>
-                          <p style="margin:6px 0 0;font-size:13px;font-weight:600;color:#e4e4e7;">Active</p>
-                        </td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-        </table>
-
-        <!-- ━━━ Departments Table ━━━ -->
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
-          <tr>
-            <td style="background-color:#0f0f16;padding:0 40px 32px;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.06);border-radius:14px;overflow:hidden;">
-                <tr>
-                  <td style="padding:12px 16px;font-size:11px;font-weight:700;color:#52525b;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid rgba(255,255,255,0.06);">Department</td>
-                  <td style="padding:12px 16px;font-size:11px;font-weight:700;color:#52525b;text-transform:uppercase;letter-spacing:0.5px;text-align:center;border-bottom:1px solid rgba(255,255,255,0.06);">SLA</td>
-                </tr>
-                ${deptRows}
-              </table>
-            </td>
-          </tr>
-        </table>
-
-        <!-- ━━━ CTA Button ━━━ -->
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
-          <tr>
-            <td style="background-color:#0f0f16;padding:0 40px 32px;text-align:center;">
-              <a href="${dashboardUrl}" target="_blank" style="display:inline-block;background-color:#7C3291;color:#ffffff;font-size:16px;font-weight:700;text-decoration:none;padding:14px 40px;border-radius:12px;mso-padding-alt:14px 40px;">
-                Open Dashboard &rarr;
-              </a>
-            </td>
-          </tr>
-        </table>
-
-        <!-- ━━━ Closing ━━━ -->
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
-          <tr>
-            <td style="background-color:#0f0f16;border-radius:0 0 20px 20px;padding:0 40px 40px;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid rgba(255,255,255,0.06);">
-                <tr>
-                  <td style="padding:28px 0 0;text-align:center;">
-                    <p style="margin:0 0 20px;font-size:14px;color:#71717a;line-height:1.6;">
-                      Your AI agents are standing by &mdash; ready to handle every conversation.
-                    </p>
-                    <p style="margin:0;font-size:14px;color:#52525b;">
-                      Talk soon,<br>
-                      <strong style="color:#e4e4e7;">The GOTCHA. Team</strong>
-                    </p>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-        </table>
-
-        <!-- ━━━ Footer ━━━ -->
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
-          <tr>
-            <td align="center" style="padding:28px 16px 12px;">
-              <p style="margin:0;color:#3f3f46;font-size:11px;line-height:18px;">
-                GOTCHA. &mdash; Smart messaging for modern teams.
-              </p>
-              <p style="margin:8px 0 0;color:#27272a;font-size:11px;">
-                You're receiving this because your workspace was activated on gotcha.co.il
-              </p>
-            </td>
-          </tr>
-        </table>
-
-      </td>
-    </tr>
-  </table>
-</body>
-</html>`;
+  return renderBrandEmail({
+    title: `${escapeHtml(tenantName)} is live - GOTCHA.`,
+    preheader: "Everything's set up and ready to go.",
+    eyebrow: "You're live",
+    icon: "&#10003;",
+    headline: `${escapeHtml(tenantName)} is live.`,
+    subhead: `Everything's set up and ready to go, ${escapeHtml(adminName)}.`,
+    bodyHtml:
+      emailStatCards([
+        { label: "Industry", value: escapeHtml(industry) },
+        { label: "Priority", value: escapeHtml(priority.replace(/_/g, " ")) },
+        { label: "AI Employee", value: "Active" },
+      ]) +
+      (departments.length
+        ? emailKeyValueTable(["Department", "SLA"], departments.map((d) => [escapeHtml(d.name), escapeHtml(d.sla)]))
+        : ""),
+    cta: { label: "Open dashboard", url: dashboardUrl },
+    closingHtml: `<p style="margin:0 0 14px;font-size:14px;color:#8f89a0;line-height:1.6;">Your AI employee is standing by &mdash; ready to handle every conversation.</p>
+      <p style="margin:0;font-size:14px;color:#8f89a0;">Talk soon,<br><strong style="color:#1d1a26;">The GOTCHA. Team</strong></p>`,
+    footerNote: "You're receiving this because your workspace was activated on gotcha.co.il",
+  });
 }
 
 // ─── Waitlist Welcome Email ──────────────────────────────────
 
-function waitlistWelcomeHtml(firstName: string, position: number): string {
-  const frontendUrl = process.env.FRONTEND_URL || "https://gotcha.co.il";
-  const logoUrl = `${frontendUrl}/logo.png`;
-
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>You're in &mdash; GOTCHA.</title>
-  <!--[if mso]>
-  <style>table,td{font-family:Arial,sans-serif;}</style>
-  <![endif]-->
-</head>
-<body style="margin:0;padding:0;background-color:#08080c;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;-webkit-font-smoothing:antialiased;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#08080c;">
-    <tr>
-      <td align="center" style="padding:40px 16px 20px;">
-
-        <!-- ━━━ Logo ━━━ -->
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
-          <tr>
-            <td align="center" style="padding-bottom:32px;">
-              <img src="${logoUrl}" alt="GOTCHA." width="140" style="display:block;border:0;outline:none;max-width:140px;height:auto;" />
-            </td>
-          </tr>
-        </table>
-
-        <!-- ━━━ Hero Banner ━━━ -->
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
-          <tr>
-            <td style="background:linear-gradient(135deg,#7C3291 0%,#5A72B3 50%,#6DCED9 100%);border-radius:20px 20px 0 0;padding:48px 40px 40px;text-align:center;">
-              <!-- Checkmark circle -->
-              <div style="margin:0 auto 20px;width:68px;height:68px;border-radius:50%;background-color:rgba(255,255,255,0.18);line-height:68px;text-align:center;">
-                <span style="font-size:34px;color:#ffffff;">&#10003;</span>
-              </div>
-              <h1 style="margin:0 0 8px;font-size:30px;font-weight:800;color:#ffffff;line-height:1.2;letter-spacing:-0.5px;">
-                You're in, ${firstName}.
-              </h1>
-              <p style="margin:0;font-size:16px;color:rgba(255,255,255,0.85);line-height:1.5;font-weight:400;">
-                Welcome to the inner circle.
-              </p>
-            </td>
-          </tr>
-        </table>
-
-        <!-- ━━━ Position Badge ━━━ -->
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
-          <tr>
-            <td style="background-color:#0f0f16;padding:0 40px;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-                <tr>
-                  <td style="padding:28px 0;text-align:center;border-bottom:1px solid rgba(255,255,255,0.06);">
-                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;background:linear-gradient(135deg,rgba(124,50,145,0.12) 0%,rgba(109,206,217,0.08) 100%);border:1px solid rgba(124,50,145,0.25);border-radius:14px;">
-                      <tr>
-                        <td style="padding:16px 32px;text-align:center;">
-                          <p style="margin:0 0 2px;font-size:10px;font-weight:700;color:#6DCED9;text-transform:uppercase;letter-spacing:1.5px;">Your position</p>
-                          <p style="margin:0;font-size:36px;font-weight:800;color:#ffffff;letter-spacing:-1px;">#${position + 500}</p>
-                        </td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-        </table>
-
-        <!-- ━━━ Body Content ━━━ -->
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
-          <tr>
-            <td style="background-color:#0f0f16;padding:28px 40px 8px;">
-              <p style="margin:0;font-size:15px;color:#a1a1aa;line-height:1.75;">
-                You just secured early access to <span style="color:#e4e4e7;font-weight:600;">GOTCHA.</span> &mdash; the unified inbox that brings WhatsApp, Messenger &amp; Instagram into one screen, powered by AI that actually helps your team close faster.
-              </p>
-            </td>
-          </tr>
-        </table>
-
-        <!-- ━━━ Timeline Steps ━━━ -->
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
-          <tr>
-            <td style="background-color:#0f0f16;padding:28px 40px 32px;">
-              <p style="margin:0 0 22px;font-size:11px;font-weight:700;color:#7C3291;text-transform:uppercase;letter-spacing:1.2px;">What happens next</p>
-
-              <!-- Step 1 -->
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:4px;">
-                <tr>
-                  <td style="width:40px;vertical-align:top;padding-top:2px;">
-                    <div style="width:30px;height:30px;background:linear-gradient(135deg,#7C3291,#5A72B3);border-radius:50%;text-align:center;line-height:30px;color:#fff;font-size:13px;font-weight:800;">1</div>
-                  </td>
-                  <td style="vertical-align:top;padding-bottom:22px;border-left:2px solid rgba(124,50,145,0.2);padding-left:20px;">
-                    <p style="margin:0;font-size:15px;font-weight:700;color:#e4e4e7;">We're building your command center</p>
-                    <p style="margin:5px 0 0;font-size:13px;color:#71717a;line-height:1.55;">Our team is preparing the platform tailored to your business &mdash; every detail dialed in before you touch it.</p>
-                  </td>
-                </tr>
-              </table>
-
-              <!-- Step 2 -->
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:4px;">
-                <tr>
-                  <td style="width:40px;vertical-align:top;padding-top:2px;">
-                    <div style="width:30px;height:30px;background:linear-gradient(135deg,#5A72B3,#6DCED9);border-radius:50%;text-align:center;line-height:30px;color:#fff;font-size:13px;font-weight:800;">2</div>
-                  </td>
-                  <td style="vertical-align:top;padding-bottom:22px;border-left:2px solid rgba(90,114,179,0.2);padding-left:20px;">
-                    <p style="margin:0;font-size:15px;font-weight:700;color:#e4e4e7;">A personal kickoff call with our team</p>
-                    <p style="margin:5px 0 0;font-size:13px;color:#71717a;line-height:1.55;">One of our specialists will reach out to schedule a <strong style="color:#6DCED9;">Teams call</strong> &mdash; we'll map your workflows and set you up for success.</p>
-                  </td>
-                </tr>
-              </table>
-
-              <!-- Step 3 -->
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-                <tr>
-                  <td style="width:40px;vertical-align:top;padding-top:2px;">
-                    <div style="width:30px;height:30px;background:linear-gradient(135deg,#10b981,#6DCED9);border-radius:50%;text-align:center;line-height:30px;color:#fff;font-size:15px;font-weight:800;">&#10003;</div>
-                  </td>
-                  <td style="vertical-align:top;padding-left:20px;">
-                    <p style="margin:0;font-size:15px;font-weight:700;color:#e4e4e7;">Welcome to the Gotcha standard</p>
-                    <p style="margin:5px 0 0;font-size:13px;color:#71717a;line-height:1.55;">Every message answered. Every customer delighted. Transform how your company communicates &mdash; starting day one.</p>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-        </table>
-
-        <!-- ━━━ Feature Pills ━━━ -->
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
-          <tr>
-            <td style="background-color:#0f0f16;padding:0 40px 32px;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.06);border-radius:14px;">
-                <tr>
-                  <td style="padding:20px 24px 12px;">
-                    <p style="margin:0;font-size:10px;font-weight:700;color:#52525b;text-transform:uppercase;letter-spacing:1px;">What you'll unlock</p>
-                  </td>
-                </tr>
-                <tr>
-                  <td style="padding:0 24px 20px;">
-                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-                      <tr>
-                        <td style="padding:7px 0;">
-                          <span style="display:inline-block;font-size:13px;color:#a1a1aa;line-height:1;">
-                            <span style="color:#7C3291;margin-right:8px;">&#9670;</span> Unified inbox &mdash; WhatsApp, Messenger, Instagram
-                          </span>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td style="padding:7px 0;">
-                          <span style="display:inline-block;font-size:13px;color:#a1a1aa;line-height:1;">
-                            <span style="color:#5A72B3;margin-right:8px;">&#9670;</span> AI co-pilot trained on your knowledge base
-                          </span>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td style="padding:7px 0;">
-                          <span style="display:inline-block;font-size:13px;color:#a1a1aa;line-height:1;">
-                            <span style="color:#6DCED9;margin-right:8px;">&#9670;</span> Smart routing &amp; SLA tracking
-                          </span>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td style="padding:7px 0;">
-                          <span style="display:inline-block;font-size:13px;color:#a1a1aa;line-height:1;">
-                            <span style="color:#7C3291;margin-right:8px;">&#9670;</span> Visual bot builder &mdash; no code needed
-                          </span>
-                        </td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-        </table>
-
-        <!-- ━━━ Closing + Reply CTA ━━━ -->
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
-          <tr>
-            <td style="background-color:#0f0f16;border-radius:0 0 20px 20px;padding:0 40px 40px;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid rgba(255,255,255,0.06);">
-                <tr>
-                  <td style="padding:28px 0 0;text-align:center;">
-                    <p style="margin:0 0 20px;font-size:14px;color:#71717a;line-height:1.6;">
-                      Got questions before your invite arrives?<br>
-                      Just hit reply &mdash; a real human reads every message.
-                    </p>
-                    <p style="margin:0;font-size:14px;color:#52525b;">
-                      Talk soon,<br>
-                      <strong style="color:#e4e4e7;">The GOTCHA. Team</strong>
-                    </p>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-        </table>
-
-        <!-- ━━━ Social Icons ━━━ -->
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
-          <tr>
-            <td align="center" style="padding:24px 16px 0;">
-              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
-                <tr>
-                  <!-- Facebook -->
-                  <td style="padding:0 8px;">
-                    <a href="https://www.facebook.com/gotchainbox" target="_blank" style="display:inline-block;width:36px;height:36px;border-radius:50%;background-color:rgba(255,255,255,0.06);text-align:center;line-height:36px;text-decoration:none;">
-                      <img src="https://cdn-icons-png.flaticon.com/512/733/733547.png" alt="Facebook" width="18" height="18" style="display:inline-block;vertical-align:middle;border:0;filter:brightness(0) invert(0.55);" />
-                    </a>
-                  </td>
-                  <!-- Instagram -->
-                  <td style="padding:0 8px;">
-                    <a href="https://www.instagram.com/gotcha.inbox/" target="_blank" style="display:inline-block;width:36px;height:36px;border-radius:50%;background-color:rgba(255,255,255,0.06);text-align:center;line-height:36px;text-decoration:none;">
-                      <img src="https://cdn-icons-png.flaticon.com/512/733/733558.png" alt="Instagram" width="18" height="18" style="display:inline-block;vertical-align:middle;border:0;filter:brightness(0) invert(0.55);" />
-                    </a>
-                  </td>
-                  <!-- LinkedIn - Omer -->
-                  <td style="padding:0 8px;">
-                    <a href="http://linkedin.com/in/omer-serruya" target="_blank" style="display:inline-block;width:36px;height:36px;border-radius:50%;background-color:rgba(255,255,255,0.06);text-align:center;line-height:36px;text-decoration:none;">
-                      <img src="https://cdn-icons-png.flaticon.com/512/733/733561.png" alt="LinkedIn" width="18" height="18" style="display:inline-block;vertical-align:middle;border:0;filter:brightness(0) invert(0.55);" />
-                    </a>
-                  </td>
-                  <!-- LinkedIn - Matan -->
-                  <td style="padding:0 8px;">
-                    <a href="https://www.linkedin.com/in/matan-amran-82625b264/" target="_blank" style="display:inline-block;width:36px;height:36px;border-radius:50%;background-color:rgba(255,255,255,0.06);text-align:center;line-height:36px;text-decoration:none;">
-                      <img src="https://cdn-icons-png.flaticon.com/512/733/733561.png" alt="LinkedIn" width="18" height="18" style="display:inline-block;vertical-align:middle;border:0;filter:brightness(0) invert(0.55);" />
-                    </a>
-                  </td>
-                </tr>
-              </table>
-              <p style="margin:10px 0 0;font-size:11px;color:#52525b;">
-                Follow us &amp; DM the founders
-              </p>
-            </td>
-          </tr>
-        </table>
-
-        <!-- ━━━ Footer ━━━ -->
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
-          <tr>
-            <td align="center" style="padding:16px 16px 12px;">
-              <p style="margin:0;color:#3f3f46;font-size:11px;line-height:18px;">
-                GOTCHA. &mdash; Smart messaging for modern teams.
-              </p>
-              <p style="margin:8px 0 0;color:#27272a;font-size:11px;">
-                You're receiving this because you signed up at gotcha.co.il
-              </p>
-            </td>
-          </tr>
-        </table>
-
-      </td>
-    </tr>
-  </table>
-</body>
-</html>`;
+export function waitlistWelcomeHtml(firstName: string, position: number): string {
+  const socials: Array<[string, string, string]> = [
+    ["https://www.facebook.com/gotchainbox", "https://cdn-icons-png.flaticon.com/512/733/733547.png", "Facebook"],
+    ["https://www.instagram.com/gotcha.inbox/", "https://cdn-icons-png.flaticon.com/512/733/733558.png", "Instagram"],
+    ["http://linkedin.com/in/omer-serruya", "https://cdn-icons-png.flaticon.com/512/733/733561.png", "LinkedIn"],
+    ["https://www.linkedin.com/in/matan-amran-82625b264/", "https://cdn-icons-png.flaticon.com/512/733/733561.png", "LinkedIn"],
+  ];
+  const social = `
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:560px;">
+        <tr><td align="center" style="padding:22px 16px 0;">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+            ${socials.map(([href, img, alt]) => `<td style="padding:0 8px;"><a href="${href}" target="_blank" style="display:inline-block;width:36px;height:36px;border-radius:50%;background-color:#ffffff;border:1px solid #eae7f2;text-align:center;line-height:34px;text-decoration:none;"><img src="${img}" alt="${alt}" width="16" height="16" style="display:inline-block;vertical-align:middle;border:0;filter:brightness(0);opacity:0.45;" /></a></td>`).join("")}
+          </tr></table>
+          <p style="margin:10px 0 0;font-size:11px;color:#8f89a0;">Follow us &amp; DM the founders</p>
+        </td></tr>
+      </table>`;
+  return renderBrandEmail({
+    title: "You're in - GOTCHA.",
+    preheader: "Welcome to early access - here's what happens next.",
+    eyebrow: "Early access",
+    icon: "&#10003;",
+    headline: `You're in, ${escapeHtml(firstName)}.`,
+    subhead: "Welcome to the inner circle.",
+    bodyHtml:
+      emailBadge("Your position", `#${position}`) +
+      emailParagraph(`You just secured early access to <strong style="color:#1d1a26;">GOTCHA.</strong> &mdash; AI employees in one unified inbox (WhatsApp, Messenger &amp; Instagram) that actually help your team close faster.`) +
+      emailSteps("What happens next", [
+        { marker: "1", title: "We're building your command center", desc: "Our team is preparing the platform tailored to your business &mdash; every detail dialed in before you touch it." },
+        { marker: "2", title: "A personal kickoff call", desc: "One of our specialists will reach out to schedule a call &mdash; we'll map your workflows and set you up for success." },
+        { marker: "&#10003;", title: "Welcome to the GOTCHA standard", desc: "Every message answered. Every customer delighted. Starting day one." },
+      ]) +
+      emailPills("What you'll unlock", [
+        "Unified inbox &mdash; WhatsApp, Messenger, Instagram",
+        "An AI employee trained on your business",
+        "Smart routing &amp; SLA tracking",
+        "Visual bot builder &mdash; no code needed",
+      ]),
+    belowCardHtml: social,
+    closingHtml: `<p style="margin:0 0 14px;font-size:14px;color:#8f89a0;line-height:1.6;">Got questions before your invite arrives?<br>Just hit reply &mdash; a real human reads every message.</p>
+      <p style="margin:0;font-size:14px;color:#8f89a0;">Talk soon,<br><strong style="color:#1d1a26;">The GOTCHA. Team</strong></p>`,
+    footerNote: "You're receiving this because you signed up at gotcha.co.il",
+  });
 }
 
 // ─── Public API ─────────────────────────────────────────────
@@ -722,150 +442,6 @@ export async function sendWaitlistWelcomeEmail(email: string, firstName: string,
 }
 
 /**
- * Send password reset email with magic link.
- */
-export async function sendPasswordResetEmail(
-  tenantId: string,
-  email: string,
-  userName: string,
-  tenantName: string,
-  token: string,
-): Promise<void> {
-  const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
-  const resetUrl = `${frontendUrl}/login?resetToken=${token}`;
-  const logoUrl = `${frontendUrl}/logo.png`;
-
-  const subject = `Reset your password - ${tenantName}`;
-  const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Reset Password &mdash; GOTCHA.</title>
-</head>
-<body style="margin:0;padding:0;background-color:#08080c;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;-webkit-font-smoothing:antialiased;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#08080c;">
-    <tr>
-      <td align="center" style="padding:40px 16px 20px;">
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
-          <tr>
-            <td align="center" style="padding-bottom:32px;">
-              <img src="${logoUrl}" alt="GOTCHA." width="140" style="display:block;border:0;outline:none;max-width:140px;height:auto;" />
-            </td>
-          </tr>
-        </table>
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
-          <tr>
-            <td style="background:linear-gradient(135deg,#7C3291 0%,#5A72B3 50%,#6DCED9 100%);border-radius:20px 20px 0 0;padding:48px 40px 40px;text-align:center;">
-              <div style="margin:0 auto 20px;width:68px;height:68px;border-radius:50%;background-color:rgba(255,255,255,0.18);line-height:68px;text-align:center;">
-                <span style="font-size:34px;color:#ffffff;">&#128274;</span>
-              </div>
-              <h1 style="margin:0 0 8px;font-size:30px;font-weight:800;color:#ffffff;line-height:1.2;letter-spacing:-0.5px;">
-                Reset your password
-              </h1>
-              <p style="margin:0;font-size:16px;color:rgba(255,255,255,0.85);line-height:1.5;font-weight:400;">
-                Hi ${userName}, we received a password reset request.
-              </p>
-            </td>
-          </tr>
-        </table>
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
-          <tr>
-            <td style="background-color:#0f0f16;padding:36px 40px 32px;text-align:center;">
-              <p style="margin:0 0 24px;font-size:15px;color:#a1a1aa;line-height:1.6;">
-                Click the button below to set a new password for your <strong style="color:#e4e4e7;">${tenantName}</strong> account.
-              </p>
-              <a href="${resetUrl}" target="_blank" style="display:inline-block;background-color:#7C3291;color:#ffffff;font-size:16px;font-weight:700;text-decoration:none;padding:14px 40px;border-radius:12px;">
-                Reset Password &rarr;
-              </a>
-            </td>
-          </tr>
-        </table>
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
-          <tr>
-            <td style="background-color:#0f0f16;padding:0 40px 32px;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid rgba(255,255,255,0.06);">
-                <tr>
-                  <td style="padding:24px 0 0;">
-                    <p style="margin:0;font-size:12px;color:#71717a;line-height:1.6;">
-                      Button not working? Copy this link:<br>
-                      <a href="${resetUrl}" style="color:#6DCED9;word-break:break-all;font-size:12px;">${resetUrl}</a>
-                    </p>
-                    <p style="margin:10px 0 0;font-size:12px;color:#52525b;">
-                      This link expires in <strong style="color:#6DCED9;">1 hour</strong>
-                    </p>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-        </table>
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
-          <tr>
-            <td style="background-color:#0f0f16;border-radius:0 0 20px 20px;padding:0 40px 40px;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid rgba(255,255,255,0.06);">
-                <tr>
-                  <td style="padding:28px 0 0;text-align:center;">
-                    <p style="margin:0 0 12px;font-size:13px;color:#71717a;line-height:1.6;">
-                      If you didn't request this, you can safely ignore this email.
-                    </p>
-                    <p style="margin:0;font-size:14px;color:#52525b;">
-                      <strong style="color:#e4e4e7;">The GOTCHA. Team</strong>
-                    </p>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-        </table>
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
-          <tr>
-            <td align="center" style="padding:28px 16px 12px;">
-              <p style="margin:0;color:#3f3f46;font-size:11px;line-height:18px;">GOTCHA. &mdash; Smart messaging for modern teams.</p>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>`;
-
-  const text = [
-    `Hi ${userName},`,
-    "",
-    "We received a request to reset your password.",
-    "",
-    "Click the link below to set a new password:",
-    resetUrl,
-    "",
-    "This link expires in 1 hour.",
-    "",
-    "If you didn't request this, you can safely ignore this email.",
-    "",
-    "- The GOTCHA. Team",
-  ].join("\n");
-
-  const payload: NotificationPayload = {
-    tenantId,
-    channel: "email",
-    type: "password_reset",
-    recipient: email,
-    subject,
-    body: text,
-    metadata: { resetUrl },
-  };
-
-  try {
-    await sendHtmlEmail(email, subject, html, text);
-    await logNotification(payload, "sent");
-  } catch (err: any) {
-    console.error("Failed to send password reset email:", err);
-    await logNotification(payload, "failed", err.message);
-  }
-}
-
-/**
  * Send onboarding email with magic link (no login required).
  */
 export async function sendOnboardingEmail(
@@ -878,9 +454,9 @@ export async function sendOnboardingEmail(
 ): Promise<void> {
   const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
 
-  // Generate magic link token
-  const token = await createMagicLink(tenantId, adminUserId);
-  const setupUrl = `${frontendUrl}/setup/verify?token=${token}`;
+  // One-time Authentik link: the admin sets their password there, then lands
+  // back in GOTCHA authenticated. GOTCHA never issues the credential.
+  const setupUrl = await createSetupLink(adminUserId);
 
   const subject = `Welcome to Gotcha. - Set up your ${tenantName} workspace`;
   const html = onboardingEmailHtml(adminName, tenantName, setupUrl);
@@ -919,6 +495,47 @@ export async function sendOnboardingEmail(
   } catch (err: any) {
     console.error("Failed to send onboarding email:", err);
     await logNotification(payload, "failed", err.message);
+  }
+}
+
+/**
+ * Send a lifecycle NUDGE email - generic subject/body computed by the Nudge
+ * Engine. Reuses the same transport + logging as every other email. Returns
+ * true on success so the engine can mark the nudge SENT vs FAILED.
+ */
+export async function sendNudgeEmail(
+  tenantId: string,
+  recipient: string,
+  subject: string,
+  html: string,
+  text: string,
+  dedupeKey: string,
+): Promise<boolean> {
+  const payload: NotificationPayload = {
+    tenantId,
+    channel: "email",
+    type: "lifecycle_nudge",
+    recipient,
+    subject,
+    body: text,
+    metadata: { dedupeKey },
+  };
+  // Fail loud when the transport is a stub - a nudge that wasn't really sent must
+  // settle FAILED, never SENT. Otherwise the Voice reports it is speaking when
+  // it is mute (T-4).
+  if (!isEmailTransportConfigured()) {
+    console.error(`[EMAIL] Nudge NOT delivered to ${recipient} - SMTP unconfigured (stub transport). Marking FAILED, not SENT.`);
+    await logNotification(payload, "failed", "smtp_unconfigured").catch(() => {});
+    return false;
+  }
+  try {
+    await sendHtmlEmail(recipient, subject, html, text);
+    await logNotification(payload, "sent");
+    return true;
+  } catch (err: any) {
+    console.error("Failed to send nudge email:", err?.message);
+    await logNotification(payload, "failed", err?.message);
+    return false;
   }
 }
 
@@ -1026,50 +643,27 @@ interface TeammateInviteArgs {
   tenantName: string;
   tenantSlug: string;
   inviterName: string;
-  magicLinkToken: string;
+  setupUrl: string;
 }
 
 function teammateInviteHtml(args: TeammateInviteArgs, joinUrl: string): string {
-  const frontendUrl = process.env.FRONTEND_URL || "https://gotcha.co.il";
-  const logoUrl = `${frontendUrl}/logo.png`;
-  return `<!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>${args.inviterName} invited you to ${args.tenantName}</title></head>
-<body style="margin:0;padding:0;background-color:#08080c;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;-webkit-font-smoothing:antialiased;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#08080c;">
-  <tr><td align="center" style="padding:40px 16px 20px;">
-    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
-      <tr><td align="center" style="padding-bottom:32px;">
-        <img src="${logoUrl}" alt="GOTCHA." width="140" style="display:block;border:0;outline:none;max-width:140px;height:auto;" />
-      </td></tr>
-    </table>
-    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
-      <tr><td style="background:linear-gradient(135deg,#7C3291 0%,#5A72B3 50%,#6DCED9 100%);border-radius:20px 20px 0 0;padding:48px 40px 40px;text-align:center;">
-        <h1 style="margin:0 0 8px;font-size:28px;font-weight:800;color:#ffffff;line-height:1.2;letter-spacing:-0.5px;">
-          You're invited to ${args.tenantName}.
-        </h1>
-        <p style="margin:0;font-size:15px;color:rgba(255,255,255,0.85);line-height:1.5;font-weight:400;">
-          ${args.inviterName} wants you on the team.
-        </p>
-      </td></tr>
-    </table>
-    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
-      <tr><td style="background-color:#0f0f16;padding:36px 40px 40px;text-align:center;border-radius:0 0 20px 20px;">
-        <a href="${joinUrl}" target="_blank" style="display:inline-block;background-color:#7C3291;color:#ffffff;font-size:16px;font-weight:700;text-decoration:none;padding:14px 40px;border-radius:12px;mso-padding-alt:14px 40px;">
-          Accept &amp; Open Workspace &rarr;
-        </a>
-        <p style="margin:24px 0 0;font-size:12px;color:#71717a;line-height:1.6;">
-          The link is valid for 48 hours. If you didn't expect this invite you can ignore the email.
-        </p>
-      </td></tr>
-    </table>
-  </td></tr>
-</table>
-</body></html>`;
+  return renderBrandEmail({
+    title: `${escapeHtml(args.inviterName)} invited you to ${escapeHtml(args.tenantName)}`,
+    preheader: `${args.inviterName} wants you on the team.`,
+    eyebrow: "Team invite",
+    icon: "&#128075;",
+    headline: `You're invited to ${escapeHtml(args.tenantName)}.`,
+    subhead: `${escapeHtml(args.inviterName)} wants you on the team.`,
+    cta: { label: "Accept &amp; open workspace", url: joinUrl },
+    fallbackUrl: joinUrl,
+    expiryNote: "The link is valid for 48 hours. If you didn't expect this invite you can ignore this email.",
+  });
 }
 
 export async function sendTeammateInvite(args: TeammateInviteArgs): Promise<void> {
-  const frontendUrl = process.env.FRONTEND_URL || "https://gotcha.co.il";
-  const joinUrl = `${frontendUrl}/login?magic=${args.magicLinkToken}`;
+  // Authentik-issued one-time link: the teammate sets their own password there
+  // and arrives back in GOTCHA authenticated.
+  const joinUrl = args.setupUrl;
   const subject = `${args.inviterName} invited you to ${args.tenantName}`;
   const text = `${args.inviterName} invited you to join ${args.tenantName} on GOTCHA.\n\nAccept your invite: ${joinUrl}\n\nThis link is valid for 48 hours.`;
   const html = teammateInviteHtml(args, joinUrl);
@@ -1105,3 +699,280 @@ export async function sendTeammateInvite(args: TeammateInviteArgs): Promise<void
 // imports `sendOnboardingInvite` even though we only need
 // `sendTeammateInvite`). Re-export so the import line stays minimal.
 export const sendOnboardingInvite = sendTeammateInvite;
+
+// ── "Tell us about an integration we don't have yet" ────────────────────────
+// During onboarding the scan sometimes spots an important tool GOTCHA doesn't
+// support yet (a ReturnGO-style app). The owner can flag it with one click; we
+// email the team so we know what to build next. Destination is env-driven
+// (MAIL_TO / INTEGRATION_REQUEST_EMAIL) - a future group alias - and it degrades
+// gracefully (logs, never throws) when SMTP or the address isn't configured.
+export interface IntegrationRequestArgs {
+  integration: string;              // the tool/integration name the owner wants
+  tenantId?: string;
+  tenantName?: string;
+  requestedByEmail?: string;
+  requestedByName?: string;
+  websiteDomain?: string;
+  note?: string;                    // optional free-text context from the owner
+  source?: string;                  // where it was flagged (e.g. "onboarding_integrations")
+}
+
+export function integrationRequestRecipient(): string | null {
+  return (process.env.MAIL_TO || process.env.INTEGRATION_REQUEST_EMAIL || process.env.TEAM_ALERT_EMAIL || "").trim() || null;
+}
+
+export async function sendIntegrationRequestEmail(args: IntegrationRequestArgs): Promise<boolean> {
+  const to = integrationRequestRecipient();
+  if (!to) {
+    console.warn("[notify] integration request not sent - no MAIL_TO / INTEGRATION_REQUEST_EMAIL configured:", args.integration);
+    return false;
+  }
+  if (!isEmailTransportConfigured()) {
+    console.warn("[notify] integration request not sent - SMTP not configured:", args.integration);
+    return false;
+  }
+  const subject = `Integration request: ${args.integration}`;
+  const rows = [
+    ["Integration", args.integration],
+    ["Business", args.tenantName || "-"],
+    ["Website", args.websiteDomain || "-"],
+    ["Requested by", [args.requestedByName, args.requestedByEmail].filter(Boolean).join(" · ") || "-"],
+    ["Tenant ID", args.tenantId || "-"],
+    ["Source", args.source || "onboarding"],
+    ["Note", args.note || "-"],
+  ];
+  const bodyHtml = rows
+    .map(([k, v]) => `${emailParagraph(`<strong>${escapeHtml(String(k))}:</strong> ${escapeHtml(String(v))}`)}`)
+    .join("");
+  const html = renderBrandEmail({
+    title: subject,
+    eyebrow: "Integration request",
+    icon: "🔌",
+    headline: `A customer wants ${escapeHtml(args.integration)}`,
+    subhead: "Flagged during onboarding - a tool we don't support yet.",
+    bodyHtml,
+    footerNote: "You're receiving this because you're on the GOTCHA integrations alias.",
+  });
+  const text = rows.map(([k, v]) => `${k}: ${v}`).join("\n");
+  try {
+    await sendHtmlEmail(to, subject, html, text);
+    return true;
+  } catch (err: any) {
+    console.error("[notify] failed to send integration request email:", err?.message);
+    return false;
+  }
+}
+
+// ─── Email Change Verification ──────────────────────────────
+
+/**
+ * Send the verification link for a self-service email change to the NEW address.
+ * Proving control of the new inbox is what authorizes the change. Branded with
+ * renderBrandEmail so it never looks like a stock IdP email.
+ */
+export async function sendEmailChangeVerification(
+  newEmail: string,
+  name: string,
+  verifyUrl: string,
+): Promise<void> {
+  const subject = "Confirm your new email - GOTCHA";
+  const text =
+    `Hi ${name},\n\nConfirm this address to make it your new GOTCHA sign-in email:\n${verifyUrl}\n\n` +
+    `This link expires in 1 hour. If you didn't request this, you can ignore this email.`;
+  const html = renderBrandEmail({
+    title: "Confirm your new email - GOTCHA.",
+    preheader: "Confirm this address to finish changing your email.",
+    eyebrow: "Verify your email",
+    icon: "&#9993;",
+    headline: "Confirm your new email",
+    subhead: `${escapeHtml(name)}, confirm this address to make it your new GOTCHA sign-in email.`,
+    cta: { label: "Confirm email", url: verifyUrl },
+    fallbackUrl: verifyUrl,
+    expiryNote: `This link expires in <strong style="color:#7C3291;">1 hour</strong>`,
+    footerNote: "You're receiving this because someone requested to use this address on gotcha.co.il. If that wasn't you, ignore this email.",
+  });
+  await sendHtmlEmail(newEmail, subject, html, text);
+}
+
+// ─── Team Invitation ────────────────────────────────────────
+
+/**
+ * Send the invitee their one-time password-setup link. The admin still sees
+ * the link in the UI as a fallback, but the invitee should not depend on a
+ * copy-paste hand-off: the invite lands in their inbox like any SaaS invite.
+ */
+export async function sendTeamInviteEmail(
+  email: string,
+  name: string,
+  workspaceName: string,
+  setupLink: string,
+): Promise<void> {
+  const subject = `You've been invited to ${workspaceName} on GOTCHA`;
+  const text =
+    `Hi ${name},\n\nYou've been invited to join ${workspaceName} on GOTCHA.\n` +
+    `Set your password to activate your account:\n${setupLink}\n\n` +
+    `The link can be used once. If you weren't expecting this invite, you can ignore this email.`;
+  const html = renderBrandEmail({
+    title: `Join ${workspaceName} on GOTCHA.`,
+    preheader: `Set your password to join ${workspaceName}.`,
+    eyebrow: "Team invitation",
+    icon: "&#128075;",
+    headline: `Join ${escapeHtml(workspaceName)}`,
+    subhead: `${escapeHtml(name)}, you've been invited to join <strong>${escapeHtml(workspaceName)}</strong> on GOTCHA. Set your password and you're in.`,
+    cta: { label: "Set your password", url: setupLink },
+    fallbackUrl: setupLink,
+    expiryNote: `This link can be used <strong style="color:#7C3291;">once</strong>.`,
+    footerNote: `You're receiving this because an administrator of ${escapeHtml(workspaceName)} invited this address. If that wasn't expected, ignore this email.`,
+  });
+  await sendHtmlEmail(email, subject, html, text);
+}
+
+/**
+ * Paid-tenant onboarding email.
+ *
+ * Rendered entirely from the IMMUTABLE commercial snapshot passed in by the
+ * caller. It never reads the live Plan row: if pricing changes between issuing
+ * an offer and the customer opening the email, they must still see the terms
+ * they were actually offered.
+ *
+ * Carries no internal identifier of any kind - no tenant id, checkout id,
+ * attempt id, plan id or provider detail - and no card or token vocabulary. The
+ * only opaque value is the continuation token, which is the whole point of the
+ * link.
+ */
+export function paidOnboardingEmailHtml(a: {
+  adminName: string;
+  tenantName: string;
+  planName: string;
+  amount: string;
+  currency: string;
+  includedCredits: number;
+  continuationUrl: string;
+  expiresAtLabel: string;
+  locale?: string;
+}): string {
+  const he = a.locale === "he";
+  const symbol = a.currency === "ILS" ? "₪" : "$";
+  const price = `${symbol}${Number(a.amount).toLocaleString("en-US")}`;
+  const credits = a.includedCredits.toLocaleString("en-US");
+
+  return renderBrandEmail({
+    locale: a.locale,
+    title: he ? `הגדרת ${escapeHtml(a.tenantName)} - GOTCHA.` : `Set up ${escapeHtml(a.tenantName)} - GOTCHA.`,
+    preheader: he
+      ? "הארגון שלכם נוצר. השלימו הגדרה ותשלום כדי להפעיל את התוכנית."
+      : "Your organization has been created. Complete setup and payment to activate your plan.",
+    eyebrow: he ? "הארגון שלכם נוצר" : "Your organization is ready",
+    icon: "&#9889;",
+    headline: he ? `נגדיר את ${escapeHtml(a.tenantName)}.` : `Let's set up ${escapeHtml(a.tenantName)}.`,
+    subhead: he
+      ? `${escapeHtml(a.adminName)}, הארגון שלכם נוצר. השלימו את ההגדרה והתשלום כדי להפעיל את התוכנית שנבחרה.`
+      : `${escapeHtml(a.adminName)}, your organization has been created. Complete account setup and payment to activate the selected plan.`,
+    bodyHtml: emailSteps(he ? "התוכנית שנבחרה" : "Your selected plan", [
+      { marker: "1", title: escapeHtml(a.planName), desc: he ? `${price} לחודש` : `${price} per month` },
+      { marker: "2", title: he ? `${credits} קרדיטים` : `${credits} credits`, desc: he ? "כלולים בכל חודש" : "included every month" },
+      {
+        marker: "&#10003;",
+        title: he ? "הפעלה לאחר אישור התשלום" : "Activates after payment is confirmed",
+        desc: he
+          ? "אפשר להשלים את הגדרת המשתמש כבר עכשיו."
+          : "You can complete account setup right away.",
+      },
+    ]),
+    cta: { label: he ? "השלמת ההגדרה" : "Complete setup", url: a.continuationUrl },
+    fallbackUrl: a.continuationUrl,
+    expiryNote: he
+      ? `הקישור בתוקף עד <strong style="color:#7C3291;">${escapeHtml(a.expiresAtLabel)}</strong>`
+      : `This link is valid until <strong style="color:#7C3291;">${escapeHtml(a.expiresAtLabel)}</strong>`,
+    footerNote: he
+      ? "קיבלתם את ההודעה הזו כי נוצר עבורכם ארגון ב-gotcha.co.il"
+      : "You're receiving this because your organization was created on gotcha.co.il",
+  });
+}
+
+export async function sendPaidOnboardingEmail(a: {
+  tenantId: string;
+  adminEmail: string;
+  adminName: string;
+  tenantName: string;
+  adminUserId: string;
+  continuationToken: string;
+  /**
+   * The checkout this link is for. Required: the token authorizes action on a
+   * checkout the caller already names, so a link carrying only the token
+   * lands on a page with nothing to ask about.
+   */
+  checkoutReference: string;
+  linkExpiresAt: Date;
+  planName: string;
+  amount: string;
+  currency: string;
+  includedCredits: number;
+  locale?: string;
+  resend?: boolean;
+}): Promise<void> {
+  const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+  // Both parts are needed, and they do different jobs: `ref` says WHICH
+  // checkout, `token` proves the holder may act on it. The entry page strips
+  // the token out of the address bar on arrival.
+  const continuationUrl =
+    `${frontendUrl}/checkout` +
+    `?ref=${encodeURIComponent(a.checkoutReference)}` +
+    `&token=${encodeURIComponent(a.continuationToken)}`;
+  const he = a.locale === "he";
+  const expiresAtLabel = a.linkExpiresAt.toISOString().slice(0, 16).replace("T", " ");
+
+  const subject = he
+    ? `הגדרת ${a.tenantName} ותשלום - GOTCHA.`
+    : `Set up ${a.tenantName} and complete payment - GOTCHA.`;
+
+  const html = paidOnboardingEmailHtml({ ...a, continuationUrl, expiresAtLabel });
+  const symbol = a.currency === "ILS" ? "₪" : "$";
+  const text = he
+    ? [
+        `שלום ${a.adminName},`, "",
+        `הארגון "${a.tenantName}" נוצר ב-GOTCHA.`, "",
+        `התוכנית שנבחרה: ${a.planName}`,
+        `מחיר: ${symbol}${Number(a.amount).toLocaleString("en-US")} לחודש`,
+        `קרדיטים כלולים: ${a.includedCredits.toLocaleString("en-US")}`, "",
+        "השלימו את ההגדרה והתשלום כדי להפעיל את התוכנית:",
+        continuationUrl, "",
+        `הקישור בתוקף עד ${expiresAtLabel}.`, "",
+        "החשבון יופעל במלואו לאחר אישור התשלום.", "",
+        "צוות GOTCHA.",
+      ].join("\n")
+    : [
+        `Hello ${a.adminName},`, "",
+        `Your organization "${a.tenantName}" has been created on GOTCHA.`, "",
+        `Selected plan: ${a.planName}`,
+        `Price: ${symbol}${Number(a.amount).toLocaleString("en-US")} per month`,
+        `Included credits: ${a.includedCredits.toLocaleString("en-US")}`, "",
+        "Complete account setup and payment to activate the plan:",
+        continuationUrl, "",
+        `This link is valid until ${expiresAtLabel}.`, "",
+        "Your account becomes fully active once payment is confirmed.", "",
+        "The GOTCHA. Team",
+      ].join("\n");
+
+  const payload: NotificationPayload = {
+    tenantId: a.tenantId,
+    channel: "email",
+    type: a.resend ? "paid_onboarding_email_resent" : "paid_onboarding_email",
+    recipient: a.adminEmail,
+    subject,
+    body: text,
+    // The continuation URL carries the raw token, so it is deliberately NOT
+    // recorded in notification metadata.
+    metadata: { planName: a.planName, expiresAt: a.linkExpiresAt.toISOString() },
+  };
+
+  try {
+    await sendHtmlEmail(a.adminEmail, subject, html, text);
+    await logNotification(payload, "sent");
+  } catch (err: any) {
+    // Delivery failure activates nothing. Resend is the repair path.
+    console.error("Failed to send paid onboarding email:", err?.message ?? err);
+    await logNotification(payload, "failed", err.message);
+    throw err;
+  }
+}

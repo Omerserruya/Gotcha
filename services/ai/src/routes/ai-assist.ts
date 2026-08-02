@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import * as crypto from "crypto";
 import {
+  requireInternalKey,
   prisma,
   authenticate,
   resolveTenant,
@@ -8,6 +9,7 @@ import {
   requireRole,
   resolveConversationLocale,
   resolveEffectiveLocale,
+  requireEntitlement,
 } from "@chatcenter/shared";
 import * as aiService from "../services/ai-assist.service";
 import { runDeduped } from "../services/copilot-dedup.service";
@@ -16,6 +18,7 @@ import { generateAllAgentConfigs, generateAgentConfig } from "../services/agent-
 import { analyzeConversation, getConversationIntelligence, getConversationReplay } from "../services/conversation-intelligence.service";
 import { getToolsForTenant, executeTool, getToolExecutions } from "../services/tool-execution.service";
 import { executeAdapterTool } from "../services/connectors/integration-framework";
+import { getCrmAdapter } from "../services/connectors/crm-adapter-resolver";
 import { scoreAgent, getAgentScore } from "../services/agent-performance.service";
 import { generateFollowup } from "../services/followup-generator.service";
 import { buildCustomerState } from "../services/customer-state.service";
@@ -23,8 +26,78 @@ import { getPolicy, setPolicy } from "../services/policy.service";
 import voiceRouter from "./ai-assist-voice";
 import { buildAgentPrompt } from "../services/prompt-builder.service";
 import { computeBehaviorState } from "../services/behavior-engine.service";
+import { discoverBusiness } from "../services/business-discovery.service";
+import { tuneEmployeeChat } from "../services/employee-tuning.service";
 
 const router = Router();
+
+// ─── Business Discovery (Onboarding Intelligence Engine) ───
+// The deep 5-domain website scan that produces the Business Intelligence
+// Report + first recommendation (Bible Part II). The auth onboarding route
+// fetches the pages + detects signals (no LLM) and calls this with the admin
+// JWT forwarded - this is the one place onboarding is allowed to make an LLM
+// call. Best-effort: returns { ok:false } on a scan miss so the caller can
+// fall back to the shallow understanding and never block onboarding.
+router.post("/discover-business", authenticate, resolveTenant, requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const { domain, locale, pages, signals, businessType } = req.body as {
+      domain?: string;
+      locale?: string;
+      pages?: Array<{ url: string; text: string }>;
+      signals?: import("../services/business-discovery.service").DiscoverySignals;
+      businessType?: string;
+    };
+    if (!domain || !Array.isArray(pages) || pages.length === 0) {
+      res.status(400).json({ error: "domain and pages are required" });
+      return;
+    }
+    const report = await discoverBusiness({
+      tenantId: req.tenantId!,
+      domain,
+      locale,
+      pages: pages.filter((p) => p && typeof p.text === "string").slice(0, 8),
+      signals: signals || {},
+      businessType,
+    });
+    if (!report) {
+      res.json({ data: { ok: false } });
+      return;
+    }
+    res.json({ data: { ok: true, report } });
+  } catch (err) {
+    console.error("Discover business error:", err);
+    res.status(500).json({ error: "Failed to run business discovery" });
+  }
+});
+
+// Onboarding Movement 8 - chat with the recommended employee before deploy.
+router.post("/onboarding-employee-chat", authenticate, resolveTenant, requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const { name, role, locale, context, persona, messages } = req.body as {
+      name?: string; role?: string; locale?: string;
+      context?: { business?: string; industry?: string; summary?: string; brandVoice?: string; goal?: string };
+      persona?: import("../services/employee-tuning.service").EmployeePersona;
+      messages?: Array<{ role: "user" | "assistant"; content: string }>;
+    };
+    if (!Array.isArray(messages) || messages.length === 0) {
+      res.status(400).json({ error: "messages are required" });
+      return;
+    }
+    const result = await tuneEmployeeChat({
+      tenantId: req.tenantId!,
+      name: (name || "").slice(0, 120) || "Your AI Employee",
+      role: role || "customer_support",
+      locale,
+      context,
+      persona: persona || {},
+      messages: messages.filter((m) => m && typeof m.content === "string").slice(-10),
+    });
+    res.json({ data: { ok: true, ...result } });
+  } catch (err) {
+    console.error("Employee tuning chat error:", err);
+    res.status(500).json({ error: "Failed to chat with the employee" });
+  }
+});
 
 // ─── Config Generation Endpoints (called during onboarding - tenant may not be active yet) ───
 
@@ -76,14 +149,7 @@ router.post("/generate-config/:departmentId", authenticate, resolveTenant, requi
 
 // ─── Intent Classification (internal, called by incoming-worker) ───
 
-router.post("/intent", (req: Request, res: Response, next) => {
-  const key = req.headers["x-internal-key"];
-  if (!key || key !== (process.env.INTERNAL_SERVICE_KEY || "chatcenter-internal-2026")) {
-    res.status(403).json({ error: "Forbidden" });
-    return;
-  }
-  next();
-}, async (req: Request, res: Response) => {
+router.post("/intent", requireInternalKey, async (req: Request, res: Response) => {
   try {
     const { message, intent, intents, tenantId } = req.body;
     // Accept both shapes:
@@ -295,7 +361,9 @@ router.post("/compose", async (req: Request, res: Response) => {
   }
 });
 
-router.get("/:conversationId/suggestions", async (req: Request, res: Response) => {
+// Chat Copilot is sold separately from the core inbox, so the suggestion
+// endpoint is gated rather than merely hidden in the UI.
+router.get("/:conversationId/suggestions", requireEntitlement("ai.copilot"), async (req: Request, res: Response) => {
   // Request-instance ID - accepted from the client to dedup retries and
   // double-fires. Falls back to a server-generated id so legacy clients
   // (no header / no query param) still get concurrency dedup, just not
@@ -425,7 +493,11 @@ router.get("/:conversationId/suggestions", async (req: Request, res: Response) =
   }
 });
 
-router.get("/:conversationId/summary", async (req: Request, res: Response) => {
+// Gated on communication.crm_summaries — the SAME key as the background
+// pipeline, and deliberately NOT ai.copilot. Foundation denies Copilot and
+// grants summaries; gating this route on ai.copilot would break exactly the
+// plan combination the product sells.
+router.get("/:conversationId/summary", requireEntitlement("communication.crm_summaries"), async (req: Request, res: Response) => {
   try {
     const convId = req.params.conversationId as string;
     const conversation = await prisma.conversation.findFirst({ where: { id: convId, tenantId: req.tenantId! } });
@@ -655,6 +727,36 @@ router.post("/:conversationId/adapter-tools/execute", async (req: Request, res: 
   } catch (err: any) {
     console.error("Adapter tool execute error:", err);
     res.status(500).json({ error: "Failed to execute adapter tool" });
+  }
+});
+
+// ─── Uniform CRM identity lookup ─────────────────────────────
+// Search the connected system-of-record by email/phone through the
+// CRMAdapter.findCustomer interface. Unlike the per-vendor catalog
+// `lead_search`/`contact_search` tools (which only Zoho-style providers
+// register), this covers EVERY source-of-truth integration connectable at
+// onboarding - HubSpot, Salesforce, Zoho, Shopify, Fireberry, Airtable -
+// through one code path. Shared's searchLeads/searchContacts fall back here
+// for providers that don't expose the catalog search tools.
+router.post("/:conversationId/crm/find", async (req: Request, res: Response) => {
+  try {
+    const { phone, email, external_id } = req.body || {};
+    if (!phone && !email && !external_id) {
+      res.json({ data: { ok: true, contacts: [] } });
+      return;
+    }
+    const adapter = await getCrmAdapter(req.tenantId!);
+    if (adapter.capabilities?.is_stub) {
+      res.json({ data: { ok: false, reason: "no_crm_configured", contacts: [] } });
+      return;
+    }
+    const result = await adapter.findCustomer({ phone, email, external_id });
+    res.json({
+      data: { ok: result.ok, contacts: result.contacts ?? [], reason: result.reason },
+    });
+  } catch (err: any) {
+    console.error("CRM find error:", err);
+    res.status(500).json({ error: "Failed to search CRM" });
   }
 });
 

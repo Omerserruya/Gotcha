@@ -16,10 +16,14 @@ import clsx from "clsx";
  * place shows up immediately in the other.
  */
 
+// Category chips for the GENERIC marketplace. CRM is deliberately absent:
+// the CRM / customer system-of-record is a business-architecture choice, not
+// an ordinary tool, and lives in Settings → Integrations (restrictToCategory
+// ="CRM" + CustomerSystemOfRecordCard). Presenting it here duplicated the
+// concept across two surfaces and let it read as a casually toggleable skill.
 const CATEGORIES = [
   { label: "All", value: "All" },
   { label: "E-Commerce", value: "ECOMMERCE" },
-  { label: "CRM", value: "CRM" },
   { label: "Payments", value: "PAYMENTS" },
   { label: "Project Management", value: "PROJECT_MANAGEMENT" },
   { label: "Database", value: "DATABASE" },
@@ -66,9 +70,18 @@ export interface IntegrationsExplorerProps {
    *  show only CRM integrations and avoid surfacing the full marketplace
    *  surface there. */
   restrictToCategory?: string;
+  /** Rendered between the header and the integration list. Lets a host page add
+   *  account-level controls (e.g. the customer system-of-record picker) without
+   *  the explorer knowing anything about them. */
+  beforeContent?: React.ReactNode;
+  /** Where a card/connect click navigates for a given provider slug. Defaults
+   *  to the AI Studio marketplace detail route. Settings → Business Systems
+   *  overrides this to a Settings-owned route so the whole connect flow stays
+   *  inside Settings (no bounce to the marketplace). */
+  detailHref?: (slug: string) => string;
 }
 
-export default function IntegrationsExplorer({ subtitle, title, initialCategory, restrictToCategory }: IntegrationsExplorerProps) {
+export default function IntegrationsExplorer({ subtitle, title, initialCategory, restrictToCategory, beforeContent, detailHref = (slug: string) => `/integrations/${slug}` }: IntegrationsExplorerProps) {
   const { token } = useAuth();
   const { t } = useI18n();
   const router = useRouter();
@@ -102,6 +115,12 @@ export default function IntegrationsExplorer({ subtitle, title, initialCategory,
   }, [token]);
 
   const filtered = integrations.filter((intg) => {
+    // CRM-category systems never appear in the GENERIC marketplace - they are
+    // the tenant's business system / source of truth, configured in Settings →
+    // Integrations. Only a page explicitly restricted to CRM sees them.
+    // (Shopify stays here as ECOMMERCE - it is a real store tool - but its
+    // source-of-truth ELECTION also lives only in the settings surface.)
+    if (restrictToCategory !== "CRM" && intg.category?.toUpperCase() === "CRM") return false;
     const matchSearch =
       !search ||
       intg.name?.toLowerCase().includes(search.toLowerCase()) ||
@@ -131,9 +150,19 @@ export default function IntegrationsExplorer({ subtitle, title, initialCategory,
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">{title ?? t("marketplace.title")}</h1>
         <p className="text-sm text-gray-400 mt-1">
-          {subtitle ?? "Connect external services to power your AI agents"}
+          {subtitle ?? t("marketplace.subtitle")}
         </p>
+        {/* CRM/system-of-record lives in Settings, not here - leave a trail so
+            nobody hunts the marketplace for it. */}
+        {!restrictToCategory && (
+          <p className="text-xs text-gray-400 mt-2">
+            {t("marketplace.crmMovedHint")}{" "}
+            <a href="/settings/business-systems" className="text-primary-600 hover:underline font-medium">{t("marketplace.crmMovedLink")}</a>
+          </p>
+        )}
       </div>
+
+      {beforeContent}
 
       {/* Search + filters */}
       <div className="mb-5 flex flex-col gap-3">
@@ -192,7 +221,7 @@ export default function IntegrationsExplorer({ subtitle, title, initialCategory,
               <div
                 key={intg.id || intg.slug}
                 className="bg-white rounded-2xl shadow-card border border-gray-100 p-5 flex flex-col gap-3 hover:shadow-md hover:border-violet-200 transition cursor-pointer"
-                onClick={() => router.push(`/integrations/${intg.slug}`)}
+                onClick={() => router.push(detailHref(intg.slug))}
               >
                 <div className="flex items-start justify-between">
                   <div className={clsx("w-12 h-12 rounded-xl flex items-center justify-center shrink-0", logoSrc ? "bg-white border border-gray-100 p-1.5" : `${logoColor} text-white font-bold text-lg`)}>
@@ -243,7 +272,7 @@ export default function IntegrationsExplorer({ subtitle, title, initialCategory,
                       ? "bg-violet-50 text-violet-700 hover:bg-violet-100"
                       : "bg-violet-600 text-white hover:bg-violet-700 shadow-sm"
                   )}
-                  onClick={(e) => { e.stopPropagation(); router.push(`/integrations/${intg.slug}`); }}
+                  onClick={(e) => { e.stopPropagation(); router.push(detailHref(intg.slug)); }}
                 >
                   {isConnected ? t("marketplace.manage") : t("marketplace.connect")}
                 </button>

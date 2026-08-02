@@ -21,6 +21,7 @@ import type {
   CalendarAdapter,
   BusyInterval,
 } from "../scheduling.service";
+import { registerAdapter, type ProviderAdapter, type ToolDefinition } from "./integration-framework";
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const FREEBUSY_URL = "https://www.googleapis.com/calendar/v3/freeBusy";
@@ -129,6 +130,87 @@ export class GoogleCalendarAdapter implements CalendarAdapter {
     };
   }
 
+  /**
+   * Move an existing event to a new time. PATCH only the start/end so attendees,
+   * the Meet link, and the title are preserved. `sendUpdates=all` notifies guests.
+   */
+  async updateEvent(opts: {
+    agentId: string;
+    eventId: string;
+    startMs: number;
+    endMs: number;
+    customerTimezone?: string;
+  }): Promise<{ eventId: string; joinUrl?: string }> {
+    const { account, creds } = await this.loadAccount();
+    const calendarId = account.defaultCalendarId || "primary";
+    const tz = opts.customerTimezone || "UTC";
+    const body = {
+      start: { dateTime: new Date(opts.startMs).toISOString(), timeZone: tz },
+      end: { dateTime: new Date(opts.endMs).toISOString(), timeZone: tz },
+    };
+    const url = `${EVENTS_URL(calendarId)}/${encodeURIComponent(opts.eventId)}?conferenceDataVersion=1&sendUpdates=all`;
+    console.log(
+      `[gcal-adapter] events.patch.PATCH calendar=${calendarId} eventId=${opts.eventId} ` +
+        `start=${body.start.dateTime}`,
+    );
+    const t = Date.now();
+    const res = await this.fetchAuthed(url, { method: "PATCH", body: JSON.stringify(body) }, creds);
+    const json: any = await res.json();
+    const joinUrl = json?.hangoutLink ?? json?.conferenceData?.entryPoints?.[0]?.uri;
+    console.log(`[gcal-adapter] events.patch.OK eventId=${json?.id} dt_ms=${Date.now() - t}`);
+    return { eventId: String(json?.id ?? opts.eventId), joinUrl };
+  }
+
+  /** Cancel an existing event. `sendUpdates=all` notifies guests of the cancellation. */
+  async cancelEvent(opts: { agentId: string; eventId: string }): Promise<void> {
+    const { account, creds } = await this.loadAccount();
+    const calendarId = account.defaultCalendarId || "primary";
+    const url = `${EVENTS_URL(calendarId)}/${encodeURIComponent(opts.eventId)}?sendUpdates=all`;
+    console.log(`[gcal-adapter] events.delete.DELETE calendar=${calendarId} eventId=${opts.eventId}`);
+    const t = Date.now();
+    // 404/410 = already gone → treat as success (idempotent cancel).
+    try {
+      await this.fetchAuthed(url, { method: "DELETE" }, creds);
+    } catch (err: any) {
+      const msg = String(err?.message || "");
+      if (/ 4(04|10):/.test(msg)) {
+        console.log(`[gcal-adapter] events.delete already-gone eventId=${opts.eventId} (ok)`);
+        return;
+      }
+      throw err;
+    }
+    console.log(`[gcal-adapter] events.delete.OK eventId=${opts.eventId} dt_ms=${Date.now() - t}`);
+  }
+
+  /**
+   * Read-only: list upcoming events in the window. Backs the
+   * `google_calendar.list_events` tool surfaced via the adapter framework.
+   */
+  async listEvents(opts: { fromMs: number; toMs: number; max?: number }): Promise<
+    Array<{ id: string; summary: string | null; start: string | null; end: string | null; attendees: string[] }>
+  > {
+    const { account, creds } = await this.loadAccount();
+    const calendarId = account.defaultCalendarId || "primary";
+    const params = new URLSearchParams({
+      timeMin: new Date(opts.fromMs).toISOString(),
+      timeMax: new Date(opts.toMs).toISOString(),
+      singleEvents: "true",
+      orderBy: "startTime",
+      maxResults: String(Math.min(Math.max(1, Number(opts.max) || 10), 50)),
+    });
+    const url = `${EVENTS_URL(calendarId)}?${params.toString()}`;
+    const res = await this.fetchAuthed(url, { method: "GET" }, creds);
+    const json: any = await res.json();
+    const items: any[] = json?.items ?? [];
+    return items.map((e) => ({
+      id: String(e.id ?? ""),
+      summary: e.summary ?? null,
+      start: e.start?.dateTime ?? e.start?.date ?? null,
+      end: e.end?.dateTime ?? e.end?.date ?? null,
+      attendees: (e.attendees ?? []).map((a: any) => a.email).filter(Boolean),
+    }));
+  }
+
   // ─── Internals ─────────────────────────────────────────
 
   private async loadAccount(): Promise<{ account: any; creds: StoredCredentials }> {
@@ -210,3 +292,108 @@ export class GoogleCalendarAdapter implements CalendarAdapter {
     return next;
   }
 }
+
+// ─── Provider-framework registration ─────────────────────────
+//
+// Makes Google Calendar a FIRST-CLASS adapter-framework provider (like Stripe,
+// Airtable, HubSpot) so its READ tools surface + execute through the SAME
+// connected-AND-allowed pipeline as every other integration - no calendar
+// special-casing in the surface/dispatch layers. WRITES are intentionally NOT
+// exposed here: booking goes through the validated `schedule_meeting` path
+// (working hours / buffers / conflicts), so `create_event` is never surfaced to
+// the model. The concrete per-agent calendar is resolved here (calendar
+// capability is per-agent), keeping the framework contract unchanged.
+
+// NOTE: availability is NOT exposed here. A raw free/busy passthrough bypasses
+// the scheduling policy (working hours, buffers, min-notice, meeting-type
+// windows). The model gets availability through the first-class
+// `check_availability` built-in tool instead, which runs the SAME
+// `resolveAvailability` resolver as `schedule_meeting` - one source of truth.
+// Only neutral reads (list_events) live on this adapter path.
+const GCAL_READ_TOOLS: ToolDefinition[] = [
+  {
+    name: "google_calendar.list_events",
+    description: "List the assigned agent's upcoming calendar events in a window.",
+    whenToUse: "You need to see existing events (e.g. to reference or avoid a clash) - read only.",
+    category: "READ",
+    riskLevel: "LOW",
+    parameters: {
+      type: "object",
+      properties: {
+        from_iso: { type: "string", description: "Window start, ISO8601 with timezone offset." },
+        to_iso: { type: "string", description: "Window end, ISO8601 with timezone offset." },
+        max: { type: "number", description: "Max events to return (default 10, max 50)." },
+      },
+      required: ["from_iso", "to_iso"],
+    },
+  },
+];
+
+/**
+ * Resolve the per-agent CONNECTED Google calendar account for this conversation.
+ * Calendar capability is per-agent (an agent books into a SPECIFIC calendar), so
+ * the agent is taken from the conversation's assignment. Throws a clear error
+ * (never a crash) when the agent has no connected calendar - the dispatcher
+ * surfaces it as a structured failure.
+ */
+async function resolveAgentCalendarAccountId(tenantId: string, conversationId?: string): Promise<string> {
+  if (!conversationId) throw new Error("calendar tools require a conversation context");
+  const conv = await (prisma as any).conversation.findUnique({
+    where: { id: conversationId },
+    select: { assignedAiAgentId: true },
+  });
+  const aiAgentId = conv?.assignedAiAgentId;
+  if (!aiAgentId) throw new Error("no_agent_assigned_to_conversation");
+  const account = await (prisma as any).calendarAccount.findFirst({
+    where: { tenantId, aiAgentId, provider: "GOOGLE_CALENDAR", status: "CONNECTED" },
+    select: { id: true },
+  });
+  if (!account) throw new Error("no_connected_calendar_for_agent");
+  return account.id;
+}
+
+export const GoogleCalendarProviderAdapter: ProviderAdapter = {
+  slug: "google_calendar",
+  tools: () => GCAL_READ_TOOLS,
+  async execute({ ctx, toolName, args }) {
+    const accountId = await resolveAgentCalendarAccountId(ctx.tenantId, ctx.conversationId);
+    const cal = new GoogleCalendarAdapter({ calendarAccountId: accountId });
+    const fromMs = Date.parse(String(args.from_iso ?? ""));
+    const toMs = Date.parse(String(args.to_iso ?? ""));
+    if (!Number.isFinite(fromMs) || !Number.isFinite(toMs)) {
+      throw new Error("from_iso and to_iso must be valid ISO8601 timestamps");
+    }
+    const tool = toolName.includes(".") ? toolName.slice(toolName.indexOf(".") + 1) : toolName;
+    if (tool === "list_events") {
+      return { events: await cal.listEvents({ fromMs, toMs, max: Number(args.max) || 10 }) };
+    }
+    throw new Error(`unsupported google_calendar tool: ${tool}`);
+  },
+
+  /**
+   * Connection probe. The generic fallback ("call the first READ tool with no
+   * args") can never pass here: `list_events` requires from_iso/to_iso, so
+   * every test marked this integration ERROR even when the credential was
+   * perfectly good. We instead ask Google for the calendar list - the cheapest
+   * call that proves the token carries the calendar scope.
+   */
+  async validate({ credentials }) {
+    const accessToken = credentials?.accessToken;
+    if (!accessToken) return { ok: false, error: "No stored Google credential - reconnect the integration." };
+    try {
+      const r = await fetch("https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=1", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (r.ok) return { ok: true };
+      if (r.status === 401 || r.status === 403) {
+        return { ok: false, error: "Google rejected the stored credential. Reconnect Google Calendar to grant access again." };
+      }
+      return { ok: false, error: `Google Calendar returned ${r.status} while verifying access.` };
+    } catch (e: any) {
+      // Never leak the token or the raw provider payload into user-facing text.
+      return { ok: false, error: `Couldn't reach Google Calendar: ${e?.code || "network error"}` };
+    }
+  },
+};
+
+registerAdapter(GoogleCalendarProviderAdapter);

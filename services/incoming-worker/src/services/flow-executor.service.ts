@@ -25,7 +25,7 @@
  * RouterRule-list evaluator in routing.service.ts. That is the only escape hatch.
  */
 
-import { prisma, getOutboundAdapter, decryptCredentials, publishEvent, flowResumeQueue } from "@chatcenter/shared";
+import { prisma, getOutboundAdapter, decryptCredentials, publishEvent, flowResumeQueue, describeSendError, safeFetch as sharedSafeFetch } from "@chatcenter/shared";
 import type { ChannelCredentials } from "@chatcenter/shared";
 import { processAIBot } from "./ai-bot.service";
 import { tryLinkIdentifierFromInbound } from "./identity-link.service";
@@ -599,13 +599,20 @@ async function walk(
         if (ctx.sendCtx && buttons.length > 0) {
           const adapter = getOutboundAdapter(ctx.sendCtx.channel as any);
           if (adapter) {
-            const extId = await adapter.sendInteractiveMessage(
-              ctx.sendCtx.credentials,
-              ctx.sendCtx.channelAccountExternalId,
-              ctx.sendCtx.recipientId,
-              body,
-              buttons,
-            );
+            let extId: string | null;
+            try {
+              extId = await adapter.sendInteractiveMessage(
+                ctx.sendCtx.credentials,
+                ctx.sendCtx.channelAccountExternalId,
+                ctx.sendCtx.recipientId,
+                body,
+                buttons,
+              );
+            } catch (err: any) {
+              const { sendError } = describeSendError(err, ctx.sendCtx.channel as any);
+              await persistOutbound(ctx, body, "interactive", null, { buttons, sendError });
+              throw err;
+            }
             await persistOutbound(ctx, body, "interactive", extId, { buttons });
           }
         }
@@ -1005,12 +1012,21 @@ async function sendText(
   if (!resolved || !resolved.trim() || !sendCtx) return;
   const adapter = getOutboundAdapter(sendCtx.channel as any);
   if (!adapter) return;
-  const extId = await adapter.sendTextMessage(
-    sendCtx.credentials,
-    sendCtx.channelAccountExternalId,
-    sendCtx.recipientId,
-    resolved,
-  );
+  let extId: string | null;
+  try {
+    extId = await adapter.sendTextMessage(
+      sendCtx.credentials,
+      sendCtx.channelAccountExternalId,
+      sendCtx.recipientId,
+      resolved,
+    );
+  } catch (err: any) {
+    // Persist a FAILED row with the full provider error before rethrowing, so
+    // the flow's history shows a diagnosable failure instead of a silent drop.
+    const { sendError } = describeSendError(err, sendCtx.channel as any);
+    await persistOutbound(ctx, resolved, "text", null, { sendError });
+    throw err;
+  }
   await persistOutbound(ctx, resolved, "text", extId);
 }
 
@@ -1028,15 +1044,22 @@ async function sendMedia(
   const adapter = getOutboundAdapter(ctx.sendCtx.channel as any);
   if (!adapter) return;
   if (adapter.sendMediaMessage) {
-    const extId = await adapter.sendMediaMessage(
-      ctx.sendCtx.credentials,
-      ctx.sendCtx.channelAccountExternalId,
-      ctx.sendCtx.recipientId,
-      resolvedUrl,
-      mediaType,
-      resolvedName,
-      resolvedCaption,
-    );
+    let extId: string | null;
+    try {
+      extId = await adapter.sendMediaMessage(
+        ctx.sendCtx.credentials,
+        ctx.sendCtx.channelAccountExternalId,
+        ctx.sendCtx.recipientId,
+        resolvedUrl,
+        mediaType,
+        resolvedName,
+        resolvedCaption,
+      );
+    } catch (err: any) {
+      const { sendError } = describeSendError(err, ctx.sendCtx.channel as any);
+      await persistOutbound(ctx, resolvedCaption || resolvedUrl, mediaType, null, { url: resolvedUrl, filename: resolvedName, sendError });
+      throw err;
+    }
     await persistOutbound(ctx, resolvedCaption || resolvedUrl, mediaType, extId, { url: resolvedUrl, filename: resolvedName });
     return;
   }
@@ -1255,15 +1278,16 @@ async function sendTemplate(data: Record<string, any>, ctx: FlowExecCtx): Promis
       components,
     );
   } catch (err: any) {
-    console.error(`${tag} fail name=${tmpl.name} err=${String(err?.message || err).slice(0, 200)}`);
+    const { sendError } = describeSendError(err, sendCtx.channel as any);
+    console.error(`${tag} fail name=${tmpl.name} err=${JSON.stringify(sendError)}`);
     // Persist a FAILED message row so the agent's history shows the attempt
-    // (and the failure reason) instead of silently dropping.
+    // (and the full provider error) instead of silently dropping.
     await persistOutbound(ctx, tmpl.body || tmpl.name, "template", null, {
       templateId: tmpl.id,
       templateName: tmpl.name,
       language: tmpl.language,
       components,
-      error: String(err?.message || err).slice(0, 500),
+      sendError,
     });
     return "failed";
   }
@@ -1288,6 +1312,11 @@ async function persistOutbound(
   // No sendCtx (or no conversation) → nothing to attach an outbound row to.
   // Context-free runs hit the first branch since they carry neither.
   if (!ctx.sendCtx || !ctx.conversationId) return;
+  // When a structured provider error rode in on metadata.sendError, lift its
+  // human summary into the errorMessage column so the failed row is diagnosable
+  // from the DB/UI (not just buried in the JSON blob).
+  const sendErrorMessage: string | undefined =
+    !extId && metadata?.sendError?.message ? String(metadata.sendError.message) : undefined;
   const m = await prisma.message.create({
     data: {
       tenantId: ctx.tenantId,
@@ -1299,6 +1328,7 @@ async function persistOutbound(
       senderName: "Flow",
       externalMessageId: extId,
       status: extId ? "SENT" : "FAILED",
+      errorMessage: sendErrorMessage,
       metadata: metadata || {},
     } as any,
   });
@@ -1466,10 +1496,11 @@ async function persistVars(ctx: FlowExecCtx): Promise<void> {
 }
 
 /**
- * Fetch with SSRF guard + timeout. Blocks internal IP ranges (10.x, 127.x,
- * 172.16-31.x, 192.168.x, link-local, metadata endpoints) so a flow author
- * can't point HTTP Request at an internal service. This is NOT a substitute
- * for a proper allowlist - it's a floor.
+ * Flow HTTP-node fetch, delegating to the shared SSRF-hardened safeFetch
+ * (scheme allowlist, DNS-resolved private/link-local/metadata block on every
+ * hop, manual redirect revalidation). The old local string-match guard was
+ * bypassable via a 302 redirect or DNS rebinding; the shared primitive is the
+ * single sanctioned implementation.
  */
 async function safeFetch(
   url: string,
@@ -1477,48 +1508,10 @@ async function safeFetch(
   headers: Record<string, string>,
   body: string | undefined,
 ): Promise<{ ok: boolean; status: number; data: any; error?: string }> {
-  if (!url || !/^https?:\/\//i.test(url)) {
-    return { ok: false, status: 0, data: null, error: "URL must be http(s)://" };
-  }
-  try {
-    const parsed = new URL(url);
-    const host = parsed.hostname.toLowerCase();
-    if (isPrivateHost(host)) {
-      return { ok: false, status: 0, data: null, error: `Blocked internal host: ${host}` };
-    }
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 10_000);
-    const init: RequestInit = {
-      method,
-      headers: { ...(body ? { "Content-Type": "application/json" } : {}), ...headers },
-      signal: controller.signal,
-    };
-    if (body && body.length > 0) init.body = body;
-    const res = await fetch(parsed.toString(), init).finally(() => clearTimeout(timer));
-    const text = await res.text();
-    let data: any = text;
-    try { data = JSON.parse(text); } catch {}
-    return { ok: res.ok, status: res.status, data };
-  } catch (err) {
-    return { ok: false, status: 0, data: null, error: (err as Error).message };
-  }
-}
-
-function isPrivateHost(host: string): boolean {
-  if (host === "localhost" || host === "0.0.0.0" || host === "::1") return true;
-  // IPv4 literal
-  const m = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (m) {
-    const [a, b] = [parseInt(m[1], 10), parseInt(m[2], 10)];
-    if (a === 10) return true;
-    if (a === 127) return true;
-    if (a === 169 && b === 254) return true; // link-local / metadata
-    if (a === 172 && b >= 16 && b <= 31) return true;
-    if (a === 192 && b === 168) return true;
-    return false;
-  }
-  // Common internal names
-  return /^(internal\.|intranet\.|\.internal$|\.local$)/i.test(host);
+  const r = await sharedSafeFetch(url, { method, headers, body, timeoutMs: 10_000 });
+  let data: any = r.text;
+  try { data = JSON.parse(r.text); } catch {}
+  return { ok: r.ok, status: r.status, data, ...(r.error ? { error: r.error } : {}) };
 }
 
 /**

@@ -7,6 +7,19 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("@chatcenter/shared", () => ({
+  // Durable tenant settings (business hours, auto-greeting, SLA). Exhaustive
+  // mocks of this barrel must supply them or the read path throws instead of
+  // returning "not configured". Default: nothing configured.
+  readDurableSetting: async () => null,
+  writeDurableSetting: async () => undefined,
+  settingCacheKey: (t: string, k: string) => `tenant:${t}:${k}`,
+  // Version pins now live in shared modules, so exhaustive mocks of this
+  // barrel must supply them. Returning the real defaults keeps any URL the
+  // code builds meaningful instead of "undefined/...".
+  shopifyApiVersion: () => "2026-07",
+  checkShopifyResponseVersion: () => ({ ok: true, served: "2026-07" }),
+  metaGraphBaseUrl: (legacy?: string) => legacy || "https://graph.facebook.com/v24.0",
+  stripeVersionHeader: () => ({ "Stripe-Version": "2026-02-25.clover" }),
   prisma: {
     auditLog: { create: vi.fn().mockResolvedValue({}) },
   },
@@ -15,6 +28,8 @@ vi.mock("@chatcenter/shared", () => ({
 import {
   validateAssistantOutput,
   validateAndPersist,
+  stripLeakedToolContent,
+  stripInternalOpsNarration,
 } from "../../services/output-validator.service";
 
 const ctx = { tenantId: "t1", conversationId: "conv1" };
@@ -171,5 +186,91 @@ describe("validateAndPersist", () => {
     await new Promise((resolve) => setImmediate(resolve));
     const { prisma } = await import("@chatcenter/shared");
     expect((prisma.auditLog.create as any)).toHaveBeenCalled();
+  });
+});
+
+describe("tool-output leak protection (P0 - the live E2E leak)", () => {
+  // The exact content that reached the customer in the amorphous E2E: an
+  // interim ack, a tool-call-as-text blob, a fabricated result envelope, then a
+  // human confirmation. The JSON lines must be stripped; the human text kept.
+  const leaked =
+    "רגע אחד, בודק 🙏\n" +
+    '{"to":"functions.schedule_meeting","json":{"email":"a@b.com","start_iso":"2026-06-25T16:30:00+03:00"}}\n' +
+    '{"ok":true,"meeting_link":"https://gotcha.demo/meet/abc123","duration_minutes":20}\n' +
+    "אעדכן אותך כשנמשיך.";
+
+  it("strips tool-call-shaped and result-envelope JSON lines, keeps human text", () => {
+    const { cleaned, leaked: didLeak } = stripLeakedToolContent(leaked);
+    expect(didLeak).toBe(true);
+    expect(cleaned).not.toContain("functions.schedule_meeting");
+    expect(cleaned).not.toContain('"ok":true');
+    expect(cleaned).not.toContain("gotcha.demo");
+    expect(cleaned).toContain("רגע אחד");
+    expect(cleaned).toContain("אעדכן אותך");
+  });
+
+  it("validateAssistantOutput flags tool_output_leak and returns the cleaned text (leak-only)", () => {
+    const r = validateAssistantOutput(leaked, ctx);
+    expect(r.ok).toBe(false);
+    expect(r.violations.some((v) => v.category === "tool_output_leak")).toBe(true);
+    expect(r.safeReply).not.toContain("functions.");
+    expect(r.safeReply).not.toContain('"ok":true');
+    expect(r.safeReply).toContain("רגע אחד");
+  });
+
+  it("clean human text is untouched (no false positive)", () => {
+    const ok = "מעולה, נשמח לקבוע דמו קצר. איזה יום נוח לך השבוע?";
+    const { leaked: didLeak } = stripLeakedToolContent(ok);
+    expect(didLeak).toBe(false);
+    expect(validateAssistantOutput(ok, ctx).ok).toBe(true);
+  });
+
+  it("fabricated Hebrew booking claim with NO schedule_meeting success → blocked", () => {
+    const r = validateAssistantOutput("הצלחתי לקבוע את הדמו למחר ב-16:30", {
+      ...ctx,
+      toolCallLog: [{ tool: "integration_create_lead", decision: "executed" }],
+    });
+    expect(r.ok).toBe(false);
+    expect(r.violations.some((v) => v.category === "fabricated_action")).toBe(true);
+  });
+
+  it("same booking claim WITH a real schedule_meeting success → allowed", () => {
+    const r = validateAssistantOutput("קבעתי לך פגישה למחר ב-16:30", {
+      ...ctx,
+      toolCallLog: [{ tool: "schedule_meeting", decision: "executed" }],
+    });
+    expect(r.ok).toBe(true);
+  });
+});
+
+describe("internal-operations leak protection (customers see outcomes, not mechanics)", () => {
+  it("strips the internal-ops clause but keeps the customer-facing reply (the live leak)", () => {
+    const leak = "Awesome, I'll set the demo up. I'll create a lead internally with the details once we lock time and name. What name should I use for the booking?";
+    const { cleaned, leaked } = stripInternalOpsNarration(leak);
+    expect(leaked).toBe(true);
+    expect(cleaned.toLowerCase()).not.toContain("create a lead");
+    expect(cleaned.toLowerCase()).not.toContain("internally");
+    expect(cleaned).toContain("What name should I use"); // the real ask survives
+  });
+
+  it("validateAssistantOutput flags internal_ops_leak and returns the cleaned reply", () => {
+    const r = validateAssistantOutput("Sure! I'll update the CRM with your details. Meanwhile, which channel do you use most?", ctx);
+    expect(r.ok).toBe(false);
+    expect(r.violations.some((v) => v.category === "internal_ops_leak")).toBe(true);
+    expect(r.safeReply.toLowerCase()).not.toContain("crm");
+    expect(r.safeReply).toContain("which channel");
+  });
+
+  it("Hebrew internal-ops narration is stripped too", () => {
+    const { cleaned, leaked } = stripInternalOpsNarration("מעולה. אני ארשום אותך במערכת. מתי נוח לך להיפגש?");
+    expect(leaked).toBe(true);
+    expect(cleaned).not.toContain("במערכת");
+    expect(cleaned).toContain("מתי נוח לך");
+  });
+
+  it("does NOT touch a clean reply with no internal-ops language", () => {
+    const ok = "Great - I can show you how it handles WhatsApp DMs. What day works for a quick demo?";
+    expect(stripInternalOpsNarration(ok).leaked).toBe(false);
+    expect(validateAssistantOutput(ok, ctx).ok).toBe(true);
   });
 });

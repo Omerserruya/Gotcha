@@ -1,12 +1,19 @@
 import { Job } from "bullmq";
-import { prisma, createWorker, OutgoingMessageJob, analyticsQueue, publishEvent, getOutboundAdapter, decryptCredentials } from "@chatcenter/shared";
-import type { ChannelCredentials } from "@chatcenter/shared";
+import { prisma, createWorker, OutgoingMessageJob, analyticsQueue, publishEvent, getOutboundAdapter, decryptCredentials, describeSendError, sanitizeCustomerText } from "@chatcenter/shared";
+import type { ChannelCredentials, ProviderSendError } from "@chatcenter/shared";
 import { recordBroadcastResult } from "./broadcast.worker";
 
 const MEDIA_MESSAGE_TYPES = ["image", "video", "document"];
 
 async function processOutgoingMessage(job: Job<OutgoingMessageJob>): Promise<void> {
-  const { tenantId, channel, channelAccountId, recipientExternalId, body, messageId, messageType, mediaUrl, fileName, broadcastId, broadcastRecipientId } = job.data;
+  const { tenantId, channel, channelAccountId, recipientExternalId, body: rawBody, messageId, messageType, mediaUrl, fileName, broadcastId, broadcastRecipientId } = job.data;
+  // OUTBOX chokepoint: every customer-bound body from EVERY producer (bot
+  // replies, approval continuations, broadcasts, scheduled sends, voice
+  // callbacks) passes through the AI-signature sanitizer here, so no path -
+  // present or future - can leak an em dash to a customer even if it skipped
+  // the generation-side humanizer. Character-level only: business facts
+  // (amounts, ids, dates) are never altered.
+  const body = sanitizeCustomerText(rawBody);
 
   const channelAccount = await prisma.channelAccount.findUnique({ where: { id: channelAccountId } });
   if (!channelAccount) {
@@ -30,6 +37,7 @@ async function processOutgoingMessage(job: Job<OutgoingMessageJob>): Promise<voi
 
   let externalMessageId: string | null = null;
   let sendError: string | null = null;
+  let sendErrorDetail: ProviderSendError | null = null;
 
   try {
     if (messageType === "template" && adapter.sendTemplateMessage) {
@@ -61,15 +69,39 @@ async function processOutgoingMessage(job: Job<OutgoingMessageJob>): Promise<voi
       );
     }
   } catch (err: any) {
-    sendError = err?.message || `${channel} send failed`;
-    console.error(`[outgoing] ${channel} adapter error:`, sendError);
+    const described = describeSendError(err, channel);
+    sendError = described.errorMessage;
+    sendErrorDetail = described.sendError;
+    // Structured so it's diagnosable from the DB/UI without server logs.
+    console.error(`[outgoing] ${channel} adapter error:`, JSON.stringify(sendErrorDetail));
   }
 
   const status = externalMessageId ? "SENT" : "FAILED";
 
+  // Merge the structured provider error into the row's existing metadata JSON
+  // (Prisma replaces the whole column, so read-then-merge to avoid clobbering
+  // whatever the enqueuer stored). Persisted at `metadata.sendError` so the
+  // failed send is fully diagnosable from the DB/UI without server logs.
+  let metadataUpdate: Record<string, any> | undefined;
+  if (sendErrorDetail) {
+    const existing = await prisma.message.findUnique({
+      where: { id: messageId },
+      select: { metadata: true },
+    });
+    const base = (existing?.metadata && typeof existing.metadata === "object")
+      ? (existing.metadata as Record<string, any>)
+      : {};
+    metadataUpdate = { ...base, sendError: sendErrorDetail };
+  }
+
   const updatedMessage = await prisma.message.update({
     where: { id: messageId },
-    data: { status, externalMessageId, errorMessage: sendError || undefined },
+    data: {
+      status,
+      externalMessageId,
+      errorMessage: sendError || undefined,
+      ...(metadataUpdate ? { metadata: metadataUpdate } : {}),
+    },
   });
 
   // If this Message was produced by a scheduled-message job, mirror the
@@ -95,7 +127,7 @@ async function processOutgoingMessage(job: Job<OutgoingMessageJob>): Promise<voi
     await publishEvent({
       event: "message:status",
       tenantId,
-      data: { messageId, conversationId: job.data.conversationId, status, externalMessageId, error: sendError },
+      data: { messageId, conversationId: job.data.conversationId, status, externalMessageId, error: sendError, sendError: sendErrorDetail || undefined },
     });
   }
 

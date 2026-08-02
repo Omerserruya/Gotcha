@@ -1,6 +1,15 @@
 import { Router, Request, Response } from "express";
 import rateLimit from "express-rate-limit";
-import { prisma, incomingMessageQueue, withCrossTenantAccess } from "@chatcenter/shared";
+import {
+  prisma,
+  incomingMessageQueue,
+  withCrossTenantAccess,
+  normalizeWebchatConfig,
+  publicWebchatConfig,
+  getRedis,
+  BUSINESS_HOURS_KEY,
+  parseBusinessHours,
+  evaluateBusinessHours, readDurableSetting } from "@chatcenter/shared";
 import crypto from "crypto";
 import { sanitizeVisitorName, sanitizeUntrusted } from "../services/prompt-sanitizer.service";
 
@@ -76,6 +85,88 @@ const MAX_VISITOR_NAME = 32;
 const MAX_PAGE_URL = 512;
 
 // POST /api/embedded-chat/init - Initialize a chat session (public, no auth)
+/**
+ * POST /bootstrap — everything the widget needs before it draws anything.
+ *
+ * This exists so a widget that no longer belongs to anyone draws NOTHING.
+ * Previously the script painted its launcher unconditionally and only
+ * called the server when a visitor opened it; delete the channel and the
+ * customer's site kept a chat button that opened onto silence. Asking
+ * first means a deleted widget simply is not there.
+ *
+ * The refusal is uniform on purpose. A deleted widget, a disabled one and
+ * an id that never existed all answer the same way: a public endpoint on
+ * someone else's website is not a place to explain our internal state.
+ *
+ * And it answers 200 with an empty body rather than 404. "Render nothing"
+ * is a legitimate answer to "what should I render", not a failure — and a
+ * 404 puts a red line in the console of a tenant's own website that no
+ * amount of handling in the script can suppress. It also stops the status
+ * code from confirming whether a given widget id exists.
+ */
+router.post("/bootstrap", initLimiter, async (req: Request, res: Response) => {
+  try {
+    const widgetId = String((req.body as any)?.widgetId ?? "").trim();
+    if (!widgetId || widgetId.length > 128) {
+      res.json({ data: {} });
+      return;
+    }
+
+    // Public and anonymous: the caller has no tenant context, and the
+    // widget id is globally unique by design, so this lookup must be
+    // cross-tenant. Everything after it is scoped to the row we found.
+    const account = await withCrossTenantAccess(async () =>
+      prisma.channelAccount.findFirst({
+        where: {
+          externalId: widgetId,
+          channel: "WEBCHAT",
+          connectionStatus: { in: ["CONNECTED", "PENDING"] },
+        },
+      }),
+    );
+
+    if (!account) {
+      res.json({ data: {} });
+      return;
+    }
+
+    // The first real load IS the installation verification.
+    if (account.connectionStatus === "PENDING") {
+      await withCrossTenantAccess(async () =>
+        prisma.channelAccount.update({
+          where: { id: account.id },
+          data: { connectionStatus: "CONNECTED", connectedAt: new Date(), lastError: null },
+        }),
+      ).catch(() => undefined);
+    }
+
+    const config = normalizeWebchatConfig(account.credentials);
+
+    // The tenant's own opening hours — the same ones the AI employee and
+    // the storefront widget read. One business, one schedule.
+    let offline = false;
+    try {
+      const hours = parseBusinessHours(await readDurableSetting(account.tenantId, "businessHours"));
+      offline = !evaluateBusinessHours(hours).open;
+    } catch {
+      // Config store unreachable → answer as open. A widget that says
+      // "we are closed" because Redis blinked is worse than one that
+      // answers out of hours.
+      offline = false;
+    }
+
+    res.json({
+      data: {
+        availability: offline ? "offline" : "online",
+        widget: publicWebchatConfig(config, { offline }),
+      },
+    });
+  } catch (err) {
+    console.error("Embedded chat bootstrap error:", (err as Error)?.message);
+    res.status(500).json({ error: "unavailable" });
+  }
+});
+
 router.post("/init", initLimiter, async (req: Request, res: Response) => {
   try {
     const { widgetId, visitorId, sessionId, visitorName, pageUrl } = req.body;
@@ -92,13 +183,26 @@ router.post("/init", initLimiter, async (req: Request, res: Response) => {
     const channelAccount = await withCrossTenantAccess(
       async () =>
         await prisma.channelAccount.findFirst({
-          where: { externalId: widgetId, channel: "WEBCHAT", connectionStatus: "CONNECTED" },
+          // PENDING = created in Settings but never seen on a real site yet.
+          // The first successful widget init IS the installation verification:
+          // we accept it and flip the account to CONNECTED below. ERROR /
+          // DISCONNECTED widgets stay rejected.
+          where: { externalId: widgetId, channel: "WEBCHAT", connectionStatus: { in: ["CONNECTED", "PENDING"] } },
         }),
     );
 
     if (!channelAccount) {
       res.status(404).json({ error: "Widget not found or not active" });
       return;
+    }
+
+    if (channelAccount.connectionStatus === "PENDING") {
+      await withCrossTenantAccess(async () =>
+        prisma.channelAccount.update({
+          where: { id: channelAccount.id },
+          data: { connectionStatus: "CONNECTED", connectedAt: new Date(), lastError: null },
+        }),
+      ).catch(() => { /* verification flip is best-effort; chat still works */ });
     }
 
     const finalVisitorId = visitorId || `visitor_${crypto.randomBytes(8).toString("hex")}`;
@@ -161,7 +265,8 @@ router.post("/init", initLimiter, async (req: Request, res: Response) => {
         sessionId: conversation.id,
         visitorId: finalVisitorId,
         sessionToken: finalSessionId,
-        tenantId: channelAccount.tenantId,
+        // tenantId used to be returned here. A visitor's browser has no
+        // use for it and every reason not to hold it.
       },
     });
   } catch (err) {

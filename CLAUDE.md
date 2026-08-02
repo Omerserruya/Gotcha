@@ -57,10 +57,22 @@ docker compose down               # tear down
    - `services/auth/src/routes/onboarding.ts` (chat completions during onboarding)
    - `services/incoming-worker/src/services/knowledge-retrieval.service.ts` (embeddings for RAG)
 3. **No new dependencies.** `npm install` / `pip install` / `yarn add` are blocked for agents.
+   One granted exception: **`jose`** (pinned `^5`, in `packages/shared`) for standards-compliant
+   OIDC/JWKS token verification. Granted explicitly because hand-rolling RS256 + JWKS + key
+   rotation would be exactly the custom auth crypto the Authentik migration removed. Note `jose@6`
+   is ESM-only and cannot be `require`d from this CommonJS repo - stay on v5.
 4. **No half-work.** User-facing tickets must touch **UI (`frontend/`) AND backend** and be E2E-verified.
 5. **Main is sacred.** No direct commits to main, no force-push, no `git reset --hard`. PR-based merges
    only; only the Deployer merges, and only after explicit user approval.
 6. **One autonomous session at a time** (global single-flight lock).
+7. **Authentication belongs to Authentik. GOTCHA implements NONE of it.** No password hashing,
+   no login/register/reset endpoint, no session or refresh-token store, no MFA, no token signing.
+   GOTCHA verifies Authentik's tokens via JWKS and resolves `sub` → `User.authentikSubject`.
+   Authorization (roles, permissions, tenancy) stays 100% local - never read an Authentik group
+   for a business decision. Full architecture: `docs/security/authentik-architecture.md`.
+   - The auth gate is ONE function: `authenticate()` in `packages/shared/src/middleware/auth.ts`,
+     backed by `resolvePrincipal()`. Never re-implement it per service, and never bypass it.
+   - It **fails closed** by design. Do not "restore availability" by calling `next()` on error.
 
 ---
 

@@ -28,7 +28,24 @@ export type SystemEventType =
   | "conversation.escalated"
   | "high_value_lead.detected"
   | "payment.failed"
-  | "system.error.critical";
+  | "system.error.critical"
+  // Billing · subscription · AI Units (emitted by services/billing).
+  | "subscription.trial_started"
+  | "subscription.trial_ending"
+  | "subscription.activated"
+  | "subscription.plan_changed"
+  | "subscription.canceled"
+  | "subscription.resumed"
+  | "subscription.suspended"
+  | "subscription.past_due"
+  | "invoice.issued"
+  | "invoice.paid"
+  | "payment_method.expiring"
+  | "credit.threshold"
+  | "credit.exhausted"
+  | "credit.auto_purchase_succeeded"
+  | "credit.auto_purchase_failed"
+  | "credit.auto_purchase_ceiling_reached";
 
 export interface SystemEventMetadata {
   conversationId?: string;

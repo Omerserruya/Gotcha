@@ -30,6 +30,25 @@ export interface AgentToolContext {
    */
   mode?: "agent" | "copilot";
   /**
+   * Sandbox ("Test the AI Employee") execution.
+   *
+   * The whole point of a test conversation is that it behaves like the real
+   * employee, so this deliberately does NOT change the prompt, the tools the
+   * model is offered, the policy gate, or the routing - only what happens at
+   * the moment of execution:
+   *
+   *   - reads run for real against this tenant's data, because a test that
+   *     invents order history teaches the operator nothing;
+   *   - anything that mutates state is NOT executed. The model is handed a
+   *     clearly-labelled simulated result so the conversation can continue,
+   *     and the caller gets a `simulated` side effect to show in the UI.
+   *
+   * "safe" is the default for sandbox. "real" runs writes through the ordinary
+   * production path including HITL approval, and is only for an operator who
+   * explicitly opts in.
+   */
+  sandbox?: { enabled: true; writes: "safe" | "real" };
+  /**
    * Optional handler for `schedule_meeting` (Task 3). The ai service wires
    * this with its scheduling.service + calendar adapter. Lives on the
    * context so shared/agent-tools.ts stays decoupled from per-service
@@ -37,6 +56,26 @@ export interface AgentToolContext {
    * Return shape mirrors what the model needs to relay to the customer.
    */
   scheduleMeeting?: (args: ScheduleMeetingArgs) => Promise<ScheduleMeetingResult>;
+  /**
+   * Optional handler for `check_availability` (read-only). Answers "what times
+   * are free?", "are you open Saturday?", "what are your working hours?" by
+   * inspecting the configured calendar + scheduling policy. NEVER creates an
+   * event. Wired alongside scheduleMeeting whenever a calendar is bookable.
+   */
+  checkAvailability?: (args: CheckAvailabilityArgs) => Promise<CheckAvailabilityResult>;
+  /**
+   * Optional handler for `reschedule_meeting`. Moves the meeting already booked
+   * in THIS conversation to a new time (the existing eventId is resolved
+   * server-side from the audit trail, NOT supplied by the model). Wired by the
+   * ai service only when a connected calendar AND a prior booking exist.
+   */
+  rescheduleMeeting?: (args: RescheduleMeetingArgs) => Promise<RescheduleMeetingResult>;
+  /**
+   * Optional handler for `cancel_meeting`. Cancels the meeting already booked in
+   * THIS conversation (eventId resolved server-side). Wired alongside
+   * rescheduleMeeting.
+   */
+  cancelMeeting?: () => Promise<CancelMeetingResult>;
   /**
    * Custom API tool runner. Set by ai-bot.service from
    * connectors/custom-api.service. The dispatcher routes any tool whose
@@ -57,6 +96,21 @@ export interface AgentToolContext {
     args: Record<string, unknown>;
   }) => Promise<{ ok: true; result: unknown } | { ok: false; reason: string }>;
   /**
+   * Cross-identity verification (set by ai-bot.service). The ONLY sanctioned
+   * path when the chat participant claims to be a DIFFERENT customer: an OTP
+   * goes to the destination already STORED on that customer (never to a
+   * chat-supplied destination), and only a confirmed code opens short-lived,
+   * customer-scoped access via the backend guard. The handler returns only a
+   * MASKED destination - the model never sees the stored phone/email.
+   */
+  requestIdentityVerification?: (opts: {
+    phone?: string;
+    email?: string;
+  }) => Promise<{ ok: boolean; sent_to?: string; reason?: string }>;
+  submitVerificationCode?: (opts: {
+    code: string;
+  }) => Promise<{ ok: boolean; verified?: boolean; remainingAttempts?: number; reason?: string }>;
+  /**
    * Custom DB query tool runner. Set by ai-bot.service from
    * connectors/custom-db.service. Routes any tool whose name starts with
    * `custom_db.` to the tenant-defined query template (parameterized SQL or
@@ -76,6 +130,31 @@ export interface AgentToolContext {
     body: string;
     priority?: "low" | "normal" | "high" | "urgent";
   }) => Promise<{ ok: true; result: unknown } | { ok: false; reason: string }>;
+  /**
+   * Unified lead/contact creation runner. Set by ai-bot.service, backed by the
+   * per-tenant CRMAdapter (crm-adapter-resolver). The dispatcher routes the
+   * vendor-neutral `integration_create_lead` / `integration_create_contact`
+   * tools here so EVERY source-of-truth CRM (HubSpot, Salesforce, Zoho,
+   * Airtable, Fireberry, …) shares one create path with correct per-vendor
+   * field mapping - instead of the model driving a raw `<vendor>.create_record`.
+   * shared/agent-tools stays decoupled from the AI service's connector layer.
+   */
+  runCreateLead?: (opts: {
+    kind: "lead" | "contact";
+    name?: string;
+    email?: string;
+    phone?: string;
+    company?: string;
+    notes?: string;
+  }) => Promise<{ ok: boolean; id?: string; kind?: string; vendor?: string; reason?: string }>;
+  /**
+   * Shopify product card / carousel handler. Wired by the AI service from
+   * its catalog + commerce-message services, so this file stays free of
+   * Shopify specifics. Present only on Shopify Live Chat conversations
+   * where product messaging is allowed; when absent the tools are not
+   * surfaced and a stray call degrades to a clear refusal.
+   */
+  sendShopifyProducts?: (args: SendShopifyProductsArgs) => Promise<SendShopifyProductsResult>;
 }
 
 export interface ScheduleMeetingArgs {
@@ -94,7 +173,14 @@ export type ScheduleMeetingResult =
       ok: false;
       verdict: "INVALID";
       reason: string;
-      proposedSlotsIso: string[];
+      /**
+       * schedule_meeting is a pure WRITE tool: it never searches for slots. When
+       * the chosen time isn't bookable (out of hours, busy, min-notice, or a
+       * `slot_taken` race after validation) it sets this flag so the model knows
+       * to call `check_availability` for real open slots instead of expecting
+       * alternatives in this result.
+       */
+      needsAvailabilityCheck: true;
       /**
        * Pre-localized customer-facing copy. Set when the failure mode warrants
        * a specific user-visible message (e.g. `slot_taken` race after the
@@ -105,7 +191,90 @@ export type ScheduleMeetingResult =
       /** The slot the model originally tried to book - for audit. */
       requestedSlotIso?: string;
     }
-  | { ok: false; verdict: "PROPOSE"; proposedSlotsIso: string[] }
+  | { ok: false; reason: string; needsAvailabilityCheck?: boolean };
+
+export interface RescheduleMeetingArgs {
+  /** The NEW time the customer wants, ISO8601 with timezone offset. */
+  requested_at_iso: string;
+  customer_timezone?: string;
+}
+
+/**
+ * Reschedule shares schedule_meeting's result shape: VALID on a successful move
+ * (new eventId/joinUrl/start/end), INVALID with `needsAvailabilityCheck` when
+ * the new time isn't bookable (defer to check_availability), or a bare
+ * {ok:false,reason} (e.g. `no_existing_meeting` when there's nothing to move).
+ */
+export type RescheduleMeetingResult = ScheduleMeetingResult;
+
+export type CancelMeetingResult =
+  | { ok: true; cancelled: true; startMs?: number; endMs?: number }
+  | { ok: false; reason: string };
+
+export interface CheckAvailabilityArgs {
+  /**
+   * Which meeting type to check against (its duration + working-hours policy).
+   * Optional: the server snaps to the closest configured type, or uses the only
+   * one when a single type exists.
+   */
+  meeting_type?: string;
+  /**
+   * A SPECIFIC time the customer asked about ("are you free tomorrow at noon?"),
+   * ISO8601 with offset. Returns `requestedAvailable` + a `requestedReason` when
+   * not free. Mutually exclusive with from_iso/to_iso (point check vs window).
+   */
+  requested_at_iso?: string;
+  /** Window start for "what's free tomorrow / Saturday / next week", ISO8601. */
+  from_iso?: string;
+  /** Window end for the same windowed question, ISO8601. */
+  to_iso?: string;
+  customer_timezone?: string;
+}
+
+/** A weekly working-hours window in the agent's timezone (empty weekday = closed). */
+export interface WorkingHoursWindow {
+  /** 0=Sun … 6=Sat (JS Date.getDay()). */
+  weekday: number;
+  /** "HH:MM" 24h, agent timezone. */
+  start: string;
+  /** "HH:MM" 24h, agent timezone (exclusive). */
+  end: string;
+}
+
+/**
+ * Read-only availability answer. The single source of truth the model uses for
+ * EVERY availability / working-hours question. Never books anything.
+ */
+export type CheckAvailabilityResult =
+  | {
+      ok: true;
+      /** IANA timezone the working hours + slots are expressed in. */
+      timezone: string;
+      /** Structured weekly working hours; absence of a weekday = closed that day. */
+      workingHours: WorkingHoursWindow[];
+      minNoticeHours: number;
+      maxHorizonDays: number;
+      /** Duration (minutes) of the meeting type these slots were computed for. */
+      durationMinutes: number;
+      meetingTypeSlug: string;
+      /** Set when `requested_at_iso` was given - the point-check verdict. */
+      requestedIso?: string;
+      requestedAvailable?: boolean;
+      /** InvalidReason (e.g. outside_working_hours, agent_busy) when not available. */
+      requestedReason?: string;
+      /**
+       * Valid, bookable open slots (ISO8601). Within [from_iso,to_iso] when a
+       * window was given, else soonest-first. The customer picks one of these and
+       * THEN the model calls schedule_meeting with it.
+       */
+      proposedSlotsIso: string[];
+      /**
+       * Soonest valid slot ignoring the window - populated when the windowed
+       * answer is empty (e.g. asked about a closed Saturday) so the model can say
+       * "we're closed then; the nearest is …".
+       */
+      nextAvailableIso?: string;
+    }
   | { ok: false; reason: string };
 
 export interface AgentToolSideEffect {
@@ -135,6 +304,16 @@ export interface AgentToolSideEffect {
     reason: string;
   };
   /**
+   * A sandbox ("Test the AI Employee") turn proposed a state-mutating tool and
+   * it was NOT executed. Surfaced so the UI can label the turn honestly - the
+   * tester needs to know the difference between "the employee did this" and
+   * "the employee would have done this".
+   */
+  simulated?: {
+    tool: string;
+    arguments: Record<string, unknown>;
+  };
+  /**
    * Copilot-mode replacement for `awaitingApproval`. The tool was gated
    * as REQUIRE_APPROVAL but the human agent is already in the loop, so
    * we surface it as a "proposed quick action" the agent can fire from
@@ -156,6 +335,45 @@ export interface AgentToolDispatchResult {
 }
 
 // ─── Tool schemas (OpenAI function-calling format) ────────────
+
+export const REQUEST_IDENTITY_VERIFICATION_TOOL = {
+  type: "function" as const,
+  function: {
+    name: "request_identity_verification",
+    description:
+      "Start REAL identity verification when the chat participant asks about records of a customer whose " +
+      "identity does not match this chat's phone number. A one-time code is sent to the contact details " +
+      "ALREADY STORED on that customer's account - never to a phone or email typed in this chat. " +
+      "Saying 'yes that's me', repeating a phone number, or knowing an order number is NOT verification - " +
+      "when in doubt, call this tool or escalate to a human. You will receive only a masked destination " +
+      "(e.g. ***0665) to tell the customer; never reveal the full stored phone or email.",
+    parameters: {
+      type: "object",
+      properties: {
+        phone: { type: "string", description: "Phone the participant CLAIMS identifies the customer (untrusted input, used only to locate the stored account)." },
+        email: { type: "string", description: "Email the participant CLAIMS identifies the customer (untrusted input)." },
+      },
+    },
+  },
+};
+
+export const SUBMIT_VERIFICATION_CODE_TOOL = {
+  type: "function" as const,
+  function: {
+    name: "submit_verification_code",
+    description:
+      "Submit the one-time verification code the customer received after request_identity_verification. " +
+      "Only a correct, unexpired code opens access - and only to that specific customer's records, for a " +
+      "short time, in this conversation.",
+    parameters: {
+      type: "object",
+      properties: {
+        code: { type: "string", description: "The code exactly as the customer typed it." },
+      },
+      required: ["code"],
+    },
+  },
+};
 
 export const LINK_IDENTIFIER_TOOL = {
   type: "function" as const,
@@ -379,15 +597,119 @@ export const CREATE_TASK_TOOL = {
   },
 };
 
+// Vendor-neutral CRM lead/contact creation. The bot NEVER picks a CRM - the AI
+// service resolves the tenant's source-of-truth CRM and maps fields. This is the
+// ONLY create path surfaced to the model; raw `<vendor>.create_record` /
+// `create_lead` tools are stripped for the resolved CRM so there's no ambiguity.
+const _CRM_CREATE_PROPS = {
+  name: { type: "string", description: "The person's full name, exactly as they gave it. Do not invent." },
+  email: { type: "string", description: "Their email - only if they actually provided one this conversation." },
+  phone: { type: "string", description: "Their phone - only if known (the conversation's own channel number counts)." },
+  company: { type: "string", description: "Their company / business name, if mentioned." },
+  notes: { type: "string", description: "One short line on what they want / why they reached out." },
+} as const;
+
+export const INTEGRATION_CREATE_LEAD_TOOL = {
+  type: "function" as const,
+  function: {
+    name: "integration_create_lead",
+    description:
+      "Create a NEW lead in the business's CRM (whichever CRM is connected as the source of truth - " +
+      "HubSpot, Salesforce, Zoho, Airtable, Fireberry, etc.). The system routes to the correct CRM and " +
+      "maps the fields automatically - you do NOT choose the CRM and you do NOT need to know which one it is.\n" +
+      "Call this SILENTLY (never narrate CRM/lead/record to the customer) once you know who the person is and " +
+      "how to reach them. Provide everything you've genuinely learned - at minimum a name AND an email or phone.\n" +
+      "🚫 HARD RULES: never invent a name/email/phone - pass only what the customer actually gave you. If you " +
+      "don't yet have a name and a way to reach them, ASK first (one question) and do NOT call this tool this turn. " +
+      "If the customer already exists in CRM this tool is removed from your toolbox - use the update/note tools instead.",
+    parameters: { type: "object", properties: { ..._CRM_CREATE_PROPS }, required: [] },
+  },
+};
+
+export const INTEGRATION_CREATE_CONTACT_TOOL = {
+  type: "function" as const,
+  function: {
+    name: "integration_create_contact",
+    description:
+      "Create a NEW contact in the business's CRM (whichever CRM is connected as the source of truth). Same " +
+      "behavior and HARD RULES as integration_create_lead, but for businesses that capture people as contacts " +
+      "rather than leads. The system routes to the correct CRM and maps fields automatically - never tell the " +
+      "customer about CRM/contacts/records, and never invent values you weren't given.",
+    parameters: { type: "object", properties: { ..._CRM_CREATE_PROPS }, required: [] },
+  },
+};
+
+export const CHECK_AVAILABILITY_TOOL = {
+  type: "function" as const,
+  function: {
+    name: "check_availability",
+    description:
+      "READ-ONLY. Inspect the assigned agent's REAL calendar + scheduling rules to answer ANY availability " +
+      "or working-hours question. This is the ONLY source of truth for when the agent can meet - you do NOT " +
+      "know the calendar yourself, so never state availability, working hours, or specific open times from " +
+      "memory or reasoning. This tool NEVER books anything.\n\n" +
+      "Call it whenever the customer asks about timing, OR right before you propose any time yourself:\n" +
+      "  • \"are you free tomorrow / around noon / next week?\" → pass from_iso/to_iso for that window (or " +
+      "requested_at_iso for one exact time).\n" +
+      "  • \"what are your working hours?\", \"do you work Saturdays?\", \"are evenings possible?\" → call with " +
+      "no time and answer from the returned `workingHours` (structured weekly hours) + `timezone`.\n" +
+      "  • YOU want to propose meeting times → call first (with the window you have in mind, or none for " +
+      "'soonest') and offer ONLY the returned `proposedSlotsIso`. Never volunteer a clock time this tool " +
+      "did not return.\n\n" +
+      "Result:\n" +
+      "  - `workingHours` + `timezone` + `minNoticeHours` → answer hours / Saturday / evening questions directly.\n" +
+      "  - `proposedSlotsIso` → real bookable slots to offer; the customer picks one, THEN you call " +
+      "schedule_meeting with that exact slot.\n" +
+      "  - `requestedAvailable` + `requestedReason` (only when you passed `requested_at_iso`) → whether that one " +
+      "exact time is open, and if not, why.\n" +
+      "  - `nextAvailableIso` → the soonest open slot when the window you asked about has none (e.g. a closed " +
+      "Saturday): say you're closed then and offer it.",
+    parameters: {
+      type: "object",
+      properties: {
+        meeting_type: {
+          type: "string",
+          description:
+            "Configured meeting-type slug to check against (drives duration + working-hours policy). " +
+            "Optional - the server snaps to the closest configured type, or uses the only one configured.",
+        },
+        requested_at_iso: {
+          type: "string",
+          description:
+            "A SINGLE exact time to check ('are you free tomorrow at 12:00?'), ISO8601 with timezone offset. " +
+            "Use this OR from_iso/to_iso - not both.",
+        },
+        from_iso: {
+          type: "string",
+          description: "Window start for 'what's free tomorrow / Saturday / next week', ISO8601 with offset.",
+        },
+        to_iso: {
+          type: "string",
+          description: "Window end for that windowed question, ISO8601 with offset.",
+        },
+        customer_timezone: {
+          type: "string",
+          description: "IANA timezone (e.g. 'Asia/Jerusalem'). Provide if known.",
+        },
+      },
+      required: [],
+    },
+  },
+};
+
 export const SCHEDULE_MEETING_TOOL = {
   type: "function" as const,
   function: {
     name: "schedule_meeting",
     description:
-      "Book a meeting on the assigned agent's calendar. The system enforces working hours, " +
-      "buffers, minimum-notice, max-horizon, and existing busy slots - DO NOT assume the time " +
-      "you propose is free, the server validates and may reject.\n" +
-      "BEFORE calling this tool you MUST do TWO things in order:\n\n" +
+      "BOOK a meeting at a SPECIFIC time the customer has ALREADY chosen. This is a pure WRITE action: it " +
+      "creates the calendar event, the Meet link, and the invites. It does NOT search for times and does NOT " +
+      "decide availability - that is `check_availability`'s job. Never call this to 'see if a time works', and " +
+      "never invent a time.\n\n" +
+      "PRECONDITION - you only reach this tool once a concrete slot is agreed, obtained one of two ways:\n" +
+      "  • the customer named an explicit time AND you confirmed it is open via `check_availability`, or\n" +
+      "  • the customer picked one of the slots `check_availability` returned.\n\n" +
+      "BEFORE booking, complete these (ask ONE question per turn if anything is missing):\n" +
       "STEP A - CRM identity reconciliation (silent, no narration):\n" +
       "  • Look up the customer in CRM by their phone first (the conversation's `senderId` / phone is the " +
       "primary channel identifier). Use whatever CRM lookup tool is available (e.g. `integration.zoho_crm.search_lead`, " +
@@ -399,30 +721,22 @@ export const SCHEDULE_MEETING_TOOL = {
       "they stated (high confidence), then `update_record` to keep the lead fresh.\n" +
       "  • If the customer is NOT FOUND → after gathering essentials below, call `create_lead` (silent) " +
       "with their phone + email + name. The booking happens RIGHT AFTER the lead exists.\n\n" +
-      "STEP B - gather meeting essentials in conversation (unless the customer already volunteered them):\n" +
-      "  1. Time the customer prefers (date + hour + their timezone if non-obvious).\n" +
-      "  2. Whether anyone else should be invited (additional guest emails) - explicitly ask if not stated.\n" +
-      "  3. Topic / agenda - one short line, so the calendar event title + notes are useful.\n" +
-      "  4. The customer's email (only ask if STEP A didn't surface one and the customer hasn't given it).\n" +
-      "Ask one question per turn until you have these.\n\n" +
-      "🚫 HARD RULES - break these and the booking will be wrong:\n" +
-      "  • If the customer's last inbound did NOT include an explicit time (e.g. \"Tuesday at 11\"), " +
-      "you MUST reply with a question (e.g. \"Sure - what day/time works for you?\") and NOT call " +
-      "schedule_meeting this turn.\n" +
-      "  • If the customer has not been asked about additional guests in THIS conversation, you MUST " +
-      "ask before calling schedule_meeting.\n" +
-      "  • Even if you can guess from CRM history, never assume guests = none. Confirm with the customer.\n" +
+      "STEP B - essentials (unless already volunteered):\n" +
+      "  1. Whether anyone else should be invited (additional guest emails) - explicitly ask if not stated.\n" +
+      "  2. Topic / agenda - one short line, so the calendar event title + notes are useful.\n" +
+      "  3. The customer's email (only ask if STEP A didn't surface one and the customer hasn't given it).\n\n" +
+      "🚫 HARD RULES:\n" +
+      "  • `requested_at_iso` is REQUIRED - it is the exact agreed slot. If you do NOT have a concrete agreed " +
+      "time, call `check_availability` instead; do not call this tool.\n" +
+      "  • If the customer has not been asked about additional guests in THIS conversation, ask first; never " +
+      "assume guests = none, even from CRM history.\n" +
       "  • Never call schedule_meeting on the customer's first booking-intent message. Reconcile + qualify first.\n\n" +
-      "Behavior of the tool itself:\n" +
-      "  - If the customer suggested a time → pass it via `requested_at_iso` and the server validates.\n" +
-      "  - If the customer did NOT suggest a time → omit `requested_at_iso` and the server " +
-      "returns 2–3 valid slots in `proposed_slots`; relay them and ask the customer to pick one.\n" +
-      "Never invent times. Never claim a slot is available without a successful tool result.\n" +
-      "Failure modes:\n" +
-      "  - verdict='INVALID' with reason='slot_taken' means another booking landed in the same " +
-      "window between validation and creation. DO NOT confirm the meeting. The result includes " +
-      "`userMessage.he` / `userMessage.en` - relay that line verbatim in the customer's language, " +
-      "then offer the slots in `proposedSlotsIso`.",
+      "Result handling:\n" +
+      "  - verdict='VALID' → booked; confirm the exact day/time + the meeting link.\n" +
+      "  - ok:false with `needsAvailabilityCheck:true` (reasons include no_time_selected, outside_working_hours, " +
+      "agent_busy, min_notice_violated, slot_taken) → the chosen slot is NOT bookable. Do NOT confirm. Call " +
+      "`check_availability` to get real open slots, offer them, and let the customer pick. When a " +
+      "`userMessage.he`/`userMessage.en` is present, relay it verbatim in the customer's language first.",
     parameters: {
       type: "object",
       properties: {
@@ -434,14 +748,18 @@ export const SCHEDULE_MEETING_TOOL = {
         meeting_type: {
           type: "string",
           description:
-            "Tenant-defined meeting type slug (e.g. 'discovery_call', 'demo', 'consultation'). " +
-            "Each type has its own working hours / buffer policy.",
+            "Slug of one of the business's CONFIGURED meeting types. Do NOT invent a value from the " +
+            "customer's wording: if they say 'demo'/'call'/'meeting'/'intro' and that is not an exact " +
+            "configured slug, pass the CLOSEST configured type (e.g. their request for a 'demo' → a " +
+            "'discovery_call' type). The server snaps to the nearest configured type and, if there is " +
+            "only one, uses it. Each type has its own working hours / buffer policy.",
         },
         requested_at_iso: {
           type: "string",
           description:
-            "Optional ISO8601 timestamp the customer explicitly asked for. Must include timezone offset. " +
-            "Omit when proposing slots.",
+            "REQUIRED. The exact ISO8601 slot (with timezone offset) the customer has CHOSEN - either a time " +
+            "they named that you confirmed open via check_availability, or one of check_availability's returned " +
+            "slots. This tool books THIS time; it never searches for one.",
         },
         customer_timezone: {
           type: "string",
@@ -465,8 +783,57 @@ export const SCHEDULE_MEETING_TOOL = {
           description: "Short note to attach to the calendar event (one sentence) - typically the topic / agenda the customer stated.",
         },
       },
-      required: ["duration_minutes", "meeting_type"],
+      required: ["duration_minutes", "meeting_type", "requested_at_iso"],
     },
+  },
+};
+
+export const RESCHEDULE_MEETING_TOOL = {
+  type: "function" as const,
+  function: {
+    name: "reschedule_meeting",
+    description:
+      "MOVE the meeting already booked in THIS conversation to a new, ALREADY-CHOSEN time. Use this - never " +
+      "schedule_meeting - when the customer wants to change/move/postpone an existing meeting. Calling " +
+      "schedule_meeting again would create a DUPLICATE event and leave the old one on the calendar.\n" +
+      "The system already knows which event to move (resolved server-side) - you only provide the NEW time. " +
+      "Like schedule_meeting, this is a WRITE action: it does NOT search for replacement times.\n" +
+      "HARD RULES:\n" +
+      "  • Only call this if a meeting was actually booked earlier in this conversation. If unsure, you don't have one.\n" +
+      "  • To find a replacement time, use `check_availability` first (it gives real open slots / working hours); " +
+      "call reschedule_meeting only once the customer has CHOSEN the new time. Never invent the new time.\n" +
+      "  • If the new time turns out to be unbookable you'll get ok:false with `needsAvailabilityCheck:true` - " +
+      "do NOT confirm the move; call check_availability, offer real slots, and let the customer pick.\n" +
+      "  • On success the meeting keeps its original meeting link; confirm the new day/time to the customer.",
+    parameters: {
+      type: "object",
+      properties: {
+        requested_at_iso: {
+          type: "string",
+          description: "The NEW ISO8601 time the customer asked for. Must include timezone offset.",
+        },
+        customer_timezone: {
+          type: "string",
+          description: "IANA timezone (e.g. 'Asia/Jerusalem'). Provide if known.",
+        },
+      },
+      required: ["requested_at_iso"],
+    },
+  },
+};
+
+export const CANCEL_MEETING_TOOL = {
+  type: "function" as const,
+  function: {
+    name: "cancel_meeting",
+    description:
+      "CANCEL the meeting already booked in THIS conversation. Use when the customer wants to cancel/call off an " +
+      "existing meeting (and is NOT asking to move it - to move it, use reschedule_meeting). The system knows which " +
+      "event to cancel (resolved server-side); the guests are notified automatically.\n" +
+      "HARD RULES:\n" +
+      "  • Only call this if a meeting was actually booked earlier in this conversation.\n" +
+      "  • Confirm the cancellation to the customer once it succeeds. Do NOT then offer to rebook unless they ask.",
+    parameters: { type: "object", properties: {} },
   },
 };
 
@@ -498,6 +865,97 @@ export const ESCALATE_TOOL = {
   },
 };
 
+/**
+ * Shopify Live Chat product messaging.
+ *
+ * Two tools rather than one because the model's *intent* differs: "here
+ * is the one I recommend" and "here are a few to compare" are different
+ * answers, and collapsing them into a count parameter reliably produced
+ * one-item carousels. Both accept references only — the server re-reads
+ * title, price, image and stock from Shopify, so the model cannot invent
+ * a product or quote a stale price even if it tries.
+ */
+export const SEND_PRODUCT_CARD_TOOL = {
+  type: "function" as const,
+  function: {
+    name: "send_product_card",
+    description:
+      "Show the customer ONE specific product as a rich card with its live price, image, availability and an Add to Cart button. " +
+      "Use after you have identified the single best product for them. " +
+      "Write your normal reply text as usual — the card is sent alongside it, so do NOT paste the product URL or price into your message.",
+    parameters: {
+      type: "object",
+      properties: {
+        product_id: {
+          type: "string",
+          description: "Shopify product id, from a product search or lookup. Preferred.",
+        },
+        handle: {
+          type: "string",
+          description: "Shopify product handle, if you have that instead of an id.",
+        },
+        variant_id: {
+          type: "string",
+          description:
+            "Specific variant id, ONLY when the customer already chose their size/colour. Leave empty otherwise so they can pick.",
+        },
+        reason: {
+          type: "string",
+          description:
+            "One short sentence on why this product fits this customer. Shown on the card.",
+        },
+      },
+    },
+  },
+};
+
+export const SEND_PRODUCT_CAROUSEL_TOOL = {
+  type: "function" as const,
+  function: {
+    name: "send_product_carousel",
+    description:
+      "Show the customer a small set of products side by side, each with live price, image and availability. " +
+      "Use when several products genuinely fit and the customer should choose. " +
+      "Prefer 3 items; never send more than 5. Do not use this to list your whole catalogue.",
+    parameters: {
+      type: "object",
+      properties: {
+        products: {
+          type: "array",
+          description: "The products to show, best first.",
+          items: {
+            type: "object",
+            properties: {
+              product_id: { type: "string", description: "Shopify product id. Preferred." },
+              handle: { type: "string", description: "Shopify product handle." },
+              variant_id: { type: "string", description: "Variant id, only if already chosen." },
+              reason: { type: "string", description: "One short sentence on why this one fits." },
+            },
+          },
+        },
+      },
+      required: ["products"],
+    },
+  },
+};
+
+export interface SendShopifyProductsArgs {
+  products: Array<{
+    productId?: string | null;
+    handle?: string | null;
+    variantId?: string | null;
+    reason?: string | null;
+  }>;
+}
+
+export type SendShopifyProductsResult =
+  | {
+      ok: true;
+      /** Titles the model may safely refer to — resolved from Shopify. */
+      products: Array<{ title: string; price: string | null; currency: string; available: boolean }>;
+    }
+  | { ok: false; reason: string };
+
 export interface BuildAgentToolsOptions {
   identityLinking?: boolean;
   escalation?: boolean;
@@ -512,6 +970,27 @@ export interface BuildAgentToolsOptions {
    * causes the model to confidently propose times it can't actually book.
    */
   scheduleMeeting?: boolean;
+  /**
+   * check_availability tool (read-only). Surfaced together with scheduleMeeting
+   * whenever the agent has a bookable calendar - it's the source of truth for
+   * availability + working-hours questions, so the model never invents times.
+   */
+  checkAvailability?: boolean;
+  /**
+   * reschedule_meeting / cancel_meeting tools. Default OFF - the ai service
+   * enables them ONLY when the agent has a bookable calendar AND a meeting was
+   * already booked in this conversation (so the model can't move/cancel a
+   * meeting that doesn't exist).
+   */
+  rescheduleMeeting?: boolean;
+  cancelMeeting?: boolean;
+  /**
+   * Shopify product card / carousel tools. Default OFF - only enable on a
+   * Shopify Live Chat conversation whose channel and plan both allow
+   * product messaging. Surfacing them elsewhere would let the model
+   * promise a card the channel cannot render.
+   */
+  shopifyProducts?: boolean;
   /** Extra tenant-defined function schemas to append. */
   extra?: Array<Record<string, unknown>>;
   /**
@@ -526,6 +1005,13 @@ export interface BuildAgentToolsOptions {
 export function buildAgentTools(opts: BuildAgentToolsOptions = {}): Array<Record<string, unknown>> {
   const tools: Array<Record<string, unknown>> = [];
   if (opts.identityLinking !== false) tools.push(LINK_IDENTIFIER_TOOL as any);
+  // Cross-identity verification: always offered - the backend guard blocks
+  // cross-customer lookups outright, and these two tools are the model's ONLY
+  // legitimate way through (OTP to the STORED destination of the claimed
+  // customer, confirmed in-chat). Without them the model has no honest path
+  // and is more likely to improvise.
+  tools.push(REQUEST_IDENTITY_VERIFICATION_TOOL as any);
+  tools.push(SUBMIT_VERIFICATION_CODE_TOOL as any);
   if (opts.escalation !== false) tools.push(ESCALATE_TOOL as any);
   if (opts.closure !== false) tools.push(CLOSE_CONVERSATION_TOOL as any);
   if (opts.followup !== false) {
@@ -535,7 +1021,14 @@ export function buildAgentTools(opts: BuildAgentToolsOptions = {}): Array<Record
   // create_task is NOT a built-in: it's a CRM action and should be surfaced
   // as an integration tool (AgentToolPermission), not auto-included here.
   // The schema + dispatcher are kept so a connected CRM can expose it.
+  if (opts.checkAvailability === true) tools.push(CHECK_AVAILABILITY_TOOL as any);
   if (opts.scheduleMeeting === true) tools.push(SCHEDULE_MEETING_TOOL as any);
+  if (opts.rescheduleMeeting === true) tools.push(RESCHEDULE_MEETING_TOOL as any);
+  if (opts.cancelMeeting === true) tools.push(CANCEL_MEETING_TOOL as any);
+  if (opts.shopifyProducts === true) {
+    tools.push(SEND_PRODUCT_CARD_TOOL as any);
+    tools.push(SEND_PRODUCT_CAROUSEL_TOOL as any);
+  }
   if (opts.extra?.length) tools.push(...opts.extra);
   return tools;
 }
@@ -573,6 +1066,16 @@ export async function buildAgentToolsForAIAgent(
         tenantTool: {
           isEnabled: true,
           tenantIntegration: { status: "CONNECTED" },
+          // Calendar tools are NOT surfaced through this HTTP-catalog path, to
+          // avoid double-surfacing the same tool under two names. Availability is
+          // the first-class `check_availability` built-in (validated against the
+          // scheduling policy - working hours / buffers / conflicts), booking is
+          // the `schedule_meeting` built-in, and neutral reads (list_events) come
+          // from the registered `google_calendar` ProviderAdapter. Raw
+          // create_event / free-busy passthroughs are intentionally never
+          // surfaced. This exclusion is purely routing (which path), not a
+          // capability/authorization gate.
+          catalogTool: { integration: { category: { not: "CALENDAR" } } },
         },
       },
       include: {
@@ -733,7 +1236,41 @@ export interface ToolCallLike {
   function: { name: string; arguments: string };
 }
 
+/**
+ * Dispatch a tool call, recording whether it worked.
+ *
+ * The recording is what gives `checkToolAttempt` (inside) something to count.
+ * A thin wrapper rather than a return-by-return edit, because the inner
+ * function has a dozen exit points and missing one would leave a failure
+ * uncounted - which is precisely the loop this is meant to stop.
+ */
 export async function dispatchToolCall(
+  toolCall: ToolCallLike,
+  ctx: AgentToolContext,
+): Promise<AgentToolDispatchResult> {
+  const toolName = String(toolCall.function?.name || "");
+  let parsedArgs: Record<string, unknown> = {};
+  try { parsedArgs = JSON.parse(toolCall.function?.arguments || "{}"); } catch { /* inner reports it */ }
+
+  const result = await dispatchToolCallInner(toolCall, ctx);
+
+  try {
+    const { recordToolAttempt } = await import("./tool-attempt-guard");
+    const payload = JSON.parse(result.content || "{}");
+    // `repeated_failure` is this guard's own refusal - counting it would let
+    // the tally climb forever on calls that never reached the provider.
+    if (!payload?.repeated_failure) {
+      recordToolAttempt(ctx.conversationId, toolName, parsedArgs, {
+        ok: payload?.ok !== false,
+        reason: payload?.error ?? payload?.reason,
+      });
+    }
+  } catch { /* unparseable content is not a countable failure */ }
+
+  return result;
+}
+
+async function dispatchToolCallInner(
   toolCall: ToolCallLike,
   ctx: AgentToolContext,
 ): Promise<AgentToolDispatchResult> {
@@ -760,6 +1297,57 @@ export async function dispatchToolCall(
   // them - but it means ANY new tool added to this dispatcher is
   // automatically gated through the same code path. That's the whole
   // point: replace scattered ad-hoc checks with one entry point.
+  // ── Sandbox write guard ──
+  // Placed BEFORE the policy gate on purpose. A simulated write must not create
+  // an ApprovalRequest, must not notify a human approver, and must not appear
+  // in the audit trail as an attempted action: none of that happened. The gate
+  // below is what production uses; a safe sandbox turn simply never reaches it
+  // for a mutating tool.
+  if (ctx.sandbox?.enabled && ctx.sandbox.writes !== "real") {
+    const { classifyToolEffect } = await import("./tool-effect");
+    if (classifyToolEffect(String(name || "")) === "action") {
+      return {
+        toolCallId: toolCall.id,
+        // The model is told plainly that nothing ran, so it does not go on to
+        // tell the tester "done, I've refunded that" - a false success is the
+        // exact failure this whole mode exists to prevent.
+        content: JSON.stringify({
+          ok: true,
+          simulated: true,
+          executed: false,
+          tool: name,
+          arguments: args,
+          note:
+            "SIMULATION: this is a test conversation, so the action was not performed. " +
+            "Tell the person you are talking to what you WOULD do, and that it needs " +
+            "confirmation before it happens for real. Do not claim it is done.",
+        }),
+        sideEffect: { simulated: { tool: String(name || ""), arguments: args } },
+      };
+    }
+  }
+
+  // ── Repeat-failure brake ──
+  //
+  // Runs BEFORE the permission gate, because a call that has already proved it
+  // cannot work should not consume an approval or a provider round trip.
+  //
+  // The case it exists for: four `update_order_fulfillment` calls for one
+  // order, five minutes apart, each failing on the same unresolvable
+  // identifier, while the customer was told a shipping team was being
+  // contacted. The identifier bug is fixed; this catches the next one.
+  const { checkToolAttempt } = await import("./tool-attempt-guard");
+  const attempt = checkToolAttempt(ctx.conversationId, String(name || ""), args);
+  if (!attempt.allowed) {
+    return {
+      toolCallId: toolCall.id,
+      // The model sees WHY and what to do instead. The customer never sees any
+      // of this - the reply guard strips tool detail on the way out.
+      content: JSON.stringify({ ok: false, error: attempt.reason, repeated_failure: true }),
+      sideEffect: { denied: { tool: String(name || ""), reason: "repeated_identical_failure" } },
+    };
+  }
+
   try {
     const { evaluateToolGate, createApprovalRequest } = await import("./tool-gate").then(
       async (g) => ({
@@ -852,6 +1440,37 @@ export async function dispatchToolCall(
         // create a fresh approval. Worst case: a duplicate row.
         console.warn("[agent-tools] pending-approval dedupe lookup failed:", err?.message);
       }
+      // Never ask a human to approve a call with NO arguments.
+      //
+      // On 2026-07-31 the model called `shopify.cancel_order` with `{}` - no
+      // order id, no order name. The gate saw a HIGH-risk tool and raised an
+      // approval whose summary read `shopify.cancel_order()`. A human approved
+      // it, because the inbox gave them nothing to disagree with, and the
+      // execution then failed with `order_id_or_name_required`. The customer
+      // was told his cancellation was being handled, then waited and asked
+      // twice what was happening.
+      //
+      // An approval is a human taking responsibility for a specific action. If
+      // the action has no parameters at all, there is nothing to take
+      // responsibility FOR, and approving it can only ever produce a failure
+      // after the fact. Better to bounce it back to the model, which still has
+      // the conversation and can supply the target.
+      if (!args || Object.keys(args).length === 0) {
+        return {
+          toolCallId: toolCall.id,
+          content: JSON.stringify({
+            ok: false,
+            error: "missing_arguments",
+            instruction:
+              `${name} needs its target parameters and was called with none. ` +
+              `Supply them from the conversation - for an order action that means the ` +
+              `order number the customer gave you - and call it again. Do not tell the ` +
+              `customer the action is in progress until it has actually succeeded.`,
+          }),
+          sideEffect: { denied: { tool: name, reason: "approval_requested_with_no_arguments" } },
+        };
+      }
+
       const approval = await createApprovalRequest({
         tenantId: ctx.tenantId,
         conversationId: ctx.conversationId,
@@ -900,6 +1519,25 @@ export async function dispatchToolCall(
     };
   }
 
+  if (name === "request_identity_verification") {
+    if (!ctx.requestIdentityVerification) {
+      return { toolCallId: toolCall.id, content: JSON.stringify({ ok: false, error: "verification_unavailable" }) };
+    }
+    const r = await ctx.requestIdentityVerification({
+      phone: args.phone != null ? String(args.phone) : undefined,
+      email: args.email != null ? String(args.email) : undefined,
+    });
+    return { toolCallId: toolCall.id, content: JSON.stringify(r) };
+  }
+
+  if (name === "submit_verification_code") {
+    if (!ctx.submitVerificationCode) {
+      return { toolCallId: toolCall.id, content: JSON.stringify({ ok: false, error: "verification_unavailable" }) };
+    }
+    const r = await ctx.submitVerificationCode({ code: String(args.code ?? "") });
+    return { toolCallId: toolCall.id, content: JSON.stringify(r) };
+  }
+
   if (name === "link_customer_identifier") {
     if (!ctx.contactId) {
       return {
@@ -938,6 +1576,28 @@ export async function dispatchToolCall(
     };
   }
 
+  if (name === "check_availability") {
+    console.log(`[ai-bot] tool_call check_availability args=${JSON.stringify(args)}`);
+    if (!ctx.checkAvailability) {
+      console.warn(`[ai-bot] check_availability called but ctx.checkAvailability handler is not wired`);
+      return {
+        toolCallId: toolCall.id,
+        content: JSON.stringify({ ok: false, reason: "scheduling_not_configured" }),
+      };
+    }
+    try {
+      const result = await ctx.checkAvailability(args as unknown as CheckAvailabilityArgs);
+      console.log(`[ai-bot] check_availability → ${JSON.stringify(result).slice(0, 240)}`);
+      return { toolCallId: toolCall.id, content: JSON.stringify(result) };
+    } catch (err: any) {
+      console.error(`[ai-bot] check_availability threw: ${err?.message}`);
+      return {
+        toolCallId: toolCall.id,
+        content: JSON.stringify({ ok: false, reason: err?.message || "check_availability failed" }),
+      };
+    }
+  }
+
   if (name === "schedule_meeting") {
     console.log(`[ai-bot] tool_call schedule_meeting args=${JSON.stringify(args)}`);
     if (!ctx.scheduleMeeting) {
@@ -959,6 +1619,98 @@ export async function dispatchToolCall(
       return {
         toolCallId: toolCall.id,
         content: JSON.stringify({ ok: false, reason: err?.message || "schedule_meeting failed" }),
+      };
+    }
+  }
+
+  if (name === "reschedule_meeting") {
+    console.log(`[ai-bot] tool_call reschedule_meeting args=${JSON.stringify(args)}`);
+    if (!ctx.rescheduleMeeting) {
+      return {
+        toolCallId: toolCall.id,
+        content: JSON.stringify({ ok: false, reason: "reschedule_not_configured" }),
+      };
+    }
+    try {
+      const result = await ctx.rescheduleMeeting(args as unknown as RescheduleMeetingArgs);
+      console.log(`[ai-bot] reschedule_meeting → ${JSON.stringify(result).slice(0, 240)}`);
+      return { toolCallId: toolCall.id, content: JSON.stringify(result) };
+    } catch (err: any) {
+      console.error(`[ai-bot] reschedule_meeting threw: ${err?.message}`);
+      return {
+        toolCallId: toolCall.id,
+        content: JSON.stringify({ ok: false, reason: err?.message || "reschedule_meeting failed" }),
+      };
+    }
+  }
+
+  if (name === "cancel_meeting") {
+    console.log(`[ai-bot] tool_call cancel_meeting`);
+    if (!ctx.cancelMeeting) {
+      return {
+        toolCallId: toolCall.id,
+        content: JSON.stringify({ ok: false, reason: "cancel_not_configured" }),
+      };
+    }
+    try {
+      const result = await ctx.cancelMeeting();
+      console.log(`[ai-bot] cancel_meeting → ${JSON.stringify(result).slice(0, 240)}`);
+      return { toolCallId: toolCall.id, content: JSON.stringify(result) };
+    } catch (err: any) {
+      console.error(`[ai-bot] cancel_meeting threw: ${err?.message}`);
+      return {
+        toolCallId: toolCall.id,
+        content: JSON.stringify({ ok: false, reason: err?.message || "cancel_meeting failed" }),
+      };
+    }
+  }
+
+  if (name === "send_product_card" || name === "send_product_carousel") {
+    if (!ctx.sendShopifyProducts) {
+      return {
+        toolCallId: toolCall.id,
+        content: JSON.stringify({
+          ok: false,
+          reason: "product_cards_not_available_on_this_channel",
+          instruction:
+            "You cannot show a product card here. Describe the product in plain text instead, and never invent a price or stock level.",
+        }),
+      };
+    }
+    const refs =
+      name === "send_product_card"
+        ? [
+            {
+              productId: str(args.product_id),
+              handle: str(args.handle),
+              variantId: str(args.variant_id),
+              reason: str(args.reason),
+            },
+          ]
+        : (Array.isArray(args.products) ? args.products : []).map((p: any) => ({
+            productId: str(p?.product_id),
+            handle: str(p?.handle),
+            variantId: str(p?.variant_id),
+            reason: str(p?.reason),
+          }));
+    if (!refs.length || refs.every((r) => !r.productId && !r.handle)) {
+      return {
+        toolCallId: toolCall.id,
+        content: JSON.stringify({
+          ok: false,
+          reason: "no_product_reference",
+          instruction:
+            "Search the catalogue first and pass the product id you found. Never guess an id.",
+        }),
+      };
+    }
+    try {
+      const result = await ctx.sendShopifyProducts({ products: refs });
+      return { toolCallId: toolCall.id, content: JSON.stringify(result) };
+    } catch (err: any) {
+      return {
+        toolCallId: toolCall.id,
+        content: JSON.stringify({ ok: false, reason: err?.message || "send_products_failed" }),
       };
     }
   }
@@ -1276,6 +2028,31 @@ export async function dispatchToolCall(
     }
   }
 
+  // Unified semantic lead/contact creation. Routed through the per-tenant
+  // CRMAdapter (via ctx.runCreateLead) so Airtable/Fireberry/HubSpot/… all share
+  // ONE create path with correct field mapping. MUST precede the generic
+  // `integration_<slug>` branch below (which would otherwise try to resolve a
+  // catalog tool literally named "create_lead" and miss generic-record CRMs).
+  if ((name === "integration_create_lead" || name === "integration_create_contact") && ctx.runCreateLead) {
+    const kind = name === "integration_create_contact" ? "contact" : "lead";
+    try {
+      const result = await ctx.runCreateLead({
+        kind,
+        name: typeof args.name === "string" ? args.name : undefined,
+        email: typeof args.email === "string" ? args.email : undefined,
+        phone: typeof args.phone === "string" ? args.phone : undefined,
+        company: typeof args.company === "string" ? args.company : undefined,
+        notes: typeof args.notes === "string" ? args.notes : undefined,
+      });
+      return { toolCallId: toolCall.id, content: JSON.stringify(result) };
+    } catch (err: any) {
+      return {
+        toolCallId: toolCall.id,
+        content: JSON.stringify({ ok: false, reason: err?.message || "create_lead_failed" }),
+      };
+    }
+  }
+
   if (name?.startsWith("integration_")) {
     const slug = name.slice("integration_".length);
     if (!ctx.conversationId) {
@@ -1367,6 +2144,14 @@ function parseISO8601Duration(input: string): number | null {
  * raw (tool, params); this is just the "one-sentence first line"
  * fallback for lists and notifications.
  */
+/** Model-supplied scalar → trimmed string or null. */
+function str(raw: unknown): string | null {
+  if (typeof raw === "number") return String(raw);
+  if (typeof raw !== "string") return null;
+  const v = raw.trim();
+  return v ? v.slice(0, 200) : null;
+}
+
 function summarizeToolCall(name: string, args: Record<string, unknown>): string {
   const preview = Object.entries(args)
     .filter(([, v]) => v !== undefined && v !== null && v !== "")

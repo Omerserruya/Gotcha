@@ -11,7 +11,7 @@
  * needed to mint a token also get 503.
  */
 import { Router, Request, Response } from "express";
-import { verifyToken } from "@chatcenter/shared";
+import { resolvePrincipal } from "@chatcenter/shared";
 import type { Logger } from "../lib/logger";
 import type { VoiceProvider, VoiceProviderResolver } from "../providers/voice-provider";
 import { NoActiveVoiceChannelError } from "../providers/resolve-provider";
@@ -29,7 +29,7 @@ export function createTwilioTokenRouter(opts: { resolveProvider: VoiceProviderRe
 
     let payload;
     try {
-      payload = verifyToken(header.slice(7));
+      payload = await resolvePrincipal(header.slice(7));
     } catch {
       res.status(401).json({ error: "invalid_token" });
       return;

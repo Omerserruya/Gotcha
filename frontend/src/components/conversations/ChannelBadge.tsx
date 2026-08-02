@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import clsx from "clsx";
+import { ShopifyGlyph } from "@/components/shopify/ShopifyGlyph";
 
 interface Props {
   channel?: string;
@@ -22,6 +23,26 @@ export function ChannelBadge({ channel, size = "sm", showLabel = false }: Props)
   const config = channel ? CHANNEL_MAP[channel] : undefined;
   const label = config?.label || channel || "Unknown";
   const imgSize = size === "sm" ? 14 : 18;
+
+  // Shopify Live Chat carries the Shopify mark, like every other channel
+  // carries its platform's. The merchant's own branding is what the
+  // storefront visitor sees; in the inbox the useful signal is which
+  // platform the conversation arrived from.
+  if (channel === "SHOPIFY_LIVE_CHAT") {
+    return (
+      <span
+        className={clsx(
+          "inline-flex items-center gap-1 shrink-0",
+          showLabel && "font-medium",
+          size === "sm" ? "text-[9px]" : "text-[11px]",
+        )}
+        title="Shopify Live Chat"
+      >
+        <ShopifyGlyph className={size === "sm" ? "w-3.5 h-3.5" : "w-4.5 h-4.5"} />
+        {showLabel && <span>Shopify Live Chat</span>}
+      </span>
+    );
+  }
 
   return (
     <span

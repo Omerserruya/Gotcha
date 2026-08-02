@@ -29,6 +29,23 @@ x-logging: &default-logging
 x-restart: &default-restart
   restart: unless-stopped
 
+# ─── OIDC verification config ────────────────────────────
+# Every service that authenticates a request verifies Authentik's RS256 token
+# via JWKS (packages/shared/src/lib/jwt.ts). Both vars are REQUIRED there and
+# throw if absent, so a service without them 401s every request.
+#
+# The two are deliberately DIFFERENT hosts - read this before debugging a 401:
+#   OIDC_ISSUER   is string-COMPARED against the `iss` claim inside the token.
+#                 It must be the PUBLIC url the browser used. Never fetched.
+#   OIDC_JWKS_URI is FETCHED from inside the container, so it must use docker
+#                 service DNS. Pointing it at the public url works only if the
+#                 container can route back out through Cloudflare; pointing it
+#                 at localhost makes a service resolve itself and reject every
+#                 token. Internal DNS is correct and has no egress dependency.
+x-oidc-env: &oidc-env
+  OIDC_ISSUER: ${OIDC_ISSUER:?OIDC_ISSUER required in prod (public url, e.g. https://auth.gotcha.co.il/application/o/gotcha/)}
+  OIDC_JWKS_URI: ${OIDC_JWKS_URI:-http://authentik-server:9000/application/o/gotcha/jwks/}
+
 services:
   # ─── Infrastructure ──────────────────────────────────────
   db:
@@ -75,6 +92,128 @@ services:
       timeout: 5s
       retries: 5
 
+  # ─── Authentik (identity provider) ───────────────────────
+  # Authentik owns ALL authentication: credentials, sessions, MFA, recovery,
+  # email verification. GOTCHA implements none of it and only verifies the
+  # tokens Authentik signs (packages/shared/src/lib/jwt.ts). See
+  # docs/security/authentik-architecture.md.
+  #
+  # It gets its OWN database: identity data and GOTCHA business data must
+  # never share a schema, so a GOTCHA migration can never touch credentials.
+  #
+  # Reached from the internet at https://auth.gotcha.co.il, routed by the
+  # gateway vhost (gateway/nginx.prod.conf.template). No host port is
+  # published here - same rule as db/redis/qdrant.
+  authentik-db:
+    image: postgres:16-alpine
+    <<: *default-restart
+    logging: *default-logging
+    environment:
+      POSTGRES_USER: ${AUTHENTIK_PG_USER:-authentik}
+      POSTGRES_PASSWORD: ${AUTHENTIK_PG_PASS:?AUTHENTIK_PG_PASS required in prod}
+      POSTGRES_DB: ${AUTHENTIK_PG_DB:-authentik}
+    volumes:
+      - authentik_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${AUTHENTIK_PG_USER:-authentik}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  authentik-server:
+    image: ghcr.io/goauthentik/server:2024.10
+    command: server
+    <<: *default-restart
+    logging: *default-logging
+    environment: &authentik-env
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:?AUTHENTIK_SECRET_KEY required in prod}
+      AUTHENTIK_POSTGRESQL__HOST: authentik-db
+      AUTHENTIK_POSTGRESQL__USER: ${AUTHENTIK_PG_USER:-authentik}
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_PG_PASS:?AUTHENTIK_PG_PASS required in prod}
+      AUTHENTIK_POSTGRESQL__NAME: ${AUTHENTIK_PG_DB:-authentik}
+      # Shared redis, dedicated logical DB so Authentik keys never collide
+      # with BullMQ queues on db 0.
+      AUTHENTIK_REDIS__HOST: redis
+      AUTHENTIK_REDIS__DB: 1
+      AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
+      AUTHENTIK_DISABLE_UPDATE_CHECK: "true"
+      # TLS terminates at Cloudflare, so Authentik only ever sees plain HTTP on
+      # the internal network. It must TRUST the gateway's X-Forwarded-Proto to
+      # know the public scheme is https - otherwise it builds http:// URLs and
+      # signs tokens whose `iss` does not match OIDC_ISSUER (https://…), and
+      # every token 401s. These CIDRs are the docker bridge ranges the gateway
+      # talks from; a request from anywhere else has its headers ignored.
+      AUTHENTIK_LISTEN__TRUSTED_PROXY_CIDRS: ${AUTHENTIK_TRUSTED_PROXY_CIDRS:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
+      AUTHENTIK_WEB__THREADS: ${AUTHENTIK_WEB_THREADS:-2}
+      # Scoped to the apex so the session cookie is valid on auth.gotcha.co.il.
+      AUTHENTIK_COOKIE_DOMAIN: ${AUTHENTIK_COOKIE_DOMAIN:-gotcha.co.il}
+      # Bootstrap only seeds the very first admin on an empty database; it is
+      # a no-op afterwards. Leave unset in prod once the admin exists.
+      AUTHENTIK_BOOTSTRAP_PASSWORD: ${AUTHENTIK_BOOTSTRAP_PASSWORD:-}
+      AUTHENTIK_BOOTSTRAP_TOKEN: ${AUTHENTIK_BOOTSTRAP_TOKEN:-}
+      AUTHENTIK_BOOTSTRAP_EMAIL: ${AUTHENTIK_BOOTSTRAP_EMAIL:-admin@gotcha.co.il}
+      # Authentik sends its own recovery / verification mail - GOTCHA never does.
+      AUTHENTIK_EMAIL__HOST: ${SMTP_HOST:-}
+      AUTHENTIK_EMAIL__PORT: ${SMTP_PORT:-587}
+      AUTHENTIK_EMAIL__USERNAME: ${SMTP_USER:-}
+      AUTHENTIK_EMAIL__PASSWORD: ${SMTP_PASS:-}
+      AUTHENTIK_EMAIL__USE_TLS: ${SMTP_USE_TLS:-true}
+      AUTHENTIK_EMAIL__FROM: ${SMTP_FROM:-noreply@gotcha.co.il}
+    volumes:
+      - authentik_media:/media
+      - authentik_templates:/templates
+      # GOTCHA-branded recovery email (referenced by the email stage's template
+      # field, set in scripts/authentik/bootstrap.mjs).
+      - ./scripts/authentik/templates/gotcha_password_reset.html:/templates/gotcha_password_reset.html:ro
+      # GOTCHA theme (same files as dev): requires the repo checkout next to
+      # this compose file on the host. Served at /static/dist/... and injected
+      # into the flow UI's shadow roots via the data-inject stylesheet hook.
+      - ./scripts/authentik/custom.css:/web/dist/custom.css:ro
+      - ./frontend/public/logo_icon.png:/web/dist/assets/custom/logo_icon.png:ro
+      # GOTCHA favicon for the Authentik browser tab (served at
+      # /static/dist/assets/custom/gotcha-favicon.ico). Referenced by the brand's
+      # branding_favicon, set in scripts/authentik/bootstrap.mjs.
+      - ./frontend/public/favicon.ico:/web/dist/assets/custom/gotcha-favicon.ico:ro
+      - ./frontend/public/full_icon_white.png:/web/dist/assets/custom/full_icon_white.png:ro
+      - ./frontend/public/authentik-enhance.js:/web/dist/assets/custom/authentik-enhance.js:ro
+    # No host port in prod - the gateway proxies auth.gotcha.co.il to :9000.
+    healthcheck:
+      test: ["CMD", "ak", "healthcheck"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+    depends_on:
+      authentik-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  authentik-worker:
+    image: ghcr.io/goauthentik/server:2024.10
+    command: worker
+    <<: *default-restart
+    logging: *default-logging
+    environment: *authentik-env
+    # Authentik's worker writes to /media and reads /templates as root.
+    user: root
+    volumes:
+      - authentik_media:/media
+      - authentik_templates:/templates
+      # The worker is the process that actually renders + sends stage emails.
+      - ./scripts/authentik/templates/gotcha_password_reset.html:/templates/gotcha_password_reset.html:ro
+    healthcheck:
+      test: ["CMD", "ak", "healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      authentik-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
   # ─── API Gateway + Static Frontend (single nginx image) ────────────
   # Prod merges the gateway and the Next.js static export into one image
   # (built from gateway/Dockerfile.prod). The dev compose still has a
@@ -95,6 +234,11 @@ services:
       AI_PORT: ${AI_PORT:-4006}
       VOICE_COPILOT_PORT: ${VOICE_COPILOT_PORT:-4007}
       NOTIFICATIONS_PORT: ${NOTIFICATIONS_PORT:-4008}
+      BILLING_PORT: ${BILLING_PORT:-4009}
+      # Consumed by envsubst in gateway/Dockerfile.prod for the
+      # auth.gotcha.co.il upstream. envsubst uses an allowlist, so a var that
+      # is not listed there survives as a literal and nginx fails to start.
+      AUTHENTIK_PORT: ${AUTHENTIK_PORT:-9000}
     depends_on:
       - auth
       - conversation
@@ -104,6 +248,8 @@ services:
       - ai
       - voice-copilot
       - notifications
+      - billing
+      - authentik-server
 
   # ─── Microservices ───────────────────────────────────────
   auth:
@@ -116,8 +262,21 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: production
       PORT: ${AUTH_PORT:-4001}
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      <<: *oidc-env
+      # auth is the ONLY service holding Authentik admin credentials. It uses
+      # them to create identities for invited users and to mint one-time
+      # recovery links (services/auth/src/services/invitation.service.ts).
+      # This token can create and disable identities - treat it as a root
+      # credential and use a dedicated non-bootstrap token in prod.
+      AUTHENTIK_URL: ${AUTHENTIK_URL:-http://authentik-server:9000}
+      AUTHENTIK_API_TOKEN: ${AUTHENTIK_API_TOKEN:?AUTHENTIK_API_TOKEN required in prod}
+      # Signs the `state` param for third-party OAuth (Google/Meta/etc).
+      # Unrelated to user authentication.
+      OAUTH_STATE_SECRET: ${OAUTH_STATE_SECRET:?OAUTH_STATE_SECRET required in prod}
+      # Auth calls billing's internal endpoints (paid-tenant provisioning).
+      # Without this every such call 401s and provisioning silently fails.
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:-chatcenter-internal-2026}
+      BILLING_SERVICE_URL: ${BILLING_SERVICE_URL:-http://billing:4009}
       META_APP_ID: ${META_APP_ID:-}
       META_APP_SECRET: ${META_APP_SECRET:-}
       WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID: ${WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID:-}
@@ -125,7 +284,7 @@ services:
       WEBHOOK_URL: ${WEBHOOK_URL:-}
       CHANNEL_ENCRYPTION_KEY: ${CHANNEL_ENCRYPTION_KEY:?CHANNEL_ENCRYPTION_KEY required}
       OAUTH_REDIRECT_URI: ${OAUTH_REDIRECT_URI:-}
-      FACEBOOK_API_URL: ${FACEBOOK_API_URL:-https://graph.facebook.com/v21.0}
+      FACEBOOK_API_URL: ${FACEBOOK_API_URL:-}
       FRONTEND_URL: ${FRONTEND_URL}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
@@ -160,13 +319,22 @@ services:
     <<: *default-restart
     logging: *default-logging
     environment:
+      # Verifies storefront visitor sessions minted by services/ai.
+      # Same secret, same failure mode: unset in production means
+      # every Shopify Live Chat visitor session is rejected.
+      WIDGET_SESSION_SECRET: ${WIDGET_SESSION_SECRET:-}
       DATABASE_URL: ${DATABASE_URL}
+      # Paid-access gate - see the `ai` service for the full note. Present here
+      # because this service can produce billable work on its own, and a service
+      # without this variable defaults to "off", which is a bypass path.
+      BILLING_ENFORCEMENT_MODE: ${BILLING_ENFORCEMENT_MODE:-enforce}
+      BILLING_PAST_DUE_GRACE_HOURS: ${BILLING_PAST_DUE_GRACE_HOURS:-72}
+      BILLING_ALLOW_UNENFORCED: ${BILLING_ALLOW_UNENFORCED:-}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: production
       PORT: ${CONVERSATION_PORT:-4002}
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
-      WHATSAPP_API_URL: ${WHATSAPP_API_URL:-https://graph.facebook.com/v19.0}
+      <<: *oidc-env
+      WHATSAPP_API_URL: ${WHATSAPP_API_URL:-}
       FRONTEND_URL: ${FRONTEND_URL}
       CHANNEL_ENCRYPTION_KEY: ${CHANNEL_ENCRYPTION_KEY}
       PUBLIC_URL: ${NEXT_PUBLIC_API_URL:-}
@@ -190,12 +358,16 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: production
       PORT: ${WEBHOOK_PORT:-4003}
-      JWT_SECRET: ${JWT_SECRET}
-      WHATSAPP_API_URL: ${WHATSAPP_API_URL:-https://graph.facebook.com/v19.0}
+      <<: *oidc-env
+      WHATSAPP_API_URL: ${WHATSAPP_API_URL:-}
       WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}
       WHATSAPP_ACCESS_TOKEN: ${WHATSAPP_ACCESS_TOKEN:-}
       WHATSAPP_WEBHOOK_VERIFY_TOKEN: ${WHATSAPP_WEBHOOK_VERIFY_TOKEN:-}
       WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:-}
+      META_APP_SECRET: ${META_APP_SECRET:-}
+      EMAIL_WEBHOOK_SECRET: ${EMAIL_WEBHOOK_SECRET:-}
+      GMAIL_PUBSUB_TOKEN: ${GMAIL_PUBSUB_TOKEN:-}
+      OUTLOOK_WEBHOOK_CLIENT_STATE: ${OUTLOOK_WEBHOOK_CLIENT_STATE:-}
       SLACK_SIGNING_SECRET: ${SLACK_SIGNING_SECRET:-}
       CHANNEL_ENCRYPTION_KEY: ${CHANNEL_ENCRYPTION_KEY}
     depends_on:
@@ -212,8 +384,7 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: production
       PORT: ${ANALYTICS_PORT:-4004}
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      <<: *oidc-env
     depends_on:
       db: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -225,11 +396,16 @@ services:
     logging: *default-logging
     environment:
       DATABASE_URL: ${DATABASE_URL}
+      # Paid-access gate - see the `ai` service for the full note. Present here
+      # because this service can produce billable work on its own, and a service
+      # without this variable defaults to "off", which is a bypass path.
+      BILLING_ENFORCEMENT_MODE: ${BILLING_ENFORCEMENT_MODE:-enforce}
+      BILLING_PAST_DUE_GRACE_HOURS: ${BILLING_PAST_DUE_GRACE_HOURS:-72}
+      BILLING_ALLOW_UNENFORCED: ${BILLING_ALLOW_UNENFORCED:-}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: production
       PORT: ${CHATBOT_PORT:-4005}
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      <<: *oidc-env
     depends_on:
       db: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -240,15 +416,21 @@ services:
     <<: *default-restart
     logging: *default-logging
     environment:
+      # Decides whether unpaid or suspended organizations are refused AI, and
+      # whether a capability outside their plan is refused. Undeclared means
+      # "off", which fails OPEN - so it is stated here rather than left to a
+      # default nobody sees. Production runs `enforce`.
+      BILLING_ENFORCEMENT_MODE: ${BILLING_ENFORCEMENT_MODE:-enforce}
+      BILLING_PAST_DUE_GRACE_HOURS: ${BILLING_PAST_DUE_GRACE_HOURS:-72}
+      BILLING_ALLOW_UNENFORCED: ${BILLING_ALLOW_UNENFORCED:-}
       DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: production
       PORT: ${AI_PORT:-4006}
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      <<: *oidc-env
       OPENAI_API_KEY: ${OPENAI_API_KEY:?OPENAI_API_KEY required}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
-      OPENAI_DEFAULT_MODEL: ${OPENAI_DEFAULT_MODEL:-gpt-4o-mini}
+      OPENAI_DEFAULT_MODEL: ${OPENAI_DEFAULT_MODEL:-gpt-5-mini}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
       RAG_CHUNK_SIZE: ${RAG_CHUNK_SIZE:-500}
       RAG_CHUNK_OVERLAP: ${RAG_CHUNK_OVERLAP:-50}
@@ -276,6 +458,26 @@ services:
       SHOPIFY_API_KEY: ${SHOPIFY_API_KEY:-}
       SHOPIFY_API_SECRET: ${SHOPIFY_API_SECRET:-}
       SHOPIFY_REDIRECT_URI: ${SHOPIFY_REDIRECT_URI:-}
+      # ── GOTCHA Shopify CHAT app ───────────────────────────────────
+      # A SEPARATE Shopify Partner app from the Core integration above.
+      # Never reuse SHOPIFY_API_KEY / SHOPIFY_API_SECRET here: a chat
+      # uninstall must not be able to revoke a merchant's commerce
+      # connection. See docs/architecture/shopify-core-vs-chat-app.md.
+      SHOPIFY_CHAT_APP_CLIENT_ID: ${SHOPIFY_CHAT_APP_CLIENT_ID:-}
+      SHOPIFY_CHAT_APP_SECRET: ${SHOPIFY_CHAT_APP_SECRET:-}
+      SHOPIFY_CHAT_APP_URL: ${SHOPIFY_CHAT_APP_URL:-https://gotcha.co.il}
+      SHOPIFY_CHAT_REDIRECT_URI: ${SHOPIFY_CHAT_REDIRECT_URI:-https://gotcha.co.il/api/connectors/shopify-chat/oauth/callback}
+      # The App Embed BLOCK handle is the .liquid file name (underscore),
+      # NOT the extension handle (hyphen). The Theme Editor deep link is
+      # built from it and silently opens nothing when it is wrong.
+      SHOPIFY_CHAT_BLOCK_HANDLE: ${SHOPIFY_CHAT_BLOCK_HANDLE:-gotcha_chat}
+      SHOPIFY_CHAT_EXTENSION_HANDLE: ${SHOPIFY_CHAT_EXTENSION_HANDLE:-gotcha-chat}
+      SHOPIFY_CHAT_APP_HANDLE: ${SHOPIFY_CHAT_APP_HANDLE:-gotcha-chat}
+      # Empty by design in v1 - the Chat app needs no Admin API access.
+      SHOPIFY_CHAT_SCOPES: ${SHOPIFY_CHAT_SCOPES:-}
+      # Encrypts storefront visitor sessions. Mandatory in production:
+      # without it signVisitorSession() throws and no widget can start.
+      WIDGET_SESSION_SECRET: ${WIDGET_SESSION_SECRET:-}
       WIX_CLIENT_ID: ${WIX_CLIENT_ID:-}
       WIX_CLIENT_SECRET: ${WIX_CLIENT_SECRET:-}
       WIX_REDIRECT_URI: ${WIX_REDIRECT_URI:-}
@@ -312,8 +514,7 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: production
       PORT: ${NOTIFICATIONS_PORT:-4008}
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      <<: *oidc-env
       FRONTEND_URL: ${FRONTEND_URL}
       NOTIFICATIONS_ENABLED: ${NOTIFICATIONS_ENABLED:-true}
       SMTP_HOST: ${SMTP_HOST:-}
@@ -321,6 +522,117 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:-}
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  # Billing - subscriptions, credits/wallet, invoices, dunning, iCount webhooks.
+  # NOT dormant: the frontend calls /api/billing/* (api-billing.ts), and both
+  # ai (ai.service.ts:320 usage-threshold) and auth (onboarding.ts:39
+  # ensure-entity, system-features.ts:158) call it service-to-service on
+  # http://billing:4009. Absent from prod, onboarding degrades and the whole
+  # billing UI 404s - which is why it is added here.
+  billing:
+    image: ${REGISTRY}/${REPO:-gotcha}:billing-${TAG:-latest}
+    pull_policy: always
+    <<: *default-restart
+    logging: *default-logging
+    environment:
+      # Official Bank of Israel USD/ILS feed. Off by default: with it off there
+      # is no chargeable rate, which is the safe direction.
+      BOI_FX_ENABLED: ${BOI_FX_ENABLED:-false}
+      # How long a published rate stays usable. The BOI does not publish on
+      # weekends or Israeli holidays, so Friday must carry through to Sunday.
+      BOI_FX_MAX_STALENESS_HOURS: ${BOI_FX_MAX_STALENESS_HOURS:-120}
+      BOI_FX_BASE_URL: ${BOI_FX_BASE_URL:-}
+      # How long the public pricing page is cached. Declared so prod is
+      # configurable through the normal path rather than by editing compose.
+      PUBLIC_PRICING_CACHE_SECONDS: ${PUBLIC_PRICING_CACHE_SECONDS:-}
+      # Where a customer returns after the hosted payment page. Without it the
+      # return URLs are omitted and they land wherever the provider defaults to.
+      # The unauthenticated marketing catalog. It was declared for billing in
+      # dev and NOWHERE in production, so setting PUBLIC_PRICING_ENABLED=true in
+      # a production env file reached nginx but never reached the service - the
+      # gateway would serve /pricing while the API behind it 404'd the catalog,
+      # and the page would show no prices at all.
+      #
+      # Default stays "false", matching nginx and dev: provisional prices must
+      # never become publicly reachable by omission.
+      PUBLIC_PRICING_ENABLED: ${PUBLIC_PRICING_ENABLED:-false}
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-}
+      # Hosts this deployment may send a paying customer back through. Empty
+      # disables the check; set it in production so a mistyped APP_PUBLIC_URL
+      # cannot hand a payment provider someone else's domain.
+      APP_PUBLIC_URL_ALLOWED_HOSTS: ${APP_PUBLIC_URL_ALLOWED_HOSTS:-}
+      # Authenticates the GATEWAY -> billing hop for forwarded notifications.
+      # Not a provider secret: iCount cannot sign anything, and the IPN endpoint
+      # is built so it does not need them to.
+      INTERNAL_BILLING_WEBHOOK_FORWARD_SECRET: ${INTERNAL_BILLING_WEBHOOK_FORWARD_SECRET:-}
+      # Read here to REPORT enforcement in the Sysadmin preview and the
+      # enforcement impact report. Both the mode AND the grace period must match
+      # what the other services use, or the report describes a different system
+      # than the one refusing customers - which is worse than no report, because
+      # someone would act on it.
+      BILLING_ENFORCEMENT_MODE: ${BILLING_ENFORCEMENT_MODE:-enforce}
+      BILLING_PAST_DUE_GRACE_HOURS: ${BILLING_PAST_DUE_GRACE_HOURS:-72}
+      BILLING_ALLOW_UNENFORCED: ${BILLING_ALLOW_UNENFORCED:-}
+      # ── Payment capability switches. Separate from ICOUNT_MODE: that decides
+      # whether the provider can be reached, these decide whether the capability
+      # is part of the product yet. All default OFF, because a payment
+      # capability that switches itself on takes someone's money somewhere
+      # nobody meant it to. ──
+      ICOUNT_CHECKOUT_ENABLED: ${ICOUNT_CHECKOUT_ENABLED:-false}
+      ICOUNT_TOKENIZATION_ENABLED: ${ICOUNT_TOKENIZATION_ENABLED:-false}
+      ICOUNT_STORED_CARD_CHARGE_ENABLED: ${ICOUNT_STORED_CARD_CHARGE_ENABLED:-false}
+      # Whether a customer may open their own checkout. Off: every checkout is
+      # opened by a human through Sysadmin paid provisioning.
+      SELF_SERVE_CHECKOUT_ENABLED: ${SELF_SERVE_CHECKOUT_ENABLED:-false}
+      # Declared, never set here: dropping Secure from the checkout cookie in
+      # production would put a bearer credential on the wire in the clear.
+      CHECKOUT_COOKIE_INSECURE: ${CHECKOUT_COOKIE_INSECURE:-}
+      # Required to charge live, alongside NODE_ENV=production. Declared so it
+      # can be set through the normal path rather than by editing compose.
+      ICOUNT_ALLOW_LIVE: ${ICOUNT_ALLOW_LIVE:-}
+      ICOUNT_ALLOW_SIMULATOR: ${ICOUNT_ALLOW_SIMULATOR:-}
+      # Declared, never set in production: the startup gate refuses
+      # ICOUNT_MODE=test when NODE_ENV=production outright.
+      ICOUNT_ALLOW_TEST: ${ICOUNT_ALLOW_TEST:-}
+      ICOUNT_TEST_ACCOUNT_ID: ${ICOUNT_TEST_ACCOUNT_ID:-}
+      ICOUNT_ENVIRONMENT: ${ICOUNT_ENVIRONMENT:-}
+      ICOUNT_PROVIDER_EVENTS_ENABLED: ${ICOUNT_PROVIDER_EVENTS_ENABLED:-}
+      PAYMENT_LINK_TTL_HOURS: ${PAYMENT_LINK_TTL_HOURS:-}
+      PAYMENT_LINK_RESEND_COOLDOWN_SECONDS: ${PAYMENT_LINK_RESEND_COOLDOWN_SECONDS:-}
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      NODE_ENV: production
+      PORT: ${BILLING_PORT:-4009}
+      <<: *oidc-env
+      FRONTEND_URL: ${FRONTEND_URL}
+      # Validates the internal calls from ai/auth. Fail closed if unset - a
+      # missing key must stop the deploy, not silently open the mesh boundary.
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?INTERNAL_SERVICE_KEY required in prod}
+      # Identity is auth's domain: billing asks it to welcome a paid tenant and
+      # hand that admin a way in. Without this the welcome email never sends,
+      # and a customer who paid from an emailed link has no way to set a
+      # password at all.
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth:4001}
+      # Billing config
+      BILLING_PROVIDER: ${BILLING_PROVIDER:-ICOUNT}
+      BILLING_TRIAL_DAYS: ${BILLING_TRIAL_DAYS:-14}
+      BILLING_DUNNING_DAYS: ${BILLING_DUNNING_DAYS:-0,3,7}
+      BILLING_SCHEDULER_ENABLED: ${BILLING_SCHEDULER_ENABLED:-true}
+      BILLING_CYCLE_INTERVAL_MS: ${BILLING_CYCLE_INTERVAL_MS:-3600000}
+      # iCount. Mock by default. Authentication is API-TOKEN ONLY - there is no
+      # username/password path. Billing service only; never NEXT_PUBLIC.
+      ICOUNT_MODE: ${ICOUNT_MODE:-mock}
+      ICOUNT_API_TOKEN: ${ICOUNT_API_TOKEN:-}
+      ICOUNT_API_BASE_URL: ${ICOUNT_API_BASE_URL:-https://api.icount.co.il/api/v3.php}
+      # Configuration, not a credential: which "Credit card token" PayPage to use.
+      ICOUNT_PAYMENT_PAGE_ID: ${ICOUNT_PAYMENT_PAGE_ID:-}
+      ICOUNT_WEBHOOK_SECRET: ${ICOUNT_WEBHOOK_SECRET:-}
+      # Dedicated card-token key. Billing service only; never NEXT_PUBLIC.
+      BILLING_PAYMENT_TOKEN_ENCRYPTION_KEY: ${BILLING_PAYMENT_TOKEN_ENCRYPTION_KEY:-}
+      BILLING_PAYMENT_TOKEN_DECRYPTION_KEYS: ${BILLING_PAYMENT_TOKEN_DECRYPTION_KEYS:-}
     depends_on:
       db: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -343,8 +655,14 @@ services:
       CHANNEL_ENCRYPTION_KEY: ${CHANNEL_ENCRYPTION_KEY}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
       PUBLIC_URL: ${NEXT_PUBLIC_API_URL}
-      JWT_SECRET: ${JWT_SECRET}
+      <<: *oidc-env
       DATABASE_URL: ${DATABASE_URL}
+      # Paid-access gate - see the `ai` service for the full note. Present here
+      # because this service can produce billable work on its own, and a service
+      # without this variable defaults to "off", which is a bypass path.
+      BILLING_ENFORCEMENT_MODE: ${BILLING_ENFORCEMENT_MODE:-enforce}
+      BILLING_PAST_DUE_GRACE_HOURS: ${BILLING_PAST_DUE_GRACE_HOURS:-72}
+      BILLING_ALLOW_UNENFORCED: ${BILLING_ALLOW_UNENFORCED:-}
     depends_on:
       redis: { condition: service_healthy }
     healthcheck:
@@ -362,10 +680,16 @@ services:
     logging: *default-logging
     environment:
       DATABASE_URL: ${DATABASE_URL}
+      # Paid-access gate - see the `ai` service for the full note. Present here
+      # because this service can produce billable work on its own, and a service
+      # without this variable defaults to "off", which is a bypass path.
+      BILLING_ENFORCEMENT_MODE: ${BILLING_ENFORCEMENT_MODE:-enforce}
+      BILLING_PAST_DUE_GRACE_HOURS: ${BILLING_PAST_DUE_GRACE_HOURS:-72}
+      BILLING_ALLOW_UNENFORCED: ${BILLING_ALLOW_UNENFORCED:-}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: production
-      WHATSAPP_API_URL: ${WHATSAPP_API_URL:-https://graph.facebook.com/v19.0}
-      FACEBOOK_API_URL: ${FACEBOOK_API_URL:-https://graph.facebook.com/v21.0}
+      WHATSAPP_API_URL: ${WHATSAPP_API_URL:-}
+      FACEBOOK_API_URL: ${FACEBOOK_API_URL:-}
       META_APP_ID: ${META_APP_ID:-}
       META_APP_SECRET: ${META_APP_SECRET:-}
       CHANNEL_ENCRYPTION_KEY: ${CHANNEL_ENCRYPTION_KEY}
@@ -376,10 +700,10 @@ services:
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-}
       AI_SERVICE_URL: ${AI_SERVICE_URL:-http://ai:4006}
       CONVERSATION_SERVICE_URL: ${CONVERSATION_SERVICE_URL:-http://conversation:4002}
-      # Required by shared/jwt.ts at module-load - even workers that don't
-      # mint tokens import the shared barrel, which triggers the prod
-      # JWT_SECRET length check.
-      JWT_SECRET: ${JWT_SECRET}
+      # No OIDC vars here on purpose: the workers consume queue jobs and never
+      # verify a bearer token, so they never call into jwt.ts. (They also no
+      # longer need JWT_SECRET - shared/jwt.ts has no signing path and reads
+      # OIDC_* lazily at verification time, not at module-load.)
       UPLOADS_DIR: /app/uploads
     volumes:
       - uploads:/app/uploads
@@ -397,13 +721,18 @@ services:
     logging: *default-logging
     environment:
       DATABASE_URL: ${DATABASE_URL}
+      # Paid-access gate - see the `ai` service for the full note. Present here
+      # because this service can produce billable work on its own, and a service
+      # without this variable defaults to "off", which is a bypass path.
+      BILLING_ENFORCEMENT_MODE: ${BILLING_ENFORCEMENT_MODE:-enforce}
+      BILLING_PAST_DUE_GRACE_HOURS: ${BILLING_PAST_DUE_GRACE_HOURS:-72}
+      BILLING_ALLOW_UNENFORCED: ${BILLING_ALLOW_UNENFORCED:-}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: production
-      WHATSAPP_API_URL: ${WHATSAPP_API_URL:-https://graph.facebook.com/v19.0}
+      WHATSAPP_API_URL: ${WHATSAPP_API_URL:-}
       CHANNEL_ENCRYPTION_KEY: ${CHANNEL_ENCRYPTION_KEY}
-      FACEBOOK_API_URL: ${FACEBOOK_API_URL:-https://graph.facebook.com/v21.0}
-      # Required by shared/jwt.ts at module-load (see incoming-worker note).
-      JWT_SECRET: ${JWT_SECRET}
+      FACEBOOK_API_URL: ${FACEBOOK_API_URL:-}
+      # No OIDC vars - this worker never verifies a token (see incoming-worker).
       UPLOADS_DIR: /app/uploads
     volumes:
       - uploads:/app/uploads
@@ -450,3 +779,9 @@ volumes:
   qdrant_data:
   redis_data:
   uploads:
+  # Authentik state. authentik_pgdata holds every credential and MFA secret -
+  # it is the most sensitive volume in the stack and is NOT covered by the
+  # nightly pg_dump (terraform/user_data.sh dumps the GOTCHA db only).
+  authentik_pgdata:
+  authentik_media:
+  authentik_templates:
