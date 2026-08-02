@@ -3,6 +3,13 @@ import express from "express";
 import request from "supertest";
 
 vi.mock("@chatcenter/shared", () => ({
+  // Internal-service key gate. The Security v2 remediation removed the silent
+  // fallback that let these routes run unauthenticated, and this exhaustive
+  // mock never grew the export - so the suite failed to load rather than
+  // failing an assertion, which is why it looked like an import error. Passing
+  // through: these tests cover route behaviour, and the gate itself is proved
+  // in the security suite.
+  requireInternalKey: (_req: any, _res: any, next: any) => next(),
   // Durable tenant settings (business hours, auto-greeting, SLA). Exhaustive
   // mocks of this barrel must supply them or the read path throws instead of
   // returning "not configured". Default: nothing configured.
