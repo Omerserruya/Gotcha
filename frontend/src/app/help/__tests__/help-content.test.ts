@@ -34,9 +34,10 @@ describe("no article sends anyone to the wrong host", () => {
   it("never puts an application path on the marketing host", () => {
     // `gotcha.co.il` alone is legitimate - it is the marketing site. What is
     // never legitimate is the marketing host carrying /api/ or an app route.
-    const offenders = [...ALL_TEXT.matchAll(/https:\/\/gotcha\.co\.il(\/[^\s"'`)\]]*)/g)]
-      .map((m) => m[1])
-      .filter((p) => ["/api/", "/settings", "/inbox", "/ai-studio", "/auth/callback"].some((x) => p.startsWith(x)));
+    const paths = (ALL_TEXT.match(/https:\/\/gotcha\.co\.il\/[^\s"'`)\]]*/g) ?? [])
+      .map((u) => u.replace("https://gotcha.co.il", ""));
+    const offenders = paths.filter((p) =>
+      ["/api/", "/settings", "/inbox", "/ai-studio", "/auth/callback"].some((x) => p.startsWith(x)));
     expect(offenders).toEqual([]);
   });
 
@@ -81,7 +82,7 @@ describe("the Shopify article describes what the product actually does", () => {
 
 describe("house style", () => {
   it("uses no em-dash or en-dash in customer-facing copy", () => {
-    const found = [...ALL_TEXT.matchAll(/.{0,40}[—–].{0,40}/g)].map((m) => m[0]);
+    const found = ALL_TEXT.match(/.{0,40}[—–].{0,40}/g) ?? [];
     expect(found).toEqual([]);
   });
 });
