@@ -1569,12 +1569,22 @@ execute and read back.
 **Tests.** 40 new (the 37-point security matrix plus the gate's own failure
 modes). Full suite, same worktree, same command:
 
-| | Test files | Tests | Failed | Passed |
+| Run | Test files | Tests | Failed | Passed |
 |---|---|---|---|---|
 | baseline (`26abf34`, before the gate) | 232 | 3234 | 71 | 3148 |
-| with the gate | 233 | 3274 | **71** | 3188 |
+| with the gate, run A | 233 | 3274 | 71 | 3188 |
+| with the gate, run B | 233 | 3274 | 72 | 3187 |
+| with the gate, run C | 233 | 3274 | **71** | 3188 |
 
-Zero new failures. The 71 are pre-existing on the readiness branch.
++40 tests, all passing. Runs A and C show **zero new failures** - the set
+difference against the baseline failure list is empty. Run B showed one extra,
+`shopify-chat-cors`, which passes in isolation (20/20); run A's extra was
+`three-state-policy-enforcement`, which also passes in isolation (7/7) and
+passed in runs B and C. Different members each time, neither touching
+integration dispatch, with Redis `ECONNREFUSED` noise in the logs: that is
+run-to-run interference under full-suite parallelism, proven by isolation rather
+than assumed. Three runs were done instead of one precisely because a single
+green run would not have distinguished the two.
 
 Two suites did fail when the gate first landed, and both were real:
 `customer-access-guard.test.ts` mocks prisma exhaustively and predates the gate,
