@@ -24,6 +24,7 @@ import {
   applySelfScope,
   deriveSelfSelector,
   SELF_SCOPED_SHOPIFY_TOOLS,
+  SELF_SCOPE_KEY,
   type RequesterIdentity,
 } from "../services/connectors/customer-access-guard";
 import {
@@ -60,16 +61,33 @@ describe("ownership is derived, never accepted", () => {
     expect(deriveSelfSelector(identity({ phoneSuffixes: new Set(), channelSenderId: null }))).toBeNull();
   });
 
-  it("strips a customer id the model supplied and substitutes the real one", () => {
-    const out = applySelfScope(identity(), { customer_id: "999", email: "attacker@x.com", first_name: "Matan" })!;
+  it("strips a customer id the model supplied and derives the real one", () => {
+    const out = applySelfScope(identity(), { customer_id: "999", first_name: "Matan" })!;
     expect(out.args.customer_id).toBeUndefined();
-    expect(out.args.email).toBeUndefined();
-    expect(out.args.phone).toBe("+972545680665");
+    expect(out.args[SELF_SCOPE_KEY]).toEqual({ phone: "+972545680665" });
     expect(out.args.first_name).toBe("Matan");
-    expect(out.stripped.sort()).toEqual(["customer_id", "email"]);
+    expect(out.stripped).toEqual(["customer_id"]);
   });
 
-  it("keeps the fields being changed while discarding the selectors", () => {
+  // On a self-scoped tool the arguments ARE the new values. Merging the derived
+  // selector into them made an injected `{ phone: … }` indistinguishable from
+  // "set my phone to this", and an injected `{ customer_id: … }` was rejected
+  // by the field validator, which then reported `nothing_to_update` for a
+  // change the customer had just confirmed. Live, 2026-08-02.
+  it("keeps the selector OUT of the fields being changed", () => {
+    const out = applySelfScope(identity(), { email: "new@example.com" })!;
+    expect(out.args.email).toBe("new@example.com");
+    expect(out.args[SELF_SCOPE_KEY]).toEqual({ phone: "+972545680665" });
+    expect(out.stripped).toEqual([]);
+  });
+
+  it("treats email and phone as VALUES on this tool, not as ownership claims", () => {
+    const out = applySelfScope(identity(), { phone: "0501112222" })!;
+    expect(out.args.phone).toBe("0501112222");
+    expect(out.args[SELF_SCOPE_KEY]).toEqual({ phone: "+972545680665" });
+  });
+
+  it("keeps the fields being changed while discarding an id selector", () => {
     const out = applySelfScope(identity(), { address: { city: "Haifa" }, id: "1" })!;
     expect(out.args.address).toEqual({ city: "Haifa" });
     expect(out.stripped).toEqual(["id"]);

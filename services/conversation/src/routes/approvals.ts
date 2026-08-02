@@ -277,6 +277,34 @@ export function sanitizeExecutionResult(value: unknown, depth = 0): unknown {
 
 const router = Router();
 
+/**
+ * Did the tool say, in its own result, that nothing changed?
+ *
+ * The dispatch layer only knows whether the call completed. Every write tool in
+ * this round reads its own change back and reports the verdict, and that verdict
+ * has to outrank a clean HTTP round trip - otherwise a customer is told their
+ * address changed by a message generated from the same result that says it did
+ * not.
+ *
+ * Only an EXPLICIT negative counts. A tool that reports nothing is not claiming
+ * failure, and treating silence as failure would turn every unverified-but-fine
+ * write into an alarming message.
+ */
+export function providerReportedNoChange(result: unknown): boolean {
+  if (!result || typeof result !== "object") return false;
+  const r = result as Record<string, any>;
+  const inner = (r.result ?? r.output) as Record<string, any> | undefined;
+  const scopes = [r, inner].filter((s): s is Record<string, any> => !!s && typeof s === "object");
+  return scopes.some(
+    (s) =>
+      s.verified === false ||
+      s.address_updated === false ||
+      s.exchange_completed === false ||
+      s.return_created === false ||
+      s.updated === false,
+  );
+}
+
 /** A terminal HITL outcome that owes the customer exactly one message. */
 type ContinuationOutcome = "succeeded" | "failed" | "rejected";
 
@@ -702,15 +730,26 @@ export async function runApprovedAction(opts: {
   // a customer who had just been told "I'm handling your cancellation now" in
   // total silence when Shopify refused, with the conversation then dumped on a
   // human who had no idea what had been promised.
+  // A tool that RAN is not a tool that did the thing. Live (2026-08-02): an
+  // approved address change dispatched cleanly, and the tool's own read-back
+  // reported `verified: false` - so the continuation told the customer their
+  // address had been changed on the strength of `dispatch.ok` alone, while the
+  // result sitting beside it said the opposite. Tools that verify themselves
+  // are believed over the transport.
+  const unverified = providerReportedNoChange(dispatch.result);
   await sendApprovalContinuation({
     tenantId,
     approvalId,
     conversationId,
     tool,
-    outcome: dispatch.ok ? "succeeded" : "failed",
+    outcome: dispatch.ok && !unverified ? "succeeded" : "failed",
     result: dispatch.result,
     params: effectiveParams,
-    errorReason: dispatch.ok ? undefined : toCustomerSafeReason(dispatch.error),
+    errorReason: dispatch.ok
+      ? unverified
+        ? "the change could not be confirmed on the order afterwards"
+        : undefined
+      : toCustomerSafeReason(dispatch.error),
   });
 
   // ── Ownership after a failed execution ───────────────────────────────

@@ -227,7 +227,24 @@ export function deriveSelfSelector(identity: RequesterIdentity): Record<string, 
 }
 
 /** Selector-shaped keys a self-scoped tool must never receive from the model. */
-const SELECTOR_KEYS = ["customer_id", "customerId", "email", "phone", "id"];
+const SELECTOR_KEYS = ["customer_id", "customerId", "id"];
+
+/**
+ * Where the derived selector is handed to the adapter.
+ *
+ * Under its own reserved key, not merged into the arguments, because on
+ * `update_my_profile` the arguments ARE the new values: an injected
+ * `{ phone: "+972…" }` selector is indistinguishable from the customer asking
+ * to change their phone to that number. Live (2026-08-02) the merged form sent
+ * the derived selector into the field validator, which rejected `customer_id`
+ * as an unsupported field and then reported `nothing_to_update` for a change
+ * the customer had just confirmed.
+ *
+ * `email` and `phone` are no longer stripped for the same reason - on a
+ * self-scoped tool they are values, not selectors, and ownership does not
+ * depend on them.
+ */
+export const SELF_SCOPE_KEY = "__selfScope";
 
 /**
  * Strip every selector the model supplied and substitute the derived one.
@@ -252,7 +269,7 @@ export function applySelfScope(
     }
     next[k] = v;
   }
-  return { args: { ...next, ...selector }, stripped };
+  return { args: { ...next, [SELF_SCOPE_KEY]: selector }, stripped };
 }
 
 /**

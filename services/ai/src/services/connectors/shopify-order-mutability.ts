@@ -191,15 +191,47 @@ export function validateShippingAddress(input: Record<string, unknown>): Address
 export function verifyShippingAddress(
   patch: AddressPatch,
   order: any,
-): { verified: boolean; mismatches: Array<{ field: string; requested: string; actual: string | null }> } {
+): {
+  verified: boolean;
+  mismatches: Array<{ field: string; requested: string; actual: string | null }>;
+  /** Fields Shopify accepted and rewrote into its own canonical form. */
+  normalized: Array<{ field: string; requested: string; actual: string }>;
+} {
   const addr = order?.shipping_address ?? null;
   const mismatches: Array<{ field: string; requested: string; actual: string | null }> = [];
-  if (!addr) return { verified: false, mismatches: [{ field: "shipping_address", requested: "read back", actual: null }] };
+  const normalized: Array<{ field: string; requested: string; actual: string }> = [];
+  if (!addr) {
+    return {
+      verified: false,
+      mismatches: [{ field: "shipping_address", requested: "read back", actual: null }],
+      normalized: [],
+    };
+  }
   for (const [field, requested] of Object.entries(patch.fields)) {
     const actual = addr[field] == null ? null : String(addr[field]);
-    if (actual == null || actual.trim().toLowerCase() !== requested.trim().toLowerCase()) {
-      mismatches.push({ field, requested, actual });
+    if (actual != null && actual.trim().toLowerCase() === requested.trim().toLowerCase()) continue;
+
+    // Country is the one field Shopify rewrites. A customer writing in Hebrew
+    // says "ישראל"; Shopify stores "Israel" and a country_code of "IL". Live
+    // (2026-08-02) that single difference made a change whose street, city and
+    // postal code were all exactly right report as a failed write - a false
+    // negative of precisely the kind the phone comparison already guards
+    // against, and one that would have told a customer their address had not
+    // been changed while the parcel was already routed to the new one.
+    if (field === "country" && actual) {
+      const code = String(addr.country_code ?? "").trim().toLowerCase();
+      const want = requested.trim().toLowerCase();
+      if (code && code === want) continue;
+      // A non-ASCII request is one Shopify HAD to rewrite - we cannot map every
+      // language, so the rewrite is reported rather than judged. Silence would
+      // be the wrong answer in both directions: hiding a real country error, or
+      // calling a normalisation a failure.
+      if (/[^\x00-\x7F]/.test(requested)) {
+        normalized.push({ field, requested, actual });
+        continue;
+      }
     }
+    mismatches.push({ field, requested, actual });
   }
-  return { verified: mismatches.length === 0, mismatches };
+  return { verified: mismatches.length === 0, mismatches, normalized };
 }

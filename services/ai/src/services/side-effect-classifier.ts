@@ -225,9 +225,28 @@ const REF_TYPE_BY_KIND: Record<OutcomeKind, string> = {
  * `externalRef`, else falls back to known id keys (top-level + nested result/data). */
 export function extractExternalRef(kind: OutcomeKind, result: any): ExternalRef | undefined {
   if (!result || typeof result !== "object") return undefined;
-  const explicit = result.externalRef ?? result.parsed?.externalRef;
-  if (explicit?.id) return { type: String(explicit.type ?? REF_TYPE_BY_KIND[kind]), id: String(explicit.id) };
-  const scopes = [result, result.result, result.data, result.parsed, result.parsed?.result];
+  // `output` was missing, and it is the envelope EVERY integration tool comes
+  // back in: tool-execution.service wraps an adapter result as
+  // `{ ok, output, error }`. So no adapter tool has ever produced a real
+  // external ref, every one of them logged a LEDGER_GAP, and each was recorded
+  // as `succeeded_unverified` - deduped but "not confidently claimable".
+  //
+  // Live (2026-08-02): `add_order_note` wrote the note, Shopify showed it, and
+  // the bot told the customer it had failed. The ledger said the write could
+  // not be claimed and the model believed it - the exact inverse of the lie
+  // this whole round is about, produced by the machinery built to prevent it.
+  //
+  // The explicit branch used to search FEWER places than the key fallback
+  // below - it looked at the top level and at `parsed`, while the fallback
+  // also walked `result` and `data`. So a handler that did exactly what the
+  // LEDGER_GAP warning asked for, and returned an explicit `externalRef`, was
+  // still missed, because the ref sat one level down inside the envelope. Both
+  // now search the same scopes, which is the only defensible arrangement.
+  const scopes = [result, result.output, result.result, result.data, result.parsed, result.parsed?.result];
+  for (const scope of scopes) {
+    const explicit = scope?.externalRef;
+    if (explicit?.id) return { type: String(explicit.type ?? REF_TYPE_BY_KIND[kind]), id: String(explicit.id) };
+  }
   for (const key of REF_KEYS_BY_KIND[kind]) {
     for (const scope of scopes) {
       const v = scope?.[key];

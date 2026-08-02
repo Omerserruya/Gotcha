@@ -28,6 +28,10 @@
  *   SHOPIFY_DEV_E2E=true node scripts/shopify/dev-e2e.mjs state
  *   SHOPIFY_DEV_E2E=true node scripts/shopify/dev-e2e.mjs fixtures
  *   SHOPIFY_DEV_E2E=true node scripts/shopify/dev-e2e.mjs scenario "<hebrew>" [waitSeconds]
+ *   SHOPIFY_DEV_E2E=true node scripts/shopify/dev-e2e.mjs suite            # every named capability
+ *   SHOPIFY_DEV_E2E=true node scripts/shopify/dev-e2e.mjs suite missing-item
+ *   SHOPIFY_DEV_E2E=true node scripts/shopify/dev-e2e.mjs customer
+ *   SHOPIFY_DEV_E2E=true node scripts/shopify/dev-e2e.mjs tools
  */
 
 import { execFileSync } from "node:child_process";
@@ -236,6 +240,103 @@ function decide(kind, approvalId, reason) {
   return inContainer("conversation", js);
 }
 
+/** Read the customer straight from Shopify - the independent check for a profile write. */
+function readCustomer(phone = ALLOW.customerPhones[0]) {
+  if (!ALLOW.customerPhones.includes(phone)) die(`phone ${phone} is not allowlisted.`);
+  const js = `
+    const key = process.env.INTERNAL_SERVICE_KEY;
+    fetch("http://ai:4006/api/ai-assist/system/adapter-tools/execute", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + key, "x-tenant-id": "${ALLOW.tenantId}" },
+      body: JSON.stringify({ toolFunctionName: "shopify.get_customer_by_phone", args: { phone: "+${phone}" } }),
+    }).then(r => r.text()).then(t => {
+      const c = (JSON.parse(t).data || {}).output || {};
+      console.log(JSON.stringify({
+        id: c.id, first_name: c.first_name, last_name: c.last_name,
+        email: c.email, phone: c.phone,
+        default_address: c.default_address ? {
+          address1: c.default_address.address1, city: c.default_address.city,
+          province: c.default_address.province, zip: c.default_address.zip,
+          country: c.default_address.country,
+        } : null,
+      }));
+    });
+  `;
+  return JSON.parse(inContainer("conversation", js));
+}
+
+/**
+ * The tool surface the AI actually holds.
+ *
+ * Worth a command of its own: Part 3's worst defect was a healthy connection
+ * and an assistant with seven tools, and every health signal we had said the
+ * integration was fine because all of them ask about the CONNECTION. This asks
+ * what the assistant can do.
+ */
+function toolSurface() {
+  const rows = sql(
+    `select ct.slug, ct.allowed_modes::text, tt.is_enabled, atp.is_allowed
+     from agent_tool_permissions atp
+     join tenant_tools tt on tt.id = atp.tenant_tool_id
+     join catalog_tools ct on ct.id = tt.catalog_tool_id
+     join integration_catalog ic on ic.id = ct.integration_id
+     where atp.tenant_id='${ALLOW.tenantId}' and ic.slug='shopify'
+     order by ct.slug`,
+  );
+  return rows ? rows.split("\n").map((l) => l.split("\t")) : [];
+}
+
+// ─── Named scenarios ────────────────────────────────────────────────────────
+//
+// One entry per capability this round added or changed, so a rerun is a command
+// rather than a paragraph of instructions that drifts from what was actually
+// run. The `expect` notes are what a reader should check in the transcript;
+// they are deliberately not assertions, because the interesting failures here
+// are ones no assertion anticipated.
+
+const SCENARIOS = {
+  "unsupported-coupon": {
+    say: "יש קופון שאני יכול לקבל?",
+    expect: "plain refusal; NO discount tool, NO approval, NO handoff, AI retains the conversation",
+  },
+  "missing-item": {
+    say: "קיבלתי את ההזמנה אבל חסר לי פריט",
+    expect: "reconcile_order_items called; NO identity re-verification; names the item or asks only when genuinely ambiguous",
+  },
+  "note-tag": {
+    say: "תרשמו בהזמנה 1011 שאני מבקש שיחזרו אליי לפני המשלוח",
+    expect: "add_order_note called and read back; says the note was added; does NOT say a team was told",
+  },
+  "customer-profile-update": {
+    say: "אפשר לעדכן את המייל שלי ל-matan.amran.dev@example.com?",
+    expect: "update_my_profile with NO customer id asked for; confirms the new value first; read-back verified",
+  },
+  "shipping-address-update": {
+    say: "אפשר לשנות את כתובת המשלוח בהזמנה 1011 להרצל 1, חיפה, ישראל?",
+    expect: "eligibility from fulfillment orders; HITL raised when eligible; refusal names the real reason otherwise",
+  },
+  exchange: {
+    say: "אפשר להחליף את המידה בהזמנה 1011 למידה אחרת?",
+    expect: "variant_information first; same-price only; a price gap is refused with the exact difference, never a coupon",
+  },
+  "return-shopify": {
+    say: "אני רוצה להחזיר את המוצר, הוא הגיע פגום",
+    expect: "return provider resolved; a return claim ONLY with a real return id; otherwise a real handoff",
+  },
+  "return-returngo": {
+    say: "מה הסטטוס של ההחזרה שלי?",
+    expect: "status may read both providers; creation is never attempted in two places",
+  },
+  "send-confirmation": {
+    say: "אפשר לקבל אישור הזמנה במייל?",
+    expect: "goes to the stored address only; never asks where to send it; claims sent only after the tool succeeds",
+  },
+  "send-invoice": {
+    say: "אני צריך חשבונית מס בבקשה",
+    expect: "honest unavailability, no provider name or status code, no order summary dressed as a tax invoice",
+  },
+};
+
 // ─── Fixture manifest ───────────────────────────────────────────────────────
 
 function fixtures() {
@@ -288,6 +389,46 @@ async function main() {
       break;
     }
 
+    case "suite": {
+      // One named capability, or all of them in order. Each run prints what a
+      // reader is supposed to check, so a rerun and its evidence stay together.
+      const wanted = rest[0] ? [rest[0]] : Object.keys(SCENARIOS);
+      const wait = Number(rest[1] || 50);
+      for (const name of wanted) {
+        const s = SCENARIOS[name];
+        if (!s) die(`unknown scenario "${name}". Known: ${Object.keys(SCENARIOS).join(", ")}`);
+        const since = nowIso();
+        console.log(`\n════════ ${name} ════════`);
+        console.log(`> ${s.say}`);
+        console.log(`# expect: ${s.expect}`);
+        sendInbound(s.say);
+        await sleep(wait);
+        console.log("--- TRANSCRIPT ---");
+        for (const [dir, type, source, body] of transcript(since)) {
+          console.log(`${dir}${source ? ` (${source})` : ""}: ${body || `[${type}]`}`);
+        }
+        const aps = approvals(since);
+        if (aps.length) {
+          console.log("--- APPROVALS ---");
+          for (const a of aps) console.log(a.join(" | "));
+        }
+        console.log("--- OWNERSHIP ---");
+        for (const o of ownership()) console.log(o.join(" | "));
+      }
+      break;
+    }
+
+    case "customer":
+      console.log(JSON.stringify(readCustomer(rest[0]), null, 1));
+      break;
+
+    case "tools": {
+      const rows = toolSurface();
+      console.log(`# ${rows.length} shopify tools permissioned for this tenant's AI`);
+      for (const r of rows) console.log(r.join(" | "));
+      break;
+    }
+
     case "approvals":
       for (const a of approvals(rest[0])) console.log(a.join(" | "));
       break;
@@ -322,7 +463,10 @@ async function main() {
       break;
 
     default:
-      console.log("commands: say | scenario | approvals | approve | reject | order | state | fixtures");
+      console.log(
+        "commands: say | scenario | suite [name] | approvals | approve | reject | order | customer | tools | state | fixtures\n" +
+          `suite scenarios: ${Object.keys(SCENARIOS).join(", ")}`,
+      );
       process.exit(1);
   }
 }

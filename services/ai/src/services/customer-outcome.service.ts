@@ -128,16 +128,32 @@ export interface ToolCallRecord {
   sideEffect?: string;
 }
 
+/**
+ * The tool's own fields, whichever envelope it arrived in.
+ *
+ * There are two, and reading the wrong one costs a customer the truth. The
+ * adapter path returns `{ ok, result }`; the catalog path returns
+ * `{ ok, output, error }`. Live (2026-08-02): `add_order_note` wrote the note,
+ * Shopify showed it, the ledger committed it - and the fact block said nothing
+ * had happened, because `note_added` was one level down. The model read the
+ * fact block and told the customer the note had not been added. A correct
+ * mechanism reporting the inverse of the truth, which is worse than no
+ * mechanism, because it is believed.
+ *
+ * `ok` and `error` stay at the top level where the envelope puts them.
+ */
 function parse(result: unknown): Record<string, any> {
   if (result == null) return {};
-  if (typeof result === "object") return result as Record<string, any>;
-  if (typeof result !== "string") return {};
-  try {
-    const v = JSON.parse(result);
-    return v && typeof v === "object" ? v : {};
-  } catch {
-    return {};
+  let v: any = result;
+  if (typeof v === "string") {
+    try { v = JSON.parse(v); } catch { return {}; }
   }
+  if (!v || typeof v !== "object") return {};
+  const inner = v.result ?? v.output;
+  if (inner && typeof inner === "object" && !Array.isArray(inner)) {
+    return { ...inner, ok: v.ok ?? inner.ok, error: v.error ?? v.reason ?? inner.error };
+  }
+  return v;
 }
 
 /** A tool that ran for real, as opposed to one a gate refused or parked. */
@@ -180,9 +196,12 @@ export function applyToolResult(outcome: CustomerOutcome, record: ToolCallRecord
 
   if (!executed) return o;
 
-  if (r.ok === false || r.error) {
+  if (r.ok === false || r.error || r.reason) {
     o.actionAttempted = true;
-    if (typeof r.error === "string" && !o.safeFailureReason) o.safeFailureReason = r.error;
+    // `reason` as well as `error`: executeAdapterTool's failure shape is
+    // `{ ok: false, reason }`, and reading only `error` loses why.
+    const why = typeof r.error === "string" ? r.error : typeof r.reason === "string" ? r.reason : null;
+    if (why && !o.safeFailureReason) o.safeFailureReason = why;
     return o;
   }
 

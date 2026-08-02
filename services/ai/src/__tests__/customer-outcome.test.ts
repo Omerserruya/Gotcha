@@ -113,6 +113,44 @@ describe("normalising tool results into facts", () => {
   });
 });
 
+describe("the envelope a tool result arrives in", () => {
+  // Live (2026-08-02): add_order_note wrote the note, Shopify showed it, the
+  // ledger committed it - and the fact block said nothing had happened, because
+  // `note_added` sat one level down inside `{ ok, result }`. The model read the
+  // fact block and told the customer the note had not been added. A correct
+  // mechanism reporting the inverse of the truth.
+  it("reads the adapter path's { ok, result } envelope", () => {
+    const o = buildOutcome([
+      executed("shopify.add_order_note", { ok: true, result: { order_id: 1, name: "#1011", note_added: true, tags_added: [] } }),
+    ]);
+    expect(o.noteAdded).toBe(true);
+    expect(o.actionSucceeded).toBe(true);
+  });
+
+  it("reads the catalog path's { ok, output } envelope", () => {
+    const o = buildOutcome([
+      executed("integration_add_order_note", { ok: true, output: { order_id: 1, note_added: true, tags_added: [] } }),
+    ]);
+    expect(o.noteAdded).toBe(true);
+  });
+
+  it("still reads a bare, unwrapped result", () => {
+    expect(buildOutcome([executed("shopify.add_order_note", { note_added: true })]).noteAdded).toBe(true);
+  });
+
+  it("keeps ok:false at the envelope level from becoming a success", () => {
+    const o = buildOutcome([executed("shopify.add_order_note", { ok: false, reason: "shopify_422", result: null })]);
+    expect(o.noteAdded).toBe(false);
+    expect(o.actionAttempted).toBe(true);
+    expect(o.safeFailureReason).toBe("shopify_422");
+  });
+
+  it("does not mistake an ARRAY result for an envelope", () => {
+    const o = buildOutcome([executed("shopify.get_order_items", { ok: true, result: [{ id: 1 }] })]);
+    expect(o.actionSucceeded).toBe(false);
+  });
+});
+
 describe("Hebrew paraphrases cannot outrun the facts", () => {
   const cases: Array<{ claim: string; supported: Partial<CustomerOutcome>; phrases: string[] }> = [
     {

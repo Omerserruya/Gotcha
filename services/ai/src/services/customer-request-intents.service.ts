@@ -105,6 +105,14 @@ export function buildProfileUpdateDirective(opts: { hasProfileTool: boolean }): 
   return [
     `The customer wants to change their OWN stored details (name, email, phone or saved address).`,
     `Use update_my_profile. It takes ONLY the new values - there is no customer id, email or phone selector, because the system already knows which record is theirs.`,
+    // Live (2026-08-02): "אפשר לעדכן את המייל שלי ל-..." went to
+    // link_customer_identifier instead. That tool's description tells the model
+    // to call it on a self-referential phrase - "האימייל שלי" is its textbook
+    // example - so it wins on wording while answering a different question.
+    // Linking records an identifier for US; the customer asked for their record
+    // at the SHOP to change, and only one of those is visible to them.
+    `link_customer_identifier is NOT this. It records an identifier on our side and changes nothing in the shop, so on its own it leaves the customer's request undone. If you use it at all, use it in ADDITION to update_my_profile, never instead of it - and if it fails, that failure is not the customer's request failing.`,
+    `Once they have confirmed the new value, call update_my_profile in THIS turn. Do not answer with an acknowledgement and no call.`,
     `So: do NOT ask for their customer number, do NOT ask them to confirm who they are, and do NOT pass an id you found elsewhere.`,
     `Before calling, read the NEW value back to them and get a clear yes - an email or phone change affects how they are recognised later, and a typo there is expensive.`,
     `A saved-address change is NOT the same as changing the delivery address of an existing order. If they meant an order, say so and handle that separately.`,

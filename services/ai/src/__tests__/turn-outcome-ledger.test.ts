@@ -126,4 +126,44 @@ describe("extractExternalRef - mandatory id for committed", () => {
   it("honors an explicit externalRef", () => {
     expect(extractExternalRef("other", { ok: true, externalRef: { type: "z", id: "9" } })).toEqual({ type: "z", id: "9" });
   });
+
+  // `output` is the envelope EVERY integration tool comes back in -
+  // tool-execution.service wraps an adapter result as { ok, output, error } -
+  // and it was missing from the scope list. So no adapter tool had ever
+  // produced a real external ref, and every one was recorded as
+  // `succeeded_unverified`: deduped, but "not confidently claimable".
+  //
+  // Live (2026-08-02): add_order_note wrote the note, Shopify showed it, and
+  // the bot told the customer it had failed. The ledger said the write could
+  // not be claimed and the model believed it - the exact inverse of the lie
+  // this machinery exists to prevent.
+  it("looks inside the { ok, output } envelope every adapter tool returns", () => {
+    expect(extractExternalRef("note", { ok: true, output: { externalRef: { type: "shopify_order_note", id: "1011" } } }))
+      .toEqual({ type: "shopify_order_note", id: "1011" });
+  });
+
+  // The bot's own adapter path wraps as { ok, result }, not { ok, output }. The
+  // explicit-ref branch used to search fewer scopes than the key fallback, so a
+  // handler that did exactly what the LEDGER_GAP warning asked for was still
+  // missed - the ref sat one level down.
+  it("finds an explicit ref in EVERY scope the key fallback searches", () => {
+    for (const envelope of [
+      { ok: true, externalRef: { type: "t", id: "1" } },
+      { ok: true, output: { externalRef: { type: "t", id: "1" } } },
+      { ok: true, result: { externalRef: { type: "t", id: "1" } } },
+      { ok: true, data: { externalRef: { type: "t", id: "1" } } },
+      { ok: true, parsed: { externalRef: { type: "t", id: "1" } } },
+    ]) {
+      expect(extractExternalRef("note", envelope), JSON.stringify(envelope)).toEqual({ type: "t", id: "1" });
+    }
+  });
+
+  it("finds a plain id key inside output too", () => {
+    expect(extractExternalRef("create", { ok: true, output: { id: "cust_1" } }))
+      .toEqual({ type: "crm_record", id: "cust_1" });
+  });
+
+  it("still returns undefined when output carries no id at all", () => {
+    expect(extractExternalRef("note", { ok: true, output: { note_added: true } })).toBeUndefined();
+  });
 });

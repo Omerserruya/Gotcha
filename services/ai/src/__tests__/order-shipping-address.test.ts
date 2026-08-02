@@ -128,6 +128,46 @@ describe("verifying the address actually changed", () => {
   it("an order with no shipping address at all is not a success", () => {
     expect(verifyShippingAddress(patch, { shipping_address: null }).verified).toBe(false);
   });
+
+  // Live (2026-08-02): the customer wrote "ישראל", Shopify stored "Israel",
+  // and a change whose street, city and postal code were all exactly right
+  // reported as a failed write. The customer would have been told their
+  // address had not changed while the parcel was already routed to the new one.
+  it("accepts Shopify's rewrite of a country name it had to normalise", () => {
+    const p = validateShippingAddress({ address1: "הרצל 1", city: "חיפה", country: "ישראל", zip: "3100000" });
+    const v = verifyShippingAddress(p, {
+      shipping_address: { address1: "הרצל 1", city: "חיפה", country: "Israel", country_code: "IL", zip: "3100000" },
+    });
+    expect(v.verified).toBe(true);
+    expect(v.normalized).toEqual([{ field: "country", requested: "ישראל", actual: "Israel" }]);
+  });
+
+  it("matches on the country CODE when that is what was asked for", () => {
+    const p = validateShippingAddress({ address1: "Herzl 1", city: "Haifa", country: "IL" });
+    expect(verifyShippingAddress(p, {
+      shipping_address: { address1: "Herzl 1", city: "Haifa", country: "Israel", country_code: "IL" },
+    }).verified).toBe(true);
+  });
+
+  // The normalisation allowance must not swallow a real country error, so it
+  // only applies where WE sent something Shopify had to rewrite.
+  it("still fails when an ASCII country comes back as a different country", () => {
+    const p = validateShippingAddress({ address1: "Herzl 1", city: "Haifa", country: "Israel" });
+    const v = verifyShippingAddress(p, {
+      shipping_address: { address1: "Herzl 1", city: "Haifa", country: "United States", country_code: "US" },
+    });
+    expect(v.verified).toBe(false);
+    expect(v.mismatches[0].field).toBe("country");
+  });
+
+  it("a wrong city is still a mismatch even alongside a normalised country", () => {
+    const p = validateShippingAddress({ address1: "הרצל 1", city: "חיפה", country: "ישראל" });
+    const v = verifyShippingAddress(p, {
+      shipping_address: { address1: "הרצל 1", city: "Tel Aviv", country: "Israel", country_code: "IL" },
+    });
+    expect(v.verified).toBe(false);
+    expect(v.mismatches.map((m) => m.field)).toEqual(["city"]);
+  });
 });
 
 describe("detecting an order-address request", () => {

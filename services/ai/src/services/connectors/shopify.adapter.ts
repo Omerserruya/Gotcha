@@ -37,6 +37,7 @@ import { assertPublicUrl, shopifyApiVersion, checkShopifyResponseVersion } from 
 import { orderIdentifierFromArgs } from "./shopify-order-identifier";
 import { reconcile } from "./shopify-item-reconciliation";
 import { validateProfilePatch, verifyReadBack, detectDuplicate } from "./shopify-profile-update";
+import { SELF_SCOPE_KEY } from "./customer-access-guard";
 import {
   assessMutability,
   validateShippingAddress,
@@ -975,6 +976,14 @@ const ShopifyAdapter: ProviderAdapter = {
           tags: after.tags ?? null,
           // Said explicitly because the model kept conflating the two.
           notified_anyone: false,
+          // Live (2026-08-02): the note was written, Shopify showed it, and the
+          // bot told the customer it had failed. The turn ledger records a
+          // success with no external id as `succeeded_unverified` - deduped but
+          // not confidently claimable - so the committed-outcome block told the
+          // model it could not claim the write, and the model reported the
+          // opposite of what happened. A note is a FIELD on the order, so the
+          // order is its identifier; that is what the ledger was asking for.
+          externalRef: { type: "shopify_order_note", id: String(o.id) },
         };
       }
 
@@ -2285,10 +2294,15 @@ function projectOrderForAgent(o: any): Record<string, unknown> {
  * be told succeeded.
  */
 async function updateOwnProfile(ctx: Ctx, args: Record<string, any>): Promise<Record<string, unknown>> {
-  const c = await resolveCustomer(ctx, args);
+  // The selector arrives under its own reserved key. Merging it into the
+  // arguments made it indistinguishable from a requested change: an injected
+  // `{ phone: … }` reads as "set my phone to this", and an injected
+  // `{ customer_id: … }` was rejected by the field validator, which then
+  // reported `nothing_to_update` for a change the customer had just confirmed.
+  const { [SELF_SCOPE_KEY]: selector, address, ...flat } = args as Record<string, any>;
+  const c = await resolveCustomer(ctx, (selector as Record<string, any>) ?? {});
   if (!c) throw new Error("customer_not_found");
 
-  const { address, ...flat } = args as Record<string, any>;
   const patch = validateProfilePatch({ ...flat, ...(address ? { address } : {}) });
   if (patch.errors.length) {
     return {
@@ -2366,6 +2380,10 @@ async function updateOwnProfile(ctx: Ctx, args: Record<string, any>): Promise<Re
     mismatches: verdict.mismatches,
     rejected_fields: patch.rejected,
     sensitive_change: patch.sensitive,
+    // Only on a verified write. The ledger treats an id as proof the action is
+    // claimable, so handing it one for a change the read-back did not confirm
+    // would be worse than the missing-id problem it solves.
+    ...(verdict.verified ? { externalRef: { type: "shopify_customer", id: String(c.id) } } : {}),
     model_instruction: verdict.verified
       ? `The change is confirmed by an independent read of the record. Tell the customer exactly which fields changed (${changed.join(", ")}) and nothing more.`
       : "The read-back does NOT match what was requested, so the change did not take effect as asked." +
@@ -2544,6 +2562,7 @@ async function createShopifyReturn(
     return_name: found?.name ?? created?.returnCreate?.return?.name ?? null,
     return_status: found?.status ?? created?.returnCreate?.return?.status ?? null,
     items: selected.map((s: any) => ({ title: s.title, quantity: s.quantity, reason: s.returnReason })),
+    ...(found ? { externalRef: { type: "shopify_return", id: String(rid) } } : {}),
     model_instruction: found
       ? `The return is open and confirmed on the order. Tell the customer it is open, give them the return reference (${found.name ?? rid}) and say what happens next only if you actually know it.`
       : `The return could not be confirmed on a read-back of the order, so do NOT tell the customer it is open. Say it did not complete and hand over to a person.`,
@@ -2746,6 +2765,7 @@ async function exchangeOrderItem(
     problems: verdict.problems,
     quote,
     order_total: after?.order?.total_price ?? null,
+    ...(verdict.verified ? { externalRef: { type: "shopify_order", id: String(order.id) } } : {}),
     model_instruction: verdict.verified
       ? `The exchange is confirmed by an independent read of the order: ${quote.current_variant ?? quote.current_title} was replaced with ${quote.requested_variant ?? quote.requested_title}. Tell the customer exactly that. There is nothing further to pay.`
       : `The order does NOT read back as expected after the edit (${verdict.problems.join(", ")}). Tell the customer the exchange did not complete and hand over to a person. Do NOT say the item was exchanged.`,
@@ -2835,13 +2855,18 @@ async function updateOrderShippingAddress(
     verified: verdict.verified,
     changed_fields: verdict.verified ? Object.keys(patch.fields) : [],
     mismatches: verdict.mismatches,
+    normalized_fields: verdict.normalized,
     // City and country only. An approval card and a chat transcript are both
     // read by people who do not need the customer's street address to
     // understand what is being decided.
     from: { city: before.city ?? null, country: before.country ?? null },
     to: { city: patch.fields.city ?? before.city ?? null, country: patch.fields.country ?? before.country ?? null },
+    ...(verdict.verified ? { externalRef: { type: "shopify_order", id: String(order.id) } } : {}),
     model_instruction: verdict.verified
-      ? `The order's delivery address is confirmed changed by an independent read of the order. Tell the customer the new city and country, and nothing about carriers.`
+      ? `The order's delivery address is confirmed changed by an independent read of the order. Tell the customer the new city and country, and nothing about carriers.` +
+        (verdict.normalized.length
+          ? ` The shop stored ${verdict.normalized.map((n) => `${n.field} as "${n.actual}"`).join(", ")} - use that wording, it is what is on the label.`
+          : "")
       : `The read-back does NOT match the requested address, so the change did not take effect. Tell the customer it did not go through and offer a person. Do NOT say the address was changed.`,
   };
 }
