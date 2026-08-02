@@ -248,9 +248,12 @@ const TOOLS: ToolDefinition[] = [
   withOrderTarget(t("send_invoice", "ACTION", "MEDIUM", "Send/resend the order invoice email to the customer.",
     "Customer didn't receive their invoice / needs the payment link again.",
     { ...P.orderSel, to: { type: "string", description: "Override recipient email." } })),
-  withOrderTarget(t("resend_confirmation", "ACTION", "MEDIUM", "Resend the order confirmation email.",
-    "Customer says they never got the confirmation email.", P.orderSel, undefined,
-    { unsupported: "Shopify has no REST endpoint to resend an order confirmation." })),
+  // No longer `unsupported`. That flag was set on the strength of the REST gap,
+  // and the GraphQL mutation that does work went unnoticed behind it - so a
+  // capability the product HAS was declared missing, and the tool short-
+  // circuited before ever reaching an API.
+  withOrderTarget(t("resend_confirmation", "ACTION", "MEDIUM", "Resend the order confirmation email to the address on the order.",
+    "Customer says they never got the confirmation email. It goes to the address already on the order - you cannot redirect it, and must not ask where to send it. This is an order confirmation, NOT a tax invoice.", P.orderSel)),
   // "156 → 159", before anything ships.
   //
   // Narrower than edit_order on purpose: one line item, one replacement
@@ -1270,16 +1273,41 @@ const ShopifyAdapter: ProviderAdapter = {
         }
         return cancelled;
       }
-      case "send_invoice": {
+      case "send_invoice":
+      case "resend_confirmation": {
+        // GraphQL, because REST `send_invoice` answers 406 on the current API
+        // and answered it to a live customer in Part 4. `orderInvoiceSend` is
+        // the supported operation and it works - which makes this a capability
+        // the product HAS, not one it lacks. `resend_confirmation` was declared
+        // unsupported on the strength of the REST gap; it is the same mutation.
+        //
+        // No recipient is ever passed. The email goes to the address already on
+        // the order, and customer-access-guard.ts refuses a chat-supplied `to`
+        // outright - a financial document is not something a conversation gets
+        // to redirect.
         const o = await resolveOrder(ctx, args);
         if (!o) throw new Error("order_not_found");
-        const invoice: any = {};
-        if (args.to) invoice.to = String(args.to);
-        const r: any = await sreq(ctx, "POST", `/orders/${o.id}/send_invoice.json`, { order_invoice: invoice });
-        return r.order_invoice || { ok: true };
+        const data = await shopifyGraphQL(ctx, ORDER_INVOICE_SEND, { id: orderGid(o.id) });
+        const err = firstUserError(data?.orderInvoiceSend);
+        if (err) throw new Error(`shopify_order_invoice_send: ${err}`);
+        if (!data?.orderInvoiceSend?.order?.id) {
+          throw new Error("shopify_order_invoice_send: the provider did not confirm the send");
+        }
+        return {
+          order_id: String(o.id),
+          name: o.name,
+          document_type: "order_confirmation",
+          delivery_channel: "email",
+          sent: true,
+          // The stored address, echoed so the model can say WHERE it went
+          // without ever having been given a choice about it.
+          sent_to: o.email ?? o.contact_email ?? null,
+          externalRef: { type: "shopify_order_invoice", id: String(o.id) },
+          model_instruction:
+            `The order confirmation email was sent by Shopify to the address on the order. Tell the customer it was sent and to which address. ` +
+            `It is an order confirmation, NOT a tax invoice - do not call it one.`,
+        };
       }
-      case "resend_confirmation":
-        throw new Error("unsupported_rest: Shopify has no REST endpoint to resend the order confirmation email. Use send_invoice to re-send the invoice/payment link, or resend confirmation from the Shopify admin.");
       case "edit_order":
         throw new Error("unsupported_rest: editing placed orders requires the GraphQL Admin API (orderEditBegin/orderEditCommit). Not available via REST tools.");
 
@@ -2521,6 +2549,20 @@ const RETURNABLE_FULFILLMENTS_QUERY = `
           }
         }
       }
+    }
+  }`;
+
+/**
+ * The supported way to (re)send an order confirmation.
+ *
+ * REST `POST /orders/{id}/send_invoice.json` answers 406 on the current API,
+ * and answered it to a live customer in Part 4 as `shopify_406`. This works.
+ */
+const ORDER_INVOICE_SEND = `
+  mutation OrderInvoiceSend($id: ID!) {
+    orderInvoiceSend(id: $id) {
+      order { id name }
+      userErrors { field message }
     }
   }`;
 

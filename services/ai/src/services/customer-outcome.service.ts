@@ -293,12 +293,13 @@ export function applyToolResult(outcome: CustomerOutcome, record: ToolCallRecord
       break;
 
     case "send_invoice":
+    case "resend_confirmation":
       o.actionAttempted = true;
-      // Shopify's send_invoice sends the ORDER INVOICE EMAIL. That is a
-      // confirmation/receipt, and deliberately NOT invoiceSent: a tax invoice
-      // needs an invoicing provider, and conflating them is how an order
-      // summary gets called an invoice.
-      if (r.id || r.ok === true || r.to) {
+      // Shopify's orderInvoiceSend sends the ORDER CONFIRMATION email. That is
+      // a confirmation, and deliberately NOT invoiceSent: a tax invoice needs
+      // an invoicing provider, and conflating them is how an order summary gets
+      // called an invoice.
+      if (r.sent === true || r.id || r.ok === true) {
         o.confirmationSent = true;
         o.documentSent = true;
         o.actionSucceeded = true;
