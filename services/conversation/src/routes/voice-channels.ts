@@ -38,13 +38,21 @@ import {
   CopilotConfigSchema,
   requireEntitlement,
   requireCapacity,
+  resolveVoicePublicUrl,
 } from "@chatcenter/shared";
 
 const router = Router();
 
-/** PUBLIC_BASE_URL is required for Twilio webhook URLs. Fallback in dev only. */
+/**
+ * The VOICE origin (voice.gotcha.co.il), not the application origin.
+ *
+ * These two URLs are written onto the merchant's Twilio number, so getting the
+ * host wrong does not surface as an error - the number simply stops reaching
+ * us. resolveVoicePublicUrl throws in production when VOICE_PUBLIC_URL is
+ * unset rather than falling back to localhost, which is what this used to do.
+ */
 function publicBaseUrl(): string {
-  return (process.env.PUBLIC_BASE_URL || "http://localhost").replace(/\/+$/, "");
+  return resolveVoicePublicUrl(process.env).replace(/\/+$/, "");
 }
 
 function inboundVoiceWebhookUrl(): string {

@@ -20,7 +20,7 @@
 import express from "express";
 import * as http from "http";
 import { WebSocketServer } from "ws";
-import { getRedis, publishEvent as sharedPublishEvent } from "@chatcenter/shared";
+import { getRedis, publishEvent as sharedPublishEvent, resolveVoicePublicUrl } from "@chatcenter/shared";
 import type { ServiceEvent } from "@chatcenter/shared";
 import type { Redis } from "ioredis";
 
@@ -246,14 +246,20 @@ export function createApp(overrides?: Partial<AppDeps>): BuiltApp {
 
   app.use("/api/voice-copilot/live", createLiveRouter({ redis: deps.redis, logger: deps.logger }));
   app.use("/api/voice-copilot/token", createTwilioTokenRouter({ resolveProvider: deps.resolveVoiceProvider, logger: deps.logger }));
+  // Every URL below is handed to Twilio, so all three routers get the VOICE
+  // origin, never the application one. resolveVoicePublicUrl throws in
+  // production when VOICE_PUBLIC_URL is unset - the service refuses to boot
+  // rather than answer a call it cannot complete.
+  const voicePublicUrl = resolveVoicePublicUrl(process.env);
+
   app.use("/api/voice-copilot/twiml", createTwilioTwimlRouter({
     resolveProvider: deps.resolveVoiceProvider,
-    publicBaseUrl: env.PUBLIC_BASE_URL,
+    publicBaseUrl: voicePublicUrl,
     logger: deps.logger,
   }));
   app.use("/api/voice/incoming", createVoiceIncomingRouter({
     resolveProviderByChannelId: deps.resolveVoiceProviderByChannelId,
-    publicBaseUrl: env.PUBLIC_BASE_URL,
+    publicBaseUrl: voicePublicUrl,
     logger: deps.logger,
     redis: deps.redis,
   }));
@@ -276,7 +282,7 @@ export function createApp(overrides?: Partial<AppDeps>): BuiltApp {
   app.use("/api/voice-copilot", createVoiceCallbackRouter({
     resolveProvider: deps.resolveVoiceProvider,
     resolveProviderByChannelId: deps.resolveVoiceProviderByChannelId,
-    publicBaseUrl: env.PUBLIC_BASE_URL,
+    publicBaseUrl: voicePublicUrl,
     logger: deps.logger,
   }));
 

@@ -423,6 +423,10 @@ export {
   loadOriginPolicy,
   isAllowedOrigin,
   assertAppOriginReady,
+  resolveAppPublicUrl,
+  assertAppPublicUrlReady,
+  resolveVoicePublicUrl,
+  assertVoicePublicUrlReady,
   AppOriginError,
   type OriginPolicy,
 } from "./lib/app-origins";
