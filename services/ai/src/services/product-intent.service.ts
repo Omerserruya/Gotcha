@@ -26,6 +26,60 @@ const VARIANT_ATTRIBUTE_RE =
 const AVAILABILITY_RE =
   /(יש\s*(לכם|לך)?|האם\s*יש|במלאי|זמין|זמינות|אזל|נגמר|do you have|in stock|available|availability)/i;
 
+/**
+ * Coupons and discounts, in a customer conversation.
+ *
+ * Out of scope by product decision. The tools are gone from the autonomous
+ * surface (allowed_modes = ASSIST), so the model CANNOT create, validate or
+ * disable a code even if it wanted to - but a model with no tool tends to
+ * improvise, and the live failure did exactly that: it offered to create a
+ * coupon, promised to pass the details to a team, and speculated about booking
+ * a meeting, in one reply.
+ *
+ * So the turn is told plainly what the answer is. Silence is what produced the
+ * improvisation.
+ */
+const COUPON_RE =
+  /(קופון|קופונים|הנחה|הנחות|קוד\s*הנחה|מבצע|זיכוי\s*לחנות|coupon|discount|promo\s*code|voucher)/i;
+
+/**
+ * Validating a code WITHOUT naming it a coupon: "הקוד ABC תקף?".
+ *
+ * The word "coupon" never appears, but `validate_discount` is exactly what the
+ * model would reach for, so the same scope decision has to cover it.
+ */
+const CODE_VALIDITY_RE =
+  /(הקוד|קוד)\s*\S{0,20}?\s*(תקף|בתוקף|עובד|פעיל)|\bcode\b[^\n]{0,20}?\b(valid|still work|works)\b/i;
+
+export function detectCouponIntent(text: string | null | undefined): boolean {
+  const t = String(text ?? "");
+  return COUPON_RE.test(t) || CODE_VALIDITY_RE.test(t);
+}
+
+/**
+ * What the model must say instead of improvising.
+ *
+ * Three explicit prohibitions, each one an observed failure mode: do not offer
+ * to make a coupon (there is no tool), do not hand the conversation to a person
+ * (a discount question is not an incident), and do not pivot to a refund - a
+ * customer asking about a promotion has not asked for their money back, and
+ * offering it is how a discount enquiry turns into an unintended financial
+ * conversation.
+ */
+export function buildCouponUnsupportedDirective(): string {
+  return (
+    `The customer is asking about a coupon, discount code or promotion.\n` +
+    `This is NOT SUPPORTED in customer conversations, by product decision. You have no tool for it and must not look for one.\n` +
+    `- Say plainly, in the customer's language, that coupons cannot be issued, checked or applied through this chat.\n` +
+    `- Suggested Hebrew wording: "כרגע לא ניתן להפיק, לבדוק או להוסיף קופון דרך השיחה."\n` +
+    `- Do NOT offer to create, generate or apply a coupon or discount.\n` +
+    `- Do NOT offer a refund or a partial refund as a substitute. If the customer separately asks for a refund, that is a different request.\n` +
+    `- Do NOT transfer the conversation to a human just because a discount was requested.\n` +
+    `- Do NOT promise anyone will look into it.\n` +
+    `- Answer briefly, then carry on helping with whatever else they need.\n`
+  );
+}
+
 export interface VariantIntent {
   /** The turn is asking about a concrete product attribute or its stock. */
   isVariantQuestion: boolean;

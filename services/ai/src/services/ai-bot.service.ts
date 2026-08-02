@@ -37,7 +37,12 @@ import {
 } from "./grounded-message.service";
 import { validateActionHonesty, stripUnsupportedDelegation } from "./action-honesty.service";
 import { assertOrderTargetMatchesTurn, isOrderStateChangingTool } from "./order-reference.service";
-import { detectVariantIntent, buildVariantIntentDirective } from "./product-intent.service";
+import {
+  detectVariantIntent,
+  buildVariantIntentDirective,
+  detectCouponIntent,
+  buildCouponUnsupportedDirective,
+} from "./product-intent.service";
 import { getActionOrchestrator, type ExecutionResult } from "./orchestrator";
 import type { AgentToolContext } from "@chatcenter/shared";
 import { generateResponse, getDefaultModel, getMicroModel } from "./ai.service";
@@ -2360,6 +2365,16 @@ async function generateAIBotReplyInner(
   // only what it needs to diagnose - so "יש את הדגם הזה במידה 159?" got a
   // question back about which colour was meant, on a catalogue whose products
   // have one variant each. The answer was one call away the whole time.
+  // Coupons are out of scope for customer conversations. The tools are already
+  // off this surface; this stops the model improvising in their absence.
+  try {
+    if (detectCouponIntent(opts.incomingMessage)) {
+      chatMessages.push({ role: "system", content: buildCouponUnsupportedDirective() });
+    }
+  } catch (err: any) {
+    console.warn("[ai-bot] coupon intent detection failed (non-fatal):", err?.message);
+  }
+
   try {
     const variantIntent = detectVariantIntent(opts.incomingMessage);
     const hasVariantTool = toolFunctionNames.some((n) => n.endsWith(".variant_information"));
