@@ -166,7 +166,7 @@ export async function assessIntegrationHealth(
   // ── The layer nothing used to check: what does the assistant actually hold ──
   const catalogTools: any[] = await (prisma as any).catalogTool.findMany({
     where: { integrationId: catalog.id },
-    select: { id: true, slug: true, category: true, requiredScopes: true },
+    select: { id: true, slug: true, category: true },
   });
   const tenantTools: any[] = await (prisma as any).tenantTool.findMany({
     where: { tenantId, tenantIntegrationId: ti.id },
