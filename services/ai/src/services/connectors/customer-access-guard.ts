@@ -33,7 +33,7 @@ export const PROTECTED_SHOPIFY_TOOLS = new Set([
   "get_customer_orders", "get_customer_addresses", "get_customer_tags", "get_customer_metafields",
   "get_customer_discounts", "summarize_customer", "get_customer_health",
   "get_orders", "get_order", "order_lookup", "search_orders", "get_order_items",
-  "reconcile_order_items", "update_order_shipping_address", "exchange_order_item",
+  "reconcile_order_items", "update_order_shipping_address", "exchange_order_item", "create_return",
   "get_financial_status", "check_payment_status", "get_fulfillment_status",
   "get_shipment_status", "track_shipment", "get_tracking_number", "get_tracking_url",
   "get_fulfillment_events", "check_delivery_eta", "check_pickup_point",

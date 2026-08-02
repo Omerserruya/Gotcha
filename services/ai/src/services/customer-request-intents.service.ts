@@ -154,6 +154,15 @@ export function buildOrderAddressDirective(opts: { hasAddressTool: boolean }): s
   ].join("\n");
 }
 
+// ── Return / RMA ──────────────────────────────────────────────
+
+const RETURN_RE =
+  /(להחזיר|החזרה|החזרות|להחזרה|רוצה\s*להחזיר|לבטל\s*ולהחזיר|פגום|שבור|נזק|מוצר\s*לא\s*נכון|לא\s*מה\s*שהזמנתי|return\s*(it|this|the)|send\s*(it\s*)?back|damaged|broken|wrong\s*item)/i;
+
+export function detectReturnIntent(text: string | null | undefined): boolean {
+  return RETURN_RE.test(String(text ?? ""));
+}
+
 // ── Exchange ──────────────────────────────────────────────────
 
 const EXCHANGE_RE =

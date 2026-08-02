@@ -361,6 +361,33 @@ const TOOLS: ToolDefinition[] = [
     "Customer asks 'has my refund been processed?'. This is the money movement in Shopify. If returngo.* tools are also available, ALSO call returngo.get_return_status - combine both for the full refund/return picture.", P.orderSel),
   t("get_returns", "READ", "LOW", "List Shopify Returns (RMAs) for an order with status + line items (GraphQL - Shopify's native return object).",
     "Customer asks about a return request / 'what's the status of my return?'. This is Shopify's native RMA. If returngo.* tools are also available, ALSO call returngo.get_return_status and synthesize both - neither source alone is complete.", P.orderSel),
+  // The one that did not exist.
+  //
+  // Part 3's scope matrix recorded `write_returns` as "granted but no tool uses
+  // it", and scenario 21 was UNSUPPORTED for exactly that reason - the store
+  // could read every RMA it had and open none. `returnCreate` is GraphQL-only
+  // and works against FULFILLMENT line items, not order line items, which is
+  // why an unfulfilled order genuinely has nothing to return.
+  withOrderTarget(t("create_return", "ACTION", "HIGH",
+    "Open a Shopify Return (RMA) against an order's fulfilled line items, then read it back and report the real return id.",
+    "Customer wants to return or replace something that has been delivered, and Shopify is this store's return provider. Call get_returns FIRST - never open a second return for items already covered by one. Only an item that was actually fulfilled can be returned. Approval is handled by the system: calling this tool is what RAISES the approval.",
+    {
+      ...P.orderSel,
+      line_items: {
+        type: "array",
+        description: "Items to return: [{ line_item_id, quantity, reason }]. Omit to return everything fulfilled on the order.",
+        items: {
+          type: "object",
+          properties: {
+            line_item_id: { type: "string" },
+            quantity: { type: "number" },
+            reason: { type: "string", description: "One of: DEFECTIVE, WRONG_ITEM, NOT_AS_DESCRIBED, SIZE_TOO_SMALL, SIZE_TOO_LARGE, STYLE, UNWANTED, UNKNOWN, OTHER." },
+          },
+        },
+      },
+      note: { type: "string", description: "The customer's own description of the problem." },
+    }, undefined,
+    { sideEffects: "Opens a real return against the merchant's order.", priority: 86 })),
   t("get_return_reason", "READ", "LOW", "Get the per-line return reason(s) for an order's returns (GraphQL).",
     "You need why a customer returned an item. Pair with returngo.get_return_status when ReturnGO is the returns platform.", P.orderSel),
 
@@ -511,6 +538,11 @@ const TOOL_SCOPES: Record<string, string[]> = {
   issue_compensation_coupon: ["write_price_rules"],
   // returns (GraphQL)
   get_returns: ["read_returns"], get_return_reason: ["read_returns"],
+  // read_returns does NOT imply write_returns - they are separate grants, and
+  // a store can read every RMA it has while being unable to open one. The
+  // fulfillment scope is here because returnCreate works against FULFILLMENT
+  // line items, which have to be read before anything can be returned.
+  create_return: ["read_returns", "write_returns", "read_merchant_managed_fulfillment_orders"],
 };
 for (const def of TOOLS) {
   const slug = def.name.slice(def.name.indexOf(".") + 1);
@@ -1452,6 +1484,11 @@ const ShopifyAdapter: ProviderAdapter = {
         const returns = mapReturns(data?.order?.returns?.nodes);
         return { order_id: o.id, name: o.name, returns_count: returns.length, returns };
       }
+      case "create_return": {
+        const o = await resolveOrder(ctx, args);
+        if (!o) throw new Error("order_not_found");
+        return await createShopifyReturn(ctx, o, args);
+      }
       case "get_return_reason": {
         const o = await resolveOrder(ctx, args);
         if (!o) throw new Error("order_not_found");
@@ -2333,6 +2370,183 @@ async function updateOwnProfile(ctx: Ctx, args: Record<string, any>): Promise<Re
       ? `The change is confirmed by an independent read of the record. Tell the customer exactly which fields changed (${changed.join(", ")}) and nothing more.`
       : "The read-back does NOT match what was requested, so the change did not take effect as asked." +
         " Tell the customer it did not go through and offer a person. Do NOT say it was updated.",
+  };
+}
+
+// ─── Returns (RMA) ──────────────────────────────────────────
+//
+// `returnCreate` works against FULFILLMENT line items, not order line items.
+// That is not a quirk to route around: an item that never shipped has nothing
+// to return, and the API saying so is more correct than a tool that would
+// happily open an RMA for a parcel still in the warehouse.
+
+const RETURNABLE_FULFILLMENTS_QUERY = `
+  query ReturnableFulfillments($id: ID!) {
+    order(id: $id) {
+      id
+      name
+      returnableFulfillments(first: 20) {
+        nodes {
+          id
+          returnableFulfillmentLineItems(first: 50) {
+            nodes {
+              fulfillmentLineItem { id lineItem { id title sku } }
+              quantity
+            }
+          }
+        }
+      }
+    }
+  }`;
+
+const RETURN_CREATE_MUTATION = `
+  mutation ReturnCreate($input: ReturnInput!) {
+    returnCreate(returnInput: $input) {
+      return { id name status totalQuantity }
+      userErrors { field message }
+    }
+  }`;
+
+/** Shopify's ReturnReason enum. Anything unrecognised becomes UNKNOWN. */
+const RETURN_REASONS = new Set([
+  "COLOR", "DEFECTIVE", "NOT_AS_DESCRIBED", "OTHER", "SIZE_TOO_LARGE", "SIZE_TOO_SMALL",
+  "STYLE", "UNKNOWN", "UNWANTED", "WRONG_ITEM",
+]);
+
+function normalizeReturnReason(v: unknown): string {
+  const s = String(v ?? "").toUpperCase().replace(/[\s-]+/g, "_");
+  return RETURN_REASONS.has(s) ? s : "UNKNOWN";
+}
+
+/**
+ * Open a real Shopify return and report its real id.
+ *
+ * The rule this exists to keep: a return is only claimed once the provider has
+ * handed back an id. Everything before that - a note, a tag, a customer record,
+ * an intention - reaches nobody, and scenario 21 is what "we've passed it on"
+ * looks like when nothing was passed anywhere.
+ */
+async function createShopifyReturn(
+  ctx: Ctx,
+  order: any,
+  args: Record<string, any>,
+): Promise<Record<string, unknown>> {
+  // Nothing may be returned twice. Checked here as well as in the directive,
+  // because a re-dispatched approval would otherwise open a second RMA for the
+  // same complaint.
+  const existing = await shopifyGraphQL(ctx, RETURNS_QUERY, { id: orderGid(order.id) });
+  const openReturns = (existing?.order?.returns?.nodes ?? []).filter(
+    (r: any) => !["CLOSED", "CANCELED", "CANCELLED", "DECLINED"].includes(String(r?.status ?? "").toUpperCase()),
+  );
+  if (openReturns.length) {
+    return {
+      order_id: String(order.id),
+      name: order.name,
+      return_created: false,
+      already_open: true,
+      return_id: String(openReturns[0].id),
+      return_status: openReturns[0].status ?? null,
+      model_instruction:
+        `A return is ALREADY open on this order (${openReturns[0].name ?? openReturns[0].id}, status ${openReturns[0].status}). ` +
+        `Tell the customer it is already open and give them its status. Do NOT open another one.`,
+    };
+  }
+
+  const returnable = await shopifyGraphQL(ctx, RETURNABLE_FULFILLMENTS_QUERY, { id: orderGid(order.id) });
+  const nodes: any[] = returnable?.order?.returnableFulfillments?.nodes ?? [];
+  const available = nodes.flatMap((n: any) =>
+    (n?.returnableFulfillmentLineItems?.nodes ?? []).map((li: any) => ({
+      fulfillmentLineItemId: li?.fulfillmentLineItem?.id,
+      orderLineItemId: String(li?.fulfillmentLineItem?.lineItem?.id ?? "").split("/").pop(),
+      title: li?.fulfillmentLineItem?.lineItem?.title ?? "",
+      maxQuantity: Number(li?.quantity ?? 0),
+    })),
+  ).filter((x: any) => x.fulfillmentLineItemId && x.maxQuantity > 0);
+
+  if (!available.length) {
+    return {
+      order_id: String(order.id),
+      name: order.name,
+      return_created: false,
+      returnable_items: 0,
+      model_instruction:
+        "Nothing on this order can be returned - Shopify has no returnable fulfilled items for it, which normally means it " +
+        "has not been delivered yet or everything has already been returned. Say exactly that. Do NOT say a return was opened.",
+    };
+  }
+
+  const requested: any[] = Array.isArray(args.line_items) ? args.line_items : [];
+  const selected = requested.length
+    ? requested
+        .map((r: any) => {
+          const match = available.find((a: any) => String(a.orderLineItemId) === String(r.line_item_id));
+          if (!match) return null;
+          const qty = r.quantity != null ? Math.floor(Number(r.quantity)) : match.maxQuantity;
+          if (!Number.isFinite(qty) || qty < 1) return null;
+          return {
+            fulfillmentLineItemId: match.fulfillmentLineItemId,
+            quantity: Math.min(qty, match.maxQuantity),
+            returnReason: normalizeReturnReason(r.reason),
+            returnReasonNote: args.note ? String(args.note).slice(0, 500) : undefined,
+            title: match.title,
+          };
+        })
+        .filter(Boolean)
+    : available.map((a: any) => ({
+        fulfillmentLineItemId: a.fulfillmentLineItemId,
+        quantity: a.maxQuantity,
+        returnReason: normalizeReturnReason(args.reason),
+        returnReasonNote: args.note ? String(args.note).slice(0, 500) : undefined,
+        title: a.title,
+      }));
+
+  if (!selected.length) {
+    return {
+      order_id: String(order.id),
+      name: order.name,
+      return_created: false,
+      returnable_items: available.length,
+      model_instruction:
+        "The items asked for are not among the ones this order can return. Name what IS returnable and ask which they mean. " +
+        "Do NOT say a return was opened.",
+    };
+  }
+
+  const created = await shopifyGraphQL(ctx, RETURN_CREATE_MUTATION, {
+    input: {
+      orderId: orderGid(order.id),
+      returnLineItems: selected.map((s: any) => ({
+        fulfillmentLineItemId: s.fulfillmentLineItemId,
+        quantity: s.quantity,
+        returnReason: s.returnReason,
+        ...(s.returnReasonNote ? { returnReasonNote: s.returnReasonNote } : {}),
+      })),
+    },
+  });
+  const err = firstUserError(created?.returnCreate);
+  if (err) throw new Error(`shopify_return_create: ${err}`);
+
+  const rid = created?.returnCreate?.return?.id;
+  if (!rid) throw new Error("shopify_return_create: no return id returned");
+
+  // Independent read-back. A return id from the mutation is the mutation's own
+  // word for it; this is the order confirming the return exists on it.
+  const after = await shopifyGraphQL(ctx, RETURNS_QUERY, { id: orderGid(order.id) });
+  const found = (after?.order?.returns?.nodes ?? []).find((r: any) => String(r?.id) === String(rid));
+
+  return {
+    order_id: String(order.id),
+    name: order.name,
+    return_created: !!found,
+    verified: !!found,
+    return_provider: "shopify",
+    return_id: String(rid),
+    return_name: found?.name ?? created?.returnCreate?.return?.name ?? null,
+    return_status: found?.status ?? created?.returnCreate?.return?.status ?? null,
+    items: selected.map((s: any) => ({ title: s.title, quantity: s.quantity, reason: s.returnReason })),
+    model_instruction: found
+      ? `The return is open and confirmed on the order. Tell the customer it is open, give them the return reference (${found.name ?? rid}) and say what happens next only if you actually know it.`
+      : `The return could not be confirmed on a read-back of the order, so do NOT tell the customer it is open. Say it did not complete and hand over to a person.`,
   };
 }
 

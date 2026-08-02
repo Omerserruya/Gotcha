@@ -55,7 +55,9 @@ import {
   buildOrderAddressDirective,
   detectExchangeIntent,
   buildExchangeDirective,
+  detectReturnIntent,
 } from "./customer-request-intents.service";
+import { getReturnProvider, buildReturnDirective } from "./return-provider.service";
 import { getActionOrchestrator, type ExecutionResult } from "./orchestrator";
 import type { AgentToolContext } from "@chatcenter/shared";
 import { generateResponse, getDefaultModel, getMicroModel } from "./ai.service";
@@ -2417,6 +2419,11 @@ async function generateAIBotReplyInner(
           hasAddressTool: toolFunctionNames.some((n) => n.endsWith(".update_order_shipping_address")),
         }),
       });
+    }
+    // Returns: ONE provider creates them, and only a real id may be claimed.
+    if (detectReturnIntent(opts.incomingMessage)) {
+      const caps = await getReturnProvider(opts.tenantId);
+      chatMessages.push({ role: "system", content: buildReturnDirective(caps) });
     }
     // An exchange is an order edit before dispatch and a return after it.
     if (detectExchangeIntent(opts.incomingMessage)) {
