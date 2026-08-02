@@ -262,12 +262,18 @@ export async function getToolUsageStats(tenantId: string, from?: string, to?: st
   const byTool: Record<string, { toolName: string; total: number; successes: number; durations: number[] }> = {};
   for (const ex of executions) {
     const toolName = ex.tenantTool?.catalogTool?.name ?? "unknown";
-    if (!byTool[ex.tenantToolId]) {
-      byTool[ex.tenantToolId] = { toolName, total: 0, successes: 0, durations: [] };
+    // `tenantToolId` is nullable: an execution can outlive the tenant tool it
+    // ran through, and the built-in (non-catalog) tools never had one. Indexing
+    // by it directly relied on JavaScript stringifying null into a "null" key,
+    // which happened to work and is not something to keep. Unattributable
+    // executions share the one bucket the name fallback already implies.
+    const toolId = ex.tenantToolId ?? "unknown";
+    if (!byTool[toolId]) {
+      byTool[toolId] = { toolName, total: 0, successes: 0, durations: [] };
     }
-    byTool[ex.tenantToolId].total += 1;
-    if (ex.success) byTool[ex.tenantToolId].successes += 1;
-    if (ex.durationMs != null) byTool[ex.tenantToolId].durations.push(ex.durationMs);
+    byTool[toolId].total += 1;
+    if (ex.success) byTool[toolId].successes += 1;
+    if (ex.durationMs != null) byTool[toolId].durations.push(ex.durationMs);
   }
 
   return Object.entries(byTool).map(([toolId, stats]) => ({
