@@ -452,9 +452,14 @@ export async function recordGateAudit(opts: {
     await (prisma as any).auditLog?.create({
       data: {
         tenantId: opts.tenantId,
+        // The gate is machinery, not a person - even when the decision was an
+        // admin's override, the actor who ran it is recorded in metadata rather
+        // than impersonated here.
+        actorType: "system",
+        actorId: null,
         action: "integration.dispatch_decision",
-        entityType: "tool",
-        entityId: opts.toolFunctionName,
+        targetType: "tool",
+        targetId: opts.toolFunctionName,
         metadata: {
           tool: opts.toolFunctionName,
           actorType: opts.actor.type,
