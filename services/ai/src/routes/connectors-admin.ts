@@ -529,12 +529,21 @@ router.get(
     // shipped" for orders in fulfillment, and offered to cancel orders Shopify
     // would refuse. The list below is what the tool surface actually calls.
     //
-    // Deliberately NOT requested: write_fulfillments and write_returns (no
-    // tool creates a fulfillment or an RMA), write_draft_orders and
-    // read_draft_orders (no draft-order tool exists), and the third-party
-    // fulfillment-order scopes (only meaningful for merchants using a 3PL -
-    // read_assigned_fulfillment_orders is requested for that case, and a
-    // merchant without one loses nothing by granting it).
+    // `write_returns` and `write_order_edits` were on the not-requested list
+    // with the note "no tool creates an RMA / edits an order". Both tools now
+    // exist, and the note outliving the fact is how the exchange reached a
+    // live store and failed at orderEditBegin with "Requires
+    // `write_order_edits` access scope" - after eligibility passed, after the
+    // price was quoted, after a human approved it. A scope list that is a
+    // comment about the past rather than a statement about the surface fails
+    // exactly this way: silently, and only at the last step.
+    //
+    // Deliberately NOT requested: write_fulfillments (no tool creates a
+    // fulfillment), write_draft_orders and read_draft_orders (no draft-order
+    // tool exists), and the third-party fulfillment-order scopes (only
+    // meaningful for merchants using a 3PL - read_assigned_fulfillment_orders
+    // is requested for that case, and a merchant without one loses nothing by
+    // granting it).
     const scopes = [
       "read_orders", "write_orders",
       // Orders older than 60 days are invisible to read_orders alone, and a
@@ -547,7 +556,8 @@ router.get(
       "read_price_rules", "write_price_rules",
       "write_discounts",
       "read_products",
-      "read_returns",
+      "read_returns", "write_returns",
+      "write_order_edits",
     ].join(",");
     const params = new URLSearchParams({
       client_id: clientId,

@@ -711,13 +711,20 @@ export async function runApprovedAction(opts: {
           approvedBy: actorId,
           authToken,
         });
+    // A tool that RAN is not a tool that did the thing. This has to be folded
+    // in HERE, not only at the continuation: `claimCustomerNotification`
+    // asserts the row really is in the outcome being claimed, so persisting
+    // SUCCEEDED and then claiming a "failed" continuation matches nothing and
+    // the customer gets NO message at all - which is the exact silent failure
+    // Part 1 was written to end, reintroduced from the other side.
+    const noChange = providerReportedNoChange(dispatch.result);
     // Persist the outcome BEFORE any customer messaging. The execution state
     // is now durable: a crash here leaves a row a sweeper can reason about,
     // instead of an APPROVED row that looks identical to a successful one.
     await recordExecutionOutcome(tenantId, approvalId, {
-      ok: dispatch.ok,
+      ok: dispatch.ok && !noChange,
       result: sanitizeExecutionResult(dispatch.result),
-      error: dispatch.error,
+      error: dispatch.error ?? (noChange ? "provider_reported_no_change" : undefined),
     });
     if (!dispatch.ok) {
       console.error(`[approvals] dispatch failed for ${approvalId}: ${dispatch.error}`);
@@ -730,12 +737,11 @@ export async function runApprovedAction(opts: {
   // a customer who had just been told "I'm handling your cancellation now" in
   // total silence when Shopify refused, with the conversation then dumped on a
   // human who had no idea what had been promised.
-  // A tool that RAN is not a tool that did the thing. Live (2026-08-02): an
-  // approved address change dispatched cleanly, and the tool's own read-back
-  // reported `verified: false` - so the continuation told the customer their
-  // address had been changed on the strength of `dispatch.ok` alone, while the
-  // result sitting beside it said the opposite. Tools that verify themselves
-  // are believed over the transport.
+  // Live (2026-08-02): an approved address change dispatched cleanly, and the
+  // tool's own read-back reported `verified: false` - so the continuation told
+  // the customer their address had been changed on the strength of
+  // `dispatch.ok` alone, while the result sitting beside it said the opposite.
+  // Tools that verify themselves are believed over the transport.
   const unverified = providerReportedNoChange(dispatch.result);
   await sendApprovalContinuation({
     tenantId,

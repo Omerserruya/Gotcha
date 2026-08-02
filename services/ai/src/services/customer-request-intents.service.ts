@@ -202,7 +202,13 @@ export function buildExchangeDirective(opts: { hasExchangeTool: boolean }): stri
   }
   return [
     `The customer wants a different variant of something they already ordered.`,
-    `First call variant_information so you know the replacement actually exists and what it costs. Do not guess at sizes or colours.`,
+    // Live (2026-08-02): asked to swap a colour on order #1012, the model
+    // called variant_information with a product name guessed from the
+    // customer's word for the item, landed on a different single-variant
+    // snowboard, and told the customer their product came in one version only
+    // - while the order in front of it held a product with five colours. The
+    // order knows which product it is.
+    `First read the order's line items (get_order_items or reconcile_order_items), then call variant_information with the product_id FROM THAT LINE. Never call it with a product name you inferred from what the customer called the item, and never run a product search for this - a colour or size only means anything within the exact product they bought.`,
     `Then call exchange_order_item with the new variant id. It checks fulfillment state, stock and price itself.`,
     `An exchange is only possible before dispatch. If it refuses on fulfillment, the route is a RETURN plus a replacement - say that, and do not claim anything was swapped.`,
     `If it refuses on price, the difference has to be settled by a person. Say so plainly and offer a real handover.`,

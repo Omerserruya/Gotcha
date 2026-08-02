@@ -256,3 +256,42 @@ describe("executeAdapterTool end-to-end attack replay (1/6/20)", () => {
     expect(r.ok).toBe(true);
   });
 });
+
+/**
+ * An order's line items are not a list of people.
+ *
+ * Live (2026-08-02): asked to exchange an item, the bot answered "I could not
+ * access your order without verifying your identity" - for the customer's own
+ * order. `get_order_items` returned a BARE ARRAY of line items; the guard
+ * filters arrays to entries it can prove belong to the requester; a Shopify
+ * line item has a `name` (the PRODUCT name) which makes it look
+ * customer-scoped, and no phone, email or customer id to match on. Every row
+ * was filtered out and the read was denied as another customer's data.
+ *
+ * The fix is the tool's shape, not the guard's rules - which is why this test
+ * asserts the WRAPPER passes while the bare array still does not.
+ */
+describe("an order's line items are not a list of people", () => {
+  const identity = {
+    phoneSuffixes: new Set(["545680665"]),
+    emails: new Set<string>(),
+    customerIds: new Set<string>(),
+    conversationId: "c1",
+    channelSenderId: "972545680665",
+  };
+
+  it("allows the wrapper shape, which the order already authorized", () => {
+    const wrapped = {
+      order_id: 1, name: "#1012",
+      line_items: [{ id: 1, title: "The Complete Snowboard", variant_title: "Ice", quantity: 2 }],
+    };
+    const v = checkResultAllowed(identity as any, "get_order_items", wrapped);
+    expect(v.allowed).toBe(true);
+  });
+
+  it("a BARE array of line items is still denied - which is why the shape changed", () => {
+    const bare = [{ id: 1, name: "The Complete Snowboard - Ice", quantity: 2 }];
+    const v = checkResultAllowed(identity as any, "get_order_items", bare);
+    expect(v.allowed).toBe(false);
+  });
+});

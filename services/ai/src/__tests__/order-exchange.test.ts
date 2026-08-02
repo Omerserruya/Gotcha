@@ -206,10 +206,15 @@ describe("the exchange directive", () => {
     expect(d).toContain("do NOT invent store credit");
   });
 
-  it("requires a real variant lookup before the swap", () => {
+  // Live (2026-08-02): the model called variant_information with a product name
+  // guessed from the customer's word for the item, landed on a different
+  // single-variant snowboard, and told the customer their product came in one
+  // version only - while the order in front of it held five colours.
+  it("pins the variant lookup to the product ON THE ORDER, not a guessed name", () => {
     const d = buildExchangeDirective({ hasExchangeTool: true });
-    expect(d).toContain("call variant_information");
-    expect(d).toContain("Do not guess at sizes or colours");
+    expect(d).toContain("call variant_information with the product_id FROM THAT LINE");
+    expect(d).toContain("Never call it with a product name you inferred");
+    expect(d).toContain("never run a product search for this");
   });
 
   it("routes a dispatched order to a return, not to a claim", () => {

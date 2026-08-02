@@ -873,6 +873,20 @@ function renderCustomerInfoBlock(
   return lines.join("\n");
 }
 
+/**
+ * What to say when the turn produced nothing.
+ *
+ * Deliberately admits only what is certainly true - that the answer did not
+ * come together this time - and offers the one thing that is always available.
+ * It claims no action, names no tool and blames no provider, because at this
+ * point we genuinely do not know what happened.
+ */
+function silentTurnFallback(locale: string): string {
+  return locale?.startsWith("he")
+    ? "סליחה, לא הצלחתי להשלים את הבדיקה הזאת עכשיו. אפשר לנסות שוב, או שאעביר אותך לנציג?"
+    : "Sorry - I couldn't finish checking that just now. Shall I try again, or pass you to a person?";
+}
+
 function renderPendingApprovalsBlock(pending: Array<{ tool: string }>): string | undefined {
   if (!pending.length) return undefined;
   const list = pending.map((a) => `\`${a.tool}\``).join(", ");
@@ -4374,8 +4388,33 @@ async function generateAIBotReplyInner(
     toolCallLog,
   });
 
+  // Silence is not an outcome.
+  //
+  // A turn can end with no text at all: the model spends its round on tool
+  // calls and returns nothing, and every guard downstream is happy because
+  // there is nothing to object to. The customer asked a question and got no
+  // reply - not an error, not a handoff, nothing. Part 4 recorded this once
+  // (a turn that read one order produced no reply, silently) and fixed the
+  // payload that caused it; it recurred here on a different pair of reads,
+  // which says the shape of the fix was too specific.
+  //
+  // An escalation or an approval pause is a different case: both already owe
+  // the customer a message from another path, and adding one here would make
+  // two.
+  const deliverable =
+    safeReply?.trim() ||
+    (pendingEscalation || awaitingApproval
+      ? safeReply
+      : silentTurnFallback(replyLocale));
+  if (!safeReply?.trim() && !pendingEscalation && !awaitingApproval) {
+    console.error(
+      `[ai-bot] SILENT TURN: no reply produced conv=${opts.conversationId} ` +
+        `tools=${toolCallLog.map((t) => t.tool).join(",") || "none"} - sent the fallback instead of nothing`,
+    );
+  }
+
   return {
-    reply: safeReply,
+    reply: deliverable,
     interimMessages: finalInterim.length > 0 ? finalInterim : undefined,
     escalation: pendingEscalation,
     awaitingApproval,
@@ -4503,6 +4542,18 @@ export async function generateExecutionMessage(opts: {
       `- outcome "failed" must never be presented as success; do not promise a specific fix.\n` +
       `- outcome "rejected" means a person DECLINED the request: nothing was attempted and nothing is broken. Say plainly it was not approved, say the order/money is therefore unchanged, and offer to look at alternatives. Never blame a technical problem, and never say you are "working on it".\n` +
       `- Never claim a colleague, team or courier was contacted, or that someone will get back to them, unless that is stated in VERIFIED FACTS.\n` +
+      // Live (2026-08-02): an order-confirmation send failed, and the
+      // continuation asked the customer which email address to use. The
+      // request would have been refused anyway - the guard denies a chat-
+      // supplied destination for a financial document outright - so the
+      // question could only ever waste the customer's time and teach them the
+      // system works in a way it does not.
+      `- NEVER ask the customer where to send a document, invoice, receipt or confirmation. Those go only to the address already on their account; an address typed in chat is refused by the system, so asking for one is asking for something that cannot be used.\n` +
+      // Live (2026-08-02): a return failed with "that GraphQL field does not
+      // exist" and the customer was told it failed "because the order has
+      // already been handed to shipping" - a specific, plausible and invented
+      // cause. A failure whose reason we do not have is a failure, full stop.
+      `- Do NOT invent a CAUSE for a failure. If failure_reason is absent, say it did not go through and stop; never supply a plausible-sounding explanation of your own.\n` +
       `- No em dashes, no headings, no bullet lists, no "I'm happy to assist" filler.\n` +
       `- Do NOT mention internal systems or approvals.\n`;
     const r = await generateAIBotOneshot({

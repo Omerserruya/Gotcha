@@ -265,6 +265,13 @@ const TOOLS: ToolDefinition[] = [
       line_item_id: { type: "string", description: "The order line to replace. Omit on a single-line order." },
       current_variant_id: { type: "string", description: "Alternative to line_item_id: the variant currently on the order." },
       new_variant_id: { type: "string", description: "The replacement variant id (from variant_information)." },
+      // Accepting the NAME as well as the id, for the same reason
+      // variant_information had to: a tool that only takes an id makes the
+      // model do a lookup first, and when it skips the lookup it raises an
+      // approval that cannot succeed. Live (2026-08-02): a human approved an
+      // exchange whose arguments were `{quantity: 1, order_name: "1012"}` -
+      // no replacement at all - and it failed with variant_not_found.
+      new_variant_name: { type: "string", description: "The replacement option as the customer said it, e.g. \"Dawn\" or \"159\". Use this when you do not have an id." },
       quantity: { type: "number", description: "How many units to swap. Default: all of that line." },
     }, undefined,
     { sideEffects: "Rewrites what a placed order contains.", priority: 84 })),
@@ -516,8 +523,14 @@ const TOOL_SCOPES: Record<string, string[]> = {
   update_order_shipping_address: ["write_orders", "read_merchant_managed_fulfillment_orders"],
   // An exchange reads the replacement's stock before it decides anything, so
   // inventory is as required as the order write itself.
+  // `write_order_edits` is the one that actually gates orderEditBegin, and it
+  // was missing here. Without it the capability gate saw a store that could do
+  // this, so nothing short-circuited: eligibility passed, the price was quoted,
+  // a human approved, and Shopify refused at the last GraphQL call. A required
+  // scope left off this map is a wasted human decision.
   exchange_order_item: [
-    "write_orders", "read_merchant_managed_fulfillment_orders", "read_products", "read_inventory",
+    "write_orders", "write_order_edits",
+    "read_merchant_managed_fulfillment_orders", "read_products", "read_inventory",
   ],
   send_invoice: ["write_orders"],
   add_order_note: ["write_orders"],
@@ -573,6 +586,11 @@ const REQUIRED_SCOPES: Array<{ scope: string; needs: string }> = [
   { scope: "read_merchant_managed_fulfillment_orders", needs: "fulfillment state, tracking, and cancellability" },
   { scope: "read_inventory", needs: "stock and variant availability answers" },
   { scope: "read_returns", needs: "return status lookups" },
+  // Both were "granted but unused" until this round gave each a tool. They are
+  // in the connection test now so a merchant is told BEFORE a customer asks,
+  // rather than at the last GraphQL call of an already-approved action.
+  { scope: "write_returns", needs: "opening a return (RMA) for a customer" },
+  { scope: "write_order_edits", needs: "exchanging an item on an unshipped order" },
 ];
 
 const ShopifyAdapter: ProviderAdapter = {
@@ -595,6 +613,7 @@ const ShopifyAdapter: ProviderAdapter = {
   async precheckEligibility({ toolName, args, call }) {
     const PRECHECKED = [
       "cancel_order", "process_refund", "update_order_shipping_address", "exchange_order_item",
+      "create_return",
     ];
     if (!PRECHECKED.includes(toolName)) return { eligible: true };
     const target = args.order_id ?? args.order_name;
@@ -603,11 +622,53 @@ const ShopifyAdapter: ProviderAdapter = {
     const order: any = await call("get_order", args.order_id ? { order_id: args.order_id } : { order_name: args.order_name });
     if (!order?.id) return { eligible: true };
 
+    // Nothing shipped, nothing to return. `returnCreate` works against
+    // FULFILLMENT line items, so an unfulfilled order has no returnable items
+    // at all - and a human approving a return for one is deciding something
+    // the answer cannot change. Live (2026-08-02): a return was approved for
+    // an unfulfilled order and failed at the provider.
+    if (toolName === "create_return") {
+      const shipped = (order.fulfillments ?? []).filter(
+        (f: any) => String(f?.status ?? "").toLowerCase() !== "cancelled",
+      );
+      if (!shipped.length) {
+        return {
+          eligible: false,
+          reason:
+            `nothing on order ${order.name ?? ""} has shipped yet, so there is nothing to return - a return covers items ` +
+            `the customer has actually received. Say that plainly. If they want to stop the order instead, a cancellation ` +
+            `or a refund is the right request. Do NOT say a return was opened.`,
+        };
+      }
+      return { eligible: true };
+    }
+
     // An exchange that is out of stock, or whose price differs, cannot be
     // completed by anyone approving it - so no approval is raised. The refusal
     // reasons are the tool's own, so the answer here and the answer at
     // execution time are the same sentence.
     if (toolName === "exchange_order_item") {
+      // An exchange that names no replacement cannot succeed, so no human
+      // should be asked about it. Live (2026-08-02): a person approved
+      // `{quantity: 1, order_name: "1012"}` - a swap with nothing to swap TO -
+      // and it failed with variant_not_found after the decision was spent.
+      if (!args.new_variant_id && !args.new_variant_name) {
+        // The options are named HERE rather than left to a lookup. Live
+        // (2026-08-02) the model called variant_information with a product
+        // name it guessed from the customer's word for the item, landed on a
+        // different single-variant snowboard, and told the customer their
+        // product came in one version only - while the order in front of it
+        // held a product with five colours. The order knows which product it
+        // is; nothing else has to guess.
+        const options = await exchangeOptionsForOrder(call, order);
+        return {
+          eligible: false,
+          reason:
+            `no replacement option was named for order ${order.name ?? ""}. ${options} ` +
+            `Ask the customer which of those they want and pass it as new_variant_name. ` +
+            `Do NOT run a product search - the order already says which product this is - and do NOT say the item was exchanged.`,
+        };
+      }
       const fs: any = await call(
         "get_fulfillment_status",
         args.order_id ? { order_id: args.order_id } : { order_name: args.order_name },
@@ -1016,7 +1077,33 @@ const ShopifyAdapter: ProviderAdapter = {
       case "get_order_items": {
         const o = await resolveOrder(ctx, args);
         if (!o) throw new Error("order_not_found");
-        return o.line_items || [];
+        // A WRAPPER, not a bare array, and that is a security fix rather than
+        // a tidy-up. The cross-customer guard filters arrays to entries it can
+        // prove belong to the requester; a Shopify line item has a `name` -
+        // the PRODUCT name - which makes it look customer-scoped, and no
+        // phone, email or customer id to match on. So every row was filtered
+        // out and the whole read was denied as another customer's data. Live
+        // (2026-08-02): "I could not access your order without verifying your
+        // identity", for the customer's own order.
+        //
+        // The wrapper shape is the one the guard already understands: the
+        // order was authorized when it was resolved, and the items under it
+        // carry no separate ownership.
+        return {
+          order_id: o.id,
+          name: o.name,
+          line_items: (o.line_items || []).map((li: any) => ({
+            id: li.id,
+            product_id: li.product_id,
+            variant_id: li.variant_id,
+            title: li.title,
+            variant_title: li.variant_title ?? null,
+            sku: li.sku ?? null,
+            quantity: li.quantity,
+            fulfillable_quantity: li.fulfillable_quantity ?? null,
+            price: li.price,
+          })),
+        };
       }
       case "exchange_order_item": {
         const o = await resolveOrder(ctx, args);
@@ -2398,19 +2485,27 @@ async function updateOwnProfile(ctx: Ctx, args: Record<string, any>): Promise<Re
 // to return, and the API saying so is more correct than a tool that would
 // happily open an RMA for a parcel still in the warehouse.
 
+// Read the FULFILLMENTS and their line items, not `returnableFulfillments`.
+//
+// Live (2026-08-02): `Field 'returnableFulfillments' doesn't exist on type
+// 'Order'` on the current API version - after a human had approved the return.
+// GraphQL fails the WHOLE query on one unknown field, so a convenience field
+// that comes and goes across versions is the worst possible thing to build a
+// money-adjacent action on. `fulfillments { fulfillmentLineItems }` is the
+// stable shape and carries exactly what returnCreate needs.
 const RETURNABLE_FULFILLMENTS_QUERY = `
   query ReturnableFulfillments($id: ID!) {
     order(id: $id) {
       id
       name
-      returnableFulfillments(first: 20) {
-        nodes {
-          id
-          returnableFulfillmentLineItems(first: 50) {
-            nodes {
-              fulfillmentLineItem { id lineItem { id title sku } }
-              quantity
-            }
+      fulfillments(first: 20) {
+        id
+        status
+        fulfillmentLineItems(first: 50) {
+          nodes {
+            id
+            quantity
+            lineItem { id title sku }
           }
         }
       }
@@ -2471,15 +2566,19 @@ async function createShopifyReturn(
   }
 
   const returnable = await shopifyGraphQL(ctx, RETURNABLE_FULFILLMENTS_QUERY, { id: orderGid(order.id) });
-  const nodes: any[] = returnable?.order?.returnableFulfillments?.nodes ?? [];
-  const available = nodes.flatMap((n: any) =>
-    (n?.returnableFulfillmentLineItems?.nodes ?? []).map((li: any) => ({
-      fulfillmentLineItemId: li?.fulfillmentLineItem?.id,
-      orderLineItemId: String(li?.fulfillmentLineItem?.lineItem?.id ?? "").split("/").pop(),
-      title: li?.fulfillmentLineItem?.lineItem?.title ?? "",
-      maxQuantity: Number(li?.quantity ?? 0),
-    })),
-  ).filter((x: any) => x.fulfillmentLineItemId && x.maxQuantity > 0);
+  const fulfilled: any[] = returnable?.order?.fulfillments ?? [];
+  const available = fulfilled
+    // A cancelled fulfillment shipped nothing, so nothing on it can come back.
+    .filter((f: any) => String(f?.status ?? "").toUpperCase() !== "CANCELLED")
+    .flatMap((f: any) =>
+      (f?.fulfillmentLineItems?.nodes ?? []).map((li: any) => ({
+        fulfillmentLineItemId: li?.id,
+        orderLineItemId: String(li?.lineItem?.id ?? "").split("/").pop(),
+        title: li?.lineItem?.title ?? "",
+        maxQuantity: Number(li?.quantity ?? 0),
+      })),
+    )
+    .filter((x: any) => x.fulfillmentLineItemId && x.maxQuantity > 0);
 
   if (!available.length) {
     return {
@@ -2692,6 +2791,26 @@ async function exchangeOrderItem(
       variant = null;
     }
   }
+  // No id, but a name the customer used. Resolve it against the SAME product
+  // the line item is on - a colour or size only means anything within one
+  // product, and searching the catalogue for "Dawn" would find whatever else
+  // happens to be called that.
+  if (!variant && args.new_variant_name && lineItem?.product_id) {
+    try {
+      const pr: any = await sreq(ctx, "GET", `/products/${lineItem.product_id}.json`);
+      const product = pr?.product;
+      productTitle = product?.title ?? "";
+      const want = String(args.new_variant_name).trim().toLowerCase();
+      variant =
+        (product?.variants ?? []).find((v: any) => String(v.title ?? "").trim().toLowerCase() === want) ??
+        (product?.variants ?? []).find((v: any) =>
+          [v.option1, v.option2, v.option3].some((o: any) => String(o ?? "").trim().toLowerCase() === want),
+        ) ??
+        null;
+    } catch {
+      variant = null;
+    }
+  }
 
   const quoted = quoteExchange({
     orderName: String(order.name ?? ""),
@@ -2770,6 +2889,42 @@ async function exchangeOrderItem(
       ? `The exchange is confirmed by an independent read of the order: ${quote.current_variant ?? quote.current_title} was replaced with ${quote.requested_variant ?? quote.requested_title}. Tell the customer exactly that. There is nothing further to pay.`
       : `The order does NOT read back as expected after the edit (${verdict.problems.join(", ")}). Tell the customer the exchange did not complete and hand over to a person. Do NOT say the item was exchanged.`,
   };
+}
+
+/**
+ * The real options for what is actually on this order.
+ *
+ * Reads the line items' own products, so a colour question is answered from
+ * the order rather than from a search for whatever the customer called the
+ * thing. Degrades to a plain sentence rather than throwing: this runs inside a
+ * refusal, and a refusal that fails is worse than one that is vague.
+ */
+async function exchangeOptionsForOrder(
+  call: (tool: string, args: Record<string, any>) => Promise<any>,
+  order: any,
+): Promise<string> {
+  try {
+    const lines: any[] = order?.line_items ?? [];
+    const seen = new Set<string>();
+    const parts: string[] = [];
+    for (const li of lines) {
+      if (!li?.product_id || seen.has(String(li.product_id))) continue;
+      seen.add(String(li.product_id));
+      const info = await call("variant_information", { product_id: String(li.product_id) });
+      const variants: any[] = info?.variants ?? [];
+      if (!info?.has_variant_options || variants.length < 2) {
+        parts.push(`"${li.title}" is sold in one version only - there is nothing to exchange it for.`);
+        continue;
+      }
+      const available = variants
+        .map((v) => `${v.title}${v.in_stock === false ? " (out of stock)" : ""}`)
+        .join(", ");
+      parts.push(`"${li.title}" comes in: ${available}.`);
+    }
+    return parts.length ? parts.join(" ") : "The order's options could not be read.";
+  } catch {
+    return "The order's available options could not be read right now.";
+  }
 }
 
 /** What the model may say about each way an exchange can be refused. */
@@ -3053,7 +3208,17 @@ async function shopifyGraphQL(ctx: Ctx, query: string, variables: Record<string,
   if (Array.isArray(j.errors) && j.errors.length) {
     const msg = j.errors.map((e: any) => e?.message).filter(Boolean).join("; ");
     if (/access denied|read_returns|not approved|requires merchant approval/i.test(msg)) {
-      throw new Error(`shopify_graphql_access_denied: ${msg.slice(0, 160)} - re-connect Shopify to grant the read_returns scope.`);
+      // Name the scope Shopify actually asked for. This said "re-connect to
+      // grant the read_returns scope" for EVERY GraphQL denial, because it was
+      // written when returns were the only GraphQL surface - so an orderEdit
+      // refused for `write_order_edits` told an operator to grant an unrelated
+      // scope they already had. Shopify puts the real one in the message; use
+      // it, and fall back to the generic advice rather than to a guess.
+      const named = /`?([a-z_]*(?:read|write)_[a-z_]+)`?\s*(?:access\s*)?scope/i.exec(msg)?.[1];
+      throw new Error(
+        `shopify_graphql_access_denied: ${msg.slice(0, 160)} - re-connect Shopify to grant ` +
+          (named ? `the ${named} scope.` : `the scope it names.`),
+      );
     }
     throw new Error(`shopify_graphql_error: ${msg.slice(0, 200)}`);
   }

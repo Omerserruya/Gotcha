@@ -128,10 +128,17 @@ describe("proactive capability discovery", () => {
     // A connection without them used to test GREEN while answering every
     // shipping and cancellability question from fields that read null, so a
     // green connection that cannot see fulfillment is not a passing state.
+    //
+    // `write_returns` and `write_order_edits` joined the list when returns and
+    // exchanges got tools. Both had been granted-but-unused, and leaving them
+    // out of the connection test is how an exchange reached a live store and
+    // failed at the last GraphQL call with "Requires `write_order_edits`
+    // access scope" - after eligibility passed and a human had approved it.
     const all = [
       "read_customers", "write_customers", "read_orders", "write_orders",
       "read_products", "read_price_rules", "write_price_rules",
-      "read_merchant_managed_fulfillment_orders", "read_inventory", "read_returns",
+      "read_merchant_managed_fulfillment_orders", "read_inventory",
+      "read_returns", "write_returns", "write_order_edits",
     ];
     (globalThis as any).fetch = vi.fn(async () => ({
       ok: true, status: 200, json: async () => ({ access_scopes: all.map((handle) => ({ handle })) }),
