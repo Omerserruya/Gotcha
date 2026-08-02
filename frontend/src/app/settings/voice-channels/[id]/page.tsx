@@ -34,7 +34,14 @@ const STATUS_CLASS: Record<VoiceChannelStatus, string> = {
   ERROR: "bg-red-50 text-red-700 ring-red-200",
 };
 
-const INCOMING_WEBHOOK_URL = "https://gotcha.co.il/api/voice/incoming/voice";
+// The VOICE origin, not the application one. This string is what an operator
+// copies into Twilio, so it pointed at the marketing host it would silently
+// never reach us. Build-time (NEXT_PUBLIC_*), defaulting to the canonical
+// production voice hostname.
+const VOICE_PUBLIC_URL = (
+  process.env.NEXT_PUBLIC_VOICE_URL || "https://voice.gotcha.co.il"
+).replace(/\/+$/, "");
+const INCOMING_WEBHOOK_URL = `${VOICE_PUBLIC_URL}/api/voice/incoming/voice`;
 
 function truncateSid(sid?: string): string {
   if (!sid) return "-";

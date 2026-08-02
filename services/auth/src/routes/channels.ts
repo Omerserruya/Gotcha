@@ -19,7 +19,9 @@ import {
   decryptCredentials,
   mintOAuthState,
   consumeOAuthState,
-  resolvePrincipal, metaGraphBaseUrl } from "@chatcenter/shared";
+  resolvePrincipal, metaGraphBaseUrl,
+  resolveAppPublicUrl,
+} from "@chatcenter/shared";
 
 const router = Router();
 
@@ -40,7 +42,7 @@ const META_APP_ID = process.env.META_APP_ID || "";
 const META_APP_SECRET = process.env.META_APP_SECRET || "";
 const EMBEDDED_SIGNUP_CONFIG_ID = process.env.WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID || "";
 const OAUTH_REDIRECT_URI = process.env.OAUTH_REDIRECT_URI || "";
-const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
+const FRONTEND_URL = resolveAppPublicUrl(process.env);
 const FB_API_URL = metaGraphBaseUrl(process.env.FACEBOOK_API_URL);
 // OAuth `state` signing only - not user auth. See getOAuthStateSecret().
 
@@ -747,7 +749,7 @@ router.get("/oauth/init", async (req: Request, res: Response) => {
 
 router.get("/oauth/callback", async (req: Request, res: Response) => {
   // Note: This endpoint does NOT use authenticate middleware since it's a redirect from Meta
-  const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+  const frontendUrl = resolveAppPublicUrl(process.env);
 
   try {
     const { code, state, error: oauthError } = req.query;

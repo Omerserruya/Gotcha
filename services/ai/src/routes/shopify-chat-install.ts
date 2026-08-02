@@ -34,6 +34,7 @@ import {
   verifyShopifyQueryHmac,
   normalizeShopifyShopDomain,
   buildAppAdminLink,
+  resolveAppPublicUrl,
 } from "@chatcenter/shared";
 import {
   recordAuthorizedInstall,
@@ -58,9 +59,17 @@ function chatScopes(): string {
   return (process.env.SHOPIFY_CHAT_SCOPES || "").trim();
 }
 
+/**
+ * Where a merchant is sent after the install handshake.
+ *
+ * SHOPIFY_CHAT_APP_URL first, because the Chat app's own public URL is what
+ * Shopify was told about. Falling through to `""` used to emit a bare relative
+ * redirect, which happens to work in a browser and hides a missing
+ * configuration until someone reads the address bar.
+ */
 function frontendBase(): string {
   const cfg = getShopifyChatAppConfig();
-  return cfg.appUrl || process.env.FRONTEND_URL || "";
+  return cfg.appUrl || resolveAppPublicUrl(process.env);
 }
 
 /** Merchant-facing failure page. Never leaks which check failed. */

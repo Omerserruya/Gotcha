@@ -19,7 +19,9 @@
  */
 
 import { Queue } from "bullmq";
-import { prisma, createWorker } from "@chatcenter/shared";
+import { prisma, createWorker,
+  resolveAppPublicUrl,
+} from "@chatcenter/shared";
 import { createSetupLink, sendNudgeEmail, renderBrandEmail, emailParagraph, escapeHtml } from "./notification.service";
 import { getOnboardingSnapshot, type OnboardingSnapshot } from "./onboarding-state.service";
 
@@ -273,7 +275,7 @@ export async function processNudgeRow(row: any): Promise<NudgeResult> {
   // An admin who never finished setup has no password yet, so the nudge
   // carries an Authentik setup link. If that cannot be minted we fall back to
   // /setup, which bounces through Authentik login anyway.
-  const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+  const frontendUrl = resolveAppPublicUrl(process.env);
   let ctaUrl = `${frontendUrl}/setup`;
   try {
     ctaUrl = await createSetupLink(admin.id);

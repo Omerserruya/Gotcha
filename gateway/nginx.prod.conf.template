@@ -96,9 +96,19 @@ http {
     # a burst of app traffic must never throttle someone's ability to log in.
     limit_req_zone $binary_remote_addr zone=authentik:10m rate=20r/s;
 
+    # ── Application: app.gotcha.co.il ─────────────────────────
+    # The authenticated frontend, the public application API, every OAuth
+    # callback except Authentik's own endpoints, and every provider webhook
+    # except Twilio's.
+    #
+    # `_` is kept alongside the real name so this stays the default server:
+    # the marketing apex and any host the tunnel forwards without a dedicated
+    # vhost still land somewhere that serves the app rather than on nginx's
+    # "no such server" path. Voice and Authentik have their own blocks below
+    # and are matched by name before this one.
     server {
-        listen 80;
-        server_name _;
+        listen 80 default_server;
+        server_name app.gotcha.co.il _;
 
         # Increase body size for webhooks
         client_max_body_size 10m;
@@ -1538,6 +1548,113 @@ http {
 
         location / {
             try_files $uri $uri/index.html $uri.html /index.html;
+        }
+    }
+
+    # ── Voice: voice.gotcha.co.il → voice-copilot ─────────────
+    #
+    # A separate hostname, and a deliberately SMALL one. Twilio is the only
+    # client, so this vhost exposes exactly the four surfaces Twilio touches
+    # and nothing else - no frontend, no app API, no OAuth, no marketing
+    # fallback. A host that answers only what it must is a host that cannot
+    # leak what it should not.
+    #
+    # Note on topology: the Cloudflare Tunnel may route voice.gotcha.co.il
+    # straight to voice-copilot:4007 and skip this container entirely (see
+    # DEPLOY.md Step 7), which is the lower-latency arrangement for a media
+    # stream. This block exists so the hostname ALSO works through the
+    # gateway - during a tunnel change, or if the direct route is withdrawn -
+    # rather than depending on one ingress being configured correctly forever.
+    #
+    # The equivalent paths remain on the app vhost above as compatibility
+    # routes for numbers that were configured before the split. New Twilio
+    # URLs are generated from VOICE_PUBLIC_URL and land here.
+    server {
+        listen 80;
+        server_name voice.gotcha.co.il;
+
+        # TwiML posts are small; recordings are fetched, never uploaded here.
+        client_max_body_size 1m;
+
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        # Nothing on this host is ever rendered in a browser frame.
+        add_header X-Frame-Options "DENY" always;
+        add_header Content-Security-Policy "default-src 'none'; frame-ancestors 'none'" always;
+
+        # Liveness for the tunnel and for uptime checks.
+        location = /health {
+            proxy_pass http://voice_copilot_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            access_log off;
+            add_header X-Content-Type-Options "nosniff" always;
+            add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+            add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        }
+
+        # ─── Twilio Media Streams (WebSocket) ───────────────────
+        # The reason this hostname exists. Long-lived, bidirectional, and
+        # latency-sensitive: the read/send timeouts are a day because the
+        # socket lives as long as the call, and nginx must not close it.
+        location /twilio/media-stream {
+            proxy_pass http://voice_copilot_service;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $public_proto;
+            proxy_set_header X-Twilio-Signature $http_x_twilio_signature;
+            proxy_buffering off;
+            proxy_read_timeout 86400;
+            proxy_send_timeout 86400;
+        }
+
+        # ─── Inbound calls: voice / status / recording / forward ─
+        # Twilio validates its signature over the EXACT URL it called, so the
+        # public Host and scheme have to survive the hop unaltered.
+        location /api/voice/incoming {
+            proxy_pass http://voice_copilot_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $public_proto;
+            proxy_set_header X-Twilio-Signature $http_x_twilio_signature;
+            proxy_request_buffering off;
+            # A webhook must never be answered from cache.
+            proxy_no_cache 1;
+            proxy_cache_bypass 1;
+            add_header Cache-Control "no-store" always;
+        }
+
+        # ─── TwiML + callback endpoints (outbound, conference) ──
+        location /api/voice-copilot {
+            proxy_pass http://voice_copilot_service;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $public_proto;
+            proxy_set_header X-Twilio-Signature $http_x_twilio_signature;
+            proxy_request_buffering off;
+            proxy_no_cache 1;
+            proxy_cache_bypass 1;
+            add_header Cache-Control "no-store" always;
+        }
+
+        # Anything else on this hostname is not part of the voice contract.
+        # 404, never a redirect to the app or the marketing site: a redirect
+        # would turn a mis-typed Twilio URL into a 200 and hide the mistake.
+        location / {
+            return 404;
         }
     }
 

@@ -42,6 +42,13 @@ vi.mock("@chatcenter/shared", () => ({
   ensureIdentity: vi.fn(),
   createRecoveryLink: vi.fn(),
   findIdentityBySubject: vi.fn(),
+  // The app's public origin is resolved through shared rather than inlined at
+  // each call site, so an exhaustive mock of this barrel has to supply it.
+  // Mirrors the real behaviour closely enough for the link assertions below
+  // (which set FRONTEND_URL and expect it honoured), without pulling in the
+  // production guard that throws when it is unset.
+  resolveAppPublicUrl: (env: NodeJS.ProcessEnv = process.env) =>
+    (env.FRONTEND_URL || env.DASHBOARD_URL || "http://localhost:3000").replace(/\/+$/, ""),
 }));
 
 import { sendPaidOnboardingEmail } from "../services/notification.service";

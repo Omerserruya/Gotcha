@@ -583,10 +583,12 @@ export function createVoiceCallbackRouter(opts: {
       channelId: session.channelId,
       customerNumber: session.customerNumber,
     });
+    // `publicBaseUrl` is the VOICE origin, injected at construction. Reading
+    // PUBLIC_BASE_URL here used to override it with the APPLICATION origin,
+    // which put a customer-facing callback link on a host that does not route
+    // to this service in production.
     const callbackUrlFull =
-      (process.env.PUBLIC_BASE_URL || publicBaseUrl) +
-      "/api/voice-copilot/callbacks/click/" +
-      callbackToken;
+      publicBaseUrl + "/api/voice-copilot/callbacks/click/" + callbackToken;
 
     // Customer label for the template body parameter - prefer the
     // Contact display name, fall back to the bare phone number.
@@ -739,7 +741,9 @@ export function createVoiceCallbackRouter(opts: {
     // Meta Business Manager after first approval. The URL button is
     // the load-bearing part and must keep the {{1}} variable suffix
     // because we paste a fresh signed token there on each send.
-    const baseUrl = (process.env.PUBLIC_BASE_URL || publicBaseUrl).replace(/\/$/, "");
+    // VOICE origin, not the application one - this URL is baked into an
+    // approved WhatsApp template and cannot be corrected without a re-approval.
+    const baseUrl = publicBaseUrl.replace(/\/$/, "");
     const urlTemplate = `${baseUrl}/api/voice-copilot/callbacks/click/{{1}}`;
     const exampleToken = "examplepayload.examplesignature";
     const createBody = {

@@ -1,5 +1,7 @@
 import { Router, Request, Response } from "express";
-import { prisma, authenticate, resolveTenant, requireActiveTenant, requireOnboardingOrActiveTenant, requireRole, mintOAuthState, consumeOAuthState } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireActiveTenant, requireOnboardingOrActiveTenant, requireRole, mintOAuthState, consumeOAuthState,
+  resolveAppPublicUrl,
+} from "@chatcenter/shared";
 import * as confluenceService from "../services/confluence.service";
 import * as googleDriveService from "../services/google-drive.service";
 
@@ -96,7 +98,7 @@ router.get("/oauth/confluence/callback", async (req: Request, res: Response) => 
       },
     });
 
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+    const frontendUrl = resolveAppPublicUrl(process.env);
     res.redirect(`${frontendUrl}/knowledge?connected=confluence`);
   } catch (err: any) {
     console.error("[Confluence OAuth] Callback error:", err.message);
@@ -191,7 +193,7 @@ router.get("/oauth/google-drive/callback", async (req: Request, res: Response) =
       },
     });
 
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+    const frontendUrl = resolveAppPublicUrl(process.env);
     // Onboarding-initiated connects return to the wizard (Movement 6 resumes
     // via the persisted progress checkpoint); everything else to the app.
     res.redirect(payload.flow === "onboarding" ? `${frontendUrl}/setup?connected=google_drive` : `${frontendUrl}/knowledge?connected=google_drive`);

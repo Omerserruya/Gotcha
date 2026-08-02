@@ -46,6 +46,12 @@ vi.mock("@chatcenter/shared", () => {
     },
     publishEvent: async () => {},
     closeRedis: async () => {},
+    // createApp resolves the Twilio-facing origin through shared, so an
+    // exhaustive mock of this barrel must supply it. The e2e harness runs
+    // outside production and asserts nothing about URL construction, so the
+    // non-production fallback is the honest stub here.
+    resolveVoicePublicUrl: (env: NodeJS.ProcessEnv = process.env) =>
+      (env.VOICE_PUBLIC_URL || env.PUBLIC_BASE_URL || "http://localhost").replace(/\/+$/, ""),
     // Middleware stubs used by routes/live.ts
     authenticate: passThrough,
     resolveTenant: passThrough,

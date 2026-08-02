@@ -45,6 +45,12 @@ x-restart: &default-restart
 x-oidc-env: &oidc-env
   OIDC_ISSUER: ${OIDC_ISSUER:?OIDC_ISSUER required in prod (public url, e.g. https://auth.gotcha.co.il/application/o/gotcha/)}
   OIDC_JWKS_URI: ${OIDC_JWKS_URI:-http://authentik-server:9000/application/o/gotcha/jwks/}
+  # The APPLICATION origin (app.gotcha.co.il) - distinct from the issuer above,
+  # which is Authentik's own host. Carried on the same anchor because the set of
+  # services that verify a token is exactly the set that generates links back
+  # into the app, and the two must agree on where "the app" is.
+  APP_ORIGIN: ${APP_ORIGIN:?APP_ORIGIN required in prod (e.g. https://app.gotcha.co.il)}
+  AUTH_ALLOWED_ORIGINS: ${AUTH_ALLOWED_ORIGINS:-}
 
 services:
   # ─── Infrastructure ──────────────────────────────────────
@@ -309,6 +315,18 @@ services:
       SLACK_CLIENT_SECRET: ${SLACK_CLIENT_SECRET:-}
       SLACK_OAUTH_REDIRECT_URI: ${SLACK_OAUTH_REDIRECT_URI:-}
       SLACK_SIGNING_SECRET: ${SLACK_SIGNING_SECRET:-}
+      # Instagram connects through Instagram Login, which is its own app id and
+      # its own redirect allow-list - not the Facebook one. Absent here until
+      # now, so Instagram connect was unavailable in production regardless of
+      # what the dashboard said.
+      INSTAGRAM_APP_ID: ${INSTAGRAM_APP_ID:-}
+      INSTAGRAM_APP_SECRET: ${INSTAGRAM_APP_SECRET:-}
+      INSTAGRAM_OAUTH_REDIRECT_URI: ${INSTAGRAM_OAUTH_REDIRECT_URI:-}
+      INSTAGRAM_API_URL: ${INSTAGRAM_API_URL:-https://graph.instagram.com}
+      # The Graph notification URL is baked into every subscription this
+      # service creates, so it has to be present when the subscription is made.
+      OUTLOOK_WEBHOOK_URL: ${OUTLOOK_WEBHOOK_URL:-}
+      OUTLOOK_WEBHOOK_CLIENT_STATE: ${OUTLOOK_WEBHOOK_CLIENT_STATE:-}
     depends_on:
       db: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -339,6 +357,9 @@ services:
       CHANNEL_ENCRYPTION_KEY: ${CHANNEL_ENCRYPTION_KEY}
       PUBLIC_URL: ${NEXT_PUBLIC_API_URL:-}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
+      # This service WRITES the voice/status webhook URLs onto the merchant's
+      # Twilio number, so it needs the voice origin, not the app one.
+      VOICE_PUBLIC_URL: ${VOICE_PUBLIC_URL:?required}
       INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?required}
       META_APP_ID: ${META_APP_ID:-}
       UPLOADS_DIR: /app/uploads
@@ -465,8 +486,8 @@ services:
       # connection. See docs/architecture/shopify-core-vs-chat-app.md.
       SHOPIFY_CHAT_APP_CLIENT_ID: ${SHOPIFY_CHAT_APP_CLIENT_ID:-}
       SHOPIFY_CHAT_APP_SECRET: ${SHOPIFY_CHAT_APP_SECRET:-}
-      SHOPIFY_CHAT_APP_URL: ${SHOPIFY_CHAT_APP_URL:-https://gotcha.co.il}
-      SHOPIFY_CHAT_REDIRECT_URI: ${SHOPIFY_CHAT_REDIRECT_URI:-https://gotcha.co.il/api/connectors/shopify-chat/oauth/callback}
+      SHOPIFY_CHAT_APP_URL: ${SHOPIFY_CHAT_APP_URL:-https://app.gotcha.co.il}
+      SHOPIFY_CHAT_REDIRECT_URI: ${SHOPIFY_CHAT_REDIRECT_URI:-https://app.gotcha.co.il/api/connectors/shopify-chat/oauth/callback}
       # The App Embed BLOCK handle is the .liquid file name (underscore),
       # NOT the extension handle (hyphen). The Theme Editor deep link is
       # built from it and silently opens nothing when it is wrong.
@@ -490,6 +511,11 @@ services:
       MONDAY_CLIENT_ID: ${MONDAY_CLIENT_ID:-}
       MONDAY_CLIENT_SECRET: ${MONDAY_CLIENT_SECRET:-}
       MONDAY_REDIRECT_URI: ${MONDAY_REDIRECT_URI:-}
+      # Airtable has an OAuth route in this service but was never wired into
+      # prod, so the connector could not complete a handshake here.
+      AIRTABLE_CLIENT_ID: ${AIRTABLE_CLIENT_ID:-}
+      AIRTABLE_CLIENT_SECRET: ${AIRTABLE_CLIENT_SECRET:-}
+      AIRTABLE_REDIRECT_URI: ${AIRTABLE_REDIRECT_URI:-}
       ADAPTER_RATE_BURST: ${ADAPTER_RATE_BURST:-10}
       ADAPTER_RATE_REFILL_PER_SEC: ${ADAPTER_RATE_REFILL_PER_SEC:-1}
       FRONTEND_URL: ${FRONTEND_URL}
@@ -654,6 +680,12 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       CHANNEL_ENCRYPTION_KEY: ${CHANNEL_ENCRYPTION_KEY}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
+      # The Twilio-facing origin (voice.gotcha.co.il), which is NOT the app
+      # origin: the tunnel sends this hostname straight here, skipping the
+      # gateway, because a Media Stream is a long-lived WebSocket. `:?required`
+      # because the service must refuse to boot rather than answer a call whose
+      # callbacks point somewhere that does not route back.
+      VOICE_PUBLIC_URL: ${VOICE_PUBLIC_URL:?required}
       PUBLIC_URL: ${NEXT_PUBLIC_API_URL}
       <<: *oidc-env
       DATABASE_URL: ${DATABASE_URL}
@@ -700,6 +732,11 @@ services:
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-}
       AI_SERVICE_URL: ${AI_SERVICE_URL:-http://ai:4006}
       CONVERSATION_SERVICE_URL: ${CONVERSATION_SERVICE_URL:-http://conversation:4002}
+      # channel-health.worker renews Outlook Graph subscriptions and re-issues
+      # Gmail watches; both carry the notification URL, so this worker needs the
+      # same values the auth service used when the subscription was created.
+      OUTLOOK_WEBHOOK_URL: ${OUTLOOK_WEBHOOK_URL:-}
+      GMAIL_PUBSUB_TOPIC: ${GMAIL_PUBSUB_TOPIC:-}
       # No OIDC vars here on purpose: the workers consume queue jobs and never
       # verify a bearer token, so they never call into jwt.ts. (They also no
       # longer need JWT_SECRET - shared/jwt.ts has no signing path and reads

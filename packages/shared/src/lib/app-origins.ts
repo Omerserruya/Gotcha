@@ -94,3 +94,85 @@ export function isAllowedOrigin(origin: string, policy: OriginPolicy): boolean {
 export function assertAppOriginReady(env: NodeJS.ProcessEnv = process.env): void {
   loadOriginPolicy(env);
 }
+
+/**
+ * The public origin of the application itself (app.gotcha.co.il).
+ *
+ * Every customer- and operator-facing link the backend generates - invite
+ * links, password-setup links, notification emails, OAuth "back to the app"
+ * redirects - is built from this. Nineteen call sites used to inline their own
+ * fallback, and the fallbacks disagreed: some produced `http://localhost:3000`,
+ * one produced `https://gotcha.co.il`, which is the MARKETING host and does not
+ * serve authenticated routes.
+ *
+ * Neither is a safe production default, and both fail quietly: the email sends,
+ * the link renders, and the recipient lands somewhere that cannot log them in.
+ * So in production a missing FRONTEND_URL throws.
+ */
+export function resolveAppPublicUrl(env: NodeJS.ProcessEnv = process.env): string {
+  const isProd = env.NODE_ENV === "production";
+  const raw = env.FRONTEND_URL?.trim() || env.DASHBOARD_URL?.trim();
+
+  if (raw) {
+    const origin = normalizeOrigin(raw); // throws on wildcard/path/invalid
+    if (isProd && !origin.startsWith("https://")) {
+      throw new AppOriginError("app_prod_requires_https");
+    }
+    return origin;
+  }
+
+  if (isProd) throw new AppOriginError("frontend_url_required_in_production");
+  return normalizeOrigin("http://localhost:3000");
+}
+
+/** Startup guard - fail the boot, not the first email. */
+export function assertAppPublicUrlReady(env: NodeJS.ProcessEnv = process.env): void {
+  resolveAppPublicUrl(env);
+}
+
+/**
+ * The public origin Twilio talks to, which is NOT the application origin.
+ *
+ * Voice is a separate hostname on purpose. The Cloudflare Tunnel routes
+ * voice.gotcha.co.il straight at the voice-copilot container, skipping the
+ * gateway, because Twilio Media Streams are a long-lived WebSocket and every
+ * proxy hop in front of one is latency on a live call.
+ *
+ * It used to be derived from PUBLIC_BASE_URL - the same variable the
+ * application uses - which meant the two could never diverge, and pointing the
+ * app at app.gotcha.co.il silently moved every Twilio callback there too. So
+ * this reads its own variable and, in production, refuses to guess:
+ *
+ *   - a missing value throws rather than falling back to the app origin, to
+ *     localhost, or to the marketing host. A Twilio webhook pointed at the
+ *     wrong host does not fail loudly - the call simply goes silent, which is
+ *     the worst way to discover a configuration mistake.
+ *   - http is refused. Twilio will not open a wss:// media stream against an
+ *     origin we advertised over http.
+ *
+ * Outside production the app origin (or localhost) is an acceptable fallback,
+ * because a dev stack runs every service behind one gateway.
+ */
+export function resolveVoicePublicUrl(env: NodeJS.ProcessEnv = process.env): string {
+  const isProd = env.NODE_ENV === "production";
+  const raw = env.VOICE_PUBLIC_URL?.trim();
+
+  if (raw) {
+    const origin = normalizeOrigin(raw); // throws on wildcard/path/invalid
+    if (isProd && !origin.startsWith("https://")) {
+      throw new AppOriginError("voice_prod_requires_https");
+    }
+    return origin;
+  }
+
+  if (isProd) throw new AppOriginError("voice_public_url_required_in_production");
+
+  // Dev only: one gateway fronts everything, so the app origin is correct.
+  const fallback = env.PUBLIC_BASE_URL?.trim() || "http://localhost";
+  return normalizeOrigin(fallback);
+}
+
+/** Startup guard - call before the service accepts a call. */
+export function assertVoicePublicUrlReady(env: NodeJS.ProcessEnv = process.env): void {
+  resolveVoicePublicUrl(env);
+}

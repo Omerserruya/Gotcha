@@ -36,6 +36,7 @@ import {
   requirePermission,
   encryptCredentials,
   getOAuthStateSecret,
+  resolveAppPublicUrl,
 } from "@chatcenter/shared";
 import { airtableListBases, airtableListTables, airtableListFields, airtableCreateField } from "../services/connectors/airtable.adapter";
 import { mondayListBoards } from "../services/connectors/monday.adapter";
@@ -184,7 +185,7 @@ function parseFlow(raw: unknown): string | undefined {
 //     AI Studio marketplace)
 //   • otherwise                 → the provider's marketplace page
 function postOAuthRedirect(slug: string, flow: string | undefined, query: Record<string, string> = {}) {
-  const base = process.env.FRONTEND_URL || process.env.DASHBOARD_URL || "";
+  const base = resolveAppPublicUrl(process.env);
   if (flow === "onboarding") {
     const params = new URLSearchParams({ connected: slug, ...query });
     return `${base}/setup?${params.toString()}`;

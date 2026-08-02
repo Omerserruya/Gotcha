@@ -8,9 +8,13 @@
 # Select it with:   shopify app config use shopify.app.dev.toml
 # Verify it with:   node scripts/shopify/verify-chat-app-identity.mjs --config shopify.app.dev.toml
 #
-# `dev.gotcha.co.il` is the only non-production host that actually resolves
-# and serves both the API and the widget assets. `app.gotcha.co.il` and
-# `api.gotcha.co.il` do NOT exist — do not reintroduce them.
+# `dev.gotcha.co.il` is the only NON-PRODUCTION host that resolves and serves
+# both the API and the widget assets, and it belongs in THIS file only.
+#
+# Production is `app.gotcha.co.il` (see shopify.app.toml). It was previously
+# recorded here as a host that "does not exist"; that stopped being true when
+# the application moved off the marketing apex. `api.gotcha.co.il` still does
+# not exist — do not reintroduce it.
 #
 # NOTE: `shopify app config link` rewrote this file with Shopify's defaults
 # when it created the app (embedded = true, placeholder application_url and

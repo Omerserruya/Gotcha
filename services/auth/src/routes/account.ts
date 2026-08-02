@@ -33,6 +33,7 @@ import {
   isSupportedLocale,
   getOAuthStateSecret,
   type RemovableDeviceType,
+  resolveAppPublicUrl,
 } from "@chatcenter/shared";
 import { sendEmailChangeVerification } from "../services/notification.service";
 
@@ -417,7 +418,7 @@ router.post("/email-change", async (req: Request, res: Response): Promise<void> 
     if (clash) { res.status(409).json({ error: "email_taken" }); return; }
 
     const token = signEmailChange({ userId: req.user!.userId, newEmail: raw, exp: Date.now() + EMAIL_CHANGE_TTL_MS });
-    const base = (process.env.FRONTEND_URL || "http://localhost:3000").replace(/\/$/, "");
+    const base = resolveAppPublicUrl(process.env);
     const verifyUrl = `${base}/account/verify-email?token=${encodeURIComponent(token)}`;
     await sendEmailChangeVerification(raw, me.name, verifyUrl);
 
