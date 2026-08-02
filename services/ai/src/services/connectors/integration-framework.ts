@@ -991,6 +991,17 @@ export async function executeAdapterTool(opts: {
         await guard.rememberShopifyCustomer(opts.tenantId, opts.conversationId, (result as any).customer_id);
       }
     }
+    // Last gate before the result becomes prompt. `projectOrderForAgent`
+    // whitelists the fields of an order, which is the right shape of fix and
+    // is also a list somebody has to remember to update - every new tool is
+    // another chance to forget. This catches whatever slipped: admin URLs,
+    // checkout sessions, the `authenticate?key=` bearer link on an order
+    // status page, and access tokens by prefix. A model that can see a
+    // credential can repeat one.
+    if (slug === "shopify") {
+      const { redactPrivateShopifyData } = await import("./shopify-safe-output");
+      result = redactPrivateShopifyData(result);
+    }
     return { ok: true, result };
   } catch (err: any) {
     const message = err?.message || "execution_failed";

@@ -36,6 +36,10 @@ import {
   type ExecutionFacts,
 } from "./grounded-message.service";
 import { validateActionHonesty, stripUnsupportedDelegation } from "./action-honesty.service";
+import {
+  containsPrivateShopifyData,
+  redactString,
+} from "./connectors/shopify-safe-output";
 import { assertOrderTargetMatchesTurn, isOrderStateChangingTool } from "./order-reference.service";
 import {
   detectVariantIntent,
@@ -58,6 +62,11 @@ import {
   detectReturnIntent,
 } from "./customer-request-intents.service";
 import { getReturnProvider, buildReturnDirective } from "./return-provider.service";
+import {
+  detectDocumentRequest,
+  resolveDocumentCapability,
+  buildDocumentDirective,
+} from "./document-request.service";
 import { getActionOrchestrator, type ExecutionResult } from "./orchestrator";
 import type { AgentToolContext } from "@chatcenter/shared";
 import { generateResponse, getDefaultModel, getMicroModel } from "./ai.service";
@@ -2420,6 +2429,25 @@ async function generateAIBotReplyInner(
         }),
       });
     }
+    // "Invoice" is at least three different documents, and only some exist.
+    const docType = detectDocumentRequest(opts.incomingMessage);
+    if (docType) {
+      chatMessages.push({
+        role: "system",
+        content: buildDocumentDirective(
+          resolveDocumentCapability(docType, {
+            shopifyConnected: toolFunctionNames.some((n) => n.startsWith("shopify.")),
+            // Nothing in this deployment's integration catalog issues tax
+            // documents, so this stays null until one exists. Inferring an
+            // invoicing provider from a connected CRM is how an order summary
+            // gets called a tax invoice.
+            invoicingProvider: null,
+            canSendWhatsAppMedia: false,
+            hasCustomerEmail: !!resolvedCustomerEmail,
+          }),
+        ),
+      });
+    }
     // Returns: ONE provider creates them, and only a real id may be claimed.
     if (detectReturnIntent(opts.incomingMessage)) {
       const caps = await getReturnProvider(opts.tenantId);
@@ -4041,6 +4069,37 @@ async function generateAIBotReplyInner(
     }
   } catch (err: any) {
     console.warn("[ai-bot] action-honesty check failed:", err?.message);
+  }
+
+  // ── Outbound credential check ───────────────────────────────────
+  // The adapter already redacts on the way IN, so anything found here escaped
+  // that and was either invented by the model or carried by a path that does
+  // not go through executeAdapterTool. Either way it must not ship: an
+  // `authenticate?key=` link is a bearer credential for the customer's own
+  // order page, and once it is in a transcript it belongs to everyone who
+  // later reads the transcript. Redact and shout - the interesting fact is
+  // which reply managed it.
+  try {
+    if (containsPrivateShopifyData(replyText)) {
+      console.error(
+        `[ai-bot] SECURITY: outbound reply carried a private Shopify URL or token conv=${opts.conversationId}`,
+      );
+      prisma.auditLog
+        .create({
+          data: {
+            tenantId: opts.tenantId,
+            actorType: "ai",
+            action: "security.private_url_in_reply",
+            targetType: "conversation",
+            targetId: opts.conversationId,
+            metadata: { source: "ai_bot" } as any,
+          },
+        })
+        .catch((err: any) => console.error("[ai-bot] leak audit failed:", err?.message));
+      replyText = redactString(replyText ?? "");
+    }
+  } catch (err: any) {
+    console.warn("[ai-bot] outbound credential check failed:", err?.message);
   }
 
   // ── Conversation decision trace ─────────────────────────────────
