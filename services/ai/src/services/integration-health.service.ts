@@ -25,6 +25,7 @@
  * as a boolean, which is the only part of it anyone diagnosing this needs.
  */
 
+import { assertDispatchAllowed } from "./dispatch-policy-gate.service";
 import { prisma, decryptCredentials } from "@chatcenter/shared";
 
 /**
@@ -51,12 +52,47 @@ function probeStateFrom(config: any): { status: string | null; lastCheckedAt: st
   };
 }
 
+/**
+ * Bump when the gate's decision set changes, so a deployment running an older
+ * enforcement contract is visible rather than merely different.
+ */
+export const DISPATCH_POLICY_SCHEMA_VERSION = "1.0.0";
+
+/** Is the final execution gate wired into this build? */
+function dispatchGateState(): { active: boolean; policySchemaVersion: string } {
+  // Deliberately a STATIC import rather than a runtime probe.
+  //
+  // The first version of this used require() so a build with the gate removed
+  // would report DISPATCH_GATE_MISSING. Under ESM that require() always threw,
+  // so it reported the gate missing on every healthy deployment - a detector
+  // that fires constantly is worse than no detector, because people learn to
+  // ignore it.
+  //
+  // Binding statically means removing the gate breaks the build instead of
+  // producing a store that quietly reports itself unenforced. That is the
+  // stronger guarantee. The status below still exists for the case the check
+  // can genuinely have: a gate that is present but not wired in.
+  return {
+    active: typeof assertDispatchAllowed === "function",
+    policySchemaVersion: DISPATCH_POLICY_SCHEMA_VERSION,
+  };
+}
+
 export type IntegrationHealthStatus =
   | "HEALTHY"
   | "CONNECTED_BUT_UNPROVISIONED"
   | "MISSING_SCOPES"
   | "POLICY_MISSING"
   | "PARTIALLY_AVAILABLE"
+  /**
+   * The final execution gate is not in force on this deployment.
+   *
+   * Separate from POLICY_MISSING on purpose: policy can be perfectly configured
+   * and still unenforced at the boundary, which is the exact state that let a
+   * disabled `process_refund` reach Shopify. A store in this state looks
+   * correct in every screen an operator can open.
+   */
+  | "DISPATCH_GATE_MISSING"
   | "CREDENTIAL_ERROR"
   | "REAUTH_REQUIRED"
   | "DISCONNECTED"
@@ -97,6 +133,18 @@ export interface IntegrationHealth {
   disabledTools: string[];
   /** Tools carrying an explicit HITL policy. */
   hitlTools: string[];
+  /**
+   * Is tenant tool policy actually enforced at the provider boundary?
+   *
+   * Every other field here describes what the policy SAYS. This one says
+   * whether anything makes it true. They were different answers for the whole
+   * of parts 1-6, and nothing reported the difference.
+   */
+  dispatchGate: {
+    active: boolean;
+    /** Bumped when the gate's decision set changes, so drift is visible. */
+    policySchemaVersion: string;
+  };
   /** What an admin can do about it, if anything. */
   remediation: Array<"reprovision_missing_tools" | "reconnect_for_scopes" | "reconnect_for_credentials" | "inspect_disabled_tools">;
 }
@@ -127,6 +175,7 @@ export async function assessIntegrationHealth(
     tools: { total: emptyCounts(), byCategory: {} },
     disabledTools: [],
     hitlTools: [],
+    dispatchGate: dispatchGateState(),
     remediation: [],
   };
 
@@ -235,6 +284,20 @@ export async function assessIntegrationHealth(
 function verdict(h: IntegrationHealth): Pick<IntegrationHealth, "status" | "summary" | "remediation"> {
   const t = h.tools.total;
   const remediation: IntegrationHealth["remediation"] = [];
+
+  // Checked before anything else, because it changes what every other answer on
+  // this page is WORTH. A perfectly configured store whose policy is not
+  // enforced at the boundary is the state that let a disabled `process_refund`
+  // reach Shopify, and it looked correct in every screen an operator could open.
+  if (!h.dispatchGate.active) {
+    return {
+      status: "DISPATCH_GATE_MISSING",
+      summary:
+        `${h.slug} tool policy is NOT enforced at the provider boundary on this deployment. ` +
+        `Configuration below describes what should happen, not what will. Do not treat this store as ready.`,
+      remediation: ["deploy_dispatch_policy_gate"],
+    };
+  }
 
   if (h.connection.status === "DISCONNECTED") {
     // Policy surviving a disconnect is the fixed behaviour, so say so - somebody

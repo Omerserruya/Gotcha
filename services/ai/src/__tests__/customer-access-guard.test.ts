@@ -17,6 +17,21 @@ const prismaMock = vi.hoisted(() => ({
   customerVerification: { findMany: vi.fn(async (): Promise<any[]> => []) },
   auditLog: { create: vi.fn(async () => ({})) },
   tenantIntegration: { findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn(async () => ({})) },
+  // `executeAdapterTool` now runs the final dispatch policy gate before it
+  // reaches a provider. These tests are about the cross-customer guard, not
+  // about tool policy, so the tenant is modelled as having the tool enabled
+  // and connected - otherwise the gate fails closed first and the assertions
+  // below would pass for the wrong reason, which is worse than failing.
+  tenantTool: {
+    findFirst: vi.fn(async () => ({
+      id: "tt_test",
+      isEnabled: true,
+      configOverrides: {},
+      catalogTool: { slug: "get_order", allowedModes: ["AUTO", "ASSIST"], category: "READ" },
+      tenantIntegration: { status: "CONNECTED", integration: { slug: "shopify" } },
+    })),
+  },
+  approvalRequest: { findUnique: vi.fn(async () => null), findFirst: vi.fn(async () => null) },
 }));
 
 vi.mock("@chatcenter/shared", () => ({
