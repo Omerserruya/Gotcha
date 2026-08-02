@@ -42,7 +42,14 @@ import {
   buildVariantIntentDirective,
   detectCouponIntent,
   buildCouponUnsupportedDirective,
+  detectOrderNoteIntent,
+  buildOrderNoteDirective,
 } from "./product-intent.service";
+import {
+  detectMissingItemIntent,
+  buildMissingItemDirective,
+  buildEstablishedIdentityBlock,
+} from "./customer-request-intents.service";
 import { getActionOrchestrator, type ExecutionResult } from "./orchestrator";
 import type { AgentToolContext } from "@chatcenter/shared";
 import { generateResponse, getDefaultModel, getMicroModel } from "./ai.service";
@@ -829,6 +836,17 @@ function renderCustomerInfoBlock(
       "have their details (e.g. their email), CONFIRM the value above - never claim you don't have " +
       "it and never re-ask for information already listed here.",
   );
+  // Who this conversation IS, and when that stops being enough. Withheld when
+  // the channel proves nothing, so the block never asserts a settled identity
+  // that isn't.
+  const identityBlock = buildEstablishedIdentityBlock({
+    channel: conv.channel,
+    customerExternalId: conv.customerExternalId,
+  });
+  if (identityBlock) {
+    lines.push("");
+    lines.push(identityBlock);
+  }
   return lines.join("\n");
 }
 
@@ -2370,6 +2388,20 @@ async function generateAIBotReplyInner(
   try {
     if (detectCouponIntent(opts.incomingMessage)) {
       chatMessages.push({ role: "system", content: buildCouponUnsupportedDirective() });
+    }
+    // "Write this on my order" - the model kept claiming the write instead of
+    // performing it.
+    if (detectOrderNoteIntent(opts.incomingMessage)) {
+      chatMessages.push({ role: "system", content: buildOrderNoteDirective() });
+    }
+    // A missing item is arithmetic the bot can do, not an identity check.
+    if (detectMissingItemIntent(opts.incomingMessage)) {
+      chatMessages.push({
+        role: "system",
+        content: buildMissingItemDirective({
+          hasReconcileTool: toolFunctionNames.some((n) => n.endsWith(".reconcile_order_items")),
+        }),
+      });
     }
   } catch (err: any) {
     console.warn("[ai-bot] coupon intent detection failed (non-fatal):", err?.message);

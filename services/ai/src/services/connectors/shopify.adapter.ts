@@ -35,6 +35,7 @@
 import { registerAdapter, type ProviderAdapter, type ToolDefinition } from "./integration-framework";
 import { assertPublicUrl, shopifyApiVersion, checkShopifyResponseVersion } from "@chatcenter/shared";
 import { orderIdentifierFromArgs } from "./shopify-order-identifier";
+import { reconcile } from "./shopify-item-reconciliation";
 
 /**
  * Resolved from the ONE shared declaration, not pinned here. This used to be a
@@ -159,9 +160,13 @@ const TOOLS: ToolDefinition[] = [
   t("update_metafield", "WRITE", "MEDIUM", "Set a customer metafield (custom data).",
     "You need to store a custom attribute on the customer.",
     { ...P.customerSel, namespace: { type: "string" }, key: { type: "string" }, value: { type: "string" }, type: { type: "string", description: "Metafield type, default single_line_text_field." } }, ["namespace", "key", "value"]),
-  t("create_note", "WRITE", "LOW", "Append a note to a customer's note field (timeline-style).",
-    "Record a customer interaction on their profile.",
+  t("create_note", "WRITE", "LOW", "Append a note to the CUSTOMER's profile note field (not an order).",
+    "Record something about the PERSON that is true across all their orders. If the customer is talking about a specific order, use add_order_note instead - this tool writes the customer record and the order will still show no note.",
     { ...P.customerSel, note: { type: "string" } }, ["note"]),
+  t("add_order_note", "WRITE", "LOW", "Add a note and/or tags to a specific ORDER, then verify it was applied.",
+    "Customer asks you to write something on their order (\"תרשמו בהזמנה ש...\", \"add a note to my order\"). This is the tool for anything order-specific. A note RECORDS information on the order - it does not notify anyone, create a task, or guarantee a callback, so never describe it as telling a team.",
+    { ...P.orderSel, note: { type: "string" }, tags: { type: "string", description: "Comma-separated tags to add. Existing tags are preserved." } },
+    undefined, { priority: 80 }),
 
   // ── Orders (read) ──
   t("get_orders", "READ", "LOW", "List recent shop orders, optionally filtered.",
@@ -178,6 +183,15 @@ const TOOLS: ToolDefinition[] = [
     "Customer asks 'has my payment gone through?'.", P.orderSel),
   t("get_fulfillment_status", "READ", "LOW", "Get an order's fulfillment status + fulfillments.",
     "Customer asks 'has my order shipped?'.", P.orderSel),
+  // A missing-item complaint is an ARITHMETIC question - ordered minus shipped
+  // minus refunded, per line - and the model was answering it by asking the
+  // customer which item they meant, or by re-verifying an identity it already
+  // had. One call now returns the whole comparison, including which item (if
+  // any) is unambiguously the one being complained about.
+  t("reconcile_order_items", "READ", "LOW",
+    "Compare what was ORDERED against what was actually shipped, still pending, cancelled or refunded, line by line. Returns per-item quantities plus which item the complaint can only be about.",
+    "Customer says something is missing, short, or did not arrive (\"חסר לי פריט\", \"קיבלתי רק חלק מההזמנה\", \"item missing from my order\"). Call this FIRST - before asking the customer which item they mean, and without asking them to verify their identity again. Only ask which item is missing if `ambiguous` is true.",
+    P.orderSel, undefined, { priority: 90 }),
 
   // ── Orders (actions) ──
   withOrderTarget(t("cancel_order", "ACTION", "HIGH", "Cancel an order (optionally refund + restock).",
@@ -384,6 +398,10 @@ const TOOL_SCOPES: Record<string, string[]> = {
   // null on orders that are demonstrably in fulfillment, and the honest answer
   // ("I cannot see") was being rendered as "nothing has shipped".
   get_fulfillment_status: ["read_orders", "read_merchant_managed_fulfillment_orders"],
+  // The whole point of the reconciliation is the fulfillment side of the
+  // comparison. Without the scope it can still read the order, and it says so
+  // rather than reporting "nothing shipped".
+  reconcile_order_items: ["read_orders", "read_merchant_managed_fulfillment_orders"],
   get_shipment_status: ["read_orders", "read_merchant_managed_fulfillment_orders"],
   track_shipment: ["read_orders", "read_merchant_managed_fulfillment_orders"],
   get_tracking_number: ["read_orders", "read_merchant_managed_fulfillment_orders"],
@@ -401,6 +419,7 @@ const TOOL_SCOPES: Record<string, string[]> = {
   cancel_order: ["write_orders", "read_merchant_managed_fulfillment_orders"],
   process_refund: ["write_orders"],
   send_invoice: ["write_orders"],
+  add_order_note: ["write_orders"],
   // Creating/updating a fulfillment is a fulfillment-order write, not an
   // order write - `write_orders` alone has never been sufficient here.
   update_order_fulfillment: ["write_orders", "write_merchant_managed_fulfillment_orders"],
@@ -728,6 +747,60 @@ const ShopifyAdapter: ProviderAdapter = {
         return r.customer;
       }
 
+      // Notes on the ORDER, which is a different object from the customer.
+      //
+      // There was no such tool. Asked to "write it on order #1011" the model
+      // reached for `create_note`, which writes the CUSTOMER record - so a note
+      // really was saved, the honesty check saw a successful write and allowed
+      // "ההערה נוספה להזמנה 1011", and Shopify's order still read note: null.
+      // A true claim about the wrong object is harder to catch than a false one.
+      case "add_order_note": {
+        const o = await resolveOrder(ctx, args);
+        if (!o) throw new Error("order_not_found");
+        const text = String(args.note ?? "").trim();
+        const addTags = String(args.tags ?? "").trim();
+        if (!text && !addTags) throw new Error("note_or_tags_required");
+        // Bounded: an order note is a record for staff, not a transcript, and
+        // an unbounded field is an injection surface.
+        if (text.length > 900) throw new Error("note_too_long");
+
+        const body: any = { order: { id: o.id } };
+        if (text) {
+          const existing = String(o.note || "").trim();
+          body.order.note = existing ? `${existing}\n\n${text}` : text;
+        }
+        if (addTags) {
+          const have = String(o.tags || "").split(",").map((s) => s.trim()).filter(Boolean);
+          const want = addTags.split(",").map((s) => s.trim()).filter(Boolean);
+          body.order.tags = Array.from(new Set([...have, ...want])).join(", ");
+        }
+        await sreq(ctx, "PUT", `/orders/${o.id}.json`, body);
+
+        // Read back. "Shopify accepted the write" and "the note is on the
+        // order" are different claims, and only the second one may reach a
+        // customer.
+        const check: any = await sreq(ctx, "GET", `/orders/${o.id}.json`);
+        const after = check?.order ?? {};
+        const noteApplied = !text || String(after.note || "").includes(text);
+        const tagsApplied =
+          !addTags ||
+          addTags.split(",").map((s) => s.trim()).filter(Boolean)
+            .every((t) => String(after.tags || "").toLowerCase().includes(t.toLowerCase()));
+        if (!noteApplied || !tagsApplied) {
+          throw new Error("order_note_not_applied: Shopify accepted the update but the order does not show it");
+        }
+        return {
+          order_id: o.id,
+          name: after.name ?? o.name,
+          note_added: !!text,
+          tags_added: addTags ? addTags.split(",").map((s) => s.trim()).filter(Boolean) : [],
+          note: after.note ?? null,
+          tags: after.tags ?? null,
+          // Said explicitly because the model kept conflating the two.
+          notified_anyone: false,
+        };
+      }
+
       // ── Orders read ──
       case "get_orders": {
         const params = new URLSearchParams();
@@ -758,6 +831,11 @@ const ShopifyAdapter: ProviderAdapter = {
         const o = await resolveOrder(ctx, args);
         if (!o) throw new Error("order_not_found");
         return o.line_items || [];
+      }
+      case "reconcile_order_items": {
+        const o = await resolveOrder(ctx, args);
+        if (!o) throw new Error("order_not_found");
+        return await reconcileOrderItems(ctx, o);
       }
       case "get_financial_status":
       case "check_payment_status": {
@@ -1990,6 +2068,20 @@ function projectOrderForAgent(o: any): Record<string, unknown> {
     })),
     discount_codes: (o.discount_codes || []).map((d: any) => ({ code: d.code, amount: d.amount, type: d.type })),
   };
+}
+
+/**
+ * Ordered vs shipped vs pending vs refunded, per line.
+ *
+ * Two reads: the order (which already carries `fulfillments` and `refunds`)
+ * and the fulfillment orders (the only place a not-yet-dispatched second
+ * shipment exists). The arithmetic itself is pure and lives in
+ * `shopify-item-reconciliation.ts` so it can be tested against real payload
+ * shapes without a network.
+ */
+async function reconcileOrderItems(ctx: Ctx, order: any): Promise<Record<string, unknown>> {
+  const fos = await fetchFulfillmentOrders(ctx, order.id);
+  return reconcile(order, fos) as unknown as Record<string, unknown>;
 }
 
 function hasOutstandingFulfillments(fulfillmentOrders: any[]): boolean {
