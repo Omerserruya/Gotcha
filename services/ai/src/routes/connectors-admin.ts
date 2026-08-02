@@ -27,6 +27,7 @@ import jwt from "jsonwebtoken";
 import * as crypto from "crypto";
 import { provisionIntegrationTools } from "../services/integration-provisioning.service";
 import { disconnectIntegration } from "../services/integration-lifecycle.service";
+import { assessIntegrationHealth } from "../services/integration-health.service";
 import {
   prisma,
   authenticate,
@@ -155,7 +156,34 @@ function base64url(buf: Buffer): string {
   return buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-// ─── Status / disconnect / config (universal) ─────────────────
+// ─── Status / health / disconnect / config (universal) ────────
+
+/**
+ * Whether the assistant can actually USE this integration.
+ *
+ * `/status` above answers a different question - what the connection row says -
+ * and it answered CONNECTED throughout the incident where a reconnect left the
+ * assistant with 42 read tools and zero write or action tools. Every signal we
+ * had asked about the connection; none asked what the assistant could do.
+ *
+ * Read-only. Remediation is returned as a list of actions and never performed:
+ * a diagnostic that repairs things destroys the state somebody is trying to
+ * understand, and repairing policy automatically is exactly how an operator's
+ * decision gets overwritten.
+ */
+router.get(
+  "/connectors/:slug/health",
+  authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"),
+  async (req: Request, res: Response) => {
+    try {
+      const health = await assessIntegrationHealth(req.tenantId!, String(req.params.slug));
+      res.json({ data: health });
+    } catch (err: any) {
+      console.error("[connectors] health assessment failed:", err?.message);
+      res.status(500).json({ error: "health_check_failed" });
+    }
+  },
+);
 
 router.get(
   "/connectors/:slug/status",
