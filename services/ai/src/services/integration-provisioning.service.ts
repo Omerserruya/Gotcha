@@ -28,15 +28,31 @@
  * nobody decided anything, a cascade did. Write and action tools are restored
  * with reads, and the thing that actually keeps them safe is where it always
  * was - `hitl_policy`, which holds every money-moving tool behind a human.
+ *
+ * And restoring the SURFACE is only half of it. Restoring it from catalogue
+ * defaults threw away what the operator had configured, which is its own
+ * customer-visible reset - a disabled `process_refund` came back enabled after
+ * a reconnect. What a tool is allowed to do is a tenant decision that must
+ * outlive the connection it was made through.
  */
 
 import { prisma } from "@chatcenter/shared";
+import {
+  loadOperatorToolIntents,
+  tenantToolFieldsFromIntent,
+} from "./tool-policy-intent.service";
 
 export interface ProvisionResult {
   /** Permissions newly created. */
   granted: number;
   /** Rows left alone because an operator had turned them off. */
   preserved: number;
+  /**
+   * Rows recreated from a durable operator decision rather than a catalogue
+   * default. On a first connect this is zero; after a disconnect/reconnect it
+   * is how many of the operator's choices were carried across.
+   */
+  restoredFromIntent: number;
   byCategory: Record<string, number>;
 }
 
@@ -47,13 +63,13 @@ export interface ProvisionResult {
  * that exists with `isEnabled = false`, or an AgentToolPermission that exists
  * with `isAllowed = false`, is left exactly as it is. Only gaps are filled.
  *
- * KNOWN LIMITATION, stated rather than hidden: a full DISCONNECT deletes
- * TenantTool and AgentToolPermission by cascade, so a per-tool "off" an
- * operator set does not survive one. This function cannot preserve a row that
- * no longer exists. Reconnect therefore restores the default surface, and an
- * operator who had disabled a specific tool must disable it again. That is a
- * schema-level fix (durable per-tool intent, keyed by tenant + tool name rather
- * than by connection) and is deliberately not attempted here.
+ * A row that no longer exists cannot be preserved, and after a disconnect none
+ * of them do. So preservation is not enough on its own: a recreated row is
+ * populated from the operator's DURABLE decision in `TenantToolPermission`
+ * (see `tool-policy-intent.service.ts`), which is keyed by tenant + tool name
+ * and has no foreign key to any connection. Absence of a decision means nobody
+ * ever configured that tool, and the catalogue default is used - which is what
+ * stops this from inventing a disabled state for a tool no human has touched.
  */
 export async function provisionIntegrationTools(
   tenantId: string,
@@ -61,7 +77,7 @@ export async function provisionIntegrationTools(
   catalogIntegrationId: string,
   opts: { categories?: string[]; reason?: string } = {},
 ): Promise<ProvisionResult> {
-  const empty: ProvisionResult = { granted: 0, preserved: 0, byCategory: {} };
+  const empty: ProvisionResult = { granted: 0, preserved: 0, restoredFromIntent: 0, byCategory: {} };
 
   const tools = await prisma.catalogTool.findMany({
     where: {
@@ -85,9 +101,40 @@ export async function provisionIntegrationTools(
   });
   const haveTool = new Set(existingTools.map((t) => t.catalogToolId));
   const missingTools = toolIds.filter((id) => !haveTool.has(id));
+
+  // A recreated row inherits the operator's DECISION, not the catalogue default.
+  //
+  // `TenantTool` dies with the connection - by cascade, and until recently by an
+  // explicit delete on every disconnect. So after a disconnect/reconnect every
+  // row here is "missing" and would be recreated enabled, which is exactly how
+  // an operator who disabled `process_refund` got it back on. The durable
+  // record in `TenantToolPermission` is what they actually chose; it has no
+  // foreign key to the connection and survives.
+  //
+  // Absence of a record means nobody ever configured the tool, and a default is
+  // legitimate. That is the distinction that stops this inventing a disabled
+  // state for a tool no human has touched.
+  const intents = await loadOperatorToolIntents(tenantId);
+  const slugById = new Map(tools.map((t) => [t.id, t.slug]));
+  let restoredFromIntent = 0;
+
   if (missingTools.length > 0) {
     await prisma.tenantTool.createMany({
-      data: missingTools.map((catalogToolId) => ({ tenantId, tenantIntegrationId, catalogToolId, isEnabled: true })),
+      data: missingTools.map((catalogToolId) => {
+        const intent = intents.get(String(slugById.get(catalogToolId) ?? ""));
+        if (!intent) {
+          return { tenantId, tenantIntegrationId, catalogToolId, isEnabled: true };
+        }
+        restoredFromIntent += 1;
+        const fields = tenantToolFieldsFromIntent(intent);
+        return {
+          tenantId,
+          tenantIntegrationId,
+          catalogToolId,
+          isEnabled: fields.isEnabled,
+          configOverrides: fields.configOverrides as any,
+        };
+      }),
       skipDuplicates: true,
     });
   }
@@ -125,7 +172,7 @@ export async function provisionIntegrationTools(
       .filter((tt) => !seen.has(`${agent.id}:${tt.id}`))
       .map((tt) => ({ tenantId, aiAgentId: agent.id, tenantToolId: tt.id, isAllowed: true, catalogToolId: tt.catalogToolId })),
   );
-  if (toCreate.length === 0) return { ...empty, preserved };
+  if (toCreate.length === 0) return { ...empty, preserved, restoredFromIntent };
 
   const { count } = await prisma.agentToolPermission.createMany({
     data: toCreate.map(({ catalogToolId, ...row }) => row),
@@ -141,9 +188,9 @@ export async function provisionIntegrationTools(
   console.log("[integrations] tool permissions provisioned", JSON.stringify({
     tenantId, tenantIntegrationId, reason: opts.reason ?? "connect",
     catalogTools: tools.length, aiAgents: aiAgents.length,
-    granted: count, preserved, byCategory,
+    granted: count, preserved, restoredFromIntent, byCategory,
   }));
-  return { granted: count, preserved, byCategory };
+  return { granted: count, preserved, restoredFromIntent, byCategory };
 }
 
 /**
