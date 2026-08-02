@@ -31,13 +31,26 @@ jobs:
   secret-scan:
     name: Secret scanning (gitleaks)
     runs-on: ubuntu-latest
+    # Scoped to this job rather than widened at the top of the file. The action
+    # reads the PR's commit range through the API, which needs pull-requests
+    # beyond the repo-wide contents:read.
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v4
         with:
+          # Full history: gitleaks scans the commit range, so a shallow clone
+          # silently narrows what is examined rather than failing.
           fetch-depth: 0
       - name: gitleaks
         uses: gitleaks/gitleaks-action@v2
         env:
+          # v2 requires this to scan a pull request and errors out without it.
+          # Absent, the job failed on every PR regardless of content - which is
+          # a secret scanner that never scanned, and reads identically to a
+          # scanner that found nothing.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
 
   typecheck:
