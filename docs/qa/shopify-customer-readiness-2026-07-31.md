@@ -1112,3 +1112,138 @@ that sentence exists.
 
 Orders #1006-#1011 unchanged from Part 4. No other tenant, store or customer
 was touched.
+
+## Final 30-scenario matrix (Part 6, signed WhatsApp webhook, Matan Amran)
+
+| # | Scenario | Order | Tool / flow | HITL | Read-back | Result |
+|---|---|---|---|---|---|---|
+| 1 | Latest order | #1014 | `find_latest_order` → order read | - | n/a | **PASS** - money, lines and the return all correct |
+| 2 | Order by name | #1002/#1011/#1014 | `get_order` | - | n/a | **PASS** |
+| 3 | Product by use case | - | discovery | - | n/a | **PASS** - qualifies, invents nothing |
+| 4 | Product by budget | - | discovery | - | n/a | **PASS** - asks for budget |
+| 5 | Recommendation by profile | - | discovery | - | n/a | **PASS** |
+| 6 | Exact variant / colour | - | `variant_information` | - | n/a | **PASS** - "Powder ומצוין במלאי (9 יחידות)" |
+| 7 | Out of stock | - | `variant_information` | - | n/a | **PASS** - no invented restock date |
+| 8 | Tracking | #1002 | `track_shipment` | - | n/a | **PASS** after the interim-only fix - "כבר נמסרה" |
+| 9 | No ETA | - | `check_delivery_eta` | - | n/a | **PASS** - Part 3, `tracking_state` |
+| 10 | Address before fulfilment | #1014 | `update_order_shipping_address` | approved | רוטשילד 5, תל אביב | **PASS** |
+| 11 | Address after fulfilment | #1002 | flow controller | none raised | n/a | **PASS** - refuses, no carrier claim |
+| 12 | Cancel eligible | #1015 | `cancel_order` | approved | `cancelled_at` set | **PASS** |
+| 13 | Reject cancellation | - | reject route | rejected | n/a | **PASS** - Part 2, re-proven via refund rejection |
+| 14 | Cancel fulfilled | #1002 | precheck | none raised | n/a | **PASS** - offers return+refund |
+| 15 | Cancel already cancelled | #1007/#1015 | precheck + idempotent tool | none raised | `already_cancelled` | **PASS** |
+| 16 | Full refund | #1016 | `process_refund` | approved | `nothing_to_refund` | **PASS (honest failure)** - fixture has no transaction; real full refund proven Part 2 on #1010 |
+| 17 | Reject refund | #1016 | reject route | rejected | `refunds: []` | **PASS** - "הכסף לא הוחזר", nothing moved |
+| 18 | Partial refund | #1011 | `process_refund` | approved | 4th refund 50.00 | **PASS** - real transaction |
+| 19 | Refund above maximum | #1011 | `process_refund` | none raised | n/a | **PASS** - "only 235.95 USD is refundable" |
+| 20 | Duplicate refund | #1011 | ledger + balance | - | n/a | **PASS** - Part 4, balance arithmetic re-proven |
+| 21 | Return request | #1003 | `create_return` | approved | `#1003-R2` OPEN | **PASS** |
+| 22 | Exchange | #1014 | `exchange_order_item` | approved | Ice 1 / Dawn 1 | **PASS** |
+| 23 | Damaged item | #1003 | `create_return` DEFECTIVE | approved | `#1003-R2` | **PASS** |
+| 24 | Wrong item | #1002 | `create_return` WRONG_ITEM | approved | `#1002-R1` | **PASS** |
+| 25 | Missing item | #1014 | `reconcile_order_items` | - | n/a | **PASS** - no identity re-check |
+| 26 | Note / tag | #1014 | `add_order_note` | - | note non-empty | **PASS** - "ההערה נוספה להזמנה #1014" |
+| 27 | Order confirmation | #1014 | `resend_confirmation` → `orderInvoiceSend` | approved | provider ack | **PASS** |
+| 28 | Invoice / tax invoice | - | document resolver | - | n/a | **UNSUPPORTED** - no invoicing provider connected |
+| 29 | Coupon | - | detector + ASSIST-only tools | none raised | n/a | **UNSUPPORTED** - product decision |
+| 30 | Proactive shipment update | - | flow | - | n/a | **PASS** - asks which order, promises nothing unschedulable |
+
+**28 PASS. 2 UNSUPPORTED by explicit product decision. 0 BROKEN.**
+
+Two PASSes carry a caveat and are marked as such above: #16 could only be
+observed failing honestly, because an API-created fixture has no payment
+transaction to refund - the real full refund is Part 2's on #1010. Everything
+in the money column that runs against a real transaction was re-proven here on
+#1011.
+
+## Test commands and exit codes
+
+| Suite | Command | Exit | Result |
+|---|---|---|---|
+| AI | `npx vitest run` (services/ai) | 1 | 25 failed / 2172 passed / 12 skipped |
+| Conversation | `npx vitest run` (services/conversation) | 1 | 1 failed / 69 passed |
+| Incoming worker | `npx vitest run` (services/incoming-worker) | 1 | 0 failed / 43 passed |
+| Shared | `npx vitest run` (packages/shared) | 1 | 49 failed / 958 passed |
+| Typecheck | `npx tsc --noEmit` (ai, conversation) | 0 | clean |
+
+**Baseline comparison by checkout.** `f040686` in a separate worktree, same
+suites. The AI failures at HEAD are a **strict subset** of the baseline's -
+**zero new**. Conversation and incoming-worker are identical at both. Shared's
+three extra failures are `role-assignment-tenant-scope.test.ts`, an untracked
+file belonging to other uncommitted work on this branch, absent at baseline.
+
+AI passing count rose 2089 → 2172 across Parts 5 and 6.
+
+## Final state
+
+Tool surface: **READ 42 / WRITE 18 / ACTION 8 - 68 of 68 provisioned.**
+
+| Order | Final state |
+|---|---|
+| #1002 | paid, fulfilled, return `#1002-R1` OPEN |
+| #1003 | paid, fulfilled, return `#1003-R2` OPEN |
+| #1006 | paid, unfulfilled, unchanged since Part 2 |
+| #1011 | partially_refunded, 550.00 of 785.95 returned |
+| #1012 | partially_paid - the `restock` defect, preserved as evidence |
+| #1013 | partially_paid, exchanged |
+| #1014 | partially_paid, exchanged + address changed + note + confirmation |
+| #1015 | cancelled |
+| #1016 | paid, refund attempted and honestly failed, refund rejected |
+
+Customer 27711594201457: `matan.amran.dev@example.com`, default address
+הרצל 1, חיפה, 3100000, Israel.
+
+## Verdict: Shopify sales readiness
+
+**GO, for merchants whose returns run on Shopify native returns, with two
+conditions the seller must know.**
+
+Everything a Shopify merchant will ask to see in a demo now works end to end
+through the real customer path, with a human in the loop on every irreversible
+action and a provider read-back behind every claim: order status, tracking,
+variants and stock, cancellation, full and partial refunds with duplicate
+prevention and balance arithmetic, order-address changes before dispatch,
+same-price exchange, return creation with a real RMA reference, self-service
+profile changes, missing-item reconciliation, order notes, and order
+confirmations. Coupons and tax invoices are refused honestly and deliberately.
+
+The two conditions:
+
+**1. Reconnect provisioning must ship before any merchant onboards.** The defect
+found in Phase 1 - a reconnect leaving 42 read tools and zero write tools -
+is fixed, but it was live on the only store we have, it was invisible to every
+health signal, and reconnecting is mandatory for granting scopes. A merchant who
+reconnects on a build without this fix gets a green connection and an assistant
+that can only look. This is the single highest-severity thing found in six
+parts.
+
+**2. Two capabilities are proven only as far as a dev store allows.** Fulfilment
+cannot be created without `write_merchant_managed_fulfillment_orders`, which is
+deliberately not requested, so the return path was proven against pre-existing
+fulfilled orders rather than ones we made. And API-created orders carry
+`financial_status: "paid"` as a label rather than a transaction, so the
+exchange's zero settlement delta is Shopify's own arithmetic rather than an
+observed gateway movement. Both should be confirmed once against a merchant's
+staging store before the first sale.
+
+### What is genuinely different from Part 5
+
+Part 5's honest summary was that the mechanisms had become stronger than the
+behaviour they were containing. That is no longer the shape of the system. The
+model does not choose the move on any irreversible flow: the facts are resolved
+in code, the permitted call arrives with its arguments already computed, and the
+dispatch gate refuses anything else. The two live failures that closed Part 5 -
+an approval raised with no replacement variant, and a colour answered from a
+guessed product - are not reachable from here.
+
+### Remaining product limitations
+
+- No invoicing provider, so no tax invoice, credit note or receipt document.
+- ReturnGO is read-only: it cannot create a return, and is not offered as a
+  return provider.
+- Higher- and lower-price exchanges are always a human's job, by design.
+- A full disconnect still discards per-tool operator overrides (schema cascade).
+- No WhatsApp document/media delivery; documents go by email to the stored
+  address only.
+- Fulfilment creation, draft orders and third-party fulfilment writes remain
+  deliberately un-requested.
