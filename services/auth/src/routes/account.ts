@@ -219,9 +219,20 @@ router.get("/mfa-gate", async (req: Request, res: Response): Promise<void> => {
       // to the stamp; a never-enrolled user stays gated (stamp is null).
       enrolled = mfaStamp != null;
     }
-  } catch {
+  } catch (err) {
     // IdP error: fail CLOSED for enforcement - trust only the stored stamp.
     enrolled = mfaStamp != null;
+    // LOG it. This catch was silent, and silence here is expensive: the gate
+    // blocks the entire app until it clears, so an unusable API token showed
+    // up as an MFA popup that reappeared after every successful enrolment,
+    // with nothing in any log to say why. The message carries the HTTP status
+    // (see api() in packages/shared/lib/authentik.ts), which distinguishes the
+    // two cases that matter - 401/403 means our credentials are wrong and no
+    // amount of user retrying will help, anything else is likely transient.
+    console.warn(
+      `[mfa-gate] IdP lookup failed for identity=${user.identityId}; ` +
+      `falling back to the stored stamp (enrolled=${enrolled}). ${(err as Error)?.message ?? err}`,
+    );
   }
 
   // Keep the local mirror honest whenever we have a live read. The stamp is
