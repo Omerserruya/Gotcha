@@ -14,6 +14,8 @@ import {
   verifyWebhookSignature,
   verifySharedSecretToken,
   timingSafeEqualStr,
+  reportOperationalFailure,
+  ERROR_CODES,
 } from "@chatcenter/shared";
 
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
@@ -35,6 +37,16 @@ router.get("/", (req: Request, res: Response) => {
   const challenge = req.query["hub.challenge"];
   const verifyToken = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN;
 
+  if (mode !== "subscribe" || token !== verifyToken) {
+    // The Meta verification handshake failed. Either the configured token
+    // drifted from the one in the Meta dashboard - in which case NO webhook
+    // will ever be delivered - or someone is probing the endpoint.
+    reportOperationalFailure({
+      errorCode: ERROR_CODES.webhook_verification_failed,
+      domain: "webhook", service: "webhook", provider: "meta",
+      context: { mode: String(mode ?? "none"), tokenConfigured: Boolean(verifyToken) },
+    });
+  }
   if (mode === "subscribe" && token === verifyToken) {
     console.log("Webhook verified");
     res.status(200).send(challenge);
@@ -100,6 +112,15 @@ router.post("/", async (req: Request, res: Response) => {
     });
     if (!verdict.ok) {
       console.error(`[WEBHOOK] Rejected ${adapter.channel} webhook: ${verdict.reason}`);
+      // Single failures are internet background noise - a scanner, a stale
+      // secret, a provider replaying an old delivery. The RATE is the signal,
+      // which is why the alert on this code is a spike rule and not per-event.
+      reportOperationalFailure({
+        errorCode: ERROR_CODES.webhook_signature_invalid,
+        domain: "webhook", service: "webhook",
+        provider: String(adapter.channel).toLowerCase(),
+        context: { reason: verdict.reason },
+      });
       return;
     }
 

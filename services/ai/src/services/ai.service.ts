@@ -10,7 +10,7 @@ import { getInternalServiceKey } from "@chatcenter/shared";
  */
 
 import OpenAI from "openai";
-import { trackAIUsage, assertAiAllowed, meterAiUnits } from "@chatcenter/shared";
+import { trackAIUsage, assertAiAllowed, meterAiUnits, reportOperationalFailure, recordExpectedOutcome, ERROR_CODES } from "@chatcenter/shared";
 import { logAudit } from "./audit.service";
 import { stablePrefixOf } from "./prompt-builder.service";
 
@@ -710,6 +710,24 @@ function isRetryable(err: any): boolean {
   return true;
 }
 
+/**
+ * Which alert this failure belongs to.
+ *
+ * Separate from the retry logic and exported so the mapping can be tested
+ * without a provider: the classification IS the alert contract, and a rate-limit
+ * misfiled as a provider outage sends someone looking at the wrong dashboard.
+ */
+export function classifyLlmFailure(err: any) {
+  const status = err?.status ?? err?.response?.status;
+  if (status === 429) return ERROR_CODES.ai_rate_limit;
+  if (status === 408) return ERROR_CODES.ai_timeout;
+  const code = String(err?.code ?? "");
+  if (code === "ETIMEDOUT" || code === "ESOCKETTIMEDOUT" || /timeout/i.test(String(err?.message ?? ""))) {
+    return ERROR_CODES.ai_timeout;
+  }
+  return ERROR_CODES.ai_provider_failure;
+}
+
 export async function callWithRetry<T>(
   fn: () => Promise<T>,
   signal?: AbortSignal,
@@ -723,7 +741,25 @@ export async function callWithRetry<T>(
       return await fn();
     } catch (err: any) {
       lastErr = err;
-      if (attempt === maxRetries || !isRetryable(err) || signal?.aborted) throw err;
+      if (attempt === maxRetries || !isRetryable(err) || signal?.aborted) {
+        // A cancelled turn is the user changing their mind, not an incident.
+        // Filing it would bury real provider outages in cancellation noise.
+        if (isAbort(err) || signal?.aborted) {
+          recordExpectedOutcome("ai_turn_cancelled", { attempts: attempt + 1 });
+        } else {
+          // Reported once, AFTER retries are exhausted - alerting on each
+          // attempt would triple the rate of every transient blip.
+          reportOperationalFailure({
+            errorCode: classifyLlmFailure(err),
+            domain: "ai",
+            service: "ai",
+            provider: "openai",
+            cause: err,
+            context: { attempts: attempt + 1, status: err?.status ?? null, retryable: isRetryable(err) },
+          });
+        }
+        throw err;
+      }
       // Exponential backoff with jitter; honour a Retry-After header when present.
       const retryAfterSec = Number(err?.headers?.["retry-after"] ?? err?.response?.headers?.get?.("retry-after"));
       const backoff = Number.isFinite(retryAfterSec) && retryAfterSec > 0

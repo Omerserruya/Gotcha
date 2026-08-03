@@ -904,6 +904,8 @@ export { scrubEvent, scrubValue, scrubHeaders, scrubUrl, redactSecrets, REDACTED
 export type { ScrubbableEvent } from "./lib/observability/sentry-scrub";
 export { ERROR_CODES, CODE_CHANNEL } from "./lib/observability/error-codes";
 export type { ErrorCode } from "./lib/observability/error-codes";
+export { reportOperationalFailure, recordExpectedOutcome, buildFailureTags, projectFor, assertSafeContext, UnsafeContextError } from "./lib/observability/operational-failure";
+export type { OperationalFailure, FailureDomain } from "./lib/observability/operational-failure";
 
 // Types import (side-effect for Express augmentation)
 import "./types/express.d";

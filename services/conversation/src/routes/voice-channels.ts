@@ -39,6 +39,8 @@ import {
   requireEntitlement,
   requireCapacity,
   resolveVoicePublicUrl,
+  reportOperationalFailure,
+  ERROR_CODES,
 } from "@chatcenter/shared";
 
 const router = Router();
@@ -279,7 +281,20 @@ async function setNumberWebhooksOnTwilio(
         StatusCallbackMethod: "POST",
       }
     : { VoiceUrl: "", StatusCallback: "" };
-  await twilioApiCall(ctx, "POST", `/IncomingPhoneNumbers/${encodeURIComponent(numberSid)}.json`, params);
+  try {
+    await twilioApiCall(ctx, "POST", `/IncomingPhoneNumbers/${encodeURIComponent(numberSid)}.json`, params);
+  } catch (err) {
+    // The number is live in Twilio but not pointed at us (or, on disable, still
+    // pointed at us). Calls silently go nowhere, and nothing else in the system
+    // notices because no request ever arrives.
+    reportOperationalFailure({
+      errorCode: ERROR_CODES.voice_number_activation_failed,
+      domain: "voice", service: "conversation", provider: "twilio",
+      cause: err,
+      context: { enabling: enable },
+    });
+    throw err;
+  }
 }
 
 // ─── Auth middleware (everything below is authenticated admin) ────
@@ -369,6 +384,14 @@ async function provisionOutboundResources(
     })) as { sid: string };
     twimlAppSid = appResp.sid;
   } catch (err) {
+    // Outbound calling cannot work without the TwiML App: the browser SDK has
+    // nothing to connect through.
+    reportOperationalFailure({
+      errorCode: ERROR_CODES.voice_provisioning_failed,
+      domain: "voice", service: "conversation", provider: "twilio",
+      cause: err,
+      context: { step: "twiml_app_create" },
+    });
     const msg = (err as { message?: string })?.message ?? "app_create_failed";
     console.warn("voice-channels.provision: TwiML App creation failed:", msg);
     await prisma.communicationChannel.update({

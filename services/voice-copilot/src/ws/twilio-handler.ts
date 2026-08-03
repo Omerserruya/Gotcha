@@ -1,5 +1,6 @@
 import * as http from "http";
 import { WebSocketServer, WebSocket } from "ws";
+import { reportOperationalFailure, ERROR_CODES } from "@chatcenter/shared";
 import { twilioFrame } from "./twilio-frames";
 import { validateTwilioSignature } from "./twilio-frames";
 import type { SessionStore, SessionRecord } from "../session/session-store";
@@ -153,12 +154,25 @@ export function attachTwilioHandler(
     if (outcome.kind === "resolve_failed") {
       logger.warn({ err: outcome.err, tenantId }, "twilio-handler: failed to resolve auth token");
       metrics.twilioAuthRejected.inc();
+      // The call is already connected and the audio has nowhere to go. There is
+      // no retry for a live media stream - the caller just hears nothing.
+      reportOperationalFailure({
+        errorCode: ERROR_CODES.voice_media_stream_failed,
+        domain: "voice", service: "voice-copilot", provider: "twilio",
+        cause: outcome.err,
+        context: { stage: "upgrade", reason: "resolve_failed" },
+      });
       socket.destroy();
       return;
     }
     if (outcome.kind === "signature_mismatch") {
       logger.warn({ tenantId, urls, sig }, "twilio-handler: signature mismatch");
       metrics.twilioAuthRejected.inc();
+      reportOperationalFailure({
+        errorCode: ERROR_CODES.webhook_signature_invalid,
+        domain: "voice", service: "voice-copilot", provider: "twilio",
+        context: { stage: "media_stream_upgrade" },
+      });
       socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
       socket.destroy();
       return;

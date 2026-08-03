@@ -21,6 +21,7 @@
  *   - 422 FSM violation        - alert; not retryable
  *   - 500 provider failure     - Twilio retries with backoff
  */
+import { reportOperationalFailure, ERROR_CODES } from "@chatcenter/shared";
 import express, { Router, Request, Response } from "express";
 import twilio from "twilio";
 import {
@@ -196,6 +197,12 @@ export function createVoiceIncomingRouter(opts: VoiceIncomingRouterOpts): Router
     try {
       resolved = await resolveChannelByTo(toRaw);
     } catch (err) {
+      reportOperationalFailure({
+        errorCode: ERROR_CODES.voice_twiml_failed,
+        domain: "voice", service: "voice-copilot", provider: "twilio",
+        cause: err,
+        context: { stage: "incoming_twiml" },
+      });
       logger.error({ err, to: toRaw }, "incoming.voice: channel lookup failed");
       res.status(503).end();
       return;
