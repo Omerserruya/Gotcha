@@ -27,7 +27,8 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
+import { useDynamicParam } from "@/lib/useRouteParam";
 import Link from "next/link";
 import { SystemLayout } from "@/components/SystemLayout";
 import { useAuth } from "@/context/AuthContext";
@@ -73,8 +74,7 @@ const CATEGORY_LABEL: Record<string, string> = {
 export default function EditPlanPage() {
   const { token } = useAuth();
   const router = useRouter();
-  const params = useParams<{ id: string }>();
-  const planId = String(params?.id ?? "");
+  const planId = useDynamicParam("id", "/system/plans/[id]");
 
   const [plan, setPlan] = useState<AdminPlan | null>(null);
   const [features, setFeatures] = useState<AdminFeature[]>([]);

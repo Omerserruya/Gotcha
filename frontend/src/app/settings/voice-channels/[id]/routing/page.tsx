@@ -10,7 +10,8 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
+import { useDynamicParam } from "@/lib/useRouteParam";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import {
@@ -47,9 +48,9 @@ function findAgent(agents: AgentOption[], id: string | null): AgentOption | null
 export default function VoiceChannelRoutingPage() {
   const { token } = useAuth();
   const { t } = useI18n();
-  const params = useParams<{ id: string }>();
+  const channelIdFromRoute = useDynamicParam("id", "/settings/voice-channels/[id]/routing");
   const router = useRouter();
-  const channelId = params?.id;
+  const channelId = channelIdFromRoute;
 
   const [routing, setRouting] = useState<VoiceChannelRouting>(EMPTY);
   const [agents, setAgents] = useState<AgentOption[]>([]);
