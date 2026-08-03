@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useRouter } from "next/navigation";
+import { useDynamicParam } from "@/lib/useRouteParam";
 import clsx from "clsx";
 import { AppLayout } from "@/components/AppLayout";
 import { useAuth } from "@/context/AuthContext";
@@ -70,8 +71,8 @@ function formatPhone(num: string): string {
 }
 
 export default function VoiceWorkspacePage() {
-  const params = useParams<{ sessionId: string }>();
-  const sessionId = params?.sessionId || "";
+  const sessionIdFromRoute = useDynamicParam("sessionId", "/voice/[sessionId]");
+  const sessionId = sessionIdFromRoute;
   return (
     <AppLayout>
       <VoiceWorkspaceInner sessionId={sessionId} />

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
+import { useDynamicParam } from "@/lib/useRouteParam";
 import { AppLayout } from "@/components/AppLayout";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
@@ -26,11 +27,11 @@ interface DeptToolPermission {
 }
 
 export default function DepartmentCopilotPage() {
-  const params = useParams();
+  const departmentIdFromRoute = useDynamicParam("id", "/departments/[id]/copilot");
   const router = useRouter();
   const { token } = useAuth();
   const { t } = useI18n();
-  const departmentId = params.id as string;
+  const departmentId = departmentIdFromRoute;
 
   const [source, setSource] = useState<string>("tenant");
   const [copilotMode, setCopilotMode] = useState<string>("READY_MESSAGE");
