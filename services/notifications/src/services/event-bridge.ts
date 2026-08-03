@@ -10,6 +10,7 @@
  * Started from the AI service boot path next to the dispatcher worker.
  */
 
+import { reportOperationalFailure, ERROR_CODES } from "@chatcenter/shared";
 import { subscribeToEvents, type ServiceEvent } from "@chatcenter/shared";
 import { tryEmit } from "./event-emitter.service";
 import { notifyManagerOfApproval } from "./whatsapp-approval.service";
@@ -43,9 +44,18 @@ export function startNotificationEventBridge(): void {
           // Out-of-band manager ping (opt-in per tenant). Fire-and-forget:
           // the approval already exists in the in-app inbox, so a WhatsApp
           // problem must never break the in-app notification above.
-          void notifyManagerOfApproval(evt.tenantId, evt.data ?? {}).catch((err: any) =>
-            console.warn("[notifications.bridge] whatsapp approval notify failed:", err?.message),
-          );
+          void notifyManagerOfApproval(evt.tenantId, evt.data ?? {}).catch((err: any) => {
+            console.warn("[notifications.bridge] whatsapp approval notify failed:", err?.message);
+            // The approval exists and the approver was never told. Distinct
+            // from a customer completion notification: here the action is
+            // stuck waiting on a human who does not know they are needed.
+            reportOperationalFailure({
+              errorCode: ERROR_CODES.hitl_notification_failed,
+              domain: "hitl", service: "notifications", provider: "whatsapp",
+              cause: err,
+              context: { channel: "whatsapp", stage: "approver_notify" },
+            });
+          });
         }
       } catch (err: any) {
         console.warn("[notifications.bridge] handler failed:", err?.message);

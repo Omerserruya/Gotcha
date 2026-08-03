@@ -30,6 +30,7 @@
  * was - `hitl_policy`, which holds every money-moving tool behind a human.
  */
 
+import { reportOperationalFailure, ERROR_CODES } from "@chatcenter/shared";
 import { prisma } from "@chatcenter/shared";
 
 export interface ProvisionResult {
@@ -158,9 +159,22 @@ export async function enableReadToolsForIntegration(
   tenantIntegrationId: string,
   catalogIntegrationId: string,
 ): Promise<number> {
-  const r = await provisionIntegrationTools(tenantId, tenantIntegrationId, catalogIntegrationId, {
-    categories: ["READ"],
-    reason: "crm_source_of_truth",
-  });
-  return r.granted;
+  try {
+    const r = await provisionIntegrationTools(tenantId, tenantIntegrationId, catalogIntegrationId, {
+      categories: ["READ"],
+      reason: "crm_source_of_truth",
+    });
+    return r.granted;
+  } catch (err) {
+    // The connection succeeded and the tools behind it did not. The
+    // integration reads as CONNECTED in the UI while the AI has nothing it is
+    // allowed to call - a state that looks fine from every direction.
+    reportOperationalFailure({
+      errorCode: ERROR_CODES.integration_provisioning_failed,
+      domain: "integration", service: "ai",
+      cause: err,
+      context: { stage: "enable_read_tools", categories: "READ" },
+    });
+    throw err;
+  }
 }

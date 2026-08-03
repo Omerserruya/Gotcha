@@ -19,6 +19,7 @@
  * parameter is only needed if we want Zoho to return a refresh_token in the
  * response, which we do.
  */
+import { reportOperationalFailure, ERROR_CODES } from "@chatcenter/shared";
 import { prisma } from "@chatcenter/shared";
 
 export interface ZohoTokenResponse {
@@ -147,7 +148,21 @@ export async function maybeRefreshZohoToken(integrationId: string): Promise<stri
   const fresh = typeof expiresAt === "number" ? expiresAt - Date.now() < 60_000 : true;
   if (!fresh && accessToken) return accessToken;
 
-  const refreshed = await refreshZohoAccessToken(refreshToken);
+  let refreshed;
+  try {
+    refreshed = await refreshZohoAccessToken(refreshToken);
+  } catch (err) {
+    // Stored refresh token no longer works. Every tool for this tenant stops,
+    // silently, until someone reconnects - and nothing else notices, because
+    // each call just returns "not connected".
+    reportOperationalFailure({
+      errorCode: ERROR_CODES.integration_token_refresh_failed,
+      domain: "integration", service: "ai", provider: "zoho",
+      cause: err,
+      context: { stage: "refresh" },
+    });
+    throw err;
+  }
   const newExpiresAt = Date.now() + refreshed.expiresIn * 1000;
 
   await prisma.tenantIntegration.update({
