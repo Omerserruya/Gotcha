@@ -245,6 +245,17 @@ services:
       # auth.gotcha.co.il upstream. envsubst uses an allowlist, so a var that
       # is not listed there survives as a literal and nginx fails to start.
       AUTHENTIK_PORT: ${AUTHENTIK_PORT:-9000}
+      # The /pricing gate. envsubst renders whatever the CONTAINER holds, and
+      # compose passes only what is listed here - so omitting it did not leave
+      # the variable at its default, it left it EMPTY:
+      #
+      #   map $host $public_pricing_enabled { default ""; }
+      #
+      # which is never "true", so /pricing 302'd to /early-access no matter what
+      # .env said. The dev compose has always had this line; production never
+      # did, and nothing reads a gateway env var except the gateway, so nothing
+      # else noticed.
+      PUBLIC_PRICING_ENABLED: ${PUBLIC_PRICING_ENABLED:-false}
     depends_on:
       - auth
       - conversation

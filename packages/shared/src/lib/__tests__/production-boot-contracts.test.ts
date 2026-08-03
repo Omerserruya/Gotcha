@@ -133,4 +133,30 @@ describe("production nginx upstreams", () => {
   it("names no `frontend` container - the static export is baked into the image", () => {
     expect(conf).not.toMatch(/proxy_pass\s+https?:\/\/frontend/);
   });
+
+  /**
+   * envsubst renders whatever the CONTAINER holds, and compose passes only
+   * what the service's `environment:` block lists. A variable in the allowlist
+   * but not in the block does not fall back to a default - it renders EMPTY:
+   *
+   *   map $host $public_pricing_enabled { default ""; }
+   *
+   * which is never "true", so /pricing redirected to /early-access regardless
+   * of what .env said. Three separate layers gate that page (bundle, nginx,
+   * billing API) and each failed silently in its own way; this is the nginx one.
+   */
+  it("passes the gateway every variable its envsubst allowlist substitutes", () => {
+    const dockerfile = fs.readFileSync(path.join(ROOT, "gateway/Dockerfile.prod"), "utf8");
+    const cmdLine = dockerfile.split("\n").find((l) => l.startsWith("CMD") && l.includes("envsubst"));
+    const quoted = /envsubst\s+'([^']*)'/.exec(cmdLine ?? "");
+    const substituted = (quoted?.[1].match(/\$[A-Z][A-Z0-9_]*/g) ?? []).map((v) => v.slice(1));
+    expect(substituted.length, "expected an envsubst allowlist").toBeGreaterThan(0);
+
+    const gatewayEnv = envByService().get("gateway") ?? new Set();
+    const missing = substituted.filter((v) => !gatewayEnv.has(v)).sort();
+    expect(
+      missing,
+      "the gateway substitutes these but compose never gives them to the container - they render empty",
+    ).toEqual([]);
+  });
 });
