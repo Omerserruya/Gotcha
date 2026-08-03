@@ -314,6 +314,8 @@ http {
                 return 204;
             }
 
+            # Same duplicate-header hazard as /api/public/pricing above.
+            proxy_hide_header Access-Control-Allow-Origin;
             add_header Access-Control-Allow-Origin $public_api_cors_origin always;
             add_header Vary "Origin" always;
             # Repeated because this location now declares add_header (see /health).
@@ -519,6 +521,12 @@ http {
             # Readable from the marketing host. The request is a plain GET with
             # an Accept header (CORS-safelisted), so there is no preflight to
             # answer here - only the response header the browser checks.
+            #
+            # The service emits its OWN Access-Control-Allow-Origin (from
+            # APP_ORIGIN), so without this hide the response carried two of
+            # them and every browser rejected it outright - a stricter failure
+            # than sending none. Hiding the upstream's guarantees exactly one.
+            proxy_hide_header Access-Control-Allow-Origin;
             add_header Access-Control-Allow-Origin $public_api_cors_origin always;
             add_header Vary "Origin" always;
             # Repeated because this location now declares add_header, which
