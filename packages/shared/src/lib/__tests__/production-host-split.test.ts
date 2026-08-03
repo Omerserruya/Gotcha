@@ -215,3 +215,36 @@ describe("voice direct ingress", () => {
     expect(ports, "a bare host:container mapping binds all interfaces").not.toMatch(/-\s+"\d+:\d+"/);
   });
 });
+
+/**
+ * try_files is meaningless without a root.
+ *
+ * nginx falls back to its COMPILE-TIME default root when no directive is in
+ * scope. In nginx:alpine that is /etc/nginx/html, which the image does not
+ * contain - so every path resolves against nothing. The help vhost declared no
+ * root, and there is none at http scope, so help.gotcha.co.il answered:
+ *
+ *   /            404   (its `location = /` hit the explicit =404)
+ *   /index.html  500   (try_files fallback could not be found either)
+ *
+ * It never served a page in production. The failure is silent in review because
+ * the block reads correctly on its own - the missing piece is the absence of a
+ * line, in a file where two other vhosts happen to declare it.
+ */
+describe("static vhosts declare a document root", () => {
+  const CONF_TEXT = fs.readFileSync(path.join(ROOT, "gateway/nginx.prod.conf.template"), "utf8");
+  const hasHttpScopeRoot = /^ {4}root\s+\S+;/m.test(CONF_TEXT);
+
+  it("every server block serving files from disk sets root", () => {
+    const missing = serverBlocks()
+      .filter((b) => /try_files/.test(b.body))
+      .filter((b) => !/^\s+root\s+\S+;/m.test(b.body))
+      .map((b) => b.names[0]);
+    expect(
+      missing,
+      hasHttpScopeRoot
+        ? "these rely on an http-scope root"
+        : "there is no http-scope root, so these resolve against nginx's compile-time default and serve nothing",
+    ).toEqual([]);
+  });
+});

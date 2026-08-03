@@ -1966,6 +1966,17 @@ http {
         listen 80;
         server_name help.gotcha.co.il;
 
+        # Every try_files below is relative to THIS. Without it nginx falls back
+        # to its compile-time default root (/etc/nginx/html), which does not
+        # exist in this image - so every path resolved against nothing:
+        # `location = /` hit its explicit =404, and everything else 500'd on a
+        # try_files fallback that could not be found either.
+        #
+        # The app vhost declares its own root and there is none at http scope,
+        # so this block inherited nothing. help.gotcha.co.il never served a page
+        # in production.
+        root /usr/share/nginx/html;
+
         # ── Security headers (H-5) ──────────────────────────────
         # Emitted at server scope; repeated inside any location that declares
         # its own add_header (nginx add_header inheritance stops there).
