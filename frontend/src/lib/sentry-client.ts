@@ -17,6 +17,28 @@
  */
 
 /**
+ * Read at MODULE SCOPE, as literal `process.env.NEXT_PUBLIC_*` expressions.
+ *
+ * This is not a style choice. Next.js substitutes these at build time by
+ * matching the literal text `process.env.NEXT_PUBLIC_FOO`; read through an
+ * alias - a function parameter defaulting to `process.env`, say - there is
+ * nothing to match, the expression survives into the bundle, and at runtime in
+ * the browser `process.env` is empty. The value is then `undefined` forever.
+ *
+ * That is exactly what happened here: the injectable-env signature below made
+ * the code testable and simultaneously guaranteed the DSN was never inlined.
+ * The build printed the DSN as set, and the shipped bundle contained no trace
+ * of it. Capturing the literals here and passing them in keeps both properties.
+ */
+const BUILD_ENV = {
+  NODE_ENV: process.env.NODE_ENV,
+  NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
+  NEXT_PUBLIC_SENTRY_ENVIRONMENT: process.env.NEXT_PUBLIC_SENTRY_ENVIRONMENT,
+  NEXT_PUBLIC_SENTRY_RELEASE: process.env.NEXT_PUBLIC_SENTRY_RELEASE,
+  NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE: process.env.NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE,
+} as Record<string, string | undefined>;
+
+/**
  * True only for a real production bundle.
  *
  * Both halves are required, exactly as on the backend: `NODE_ENV` proves this
@@ -25,7 +47,7 @@
  * a developer, a CI type-check - none of them satisfy both.
  */
 export function isProductionSentryClient(
-  env: Record<string, string | undefined> = process.env as Record<string, string | undefined>,
+  env: Record<string, string | undefined> = BUILD_ENV,
 ): boolean {
   return env.NODE_ENV === "production" && env.NEXT_PUBLIC_SENTRY_ENVIRONMENT === "production";
 }
@@ -99,7 +121,7 @@ export function scrubClientEvent(event: ClientEvent): ClientEvent {
 
 /** The options object, exported so a test can assert the guarantees. */
 export function sentryClientOptions(
-  env: Record<string, string | undefined> = process.env as Record<string, string | undefined>,
+  env: Record<string, string | undefined> = BUILD_ENV,
 ) {
   return {
     dsn: env.NEXT_PUBLIC_SENTRY_DSN,
