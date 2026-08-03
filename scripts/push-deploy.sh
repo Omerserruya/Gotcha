@@ -127,17 +127,49 @@ echo "→ assets:  ${#MOUNTED_ASSETS[@]} bind-mounted files (paths preserved)"
 # Relies on the ~/.ssh/config `host i-*` ProxyCommand to tunnel through SSM.
 scp -i "$SSH_KEY" "${SRC[@]}" "ubuntu@${INSTANCE_ID}:${REMOTE_DIR}/"
 
-# Clear any empty directory Docker already auto-created at an asset path on a
-# previous failed `up`, or tar cannot write the file over it. Then stream the
-# assets across with their directory structure.
-REMOTE_CLEANUP=""
+# Clear anything Docker already auto-created at an asset path on a previous
+# failed `up`, then stream the assets across with their directory structure.
+#
+# sudo is required and not optional. Docker creates those placeholders as
+# ROOT - both the empty directory itself and every parent it had to make - so
+# the ubuntu user cannot remove them, and tar cannot write into them:
+#
+#   rm: cannot remove '.../custom.css': Permission denied
+#   tar: scripts/authentik/custom.css: Cannot open: File exists
+#
+# The chown is the other half. Deleting the placeholder is not enough when
+# `/opt/chatcenter/scripts` itself is still root-owned, because tar runs as
+# ubuntu and cannot create a file inside it. Scoped to the top-level
+# directories our own assets live in, derived from the asset list rather than
+# hardcoded, so it can never widen to something we do not own.
+ASSET_ROOTS=()
 for f in "${MOUNTED_ASSETS[@]}"; do
-  REMOTE_CLEANUP+="[ -d '${REMOTE_DIR}/${f}' ] && rm -rf '${REMOTE_DIR}/${f}'; "
+  top="${f%%/*}"
+  case " ${ASSET_ROOTS[*]:-} " in *" $top "*) ;; *) ASSET_ROOTS+=("$top") ;; esac
 done
-ssh -i "$SSH_KEY" "ubuntu@${INSTANCE_ID}" "${REMOTE_CLEANUP}true"
+
+REMOTE_PREP="set -e; cd '${REMOTE_DIR}'; "
+for f in "${MOUNTED_ASSETS[@]}"; do
+  REMOTE_PREP+="sudo rm -rf './${f}'; "
+done
+for d in "${ASSET_ROOTS[@]}"; do
+  REMOTE_PREP+="sudo mkdir -p './${d}'; sudo chown -R ubuntu:ubuntu './${d}'; "
+done
+ssh -i "$SSH_KEY" "ubuntu@${INSTANCE_ID}" "$REMOTE_PREP"
+
 tar czf - "${MOUNTED_ASSETS[@]}" \
   | ssh -i "$SSH_KEY" "ubuntu@${INSTANCE_ID}" "tar xzf - -C '${REMOTE_DIR}'"
-echo "✓ pushed ${#MOUNTED_ASSETS[@]} bind-mount asset(s)."
+
+# Confirm they landed as FILES. A silent re-creation as a directory is the
+# whole failure mode, so assert rather than assume.
+REMOTE_VERIFY="cd '${REMOTE_DIR}'; bad=0; "
+for f in "${MOUNTED_ASSETS[@]}"; do
+  REMOTE_VERIFY+="[ -f './${f}' ] || { echo \"NOT A FILE: ${f}\" >&2; bad=1; }; "
+done
+REMOTE_VERIFY+="exit \$bad"
+ssh -i "$SSH_KEY" "ubuntu@${INSTANCE_ID}" "$REMOTE_VERIFY" \
+  || { echo "ERROR: bind-mount assets did not land as files." >&2; exit 1; }
+echo "✓ pushed ${#MOUNTED_ASSETS[@]} bind-mount asset(s), verified as files."
 echo "✓ pushed ${#SRC[@]} file(s)."
 
 if [ "$OPEN_SHELL" -eq 1 ]; then
