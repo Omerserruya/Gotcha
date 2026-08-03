@@ -17,6 +17,7 @@
     "@reactflow/background": "^11.3.0",
     "@reactflow/controls": "^11.2.0",
     "@reactflow/core": "^11.11.0",
+    "@sentry/nextjs": "^10.69.0",
     "@tailwindcss/typography": "^0.5.19",
     "@twilio/voice-sdk": "^2.18.1",
     "clsx": "^2.1.0",

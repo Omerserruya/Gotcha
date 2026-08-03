@@ -1,7 +1,11 @@
 import { createApp } from "./app";
 import { loadEnv } from "./config/env";
 import { logger } from "./lib/logger";
-import { assertEnforcementConfigured } from "@chatcenter/shared";
+import { assertEnforcementConfigured, initSentry } from "@chatcenter/shared";
+
+// Before createApp(), so the SDK is live before any route or WebSocket handler
+// is constructed. Production-only; a no-op everywhere else.
+initSentry("voice-copilot");
 
 async function main(): Promise<void> {
   // Before anything else: a voice call is billable work, and a stack that

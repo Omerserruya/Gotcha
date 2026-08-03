@@ -52,6 +52,30 @@ x-oidc-env: &oidc-env
   APP_ORIGIN: ${APP_ORIGIN:?APP_ORIGIN required in prod (e.g. https://app.gotcha.co.il)}
   AUTH_ALLOWED_ORIGINS: ${AUTH_ALLOWED_ORIGINS:-}
 
+# ─── Sentry ────────────────────────────────────────────────────────────────
+# FOUR projects, not one per service. A DSN alone does nothing: initSentry()
+# also requires NODE_ENV=production AND SENTRY_ENVIRONMENT=production, so a
+# staging stack that inherits this file stays silent unless someone sets both.
+# Every value defaults to empty - unset means Sentry is simply off.
+x-sentry-common: &sentry-common
+  SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-}
+  # Falls back to the deployed image tag so an issue can always be traced to a
+  # build even when no release was named explicitly.
+  SENTRY_RELEASE: ${SENTRY_RELEASE:-${TAG:-}}
+  SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0.1}
+
+x-sentry-core: &sentry-core
+  <<: *sentry-common
+  SENTRY_CORE_BACKEND_DSN: ${SENTRY_CORE_BACKEND_DSN:-}
+
+x-sentry-workers: &sentry-workers
+  <<: *sentry-common
+  SENTRY_WORKERS_DSN: ${SENTRY_WORKERS_DSN:-}
+
+x-sentry-voice: &sentry-voice
+  <<: *sentry-common
+  SENTRY_VOICE_DSN: ${SENTRY_VOICE_DSN:-}
+
 services:
   # ─── Infrastructure ──────────────────────────────────────
   db:
@@ -293,7 +317,7 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: production
       PORT: ${AUTH_PORT:-4001}
-      <<: *oidc-env
+      <<: [*oidc-env, *sentry-core]
       # auth is the ONLY service holding Authentik admin credentials. It uses
       # them to create identities for invited users and to mint one-time
       # recovery links (services/auth/src/services/invitation.service.ts).
@@ -376,7 +400,7 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: production
       PORT: ${CONVERSATION_PORT:-4002}
-      <<: *oidc-env
+      <<: [*oidc-env, *sentry-core]
       WHATSAPP_API_URL: ${WHATSAPP_API_URL:-}
       FRONTEND_URL: ${FRONTEND_URL}
       CHANNEL_ENCRYPTION_KEY: ${CHANNEL_ENCRYPTION_KEY}
@@ -411,7 +435,7 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: production
       PORT: ${WEBHOOK_PORT:-4003}
-      <<: *oidc-env
+      <<: [*oidc-env, *sentry-workers]
       WHATSAPP_API_URL: ${WHATSAPP_API_URL:-}
       WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}
       WHATSAPP_ACCESS_TOKEN: ${WHATSAPP_ACCESS_TOKEN:-}
@@ -444,7 +468,7 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: production
       PORT: ${ANALYTICS_PORT:-4004}
-      <<: *oidc-env
+      <<: [*oidc-env, *sentry-core]
     depends_on:
       db: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -465,7 +489,7 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: production
       PORT: ${CHATBOT_PORT:-4005}
-      <<: *oidc-env
+      <<: [*oidc-env, *sentry-core]
     depends_on:
       db: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -487,7 +511,7 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: production
       PORT: ${AI_PORT:-4006}
-      <<: *oidc-env
+      <<: [*oidc-env, *sentry-core]
       OPENAI_API_KEY: ${OPENAI_API_KEY:?OPENAI_API_KEY required}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
       OPENAI_DEFAULT_MODEL: ${OPENAI_DEFAULT_MODEL:-gpt-5-mini}
@@ -592,7 +616,7 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: production
       PORT: ${NOTIFICATIONS_PORT:-4008}
-      <<: *oidc-env
+      <<: [*oidc-env, *sentry-workers]
       FRONTEND_URL: ${FRONTEND_URL}
       NOTIFICATIONS_ENABLED: ${NOTIFICATIONS_ENABLED:-true}
       SMTP_HOST: ${SMTP_HOST:-}
@@ -684,7 +708,7 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: production
       PORT: ${BILLING_PORT:-4009}
-      <<: *oidc-env
+      <<: [*oidc-env, *sentry-core]
       FRONTEND_URL: ${FRONTEND_URL}
       # Validates the internal calls from ai/auth. Fail closed if unset - a
       # missing key must stop the deploy, not silently open the mesh boundary.
@@ -758,7 +782,7 @@ services:
       # callbacks point somewhere that does not route back.
       VOICE_PUBLIC_URL: ${VOICE_PUBLIC_URL:?required}
       PUBLIC_URL: ${NEXT_PUBLIC_API_URL}
-      <<: *oidc-env
+      <<: [*oidc-env, *sentry-voice]
       DATABASE_URL: ${DATABASE_URL}
       # Paid-access gate - see the `ai` service for the full note. Present here
       # because this service can produce billable work on its own, and a service
@@ -782,6 +806,7 @@ services:
     <<: *default-restart
     logging: *default-logging
     environment:
+      <<: *sentry-workers
       DATABASE_URL: ${DATABASE_URL}
       # Paid-access gate - see the `ai` service for the full note. Present here
       # because this service can produce billable work on its own, and a service
@@ -828,6 +853,7 @@ services:
     <<: *default-restart
     logging: *default-logging
     environment:
+      <<: *sentry-workers
       DATABASE_URL: ${DATABASE_URL}
       # Paid-access gate - see the `ai` service for the full note. Present here
       # because this service can produce billable work on its own, and a service

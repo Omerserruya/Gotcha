@@ -894,5 +894,16 @@ export * from "./lib/capability-runtime";
 // stays the single execution authority; an Agent only proposes through it.
 export * from "./lib/agent";
 
+// Sentry: four projects, production-only, scrubbed. See lib/observability.
+export {
+  initSentry, captureError, flushSentry, isProductionSentry,
+  resolveDsn, SERVICE_PROJECT, __resetSentryForTests,
+} from "./lib/observability/sentry";
+export type { SentryProject, SentryInitResult } from "./lib/observability/sentry";
+export { scrubEvent, scrubValue, scrubHeaders, scrubUrl, redactSecrets, REDACTED } from "./lib/observability/sentry-scrub";
+export type { ScrubbableEvent } from "./lib/observability/sentry-scrub";
+export { ERROR_CODES, CODE_CHANNEL } from "./lib/observability/error-codes";
+export type { ErrorCode } from "./lib/observability/error-codes";
+
 // Types import (side-effect for Express augmentation)
 import "./types/express.d";

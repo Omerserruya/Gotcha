@@ -4,6 +4,7 @@ import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import { assertEnforcementConfigured } from "./billing/entitlement-gate";
+import { initSentry } from "./observability/sentry";
 
 export interface ServiceConfig {
   name: string;
@@ -23,6 +24,14 @@ export interface ServiceConfig {
 }
 
 export function createServiceApp(config: ServiceConfig): express.Express {
+  // Before any middleware. Sentry is wired HERE, in the shared factory, for the
+  // same reason assertEnforcementConfigured lives in startService below: a step
+  // every service has to remember is a step one service will not have, and the
+  // service that forgets is the one whose outage nobody sees.
+  //
+  // No-op without a DSN, so development and tests are unaffected.
+  initSentry(config.name);
+
   const app = express();
 
   // Trust proxy (nginx gateway) - required for express-rate-limit behind reverse proxy
@@ -89,6 +98,21 @@ export function createServiceApp(config: ServiceConfig): express.Express {
  */
 export function startService(app: express.Express, config: ServiceConfig): void {
   assertEnforcementConfigured();
+
+  // Registered HERE and not in createServiceApp: an Express error handler only
+  // catches errors from middleware registered BEFORE it, and every route is
+  // added by the service after createServiceApp returns. startService is the
+  // one shared point that runs once routes exist.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const Sentry = require("@sentry/node");
+    if (typeof Sentry.setupExpressErrorHandler === "function") {
+      Sentry.setupExpressErrorHandler(app);
+    }
+  } catch {
+    /* no DSN, or SDK absent - the service still starts */
+  }
+
   app.listen(config.port, () => {
     console.log(`[${config.name}] running on port ${config.port} (build ${process.env.BUILD_SHA || "dev"})`);
   });

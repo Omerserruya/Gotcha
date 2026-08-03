@@ -141,6 +141,12 @@ if [ -z "${SERVICES:-}" ] || [[ ",$SERVICES," == *,gateway,* ]] || [[ ",$SERVICE
             NEXT_PUBLIC_*=*) export "${_line%%=*}=${_line#*=}" ;;
             PUBLIC_PRICING_ENABLED=*|MARKETING_URL=*|SOCIAL_INSTAGRAM_URL=*|SOCIAL_FACEBOOK_URL=*|SOCIAL_WHATSAPP_URL=*)
               export "${_line%%=*}=${_line#*=}" ;;
+            # Sentry. SENTRY_FRONTEND_DSN becomes NEXT_PUBLIC_SENTRY_DSN below.
+            # SENTRY_AUTH_TOKEN and SENTRY_ORG are build-time only - they gate
+            # source-map UPLOAD in next.config.js and are never baked into the
+            # bundle, so they are loaded but never echoed.
+            SENTRY_FRONTEND_DSN=*|SENTRY_ENVIRONMENT=*|SENTRY_RELEASE=*|SENTRY_TRACES_SAMPLE_RATE=*|SENTRY_AUTH_TOKEN=*|SENTRY_ORG=*)
+              export "${_line%%=*}=${_line#*=}" ;;
           esac
         done < "$FRONTEND_ENV"
       else
@@ -168,6 +174,13 @@ if [ -z "${SERVICES:-}" ] || [[ ",$SERVICES," == *,gateway,* ]] || [[ ",$SERVICE
     # dev behaviour - so an accidental omission here silently un-splits the two
     # production hostnames rather than failing the build.
     echo "   NEXT_PUBLIC_MARKETING_URL=${NEXT_PUBLIC_MARKETING_URL:-${MARKETING_URL:-<unset - no host split>}}"
+    # Echoed as present/absent only - a DSN is not a secret, but there is no
+    # reason to print it into CI logs either. The browser SDK additionally
+    # requires NEXT_PUBLIC_SENTRY_ENVIRONMENT=production at runtime, so a bundle
+    # built without it stays silent even if a DSN was baked in.
+    echo "   NEXT_PUBLIC_SENTRY_DSN=$( [ -n "${SENTRY_FRONTEND_DSN:-}" ] && echo "<set>" || echo "<unset - frontend Sentry off>" )"
+    echo "   NEXT_PUBLIC_SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT:-<unset>}"
+    echo "   sourcemap upload=$( [ -n "${SENTRY_AUTH_TOKEN:-}" ] && [ -n "${SENTRY_ORG:-}" ] && [ -n "${SENTRY_RELEASE:-}" ] && [ "${SENTRY_ENVIRONMENT:-}" = "production" ] && echo "yes (explicit production release)" || echo "no" )"
     (
       cd frontend
       [ -d node_modules ] || npm install
@@ -183,6 +196,10 @@ if [ -z "${SERVICES:-}" ] || [[ ",$SERVICES," == *,gateway,* ]] || [[ ",$SERVICE
       NEXT_PUBLIC_VOICE_URL="${NEXT_PUBLIC_VOICE_URL:-}" \
       NEXT_PUBLIC_PRICING_ENABLED="${NEXT_PUBLIC_PRICING_ENABLED:-${PUBLIC_PRICING_ENABLED:-false}}" \
       NEXT_PUBLIC_MARKETING_URL="${NEXT_PUBLIC_MARKETING_URL:-${MARKETING_URL:-}}" \
+      NEXT_PUBLIC_SENTRY_DSN="${SENTRY_FRONTEND_DSN:-}" \
+      NEXT_PUBLIC_SENTRY_ENVIRONMENT="${SENTRY_ENVIRONMENT:-}" \
+      NEXT_PUBLIC_SENTRY_RELEASE="${SENTRY_RELEASE:-}" \
+      NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE="${SENTRY_TRACES_SAMPLE_RATE:-0.1}" \
       NEXT_PUBLIC_SOCIAL_INSTAGRAM_URL="${NEXT_PUBLIC_SOCIAL_INSTAGRAM_URL:-${SOCIAL_INSTAGRAM_URL:-}}" \
       NEXT_PUBLIC_SOCIAL_FACEBOOK_URL="${NEXT_PUBLIC_SOCIAL_FACEBOOK_URL:-${SOCIAL_FACEBOOK_URL:-}}" \
       NEXT_PUBLIC_SOCIAL_WHATSAPP_URL="${NEXT_PUBLIC_SOCIAL_WHATSAPP_URL:-${SOCIAL_WHATSAPP_URL:-}}" \
