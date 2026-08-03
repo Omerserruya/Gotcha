@@ -11,6 +11,8 @@
 import { createHash } from "node:crypto";
 import { prisma } from "./prisma";
 import { publishEvent } from "./event-bus";
+import { reportOperationalFailure, recordExpectedOutcome } from "./observability/operational-failure";
+import { ERROR_CODES } from "./observability/error-codes";
 import type { ToolGateResult } from "./tool-gate";
 
 /**
@@ -155,9 +157,16 @@ export async function createApprovalRequest(
     select: { id: true, expiresAt: true },
     orderBy: { createdAt: "desc" },
   });
-  if (open) return { id: open.id, expiresAt: open.expiresAt, deduped: true };
+  if (open) {
+    // Dedupe working as designed: the same action asked twice reuses one
+    // approval instead of minting a sibling. Expected, so a breadcrumb.
+    recordExpectedOutcome("hitl_request_deduped", { tool: input.tool });
+    return { id: open.id, expiresAt: open.expiresAt, deduped: true };
+  }
 
-  const created = await (prisma as any).approvalRequest.create({
+  let created: { id: string; expiresAt: Date; conversationId: string | null; tool: string; summary: string; riskLevel: string; requestedBy: string; createdAt: Date };
+  try {
+    created = await (prisma as any).approvalRequest.create({
     data: {
       tenantId: input.tenantId,
       conversationId: input.conversationId ?? null,
@@ -178,7 +187,20 @@ export async function createApprovalRequest(
       expiresAt,
     },
     select: { id: true, expiresAt: true, conversationId: true, tool: true, summary: true, riskLevel: true, requestedBy: true, createdAt: true },
-  });
+    });
+  } catch (err) {
+    // The action is gated and there is now no way to approve it. The turn is
+    // stuck and no human will ever be asked - the quietest possible failure,
+    // which is precisely why it is reported rather than only thrown.
+    reportOperationalFailure({
+      errorCode: ERROR_CODES.hitl_request_creation_failed,
+      domain: "hitl", service: "shared",
+      cause: err,
+      context: { tool: input.tool, riskLevel: input.riskLevel ?? "medium" },
+    });
+    throw err;
+  }
+
   // Surface as a tenant-scoped socket event so the Approvals page (and any
   // open inbox view) can render live without polling.
   await publishEvent({

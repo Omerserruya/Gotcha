@@ -144,6 +144,9 @@ than a missing one.
 
 ## 6. `#gotcha-security`
 
+> **Live today:** S5 (`webhook_signature_invalid`). S1-S4 filter on codes with no
+> emitter yet - see §9.
+
 Security rules use **Issue Alerts** on **first occurrence**, not thresholds. One
 cross-tenant exposure is an incident; waiting for a second is not a policy.
 
@@ -170,6 +173,9 @@ repeat-page; the issue is already open.
 
 ## 7. `#gotcha-ai-ops`
 
+> **Live today:** A6 (AI provider/timeout/rate-limit). A1-A5 are blocked by the
+> protected P0 execution routes or have no emitter yet - see §9.
+
 Execution failures. These are expected at a low rate and meaningful as a rate
 change, so most are **Metric Alerts** with automatic recovery.
 
@@ -182,7 +188,7 @@ All: **Environment** `production` · **Action** Slack → `#gotcha-ai-ops`.
 | A3 | `gotcha-core-backend` | `error_code:action_provider_failed` | Metric Alert — count | **> 15 in 10 min** (critical); **> 6 in 10 min** (warning) | 10 min | Auto-resolves |
 | A4 | `gotcha-core-backend` | `error_code:action_persistence_failed` | Issue Alert — first event | first event | n/a | **Manual.** The action ran and the record did not — the system's memory and the world disagree. Never auto-resolve |
 | A5 | `gotcha-core-backend` | `error_code:action_notification_failed` | Metric Alert — count | **> 10 in 15 min** (critical) | 15 min | Auto-resolves |
-| A6 | `gotcha-core-backend` | `error_code:ai_provider_degraded` | Metric Alert — count | **> 20 in 5 min** (critical); **> 8 in 5 min** (warning) | 5 min, 1 min interval | Auto-resolves below warning for one window |
+| A6 | `gotcha-core-backend` | `error_code:[ai_provider_failure,ai_timeout,ai_rate_limit]` | Metric Alert — count | **> 20 in 5 min** (critical); **> 8 in 5 min** (warning) | 5 min, 1 min interval | Auto-resolves below warning for one window |
 
 **Threshold rationale.** A3 sits above A2 deliberately: provider failures are the
 common, self-healing case (a rate limit, a 502 from Shopify) and should not page
@@ -194,16 +200,19 @@ the one failure mode in this list that silently corrupts state.
 
 ## 8. `#gotcha-prod-alerts`
 
+> **Live today:** P1, P2 (partially - OAuth callback only), P5, P6, P7. P3 and P4
+> filter on codes with no emitter yet - see §9.
+
 General production health. **Environment** `production` · **Action** Slack →
 `#gotcha-prod-alerts`.
 
 | # | Project | Filter | Trigger | Threshold | Window | Recovery |
 |---|---|---|---|---|---|---|
 | P1 | `gotcha-core-backend` | *(no filter — all events)* | Issue Alert — a new issue is created | first event of a **new** issue | n/a | Manual. `frequency: 30 minutes` |
-| P2 | `gotcha-core-backend` | `error_code:oauth_integration_failed` | Metric Alert — count | **> 10 in 15 min** (critical); **> 4 in 15 min** (warning) | 15 min | Auto-resolves |
+| P2 | `gotcha-core-backend` | `error_code:[integration_oauth_failed,integration_token_refresh_failed,integration_credentials_invalid]` | Metric Alert — count | **> 10 in 15 min** (critical); **> 4 in 15 min** (warning) | 15 min | Auto-resolves |
 | P3 | `gotcha-workers-webhooks` | `error_code:webhook_processing_failed` | Metric Alert — count | **> 25 in 10 min** (critical); **> 10 in 10 min** (warning) | 10 min | Auto-resolves |
-| P4 | `gotcha-core-backend` | `error_code:billing_failed` | Metric Alert — count | **> 3 in 15 min** (critical); **> 1 in 15 min** (warning) | 15 min | Auto-resolves |
-| P5 | `gotcha-voice` | `error_code:voice_failed` | Metric Alert — count | **> 5 in 5 min** (critical); **> 2 in 5 min** (warning) | 5 min, 1 min interval | Auto-resolves below warning for one window |
+| P4 | `gotcha-core-backend` | `error_code:[payment_callback_failed,subscription_update_failed,entitlement_creation_failed]` | Metric Alert — count | **> 3 in 15 min** (critical); **> 1 in 15 min** (warning) | 15 min | Auto-resolves |
+| P5 | `gotcha-voice` | `error_code:[voice_provisioning_failed,voice_number_activation_failed,voice_twiml_failed,voice_media_stream_failed,voice_transcription_failed]` | Metric Alert — count | **> 5 in 5 min** (critical); **> 2 in 5 min** (warning) | 5 min, 1 min interval | Auto-resolves below warning for one window |
 | P6 | `gotcha-voice` | *(no filter — all events)* | Issue Alert — a new issue is created | first event of a **new** issue | n/a | Manual. Voice gets its own catch-all because a call cannot be retried |
 | P7 | `gotcha-frontend` | *(no filter — all events)* | Metric Alert — count | **> 50 in 10 min** (critical); **> 20 in 10 min** (warning) | 10 min | Auto-resolves. **Spike detection, not per-error** — one browser throwing is not an incident |
 | P8 | `gotcha-frontend` | `release:{{SENTRY_RELEASE}}` | Issue Alert — **a new issue is created** and `The issue is older than 0 minutes` unset | first event of a new issue on the current release | n/a | Manual. This is the regression rule: a new issue appearing only after a deploy |
@@ -219,57 +228,85 @@ knowable before production traffic exists.
 
 ---
 
-## 9. Emission status — read this before trusting the rules
+## 9. Emitter status — read this before trusting a rule
 
-Alert rules match `error_code` tags. **Those tags are not yet emitted anywhere in
-the codebase.** The vocabulary and routing exist and are typed; the call sites
-that raise each code have not been instrumented.
+Alert rules filter on `error_code` tags. A rule whose code nothing emits is not
+an alert; it is a dashboard entry that stays green through the incident it was
+written for. This table is **derived from a test that scans the source**
+(`sentry-emitter-coverage.test.ts`), not maintained by hand, so it cannot drift.
 
-Every rule in §6–§8 that filters on `error_code:` will therefore **never fire**
-until the corresponding `captureError(err, { error_code: ... })` call is added.
-The unfiltered rules (P1, P6, P7) work today.
+**14 of 34 codes emit today. 6 are blocked. 14 are documented only.**
 
-Instrumenting them means touching the HITL and action-execution paths, including
-the deferred generic P0 execution routes this task was told not to modify. That
-work is deliberately not done here.
+### EMITTED IN PRODUCTION CODE
 
-To wire one:
+| Code | Where |
+|---|---|
+| `ai_provider_failure` | `ai.service.ts` — after retries are exhausted |
+| `ai_timeout` | same seam, classified by status/code |
+| `ai_rate_limit` | same seam, HTTP 429 |
+| `hitl_request_creation_failed` | `approval-requests.ts` — create fails |
+| `hitl_callback_invalid` | `approvals.ts` — unknown approval id |
+| `hitl_expired` | `approvals.ts` — decided after expiry |
+| `hitl_already_consumed` | `approvals.ts` — non-PENDING, and the CAS loser |
+| `integration_oauth_failed` | `crm-oauth.ts` — callback failure |
+| `webhook_signature_invalid` | `webhook.ts`, `twilio-handler.ts` |
+| `webhook_verification_failed` | `webhook.ts` — Meta handshake |
+| `voice_provisioning_failed` | `voice-channels.ts` — TwiML App create |
+| `voice_number_activation_failed` | `voice-channels.ts` — number webhooks |
+| `voice_twiml_failed` | `voice-incoming.ts` |
+| `voice_media_stream_failed` | `twilio-handler.ts` — upgrade rejected |
+
+### BLOCKED BY EXPLICIT P0 ROUTE RESTRICTION
+
+Emittable only from the two deferred generic execution routes
+(`POST /api/ai-assist/:conversationId/tools/execute` and `.../adapter-tools/execute`),
+which must not be modified. The helper they need already exists and is tested;
+only the call site is missing.
+
+| Code | Instrumentation point |
+|---|---|
+| `action_execution_failed` | tool dispatch catch in the execute handler |
+| `action_provider_failed` | connector result rejected by the provider |
+| `action_persistence_failed` | outcome write after a successful execution |
+| `action_notification_failed` | customer completion notification |
+| `hitl_execution_failed` | approved-action dispatch inside the execute route |
+| `hitl_payload_mismatch` | approved-params vs executed-params comparison |
+
+### DOCUMENTED ONLY — no emitter yet, not blocked
+
+`ai_invalid_output`, `hitl_notification_failed`, `integration_token_refresh_failed`,
+`integration_credentials_invalid`, `integration_provisioning_failed`,
+`integration_disconnect_cleanup_failed`, `webhook_processing_failed`,
+`payment_callback_failed`, `subscription_update_failed`,
+`entitlement_creation_failed`, `voice_transcription_failed`,
+`authorization_invariant_broken`, `cross_tenant_exposure`,
+`irreversible_duplicate_execution`.
+
+### Expected outcomes — deliberately NOT issues
+
+Recorded as breadcrumbs via `recordExpectedOutcome`, visible on a real issue and
+silent on their own. Filing these as issues is how a channel gets muted.
+
+| Outcome | Where |
+|---|---|
+| `ai_turn_cancelled` | user cancelled the turn mid-generation |
+| `hitl_request_deduped` | the same action asked twice reused one approval |
+
+To add an emitter:
 
 ```ts
-import { captureError, ERROR_CODES } from "@chatcenter/shared";
+import { reportOperationalFailure, ERROR_CODES } from "@chatcenter/shared";
 
-captureError(err, {
-  error_code: ERROR_CODES.action_provider_failed,
-  provider: "shopify",   // low cardinality only
+reportOperationalFailure({
+  errorCode: ERROR_CODES.integration_token_refresh_failed,
+  domain: "integration", service: "ai", provider: "google",
+  cause: err,
+  context: { stage: "refresh" },   // ids and counts only
 });
 ```
 
-Keep tag values low-cardinality. A tenant id or message id turns the Sentry tag
-index into a unique-value list and makes the alert unusable.
-
-| Code | Emitted today |
-|---|---|
-| `authorization_invariant_broken` | ❌ pending |
-| `cross_tenant_exposure` | ❌ pending |
-| `irreversible_duplicate_execution` | ❌ pending |
-| `hitl_payload_mismatch` | ❌ pending |
-| `webhook_signature_invalid` | ❌ pending |
-| `hitl_execution_failed` | ❌ pending |
-| `action_execution_failed` | ❌ pending |
-| `action_provider_failed` | ❌ pending |
-| `action_persistence_failed` | ❌ pending |
-| `action_notification_failed` | ❌ pending |
-| `ai_provider_degraded` | ❌ pending |
-| `oauth_integration_failed` | ❌ pending |
-| `webhook_processing_failed` | ❌ pending |
-| `billing_failed` | ❌ pending |
-| `voice_failed` | ❌ pending |
-
-Unhandled exceptions from every wired service reach the right project today via
-the Express error handler and the worker/voice init, tagged with `service` — so
-P1, P6 and P7 are live the moment DSNs are set.
-
----
+Context is checked by key NAME: passing a token, prompt, message, email or phone
+throws in development and is dropped in production.
 
 ## 10. Release and source maps
 

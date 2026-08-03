@@ -13,6 +13,7 @@
  * State JWT carries {tenantId, integrationSlug, userId} and is the only
  * trust anchor on the callback - so the callback is safe to leave public.
  */
+import { reportOperationalFailure, ERROR_CODES } from "@chatcenter/shared";
 import { Router, Request, Response } from "express";
 import { prisma, authenticate, resolveTenant, requireOnboardingOrActiveTenant, requireRole, mintOAuthState, consumeOAuthState,
   resolveAppPublicUrl,
@@ -195,6 +196,14 @@ router.get("/oauth/zoho_crm/callback", async (req: Request, res: Response) => {
     );
   } catch (err: any) {
     console.error("[Zoho OAuth] Callback error:", err?.message ?? err);
+    // The user finished consent and still has no working integration. They see
+    // a generic error banner; without this nobody on our side sees anything.
+    reportOperationalFailure({
+      errorCode: ERROR_CODES.integration_oauth_failed,
+      domain: "integration", service: "ai", provider: "zoho",
+      cause: err,
+      context: { stage: "callback" },
+    });
     res.redirect(`${frontendUrl}/integrations?error=oauth_callback_failed`);
   }
 });

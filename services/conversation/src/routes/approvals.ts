@@ -1,4 +1,4 @@
-import { getInternalServiceKey } from "@chatcenter/shared";
+import { getInternalServiceKey, reportOperationalFailure, recordExpectedOutcome, ERROR_CODES } from "@chatcenter/shared";
 /**
  * Approval request REST surface.
  *
@@ -1011,11 +1011,31 @@ router.post("/:id/approve", async (req: Request, res: Response) => {
     const row = await (prisma as any).approvalRequest.findFirst({
       where: { id: req.params.id, tenantId },
     });
-    if (!row) return res.status(404).json({ error: "approval not found" });
+    if (!row) {
+      // An approval id that does not exist in this tenant. Either a stale link
+      // or someone probing ids, and the two are indistinguishable from here -
+      // which is exactly why it is worth seeing.
+      reportOperationalFailure({
+        errorCode: ERROR_CODES.hitl_callback_invalid,
+        domain: "hitl", service: "conversation",
+        context: { reason: "unknown_approval_id" },
+      });
+      return res.status(404).json({ error: "approval not found" });
+    }
     if (row.status !== "PENDING") {
+      reportOperationalFailure({
+        errorCode: ERROR_CODES.hitl_already_consumed,
+        domain: "hitl", service: "conversation",
+        context: { reason: "not_pending", currentStatus: String(row.status) },
+      });
       return res.status(409).json({ error: `approval is already ${row.status.toLowerCase()}` });
     }
     if (row.expiresAt && row.expiresAt < new Date()) {
+      reportOperationalFailure({
+        errorCode: ERROR_CODES.hitl_expired,
+        domain: "hitl", service: "conversation",
+        context: { reason: "expired_before_decision" },
+      });
       return res.status(409).json({ error: "approval has expired" });
     }
     // Same-actor defense-in-depth
@@ -1046,6 +1066,14 @@ router.post("/:id/approve", async (req: Request, res: Response) => {
     if (!updated) {
       // Someone else decided it (or it expired) between our read and our write.
       const current = await (prisma as any).approvalRequest.findFirst({ where: { id: row.id, tenantId }, select: { status: true } });
+      // The CAS loser. Benign on a double-click, and the signal that the
+      // atomic claim is doing its job - but a RATE of these means two humans
+      // are routinely racing the same approval, which is worth knowing.
+      reportOperationalFailure({
+        errorCode: ERROR_CODES.hitl_already_consumed,
+        domain: "hitl", service: "conversation",
+        context: { reason: "lost_decision_cas", currentStatus: String(current?.status ?? "unknown") },
+      });
       return res.status(409).json({ error: `approval is already ${String(current?.status ?? "decided").toLowerCase()}` });
     }
 
