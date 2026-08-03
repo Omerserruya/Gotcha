@@ -713,6 +713,25 @@ services:
     pull_policy: always
     <<: *default-restart
     logging: *default-logging
+    # Published to the host LOOPBACK, for the Cloudflare Tunnel.
+    #
+    # cloudflared runs as a systemd unit on the host, not inside this compose
+    # network, so its `voice.gotcha.co.il -> http://localhost:4007` ingress can
+    # only reach this container through a published port. There was none: the
+    # container merely EXPOSED 4007, the host listened on 80 and nothing else,
+    # and every request to voice.gotcha.co.il 502'd.
+    #
+    # Deliberately the DIRECT route rather than sending voice through the
+    # gateway. A Twilio media stream is a long-lived WebSocket carrying
+    # real-time audio, and an extra nginx hop costs latency on every frame.
+    # The gateway's voice.gotcha.co.il block stays as a fallback for when the
+    # direct ingress is being changed or withdrawn - it is not the normal path.
+    #
+    # 127.0.0.1 and NOT 0.0.0.0: the only client is cloudflared on this host.
+    # Binding the wildcard would publish the voice service to the internet with
+    # nothing but the security group in front of it.
+    ports:
+      - "127.0.0.1:${VOICE_COPILOT_PORT:-4007}:${VOICE_COPILOT_PORT:-4007}"
     environment:
       NODE_ENV: production
       PORT: ${VOICE_COPILOT_PORT:-4007}
