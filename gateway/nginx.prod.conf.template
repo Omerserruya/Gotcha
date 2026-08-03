@@ -994,20 +994,17 @@ http {
         #   the HASHED bundle is immutable by construction: new content is
         #   a new filename, so it can be cached for a year safely.
         location = /widget/gotcha-shopify-bootstrap.js {
-            proxy_pass http://frontend;
-            proxy_set_header Host $host;
-            proxy_set_header X-Internal-Key "";
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
+            # Served from the static export baked into THIS image - there is
+            # no `frontend` container in production. Proxying to one made nginx
+            # refuse to start outright ("host not found in upstream frontend"),
+            # which took the whole gateway down, not just the widget.
+            try_files $uri =404;
 
-            proxy_hide_header Access-Control-Allow-Origin;
             add_header Access-Control-Allow-Origin "*" always;
             add_header Access-Control-Allow-Methods "GET, HEAD, OPTIONS" always;
 
             # `no-cache` still allows a cached copy — it requires it to be
             # revalidated first, so an unchanged file costs a 304.
-            proxy_hide_header Cache-Control;
             add_header Cache-Control "public, no-cache, must-revalidate" always;
 
             # Security headers repeated: this location declares add_header,
@@ -1021,14 +1018,12 @@ http {
         }
 
         location /widget/ {
-            proxy_pass http://frontend;
-            proxy_set_header Host $host;
-            proxy_set_header X-Internal-Key "";
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
+            # Served from the static export baked into THIS image - there is
+            # no `frontend` container in production. Proxying to one made nginx
+            # refuse to start outright ("host not found in upstream frontend"),
+            # which took the whole gateway down, not just the widget.
+            try_files $uri =404;
 
-            proxy_hide_header Access-Control-Allow-Origin;
             add_header Access-Control-Allow-Origin "*" always;
             add_header Access-Control-Allow-Methods "GET, HEAD, OPTIONS" always;
 
@@ -1037,7 +1032,6 @@ http {
             # Short TTL plus revalidation until the assets are versioned.
             # Content-hashed filenames: new bytes are a new URL, so this
             # can be cached for a year without ever going stale.
-            proxy_hide_header Cache-Control;
             add_header Cache-Control "public, max-age=31536000, immutable" always;
 
             # Security headers repeated: this location declares add_header,
