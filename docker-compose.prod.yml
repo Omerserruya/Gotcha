@@ -264,6 +264,13 @@ services:
     <<: *default-restart
     logging: *default-logging
     environment:
+      # startService() calls assertEnforcementConfigured(), which THROWS when this
+      # is unset - an unset value would mean "off" in production, and every
+      # organization that stopped paying would keep being served. Absent here,
+      # this service crash-looped on the first real production boot.
+      BILLING_ENFORCEMENT_MODE: ${BILLING_ENFORCEMENT_MODE:-enforce}
+      BILLING_PAST_DUE_GRACE_HOURS: ${BILLING_PAST_DUE_GRACE_HOURS:-72}
+      BILLING_ALLOW_UNENFORCED: ${BILLING_ALLOW_UNENFORCED:-}
       DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: production
@@ -375,6 +382,13 @@ services:
     <<: *default-restart
     logging: *default-logging
     environment:
+      # startService() calls assertEnforcementConfigured(), which THROWS when this
+      # is unset - an unset value would mean "off" in production, and every
+      # organization that stopped paying would keep being served. Absent here,
+      # this service crash-looped on the first real production boot.
+      BILLING_ENFORCEMENT_MODE: ${BILLING_ENFORCEMENT_MODE:-enforce}
+      BILLING_PAST_DUE_GRACE_HOURS: ${BILLING_PAST_DUE_GRACE_HOURS:-72}
+      BILLING_ALLOW_UNENFORCED: ${BILLING_ALLOW_UNENFORCED:-}
       DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: production
@@ -401,6 +415,13 @@ services:
     <<: *default-restart
     logging: *default-logging
     environment:
+      # startService() calls assertEnforcementConfigured(), which THROWS when this
+      # is unset - an unset value would mean "off" in production, and every
+      # organization that stopped paying would keep being served. Absent here,
+      # this service crash-looped on the first real production boot.
+      BILLING_ENFORCEMENT_MODE: ${BILLING_ENFORCEMENT_MODE:-enforce}
+      BILLING_PAST_DUE_GRACE_HOURS: ${BILLING_PAST_DUE_GRACE_HOURS:-72}
+      BILLING_ALLOW_UNENFORCED: ${BILLING_ALLOW_UNENFORCED:-}
       DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: production
@@ -523,6 +544,12 @@ services:
       QDRANT_API_KEY: ${QDRANT_API_KEY:-}
       CONVERSATION_SERVICE_URL: ${CONVERSATION_SERVICE_URL:-http://conversation:4002}
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-}
+      # Signs the OAuth `state` for every connector handshake this service
+      # runs (Shopify Core, Shopify Chat, Stripe, HubSpot, Salesforce, Monday,
+      # Airtable, Wix, Square, Zoho, Google Calendar, Calendly, Confluence,
+      # Drive). Only `auth` had it, so `ai` refused to boot in production:
+      #   [oauth-state] OAUTH_STATE_SECRET is required in production (>=32 chars).
+      OAUTH_STATE_SECRET: ${OAUTH_STATE_SECRET:?OAUTH_STATE_SECRET required in prod}
       INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY}
       CHANNEL_ENCRYPTION_KEY: ${CHANNEL_ENCRYPTION_KEY}
     depends_on:
@@ -536,6 +563,13 @@ services:
     <<: *default-restart
     logging: *default-logging
     environment:
+      # startService() calls assertEnforcementConfigured(), which THROWS when this
+      # is unset - an unset value would mean "off" in production, and every
+      # organization that stopped paying would keep being served. Absent here,
+      # this service crash-looped on the first real production boot.
+      BILLING_ENFORCEMENT_MODE: ${BILLING_ENFORCEMENT_MODE:-enforce}
+      BILLING_PAST_DUE_GRACE_HOURS: ${BILLING_PAST_DUE_GRACE_HOURS:-72}
+      BILLING_ALLOW_UNENFORCED: ${BILLING_ALLOW_UNENFORCED:-}
       DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: production
