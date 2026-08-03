@@ -1,0 +1,1461 @@
+{
+  "kind": "gotcha.pricing-catalogue",
+  "formatVersion": 1,
+  "schemaVersion": "20260802190000_one_order_note_tool",
+  "sourceEnvironment": "dev",
+  "scope": "active-only",
+  "exportedAt": "2026-08-03T10:03:52.634Z",
+  "counts": {
+    "plans": 4,
+    "entitlements": 132,
+    "volumeOptions": 20,
+    "creditPackages": 4,
+    "estimationConfigs": 1
+  },
+  "notes": [
+    "Database ids are not exported. Plans key on (key, version).",
+    "tenantId, publishedBy, approvedBy, createdBy and all timestamps are omitted.",
+    "credit_packages.providerPriceRef is exported as null; production values are set by hand and never overwritten by an import."
+  ],
+  "plans": [
+    {
+      "key": "poc",
+      "version": 1,
+      "name": "POC / Pilot",
+      "name_he": null,
+      "status": "ACTIVE",
+      "kind": "POC",
+      "billing_interval": "MONTHLY",
+      "base_price": null,
+      "currency": "ILS",
+      "included_ai_units": 0,
+      "sales_only": true,
+      "active": true,
+      "description_en": null,
+      "description_he": null,
+      "sort_order": 0,
+      "recommended": false,
+      "support_level": null,
+      "data_retention_days": null,
+      "auto_purchase_eligible": true,
+      "credit_packages_eligible": true,
+      "chat_volume_enabled": false,
+      "voice_volume_enabled": false,
+      "internal_note": null,
+      "entitlements": [],
+      "volume_options": []
+    },
+    {
+      "key": "foundation",
+      "version": 4,
+      "name": "Foundation",
+      "name_he": "בסיס",
+      "status": "ACTIVE",
+      "kind": "PUBLIC",
+      "billing_interval": "MONTHLY",
+      "base_price": "39.00",
+      "currency": "USD",
+      "included_ai_units": 750,
+      "sales_only": false,
+      "active": true,
+      "description_en": "Every conversation in one place, with AI that understands your business.",
+      "description_he": "כל השיחות במקום אחד, עם AI שמבין את העסק שלך.",
+      "sort_order": 10,
+      "recommended": false,
+      "support_level": "standard",
+      "data_retention_days": 180,
+      "auto_purchase_eligible": true,
+      "credit_packages_eligible": true,
+      "chat_volume_enabled": true,
+      "voice_volume_enabled": false,
+      "internal_note": "",
+      "entitlements": [
+        {
+          "entitlement_key": "ai",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "ai.action_approval",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": false
+          }
+        },
+        {
+          "entitlement_key": "ai.command_center",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "ai.copilot",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": false
+          }
+        },
+        {
+          "entitlement_key": "ai.customer_360",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "ai.department_router",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "ai.employee",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": false
+          }
+        },
+        {
+          "entitlement_key": "ai.knowledge_base",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "ai.sentiment_analysis",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "ai.usage_tracking",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "analytics",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "approvals",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "channels",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "communication.automations",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "communication.broadcasts",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "communication.crm_summaries",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "communication.omnichannel",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "communication.social_engagement",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "config:auto_purchase",
+          "value_type": "CONFIG",
+          "value": {
+            "thresholdPct": 10,
+            "pricePerCredit": "0.03",
+            "incrementCredits": 1000,
+            "warningThresholdPct": 80,
+            "defaultMonthlySpendLimit": "500.00"
+          }
+        },
+        {
+          "entitlement_key": "config:credit_split",
+          "value_type": "CONFIG",
+          "value": {
+            "chat": 2000,
+            "voice": 0
+          }
+        },
+        {
+          "entitlement_key": "conversation",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "crm",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "customer",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "integrations",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "limit:ai_employees",
+          "value_type": "COUNTER",
+          "value": {
+            "count": 0
+          }
+        },
+        {
+          "entitlement_key": "limit:channels",
+          "value_type": "COUNTER",
+          "value": {
+            "count": 5
+          }
+        },
+        {
+          "entitlement_key": "limit:data_retention_days",
+          "value_type": "COUNTER",
+          "value": {
+            "count": 180
+          }
+        },
+        {
+          "entitlement_key": "limit:departments",
+          "value_type": "COUNTER",
+          "value": {
+            "count": 3
+          }
+        },
+        {
+          "entitlement_key": "limit:included_ai_units",
+          "value_type": "COUNTER",
+          "value": {
+            "count": 750
+          }
+        },
+        {
+          "entitlement_key": "limit:knowledge_sources",
+          "value_type": "COUNTER",
+          "value": {
+            "count": 25
+          }
+        },
+        {
+          "entitlement_key": "limit:storage_gb",
+          "value_type": "COUNTER",
+          "value": {
+            "count": 25
+          }
+        },
+        {
+          "entitlement_key": "limit:users",
+          "value_type": "COUNTER",
+          "value": {
+            "count": 5
+          }
+        },
+        {
+          "entitlement_key": "limit:voice_channels",
+          "value_type": "COUNTER",
+          "value": {
+            "count": 0
+          }
+        },
+        {
+          "entitlement_key": "limit:workflows",
+          "value_type": "COUNTER",
+          "value": {
+            "count": 10
+          }
+        },
+        {
+          "entitlement_key": "manager.dashboard",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "manager.data_retention",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "manager.integrations",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "manager.representative_tracking",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "manager.support",
+          "value_type": "ENUM",
+          "value": {
+            "value": "standard"
+          }
+        },
+        {
+          "entitlement_key": "settings",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "voice.call_pilot",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": false
+          }
+        },
+        {
+          "entitlement_key": "voice.call_summary",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": false
+          }
+        },
+        {
+          "entitlement_key": "voice.inbound",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": false
+          }
+        },
+        {
+          "entitlement_key": "voice.outbound",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": false
+          }
+        }
+      ],
+      "volume_options": [
+        {
+          "key": "chat_10",
+          "channel": "CHAT",
+          "daily_volume": 10,
+          "business_days_per_month": 25,
+          "monthly_volume": 250,
+          "credits_per_unit": "8.0000",
+          "additional_credits": 0,
+          "additional_price": "0.00",
+          "currency": "USD",
+          "is_default": true,
+          "sort_order": 10,
+          "enabled": true,
+          "internal_note": null
+        },
+        {
+          "key": "chat_25",
+          "channel": "CHAT",
+          "daily_volume": 25,
+          "business_days_per_month": 25,
+          "monthly_volume": 625,
+          "credits_per_unit": "8.0000",
+          "additional_credits": 1125,
+          "additional_price": "30.00",
+          "currency": "USD",
+          "is_default": false,
+          "sort_order": 20,
+          "enabled": true,
+          "internal_note": null
+        },
+        {
+          "key": "chat_50",
+          "channel": "CHAT",
+          "daily_volume": 50,
+          "business_days_per_month": 25,
+          "monthly_volume": 1250,
+          "credits_per_unit": "8.0000",
+          "additional_credits": 3000,
+          "additional_price": "80.00",
+          "currency": "USD",
+          "is_default": false,
+          "sort_order": 30,
+          "enabled": true,
+          "internal_note": null
+        },
+        {
+          "key": "chat_100",
+          "channel": "CHAT",
+          "daily_volume": 100,
+          "business_days_per_month": 25,
+          "monthly_volume": 2500,
+          "credits_per_unit": "8.0000",
+          "additional_credits": 6750,
+          "additional_price": "150.00",
+          "currency": "USD",
+          "is_default": false,
+          "sort_order": 40,
+          "enabled": true,
+          "internal_note": null
+        },
+        {
+          "key": "chat_200",
+          "channel": "CHAT",
+          "daily_volume": 200,
+          "business_days_per_month": 25,
+          "monthly_volume": 5000,
+          "credits_per_unit": "8.0000",
+          "additional_credits": 14250,
+          "additional_price": "290.00",
+          "currency": "USD",
+          "is_default": false,
+          "sort_order": 50,
+          "enabled": true,
+          "internal_note": null
+        }
+      ]
+    },
+    {
+      "key": "ai_workforce",
+      "version": 3,
+      "name": "AI Workforce",
+      "name_he": "כוח עבודה AI",
+      "status": "ACTIVE",
+      "kind": "PUBLIC",
+      "billing_interval": "MONTHLY",
+      "base_price": "97.00",
+      "currency": "USD",
+      "included_ai_units": 2000,
+      "sales_only": false,
+      "active": true,
+      "description_en": "Add AI employees that handle conversations, and a copilot for your team.",
+      "description_he": "הוספת עובדי AI שמטפלים בשיחות, וקופיילוט לצוות שלך.",
+      "sort_order": 20,
+      "recommended": true,
+      "support_level": "priority",
+      "data_retention_days": 365,
+      "auto_purchase_eligible": true,
+      "credit_packages_eligible": true,
+      "chat_volume_enabled": true,
+      "voice_volume_enabled": false,
+      "internal_note": "",
+      "entitlements": [
+        {
+          "entitlement_key": "ai",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "ai.action_approval",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "ai.command_center",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "ai.copilot",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "ai.customer_360",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "ai.department_router",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "ai.employee",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "ai.knowledge_base",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "ai.sentiment_analysis",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "ai.usage_tracking",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "analytics",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "approvals",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "channels",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "communication.automations",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "communication.broadcasts",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "communication.crm_summaries",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "communication.omnichannel",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "communication.social_engagement",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "config:auto_purchase",
+          "value_type": "CONFIG",
+          "value": {
+            "thresholdPct": 10,
+            "pricePerCredit": "0.03",
+            "incrementCredits": 1000,
+            "warningThresholdPct": 80,
+            "defaultMonthlySpendLimit": "500.00"
+          }
+        },
+        {
+          "entitlement_key": "config:credit_split",
+          "value_type": "CONFIG",
+          "value": {
+            "chat": 2000,
+            "voice": 0
+          }
+        },
+        {
+          "entitlement_key": "conversation",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "crm",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "customer",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "integrations",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "limit:ai_employees",
+          "value_type": "COUNTER",
+          "value": {
+            "count": 5
+          }
+        },
+        {
+          "entitlement_key": "limit:channels",
+          "value_type": "COUNTER",
+          "value": {
+            "count": 8
+          }
+        },
+        {
+          "entitlement_key": "limit:data_retention_days",
+          "value_type": "COUNTER",
+          "value": {
+            "count": 365
+          }
+        },
+        {
+          "entitlement_key": "limit:departments",
+          "value_type": "COUNTER",
+          "value": {
+            "count": 8
+          }
+        },
+        {
+          "entitlement_key": "limit:included_ai_units",
+          "value_type": "COUNTER",
+          "value": {
+            "count": 2000
+          }
+        },
+        {
+          "entitlement_key": "limit:knowledge_sources",
+          "value_type": "COUNTER",
+          "value": {
+            "count": 50
+          }
+        },
+        {
+          "entitlement_key": "limit:storage_gb",
+          "value_type": "COUNTER",
+          "value": {
+            "count": 100
+          }
+        },
+        {
+          "entitlement_key": "limit:users",
+          "value_type": "COUNTER",
+          "value": {
+            "count": 15
+          }
+        },
+        {
+          "entitlement_key": "limit:voice_channels",
+          "value_type": "COUNTER",
+          "value": {
+            "count": 0
+          }
+        },
+        {
+          "entitlement_key": "limit:workflows",
+          "value_type": "COUNTER",
+          "value": {
+            "count": 30
+          }
+        },
+        {
+          "entitlement_key": "manager.dashboard",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "manager.data_retention",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "manager.integrations",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "manager.representative_tracking",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "manager.support",
+          "value_type": "ENUM",
+          "value": {
+            "value": "priority"
+          }
+        },
+        {
+          "entitlement_key": "settings",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "voice.call_pilot",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": false
+          }
+        },
+        {
+          "entitlement_key": "voice.call_summary",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": false
+          }
+        },
+        {
+          "entitlement_key": "voice.inbound",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": false
+          }
+        },
+        {
+          "entitlement_key": "voice.outbound",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": false
+          }
+        }
+      ],
+      "volume_options": [
+        {
+          "key": "chat_10",
+          "channel": "CHAT",
+          "daily_volume": 10,
+          "business_days_per_month": 25,
+          "monthly_volume": 250,
+          "credits_per_unit": "8.0000",
+          "additional_credits": 0,
+          "additional_price": "0.00",
+          "currency": "USD",
+          "is_default": true,
+          "sort_order": 10,
+          "enabled": true,
+          "internal_note": null
+        },
+        {
+          "key": "chat_25",
+          "channel": "CHAT",
+          "daily_volume": 25,
+          "business_days_per_month": 25,
+          "monthly_volume": 625,
+          "credits_per_unit": "8.0000",
+          "additional_credits": 3000,
+          "additional_price": "93.00",
+          "currency": "USD",
+          "is_default": false,
+          "sort_order": 20,
+          "enabled": true,
+          "internal_note": null
+        },
+        {
+          "key": "chat_50",
+          "channel": "CHAT",
+          "daily_volume": 50,
+          "business_days_per_month": 25,
+          "monthly_volume": 1250,
+          "credits_per_unit": "8.0000",
+          "additional_credits": 8000,
+          "additional_price": "213.00",
+          "currency": "USD",
+          "is_default": false,
+          "sort_order": 30,
+          "enabled": true,
+          "internal_note": null
+        },
+        {
+          "key": "chat_100",
+          "channel": "CHAT",
+          "daily_volume": 100,
+          "business_days_per_month": 25,
+          "monthly_volume": 2500,
+          "credits_per_unit": "8.0000",
+          "additional_credits": 18000,
+          "additional_price": "418.00",
+          "currency": "USD",
+          "is_default": false,
+          "sort_order": 40,
+          "enabled": true,
+          "internal_note": null
+        },
+        {
+          "key": "chat_200",
+          "channel": "CHAT",
+          "daily_volume": 200,
+          "business_days_per_month": 25,
+          "monthly_volume": 5000,
+          "credits_per_unit": "8.0000",
+          "additional_credits": 38000,
+          "additional_price": "788.00",
+          "currency": "USD",
+          "is_default": false,
+          "sort_order": 50,
+          "enabled": true,
+          "internal_note": null
+        }
+      ]
+    },
+    {
+      "key": "ai_voice",
+      "version": 1,
+      "name": "AI Voice",
+      "name_he": "קול AI",
+      "status": "ACTIVE",
+      "kind": "PUBLIC",
+      "billing_interval": "MONTHLY",
+      "base_price": "1499.00",
+      "currency": "USD",
+      "included_ai_units": 7000,
+      "sales_only": false,
+      "active": true,
+      "description_en": "Everything in AI Workforce, on the phone as well as in chat.",
+      "description_he": "כל היכולות של כוח עבודה AI, גם בטלפון וגם בצ'אט.",
+      "sort_order": 30,
+      "recommended": false,
+      "support_level": "dedicated",
+      "data_retention_days": 730,
+      "auto_purchase_eligible": true,
+      "credit_packages_eligible": true,
+      "chat_volume_enabled": true,
+      "voice_volume_enabled": true,
+      "internal_note": "Provisional seed pricing. Do not enable live checkout on these values.",
+      "entitlements": [
+        {
+          "entitlement_key": "ai",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "ai.action_approval",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "ai.command_center",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "ai.copilot",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "ai.customer_360",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "ai.department_router",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "ai.employee",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "ai.knowledge_base",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "ai.sentiment_analysis",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "ai.usage_tracking",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "analytics",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "approvals",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "channels",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "communication.automations",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "communication.broadcasts",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "communication.crm_summaries",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "communication.omnichannel",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "communication.social_engagement",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "config:auto_purchase",
+          "value_type": "CONFIG",
+          "value": {
+            "thresholdPct": 10,
+            "pricePerCredit": "0.03",
+            "incrementCredits": 1000,
+            "warningThresholdPct": 80,
+            "defaultMonthlySpendLimit": "500.00"
+          }
+        },
+        {
+          "entitlement_key": "config:credit_split",
+          "value_type": "CONFIG",
+          "value": {
+            "chat": 2000,
+            "voice": 5000
+          }
+        },
+        {
+          "entitlement_key": "conversation",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "crm",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "customer",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "integrations",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "limit:ai_employees",
+          "value_type": "COUNTER",
+          "value": {
+            "count": 15
+          }
+        },
+        {
+          "entitlement_key": "limit:channels",
+          "value_type": "COUNTER",
+          "value": {
+            "count": 20
+          }
+        },
+        {
+          "entitlement_key": "limit:data_retention_days",
+          "value_type": "COUNTER",
+          "value": {
+            "count": 730
+          }
+        },
+        {
+          "entitlement_key": "limit:departments",
+          "value_type": "COUNTER",
+          "value": {
+            "count": 20
+          }
+        },
+        {
+          "entitlement_key": "limit:included_ai_units",
+          "value_type": "COUNTER",
+          "value": {
+            "count": 7000
+          }
+        },
+        {
+          "entitlement_key": "limit:knowledge_sources",
+          "value_type": "COUNTER",
+          "value": {
+            "count": 200
+          }
+        },
+        {
+          "entitlement_key": "limit:storage_gb",
+          "value_type": "COUNTER",
+          "value": {
+            "count": 500
+          }
+        },
+        {
+          "entitlement_key": "limit:users",
+          "value_type": "COUNTER",
+          "value": {
+            "count": 40
+          }
+        },
+        {
+          "entitlement_key": "limit:voice_channels",
+          "value_type": "COUNTER",
+          "value": {
+            "count": 5
+          }
+        },
+        {
+          "entitlement_key": "limit:workflows",
+          "value_type": "COUNTER",
+          "value": {
+            "count": 100
+          }
+        },
+        {
+          "entitlement_key": "manager.dashboard",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "manager.data_retention",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "manager.integrations",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "manager.representative_tracking",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "manager.support",
+          "value_type": "ENUM",
+          "value": {
+            "value": "dedicated"
+          }
+        },
+        {
+          "entitlement_key": "settings",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "voice.call_pilot",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "voice.call_summary",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "voice.inbound",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        },
+        {
+          "entitlement_key": "voice.outbound",
+          "value_type": "BOOLEAN",
+          "value": {
+            "bool": true
+          }
+        }
+      ],
+      "volume_options": [
+        {
+          "key": "chat_10",
+          "channel": "CHAT",
+          "daily_volume": 10,
+          "business_days_per_month": 25,
+          "monthly_volume": 250,
+          "credits_per_unit": "8.0000",
+          "additional_credits": 0,
+          "additional_price": "0.00",
+          "currency": "USD",
+          "is_default": true,
+          "sort_order": 10,
+          "enabled": true,
+          "internal_note": "Provisional seed pricing."
+        },
+        {
+          "key": "voice_10",
+          "channel": "VOICE",
+          "daily_volume": 10,
+          "business_days_per_month": 25,
+          "monthly_volume": 250,
+          "credits_per_unit": "20.0000",
+          "additional_credits": 0,
+          "additional_price": "0.00",
+          "currency": "USD",
+          "is_default": true,
+          "sort_order": 10,
+          "enabled": true,
+          "internal_note": "Provisional seed pricing."
+        },
+        {
+          "key": "chat_25",
+          "channel": "CHAT",
+          "daily_volume": 25,
+          "business_days_per_month": 25,
+          "monthly_volume": 625,
+          "credits_per_unit": "8.0000",
+          "additional_credits": 3000,
+          "additional_price": "79.00",
+          "currency": "USD",
+          "is_default": false,
+          "sort_order": 20,
+          "enabled": true,
+          "internal_note": "Provisional seed pricing."
+        },
+        {
+          "key": "voice_25",
+          "channel": "VOICE",
+          "daily_volume": 25,
+          "business_days_per_month": 25,
+          "monthly_volume": 625,
+          "credits_per_unit": "20.0000",
+          "additional_credits": 7500,
+          "additional_price": "249.00",
+          "currency": "USD",
+          "is_default": false,
+          "sort_order": 20,
+          "enabled": true,
+          "internal_note": "Provisional seed pricing."
+        },
+        {
+          "key": "chat_50",
+          "channel": "CHAT",
+          "daily_volume": 50,
+          "business_days_per_month": 25,
+          "monthly_volume": 1250,
+          "credits_per_unit": "8.0000",
+          "additional_credits": 8000,
+          "additional_price": "179.00",
+          "currency": "USD",
+          "is_default": false,
+          "sort_order": 30,
+          "enabled": true,
+          "internal_note": "Provisional seed pricing."
+        },
+        {
+          "key": "voice_50",
+          "channel": "VOICE",
+          "daily_volume": 50,
+          "business_days_per_month": 25,
+          "monthly_volume": 1250,
+          "credits_per_unit": "20.0000",
+          "additional_credits": 20000,
+          "additional_price": "599.00",
+          "currency": "USD",
+          "is_default": false,
+          "sort_order": 30,
+          "enabled": true,
+          "internal_note": "Provisional seed pricing."
+        },
+        {
+          "key": "chat_100",
+          "channel": "CHAT",
+          "daily_volume": 100,
+          "business_days_per_month": 25,
+          "monthly_volume": 2500,
+          "credits_per_unit": "8.0000",
+          "additional_credits": 18000,
+          "additional_price": "349.00",
+          "currency": "USD",
+          "is_default": false,
+          "sort_order": 40,
+          "enabled": true,
+          "internal_note": "Provisional seed pricing."
+        },
+        {
+          "key": "voice_100",
+          "channel": "VOICE",
+          "daily_volume": 100,
+          "business_days_per_month": 25,
+          "monthly_volume": 2500,
+          "credits_per_unit": "20.0000",
+          "additional_credits": 45000,
+          "additional_price": "1199.00",
+          "currency": "USD",
+          "is_default": false,
+          "sort_order": 40,
+          "enabled": true,
+          "internal_note": "Provisional seed pricing."
+        },
+        {
+          "key": "chat_200",
+          "channel": "CHAT",
+          "daily_volume": 200,
+          "business_days_per_month": 25,
+          "monthly_volume": 5000,
+          "credits_per_unit": "8.0000",
+          "additional_credits": 38000,
+          "additional_price": "649.00",
+          "currency": "USD",
+          "is_default": false,
+          "sort_order": 50,
+          "enabled": true,
+          "internal_note": "Provisional seed pricing."
+        },
+        {
+          "key": "voice_200",
+          "channel": "VOICE",
+          "daily_volume": 200,
+          "business_days_per_month": 25,
+          "monthly_volume": 5000,
+          "credits_per_unit": "20.0000",
+          "additional_credits": 95000,
+          "additional_price": "2299.00",
+          "currency": "USD",
+          "is_default": false,
+          "sort_order": 50,
+          "enabled": true,
+          "internal_note": "Provisional seed pricing."
+        }
+      ]
+    }
+  ],
+  "creditPackages": [
+    {
+      "key": "credits_1000",
+      "name": "1,000 credits",
+      "name_he": "1,000 קרדיטים",
+      "units": 1000,
+      "price": "25.00",
+      "currency": "USD",
+      "status": "ACTIVE",
+      "eligible_plan_keys": null,
+      "expiry_policy": "NEVER",
+      "expiry_days": null,
+      "customer_visible": true,
+      "max_purchase_quantity": null,
+      "discount_label": null,
+      "sort_order": 10,
+      "internal_note": "Provisional seed pricing.",
+      "providerPriceRef": null
+    },
+    {
+      "key": "credits_5000",
+      "name": "5,000 credits",
+      "name_he": "5,000 קרדיטים",
+      "units": 5000,
+      "price": "110.00",
+      "currency": "USD",
+      "status": "ACTIVE",
+      "eligible_plan_keys": null,
+      "expiry_policy": "NEVER",
+      "expiry_days": null,
+      "customer_visible": true,
+      "max_purchase_quantity": null,
+      "discount_label": "save 12%",
+      "sort_order": 20,
+      "internal_note": "Provisional seed pricing.",
+      "providerPriceRef": null
+    },
+    {
+      "key": "credits_20000",
+      "name": "20,000 credits",
+      "name_he": "20,000 קרדיטים",
+      "units": 20000,
+      "price": "399.00",
+      "currency": "USD",
+      "status": "ACTIVE",
+      "eligible_plan_keys": null,
+      "expiry_policy": "NEVER",
+      "expiry_days": null,
+      "customer_visible": true,
+      "max_purchase_quantity": null,
+      "discount_label": "save 20%",
+      "sort_order": 30,
+      "internal_note": "Provisional seed pricing.",
+      "providerPriceRef": null
+    },
+    {
+      "key": "credits_50000",
+      "name": "50,000 credits",
+      "name_he": "50,000 קרדיטים",
+      "units": 50000,
+      "price": "899.00",
+      "currency": "USD",
+      "status": "ACTIVE",
+      "eligible_plan_keys": null,
+      "expiry_policy": "NEVER",
+      "expiry_days": null,
+      "customer_visible": true,
+      "max_purchase_quantity": null,
+      "discount_label": "save 28%",
+      "sort_order": 40,
+      "internal_note": "Provisional seed pricing.",
+      "providerPriceRef": null
+    }
+  ],
+  "estimationConfigs": [
+    {
+      "scope": "GLOBAL",
+      "version": 1,
+      "chat_credits": "8.0000",
+      "voice_credits": "20.0000",
+      "business_days_per_month": 25,
+      "active": true,
+      "internal_note": "Initial commercial assumption. Provisional - not derived from platform usage."
+    }
+  ],
+  "checksum": "be853eb7f9ebba9855ca91c029de8e8771a446143a838a71a429234b7e909226"
+}
