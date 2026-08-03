@@ -145,6 +145,13 @@ if [ -z "${SERVICES:-}" ] || [[ ",$SERVICES," == *,gateway,* ]] || [[ ",$SERVICE
     echo "   NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}"
     echo "   NEXT_PUBLIC_OIDC_ISSUER=${NEXT_PUBLIC_OIDC_ISSUER}"
     echo "   NEXT_PUBLIC_OIDC_REDIRECT_URI=${NEXT_PUBLIC_OIDC_REDIRECT_URI}"
+    # Echoed because it is invisible otherwise: NEXT_PUBLIC_* are frozen into
+    # the bundle, so a wrong value here cannot be corrected by editing .env on
+    # the box. The pricing flag in particular has TWO gates - this one and the
+    # nginx /pricing route - and only this one requires a rebuild, which makes
+    # a silent mismatch easy to chase in the wrong place.
+    echo "   NEXT_PUBLIC_PRICING_ENABLED=${NEXT_PUBLIC_PRICING_ENABLED:-${PUBLIC_PRICING_ENABLED:-false}}"
+    echo "   NEXT_PUBLIC_VOICE_URL=${NEXT_PUBLIC_VOICE_URL:-<default>}"
     (
       cd frontend
       [ -d node_modules ] || npm install
@@ -157,6 +164,11 @@ if [ -z "${SERVICES:-}" ] || [[ ",$SERVICES," == *,gateway,* ]] || [[ ",$SERVICE
       NEXT_PUBLIC_OIDC_ISSUER="${NEXT_PUBLIC_OIDC_ISSUER:-}" \
       NEXT_PUBLIC_OIDC_CLIENT_ID="${NEXT_PUBLIC_OIDC_CLIENT_ID:-gotcha-app}" \
       NEXT_PUBLIC_OIDC_REDIRECT_URI="${NEXT_PUBLIC_OIDC_REDIRECT_URI:-}" \
+      NEXT_PUBLIC_VOICE_URL="${NEXT_PUBLIC_VOICE_URL:-}" \
+      NEXT_PUBLIC_PRICING_ENABLED="${NEXT_PUBLIC_PRICING_ENABLED:-${PUBLIC_PRICING_ENABLED:-false}}" \
+      NEXT_PUBLIC_SOCIAL_INSTAGRAM_URL="${NEXT_PUBLIC_SOCIAL_INSTAGRAM_URL:-${SOCIAL_INSTAGRAM_URL:-}}" \
+      NEXT_PUBLIC_SOCIAL_FACEBOOK_URL="${NEXT_PUBLIC_SOCIAL_FACEBOOK_URL:-${SOCIAL_FACEBOOK_URL:-}}" \
+      NEXT_PUBLIC_SOCIAL_WHATSAPP_URL="${NEXT_PUBLIC_SOCIAL_WHATSAPP_URL:-${SOCIAL_WHATSAPP_URL:-}}" \
         npm run build
     )
   fi
