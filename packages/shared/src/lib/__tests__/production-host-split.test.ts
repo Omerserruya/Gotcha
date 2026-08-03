@@ -168,4 +168,18 @@ describe("public API cross-origin access", () => {
         .toContain("proxy_hide_header Access-Control-Allow-Origin;");
     }
   });
+
+  /**
+   * The landing page embeds the chat widget, which builds its URLs from
+   * window.location.origin. On the marketing host that means same-origin
+   * /widget/... and /api/embedded-chat/... requests - which the catch-all
+   * redirect turned into cross-origin 301s the browser refused. The widget
+   * silently stopped loading on the marketing site.
+   */
+  it("serves the embedded widget on the marketing host rather than redirecting it", () => {
+    const mkt = find("gotcha.co.il")!;
+    expect(mkt.body, "a cross-origin 301 breaks the widget's own fetches")
+      .toMatch(/location\s+\/widget\//);
+    expect(mkt.body).toMatch(/location\s+\/api\/embedded-chat/);
+  });
 });
