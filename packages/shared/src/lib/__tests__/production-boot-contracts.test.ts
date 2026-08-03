@@ -160,3 +160,44 @@ describe("production nginx upstreams", () => {
     ).toEqual([]);
   });
 });
+
+/**
+ * OIDC_CLIENT_ID was set in the dev compose and declared NOWHERE in production,
+ * so putting it in a production env file reached the host and never reached the
+ * container. oidcConfig() throws without it:
+ *
+ *   if (!clientId) throw new Error("[oidc] OIDC_CLIENT_ID is required");
+ *
+ * Identical shape to the pricing-flag bug: a variable that exists in .env, is
+ * read by the code, and is simply never handed to the process.
+ */
+describe("OIDC server config", () => {
+  /** Services whose source builds the server-side OIDC config. */
+  function servicesReadingClientId(): string[] {
+    const dir = path.join(ROOT, "services");
+    const hit: string[] = [];
+    const walk = (d: string): boolean => {
+      for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+        const f = path.join(d, e.name);
+        if (e.isDirectory()) { if (walk(f)) return true; continue; }
+        if (!/\.ts$/.test(e.name) || f.includes("__tests__")) continue;
+        if (/OIDC_CLIENT_ID/.test(fs.readFileSync(f, "utf8"))) return true;
+      }
+      return false;
+    };
+    for (const s of fs.readdirSync(dir)) {
+      const src = path.join(dir, s, "src");
+      if (fs.existsSync(src) && walk(src)) hit.push(s);
+    }
+    return hit;
+  }
+
+  it("every service that reads OIDC_CLIENT_ID is given it", () => {
+    const env = envByService();
+    const missing = servicesReadingClientId()
+      .filter((s) => env.has(s))
+      .filter((s) => !env.get(s)!.has("OIDC_CLIENT_ID"))
+      .sort();
+    expect(missing, "oidcConfig() throws at request time without it").toEqual([]);
+  });
+});

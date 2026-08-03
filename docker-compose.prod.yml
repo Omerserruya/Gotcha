@@ -275,6 +275,13 @@ services:
     <<: *default-restart
     logging: *default-logging
     environment:
+      # oidcConfig() THROWS without this, taking down the BFF session flow's
+      # token exchange. It was set in dev and declared NOWHERE in production, so
+      # `OIDC_CLIENT_ID=...` in a production env file reached the host and never
+      # reached the container - the same failure mode as the pricing flag.
+      # Must match the Authentik provider's client_id and the NEXT_PUBLIC_ twin
+      # baked into the frontend bundle.
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-gotcha-app}
       # startService() calls assertEnforcementConfigured(), which THROWS when this
       # is unset - an unset value would mean "off" in production, and every
       # organization that stopped paying would keep being served. Absent here,
