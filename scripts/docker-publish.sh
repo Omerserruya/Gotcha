@@ -127,9 +127,20 @@ if [ -z "${SERVICES:-}" ] || [[ ",$SERVICES," == *,gateway,* ]] || [[ ",$SERVICE
     if [ -n "$FRONTEND_ENV" ]; then
       if [ -f "$FRONTEND_ENV" ]; then
         echo "   loading NEXT_PUBLIC_* from: $FRONTEND_ENV"
+        # The non-prefixed twins are loaded too, and that is not a convenience.
+        # Several NEXT_PUBLIC_* values fall back to one (PRICING_ENABLED to
+        # PUBLIC_PRICING_ENABLED, the social URLs to SOCIAL_*_URL) exactly as
+        # docker-compose.yml wires them, so one value in .env drives both
+        # environments. Loading only the prefixed lines made every one of those
+        # fallbacks unreachable: the twin was never in the environment, so the
+        # default fired and the bundle was baked with "false" while .env.prod
+        # plainly said true. Silent, and invisible until someone asks why the
+        # pricing page is missing.
         while IFS= read -r _line || [ -n "$_line" ]; do
           case "$_line" in
             NEXT_PUBLIC_*=*) export "${_line%%=*}=${_line#*=}" ;;
+            PUBLIC_PRICING_ENABLED=*|SOCIAL_INSTAGRAM_URL=*|SOCIAL_FACEBOOK_URL=*|SOCIAL_WHATSAPP_URL=*)
+              export "${_line%%=*}=${_line#*=}" ;;
           esac
         done < "$FRONTEND_ENV"
       else
