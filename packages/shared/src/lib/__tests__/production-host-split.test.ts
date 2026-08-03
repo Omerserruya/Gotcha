@@ -153,4 +153,19 @@ describe("public API cross-origin access", () => {
     expect(loc).toMatch(/return\s+204/);
     expect(loc).toContain("Access-Control-Allow-Headers");
   });
+
+  /**
+   * The services emit their own Access-Control-Allow-Origin from APP_ORIGIN.
+   * Adding ours on top produced TWO headers, and a browser rejects a response
+   * carrying more than one - a stricter failure than sending none, and one that
+   * looks identical to the original bug from the console.
+   */
+  it("sends exactly one Access-Control-Allow-Origin by hiding the upstream's", () => {
+    for (const route of ["/api/public/pricing", "/api/waitlist"]) {
+      const loc = new RegExp(`location\\s+${route.replace(/\//g, "\\/")}\\s*\\{[\\s\\S]*?\\n\\s{8}\\}`);
+      const body = loc.exec(CONF)?.[0] ?? "";
+      expect(body, `${route} must hide the upstream CORS header before adding its own`)
+        .toContain("proxy_hide_header Access-Control-Allow-Origin;");
+    }
+  });
 });
