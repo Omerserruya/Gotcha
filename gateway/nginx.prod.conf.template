@@ -1711,6 +1711,26 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
+        # The chat widget the landing page embeds. It builds its URLs from
+        # window.location.origin, so on this host it requests
+        # gotcha.co.il/widget/... and gotcha.co.il/api/embedded-chat/... - and
+        # the catch-all redirect below turned both into a CROSS-ORIGIN 301 that
+        # the browser then refused. Serving them here keeps the widget
+        # same-origin, so no CORS is involved at all.
+        location /widget/ {
+            try_files $uri =404;
+        }
+
+        location /api/embedded-chat {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://ai_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
         # The public surface. Kept as an explicit allowlist rather than a list of
         # app routes to exclude: a new application route added later is then
         # private by default here, instead of silently appearing on the
