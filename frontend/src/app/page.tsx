@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Script from "next/script";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import LandingPage from "@/components/landing/LandingPage";
 import { cachedJourneyIncomplete, refreshJourneyIncomplete } from "@/lib/journey-cache";
+import { rendersMarketing } from "@/lib/marketing-origin";
 
 // Server-rendered, always-present description of the app's purpose. It lives in
 // the initial HTML on every render branch so search crawlers and Google's OAuth
@@ -45,9 +46,26 @@ export default function Home() {
   const { user, token, isLoading } = useAuth();
   const { t } = useI18n();
   const router = useRouter();
+  // Suppresses the landing page for the frame between deciding to redirect and
+  // the router actually leaving. Without it the application host flashes
+  // marketing at a logged-out visitor on its way to /login.
+  const [leavingForLogin, setLeavingForLogin] = useState(false);
 
   useEffect(() => {
-    if (isLoading || !user) return;
+    if (isLoading) return;
+
+    // On the APPLICATION host the root is not a marketing page. Someone who
+    // opens app.gotcha.co.il while logged out came here to sign in, so send
+    // them to the login screen; the landing page belongs to the marketing
+    // origin and is served there. With no marketing origin configured (dev)
+    // rendersMarketing() is true and this does nothing.
+    if (!user) {
+      if (typeof window !== "undefined" && !rendersMarketing(window.location.origin)) {
+        setLeavingForLogin(true);
+        router.replace("/login");
+      }
+      return;
+    }
     // Admins with an unfinished first-steps journey land on Getting Started;
     // everyone else lands on the inbox. The cached flag answers instantly
     // (no fetch-before-redirect lag); only a cold cache waits for the server.
@@ -78,7 +96,7 @@ export default function Home() {
     );
   }
 
-  if (user) {
+  if (user || leavingForLogin) {
     return (
       <>
         <PurposeStatement />

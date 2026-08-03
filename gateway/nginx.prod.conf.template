@@ -83,6 +83,29 @@ http {
         default "${PUBLIC_PRICING_ENABLED}";
     }
 
+    # Which origins may read the UNAUTHENTICATED public API.
+    #
+    # One static bundle is served under two hostnames, and NEXT_PUBLIC_API_URL
+    # is frozen into it at build time as https://app.gotcha.co.il. So the
+    # marketing host calling the public API is ALWAYS cross-origin, and the
+    # browser blocked it: the pricing page on gotcha.co.il rendered "We could
+    # not load pricing" while the identical page on app.gotcha.co.il worked.
+    #
+    # Echoing the request origin rather than sending "*" keeps the allowlist
+    # explicit and exact-matched, consistent with resolveAllowedOrigins() in
+    # packages/shared. It is deliberately NOT the credentialed allowlist
+    # (APP_ORIGIN / AUTH_ALLOWED_ORIGINS): these two routes carry no cookie and
+    # no token, so widening them cannot widen the authenticated surface.
+    #
+    # An unmatched origin yields "", and nginx omits an add_header whose value
+    # is empty - so unknown origins get no CORS header at all, which is the
+    # correct default rather than a permissive one.
+    map $http_origin $public_api_cors_origin {
+        default                                  "";
+        "~^https://(www\.)?gotcha\.co\.il$"      $http_origin;
+        "~^https://app\.gotcha\.co\.il$"         $http_origin;
+    }
+
     map $http_upgrade $connection_upgrade {
         default upgrade;
         ''      close;
@@ -101,11 +124,16 @@ http {
     # callback except Authentik's own endpoints, and every provider webhook
     # except Twilio's.
     #
-    # `_` is kept alongside the real name so this stays the default server:
-    # the marketing apex and any host the tunnel forwards without a dedicated
-    # vhost still land somewhere that serves the app rather than on nginx's
-    # "no such server" path. Voice and Authentik have their own blocks below
-    # and are matched by name before this one.
+    # `_` is kept alongside the real name so this stays the default server: any
+    # host the tunnel forwards without a dedicated vhost lands somewhere that
+    # serves the app rather than on nginx's "no such server" path. Voice,
+    # Authentik, Help AND the marketing apex have their own blocks below and are
+    # matched by name before this one.
+    #
+    # The apex used to fall through to this block, which meant gotcha.co.il and
+    # app.gotcha.co.il returned byte-identical responses: the marketing landing
+    # page was served from the application host, and every application route was
+    # reachable on the marketing domain. See the gotcha.co.il block below.
     server {
         listen 80 default_server;
         server_name app.gotcha.co.il _;
@@ -271,6 +299,31 @@ http {
         # ─── Waitlist (public, no auth) ───────────────────
         location /api/waitlist {
             limit_req zone=api burst=10 nodelay;
+
+            # The early-access form lives on the marketing host and posts JSON,
+            # which is NOT a simple content type, so the browser sends a
+            # preflight first. nginx answers it: the request never reaches the
+            # service, so the service can never answer it.
+            if ($request_method = OPTIONS) {
+                add_header Access-Control-Allow-Origin $public_api_cors_origin always;
+                add_header Access-Control-Allow-Methods "POST, OPTIONS" always;
+                add_header Access-Control-Allow-Headers "Content-Type" always;
+                add_header Access-Control-Max-Age 600 always;
+                add_header Vary "Origin" always;
+                add_header Content-Length 0;
+                return 204;
+            }
+
+            add_header Access-Control-Allow-Origin $public_api_cors_origin always;
+            add_header Vary "Origin" always;
+            # Repeated because this location now declares add_header (see /health).
+            add_header X-Content-Type-Options "nosniff" always;
+            add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+            add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+            add_header X-Frame-Options "SAMEORIGIN" always;
+            add_header Permissions-Policy "camera=(), geolocation=(), payment=()" always;
+            add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
+
             proxy_pass http://auth_service;
             proxy_set_header Host $host;
             proxy_set_header X-Internal-Key "";
@@ -462,6 +515,21 @@ http {
         # ─── Public pricing catalog (billing, no auth, cacheable) ──
         location /api/public/pricing {
             limit_req zone=api burst=20 nodelay;
+
+            # Readable from the marketing host. The request is a plain GET with
+            # an Accept header (CORS-safelisted), so there is no preflight to
+            # answer here - only the response header the browser checks.
+            add_header Access-Control-Allow-Origin $public_api_cors_origin always;
+            add_header Vary "Origin" always;
+            # Repeated because this location now declares add_header, which
+            # cancels inheritance of the server-level set (see /health).
+            add_header X-Content-Type-Options "nosniff" always;
+            add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+            add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+            add_header X-Frame-Options "SAMEORIGIN" always;
+            add_header Permissions-Policy "camera=(), geolocation=(), payment=()" always;
+            add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
+
             proxy_pass http://billing_service;
             proxy_set_header Host $host;
             proxy_set_header X-Internal-Key "";
@@ -1542,6 +1610,122 @@ http {
 
         location / {
             try_files $uri $uri/index.html $uri.html /index.html;
+        }
+    }
+
+    # ── Marketing: gotcha.co.il → public pages only ───────────
+    #
+    # Same container, same static export, different contract. There is only one
+    # Next.js bundle and it cannot be built twice, so the split is enforced here
+    # by path rather than by shipping a second site.
+    #
+    # This host serves the landing page, pricing, early access and the Trust
+    # Center. Every application route redirects to app.gotcha.co.il instead of
+    # rendering, which stops the app from being reachable under two hostnames
+    # and stops search engines indexing a duplicate of every page.
+    #
+    # 301 and not 302: the marketing host is permanently not where the app
+    # lives, and $request_uri preserves the path and query so a deep link keeps
+    # working across the move.
+    # www is not a second marketing host, it is a redirect to the canonical one.
+    # Serving both would fork the origin the bundle compares against: JS on
+    # www.gotcha.co.il would not match NEXT_PUBLIC_MARKETING_URL and would send
+    # a visitor to /login from what is visibly the marketing site.
+    server {
+        listen 80;
+        server_name www.gotcha.co.il;
+        return 301 https://gotcha.co.il$request_uri;
+    }
+
+    server {
+        listen 80;
+        server_name gotcha.co.il;
+
+        client_max_body_size 1m;
+        root /usr/share/nginx/html;
+
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header Permissions-Policy "camera=(), geolocation=(), payment=()" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
+
+        location /health {
+            return 200 '{"status":"ok","service":"gateway","vhost":"marketing"}';
+            add_header Content-Type application/json;
+            add_header X-Content-Type-Options "nosniff" always;
+            add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+            add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+            add_header X-Frame-Options "SAMEORIGIN" always;
+            add_header Permissions-Policy "camera=(), geolocation=(), payment=()" always;
+        }
+
+        # Build assets and images. Without these the marketing pages render
+        # nothing at all - the redirect below would swallow every chunk.
+        location ^~ /_next/ {
+            try_files $uri =404;
+        }
+        location ^~ /icons/ {
+            try_files $uri =404;
+        }
+        location ^~ /platforms/ {
+            try_files $uri =404;
+        }
+        location ^~ /get_gifs/ {
+            try_files $uri =404;
+        }
+        location ~* \.(png|jpg|jpeg|gif|svg|ico|webp|woff2?|txt|xml|webmanifest)$ {
+            try_files $uri =404;
+        }
+
+        # The public API the marketing pages actually call. Proxied here so the
+        # apex works even if the baked NEXT_PUBLIC_API_URL is ever made relative;
+        # today the bundle calls app.gotcha.co.il directly and the CORS map above
+        # is what makes that succeed.
+        location /api/public/pricing {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://billing_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location /api/waitlist {
+            limit_req zone=api burst=10 nodelay;
+            proxy_pass http://auth_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # The public surface. Kept as an explicit allowlist rather than a list of
+        # app routes to exclude: a new application route added later is then
+        # private by default here, instead of silently appearing on the
+        # marketing domain because nobody remembered to deny it.
+        location = / {
+            try_files /index.html =404;
+        }
+
+        location ~ ^/(early-access|legal|privacy-policy|terms|en|he)(/|$) {
+            try_files $uri $uri/index.html $uri.html /index.html;
+        }
+
+        # Pricing honours the same kill switch as the app host, so a disabled
+        # flag cannot be worked around by asking the other hostname.
+        location ~ ^/pricing(/|$) {
+            absolute_redirect off;
+            if ($public_pricing_enabled != "true") { return 302 /early-access; }
+            try_files $uri $uri/index.html $uri.html /index.html;
+        }
+
+        # Everything else is the application: send it to the application host.
+        location / {
+            return 301 https://app.gotcha.co.il$request_uri;
         }
     }
 
