@@ -87,17 +87,57 @@ else
   fi
 fi
 
+# ── Files the compose file BIND-MOUNTS from the host ─────────────────
+# The box runs images and needs no source tree, with these six exceptions:
+# docker-compose.prod.yml mounts them into the Authentik containers for
+# branding and the password-reset email template.
+#
+# Forgetting them does not produce a missing-file error. Docker AUTO-CREATES a
+# missing bind source as an empty DIRECTORY, then refuses to mount a directory
+# onto a file:
+#
+#   error mounting "/opt/chatcenter/scripts/authentik/custom.css" to rootfs at
+#   "/web/dist/custom.css": not a directory
+#
+# which is an obscure way of being told "you forgot to copy a file", and it
+# only surfaces at `up -d`, after the images have been pulled. They also have
+# to arrive with their paths intact, so this is a tar stream rather than scp.
+MOUNTED_ASSETS=(
+  scripts/authentik/custom.css
+  scripts/authentik/templates/gotcha_password_reset.html
+  frontend/public/logo_icon.png
+  frontend/public/favicon.ico
+  frontend/public/full_icon_white.png
+  frontend/public/authentik-enhance.js
+)
+
 # Verify sources exist before touching the network.
 for f in "${SRC[@]}"; do
   [ -f "$f" ] || { echo "ERROR: missing local file: $f" >&2; exit 1; }
 done
+for f in "${MOUNTED_ASSETS[@]}"; do
+  [ -f "$f" ] || { echo "ERROR: missing bind-mount asset: $f" >&2; exit 1; }
+done
 
 echo "→ target:  ubuntu@${INSTANCE_ID}:${REMOTE_DIR}  (region=${REGION} profile=${PROFILE})"
 echo "→ files:   ${SRC[*]}"
+echo "→ assets:  ${#MOUNTED_ASSETS[@]} bind-mounted files (paths preserved)"
 
 # ── Copy ──────────────────────────────────────────────────────────────
 # Relies on the ~/.ssh/config `host i-*` ProxyCommand to tunnel through SSM.
 scp -i "$SSH_KEY" "${SRC[@]}" "ubuntu@${INSTANCE_ID}:${REMOTE_DIR}/"
+
+# Clear any empty directory Docker already auto-created at an asset path on a
+# previous failed `up`, or tar cannot write the file over it. Then stream the
+# assets across with their directory structure.
+REMOTE_CLEANUP=""
+for f in "${MOUNTED_ASSETS[@]}"; do
+  REMOTE_CLEANUP+="[ -d '${REMOTE_DIR}/${f}' ] && rm -rf '${REMOTE_DIR}/${f}'; "
+done
+ssh -i "$SSH_KEY" "ubuntu@${INSTANCE_ID}" "${REMOTE_CLEANUP}true"
+tar czf - "${MOUNTED_ASSETS[@]}" \
+  | ssh -i "$SSH_KEY" "ubuntu@${INSTANCE_ID}" "tar xzf - -C '${REMOTE_DIR}'"
+echo "✓ pushed ${#MOUNTED_ASSETS[@]} bind-mount asset(s)."
 echo "✓ pushed ${#SRC[@]} file(s)."
 
 if [ "$OPEN_SHELL" -eq 1 ]; then

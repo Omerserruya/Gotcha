@@ -357,10 +357,32 @@ That writes `~/.docker/config.json` - persistent across reboots.
 
 ## Step 6 - Copy deploy files + write `.env`
 
-The box runs **images** - it does **not** need the source tree. It needs only two host files:
+The box runs **images** - it does **not** need the source tree. It needs two config files plus a
+small set of assets:
+
 `docker-compose.prod.yml` (what `docker compose` reads) and `.env` (Compose auto-loads it from the
-working dir for `${VAR}` substitution). All volumes are named Docker volumes and the nginx/gateway
-config is baked into the image, so nothing else has to be on the host.
+working dir for `${VAR}` substitution). Data volumes are named Docker volumes and the nginx/gateway
+config is baked into the image.
+
+The exception is six files the compose file **bind-mounts** into the Authentik containers for
+branding and the password-reset email:
+
+```
+scripts/authentik/custom.css
+scripts/authentik/templates/gotcha_password_reset.html
+frontend/public/logo_icon.png
+frontend/public/favicon.ico
+frontend/public/full_icon_white.png
+frontend/public/authentik-enhance.js
+```
+
+They must keep their relative paths under `/opt/chatcenter`. `push-deploy.sh` sends them as a tar
+stream and does this for you.
+
+> ⚠️ Forgetting these does not give you a missing-file error. Docker auto-creates a missing bind
+> source as an empty **directory**, then refuses to mount a directory onto a file:
+> `error mounting ".../custom.css" to rootfs at "/web/dist/custom.css": not a directory`.
+> If you hit that, delete the empty directories it created and re-run `push-deploy.sh`.
 
 Prepare the app dir on the box (once) and create your local `.env`:
 ```bash
