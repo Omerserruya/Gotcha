@@ -27,6 +27,7 @@
  * redelivery is a no-op, and any money event can be reconstructed from this log
  * plus the rows it touched.
  */
+import { reportOperationalFailure, recordExpectedOutcome, ERROR_CODES } from "@chatcenter/shared";
 import { Router } from "express";
 import { createHash } from "crypto";
 import { prisma } from "@chatcenter/shared";
@@ -87,8 +88,23 @@ router.post("/billing/webhooks/icount", async (req, res) => {
       },
     });
   } catch (err: any) {
-    if (err?.code === "P2002") return res.json({ ok: true, deduped: true });
+    if (err?.code === "P2002") {
+      // The provider replayed a delivery and the unique constraint caught it.
+      // Working as designed, so a breadcrumb rather than an issue.
+      recordExpectedOutcome("billing_webhook_deduped", { provider: "icount", eventType });
+      return res.json({ ok: true, deduped: true });
+    }
     console.error("[billing/webhook] persist error:", err?.message ?? err);
+    // The signature verified, so this is a REAL provider event about real
+    // money, and we just failed to record it. We still ack (a provider
+    // retrying forever helps nobody), which means without this report the
+    // event is simply gone.
+    reportOperationalFailure({
+      errorCode: ERROR_CODES.payment_callback_failed,
+      domain: "billing", service: "billing", provider: "icount",
+      cause: err,
+      context: { stage: "persist_event", eventType },
+    });
     // Still ack: a provider retrying forever helps nobody, and reconciliation
     // against cc/transactions is the real backstop for anything missed.
     return res.json({ ok: true });

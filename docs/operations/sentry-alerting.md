@@ -144,8 +144,7 @@ than a missing one.
 
 ## 6. `#gotcha-security`
 
-> **Live today:** S5 (`webhook_signature_invalid`). S1-S4 filter on codes with no
-> emitter yet - see §9.
+> **Status:** S1, S2, S3, S5 **fully functional**. S4 (`hitl_payload_mismatch`) **blocked by P0 route restriction**.
 
 Security rules use **Issue Alerts** on **first occurrence**, not thresholds. One
 cross-tenant exposure is an incident; waiting for a second is not a policy.
@@ -173,8 +172,7 @@ repeat-page; the issue is already open.
 
 ## 7. `#gotcha-ai-ops`
 
-> **Live today:** A6 (AI provider/timeout/rate-limit). A1-A5 are blocked by the
-> protected P0 execution routes or have no emitter yet - see §9.
+> **Status:** A6 **fully functional**. A1-A5 **blocked by P0 route restriction** (`hitl_execution_failed`, `action_*`).
 
 Execution failures. These are expected at a low rate and meaningful as a rate
 change, so most are **Metric Alerts** with automatic recovery.
@@ -200,8 +198,7 @@ the one failure mode in this list that silently corrupts state.
 
 ## 8. `#gotcha-prod-alerts`
 
-> **Live today:** P1, P2 (partially - OAuth callback only), P5, P6, P7. P3 and P4
-> filter on codes with no emitter yet - see §9.
+> **Status:** P1, P2, P3, P4, P5, P6, P7 **fully functional**. P8 depends on `SENTRY_RELEASE` being set per deploy.
 
 General production health. **Environment** `production` · **Action** Slack →
 `#gotcha-prod-alerts`.
@@ -235,78 +232,93 @@ an alert; it is a dashboard entry that stays green through the incident it was
 written for. This table is **derived from a test that scans the source**
 (`sentry-emitter-coverage.test.ts`), not maintained by hand, so it cannot drift.
 
-**14 of 34 codes emit today. 6 are blocked. 14 are documented only.**
+**28 of 34 codes emit. 6 are blocked. 0 are documented only.**
 
-### EMITTED IN PRODUCTION CODE
+### EMITTED IN PRODUCTION CODE (28)
 
-| Code | Where |
-|---|---|
-| `ai_provider_failure` | `ai.service.ts` — after retries are exhausted |
-| `ai_timeout` | same seam, classified by status/code |
-| `ai_rate_limit` | same seam, HTTP 429 |
-| `hitl_request_creation_failed` | `approval-requests.ts` — create fails |
-| `hitl_callback_invalid` | `approvals.ts` — unknown approval id |
-| `hitl_expired` | `approvals.ts` — decided after expiry |
-| `hitl_already_consumed` | `approvals.ts` — non-PENDING, and the CAS loser |
-| `integration_oauth_failed` | `crm-oauth.ts` — callback failure |
-| `webhook_signature_invalid` | `webhook.ts`, `twilio-handler.ts` |
-| `webhook_verification_failed` | `webhook.ts` — Meta handshake |
-| `voice_provisioning_failed` | `voice-channels.ts` — TwiML App create |
-| `voice_number_activation_failed` | `voice-channels.ts` — number webhooks |
-| `voice_twiml_failed` | `voice-incoming.ts` |
-| `voice_media_stream_failed` | `twilio-handler.ts` — upgrade rejected |
+| Domain | Code | Where |
+|---|---|---|
+| ai | `ai_provider_failure` | `ai.service.ts` — after retries exhausted |
+| ai | `ai_timeout` | same seam, classified by status/code |
+| ai | `ai_rate_limit` | same seam, HTTP 429 |
+| ai | `ai_invalid_output` | `output-validator.service.ts` — categories only |
+| hitl | `hitl_request_creation_failed` | `approval-requests.ts` |
+| hitl | `hitl_notification_failed` | `event-bridge.ts` — approver notify |
+| hitl | `hitl_callback_invalid` | `approvals.ts` — unknown id |
+| hitl | `hitl_expired` | `approvals.ts` |
+| hitl | `hitl_already_consumed` | `approvals.ts` — non-PENDING + CAS loser |
+| integration | `integration_oauth_failed` | `crm-oauth.ts` |
+| integration | `integration_token_refresh_failed` | `zoho.service.ts` |
+| integration | `integration_credentials_invalid` | `integrations.ts` — live test |
+| integration | `integration_provisioning_failed` | `integration-provisioning.service.ts` |
+| integration | `integration_disconnect_cleanup_failed` | `integrations.ts` |
+| webhook | `webhook_signature_invalid` | `webhook.ts`, `twilio-handler.ts` |
+| webhook | `webhook_verification_failed` | `webhook.ts` — Meta handshake |
+| webhook | `webhook_processing_failed` | `webhook.ts` — post-verification |
+| billing | `payment_callback_failed` | `webhooks.ts` — event not recorded |
+| billing | `subscription_update_failed` | `checkout-activation.service.ts` |
+| billing | `entitlement_creation_failed` | `checkout-activation.service.ts` — post-commit |
+| voice | `voice_provisioning_failed` | `voice-channels.ts` |
+| voice | `voice_number_activation_failed` | `voice-channels.ts` |
+| voice | `voice_twiml_failed` | `voice-incoming.ts` |
+| voice | `voice_media_stream_failed` | `twilio-handler.ts` |
+| voice | `voice_transcription_failed` | `app.ts` — STT build |
+| security | `authorization_invariant_broken` | `tenant-status.ts` |
+| security | `cross_tenant_exposure` | `approval-requests.ts` — row tenant mismatch |
+| security | `irreversible_duplicate_execution` | `approval-requests.ts` — CAS escape / retry |
 
-### BLOCKED BY EXPLICIT P0 ROUTE RESTRICTION
+**Billing is the full customer-outcome chain:** callback recorded →
+activation transaction (subscription, tenant status) → post-commit credit and
+entitlement grant. The last is the sharpest: the subscription exists, the plan
+reads ACTIVE, and the customer has nothing.
 
-Emittable only from the two deferred generic execution routes
-(`POST /api/ai-assist/:conversationId/tools/execute` and `.../adapter-tools/execute`),
-which must not be modified. The helper they need already exists and is tested;
-only the call site is missing.
+**Security codes fire on invariant violations only**, never on ordinary denials.
+`authorization_invariant_broken` fires when an authenticated caller reaches a
+tenant-scoped route with no tenant resolved — the precondition for Prisma
+dropping its tenant filter. `cross_tenant_exposure` fires when a row pinned to
+one tenant returns under another. `irreversible_duplicate_execution` fires when
+the compare-and-set matches multiple rows, or an action is retried after a prior
+attempt — never when a duplicate is correctly suppressed.
 
-| Code | Instrumentation point |
-|---|---|
-| `action_execution_failed` | tool dispatch catch in the execute handler |
-| `action_provider_failed` | connector result rejected by the provider |
-| `action_persistence_failed` | outcome write after a successful execution |
-| `action_notification_failed` | customer completion notification |
-| `hitl_execution_failed` | approved-action dispatch inside the execute route |
-| `hitl_payload_mismatch` | approved-params vs executed-params comparison |
+### BLOCKED BY P0 ROUTE RESTRICTION (6)
 
-### DOCUMENTED ONLY — no emitter yet, not blocked
+Emittable only from `POST /api/ai-assist/:conversationId/tools/execute` and
+`.../adapter-tools/execute`, which must not be modified. The helper exists and is
+tested; only the call sites are missing.
 
-`ai_invalid_output`, `hitl_notification_failed`, `integration_token_refresh_failed`,
-`integration_credentials_invalid`, `integration_provisioning_failed`,
-`integration_disconnect_cleanup_failed`, `webhook_processing_failed`,
-`payment_callback_failed`, `subscription_update_failed`,
-`entitlement_creation_failed`, `voice_transcription_failed`,
-`authorization_invariant_broken`, `cross_tenant_exposure`,
-`irreversible_duplicate_execution`.
+`action_execution_failed`, `action_provider_failed`, `action_persistence_failed`,
+`action_notification_failed`, `hitl_execution_failed`, `hitl_payload_mismatch`.
+
+### DOCUMENTED ONLY (0)
+
+None. Every code either emits or is blocked.
 
 ### Expected outcomes — deliberately NOT issues
 
-Recorded as breadcrumbs via `recordExpectedOutcome`, visible on a real issue and
-silent on their own. Filing these as issues is how a channel gets muted.
+Breadcrumbs via `recordExpectedOutcome`: visible on a real issue, silent alone.
 
-| Outcome | Where |
+| Outcome | Meaning |
 |---|---|
-| `ai_turn_cancelled` | user cancelled the turn mid-generation |
-| `hitl_request_deduped` | the same action asked twice reused one approval |
+| `ai_turn_cancelled` | user cancelled mid-generation |
+| `hitl_request_deduped` | same action asked twice reused one approval |
+| `execution_claim_suppressed` | idempotency guard correctly blocked a duplicate |
+| `checkout_already_activated` | provider retry after a completed activation |
+| `billing_webhook_deduped` | provider replayed a delivery |
 
 To add an emitter:
 
 ```ts
-import { reportOperationalFailure, ERROR_CODES } from "@chatcenter/shared";
-
 reportOperationalFailure({
   errorCode: ERROR_CODES.integration_token_refresh_failed,
   domain: "integration", service: "ai", provider: "google",
   cause: err,
-  context: { stage: "refresh" },   // ids and counts only
+  context: { stage: "refresh" },   // ids, counts and enums only
 });
 ```
 
-Context is checked by key NAME: passing a token, prompt, message, email or phone
-throws in development and is dropped in production.
+Context is checked by key NAME: a token, prompt, message, email or phone throws
+in development and is dropped in production. A test asserts this for every call
+site in the repository.
 
 ## 10. Release and source maps
 

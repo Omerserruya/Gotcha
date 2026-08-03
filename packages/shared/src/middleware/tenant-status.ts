@@ -1,3 +1,5 @@
+import { reportOperationalFailure } from "../lib/observability/operational-failure";
+import { ERROR_CODES } from "../lib/observability/error-codes";
 import { Request, Response, NextFunction } from "express";
 import { prisma } from "../lib/prisma";
 import {
@@ -30,6 +32,17 @@ function gate(scope: TenantAccessScope) {
     // undefined, Prisma drops `where: { tenantId }` filters and returns
     // everyone's data. Fail loudly.
     if (!req.tenantId) {
+      // NOT a denied request - an INVARIANT failure. The caller is
+      // authenticated and reached a tenant-scoped route with no tenant
+      // resolved, which is the precondition for Prisma dropping its
+      // `where: { tenantId }` filter and returning every tenant's rows. The
+      // request is refused here, so nothing leaked; that this state was
+      // reachable at all is the thing worth waking someone for.
+      reportOperationalFailure({
+        errorCode: ERROR_CODES.authorization_invariant_broken,
+        domain: "security", service: "shared",
+        context: { invariant: "tenant_scoped_route_without_tenant", scope, role: String(req.user.role) },
+      });
       res.status(400).json({ error: "Tenant context required" });
       return;
     }

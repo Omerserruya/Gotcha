@@ -73,12 +73,18 @@ function emittedCodes(): Map<ErrorCode, string[]> {
  * and the lists must match what the scan finds.
  */
 const EXPECTED_EMITTED: ErrorCode[] = [
-  "ai_provider_failure", "ai_timeout", "ai_rate_limit",
-  "hitl_request_creation_failed", "hitl_callback_invalid", "hitl_expired", "hitl_already_consumed",
-  "integration_oauth_failed",
-  "webhook_signature_invalid", "webhook_verification_failed",
+  "ai_provider_failure", "ai_timeout", "ai_rate_limit", "ai_invalid_output",
+  "hitl_request_creation_failed", "hitl_notification_failed",
+  "hitl_callback_invalid", "hitl_expired", "hitl_already_consumed",
+  "integration_oauth_failed", "integration_token_refresh_failed",
+  "integration_credentials_invalid", "integration_provisioning_failed",
+  "integration_disconnect_cleanup_failed",
+  "webhook_signature_invalid", "webhook_verification_failed", "webhook_processing_failed",
+  "payment_callback_failed", "subscription_update_failed", "entitlement_creation_failed",
   "voice_provisioning_failed", "voice_number_activation_failed",
-  "voice_twiml_failed", "voice_media_stream_failed",
+  "voice_twiml_failed", "voice_media_stream_failed", "voice_transcription_failed",
+  "authorization_invariant_broken", "cross_tenant_exposure",
+  "irreversible_duplicate_execution",
 ];
 
 /** Blocked by the protected P0 execution routes - see the PR description. */
@@ -88,18 +94,11 @@ const BLOCKED_BY_P0_ROUTES: ErrorCode[] = [
   "hitl_execution_failed", "hitl_payload_mismatch",
 ];
 
-/** No emitter yet, and not blocked - simply not reached in this pass. */
-const DOCUMENTED_ONLY: ErrorCode[] = [
-  "ai_invalid_output",
-  "hitl_notification_failed",
-  "integration_token_refresh_failed", "integration_credentials_invalid",
-  "integration_provisioning_failed", "integration_disconnect_cleanup_failed",
-  "webhook_processing_failed",
-  "payment_callback_failed", "subscription_update_failed", "entitlement_creation_failed",
-  "voice_transcription_failed",
-  "authorization_invariant_broken", "cross_tenant_exposure",
-  "irreversible_duplicate_execution",
-];
+/**
+ * No emitter, and not blocked. Empty is the goal state: every code either
+ * emits or is blocked by the protected P0 routes.
+ */
+const DOCUMENTED_ONLY: ErrorCode[] = [];
 
 describe("emitter coverage", () => {
   const emitted = emittedCodes();

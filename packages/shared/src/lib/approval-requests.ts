@@ -271,8 +271,49 @@ export async function approveRequest(
       correlationId: opts?.correlationId ?? null,
     },
   });
-  if (claimed.count === 0) return null;
-  return (prisma as any).approvalRequest.findFirst({ where: { id, tenantId } });
+  if (claimed.count === 0) {
+    // Another worker holds it. This is the guard WORKING - a duplicate
+    // correctly suppressed - so it is a breadcrumb, never an issue.
+    recordExpectedOutcome("execution_claim_suppressed", { reason: "already_claimed" });
+    return null;
+  }
+  if (claimed.count > 1) {
+    // One id, more than one claimed row. The compare-and-set is supposed to
+    // make that impossible, so an irreversible action may now be running
+    // twice - a refund issued twice, an order cancelled twice. This is the
+    // escape, not the suppression.
+    reportOperationalFailure({
+      errorCode: ERROR_CODES.irreversible_duplicate_execution,
+      domain: "security", service: "shared",
+      context: { invariant: "claim_matched_multiple_rows", claimedCount: claimed.count },
+    });
+  }
+
+  const row = await (prisma as any).approvalRequest.findFirst({ where: { id, tenantId } });
+
+  // Strongly-evidenced exposure, not an ordinary denial: the query is pinned
+  // to this tenant, so a row coming back under a different one means the
+  // filter was lost somewhere between here and the database.
+  if (row && row.tenantId && row.tenantId !== tenantId) {
+    reportOperationalFailure({
+      errorCode: ERROR_CODES.cross_tenant_exposure,
+      domain: "security", service: "shared",
+      context: { invariant: "row_tenant_mismatch", surface: "approval_execution_claim" },
+    });
+    return null;
+  }
+
+  // A second attempt at an action that is not safe to repeat. The first may
+  // have reached the provider before failing locally.
+  if (row && typeof row.executionAttempts === "number" && row.executionAttempts > 1) {
+    reportOperationalFailure({
+      errorCode: ERROR_CODES.irreversible_duplicate_execution,
+      domain: "security", service: "shared",
+      context: { invariant: "retry_after_prior_attempt", attempts: row.executionAttempts, tool: String(row.tool ?? "unknown") },
+    });
+  }
+
+  return row;
 }
 
 /**

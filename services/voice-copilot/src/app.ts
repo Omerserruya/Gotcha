@@ -17,6 +17,7 @@
  * All other files under src/ are owned by their respective work packet.
  */
 
+import { reportOperationalFailure, ERROR_CODES } from "@chatcenter/shared";
 import express from "express";
 import * as http from "http";
 import { WebSocketServer } from "ws";
@@ -137,13 +138,28 @@ export function buildDefaultDeps(env: Env): AppDeps {
     },
   });
 
-  const sttFactoryReal = (cfg: SttConfig): STTProvider =>
-    buildSTTProvider({
-      provider: cfg.provider,
-      seed: cfg.seed,
-      clock,
-      apiKey: cfg.apiKey,
-    });
+  const sttFactoryReal = (cfg: SttConfig): STTProvider => {
+    try {
+      return buildSTTProvider({
+        provider: cfg.provider,
+        seed: cfg.seed,
+        clock,
+        apiKey: cfg.apiKey,
+      });
+    } catch (err) {
+      // The call is live and there will be no transcript. Nothing here carries
+      // transcript text, audio or a recording URL - only which provider failed
+      // to start, which is all anyone needs to act on it.
+      reportOperationalFailure({
+        errorCode: ERROR_CODES.voice_transcription_failed,
+        domain: "voice", service: "voice-copilot",
+        provider: String(cfg.provider),
+        cause: err,
+        context: { stage: "stt_provider_build" },
+      });
+      throw err;
+    }
+  };
 
   const sessionFactory = makeSessionFactory({
     store: sessionStore,

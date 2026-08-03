@@ -10,6 +10,7 @@
  * money checks second, then the idempotency guard, so a mismatched request is
  * rejected before it can touch subscription state.
  */
+import { reportOperationalFailure, recordExpectedOutcome, ERROR_CODES } from "@chatcenter/shared";
 import { prisma, materializeEntitlements, rolloverIncluded } from "@chatcenter/shared";
 import { Prisma } from "@prisma/client";
 import type { PaymentAttempt, PaymentQuote, PendingCheckout } from "@prisma/client";
@@ -85,109 +86,141 @@ export async function activatePaidCheckout(args: {
   // Idempotency: a checkout already COMPLETED is a no-op, not an error and not
   // a second grant of credits.
   if (checkout.status === "PAID") {
+    // Already activated. Expected on a provider retry or a double callback -
+    // the guard that stops a second grant of credits doing its job.
+    recordExpectedOutcome("checkout_already_activated", { source });
     return { activated: true, firstActivation: false };
   }
 
   const period = currentPeriod(new Date());
   const entityId = await resolveEntityId(checkout.tenantId!);
 
-  const result = await prisma.$transaction(async (tx) => {
-    // Consume the attempt FIRST, conditionally. If another worker got here
-    // first this updates zero rows and we abort, so credits are granted once
-    // even under concurrent activation.
-    const consumed = await tx.paymentAttempt.updateMany({
-      where: { id: attempt.id, state: "SUCCEEDED", consumedByActivationAt: null },
-      data: { consumedByActivationAt: new Date() },
+  let result: any;
+  try {
+    result = await prisma.$transaction(async (tx) => {
+      // Consume the attempt FIRST, conditionally. If another worker got here
+      // first this updates zero rows and we abort, so credits are granted once
+      // even under concurrent activation.
+      const consumed = await tx.paymentAttempt.updateMany({
+        where: { id: attempt.id, state: "SUCCEEDED", consumedByActivationAt: null },
+        data: { consumedByActivationAt: new Date() },
+      });
+      if (consumed.count !== 1) return { raced: true as const };
+
+      const subscription = await tx.subscription.upsert({
+        where: { billableEntityId: entityId },
+        create: {
+          billableEntityId: entityId,
+          planKey: checkout.planKey,
+          planVersion: checkout.planVersion,
+          status: "ACTIVE",
+          enforcementEnabled: true,
+          currentPeriodStart: period.start,
+          currentPeriodEnd: period.end,
+          billingInterval: "MONTHLY",
+          snapshotPrice: checkout.snapshotPrice,
+          snapshotCurrency: checkout.snapshotCurrency,
+          snapshotIncludedCredits: checkout.snapshotIncludedCredits,
+          chatVolumeOptionKey: checkout.chatVolumeOptionKey,
+          voiceVolumeOptionKey: checkout.voiceVolumeOptionKey,
+        },
+        update: {
+          status: "ACTIVE",
+          planKey: checkout.planKey,
+          planVersion: checkout.planVersion,
+          currentPeriodStart: period.start,
+          currentPeriodEnd: period.end,
+          snapshotPrice: checkout.snapshotPrice,
+          snapshotCurrency: checkout.snapshotCurrency,
+          snapshotIncludedCredits: checkout.snapshotIncludedCredits,
+        },
+      });
+
+      await tx.pendingCheckout.update({ where: { id: checkout.id }, data: { status: "PAID" } });
+
+      // Payment settles MONEY. It does not settle SETUP.
+      //
+      // A first-signup customer pays BEFORE they onboard: they are provisioned
+      // PENDING_PAYMENT and pay from an emailed link. Flipping them straight to
+      // ACTIVE claimed "fully set up" about an organization that had not answered
+      // a single question - and since both the app shell (destinationForTenantStatus)
+      // and /setup read ACTIVE as "onboarding is done", the customer who had just
+      // paid was routed PAST the wizard entirely.
+      //
+      // PENDING_ONBOARDING is the state that already means exactly this: the
+      // access policy allows the ONBOARDING scope and refuses the paid product,
+      // which is the same position an onboard-first customer occupies while they
+      // work through the wizard. `completeOnboarding` flips it to ACTIVE at the
+      // end, and finds nothing owed because this checkout is now PAID.
+      //
+      // A tenant that is ALREADY ACTIVE is never moved backwards: it has been
+      // through onboarding, whether or not the tracker existed to record it.
+      const [tenantRow, onboarding] = await Promise.all([
+        tx.tenant.findUnique({ where: { id: checkout.tenantId! }, select: { status: true } }),
+        tx.tenantOnboarding.findUnique({
+          where: { tenantId: checkout.tenantId! },
+          select: { completedAt: true },
+        }),
+      ]);
+      const alreadySetUp = tenantRow?.status === "ACTIVE" || !!onboarding?.completedAt;
+      await tx.tenant.update({
+        where: { id: checkout.tenantId! },
+        data: { status: alreadySetUp ? "ACTIVE" : "PENDING_ONBOARDING" },
+      });
+
+      await tx.subscriptionEvent.create({
+        data: {
+          subscriptionId: subscription.id,
+          type: source === "MANUAL_EXTERNAL_CONTRACT" ? "manual_contract_activated" : "checkout_activated",
+          fromStatus: null,
+          toStatus: "ACTIVE",
+          actor: args.actor ?? "system",
+          metadata: { source, checkoutId: checkout.id, paymentAttemptId: attempt.id } as any,
+        },
+      });
+
+      return { raced: false as const, subscriptionId: subscription.id };
     });
-    if (consumed.count !== 1) return { raced: true as const };
-
-    const subscription = await tx.subscription.upsert({
-      where: { billableEntityId: entityId },
-      create: {
-        billableEntityId: entityId,
-        planKey: checkout.planKey,
-        planVersion: checkout.planVersion,
-        status: "ACTIVE",
-        enforcementEnabled: true,
-        currentPeriodStart: period.start,
-        currentPeriodEnd: period.end,
-        billingInterval: "MONTHLY",
-        snapshotPrice: checkout.snapshotPrice,
-        snapshotCurrency: checkout.snapshotCurrency,
-        snapshotIncludedCredits: checkout.snapshotIncludedCredits,
-        chatVolumeOptionKey: checkout.chatVolumeOptionKey,
-        voiceVolumeOptionKey: checkout.voiceVolumeOptionKey,
-      },
-      update: {
-        status: "ACTIVE",
-        planKey: checkout.planKey,
-        planVersion: checkout.planVersion,
-        currentPeriodStart: period.start,
-        currentPeriodEnd: period.end,
-        snapshotPrice: checkout.snapshotPrice,
-        snapshotCurrency: checkout.snapshotCurrency,
-        snapshotIncludedCredits: checkout.snapshotIncludedCredits,
-      },
+  } catch (err) {
+    // THE customer-outcome failure. The payment attempt is SUCCEEDED - the
+    // money has moved - and this transaction is what turns that into a
+    // subscription, an active tenant and granted credits. If it fails the
+    // customer has paid and has nothing, and no retry runs on its own.
+    reportOperationalFailure({
+      errorCode: ERROR_CODES.subscription_update_failed,
+      domain: "billing", service: "billing", provider: "icount",
+      cause: err,
+      context: { stage: "activation_transaction", source, firstActivation: true },
     });
-
-    await tx.pendingCheckout.update({ where: { id: checkout.id }, data: { status: "PAID" } });
-
-    // Payment settles MONEY. It does not settle SETUP.
-    //
-    // A first-signup customer pays BEFORE they onboard: they are provisioned
-    // PENDING_PAYMENT and pay from an emailed link. Flipping them straight to
-    // ACTIVE claimed "fully set up" about an organization that had not answered
-    // a single question - and since both the app shell (destinationForTenantStatus)
-    // and /setup read ACTIVE as "onboarding is done", the customer who had just
-    // paid was routed PAST the wizard entirely.
-    //
-    // PENDING_ONBOARDING is the state that already means exactly this: the
-    // access policy allows the ONBOARDING scope and refuses the paid product,
-    // which is the same position an onboard-first customer occupies while they
-    // work through the wizard. `completeOnboarding` flips it to ACTIVE at the
-    // end, and finds nothing owed because this checkout is now PAID.
-    //
-    // A tenant that is ALREADY ACTIVE is never moved backwards: it has been
-    // through onboarding, whether or not the tracker existed to record it.
-    const [tenantRow, onboarding] = await Promise.all([
-      tx.tenant.findUnique({ where: { id: checkout.tenantId! }, select: { status: true } }),
-      tx.tenantOnboarding.findUnique({
-        where: { tenantId: checkout.tenantId! },
-        select: { completedAt: true },
-      }),
-    ]);
-    const alreadySetUp = tenantRow?.status === "ACTIVE" || !!onboarding?.completedAt;
-    await tx.tenant.update({
-      where: { id: checkout.tenantId! },
-      data: { status: alreadySetUp ? "ACTIVE" : "PENDING_ONBOARDING" },
-    });
-
-    await tx.subscriptionEvent.create({
-      data: {
-        subscriptionId: subscription.id,
-        type: source === "MANUAL_EXTERNAL_CONTRACT" ? "manual_contract_activated" : "checkout_activated",
-        fromStatus: null,
-        toStatus: "ACTIVE",
-        actor: args.actor ?? "system",
-        metadata: { source, checkoutId: checkout.id, paymentAttemptId: attempt.id } as any,
-      },
-    });
-
-    return { raced: false as const, subscriptionId: subscription.id };
-  });
+    throw err;
+  }
 
   if (result.raced) return { activated: true, firstActivation: false };
 
   // Credits and entitlements land AFTER the transaction commits, and only on
   // the call that won the consume - so a duplicate activation grants neither.
-  await rolloverIncluded(
-    checkout.tenantId!,
-    period.key,
-    checkout.snapshotIncludedCredits,
-    period.end,
-    `checkout:${checkout.reference}`,
-  );
-  await materializeEntitlements(checkout.tenantId!, args.actor);
+  // These land AFTER the commit, which means the subscription can exist while
+  // the credits and entitlements behind it do not. The customer has paid, the
+  // plan says ACTIVE, and nothing works - the worst shape this failure takes,
+  // because every dashboard says the purchase succeeded.
+  try {
+    await rolloverIncluded(
+      checkout.tenantId!,
+      period.key,
+      checkout.snapshotIncludedCredits,
+      period.end,
+      `checkout:${checkout.reference}`,
+    );
+    await materializeEntitlements(checkout.tenantId!, args.actor);
+  } catch (err) {
+    reportOperationalFailure({
+      errorCode: ERROR_CODES.entitlement_creation_failed,
+      domain: "billing", service: "billing", provider: "icount",
+      cause: err,
+      context: { stage: "post_commit_grant", planKey: checkout.planKey, source },
+    });
+    throw err;
+  }
 
   // Welcome them and hand over the way in. Only the call that won the consume
   // sends it, so a duplicate activation cannot email the customer twice.

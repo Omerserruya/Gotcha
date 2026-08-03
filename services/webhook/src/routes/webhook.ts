@@ -44,7 +44,7 @@ router.get("/", (req: Request, res: Response) => {
     reportOperationalFailure({
       errorCode: ERROR_CODES.webhook_verification_failed,
       domain: "webhook", service: "webhook", provider: "meta",
-      context: { mode: String(mode ?? "none"), tokenConfigured: Boolean(verifyToken) },
+      context: { mode: String(mode ?? "none"), configured: Boolean(verifyToken) },
     });
   }
   if (mode === "subscribe" && token === verifyToken) {
@@ -605,6 +605,14 @@ router.post("/gmail", async (req: Request, res: Response) => {
     });
   } catch (err) {
     console.error("Gmail webhook error:", err);
+    // Signature already verified upstream, so this is a REAL delivery we
+    // failed to process. No raw payload travels - only what it was and why.
+    reportOperationalFailure({
+      errorCode: ERROR_CODES.webhook_processing_failed,
+      domain: "webhook", service: "webhook", provider: "gmail",
+      cause: err,
+      context: { stage: "process" },
+    });
   }
 });
 

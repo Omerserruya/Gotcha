@@ -1,3 +1,4 @@
+import { reportOperationalFailure, ERROR_CODES } from "@chatcenter/shared";
 import { Router, Request, Response } from "express";
 import { enableReadToolsForIntegration } from "../services/integration-provisioning.service";
 import { prisma, authenticate, resolveTenant, requireOnboardingOrActiveTenant, requirePermission, requirePermissionOrRole, encryptCredentials, decryptCredentials, searchLeads as crmSearchLeads, searchContacts as crmSearchContacts } from "@chatcenter/shared";
@@ -540,6 +541,16 @@ router.post("/:slug/test", canConnectSystems, async (req: Request, res: Response
     res.json({ data: updated });
   } catch (err: any) {
     console.error("Test integration error:", err);
+    // A live connection test against STORED credentials failed. Distinct from
+    // a user typing the wrong key at connect time: these credentials already
+    // worked once, so this is a rotation, a revocation or an expiry.
+    reportOperationalFailure({
+      errorCode: ERROR_CODES.integration_credentials_invalid,
+      domain: "integration", service: "ai",
+      provider: String(req.params.slug ?? "unknown"),
+      cause: err,
+      context: { stage: "live_connection_test" },
+    });
     res.status(500).json({ error: err?.message || "Failed to test integration" });
   }
 });
@@ -578,6 +589,16 @@ router.post("/:slug/disconnect", canManageSystems, async (req: Request, res: Res
     res.json({ data: updated });
   } catch (err) {
     console.error("Disconnect integration error:", err);
+    // Disconnect ran part-way. Tenant tools may be gone while the connection
+    // row survives, or the reverse - either way the tenant is in a state no
+    // screen represents, and reconnecting will not necessarily repair it.
+    reportOperationalFailure({
+      errorCode: ERROR_CODES.integration_disconnect_cleanup_failed,
+      domain: "integration", service: "ai",
+      provider: String(req.params.slug ?? "unknown"),
+      cause: err,
+      context: { stage: "disconnect_cleanup" },
+    });
     res.status(500).json({ error: "Failed to disconnect integration" });
   }
 });

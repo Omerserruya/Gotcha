@@ -28,6 +28,7 @@
  * job. We just stop the leaked text from leaving the building.
  */
 
+import { reportOperationalFailure, ERROR_CODES } from "@chatcenter/shared";
 import { prisma } from "@chatcenter/shared";
 
 const FORBIDDEN_HEADERS = [
@@ -264,6 +265,15 @@ export function validateAssistantOutput(
   // Leak-only (stripping already removed the machine content) AND meaningful
   // human text remains → send the CLEANED text. Otherwise (a fabrication /
   // header / id / vendor violation, or nothing intelligible left) → deflect.
+  // The model produced something that could not be sent as-is. Only the
+  // violation CATEGORIES travel - `match` holds model output, which is exactly
+  // the customer-adjacent content that must never reach Sentry.
+  reportOperationalFailure({
+    errorCode: ERROR_CODES.ai_invalid_output,
+    domain: "ai", service: "ai", provider: "openai",
+    context: { violationCategories: violations.map((v) => v.category), count: violations.length },
+  });
+
   const onlyLeak = violations.every((v) => v.category === "tool_output_leak" || v.category === "internal_ops_leak");
   const meaningful = working.replace(/\s+/g, "").length >= 8;
   return {
