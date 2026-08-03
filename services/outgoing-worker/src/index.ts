@@ -1,3 +1,11 @@
+import { initSentry } from "@chatcenter/shared";
+
+// First statement in the process. These workers have no HTTP layer and so no
+// shared factory to hang this off - the trade-off of not booting through
+// createServiceApp is that this one line has to be remembered here.
+// Production-only; a no-op everywhere else.
+initSentry("outgoing-worker");
+
 import { startOutgoingWorker } from "./workers/outgoing.worker";
 import { startScheduledMessageWorker } from "./workers/scheduled.worker";
 import { startBroadcastWorker } from "./workers/broadcast.worker";
