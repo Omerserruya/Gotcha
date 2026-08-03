@@ -183,3 +183,35 @@ describe("public API cross-origin access", () => {
     expect(mkt.body).toMatch(/location\s+\/api\/embedded-chat/);
   });
 });
+
+/**
+ * voice.gotcha.co.il is served by the Cloudflare Tunnel going STRAIGHT to
+ * voice-copilot, not through the gateway. That is deliberate: a Twilio media
+ * stream is a long-lived WebSocket carrying real-time audio, and an extra nginx
+ * hop costs latency on every frame.
+ *
+ * cloudflared runs as a systemd unit on the host, outside this compose network,
+ * so `http://localhost:4007` can only reach the container through a PUBLISHED
+ * port. There was none - the container merely exposed 4007, the host listened
+ * on 80 and nothing else - so every voice request 502'd.
+ */
+describe("voice direct ingress", () => {
+  const COMPOSE_FILE = fs.readFileSync(path.join(ROOT, "docker-compose.prod.yml"), "utf8");
+  const block = /\n {2}voice-copilot:\n([\s\S]*?)(?=\n {2}[a-z][a-z0-9-]*:\n)/.exec(COMPOSE_FILE)?.[1] ?? "";
+
+  it("publishes the voice port so the tunnel can reach it", () => {
+    expect(block, "cloudflared cannot reach an unpublished port").toMatch(/ports:/);
+    expect(block).toMatch(/:\$\{VOICE_COPILOT_PORT:-4007\}"?\s*$|:\$\{VOICE_COPILOT_PORT:-4007\}"/m);
+  });
+
+  /**
+   * The bind address is the whole security argument. 0.0.0.0 would put the
+   * voice service on the public internet with only the security group in front.
+   */
+  it("binds it to the host loopback and not the wildcard", () => {
+    const ports = /ports:\n((?:\s+-\s+.*\n)+)/.exec(block)?.[1] ?? "";
+    expect(ports).toMatch(/127\.0\.0\.1:/);
+    expect(ports, "0.0.0.0 would expose voice-copilot publicly").not.toMatch(/"\s*0\.0\.0\.0:/);
+    expect(ports, "a bare host:container mapping binds all interfaces").not.toMatch(/-\s+"\d+:\d+"/);
+  });
+});
