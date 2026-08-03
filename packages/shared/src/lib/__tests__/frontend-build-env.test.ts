@@ -78,4 +78,33 @@ describe("frontend build-time environment", () => {
       "these resolve to undefined in the production bundle, permanently and silently",
     ).toEqual([]);
   });
+
+  /**
+   * A NEXT_PUBLIC_* that falls back to a non-prefixed twin only works if the
+   * twin is actually in the environment when the build runs. The publisher
+   * loads its variables from .env.prod itself, so a twin missing from that
+   * loader makes the fallback unreachable: the default fires, and the bundle
+   * is baked with the wrong value while .env.prod plainly says otherwise.
+   *
+   * That is precisely what happened to NEXT_PUBLIC_PRICING_ENABLED. The
+   * fallback to PUBLIC_PRICING_ENABLED was correct and the value in .env.prod
+   * was correct, and the build still baked "false", because the loader only
+   * matched NEXT_PUBLIC_* lines.
+   */
+  it("loads every non-prefixed twin its own fallbacks depend on", () => {
+    const script = fs.readFileSync(path.join(ROOT, "scripts/docker-publish.sh"), "utf8");
+    // Twins named in a ${NEXT_PUBLIC_X:-${TWIN:-...}} style fallback.
+    const twins = new Set(
+      [...script.matchAll(/NEXT_PUBLIC_[A-Z0-9_]+:-\$\{([A-Z][A-Z0-9_]*):-/g)].map((m) => m[1]),
+    );
+    expect(twins.size, "expected at least one twin fallback").toBeGreaterThan(0);
+
+    // The loader's case arms, i.e. what it actually exports from the env file.
+    const loader = /while IFS= read -r _line[\s\S]*?done < "\$FRONTEND_ENV"/.exec(script)?.[0] ?? "";
+    const missing = [...twins].filter((t) => !loader.includes(`${t}=*`)).sort();
+    expect(
+      missing,
+      "these fallbacks can never fire - the loader never puts the twin in the environment",
+    ).toEqual([]);
+  });
 });
