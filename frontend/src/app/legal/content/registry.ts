@@ -46,6 +46,19 @@ export const LEGAL_DOCS: LegalDocMeta[] = [
     ],
   },
   {
+    // Directly after the Terms because it is the commercial half of the same
+    // question: the Terms say what you are buying, this says what happens when
+    // you stop. Customers look for it at cancellation time, which is the worst
+    // moment to have to hunt for a policy.
+    slug: "cancellation-refunds",
+    audience: "public",
+    icon: "scroll",
+    summary: [
+      "How subscriptions renew and cancel, when a refund is given, and what happens to AI Credits.",
+      "איך מנוי מתחדש ומתבטל, מתי ניתן החזר כספי, ומה קורה ליתרת ה-AI Credits.",
+    ],
+  },
+  {
     slug: "privacy-policy",
     audience: "public",
     icon: "shield",

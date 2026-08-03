@@ -1161,6 +1161,7 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
                   <li><Link href="/legal/privacy-policy" className="hover:text-gray-900 transition-colors duration-200 text-[13px]">{t("landing.footer.privacy")}</Link></li>
                   <li><Link href="/legal/terms-of-service" className="hover:text-gray-900 transition-colors duration-200 text-[13px]">{t("landing.footer.terms")}</Link></li>
                   <li><Link href="/legal/cookie-policy" className="hover:text-gray-900 transition-colors duration-200 text-[13px]">{t("landing.footer.cookies")}</Link></li>
+                  <li><Link href="/legal/cancellation-refunds" className="hover:text-gray-900 transition-colors duration-200 text-[13px]">{t("landing.footer.cancellation")}</Link></li>
                 </ul>
               </div>
             </div>
