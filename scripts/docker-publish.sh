@@ -139,7 +139,7 @@ if [ -z "${SERVICES:-}" ] || [[ ",$SERVICES," == *,gateway,* ]] || [[ ",$SERVICE
         while IFS= read -r _line || [ -n "$_line" ]; do
           case "$_line" in
             NEXT_PUBLIC_*=*) export "${_line%%=*}=${_line#*=}" ;;
-            PUBLIC_PRICING_ENABLED=*|SOCIAL_INSTAGRAM_URL=*|SOCIAL_FACEBOOK_URL=*|SOCIAL_WHATSAPP_URL=*)
+            PUBLIC_PRICING_ENABLED=*|MARKETING_URL=*|SOCIAL_INSTAGRAM_URL=*|SOCIAL_FACEBOOK_URL=*|SOCIAL_WHATSAPP_URL=*)
               export "${_line%%=*}=${_line#*=}" ;;
           esac
         done < "$FRONTEND_ENV"
@@ -163,6 +163,11 @@ if [ -z "${SERVICES:-}" ] || [[ ",$SERVICES," == *,gateway,* ]] || [[ ",$SERVICE
     # a silent mismatch easy to chase in the wrong place.
     echo "   NEXT_PUBLIC_PRICING_ENABLED=${NEXT_PUBLIC_PRICING_ENABLED:-${PUBLIC_PRICING_ENABLED:-false}}"
     echo "   NEXT_PUBLIC_VOICE_URL=${NEXT_PUBLIC_VOICE_URL:-<default>}"
+    # Decides whether `/` renders marketing or bounces a logged-out visitor to
+    # /login. Empty means "single host, landing page stays at /", which is the
+    # dev behaviour - so an accidental omission here silently un-splits the two
+    # production hostnames rather than failing the build.
+    echo "   NEXT_PUBLIC_MARKETING_URL=${NEXT_PUBLIC_MARKETING_URL:-${MARKETING_URL:-<unset - no host split>}}"
     (
       cd frontend
       [ -d node_modules ] || npm install
@@ -177,6 +182,7 @@ if [ -z "${SERVICES:-}" ] || [[ ",$SERVICES," == *,gateway,* ]] || [[ ",$SERVICE
       NEXT_PUBLIC_OIDC_REDIRECT_URI="${NEXT_PUBLIC_OIDC_REDIRECT_URI:-}" \
       NEXT_PUBLIC_VOICE_URL="${NEXT_PUBLIC_VOICE_URL:-}" \
       NEXT_PUBLIC_PRICING_ENABLED="${NEXT_PUBLIC_PRICING_ENABLED:-${PUBLIC_PRICING_ENABLED:-false}}" \
+      NEXT_PUBLIC_MARKETING_URL="${NEXT_PUBLIC_MARKETING_URL:-${MARKETING_URL:-}}" \
       NEXT_PUBLIC_SOCIAL_INSTAGRAM_URL="${NEXT_PUBLIC_SOCIAL_INSTAGRAM_URL:-${SOCIAL_INSTAGRAM_URL:-}}" \
       NEXT_PUBLIC_SOCIAL_FACEBOOK_URL="${NEXT_PUBLIC_SOCIAL_FACEBOOK_URL:-${SOCIAL_FACEBOOK_URL:-}}" \
       NEXT_PUBLIC_SOCIAL_WHATSAPP_URL="${NEXT_PUBLIC_SOCIAL_WHATSAPP_URL:-${SOCIAL_WHATSAPP_URL:-}}" \
