@@ -399,14 +399,25 @@ function classifyDevice(type: string | undefined | null): "totp" | "webauthn" | 
  * carries a `type`, so it is the only reliable per-user source.
  */
 async function listUserDeviceRows(userPk: number): Promise<any[]> {
-  try {
-    const res = await api<any[] | { results?: any[] }>(`/authenticators/admin/all/?user=${userPk}`);
-    const arr = Array.isArray(res) ? res : (res.results ?? []);
-    // Only confirmed devices count - a half-finished enrolment must not read as set up.
-    return arr.filter((d: any) => d?.confirmed !== false);
-  } catch {
-    return [];
-  }
+  // THROWS on an IdP error, deliberately. This used to `catch { return [] }`,
+  // which made "we could not ask Authentik" indistinguishable from "this user
+  // has no devices" - and every caller reads an empty list as NOT ENROLLED.
+  //
+  // The consequences were not symmetrical with the failure. In /mfa-gate the
+  // empty list arrived with live=true, so the handler concluded the user had
+  // un-enrolled and ERASED their mfaEnrolledAt stamp: a transient IdP blip
+  // turned into permanent local state loss. And because the enrolment gate
+  // blocks the whole app until it clears, a wrong API token presented as an
+  // MFA popup that reappeared after every successful enrolment, forever, with
+  // nothing in any log.
+  //
+  // Letting it throw lets each caller say what it actually knows: /mfa-gate
+  // falls back to the stored stamp with live=false (so the stamp survives),
+  // and the bulk reader reports resolved=false.
+  const res = await api<any[] | { results?: any[] }>(`/authenticators/admin/all/?user=${userPk}`);
+  const arr = Array.isArray(res) ? res : (res.results ?? []);
+  // Only confirmed devices count - a half-finished enrolment must not read as set up.
+  return arr.filter((d: any) => d?.confirmed !== false);
 }
 
 /** All authenticator devices for a user, normalized (TOTP / passkeys / recovery). */
@@ -541,7 +552,15 @@ export async function getMfaEnrollmentMap(subjects: string[]): Promise<Map<strin
   }
 
   const stateFor = async (pk: number): Promise<MfaEnrollmentState> => {
-    const rows = await listUserDeviceRows(pk);
+    let rows: any[];
+    try {
+      rows = await listUserDeviceRows(pk);
+    } catch {
+      // Could not ask the IdP. `resolved: false` is the whole point of the
+      // field - callers must not read this as "no devices", which is what an
+      // empty list would have meant.
+      return { hasAuthenticator: false, hasRecovery: false, enrolled: false, resolved: false };
+    }
     let hasAuthenticator = false;
     let hasRecovery = false;
     for (const d of rows) {
