@@ -9,8 +9,9 @@
  *   1. Summarize the transcript → structured PostConversationSummary
  *   2. Persist summary to Conversation.aiSummary + CallAnalysis.meta.structured
  *   3. Apply sparse CRM patch via action-executor.update_contact
- *   4. Create CRM task per suggested_task via action-executor.create_task
- *   5. Schedule follow-up via action-executor.schedule_followup
+ *   4. Write the summary onto the vendor customer record as a note
+ *   5. Create CRM task per suggested_task via action-executor.create_task
+ *   6. Schedule follow-up via action-executor.schedule_followup
  *
  * Sparse-patch contract: only fields the AI marked as `mentioned_fields`
  * are written; prior CRM data is preserved (see feedback memory
@@ -26,7 +27,7 @@ import {
   getPostConversationConfig,
 } from "./post-conversation-config.service";
 import { applyPostConversationRules } from "./post-conversation-rule-engine.service";
-import { applyCrmPatchKindAware, createCrmTaskKindAware, getCrmIdentity } from "./post-conversation-crm.service";
+import { applyCrmPatchKindAware, createCrmTaskKindAware, getCrmIdentity, writeSummaryNoteKindAware } from "./post-conversation-crm.service";
 import { loadExistingActionItems } from "./existing-action-items.service";
 import { ingestConversationFacts } from "./intelligence-ingest.service";
 
@@ -123,6 +124,8 @@ export async function runPostChatPipeline(params: {
   ok: boolean;
   summarized: boolean;
   crmWritten: boolean;
+  /** The summary was written onto the vendor customer record as a note. */
+  summaryNoteWritten: boolean;
   tasksCreated: number;
   followupScheduled: boolean;
   notes: string[];
@@ -150,7 +153,7 @@ export async function runPostChatPipeline(params: {
     const entitled = await isEntitled(params.tenantId, "communication.crm_summaries");
     if (!entitled) {
       return {
-        ok: true, summarized: false, crmWritten: false, tasksCreated: 0,
+        ok: true, summarized: false, crmWritten: false, summaryNoteWritten: false, tasksCreated: 0,
         followupScheduled: false, notes: ["not-entitled:communication.crm_summaries"],
       };
     }
@@ -170,14 +173,14 @@ export async function runPostChatPipeline(params: {
     select: { meta: true, finalSummary: true },
   });
   if (existing?.finalSummary && (existing.meta as any)?.structured) {
-    return { ok: true, summarized: false, crmWritten: false, tasksCreated: 0, followupScheduled: false, notes: ["already-processed"] };
+    return { ok: true, summarized: false, crmWritten: false, summaryNoteWritten: false, tasksCreated: 0, followupScheduled: false, notes: ["already-processed"] };
   }
 
   // The read above cannot catch a CONCURRENT delivery: both callers see no
   // summary, both continue, and both write a note to the merchant's CRM. The
   // claim is atomic, so exactly one proceeds.
   if (!(await claimPostChatRun(params.conversationId, params.tenantId))) {
-    return { ok: true, summarized: false, crmWritten: false, tasksCreated: 0, followupScheduled: false, notes: ["claimed-by-another-run"] };
+    return { ok: true, summarized: false, crmWritten: false, summaryNoteWritten: false, tasksCreated: 0, followupScheduled: false, notes: ["claimed-by-another-run"] };
   }
 
   // 1. Summarize + apply tenant rule engine.
@@ -206,7 +209,7 @@ export async function runPostChatPipeline(params: {
     // Nothing was written anywhere, so hand the claim back rather than making a
     // legitimate retry wait out CLAIM_STALE_MS.
     await releasePostChatRun(params.conversationId);
-    return { ok: false, summarized: false, crmWritten: false, tasksCreated: 0, followupScheduled: false, notes: ["empty-summary"] };
+    return { ok: false, summarized: false, crmWritten: false, summaryNoteWritten: false, tasksCreated: 0, followupScheduled: false, notes: ["empty-summary"] };
   }
 
   // 2. Persist.
@@ -257,6 +260,7 @@ export async function runPostChatPipeline(params: {
   const actor = params.actorId ?? `post-chat:${params.conversationId}`;
 
   let crmWritten = false;
+  let summaryNoteWritten = false;
   let tasksCreated = 0;
   let followupScheduled = false;
 
@@ -332,6 +336,36 @@ export async function runPostChatPipeline(params: {
   //    + pending follow-ups are loaded above and passed into the summarizer
   //    so it only emits tasks/follow-ups that aren't already covered.
   const identity = await getCrmIdentity(params.tenantId, params.conversationId);
+
+  // 4b. The summary itself, onto the customer's record in the merchant's CRM.
+  //
+  //     Everything above persists the summary GOTCHA-side only (CallAnalysis
+  //     + Conversation.aiSummary). The only vendor write was the sparse FIELD
+  //     patch, and its note fallback runs ONLY when that patch fails — which
+  //     on Shopify it doesn't, because `updateRecord` maps to a real
+  //     `shopify.update_customer` call. Net effect: a merchant reading their
+  //     own Shopify customer record saw no trace of the conversation and had
+  //     to come back to GOTCHA to find out what happened.
+  //
+  //     Ordered AFTER the field patch on purpose: `shopify.create_note` is a
+  //     read-modify-write on `customer.note`, so running it second keeps it
+  //     from racing the field update on the same record. Best-effort — a
+  //     vendor failure here must not cost us the tasks and follow-up below.
+  const summaryNote = await writeSummaryNoteKindAware({
+    tenantId: params.tenantId,
+    conversationId: params.conversationId,
+    summary: structured.summary,
+    identity,
+    sourceInteractionId: params.conversationId,
+  }).catch((err: any) => ({
+    ok: false as const,
+    outcome: "skipped" as const,
+    crmContactId: null,
+    reason: `threw:${err?.message ?? "unknown"}`,
+  }));
+  summaryNoteWritten = summaryNote.ok;
+  notes.push(`summary-note:${summaryNote.ok ? "ok" : summaryNote.reason ?? "failed"}`);
+
   for (const t of structured.suggested_tasks) {
     const vendor = await createCrmTaskKindAware({
       tenantId: params.tenantId,
@@ -405,6 +439,7 @@ export async function runPostChatPipeline(params: {
     ok: true,
     summarized: true,
     crmWritten,
+    summaryNoteWritten,
     tasksCreated,
     followupScheduled,
     notes,

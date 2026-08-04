@@ -984,7 +984,24 @@ const ShopifyAdapter: ProviderAdapter = {
         const c = await resolveCustomer(ctx, args);
         if (!c) throw new Error("customer_not_found");
         const existing = String(c.note || "").trim();
-        const note = existing ? `${existing}\n\n${String(args.note || "")}` : String(args.note || "");
+        const incoming = String(args.note || "");
+
+        // Idempotency. This field is a single free-text blob that every note
+        // APPENDS to, and this handler is reached by retried background work
+        // (the post-chat pipeline) as well as by the model. Callers stamp the
+        // body with a `[gotcha_source_interaction_id=...]` marker; if that
+        // exact marker is already in the customer's note, the write landed on
+        // a previous attempt and appending again would duplicate it forever.
+        //
+        // Matching on the marker rather than the whole body is deliberate: an
+        // LLM-written summary is not byte-stable across retries, so comparing
+        // bodies would dedup nothing.
+        const marker = incoming.match(/\[gotcha_source_interaction_id=[^\]]*\]/)?.[0];
+        if (marker && existing.includes(marker)) {
+          return { ...c, note: existing, deduped: true };
+        }
+
+        const note = existing ? `${existing}\n\n${incoming}` : incoming;
         const r: any = await sreq(ctx, "PUT", `/customers/${c.id}.json`, { customer: { id: c.id, note } });
         return r.customer;
       }
