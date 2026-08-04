@@ -38,6 +38,7 @@ import { orderIdentifierFromArgs } from "./shopify-order-identifier";
 import { reconcile } from "./shopify-item-reconciliation";
 import { validateProfilePatch, verifyReadBack, detectDuplicate } from "./shopify-profile-update";
 import { SELF_SCOPE_KEY } from "./customer-access-guard";
+import { normalizeGrantedScopes } from "./shopify-scopes";
 import {
   assessMutability,
   validateShippingAddress,
@@ -814,9 +815,17 @@ const ShopifyAdapter: ProviderAdapter = {
     }
     if (!res.ok) return { ok: false, error: `Shopify returned ${res.status} while validating` };
     const j: any = await res.json().catch(() => ({}));
-    const granted = (j.access_scopes || [])
+    const raw = (j.access_scopes || [])
       .map((s: any) => String(s.handle || ""))
       .filter(Boolean);
+    // Shopify returns the COLLAPSED grant: a granted `write_orders` is listed
+    // without the `read_orders` it confers. Comparing REQUIRED_SCOPES against
+    // the raw response therefore reports read scopes as missing on a store
+    // that holds them - a live read of the demo store returned 19 handles for
+    // a 26-scope grant, with all 7 absent entries being implied reads.
+    // Expand before comparing, and persist the expanded form so every
+    // downstream `includes()` check is asking the same question.
+    const granted = normalizeGrantedScopes(raw);
     const grantedSet = new Set<string>(granted);
     const missing = REQUIRED_SCOPES.filter((r) => !grantedSet.has(r.scope));
     if (missing.length) {

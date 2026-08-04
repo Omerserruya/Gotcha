@@ -1,0 +1,103 @@
+# GOTCHA — UNIFIED PRODUCTION Shopify app manifest.
+#
+# ⚠️  THIS FILE TARGETS THE LIVE GOTCHA APP THAT EVERY MERCHANT CONNECTS THROUGH.
+#
+# One app now owns everything: OAuth, the Admin API token, the scope set,
+# webhooks, the app proxy, the Chat Theme App Extension and the storefront
+# chat widget. There is no separate Chat app in production.
+#
+# Before ANY `shopify app` command:
+#
+#     node scripts/shopify/verify-unified-app-identity.mjs
+#
+# It fails closed and has no bypass flag. Run it every time, not once.
+#
+# `include_config_on_deploy` is FALSE below, deliberately. While it is false a
+# deploy ships the extension only and cannot touch the live scope list or the
+# redirect allowlist. Flipping it to true makes this file authoritative over
+# both — at which point an omission here silently REMOVES a live grant and
+# every connected merchant has to re-consent. Do not flip it until the
+# dashboard values in §7 of
+# docs/setup/shopify-core-unified-production-runbook.md have been read back
+# and matched.
+
+client_id = "b1ce3aa50d8d2e67b978918629bc5f76"
+
+# NOTE: `name` and `handle` are intentionally ABSENT.
+#
+# They are unverified — no Admin API maps a client id to an app name, and the
+# Partner Dashboard was not read. Writing a guess here would be worse than
+# writing nothing: with include_config_on_deploy = true a wrong name is
+# published to the live app. The verifier refuses to pass until they are
+# supplied from the dashboard and recorded in .env.prod as
+# SHOPIFY_APP_NAME / SHOPIFY_APP_HANDLE.
+
+# Non-embedded: GOTCHA's merchant UI is its own application, not an iframe
+# inside Shopify admin. There is no App Bridge and no session-token code,
+# which is why the authorization-code flow is the correct install path.
+embedded = false
+
+application_url = "https://app.gotcha.co.il"
+
+[access_scopes]
+# The approved 26. Written in FULL, never in the collapsed form Shopify
+# returns from /admin/oauth/access_scopes.json: that response omits a
+# `read_X` when `write_X` is granted, and copying it back would silently
+# drop 6 scopes from the request.
+#
+# `write_merchant_managed_fulfillment_orders` is in this set because
+# `update_order_fulfillment` requires it (shopify.adapter.ts). It was absent
+# from the earlier 25-scope draft, which would have left that tool unable to
+# succeed.
+scopes = "read_all_orders,read_assigned_fulfillment_orders,read_customers,write_customers,read_price_rules,write_price_rules,read_discounts,write_discounts,read_draft_orders,read_fulfillments,read_inventory,read_inventory_shipments,read_inventory_shipments_received_items,read_inventory_transfers,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders,write_order_edits,read_order_edits,read_orders,write_orders,read_product_feeds,read_product_listings,read_products,read_returns,write_returns,read_third_party_fulfillment_orders"
+
+[auth]
+# The Core OAuth callback, matching SHOPIFY_REDIRECT_URI in .env.prod.
+#
+# ⚠️  This list REPLACES the live allowlist once include_config_on_deploy is
+# true. Any redirect currently registered on the app and missing here stops
+# working. The dashboard allowlist has NOT been read, so this list is
+# provably complete only for the callback the code actually uses.
+redirect_urls = [
+  "https://app.gotcha.co.il/api/connectors/shopify/oauth/callback",
+]
+
+[webhooks]
+# In step with packages/shared/src/lib/shopify-api-version.ts.
+api_version = "2026-07"
+
+  # Commerce lifecycle. Verified against the CORE secret (SHOPIFY_API_SECRET).
+  [[webhooks.subscriptions]]
+  topics = [ "app/uninstalled" ]
+  uri = "https://app.gotcha.co.il/api/connectors/shopify/webhooks/app-uninstalled"
+
+  # Mandatory compliance topics for public App Store distribution.
+  #
+  # These are NOT ordinary subscriptions: declaring them under
+  # [[webhooks.subscriptions]] is rejected outright ("The following topic is
+  # invalid: customers/data_request"). Shopify requires this named block.
+  [webhooks.privacy_compliance]
+  customer_data_request_url = "https://app.gotcha.co.il/api/connectors/shopify/webhooks/customers-data-request"
+  customer_deletion_url = "https://app.gotcha.co.il/api/connectors/shopify/webhooks/customers-redact"
+  shop_deletion_url = "https://app.gotcha.co.il/api/connectors/shopify/webhooks/shop-redact"
+
+[app_proxy]
+# The ONLY way the storefront can prove which customer is chatting.
+#
+# The shopper's browser calls the merchant's own origin
+# (https://<shop>/apps/gotcha-chat/...); Shopify then calls `url`
+# server-to-server with `logged_in_customer_id` and a `signature` made with
+# THIS app's secret. The browser never holds the secret, so it cannot forge
+# the claim — which is why Liquid's `customer.id` is not usable for this.
+#
+# Under the unified app the signing secret is the CORE secret. The runtime
+# verification path moves with it; see shopify-chat-public.ts.
+url = "https://app.gotcha.co.il/api/shopify-chat/proxy"
+subpath = "gotcha-chat"
+prefix = "apps"
+
+[build]
+# FALSE until the dashboard read-back in the runbook is complete. See the
+# header — this single flag is the difference between "ship the extension"
+# and "republish the live scope list and redirect allowlist".
+include_config_on_deploy = false

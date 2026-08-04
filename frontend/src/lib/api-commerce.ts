@@ -95,6 +95,8 @@ export interface CommerceCapabilities {
   canNote: boolean;
   canNotify: boolean;
   grantedScopes: string[];
+  /** "unknown" = never probed. Not permission; show a reconnect prompt. */
+  scopeVerification: "verified" | "unknown";
   lastCheckedAt: string | null;
   missingScopes: string[];
 }
