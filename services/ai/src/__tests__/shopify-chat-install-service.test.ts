@@ -256,7 +256,8 @@ describe("verified domains", () => {
     const domains = await refreshVerifiedDomains({
       id: "i1",
       shopDomain: SHOP,
-      status: "ACTIVE",
+      status: "ACTIVE" as const,
+      appIdentity: "gotcha-core",
       tenantId: "t1",
       channelAccountId: "c1",
       verifiedDomains: [SHOP],
@@ -277,7 +278,8 @@ describe("verified domains", () => {
     const domains = await refreshVerifiedDomains({
       id: "i1",
       shopDomain: SHOP,
-      status: "ACTIVE",
+      status: "ACTIVE" as const,
+      appIdentity: "gotcha-core",
       tenantId: "t1",
       channelAccountId: "c1",
       verifiedDomains: [SHOP],

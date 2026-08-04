@@ -5118,7 +5118,18 @@
     "routingMovedHint": "מי עונה לשיחה חדשה נקבע ב-Main Playbook, בדיוק כמו בכל ערוץ אחר.",
     "routingMovedLink": "פתיחת ה-Main Playbook",
     "desktop": "מחשב",
-    "mobile": "נייד"
+    "mobile": "נייד",
+    "statusNotServing": "הצ'אט לא פעיל בחנות שלך",
+    "repair": {
+      "title": "חיבור אפליקציית Shopify דורש תיקון",
+      "installation_missing": "אפליקציית GOTCHA לא מותקנת בחנות הזו",
+      "uninstalled": "אפליקציית GOTCHA הוסרה מהחנות הזו",
+      "wrong_app_identity": "החנות עדיין מקושרת לאפליקציית GOTCHA Chat הישנה",
+      "tenant_binding_missing": "החנות לא מקושרת לסביבת העבודה שלך",
+      "detail": "הגדרות הווידג'ט והשיחות הקודמות נשמרות. התיקון מקשר מחדש את החנות כדי שהצ'אט יחזור לפעול.",
+      "action": "תקן חיבור",
+      "done": "החיבור תוקן"
+    }
   },
   "shopifyInstall": {
     "title": "התקנת GOTCHA Chat",

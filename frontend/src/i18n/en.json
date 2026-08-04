@@ -5117,7 +5117,18 @@
     "routingMovedHint": "Who answers a new chat is decided by your Main Playbook, the same as every other channel.",
     "routingMovedLink": "Open the Main Playbook",
     "desktop": "Desktop",
-    "mobile": "Mobile"
+    "mobile": "Mobile",
+    "statusNotServing": "Chat is not serving your storefront",
+    "repair": {
+      "title": "The Shopify app connection needs repairing",
+      "installation_missing": "The GOTCHA app is not installed on this store",
+      "uninstalled": "The GOTCHA app was removed from this store",
+      "wrong_app_identity": "This store is still linked to the old GOTCHA Chat app",
+      "tenant_binding_missing": "This store is not linked to your workspace",
+      "detail": "Your widget settings and past conversations are kept. Repairing relinks the store so the chat can serve shoppers again.",
+      "action": "Repair connection",
+      "done": "Connection repaired"
+    }
   },
   "shopifyInstall": {
     "title": "Set up GOTCHA Chat",
