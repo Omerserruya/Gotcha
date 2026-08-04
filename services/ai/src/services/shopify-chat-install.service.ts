@@ -31,7 +31,7 @@ import {
   normalizeShopifyShopDomain,
   normalizeStorefrontHost,
   resolveChatActivationState,
-  getShopifyChatAppConfig,
+  getShopifyAppIdentity,
   buildThemeEditorDeepLink,
   isFeatureEnabledForTenant,
   FEATURES,
@@ -172,7 +172,11 @@ export async function recordAuthorizedInstall(input: {
       data: {
         shopDomain: shop,
         status: "PENDING",
-        appIdentity: getShopifyChatAppConfig().appHandle || "gotcha-chat",
+        // Which Shopify app this row came from. "gotcha-core" marks the
+        // unified app; rows written before the cutover carry "gotcha-chat"
+        // or "gotcha-chat-dev", which is exactly the provenance this column
+        // exists to preserve.
+        appIdentity: getShopifyAppIdentity().appHandle || "gotcha-core",
         ...(encrypted ? { accessToken: encrypted, tokenScopes: input.scopes ?? null } : {}),
         verifiedDomains: [shop],
         lastVerifiedAt: new Date(),
@@ -589,7 +593,7 @@ export interface ActivationSnapshot {
  * settings diagnostics and the recovery screen so they can never disagree.
  */
 export async function activationSnapshot(installation: ChatInstallation): Promise<ActivationSnapshot> {
-  const cfg = getShopifyChatAppConfig();
+  const cfg = getShopifyAppIdentity();
   let channel: ShopifyLiveChatChannel | null = null;
   let tenantActive = false;
   let chatEntitled = false;

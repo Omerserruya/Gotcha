@@ -543,12 +543,14 @@ services:
       SHOPIFY_API_SECRET: ${SHOPIFY_API_SECRET:-}
       SHOPIFY_REDIRECT_URI: ${SHOPIFY_REDIRECT_URI:-}
       # ── GOTCHA Shopify CHAT app ───────────────────────────────────
-      # A SEPARATE Shopify Partner app from the Core integration above.
-      # Never reuse SHOPIFY_API_KEY / SHOPIFY_API_SECRET here: a chat
-      # uninstall must not be able to revoke a merchant's commerce
-      # connection. See docs/architecture/shopify-core-vs-chat-app.md.
-      SHOPIFY_CHAT_APP_CLIENT_ID: ${SHOPIFY_CHAT_APP_CLIENT_ID:-}
-      SHOPIFY_CHAT_APP_SECRET: ${SHOPIFY_CHAT_APP_SECRET:-}
+      # RETIRED at the Core/Chat unification. There is ONE Shopify app now,
+      # so app-proxy signatures, webhook HMACs and the Theme Editor deep
+      # link all derive from SHOPIFY_API_KEY / SHOPIFY_API_SECRET above.
+      #
+      # SHOPIFY_CHAT_APP_CLIENT_ID / _SECRET are deliberately NOT re-declared
+      # pointing at the Core values: two environment names for one secret
+      # means the first rotation that misses one breaks proxy verification
+      # with an error that reads like a misconfigured proxy.
       SHOPIFY_CHAT_APP_URL: ${SHOPIFY_CHAT_APP_URL:-https://app.gotcha.co.il}
       SHOPIFY_CHAT_REDIRECT_URI: ${SHOPIFY_CHAT_REDIRECT_URI:-https://app.gotcha.co.il/api/connectors/shopify-chat/oauth/callback}
       # The App Embed BLOCK handle is the .liquid file name (underscore),
