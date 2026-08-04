@@ -92,6 +92,12 @@ vi.mock("../services/post-conversation-crm.service", () => ({
   applyCrmPatchKindAware: async () => ({ ok: false, outcome: "skipped" }),
   createCrmTaskKindAware: async () => ({ ok: false, outcome: "skipped" }),
   getCrmIdentity: async () => ({ crmContactId: null, crmObjectKind: null }),
+  // These tests are about the CLAIM, not about vendor writes. An unlinked
+  // customer is the honest default here: no CRM record to write the summary
+  // onto, so the pipeline records the skip and moves on.
+  writeSummaryNoteKindAware: async () => ({
+    ok: false, outcome: "skipped", crmContactId: null, reason: "no-crm-link",
+  }),
 }));
 vi.mock("../services/existing-action-items.service", () => ({ loadExistingActionItems: async () => [] }));
 vi.mock("../services/intelligence-ingest.service", () => ({ ingestConversationFacts: async () => ({}) }));

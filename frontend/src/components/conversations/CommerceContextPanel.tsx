@@ -33,6 +33,9 @@ const NAV_LIMIT_STEP = 25; // how many more each "load more" brings
 /** Message scope for customer-level actions, which have no order id. */
 const CUSTOMER_SCOPE = "__customer__";
 
+/** The order-scoped actions this panel can dispatch. */
+type OrderActionKind = "cancel" | "refund" | "create_return" | "exchange_item";
+
 const toneText: Record<StatusChip["tone"], string> = {
   positive: "text-emerald-600",
   warning: "text-amber-600",
@@ -87,7 +90,7 @@ export function CommerceContextPanel({ conversationId, token, onState }: Props) 
   const [loading, setLoading] = useState(true);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [busy, setBusy] = useState(false);
-  const [confirm, setConfirm] = useState<{ order: OrderCard; action: "cancel" | "refund" } | null>(null);
+  const [confirm, setConfirm] = useState<{ order: OrderCard; action: OrderActionKind } | null>(null);
   // Customer tags, seeded from the context and replaced by the VERIFIED list the
   // server returns after a change - never patched locally.
   const [tags, setTags] = useState<string[] | null>(null);
@@ -198,7 +201,7 @@ export function CommerceContextPanel({ conversationId, token, onState }: Props) 
     }
   }
 
-  function runOrderAction(order: OrderCard, action: "cancel" | "refund", params: CommerceActionInput["params"]) {
+  function runOrderAction(order: OrderCard, action: OrderActionKind, params: CommerceActionInput["params"]) {
     void doAction(
       {
         orderId: order.orderId,
@@ -385,6 +388,22 @@ export function CommerceContextPanel({ conversationId, token, onState }: Props) 
           t={t}
         />
       )}
+      {confirm?.action === "create_return" && (
+        <ReturnDialog
+          order={confirm.order}
+          onCancel={() => setConfirm(null)}
+          onConfirm={(params) => runOrderAction(confirm.order, "create_return", params)}
+          t={t}
+        />
+      )}
+      {confirm?.action === "exchange_item" && (
+        <ExchangeDialog
+          order={confirm.order}
+          onCancel={() => setConfirm(null)}
+          onConfirm={(params) => runOrderAction(confirm.order, "exchange_item", params)}
+          t={t}
+        />
+      )}
     </section>
   );
 }
@@ -452,7 +471,7 @@ function SingleOrderCard({
   menuOpen: boolean;
   setMenuOpen: (v: boolean) => void;
   msg: { text: string; tone: StatusChip["tone"] } | null;
-  onAction: (a: "cancel" | "refund") => void;
+  onAction: (a: OrderActionKind) => void;
   onRefresh: () => void;
   dateLocale: string;
   t: (k: string, v?: Record<string, string>) => string;
@@ -465,7 +484,8 @@ function SingleOrderCard({
   // is noise about a capability they do not have.
   const blocked =
     (caps?.canCancel && !order.eligibility.cancellable) ||
-    (caps?.canRefund && !order.eligibility.refundable);
+    (caps?.canRefund && !order.eligibility.refundable) ||
+    (caps?.canReturn && !order.eligibility.returnable && !order.eligibility.exchangeable);
   const eligibilityNote = blocked ? eligibilityReason(order.eligibility.reasonIfNot, t) : null;
   return (
     <div className="p-3">
@@ -523,6 +543,20 @@ function SingleOrderCard({
           {caps?.canCancel && order.eligibility.cancellable && (
             <button disabled={busy} onClick={() => onAction("cancel")} className="text-[10px] font-medium px-2 py-1 rounded-md bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 disabled:opacity-40">
               {t("commerce.cancel") || "Cancel"}
+            </button>
+          )}
+          {/* Return and exchange are mutually exclusive by order state, not by
+              preference: an exchange is an order edit (pre-shipping) and a
+              return only exists once something has shipped. Showing both at
+              once would offer a choice the order cannot honour. */}
+          {caps?.canReturn && order.eligibility.returnable && (
+            <button disabled={busy} onClick={() => onAction("create_return")} className="text-[10px] font-medium px-2 py-1 rounded-md bg-white border border-sky-200 text-sky-700 hover:bg-sky-50 disabled:opacity-40">
+              {t("commerce.createReturn") || "Return"}
+            </button>
+          )}
+          {caps?.canReturn && order.eligibility.exchangeable && (
+            <button disabled={busy} onClick={() => onAction("exchange_item")} className="text-[10px] font-medium px-2 py-1 rounded-md bg-white border border-violet-200 text-violet-700 hover:bg-violet-50 disabled:opacity-40">
+              {t("commerce.exchangeItem") || "Exchange"}
             </button>
           )}
           {/* An action that is gone because of the ORDER's state must say so.
@@ -791,6 +825,184 @@ function CancelDialog({
           className="text-xs px-3 py-1.5 rounded-lg text-white bg-rose-600 hover:bg-rose-700"
         >
           {t("commerce.cancel") || "Cancel order"}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+/**
+ * Open a return (RMA) against a shipped order.
+ *
+ * Line selection defaults to EVERYTHING, matching the server's behaviour when
+ * `returnLineItems` is omitted, but an agent can narrow it - a three-item
+ * order with one faulty item is the common case, and "return all of it" would
+ * be the wrong answer to it.
+ *
+ * The quantities and ids shown here are the order's; Shopify decides what is
+ * actually returnable and the adapter refuses anything it cannot match, so a
+ * selection made against stale data fails loudly rather than returning the
+ * wrong goods.
+ */
+function ReturnDialog({
+  order, onConfirm, onCancel, t,
+}: {
+  order: OrderCard;
+  onConfirm: (params: CommerceActionInput["params"]) => void;
+  onCancel: () => void;
+  t: (k: string, v?: Record<string, string>) => string;
+}) {
+  const lines = (order.detail?.lineItems ?? []).filter((li) => li.lineItemId);
+  const [selected, setSelected] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(lines.map((li) => [li.lineItemId, true])),
+  );
+  const [reason, setReason] = useState("");
+  const chosen = lines.filter((li) => selected[li.lineItemId]);
+  // With no line detail at all, the honest request is "everything returnable",
+  // which is exactly what omitting the field asks the server for.
+  const nothingSelectable = lines.length === 0;
+
+  return (
+    <Modal onCancel={onCancel} titleId="return-title">
+      <p id="return-title" className="text-sm font-semibold text-gray-900 mb-1">
+        {t("commerce.confirmReturn") || "Open a return?"}
+      </p>
+      <div className="text-[11px] text-gray-600 space-y-1 mb-3">
+        <div><span className="text-gray-400">{t("commerce.order") || "Order"}:</span> <span dir="ltr">{order.orderNumber}</span></div>
+        <StatusLine order={order} t={t} />
+      </div>
+
+      {!nothingSelectable && (
+        <div className="space-y-1.5 mb-3 max-h-40 overflow-y-auto">
+          {lines.map((li) => (
+            <Check
+              key={li.lineItemId}
+              id={`return-line-${li.lineItemId}`}
+              checked={!!selected[li.lineItemId]}
+              onChange={(v) => setSelected((prev) => ({ ...prev, [li.lineItemId]: v }))}
+              label={`${li.title}${li.variantTitle ? ` · ${li.variantTitle}` : ""} × ${li.quantity}`}
+            />
+          ))}
+        </div>
+      )}
+
+      <input
+        data-testid="return-reason"
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+        placeholder={t("commerce.reasonOptional") || "Reason (optional)"}
+        className="w-full px-2 py-1.5 rounded-lg border border-gray-200 text-xs outline-none focus:border-indigo-300 mb-3"
+      />
+
+      {/* The opposite is what people assume, so it is said out loud - exactly
+          as the cancel dialog says a cancel does not refund. */}
+      <p className="text-[10px] text-gray-500 mb-3">
+        {t("commerce.returnDoesNotRefund") || "Opening a return does not refund. Refund is a separate action."}
+      </p>
+      <p className="text-gray-400 text-[10px] mb-3">{t("commerce.actionSubjectToApproval") || "Subject to your store's rules and may require approval."}</p>
+
+      <div className="flex justify-end gap-2">
+        <button onClick={onCancel} className="text-xs px-3 py-1.5 rounded-lg text-gray-600 hover:bg-gray-100">{t("commerce.back") || "Back"}</button>
+        <button
+          data-testid="return-submit"
+          disabled={!nothingSelectable && chosen.length === 0}
+          onClick={() =>
+            onConfirm({
+              ...(nothingSelectable
+                ? {}
+                : {
+                    returnLineItems: chosen.map((li) => ({
+                      lineItemId: li.lineItemId,
+                      quantity: li.quantity,
+                      ...(reason.trim() ? { returnReason: reason.trim() } : {}),
+                    })),
+                  }),
+              ...(reason.trim() ? { reason: reason.trim() } : {}),
+            })
+          }
+          className="text-xs px-3 py-1.5 rounded-lg text-white bg-sky-600 hover:bg-sky-700 disabled:opacity-40"
+        >
+          {t("commerce.createReturn") || "Open return"}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+/**
+ * Swap one line for a different variant, BEFORE the order ships.
+ *
+ * The variant id is typed rather than picked: this panel has no product
+ * browser, and inventing one that guesses at the catalogue would be worse
+ * than asking for the id the agent can copy from the product page. The server
+ * resolves and validates it - an id that is not a real variant fails there,
+ * not here.
+ */
+function ExchangeDialog({
+  order, onConfirm, onCancel, t,
+}: {
+  order: OrderCard;
+  onConfirm: (params: CommerceActionInput["params"]) => void;
+  onCancel: () => void;
+  t: (k: string, v?: Record<string, string>) => string;
+}) {
+  const lines = (order.detail?.lineItems ?? []).filter((li) => li.lineItemId);
+  const [lineItemId, setLineItemId] = useState(lines[0]?.lineItemId ?? "");
+  const [variantId, setVariantId] = useState("");
+
+  return (
+    <Modal onCancel={onCancel} titleId="exchange-title">
+      <p id="exchange-title" className="text-sm font-semibold text-gray-900 mb-1">
+        {t("commerce.confirmExchange") || "Exchange an item?"}
+      </p>
+      <div className="text-[11px] text-gray-600 space-y-1 mb-3">
+        <div><span className="text-gray-400">{t("commerce.order") || "Order"}:</span> <span dir="ltr">{order.orderNumber}</span></div>
+        <StatusLine order={order} t={t} />
+      </div>
+
+      {lines.length > 1 && (
+        <select
+          data-testid="exchange-line"
+          value={lineItemId}
+          onChange={(e) => setLineItemId(e.target.value)}
+          className="w-full px-2 py-1.5 rounded-lg border border-gray-200 text-xs outline-none focus:border-indigo-300 mb-2"
+        >
+          {lines.map((li) => (
+            <option key={li.lineItemId} value={li.lineItemId}>
+              {li.title}{li.variantTitle ? ` · ${li.variantTitle}` : ""}
+            </option>
+          ))}
+        </select>
+      )}
+
+      <input
+        data-testid="exchange-variant"
+        value={variantId}
+        onChange={(e) => setVariantId(e.target.value)}
+        placeholder={t("commerce.newVariantId") || "New variant ID"}
+        dir="ltr"
+        className="w-full px-2 py-1.5 rounded-lg border border-gray-200 text-xs outline-none focus:border-indigo-300 mb-3"
+      />
+
+      <p className="text-[10px] text-gray-500 mb-3">
+        {t("commerce.exchangeBeforeShipping") || "An exchange edits the order, so it is only possible before it ships. Once shipped, open a return instead."}
+      </p>
+      <p className="text-gray-400 text-[10px] mb-3">{t("commerce.actionSubjectToApproval") || "Subject to your store's rules and may require approval."}</p>
+
+      <div className="flex justify-end gap-2">
+        <button onClick={onCancel} className="text-xs px-3 py-1.5 rounded-lg text-gray-600 hover:bg-gray-100">{t("commerce.back") || "Back"}</button>
+        <button
+          data-testid="exchange-submit"
+          disabled={!variantId.trim()}
+          onClick={() =>
+            onConfirm({
+              ...(lineItemId ? { exchangeLineItemId: lineItemId } : {}),
+              exchangeNewVariantId: variantId.trim(),
+            })
+          }
+          className="text-xs px-3 py-1.5 rounded-lg text-white bg-violet-600 hover:bg-violet-700 disabled:opacity-40"
+        >
+          {t("commerce.exchangeItem") || "Exchange"}
         </button>
       </div>
     </Modal>

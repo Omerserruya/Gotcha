@@ -77,6 +77,88 @@ function renderPatchAsNote(fields: Record<string, unknown>): string {
 }
 
 /**
+ * Render the conversation summary as the body of a CRM note.
+ *
+ * Prefixed so a merchant scanning a customer record can tell at a glance
+ * that GOTCHA wrote this and that it is a summary rather than something a
+ * human typed. The body is bounded: on Shopify this lands in the customer's
+ * single free-text `note` field, which every future note appends to, so an
+ * unbounded summary would grow that field without limit.
+ */
+function renderSummaryAsNote(summary: string): string {
+  const body = String(summary ?? "").trim();
+  if (!body) return "";
+  const MAX = 1500;
+  const clipped = body.length > MAX ? `${body.slice(0, MAX - 1).trimEnd()}…` : body;
+  return `GOTCHA - conversation summary:\n${clipped}`;
+}
+
+/**
+ * Write the conversation summary onto the customer's record in the
+ * merchant's CRM.
+ *
+ * This is deliberately SEPARATE from `applyCrmPatchKindAware`. That function
+ * writes the sparse FIELD patch and only falls back to a note when the field
+ * update fails — so on a vendor where field updates succeed (Shopify, whose
+ * `updateRecord` maps to `shopify.update_customer`) the note path never ran
+ * and the merchant's customer record held no record of what was discussed.
+ *
+ * On Shopify `createNote` appends to the customer's single free-text `note`
+ * field, which is where a merchant actually looks. Idempotency comes from
+ * the `source_interaction_id` marker the adapter appends to the body and the
+ * vendor handler's check for it.
+ */
+export async function writeSummaryNoteKindAware(args: {
+  tenantId: string;
+  conversationId: string;
+  summary: string;
+  /** Optional override - pass a precomputed identity to skip the DB lookup. */
+  identity?: { crmContactId: string | null; crmObjectKind: CrmObjectKind | null };
+  /** Idempotency / dedup key. Defaults to the conversation id. */
+  sourceInteractionId?: string;
+}): Promise<{ ok: boolean; outcome: "note" | "skipped"; crmContactId: string | null; reason?: string }> {
+  const body = renderSummaryAsNote(args.summary);
+  if (!body) return { ok: false, outcome: "skipped", crmContactId: null, reason: "empty-summary" };
+
+  const identity = args.identity ?? (await resolveCrmIdentity(args.tenantId, args.conversationId));
+  if (!identity.crmContactId || !identity.crmObjectKind) {
+    return { ok: false, outcome: "skipped", crmContactId: identity.crmContactId, reason: "no-crm-link" };
+  }
+
+  const adapter = await getCrmAdapter(args.tenantId).catch(() => null);
+  if (!adapter || adapter.capabilities.is_stub) {
+    return { ok: false, outcome: "skipped", crmContactId: identity.crmContactId, reason: "no-crm-adapter" };
+  }
+  if (!adapter.createNote) {
+    return { ok: false, outcome: "skipped", crmContactId: identity.crmContactId, reason: "no-create-note" };
+  }
+  // A vendor that models no note-like activity at all (capability declared,
+  // not guessed) is a skip, not a failure — there is nowhere to put this.
+  if (!adapter.capabilities.activity_kinds_supported?.includes("note")) {
+    return { ok: false, outcome: "skipped", crmContactId: identity.crmContactId, reason: "notes-unsupported" };
+  }
+
+  const res = await adapter.createNote({
+    contact_id: identity.crmContactId,
+    kind: identity.crmObjectKind,
+    body,
+    // Distinct from the field patch's marker so the two writes cannot be
+    // mistaken for each other, and so a retry of one does not suppress the
+    // other's idempotency check.
+    source_interaction_id: `${args.sourceInteractionId ?? args.conversationId}:summary`,
+  });
+  if (!res.ok) {
+    return {
+      ok: false,
+      outcome: "skipped",
+      crmContactId: identity.crmContactId,
+      reason: `note-failed:${res.reason ?? "unknown"}`,
+    };
+  }
+  return { ok: true, outcome: "note", crmContactId: identity.crmContactId };
+}
+
+/**
  * Apply the sparse CRM patch the summarizer produced. Routes by kind so
  * Leads get updated in Leads and Contacts in Contacts. Falls back to a
  * timeline note when the adapter can't update the kind (Salesforce contact).

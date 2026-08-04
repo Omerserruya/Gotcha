@@ -25,6 +25,11 @@
 import { prisma } from "@chatcenter/shared";
 import { loadCustomerContext, type CustomerContextBundle } from "./memory/customer-context.service";
 import { generateResponse, getDefaultModel } from "./ai.service";
+import {
+  loadCustomerCommerceFacts,
+  renderCommerceFactsForPrompt,
+  type CustomerCommerceFacts,
+} from "./customer-commerce-facts.service";
 
 export interface CustomerBriefRecord {
   id: string;
@@ -227,6 +232,18 @@ export async function refreshCustomerBriefFromConversation(args: {
     `samples=${priorMessageSamples.length}`,
   );
 
+  // Purchase history from the merchant's store, via the resolved CRM adapter.
+  // Best-effort and non-fatal: a store that is slow, rate-limited or
+  // disconnected costs the brief its commerce section, never the brief itself.
+  const commerceFacts = await loadCustomerCommerceFacts({
+    tenantId: args.tenantId,
+    crmContactId: bundle.crmContactId,
+    crmObjectKind: bundle.crmObjectKind,
+  }).catch((err: any) => {
+    console.warn(`[customer-brief] commerce facts unavailable: ${err?.message ?? "unknown"}`);
+    return null;
+  });
+
   const { brief, signals, tone, mood, recommendedBehaviors } = await generateBriefText({
     tenantId: args.tenantId,
     bundle,
@@ -235,6 +252,7 @@ export async function refreshCustomerBriefFromConversation(args: {
     currentChannel: conv?.channel ?? null,
     priorMessageSamples,
     siblingConversationCount: siblingConvIds.length,
+    commerceFacts,
   });
 
   const channels = Array.from(new Set(bundle.recent_summaries.map((s) => s.channel).filter(Boolean)));
@@ -305,6 +323,8 @@ async function generateBriefText(args: {
    *  (personId + CRM pin). Used to communicate scope to the LLM even when
    *  the message-sample window doesn't cover all of them. */
   siblingConversationCount: number;
+  /** Computed purchase history. Null when the customer has no store link. */
+  commerceFacts?: CustomerCommerceFacts | null;
 }): Promise<{
   brief: string;
   signals: string[];
@@ -378,6 +398,11 @@ async function generateBriefText(args: {
     profileLines.push("", `## Sentiment trend across prior conversations (most-recent first): ${bundle.sentiment_trend.join(", ")}`);
   }
 
+  // Purchase history. Arithmetic done in code, handed over as fact - see
+  // customer-commerce-facts.service for why the model is not allowed to
+  // compute any of these numbers itself.
+  profileLines.push(...renderCommerceFactsForPrompt(args.commerceFacts ?? null));
+
   const profile = profileLines.join("\n");
 
   // STRICT scope rule: the brief is about WHO THIS CUSTOMER IS over time -
@@ -400,6 +425,12 @@ async function generateBriefText(args: {
     "5. Never write filler like \"asking about wellbeing\", \"checking in\", \"reaching out to say hi\" unless those exact intents appear in prior messages.",
     "6. NAME concrete topics from prior conversations - products, features, prices, complaints, requests they actually wrote about.",
     "7. If you cite a topic, it must be quotable from the profile.",
+    "",
+    "COMMERCE RULES (only when a \"Commerce history\" section is present):",
+    "8. Those numbers are already computed. Quote them as given - NEVER recalculate, re-derive or estimate a total, an average or a date. A wrong number here reaches the customer.",
+    "9. Treat purchase history as first-class evidence about who this person is: a loyal high-spender and a lapsed one-time buyer are different customers even with identical message history.",
+    "10. Surface a lapsed high-value customer, an order state needing attention, or a spend level that should change how they are treated - those belong in `signals` and `recommended_behaviors`.",
+    "11. If there is no Commerce history section, say nothing about orders or spend. Absence of the section is not evidence they never bought.",
     "",
     "BEHAVIORAL DEPTH (this is the value the brief adds):",
     "- Arc across channels: how have they engaged with the business over time?",

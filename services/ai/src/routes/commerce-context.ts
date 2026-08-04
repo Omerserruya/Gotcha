@@ -37,23 +37,26 @@ function principalOf(req: Request & { tenantId?: string }): PermissionPrincipal 
 }
 
 async function commercePerms(p: PermissionPrincipal) {
-  const [canRead, canOpen, canCancel, canRefund, canTag, canNote, canNotify] = await Promise.all([
+  const [canRead, canOpen, canCancel, canRefund, canReturn, canTag, canNote, canNotify] = await Promise.all([
     hasPermission(p, "customer:commerce:read"),
     hasPermission(p, "customer:commerce:open"),
     hasPermission(p, "customer:commerce:cancel"),
     hasPermission(p, "customer:commerce:refund"),
+    hasPermission(p, "customer:commerce:return"),
     hasPermission(p, "customer:commerce:tag"),
     hasPermission(p, "customer:commerce:note"),
     hasPermission(p, "customer:commerce:notify"),
   ]);
-  return { canRead, canOpen, canCancel, canRefund, canTag, canNote, canNotify };
+  return { canRead, canOpen, canCancel, canRefund, canReturn, canTag, canNote, canNotify };
 }
 
 /** Which permission a given action needs. One table, so the route gate and the
  *  service gate cannot disagree about what an action costs. */
-const PERMISSION_FOR: Record<string, "canCancel" | "canRefund" | "canTag" | "canNote" | "canNotify"> = {
+const PERMISSION_FOR: Record<string, "canCancel" | "canRefund" | "canReturn" | "canTag" | "canNote" | "canNotify"> = {
   cancel: "canCancel",
   refund: "canRefund",
+  create_return: "canReturn",
+  exchange_item: "canReturn",
   add_tag: "canTag",
   remove_tag: "canTag",
   add_note: "canNote",
@@ -106,6 +109,7 @@ router.post(
   requirePermission(
     "customer:commerce:cancel",
     "customer:commerce:refund",
+    "customer:commerce:return",
     "customer:commerce:tag",
     "customer:commerce:note",
     "customer:commerce:notify",
@@ -157,6 +161,7 @@ router.post(
         perms: {
           canCancel: perms.canCancel,
           canRefund: perms.canRefund,
+          canReturn: perms.canReturn,
           canTag: perms.canTag,
           canNote: perms.canNote,
           canNotify: perms.canNotify,

@@ -20,7 +20,7 @@ vi.mock("../services/connectors/customer-access-guard", () => ({
 import { buildCommerceContextResponse, invalidateCommerceCache } from "../services/commerce-context.service";
 import { handleCommerceCacheEvent } from "../services/commerce-cache-subscriber";
 
-const PERMS = { canRead: true, canOpen: true, canCancel: true, canRefund: true, canTag: true, canNote: true, canNotify: true };
+const PERMS = { canRead: true, canOpen: true, canCancel: true, canRefund: true, canReturn: true, canTag: true, canNote: true, canNotify: true };
 const ORDERS = [
   { id: 5001, name: "#1246", created_at: "2026-07-18T10:00:00Z", currency: "USD", total_price: "120.00",
     financial_status: "paid", fulfillment_status: null, cancelled_at: null,
@@ -74,8 +74,8 @@ describe("25. webhook-driven invalidation", () => {
   });
 
   it("different viewer permissions do NOT share a cache entry (capabilities are per-viewer)", async () => {
-    const reader = { canRead: true, canOpen: true, canCancel: false, canRefund: false, canTag: false, canNote: false, canNotify: false };
-    const manager = { canRead: true, canOpen: true, canCancel: true, canRefund: true, canTag: true, canNote: true, canNotify: true };
+    const reader = { canRead: true, canOpen: true, canCancel: false, canRefund: false, canReturn: false, canTag: false, canNote: false, canNotify: false };
+    const manager = { canRead: true, canOpen: true, canCancel: true, canRefund: true, canReturn: true, canTag: true, canNote: true, canNotify: true };
     const a = await buildCommerceContextResponse({ tenantId: "tCACHE", conversationId: "conv1", perms: reader });
     const b = await buildCommerceContextResponse({ tenantId: "tCACHE", conversationId: "conv1", perms: manager });
     if (a.state !== "ok" || b.state !== "ok") throw new Error(`${a.state}/${b.state}`);

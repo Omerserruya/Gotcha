@@ -251,3 +251,74 @@ describe("failure honesty", () => {
     await expect(run("cancel_order", { order_id: "1001" })).rejects.toThrow(/shopify_403/);
   });
 });
+
+describe("shopify.create_note", () => {
+  /** A customer whose `note` field starts at `note` and records every PUT. */
+  function customerWithNote(note: string) {
+    let current = note;
+    const puts: string[] = [];
+    const calls = stubShopify([
+      {
+        match: (m, u) => m === "GET" && /\/customers\/77\.json$/.test(u),
+        reply: () => ({ customer: { id: 77, note: current } }),
+      },
+      {
+        match: (m, u) => m === "PUT" && /\/customers\/77\.json$/.test(u),
+        reply: (_m, _u, body) => {
+          current = body?.customer?.note ?? current;
+          puts.push(current);
+          return { customer: { id: 77, note: current } };
+        },
+      },
+    ]);
+    return { calls, puts, read: () => current };
+  }
+
+  const MARKER = "[gotcha_source_interaction_id=conv-1:summary]";
+
+  it("appends to the customer's existing note rather than replacing it", async () => {
+    const c = customerWithNote("Prefers pickup.");
+
+    await run("create_note", { customer_id: "77", note: `New summary.\n\n${MARKER}` });
+
+    expect(c.read()).toContain("Prefers pickup.");
+    expect(c.read()).toContain("New summary.");
+  });
+
+  it("does not append twice when the same marked note is retried", async () => {
+    // `customer.note` is one free-text field that every note appends to, and
+    // this handler is reached by retried background work. Without the marker
+    // check a redelivered post-chat run duplicates the summary permanently.
+    const c = customerWithNote("");
+
+    await run("create_note", { customer_id: "77", note: `Summary v1.\n\n${MARKER}` });
+    await run("create_note", { customer_id: "77", note: `Summary v1 reworded by the LLM.\n\n${MARKER}` });
+
+    expect(c.puts).toHaveLength(1);
+    expect(c.read()).toContain("Summary v1.");
+    // The retry must not have written the reworded body either.
+    expect(c.read()).not.toContain("reworded");
+  });
+
+  it("still writes a DIFFERENT conversation's note to the same customer", async () => {
+    const c = customerWithNote("");
+
+    await run("create_note", { customer_id: "77", note: `First.\n\n${MARKER}` });
+    await run("create_note", { customer_id: "77", note: "Second.\n\n[gotcha_source_interaction_id=conv-2:summary]" });
+
+    expect(c.puts).toHaveLength(2);
+    expect(c.read()).toContain("First.");
+    expect(c.read()).toContain("Second.");
+  });
+
+  it("appends an unmarked note every time - dedup is opt-in via the marker", async () => {
+    // A human or the model writing a free-text note has no idempotency key,
+    // and silently swallowing the second one would lose a real note.
+    const c = customerWithNote("");
+
+    await run("create_note", { customer_id: "77", note: "Called about sizing." });
+    await run("create_note", { customer_id: "77", note: "Called about sizing." });
+
+    expect(c.puts).toHaveLength(2);
+  });
+});

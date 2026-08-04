@@ -33,7 +33,7 @@ const OK_CTX = {
       lastOrderAt: "2026-07-18T10:00:00Z",
       repeatCustomer: true, openOrderCount: 1, refundedOrCancelledCount: 0,
     },
-    capabilities: { canOpen: true, canCancel: true, canRefund: true, grantedScopes: [], lastCheckedAt: null, missingScopes: [] },
+    capabilities: { canOpen: true, canCancel: true, canRefund: true, canReturn: true, grantedScopes: [], lastCheckedAt: null, missingScopes: [] },
     recentOrders: [
       {
         orderId: "5001", orderNumber: "#1246", adminUrl: "https://x.myshopify.com/admin/orders/5001",
