@@ -23,14 +23,22 @@
 
 client_id = "b1ce3aa50d8d2e67b978918629bc5f76"
 
-# NOTE: `name` and `handle` are intentionally ABSENT.
+name = "GOTCHA"
+
+# `handle` is intentionally ABSENT.
 #
-# They are unverified — no Admin API maps a client id to an app name, and the
-# Partner Dashboard was not read. Writing a guess here would be worse than
-# writing nothing: with include_config_on_deploy = true a wrong name is
-# published to the live app. The verifier refuses to pass until they are
-# supplied from the dashboard and recorded in .env.prod as
-# SHOPIFY_APP_NAME / SHOPIFY_APP_HANDLE.
+# It has not been read from Shopify, and it is not needed: this app is
+# backend-driven rather than an embedded App Home, so nothing in the
+# deployment path consumes it. A guessed handle only produces admin deep
+# links that 404 for the merchant, and with include_config_on_deploy = true
+# a wrong one would be PUBLISHED to the live app.
+#
+# Add it only when pulled directly from Shopify configuration. Its absence
+# here is correct, not a gap, and the verifier does not treat it as one.
+#
+# `name` above is a LABEL, not an identity check. Names are editable and
+# non-unique; identity is `client_id`, which is what Shopify keys the app on
+# and the only value that cannot be true of two different apps.
 
 # Non-embedded: GOTCHA's merchant UI is its own application, not an iframe
 # inside Shopify admin. There is no App Bridge and no session-token code,

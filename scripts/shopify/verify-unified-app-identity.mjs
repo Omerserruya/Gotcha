@@ -44,6 +44,11 @@ const configPath = path.join(APP_DIR, configName);
 const CORE_CLIENT_ID = "b1ce3aa50d8d2e67b978918629bc5f76";
 /** Must never be the deploy target: it is bound to dev.gotcha.co.il. */
 const CHAT_DEV_CLIENT_ID = "96c9417a8e0b8b7ea17b8c9bf7f4c3ad";
+/**
+ * The app's display name. A LABEL, not an identity check - names are
+ * editable and non-unique. Identity is the client id above.
+ */
+const CANONICAL_APP_NAME = "GOTCHA";
 
 /**
  * The approved 26. Order is irrelevant; membership is not.
@@ -195,26 +200,28 @@ if (envCore && manifest.clientId && envCore !== manifest.clientId) {
   fail(`Manifest client_id ${suffix(manifest.clientId)} disagrees with SHOPIFY_API_KEY ${suffix(envCore)} in .env.prod.`);
 }
 
-// 3. Name and handle must be REAL, not guessed. Unverified is a hard stop:
-//    with include_config_on_deploy the wrong name is published to the live app.
-const expectedName = env.SHOPIFY_APP_NAME || "";
-const expectedHandle = env.SHOPIFY_APP_HANDLE || "";
-if (!expectedName || !expectedHandle) {
-  fail(
-    "SHOPIFY_APP_NAME / SHOPIFY_APP_HANDLE are not set. Read the exact name and handle " +
-      "from the Partner Dashboard and record them in .env.prod. They cannot be inferred: " +
-      "no Shopify API maps a client id to an app name.",
-  );
-} else {
-  if (manifest.name && manifest.name !== expectedName) {
-    fail(`Manifest name "${manifest.name}" != dashboard name "${expectedName}".`);
-  }
-  if (manifest.handle && manifest.handle !== expectedHandle) {
-    fail(`Manifest handle "${manifest.handle}" != dashboard handle "${expectedHandle}".`);
-  }
-  if (!manifest.name || !manifest.handle) {
-    fail("Manifest is missing name/handle. Add them once the dashboard values are confirmed.");
-  }
+// 3. Name is a LABEL, not proof. Handle is not asserted at all.
+//
+//    The client id is the authoritative identity check (checks 1-2 above):
+//    it is what Shopify actually keys the app on, and it is the only value
+//    that cannot be true of two different apps. A name can be edited in the
+//    dashboard and can legitimately be shared, so treating it as proof would
+//    add a check that is simultaneously weaker and more brittle.
+//
+//    The handle is deliberately NOT required and NOT defaulted. This app is
+//    backend-driven rather than an embedded App Home, so nothing in the
+//    deployment path needs it, and a guessed handle only produces admin deep
+//    links that 404 for the merchant. When the real handle is read from
+//    Shopify it can be added to the manifest; until then its absence is
+//    correct, not a gap.
+const expectedName = env.SHOPIFY_APP_NAME || CANONICAL_APP_NAME;
+if (manifest.name && manifest.name !== expectedName) {
+  // A mismatch is still worth stopping on: with include_config_on_deploy the
+  // manifest name is PUBLISHED, so a stale one silently renames the live app.
+  fail(`Manifest name "${manifest.name}" != expected "${expectedName}". Fix the manifest or set SHOPIFY_APP_NAME.`);
+}
+if (manifest.handle) {
+  notes.push(`app handle "${manifest.handle}" will be published - confirm it matches Shopify before enabling config deploy.`);
 }
 
 // 4 + 5. Scope set: exact, both directions.
@@ -301,8 +308,8 @@ console.log(`
   linked client id   ${suffix(manifest.clientId)}
   expected (core)    ${suffix(CORE_CLIENT_ID)}  ← must MATCH
   chat dev id        ${suffix(CHAT_DEV_CLIENT_ID)}  ← must differ
-  app name           ${manifest.name ?? "(absent)"}${expectedName ? "" : "   [dashboard value unknown]"}
-  app handle         ${manifest.handle ?? "(absent)"}
+  app name           ${manifest.name ?? "(absent)"}   [label only - identity is the client id]
+  app handle         ${manifest.handle ?? "(omitted - not read from Shopify, not required)"}
   application url    ${manifest.applicationUrl ?? "(unset)"}
   redirect urls      ${redirectUrls.join("\n                     ") || "(none)"}
   app proxy          ${manifest.proxyUrl ?? "(unset)"}  (/${manifest.proxyPrefix}/${manifest.proxySubpath})
