@@ -692,6 +692,17 @@ export {
   __resetShopifyApiVersionCache,
 } from "./lib/shopify-api-version";
 
+// The ONE Shopify app identity. Replaces the separate Chat app credentials:
+// app-proxy signatures, webhook HMACs and the Theme Editor deep link are all
+// derived from the Core app now. See lib/shopify-app-identity.ts for why this
+// is a replacement rather than an alias of SHOPIFY_CHAT_APP_*.
+export {
+  getShopifyAppIdentity,
+  validateAppIdentity,
+  isAppIdentityConfigured,
+} from "./lib/shopify-app-identity";
+export type { ShopifyAppIdentity, AppIdentityProblem } from "./lib/shopify-app-identity";
+
 // GOTCHA Shopify CHAT app — its own identity, verification and lifecycle.
 // Deliberately a separate module from the live-chat channel config above:
 // one describes the merchant's widget, the other the Shopify app that

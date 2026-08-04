@@ -8,6 +8,7 @@ import {
   getShopifyStore,
   listShopifyLiveChatChannels,
   createShopifyLiveChatChannel,
+  enableShopifyChat,
   updateShopifyLiveChatChannel,
   deleteShopifyLiveChatChannel,
   getShopifyLiveChatDiagnostics,
@@ -198,13 +199,35 @@ export function ShopifyLiveChatSettings() {
     setDirty(true);
   };
 
+  /**
+   * Enable Shopify Chat.
+   *
+   * Under the unified app this is NOT a second Shopify install: the merchant
+   * already authorized one app and the Theme App Extension shipped with it,
+   * so enabling is purely a GOTCHA-side provisioning step. `enableShopifyChat`
+   * derives the shop from the existing Core connection and records the
+   * installation row that activation state and the heartbeat hang off, which
+   * creating a bare channel would not.
+   *
+   * Falls back to plain channel creation when the unified endpoint is not
+   * available yet, so this keeps working against an older API during rollout.
+   */
   async function handleCreate() {
     if (!token) return;
     setSaving(true);
     try {
-      const res = await createShopifyLiveChatChannel(token);
-      setChannel(res.data);
-      setDraft(structuredClone(res.data.config));
+      try {
+        await enableShopifyChat(token);
+      } catch (err: any) {
+        // A store that is genuinely not connected is a real refusal and must
+        // surface; anything else falls back to the legacy create path.
+        if (err?.code === "SHOPIFY_NOT_CONNECTED") throw err;
+        await createShopifyLiveChatChannel(token);
+      }
+      // Re-read rather than trusting the create response: `load()` is the one
+      // place that reconciles channel + store + draft, and enabling may have
+      // adopted a pre-existing channel instead of making a new one.
+      await load();
       setSection("installation");
       notify(t("shopifyChat.created"));
     } catch (err: any) {

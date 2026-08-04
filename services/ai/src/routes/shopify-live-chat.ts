@@ -26,7 +26,7 @@ import {
   evaluateBusinessHours,
   defaultShopifyLiveChatConfig,
   isFeatureEnabledForTenant,
-  getShopifyChatAppConfig,
+  getShopifyAppIdentity,
   buildThemeEditorDeepLink,
   type ProductSnapshot, readDurableSetting } from "@chatcenter/shared";
 import {
@@ -406,7 +406,7 @@ router.get(
     // Shopify's Theme Editor deep link needs the app's client id. When it
     // is not configured we say so plainly instead of handing the merchant
     // a link that silently opens the wrong screen.
-    const chatApp = getShopifyChatAppConfig();
+    const chatApp = getShopifyAppIdentity();
     const deepLink = shop
       ? buildThemeEditorDeepLink({
           shopDomain: shop,

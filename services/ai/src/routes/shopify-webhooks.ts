@@ -1,19 +1,25 @@
 /**
- * Shopify webhooks — two apps, two secrets, two consequences.
+ * Shopify webhooks — one app, one secret, two consequences.
  *
  * Every handler here verifies `X-Shopify-Hmac-Sha256` over the RAW request
  * bytes (captured by createServiceApp's json verify hook). An unverified
  * body is not a webhook, it is an anonymous POST from the internet, so it
  * gets 401 and nothing else happens.
  *
- * The split is the point:
+ * There is now ONE Shopify app, so both route families verify against the
+ * SAME (Core) secret:
  *
- *   /api/shopify-chat/webhooks/*      → CHAT app secret  → chat lifecycle
- *   /api/connectors/shopify/webhooks/* → CORE app secret → commerce lifecycle
+ *   /api/shopify-chat/webhooks/*       → chat lifecycle
+ *   /api/connectors/shopify/webhooks/* → commerce lifecycle
  *
- * A chat uninstall must never disconnect a merchant's commerce integration,
- * and a core uninstall must never silently kill a storefront chat that is
- * still installed. Mixing the secrets would make either possible.
+ * The consequences stay distinct even though the secret no longer does. The
+ * chat routes remain mounted because a store installed under the old
+ * two-app topology still has subscriptions pointing at them; retiring the
+ * endpoints before those drain would silently drop real deliveries.
+ *
+ * Under one app Shopify sends a single app/uninstalled, and it must produce
+ * BOTH consequences - disconnect commerce AND disable the storefront chat.
+ * See the core handler below.
  *
  * Shopify requires public apps to answer the mandatory compliance topics
  * (customers/data_request, customers/redact, shop/redact), so those are
@@ -26,10 +32,14 @@ import {
   withCrossTenantAccess,
   getRedis,
   verifyShopifyWebhookHmac,
-  getShopifyChatAppConfig,
+  getShopifyAppIdentity,
   normalizeShopifyShopDomain,
 } from "@chatcenter/shared";
-import { markUninstalledByShop, findLatestInstallation } from "../services/shopify-chat-install.service";
+import {
+  markUninstalledByShop,
+  findLatestInstallation,
+  disableChatForUninstalledShop,
+} from "../services/shopify-chat-install.service";
 
 const router = Router();
 
@@ -155,7 +165,7 @@ const chat = Router();
  * GOTCHA for orders and refunds, that keeps working.
  */
 chat.post("/app-uninstalled", async (req: Request, res: Response) => {
-  const hook = verify(req, res, getShopifyChatAppConfig().clientSecret, "app/uninstalled");
+  const hook = verify(req, res, getShopifyAppIdentity().clientSecret, "app/uninstalled");
   if (!hook) return;
 
   // Answer first, work second: Shopify's delivery timeout is short and a
@@ -185,7 +195,7 @@ chat.post("/app-uninstalled", async (req: Request, res: Response) => {
  * which is exactly what this handler produces.
  */
 chat.post("/customers-data-request", async (req: Request, res: Response) => {
-  const hook = verify(req, res, getShopifyChatAppConfig().clientSecret, "customers/data_request");
+  const hook = verify(req, res, getShopifyAppIdentity().clientSecret, "customers/data_request");
   if (!hook) return;
   res.status(200).json({ ok: true });
   if (await alreadyProcessed("chat", hook.webhookId)) return;
@@ -200,7 +210,7 @@ chat.post("/customers-data-request", async (req: Request, res: Response) => {
 
 /** Mandatory compliance: erase a shopper's data. */
 chat.post("/customers-redact", async (req: Request, res: Response) => {
-  const hook = verify(req, res, getShopifyChatAppConfig().clientSecret, "customers/redact");
+  const hook = verify(req, res, getShopifyAppIdentity().clientSecret, "customers/redact");
   if (!hook) return;
   res.status(200).json({ ok: true });
   if (await alreadyProcessed("chat", hook.webhookId)) return;
@@ -219,7 +229,7 @@ chat.post("/customers-redact", async (req: Request, res: Response) => {
  * one storefront may never reach another tenant's data.
  */
 chat.post("/shop-redact", async (req: Request, res: Response) => {
-  const hook = verify(req, res, getShopifyChatAppConfig().clientSecret, "shop/redact");
+  const hook = verify(req, res, getShopifyAppIdentity().clientSecret, "shop/redact");
   if (!hook) return;
   res.status(200).json({ ok: true });
   if (await alreadyProcessed("chat", hook.webhookId)) return;
@@ -269,10 +279,18 @@ const core = Router();
  * token that had been revoked, so every Admin call failed at runtime with
  * no explanation anywhere in the product.
  *
- * Consequence is strictly commerce-shaped. The chat channel is deliberately
- * left running: text chat needs no Admin API, and killing a merchant's
- * storefront support chat because they detached a back-office integration
- * would be a bigger surprise than losing product cards.
+ * Under ONE app the consequence is no longer commerce-shaped only.
+ *
+ * With two apps the chat channel was deliberately left running here: text
+ * chat needed no Admin API, so killing it because a back-office integration
+ * was detached would have been a surprise. That reasoning depended on chat
+ * having its own install that was still present. It no longer does - the
+ * Theme App Extension belongs to THIS app and leaves with it, so a chat that
+ * kept claiming to be live would be claiming something the storefront can no
+ * longer render.
+ *
+ * Conversations, messages and audit history are preserved. Only the ability
+ * to serve NEW storefront chat stops.
  */
 core.post("/app-uninstalled", async (req: Request, res: Response) => {
   const hook = verify(req, res, process.env.SHOPIFY_API_SECRET || "", "app/uninstalled");
@@ -310,7 +328,21 @@ core.post("/app-uninstalled", async (req: Request, res: Response) => {
         },
       }),
     );
-    await recordDelivery({ app: "core", hook, tenantId: match.tenantId, outcome: "disconnected" });
+    // The extension left with the app, so the storefront chat goes too.
+    // Best-effort and ordered second: a chat-side failure must not leave the
+    // commerce connection wrongly marked CONNECTED with a revoked token.
+    let chatDisabled = false;
+    try {
+      chatDisabled = (await disableChatForUninstalledShop(shop)).disabled;
+    } catch (err) {
+      console.error("[shopify-webhook] chat disable on core uninstall failed:", (err as Error)?.message);
+    }
+    await recordDelivery({
+      app: "core",
+      hook,
+      tenantId: match.tenantId,
+      outcome: chatDisabled ? "disconnected+chat_disabled" : "disconnected",
+    });
   } catch (err) {
     console.error("[shopify-webhook] core uninstall failed:", (err as Error)?.message);
   }

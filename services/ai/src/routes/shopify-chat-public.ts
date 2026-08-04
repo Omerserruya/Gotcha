@@ -37,7 +37,7 @@ import {
   signCustomerIdentity,
   verifyCustomerIdentity,
   verifiedCustomerExternalId,
-  getShopifyChatAppConfig,
+  getShopifyAppIdentity,
   normalizeShopifyShopDomain,
   MAX_VISITOR_MESSAGE_CHARS,
   type VisitorSessionPayload,
@@ -383,7 +383,9 @@ function publicWidgetConfig(
 // signed, there is simply no id, and the widget carries on anonymously.
 router.get("/proxy/identity", bootstrapLimiter, async (req: Request, res: Response) => {
   try {
-    const { clientSecret } = getShopifyChatAppConfig();
+    // The unified app signs proxy requests with the CORE secret. There is no
+    // second Shopify app and no second secret; see lib/shopify-app-identity.
+    const { clientSecret } = getShopifyAppIdentity();
     if (!verifyAppProxySignature(req.query as Record<string, string | string[] | undefined>, clientSecret)) {
       // Uniform refusal: a bad signature, a missing secret and a replayed
       // request all look the same from the storefront.

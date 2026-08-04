@@ -32,6 +32,7 @@ import type {
 import { executeAdapterTool } from "./connectors/integration-framework";
 import { loadConnection } from "./connectors/integration-framework";
 import { resolveRequesterIdentity } from "./connectors/customer-access-guard";
+import { readScopeState, hasScope } from "./connectors/shopify-scopes";
 
 export const COMMERCE_CACHE_TTL_SECONDS = 60;
 
@@ -415,18 +416,33 @@ function buildCapabilities(
   config: Record<string, any>,
   agent: { canOpen: boolean; canCancel: boolean; canRefund: boolean; canReturn: boolean; canTag: boolean; canNote: boolean; canNotify: boolean },
 ): CommerceCapabilities {
-  const granted: string[] = Array.isArray(config?.grantedScopes) ? config.grantedScopes : [];
-  const hasRead = granted.length === 0 || granted.includes("read_orders");
-  const hasWrite = granted.length === 0 || granted.includes("write_orders");
+  // FAIL CLOSED.
+  //
+  // This previously read `granted.length === 0` as "everything is granted",
+  // so a connection whose scopes had never been read offered every write
+  // button. `grantedScopes` was in fact null on EVERY installation in both
+  // the dev and production databases, which means that permissive branch was
+  // not a rare fallback - it was the only branch anything ever took.
+  //
+  // Unknown now means unknown: no write capability is advertised until the
+  // grant has actually been read from Shopify. `scopeVerification` carries
+  // that distinction outward so the panel can say "verification required"
+  // instead of showing an agent a button whose authority nobody has checked.
+  //
+  // readScopeState also expands implied reads, because Shopify's grant
+  // response omits `read_orders` when `write_orders` is present.
+  const scopes = readScopeState(config);
+  const verified = scopes.verification === "verified";
+  const hasWrite = hasScope(scopes, "write_orders");
   // Tagging and noting write the CUSTOMER record, which is a different scope.
   // Conflating the two would offer a tag button that always fails on a store
   // that granted write_orders but not write_customers.
-  const hasCustomerWrite = granted.length === 0 || granted.includes("write_customers");
+  const hasCustomerWrite = hasScope(scopes, "write_customers");
   // Returns are their own Shopify scope. A store can grant write_orders and
   // still refuse the returns API - the adapter surfaces exactly that as
   // "Access denied ... Required access: read_returns" - so offering a Return
   // button on write_orders alone sends the agent to a guaranteed failure.
-  const hasReturnWrite = granted.length === 0 || granted.includes("write_returns");
+  const hasReturnWrite = hasScope(scopes, "write_returns");
   const missing: string[] = [];
   if (!hasWrite && (agent.canCancel || agent.canRefund)) missing.push("write_orders");
   if (!hasCustomerWrite && (agent.canTag || agent.canNote)) missing.push("write_customers");
@@ -443,9 +459,13 @@ function buildCapabilities(
     // Resending a confirmation is an order-side action, so it rides on the
     // order write scope rather than the customer one.
     canNotify: agent.canNotify && hasWrite,
-    grantedScopes: granted,
+    grantedScopes: [...scopes.effective].sort(),
+    scopeVerification: scopes.verification,
     lastCheckedAt: config?.scopesCheckedAt ?? null,
-    missingScopes: missing,
+    // When the grant was never read, every write scope is "missing" in the
+    // only sense that matters: unproven. Naming them lets the panel prompt a
+    // reconnect instead of showing a silent, capability-free card.
+    missingScopes: verified ? missing : ["write_orders", "write_customers", "write_returns"],
   };
 }
 

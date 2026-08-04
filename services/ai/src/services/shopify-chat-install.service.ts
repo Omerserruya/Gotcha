@@ -31,7 +31,7 @@ import {
   normalizeShopifyShopDomain,
   normalizeStorefrontHost,
   resolveChatActivationState,
-  getShopifyChatAppConfig,
+  getShopifyAppIdentity,
   buildThemeEditorDeepLink,
   isFeatureEnabledForTenant,
   FEATURES,
@@ -39,7 +39,7 @@ import {
 } from "@chatcenter/shared";
 import { SHOPIFY_LIVE_CHAT, loadChannel, type ShopifyLiveChatChannel } from "./shopify-live-chat.service";
 import { resolveShopifyStore } from "./shopify-catalog.service";
-import { executeAdapterTool } from "./connectors/integration-framework";
+import { executeAdapterTool, loadConnection } from "./connectors/integration-framework";
 
 export type InstallStatus = "PENDING" | "ACTIVE" | "UNINSTALLED";
 
@@ -172,7 +172,11 @@ export async function recordAuthorizedInstall(input: {
       data: {
         shopDomain: shop,
         status: "PENDING",
-        appIdentity: getShopifyChatAppConfig().appHandle || "gotcha-chat",
+        // Which Shopify app this row came from. "gotcha-core" marks the
+        // unified app; rows written before the cutover carry "gotcha-chat"
+        // or "gotcha-chat-dev", which is exactly the provenance this column
+        // exists to preserve.
+        appIdentity: getShopifyAppIdentity().appHandle || "gotcha-core",
         ...(encrypted ? { accessToken: encrypted, tokenScopes: input.scopes ?? null } : {}),
         verifiedDomains: [shop],
         lastVerifiedAt: new Date(),
@@ -589,7 +593,7 @@ export interface ActivationSnapshot {
  * settings diagnostics and the recovery screen so they can never disagree.
  */
 export async function activationSnapshot(installation: ChatInstallation): Promise<ActivationSnapshot> {
-  const cfg = getShopifyChatAppConfig();
+  const cfg = getShopifyAppIdentity();
   let channel: ShopifyLiveChatChannel | null = null;
   let tenantActive = false;
   let chatEntitled = false;
@@ -654,4 +658,95 @@ export async function activationSnapshot(installation: ChatInstallation): Promis
     }),
     lastHeartbeatAt: heartbeat ?? null,
   };
+}
+
+// ─── Unified app: enable / disable without a second OAuth ─────
+
+/**
+ * Turn Shopify Chat on for a tenant that already has Shopify connected.
+ *
+ * Under the unified app there is no second install to perform. The merchant
+ * authorized ONE Shopify app; the Theme App Extension ships with it, and
+ * enabling chat is a GOTCHA-side decision, not a Shopify handshake. So this
+ * derives the shop from the Core integration rather than from an OAuth
+ * callback, and records an installation row carrying no token at all - the
+ * storefront never needed Admin access, and now there is no second grant it
+ * could even draw one from.
+ *
+ * Idempotent: enabling an already-enabled channel returns the same channel.
+ */
+export async function enableChatForTenant(input: {
+  tenantId: string;
+  userId?: string;
+}): Promise<
+  | { ok: true; installation: ChatInstallation; channel: ShopifyLiveChatChannel; created: boolean }
+  | { ok: false; reason: "shopify_not_connected" | "not_entitled" | "shop_taken" | "bound_to_other_tenant" | "installation_not_found" | "installation_uninstalled" }
+> {
+  // The Core connection is the only source of the shop domain. Accepting one
+  // from the caller would let a tenant claim a storefront it never connected.
+  const conn = await loadConnection({ tenantId: input.tenantId, slug: "shopify" }).catch(() => null);
+  const shopDomain = normalizeShopifyShopDomain((conn?.config as any)?.shopDomain ?? "");
+  if (!conn || !shopDomain) return { ok: false, reason: "shopify_not_connected" };
+
+  const installation = await recordAuthorizedInstall({ shopDomain, accessToken: null, scopes: null });
+  const bound = await bindInstallationToTenant({
+    installationId: installation.id,
+    tenantId: input.tenantId,
+    userId: input.userId,
+  });
+  if (!bound.ok) return { ok: false, reason: bound.reason };
+
+  return { ok: true, installation: bound.installation, channel: bound.channel, created: bound.created };
+}
+
+/**
+ * Turn Shopify Chat off for a tenant.
+ *
+ * Switches the CHANNEL off and leaves the Shopify connection completely
+ * alone: a merchant who no longer wants a storefront widget still wants
+ * their order and customer tools. The installation row stays too, so
+ * re-enabling does not lose the widget configuration or the verified
+ * domain list.
+ *
+ * The App Embed in the merchant's theme is a separate switch that only they
+ * can flip. Disabling here stops the server answering bootstrap, so the
+ * widget goes away either way - but the embed remains in the theme, and the
+ * UI says so rather than implying GOTCHA removed it.
+ */
+export async function disableChatForTenant(input: {
+  tenantId: string;
+}): Promise<{ ok: boolean; disabled: number }> {
+  const rows = await prisma.channelAccount.findMany({
+    where: { tenantId: input.tenantId, channel: SHOPIFY_LIVE_CHAT as any },
+  });
+  let disabled = 0;
+  for (const row of rows) {
+    const config = readShopifyLiveChatConfig(row.platformMeta);
+    if (!config.enabled) continue;
+    const next = normalizeShopifyLiveChatConfig({ enabled: false }, config);
+    await prisma.channelAccount.update({
+      where: { id: row.id },
+      data: { platformMeta: { shopifyLiveChat: next } as any, isActive: false },
+    });
+    disabled++;
+  }
+  return { ok: true, disabled };
+}
+
+/**
+ * The commerce app was uninstalled, so the storefront chat it carried is
+ * gone too.
+ *
+ * Under two apps a chat uninstall and a commerce uninstall were separate
+ * events with separate consequences. With one app Shopify sends ONE
+ * `app/uninstalled`, and the extension leaves with it - so the honest
+ * response is to disable the channel as well as the connection.
+ *
+ * Deliberately preserves conversations, messages and audit history: the
+ * merchant's support record is theirs and survives an integration being
+ * removed. Only the ability to serve NEW storefront chat stops.
+ */
+export async function disableChatForUninstalledShop(shopDomain: string): Promise<{ disabled: boolean }> {
+  const installation = await markUninstalledByShop(shopDomain);
+  return { disabled: !!installation };
 }

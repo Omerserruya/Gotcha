@@ -185,6 +185,14 @@ export interface CommerceCapabilities {
    *  resend an order confirmation, so nothing consumes this yet. */
   canNotify: boolean;
   grantedScopes: string[];
+  /**
+   * Whether the grant above was actually read from Shopify.
+   *
+   * "unknown" means no probe has ever succeeded for this store. It is NOT
+   * "the store granted nothing" and must never be treated as permission -
+   * the panel shows a reconnect prompt for it.
+   */
+  scopeVerification: "verified" | "unknown";
   lastCheckedAt: string | null;
   /** Scopes required-but-missing for an otherwise-available action. */
   missingScopes: string[];
