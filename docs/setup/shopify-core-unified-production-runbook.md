@@ -362,9 +362,16 @@ SERVICES=ai,gateway ./scripts/docker-publish.sh
 
 ### 12.3 Extension-only Shopify deployment
 
-**Permitted now** for the existing app, because `include_config_on_deploy =
-false` means the deploy ships the Theme App Extension and **cannot** touch the
-live scope list or redirect allowlist.
+**CANCELLED — no such thing exists.**
+
+Shopify CLI 3.x removed `include_config_on_deploy`. Running `app deploy`
+prints *"The `include_config_on_deploy` field is no longer supported and has
+been removed from your configuration file"*, strips the field, and publishes
+configuration and extensions **together**.
+
+This was discovered by running the deploy on 2026-08-04 and reading the
+prompt. The release was **cancelled at the confirmation step**; no version was
+created. Any future deploy requires the live read-back in §12.5 first.
 
 ```bash
 node scripts/shopify/verify-unified-app-identity.mjs   # must print ✓ and exit 0

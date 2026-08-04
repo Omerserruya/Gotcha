@@ -12,14 +12,24 @@
 #
 # It fails closed and has no bypass flag. Run it every time, not once.
 #
-# `include_config_on_deploy` is FALSE below, deliberately. While it is false a
-# deploy ships the extension only and cannot touch the live scope list or the
-# redirect allowlist. Flipping it to true makes this file authoritative over
-# both — at which point an omission here silently REMOVES a live grant and
-# every connected merchant has to re-consent. Do not flip it until the
-# dashboard values in §7 of
-# docs/setup/shopify-core-unified-production-runbook.md have been read back
-# and matched.
+# ⚠️  THERE IS NO EXTENSION-ONLY DEPLOY. `shopify app deploy` ALWAYS PUBLISHES
+# THIS ENTIRE FILE.
+#
+# An earlier version of this manifest carried `[build] include_config_on_deploy
+# = false` and treated it as a safety catch. Shopify CLI 3.x removed the field:
+# running `app deploy` prints "The `include_config_on_deploy` field is no
+# longer supported and has been removed from your configuration file" and then
+# strips it. Configuration and extensions ship together, always.
+#
+# That means every value below is published to the LIVE app the moment anyone
+# deploys. An omission here is a REMOVAL there: a scope missing from this file
+# is revoked on the app, and a redirect URL missing from this file stops
+# working for every connected merchant. There is no undo.
+#
+# Therefore this file must be a faithful SUPERSET of the live configuration
+# before any deploy. The live values have not been read back yet — see §7 of
+# docs/setup/shopify-core-unified-production-runbook.md. Until that comparison
+# is done and approved, do not deploy.
 
 client_id = "b1ce3aa50d8d2e67b978918629bc5f76"
 
@@ -30,8 +40,8 @@ name = "GOTCHA"
 # It has not been read from Shopify, and it is not needed: this app is
 # backend-driven rather than an embedded App Home, so nothing in the
 # deployment path consumes it. A guessed handle only produces admin deep
-# links that 404 for the merchant, and with include_config_on_deploy = true
-# a wrong one would be PUBLISHED to the live app.
+# links that 404 for the merchant, and a wrong one would be PUBLISHED to the
+# live app on the next deploy.
 #
 # Add it only when pulled directly from Shopify configuration. Its absence
 # here is correct, not a gap, and the verifier does not treat it as one.
@@ -62,10 +72,10 @@ scopes = "read_all_orders,read_assigned_fulfillment_orders,read_customers,write_
 [auth]
 # The Core OAuth callback, matching SHOPIFY_REDIRECT_URI in .env.prod.
 #
-# ⚠️  This list REPLACES the live allowlist once include_config_on_deploy is
-# true. Any redirect currently registered on the app and missing here stops
-# working. The dashboard allowlist has NOT been read, so this list is
-# provably complete only for the callback the code actually uses.
+# ⚠️  This list REPLACES the live allowlist on every deploy. Any redirect
+# currently registered on the app and missing here stops working. The
+# dashboard allowlist has NOT been read, so this list is provably complete
+# only for the callback the code actually uses.
 redirect_urls = [
   "https://app.gotcha.co.il/api/connectors/shopify/oauth/callback",
 ]
@@ -103,9 +113,3 @@ api_version = "2026-07"
 url = "https://app.gotcha.co.il/api/shopify-chat/proxy"
 subpath = "gotcha-chat"
 prefix = "apps"
-
-[build]
-# FALSE until the dashboard read-back in the runbook is complete. See the
-# header — this single flag is the difference between "ship the extension"
-# and "republish the live scope list and redirect allowlist".
-include_config_on_deploy = false
