@@ -1,7 +1,7 @@
 # Unified GOTCHA Shopify app — production runbook
 
 **Date:** 2026-08-04
-**Decision:** one production Shopify app (the existing **GOTCHA** app) owns OAuth, the Admin token, the 25-scope set, webhooks, the app proxy **and** the Chat Theme App Extension. Chat becomes a channel toggle inside GOTCHA, with no second OAuth.
+**Decision:** one production Shopify app (the existing **GOTCHA** app) owns OAuth, the Admin token, the 26-scope set, webhooks, the app proxy **and** the Chat Theme App Extension. Chat becomes a channel toggle inside GOTCHA, with no second OAuth.
 **Status of this document:** planning only. **Nothing was deployed, no Shopify app was modified, no CLI create/link/deploy command was run.**
 
 Evidence marks: **[R]** repository · **[L]** live (dev DB / Shopify Admin API read) · **[I]** inferred · **[?]** requires Partner Dashboard verification.
@@ -13,7 +13,7 @@ Evidence marks: **[R]** repository · **[L]** live (dev DB / Shopify Admin API r
 | Property | Value | Confidence |
 |---|---|---|
 | Client ID | `b1ce3aa50d8d2e67b978918629bc5f76` | **[R]** `.env.prod` / `.env`, key `SHOPIFY_API_KEY` |
-| App name | **"GOTCHA" — NOT VERIFIED from this environment** | **[?]** |
+| App name | **GOTCHA** (confirmed by the app owner). A LABEL, not the identity check | **[R]** |
 | Organization | account `omer.serruya@gotcha.co.il` | **[L]** CLI account cache |
 | App type / distribution | public app, Partner-distributed | **[I]** |
 | Production application URL | **[?]** dashboard-managed; no Core TOML exists in the repo | **[R]** absence |
@@ -29,15 +29,17 @@ Evidence marks: **[R]** repository · **[L]** live (dev DB / Shopify Admin API r
 
 **`SHOPIFY_API_KEY` is byte-identical in `.env` and `.env.prod` (`…5f76`) [R].** Production and development Core installs are the **same Shopify app**. There is no separate Core Dev app today. Any config deploy therefore hits production and development simultaneously.
 
-### What could not be proven here
+### Identity is the client id
 
-The **name** "GOTCHA" cannot be confirmed from this environment. No Admin API endpoint maps a client ID to an app name, and the Partner Dashboard was deliberately not touched. The client ID above is proven; the name attached to it is **[?]** and is blocker **B1** in §11.
+The name was supplied by the app owner and is recorded above, but it is **not** the identity assertion: names are editable and non-unique. The verifier keys on `client_id === b1ce3aa50d8d2e67b978918629bc5f76`, which is what Shopify itself keys the app on and the only value that cannot be true of two different apps.
+
+The app **handle** is deliberately absent. This app is backend-driven rather than an embedded App Home, so nothing in the deployment path consumes it, and a guessed handle only produces admin deep links that 404 for the merchant. Add it only if pulled directly from Shopify.
 
 ---
 
 ## 2. Exact scope list
 
-### Requested target set (25, authoritative per the approved decision)
+### Requested target set (26, authoritative per the approved decision)
 
 ```
 read_all_orders                              read_inventory_transfers
@@ -52,7 +54,7 @@ read_draft_orders                            read_products
 read_fulfillments                            read_returns
 read_inventory                               write_returns
 read_inventory_shipments                     read_third_party_fulfillment_orders
-read_inventory_shipments_received_items
+read_inventory_shipments_received_items       write_merchant_managed_fulfillment_orders
 ```
 
 ### What the app ACTUALLY granted, read from Shopify
@@ -68,9 +70,11 @@ write_order_edits, write_orders, read_product_feeds, read_product_listings,
 read_products, write_returns, read_third_party_fulfillment_orders
 ```
 
-19 explicit. Shopify returns the **canonical collapsed form**: a granted `write_X` implies `read_X` and the read is not listed separately. Expanding the six implied reads (`read_customers`, `read_price_rules`, `read_discounts`, `read_order_edits`, `read_orders`, `read_returns`) yields **exactly the 25 requested scopes, with none missing and none extra**.
+19 explicit. Shopify returns the **canonical collapsed form**: a granted `write_X` implies `read_X` and the read is not listed separately. Expanding the six implied reads (`read_customers`, `read_price_rules`, `read_discounts`, `read_order_edits`, `read_orders`, `read_returns`) yields **25 of the 26 requested scopes**.
 
-**This is the strongest evidence in this document.** The 25-scope set is not aspirational. Shopify has already issued it to this app.
+**This is the strongest evidence in this document.** The set is not aspirational: Shopify has already issued 25 of the 26 to this app.
+
+The one exception is **`write_merchant_managed_fulfillment_orders`**, which `update_order_fulfillment` requires and which the live app does **not** currently hold. Adding it is a scope EXPANSION requiring merchant consent at the next install. Pinned by a test (`shopify-scopes.test.ts`) so it cannot drift unnoticed.
 
 ### Third finding: the OAuth code is out of date
 
@@ -117,7 +121,7 @@ Every scope in the list is **VALID** — proven by Shopify having granted all 25
 
 | Scope | Used by | Impact |
 |---|---|---|
-| `write_merchant_managed_fulfillment_orders` | `update_order_fulfillment` **[R]** | That tool cannot succeed under the 25-set. Either add the scope or retire the tool. **This is blocker B3.** |
+| `write_merchant_managed_fulfillment_orders` | `update_order_fulfillment` **[R]** | **RESOLVED:** kept in the approved 26-set. Not yet in the live grant, so the tool cannot succeed until a merchant consents at next install. |
 
 ### Unused scopes flagged for review (not removed, per instruction)
 
@@ -228,9 +232,9 @@ Prints a normalized summary, exits non-zero on any mismatch. **No `--force`, no 
 
 ## 7. Pre-deploy checklist
 
-- [ ] **B1** app name, handle, live redirect list and existing app-proxy config read from the Partner Dashboard
+- [x] **B1** app name supplied (GOTCHA); handle dropped as a blocker; **live redirect list and app-proxy config still required before CONFIG deploy only**
 - [ ] **B2** Protected Customer Data approval confirmed for **production**, not inferred from a dev-store grant
-- [ ] **B3** `write_merchant_managed_fulfillment_orders` decided: add to the set, or retire `update_order_fulfillment`
+- [x] **B3** RESOLVED — `write_merchant_managed_fulfillment_orders` kept, `update_order_fulfillment` kept
 - [ ] **B4** Shopify behaviour confirmed for extension re-registration and for scope expansion on existing installs
 - [ ] Production installed-store count and their granted scopes established from the production database
 - [ ] `shopify.app.production.toml` authored, verifier green
@@ -290,8 +294,108 @@ Do **not** auto-disconnect or auto-reconnect any store. Surface a "reconnect to 
 
 ## Appendix — blockers
 
-- **B1 [CRITICAL]** Confirm from the Partner Dashboard: exact app name, handle, full redirect allowlist, existing app-proxy config. The name "GOTCHA" is currently **unverified**.
+- ~~**B1**~~ RESOLVED for identity: name supplied, handle dropped as a blocker, client id is authoritative. Live redirect allowlist and app-proxy read-back remain required **before config deploy only**.
 - **B2 [CRITICAL]** Confirm production Protected Customer Data approval for `read_customers` / `write_customers` / `read_orders` / `read_all_orders`. A dev-store grant does not prove it.
-- **B3 [HIGH]** Resolve `write_merchant_managed_fulfillment_orders`, used by `update_order_fulfillment` but absent from the approved 25.
+- ~~**B3**~~ RESOLVED: scope kept in the 26-set and the tool retained.
 - **B4 [MEDIUM]** Confirm extension re-registration behaviour and scope-expansion mechanics for existing installs.
-- **B5 [MEDIUM]** Core production and development share one client ID **[R]**. Create a Core Dev app before using `shopify app deploy`, or every config deploy hits production.
+- **B5 [MEDIUM]** Core production and development share one client ID **[R]**. A Core Dev app is planned separately; until it exists, treat every Shopify CLI operation as production-sensitive.
+
+---
+
+## 12. Cutover deployment (added 2026-08-04)
+
+### 12.1 Production environment variable changes
+
+**REMOVE from `.env.prod`** (already removed from both compose files):
+
+```
+SHOPIFY_CHAT_APP_CLIENT_ID     # retired - identity is SHOPIFY_API_KEY
+SHOPIFY_CHAT_APP_SECRET        # retired - signing is SHOPIFY_API_SECRET
+```
+
+Both are currently **empty** in `.env.prod`, so removing them changes no
+running behaviour. They are deleted rather than pointed at the Core values:
+two environment names for one secret means the first rotation that misses one
+breaks app-proxy verification with an error that reads like a misconfigured
+proxy.
+
+**KEEP unchanged** (names only — values are not reproduced here):
+
+| Variable | Note |
+|---|---|
+| `SHOPIFY_API_KEY` | the Core client id, recorded in §1 |
+| `SHOPIFY_API_SECRET` | signs app-proxy requests and webhook HMACs |
+| `SHOPIFY_REDIRECT_URI` | `https://app.gotcha.co.il/api/connectors/shopify/oauth/callback` |
+| `SHOPIFY_CHAT_APP_URL`, `SHOPIFY_CHAT_REDIRECT_URI` | still name the asset host |
+| `SHOPIFY_CHAT_EXTENSION_HANDLE`, `SHOPIFY_CHAT_BLOCK_HANDLE` | extension + App Embed block |
+
+> Values are deliberately NOT written as `NAME=value` here. Secret scanning
+> cannot tell a public client id from a live credential when both appear in
+> that shape, and an allowlist entry for `SHOPIFY_API_KEY=` would teach the
+> scanner to ignore the one line that might one day hold the real secret.
+> The client id itself is in §1, in a table, where it reads as a fact rather
+> than as something to paste into an environment.
+
+**NOT required** (removed as deployment blockers): `SHOPIFY_APP_NAME`,
+`SHOPIFY_APP_HANDLE`. The client id is the authoritative identity.
+
+### 12.2 Services requiring rebuild
+
+Only two. Verified by checking which services import the changed shared
+modules (`shopify-app-identity`, `commerce-context.types`) - the answer is
+`ai` alone:
+
+| Service | Why |
+|---|---|
+| **`ai`** | Owns every changed route and service: proxy verification, webhooks, install/enable/disable, scope gating |
+| **`gateway`** | Serves the static frontend bundle, which changed (API layer, settings component, deleted wizard) |
+
+The other nine services bundle `packages/shared` too, but the only shared
+change they see is an unused export. Rebuilding them is harmless and
+unnecessary.
+
+```bash
+export REGISTRY=docker.io/omerserruya REPO=gotcha PLATFORM=linux/arm64
+export TAG=$(git rev-parse --short HEAD)
+SERVICES=ai,gateway ./scripts/docker-publish.sh
+```
+
+### 12.3 Extension-only Shopify deployment
+
+**Permitted now** for the existing app, because `include_config_on_deploy =
+false` means the deploy ships the Theme App Extension and **cannot** touch the
+live scope list or redirect allowlist.
+
+```bash
+node scripts/shopify/verify-unified-app-identity.mjs   # must print ✓ and exit 0
+cd shopify-app
+shopify app deploy --config production
+```
+
+Preconditions, all currently true:
+
+- production has **zero** Shopify installations (verified live)
+- no protected customer data is accessed by an extension deploy
+- `include_config_on_deploy = false` (asserted by a test)
+
+### 12.4 Rollback
+
+| Stage | Rollback |
+|---|---|
+| Repo only | `git revert` the branch; nothing external changed |
+| After image push | Registry tags are immutable per SHA; redeploy the previous TAG |
+| After service deploy | `sed -i "s/^TAG=.*/TAG=<previous>/" .env` then pull + `up -d` |
+| After extension deploy | Publish the previous app version in the Partner Dashboard. Scopes and redirects were never touched, so nothing to restore there |
+| Chat runtime | Restoring `SHOPIFY_CHAT_APP_*` requires reverting the code too - the variables are no longer read. Revert to the previous image rather than re-adding env vars |
+
+Merchant connections and conversation history are unaffected by every row
+above: no migration runs, and no destructive statement exists on either path.
+
+### 12.5 Still blocked
+
+| Item | Blocks | Status |
+|---|---|---|
+| Live redirect allowlist read-back | **Config deploy only** | Required before `include_config_on_deploy = true` |
+| Live app proxy config read-back | **Config deploy only** | If the live app already has a different proxy, STOP and report before changing |
+| Protected Customer Data approval | **Production merchant rollout** | Does not block repo work or an extension-only deploy while zero merchants are connected |
+| `write_merchant_managed_fulfillment_orders` | `update_order_fulfillment` | In the 26-set but NOT in the live grant; needs consent at next install |
