@@ -35,6 +35,7 @@ const H = vi.hoisted(() => {
     connections: { current: [] as any[] },
     installation: { current: null as any },
     markUninstalled: v.fn(),
+    disableChatOnUninstall: v.fn(async () => ({ disabled: true })),
     updateConnection: v.fn(async () => ({})),
     updateInstallations: v.fn(async () => ({ count: 1 })),
     createAudit: v.fn(async () => ({})),
@@ -68,6 +69,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
 vi.mock("../services/shopify-chat-install.service", () => ({
   markUninstalledByShop: H.markUninstalled,
   findLatestInstallation: vi.fn(async () => H.installation.current),
+  disableChatForUninstalledShop: H.disableChatOnUninstall,
 }));
 
 import router from "../routes/shopify-webhooks";
@@ -92,6 +94,7 @@ beforeEach(() => {
   H.seen.clear();
   H.installation.current = { id: "i1", shopDomain: SHOP, tenantId: "t1", status: "ACTIVE" };
   H.markUninstalled.mockResolvedValue({ id: "i1", shopDomain: SHOP, tenantId: "t1", status: "UNINSTALLED" });
+  H.disableChatOnUninstall.mockResolvedValue({ disabled: true });
   H.connections.current = [{ id: "ti1", tenantId: "t1", config: { shopDomain: SHOP } }];
 });
 
@@ -161,10 +164,33 @@ describe("core app/uninstalled", () => {
     );
   });
 
-  it("leaves the chat installation alone — text chat survives", async () => {
+  it("ALSO disables Shopify Chat — the extension left with the app", async () => {
+    // Inverted at unification. Under two apps this asserted the opposite:
+    // chat survived a core uninstall because it had its own install that was
+    // still present. It no longer does - the Theme App Extension belongs to
+    // this app - so a chat that kept claiming to be live would be claiming
+    // something the storefront can no longer render.
     await post("/api/connectors/shopify/webhooks/app-uninstalled", "core-app-secret");
     await new Promise((r) => setImmediate(r));
-    expect(H.markUninstalled).not.toHaveBeenCalled();
+    expect(H.disableChatOnUninstall).toHaveBeenCalledWith(SHOP);
+  });
+
+  it("still disconnects commerce when disabling chat throws", async () => {
+    // Ordered second and wrapped for exactly this reason: a chat-side failure
+    // must not leave the connection wrongly CONNECTED with a revoked token.
+    H.disableChatOnUninstall.mockRejectedValueOnce(new Error("boom"));
+    await post("/api/connectors/shopify/webhooks/app-uninstalled", "core-app-secret");
+    await new Promise((r) => setImmediate(r));
+    expect(H.updateConnection).toHaveBeenCalled();
+  });
+
+  it("preserves conversation history — uninstall disables, it does not delete", async () => {
+    // The merchant's support record is theirs and survives an integration
+    // being removed. Only the ability to serve NEW storefront chat stops.
+    await post("/api/connectors/shopify/webhooks/app-uninstalled", "core-app-secret");
+    await new Promise((r) => setImmediate(r));
+    const deleteCalls = Object.entries(H).filter(([k]) => /delete|destroy|purge/i.test(k));
+    expect(deleteCalls).toHaveLength(0);
   });
 
   it("refuses a body signed with the RETIRED chat secret", async () => {
