@@ -406,3 +406,48 @@ above: no migration runs, and no destructive statement exists on either path.
 | Live app proxy config read-back | **Config deploy only** | If the live app already has a different proxy, STOP and report before changing |
 | Protected Customer Data approval | **Production merchant rollout** | Does not block repo work or an extension-only deploy while zero merchants are connected |
 | `write_merchant_managed_fulfillment_orders` | `update_order_fulfillment` | In the 26-set but NOT in the live grant; needs consent at next install |
+
+
+---
+
+## 13. Live vs repository comparison (2026-08-04)
+
+Live values supplied by the app owner after a Partner Dashboard read-back.
+Nothing below is guessed.
+
+| Setting | Live Dashboard | Repository TOML | Match | Planned change |
+|---|---|---|---|---|
+| App name | GOTCHA | GOTCHA | ✅ | none |
+| Client ID | `b1ce3aa5…5f76` | `b1ce3aa5…5f76` | ✅ | none |
+| Embedded | false | false | ✅ | none |
+| Application URL | `https://gotcha.co.il` | `https://app.gotcha.co.il` | ❌ | **CHANGE — approved.** The app moved off the marketing apex; every OAuth, proxy and webhook endpoint resolves at `app.` |
+| Redirect — app | released | present | ✅ | preserved |
+| Redirect — apex | released | present | ✅ | **preserved deliberately** — not dropped despite the app URL move |
+| Redirect — dev | released | present | ✅ | **preserved deliberately** |
+| Webhook API version | 2026-04 | 2026-04 | ✅ | none — the repo's 2026-07 pin governs ADMIN calls, a separate contract |
+| Access scopes | 25 effective | 26 | ❌ | **ADDITIVE ONLY.** `write_merchant_managed_fulfillment_orders` added; zero removed (proven by diff) |
+| App proxy | **could not be read** | `/apps/gotcha-chat` → `https://app.gotcha.co.il/api/shopify-chat/proxy` | ? | **ADD.** See below |
+
+### App proxy decision
+
+The live proxy could not be read: `shopify app info` reports only local
+config, and the only command that surfaces it is the deploy itself.
+
+Proceeding with the intended proxy, on the authority given and because:
+
+- there are **zero** Shopify production installations, so no merchant flow can break;
+- the Chat runtime already expects exactly this path (`/api/shopify-chat/proxy`), verified in `shopify-chat-public.ts`;
+- no repository code references any other proxy path — grepped;
+- rollback is prepared (previous app version + previous image digests recorded).
+
+If the released version turns out to have replaced a different live proxy,
+that will be visible immediately after deploy and the previous app version can
+be republished.
+
+### Still blocked
+
+**Protected Customer Data is in Draft, not approved.** This does not block
+publishing configuration, publishing the extension, deploying services, or
+development-store testing. It **does** block onboarding a real production
+merchant, declaring protected customer/order functionality production-ready,
+and processing protected production merchant data.

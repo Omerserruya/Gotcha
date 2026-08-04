@@ -55,6 +55,10 @@ name = "GOTCHA"
 # which is why the authorization-code flow is the correct install path.
 embedded = false
 
+# CHANGED by this rollout: was https://gotcha.co.il (the marketing apex).
+# The application now lives at app.gotcha.co.il, which is where every OAuth,
+# proxy and webhook endpoint in this file resolves. The apex callback stays in
+# the redirect allowlist below regardless.
 application_url = "https://app.gotcha.co.il"
 
 [access_scopes]
@@ -73,16 +77,32 @@ scopes = "read_all_orders,read_assigned_fulfillment_orders,read_customers,write_
 # The Core OAuth callback, matching SHOPIFY_REDIRECT_URI in .env.prod.
 #
 # ⚠️  This list REPLACES the live allowlist on every deploy. Any redirect
-# currently registered on the app and missing here stops working. The
-# dashboard allowlist has NOT been read, so this list is provably complete
-# only for the callback the code actually uses.
+# registered on the app and missing here stops working.
+#
+# All THREE currently-released callbacks are listed, confirmed live by the
+# app owner on 2026-08-04. `gotcha.co.il` is the apex the app was originally
+# registered against and `dev.gotcha.co.il` serves development installs;
+# neither is dropped by this rollout even though the application_url moves to
+# app.gotcha.co.il. Removing either would break OAuth for anything still
+# pointed at it, and a redirect costs nothing to keep.
 redirect_urls = [
   "https://app.gotcha.co.il/api/connectors/shopify/oauth/callback",
+  "https://gotcha.co.il/api/connectors/shopify/oauth/callback",
+  "https://dev.gotcha.co.il/api/connectors/shopify/oauth/callback",
 ]
 
 [webhooks]
-# In step with packages/shared/src/lib/shopify-api-version.ts.
-api_version = "2026-07"
+# 2026-04 because that is what the app is LIVE on, confirmed by the app owner.
+#
+# Deliberately NOT the 2026-07 pin in packages/shared/src/lib/shopify-api-version.ts:
+# that constant governs ADMIN API calls the services make, which is a separate
+# contract from the version Shopify uses to shape webhook PAYLOADS. Publishing
+# 2026-07 here would silently re-version every live subscription to a payload
+# shape nothing has exercised, to gain nothing - the handlers read `shop_domain`
+# and verify an HMAC over raw bytes, neither of which is version-sensitive.
+#
+# Preserve what is live; change it deliberately, in its own change, if ever.
+api_version = "2026-04"
 
   # Commerce lifecycle. Verified against the CORE secret (SHOPIFY_API_SECRET).
   [[webhooks.subscriptions]]

@@ -203,9 +203,39 @@ describe("production configuration", () => {
     expect(scopes).toContain("write_merchant_managed_fulfillment_orders");
   });
 
-  it("carries no dev or localhost URL", () => {
-    const active = toml().split("\n").filter((l) => !l.trim().startsWith("#")).join("\n");
-    expect(active).not.toMatch(/dev\.gotcha\.co\.il|localhost|127\.0\.0\.1/);
+  it("never sends Shopify traffic to a dev or localhost ENDPOINT", () => {
+    // Scoped to endpoints on purpose. `dev.gotcha.co.il` IS a legitimate
+    // entry in the redirect allowlist - a live callback this rollout
+    // preserves - but it must never be where Shopify SENDS traffic: not the
+    // application URL, not the app proxy, not a webhook. Banning it outright
+    // would force dropping a live redirect; allowing it outright would let a
+    // dev host receive production webhooks.
+    const active = toml().split("\n").filter((l) => !l.trim().startsWith("#"));
+    const endpoints = active.filter((l) =>
+      /^(application_url|url)\s*=/.test(l.trim()) || /_url\s*=|^\s*uri\s*=/.test(l),
+    );
+    expect(endpoints.length).toBeGreaterThan(0);
+    for (const line of endpoints) {
+      expect(line, `dev/localhost endpoint: ${line.trim()}`)
+        .not.toMatch(/dev\.gotcha\.co\.il|localhost|127\.0\.0\.1/);
+    }
+    // localhost is banned everywhere, including redirects.
+    expect(active.join("\n")).not.toMatch(/localhost|127\.0\.0\.1/);
+  });
+
+  it("preserves all three live redirect callbacks", () => {
+    // The manifest REPLACES the live allowlist on deploy. Dropping one
+    // silently breaks OAuth for anything still pointed at it.
+    const t = toml();
+    for (const host of ["app.gotcha.co.il", "gotcha.co.il", "dev.gotcha.co.il"]) {
+      expect(t).toContain(`https://${host}/api/connectors/shopify/oauth/callback`);
+    }
+  });
+
+  it("pins the webhook API version the app is LIVE on", () => {
+    // 2026-04, not the repo's 2026-07 Admin pin. Re-versioning live
+    // subscriptions is a separate, deliberate change.
+    expect(toml()).toMatch(/api_version = "2026-04"/);
   });
 
   it("points the app proxy at the production endpoint", () => {

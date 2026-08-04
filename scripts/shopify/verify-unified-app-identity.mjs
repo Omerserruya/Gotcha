@@ -97,6 +97,19 @@ const REQUIRED_SCOPES = [
 const PROD_HOST = "app.gotcha.co.il";
 const PROD_APP_URL = `https://${PROD_HOST}`;
 const PROD_CALLBACK = `${PROD_APP_URL}/api/connectors/shopify/oauth/callback`;
+/**
+ * Every callback currently released on the live app, confirmed by the app
+ * owner. The manifest REPLACES the live allowlist on deploy, so all three
+ * must survive - dropping one silently breaks OAuth for anything still
+ * pointed at it.
+ */
+const REQUIRED_REDIRECTS = [
+  PROD_CALLBACK,
+  "https://gotcha.co.il/api/connectors/shopify/oauth/callback",
+  "https://dev.gotcha.co.il/api/connectors/shopify/oauth/callback",
+];
+/** The version the app is LIVE on. Not the repo's Admin API pin. */
+const LIVE_WEBHOOK_API_VERSION = "2026-04";
 const PROD_PROXY_URL = `${PROD_APP_URL}/api/shopify-chat/proxy`;
 const REQUIRED_WEBHOOK_PATHS = [
   "/api/connectors/shopify/webhooks/app-uninstalled",
@@ -256,8 +269,13 @@ if (manifest.applicationUrl !== PROD_APP_URL) {
 
 // 7. Redirect allowlist. Every URL the live app needs must be present, because
 //    this list REPLACES the live one.
-if (!redirectUrls.includes(PROD_CALLBACK)) {
-  fail(`redirect_urls must contain the Core OAuth callback ${PROD_CALLBACK}.`);
+for (const r of REQUIRED_REDIRECTS) {
+  if (!redirectUrls.includes(r)) {
+    fail(`redirect_urls is missing a LIVE callback: ${r}. Publishing without it removes it from the app and breaks OAuth for anything using it.`);
+  }
+}
+if (manifest.apiVersion !== LIVE_WEBHOOK_API_VERSION) {
+  fail(`webhook api_version is "${manifest.apiVersion}", expected the live "${LIVE_WEBHOOK_API_VERSION}". Re-versioning live subscriptions is a separate, deliberate change.`);
 }
 const envRedirect = env.SHOPIFY_REDIRECT_URI || "";
 if (envRedirect && !redirectUrls.includes(envRedirect)) {
@@ -284,12 +302,23 @@ if (!fs.existsSync(extToml)) {
   fail(`Extension handle is "${extensionHandle}", expected "gotcha-chat".`);
 }
 
-// 11. No dev or localhost anywhere.
+// 11. No dev, localhost or tunnel hosts on any ENDPOINT.
+//
+// Scoped to endpoints deliberately. `dev.gotcha.co.il` is a legitimate entry
+// in the redirect ALLOWLIST - it is a live callback this rollout preserves -
+// but it must never be where Shopify SENDS traffic: not the application URL,
+// not the app proxy, not a webhook. Banning it everywhere would block the
+// preservation; allowing it everywhere would let a dev host receive
+// production webhooks.
+const endpointUrls = [manifest.applicationUrl, manifest.proxyUrl, ...webhookUris].filter(Boolean);
+for (const u of endpointUrls) {
+  if (/localhost|127\.0\.0\.1/i.test(u)) fail(`localhost URL in production endpoint: ${u}`);
+  if (/dev\.gotcha\.co\.il/i.test(u)) fail(`dev host as a production ENDPOINT: ${u}`);
+  if (/trycloudflare|ngrok|tunnel/i.test(u)) fail(`tunnel URL in production endpoint: ${u}`);
+}
 for (const u of allUrls) {
-  if (/localhost|127\.0\.0\.1/i.test(u)) fail(`localhost URL in production manifest: ${u}`);
-  if (/dev\.gotcha\.co\.il/i.test(u)) fail(`dev host in production manifest: ${u}`);
-  if (/trycloudflare|ngrok|tunnel/i.test(u)) fail(`tunnel URL in production manifest: ${u}`);
   if (u.startsWith("http://")) fail(`non-HTTPS URL: ${u}`);
+  if (/localhost|127\.0\.0\.1|trycloudflare|ngrok/i.test(u)) fail(`localhost/tunnel URL anywhere in manifest: ${u}`);
 }
 
 // 12. Embedded must stay false.
