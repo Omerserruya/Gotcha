@@ -1,5 +1,5 @@
 /**
- * Human-agent commerce quick actions (cancel / refund) - spec §5-6.
+ * Human-agent commerce quick actions (cancel / refund / return / exchange).
  *
  * A quick-action button reuses the SAME hardened path AI/HITL actions use:
  *   permission (route) → tenant/customer/order ownership re-validation →
@@ -24,14 +24,27 @@ import {
   type CommerceActionRequest,
   type CommerceActionResponse,
   type CommerceCustomerActionKind,
+  type CommerceOrderActionKind,
   type BusinessActionKind,
 } from "@chatcenter/shared";
 import { executeAdapterTool } from "./connectors/integration-framework";
 import { resolveVerifiedShopifyCustomerId, orderToCard, invalidateCommerceCache } from "./commerce-context.service";
 
-const TOOL_FOR: Record<"cancel" | "refund", string> = {
+const TOOL_FOR: Record<CommerceOrderActionKind, string> = {
   cancel: "shopify.cancel_order",
   refund: "shopify.process_refund",
+  create_return: "shopify.create_return",
+  exchange_item: "shopify.exchange_order_item",
+};
+
+/** What an approver reads in the request title. A return that says "Cancel
+ *  order #1246" is a request for a decision the approver was never asked to
+ *  make. */
+const ACTION_LABEL: Record<CommerceOrderActionKind, string> = {
+  cancel: "Cancel",
+  refund: "Refund",
+  create_return: "Open a return on",
+  exchange_item: "Exchange an item on",
 };
 
 /** Build the adapter args from the typed request (server-controlled - the
@@ -44,6 +57,30 @@ function adapterArgs(req: CommerceActionRequest & { orderId: string }): Record<s
       reason: p.reason ?? "other",
       refund: false, // a cancel here never silently refunds; refund is its own action
       restock: p.restock ?? false,
+    };
+  }
+  if (req.action === "create_return") {
+    const args: Record<string, unknown> = { order_id: req.orderId };
+    if (Array.isArray(p.returnLineItems) && p.returnLineItems.length) {
+      // The adapter maps these ORDER line item ids onto returnable fulfillment
+      // line items and refuses anything it cannot match, so a stale id fails
+      // loudly instead of opening a return over the wrong goods.
+      args.line_items = p.returnLineItems.map((li) => ({
+        line_item_id: li.lineItemId,
+        quantity: li.quantity,
+        reason: li.returnReason ?? p.reason,
+      }));
+    }
+    if (p.reason) args.reason = p.reason;
+    if (p.note) args.note = p.note;
+    return args;
+  }
+  if (req.action === "exchange_item") {
+    return {
+      order_id: req.orderId,
+      ...(p.exchangeLineItemId ? { line_item_id: p.exchangeLineItemId } : {}),
+      ...(p.exchangeNewVariantId ? { new_variant_id: p.exchangeNewVariantId } : {}),
+      ...(p.reason ? { reason: p.reason } : {}),
     };
   }
   // refund
@@ -73,6 +110,10 @@ async function fetchOrder(tenantId: string, conversationId: string, orderId: str
 export interface CommerceActionPerms {
   canCancel: boolean;
   canRefund: boolean;
+  /** Returns AND exchanges. One permission: both hand goods back to the
+   *  store against the same merchant return policy, and splitting them would
+   *  let an agent hold one half of a single support decision. */
+  canReturn: boolean;
   canTag: boolean;
   canNote: boolean;
   canNotify: boolean;
@@ -255,7 +296,7 @@ export async function executeCommerceAction(opts: {
 
   if (!request.orderId) return { state: "denied", reason: "orderId_required" };
   const orderRequest = request as CommerceActionRequest & { orderId: string };
-  const tool = TOOL_FOR[request.action as "cancel" | "refund"];
+  const tool = TOOL_FOR[request.action as CommerceOrderActionKind];
   // The route validates the action, but this is the money path - an action we
   // do not recognise must stop here rather than reach the adapter with an
   // undefined tool name.
@@ -265,6 +306,9 @@ export async function executeCommerceAction(opts: {
   // 0. Permission (defence-in-depth; the route already gated).
   if (request.action === "cancel" && !opts.perms.canCancel) return { state: "denied", reason: "permission_denied" };
   if (request.action === "refund" && !opts.perms.canRefund) return { state: "denied", reason: "permission_denied" };
+  if ((request.action === "create_return" || request.action === "exchange_item") && !opts.perms.canReturn) {
+    return { state: "denied", reason: "permission_denied" };
+  }
 
   // 1. Ownership: the order must belong to THIS conversation's verified customer.
   const verifiedCustomerId = await resolveVerifiedShopifyCustomerId(tenantId, conversationId);
@@ -303,6 +347,25 @@ export async function executeCommerceAction(opts: {
   }
   if (request.action === "cancel" && order?.cancelled_at) {
     return { state: "unavailable", reason: "already_cancelled" };
+  }
+  // A return needs the OPPOSITE precondition to a cancel: nothing can come
+  // back that never shipped. Refusing it here means the agent is told why
+  // instead of watching the adapter report "0 returnable items" as if the
+  // store were misconfigured.
+  if (request.action === "create_return" && !fulfilled) {
+    return { state: "unavailable", reason: "nothing_fulfilled_to_return" };
+  }
+  if (request.action === "create_return" && order?.cancelled_at) {
+    return { state: "unavailable", reason: "order_cancelled" };
+  }
+  // An exchange is an order EDIT, so it only exists while the goods are still
+  // ours to change. Once shipped the honest answer is a return plus a
+  // replacement, which is a different action the agent must choose knowingly.
+  if (request.action === "exchange_item" && fulfilled) {
+    return { state: "unavailable", reason: "already_fulfilled_use_return" };
+  }
+  if (request.action === "exchange_item" && order?.cancelled_at) {
+    return { state: "unavailable", reason: "order_cancelled" };
   }
   if (request.action === "refund") {
     const alreadyRefunded = String(order?.financial_status) === "refunded";
@@ -368,7 +431,7 @@ export async function executeCommerceAction(opts: {
       conversationId,
       tool,
       params: args,
-      summary: `${request.action === "refund" ? "Refund" : "Cancel"} order ${order?.name ?? orderRequest.orderId}`,
+      summary: `${ACTION_LABEL[request.action as CommerceOrderActionKind] ?? request.action} order ${order?.name ?? orderRequest.orderId}`,
       reason: `Human agent requested ${request.action} (policy requires approval)`,
       riskLevel: "high",
       riskTags: ["commerce", request.action, "human_initiated"],
@@ -405,10 +468,25 @@ export async function executeCommerceAction(opts: {
   // 7. Post-action verify: re-fetch and confirm the intended state actually
   //    landed.
   const verified = await fetchOrder(tenantId, conversationId, orderRequest.orderId);
+  // What "it landed" MEANS is different per action, and getting it wrong in
+  // either direction is a false report to an agent who will repeat it to the
+  // customer.
+  //
+  // A return does not change any field on the order - it creates a separate
+  // Return object - so re-reading the order proves nothing about it. The
+  // adapter already does the authoritative check (it re-reads the order's
+  // returns and confirms the new id is among them) and reports that as
+  // `verified` / `return_created`. Trusting the order's financial_status here
+  // would report every successful return as unverified.
+  const execResult = (exec.result ?? {}) as Record<string, unknown>;
   const landed =
     request.action === "cancel"
       ? !!verified?.cancelled_at
-      : String(verified?.financial_status || "").includes("refunded");
+      : request.action === "create_return"
+        ? execResult.verified === true || execResult.return_created === true
+        : request.action === "exchange_item"
+          ? execResult.exchange_completed === true
+          : String(verified?.financial_status || "").includes("refunded");
   await writeAudit({
     tenantId, actorType: "user", actorId: opts.actorUserId,
     action: landed ? "commerce.order_action_executed" : "commerce.order_action_unverified",

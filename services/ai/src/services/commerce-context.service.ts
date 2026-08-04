@@ -274,6 +274,7 @@ function mapOrderDetail(order: any, currency: string, imageByProduct: Record<str
     const qty = num(li?.quantity) ?? 1;
     const unit = num(li?.price) ?? 0;
     return {
+      lineItemId: String(li?.id ?? ""),
       title: String(li?.title ?? li?.name ?? "Item"),
       ...(li?.variant_title ? { variantTitle: String(li.variant_title) } : {}),
       ...(li?.sku ? { sku: String(li.sku) } : {}),
@@ -387,6 +388,14 @@ function mapOrderCard(order: any, shopDomain: string, canWrite: boolean, locale:
       // exact thing order-state rules exist to prevent.
       cancellable: canWrite && !cancelled && !hasFulfillment,
       refundable: canWrite && !isFullyRefunded && refundable > 0,
+      // A return is the MIRROR of a cancel: nothing can come back that never
+      // shipped, so this is gated on fulfilment being present, not absent.
+      // Whether any individual line is still returnable is Shopify's call -
+      // the adapter reads the returnable fulfillments and refuses the rest.
+      returnable: canWrite && !cancelled && hasFulfillment,
+      // An exchange is an order EDIT, so it shares the cancel window: once the
+      // goods have shipped the honest route is a return plus a replacement.
+      exchangeable: canWrite && !cancelled && !hasFulfillment,
       reasonIfNot: cancelled
         ? "already_cancelled"
         : hasFulfillment
@@ -404,7 +413,7 @@ function mapOrderCard(order: any, shopDomain: string, canWrite: boolean, locale:
 
 function buildCapabilities(
   config: Record<string, any>,
-  agent: { canOpen: boolean; canCancel: boolean; canRefund: boolean; canTag: boolean; canNote: boolean; canNotify: boolean },
+  agent: { canOpen: boolean; canCancel: boolean; canRefund: boolean; canReturn: boolean; canTag: boolean; canNote: boolean; canNotify: boolean },
 ): CommerceCapabilities {
   const granted: string[] = Array.isArray(config?.grantedScopes) ? config.grantedScopes : [];
   const hasRead = granted.length === 0 || granted.includes("read_orders");
@@ -413,13 +422,22 @@ function buildCapabilities(
   // Conflating the two would offer a tag button that always fails on a store
   // that granted write_orders but not write_customers.
   const hasCustomerWrite = granted.length === 0 || granted.includes("write_customers");
+  // Returns are their own Shopify scope. A store can grant write_orders and
+  // still refuse the returns API - the adapter surfaces exactly that as
+  // "Access denied ... Required access: read_returns" - so offering a Return
+  // button on write_orders alone sends the agent to a guaranteed failure.
+  const hasReturnWrite = granted.length === 0 || granted.includes("write_returns");
   const missing: string[] = [];
   if (!hasWrite && (agent.canCancel || agent.canRefund)) missing.push("write_orders");
   if (!hasCustomerWrite && (agent.canTag || agent.canNote)) missing.push("write_customers");
+  if (!hasReturnWrite && agent.canReturn) missing.push("write_returns");
   return {
     canOpen: agent.canOpen,
     canCancel: agent.canCancel && hasWrite,
     canRefund: agent.canRefund && hasWrite,
+    // An exchange is an order edit and a return is a returns-API write, but
+    // they share one grant, so this needs BOTH scopes to be honest about it.
+    canReturn: agent.canReturn && hasWrite && hasReturnWrite,
     canTag: agent.canTag && hasCustomerWrite,
     canNote: agent.canNote && hasCustomerWrite,
     // Resending a confirmation is an order-side action, so it rides on the
@@ -467,6 +485,8 @@ export interface CommerceAgentPermissions {
   canOpen: boolean;
   canCancel: boolean;
   canRefund: boolean;
+  /** Returns AND exchanges - one grant, see permission-catalog. */
+  canReturn: boolean;
   canTag: boolean;
   canNote: boolean;
   canNotify: boolean;

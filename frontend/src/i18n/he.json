@@ -427,7 +427,14 @@
     "reasonFulfilled": "לא ניתן לבטל הזמנה שכבר נשלחה",
     "reasonCancelled": "ההזמנה כבר בוטלה",
     "reasonRefunded": "ההזמנה כבר הוחזרה במלואה",
-    "reasonScope": "חסרות הרשאות כתיבה בחיבור לחנות"
+    "reasonScope": "חסרות הרשאות כתיבה בחיבור לחנות",
+    "createReturn": "החזרה",
+    "confirmReturn": "לפתוח בקשת החזרה?",
+    "returnDoesNotRefund": "פתיחת החזרה לא מחזירה כסף. החזר כספי הוא פעולה נפרדת.",
+    "exchangeItem": "החלפה",
+    "confirmExchange": "להחליף פריט?",
+    "newVariantId": "מזהה וריאנט חדש",
+    "exchangeBeforeShipping": "החלפה היא עריכה של ההזמנה, ולכן אפשרית רק לפני שהיא נשלחת. אחרי שנשלחה, יש לפתוח החזרה."
   },
   "crmPanel": {
     "title": "הקשר CRM",

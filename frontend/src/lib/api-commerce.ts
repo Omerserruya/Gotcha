@@ -40,10 +40,19 @@ export interface OrderCard {
   refundableMaximum: Money;
   timeline: TimelineMilestone[];
   detail?: OrderDetail;
-  eligibility: { cancellable: boolean; refundable: boolean; reasonIfNot?: string };
+  eligibility: {
+    cancellable: boolean; refundable: boolean;
+    /** Mirror of the server: a return needs goods to have SHIPPED. */
+    returnable: boolean;
+    /** An exchange is an order edit, so it dies once the order ships. */
+    exchangeable: boolean;
+    reasonIfNot?: string;
+  };
 }
 
 export interface OrderLineDetail {
+  /** Shopify ORDER line item id - names which line a return acts on. */
+  lineItemId: string;
   title: string; variantTitle?: string; sku?: string;
   quantity: number; unitPrice: Money; lineTotal: Money; imageUrl: string | null;
 }
@@ -79,6 +88,8 @@ export interface CommerceCapabilities {
   canOpen: boolean;
   canCancel: boolean;
   canRefund: boolean;
+  /** Returns AND exchanges - one grant on the server. */
+  canReturn: boolean;
   /** Customer-record actions. Need write_customers, not write_orders. */
   canTag: boolean;
   canNote: boolean;
@@ -115,7 +126,7 @@ export type CommerceActionResponse =
   | { state: "executed"; order: OrderCard; note?: string }
   | { state: "executed_customer"; tags?: string[]; noteAdded?: boolean };
 
-export type CommerceOrderAction = "cancel" | "refund";
+export type CommerceOrderAction = "cancel" | "refund" | "create_return" | "exchange_item";
 export type CommerceCustomerAction = "add_tag" | "remove_tag" | "add_note";
 export type CommerceAction = CommerceOrderAction | CommerceCustomerAction;
 
@@ -130,6 +141,9 @@ export interface CommerceActionInput {
     restock?: boolean;
     amount?: number;
     lineItems?: { lineItemId: string; quantity: number }[];
+    returnLineItems?: { lineItemId: string; quantity: number; returnReason?: string }[];
+    exchangeLineItemId?: string;
+    exchangeNewVariantId?: string;
     refundShipping?: boolean;
     notify?: boolean;
     tag?: string;

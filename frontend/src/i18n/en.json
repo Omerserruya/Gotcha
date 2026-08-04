@@ -427,7 +427,14 @@
     "reasonFulfilled": "Cannot cancel a fulfilled order",
     "reasonCancelled": "This order is already cancelled",
     "reasonRefunded": "This order is already fully refunded",
-    "reasonScope": "The store connection is missing write permissions"
+    "reasonScope": "The store connection is missing write permissions",
+    "createReturn": "Return",
+    "confirmReturn": "Open a return?",
+    "returnDoesNotRefund": "Opening a return does not refund. Refund is a separate action.",
+    "exchangeItem": "Exchange",
+    "confirmExchange": "Exchange an item?",
+    "newVariantId": "New variant ID",
+    "exchangeBeforeShipping": "An exchange edits the order, so it is only possible before it ships. Once shipped, open a return instead."
   },
   "crmPanel": {
     "title": "CRM Context",

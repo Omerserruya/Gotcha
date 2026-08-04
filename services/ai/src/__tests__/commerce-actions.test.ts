@@ -65,7 +65,7 @@ const PAID_ORDER = {
 function baseOpts(overrides: any = {}) {
   return {
     tenantId: "t1", conversationId: "c1", actorUserId: "u1",
-    perms: { canCancel: true, canRefund: true, canTag: true, canNote: true, canNotify: true },
+    perms: { canCancel: true, canRefund: true, canReturn: true, canTag: true, canNote: true, canNotify: true },
     request: { orderId: "5001", action: "refund" as const, idempotencyKey: "idem-1", params: {} },
     correlationId: "corr1",
     ...overrides,
@@ -200,7 +200,7 @@ describe("execution verification (tests 18, 19, 20)", () => {
 describe("customer-scoped actions", () => {
   const customerOpts = (action: string, params: any = {}, perms: any = {}) =>
     baseOpts({
-      perms: { canCancel: true, canRefund: true, canTag: true, canNote: true, canNotify: true, ...perms },
+      perms: { canCancel: true, canRefund: true, canReturn: true, canTag: true, canNote: true, canNotify: true, ...perms },
       request: { action, idempotencyKey: "idem-c1", params },
     });
 
@@ -328,5 +328,150 @@ describe("an action the provider cannot execute is refused, not attempted", () =
       baseOpts({ request: { orderId: "5001", action: "resend_confirmation", idempotencyKey: "i", params: {} } }) as any,
     );
     expect(res.state).not.toBe("executed");
+  });
+});
+
+/**
+ * Returns and exchanges.
+ *
+ * These are the two actions an agent previously had to leave GOTCHA for, and
+ * they carry a precondition that is the MIRROR of the cancel path: a cancel
+ * needs an order that has not shipped, a return needs one that has. Getting
+ * that backwards would offer a Return button on an order Shopify will refuse
+ * and hide it on the one order it would have worked for.
+ */
+describe("returns and exchanges", () => {
+  const FULFILLED_ORDER = {
+    ...PAID_ORDER,
+    fulfillment_status: "fulfilled",
+    fulfillments: [{ id: 1, status: "success" }],
+  };
+
+  beforeEach(() => {
+    evalPolicyMock.mockResolvedValue({ decision: "ALLOWED", reasonCodes: [] });
+    revalidateMock.mockResolvedValue({ ok: true });
+  });
+
+  function returnOpts(order: any, params: any = {}, perms: any = {}) {
+    execMock.mockImplementation(async ({ toolFunctionName }: any) => {
+      if (toolFunctionName === "shopify.get_order") return { ok: true, result: order };
+      if (toolFunctionName === "shopify.create_return") {
+        return { ok: true, result: { return_created: true, verified: true, return_id: "77" } };
+      }
+      return { ok: true, result: {} };
+    });
+    return baseOpts({
+      perms: { canCancel: true, canRefund: true, canReturn: true, canTag: true, canNote: true, canNotify: true, ...perms },
+      request: { orderId: "5001", action: "create_return", idempotencyKey: "idem-r1", params },
+    });
+  }
+
+  it("refuses a return on an order that never shipped", async () => {
+    // Nothing can come back that never went out. Shopify would answer "0
+    // returnable items", which reads to an agent like a broken integration.
+    const res: any = await executeCommerceAction(returnOpts(PAID_ORDER) as any);
+
+    expect(res.state).toBe("unavailable");
+    expect(res.reason).toBe("nothing_fulfilled_to_return");
+  });
+
+  it("opens a return on a fulfilled order", async () => {
+    const res: any = await executeCommerceAction(returnOpts(FULFILLED_ORDER) as any);
+
+    expect(res.state).toBe("executed");
+    const call = execMock.mock.calls.find((c: any) => c[0].toolFunctionName === "shopify.create_return");
+    expect(call).toBeTruthy();
+    expect(call![0].args.order_id).toBe("5001");
+  });
+
+  it("passes selected lines as ORDER line item ids, the ids the panel shows", async () => {
+    await executeCommerceAction(
+      returnOpts(FULFILLED_ORDER, {
+        returnLineItems: [{ lineItemId: "L1", quantity: 2, returnReason: "damaged" }],
+      }) as any,
+    );
+
+    const call = execMock.mock.calls.find((c: any) => c[0].toolFunctionName === "shopify.create_return");
+    expect(call![0].args.line_items).toEqual([
+      { line_item_id: "L1", quantity: 2, reason: "damaged" },
+    ]);
+  });
+
+  it("omits line_items entirely when none were chosen, asking for everything returnable", async () => {
+    await executeCommerceAction(returnOpts(FULFILLED_ORDER, {}) as any);
+
+    const call = execMock.mock.calls.find((c: any) => c[0].toolFunctionName === "shopify.create_return");
+    expect(call![0].args.line_items).toBeUndefined();
+  });
+
+  it("refuses a return on a cancelled order", async () => {
+    const res: any = await executeCommerceAction(
+      returnOpts({ ...FULFILLED_ORDER, cancelled_at: "2026-08-01T00:00:00Z" }) as any,
+    );
+
+    expect(res.state).toBe("unavailable");
+    expect(res.reason).toBe("order_cancelled");
+  });
+
+  it("denies a return to an agent without the returns permission", async () => {
+    const res: any = await executeCommerceAction(
+      returnOpts(FULFILLED_ORDER, {}, { canReturn: false }) as any,
+    );
+
+    expect(res.state).toBe("denied");
+    expect(res.reason).toBe("permission_denied");
+  });
+
+  it("a cancel permission does not buy a return", async () => {
+    // They are opposite ends of the order's life; conflating the grants would
+    // let a cancel-only agent authorise goods coming back.
+    const res: any = await executeCommerceAction(
+      returnOpts(FULFILLED_ORDER, {}, { canReturn: false, canCancel: true }) as any,
+    );
+
+    expect(res.state).toBe("denied");
+  });
+
+  function exchangeOpts(order: any, params: any = {}) {
+    execMock.mockImplementation(async ({ toolFunctionName }: any) => {
+      if (toolFunctionName === "shopify.get_order") return { ok: true, result: order };
+      if (toolFunctionName === "shopify.exchange_order_item") {
+        return { ok: true, result: { exchange_completed: true } };
+      }
+      return { ok: true, result: {} };
+    });
+    return baseOpts({
+      request: { orderId: "5001", action: "exchange_item", idempotencyKey: "idem-x1", params },
+    });
+  }
+
+  it("refuses an exchange once the order has shipped, and says to use a return", async () => {
+    // An exchange is an order EDIT. After shipping the honest route is a
+    // return plus a replacement, which is a different decision.
+    const res: any = await executeCommerceAction(exchangeOpts(FULFILLED_ORDER) as any);
+
+    expect(res.state).toBe("unavailable");
+    expect(res.reason).toBe("already_fulfilled_use_return");
+  });
+
+  it("exchanges a line on an unshipped order", async () => {
+    const res: any = await executeCommerceAction(
+      exchangeOpts(PAID_ORDER, { exchangeLineItemId: "L1", exchangeNewVariantId: "V9" }) as any,
+    );
+
+    expect(res.state).toBe("executed");
+    const call = execMock.mock.calls.find((c: any) => c[0].toolFunctionName === "shopify.exchange_order_item");
+    expect(call![0].args).toMatchObject({ order_id: "5001", line_item_id: "L1", new_variant_id: "V9" });
+  });
+
+  it("never lets a return reach an order the conversation's customer does not own", async () => {
+    resolveVerifiedMock.mockResolvedValue("999");
+    const res: any = await executeCommerceAction(
+      returnOpts({ ...FULFILLED_ORDER, customer: { id: 424242 } }) as any,
+    );
+
+    expect(res.state).toBe("denied");
+    expect(res.reason).toBe("order_not_owned");
+    expect(execMock.mock.calls.some((c: any) => c[0].toolFunctionName === "shopify.create_return")).toBe(false);
   });
 });

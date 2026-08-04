@@ -60,7 +60,7 @@ export async function buildAICommerceSnapshot(opts: {
       tenantId: opts.tenantId,
       conversationId: opts.conversationId,
       // The AI employee never gets action capabilities - read projection only.
-      perms: { canRead: true, canOpen: false, canCancel: false, canRefund: false, canTag: false, canNote: false, canNotify: false },
+      perms: { canRead: true, canOpen: false, canCancel: false, canRefund: false, canReturn: false, canTag: false, canNote: false, canNotify: false },
       recentLimit: AI_RECENT_LIMIT,
     });
     if (res.state !== "ok") return null;

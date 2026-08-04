@@ -109,6 +109,12 @@ export const PERMISSIONS: readonly PermissionDef[] = [
   p("customer:commerce:open", "customer", "runtime", true, "Open Orders in Store", "Open the customer's order in the connected store admin."),
   p("customer:commerce:cancel", "customer", "runtime", true, "Cancel Orders", "Cancel a customer's store order (subject to business policy and approval)."),
   p("customer:commerce:refund", "customer", "runtime", true, "Refund Orders", "Refund a customer's store order (subject to business policy and approval)."),
+  // Returns and exchanges share ONE grant. Both hand goods back against the
+  // same merchant return policy, and an agent who can authorise one but not
+  // the other holds half of a single support decision - which in practice
+  // means they finish the other half in Shopify admin, which is the thing
+  // this surface exists to stop.
+  p("customer:commerce:return", "customer", "runtime", true, "Returns & Exchanges", "Open a return or exchange an item on a customer's store order (subject to business policy and approval)."),
   // Customer-record actions, separate from order actions on purpose: they need
   // write_customers rather than write_orders, and tagging a customer is a very
   // different grant from moving their money.

@@ -56,6 +56,14 @@ export interface TimelineMilestone {
 }
 
 export interface OrderLineDetail {
+  /**
+   * The Shopify ORDER line item id.
+   *
+   * Needed so a return or a partial refund can name WHICH line it acts on.
+   * Without it the only expressible action is "all of it", which for a
+   * three-item order with one faulty item is the wrong answer.
+   */
+  lineItemId: string;
   title: string;
   variantTitle?: string;
   sku?: string;
@@ -124,6 +132,12 @@ export interface OrderCard {
   eligibility: {
     cancellable: boolean;
     refundable: boolean;
+    /** A return needs the OPPOSITE precondition to a cancel - goods must have
+     *  shipped before anything can come back. */
+    returnable: boolean;
+    /** An exchange is an order EDIT, so it dies the moment the order ships;
+     *  after that the honest route is a return plus a replacement. */
+    exchangeable: boolean;
     reasonIfNot?: string;
   };
 }
@@ -160,6 +174,8 @@ export interface CommerceCapabilities {
   canOpen: boolean;
   canCancel: boolean;
   canRefund: boolean;
+  /** Returns AND exchanges - one grant, see permission-catalog. */
+  canReturn: boolean;
   /** Tag and note the CUSTOMER record. Separate from order actions because they
    *  need write_customers rather than write_orders, and a tenant may hold one
    *  scope without the other. */
@@ -238,11 +254,20 @@ export interface AICommerceSnapshot {
  * verified customer directly and take no order id at all - there is nothing
  * client-supplied to forge.
  */
-export type CommerceOrderActionKind = "cancel" | "refund";
+export type CommerceOrderActionKind = "cancel" | "refund" | "create_return" | "exchange_item";
 export type CommerceCustomerActionKind = "add_tag" | "remove_tag" | "add_note";
 export type CommerceActionKind = CommerceOrderActionKind | CommerceCustomerActionKind;
 
-export const COMMERCE_ORDER_ACTIONS: CommerceOrderActionKind[] = ["cancel", "refund"];
+export const COMMERCE_ORDER_ACTIONS: CommerceOrderActionKind[] = [
+  "cancel",
+  "refund",
+  // Returns and exchanges are the highest-volume support request a store
+  // gets, and they were the largest reason an agent had to leave GOTCHA and
+  // finish the job in Shopify admin - losing the conversation context, the
+  // audit trail and the customer notification along the way.
+  "create_return",
+  "exchange_item",
+];
 export const COMMERCE_CUSTOMER_ACTIONS: CommerceCustomerActionKind[] = ["add_tag", "remove_tag", "add_note"];
 
 export function isCustomerScopedAction(action: string): action is CommerceCustomerActionKind {
@@ -266,6 +291,19 @@ export interface CommerceActionRequest {
     lineItems?: { lineItemId: string; quantity: number }[];
     refundShipping?: boolean;
     notify?: boolean;
+    // create_return.
+    //
+    // ORDER line item ids, the same ids the refund path uses and the same ones
+    // the order card already shows. Shopify authorises a return against the
+    // FULFILLMENT line item, but that mapping is the adapter's job - it reads
+    // the returnable fulfillments and resolves them. Asking the panel for a
+    // fulfillment id would mean surfacing an id the agent never sees.
+    //
+    // Omit to return everything returnable on the order.
+    returnLineItems?: { lineItemId: string; quantity: number; returnReason?: string }[];
+    // exchange_item. The line being replaced, and what replaces it.
+    exchangeLineItemId?: string;
+    exchangeNewVariantId?: string;
     // customer-scoped
     tag?: string;
     note?: string;

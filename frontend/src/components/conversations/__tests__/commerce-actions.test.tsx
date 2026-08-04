@@ -42,13 +42,13 @@ const order = (over: Record<string, any> = {}) => ({
   refundedAmount: { amount: "0.00", currency: "USD" },
   refundableMaximum: { amount: "100.00", currency: "USD" },
   timeline: [],
-  eligibility: { cancellable: true, refundable: true },
+  eligibility: { cancellable: true, refundable: true, returnable: false, exchangeable: true },
   ...over,
 });
 
 const caps = (over: Record<string, any> = {}) => ({
-  canOpen: true, canCancel: true, canRefund: true, canTag: true, canNote: true, canNotify: true,
-  grantedScopes: ["read_orders", "write_orders", "write_customers"],
+  canOpen: true, canCancel: true, canRefund: true, canReturn: true, canTag: true, canNote: true, canNotify: true,
+  grantedScopes: ["read_orders", "write_orders", "write_customers", "write_returns"],
   lastCheckedAt: null, missingScopes: [], ...over,
 });
 
@@ -532,8 +532,8 @@ describe("an action removed by order state explains itself (§21)", () => {
     // Explaining why they cannot cancel, to someone who may never cancel, is
     // noise about a capability they do not have.
     withOrder(
-      { eligibility: { cancellable: false, refundable: false, reasonIfNot: "already_fulfilled" } },
-      { canCancel: false, canRefund: false },
+      { eligibility: { cancellable: false, refundable: false, returnable: false, exchangeable: false, reasonIfNot: "already_fulfilled" } },
+      { canCancel: false, canRefund: false, canReturn: false },
     );
     renderPanel();
     await screen.findByText("#1001");
@@ -557,5 +557,184 @@ describe("status chips", () => {
     renderPanel();
     await screen.findByText("#1001");
     expect(screen.getAllByText("refunded").length).toBe(1);
+  });
+});
+
+/**
+ * Returns and exchanges - the two jobs an agent previously finished in
+ * Shopify admin, losing the conversation context and the audit trail.
+ *
+ * The load-bearing rule is that the two are mutually exclusive by ORDER
+ * STATE, not by preference: an exchange edits an order that has not shipped,
+ * a return only exists once something has. Offering both at once would put a
+ * choice in front of the agent that the order cannot honour.
+ */
+describe("returns and exchanges", () => {
+  const withOrder = (over: Record<string, any>, capsOver: Record<string, any> = {}) => {
+    fetchCommerceContext.mockResolvedValue(
+      okContext({ recentOrders: [order(over)], capabilities: caps(capsOver) }),
+    );
+  };
+
+  const SHIPPED = {
+    eligibility: { cancellable: false, refundable: true, returnable: true, exchangeable: false },
+    detail: {
+      lineItems: [
+        { lineItemId: "L1", title: "A shirt", quantity: 1, unitPrice: { amount: "60.00", currency: "USD" }, lineTotal: { amount: "60.00", currency: "USD" }, imageUrl: null },
+        { lineItemId: "L2", title: "A hat", quantity: 2, unitPrice: { amount: "20.00", currency: "USD" }, lineTotal: { amount: "40.00", currency: "USD" }, imageUrl: null },
+      ],
+      itemCount: 3, tracking: [], tags: [], refunds: [],
+    },
+  };
+
+  it("offers Return on a shipped order and NOT Exchange", async () => {
+    withOrder(SHIPPED);
+    renderPanel();
+    await screen.findByText("#1001");
+
+    expect(screen.getByText("commerce.createReturn")).toBeTruthy();
+    expect(screen.queryByText("commerce.exchangeItem")).toBeNull();
+  });
+
+  it("offers Exchange before shipping and NOT Return", async () => {
+    withOrder({ eligibility: { cancellable: true, refundable: true, returnable: false, exchangeable: true } });
+    renderPanel();
+    await screen.findByText("#1001");
+
+    expect(screen.getByText("commerce.exchangeItem")).toBeTruthy();
+    expect(screen.queryByText("commerce.createReturn")).toBeNull();
+  });
+
+  it("hides both from an agent without the returns permission", async () => {
+    withOrder(SHIPPED, { canReturn: false });
+    renderPanel();
+    await screen.findByText("#1001");
+
+    expect(screen.queryByText("commerce.createReturn")).toBeNull();
+    expect(screen.queryByText("commerce.exchangeItem")).toBeNull();
+  });
+
+  it("returns every line by default, because that is the common case", async () => {
+    runCommerceAction.mockResolvedValue({ state: "executed", order: order() });
+    withOrder(SHIPPED);
+    renderPanel();
+    await screen.findByText("#1001");
+    fireEvent.click(screen.getByText("commerce.createReturn"));
+    await screen.findByTestId("return-submit");
+    fireEvent.click(screen.getByTestId("return-submit"));
+
+    await waitFor(() => expect(runCommerceAction).toHaveBeenCalled());
+    const [, , input] = runCommerceAction.mock.calls[0];
+    expect(input.action).toBe("create_return");
+    expect(input.params.returnLineItems).toEqual([
+      { lineItemId: "L1", quantity: 1 },
+      { lineItemId: "L2", quantity: 2 },
+    ]);
+  });
+
+  it("sends only the lines the agent kept ticked", async () => {
+    // One faulty item out of three is the case that makes "return all of it"
+    // the wrong answer.
+    runCommerceAction.mockResolvedValue({ state: "executed", order: order() });
+    withOrder(SHIPPED);
+    renderPanel();
+    await screen.findByText("#1001");
+    fireEvent.click(screen.getByText("commerce.createReturn"));
+    await screen.findByTestId("return-submit");
+    fireEvent.click(screen.getByLabelText(/A hat/));
+    fireEvent.click(screen.getByTestId("return-submit"));
+
+    await waitFor(() => expect(runCommerceAction).toHaveBeenCalled());
+    expect(runCommerceAction.mock.calls[0][2].params.returnLineItems).toEqual([
+      { lineItemId: "L1", quantity: 1 },
+    ]);
+  });
+
+  it("cannot submit a return with nothing selected", async () => {
+    withOrder(SHIPPED);
+    renderPanel();
+    await screen.findByText("#1001");
+    fireEvent.click(screen.getByText("commerce.createReturn"));
+    await screen.findByTestId("return-submit");
+    fireEvent.click(screen.getByLabelText(/A shirt/));
+    fireEvent.click(screen.getByLabelText(/A hat/));
+
+    expect((screen.getByTestId("return-submit") as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("asks for everything returnable when the order has no line detail", async () => {
+    // Omitting the field is how the server is asked for "all of it"; sending
+    // an empty list would ask for nothing.
+    runCommerceAction.mockResolvedValue({ state: "executed", order: order() });
+    withOrder({ eligibility: { cancellable: false, refundable: true, returnable: true, exchangeable: false } });
+    renderPanel();
+    await screen.findByText("#1001");
+    fireEvent.click(screen.getByText("commerce.createReturn"));
+    await screen.findByTestId("return-submit");
+    fireEvent.click(screen.getByTestId("return-submit"));
+
+    await waitFor(() => expect(runCommerceAction).toHaveBeenCalled());
+    expect(runCommerceAction.mock.calls[0][2].params.returnLineItems).toBeUndefined();
+  });
+
+  it("carries the agent's reason onto every returned line", async () => {
+    runCommerceAction.mockResolvedValue({ state: "executed", order: order() });
+    withOrder(SHIPPED);
+    renderPanel();
+    await screen.findByText("#1001");
+    fireEvent.click(screen.getByText("commerce.createReturn"));
+    await screen.findByTestId("return-submit");
+    fireEvent.change(screen.getByTestId("return-reason"), { target: { value: "arrived damaged" } });
+    fireEvent.click(screen.getByTestId("return-submit"));
+
+    await waitFor(() => expect(runCommerceAction).toHaveBeenCalled());
+    const params = runCommerceAction.mock.calls[0][2].params;
+    expect(params.reason).toBe("arrived damaged");
+    expect(params.returnLineItems[0].returnReason).toBe("arrived damaged");
+  });
+
+  it("will not exchange without a replacement variant", async () => {
+    withOrder({
+      eligibility: { cancellable: true, refundable: true, returnable: false, exchangeable: true },
+      detail: SHIPPED.detail,
+    });
+    renderPanel();
+    await screen.findByText("#1001");
+    fireEvent.click(screen.getByText("commerce.exchangeItem"));
+    await screen.findByTestId("exchange-submit");
+
+    expect((screen.getByTestId("exchange-submit") as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("sends the chosen line and the replacement variant", async () => {
+    runCommerceAction.mockResolvedValue({ state: "executed", order: order() });
+    withOrder({
+      eligibility: { cancellable: true, refundable: true, returnable: false, exchangeable: true },
+      detail: SHIPPED.detail,
+    });
+    renderPanel();
+    await screen.findByText("#1001");
+    fireEvent.click(screen.getByText("commerce.exchangeItem"));
+    await screen.findByTestId("exchange-submit");
+    fireEvent.change(screen.getByTestId("exchange-line"), { target: { value: "L2" } });
+    fireEvent.change(screen.getByTestId("exchange-variant"), { target: { value: "V9" } });
+    fireEvent.click(screen.getByTestId("exchange-submit"));
+
+    await waitFor(() => expect(runCommerceAction).toHaveBeenCalled());
+    const [, , input] = runCommerceAction.mock.calls[0];
+    expect(input.action).toBe("exchange_item");
+    expect(input.params).toMatchObject({ exchangeLineItemId: "L2", exchangeNewVariantId: "V9" });
+  });
+
+  it("reports a pending approval as pending, never as done", async () => {
+    runCommerceAction.mockResolvedValue({ state: "pending_approval", approvalRequestId: "ap1" });
+    withOrder(SHIPPED);
+    renderPanel();
+    await screen.findByText("#1001");
+    fireEvent.click(screen.getByText("commerce.createReturn"));
+    await screen.findByTestId("return-submit");
+    fireEvent.click(screen.getByTestId("return-submit"));
+
+    await screen.findByText(/commerce.pendingApproval/);
   });
 });
