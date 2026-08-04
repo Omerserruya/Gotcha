@@ -1,27 +1,32 @@
 /**
- * GOTCHA Shopify CHAT app — App Store installation flow.
+ * Shopify Chat activation under the UNIFIED app.
  *
- * Drives the real router. The interesting cases are all refusals: a forged
- * signature, a replayed state, a shop that changed between request and
- * callback, and a merchant trying to claim a store that belongs to someone
- * else's organization.
+ * This suite used to drive an App Store install handshake: an OAuth entry
+ * point, a signed callback, a Redis continuation session and a binding step.
+ * All of that is gone. The merchant authorizes ONE Shopify app, the Theme App
+ * Extension ships inside it, and enabling chat is a GOTCHA-side decision.
+ *
+ * What is worth testing now:
+ *   • the second OAuth surface is really gone, not merely unused
+ *   • the shop comes from the tenant's own Core connection, never the request
+ *   • enable is idempotent and permission-gated
+ *   • disable never touches the Shopify connection
+ *   • another organization's installation stays invisible
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import express from "express";
 import request from "supertest";
-import crypto from "crypto";
 
 vi.hoisted(() => {
   process.env.NODE_ENV = "test";
-  process.env.SHOPIFY_CHAT_APP_CLIENT_ID = "chat-client-id";
-  process.env.SHOPIFY_CHAT_APP_SECRET = "chat-app-secret";
-  process.env.SHOPIFY_CHAT_APP_URL = "https://dev.gotcha.co.il";
-  process.env.SHOPIFY_CHAT_REDIRECT_URI =
-    "https://dev.gotcha.co.il/api/connectors/shopify-chat/oauth/callback";
-  // The Core app's credentials exist in the same process. Nothing in the
-  // chat flow may use them.
   process.env.SHOPIFY_API_KEY = "core-client-id";
   process.env.SHOPIFY_API_SECRET = "core-app-secret";
+  process.env.SHOPIFY_REDIRECT_URI =
+    "https://app.gotcha.co.il/api/connectors/shopify/oauth/callback";
+  // The retired chat credentials are deliberately present: nothing may read
+  // them, and a test that never sets them could not prove that.
+  process.env.SHOPIFY_CHAT_APP_CLIENT_ID = "chat-client-id";
+  process.env.SHOPIFY_CHAT_APP_SECRET = "chat-app-secret";
 });
 
 vi.mock("bullmq", () => ({ Queue: class { add = vi.fn(); }, Worker: class {}, Job: class {} }));
@@ -33,15 +38,12 @@ const H = vi.hoisted(() => {
   return {
     permission: { granted: true },
     tenantId: { current: "t1" },
-    state: { current: { ok: true, claims: { shop: "my-store.myshopify.com", provider: "shopify-chat" } } as any },
     install: { current: null as any },
-    bindResult: { current: null as any },
     snapshot: { current: null as any },
-    recordAuthorizedInstall: v.fn(),
-    createInstallSession: v.fn(async () => "session-token"),
-    readInstallSession: v.fn(async (t: string) => (t === "session-token" ? { installationId: "i1" } : null)),
-    discardInstallSession: v.fn(async () => undefined),
-    bindInstallationToTenant: v.fn(),
+    connection: { current: null as any },
+    enableResult: { current: null as any },
+    enableChatForTenant: v.fn(),
+    disableChatForTenant: v.fn(async () => ({ ok: true, disabled: 1 })),
     refreshVerifiedDomains: v.fn(async () => ["my-store.myshopify.com"]),
   };
 });
@@ -61,21 +63,19 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
     requireOnboardingOrActiveTenant: () => (_req: any, _res: any, next: any) => next(),
     requirePermission: () => (_req: any, res: any, next: any) =>
       H.permission.granted ? next() : res.status(403).json({ error: "forbidden" }),
-    mintOAuthState: vi.fn(() => ({ state: "minted-state", jti: "j1" })),
-    consumeOAuthState: vi.fn(async () => H.state.current),
   };
 });
 
+vi.mock("../services/connectors/integration-framework", () => ({
+  loadConnection: vi.fn(async () => H.connection.current),
+}));
+
 vi.mock("../services/shopify-chat-install.service", () => ({
-  recordAuthorizedInstall: H.recordAuthorizedInstall,
-  createInstallSession: H.createInstallSession,
-  readInstallSession: H.readInstallSession,
-  discardInstallSession: H.discardInstallSession,
-  findInstallationById: vi.fn(async () => H.install.current),
   findLiveInstallation: vi.fn(async () => H.install.current),
-  bindInstallationToTenant: H.bindInstallationToTenant,
   activationSnapshot: vi.fn(async () => H.snapshot.current),
   refreshVerifiedDomains: H.refreshVerifiedDomains,
+  enableChatForTenant: H.enableChatForTenant,
+  disableChatForTenant: H.disableChatForTenant,
 }));
 
 import router from "../routes/shopify-chat-install";
@@ -87,25 +87,18 @@ function app() {
   return a;
 }
 
-/** Sign a query string the way Shopify does. */
-function signQuery(params: Record<string, string>, secret = "chat-app-secret"): string {
-  const message = Object.keys(params)
-    .sort()
-    .map((k) => `${k}=${params[k]}`)
-    .join("&");
-  return crypto.createHmac("sha256", secret).update(message).digest("hex");
-}
+const SHOP = "my-store.myshopify.com";
 
 const INSTALLATION = {
   id: "i1",
-  shopDomain: "my-store.myshopify.com",
-  status: "PENDING" as const,
-  tenantId: null,
-  channelAccountId: null,
-  verifiedDomains: ["my-store.myshopify.com"],
+  shopDomain: SHOP,
+  status: "ACTIVE" as const,
+  tenantId: "t1",
+  channelAccountId: "c1",
+  verifiedDomains: [SHOP],
   installedAt: new Date(),
   uninstalledAt: null,
-  boundAt: null,
+  boundAt: new Date(),
   lastHeartbeatAt: null,
 };
 
@@ -113,278 +106,175 @@ beforeEach(() => {
   vi.clearAllMocks();
   H.permission.granted = true;
   H.tenantId.current = "t1";
-  H.state.current = { ok: true, claims: { shop: "my-store.myshopify.com", provider: "shopify-chat" } };
   H.install.current = { ...INSTALLATION };
-  H.recordAuthorizedInstall.mockResolvedValue({ ...INSTALLATION });
-  H.createInstallSession.mockResolvedValue("session-token");
-  H.readInstallSession.mockImplementation(async (t: string) =>
-    t === "session-token" ? { installationId: "i1" } : null,
-  );
+  H.connection.current = { config: { shopDomain: SHOP } };
+  H.disableChatForTenant.mockResolvedValue({ ok: true, disabled: 1 });
+  H.enableChatForTenant.mockResolvedValue({
+    ok: true,
+    installation: { ...INSTALLATION },
+    channel: { id: "c1" },
+    created: true,
+  });
   H.snapshot.current = {
     state: "EMBED_NOT_ENABLED",
-    shopDomain: "my-store.myshopify.com",
+    shopDomain: SHOP,
     tenantId: "t1",
     channelId: "c1",
     channelEnabled: false,
     productMessaging: false,
-    coreConnected: false,
-    verifiedDomains: ["my-store.myshopify.com"],
-    themeEditorDeepLink: "https://my-store.myshopify.com/admin/themes/current/editor",
+    coreConnected: true,
+    verifiedDomains: [SHOP],
+    themeEditorDeepLink: `https://${SHOP}/admin/themes/current/editor`,
     lastHeartbeatAt: null,
   };
 });
 
-// ─── Install entry ───────────────────────────────────────────
+// ─── The second OAuth surface is gone ────────────────────────
 
-describe("install entry", () => {
-  it("redirects a valid shop to Shopify authorization with the CHAT client id", async () => {
-    const res = await request(app())
-      .get("/api/connectors/shopify-chat/oauth/init")
-      .query({ shop: "my-store" });
-
-    expect(res.status).toBe(302);
-    expect(res.headers.location).toContain("https://my-store.myshopify.com/admin/oauth/authorize");
-    expect(res.headers.location).toContain("client_id=chat-client-id");
-    expect(res.headers.location).not.toContain("core-client-id");
-    // No scopes in v1 — the app must not ask for access it cannot use.
-    expect(res.headers.location).not.toContain("scope=");
-  });
-
-  it("rejects a shop domain that is not a Shopify store", async () => {
-    const res = await request(app())
-      .get("/api/connectors/shopify-chat/oauth/init")
-      .query({ shop: "evil.com" });
-    expect(res.status).toBe(302);
-    expect(res.headers.location).toContain("error=invalid_shop");
-  });
-
-  it("rejects a signed entry whose signature does not verify", async () => {
-    const res = await request(app())
-      .get("/api/connectors/shopify-chat/oauth/init")
-      .query({ shop: "my-store.myshopify.com", timestamp: "170", hmac: "deadbeef" });
-    expect(res.headers.location).toContain("error=invalid_signature");
-  });
-
-  it("accepts a correctly signed entry", async () => {
-    const params = { shop: "my-store.myshopify.com", timestamp: "170" };
-    const res = await request(app())
-      .get("/api/connectors/shopify-chat/oauth/init")
-      .query({ ...params, hmac: signQuery(params) });
-    expect(res.headers.location).toContain("/admin/oauth/authorize");
-  });
-});
-
-// ─── Callback ────────────────────────────────────────────────
-
-describe("install callback", () => {
-  function callbackQuery(overrides: Record<string, string> = {}, secret?: string) {
-    const params: Record<string, string> = {
-      code: "auth-code",
-      shop: "my-store.myshopify.com",
-      state: "minted-state",
-      timestamp: "170",
-      ...overrides,
-    };
-    return { ...params, hmac: signQuery(params, secret) };
-  }
-
-  it("stores the installation and hands the browser a continuation session", async () => {
-    const res = await request(app())
-      .get("/api/connectors/shopify-chat/oauth/callback")
-      .query(callbackQuery());
-
-    expect(res.status).toBe(302);
-    expect(H.recordAuthorizedInstall).toHaveBeenCalledWith(
-      expect.objectContaining({ shopDomain: "my-store.myshopify.com" }),
-    );
-    expect(res.headers.location).toContain("/shopify/chat/install?session=session-token");
-    const cookie = String(res.headers["set-cookie"] ?? "");
-    expect(cookie).toContain("gotcha_sfy_install=session-token");
-    expect(cookie).toContain("HttpOnly");
-    expect(cookie).toContain("SameSite=Lax");
-  });
-
-  it("stores NO token when the app requests no scopes", async () => {
-    await request(app()).get("/api/connectors/shopify-chat/oauth/callback").query(callbackQuery());
-    expect(H.recordAuthorizedInstall).toHaveBeenCalledWith(
-      expect.objectContaining({ accessToken: null, scopes: null }),
-    );
-  });
-
-  it("refuses a forged signature with 401", async () => {
-    const res = await request(app())
-      .get("/api/connectors/shopify-chat/oauth/callback")
-      .query({ ...callbackQuery(), hmac: "deadbeef" });
-    expect(res.status).toBe(401);
-    expect(H.recordAuthorizedInstall).not.toHaveBeenCalled();
-  });
-
-  it("refuses a signature made with the CORE app secret", async () => {
-    const res = await request(app())
-      .get("/api/connectors/shopify-chat/oauth/callback")
-      .query(callbackQuery({}, "core-app-secret"));
-    expect(res.status).toBe(401);
-    expect(H.recordAuthorizedInstall).not.toHaveBeenCalled();
-  });
-
-  it("refuses a replayed state", async () => {
-    H.state.current = { ok: false, reason: "replayed" };
-    const res = await request(app())
-      .get("/api/connectors/shopify-chat/oauth/callback")
-      .query(callbackQuery());
-    expect(res.status).toBe(400);
-    expect(res.text).toBe("state_already_used");
-    expect(H.recordAuthorizedInstall).not.toHaveBeenCalled();
-  });
-
-  it("refuses an expired state", async () => {
-    H.state.current = { ok: false, reason: "expired" };
-    const res = await request(app())
-      .get("/api/connectors/shopify-chat/oauth/callback")
-      .query(callbackQuery());
-    expect(res.status).toBe(400);
-    expect(H.recordAuthorizedInstall).not.toHaveBeenCalled();
-  });
-
-  it("refuses when the returned shop is not the shop we sent them to", async () => {
-    const res = await request(app())
-      .get("/api/connectors/shopify-chat/oauth/callback")
-      .query(callbackQuery({ shop: "other-store.myshopify.com" }));
-    expect(res.status).toBe(400);
-    expect(H.recordAuthorizedInstall).not.toHaveBeenCalled();
-  });
-});
-
-// ─── Binding ─────────────────────────────────────────────────
-
-describe("tenant binding", () => {
-  it("returns the verified shop without leaking who owns it", async () => {
-    H.install.current = { ...INSTALLATION, tenantId: "someone-else" };
-    const res = await request(app())
-      .get("/api/shopify-chat-install/context")
-      .set("Cookie", "gotcha_sfy_install=session-token");
-
-    expect(res.status).toBe(200);
-    expect(res.body.data.shopDomain).toBe("my-store.myshopify.com");
-    expect(res.body.data.claimedByAnotherOrganization).toBe(true);
-    expect(JSON.stringify(res.body)).not.toContain("someone-else");
-  });
-
-  it("binds the installation to the caller's own tenant, never a body-supplied one", async () => {
-    H.bindInstallationToTenant.mockResolvedValue({
-      ok: true,
-      installation: { ...INSTALLATION, tenantId: "t1", channelAccountId: "c1", status: "ACTIVE" },
-      channel: { id: "c1" },
-      created: true,
-    });
-
-    const res = await request(app())
-      .post("/api/shopify-chat-install/bind")
-      .set("Cookie", "gotcha_sfy_install=session-token")
-      .send({ tenantId: "attacker-tenant" });
-
-    expect(res.status).toBe(201);
-    expect(H.bindInstallationToTenant).toHaveBeenCalledWith(
-      expect.objectContaining({ installationId: "i1", tenantId: "t1" }),
-    );
-    expect(res.body.data.channelCreated).toBe(true);
-  });
-
-  it("clears the continuation session once it has been used", async () => {
-    H.bindInstallationToTenant.mockResolvedValue({
-      ok: true,
-      installation: { ...INSTALLATION, tenantId: "t1", channelAccountId: "c1" },
-      channel: { id: "c1" },
-      created: false,
-    });
-    const res = await request(app())
-      .post("/api/shopify-chat-install/bind")
-      .set("Cookie", "gotcha_sfy_install=session-token")
-      .send({});
-    expect(H.discardInstallSession).toHaveBeenCalled();
-    expect(String(res.headers["set-cookie"] ?? "")).toContain("gotcha_sfy_install=;");
-  });
-
-  it("refuses a merchant without permission to connect channels", async () => {
-    H.permission.granted = false;
-    const res = await request(app())
-      .post("/api/shopify-chat-install/bind")
-      .set("Cookie", "gotcha_sfy_install=session-token")
-      .send({});
-    expect(res.status).toBe(403);
-    expect(H.bindInstallationToTenant).not.toHaveBeenCalled();
-  });
-
-  it("refuses a shop already claimed by another organization", async () => {
-    H.bindInstallationToTenant.mockResolvedValue({ ok: false, reason: "shop_taken" });
-    const res = await request(app())
-      .post("/api/shopify-chat-install/bind")
-      .set("Cookie", "gotcha_sfy_install=session-token")
-      .send({});
-    expect(res.status).toBe(409);
-    expect(res.body.code).toBe("SHOP_TAKEN");
-  });
-
-  it("refuses an organization whose plan does not include the chat", async () => {
-    H.bindInstallationToTenant.mockResolvedValue({ ok: false, reason: "not_entitled" });
-    const res = await request(app())
-      .post("/api/shopify-chat-install/bind")
-      .set("Cookie", "gotcha_sfy_install=session-token")
-      .send({});
-    expect(res.status).toBe(403);
-    expect(res.body.code).toBe("NOT_ENTITLED");
-  });
-
-  it("refuses without a continuation session", async () => {
-    const res = await request(app()).post("/api/shopify-chat-install/bind").send({});
+describe("retired install handshake", () => {
+  it.each([
+    "/api/connectors/shopify-chat/oauth/init?shop=my-store.myshopify.com",
+    "/api/connectors/shopify-chat/oauth/callback?shop=my-store.myshopify.com&code=x",
+  ])("no longer serves %s", async (path) => {
+    // Not merely unused - unmounted. Leaving them would keep a second app
+    // identity alive that the runtime no longer holds a secret for.
+    const res = await request(app()).get(path);
     expect(res.status).toBe(404);
-    expect(H.bindInstallationToTenant).not.toHaveBeenCalled();
+  });
+});
+
+// ─── Status ──────────────────────────────────────────────────
+
+describe("status", () => {
+  it("reports the shop from the Core connection", async () => {
+    const res = await request(app()).get("/api/shopify-chat-install/status");
+    expect(res.status).toBe(200);
+    expect(res.body.data.shopifyConnected).toBe(true);
+    expect(res.body.data.shopDomain).toBe(SHOP);
+    expect(res.body.data.state).toBe("enabled");
   });
 
-  it("accepts the session from the URL when the cookie was dropped", async () => {
-    H.bindInstallationToTenant.mockResolvedValue({
-      ok: true,
-      installation: { ...INSTALLATION, tenantId: "t1", channelAccountId: "c1" },
-      channel: { id: "c1" },
-      created: false,
+  it("says shopify_not_connected rather than pretending chat is unavailable", async () => {
+    // These are different facts and the merchant's next action differs.
+    H.connection.current = null;
+    const res = await request(app()).get("/api/shopify-chat-install/status");
+    expect(res.body.data.shopifyConnected).toBe(false);
+    expect(res.body.data.state).toBe("shopify_not_connected");
+  });
+
+  it("offers no admin deep link while the app handle is unconfirmed", async () => {
+    // A guessed handle 404s in the merchant's admin, which is worse than
+    // showing no link.
+    delete process.env.SHOPIFY_APP_HANDLE;
+    const res = await request(app()).get("/api/shopify-chat-install/status");
+    expect(res.body.data.appAdminLink).toBeNull();
+  });
+
+  it("reports ready_to_activate when another organization holds the install", async () => {
+    H.install.current = { ...INSTALLATION, tenantId: "other-tenant" };
+    const res = await request(app()).get("/api/shopify-chat-install/status");
+    expect(res.body.data.state).toBe("ready_to_activate");
+    expect(res.body.data.activation).toBeNull();
+  });
+});
+
+// ─── Enable ──────────────────────────────────────────────────
+
+describe("enable", () => {
+  it("enables without any Shopify round trip", async () => {
+    const res = await request(app()).post("/api/shopify-chat-install/enable");
+    expect(res.status).toBe(201);
+    expect(res.body.data.channelId).toBe("c1");
+    expect(H.enableChatForTenant).toHaveBeenCalledWith({ tenantId: "t1", userId: "u1" });
+  });
+
+  it("never takes the shop from the request body", async () => {
+    // Accepting one would let a tenant claim a storefront it never connected.
+    await request(app())
+      .post("/api/shopify-chat-install/enable")
+      .send({ shop: "someone-elses-store.myshopify.com", tenantId: "t99" });
+    const arg = H.enableChatForTenant.mock.calls[0][0];
+    expect(arg).toEqual({ tenantId: "t1", userId: "u1" });
+    expect(JSON.stringify(arg)).not.toContain("someone-elses-store");
+  });
+
+  it("is idempotent - re-enabling returns the existing channel as 200", async () => {
+    H.enableChatForTenant.mockResolvedValue({
+      ok: true, installation: { ...INSTALLATION }, channel: { id: "c1" }, created: false,
     });
-    const res = await request(app())
-      .post("/api/shopify-chat-install/bind")
-      .send({ session: "session-token" });
+    const res = await request(app()).post("/api/shopify-chat-install/enable");
     expect(res.status).toBe(200);
+    expect(res.body.data.channelCreated).toBe(false);
+  });
+
+  it("refuses when Shopify is not connected, with a reason the UI can act on", async () => {
+    H.enableChatForTenant.mockResolvedValue({ ok: false, reason: "shopify_not_connected" });
+    const res = await request(app()).post("/api/shopify-chat-install/enable");
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("SHOPIFY_NOT_CONNECTED");
+  });
+
+  it("refuses an unentitled tenant with 403", async () => {
+    H.enableChatForTenant.mockResolvedValue({ ok: false, reason: "not_entitled" });
+    expect((await request(app()).post("/api/shopify-chat-install/enable")).status).toBe(403);
+  });
+
+  it("refuses a store already claimed by another organization", async () => {
+    H.enableChatForTenant.mockResolvedValue({ ok: false, reason: "shop_taken" });
+    expect((await request(app()).post("/api/shopify-chat-install/enable")).status).toBe(409);
+  });
+
+  it("requires the channel-manage permission", async () => {
+    H.permission.granted = false;
+    expect((await request(app()).post("/api/shopify-chat-install/enable")).status).toBe(403);
+    expect(H.enableChatForTenant).not.toHaveBeenCalled();
+  });
+});
+
+// ─── Disable ─────────────────────────────────────────────────
+
+describe("disable", () => {
+  it("switches chat off and says the Shopify connection survives", async () => {
+    const res = await request(app()).post("/api/shopify-chat-install/disable");
+    expect(res.status).toBe(200);
+    expect(res.body.data.shopifyStillConnected).toBe(true);
+    expect(H.disableChatForTenant).toHaveBeenCalledWith({ tenantId: "t1" });
+  });
+
+  it("reports that the theme embed is still installed", async () => {
+    // Disabling here stops the server answering bootstrap, but the App Embed
+    // stays in the merchant's theme - only they can remove it. Claiming
+    // otherwise would send them looking for a change we did not make.
+    const res = await request(app()).post("/api/shopify-chat-install/disable");
+    expect(res.body.data.themeEmbedStillInstalled).toBe(true);
+  });
+
+  it("requires the channel-manage permission", async () => {
+    H.permission.granted = false;
+    expect((await request(app()).post("/api/shopify-chat-install/disable")).status).toBe(403);
+    expect(H.disableChatForTenant).not.toHaveBeenCalled();
   });
 });
 
 // ─── Activation ──────────────────────────────────────────────
 
 describe("activation", () => {
-  it("reports state for the caller's own installation", async () => {
-    H.install.current = { ...INSTALLATION, tenantId: "t1", channelAccountId: "c1", status: "ACTIVE" };
-    const res = await request(app())
-      .get("/api/shopify-chat-install/activation")
-      .query({ shop: "my-store.myshopify.com" });
+  it("returns the snapshot for the caller's own store", async () => {
+    const res = await request(app()).get("/api/shopify-chat-install/activation");
     expect(res.status).toBe(200);
-    expect(res.body.data.state).toBe("EMBED_NOT_ENABLED");
+    expect(res.body.data.shopDomain).toBe(SHOP);
   });
 
-  it("pretends another organization's installation does not exist", async () => {
-    H.install.current = { ...INSTALLATION, tenantId: "other-tenant", channelAccountId: "c9", status: "ACTIVE" };
-    const res = await request(app())
-      .get("/api/shopify-chat-install/activation")
-      .query({ shop: "my-store.myshopify.com" });
+  it("hides another organization's installation behind the same 404", async () => {
+    H.install.current = { ...INSTALLATION, tenantId: "other-tenant" };
+    const res = await request(app()).get(`/api/shopify-chat-install/activation?shop=${SHOP}`);
     expect(res.status).toBe(404);
     expect(res.body.code).toBe("APP_NOT_INSTALLED");
   });
 
-  it("never returns a token, a tenant id or an integration id to the browser", async () => {
-    H.install.current = { ...INSTALLATION, tenantId: "t1", channelAccountId: "c1", status: "ACTIVE" };
-    const res = await request(app())
-      .get("/api/shopify-chat-install/activation")
-      .query({ shop: "my-store.myshopify.com" });
-    const body = JSON.stringify(res.body);
-    expect(body).not.toContain("accessToken");
-    expect(body).not.toContain("tenantIntegrationId");
-    expect(body).not.toContain("chat-app-secret");
-    expect(body).not.toContain("core-app-secret");
+  it("404s when nothing is installed", async () => {
+    H.install.current = null;
+    H.connection.current = null;
+    expect((await request(app()).get("/api/shopify-chat-install/activation")).status).toBe(404);
   });
 });

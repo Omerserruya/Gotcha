@@ -1,9 +1,15 @@
 /**
- * Shopify webhooks — two apps, two secrets, two consequences.
+ * Shopify webhooks — one app, one secret, two consequences.
  *
- * The property under test is isolation: a delivery signed with the CHAT
- * secret must never reach the Core integration's connection, and one signed
- * with the CORE secret must never disable a storefront chat.
+ * The isolation these tests used to assert was between two Shopify apps.
+ * There is now ONE app, so the secret is shared and the property under test
+ * changes: every route verifies against the CORE secret, the retired Chat
+ * secret is refused everywhere, and the two route families still produce
+ * DIFFERENT consequences even though they no longer have different keys.
+ *
+ * The consequences are the part that still matters. A core uninstall now
+ * disables chat too (the Theme App Extension left with the app), while a
+ * chat-route delivery must still never disconnect commerce.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import express from "express";
@@ -103,20 +109,23 @@ async function post(path: string, secret: string, body: any = { shop_domain: SHO
 
 describe("chat app/uninstalled", () => {
   it("retires the chat installation", async () => {
-    const res = await post("/api/shopify-chat/webhooks/app-uninstalled", "chat-app-secret");
+    const res = await post("/api/shopify-chat/webhooks/app-uninstalled", "core-app-secret");
     expect(res.status).toBe(200);
     await new Promise((r) => setImmediate(r));
     expect(H.markUninstalled).toHaveBeenCalledWith(SHOP);
   });
 
   it("does NOT touch the Core integration's connection", async () => {
-    await post("/api/shopify-chat/webhooks/app-uninstalled", "chat-app-secret");
+    await post("/api/shopify-chat/webhooks/app-uninstalled", "core-app-secret");
     await new Promise((r) => setImmediate(r));
     expect(H.updateConnection).not.toHaveBeenCalled();
   });
 
-  it("refuses a body signed with the CORE secret", async () => {
-    const res = await post("/api/shopify-chat/webhooks/app-uninstalled", "core-app-secret");
+  it("refuses a body signed with the RETIRED chat secret", async () => {
+    // Inverted deliberately at unification. The chat app no longer exists,
+    // so a delivery it could have signed must not be honoured - otherwise a
+    // leaked old secret would still be able to disable a merchant's chat.
+    const res = await post("/api/shopify-chat/webhooks/app-uninstalled", "chat-app-secret");
     expect(res.status).toBe(401);
     expect(H.markUninstalled).not.toHaveBeenCalled();
   });
@@ -131,9 +140,9 @@ describe("chat app/uninstalled", () => {
   });
 
   it("processes a redelivered webhook only once", async () => {
-    await post("/api/shopify-chat/webhooks/app-uninstalled", "chat-app-secret");
+    await post("/api/shopify-chat/webhooks/app-uninstalled", "core-app-secret");
     await new Promise((r) => setImmediate(r));
-    await post("/api/shopify-chat/webhooks/app-uninstalled", "chat-app-secret");
+    await post("/api/shopify-chat/webhooks/app-uninstalled", "core-app-secret");
     await new Promise((r) => setImmediate(r));
     expect(H.markUninstalled).toHaveBeenCalledTimes(1);
   });
@@ -158,7 +167,7 @@ describe("core app/uninstalled", () => {
     expect(H.markUninstalled).not.toHaveBeenCalled();
   });
 
-  it("refuses a body signed with the CHAT secret", async () => {
+  it("refuses a body signed with the RETIRED chat secret", async () => {
     const res = await post("/api/connectors/shopify/webhooks/app-uninstalled", "chat-app-secret");
     expect(res.status).toBe(401);
     expect(H.updateConnection).not.toHaveBeenCalled();
@@ -185,12 +194,12 @@ describe("mandatory compliance webhooks", () => {
   });
 
   it.each(topics)("%s acknowledges a verified delivery", async (path) => {
-    const res = await post(path, "chat-app-secret");
+    const res = await post(path, "core-app-secret");
     expect(res.status).toBe(200);
   });
 
   it("shop/redact clears the installation's identifiers, scoped to that shop", async () => {
-    await post("/api/shopify-chat/webhooks/shop-redact", "chat-app-secret");
+    await post("/api/shopify-chat/webhooks/shop-redact", "core-app-secret");
     await new Promise((r) => setImmediate(r));
     expect(H.updateInstallations).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -201,9 +210,9 @@ describe("mandatory compliance webhooks", () => {
   });
 
   it("shop/redact is idempotent across redeliveries", async () => {
-    await post("/api/shopify-chat/webhooks/shop-redact", "chat-app-secret", { shop_domain: SHOP });
+    await post("/api/shopify-chat/webhooks/shop-redact", "core-app-secret", { shop_domain: SHOP });
     await new Promise((r) => setImmediate(r));
-    await post("/api/shopify-chat/webhooks/shop-redact", "chat-app-secret", { shop_domain: SHOP });
+    await post("/api/shopify-chat/webhooks/shop-redact", "core-app-secret", { shop_domain: SHOP });
     await new Promise((r) => setImmediate(r));
     expect(H.updateInstallations).toHaveBeenCalledTimes(1);
   });

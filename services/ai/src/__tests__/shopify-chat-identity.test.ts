@@ -15,7 +15,11 @@ vi.hoisted(() => {
   process.env.NODE_ENV = "test";
   process.env.JWT_SECRET = "test-secret-that-is-long-enough";
   process.env.WIDGET_SESSION_SECRET = "test-widget-session-secret";
-  process.env.SHOPIFY_CHAT_APP_SECRET = "shpss_test_secret";
+  // Unified app: the proxy signature is made with the CORE secret.
+  process.env.SHOPIFY_API_SECRET = "shpss_test_secret";
+  process.env.SHOPIFY_API_KEY = "core-client-id";
+  // Retired, and deliberately still present: nothing may read it.
+  process.env.SHOPIFY_CHAT_APP_SECRET = "retired-chat-secret";
   process.env.SHOPIFY_CHAT_BOOTSTRAP_RPM = "200";
 });
 

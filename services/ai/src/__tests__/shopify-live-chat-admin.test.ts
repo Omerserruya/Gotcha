@@ -15,7 +15,9 @@ vi.hoisted(() => {
   process.env.JWT_SECRET = "test-secret-that-is-long-enough";
   // The deep link is built from the CHAT app's identity now that the
   // storefront widget ships in its own Shopify app.
-  process.env.SHOPIFY_CHAT_APP_CLIENT_ID = "test-client-id";
+  // Unified app: the Theme Editor deep link targets the CORE client id.
+  process.env.SHOPIFY_API_KEY = "test-client-id";
+  process.env.SHOPIFY_CHAT_APP_CLIENT_ID = "retired-chat-client-id";
   process.env.SHOPIFY_CHAT_BLOCK_HANDLE = "gotcha_chat";
 });
 

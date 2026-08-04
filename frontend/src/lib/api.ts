@@ -578,27 +578,32 @@ export interface ShopifyChatActivation {
   lastHeartbeatAt: string | null;
 }
 
-export interface ShopifyChatInstallContext {
-  shopDomain: string;
-  status: "PENDING" | "ACTIVE" | "UNINSTALLED";
-  alreadyBound: boolean;
-  boundToThisOrganization: boolean;
-  claimedByAnotherOrganization: boolean;
+/**
+ * Shopify Chat state for Settings -> Channels.
+ *
+ * Reports the Shopify connection and the chat channel separately, because a
+ * merchant can have commerce running with chat off and the UI must be able
+ * to say which of the two is missing.
+ */
+export interface ShopifyChatStatus {
+  shopifyConnected: boolean;
+  shopDomain: string | null;
+  state: "shopify_not_connected" | "ready_to_activate" | "enabled";
+  activation: ShopifyChatActivation | null;
+  /** Null until the app handle is confirmed; the UI hides the link rather
+   *  than offering one that 404s in the merchant's admin. */
   appAdminLink: string | null;
 }
 
-function installQuery(session?: string | null): string {
-  return session ? `?session=${encodeURIComponent(session)}` : "";
+export function getShopifyChatStatus(token: string) {
+  return apiFetch<{ data: ShopifyChatStatus }>("/api/shopify-chat-install/status", { token });
 }
 
-export function getShopifyChatInstallContext(token: string, session?: string | null) {
-  return apiFetch<{ data: ShopifyChatInstallContext }>(
-    `/api/shopify-chat-install/context${installQuery(session)}`,
-    { token },
-  );
-}
-
-export function bindShopifyChatInstall(token: string, session?: string | null) {
+/**
+ * Turn Shopify Chat on. There is no second OAuth: the unified app is already
+ * installed, so this only provisions the GOTCHA-side channel.
+ */
+export function enableShopifyChat(token: string) {
   return apiFetch<{
     data: {
       channelId: string;
@@ -606,17 +611,19 @@ export function bindShopifyChatInstall(token: string, session?: string | null) {
       shopDomain: string;
       activation: ShopifyChatActivation;
     };
-  }>("/api/shopify-chat-install/bind", {
-    token,
-    method: "POST",
-    body: JSON.stringify({ session: session ?? undefined }),
-  });
+  }>("/api/shopify-chat-install/enable", { token, method: "POST" });
 }
 
-export function getShopifyChatActivation(token: string, opts: { shop?: string; session?: string | null } = {}) {
+/** Turn Shopify Chat off. Never disconnects the Shopify integration. */
+export function disableShopifyChat(token: string) {
+  return apiFetch<{
+    data: { disabled: number; shopifyStillConnected: boolean; themeEmbedStillInstalled: boolean };
+  }>("/api/shopify-chat-install/disable", { token, method: "POST" });
+}
+
+export function getShopifyChatActivation(token: string, opts: { shop?: string } = {}) {
   const params = new URLSearchParams();
   if (opts.shop) params.set("shop", opts.shop);
-  if (opts.session) params.set("session", opts.session);
   const qs = params.toString();
   return apiFetch<{ data: ShopifyChatActivation }>(
     `/api/shopify-chat-install/activation${qs ? `?${qs}` : ""}`,
