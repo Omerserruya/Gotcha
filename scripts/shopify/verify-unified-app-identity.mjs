@@ -13,10 +13,17 @@
  * from being overwritten by a chat manifest; we are protecting Core from
  * being overwritten by an INCOMPLETE version of its own manifest.
  *
- * The failure this exists to prevent: `include_config_on_deploy = true`
- * makes this repo's TOML authoritative over the live app. A scope missing
- * from the file is a scope REMOVED from the app, and every connected
- * merchant then has to re-consent. There is no undo and no partial restore.
+ * The failure this exists to prevent: `shopify app deploy` ALWAYS publishes
+ * this repo's TOML over the live app. Shopify CLI 3.x removed
+ * `include_config_on_deploy` - it prints "no longer supported" and strips the
+ * field - so there is no extension-only mode and no safety catch. A scope
+ * missing from the file is a scope REMOVED from the app, and a redirect URL
+ * missing from the file stops working for every connected merchant. There is
+ * no undo and no partial restore.
+ *
+ * Because of that, this check now REFUSES until the live configuration has
+ * been read back from the Partner Dashboard and recorded, so the file can be
+ * proven a faithful superset before it is published.
  *
  * Prints identity, never secrets. Exit 0 = safe to proceed.
  *
@@ -150,7 +157,6 @@ const manifest = {
   proxyUrl: null,
   embedded: /^\s*embedded\s*=\s*true/m.test(code),
   apiVersion: scalar("api_version"),
-  includeConfigOnDeploy: /^\s*include_config_on_deploy\s*=\s*true/m.test(code),
 };
 
 // app_proxy.url must be read from inside its own section: `url` also appears
@@ -289,15 +295,25 @@ for (const u of allUrls) {
 // 12. Embedded must stay false.
 if (manifest.embedded) fail("embedded = true. GOTCHA's merchant UI is not an admin iframe.");
 
-// Advisory: the flag that turns this from "ship an extension" into
-// "republish the live app configuration".
-if (manifest.includeConfigOnDeploy) {
-  notes.push(
-    "include_config_on_deploy = TRUE — this deploy WILL replace the live scope list and redirect allowlist.",
+// 13. The live configuration must have been read back and recorded.
+//
+// This is the check that replaces the old include_config_on_deploy note.
+// That flag was treated as a safety catch and is obsolete: CLI 3.x removed
+// it, so EVERY deploy republishes this file. Publishing it blind would
+// silently revoke whatever the live app has that this file lacks.
+//
+// SHOPIFY_LIVE_CONFIG_VERIFIED is set only after a human has compared the
+// dashboard against this manifest (runbook §7) and recorded the result.
+if ((env.SHOPIFY_LIVE_CONFIG_VERIFIED || "").toLowerCase() !== "true") {
+  fail(
+    "Live app configuration has not been read back. `shopify app deploy` publishes this " +
+      "entire file - there is no extension-only mode in CLI 3.x - so deploying now would " +
+      "overwrite the live scopes, redirect allowlist, app proxy and webhooks with whatever " +
+      "is in this repo. Complete the comparison in runbook §7, then set " +
+      "SHOPIFY_LIVE_CONFIG_VERIFIED=true in .env.prod.",
   );
-} else {
-  notes.push("include_config_on_deploy = false — extension-only deploy; live scopes and redirects are not touched.");
 }
+notes.push("Every deploy republishes this file in full - CLI 3.x has no extension-only mode.");
 
 // ─── Report ──────────────────────────────────────────────────
 

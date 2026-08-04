@@ -182,11 +182,14 @@ describe("production configuration", () => {
     expect(toml()).not.toContain(CHAT_DEV_CLIENT_ID);
   });
 
-  it("stays extension-only until the live config is read back", () => {
-    // The single flag separating "ship the extension" from "republish the
-    // app's scopes and redirect allowlist".
-    const active = toml().split("\n").filter((l) => !l.trim().startsWith("#"));
-    expect(active.join("\n")).toMatch(/include_config_on_deploy\s*=\s*false/);
+  it("carries no include_config_on_deploy - the flag is obsolete", () => {
+    // CLI 3.x removed it: `app deploy` prints "no longer supported" and
+    // strips the field. Keeping it would imply a safety catch that does not
+    // exist, which is worse than not having one, because it invites a deploy
+    // that silently republishes scopes and redirect URLs.
+    const active = toml().split("\n").filter((l) => !l.trim().startsWith("#")).join("\n");
+    expect(active).not.toMatch(/include_config_on_deploy/);
+    expect(active).not.toMatch(/^\s*\[build\]/m);
   });
 
   it("omits the handle rather than guessing it", () => {
