@@ -132,7 +132,7 @@ describe("customer copy exposes no provider or internals", () => {
   });
 
   it("uses no em dashes", () => {
-    expect(strings).not.toMatch(/[-–]/);
+    expect(strings).not.toMatch(/[\u2014\u2013]/);
   });
 
   it("has full Hebrew parity", () => {
