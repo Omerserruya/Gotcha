@@ -49,7 +49,7 @@ function decodeIdx(s: string): number {
 // "156, 162 ס״מ" by the wide-dash sanitizer. Ranges are protected AND
 // normalized to a plain ASCII hyphen so they survive hasAiSignaturePunctuation
 // (which flags only wide dashes) and read naturally in every language.
-const NUMERIC_RANGE_RE = /(\d+)\s*[-–-―]\s*(\d+)/g;
+const NUMERIC_RANGE_RE = /(\d+)\s*[-\u2013\u2014\u2015]\s*(\d+)/g;
 
 /** Run a text transform with all atomic values shielded from it. */
 export function withProtectedAtoms(text: string, transform: (prose: string) => string): string {
@@ -80,7 +80,7 @@ export function sanitizeCustomerText(text: string | null | undefined): string {
     // every audience language we serve. Replace clause-connector usage with a
     // comma, mirroring the reply path's humanizeReply. ASCII hyphens are NOT in
     // this class on purpose - and the atoms are shielded regardless.
-    out = out.replace(/\s*[-–―]\s*/g, ", ");
+    out = out.replace(/\s*[\u2013\u2014\u2015]\s*/g, ", ");
     // Tidy artifacts the substitution can leave behind.
     out = out.replace(/,\s*([.!?,\n])/g, "$1");
     out = out.replace(/,\s*,/g, ",").replace(/[ \t]{2,}/g, " ");
@@ -90,5 +90,5 @@ export function sanitizeCustomerText(text: string | null | undefined): string {
 
 /** True when the text still carries an AI-signature wide dash. */
 export function hasAiSignaturePunctuation(text: string | null | undefined): boolean {
-  return /[-–―]/.test(text ?? "");
+  return /[\u2013\u2014\u2015]/.test(text ?? "");
 }

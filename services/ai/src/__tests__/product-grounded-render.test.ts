@@ -134,7 +134,7 @@ describe("humanizer safety (11)", () => {
     const after = sanitizeCustomerText(r.message);
     expect(after).toContain("https://urban-supply-gotcha-demo.myshopify.com/products/the-collection-snowboard-liquid");
     expect(after).toContain("749.95");
-    expect(after).not.toMatch(/[-–―]/);
+    expect(after).not.toMatch(/[\u2013\u2014\u2015]/);
   });
 });
 
