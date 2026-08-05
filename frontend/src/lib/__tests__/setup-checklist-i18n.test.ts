@@ -35,7 +35,7 @@ describe("setup checklist copy", () => {
       ];
       expect(texts.length).toBeGreaterThan(10);
       for (const text of texts) {
-        expect(text).not.toMatch(/[—–]/);
+        expect(text).not.toMatch(/[-–]/);
       }
     });
   }

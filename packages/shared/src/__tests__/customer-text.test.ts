@@ -9,7 +9,7 @@ import { sanitizeCustomerText, hasAiSignaturePunctuation } from "../lib/customer
 
 describe("sanitizeCustomerText", () => {
   it("strips em/en dashes and horizontal bars into natural punctuation", () => {
-    for (const dash of ["—", "–", "―"]) {
+    for (const dash of ["-", "–", "―"]) {
       const out = sanitizeCustomerText(`ביצעתי את ההחזר ${dash} הכסף בדרך אליך`);
       expect(hasAiSignaturePunctuation(out)).toBe(false);
       expect(out).toContain(",");
@@ -17,7 +17,7 @@ describe("sanitizeCustomerText", () => {
   });
 
   it("never alters business facts: amounts, currencies, order ids, dates survive verbatim", () => {
-    const msg = "ההחזר על סך 600.00 USD עבור הזמנה #1004 יטופל עד 25.07.2026 — תודה";
+    const msg = "ההחזר על סך 600.00 USD עבור הזמנה #1004 יטופל עד 25.07.2026 - תודה";
     const out = sanitizeCustomerText(msg);
     expect(out).toContain("600.00 USD");
     expect(out).toContain("#1004");
@@ -31,7 +31,7 @@ describe("sanitizeCustomerText", () => {
   });
 
   it("tidies substitution artifacts instead of leaving ', .' fragments", () => {
-    expect(sanitizeCustomerText("סיימנו —.")).toBe("סיימנו.");
+    expect(sanitizeCustomerText("סיימנו -.")).toBe("סיימנו.");
   });
 
   it("null/undefined bodies become empty strings (media captions stay optional)", () => {
@@ -40,7 +40,7 @@ describe("sanitizeCustomerText", () => {
   });
 
   it("bypass visibility: hasAiSignaturePunctuation flags a body that skipped sanitization", () => {
-    expect(hasAiSignaturePunctuation("raw model text — unsanitized")).toBe(true);
+    expect(hasAiSignaturePunctuation("raw model text - unsanitized")).toBe(true);
     expect(hasAiSignaturePunctuation("clean text, sanitized")).toBe(false);
   });
 
@@ -49,7 +49,7 @@ describe("sanitizeCustomerText", () => {
   it("preserves numeric ranges instead of turning them into commas (19/20/21)", () => {
     expect(sanitizeCustomerText('חפש לוח בטווח 156–162 ס"מ')).toBe('חפש לוח בטווח 156-162 ס"מ');
     expect(sanitizeCustomerText("2–3 אופציות")).toBe("2-3 אופציות");
-    expect(sanitizeCustomerText("דירוג 5 — 7 מתוך 10")).toBe("דירוג 5-7 מתוך 10");
+    expect(sanitizeCustomerText("דירוג 5 - 7 מתוך 10")).toBe("דירוג 5-7 מתוך 10");
     expect(sanitizeCustomerText("English 160-165 range")).toBe("English 160-165 range");
   });
 
@@ -60,6 +60,6 @@ describe("sanitizeCustomerText", () => {
   });
 
   it("still converts an em-dash used as a clause connector (not a range) to a comma", () => {
-    expect(sanitizeCustomerText("אשמח לעזור — מתי נוח לך")).toBe("אשמח לעזור, מתי נוח לך");
+    expect(sanitizeCustomerText("אשמח לעזור - מתי נוח לך")).toBe("אשמח לעזור, מתי נוח לך");
   });
 });

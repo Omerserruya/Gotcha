@@ -16,8 +16,8 @@ merchant's store without a bundler in the way.
 uses (see `services/conversation/src/lib/socket.ts`), which is what makes
 an agent's reply appear instantly instead of on a poll tick, and gives us
 socket.io's reconnection and backoff for free rather than hand-rolling
-them. It is loaded **lazily** — only when a shopper opens the chat, or
-when a returning shopper already has a conversation in progress — so a
+them. It is loaded **lazily** - only when a shopper opens the chat, or
+when a returning shopper already has a conversation in progress - so a
 visitor who never opens the widget never downloads it.
 
 There is a polling fallback for when this file cannot load or the socket

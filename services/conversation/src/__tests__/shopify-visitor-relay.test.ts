@@ -1,5 +1,5 @@
 /**
- * Shopify Live Chat — realtime relay to storefront visitors.
+ * Shopify Live Chat - realtime relay to storefront visitors.
  *
  * The visitor side of the socket is the one place where a bug becomes a
  * cross-tenant leak in real time, so these pin down exactly what leaves

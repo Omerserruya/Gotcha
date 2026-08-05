@@ -1,5 +1,5 @@
 /**
- * Shopify Live Chat — persistence of AI product messages.
+ * Shopify Live Chat - persistence of AI product messages.
  *
  * The AI service resolves and validates product cards but deliberately
  * does NOT write them: the worker does, AFTER the text reply, so the bot

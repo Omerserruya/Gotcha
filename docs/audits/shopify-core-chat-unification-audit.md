@@ -4,13 +4,13 @@
 **Type:** Read-only architecture and migration audit. **No code, no Shopify app, no environment variable and no deployment was changed by this task.**
 **Question:** should the storefront Chat widget keep its own Shopify app, or move into GOTCHA Core as an optional channel?
 
-> ## Decision approved — 2026-08-04 (see Section 21)
+> ## Decision approved - 2026-08-04 (see Section 21)
 >
 > **Option B is approved.** The existing **GOTCHA** app (client `b1ce3aa5…5f76`) becomes the single unified production Shopify app. No `GOTCHA Chat Production` app will be created; the Chat Dev app will not be used for production; no replacement Core app will be created.
 >
 > Execution detail lives in **`docs/setup/shopify-core-unified-production-runbook.md`**.
 >
-> Section 21 records live evidence gathered after this audit was first written. Two findings materially change the plan: the app has **already been granted all 25 target scopes**, and the OAuth code requests only 15, so **the app configuration — not the code — is already authoritative for scopes**.
+> Section 21 records live evidence gathered after this audit was first written. Two findings materially change the plan: the app has **already been granted all 25 target scopes**, and the OAuth code requests only 15, so **the app configuration - not the code - is already authoritative for scopes**.
 
 Evidence legend used throughout:
 
@@ -169,20 +169,20 @@ Only the last row belongs to Chat, and it depends on a *secret*, not on a scope 
 | Property | GOTCHA Core (prod) | Core (dev) | GOTCHA Chat (Dev) | Chat Production | Legacy/staging |
 |---|---|---|---|---|---|
 | Exists? | **Yes [L]** | Same app, different redirect **[R]** | **Yes [L]** `…c3ad` | **No. Never created [R/L]** | None found **[R]** |
-| App name | GOTCHA Core Shopify Integration | same | GOTCHA Chat (Dev) | intended `GOTCHA Chat Production` | — |
-| Client ID | `…5f76` **[R]** | `…5f76` **[R]** | `96c9417a…c3ad` **[R]** | none | — |
-| Organization | omer.serruya@gotcha.co.il **[L]** | same | same **[I]** | n/a | — |
-| Config file | **none in repo** (dashboard-managed) **[R]** | none | `shopify.app.dev.toml` **[R]** | `shopify.app.toml` (unlinked) **[R]** | — |
-| Env vars | `SHOPIFY_API_KEY/_SECRET/_REDIRECT_URI` **[R]** | same | `SHOPIFY_CHAT_APP_*` in `.env` **[R]** | `SHOPIFY_CHAT_APP_CLIENT_ID/_SECRET` **empty** in `.env.prod` **[R]** | — |
-| Scopes | 16 **[R]** | 16 | **`""`** **[R]** | **`""`** **[R]** | — |
-| Redirect URLs | `/api/connectors/shopify/oauth/callback` **[R]** | dev host | `dev.gotcha.co.il/api/connectors/shopify-chat/oauth/callback` **[R]** | `app.gotcha.co.il/...` **[R]** | — |
-| App URL | dashboard **[?]** | — | `dev.gotcha.co.il/api/connectors/shopify-chat/oauth/init` **[R]** | `app.gotcha.co.il/...` **[R]** | — |
-| App proxy | **[?]** unknown; none declared in repo | — | `/api/shopify-chat/proxy`, subpath `gotcha-chat` **[R]** | same **[R]** | — |
-| Webhooks | 4 topics on Core secret **[R]** | same | 4 topics on Chat secret **[R]** | 4 declared **[R]** | — |
-| Theme extension | none | none | `gotcha-chat`, uid `5f510f68-…` **[R]** | same uid declared **[R]** | — |
-| Deploy scripts | none (dashboard) | — | `shopify app deploy` from `shopify-app/` **[R]** | same | — |
-| Verify script | — | — | `verify-chat-app-identity.mjs --config shopify.app.dev.toml` → ✓ **[L]** | same, → ✗ REFUSING **[L]** | — |
-| Installed on | 3 tenant rows, all `urban-supply-gotcha-demo.myshopify.com`, `CONNECTED` **[L]** | — | 1 install, `urban-supply-gotcha-demo`, `ACTIVE`, bound **[L]** | none | — |
+| App name | GOTCHA Core Shopify Integration | same | GOTCHA Chat (Dev) | intended `GOTCHA Chat Production` | - |
+| Client ID | `…5f76` **[R]** | `…5f76` **[R]** | `96c9417a…c3ad` **[R]** | none | - |
+| Organization | omer.serruya@gotcha.co.il **[L]** | same | same **[I]** | n/a | - |
+| Config file | **none in repo** (dashboard-managed) **[R]** | none | `shopify.app.dev.toml` **[R]** | `shopify.app.toml` (unlinked) **[R]** | - |
+| Env vars | `SHOPIFY_API_KEY/_SECRET/_REDIRECT_URI` **[R]** | same | `SHOPIFY_CHAT_APP_*` in `.env` **[R]** | `SHOPIFY_CHAT_APP_CLIENT_ID/_SECRET` **empty** in `.env.prod` **[R]** | - |
+| Scopes | 16 **[R]** | 16 | **`""`** **[R]** | **`""`** **[R]** | - |
+| Redirect URLs | `/api/connectors/shopify/oauth/callback` **[R]** | dev host | `dev.gotcha.co.il/api/connectors/shopify-chat/oauth/callback` **[R]** | `app.gotcha.co.il/...` **[R]** | - |
+| App URL | dashboard **[?]** | - | `dev.gotcha.co.il/api/connectors/shopify-chat/oauth/init` **[R]** | `app.gotcha.co.il/...` **[R]** | - |
+| App proxy | **[?]** unknown; none declared in repo | - | `/api/shopify-chat/proxy`, subpath `gotcha-chat` **[R]** | same **[R]** | - |
+| Webhooks | 4 topics on Core secret **[R]** | same | 4 topics on Chat secret **[R]** | 4 declared **[R]** | - |
+| Theme extension | none | none | `gotcha-chat`, uid `5f510f68-…` **[R]** | same uid declared **[R]** | - |
+| Deploy scripts | none (dashboard) | - | `shopify app deploy` from `shopify-app/` **[R]** | same | - |
+| Verify script | - | - | `verify-chat-app-identity.mjs --config shopify.app.dev.toml` → ✓ **[L]** | same, → ✗ REFUSING **[L]** | - |
+| Installed on | 3 tenant rows, all `urban-supply-gotcha-demo.myshopify.com`, `CONNECTED` **[L]** | - | 1 install, `urban-supply-gotcha-demo`, `ACTIVE`, bound **[L]** | none | - |
 
 Production installed base for Core is **[?]** from here (prod DB not queried; this audit made no production reads).
 
@@ -192,16 +192,16 @@ Production installed base for Core is **[?]** from here (prod DB not queried; th
 
 | Scope | Core uses it | Chat uses it | Chat-only | Required at install | Optional | Actual code path |
 |---|---|---|---|---|---|---|
-| `read_products` | Yes | **indirectly, via Core's token** | **No** | Core: yes | — | `shopify-catalog.service.ts` → `loadConnection(slug:"shopify")` **[R]** |
-| `read_orders` / `read_all_orders` | Yes | No | No | Core: yes | — | `shopify.adapter.ts` |
-| `write_orders` | Yes | No | No | Core: yes | — | cancel, refund, edits |
-| `read_customers` / `write_customers` | Yes | No | No | Core: yes | — | tags, notes, profile |
-| `read_returns` / `write_returns` | Yes | No | No | Core: yes | — | returns, exchanges |
-| `read_price_rules` / `write_price_rules` / `write_discounts` | Yes | No | No | Core: yes | — | discounts |
-| `read_inventory` | Yes | No | No | Core: yes | — | `inventory_status` |
-| fulfillment-order scopes | Yes | No | No | Core: yes | — | fulfilment status |
-| `write_order_edits` | Yes | No | No | Core: yes | — | exchanges |
-| **(any Chat scope)** | — | **none declared** | — | **Chat: none** | — | `scopes = ""` **[R]** |
+| `read_products` | Yes | **indirectly, via Core's token** | **No** | Core: yes | - | `shopify-catalog.service.ts` → `loadConnection(slug:"shopify")` **[R]** |
+| `read_orders` / `read_all_orders` | Yes | No | No | Core: yes | - | `shopify.adapter.ts` |
+| `write_orders` | Yes | No | No | Core: yes | - | cancel, refund, edits |
+| `read_customers` / `write_customers` | Yes | No | No | Core: yes | - | tags, notes, profile |
+| `read_returns` / `write_returns` | Yes | No | No | Core: yes | - | returns, exchanges |
+| `read_price_rules` / `write_price_rules` / `write_discounts` | Yes | No | No | Core: yes | - | discounts |
+| `read_inventory` | Yes | No | No | Core: yes | - | `inventory_status` |
+| fulfillment-order scopes | Yes | No | No | Core: yes | - | fulfilment status |
+| `write_order_edits` | Yes | No | No | Core: yes | - | exchanges |
+| **(any Chat scope)** | - | **none declared** | - | **Chat: none** | - | `scopes = ""` **[R]** |
 
 **Direct answers:**
 
@@ -296,7 +296,7 @@ The state model is a superset of what exists and is a genuine improvement, indep
 | D3 | Recreate the Theme App Extension under Core | **HIGH** | See Section 15 |
 | D4 | Create a **GOTCHA Core Dev** app if one does not exist | **MEDIUM** | **[?]** today Core prod/dev share `…5f76` **[R]** |
 | D5 | Retire `GOTCHA Chat (Dev)` `…c3ad` after migration | **LOW** | Uninstall from demo store first |
-| D6 | Do **not** create `GOTCHA Chat Production` | — | Cancels the in-flight task; nothing was created **[L]** |
+| D6 | Do **not** create `GOTCHA Chat Production` | - | Cancels the in-flight task; nothing was created **[L]** |
 
 ---
 
@@ -310,7 +310,7 @@ The state model is a superset of what exists and is a genuine improvement, indep
 | `ChannelAccount` (SHOPIFY_LIVE_CHAT) | Keyed by public channel key, not app id | **LOW** |
 | Shop domain uniqueness | Partial unique index, one live install per shop **[R]** | **LOW** |
 | Conversations | Keyed by visitor id, no app reference | **NONE** |
-| Production Chat installs | **Zero** — app never existed **[R/L]** | **NONE** |
+| Production Chat installs | **Zero** - app never existed **[R/L]** | **NONE** |
 | Backfill | One dev row, or simply reinstall on the demo store | **LOW** |
 
 **This is the single strongest argument for acting now.** Migration is one dev row. After the first production merchant installs a Chat app, this becomes a HIGH-complexity merchant-action migration.
@@ -322,8 +322,8 @@ The state model is a superset of what exists and is a genuine improvement, indep
 | Case | Installation | OAuth | Reauth? | Re-enable embed? | Conversations | Channel migration | Uninstall old app | Downtime | Rollback |
 |---|---|---|---|---|---|---|---|---|---|
 | 1. Core installed, Chat not | Add extension to Core | none | **No** **[I]** | n/a (never enabled) | n/a | none | n/a | none | trivial |
-| 2. Core + separate Chat installed | **Does not exist in production [R/L]** | — | — | — | — | — | — | — | — |
-| 3. Chat without Core | **Impossible in production** (no prod Chat app) | — | — | — | — | — | — | — | — |
+| 2. Core + separate Chat installed | **Does not exist in production [R/L]** | - | - | - | - | - | - | - | - |
+| 3. Chat without Core | **Impossible in production** (no prod Chat app) | - | - | - | - | - | - | - | - |
 | 4. Dev/test store on Chat Dev | Reinstall extension under Core dev | new install | Yes (dev only) | **Yes** | preserved (visitor-keyed) | 1 row | Yes | dev only | recreate |
 | 5. New merchant post-unification | One install + activate embed | one | n/a | once | n/a | none | n/a | none | n/a |
 
@@ -354,12 +354,12 @@ Reviewed against each item requested.
 
 **Secret-selection sites that must all move together** (this is the list asked for):
 
-1. `shopify-chat-public.ts:385` — `getShopifyChatAppConfig().clientSecret` for app proxy **[R]**
-2. `shopify-webhooks.ts:158,188,203,222` — Chat secret for 4 topics **[R]**
-3. `shopify-webhooks.ts:278,325,333,341` — Core secret for 4 topics **[R]**
-4. `shopify-chat-app.ts:45-47` — the config reader itself **[R]**
+1. `shopify-chat-public.ts:385` - `getShopifyChatAppConfig().clientSecret` for app proxy **[R]**
+2. `shopify-webhooks.ts:158,188,203,222` - Chat secret for 4 topics **[R]**
+3. `shopify-webhooks.ts:278,325,333,341` - Core secret for 4 topics **[R]**
+4. `shopify-chat-app.ts:45-47` - the config reader itself **[R]**
 
-**The specific failure mode to design against:** `getShopifyChatAppConfig()` returns `""` when unset **[R]**, and `verifyAppProxySignature` returns `false` on an empty secret **[R]** — that fails closed, which is correct. But if unification is done by *pointing `SHOPIFY_CHAT_APP_SECRET` at the Core secret value* rather than by deleting the indirection, the system silently keeps two names for one secret, and a future rotation of one will break the other with a signature error that reads as "misconfigured proxy". **Recommendation: delete the Chat config reader outright rather than aliasing it.**
+**The specific failure mode to design against:** `getShopifyChatAppConfig()` returns `""` when unset **[R]**, and `verifyAppProxySignature` returns `false` on an empty secret **[R]** - that fails closed, which is correct. But if unification is done by *pointing `SHOPIFY_CHAT_APP_SECRET` at the Core secret value* rather than by deleting the indirection, the system silently keeps two names for one secret, and a future rotation of one will break the other with a signature error that reads as "misconfigured proxy". **Recommendation: delete the Chat config reader outright rather than aliasing it.**
 
 **Net security assessment:** unification is close to neutral, and mildly *positive* on surface area (one fewer OAuth flow, one fewer secret, one fewer token column). The old document's claim that the split gives "structural" isolation no longer holds: the widget's product reads already flow through the Core token **[R]**, so the isolation is already policy-level for the one Admin capability Chat uses.
 
@@ -369,7 +369,7 @@ Reviewed against each item requested.
 
 Ordered, each step reversible before the next.
 
-1. **Freeze.** Do not create `GOTCHA Chat Production`. (Already true — nothing was created **[L]**.)
+1. **Freeze.** Do not create `GOTCHA Chat Production`. (Already true - nothing was created **[L]**.)
 2. **C11 first.** Author `shopify.app.production.toml` containing Core's **exact 16 scopes** and real redirect URLs. Until this file is byte-correct, no deploy may run.
 3. **Rewrite the verifier (C6)** to assert the linked id **equals** Core and that the scope list matches the code's list exactly. Invert the current `!==` assertion.
 4. **Dashboard (D1, D2):** add app proxy and webhook subscriptions to Core.
@@ -391,7 +391,7 @@ Ordered, each step reversible before the next.
 | Must merchants re-enable the embed? | **Yes for anyone who had the old app.** Today that is one dev store **[L]** | **[I]** |
 | Can `shopify app deploy` against Core modify Core's scopes/URLs/webhooks? | **Yes, and this is the CRITICAL risk.** `include_config_on_deploy = true` **[R]** | **[R]** |
 | Can the current verifier support the unified model? | **No.** It hard-fails when `manifest.clientId === coreClientId` (`line 130`) **[R]** | **[R]** |
-| Is a separate production config file needed? | **Yes** — and it must carry Core's full scope list | **[R]** |
+| Is a separate production config file needed? | **Yes** - and it must carry Core's full scope list | **[R]** |
 | Does the verifier wrongly assume Chat must be separate? | **Yes.** Its central assertion is "core client id ← must differ" (`line 269`) **[R]** | **[R]** |
 
 ---
@@ -402,7 +402,7 @@ Ordered, each step reversible before the next.
 |---|---|
 | Before extension deploy | Delete the new TOML. Nothing external changed |
 | After Core dev deploy | Remove the extension version from the dev app; prod untouched |
-| After Core prod extension deploy | Publish the previous Core app version. Extension disappears; **scopes are the exposure** — hence C11 must be right first |
+| After Core prod extension deploy | Publish the previous Core app version. Extension disappears; **scopes are the exposure** - hence C11 must be right first |
 | After backend cutover | Feature flag back to Chat-app paths; requires Chat app to still exist, so **keep `…c3ad` until cutover is proven** |
 | After Dev Chat retirement | Point of no return for dev testing |
 
@@ -451,7 +451,7 @@ Compare with the cost of *not* unifying: creating and maintaining a second produ
 
 ## 20. Recommendation and GO / NO-GO
 
-**Recommendation: Option B — one Core Shopify app with optional Chat activation.**
+**Recommendation: Option B - one Core Shopify app with optional Chat activation.**
 
 Reasoning against the criteria requested:
 
@@ -460,7 +460,7 @@ Reasoning against the criteria requested:
 - **Security:** neutral to slightly positive. The claimed structural isolation is already policy-level because product reads use the Core token **[R]**.
 - **Maintainability:** removes an entire app identity, secret, OAuth flow, token column and 4 webhook handlers.
 - **Deployment safety:** *worse before better.* The repo TOML becomes authoritative for Core. This is the one thing that must be engineered, not assumed.
-- **Existing installations:** effectively zero cost **now** — no production Chat app, one dev install **[R/L]**.
+- **Existing installations:** effectively zero cost **now** - no production Chat app, one dev install **[R/L]**.
 - **Future App Store strategy:** the only real casualty. If Chat is ever to be listed standalone, this decision must be revisited, and that is a commercial call.
 
 **VERDICT: GO**, conditional on the four blockers below.
@@ -499,7 +499,7 @@ The last row corrects audit risk **R7** from "possible" to **confirmed**: there 
 
 ### 21.2 The 25 scopes are already granted
 
-Read live via `GET /admin/oauth/access_scopes.json` against the newest stored token **[L]**. Shopify returned **19 explicit** scopes in its canonical collapsed form, where a granted `write_X` implies `read_X`. Expanding the six implied reads gives **exactly the 25 requested scopes — none missing, none extra**.
+Read live via `GET /admin/oauth/access_scopes.json` against the newest stored token **[L]**. Shopify returned **19 explicit** scopes in its canonical collapsed form, where a granted `write_X` implies `read_X`. Expanding the six implied reads gives **exactly the 25 requested scopes - none missing, none extra**.
 
 The target scope set is therefore **proven valid and already approved for this app**. No scope in the list is invalid, deprecated or rejected.
 
@@ -523,7 +523,7 @@ It also reverses a documented decision: the code comments say draft-order scopes
 
 All three tokens are **expired** (HTTP 401) but carry refresh tokens, so expiry needs no merchant action. The scope gap does.
 
-**Direct consequence for work already merged:** the returns and exchanges feature added in `9c8d701` requires `write_returns` and `write_order_edits`, which the two older installs lack. On those tenants the Return and Exchange buttons will correctly report a missing scope rather than fail — the capability gate added in that commit is what makes this visible instead of silent.
+**Direct consequence for work already merged:** the returns and exchanges feature added in `9c8d701` requires `write_returns` and `write_order_edits`, which the two older installs lack. On those tenants the Return and Exchange buttons will correctly report a missing scope rather than fail - the capability gate added in that commit is what makes this visible instead of silent.
 
 ### 21.5 A scope used by code is absent from the approved set
 
@@ -531,7 +531,7 @@ All three tokens are **expired** (HTTP 401) but carry refresh tokens, so expiry 
 
 ### 21.6 `grantedScopes` is never recorded
 
-`TenantIntegration.config.grantedScopes` is **null on every row** **[L]**, which is why this audit had to query Shopify directly. `commerce-context.service.ts` reads that field to decide which buttons to show, so with it empty the code falls back to "assume granted" — the branch `granted.length === 0 || granted.includes(...)` **[R]**. Recording real granted scopes at OAuth time is a prerequisite for managing reauthorization at scale, and for the capability gates to be honest.
+`TenantIntegration.config.grantedScopes` is **null on every row** **[L]**, which is why this audit had to query Shopify directly. `commerce-context.service.ts` reads that field to decide which buttons to show, so with it empty the code falls back to "assume granted" - the branch `granted.length === 0 || granted.includes(...)` **[R]**. Recording real granted scopes at OAuth time is a prerequisite for managing reauthorization at scale, and for the capability gates to be honest.
 
 ### 21.7 Effect on the original recommendation
 

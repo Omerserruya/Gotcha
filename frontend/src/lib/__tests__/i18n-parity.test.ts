@@ -51,7 +51,7 @@ describe("i18n parity (en ↔ he)", () => {
     for (const block of BLOCKS) {
       for (const [name, dict] of [["en", en], ["he", he]] as const) {
         for (const text of scan(resolve(dict, block))) {
-          expect(text, `${name}:${block} contains an em/en dash: ${text}`).not.toMatch(/[—–]/);
+          expect(text, `${name}:${block} contains an em/en dash: ${text}`).not.toMatch(/[-–]/);
         }
       }
     }

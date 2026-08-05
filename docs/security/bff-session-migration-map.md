@@ -1,9 +1,9 @@
-# BFF Session Migration — Phase 1: Current-State Map
+# BFF Session Migration - Phase 1: Current-State Map
 
 Status: **Phase 1 (map only, no code changed).** Precondition for Phases 2–5.
 Awaiting map review before any Phase 2 code is written.
 
-**Decision (2026-07-24):** topology bridge = **Option A** (§7) — nginx
+**Decision (2026-07-24):** topology bridge = **Option A** (§7) - nginx
 `auth_request` → a `services/auth` session resolver that decrypts + refreshes the
 OIDC token (single refresh owner, with a lock) and injects `Authorization:
 Bearer` upstream. Downstream services stay unchanged; the cookie never reaches
@@ -14,7 +14,7 @@ stays the IdP; GOTCHA owns the application session and all authorization.
 
 Companion: `docs/security/authentik-architecture.md` (the current model, which
 explicitly names this BFF migration as the "durable fix, out of scope" for the
-Authentik migration — §6 "Accepted tradeoffs").
+Authentik migration - §6 "Accepted tradeoffs").
 
 ---
 
@@ -36,7 +36,7 @@ browser ──Bearer──▶ nginx ──/api/auth─────▶ auth_servi
 
 Every browser→service auth path therefore has to be bridged from
 "cookie" back to "the Bearer the service already understands". The chosen
-bridge is the central design decision for Phase 2/5 — see §7.
+bridge is the central design decision for Phase 2/5 - see §7.
 
 ---
 
@@ -58,27 +58,27 @@ login-state record; the active tenant moves to `session.activeMembershipId`.
 
 ## 2. Browser: token lifecycle (the code to replace)
 
-- **`frontend/src/lib/oidc.ts`** — browser OIDC client (PUBLIC client + PKCE).
+- **`frontend/src/lib/oidc.ts`** - browser OIDC client (PUBLIC client + PKCE).
   Moves server-side wholesale:
-  - `beginLogin()` `:89` — builds authorize URL, stores verifier/state in
+  - `beginLogin()` `:89` - builds authorize URL, stores verifier/state in
     sessionStorage, redirects to Authentik.
-  - `completeLogin()` `:122` — **browser-side code→token exchange** at
+  - `completeLogin()` `:122` - **browser-side code→token exchange** at
     `token_endpoint`. → becomes a backend callback.
-  - `refreshTokens()` `:164` — **browser-side refresh**. → becomes server-owned.
+  - `refreshTokens()` `:164` - **browser-side refresh**. → becomes server-owned.
   - `logoutUrl()` `:194`, `discover()` `:31`, `accountSettingsUrl`,
-    `authentikFlowUrl`/`flowDoneUrl` (embedded MFA/passkey flows — stay browser,
+    `authentikFlowUrl`/`flowDoneUrl` (embedded MFA/passkey flows - stay browser,
     they use the Authentik *session cookie*, not our token).
-- **`frontend/src/context/AuthContext.tsx`** — the token store + refresh timer +
+- **`frontend/src/context/AuthContext.tsx`** - the token store + refresh timer +
   session bootstrap. Rewrite around cookie session:
   - `storeTokens/clearTokens` `:82/:88` (localStorage) → removed.
   - `adoptSession()` `:175`, startup effect `:197`, `scheduleRefresh()` `:150`,
     `hardLogout()` `:138`, `login()` `:232`, `logout()` `:236`.
   - Still owns: `user`, `memberships`, `tenantName`, `needsTenantSelection`,
-    `switchTenant()` — but hydrated from `/api/auth/me` over the cookie, not a token.
-- **`frontend/src/app/auth/callback/page.tsx`** — browser exchange +
+    `switchTenant()` - but hydrated from `/api/auth/me` over the cookie, not a token.
+- **`frontend/src/app/auth/callback/page.tsx`** - browser exchange +
   `adoptSession` + stale-flow auto-restart (`:36–:62`). → becomes a thin spinner;
   the exchange + stale-retry logic moves into the backend callback.
-- **`frontend/src/app/auth/flow-done/page.tsx`** — embedded-flow postMessage
+- **`frontend/src/app/auth/flow-done/page.tsx`** - embedded-flow postMessage
   bridge (MFA/passkey). Stays; unrelated to our token.
 
 ## 3. Browser: `Authorization: Bearer` construction sites (→ `credentials:"include"`)
@@ -95,29 +95,29 @@ All read `token` from `useAuth()`/localStorage. Centralize, then delete the head
 - Pages: `app/outbound/scheduled/page.tsx:110`, `app/outbound/templates/page.tsx:25`,
   `app/outbound/call/page.tsx:276`, `app/settings/voice-copilot/components/*`
   (`LiveMonitoringPanel:60`, `SttConfigPanel:37/:68`).
-- **Tenant header interceptor** `lib/active-tenant.ts` — patches `window.fetch`
+- **Tenant header interceptor** `lib/active-tenant.ts` - patches `window.fetch`
   to stamp `X-Tenant-Id` + self-heal `tenant_denied`. Keep the interceptor shape
   but (a) add `credentials:"include"` and (b) treat active tenant as server-owned
   (switch via `/api/auth/switch-tenant`, which updates `session.activeMembershipId`).
 
 ## 4. Browser: authenticated sockets & downloads
 
-- **Conversation WS** — `lib/socket.ts:8` `io(WS_URL,{auth:{token,tenantId}})`.
+- **Conversation WS** - `lib/socket.ts:8` `io(WS_URL,{auth:{token,tenantId}})`.
   → `io(WS_URL,{withCredentials:true})`; server reads the cookie.
-- **Notifications WS** — opened with the token as a **URL query param** `?token=`
+- **Notifications WS** - opened with the token as a **URL query param** `?token=`
   (server side `services/notifications/src/ws-server.ts:49`). Find the browser
   opener; move to cookie on the upgrade request. **Token-in-URL must go.**
-- **CSV/file download** — `app/system/leads/page.tsx:166` `fetch().blob()` — rides
+- **CSV/file download** - `app/system/leads/page.tsx:166` `fetch().blob()` - rides
   the fetch interceptor, so cookie covers it automatically.
-- **Channel-connect redirect** — `app/.../channels` sends `?token=` to
+- **Channel-connect redirect** - `app/.../channels` sends `?token=` to
   `services/auth/src/routes/channels.ts:576` (verified via `resolvePrincipal`,
   admin-only). → same-origin redirect already carries the cookie; drop `?token=`.
 - `app/account/verify-email/page.tsx:31` `?token=` is a **change-email** token
-  (GOTCHA-issued), NOT the OIDC token — out of scope, leave as-is.
+  (GOTCHA-issued), NOT the OIDC token - out of scope, leave as-is.
 
 ## 5. Server: token consumers (what the cookie must resolve to)
 
-- **`packages/shared/src/middleware/auth.ts` `authenticate()`** — the one HTTP
+- **`packages/shared/src/middleware/auth.ts` `authenticate()`** - the one HTTP
   gate used by every service. Verifies `Authorization: Bearer` via JWKS
   (`resolvePrincipal`), plus an internal-service secret path. Also reads
   `X-Tenant-Id` as a validated hint.
@@ -127,24 +127,24 @@ All read `token` from `useAuth()`/localStorage. Centralize, then delete the head
   - `services/voice-copilot/src/routes/twilio-token.ts:32` (Bearer)
   - `services/auth/src/routes/channels.ts:589` (query-param redirect)
 - **`packages/shared/src/lib/jwt.ts` `verifyAccessToken()`** + **`lib/principal.ts`
-  `resolvePrincipal()`** — unchanged; still verify Authentik tokens. The BFF
+  `resolvePrincipal()`** - unchanged; still verify Authentik tokens. The BFF
   feeds them a server-decrypted token instead of a browser-supplied one.
 
-No Next.js `middleware.ts`, no service worker, no SSR auth — nothing to migrate there.
+No Next.js `middleware.ts`, no service worker, no SSR auth - nothing to migrate there.
 
 ## 6. Reusable infrastructure already present
 
-- **Encryption**: `packages/shared/src/lib/encryption.ts` —
+- **Encryption**: `packages/shared/src/lib/encryption.ts` -
   `encryptCredentials`/`decryptCredentials` (AES-256-GCM, `CHANNEL_ENCRYPTION_KEY`).
   Already used to store provider OAuth tokens at rest (`KnowledgeIntegration`,
-  channel `encryptedSecrets`, integration creds). **Reusable for OIDC tokens** —
+  channel `encryptedSecrets`, integration creds). **Reusable for OIDC tokens** -
   recommend a *dedicated* `SESSION_ENCRYPTION_KEY` for key separation.
 - **Config already stubbed** in `.env`: `SESSION_TTL_SECONDS`,
   `MAX_CONCURRENT_SESSIONS`. Need to add: remembered-session TTL, cookie name,
   refresh skew, `SESSION_ENCRYPTION_KEY`.
 - **No existing user `Session` model** (only `VoiceCallSession`/`DiscoverySession`,
   unrelated). Phase 2 creates a new one.
-- **No server-side cookie handling today** — greenfield; `cookie-parser` or manual
+- **No server-side cookie handling today** - greenfield; `cookie-parser` or manual
   parse in the auth service (dependency rule: prefer manual/`jose` already-present;
   avoid adding cookie-parser unless approved).
 
@@ -163,14 +163,14 @@ Three options to bridge cookie→Bearer across the nginx fan-out:
   looks up the session, decrypts, resolves. Simple nginx, but every service can
   refresh → violates "single owner of refresh" and spreads the decryption key.
 - **C. Full app-level proxy** in front of all services. Cleanest conceptually but
-  effectively re-routes all 6 services through one process — large, risky, and
+  effectively re-routes all 6 services through one process - large, risky, and
   brushes against "no new microservices".
 
 Recommendation: **A**, with the auth service as the single refresh owner. WS
 servers call the same resolver on upgrade (cookie in the upgrade request).
 **Chosen: A** (see header). Phases 2–5 will be built on this.
 
-## 8. Session model (Phase 2 target — belongs to Identity, not Tenant)
+## 8. Session model (Phase 2 target - belongs to Identity, not Tenant)
 
 New model (names TBD), fields per spec:
 `id, identityId(User/authentikSubject), encryptedAccessToken, encryptedRefreshToken,
@@ -186,7 +186,7 @@ browser/JWT `tenantId`; `X-Tenant-Id` remains a hint validated against membershi
 - `scripts/authentik/e2e-oidc-check.mjs` (drives real login → token; asserts the
   API accepts it), `bootstrap.mjs`, `link-existing-users.mjs`,
   `scripts/demo/run-demo.ts`, `scripts/simulate-audit.ts`.
-- The CDP screenshot driver reads `localStorage.getItem("token")` — will need a
+- The CDP screenshot driver reads `localStorage.getItem("token")` - will need a
   cookie-session login path.
 - Regression tests: `packages/shared/src/middleware/__tests__/auth.test.ts`
   (extend for the cookie path).
@@ -205,7 +205,7 @@ browser/JWT `tenantId`; `X-Tenant-Id` remains a hint validated against membershi
 ---
 ---
 
-# Phase 1 Addendum — Security & Rollout Design (approved decisions folded in)
+# Phase 1 Addendum - Security & Rollout Design (approved decisions folded in)
 
 Status: **design only, no code.** Extends the map with the Phase 5+ requirements.
 All topology claims below are **verified from the real configs**, not inferred
@@ -220,9 +220,9 @@ Evidence: `nginx/nginx.conf.template` (dev), `gateway/nginx.prod.conf.template`
 
 | Concern | Dev | Prod |
 |---|---|---|
-| App SPA + `/api/*` + `/socket.io/` + `/ws` | **same origin** — one `server{ server_name _; listen 80 }` block: `location /`→`frontend`, `location /api/*`→services (`nginx.conf.template:76–1247`) | **same origin** — `server_name _`; SPA served static from `/usr/share/nginx/html`, `/api/*`→services (`nginx.prod.conf.template:91+`) |
+| App SPA + `/api/*` + `/socket.io/` + `/ws` | **same origin** - one `server{ server_name _; listen 80 }` block: `location /`→`frontend`, `location /api/*`→services (`nginx.conf.template:76–1247`) | **same origin** - `server_name _`; SPA served static from `/usr/share/nginx/html`, `/api/*`→services (`nginx.prod.conf.template:91+`) |
 | Public app host | `dev.gotcha.co.il` | the single configured public host (**verify** against `NEXT_PUBLIC_OIDC_REDIRECT_URI` / `AUTHENTIK_REDIRECT_URIS`; e.g. `app.gotcha.co.il`) |
-| Authentik (IdP) | `auth-dev.gotcha.co.il` — **separate** `server` block → `authentik-server` | `auth.gotcha.co.il` — separate vhost (`authentik-architecture.md` §8.1) |
+| Authentik (IdP) | `auth-dev.gotcha.co.il` - **separate** `server` block → `authentik-server` | `auth.gotcha.co.il` - separate vhost (`authentik-architecture.md` §8.1) |
 | Help | `help.gotcha.co.il` → frontend `/help` | same |
 | TLS | terminates at Cloudflare; `$scheme`=http inside gateway; real scheme via `X-Forwarded-Proto`/`$public_proto` map | same |
 
@@ -241,33 +241,33 @@ host, but login is a top-level redirect (not a CORS/XHR flow), so that is fine.
 | **localhost (plain HTTP)** | http | `gotcha_session_dev` (distinct name, **no** `__Host-`/`Secure`) | HttpOnly; SameSite=Lax; Path=/; **guarded** |
 
 Guard (fail-closed): a startup assertion **rejects the dev cookie config when
-`NODE_ENV=production`** — `__Host-` + `Secure` is mandatory in prod; the plain
+`NODE_ENV=production`** - `__Host-` + `Secure` is mandatory in prod; the plain
 `gotcha_session_dev` name is only accepted when `NODE_ENV!=='production'`. The
 prod cookie is never downgraded to support local HTTP.
 
 ## A2. nginx trust boundary (exact contract)
 
 Today nginx **passes client request headers through untouched** except it blanks
-`X-Internal-Key ""` per location (`nginx.conf.template` — every `location`). That
+`X-Internal-Key ""` per location (`nginx.conf.template` - every `location`). That
 blank-a-client-header pattern is the precedent we extend.
 
 **On every authenticated `/api/*` location (and the `/t/:tenant/...` variants):**
 
 1. **Strip/neutralize inbound client identity headers** before the auth
-   subrequest and before proxying upstream — set each to empty so a client
+   subrequest and before proxying upstream - set each to empty so a client
    cannot supply them:
    `proxy_set_header Authorization "";` (until injected in step 3),
    `X-User-Id ""`, `X-Identity-Id ""`, `X-Tenant-Id ""`, `X-Membership-Id ""`,
    `X-Permissions ""`, and a catch for `X-Auth-*`. (Keep the existing
    `X-Internal-Key "";`.) Client-supplied Bearer can **never** reach a service.
-2. **`auth_request /_session_resolve;`** — internal subrequest (see A4).
+2. **`auth_request /_session_resolve;`** - internal subrequest (see A4).
 3. On 2xx, capture the resolver's outputs from response headers via
    `auth_request_set` and inject them as the **trusted** upstream headers:
    `auth_request_set $up_authz $sent_http_x_gotcha_authorization;`
    `proxy_set_header Authorization $up_authz;`
    (plus `X-Tenant-Id`/`X-Membership-Id`/correlation id similarly, all
    server-set). The internal service `authenticate()` still JWKS-verifies the
-   injected Bearer — defense in depth.
+   injected Bearer - defense in depth.
 4. **Public locations are NOT auth-gated** (no `auth_request`): `/api/public/*`,
    `/api/waitlist`, `/api/embedded-chat`, `/api/webhook`, `/webhooks`, all
    provider `/oauth/*/callback`, the login routes in A5, `/health`, and SPA
@@ -292,7 +292,7 @@ blank-a-client-header pattern is the precedent we extend.
 
 ## A4. Session-resolver endpoint contract (`services/auth`, internal-only)
 
-`GET /internal/session/resolve` — reachable **only** as an nginx `auth_request`
+`GET /internal/session/resolve` - reachable **only** as an nginx `auth_request`
 subrequest (not routed publicly; enforced by not adding a public `location` and
 by an internal-only guard).
 
@@ -306,10 +306,10 @@ by an internal-only guard).
 - **Returns, explicitly:**
   - `200` + response headers `X-Gotcha-Authorization: Bearer <token>`,
     `X-Tenant-Id`, `X-Membership-Id`, `X-Correlation-Id` (body empty).
-  - `401` — no/invalid/expired/revoked session (browser must re-login).
-  - `403` — authenticated session but membership/authorization failure
-    (e.g. active membership revoked) — maps to the app's `tenant_denied`.
-  - `5xx` — internal failure; nginx returns a generic 503 to the client and logs
+  - `401` - no/invalid/expired/revoked session (browser must re-login).
+  - `403` - authenticated session but membership/authorization failure
+    (e.g. active membership revoked) - maps to the app's `tenant_denied`.
+  - `5xx` - internal failure; nginx returns a generic 503 to the client and logs
     detail server-side **without** secrets. Never fail *open*.
 - **CSRF pre-check** for unsafe methods happens here or in a sibling gate (A6).
 
@@ -338,7 +338,7 @@ Moves `lib/oidc.ts` + `auth/callback/page.tsx` logic into `services/auth`:
   CSRF token = `HMAC(csrfSecret, sessionId)` (rotated on privilege change /
   tenant switch / refresh-rotation). Delivered via a **readable** `XSRF-TOKEN`
   cookie (not HttpOnly, no secret in it) and/or `/api/auth/csrf`.
-- **Enforce on unsafe methods (POST/PUT/PATCH/DELETE):** require ALL of —
+- **Enforce on unsafe methods (POST/PUT/PATCH/DELETE):** require ALL of -
   (1) `SameSite=Lax` session cookie, (2) **exact `Origin` allow-list** match
   (A7), (3) header `X-CSRF-Token` that validates against `csrfSecret`.
   `Sec-Fetch-Site: same-origin` accepted as an additional positive signal.
@@ -346,7 +346,7 @@ Moves `lib/oidc.ts` + `auth/callback/page.tsx` logic into `services/auth`:
   retries once. **File uploads** (`/api/uploads`, `/api/knowledge-bases`) use the
   same header token (multipart body unaffected). **Exceptions:** OAuth/OIDC and
   connector **callbacks** are top-level GET redirects carrying single-use
-  `state`/PKCE/nonce with replay protection — they are exempt from the CSRF-token
+  `state`/PKCE/nonce with replay protection - they are exempt from the CSRF-token
   check but keep their own state defense (A12).
 
 ## A7. CORS / origin policy
@@ -354,7 +354,7 @@ Moves `lib/oidc.ts` + `auth/callback/page.tsx` logic into `services/auth`:
 Same-origin app traffic ⇒ **no CORS needed** for `/api/*` (verified A1). Policy:
 
 - **Never** `Access-Control-Allow-Origin: *` **with** credentials. App endpoints
-  set **no** ACAO (same-origin) — a credentialed cross-origin XHR is simply
+  set **no** ACAO (same-origin) - a credentialed cross-origin XHR is simply
   refused by the browser.
 - The **exact Origin allow-list** (for the A6 check and any future credentialed
   need): prod app host + `dev.gotcha.co.il` + explicit preview hosts +
@@ -382,7 +382,7 @@ during migration only).
 ## A9. WebSockets & SSE
 
 Two authenticated sockets today: conversation `/socket.io/` (handshake
-`auth.token`) and notifications `= /ws` (**token in `?token=` query — removed**).
+`auth.token`) and notifications `= /ws` (**token in `?token=` query - removed**).
 SSE streams (`/api/agent`, `/api/ai-agents/builder`) ride normal `/api` auth.
 
 **Chosen model: short-lived single-use WS ticket via the authenticated BFF**
@@ -400,7 +400,7 @@ authorization at connect time and avoids relying on cookies over the upgrade):
   already-upgraded socket, so each socket runs a **server-side periodic
   session-revalidation** (e.g. every 60s: session not revoked, membership live,
   version current). On failure the server closes the socket with a reason.
-- **Lifecycle behavior — on logout / logout-all / expiry / membership
+- **Lifecycle behavior - on logout / logout-all / expiry / membership
   revocation / tenant switch / disabled identity:** open sockets are closed
   server-side at the next revalidation tick (and immediately on an explicit
   revocation broadcast). Tenant switch closes + the SPA reopens with a new
@@ -409,11 +409,11 @@ authorization at connect time and avoids relying on cookies over the upgrade):
 
 ## A10. Logout, revocation & session management
 
-- `POST /api/auth/logout` — revoke the current session (`revokedAt`,
+- `POST /api/auth/logout` - revoke the current session (`revokedAt`,
   `revocationReason`), stop refresh, clear the cookie (`Max-Age=0`), then 302 to
   Authentik `end_session` so the IdP session ends too (preserve today's
   behavior). Frontend cache-clear alone is **not** logout.
-- `POST /api/auth/logout-all` — revoke **all** sessions for the identity.
+- `POST /api/auth/logout-all` - revoke **all** sessions for the identity.
 - `GET /api/auth/sessions` + a **Session-list UI** (device/browser/os, IP meta,
   lastActivityAt, current-session flag) → `DELETE /api/auth/sessions/:id`
   revokes another device.
@@ -431,20 +431,20 @@ Express has no built-in cookie parser and we may not add `cookie-parser`. Provid
 one **narrowly scoped, well-tested** helper in `packages/shared` (used by the
 resolver + auth routes only):
 
-- `parseSessionCookie(header): string | null` — reads only
+- `parseSessionCookie(header): string | null` - reads only
   `__Host-gotcha_session` / `gotcha_session_dev`; **rejects** malformed,
   duplicate, or ambiguous cookie input (two session cookies ⇒ reject, not
   "pick first"); validates the opaque-id charset/length; no dependency on
   undeclared transitive packages.
-- `serializeSessionCookie(id, opts)` — emits the exact attribute set from A1,
+- `serializeSessionCookie(id, opts)` - emits the exact attribute set from A1,
   with the prod/dev guard. Unit tests cover: absent, malformed, duplicate,
   oversized, wrong-charset, prod-guard-rejects-dev-config.
 
 ## A12. OAuth connector compatibility (keep separate from the login session)
 
-Verified: connectors use `/oauth/<provider>/init` (ADMIN — signs a JWT `state`
+Verified: connectors use `/oauth/<provider>/init` (ADMIN - signs a JWT `state`
 with `OAUTH_STATE_SECRET` carrying `{tenantId, aiAgentId, userId}`) +
-`/oauth/<provider>/callback` (public — verifies + **single-use consumes** state,
+`/oauth/<provider>/callback` (public - verifies + **single-use consumes** state,
 exchanges code). Providers: shopify, hubspot, stripe, salesforce, zoho_crm,
 airtable, wix, square, monday, calendar (google), confluence, google_drive
 (`services/ai/src/routes/{connectors-admin,crm-oauth,calendar-oauth,knowledge-oauth}.ts`).
@@ -453,10 +453,10 @@ Requirements under the new cookie model:
 
 - **`/init` becomes cookie+CSRF authenticated** (it is an app action). The signed
   state must additionally bind `{ sessionId, activeMembershipId, provider,
-  originating Settings/AI-Studio location, single-use, short expiry }` — so a
+  originating Settings/AI-Studio location, single-use, short expiry }` - so a
   connect initiated in one workspace cannot complete in another.
 - **`/callback` stays public** (Authentik/provider redirects a top-level GET; no
-  cookie needed) and remains **exempt from A6 CSRF** — its defense is the signed
+  cookie needed) and remains **exempt from A6 CSRF** - its defense is the signed
   single-use state (replay-protected). Do **not** couple it to the session
   cookie for auth, only for *binding validation*.
 - The new architecture must not cause **duplicate provider connections or wrong
@@ -468,13 +468,13 @@ Requirements under the new cookie model:
 Preserve every path (map from `authentik-architecture.md` §4, `oidc.ts`,
 `invitation.service.ts`, `/join`, `/api/public/onboarding`):
 
-- **New-tenant invite / existing identity invited to another tenant** — invite
+- **New-tenant invite / existing identity invited to another tenant** - invite
   token (`/api/public/onboarding`, `/join`) is public + token-validated; on first
   login the app session is created only **after** the Authentik flow completes.
-- **New-user password setup / email verification / password reset** — owned by
+- **New-user password setup / email verification / password reset** - owned by
   Authentik (recovery links); GOTCHA holds no credential. The stale-flow restart
   (A5) covers the reset-in-a-fresh-tab replay.
-- **MFA-required login / MFA + passkey enrollment** — enforced inside the
+- **MFA-required login / MFA + passkey enrollment** - enforced inside the
   Authentik flow; embedded flows (`authentikFlowUrl`, `/auth/flow-done`) stay
   browser-side (they use the Authentik **session cookie**, not our token).
 - **Rule:** the app session is created **only after the complete required
@@ -482,7 +482,7 @@ Preserve every path (map from `authentik-architecture.md` §4, `oidc.ts`,
   prevention:** fresh session id at creation; `returnTo` must be a validated
   relative path.
 
-## A14. Removal of browser token storage — exact deletion sequence
+## A14. Removal of browser token storage - exact deletion sequence
 
 Only at rollout stage 4→7 (A15), in order:
 1. Delete `lib/oidc.ts` browser exchange/refresh (`completeLogin`,
@@ -499,7 +499,7 @@ Only at rollout stage 4→7 (A15), in order:
    ticket (A9).
 6. Remove `?token=` query auth (channels redirect) → cookie.
 7. Keep unrelated UI prefs (`sidebar-collapsed`, `locale`, `notificationSound`,
-   onboarding flags — §1 of the map lists them).
+   onboarding flags - §1 of the map lists them).
 - **Regression test (repo-level):** a test that greps the frontend for
   `localStorage.*token`, `sessionStorage.*token`, `Authorization: \`Bearer`,
   `?token=` in ws/api, and **fails** if browser auth-token storage/transport is
@@ -518,9 +518,9 @@ Sequence (each stage reversible, see A16):
 2. `CREATE`+`ACCEPT` on for selected dev identities/tenants; Bearer still works.
 3. Measure legacy Bearer usage (metric on `authenticate()` path).
 4. Migrate all browser surfaces to cookie (A14 steps 1–6 behind `BROWSER_TOKEN_ISSUE`).
-5. `BROWSER_TOKEN_ISSUE` off — stop issuing browser tokens.
+5. `BROWSER_TOKEN_ISSUE` off - stop issuing browser tokens.
 6. Revoke/expire legacy browser sessions.
-7. `COOKIE_ONLY_ENFORCE` on — services reject browser Bearer (keep internal
+7. `COOKIE_ONLY_ENFORCE` on - services reject browser Bearer (keep internal
    service-key path).
 8. Delete compatibility code + flags. **No indefinite dual-auth.**
 
@@ -541,7 +541,7 @@ Sequence (each stage reversible, see A16):
 
 | Threat | Today | After (Option A) |
 |---|---|---|
-| **XSS token theft** | access+refresh in `localStorage`, fully readable | **eliminated** — tokens server-side, HttpOnly opaque id; XSS can still *act* in-session, so keep CSP + short session + revocation |
+| **XSS token theft** | access+refresh in `localStorage`, fully readable | **eliminated** - tokens server-side, HttpOnly opaque id; XSS can still *act* in-session, so keep CSP + short session + revocation |
 | **CSRF** | ~n/a (Bearer not auto-sent) | **introduced by cookies** → mitigated by A6 (SameSite+Origin+token), not SameSite alone |
 | **Client header spoofing** (Authorization/X-Tenant-Id) | services trust validated Bearer/hint | nginx **strips** all client identity headers; only nginx injects trusted Authorization (A2) |
 | **Gateway bypass** | app services internal-only | **verified**: prod publishes only the gateway host port; app svcs + db internal; AWS SG no inbound 80/443, Cloudflare tunnel sole ingress |
@@ -556,12 +556,12 @@ Sequence (each stage reversible, see A16):
 
 1. `feat(shared): session model + SESSION_ENCRYPTION_KEY envelope + cookie codec`
    (Prisma model, encryption v-envelope A-encryption, cookie parse/serialize,
-   startup key assertions) — pure infra, no wiring, tests.
+   startup key assertions) - pure infra, no wiring, tests.
 2. `feat(auth): login-state + Auth-Code callback + session create/set-cookie` (A5)
    behind `SESSION_COOKIE_CREATE`.
 3. `feat(auth): internal session-resolver endpoint` (A4) behind `SESSION_COOKIE_ACCEPT`.
 4. `feat(gateway): auth_request wiring + client-header stripping + token injection`
-   (A2/A3) — dev template first.
+   (A2/A3) - dev template first.
 5. `feat(auth): server-owned refresh with per-session lock + invalid_grant revoke` (§4/A9).
 6. `feat(auth): CSRF issuance/validation + Origin allow-list` (A6/A7).
 7. `feat(auth): tenant switch → session.activeMembershipId + WS reconnect` (A8).
@@ -613,7 +613,7 @@ Sequence (each stage reversible, see A16):
 - **Sequencing** = review this addendum, then implement commit 1 (A18).
 
 **Still open (resolve before/within implementation):**
-1. **Exact prod app hostname** — deployment config answers this: the production
+1. **Exact prod app hostname** - deployment config answers this: the production
    app origin is **`https://app.gotcha.co.il`** (`scripts/authentik/bootstrap.mjs`
    registers `https://app.gotcha.co.il/auth/callback` + `https://app.gotcha.co.il/`;
    Authentik is `auth.gotcha.co.il`). These are env-OVERRIDABLE defaults
@@ -621,9 +621,9 @@ Sequence (each stage reversible, see A16):
    deploy env value must still be confirmed before `APP_ORIGIN` is set and the
    prod cookie is enabled. → `APP_ORIGIN=https://app.gotcha.co.il` (pending live
    confirmation).
-2. **`sessionVersion` bump triggers** — which events force global re-auth
+2. **`sessionVersion` bump triggers** - which events force global re-auth
    (password change, MFA change, role/permission change?).
-3. **auth_request performance** — accept +1 internal hop/request, or add a short
+3. **auth_request performance** - accept +1 internal hop/request, or add a short
    *negative-only* cache later (positive caching is banned, §cache)?
 
 _Update: item 2 resolved by the commit-2 policy in §A21 below; commit 1 lands its
@@ -631,14 +631,14 @@ primitives. Item 3 resolved: accept the +1 hop, no caching in Phase 2, with
 resolver instrumentation from the start. Item 1: prod origin = app.gotcha.co.il
 (pending live confirmation)._
 
-**Commit-2 input — Authentik client type (verified from `scripts/authentik/bootstrap.mjs`):**
+**Commit-2 input - Authentik client type (verified from `scripts/authentik/bootstrap.mjs`):**
 the `gotcha-app` client is `client_type: "public"` (PKCE, NO client secret;
 `bootstrap.mjs:604` + "it cannot hold a client secret"). Consequence for the
 server-side callback (A5): the BFF can perform the Authorization Code exchange
 **server-side with the existing public client** by relocating the PKCE verifier
-from the browser into the server login-state record — **no Authentik change
+from the browser into the server login-state record - **no Authentik change
 required**. Optional hardening: convert the client to `confidential` (adds a
-client secret to bind the exchange) — an Authentik/bootstrap change, a user
+client secret to bind the exchange) - an Authentik/bootstrap change, a user
 decision for commit 2. Either way the browser never sees tokens._
 
 ## A21. sessionVersion & revocation policy table (approved)

@@ -1,5 +1,5 @@
 /**
- * Shopify Live Chat — realtime relay to storefront visitors.
+ * Shopify Live Chat - realtime relay to storefront visitors.
  *
  * Reuses the transport the inbox already runs on rather than standing up
  * a second one: the same `message:new` event that lights up an agent's
@@ -7,7 +7,7 @@
  *
  * Two things make that safe:
  *   1. A visitor socket joins exactly ONE room (`visitor:<conversationId>`)
- *      and never a tenant-wide room — see lib/socket.ts.
+ *      and never a tenant-wide room - see lib/socket.ts.
  *   2. Everything leaving here goes through the shared visitor projection,
  *      the same function the polling endpoint uses, so the streaming and
  *      polling views cannot drift apart on what is safe to expose.

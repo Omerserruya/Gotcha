@@ -8,7 +8,7 @@ let io: Server;
  * Storefront visitors connect from the merchant's own domain, so the
  * socket CORS allowlist can no longer be just the dashboard. We accept
  * any origin at the handshake and rely on the token check below for
- * authorisation — a connection with no valid token joins no room and
+ * authorisation - a connection with no valid token joins no room and
  * therefore receives nothing.
  */
 export function initSocket(httpServer: HttpServer): Server {

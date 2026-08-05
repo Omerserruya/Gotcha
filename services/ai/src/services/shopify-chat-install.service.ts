@@ -1,5 +1,5 @@
 /**
- * GOTCHA Shopify Chat App — installation lifecycle.
+ * GOTCHA Shopify Chat App - installation lifecycle.
  *
  * Owns the `ShopifyChatInstallation` row from the moment Shopify
  * authorization completes until an `app/uninstalled` webhook retires it,
@@ -85,7 +85,7 @@ export async function findLiveInstallation(shopDomain: string): Promise<ChatInst
   return row ? toInstallation(row) : null;
 }
 
-/** Including retired rows — used by reinstall and by audit surfaces. */
+/** Including retired rows - used by reinstall and by audit surfaces. */
 export async function findLatestInstallation(shopDomain: string): Promise<ChatInstallation | null> {
   const shop = normalizeShopifyShopDomain(shopDomain);
   if (!shop) return null;
@@ -232,7 +232,7 @@ export async function discardInstallSession(token: unknown): Promise<void> {
  * The canonical `*.myshopify.com` comes from the install itself and is
  * therefore verified by construction. The merchant's real storefront is
  * usually a custom domain, and the only trustworthy source for it is
- * Shopify — so we ask the Core connection when there is one, and we never
+ * Shopify - so we ask the Core connection when there is one, and we never
  * accept a domain the storefront browser claims for itself.
  */
 export async function refreshVerifiedDomains(installation: ChatInstallation): Promise<string[]> {
@@ -282,8 +282,8 @@ export async function refreshVerifiedDomains(installation: ChatInstallation): Pr
  * Needed because a CORS preflight carries no body: at OPTIONS time we do
  * not yet know which shop the request is for, so the per-channel origin
  * check that guards the real request cannot run. This answers the weaker
- * question the preflight can actually ask — "is this origin one of our
- * merchants' storefronts at all?" — so an unrelated site is refused up
+ * question the preflight can actually ask - "is this origin one of our
+ * merchants' storefronts at all?" - so an unrelated site is refused up
  * front instead of being told which methods it may use.
  *
  * This is NOT authorization. The real request still resolves the channel
@@ -327,7 +327,7 @@ export async function isKnownStorefrontOrigin(origin: unknown): Promise<boolean>
 
     if (!ok) {
       // Or a channel bound to this shop / carrying it as a storefront
-      // domain — covers a channel created through the manual path.
+      // domain - covers a channel created through the manual path.
       const rows = await withCrossTenantAccess(async () =>
         prisma.channelAccount.findMany({
           where: { channel: SHOPIFY_LIVE_CHAT as any, isActive: true },
@@ -520,7 +520,7 @@ async function syncChannelDomains(
  *
  * Explicitly scoped to Chat: the Core Shopify Integration's
  * `TenantIntegration` row is not read, not written, and not looked at.
- * Conversations are left alone — they are customer records governed by the
+ * Conversations are left alone - they are customer records governed by the
  * tenant's retention policy, not app-install state.
  */
 export async function markUninstalledByShop(shopDomain: string): Promise<ChatInstallation | null> {

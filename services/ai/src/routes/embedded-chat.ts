@@ -86,7 +86,7 @@ const MAX_PAGE_URL = 512;
 
 // POST /api/embedded-chat/init - Initialize a chat session (public, no auth)
 /**
- * POST /bootstrap — everything the widget needs before it draws anything.
+ * POST /bootstrap - everything the widget needs before it draws anything.
  *
  * This exists so a widget that no longer belongs to anyone draws NOTHING.
  * Previously the script painted its launcher unconditionally and only
@@ -99,7 +99,7 @@ const MAX_PAGE_URL = 512;
  * someone else's website is not a place to explain our internal state.
  *
  * And it answers 200 with an empty body rather than 404. "Render nothing"
- * is a legitimate answer to "what should I render", not a failure — and a
+ * is a legitimate answer to "what should I render", not a failure - and a
  * 404 puts a red line in the console of a tenant's own website that no
  * amount of handling in the script can suppress. It also stops the status
  * code from confirming whether a given widget id exists.
@@ -142,7 +142,7 @@ router.post("/bootstrap", initLimiter, async (req: Request, res: Response) => {
 
     const config = normalizeWebchatConfig(account.credentials);
 
-    // The tenant's own opening hours — the same ones the AI employee and
+    // The tenant's own opening hours - the same ones the AI employee and
     // the storefront widget read. One business, one schedule.
     let offline = false;
     try {

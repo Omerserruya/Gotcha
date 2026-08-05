@@ -448,7 +448,7 @@ export function getWebchatSettings(token: string, accountId: string) {
  * The website widget's configuration.
  *
  * Accepts the canonical shape (the same experience block the storefront
- * widget uses) and, for anything not yet updated, the old flat fields —
+ * widget uses) and, for anything not yet updated, the old flat fields -
  * the server migrates those on the way in.
  */
 export function updateWebchatSettings(token: string, accountId: string, settings: Record<string, unknown>) {
@@ -461,7 +461,7 @@ export function updateWebchatSettings(token: string, accountId: string, settings
 //
 // Merchant-facing surface only. The storefront widget talks to
 // /api/shopify-chat with a signed visitor session and never uses any of
-// these — nothing here should ever be reachable without a staff token.
+// these - nothing here should ever be reachable without a staff token.
 
 export interface ShopifyLiveChatChannel {
   id: string;

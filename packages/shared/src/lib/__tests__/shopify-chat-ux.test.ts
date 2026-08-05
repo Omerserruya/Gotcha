@@ -505,7 +505,7 @@ describe("welcome screen proportions", () => {
   });
 
   it("honours a merchant's height when the panel can afford it", () => {
-    // (12) Configurability is preserved — only impractical values are cut.
+    // (12) Configurability is preserved - only impractical values are cut.
     expect(resolveHeroHeight({ configured: 120, panelHeight: 900, isMobile: false })).toBe(120);
     expect(normalizeHero({ height: 150 }).height).toBe(150);
     expect(normalizeHero({ mobileHeight: 96 }).mobileHeight).toBe(96);

@@ -1,4 +1,4 @@
-# AI employee creation — one wizard, two surfaces
+# AI employee creation - one wizard, two surfaces
 
 Written 2026-07-20. Replaces the situation where onboarding and AI Studio each
 had their own creation flow.
@@ -11,7 +11,7 @@ There used to be **two implementations**: AI Studio's `AgentBuilder` (server-
 owned draft via `/api/ai-agents/builder/*`) and onboarding's bespoke
 Meet/Tune screens (persona chat, employee generated server-side at
 `/api/onboarding/complete`). Different UIs, different draft stores, different
-creation servers — and different resulting employees.
+creation servers - and different resulting employees.
 
 Now there is **one component**:
 
@@ -23,9 +23,9 @@ frontend/src/components/aiEmployee/AgentBuilder.tsx
 
 Onboarding supplies only the surrounding navigation. It passes:
 
-- `embedded` — drops the wizard's `fixed inset-0` chrome so it sits inside the
+- `embedded` - drops the wizard's `fixed inset-0` chrome so it sits inside the
   movement flow;
-- `onDone` — the host advances its own movement instead of the wizard pushing
+- `onDone` - the host advances its own movement instead of the wizard pushing
   to the editor.
 
 The creation **logic** is identical either way. That is the point of sharing
@@ -39,7 +39,7 @@ Both paths converge on the same `AIAgent` shape:
   creation defaults. Onboarding's generator previously set only
   model/provider/temperature/maxTokens, so an onboarding-hired employee
   silently differed on `avatarColor`, `tone`, `languages`,
-  `escalationMessage`, `confidenceThreshold` and both autonomy caps — i.e. on
+  `escalationMessage`, `confidenceThreshold` and both autonomy caps - i.e. on
   **when it escalates and how long it may run unattended**.
 - Identity-bearing fields (name, role, goal, persona, status) are deliberately
   *not* in the defaults block; those are decisions each flow makes explicitly.
@@ -57,8 +57,8 @@ find most-recent AIAgent where status=DRAFT and builderStep is not null
   └── none   → generate (the pre-existing path, for owners who skipped)
 ```
 
-Without this the tenant finishes onboarding with **two** employees — the one
-they configured by hand and a machine-generated twin — and their choices look
+Without this the tenant finishes onboarding with **two** employees - the one
+they configured by hand and a machine-generated twin - and their choices look
 ignored.
 
 The early `return` on the adopt branch matters too: recommendation values
@@ -70,7 +70,7 @@ survives a recommendation carrying "Recommended Name".
 
 `ai-agent-builder.ts` gated its whole router on `requireActiveTenant()`. Since
 onboarding tenants are `PENDING_ONBOARDING`, embedding the wizard produced a
-screen that rendered correctly and **403'd on every call** — the same class of
+screen that rendered correctly and **403'd on every call** - the same class of
 bug as the OAuth connectors (see
 [integration-connection-lifecycle.md](./integration-connection-lifecycle.md)).
 
@@ -82,14 +82,14 @@ Building the first employee *is* an onboarding activity. The router now uses
 
 ## 5. Testing
 
-- `services/auth/src/__tests__/onboarding-adopt-employee.test.ts` (6) — the
+- `services/auth/src/__tests__/onboarding-adopt-employee.test.ts` (6) - the
   decision table, including an abandoned older draft, a stray `DRAFT` with no
   `builderStep`, and a draft competing with an unrelated `ACTIVE` employee.
-- `services/ai/src/__tests__/ai-agent-defaults.test.ts` (3) — the shared
+- `services/ai/src/__tests__/ai-agent-defaults.test.ts` (3) - the shared
   defaults block, and that it carries no identity-bearing fields.
 
 **Live-verified**: a seeded `PENDING_ONBOARDING` tenant holding a wizard-style
-draft, completed through the real endpoint, yielded **exactly one** agent —
+draft, completed through the real endpoint, yielded **exactly one** agent -
 adopted, activated, `builderStep` cleared, name preserved.
 
 **Not verified**: building an employee through the wizard's LLM chat all the

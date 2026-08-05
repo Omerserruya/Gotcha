@@ -3,7 +3,7 @@
  *
  * Weighted toward the migration, because the failure mode there is a
  * tenant logging in to find their widget reset to purple defaults with
- * their greeting gone — and toward the public projection, because that is
+ * their greeting gone - and toward the public projection, because that is
  * what reaches every visitor's browser on a customer's own website.
  */
 import { describe, it, expect } from "vitest";
@@ -61,7 +61,7 @@ describe("migrating a widget configured before the two shared an editor", () => 
   });
 
   it("reads the old welcome MESSAGE as the subtitle, not the title", () => {
-    // It was the first bubble a visitor saw — a sentence. Promoting it to
+    // It was the first bubble a visitor saw - a sentence. Promoting it to
     // the heading would replace every tenant's greeting with a paragraph.
     const cfg = migrateLegacyWebchat(LEGACY);
     expect(cfg.ux.welcome.title).toBe("Talk to us");

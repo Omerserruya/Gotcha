@@ -1,7 +1,7 @@
 # Human-in-the-Loop approvals
 
 How an action the AI wants to take gets authorised, executed, and reported back
-to the customer — and why each guard exists.
+to the customer - and why each guard exists.
 
 Written 2026-07-20, after an end-to-end test round found that "approved" and
 "done" were indistinguishable in the data model.
@@ -63,13 +63,13 @@ the conversation was un-paused as if all was well.
 2. **Decisions are tenant-scoped in the predicate.** The old helpers accepted a
    `tenantId` and then ignored it, leaving cross-tenant writes fenced only by an
    earlier read.
-3. **Expired requests cannot be approved**, even before the sweeper flips them —
+3. **Expired requests cannot be approved**, even before the sweeper flips them -
    `expiresAt > now()` is part of the approve predicate, so a late tap on a
    stale notification loses.
 4. **Only `NOT_STARTED` or `FAILED` may be claimed for execution.** `FAILED` is
    therefore retryable and `SUCCEEDED` can never re-run.
 5. **The customer is told only from `SUCCEEDED`**, and only by the caller that
-   wins `claimCustomerNotification()` — which writes `customerNotifiedAt` as
+   wins `claimCustomerNotification()` - which writes `customerNotifiedAt` as
    part of its CAS. That is the once-only guard.
 6. **Delivery failure ≠ action failure.** If the *message send* fails, the
    notification claim is released so delivery can be retried; the business
@@ -107,14 +107,14 @@ and recursion is depth-bounded.
 
 ## 3. WhatsApp manager approval
 
-Optional, **off by default**, and never the system of record — the approval
+Optional, **off by default**, and never the system of record - the approval
 always exists in the in-app inbox regardless of what happens on the phone.
 
 ### Why the button carries an opaque handle, not a signed token
 
 A WhatsApp reply-button `id` comes back to us on tap and is visible in the
 recipient's client, in Meta's logs, and in any message backup. So it carries a
-random 24-byte handle (`apv_<48 hex>`) and **nothing else** — no tenant, no
+random 24-byte handle (`apv_<48 hex>`) and **nothing else** - no tenant, no
 tool, no customer, no decodable JWT. Every fact lives server-side in Redis,
 keyed by that handle. (It also stays comfortably inside WhatsApp's 256-char
 button-id limit, which a claims-bearing JWT would flirt with.)
@@ -135,11 +135,11 @@ re-derives everything:
 2. row still `PENDING` for that tenant;
 3. tool matches what the handle was minted for;
 4. sender number equals the number we sent to (a forwarded message fails);
-5. **authorisation re-checked now** — the person may have been removed,
+5. **authorisation re-checked now** - the person may have been removed,
    demoted, or disabled since the message was sent;
 6. decision through the same CAS the web UI uses.
 
-The tap is intercepted **before** contact/conversation creation — a manager's
+The tap is intercepted **before** contact/conversation creation - a manager's
 decision is not a customer conversation, and letting it through would turn a
 staff phone number into a customer handed to the bot.
 
@@ -167,14 +167,14 @@ customer notification rather than growing a parallel implementation.
 inventing a mapping to expand a bare `0501234567` is how an approval request
 for one business gets delivered to a stranger in another country.
 
-**High/critical risk sends no buttons at all** — the manager gets a text telling
+**High/critical risk sends no buttons at all** - the manager gets a text telling
 them to open GOTCHA, where full context and identity checks apply.
 
 ### When it can't send
 
 Skips are a first-class state, not silence. `manager_notify_state` is
 `sent | skipped | failed` with a human-readable `manager_notify_reason`, and
-the approvals inbox renders an actionable *"WhatsApp approval not sent — Set it
+the approvals inbox renders an actionable *"WhatsApp approval not sent - Set it
 up"* prompt. Distinct reasons: `not_configured`, `disabled`, `no_phone`,
 `membership_inactive`, `not_authorized`, `risk_too_high`, plus "no active
 WhatsApp channel connected".

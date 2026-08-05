@@ -8,11 +8,11 @@ Written for whoever is on call, not whoever wrote it.
 
 | What you are seeing | Where to look |
 |---|---|
-| Nobody can pay; checkout refuses before the card form | [The rate](#the-rate) — most likely no approved rate |
+| Nobody can pay; checkout refuses before the card form | [The rate](#the-rate) - most likely no approved rate |
 | A customer says they were charged but has no plan | [Reconciliation](#reconciliation) |
-| A customer says they were charged twice | [UNKNOWN is not FAILED](#unknown-is-not-failed) — then Reconciliation |
+| A customer says they were charged twice | [UNKNOWN is not FAILED](#unknown-is-not-failed) - then Reconciliation |
 | An organization's AI stopped answering | [What an unpaid organization can do](#what-an-unpaid-organization-can-do) |
-| Renewals are failing across the board | [The rate](#the-rate) — an expired or retired rate blocks every charge |
+| Renewals are failing across the board | [The rate](#the-rate) - an expired or retired rate blocks every charge |
 | You need to stop taking money, now | Retire the active rate. See [If something looks wrong](#if-something-looks-wrong) |
 | A refund needs issuing | [Refunds](#refunds) |
 | A customer paid outside the product | [Manual contracts](#manual-contracts) |
@@ -27,7 +27,7 @@ unless we prevent it ourselves.
 
 Plans are sold in dollars. iCount is always sent shekels with `currency_id: 1`.
 Something has to decide the number in between, and that decision is commercial,
-not technical — so a person makes it.
+not technical - so a person makes it.
 
 `BillingExchangeRate` holds it: versioned, windowed, proposed by one
 administrator and approved by another. Nothing fetches it. There is deliberately
@@ -41,7 +41,7 @@ than a blocked one.
 
 > There is an older `FxRateSnapshot` used for *displaying* approximate prices. It
 > refreshes itself from an external source and falls back to a hardcoded 3.7 when
-> that fails. It must never be used to decide what to charge — a network blip
+> that fails. It must never be used to decide what to charge - a network blip
 > would quietly change the amount taken from someone's card, and nobody could
 > say afterwards which rate applied.
 
@@ -78,7 +78,7 @@ mock rather than switching on a mode nobody asked for.
 checkout completes locally. Use `simulator` when you need the failure paths.
 
 `live` additionally requires `NODE_ENV=production` **and**
-`ICOUNT_ALLOW_LIVE=true`. Both, checked before any network call — so a developer
+`ICOUNT_ALLOW_LIVE=true`. Both, checked before any network call - so a developer
 flipping `ICOUNT_MODE=live` in a local `.env` still cannot charge a real card.
 
 The simulator models declines, timeouts, expired cards and successes that carry
@@ -90,7 +90,7 @@ the real thing.
 
 ## Configuration
 
-Billing service only. **Never** `NEXT_PUBLIC_*` — the API token is a credential
+Billing service only. **Never** `NEXT_PUBLIC_*` - the API token is a credential
 and the page id has no business in a browser.
 
 | Variable | Notes |
@@ -100,11 +100,11 @@ and the page id has no business in a browser.
 | `ICOUNT_ALLOW_LIVE` | required for `live`, with `NODE_ENV=production` |
 | `ICOUNT_API_TOKEN` | Bearer token. Never logged; stripped from every error path |
 | `ICOUNT_API_BASE_URL` | defaults to the v3 endpoint |
-| `ICOUNT_PAYMENT_PAGE_ID` | the `cc_token` PayPage. Configuration, not a secret. **Validated before any customer is sent to it** — see below |
-| `BILLING_PAYMENT_TOKEN_ENCRYPTION_KEY` | 32 bytes, base64. Dedicated — no fallback to any other key. **Required even in mock/simulator**: storing a card token encrypts it, so an unset key fails checkout at the moment the card is confirmed |
-| `ICOUNT_WEBHOOK_SECRET` | HMAC secret for provider callbacks. **Required in every mode** — without it every webhook is rejected, including in mock |
-| `BILLING_ENFORCEMENT_MODE` | `off` \| `observe` \| `soft` \| `hard`. Only `hard` actually refuses service. Read by the **ai** service, which evaluates the gate, and by **billing**, which only reports it — they must match, or the Sysadmin preview describes a different system than the one refusing customers. Undeclared means `off`, which fails **open** |
-| `APP_PUBLIC_URL` | where customers return after the hosted page. **Required for checkout** — unset, the return URLs are omitted and the customer lands wherever the provider defaults to instead of on their confirmation page |
+| `ICOUNT_PAYMENT_PAGE_ID` | the `cc_token` PayPage. Configuration, not a secret. **Validated before any customer is sent to it** - see below |
+| `BILLING_PAYMENT_TOKEN_ENCRYPTION_KEY` | 32 bytes, base64. Dedicated - no fallback to any other key. **Required even in mock/simulator**: storing a card token encrypts it, so an unset key fails checkout at the moment the card is confirmed |
+| `ICOUNT_WEBHOOK_SECRET` | HMAC secret for provider callbacks. **Required in every mode** - without it every webhook is rejected, including in mock |
+| `BILLING_ENFORCEMENT_MODE` | `off` \| `observe` \| `soft` \| `hard`. Only `hard` actually refuses service. Read by the **ai** service, which evaluates the gate, and by **billing**, which only reports it - they must match, or the Sysadmin preview describes a different system than the one refusing customers. Undeclared means `off`, which fails **open** |
+| `APP_PUBLIC_URL` | where customers return after the hosted page. **Required for checkout** - unset, the return URLs are omitted and the customer lands wherever the provider defaults to instead of on their confirmation page |
 | `BILLING_SCHEDULER_ENABLED` | renewal, dunning, reconciliation sweep |
 
 Startup fails closed: `ICOUNT_MODE=live` without a token refuses to boot rather
@@ -121,7 +121,7 @@ order. Two things this prevents, both of which charge a real person:
   the same customer every month alongside us.
 
 A page that checks out is trusted for ten minutes. A page that fails, or that
-cannot be read at all, is **not** cached — so correcting it in iCount takes
+cannot be read at all, is **not** cached - so correcting it in iCount takes
 effect on the next attempt, and a provider outage blocks checkout rather than
 waving it through. A delayed checkout is recoverable; an unintended charge is
 not.
@@ -162,7 +162,7 @@ price, start a payment session, and ask the server to charge. On first load it i
 moved to `sessionStorage`, scoped to that checkout reference, and stripped from
 the URL.
 
-Cross-origin leakage is already covered by `Referrer-Policy` — the token never
+Cross-origin leakage is already covered by `Referrer-Policy` - the token never
 reaches iCount. This is about where a URL persists locally: browser history, a
 shared device, and the screen-share someone does while on the phone to support.
 If storage is unavailable the URL is left alone; a token in the address bar beats
@@ -193,8 +193,8 @@ second attempt there could take the money again.
 
 The most important distinction in the system.
 
-- **FAILED** — iCount said no. No money moved. Retry freely.
-- **UNKNOWN** — the request went out and no answer came back. Money may have
+- **FAILED** - iCount said no. No money moved. Retry freely.
+- **UNKNOWN** - the request went out and no answer came back. Money may have
   moved. **Never retried automatically**, by anything.
 
 A renewal with an unknown outcome does **not** become `PAST_DUE`, because
@@ -209,7 +209,7 @@ reconciled nor refunded until a human looks.
 
 ## Reconciliation
 
-The scheduler sweeps unresolved attempts, waiting `RECONCILE_AFTER_MS` first —
+The scheduler sweeps unresolved attempts, waiting `RECONCILE_AFTER_MS` first -
 asking too early gets a confident "no transaction" for one that is about to
 appear, which would mark a paying customer unpaid.
 
@@ -219,7 +219,7 @@ asks; it never re-submits.
 | Provider says | Result |
 |---|---|
 | exactly one matching transaction | `SUCCEEDED`, reference recorded |
-| none | `FAILED` — safe to charge again |
+| none | `FAILED` - safe to charge again |
 | two or more identical | `MANUAL_REVIEW` |
 
 The last case is unavoidable: without a merchant reference, two identical
@@ -227,7 +227,7 @@ legitimate charges are genuinely indistinguishable. It escalates rather than
 picking one.
 
 **System → Exchange Rate** lists everything awaiting a human, and can trigger a
-sweep by hand — useful when a provider outage has just ended.
+sweep by hand - useful when a provider outage has just ended.
 
 Resolving one means looking at iCount's own records and then either refunding or
 activating manually, both of which have their own audited paths. There is
@@ -246,7 +246,7 @@ no evidence at all.
 - Declines are a category ("that card has expired"), never iCount's raw string.
 - A decline is named, so they know whether to try a different card. The
   suggestion to retry appears only when retrying is actually possible.
-- An unknown outcome shows as *processing*, never as a retryable failure —
+- An unknown outcome shows as *processing*, never as a retryable failure -
   offering a retry there could charge them twice. It also reads differently from
   a charge that is merely in flight: "we are checking with your bank, this can
   take longer than usual, you do not need to wait here, please do not pay
@@ -269,12 +269,12 @@ A refund returns the **shekel** amount that was actually taken, not the dollar
 figure on the invoice. Both are written to the audit entry, along with who asked.
 
 `POST /internal/billing/refund` (internal key required) takes `chargeId`,
-optional `amount` and `reason`, and an `actor` — pass a real person, otherwise
+optional `amount` and `reason`, and an `actor` - pass a real person, otherwise
 the audit entry records the refund as "system".
 
 A charge in `UNKNOWN` **cannot** be refunded. Returning money for a charge we
 cannot confirm happened could refund something that was never taken; reconcile
-it first. That refusal is audited too — it is what someone reconstructs when a
+it first. That refusal is audited too - it is what someone reconstructs when a
 customer says they were promised their money back.
 
 ---
@@ -289,7 +289,7 @@ has to match the snapshot and credits are still granted exactly once. What
 differs is provenance: the attempt records `MANUAL_EXTERNAL_CONTRACT` and no
 provider charge, so nothing downstream can present it as a card payment that
 cleared. It carries no payment quote, and activation refuses if one is attached
-— no money moved through a provider, so there is nothing to convert.
+- no money moved through a provider, so there is nothing to convert.
 
 ---
 
@@ -300,14 +300,14 @@ Nothing that costs money. Two gates, and they answer different questions.
 **Application routes** go through `requireActiveTenant()`, which defers to the
 access matrix in `tenant-access-policy`. A `PENDING_PAYMENT` tenant gets 402 with
 `TENANT_PAYMENT_REQUIRED` everywhere except payment setup and identity
-onboarding — the two things they need in order to resolve it.
+onboarding - the two things they need in order to resolve it.
 
 **The AI runtime** goes through `checkAiAllowed`. This is the one that matters
 commercially: the product's value is the bot answering inbound messages, which is
 not an application route and would otherwise keep running.
 
 It refuses `PENDING_PAYMENT` and `SUSPENDED` tenants outright, before any
-subscription question. That is not redundant with the first gate — a tenant
+subscription question. That is not redundant with the first gate - a tenant
 provisioned on a paid plan has **no subscription at all** until its first payment
 is confirmed, because activation is what creates one, and the check used to read
 "no subscription" as unlimited.
@@ -327,7 +327,7 @@ one that matters: it separates a quiet configuration change from an outage for
 somebody's customers.
 
 The preview reads the same balance helper and evaluates the same order as the
-runtime gate, and there is a test asserting the two cannot disagree — a preview
+runtime gate, and there is a test asserting the two cannot disagree - a preview
 that quietly diverges is worse than none, because it will be believed.
 
 ---
@@ -339,14 +339,14 @@ It verifies the signature, bounds and redacts the body, writes one event row,
 and stops.
 
 That is deliberate. It previously read an event `type` off the payload and, on
-`payment.chargeback`, suspended the tenant and clawed back their credits — using
+`payment.chargeback`, suspended the tenant and clawed back their credits - using
 event names that were **invented**, since iCount's callback contract has never
 been verified. The route is publicly reachable and accepted unsigned payloads
 outside live mode, so anyone able to reach it could suspend a paying
 organization by posting a guessed string.
 
 `ICOUNT_WEBHOOK_SECRET` is now **required in every mode**. Without it, every
-webhook is rejected — including in mock. "Only in dev" is not a property of an
+webhook is rejected - including in mock. "Only in dev" is not a property of an
 endpoint the internet can reach.
 
 Acting on webhooks again needs two things: the verified callback contract from
@@ -359,9 +359,9 @@ internal key:
 
 | Endpoint | For |
 |---|---|
-| `POST /internal/billing/chargeback` | a dispute you have seen in iCount — reverses state, claws back unspent purchased credits, suspends the subscription |
-| `POST /internal/billing/refund-confirmation` | a refund issued directly in iCount — reverses state without calling the provider again |
-| `POST /internal/billing/refund` | a refund GOTCHA should issue — calls the provider, then reverses |
+| `POST /internal/billing/chargeback` | a dispute you have seen in iCount - reverses state, claws back unspent purchased credits, suspends the subscription |
+| `POST /internal/billing/refund-confirmation` | a refund issued directly in iCount - reverses state without calling the provider again |
+| `POST /internal/billing/refund` | a refund GOTCHA should issue - calls the provider, then reverses |
 
 All three take `providerChargeRef` (or `chargeId` for the last) and answer 404
 if no charge matches, rather than a silent success.
@@ -376,7 +376,7 @@ Not by luck: every charge the scheduler makes is keyed deterministically from
 the subscription and the billing period, so concurrent replicas collide on a
 unique index rather than each opening their own charge. Four replicas renewing
 the same subscription at the same instant produce **one** charge, one invoice
-and one credit grant — and an unknown outcome still leaves exactly one charge to
+and one credit grant - and an unknown outcome still leaves exactly one charge to
 reconcile, which is the combination that would otherwise be worst.
 
 A leader lock would still cut duplicated scanning. That is a cost question, not
@@ -427,7 +427,7 @@ invoices and subscriptions are financial records with their own obligations.
 ### Known: pre-existing schema drift elsewhere
 
 `prisma migrate diff` between a freshly migrated database and `schema.prisma`
-reports ~68 differences on tables **outside** billing — mostly foreign keys and
+reports ~68 differences on tables **outside** billing - mostly foreign keys and
 index names on `ai_agents`, `call_analyses`, `copilot_configs` and similar. They
 predate this work and are not addressed here.
 

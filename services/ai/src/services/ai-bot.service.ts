@@ -979,7 +979,7 @@ function humanizeReply(text: string | null): string | null {
   return withProtectedAtoms(text, (prose) => {
     let out = prose;
     // Wide dash used as a clause connector (with or without surrounding spaces).
-    out = out.replace(/\s*[—–―]\s*/g, ", ");
+    out = out.replace(/\s*[-–―]\s*/g, ", ");
     // ASCII hyphen used as a dash: spaces on BOTH sides only. Token-internal
     // hyphens (Wi-Fi, ranges like 10-15) are untouched.
     out = out.replace(/(\S) +- +(\S)/g, "$1, $2");
@@ -1679,7 +1679,7 @@ async function generateAIBotReplyInner(
   // always knows who it works for and what the company does/sells.
   const companyContext: CompanyContext | null = await getCompanyContext(opts.tenantId);
   // Shopify Live Chat wiring. Null on every other channel, which is the
-  // common case — the storefront block and the product tools simply do
+  // common case - the storefront block and the product tools simply do
   // not exist for a WhatsApp or Instagram turn.
   const shopifyTurn = await prepareShopifyTurn({
     tenantId: opts.tenantId,
@@ -1963,7 +1963,7 @@ async function generateAIBotReplyInner(
     cancelMeeting: hasExistingBooking,
     // Honor CatalogTool.allowedModes - tools tagged ASSIST-only are dropped
     shopifyProducts: shopifyTurn?.productMessagingEnabled === true,
-    // Honor CatalogTool.allowedModes — tools tagged ASSIST-only are dropped
+    // Honor CatalogTool.allowedModes - tools tagged ASSIST-only are dropped
     // from the autonomous surface. The copilot path uses {closure,followup}
     // flags; the autonomous path uses this mode filter.
     allowedMode: "AUTO",
@@ -4732,7 +4732,7 @@ export async function generateAIBotOneshot(opts: {
   return {
     // Style layer applies HERE, not only in the callers that remembered.
     // The approval acknowledgement goes out through this endpoint and skipped
-    // it, so a customer was greeted with "קיבלתי — אני מטפלת בביטול" - an
+    // it, so a customer was greeted with "קיבלתי - אני מטפלת בביטול" - an
     // em dash, which the quality contract forbids precisely because it reads
     // as machine-written. Every one-shot is customer-facing somewhere.
     reply: humanizeReply(result.content ?? null),

@@ -1,5 +1,5 @@
 /**
- * Shopify Live Chat — channel service.
+ * Shopify Live Chat - channel service.
  *
  * Owns the ChannelAccount lifecycle for SHOPIFY_LIVE_CHAT and the two
  * questions every other module asks:
@@ -10,7 +10,7 @@
  * The bootstrap resolution is the security boundary for the public
  * storefront surface, so it is written as one function with an explicit
  * ordered set of checks and a single opaque failure shape. A storefront
- * never learns *why* it was refused — "unavailable" covers a disabled
+ * never learns *why* it was refused - "unavailable" covers a disabled
  * channel, a lapsed entitlement and a disconnected store alike.
  */
 
@@ -39,7 +39,7 @@ export const SHOPIFY_LIVE_CHAT = "SHOPIFY_LIVE_CHAT";
 export interface ShopifyLiveChatChannel {
   id: string;
   tenantId: string;
-  /** Public channel key — the only identifier the storefront ever sees. */
+  /** Public channel key - the only identifier the storefront ever sees. */
   publicKey: string;
   displayName: string;
   connectionStatus: string;
@@ -86,7 +86,7 @@ export async function loadChannel(
 /**
  * Writes go through the normalizer, so the stored blob is always already
  * safe for every reader. `shopDomain` / `tenantIntegrationId` are carried
- * from the existing row and are not patchable — rebinding a channel to a
+ * from the existing row and are not patchable - rebinding a channel to a
  * different store would orphan every product snapshot already sent.
  */
 export async function saveChannelConfig(
@@ -163,27 +163,27 @@ export type BootstrapResolution =
  *
  * Two ways in, one trust model:
  *
- *   - `shopDomain` — the App Store path. The Theme App Embed publishes
+ *   - `shopDomain` - the App Store path. The Theme App Embed publishes
  *     `shop.permanent_domain`, we look up the verified Chat installation
  *     for that shop and follow it to the channel. The merchant never sees
  *     or copies an identifier.
- *   - `publicKey` — the original manual path, kept as a recovery fallback
+ *   - `publicKey` - the original manual path, kept as a recovery fallback
  *     for a merchant whose installation record is missing.
  *
  * Neither is proof of anything on its own: both are LOOKUP KEYS supplied by
- * a browser. The security is the Origin check below — a forged shop domain
+ * a browser. The security is the Origin check below - a forged shop domain
  * from another site cannot present an origin that belongs to that shop.
  *
  * Order matters: cheap identity checks first, then the origin check (so a
  * forged shop domain is refused before we spend a DB read on features),
  * then entitlement. Every failure returns the same opaque body to the
- * caller — the discrimination here exists for our logs, not for the
+ * caller - the discrimination here exists for our logs, not for the
  * storefront.
  */
 /**
  * Is the business open right now?
  *
- * Read from the TENANT's business hours — the same configuration the AI
+ * Read from the TENANT's business hours - the same configuration the AI
  * employee, the incoming worker and the settings page use. The channel
  * used to carry its own week/timezone, which meant a merchant kept two
  * schedules and only found out they disagreed when a shopper was told the

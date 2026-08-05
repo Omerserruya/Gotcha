@@ -3,7 +3,7 @@
  *
  * This is the file that decides whether the two channels genuinely share
  * one editor or merely look similar. Every section must render from a
- * plain `ux` block and write back canonical `ux.` paths — because the
+ * plain `ux` block and write back canonical `ux.` paths - because the
  * Shopify settings page and the website widget's settings both hand it
  * their own draft and expect the same paths out.
  */
@@ -40,7 +40,7 @@ describe("one editor, used by both channels", () => {
       const { unmount } = render(
         <ExperienceSection section={section} ux={ux()} patch={() => {}} t={t} />,
       );
-      // Something rendered for each — no section silently missing.
+      // Something rendered for each - no section silently missing.
       expect(document.body.textContent?.length ?? 0).toBeGreaterThan(0);
       unmount();
     }

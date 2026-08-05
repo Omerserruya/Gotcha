@@ -2,7 +2,7 @@
 --
 -- `catalog_tools.hitl_policy` is the SEED default. A tenant override in
 -- `tenant_tools.config_overrides` is authoritative and wins, so this migration
--- CANNOT weaken a tenant's own decision — it only moves the floor for tenants
+-- CANNOT weaken a tenant's own decision - it only moves the floor for tenants
 -- who never expressed one. That is also why the direction matters: every change
 -- below is a TIGHTENING (never -> always). Nothing here turns an approval-gated
 -- tool autonomous, and nothing re-enables a disabled one.
@@ -16,7 +16,7 @@
 --     returngo.update_transaction   mutates a returns/refund transaction
 --     shopify.edit_order            rewrites a customer's existing order
 --
---   Customer-visible sends — the customer receives an email either way, and an
+--   Customer-visible sends - the customer receives an email either way, and an
 --   AI sending one unprompted is not recoverable by undoing a DB row:
 --     shopify.send_invoice
 --     shopify.resend_confirmation
@@ -39,8 +39,8 @@
 --
 -- Deliberately NOT changed
 -- ------------------------
--- Record CREATION for CRM objects — create_lead, create_contact, create_case,
--- create_record, create_item, shopify.create_customer — stays autonomous where
+-- Record CREATION for CRM objects - create_lead, create_contact, create_case,
+-- create_record, create_item, shopify.create_customer - stays autonomous where
 -- it already is. Capturing a new lead is the core autonomous value of the
 -- product, the record is additive rather than destructive, and requiring a
 -- human for it would change what customers bought. Where a vendor already

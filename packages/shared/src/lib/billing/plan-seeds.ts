@@ -36,7 +36,7 @@ export const AUTO_PURCHASE_DEFAULTS = {
 // Capabilities every public plan includes.
 export const CORE_FEATURES = [
   // The two Shopify commerce capabilities join CORE rather than a paid tier.
-  // That is not a pricing decision — it PRESERVES today's behaviour. Both were
+  // That is not a pricing decision - it PRESERVES today's behaviour. Both were
   // gated only by the legacy Feature enum, whose metadata default is
   // `defaultEnabled: true`, so every tenant already has them. Putting them on a
   // narrower tier here would silently REMOVE a capability that customers

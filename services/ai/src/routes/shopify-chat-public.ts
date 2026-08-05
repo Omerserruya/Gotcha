@@ -1,5 +1,5 @@
 /**
- * Shopify Live Chat — PUBLIC storefront API.
+ * Shopify Live Chat - PUBLIC storefront API.
  *
  * Every request here arrives from a shopper's browser on a merchant's
  * storefront. There is no authentication and there never will be: the
@@ -9,7 +9,7 @@
  *
  * and nothing else. In particular the browser never names a tenant, and
  * nothing it says about price, stock, identity or store membership is
- * believed — those are re-resolved server-side against Shopify.
+ * believed - those are re-resolved server-side against Shopify.
  *
  * Failure responses are deliberately uniform. A disabled channel, a
  * lapsed entitlement, a disconnected store and an unknown key all return
@@ -101,7 +101,7 @@ const eventLimiter = limiter("events", 60, visitorKey);
 //
 // The storefront lives on the merchant's own domain, so these responses
 // are genuinely cross-origin. We echo the Origin only for a storefront we
-// recognise — including on refusals, so the browser can read our
+// recognise - including on refusals, so the browser can read our
 // deliberate "unavailable" body instead of an opaque CORS error. An
 // unrecognised origin gets no header at all, and its preflight is refused
 // outright rather than handed a list of methods.
@@ -129,9 +129,9 @@ router.use(async (req: Request, res: Response, next: NextFunction) => {
   // Take the CORS headers back from the service-wide `cors()` in
   // createServiceApp. That one is written for the GOTCHA dashboard: it
   // pins Access-Control-Allow-Origin to FRONTEND_URL and sets
-  // credentials: true. Both are wrong here — this surface answers many
+  // credentials: true. Both are wrong here - this surface answers many
   // merchant origins and carries its session in a body field, never a
-  // cookie — and leaving credentials on would also make the header set
+  // cookie - and leaving credentials on would also make the header set
   // invalid the moment an origin is echoed.
   res.removeHeader("Access-Control-Allow-Origin");
   res.removeHeader("Access-Control-Allow-Credentials");
@@ -143,7 +143,7 @@ router.use(async (req: Request, res: Response, next: NextFunction) => {
   const recognised = origin ? await isKnownStorefrontOrigin(origin) : false;
   (req as any).__originRecognised = recognised;
 
-  // Set it here, once, so EVERY response carries it — including the 4xx
+  // Set it here, once, so EVERY response carries it - including the 4xx
   // and 5xx paths. A refusal without a CORS header is replaced by the
   // browser with an opaque CORS error, which hides the deliberate,
   // detail-free body we wrote and sends the merchant chasing the wrong
@@ -278,7 +278,7 @@ router.post("/bootstrap", bootstrapLimiter, async (req: Request, res: Response) 
       existing && existing.channelAccountId === channel.id ? existing.visitorId : newVisitorId();
 
     // Identity, if the shopper has one. The token can only have come from
-    // /proxy/identity, which only answers a request Shopify signed — so
+    // /proxy/identity, which only answers a request Shopify signed - so
     // this is the one place a customer id may enter, and it never comes
     // from the request body's own say-so.
     const identity = verifyCustomerIdentity(
@@ -362,13 +362,13 @@ function publicWidgetConfig(
       productMessaging: productMessagingEnabled,
       addToCart: productMessagingEnabled && commerce.addToCartEnabled,
     },
-    // Launcher / hero / teaser / sounds / behaviour. Presentation only —
+    // Launcher / hero / teaser / sounds / behaviour. Presentation only -
     // publicUxConfig is the boundary that keeps identifiers out of it.
     ux: publicUxConfig(channel.config.ux),
   };
 }
 
-// ─── GET /proxy/identity — Shopify vouches for the shopper ───
+// ─── GET /proxy/identity - Shopify vouches for the shopper ───
 //
 // Reached ONLY through Shopify's App Proxy: the browser calls the
 // merchant's own origin (`https://shop.myshopify.com/apps/gotcha-chat/
@@ -376,7 +376,7 @@ function publicWidgetConfig(
 // `logged_in_customer_id` and a `signature` made with our app secret.
 //
 // That is what makes the answer trustworthy. The browser never holds the
-// secret, so it cannot manufacture the signature — unlike Liquid's
+// secret, so it cannot manufacture the signature - unlike Liquid's
 // `customer.id`, which any shopper can edit before it reaches us.
 //
 // A logged-out shopper is not an error: the request is still validly
@@ -421,7 +421,7 @@ router.get("/proxy/identity", bootstrapLimiter, async (req: Request, res: Respon
   }
 });
 
-// ─── POST /conversation — create or resume ───────────────────
+// ─── POST /conversation - create or resume ───────────────────
 
 router.post("/conversation", conversationLimiter, async (req: Request, res: Response) => {
   const ctx = await requireVisitor(req, res);
@@ -450,7 +450,7 @@ router.post("/conversation", conversationLimiter, async (req: Request, res: Resp
  *
  * Deliberately keyed on the visitor id rather than a tab session: the
  * customer who refreshes, navigates from the product page to the cart,
- * or comes back an hour later expects the same thread — not a new one
+ * or comes back an hour later expects the same thread - not a new one
  * with a fresh bot greeting.
  */
 /**
@@ -503,7 +503,7 @@ async function findOrCreateConversation(
       // Setting departmentId here was worse than duplication: the worker
       // only routes when `messageCount <= 1 && !conversation.departmentId`,
       // so a channel with a configured department silently skipped
-      // routeConversation entirely — the graph never ran, and which
+      // routeConversation entirely - the graph never ran, and which
       // behaviour you got depended on whether a merchant had filled in a
       // dropdown on the channel page.
     },
@@ -523,7 +523,7 @@ router.post("/message", messageLimiter, async (req: Request, res: Response) => {
       return;
     }
     // Refuse absurd payloads outright rather than paying to normalise
-    // them — an oversized body is a flood, not a question.
+    // them - an oversized body is a flood, not a question.
     if (raw.length > MAX_VISITOR_MESSAGE_CHARS * 4) {
       res.status(413).json({ error: "message_too_large" });
       return;
@@ -581,7 +581,7 @@ function normalizeClientId(raw: unknown): string {
   return crypto.randomBytes(8).toString("hex");
 }
 
-// ─── GET /messages — poll / reconnect ────────────────────────
+// ─── GET /messages - poll / reconnect ────────────────────────
 
 router.get("/messages", pollLimiter, async (req: Request, res: Response) => {
   const ctx = await requireVisitor(req, res);
@@ -624,7 +624,7 @@ router.get("/messages", pollLimiter, async (req: Request, res: Response) => {
 
 /**
  * Read a page of history and hand every row to the shared visitor
- * projection — the same function the realtime socket path uses, so
+ * projection - the same function the realtime socket path uses, so
  * polling and streaming can never disagree about what is safe to show.
  */
 async function loadVisibleMessages(
@@ -678,7 +678,7 @@ router.post("/cart/validate", cartLimiter, async (req: Request, res: Response) =
     const body = (req.body ?? {}) as Record<string, unknown>;
     const result = await validateCartLine({
       tenantId: session.tenantId,
-      // The shop comes from the CHANNEL, never from the request — this is
+      // The shop comes from the CHANNEL, never from the request - this is
       // what makes "add a variant from another store" unrepresentable.
       expectedShopDomain: channel.config.shopDomain!,
       productId: String(body.productId ?? ""),
@@ -697,7 +697,7 @@ router.post("/cart/validate", cartLimiter, async (req: Request, res: Response) =
       variantId: result.variantId,
     });
 
-    // We return a validated variant id and quantity — the storefront
+    // We return a validated variant id and quantity - the storefront
     // bridge performs the actual cart mutation same-origin against the
     // theme's own /cart/add.js. No Admin credential is involved, and no
     // order is ever created from chat.
@@ -718,7 +718,7 @@ router.post("/cart/validate", cartLimiter, async (req: Request, res: Response) =
   }
 });
 
-// ─── POST /cart/result — report the storefront outcome ───────
+// ─── POST /cart/result - report the storefront outcome ───────
 
 router.post("/cart/result", cartLimiter, async (req: Request, res: Response) => {
   const ctx = await requireVisitor(req, res);
@@ -730,7 +730,7 @@ router.post("/cart/result", cartLimiter, async (req: Request, res: Response) => 
   res.json({ data: { recorded: true } });
 });
 
-// ─── POST /handoff — ask for a human ─────────────────────────
+// ─── POST /handoff - ask for a human ─────────────────────────
 
 router.post("/handoff", conversationLimiter, async (req: Request, res: Response) => {
   const ctx = await requireVisitor(req, res);
@@ -759,7 +759,7 @@ router.post("/handoff", conversationLimiter, async (req: Request, res: Response)
         metadata: { systemEvent: "visitor_requested_human" },
       },
     });
-    // Routing and agent notification are the existing platform's job —
+    // Routing and agent notification are the existing platform's job -
     // this event is the same one every other channel raises on handoff.
     await publishEvent({
       event: "conversation:updated",
@@ -774,7 +774,7 @@ router.post("/handoff", conversationLimiter, async (req: Request, res: Response)
   }
 });
 
-// ─── POST /lead — offline contact form ───────────────────────
+// ─── POST /lead - offline contact form ───────────────────────
 
 router.post("/lead", conversationLimiter, async (req: Request, res: Response) => {
   const ctx = await requireVisitor(req, res);
@@ -844,7 +844,7 @@ function cleanEmail(raw: unknown): string {
   return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v) ? v : "";
 }
 
-// ─── POST /events — widget analytics ─────────────────────────
+// ─── POST /events - widget analytics ─────────────────────────
 
 const ALLOWED_EVENTS = new Set([
   "widget_opened",

@@ -1,5 +1,5 @@
 /**
- * Shopify catalog service — the ONLY place Shopify product truth enters
+ * Shopify catalog service - the ONLY place Shopify product truth enters
  * the Live Chat feature.
  *
  * Everything here goes through `executeAdapterTool`, which already owns
@@ -103,7 +103,7 @@ export type ProductCapability =
  *
  * Used by the channel diagnostics panel and by the widget bootstrap to
  * decide whether product messaging is offered. A store without
- * `read_products` must still get plain text chat — the feature degrades,
+ * `read_products` must still get plain text chat - the feature degrades,
  * it does not fail.
  */
 export async function probeProductCapability(tenantId: string): Promise<ProductCapability> {
@@ -144,7 +144,7 @@ export interface CatalogSearchOptions {
   limit?: number;
   /** Include DRAFT / ARCHIVED products. Off unless the channel allows it. */
   includeUnpublished?: boolean;
-  /** Pre-resolved binding — saves a round trip when the caller has one. */
+  /** Pre-resolved binding - saves a round trip when the caller has one. */
   store?: ShopifyStoreBinding;
 }
 
@@ -251,7 +251,7 @@ export async function getProductSnapshots(
 
 export interface CartValidationRequest {
   tenantId: string;
-  /** The shop the CHANNEL is bound to — not one the browser supplied. */
+  /** The shop the CHANNEL is bound to - not one the browser supplied. */
   expectedShopDomain: string;
   productId: string;
   variantId: string;
@@ -264,7 +264,7 @@ export type CartValidation =
       ok: true;
       variantId: string;
       quantity: number;
-      /** Authoritative, straight from Shopify — never echoed from input. */
+      /** Authoritative, straight from Shopify - never echoed from input. */
       price: string | null;
       currency: string;
       title: string;

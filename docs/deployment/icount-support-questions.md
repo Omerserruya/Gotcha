@@ -1,4 +1,4 @@
-# iCount API v3 — outstanding integration questions
+# iCount API v3 - outstanding integration questions
 
 Ready to send. Contains no API token, no card token, no customer data, no
 tenant identifiers and no raw provider responses.
@@ -21,7 +21,7 @@ use an iCount standing order (`hk_page = 0`). Our payment page is configured as
 Could you please provide **current API v3 request and response examples** for
 the following? We are holding live charging disabled until these are confirmed.
 
-## Blocking — these ten prevent us going live
+## Blocking - these ten prevent us going live
 
 1. How is a `cc_token` PayPage session launched (static URL from the page id, or
    an API call that returns a URL)?
@@ -34,14 +34,14 @@ the following? We are holding live charging disabled until these are confirmed.
 7. Does `cc/bill` accept a **unique merchant transaction reference**?
 8. Is that reference searchable and returned through `cc/transactions`?
 9. Does `cc/bill` create a document, and does it return `doctype` / `docnum`?
-10. What happens to the ₪1 token-validation transaction — voided, or settled and
+10. What happens to the ₪1 token-validation transaction - voided, or settled and
     needing reversal?
 
 The sections below expand on each of these.
 
 ## 1. cc_token PayPage launch and callback
 
-1. How is a `cc_token` page opened for a customer — a static URL derived from
+1. How is a `cc_token` page opened for a customer - a static URL derived from
    the page ID, or a URL generated through an API call?
 2. If it is an API call, which endpoint, and what are the request and response?
 3. How do we supply `client_id` for the customer the card should be saved to?
@@ -65,17 +65,17 @@ The sections below expand on each of these.
     will not treat a browser redirect as proof.
 15. If a customer tokenizes a second card, how do we distinguish the new token
     from the previous one?
-16. What happens to the ₪1 validation transaction — is it voided automatically,
+16. What happens to the ₪1 validation transaction - is it voided automatically,
     or does it settle and need reversing?
 
-## 3. cc/bill — currency
+## 3. cc/bill - currency
 
 Our prices are set in USD while the account base currency is ILS, so this is
 blocking for us.
 
 17. Does `cc/bill` accept an explicit currency parameter? What is the **exact
     field name**?
-18. Which values are accepted — ISO codes (`USD`), numeric currency ids, or
+18. Which values are accepted - ISO codes (`USD`), numeric currency ids, or
     another format?
 19. If currency is omitted, which currency is charged?
 20. Is the currency derived from the account, the terminal, the customer, the
@@ -85,7 +85,7 @@ blocking for us.
 23. Does the `cc/bill` response return the currency actually charged?
 24. Does `cc/transactions` return the transaction currency?
 
-## 4. cc/bill — per-charge reference and idempotency
+## 4. cc/bill - per-charge reference and idempotency
 
 Monthly renewal and dunning retry by nature, so we need to guarantee a retry
 cannot become a second charge.
@@ -96,14 +96,14 @@ cannot become a second charge.
 27. Is it returned in the `cc/bill` response?
 28. Is it searchable, and returned, by `cc/transactions`?
 29. Can it be included on the resulting accounting document?
-30. What happens if the **same reference is submitted twice** — is the second
+30. What happens if the **same reference is submitted twice** - is the second
     request rejected, or does it charge again?
 31. Is there a provider idempotency header or request field?
 
 If there is no such mechanism, please confirm that explicitly so we can document
 the limitation.
 
-## 5. cc/bill — document creation
+## 5. cc/bill - document creation
 
 32. Does `cc/bill` create an accounting document by itself?
 33. If so, which document type?
@@ -116,7 +116,7 @@ the limitation.
 39. If the card charge succeeds but document creation fails, what is the
     recommended recovery procedure?
 
-## 6. doc/cancel — refunds
+## 6. doc/cancel - refunds
 
 40. Does `doc/cancel` with `refund_cc: true` support only a **full** refund?
 41. Is a **partial** refund supported at all?

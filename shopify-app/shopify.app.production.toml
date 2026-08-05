@@ -1,4 +1,4 @@
-# GOTCHA — UNIFIED PRODUCTION Shopify app manifest.
+# GOTCHA - UNIFIED PRODUCTION Shopify app manifest.
 #
 # ⚠️  THIS FILE TARGETS THE LIVE GOTCHA APP THAT EVERY MERCHANT CONNECTS THROUGH.
 #
@@ -27,7 +27,7 @@
 # working for every connected merchant. There is no undo.
 #
 # Therefore this file must be a faithful SUPERSET of the live configuration
-# before any deploy. The live values have not been read back yet — see §7 of
+# before any deploy. The live values have not been read back yet - see §7 of
 # docs/setup/shopify-core-unified-production-runbook.md. Until that comparison
 # is done and approved, do not deploy.
 
@@ -126,7 +126,7 @@ api_version = "2026-04"
 # (https://<shop>/apps/gotcha-chat/...); Shopify then calls `url`
 # server-to-server with `logged_in_customer_id` and a `signature` made with
 # THIS app's secret. The browser never holds the secret, so it cannot forge
-# the claim — which is why Liquid's `customer.id` is not usable for this.
+# the claim - which is why Liquid's `customer.id` is not usable for this.
 #
 # Under the unified app the signing secret is the CORE secret. The runtime
 # verification path moves with it; see shopify-chat-public.ts.

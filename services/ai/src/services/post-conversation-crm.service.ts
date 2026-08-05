@@ -99,7 +99,7 @@ function renderSummaryAsNote(summary: string): string {
  *
  * This is deliberately SEPARATE from `applyCrmPatchKindAware`. That function
  * writes the sparse FIELD patch and only falls back to a note when the field
- * update fails — so on a vendor where field updates succeed (Shopify, whose
+ * update fails - so on a vendor where field updates succeed (Shopify, whose
  * `updateRecord` maps to `shopify.update_customer`) the note path never ran
  * and the merchant's customer record held no record of what was discussed.
  *
@@ -133,7 +133,7 @@ export async function writeSummaryNoteKindAware(args: {
     return { ok: false, outcome: "skipped", crmContactId: identity.crmContactId, reason: "no-create-note" };
   }
   // A vendor that models no note-like activity at all (capability declared,
-  // not guessed) is a skip, not a failure — there is nowhere to put this.
+  // not guessed) is a skip, not a failure - there is nowhere to put this.
   if (!adapter.capabilities.activity_kinds_supported?.includes("note")) {
     return { ok: false, outcome: "skipped", crmContactId: identity.crmContactId, reason: "notes-unsupported" };
   }

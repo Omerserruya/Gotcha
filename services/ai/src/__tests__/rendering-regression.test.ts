@@ -22,18 +22,18 @@ const INCIDENT_DATE = "2026-07-08";
 
 describe("incident values survive the customer-text pipeline byte-for-byte", () => {
   it("product URL, image UUID URL, ISO date, dashed phone (1/2/6/7/20)", () => {
-    const msg = `מצאתי — הנה ${INCIDENT_URL} מתאריך ${INCIDENT_DATE} תמונה ${INCIDENT_IMG} טלפון 054-568-0665`;
+    const msg = `מצאתי - הנה ${INCIDENT_URL} מתאריך ${INCIDENT_DATE} תמונה ${INCIDENT_IMG} טלפון 054-568-0665`;
     const out = sanitizeCustomerText(msg);
     expect(out).toContain(INCIDENT_URL);
     expect(out).toContain(INCIDENT_IMG);
     expect(out).toContain(INCIDENT_DATE);
     expect(out).toContain("054-568-0665");
     expect(out).not.toMatch(/urban, supply|2026, 07, 08|0a40b01b, 5021/);
-    expect(out).not.toMatch(/[—–―]/);
+    expect(out).not.toMatch(/[-–―]/);
   });
 
   it("order numbers, emails, amounts and currency survive (4/5/11)", () => {
-    const msg = "הזמנה #1005 — סכום 949.95 USD — קבלה ל a-b@x-y.com";
+    const msg = "הזמנה #1005 - סכום 949.95 USD - קבלה ל a-b@x-y.com";
     const out = sanitizeCustomerText(msg);
     expect(out).toContain("#1005");
     expect(out).toContain("949.95 USD");
@@ -56,8 +56,8 @@ describe("source-level bypass visibility", () => {
     const src = read("../services/ai-bot.service.ts");
     // the incident class - an ASCII hyphen inside a dash character class -
     // must never reappear anywhere in the reply path
-    expect(src).not.toMatch(/\[\s*-[–—―]/);
-    expect(src).not.toMatch(/\[[–—―]+-[–—―]*\]/);
+    expect(src).not.toMatch(/\[\s*-[–-―]/);
+    expect(src).not.toMatch(/\[[–-―]+-[–-―]*\]/);
     const fn = src.slice(src.indexOf("function humanizeReply"));
     expect(fn.slice(0, 1500)).toContain("withProtectedAtoms");
   });

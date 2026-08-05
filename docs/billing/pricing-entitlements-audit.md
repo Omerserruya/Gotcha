@@ -1,4 +1,4 @@
-# Pricing, Plans & Entitlements — Audit and Execution Matrix
+# Pricing, Plans & Entitlements - Audit and Execution Matrix
 
 **Branch:** `feat/pricing-entitlements` · **Base:** `696cbef` (latest completed Settings + AI Studio + auth HEAD)
 
@@ -10,7 +10,7 @@ frontend-only feature gates.
 
 ## 1. What already exists (reused, not rebuilt)
 
-### Money / subscription spine — `services/billing` (port 4009)
+### Money / subscription spine - `services/billing` (port 4009)
 
 | Component | File | Verdict |
 |---|---|---|
@@ -24,14 +24,14 @@ frontend-only feature gates.
 | iCount / manual providers | `providers/` | **Reuse.** |
 | Billing scheduler (trials → renewals → pending → dunning) | `index.ts` | **Extend.** |
 
-### Credit ledger — the single source of truth
+### Credit ledger - the single source of truth
 
 | Component | Verdict |
 |---|---|
 | `AiUnitLot` (INCLUDED / PURCHASED buckets, FIFO, `periodKey`, `expiresAt`) | **Reuse verbatim.** This *is* the credit ledger. |
 | `AiUnitLedgerEntry` (GRANT/CONSUME/EXPIRE/ADJUST/REFUND) | **Reuse verbatim.** |
 | `TenantAiBalance` (materialized snapshot) | **Reuse verbatim.** |
-| `wallet.ts` — `grantUnits` / `consumeUnits` / `rolloverIncluded` / `refundUnitsForReference` | **Reuse verbatim.** |
+| `wallet.ts` - `grantUnits` / `consumeUnits` / `rolloverIncluded` / `refundUnitsForReference` | **Reuse verbatim.** |
 | `CreditTransaction` | Already marked DEPRECATED in-schema. Left untouched. |
 
 > **Naming.** The ledger's internal noun is "AI Unit". The customer-facing
@@ -45,9 +45,9 @@ frontend-only feature gates.
 |---|---|
 | `BillableModel` (per-model provider rates + `categoryMultiplier`) | **Reuse.** Internal only. |
 | `UnitPricingConfig` (`unitCostBasisUsd`, `marginFactor`) | **Reuse.** Internal only. |
-| `pricing.ts` — `providerCostUsd` / `costToUnits` / `priceUsageFromDb` | **Reuse.** |
+| `pricing.ts` - `providerCostUsd` / `costToUnits` / `priceUsageFromDb` | **Reuse.** |
 | `UsageLog` (`promptTokens`, `completionTokens`, `costUsd`, `unitsConsumed`, `turnId`, `feature`, `model`, `aiAgentId`) | **Reuse.** Already the attributable per-call fact table. |
-| `enforcement.ts` — `checkAiAllowed` / `meterAiUnits`, `BILLING_ENFORCEMENT_MODE` off/observe/soft/hard | **Reuse.** |
+| `enforcement.ts` - `checkAiAllowed` / `meterAiUnits`, `BILLING_ENFORCEMENT_MODE` off/observe/soft/hard | **Reuse.** |
 
 ### Entitlements
 
@@ -55,7 +55,7 @@ frontend-only feature gates.
 |---|---|
 | `Plan` + `PlanEntitlement` (`@@unique([key, version])`) | **Extend into the canonical PlanVersion.** |
 | `TenantEntitlement` (source-ranked overrides, `expiresAt`) | **Reuse as `OrganizationEntitlementOverride`.** |
-| `entitlements.ts` — `getEffectiveEntitlements` / `getLimits` / `materializeEntitlements` | **Extend.** |
+| `entitlements.ts` - `getEffectiveEntitlements` / `getLimits` / `materializeEntitlements` | **Extend.** |
 | `TenantFeature` (materialized read cache consumed by `isPermissionLicensed`) | **Reuse.** Generic `key → bool`, so fine-grained feature keys drop in unchanged. |
 | `plans.ts` `PLAN_PRESETS` (9 coarse permission **domains**) | **Keep** (permission licensing depends on it) **and layer** the fine-grained feature catalog on top. |
 
@@ -79,17 +79,17 @@ frontend-only feature gates.
 |---|---|---|---|
 | G1 | **Numeric limits are defined but never enforced.** `getLimit`/`getLimits` have **zero call sites** outside their own module and `index.ts` re-export. `limit:ai_employees`, `limit:channels`, `limit:users`, `limit:storage_gb` are seeded and inert. | `grep -rn "getLimit\b"` → only definition + export | Phase 8: canonical resolver + `assertLimit` wired into real create paths. |
 | G2 | **No public commercial estimation model.** Nothing anywhere converts credits → estimated conversations. | no such symbol | Phase 3: `PublicEstimationConfig`, versioned, Sysadmin-only, never derived from analytics. |
-| G3 | **No plan lifecycle.** `Plan.active: Boolean` only — no Draft/Active/Retired/Archived, no publish step, no effective dates, no ordering, no recommended flag, no i18n name, no description. | schema `model Plan` | Phase 1. |
+| G3 | **No plan lifecycle.** `Plan.active: Boolean` only - no Draft/Active/Retired/Archived, no publish step, no effective dates, no ordering, no recommended flag, no i18n name, no description. | schema `model Plan` | Phase 1. |
 | G4 | **No custom / per-organization plans.** `Plan` has no tenant scope. | schema | Phase 1: `Plan.tenantId` + `kind=CUSTOM`. |
 | G5 | **No commercial snapshot on `Subscription`.** Price + included credits are read live from `Plan`, so editing a plan silently rewrites what every existing customer is on. | `activateOrRenew` reads `plan.basePrice` at charge time | Phase 1/7: snapshot columns on `Subscription`. |
-| G6 | **No volume options.** No chat/voice per-business-day selectors. | — | Phase 4: `PlanVolumeOption`. |
+| G6 | **No volume options.** No chat/voice per-business-day selectors. | - | Phase 4: `PlanVolumeOption`. |
 | G7 | **Currency is ILS-only, no FX, no rounding policy.** | `Plan.currency @default("ILS")` | Phase 12: `PricingCurrencyConfig` + `FxRateSnapshot`, USD canonical. |
 | G8 | **Feature catalog is 9 coarse domains.** No `ai.employee`, `voice.call_pilot`, `communication.broadcasts`… | `PLAN_DOMAINS` | Phase 1: `FeatureDefinition` catalog + seeds. |
-| G9 | **`CreditPackage` is minimal** — no plan eligibility, no active window, no expiry policy, no visibility, no max qty, no sort order, no Hebrew name. | schema | Phase 5. |
+| G9 | **`CreditPackage` is minimal** - no plan eligibility, no active window, no expiry policy, no visibility, no max qty, no sort order, no Hebrew name. | schema | Phase 5. |
 | G10 | **Auto-purchase has no concurrency lock**, no purchase increment, no price-per-credit, no warning threshold, no configurable behaviour at limit. Two concurrent triggers can both pass the ceiling check. | `triggerAutoPurchase` reads-then-writes without a lock | Phase 6. |
 | G11 | **No POC/Trial configuration.** `poc.service.ts` hardcodes; no Trial vs POC distinction; no operator-facing defaults. | `poc.service.ts` | Phase 2: `TrialPocTemplate`. |
 | G12 | **No per-conversation actual usage aggregate.** `UsageLog` has the facts but nothing rolls them to a conversation with a settlement window. `/system/pricing` computes `conversations` from a live scan. | `system.ts:1063` | Phase 10: `ConversationUsageAggregate` + `ConversationUsageEventLink`. |
-| G13 | **No Sysadmin plan administration surface.** `/system/pricing` is read-only analytics. | — | Phase 9. |
+| G13 | **No Sysadmin plan administration surface.** `/system/pricing` is read-only analytics. | - | Phase 9. |
 | G14 | **No platform pricing permissions.** Everything is `requireSystemAdmin()` (a blanket bypass). | `system.ts` | Phase 14: explicit `platform:*` keys layered on the SYSTEM_ADMIN tier. |
 | G15 | **`changePlan` tier order is hardcoded** to `light/pro/business/enterprise`. New plan keys would be treated as neither upgrade nor downgrade. | `plan.service.ts` `TIER_ORDER` | Phase 7: rank from `Plan.sortOrder`. |
 

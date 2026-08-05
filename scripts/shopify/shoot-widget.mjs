@@ -5,7 +5,7 @@
  *
  * Used for before/after comparison during design work. The widget is the
  * REAL bundle, the config is fetched from the live API, and the browser is
- * Chromium — so what comes out is what a shopper would see, minus the
+ * Chromium - so what comes out is what a shopper would see, minus the
  * merchant's own theme behind it.
  *
  *   node scripts/shopify/shoot-widget.mjs <label>
@@ -50,7 +50,7 @@ const browser = await chromium.launch({
 const NOW = new Date().toISOString();
 const CONVO = [
   { id: "a", direction: "INBOUND", body: "Do you have the trail runner in a 42?", messageType: "text", author: null, authorKind: "visitor", createdAt: NOW, commerce: null },
-  { id: "b", direction: "OUTBOUND", body: "We do — it is in stock in black and white. Want me to check the fit for you?", messageType: "text", author: "Store Assistant", authorKind: "ai", createdAt: NOW, commerce: null },
+  { id: "b", direction: "OUTBOUND", body: "We do - it is in stock in black and white. Want me to check the fit for you?", messageType: "text", author: "Store Assistant", authorKind: "ai", createdAt: NOW, commerce: null },
 ];
 
 const SHOTS = [
@@ -64,8 +64,8 @@ const SHOTS = [
 for (const shot of SHOTS) {
   const ctx = await browser.newContext({ viewport: { width: shot.width, height: shot.height } });
   const page = await ctx.newPage();
-  // A real https origin is required — on about:blank the widget's own URL
-  // parsing refuses every media URL and the hero silently disappears — but
+  // A real https origin is required - on about:blank the widget's own URL
+  // parsing refuses every media URL and the hero silently disappears - but
   // the app that normally lives there is a React dev server that re-renders
   // and wipes the host element. So: a real origin, our own document.
   await page.route(`${API}/__widget-shot`, (route) =>

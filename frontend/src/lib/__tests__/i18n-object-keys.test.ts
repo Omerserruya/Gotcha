@@ -2,8 +2,8 @@
  * A translation key that holds a MAP must never be rendered directly.
  *
  * `shopifyChat.trigger` is an object of option labels
- * (`trigger.time_on_page`, `trigger.page_views`, …). Asking for it bare —
- * `t("shopifyChat.trigger")` — returns the object, and React throws
+ * (`trigger.time_on_page`, `trigger.page_views`, …). Asking for it bare -
+ * `t("shopifyChat.trigger")` - returns the object, and React throws
  * "Objects are not valid as a React child", taking the whole settings
  * section down with it.
  *
@@ -64,7 +64,7 @@ describe("translation keys that hold maps", () => {
       // (`t(\`a.b.${x}\`)`) is exactly the correct usage and is not a
       // candidate here.
       //
-      // Nor is a call that is immediately cast — `t("...") as unknown` is
+      // Nor is a call that is immediately cast - `t("...") as unknown` is
       // a caller deliberately reading the map to iterate it, which is a
       // legitimate thing to do with one.
       const re = /\bt\(\s*"([^"]+)"\s*\)/g;
@@ -75,7 +75,7 @@ describe("translation keys that hold maps", () => {
         const after = src.slice(match.index + match[0].length, match.index + match[0].length + 12);
         if (/^\s+as\s/.test(after)) continue;
         const line = src.slice(0, match.index).split("\n").length;
-        offenders.push(`${path.relative(SRC, file)}:${line} — t("${key}") returns an object`);
+        offenders.push(`${path.relative(SRC, file)}:${line} - t("${key}") returns an object`);
       }
     }
 

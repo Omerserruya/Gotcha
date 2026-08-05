@@ -1,8 +1,8 @@
 /**
  * Structured commerce messages.
  *
- * A product card is a normal Message row — same conversation, same inbox,
- * same history — carrying a validated snapshot in `metadata`. It is NOT
+ * A product card is a normal Message row - same conversation, same inbox,
+ * same history - carrying a validated snapshot in `metadata`. It is NOT
  * HTML: the widget and the inbox each render the snapshot themselves, so
  * nothing a merchant or a model produces ever becomes markup.
  *
@@ -223,7 +223,7 @@ function summarize(products: ProductSnapshot[]): string {
   if (products.length === 1) {
     const p = products[0];
     const price = p.price ? ` (${p.price} ${p.currency})` : "";
-    return `${p.title}${price} — ${p.productUrl}`;
+    return `${p.title}${price} - ${p.productUrl}`;
   }
   const titles = products.map((p) => p.title).join(", ");
   return `${products.length} product suggestions: ${titles}`;

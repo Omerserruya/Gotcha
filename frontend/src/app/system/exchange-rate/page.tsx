@@ -187,7 +187,7 @@ export default function ExchangeRatePage() {
                 <div className="rounded-xl bg-gray-50 px-4 py-2.5">
                   <p className="text-[11px] uppercase tracking-wide text-gray-500">A ${EXAMPLE_PRICE} plan</p>
                   <p className="mt-0.5 text-[15px] font-semibold tabular-nums text-gray-900" dir="ltr">
-                    {preview ? `₪${preview}` : "—"}
+                    {preview ? `₪${preview}` : "-"}
                   </p>
                 </div>
 
@@ -334,10 +334,10 @@ function OfficialFeed({
       {c && (
         <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
           <Fact label="Rate" value={Number(c.rate).toFixed(4)} mono />
-          <Fact label="Published" value={c.officialDate ? new Date(c.officialDate).toLocaleDateString() : "—"} />
+          <Fact label="Published" value={c.officialDate ? new Date(c.officialDate).toLocaleDateString() : "-"} />
           <Fact
             label="Age"
-            value={c.ageHours == null ? "—" : `${c.ageHours}h`}
+            value={c.ageHours == null ? "-" : `${c.ageHours}h`}
             // Said plainly rather than colour-coded, because the consequence is
             // that charging stops, not that a badge turns orange.
             note={stale ? `past the ${fx.maxStalenessHours}h limit` : undefined}
@@ -427,8 +427,8 @@ function History({
                 <td className="px-4 py-2.5">
                   <StatusPill status={r.status} />
                 </td>
-                <td className="px-4 py-2.5 text-gray-500">{r.createdBy ?? "—"}</td>
-                <td className="px-4 py-2.5 text-gray-500">{r.approvedBy ?? "—"}</td>
+                <td className="px-4 py-2.5 text-gray-500">{r.createdBy ?? "-"}</td>
+                <td className="px-4 py-2.5 text-gray-500">{r.approvedBy ?? "-"}</td>
                 <td className="px-4 py-2.5 text-right">
                   {r.status === "DRAFT" && (
                     <button

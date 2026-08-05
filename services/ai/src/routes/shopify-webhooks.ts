@@ -1,5 +1,5 @@
 /**
- * Shopify webhooks — one app, one secret, two consequences.
+ * Shopify webhooks - one app, one secret, two consequences.
  *
  * Every handler here verifies `X-Shopify-Hmac-Sha256` over the RAW request
  * bytes (captured by createServiceApp's json verify hook). An unverified
@@ -23,7 +23,7 @@
  *
  * Shopify requires public apps to answer the mandatory compliance topics
  * (customers/data_request, customers/redact, shop/redact), so those are
- * implemented here too — with real behaviour, not a 200 stub.
+ * implemented here too - with real behaviour, not a 200 stub.
  */
 
 import { Router, Request, Response } from "express";
@@ -130,7 +130,7 @@ async function recordDelivery(input: {
  *
  * Redis rather than a table: the window that matters is Shopify's retry
  * window, and a claim that expires is the correct shape for that. Failing
- * OPEN here is deliberate — dropping a real uninstall because Redis blinked
+ * OPEN here is deliberate - dropping a real uninstall because Redis blinked
  * is worse than processing an idempotent handler twice.
  */
 const SEEN_TTL_SECONDS = 7 * 24 * 60 * 60;
@@ -161,7 +161,7 @@ const chat = Router();
  *
  * Consequence is strictly chat-shaped: retire the installation, switch the
  * channel off so the storefront bootstrap refuses, drop token material.
- * The Core Shopify Integration is not touched — if the merchant still uses
+ * The Core Shopify Integration is not touched - if the merchant still uses
  * GOTCHA for orders and refunds, that keeps working.
  */
 chat.post("/app-uninstalled", async (req: Request, res: Response) => {
@@ -190,7 +190,7 @@ chat.post("/app-uninstalled", async (req: Request, res: Response) => {
  * Mandatory compliance: a shopper asked what data the store holds on them.
  *
  * GOTCHA Chat stores conversations keyed by an anonymous visitor id, not by
- * a Shopify customer id — the storefront widget never receives or records
+ * a Shopify customer id - the storefront widget never receives or records
  * one. So the honest answer is a recorded, auditable "no linked data",
  * which is exactly what this handler produces.
  */
@@ -225,7 +225,7 @@ chat.post("/customers-redact", async (req: Request, res: Response) => {
 
 /**
  * Mandatory compliance: erase everything about the shop, 48h after
- * uninstall. Scoped hard to the installation for THIS shop — a redact for
+ * uninstall. Scoped hard to the installation for THIS shop - a redact for
  * one storefront may never reach another tenant's data.
  */
 chat.post("/shop-redact", async (req: Request, res: Response) => {

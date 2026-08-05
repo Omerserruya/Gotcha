@@ -660,7 +660,7 @@ export type {
 } from "./lib/shopify-chat-ux";
 
 // Stripe pins its version IN CODE. Unlike Shopify/Meta (which expire versions
-// and fall forward), Stripe with no header uses the ACCOUNT DASHBOARD default —
+// and fall forward), Stripe with no header uses the ACCOUNT DASHBOARD default -
 // so the contract lived in a web console until this was added.
 export {
   stripeApiVersion,
@@ -672,7 +672,7 @@ export {
 
 // The ONE place the Meta Graph API version is decided. Replaced eight
 // independent declarations across four services that sat on three different
-// versions at once — two of them expired.
+// versions at once - two of them expired.
 export {
   metaGraphVersion,
   metaGraphBaseUrl,
@@ -703,7 +703,7 @@ export {
 } from "./lib/shopify-app-identity";
 export type { ShopifyAppIdentity, AppIdentityProblem } from "./lib/shopify-app-identity";
 
-// GOTCHA Shopify CHAT app — its own identity, verification and lifecycle.
+// GOTCHA Shopify CHAT app - its own identity, verification and lifecycle.
 // Deliberately a separate module from the live-chat channel config above:
 // one describes the merchant's widget, the other the Shopify app that
 // installs it. See docs/architecture/shopify-core-vs-chat-app.md.
@@ -729,7 +729,7 @@ export type {
   ChatActivationInput,
 } from "./lib/shopify-chat-app";
 
-// The App Proxy — the only path by which the storefront can PROVE which
+// The App Proxy - the only path by which the storefront can PROVE which
 // customer is chatting. See lib/shopify-app-proxy.ts for why Liquid's
 // customer.id is not proof.
 export {
@@ -744,7 +744,7 @@ export {
 export type { ShopifyCustomerIdentity } from "./lib/shopify-app-proxy";
 
 // The website chat widget. Shares its experience block with the Shopify
-// storefront widget on purpose — see lib/webchat-widget.ts.
+// storefront widget on purpose - see lib/webchat-widget.ts.
 export {
   WEBCHAT_CHANNEL,
   defaultWebchatConfig,

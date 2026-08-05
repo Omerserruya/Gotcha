@@ -48,7 +48,7 @@ import { quoteExchange, verifyExchange } from "./shopify-exchange";
 
 /**
  * Resolved from the ONE shared declaration, not pinned here. This used to be a
- * local `const API_VERSION = "2024-04"` — roughly 15 months past end of support,
+ * local `const API_VERSION = "2024-04"` - roughly 15 months past end of support,
  * which Shopify served by silently falling forward to whatever its oldest
  * accessible version happened to be that quarter. See
  * packages/shared/src/lib/shopify-api-version.ts for the full reasoning.
@@ -345,7 +345,7 @@ const TOOLS: ToolDefinition[] = [
     "Customer asks about a specific product.", { product_id: { type: "string" }, handle: { type: "string" } }),
   t("search_products", "READ", "LOW", "Search products by title, vendor, product type, tag or SKU.",
     "Customer asks 'do you sell X?' or you need candidates to recommend.",
-    { query: { type: "string" }, limit: { type: "number" }, status: { type: "string", enum: ["active", "any"], description: "Default 'active' — only products a shopper can actually buy." } }, ["query"]),
+    { query: { type: "string" }, limit: { type: "number" }, status: { type: "string", enum: ["active", "any"], description: "Default 'active' - only products a shopper can actually buy." } }, ["query"]),
   // "is it in stock?" and "do you have it in a 159?" are the two most common
   // pre-purchase questions there are. Both were being dropped by the 128-tool
   // truncation, leaving the model to answer a specific size question with a
@@ -1499,7 +1499,7 @@ const ShopifyAdapter: ProviderAdapter = {
         const limit = clampLimit(args.limit, 20, 250);
         const q = String(args.query || "").trim();
         const activeOnly = String(args.status || "active") !== "any";
-        // GraphQL first: REST /products.json cannot search — it pages the
+        // GraphQL first: REST /products.json cannot search - it pages the
         // whole catalog and we filter client-side, which silently misses
         // anything past the first page. Shopify's `products(query:)` does a
         // real full-text search over title/vendor/type/tag/sku. REST stays
@@ -3236,7 +3236,7 @@ const RETURNS_QUERY = `
     }
   }`;
 
-// Product search. Field set is deliberately conservative — every field
+// Product search. Field set is deliberately conservative - every field
 // here exists in 2024-04, because GraphQL fails the WHOLE query on one
 // unknown field and the fallback would then be the only path that ever runs.
 const PRODUCT_SEARCH_QUERY = `

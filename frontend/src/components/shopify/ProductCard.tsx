@@ -4,7 +4,7 @@ import clsx from "clsx";
 import { useI18n } from "@/context/I18nContext";
 
 /**
- * Shopify product card — the dashboard-side renderer.
+ * Shopify product card - the dashboard-side renderer.
  *
  * Shared by three surfaces on purpose: the inbox (where an agent reads
  * what the AI sent), the channel settings preview, and the agent's own
@@ -12,7 +12,7 @@ import { useI18n } from "@/context/I18nContext";
  * the shopper is, which is the whole point of showing it in the inbox at
  * all.
  *
- * The storefront widget has its own vanilla-JS implementation — it lives
+ * The storefront widget has its own vanilla-JS implementation - it lives
  * inside a Shadow DOM on a merchant's theme and cannot import React. The
  * two are kept visually in step deliberately; this one is read-only and
  * never performs a cart action.
@@ -227,7 +227,7 @@ export function ProductCard({
 
 /**
  * Carousel of product cards. Scrolls horizontally inside its own
- * container so a long list never widens the conversation column — an
+ * container so a long list never widens the conversation column - an
  * inbox that scrolls sideways is an inbox nobody trusts.
  */
 export function ProductCarousel({ products }: { products: ProductView[] }) {

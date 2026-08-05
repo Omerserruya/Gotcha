@@ -6,7 +6,7 @@ import jwt from "jsonwebtoken";
 import {
   prisma,
   // The website widget shares its experience config with the Shopify
-  // storefront widget — see packages/shared/src/lib/webchat-widget.ts.
+  // storefront widget - see packages/shared/src/lib/webchat-widget.ts.
   normalizeWebchatConfig,
   isLegacyWebchatSettings,
   authenticate,
@@ -293,7 +293,7 @@ router.post("/connect/whatsapp", authenticate, resolveTenant, requirePermission(
     // The second URL is deliberately NOT our configured Graph version: the FB
     // JavaScript SDK mints the popup code against its OWN version, and the
     // exchange can fail if the versions disagree. So this is a genuine
-    // SDK-compatibility fallback, not version drift — it tracks whatever the
+    // SDK-compatibility fallback, not version drift - it tracks whatever the
     // loaded SDK uses, independently of META_GRAPH_VERSION.
     //
     // Review together with the SDK version in the frontend when either moves.
@@ -1954,7 +1954,7 @@ router.put("/webchat/:id/settings", authenticate, resolveTenant, async (req: Req
 
     // The stored blob used to be whatever six fields this route happened to
     // destructure. It is now the same experience the storefront widget is
-    // configured with — launcher, hero, welcome, proactive teaser, sounds —
+    // configured with - launcher, hero, welcome, proactive teaser, sounds -
     // normalized on the way in so nothing unvalidated can reach a visitor's
     // browser on someone else's website.
     //

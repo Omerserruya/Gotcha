@@ -1,5 +1,5 @@
 /**
- * GOTCHA Shopify CHAT app — identity, verification and activation state.
+ * GOTCHA Shopify CHAT app - identity, verification and activation state.
  *
  * These are the checks that stand between an anonymous POST and a
  * merchant's storefront, so they are tested as adversarially as they are

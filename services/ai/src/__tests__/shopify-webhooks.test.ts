@@ -1,5 +1,5 @@
 /**
- * Shopify webhooks — one app, one secret, two consequences.
+ * Shopify webhooks - one app, one secret, two consequences.
  *
  * The isolation these tests used to assert was between two Shopify apps.
  * There is now ONE app, so the secret is shared and the property under test
@@ -164,7 +164,7 @@ describe("core app/uninstalled", () => {
     );
   });
 
-  it("ALSO disables Shopify Chat — the extension left with the app", async () => {
+  it("ALSO disables Shopify Chat - the extension left with the app", async () => {
     // Inverted at unification. Under two apps this asserted the opposite:
     // chat survived a core uninstall because it had its own install that was
     // still present. It no longer does - the Theme App Extension belongs to
@@ -184,7 +184,7 @@ describe("core app/uninstalled", () => {
     expect(H.updateConnection).toHaveBeenCalled();
   });
 
-  it("preserves conversation history — uninstall disables, it does not delete", async () => {
+  it("preserves conversation history - uninstall disables, it does not delete", async () => {
     // The merchant's support record is theirs and survives an integration
     // being removed. Only the ability to serve NEW storefront chat stops.
     await post("/api/connectors/shopify/webhooks/app-uninstalled", "core-app-secret");

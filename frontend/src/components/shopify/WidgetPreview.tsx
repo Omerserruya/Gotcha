@@ -18,7 +18,7 @@ import type { ProductView } from "./ProductCard";
  * learned about the hero, and kept reading the pre-migration `welcome`
  * block. A merchant tuned the preview and shipped something else.
  *
- * With one renderer there is nothing to keep in sync — a layout change in
+ * With one renderer there is nothing to keep in sync - a layout change in
  * the widget shows up here on the next load, because it is the same file.
  * The iframe gives it a real viewport too, so "mobile" is a 390px window
  * running the widget's own media queries rather than a narrower <div>.
@@ -40,17 +40,17 @@ interface Props {
 const COPY = {
   en: {
     visitor: "Do you have this in a size 42?",
-    assistant: "We do — it is in stock in black and white. Here is the one I would go for:",
+    assistant: "We do - it is in stock in black and white. Here is the one I would go for:",
     assistantMulti: "Three that suit long runs, lightest first:",
-    sampleFixture: "Sample product — connect a store with products to preview your own",
+    sampleFixture: "Sample product - connect a store with products to preview your own",
     loading: "Loading preview…",
     failed: "The widget bundle could not be loaded. The preview shows the real widget, so there is nothing to fall back to.",
   },
   he: {
     visitor: "יש לכם את זה במידה 42?",
-    assistant: "בהחלט — יש במלאי בשחור ולבן. זה מה שהייתי ממליץ:",
+    assistant: "בהחלט - יש במלאי בשחור ולבן. זה מה שהייתי ממליץ:",
     assistantMulti: "שלושה שמתאימים לריצות ארוכות, מהקל ביותר:",
-    sampleFixture: "מוצר לדוגמה — חברו חנות עם מוצרים כדי לראות את שלכם",
+    sampleFixture: "מוצר לדוגמה - חברו חנות עם מוצרים כדי לראות את שלכם",
     loading: "טוען תצוגה מקדימה…",
     failed: "לא ניתן לטעון את קובץ הווידג׳ט. התצוגה המקדימה מציגה את הווידג׳ט האמיתי, ולכן אין לה תחליף.",
   },
@@ -67,7 +67,7 @@ const DEVICE = {
  *
  * These are two different shapes and it is easy to miss, because they
  * share several field names. The storefront never sees a channel config:
- * the server projects it in `publicWidgetConfig` — flattening the
+ * the server projects it in `publicWidgetConfig` - flattening the
  * business-hours block into `offline`, and deriving a `features` block
  * from `routing` and `commerce` that exists nowhere in the stored config.
  *
@@ -76,7 +76,7 @@ const DEVICE = {
  * preview that rendered nothing at all.
  *
  * The merchant's entitlements are not known here, so product messaging is
- * assumed available — the preview shows what the configuration WOULD do,
+ * assumed available - the preview shows what the configuration WOULD do,
  * and the server remains the authority on what a given plan may actually
  * use.
  */
@@ -158,7 +158,7 @@ export function WidgetPreview({ config, device, state, language, sampleProducts,
   const size = DEVICE[device];
 
   // The bundle filename is content-hashed, so it is read from the manifest
-  // rather than hard-coded — a hard-coded name is how the storefront ended
+  // rather than hard-coded - a hard-coded name is how the storefront ended
   // up serving a stale widget once already.
   useEffect(() => {
     let alive = true;

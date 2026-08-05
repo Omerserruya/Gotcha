@@ -88,7 +88,7 @@ async function main() {
   ];
 
   const sidebar = buildWorkspaceSidebar(entries);
-  const line = (e: WorkspaceEntry) => `    ${e.name} (${e.id}) — ${e.state}${e.toolCount === null ? "" : ` — ${e.toolCount} tools`}${e.href ? ` → ${e.href}` : ""}`;
+  const line = (e: WorkspaceEntry) => `    ${e.name} (${e.id}) - ${e.state}${e.toolCount === null ? "" : ` - ${e.toolCount} tools`}${e.href ? ` → ${e.href}` : ""}`;
 
   console.log(`\nTenant ${tenantId}\n`);
   console.log("  Connected:");

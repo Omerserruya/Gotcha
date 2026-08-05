@@ -11,8 +11,8 @@
  *   2. Does a live widget render the SAME experience as the storefront?
  *      They were two implementations and had drifted.
  *
- * The server is stubbed here — this is about the script's behaviour, and
- * a real tenant's widget id is not something to require in a test — but
+ * The server is stubbed here - this is about the script's behaviour, and
+ * a real tenant's widget id is not something to require in a test - but
  * the SCRIPT and the BUNDLE are the real files, and Chromium is real.
  */
 
@@ -39,7 +39,7 @@ const ORIGIN = "https://example-tenant-site.test";
 const results = [];
 function check(name, pass, detail = "") {
   results.push({ name, pass, detail });
-  console.log(`${pass ? "✓" : "✗"} ${name}${detail ? "  — " + detail : ""}`);
+  console.log(`${pass ? "✓" : "✗"} ${name}${detail ? "  - " + detail : ""}`);
 }
 
 /** The public widget config the bootstrap endpoint returns. */
@@ -236,6 +236,6 @@ const failed = results.filter((r) => !r.pass);
 console.log(`\n${results.length - failed.length}/${results.length} checks passed in Chromium`);
 if (failed.length) {
   console.log("\nFAILED:");
-  for (const r of failed) console.log(`  • ${r.name}${r.detail ? " — " + r.detail : ""}`);
+  for (const r of failed) console.log(`  • ${r.name}${r.detail ? " - " + r.detail : ""}`);
 }
 process.exit(failed.length ? 1 : 0);

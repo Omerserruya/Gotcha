@@ -8,7 +8,7 @@
  * this file is for: it imports BOTH and fails the moment they disagree.
  *
  * The import of the shared package works here because tests run on the
- * host, where the root `node_modules` symlink exists — not inside the
+ * host, where the root `node_modules` symlink exists - not inside the
  * frontend container, where it does not.
  */
 import { describe, it, expect } from "vitest";

@@ -9,7 +9,7 @@ import { sanitizeMediaUrl, MEDIA_GUIDANCE } from "@/lib/shopify-chat-ux-client";
  *
  * Lifted out of the Shopify channel's settings page so the website widget
  * is configured through the same controls rather than a smaller imitation
- * of them. Nothing here knows which channel it is editing — that was
+ * of them. Nothing here knows which channel it is editing - that was
  * already true of the markup, it was just living in a file named after
  * one channel.
  */

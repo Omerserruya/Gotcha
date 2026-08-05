@@ -21,7 +21,7 @@ import {
 import ConfirmModal from "@/components/ConfirmModal";
 import { ShopifyGlyph } from "./ShopifyGlyph";
 // One editor for the shared experience, used here and by the website
-// widget's settings — see components/chat-widget/ExperienceEditor.tsx.
+// widget's settings - see components/chat-widget/ExperienceEditor.tsx.
 import { ExperienceSection } from "@/components/chat-widget/ExperienceEditor";
 import { Card, Field, Toggle, Select, ColorInput, Row } from "@/components/chat-widget/primitives";
 import { WidgetPreview, PREVIEW_FIXTURE, type PreviewState, type PreviewDevice } from "./WidgetPreview";
@@ -40,7 +40,7 @@ import {
  * Structured so the merchant's next action is always obvious: the
  * diagnostics strip at the top says what is blocking them right now, and
  * the preview beside the form shows the consequence of whatever they just
- * changed. Everything is one saveable draft — a half-configured widget
+ * changed. Everything is one saveable draft - a half-configured widget
  * should not be able to reach a live storefront by accident.
  */
 

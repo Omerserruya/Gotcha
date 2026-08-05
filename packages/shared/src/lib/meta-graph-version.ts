@@ -13,9 +13,9 @@
  *   v25.0  auth/channels:289 (inline, inside a multi-version fallback)
  *
  * Meta supports a version for a minimum of two years and then, like Shopify,
- * does not reject calls to an expired one — quoting the changelog: "any calls
+ * does not reject calls to an expired one - quoting the changelog: "any calls
  * made to it will be defaulted to the next oldest, usable version". So
- * WhatsApp and Messenger — the platform's primary channels — were being served
+ * WhatsApp and Messenger - the platform's primary channels - were being served
  * a contract nobody chose, and nothing reported it.
  *
  * Choosing the version
@@ -31,7 +31,7 @@
  *   v19.0  released 2024-01-23   EXPIRED 2026-05-21
  *
  * v24.0: nine months of production maturity behind it and ~19 months of
- * runway ahead — comfortably more than one review cycle. v26.0 is too new to
+ * runway ahead - comfortably more than one review cycle. v26.0 is too new to
  * put the primary customer channel on; v21.0 expires within six months.
  *
  * Compatible across WhatsApp Cloud API, Messenger, Instagram Graph, embedded
@@ -47,7 +47,7 @@ export const META_GRAPH_VERSION_REVIEW_BY = "2027-10-01";
 
 const GRAPH_HOST = "https://graph.facebook.com";
 
-/** `vNN.N` — the only shape Meta accepts. */
+/** `vNN.N` - the only shape Meta accepts. */
 const VERSION_SHAPE = /^v\d{1,3}\.\d{1,2}$/;
 
 /** Released and supported when this was written. Warning only, never a reject. */
@@ -59,7 +59,7 @@ const KNOWN_EXPIRED = new Set(["v19.0", "v20.0"]);
 let cached: string | null = null;
 
 /**
- * The canonical version. Override with `META_GRAPH_VERSION` — ONE validated
+ * The canonical version. Override with `META_GRAPH_VERSION` - ONE validated
  * value, rather than the four full-URL variables this replaces.
  *
  * Throws on a malformed override. Falling back to the default silently is how
@@ -79,18 +79,18 @@ export function metaGraphVersion(env: NodeJS.ProcessEnv = process.env): string {
   return chosen;
 }
 
-/** Test seam — the cache would otherwise pin the first value read. */
+/** Test seam - the cache would otherwise pin the first value read. */
 export function __resetMetaGraphVersionCache(): void {
   cached = null;
 }
 
 /**
- * Base URL for graph.facebook.com — WhatsApp, Messenger, page/oauth calls.
+ * Base URL for graph.facebook.com - WhatsApp, Messenger, page/oauth calls.
  *
  * `legacyUrlEnv` keeps the pre-existing full-URL variables working
  * (`WHATSAPP_API_URL`, `FACEBOOK_API_URL`, `INSTAGRAM_API_URL`). They are
  * DEPRECATED but still honoured, because they are set in real deployments and
- * in docker-compose defaults — a hard cutover would silently change which
+ * in docker-compose defaults - a hard cutover would silently change which
  * version a running system talks to, which is the exact failure this module
  * exists to prevent. A legacy override logs once so it can be retired.
  */
@@ -110,7 +110,7 @@ export function metaGraphBaseUrl(
  * NOTE: there is deliberately NO helper for graph.instagram.com.
  *
  * The Instagram-Login flavour (`INSTAGRAM_API_URL`, default
- * `https://graph.instagram.com`) is **unversioned by design** — that host
+ * `https://graph.instagram.com`) is **unversioned by design** - that host
  * rejects version-prefixed paths. Adding a version there would break every
  * Instagram-Login account, so it stays outside this module. See the comment
  * at `packages/shared/src/channels/instagram.adapter.ts`.
@@ -128,7 +128,7 @@ function warnLegacyOverride(url: string): void {
   const expired = v && KNOWN_EXPIRED.has(v);
   console.warn(
     `[meta-graph] DEPRECATED full-URL override in use (${url}). ` +
-      `Set META_GRAPH_VERSION instead — one validated value for every Meta surface.` +
+      `Set META_GRAPH_VERSION instead - one validated value for every Meta surface.` +
       (expired
         ? ` THIS OVERRIDE PINS ${v}, WHICH META HAS EXPIRED: calls are being served by ` +
           `the next-oldest usable version, not ${v}.`
@@ -147,7 +147,7 @@ export function reportMetaGraphVersion(env: NodeJS.ProcessEnv = process.env): st
   } else if (!KNOWN_SUPPORTED.has(v)) {
     console.warn(
       `[meta-graph] configured version ${v} is not in this build's known set ` +
-        `(${[...KNOWN_SUPPORTED].join(", ")}). Expected after a Meta release — confirm at ` +
+        `(${[...KNOWN_SUPPORTED].join(", ")}). Expected after a Meta release - confirm at ` +
         `https://developers.facebook.com/docs/graph-api/changelog.`,
     );
   }

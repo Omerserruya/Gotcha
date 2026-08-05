@@ -1,5 +1,5 @@
 /**
- * Shopify Live Chat — the storefront widget itself.
+ * Shopify Live Chat - the storefront widget itself.
  *
  * This drives the REAL `public/widget/gotcha-shopify-chat.js` inside
  * jsdom, because that file is the only part of the feature that runs on
@@ -436,7 +436,7 @@ describe("panel layout", () => {
 
   it("reserves the close button's corner with logical padding", async () => {
     // A physical `padding-right` reserves the wrong corner in RTL, where
-    // the close button is on the left — which is how the mute button ended
+    // the close button is on the left - which is how the mute button ended
     // up underneath it again in Hebrew.
     const sheet = css((await boot({ messages: [] })).shadow);
     expect(sheet).toContain("padding-block:6px;padding-inline:14px 56px;");
@@ -922,7 +922,7 @@ describe("presentation preferences", () => {
 //
 // The close button looked dead on a real storefront: the handler ran,
 // state flipped, analytics fired, and the panel stayed on screen. The
-// cause was CSS, not JavaScript — `el.hidden` is inert against an author
+// cause was CSS, not JavaScript - `el.hidden` is inert against an author
 // rule that sets `display`, and a shadow root has no UA stylesheet of its
 // own to lean on.
 //
@@ -1252,7 +1252,7 @@ describe("close button ergonomics", () => {
   it("is taken out of the panel's flow so it cannot push the hero down", () => {
     // It is a child of the panel (so it survives the header being hidden
     // in the welcome view). As a flex item of that column it would occupy
-    // a 44px row — which is exactly the white gap that appeared above the
+    // a 44px row - which is exactly the white gap that appeared above the
     // hero when a second `.x` rule reset it to position:relative.
     expect(WIDGET_SOURCE).toContain('".x{position:absolute;top:var(--s2);"');
     // ...and no other `.x` rule may quietly put it back into flow.
@@ -1261,7 +1261,7 @@ describe("close button ergonomics", () => {
   });
 
   it("has a visible focus style and a non-capturing icon", () => {
-    // The ring goes on the visible chip, not on the 44px target — an
+    // The ring goes on the visible chip, not on the 44px target - an
     // outline around the invisible hit area looks like a stray rectangle.
     expect(WIDGET_SOURCE).toContain('".x:focus-visible::before,.mute:focus-visible::before{outline:2px solid "');
     // The svg must not swallow the click and defeat the hit area.

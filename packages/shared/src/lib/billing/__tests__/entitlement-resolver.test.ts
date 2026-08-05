@@ -90,7 +90,7 @@ beforeEach(() => {
   db.tenantEntitlements = [];
 });
 
-describe("entitlement resolver — plan defaults", () => {
+describe("entitlement resolver - plan defaults", () => {
   it("grants what the plan entitles and denies what it does not", async () => {
     seedPlan("foundation", { "ai.employee": { bool: false }, "communication.broadcasts": { bool: true } });
     subscribe("foundation");
@@ -125,7 +125,7 @@ describe("entitlement resolver — plan defaults", () => {
   });
 });
 
-describe("entitlement resolver — precedence", () => {
+describe("entitlement resolver - precedence", () => {
   it("OVERRIDE beats PLAN_DEFAULT", async () => {
     seedPlan("foundation", { "ai.employee": { bool: false } });
     subscribe("foundation");
@@ -167,7 +167,7 @@ describe("entitlement resolver — precedence", () => {
   });
 });
 
-describe("entitlement resolver — unbuilt capabilities", () => {
+describe("entitlement resolver - unbuilt capabilities", () => {
   it("never entitles a catalogued-but-unimplemented feature, even if the plan says true", async () => {
     seedPlan("ai_voice", { "manager.auto_csat": { bool: true } });
     subscribe("ai_voice");
@@ -189,7 +189,7 @@ describe("entitlement resolver — unbuilt capabilities", () => {
   });
 });
 
-describe("entitlement resolver — volume options", () => {
+describe("entitlement resolver - volume options", () => {
   it("adds the selected chat option's credits to the included allowance", async () => {
     seedPlan("ai_workforce", { "limit:included_ai_units": { count: 2000 } }, [
       { key: "chat_10", channel: "CHAT", additionalCredits: 0 },
@@ -221,7 +221,7 @@ describe("entitlement resolver — volume options", () => {
   });
 });
 
-describe("entitlement resolver — numeric limits", () => {
+describe("entitlement resolver - numeric limits", () => {
   beforeEach(() => {
     seedPlan("foundation", { "limit:ai_employees": { count: 2 } });
     subscribe("foundation");
@@ -257,7 +257,7 @@ describe("entitlement resolver — numeric limits", () => {
   });
 });
 
-describe("entitlement resolver — downgrade with excess resources", () => {
+describe("entitlement resolver - downgrade with excess resources", () => {
   it("reports the overage and defaults to BLOCK_NEW, never deletion", async () => {
     seedPlan("foundation", { "limit:ai_employees": { count: 1 } });
     subscribe("foundation");

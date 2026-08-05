@@ -16,7 +16,7 @@ export interface ServiceConfig {
    * The default policy below is written for the GOTCHA dashboard: one
    * fixed origin, credentials on. A surface that answers MANY third-party
    * origins (the Shopify storefront widget) needs the opposite, and it
-   * cannot simply overwrite the headers afterwards — `cors()` also ENDS
+   * cannot simply overwrite the headers afterwards - `cors()` also ENDS
    * the OPTIONS request itself, so a router mounted later never sees a
    * preflight at all and its origin checks are silently bypassed.
    */

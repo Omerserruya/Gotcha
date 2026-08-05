@@ -4,7 +4,7 @@ import crypto from "crypto";
 /**
  * Shopify Live Chat outbound adapter.
  *
- * Like webchat, "sending" does not call an external API — the storefront
+ * Like webchat, "sending" does not call an external API - the storefront
  * widget owns the last mile. The message row is persisted by the caller
  * (ai-bot.service / conversation service / product-message service) and
  * reaches the visitor two ways:

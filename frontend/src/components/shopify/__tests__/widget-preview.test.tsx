@@ -1,5 +1,5 @@
 /**
- * Shopify Live Chat — dashboard UI.
+ * Shopify Live Chat - dashboard UI.
  *
  * Covers what a merchant and an agent actually see: the branded welcome
  * state in both directions, product cards that tell the truth about
@@ -153,7 +153,7 @@ describe("preview shell", () => {
   it("projects the draft into the shape the widget actually expects", () => {
     // A draft CHANNEL config and the PUBLIC widget config are different
     // shapes that share field names. The widget reads `features.humanHandoff`,
-    // which exists nowhere in a stored channel config — it is derived by
+    // which exists nowhere in a stored channel config - it is derived by
     // the server from `routing` and `commerce`. Handing the draft over raw
     // threw "Cannot read properties of undefined (reading 'humanHandoff')"
     // and the preview rendered nothing.

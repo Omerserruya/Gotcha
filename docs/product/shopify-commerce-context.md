@@ -4,14 +4,14 @@ Status: in progress (feat/customer-intelligence-phase1). Gives a human agent imm
 *verified* commerce context about the conversation's customer, plus the same verified
 snapshot to the AI employee when Shopify is the elected Source of Truth. Wired into the
 EXISTING integration / authorization / HITL / business-policy / customer-access / audit
-architecture — not a standalone visual widget.
+architecture - not a standalone visual widget.
 
 ## 1. Trust & visibility (spec §1)
 The section renders only when ALL hold, each checked server-side:
 - Tenant has a Shopify `TenantIntegration`, status connected/usable.
 - The conversation's contact is **securely linked** to a Shopify customer for the SAME tenant.
   Source of truth for the link: `resolveRequesterIdentity(tenantId, conversationId).customerIds`
-  (`services/ai/src/services/connectors/customer-access-guard.ts`) — derived from
+  (`services/ai/src/services/connectors/customer-access-guard.ts`) - derived from
   `Contact.metadata.crmContactId` + unexpired `CustomerVerification` grants. NEVER from a
   phone/email/order number typed in chat, and never from an AI assertion.
 - The human agent holds `customer:commerce:read` (active-membership permission, not Role==ADMIN).
@@ -24,19 +24,19 @@ Middleware: `authenticate → resolveTenant → requireActiveTenant() → requir
 Tenant is ALWAYS the JWT tenant (never body). Discriminated response `state`:
 `not_connected | connection_unhealthy | customer_not_linked | verification_required |
 missing_scopes | no_orders | unavailable | ok`. Shape = `CommerceContext` (see
-`commerce-context.types.ts`). Totals are **grouped by currency** — never summed across
+`commerce-context.types.ts`). Totals are **grouped by currency** - never summed across
 currencies (spec §2). Order status → business-friendly localized labels (spec §3), never raw
 enums. Timeline is GOTCHA-rendered from verified Shopify fields only (spec §4).
 
 Projection service: `services/ai/src/services/commerce-context.service.ts`
 - Resolves the verified customer id(s), fetches customer+orders via the Shopify adapter
-  (`executeAdapterTool`, accessScope internal — the endpoint already enforced permission +
+  (`executeAdapterTool`, accessScope internal - the endpoint already enforced permission +
   verified linkage), normalizes to `CommerceContext`.
 - Capabilities (`canOpen/canCancel/canRefund`) gate on granted Shopify scopes
   (`read_orders`/`write_orders`) + per-order eligibility + the agent's action permissions.
-- adminUrl comes from the adapter/tenant `shopDomain` — never model-reconstructed.
+- adminUrl comes from the adapter/tenant `shopDomain` - never model-reconstructed.
 
-## 3. Quick actions (spec §5-6) — reuse the hardened path, no second Shopify path
+## 3. Quick actions (spec §5-6) - reuse the hardened path, no second Shopify path
 `POST /api/conversations/:conversationId/commerce-context/actions`
 body `{ orderId, action: "cancel"|"refund", params, idempotencyKey }`.
 Pipeline (identical to AI/HITL actions):
@@ -52,14 +52,14 @@ Pipeline (identical to AI/HITL actions):
 6. Provider-result validation (adapter checks `cancel_not_applied`, refundable maximum, userErrors).
 7. Post-action re-fetch + verify order state; audit (`auditLog`, tenant/membership/conversation/
    customer/order/action/correlationId/result); return the VERIFIED new order card.
-Frontend updates order state ONLY from this verified result — a click never mutates FE state.
+Frontend updates order state ONLY from this verified result - a click never mutates FE state.
 Refund can never exceed Shopify's reported refundable maximum.
 
 ## 4. AI commerce snapshot (spec §7)
 When Shopify is the elected SoT (`getSourceOfTruth(tenantId).vendor === "shopify"`) AND the
 conversation's customer is verified-linked, a typed `AICommerceSnapshot` (verified customer +
 recentOrders, STRIPPED of adminUrl/refundableMax/internal LTV labels) is injected through the
-customer-brief / prompt context layer — not raw Shopify JSON. Behavior effects (returning-customer
+customer-brief / prompt context layer - not raw Shopify JSON. Behavior effects (returning-customer
 greeting, high-value manager review, faster escalation) are governed by structured tenant policy,
 not prompt text alone. The AI must never expose internal segmentation/LTV, invent loyalty, or treat
 typed identifiers as verified identity.
@@ -73,17 +73,17 @@ New catalog keys (`packages/shared/src/lib/permission-catalog.ts`, `customer` do
 ## 6. Freshness & cache (spec §9)
 Short tenant+customer-scoped cache with a last-updated indicator + refresh button; auto-refresh after
 a successful order action; invalidate on Shopify order webhooks. Sensitive actions always reconcile
-live first — stale state is never trusted before cancel/refund.
+live first - stale state is never trusted before cancel/refund.
 
 ## 7. Files
-- `packages/shared/src/lib/commerce-context.types.ts` — shared typed contract.
-- `packages/shared/src/lib/permission-catalog.ts` — new permission keys.
-- `services/ai/src/services/commerce-context.service.ts` — projection + normalization + status maps.
-- `services/ai/src/services/commerce-actions.service.ts` — quick-action execution pipeline.
-- `services/ai/src/routes/commerce-context.ts` — GET + POST endpoints.
-- `services/ai/src/services/commerce-ai-snapshot.service.ts` — typed AI snapshot builder.
-- `frontend/src/components/conversations/CommerceContextPanel.tsx` — the panel section + order cards + actions.
-- `frontend/src/lib/api-commerce.ts` — typed client.
+- `packages/shared/src/lib/commerce-context.types.ts` - shared typed contract.
+- `packages/shared/src/lib/permission-catalog.ts` - new permission keys.
+- `services/ai/src/services/commerce-context.service.ts` - projection + normalization + status maps.
+- `services/ai/src/services/commerce-actions.service.ts` - quick-action execution pipeline.
+- `services/ai/src/routes/commerce-context.ts` - GET + POST endpoints.
+- `services/ai/src/services/commerce-ai-snapshot.service.ts` - typed AI snapshot builder.
+- `frontend/src/components/conversations/CommerceContextPanel.tsx` - the panel section + order cards + actions.
+- `frontend/src/lib/api-commerce.ts` - typed client.
 - i18n keys in `frontend/src/i18n/{en,he}.json`.
 
 Mount point: the conversation **Context Panel** (`frontend/src/components/conversations/HistoryPanel.tsx`, opened via the History/Context button on a conversation). NOTE: the older `CRMPanel.tsx` is dead code (no render site) - do not mount here. When Shopify is the connected system the commerce panel reports a non-`not_connected` state via `onState`, and HistoryPanel hides its generic CRM sections (open tasks / CRM activity / CRM notes / add-note); when a non-Shopify CRM is connected those CRM sections show as before. Shopify takes precedence when both are connected.

@@ -1,5 +1,5 @@
 /**
- * GOTCHA Shopify Live Chat — bootstrap.
+ * GOTCHA Shopify Live Chat - bootstrap.
  *
  * This file is on the critical path of every storefront page, so it does
  * the minimum that has to happen there and nothing more:
@@ -9,7 +9,7 @@
  *   3. draw the launcher inside a Shadow DOM host
  *   4. load the chat application ONLY when the shopper reaches for it
  *
- * The chat app — message list, product cards, carousel, cart flow — is a
+ * The chat app - message list, product cards, carousel, cart flow - is a
  * separate file that most visitors never download. A merchant judges a
  * chat widget by what it costs them in Core Web Vitals long before they
  * judge it by its conversation quality.
@@ -52,7 +52,7 @@
   var API = String(cfg.apiBase || originOfThisScript() || "").replace(/\/$/, "");
   var ASSETS = String(cfg.assetBase || "").replace(/\/$/, "");
   // Stamped by scripts/widget/build-widget.mjs. Content-hashed, so this
-  // bootstrap can only ever load the exact bundle it was built against —
+  // bootstrap can only ever load the exact bundle it was built against -
   // a hand-typed ?v= let four commits change the bundle without changing
   // its URL, and every cache kept serving the old one.
   var CHAT_BUNDLE = "gotcha-shopify-chat.3ab1e7a1a36f.js";
@@ -89,7 +89,7 @@
       try {
         window.localStorage.setItem(STORAGE_PREFIX + "_" + k, v);
       } catch (e) {
-        /* private mode — the session simply won't survive a reload */
+        /* private mode - the session simply won't survive a reload */
       }
     },
     del: function (k) {
@@ -325,7 +325,7 @@
    * Exposed always because a widget that misbehaves does so in
    * production, on a merchant's store, where a build flag helps nobody.
    * It carries no tenant id, no channel id, no session token, no message
-   * content and no AI configuration — only what somebody staring at a
+   * content and no AI configuration - only what somebody staring at a
    * stuck widget needs.
    */
   window.__GOTCHA_CHAT_DEBUG__ = function () {
@@ -354,13 +354,13 @@
   // when a merchant turns it on it is a teaser they can ignore rather
   // than a panel that takes over their screen.
   //
-  // Mirrors shouldShowTeaser() in @chatcenter/shared — same reason as the
+  // Mirrors shouldShowTeaser() in @chatcenter/shared - same reason as the
   // sound rules: no bundler here, so the logic is duplicated on purpose
   // and tested on both sides.
 
   // Set the moment the shopper clicks X, and never cleared for the life
-  // of this page view. The launcher can still reopen — that is the
-  // shopper asking — but nothing automatic may.
+  // of this page view. The launcher can still reopen - that is the
+  // shopper asking - but nothing automatic may.
   var visitorClosed = false;
   function closedByVisitor() {
     if (visitorClosed) return true;
@@ -551,7 +551,7 @@
   //
   // Synthesised, not downloaded. Two short tones from an oscillator cost
   // nothing to ship, cannot fail to load, need no CSP allowance and
-  // involve no third-party host — and a notification chime is a beep, so
+  // involve no third-party host - and a notification chime is a beep, so
   // there is nothing a sample file would buy us.
   //
   // Browsers refuse audio until a real gesture, so the context is created
@@ -726,7 +726,7 @@
   /**
    * Ask Shopify who is chatting, through the App Proxy.
    *
-   * This goes to the MERCHANT's own origin, not ours — same-origin, no
+   * This goes to the MERCHANT's own origin, not ours - same-origin, no
    * CORS, no cookies of ours involved. Shopify then calls us with a
    * signature only it can produce, which is the whole reason the answer
    * can be believed. Liquid's `customer.id` reaches us through this same
@@ -809,8 +809,8 @@
         if (cfg.openOnLoad) openChat();
       })
       .catch(function (err) {
-        // Every refusal — disabled channel, wrong origin, plan without
-        // the feature — looks identical here on purpose. The storefront
+        // Every refusal - disabled channel, wrong origin, plan without
+        // the feature - looks identical here on purpose. The storefront
         // simply renders no widget.
         if (err && err.status !== 403) {
           console.warn("[gotcha-chat] bootstrap failed:", err.message);

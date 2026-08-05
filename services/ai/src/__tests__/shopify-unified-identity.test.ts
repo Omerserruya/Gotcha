@@ -87,7 +87,7 @@ describe("getShopifyAppIdentity", () => {
   });
 });
 
-describe("validateAppIdentity — fails closed", () => {
+describe("validateAppIdentity - fails closed", () => {
   it("names the missing secret, because an unset one refuses every request", () => {
     process.env.SHOPIFY_API_KEY = "core-client";
     process.env.SHOPIFY_APP_URL = "https://app.gotcha.co.il";

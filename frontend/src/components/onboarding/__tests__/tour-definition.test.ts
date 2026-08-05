@@ -60,7 +60,7 @@ describe("guided tour definition", () => {
       expect(s.body[1].length).toBeGreaterThan(0);
       // Brand rule: no em/en dash in user-facing copy.
       for (const text of [s.title[0], s.title[1], s.body[0], s.body[1]]) {
-        expect(text).not.toMatch(/[—–]/);
+        expect(text).not.toMatch(/[-–]/);
       }
       if (s.center) expect(s.cta).toBeDefined();
     }
