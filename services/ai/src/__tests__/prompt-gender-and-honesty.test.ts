@@ -104,8 +104,21 @@ describe("the customer is addressed without hedging", () => {
     expect(prompt).toContain("להמשיך לביטול ההזמנה?");
   });
 
-  it("says a first name alone is not evidence of gender", () => {
-    expect(prompt).toMatch(/A first name alone is not evidence/i);
+  it("says a first name is not evidence, permanently", () => {
+    expect(prompt).toMatch(/A first name is not evidence and never will be/i);
+  });
+
+  it("no longer licenses guessing from contact data", () => {
+    // The rule used to end "then contact data as a WEAK hint only". A weak
+    // hint is still a guess from an email address, and it is now gone.
+    expect(prompt).not.toMatch(/contact data as a WEAK hint/i);
+    expect(prompt).toMatch(
+      /NEVER infer it from a name, a phone number, an email address, an avatar, a voice, an address, a purchased product or a product category/,
+    );
+  });
+
+  it("says another person's description is not evidence either", () => {
+    expect(prompt).toContain("הבת שלי מחפשת שמלה");
   });
 });
 

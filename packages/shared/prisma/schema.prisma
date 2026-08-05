@@ -716,6 +716,20 @@ model Conversation {
   // agent) override THIS for surfaces that should stay in the agent's
   // language (briefs, summaries, coaching).
   detectedLocale     String?            @map("detected_locale")
+  // Which grammatical FORM to write replies in for this conversation, in
+  // languages that make you choose one (Hebrew above all). Shape:
+  //   { form, confidence, sourceMessageId?, language?, updatedAt? }
+  // See packages/shared/src/lib/grammatical-address.ts.
+  //
+  // This is NOT a gender field and must never become one. It records only
+  // which form the customer used about THEMSELVES in THIS conversation,
+  // learned from first-person agreement morphology and nothing else - not
+  // a name, a phone number, an email, an avatar, an address or a product.
+  // It is conversation-scoped on purpose: it lives on Conversation and not
+  // on Customer so there is no row for it to be promoted into, and it must
+  // never be written to a CRM, tagged onto a Shopify customer, or read by
+  // authorization, segmentation, pricing or tool-gating code.
+  grammaticalAddress Json?              @map("grammatical_address")
   createdAt          DateTime           @default(now()) @map("created_at")
   updatedAt          DateTime           @updatedAt @map("updated_at")
 

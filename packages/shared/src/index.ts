@@ -924,6 +924,29 @@ export {
   type BidiSegment,
 } from "./lib/text-direction";
 
+// Grammatical address: which FORM a reply is written in, conversation-
+// scoped, evidence-only. NOT an identity attribute - see the module header.
+export {
+  detectGrammaticalEvidence,
+  updateGrammaticalAddress,
+  readGrammaticalAddress,
+  grammaticalAddressPromptBlock,
+  validateGrammaticalAgreement,
+  shouldRegenerateForAddress,
+  isGenderedLanguage,
+  UNKNOWN_ADDRESS,
+  GENDERED_LANGUAGES,
+  HEBREW_FORM_PAIRS,
+  SLASH_FORM_RE,
+  type GrammaticalAddress,
+  type GrammaticalForm,
+  type GrammaticalConfidence,
+  type GrammaticalEvidence,
+  type AddressUpdateInput,
+  type AddressUpdateResult,
+  type AddressAgreementVerdict,
+} from "./lib/grammatical-address";
+
 // Capability Runtime (operation contracts + pure resolver). Strategy/provider
 // impls live in services/ai and are injected via RuntimeBindings.
 export * from "./lib/capability-runtime";

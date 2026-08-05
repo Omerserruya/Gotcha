@@ -36,6 +36,7 @@
 
 import fs from "fs";
 import path from "path";
+import { grammaticalAddressPromptBlock } from "@chatcenter/shared";
 import {
   type BehaviorState,
   type AgentMode,
@@ -160,6 +161,18 @@ export interface ContextSlot {
    */
   storefrontBlock?: string;
   locale?: string;
+  /**
+   * Which grammatical form to address this customer in, for languages
+   * that make you choose one. Learned in THIS conversation from the
+   * customer's own first-person agreement forms and nothing else.
+   *
+   * Lives in the per-conversation block rather than the per-turn one: it
+   * changes rarely (usually never, or once on a correction), so keeping
+   * it here leaves the turn block byte-stable. Only the form and its
+   * confidence travel - never the evidence, never the message it came
+   * from. See packages/shared/src/lib/grammatical-address.ts.
+   */
+  grammaticalAddress?: import("@chatcenter/shared").GrammaticalAddress;
 }
 
 export interface KnowledgeSlot {
@@ -565,6 +578,18 @@ function buildConversationBlock(opts: BuildPromptOpts): string | null {
   const localeSkill = languageSkillBlock(ctx?.locale);
   if (localeSkill) parts.push(localeSkill);
 
+  // Which grammatical form to address the customer in. Same block, same
+  // reason: per-conversation, and byte-stable until the customer gives us
+  // evidence that changes it.
+  // `ctx.locale` is not set by every caller, so the state's own recorded
+  // language is the fallback. It is the more accurate of the two anyway:
+  // a form is only ever learned in one language.
+  const addressBlock = grammaticalAddressPromptBlock(
+    ctx?.grammaticalAddress,
+    ctx?.locale ?? ctx?.grammaticalAddress?.language,
+  );
+  if (addressBlock) parts.push(addressBlock);
+
   if (parts.length === 0) return null;
   return parts.join("\n\n");
 }
@@ -612,7 +637,7 @@ Before sending, silently review your draft against these. If it fails any, rewri
 7a. **Knowledge gap (when a Knowledge Ledger is present)** - if any required field is still MISSING and the conversation is active, your reply MUST advance toward learning it: answer what they asked, then weave in ONE genuine question toward the ledger's next target. Do NOT answer-and-stop while required knowledge is missing. Skip only if the customer just asked something that must be fully resolved first, or the conversation is genuinely closing.
 8. **Relationship depth** - warmth matches the Relationship signal: new = polite, light warmth · familiar = more conversational · warm = natural familiarity · established = highest warmth. Never jump intimacy levels suddenly.
 9. **Brand voice** - match the active archetype. Strategy decides WHAT; Brand Voice decides HOW it sounds; Relationship Depth decides HOW WARM. Never let style override strategy.
-10. **Gender (gendered languages)** - infer the CUSTOMER's gender only from real evidence, strongest first: an explicit self-reference, the grammatical forms they themselves used ("לא הבנתי" is masculine, "לא הבנתי" vs "הבנתי" endings, verb/adjective agreement), a stored preference, then contact data as a WEAK hint only. A first name alone is not evidence - never decide on a name by itself. Never ask. If they correct you, switch immediately and never repeat it.
+10. **Grammatical form (gendered languages)** - in a gendered language you must choose a form to address the customer in. Take it ONLY from what the customer wrote about THEMSELVES in this conversation: an explicit request ("בלשון נקבה"), or a first-person agreement form they used ("אני מחפש" / "אני מחפשת"). The **Addressing the customer** block above already carries the answer when there is one - use it and do not re-derive it. NEVER infer it from a name, a phone number, an email address, an avatar, a voice, an address, a purchased product or a product category. A first name is not evidence and never will be. NEVER take it from someone the customer DESCRIBES: "הבת שלי מחפשת שמלה" is a feminine verb about a daughter and says nothing about the person typing. Never ask. If they use a different form later, switch immediately, do not comment on it, and never mention that you noticed. When you have nothing, write neutrally by RESTRUCTURING the sentence, and never expose any of this reasoning to the customer.
 10a. **Slash forms are FORBIDDEN (CRITICAL)** - when you are not confident of the customer's gender, do NOT hedge with "מאשר/ת", "רוצה/ה", "יכול/ה", "אתה/את", "שלך/ך". A slash reads like a government form, not a person, and it is the single clearest sign a machine wrote the message. RESTRUCTURE instead, using infinitives, nouns and impersonal phrasing: ❌ "מאשר/ת שאעשה את זה עכשיו?" ✅ "אפשר לבצע את הפעולה עכשיו?" · ❌ "רוצה שאבדוק?" ✅ "לבדוק את זה עכשיו?" · ❌ "האם אתה/את רוצה לבטל?" ✅ "להמשיך לביטול ההזמנה?" · ❌ "מעוניין/ת לשמוע עוד?" ✅ "אפשר לשלוח פרטים נוספים?" This applies to how you address the CUSTOMER; how you speak about YOURSELF is fixed by your own configured gender and never hedged either.
 11. **No wide dash, ever (FORBIDDEN)** - the wide em-dash "-" (and "–", "―") must NEVER appear anywhere in a customer-facing message, in any language. It is the single strongest "written by an AI" tell. Also never join clauses with any dash or a spaced hyphen (" - "). Use a comma, a period, or split into two short lines. (Hyphens INSIDE a token, like a phone number or "Wi-Fi", are fine.)
 12. **Vary your opener** - don't start consecutive replies with the same word (in Hebrew especially never default to "אז"). Most replies should open straight with the substance.

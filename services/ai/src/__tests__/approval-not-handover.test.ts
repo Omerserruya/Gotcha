@@ -33,6 +33,10 @@ vi.mock("@chatcenter/shared", () => ({
   prisma: {},
   encryptCredentials: (v: unknown) => v,
   decryptCredentials: (v: unknown) => v,
+  // Pulled in through the prompt builder, which the adapter's tool
+  // definitions reach transitively. Returning null is the real "nothing to
+  // say about grammatical form" answer, not a convenience stub.
+  grammaticalAddressPromptBlock: () => null,
 }));
 
 import ShopifyAdapter from "../services/connectors/shopify.adapter";
