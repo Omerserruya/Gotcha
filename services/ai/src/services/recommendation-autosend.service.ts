@@ -228,6 +228,8 @@ export interface IntroductionOptions {
   candidates: ProductCandidate[];
   /** How many selected products are over budget. 0 = say nothing. */
   aboveBudgetCount?: number;
+  /** How many are going out in total, so "all of them" can be said plainly. */
+  totalCount?: number;
   maxChars?: number;
 }
 
@@ -243,15 +245,25 @@ const DEFAULT_INTRO: Record<RecoLocale, string> = {
  * "One of them is a little above the budget you gave". A sentence written
  * to be honest about the budget cannot be sloppy about how many.
  */
-function aboveBudgetIntro(count: number, locale: RecoLocale): string {
+function aboveBudgetIntro(count: number, locale: RecoLocale, total: number): string {
+  // When every option is over budget, "3 of them are above" is a strange
+  // way to say "we have nothing in your range". Say the plain thing.
+  const all = total > 0 && count >= total;
   if (locale === "he") {
+    if (all) return "אף אחת מהן לא נכנסת לתקציב שציינת, זה מה שיש כרגע בקטגוריה.";
     return count === 1
       ? "אחת מהן מעט מעל התקציב שציינת, סימנתי אותה."
       : `${count} מהן מעל התקציב שציינת, סימנתי אותן.`;
   }
+  if (all) return "None of these come in under the budget you gave, they are the closest the catalogue has.";
   return count === 1
     ? "One of them is a little above the budget you gave, and it is marked."
     : `${count} of them are above the budget you gave, and they are marked.`;
+}
+
+/** Has the model already made a budget claim in its own words? */
+function mentionsBudget(text: string): boolean {
+  return /budget|תקציב|above your limit|over your limit|מעל המחיר|above what you/i.test(text);
 }
 
 /**
@@ -307,8 +319,13 @@ export function extractIntroduction(
   if (intro.replace(/[^\p{L}]/gu, "").length < 8) intro = DEFAULT_INTRO[opts.locale];
 
   if (opts.aboveBudgetCount && opts.aboveBudgetCount > 0) {
-    const note = aboveBudgetIntro(opts.aboveBudgetCount, opts.locale);
-    if (!intro.includes(note)) intro = `${intro} ${note}`.trim();
+    // Only if the model has not already said it. The prompt now asks for
+    // budget honesty, so the model often does - and appending ours on top
+    // produced two claims in one message that disagreed on the number.
+    if (!mentionsBudget(intro)) {
+      const note = aboveBudgetIntro(opts.aboveBudgetCount, opts.locale, opts.totalCount ?? 0);
+      intro = `${intro} ${note}`.trim();
+    }
   }
   return intro;
 }
@@ -367,6 +384,7 @@ export function planAutoRecommendation(
         locale: input.locale,
         candidates: envelope.candidates,
         aboveBudgetCount: countAboveBudget(budget, input.budget),
+        totalCount: budget.selected.length,
       }),
     };
   }
@@ -381,6 +399,7 @@ export function planAutoRecommendation(
       locale: input.locale,
       candidates: envelope.candidates,
       aboveBudgetCount: countAboveBudget(budget, input.budget),
+      totalCount: budget.selected.length,
     }),
   };
 }
