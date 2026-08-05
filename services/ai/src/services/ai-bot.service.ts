@@ -4424,7 +4424,15 @@ async function generateAIBotReplyInner(
       modelText: replyText,
       locale: replyLocale,
       budget: productBudget,
-      maxProducts: recoCaps.maxCards ?? MAX_CAROUSEL_ITEMS,
+      // The limit STAGING will apply, not the channel's theoretical
+      // maximum. The merchant's carouselSize is the tighter of the two,
+      // and planning against the looser one made the introduction
+      // describe five products while three shipped - "4 of them are
+      // above the budget" printed above a carousel of three.
+      maxProducts: Math.min(
+        recoCaps.maxCards ?? MAX_CAROUSEL_ITEMS,
+        shopifyTurn?.channel.config.commerce.carouselSize || MAX_CAROUSEL_ITEMS,
+      ),
     });
 
     let structuredSent = false;

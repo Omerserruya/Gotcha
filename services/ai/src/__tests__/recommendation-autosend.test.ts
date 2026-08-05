@@ -404,3 +404,66 @@ describe("live regressions (caught on Dev, not by the unit tests above)", () => 
     expect(filterByAvailability(mostlyOos.candidates)).toHaveLength(3);
   });
 });
+
+describe("the introduction describes what actually ships", () => {
+  const BUDGET = { target: 700, currency: "USD" };
+
+  it("counts against the STAGING limit, not the channel maximum", () => {
+    // Live: the plan selected 5, staging truncated to the merchant's
+    // carouselSize of 3, and the introduction announced "4 of them are
+    // above the budget" over a carousel of three.
+    const many = envelope(
+      [
+        raw(1, "A", "949.95"), raw(2, "B", "885.95"), raw(3, "C", "749.95"),
+        raw(4, "D", "949.95"), raw(5, "E", "600.00"),
+      ],
+      { budget: BUDGET },
+    );
+    const p = planAutoRecommendation({
+      envelope: many,
+      channelSupportsCards: true,
+      alreadyStaged: false,
+      modelText: "I pulled some matches.",
+      locale: "en",
+      budget: BUDGET,
+      maxProducts: 3,
+    });
+    expect(p.selected).toHaveLength(3);
+    // Whatever it claims, it claims about three products.
+    const claimed = p.introduction.match(/(\d+) of them are above/);
+    if (claimed) expect(Number(claimed[1])).toBeLessThanOrEqual(3);
+  });
+
+  it("says plainly when NOTHING is within budget", () => {
+    const allAbove = envelope([raw(1, "A", "949.95"), raw(2, "B", "885.95")], { budget: BUDGET });
+    const p = planAutoRecommendation({
+      envelope: allAbove,
+      channelSupportsCards: true,
+      alreadyStaged: false,
+      modelText: "I pulled some matches.",
+      locale: "en",
+      budget: BUDGET,
+      maxProducts: 3,
+    });
+    expect(p.introduction).toContain("None of these come in under the budget");
+    expect(p.introduction).not.toMatch(/\d+ of them are above/);
+  });
+
+  it("does not add a second budget claim when the model already made one", () => {
+    // Live: the model said "both are above your limit" and we appended
+    // "4 of them are above the budget you gave" underneath it.
+    const allAbove = envelope([raw(1, "A", "949.95"), raw(2, "B", "885.95")], { budget: BUDGET });
+    const p = planAutoRecommendation({
+      envelope: allAbove,
+      channelSupportsCards: true,
+      alreadyStaged: false,
+      modelText: "Both of these are above your limit, but they are the closest we have.",
+      locale: "en",
+      budget: BUDGET,
+      maxProducts: 3,
+    });
+    expect(p.introduction).toBe(
+      "Both of these are above your limit, but they are the closest we have.",
+    );
+  });
+});
