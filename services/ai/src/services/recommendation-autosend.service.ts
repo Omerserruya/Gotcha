@@ -72,6 +72,26 @@ export interface BudgetVerdict {
  */
 const ENOUGH_WITHIN_BUDGET = 2;
 
+/** The same threshold, for the same reason, on stock. */
+const ENOUGH_IN_STOCK = 2;
+
+/**
+ * Drop what nobody can buy.
+ *
+ * Live on Dev: a $10 Gift Card with `available: false` was carried into a
+ * snowboard shortlist and rendered as a card with an Add to Cart button.
+ * Availability is filtered BEFORE budget because an out-of-stock product
+ * is useless at any price, so it should never occupy one of the three
+ * slots a within-budget product could have had.
+ *
+ * Not unconditional: when almost nothing is in stock, showing the real
+ * catalogue with its stock badges beats showing an empty carousel.
+ */
+export function filterByAvailability(candidates: ProductCandidate[]): ProductCandidate[] {
+  const inStock = candidates.filter((c) => c.inventoryState !== "out_of_stock");
+  return inStock.length >= ENOUGH_IN_STOCK ? inStock : candidates;
+}
+
 /**
  * Apply the budget to the PROVIDER's numbers.
  *
@@ -89,7 +109,7 @@ export function applyBudgetPolicy(
   budget: BudgetConstraint | null | undefined,
   maxProducts: number,
 ): BudgetVerdict {
-  const candidates = envelope.candidates.slice();
+  const candidates = filterByAvailability(envelope.candidates.slice());
 
   if (!budget || envelope.budgetCurrencyMismatch) {
     return {
@@ -206,8 +226,8 @@ export interface IntroductionOptions {
   locale: RecoLocale;
   /** Titles to substitute for PRODUCT_n references. */
   candidates: ProductCandidate[];
-  /** Append the over-budget caveat sentence. */
-  aboveBudgetAlternative?: boolean;
+  /** How many selected products are over budget. 0 = say nothing. */
+  aboveBudgetCount?: number;
   maxChars?: number;
 }
 
@@ -216,10 +236,23 @@ const DEFAULT_INTRO: Record<RecoLocale, string> = {
   en: "Here are a few options that could suit you:",
 };
 
-const ABOVE_BUDGET_INTRO: Record<RecoLocale, string> = {
-  he: "אחת מהן מעט מעל התקציב שציינת, סימנתי אותה.",
-  en: "One of them is a little above the budget you gave, and it is marked.",
-};
+/**
+ * Count-aware, because the singular version was itself a false claim.
+ *
+ * Live on Dev: two of three products were over budget and the line said
+ * "One of them is a little above the budget you gave". A sentence written
+ * to be honest about the budget cannot be sloppy about how many.
+ */
+function aboveBudgetIntro(count: number, locale: RecoLocale): string {
+  if (locale === "he") {
+    return count === 1
+      ? "אחת מהן מעט מעל התקציב שציינת, סימנתי אותה."
+      : `${count} מהן מעל התקציב שציינת, סימנתי אותן.`;
+  }
+  return count === 1
+    ? "One of them is a little above the budget you gave, and it is marked."
+    : `${count} of them are above the budget you gave, and they are marked.`;
+}
 
 /**
  * Reduce the model's reply to a short lead-in for the cards.
@@ -273,8 +306,8 @@ export function extractIntroduction(
   // stripping above, not an introduction.
   if (intro.replace(/[^\p{L}]/gu, "").length < 8) intro = DEFAULT_INTRO[opts.locale];
 
-  if (opts.aboveBudgetAlternative) {
-    const note = ABOVE_BUDGET_INTRO[opts.locale];
+  if (opts.aboveBudgetCount && opts.aboveBudgetCount > 0) {
+    const note = aboveBudgetIntro(opts.aboveBudgetCount, opts.locale);
     if (!intro.includes(note)) intro = `${intro} ${note}`.trim();
   }
   return intro;
@@ -333,7 +366,7 @@ export function planAutoRecommendation(
       introduction: extractIntroduction(input.modelText, {
         locale: input.locale,
         candidates: envelope.candidates,
-        aboveBudgetAlternative: budget.hasAboveBudgetAlternative,
+        aboveBudgetCount: countAboveBudget(budget, input.budget),
       }),
     };
   }
@@ -347,9 +380,18 @@ export function planAutoRecommendation(
     introduction: extractIntroduction(input.modelText, {
       locale: input.locale,
       candidates: envelope.candidates,
-      aboveBudgetAlternative: budget.hasAboveBudgetAlternative,
+      aboveBudgetCount: countAboveBudget(budget, input.budget),
     }),
   };
+}
+
+/** How many of the products actually going out are over budget. */
+export function countAboveBudget(
+  verdict: BudgetVerdict,
+  budget: BudgetConstraint | null | undefined,
+): number {
+  if (verdict.notApplicable || !budget) return 0;
+  return verdict.selected.filter((c) => isAboveBudget(c, budget)).length;
 }
 
 /**

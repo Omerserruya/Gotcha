@@ -16,6 +16,8 @@ import {
   reasonForCandidate,
   isAboveBudget,
   numericPrice,
+  filterByAvailability,
+  countAboveBudget,
 } from "../services/recommendation-autosend.service";
 import { normalizeShopifyProducts } from "../services/product-search.service";
 import { capabilitiesFor } from "@chatcenter/shared";
@@ -317,5 +319,88 @@ describe("introduction hygiene", () => {
     expect(extractIntroduction("", { locale: "en", candidates: [] })).toBe(
       "Here are a few options that could suit you:",
     );
+  });
+});
+
+// ─── Defects the LIVE Dev conversation exposed ───────────────
+
+describe("live regressions (caught on Dev, not by the unit tests above)", () => {
+  const BUDGET = { target: 700, currency: "USD" };
+
+  it("says '2 of them' when two are over budget, not 'One of them'", () => {
+    // Live: two of three products were over budget and the caveat read
+    // "One of them is a little above the budget you gave". A sentence
+    // written to be honest about budget cannot be sloppy about count.
+    const thin = envelope(
+      [raw(1, "Cheap", "10.00"), raw(2, "Pricey", "949.95"), raw(3, "Dear", "885.95")],
+      { budget: BUDGET },
+    );
+    const p = planAutoRecommendation({
+      envelope: thin,
+      channelSupportsCards: true,
+      alreadyStaged: false,
+      modelText: "I searched our catalog.",
+      locale: "en",
+      budget: BUDGET,
+      maxProducts: 5,
+    });
+    expect(p.introduction).toContain("2 of them are above the budget you gave");
+    expect(p.introduction).not.toContain("One of them");
+  });
+
+  it("still says 'One of them' when exactly one is over budget", () => {
+    const thin = envelope([raw(1, "Cheap", "10.00"), raw(2, "Pricey", "949.95")], { budget: BUDGET });
+    const p = planAutoRecommendation({
+      envelope: thin,
+      channelSupportsCards: true,
+      alreadyStaged: false,
+      modelText: "I searched our catalog.",
+      locale: "en",
+      budget: BUDGET,
+      maxProducts: 5,
+    });
+    expect(p.introduction).toContain("One of them is a little above");
+  });
+
+  it("counts only the products actually going out", () => {
+    const mixed = envelope(
+      [raw(1, "A", "600.00"), raw(2, "B", "650.00"), raw(3, "C", "949.95")],
+      { budget: BUDGET },
+    );
+    const verdict = applyBudgetPolicy(mixed, BUDGET, 5);
+    // Two within budget, so the over-budget one is excluded and the
+    // caveat must not appear at all.
+    expect(countAboveBudget(verdict, BUDGET)).toBe(0);
+  });
+
+  it("drops an out-of-stock product from an automatic shortlist", () => {
+    // Live: a $10 Gift Card with available:false was carried into a
+    // snowboard carousel, with an Add to Cart button on it.
+    const withOos = envelope([
+      raw(1, "Gift Card", "10.00", false),
+      raw(2, "Board A", "600.00", true),
+      raw(3, "Board B", "650.00", true),
+    ]);
+    const kept = filterByAvailability(withOos.candidates);
+    expect(kept.map((c) => c.title)).toEqual(["Board A", "Board B"]);
+  });
+
+  it("out-of-stock filtering happens BEFORE budget, so it cannot waste a slot", () => {
+    const withOos = envelope(
+      [raw(1, "Gift Card", "10.00", false), raw(2, "Board A", "600.00"), raw(3, "Board B", "650.00")],
+      { budget: BUDGET },
+    );
+    const verdict = applyBudgetPolicy(withOos, BUDGET, 3);
+    expect(verdict.selected.map((c) => c.title)).toEqual(["Board A", "Board B"]);
+  });
+
+  it("keeps out-of-stock products when almost nothing is in stock", () => {
+    // An empty carousel is worse than a truthful one with stock badges.
+    const mostlyOos = envelope([
+      raw(1, "Gone", "600.00", false),
+      raw(2, "Also gone", "650.00", false),
+      raw(3, "Last one", "680.00", true),
+    ]);
+    expect(filterByAvailability(mostlyOos.candidates)).toHaveLength(3);
   });
 });
