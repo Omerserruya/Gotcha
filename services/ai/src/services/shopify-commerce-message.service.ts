@@ -16,9 +16,15 @@ import {
   publishEvent,
   SHOPIFY_MESSAGE_TYPES,
   MAX_CAROUSEL_ITEMS,
+  recommendationSetFromShopifySnapshots,
   type ProductSnapshot,
   type ShopifyCommerceMessagePayload,
 } from "@chatcenter/shared";
+import {
+  planRecommendationDelivery,
+  markRecommendationDelivered,
+  wasRecommendationDelivered,
+} from "./recommendation-delivery.service";
 
 /**
  * The persisted shape of a commerce message, independent of who writes
@@ -75,12 +81,18 @@ export interface SendProductMessageInput {
   addToCartEnabled: boolean;
   /** Optional lead-in text sent as its own message before the card. */
   leadText?: string | null;
+  /** Customer's language, for the labels the renderer attaches. */
+  locale?: "he" | "en";
 }
 
 export interface SendProductMessageResult {
   ok: true;
   messageId: string;
   productCount: number;
+  /** How the channel will present these. "native_carousel" on the storefront. */
+  presentation: string;
+  /** Content-derived; a retry carrying the same key is refused. */
+  idempotencyKey: string;
 }
 
 export type SendProductMessageOutcome = SendProductMessageResult | { ok: false; reason: string };
@@ -100,6 +112,38 @@ export async function sendProductMessage(
   });
   if (!record) {
     return { ok: false, reason: input.products.length ? "store_mismatch" : "no_products" };
+  }
+
+  // The channel decision, taken in the ONE place that takes it for every
+  // channel. On the storefront it comes back "native_carousel", which is
+  // what this function already did; routing through it anyway is what
+  // makes the storefront a case of the general rule rather than the
+  // exception the general rule has to work around.
+  const recommendationSet = recommendationSetFromShopifySnapshots({
+    products: input.products,
+    shopDomain: input.shopDomain,
+    introduction: input.leadText,
+    addToCartEnabled: input.addToCartEnabled,
+  });
+  const plan = planRecommendationDelivery({
+    channel: "SHOPIFY_LIVE_CHAT",
+    recommendationSet,
+    locale: input.locale,
+  });
+
+  // Retry suppression, on the AI path ONLY.
+  //
+  // The key is content-derived, so the retry of a timed-out send carries
+  // the same one and is recognised. That is exactly right for the AI
+  // path, which a worker retries on its own.
+  //
+  // It would be wrong for the human path. An agent who sends a card, is
+  // asked "sorry, which one?", and sends the same card again is making a
+  // deliberate choice, not retrying anything, and a composer that
+  // silently swallowed it would look broken to the one person who can
+  // see both sides of the conversation.
+  if (input.source === "ai" && wasRecommendationDelivered(input.conversationId, plan.idempotencyKey)) {
+    return { ok: false, reason: "duplicate_recommendation" };
   }
 
   if (input.leadText && input.leadText.trim()) {
@@ -122,10 +166,16 @@ export async function sendProductMessage(
     metadata: record.metadata,
   });
 
+  if (input.source === "ai") {
+    markRecommendationDelivered(input.conversationId, plan.idempotencyKey);
+  }
+
   return {
     ok: true,
     messageId: message.id,
     productCount: (record.metadata.shopify as ShopifyCommerceMessagePayload).products.length,
+    presentation: plan.presentation,
+    idempotencyKey: plan.idempotencyKey,
   };
 }
 

@@ -28,6 +28,14 @@ import {
   type ShopifyChatUx,
 } from "./shopify-chat-ux";
 
+import {
+  normalizeRecommendationSet,
+  type ProductRecommendationSet,
+  type ProviderProductRecord,
+  type RecommendationMoney,
+  type RecommendedProduct,
+} from "./product-recommendations";
+
 import crypto from "crypto";
 
 // ─── Channel constants ───────────────────────────────────────
@@ -1132,4 +1140,118 @@ export function isRenderableCommercePayload(
   if (p.channelAccountId !== expected.channelAccountId) return false;
   if (!Array.isArray(p.products) || p.products.length === 0) return false;
   return p.products.every((prod) => prod && prod.shopDomain === expected.shopDomain);
+}
+
+// ─── Shopify → canonical recommendation ──────────────────────
+
+/**
+ * Turn validated Shopify snapshots into the channel-neutral
+ * recommendation set.
+ *
+ * This is the ONLY place Shopify shape becomes recommendation shape. The
+ * Shopify tools produce snapshots; the channel renderers consume
+ * recommendations; neither knows about the other, so a second commerce
+ * integration needs one function like this one and nothing else.
+ *
+ * Every field is carried across, never recomputed. The snapshot's price
+ * already came from Shopify and survived `buildProductSnapshot`; running
+ * it through a formatter here would be the third chance to get a number
+ * wrong, for no gain.
+ */
+export function recommendationSetFromShopifySnapshots(input: {
+  products: ProductSnapshot[];
+  shopDomain: string;
+  introduction?: string | null;
+  /** Merchant switch. Add to Cart is never offered when it is off. */
+  addToCartEnabled?: boolean;
+}): ProductRecommendationSet {
+  const products: RecommendedProduct[] = [];
+
+  for (const snapshot of input.products) {
+    // A snapshot from another store is refused rather than rendered. The
+    // same rule the message writer applies, applied again at the boundary
+    // a set crosses into channels that have no notion of a store.
+    if (snapshot.shopDomain !== input.shopDomain) continue;
+
+    const selected = snapshot.selectedVariantId
+      ? snapshot.variants.find((v) => v.variantId === snapshot.selectedVariantId)
+      : undefined;
+
+    // Add to Cart requires a RESOLVED variant. A product whose options the
+    // shopper still has to choose gets View Product only - picking a
+    // variant for them is how somebody ends up with the wrong size.
+    const purchasable =
+      input.addToCartEnabled === true &&
+      !!selected &&
+      selected.available &&
+      !selected.requiresSellingPlan &&
+      snapshot.status === "active";
+
+    products.push({
+      productId: snapshot.productId,
+      variantId: snapshot.selectedVariantId ?? undefined,
+      title: snapshot.title,
+      imageUrl: snapshot.imageUrl ?? undefined,
+      productUrl: snapshot.productUrl,
+      price: moneyFromSnapshot(selected?.price ?? snapshot.price, snapshot.currency),
+      compareAtPrice: moneyFromSnapshot(
+        selected?.compareAtPrice ?? snapshot.compareAtPrice,
+        snapshot.currency,
+      ),
+      availability: (selected ? selected.available : snapshot.available)
+        ? "in_stock"
+        : "out_of_stock",
+      reason: snapshot.reason ?? undefined,
+      sku: selected?.sku ?? undefined,
+      purchasable,
+    });
+  }
+
+  return normalizeRecommendationSet({
+    introduction: input.introduction ?? undefined,
+    products,
+    source: { integration: "shopify", shopDomain: input.shopDomain },
+  });
+}
+
+function moneyFromSnapshot(
+  amount: string | null | undefined,
+  currency: string,
+): RecommendationMoney | undefined {
+  if (!amount) return undefined;
+  return { amount, currency };
+}
+
+/**
+ * The same snapshots as a set of provider records, for
+ * `reconcileWithProvider`. Used when a set has travelled - staged on a
+ * reply, queued for a retry - and has to be re-checked against what
+ * Shopify says now before it reaches anyone.
+ */
+export function providerRecordsFromShopifySnapshots(
+  snapshots: ProductSnapshot[],
+): ProviderProductRecord[] {
+  return snapshots.map((snapshot) => {
+    const selected = snapshot.selectedVariantId
+      ? snapshot.variants.find((v) => v.variantId === snapshot.selectedVariantId)
+      : undefined;
+    return {
+      productId: snapshot.productId,
+      variantId: snapshot.selectedVariantId ?? undefined,
+      productUrl: snapshot.productUrl,
+      title: snapshot.title,
+      price: moneyFromSnapshot(selected?.price ?? snapshot.price, snapshot.currency),
+      compareAtPrice: moneyFromSnapshot(
+        selected?.compareAtPrice ?? snapshot.compareAtPrice,
+        snapshot.currency,
+      ),
+      availability: (selected ? selected.available : snapshot.available)
+        ? ("in_stock" as const)
+        : ("out_of_stock" as const),
+      imageUrl: snapshot.imageUrl ?? undefined,
+      sku: selected?.sku ?? undefined,
+      purchasable:
+        !!selected && selected.available && !selected.requiresSellingPlan && snapshot.status === "active",
+    };
+  });
 }

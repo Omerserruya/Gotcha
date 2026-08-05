@@ -995,6 +995,7 @@ export function ChatPanel({ conversationId, onBack }: Props) {
         <ProductPicker
           conversationId={conversationId}
           maxProducts={5}
+          channel={conversation.channel}
           onClose={() => setProductPickerOpen(false)}
           onSent={() => { /* the message arrives over the socket like any other */ }}
         />
