@@ -24,8 +24,16 @@ import {
 } from "@chatcenter/shared";
 import type { AgentToolDispatchResult } from "@chatcenter/shared";
 import { withProtectedAtoms } from "@chatcenter/shared";
+import { capabilitiesFor, MAX_CAROUSEL_ITEMS } from "@chatcenter/shared";
 import { runProductDiscoveryTurn, recordDiscoverySearchOutcome, groundProductSearchResult, isProductSearchTool } from "./discovery-integration.service";
 import { buildKeyedModelSummary, renderGroundedProductReply, renderCandidatesForWhatsApp, type ProductSearchEnvelope } from "./product-search.service";
+import {
+  planAutoRecommendation,
+  reasonForCandidate,
+  reportCarouselFallback,
+  decideDelivery,
+  type StagingOutcome,
+} from "./recommendation-autosend.service";
 import { buildAICommerceSnapshot, formatCommerceSnapshotForPrompt } from "./commerce-ai-snapshot.service";
 import { parsePhoneNumberFromString, type CountryCode } from "libphonenumber-js";
 import { randomUUID } from "crypto";
@@ -2416,6 +2424,10 @@ async function generateAIBotReplyInner(
   // Canonical typed product envelope for this turn (set when a Shopify product
   // search runs); drives deterministic grounded rendering of the final reply.
   let productEnvelope: ProductSearchEnvelope | null = null;
+  // The comparable budget the envelope resolved, in the STORE's currency.
+  // Read from the envelope rather than re-derived, so the selection below
+  // compares the same numbers the provider quoted.
+  let productBudget: { target: number; currency: string } | null = null;
   const replyLocale: "he" | "en" = detectLocale(messages.map((m) => m.body || ""));
   try {
     const disc = await runProductDiscoveryTurn({
@@ -2969,6 +2981,7 @@ async function generateAIBotReplyInner(
             });
             if (envlp) {
               productEnvelope = envlp;
+              productBudget = envlp.budget ?? null;
               toolContent = buildKeyedModelSummary(envlp, replyLocale);
             }
           } catch (err: any) {
@@ -4397,18 +4410,87 @@ async function generateAIBotReplyInner(
   // model tried to emit. On any failure it still renders from the canonical
   // envelope (never generic model inventory) and logs loudly.
   if (productEnvelope) {
-    try {
-      const rendered = renderGroundedProductReply(replyText, productEnvelope, replyLocale);
-      if (rendered.blocked.length) {
-        console.warn(`[ai-bot] grounded render blocked invented product refs: ${rendered.blocked.join(",")} conv=${opts.conversationId}`);
+    // Does this channel have somewhere better to put products than a
+    // sentence? The capability map answers, not this file.
+    const recoCaps = capabilitiesFor(conversation.channel as string);
+    const channelSupportsCards = recoCaps.supportsProductCarousel || recoCaps.supportsCards;
+    const canStage = !!shopifyTurn?.sendShopifyProducts;
+
+    const recoPlan = planAutoRecommendation({
+      envelope: productEnvelope,
+      // Staging is Shopify Live Chat's mechanism. A channel that renders
+      // cards but has no staging path (web chat today) still takes the
+      // text route, honestly.
+      channelSupportsCards: channelSupportsCards && canStage,
+      alreadyStaged: (shopifyTurn?.staged.length ?? 0) > 0,
+      modelText: replyText,
+      locale: replyLocale,
+      budget: productBudget,
+      // The limit STAGING will apply, not the channel's theoretical
+      // maximum. The merchant's carouselSize is the tighter of the two,
+      // and planning against the looser one made the introduction
+      // describe five products while three shipped - "4 of them are
+      // above the budget" printed above a carousel of three.
+      maxProducts: Math.min(
+        recoCaps.maxCards ?? MAX_CAROUSEL_ITEMS,
+        shopifyTurn?.channel.config.commerce.carouselSize || MAX_CAROUSEL_ITEMS,
+      ),
+    });
+
+    // Attempt staging, then let ONE tested function decide what the
+    // customer gets. The branch that matters most is the one that almost
+    // never runs, so it does not live inline here.
+    let outcome: StagingOutcome | null = null;
+    if (recoPlan.shouldSendStructured) {
+      // Promote by calling the SAME staging function the model should
+      // have called: it re-resolves every product against Shopify, drops
+      // unpublished ones and enforces this channel's store binding, so
+      // the automatic path inherits every guarantee the tool path has.
+      try {
+        const staged = await shopifyTurn!.sendShopifyProducts!({
+          products: recoPlan.selected.map((c) => ({
+            productId: c.productId,
+            variantId: c.variantId,
+            reason: reasonForCandidate(c, productBudget, replyLocale),
+          })),
+        });
+        outcome = staged.ok ? { ok: true } : { ok: false, reason: staged.reason };
+      } catch (err) {
+        outcome = { threw: err };
       }
-      if (rendered.usedFallback) {
-        console.warn(`[ai-bot] grounded render used deterministic fallback (canonical envelope) conv=${opts.conversationId}`);
+    }
+
+    const delivery = decideDelivery(recoPlan, outcome);
+    if (delivery.fallbackReason) {
+      reportCarouselFallback({
+        conversationId: opts.conversationId,
+        tenantId: opts.tenantId,
+        reason: delivery.fallbackReason,
+        productCount: recoPlan.selected.length,
+      });
+    }
+
+    if (!delivery.useTextFallback) {
+      // The products are in the cards. The text is a lead-in and nothing
+      // else - no numbered list, no URLs, no "shall I send a card?".
+      replyText = recoPlan.introduction;
+    } else {
+      // Genuine fallback: this channel cannot render cards, or staging
+      // failed. The legacy deterministic renderer is exactly right here,
+      // and it stays untouched so WhatsApp behaviour does not move.
+      try {
+        const rendered = renderGroundedProductReply(replyText, productEnvelope, replyLocale);
+        if (rendered.blocked.length) {
+          console.warn(`[ai-bot] grounded render blocked invented product refs: ${rendered.blocked.join(",")} conv=${opts.conversationId}`);
+        }
+        if (rendered.usedFallback) {
+          console.warn(`[ai-bot] grounded render used deterministic fallback (canonical envelope) conv=${opts.conversationId}`);
+        }
+        replyText = rendered.message;
+      } catch (err: any) {
+        console.error(`[ai-bot] grounded render FAILED, falling back to canonical list conv=${opts.conversationId}:`, err?.message);
+        try { replyText = renderCandidatesForWhatsApp(productEnvelope, replyLocale); } catch { /* keep model reply */ }
       }
-      replyText = rendered.message;
-    } catch (err: any) {
-      console.error(`[ai-bot] grounded render FAILED, falling back to canonical list conv=${opts.conversationId}:`, err?.message);
-      try { replyText = renderCandidatesForWhatsApp(productEnvelope, replyLocale); } catch { /* keep model reply */ }
     }
   }
 

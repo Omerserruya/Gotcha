@@ -6,6 +6,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import { searchShopifyProducts, sendShopifyProductMessage } from "@/lib/api";
 import { ProductCard, type ProductView } from "./ProductCard";
+import { RecommendationPreview } from "./RecommendationPreview";
 
 /**
  * Agent-facing Shopify product picker.
@@ -22,11 +23,17 @@ import { ProductCard, type ProductView } from "./ProductCard";
 interface Props {
   conversationId: string;
   maxProducts: number;
+  /**
+   * The conversation's channel. Drives the preview: an agent must see the
+   * shape the CUSTOMER will receive, and a carousel on the storefront is
+   * an image-and-caption on WhatsApp.
+   */
+  channel?: string;
   onClose: () => void;
   onSent: () => void;
 }
 
-export function ProductPicker({ conversationId, maxProducts, onClose, onSent }: Props) {
+export function ProductPicker({ conversationId, maxProducts, channel, onClose, onSent }: Props) {
   const { token } = useAuth();
   const { t } = useI18n();
 
@@ -79,6 +86,23 @@ export function ProductPicker({ conversationId, maxProducts, onClose, onSent }: 
       }
       setError(null);
       return [...prev, product];
+    });
+  }
+
+  function removeSelected(productId: string) {
+    setSelected((prev) => prev.filter((p) => p.productId !== productId));
+    setError(null);
+  }
+
+  /** Order is what the customer sees first, so it is the agent's to set. */
+  function reorderSelected(productId: string, direction: -1 | 1) {
+    setSelected((prev) => {
+      const index = prev.findIndex((p) => p.productId === productId);
+      const target = index + direction;
+      if (index < 0 || target < 0 || target >= prev.length) return prev;
+      const next = [...prev];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
     });
   }
 
@@ -161,6 +185,13 @@ export function ProductPicker({ conversationId, maxProducts, onClose, onSent }: 
 
         <div className="p-4 border-t border-gray-100 space-y-2">
           {error && <p className="text-xs text-red-600">{error}</p>}
+          {/* What the customer actually receives, not a generic list. */}
+          <RecommendationPreview
+            channel={channel ?? "SHOPIFY_LIVE_CHAT"}
+            products={selected}
+            onRemove={removeSelected}
+            onReorder={reorderSelected}
+          />
           <input
             value={note}
             onChange={(e) => setNote(e.target.value)}

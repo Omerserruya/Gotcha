@@ -896,6 +896,46 @@ export {
   type ResolvedLocale,
 } from "./lib/locale";
 
+// Channel-native product recommendations. One canonical set produced by a
+// commerce adapter, one renderer that decides how each channel shows it.
+export {
+  normalizeRecommendationSet,
+  reconcileWithProvider,
+  recommendationIdempotencyKey,
+  availabilityLabel,
+  priceLabel,
+  RECOMMENDATION_STRINGS,
+  type ProductRecommendationSet,
+  type RecommendedProduct,
+  type RecommendationMoney,
+  type RecommendationAvailability,
+  type RecommendationLocale,
+  type ProviderProductRecord,
+  type ReconcileResult,
+} from "./lib/product-recommendations";
+export {
+  CHANNEL_CAPABILITIES,
+  capabilitiesFor,
+  TEXT_ONLY_CAPABILITIES,
+  type ChannelCapabilities,
+  type RecommendationChannel,
+} from "./channels/capabilities";
+export {
+  renderProductRecommendations,
+  buildProductLine,
+  buildEmailHtml,
+  splitForLength,
+  type RenderedRecommendations,
+  type RenderedMessage,
+  type RenderedButton,
+  type RecommendationPresentation,
+  type RenderRecommendationsInput,
+} from "./channels/recommendation-renderer";
+export {
+  recommendationSetFromShopifySnapshots,
+  providerRecordsFromShopifySnapshots,
+} from "./lib/shopify-live-chat";
+
 // Capability Runtime (operation contracts + pure resolver). Strategy/provider
 // impls live in services/ai and are injected via RuntimeBindings.
 export * from "./lib/capability-runtime";
