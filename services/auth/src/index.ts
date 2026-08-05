@@ -4,6 +4,7 @@ import sessionAuthRoutes from "./routes/session-auth";
 import agentRoutes from "./routes/agents";
 import departmentRoutes from "./routes/departments";
 import channelRoutes from "./routes/channels";
+import whatsappNumberRoutes from "./routes/whatsapp-numbers";
 import systemRoutes from "./routes/system";
 import systemFeatureRoutes from "./routes/system-features";
 import knowledgeBackfillRoutes from "./routes/knowledge-backfill";
@@ -43,6 +44,10 @@ app.use("/api/auth", sessionAuthRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/agents", agentRoutes);
 app.use("/api/departments", departmentRoutes);
+// Per-number WhatsApp management. Mounted BEFORE the generic channel routes so
+// /api/channels/whatsapp/... resolves here rather than falling into
+// channelRoutes' "/:id" handlers, which would treat "whatsapp" as a channel id.
+app.use("/api/channels/whatsapp", whatsappNumberRoutes);
 app.use("/api/channels", channelRoutes);
 app.use("/api/system", systemFeatureRoutes);
 // Platform operator only: onboarding → Knowledge Base backfill (preview by
