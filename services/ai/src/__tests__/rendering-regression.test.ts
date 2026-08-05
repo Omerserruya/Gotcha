@@ -29,7 +29,7 @@ describe("incident values survive the customer-text pipeline byte-for-byte", () 
     expect(out).toContain(INCIDENT_DATE);
     expect(out).toContain("054-568-0665");
     expect(out).not.toMatch(/urban, supply|2026, 07, 08|0a40b01b, 5021/);
-    expect(out).not.toMatch(/[-–―]/);
+    expect(out).not.toMatch(/[\u2013\u2014\u2015]/);
   });
 
   it("order numbers, emails, amounts and currency survive (4/5/11)", () => {
@@ -56,8 +56,8 @@ describe("source-level bypass visibility", () => {
     const src = read("../services/ai-bot.service.ts");
     // the incident class - an ASCII hyphen inside a dash character class -
     // must never reappear anywhere in the reply path
-    expect(src).not.toMatch(/\[\s*-[–-―]/);
-    expect(src).not.toMatch(/\[[–-―]+-[–-―]*\]/);
+    expect(src).not.toMatch(/\[\s*-[\u2013\u2014\u2015]/);
+    expect(src).not.toMatch(/\[[\u2013\u2014\u2015]+-[\u2013\u2014\u2015]*\]/);
     const fn = src.slice(src.indexOf("function humanizeReply"));
     expect(fn.slice(0, 1500)).toContain("withProtectedAtoms");
   });
@@ -73,6 +73,6 @@ describe("source-level bypass visibility", () => {
     // it NORMALIZES ranges to a hyphen; it never scrubs to a comma.
     const clauseScrub = src.match(/replace\(\/\\s\*\[([^\]]+)\]\\s\*\/g,\s*", "\)/);
     expect(clauseScrub).toBeTruthy();
-    expect(clauseScrub![1]).not.toContain("-");
+    expect(clauseScrub![1]).not.toContain("-"); // a plain hyphen must never be in the scrub class
   });
 });

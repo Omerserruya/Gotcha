@@ -145,7 +145,7 @@ describe("renderCandidatesForWhatsApp", () => {
       "https://shop.myshopify.com/products/the-collection-snowboard-hydrogen",
     );
     expect(out).toContain("600.00");
-    expect(out).not.toContain("-"); // em dash
+    expect(out).not.toContain("\u2014"); // em dash
     expect(out).not.toContain("–"); // en dash
     expect(out).not.toContain("riding_style");
   });

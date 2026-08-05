@@ -965,7 +965,7 @@ function humanizeReply(text: string | null): string | null {
   return withProtectedAtoms(text, (prose) => {
     let out = prose;
     // Wide dash used as a clause connector (with or without surrounding spaces).
-    out = out.replace(/\s*[-–―]\s*/g, ", ");
+    out = out.replace(/\s*[\u2013\u2014\u2015]\s*/g, ", ");
     // ASCII hyphen used as a dash: spaces on BOTH sides only. Token-internal
     // hyphens (Wi-Fi, ranges like 10-15) are untouched.
     out = out.replace(/(\S) +- +(\S)/g, "$1, $2");

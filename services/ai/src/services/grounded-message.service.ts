@@ -107,7 +107,7 @@ const COMPLETION_RE =
   /(הוחזר|זוכה|זיכינו|קיבלת את ה|הכסף (הועבר|חזר)|ההחזר (בוצע|הושלם)|בוצע בהצלחה|הושלם בהצלחה|(was|has been|is now) (processed|completed|refunded)|money (is|was) (back|returned)|successfully (refunded|processed|completed)|(processed|completed) successfully)/i;
 const SUCCESS_RE =
   /(בהצלחה|הושלם|בוצע|ביטלתי|טופל|הוסדר|success|succeed|completed|done|has been (cancelled|canceled|refunded)|was (cancelled|canceled|refunded))/i;
-const WIDE_DASH_RE = /[–-―]/;
+const WIDE_DASH_RE = /[\u2013\u2014\u2015]/;
 
 /** Every digit-run in the text, normalized (strips thousands separators). */
 function numbersIn(text: string): string[] {
