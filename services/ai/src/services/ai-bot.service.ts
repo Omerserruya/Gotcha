@@ -37,6 +37,8 @@ import {
   planAutoRecommendation,
   reasonForCandidate,
   reportCarouselFallback,
+  decideDelivery,
+  type StagingOutcome,
 } from "./recommendation-autosend.service";
 import { buildAICommerceSnapshot, formatCommerceSnapshotForPrompt } from "./commerce-ai-snapshot.service";
 import { parsePhoneNumberFromString, type CountryCode } from "libphonenumber-js";
@@ -4480,7 +4482,10 @@ async function generateAIBotReplyInner(
       ),
     });
 
-    let structuredSent = false;
+    // Attempt staging, then let ONE tested function decide what the
+    // customer gets. The branch that matters most is the one that almost
+    // never runs, so it does not live inline here.
+    let outcome: StagingOutcome | null = null;
     if (recoPlan.shouldSendStructured) {
       // Promote by calling the SAME staging function the model should
       // have called: it re-resolves every product against Shopify, drops
@@ -4494,27 +4499,23 @@ async function generateAIBotReplyInner(
             reason: reasonForCandidate(c, productBudget, replyLocale),
           })),
         });
-        if (staged.ok) {
-          structuredSent = true;
-        } else {
-          reportCarouselFallback({
-            conversationId: opts.conversationId,
-            tenantId: opts.tenantId,
-            reason: `stage_refused:${staged.reason ?? "unknown"}`,
-            productCount: recoPlan.selected.length,
-          });
-        }
-      } catch (err: any) {
-        reportCarouselFallback({
-          conversationId: opts.conversationId,
-          tenantId: opts.tenantId,
-          reason: `stage_threw:${err?.message ?? "unknown"}`,
-          productCount: recoPlan.selected.length,
-        });
+        outcome = staged.ok ? { ok: true } : { ok: false, reason: staged.reason };
+      } catch (err) {
+        outcome = { threw: err };
       }
     }
 
-    if (structuredSent || recoPlan.skipReason === "already_staged") {
+    const delivery = decideDelivery(recoPlan, outcome);
+    if (delivery.fallbackReason) {
+      reportCarouselFallback({
+        conversationId: opts.conversationId,
+        tenantId: opts.tenantId,
+        reason: delivery.fallbackReason,
+        productCount: recoPlan.selected.length,
+      });
+    }
+
+    if (!delivery.useTextFallback) {
       // The products are in the cards. The text is a lead-in and nothing
       // else - no numbered list, no URLs, no "shall I send a card?".
       replyText = recoPlan.introduction;

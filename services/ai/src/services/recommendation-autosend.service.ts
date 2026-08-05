@@ -444,6 +444,71 @@ export function countAboveBudget(
 }
 
 /**
+ * What staging actually returned, normalized.
+ *
+ * `sendShopifyProducts` can refuse (`{ok:false, reason}`) or throw, and
+ * those are the same event to the customer: the cards did not go out.
+ */
+export type StagingOutcome =
+  | { ok: true }
+  | { ok: false; reason?: string | null }
+  | { threw: unknown };
+
+export interface DeliveryDecision {
+  /** True when the cards went out and the text is just the lead-in. */
+  structuredSent: boolean;
+  /** True when the customer must get the deterministic text list instead. */
+  useTextFallback: boolean;
+  /** Set whenever the carousel was supposed to go out and did not. */
+  fallbackReason?: string;
+}
+
+/**
+ * The rendering invariant, as one testable decision.
+ *
+ * Extracted from the reply path rather than left inline: the branch that
+ * matters most is the one that almost never runs, and a failure path
+ * buried in a four-thousand-line function is a failure path nobody can
+ * prove works. A text list is now an INCIDENT, and an incident needs a
+ * reason attached to it.
+ */
+export function decideDelivery(
+  plan: AutoRecommendationPlan,
+  outcome: StagingOutcome | null,
+): DeliveryDecision {
+  // The model already sent the cards itself. The text still gets reduced,
+  // or the customer receives the same products twice.
+  if (plan.skipReason === "already_staged") {
+    return { structuredSent: false, useTextFallback: false };
+  }
+  // Nothing was ever going to be staged - the channel cannot render cards,
+  // or there was nothing valid to send. Not a failure, and not an
+  // incident: the deterministic text list is the right answer.
+  if (!plan.shouldSendStructured) {
+    return { structuredSent: false, useTextFallback: true };
+  }
+  if (!outcome) {
+    return { structuredSent: false, useTextFallback: true, fallbackReason: "not_attempted" };
+  }
+  if ("threw" in outcome) {
+    const err = outcome.threw as { message?: string } | undefined;
+    return {
+      structuredSent: false,
+      useTextFallback: true,
+      fallbackReason: `stage_threw:${err?.message ?? "unknown"}`,
+    };
+  }
+  if (outcome.ok) {
+    return { structuredSent: true, useTextFallback: false };
+  }
+  return {
+    structuredSent: false,
+    useTextFallback: true,
+    fallbackReason: `stage_refused:${outcome.reason ?? "unknown"}`,
+  };
+}
+
+/**
  * A carousel that was supposed to go out and did not.
  *
  * Reported rather than swallowed: the whole point of the invariant is
@@ -459,7 +524,11 @@ export function reportCarouselFallback(args: {
   const message =
     `[ai-bot] shopify carousel fallback conv=${args.conversationId} ` +
     `reason=${args.reason} products=${args.productCount} (sent clean text instead)`;
-  console.warn(message);
+  try {
+    console.warn(message);
+  } catch {
+    /* a logger that throws must not take the reply down with it */
+  }
   try {
     captureError(new Error(`shopify_carousel_fallback: ${args.reason}`), {
       feature: "shopify_recommendations",
