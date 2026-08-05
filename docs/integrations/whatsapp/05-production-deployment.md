@@ -265,3 +265,55 @@ Manual test path (requires a real Meta login, performed by a human):
 ```
 https://app.gotcha.co.il/settings/channels/whatsapp
 ```
+
+
+---
+
+## 9. Deployed state (2026-08-05)
+
+| | |
+|---|---|
+| Branch | `feature/whatsapp-zero-friction-onboarding` |
+| Commit | `12da0bc` |
+| Migration | `20260805120000_whatsapp_multi_number` applied, 178 -> 179 |
+
+| Service | Image | Digest (deployed) |
+|---|---|---|
+| auth | `gotcha:auth-f038a60` | `sha256:1e301de76ec48fd2450274df9e9db430f07235b42605d91ff4faf47f1334f996` |
+| gateway | `gotcha:gateway-12da0bc` | `sha256:36e18f21b8a414a0c74547e9e620f9fd2ece2d6a7080e46e4cfd9ac4046f6431` |
+
+Both verified `arm64/linux` on the box before starting.
+
+### Rollback, now that the new digests are known
+
+```bash
+cd /opt/chatcenter
+export DOCKER_CONFIG=/home/ubuntu/.docker
+cat > docker-compose.rollback.yml <<'YAML'
+services:
+  auth:
+    image: sha256:a758fb6161dcf25d0800e822117f0e2836e62f2d144d1178e43852cf86ab3894
+  gateway:
+    image: sha256:74eeb1655e7e7f37a0c6d595e1d70937898ff006b97738e401c783ccd40cd26a
+YAML
+docker compose -f docker-compose.prod.yml -f docker-compose.rollback.yml up -d --no-deps auth gateway
+```
+
+`--no-deps` is required. Without it, compose resolves the image for every
+service in the file (gateway `depends_on` most of the stack) and aborts when a
+tag does not exist at that TAG.
+
+## 10. THE trap this deploy hit: there are TWO nginx templates
+
+| File | Used by |
+|---|---|
+| `nginx/nginx.conf.template` | **dev** gateway (bind-mounted by docker-compose.yml) |
+| `gateway/nginx.prod.conf.template` | **production** gateway (COPYd by gateway/Dockerfile.prod) |
+
+The CSP fix was applied to the dev template only, built, pushed and deployed -
+and the production header was completely unchanged. Nothing failed; the image
+simply did not contain the change.
+
+It was caught by curling the served header after deploying instead of trusting
+that a successful build meant a correct artifact. **Always verify the response
+header, not the build exit code.**
