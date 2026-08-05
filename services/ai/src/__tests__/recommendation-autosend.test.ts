@@ -8,7 +8,7 @@
  * channel was built to do. The carousel only ever appeared when the model
  * chose to call `send_product_card`, which it had no reason to.
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   planAutoRecommendation,
   applyBudgetPolicy,
@@ -19,6 +19,8 @@ import {
   filterByAvailability,
   countAboveBudget,
   stripProductEnumeration,
+  decideDelivery,
+  reportCarouselFallback,
 } from "../services/recommendation-autosend.service";
 import { normalizeShopifyProducts } from "../services/product-search.service";
 import { capabilitiesFor } from "@chatcenter/shared";
@@ -501,5 +503,85 @@ describe("the introduction never re-lists the products", () => {
 
   it("does nothing when there are fewer than two titles to match", () => {
     expect(stripProductEnumeration("Anything at all.", ["Solo"])).toBe("Anything at all.");
+  });
+});
+
+// ─── 6. Carousel delivery failure → logged text fallback ─────
+
+describe("6. the rendering invariant, including when it fails", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  const sending = () => plan();
+
+  it("cards went out: the text is the lead-in, no fallback", () => {
+    const d = decideDelivery(sending(), { ok: true });
+    expect(d).toEqual({ structuredSent: true, useTextFallback: false });
+  });
+
+  it("staging REFUSED: text fallback, with the reason attached", () => {
+    const d = decideDelivery(sending(), { ok: false, reason: "no_matching_products" });
+    expect(d.structuredSent).toBe(false);
+    expect(d.useTextFallback).toBe(true);
+    expect(d.fallbackReason).toBe("stage_refused:no_matching_products");
+  });
+
+  it("staging refused with no reason still names the failure", () => {
+    expect(decideDelivery(sending(), { ok: false }).fallbackReason).toBe("stage_refused:unknown");
+  });
+
+  it("staging THREW: text fallback, with the message attached", () => {
+    const d = decideDelivery(sending(), { threw: new Error("shopify 502") });
+    expect(d.useTextFallback).toBe(true);
+    expect(d.fallbackReason).toBe("stage_threw:shopify 502");
+  });
+
+  it("a non-Error throw is still reported rather than swallowed", () => {
+    expect(decideDelivery(sending(), { threw: "boom" }).fallbackReason).toBe("stage_threw:unknown");
+  });
+
+  it("never attempted, though it should have been, is itself an incident", () => {
+    expect(decideDelivery(sending(), null).fallbackReason).toBe("not_attempted");
+  });
+
+  it("a channel that cannot render cards falls back WITHOUT an incident", () => {
+    // Not a failure - the text list is simply the right answer there, so
+    // it must not pollute the fallback rate.
+    const d = decideDelivery(plan({ channelSupportsCards: false }), null);
+    expect(d.useTextFallback).toBe(true);
+    expect(d.fallbackReason).toBeUndefined();
+  });
+
+  it("already staged by the model: no fallback and no incident", () => {
+    const d = decideDelivery(plan({ alreadyStaged: true }), null);
+    expect(d.structuredSent).toBe(false);
+    expect(d.useTextFallback).toBe(false);
+    expect(d.fallbackReason).toBeUndefined();
+  });
+
+  it("logs the fallback so the rate is visible", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    reportCarouselFallback({
+      conversationId: "conv1",
+      tenantId: "t1",
+      reason: "stage_refused:no_matching_products",
+      productCount: 3,
+    });
+    expect(warn).toHaveBeenCalledTimes(1);
+    const line = warn.mock.calls[0][0] as string;
+    expect(line).toContain("shopify carousel fallback");
+    expect(line).toContain("conv=conv1");
+    expect(line).toContain("reason=stage_refused:no_matching_products");
+    expect(line).toContain("products=3");
+  });
+
+  it("observability failing never costs the customer their reply", () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {
+      throw new Error("logger exploded");
+    });
+    // console.warn is inside reportCarouselFallback, so an exploding
+    // logger would otherwise propagate straight up the reply path.
+    expect(() =>
+      reportCarouselFallback({ conversationId: "c", tenantId: "t", reason: "x", productCount: 1 }),
+    ).not.toThrow();
   });
 });
