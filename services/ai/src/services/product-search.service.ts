@@ -45,6 +45,17 @@ export interface ProductSearchEnvelope {
    * without an FX rate.
    */
   budgetCurrencyMismatch?: { budget: string; shop: string };
+  /**
+   * The COMPARABLE budget, in the store's own currency, when there is one.
+   *
+   * Present only when a comparison is actually valid - absent on a
+   * currency mismatch, exactly like `comparableBudget` inside the
+   * normalizer. Carried on the envelope because downstream has to make a
+   * real selection decision with it (exclude an over-budget product,
+   * label one that is kept), and re-deriving a budget from the model's
+   * prose is how a USD 729.95 board reached a shopper who said 700.
+   */
+  budget?: { target: number; currency: string };
 }
 
 /**
@@ -280,6 +291,7 @@ export function normalizeShopifyProducts(
     unavailableFilters,
     safeModelSummary: buildSafeModelSummary(candidates),
     ...(mismatch ? { budgetCurrencyMismatch: mismatch } : {}),
+    ...(comparableBudget ? { budget: comparableBudget } : {}),
   };
 }
 
@@ -330,6 +342,9 @@ export function buildKeyedModelSummary(
     ...fx,
     "",
     "Rules: reference candidates by key. Do NOT write product URLs, prices, or availability yourself - the system attaches the exact values below your text. Do NOT re-list the products as a bulleted catalogue either; that list is already appended, and repeating it just prints every title twice. Write only the short reasoning a person would say out loud, naming at most two or three keys inline. Do NOT mention any product not listed above. Never invent flex, riding style or board length; if the shopper asks for one and it is marked unknown, say that detail is not listed for this product.",
+    "",
+    "NEVER ASK PERMISSION TO SHOW THE PRODUCTS (CRITICAL). On a channel with product cards the system attaches them to this very message, automatically, without you calling anything. So do NOT write \"would you like me to send a product card?\", \"רוצה שאשלח כרטיסי מוצר?\", \"אפשר להציג לך את המוצרים?\" or any variant. Offering, as a favour, the thing that is already happening reads as a system asking permission to do its job. Write the short lead-in as though the products are already visible below your text, because they are.",
+    "BUDGET HONESTY (CRITICAL). Each candidate above is marked either `within budget` or `approximate/over-budget`, computed from the store's own prices. NEVER say or imply that every option matches the budget when any one of them is marked over-budget. If you name an over-budget option, say plainly that it is above what they asked for. Do not do the arithmetic yourself and do not contradict the marking.",
   ].join("\n");
 }
 
