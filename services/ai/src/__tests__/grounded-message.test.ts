@@ -29,7 +29,13 @@ describe("validateGroundedMessage", () => {
   });
 
   it("rejects em dashes (AI-signature punctuation must not reach customers)", () => {
-    const v = validateGroundedMessage("ביצעתי את ההחזר - 600.00 USD יוחזרו אליך.", REFUND_OK);
+    // \u2014 written as an escape so a find-replace over this repo can
+    // never again turn the fixture into a plain hyphen and quietly make
+    // this test assert nothing.
+    const v = validateGroundedMessage(
+      "\u05d1\u05d9\u05e6\u05e2\u05ea\u05d9 \u05d0\u05ea \u05d4\u05d4\u05d7\u05d6\u05e8 \u2014 600.00 USD \u05d9\u05d5\u05d7\u05d6\u05e8\u05d5 \u05d0\u05dc\u05d9\u05da.",
+      REFUND_OK,
+    );
     expect(v.ok).toBe(false);
     expect(v.problems).toContain("em_dash_present");
   });
@@ -98,7 +104,7 @@ describe("buildFallbackMessage (deterministic, always safe)", () => {
     const msg = buildFallbackMessage(REFUND_OK, "אני רוצה זיכוי\nכן");
     expect(msg).toContain("600.00 USD");
     expect(msg).toContain("#1004");
-    expect(/[–-―]/.test(msg)).toBe(false);
+    expect(/[\u2013\u2014\u2015]/.test(msg)).toBe(false);
     expect(/[֐-׿]/.test(msg)).toBe(true);
     expect(validateGroundedMessage(msg, REFUND_OK).ok).toBe(true);
   });
