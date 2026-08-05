@@ -24,6 +24,12 @@ import {
 } from "@chatcenter/shared";
 import type { AgentToolDispatchResult } from "@chatcenter/shared";
 import { withProtectedAtoms } from "@chatcenter/shared";
+import {
+  readGrammaticalAddress,
+  updateGrammaticalAddress,
+  validateGrammaticalAgreement,
+  shouldRegenerateForAddress,
+} from "@chatcenter/shared";
 import { runProductDiscoveryTurn, recordDiscoverySearchOutcome, groundProductSearchResult, isProductSearchTool } from "./discovery-integration.service";
 import { buildKeyedModelSummary, renderGroundedProductReply, renderCandidatesForWhatsApp, type ProductSearchEnvelope } from "./product-search.service";
 import { buildAICommerceSnapshot, formatCommerceSnapshotForPrompt } from "./commerce-ai-snapshot.service";
@@ -1561,6 +1567,45 @@ async function generateAIBotReplyInner(
     whatsappWindowBlock: followupFacts.whatsappWindowBlock,
     templatesBlock: followupFacts.templatesBlock,
     sessionFactsBlock,
+  };
+
+  // ── Grammatical address ────────────────────────────────
+  //
+  // In Hebrew the reply has to pick a form for almost every verb aimed at
+  // the customer. This resolves which one from what the customer wrote
+  // about THEMSELVES in this conversation - a first-person agreement form
+  // or an outright request - and nothing else. Their name, phone, email
+  // and purchase history are not inputs and there is no code path that
+  // could make them inputs. See packages/shared/src/lib/grammatical-address.ts.
+  const addressLocale = detectLocale(messages.map((m) => m.body || ""));
+  const storedAddress = readGrammaticalAddress((conversation as any).grammaticalAddress);
+  const newestInbound = [...messages].reverse().find((m) => m.direction === "INBOUND");
+  const addressUpdate = updateGrammaticalAddress({
+    current: storedAddress,
+    // The live inbound when the caller passed one (it may not be persisted
+    // yet), otherwise the newest inbound row.
+    text: opts.incomingMessage?.trim() || newestInbound?.body || "",
+    messageId: newestInbound?.id,
+    locale: addressLocale,
+  });
+  if (addressUpdate.changed) {
+    // Fire and forget: a form we failed to persist costs one turn of
+    // staleness, and blocking a customer reply on it would be worse.
+    prisma.conversation
+      .update({
+        where: { id: opts.conversationId },
+        data: { grammaticalAddress: addressUpdate.next as any },
+      })
+      .catch((err: any) =>
+        console.warn("[ai-bot] grammatical address persist failed:", err?.message),
+      );
+  }
+  // `language` is stamped for the PROMPT even when the form is unknown, so
+  // a Hebrew conversation with no evidence still gets the neutral-phrasing
+  // instruction instead of silence. Only `addressUpdate.next` is persisted.
+  ctxSlot.grammaticalAddress = {
+    ...addressUpdate.next,
+    language: addressUpdate.next.language ?? addressLocale,
   };
 
   // Verified commerce context for the AI employee (spec §7): only when Shopify
@@ -4446,6 +4491,35 @@ async function generateAIBotReplyInner(
     } catch (err: any) {
       // A guard that throws must not cost the customer their reply.
       console.error(`[ai-bot] reply guard failed conv=${opts.conversationId}:`, err?.message);
+    }
+  }
+
+  // Grammatical agreement check.
+  //
+  // Reports, deliberately does not rewrite. Hebrew agreement cannot be
+  // repaired by pattern substitution without producing something worse
+  // than the mistake, and a wrong form is a quality failure, not a false
+  // statement about the customer's order - so it must never cost anyone
+  // their reply. What it buys is visibility: a conflict here means the
+  // model ignored a form the customer gave us THIS conversation, which is
+  // the exact regression the address block exists to prevent and the only
+  // way to know it is happening at all.
+  if (replyText && ctxSlot.grammaticalAddress) {
+    try {
+      const verdict = validateGrammaticalAgreement(
+        replyText,
+        ctxSlot.grammaticalAddress,
+        addressLocale,
+      );
+      if (shouldRegenerateForAddress(verdict)) {
+        console.warn(
+          `[ai-bot] grammatical address mismatch conv=${opts.conversationId} ` +
+            `known=${ctxSlot.grammaticalAddress.form}/${ctxSlot.grammaticalAddress.confidence} ` +
+            `reply=${verdict.replyForm} problems=${verdict.problems.join(",")}`,
+        );
+      }
+    } catch (err: any) {
+      console.error(`[ai-bot] grammatical check failed conv=${opts.conversationId}:`, err?.message);
     }
   }
 
