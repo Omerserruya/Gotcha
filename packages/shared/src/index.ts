@@ -1009,5 +1009,10 @@ export type { ErrorCode } from "./lib/observability/error-codes";
 export { reportOperationalFailure, recordExpectedOutcome, buildFailureTags, projectFor, assertSafeContext, UnsafeContextError } from "./lib/observability/operational-failure";
 export type { OperationalFailure, FailureDomain } from "./lib/observability/operational-failure";
 
+// WhatsApp onboarding & multi-number architecture. Official Meta APIs only:
+// a typed Graph client, the read-only Meta Inspector, and the pure flow
+// selector. Message sending stays in ./channels/whatsapp.adapter.
+export * from "./whatsapp";
+
 // Types import (side-effect for Express augmentation)
 import "./types/express.d";
