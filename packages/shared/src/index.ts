@@ -896,6 +896,34 @@ export {
   type ResolvedLocale,
 } from "./lib/locale";
 
+// Per-message text direction. Direction is a property of a MESSAGE, not of
+// a widget: one conversation routinely carries Hebrew prose, English
+// product names and LTR URLs at once.
+export {
+  detectScriptDirection,
+  resolveMessageDirection,
+  messageDirection,
+  directionForLocale,
+  isRtlLocale,
+  countStrongCharacters,
+  stripNeutralAtoms,
+  segmentBidiText,
+  needsBidiIsolation,
+  textAlignFor,
+  inlineStartSide,
+  inlineEndSide,
+  RTL_LANGUAGES,
+  RTL_SHARE_THRESHOLD,
+  STRONG_RTL_RE,
+  STRONG_LTR_RE,
+  type TextDirection,
+  type DirectionSetting,
+  type MessageDirectionInput,
+  type ResolvedMessageDirection,
+  type ScriptCounts,
+  type BidiSegment,
+} from "./lib/text-direction";
+
 // Capability Runtime (operation contracts + pure resolver). Strategy/provider
 // impls live in services/ai and are injected via RuntimeBindings.
 export * from "./lib/capability-runtime";

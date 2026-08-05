@@ -182,7 +182,11 @@ describe("preview shell", () => {
     const cfg = previewWidgetConfig({}, { language: "he", offline: true });
     expect(cfg.features.humanHandoff).toBe(false);
     expect(cfg.offline.active).toBe(true);
-    expect(cfg.appearance.direction).toBe("rtl");
+    // "auto", not "rtl": pinning the direction would short-circuit the
+    // widget's per-message resolution and preview a widget no shopper
+    // gets. Hebrew still lays the panel out RTL through `language`.
+    expect(cfg.appearance.language).toBe("he");
+    expect(cfg.appearance.direction).toBe("auto");
     expect(cfg.welcome.suggestedQuestions).toEqual([]);
   });
 
