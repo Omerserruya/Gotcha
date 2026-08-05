@@ -15,7 +15,153 @@
  *   2. Nothing about money or stock is believed from local state. Prices
  *      shown come from the server's snapshot; Add to Cart re-validates
  *      server-side and only then touches the theme's own cart.
+ *   3. Direction is a property of a MESSAGE, not of the widget. See the
+ *      bidi module immediately below.
  */
+
+/**
+ * Bidi: per-message direction, in ES5, on a storefront page.
+ *
+ * This is a deliberate restatement of
+ * `packages/shared/src/lib/text-direction.ts`. The widget ships without a
+ * bundler and cannot import the workspace package, so the rules live
+ * twice - and `frontend/src/components/shopify/__tests__/widget-rtl-parity.test.ts`
+ * runs both implementations over the same table and fails on the first
+ * disagreement. Change one, change the other.
+ *
+ * Kept as its own module rather than folded into the app factory so the
+ * parity test can reach it without booting a widget.
+ */
+window.__gotchaBidi = (function () {
+  "use strict";
+
+  var RTL_LANGUAGES = [
+    "he", "iw", "ar", "fa", "prs", "ur", "ps", "sd", "ug", "ckb", "ku",
+    "yi", "ji", "dv", "arc", "syr",
+    "he-il", "ar-sa", "ar-ae", "ar-eg", "fa-ir", "ur-pk",
+  ];
+
+  var STRONG_RTL = /[\u0590-\u05FF\u0600-\u06FF\u0700-\u074F\u0750-\u077F\u0780-\u07BF\u07C0-\u07FF\u0800-\u083F\u0840-\u085F\u0860-\u086F\u08A0-\u08FF\uFB1D-\uFB4F\uFB50-\uFDFF\uFE70-\uFEFF]/g;
+  var STRONG_LTR = /[A-Za-z\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF\u1E00-\u1EFF\u2C60-\u2C7F\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uAC00-\uD7AF]/g;
+
+  var RTL_SHARE_THRESHOLD = 0.3;
+
+  // Runs with no direction of their own. A Hebrew sentence does not
+  // become English by quoting a product URL.
+  var ATOMS = [
+    /\b(?:https?:\/\/|www\.)[^\s<>"']+/gi,
+    /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g,
+    /(?:[$₪€£¥₹]\s?\d[\d.,]*|\b\d[\d.,]*\s?(?:USD|ILS|EUR|GBP|JPY|AED|SAR|INR|NIS)\b|\b(?:USD|ILS|EUR|GBP|JPY|AED|SAR|INR|NIS)\s?\d[\d.,]*)/gi,
+    /\b[A-Z0-9]{2,}(?:[-_/][A-Z0-9]+)+\b/g,
+    /\+\d[\d\s\-().]{6,}\d/g,
+  ];
+
+  function stripNeutralAtoms(text) {
+    var out = String(text == null ? "" : text);
+    for (var i = 0; i < ATOMS.length; i++) {
+      out = out.replace(new RegExp(ATOMS[i].source, ATOMS[i].flags), " ");
+    }
+    return out;
+  }
+
+  function countStrong(text) {
+    var clean = stripNeutralAtoms(text);
+    var rtl = (clean.match(STRONG_RTL) || []).length;
+    var ltr = (clean.match(STRONG_LTR) || []).length;
+    var total = rtl + ltr;
+    return { rtl: rtl, ltr: ltr, rtlShare: total === 0 ? 0 : rtl / total };
+  }
+
+  /** "rtl" | "ltr" | null. Null means "this text has no opinion". */
+  function detectScriptDirection(text) {
+    var c = countStrong(text);
+    if (c.rtl === 0 && c.ltr === 0) return null;
+    if (c.rtl === 0) return "ltr";
+    if (c.ltr === 0) return "rtl";
+    return c.rtlShare >= RTL_SHARE_THRESHOLD ? "rtl" : "ltr";
+  }
+
+  function isRtlLocale(locale) {
+    if (typeof locale !== "string") return false;
+    var tag = locale.trim().toLowerCase().replace(/_/g, "-");
+    if (!tag) return false;
+    if (RTL_LANGUAGES.indexOf(tag) !== -1) return true;
+    return RTL_LANGUAGES.indexOf(tag.split("-")[0]) !== -1;
+  }
+
+  function directionForLocale(locale) {
+    if (typeof locale !== "string" || !locale.trim()) return null;
+    return isRtlLocale(locale) ? "rtl" : "ltr";
+  }
+
+  /**
+   * The priority chain: explicit metadata, then this message's own
+   * script, then the conversation, then the store, then LTR.
+   */
+  function resolveMessageDirection(input) {
+    var i = input || {};
+    if (i.override === "rtl" || i.override === "ltr") {
+      return { direction: i.override, source: "override" };
+    }
+    var fromContent = directionForLocale(i.contentLocale);
+    if (fromContent) return { direction: fromContent, source: "content_locale" };
+
+    var fromScript = detectScriptDirection(i.text);
+    if (fromScript) return { direction: fromScript, source: "script" };
+
+    var fromConversation = directionForLocale(i.conversationLocale);
+    if (fromConversation) return { direction: fromConversation, source: "conversation_locale" };
+
+    var fromWidget = directionForLocale(i.widgetLocale);
+    if (fromWidget) return { direction: fromWidget, source: "widget_locale" };
+
+    return { direction: "ltr", source: "default" };
+  }
+
+  /**
+   * Split prose from the atoms that must sit inside a <bdi>. Without this
+   * a URL's trailing full stop migrates to the wrong end of the link and
+   * "$120.00" shows its dollar sign on the right.
+   */
+  function segmentBidiText(text) {
+    var src = String(text == null ? "" : text);
+    if (!src) return [];
+    var sources = [];
+    for (var i = 0; i < ATOMS.length; i++) sources.push("(?:" + ATOMS[i].source + ")");
+    var combined = new RegExp(sources.join("|"), "gi");
+
+    var out = [];
+    var cursor = 0;
+    var m;
+    while ((m = combined.exec(src)) !== null) {
+      if (m.index > cursor) out.push({ text: src.slice(cursor, m.index), kind: "text" });
+      out.push({ text: m[0], kind: "isolate" });
+      cursor = m.index + m[0].length;
+      if (m[0].length === 0) combined.lastIndex++;
+    }
+    if (cursor < src.length) out.push({ text: src.slice(cursor), kind: "text" });
+    return out;
+  }
+
+  function needsBidiIsolation(text) {
+    var segs = segmentBidiText(text);
+    for (var i = 0; i < segs.length; i++) if (segs[i].kind === "isolate") return true;
+    return false;
+  }
+
+  return {
+    RTL_SHARE_THRESHOLD: RTL_SHARE_THRESHOLD,
+    stripNeutralAtoms: stripNeutralAtoms,
+    countStrongCharacters: countStrong,
+    detectScriptDirection: detectScriptDirection,
+    isRtlLocale: isRtlLocale,
+    directionForLocale: directionForLocale,
+    resolveMessageDirection: resolveMessageDirection,
+    segmentBidiText: segmentBidiText,
+    needsBidiIsolation: needsBidiIsolation,
+  };
+})();
+
 window.__gotchaShopifyChatApp = function (boot) {
   "use strict";
 
@@ -124,8 +270,37 @@ window.__gotchaShopifyChatApp = function (boot) {
         ? "he"
         : "en";
   var T = STRINGS[lang] || STRINGS.en;
-  var dir =
-    appearance.direction !== "auto" ? appearance.direction : lang === "he" ? "rtl" : "ltr";
+  var BIDI = window.__gotchaBidi;
+
+  // The merchant's explicit choice, or "auto". Passed to every per-message
+  // resolution so one setting still governs the whole widget when a
+  // merchant has made a decision.
+  var dirOverride = appearance.direction === "rtl" || appearance.direction === "ltr"
+    ? appearance.direction
+    : "auto";
+
+  // The PANEL's direction: chrome, layout and the direction a shopper
+  // starts typing in. Individual bubbles resolve their own.
+  var dir = BIDI.resolveMessageDirection({
+    override: dirOverride,
+    conversationLocale: lang,
+    widgetLocale: boot.context.locale || document.documentElement.lang || null,
+  }).direction;
+
+  /**
+   * Direction of ONE message. The storefront locale is the last resort,
+   * so a Hebrew shopper's "👍" stays on the Hebrew side and an English
+   * agent reply inside the same conversation still reads left to right.
+   */
+  function dirOf(text, contentLocale) {
+    return BIDI.resolveMessageDirection({
+      override: dirOverride,
+      contentLocale: contentLocale || null,
+      text: text,
+      conversationLocale: lang,
+      widgetLocale: boot.context.locale || null,
+    }).direction;
+  }
 
   // ── State ───────────────────────────────────────────────────────
 
@@ -171,6 +346,62 @@ window.__gotchaShopifyChatApp = function (boot) {
   }
   function on(node, evt, fn) {
     node.addEventListener(evt, fn);
+    return node;
+  }
+
+  /**
+   * Write text into a node with its own direction, isolating the atoms
+   * that the bidi algorithm otherwise mangles.
+   *
+   * Still no innerHTML: <bdi> elements are built with createElement and
+   * filled with textContent, so rule 1 at the top of this file holds.
+   * <bdi> is used rather than a CSS `unicode-bidi` span because it
+   * isolates natively, needs no stylesheet to be correct, and degrades to
+   * an inline element on anything that has not implemented it.
+   */
+  function setDirectedText(node, text, contentLocale) {
+    var value = text == null ? "" : String(text);
+    var d = dirOf(value, contentLocale);
+    attr(node, { dir: d });
+    clear(node);
+    var segments = BIDI.segmentBidiText(value);
+    if (segments.length <= 1) {
+      node.textContent = value;
+      return node;
+    }
+    segments.forEach(function (seg) {
+      if (seg.kind === "isolate") {
+        var bdi = document.createElement("bdi");
+        // A URL, a price or a part code is always read left to right,
+        // whatever it is embedded in.
+        bdi.setAttribute("dir", "ltr");
+        bdi.textContent = seg.text;
+        node.appendChild(bdi);
+      } else {
+        node.appendChild(document.createTextNode(seg.text));
+      }
+    });
+    return node;
+  }
+
+  /**
+   * An element whose content is ALWAYS left to right regardless of the
+   * surrounding prose: prices, timestamps, counts, part codes. Rendered
+   * as a <bdi> so it cannot leak its direction into the sentence around
+   * it.
+   */
+  function ltrAtom(className, text) {
+    var bdi = document.createElement("bdi");
+    if (className) bdi.className = className;
+    bdi.setAttribute("dir", "ltr");
+    bdi.textContent = text == null ? "" : String(text);
+    return bdi;
+  }
+
+  /** A text node with its own resolved direction. */
+  function directedEl(tag, className, text, contentLocale) {
+    var node = el(tag, className);
+    setDirectedText(node, text, contentLocale);
     return node;
   }
 
@@ -401,7 +632,9 @@ window.__gotchaShopifyChatApp = function (boot) {
     ".sug{display:flex;flex-direction:column;gap:var(--s1);}",
     // Compact: 9px of padding and a 1.35 line-height instead of 12px and
     // the panel default. Three questions now cost what two used to.
-    ".sug-b{text-align:" + (dir === "rtl" ? "right" : "left") + ";border:1px solid #e8edf3;background:#fff;",
+    // `start`, resolved against the chip's OWN dir: a Hebrew suggestion
+    // and an English one in the same list each read from their own edge.
+    ".sug-b{text-align:start;border:1px solid #e8edf3;background:#fff;",
     "  border-radius:11px;padding:9px 12px;font:inherit;font-size:13.5px;line-height:1.35;",
     "  color:#1e293b;cursor:pointer;min-height:38px;display:flex;align-items:center;",
     "  transition:border-color .15s,background .15s,color .15s;}",
@@ -415,7 +648,11 @@ window.__gotchaShopifyChatApp = function (boot) {
     // than turning the welcome screen into a list.
     // Follows the copy's alignment rather than picking its own, and stays
     // quiet: it is an escape hatch for the curious, not a call to action.
-    ".sug-more{align-self:" + (dir === "rtl" ? "flex-end" : "flex-start") + ";background:none;border:0;",
+    // `flex-start` in a COLUMN flex container already resolves against
+    // the writing direction, so flipping it by hand was a double flip:
+    // in RTL the toggle landed on the left, opposite the questions it
+    // belongs to.
+    ".sug-more{align-self:flex-start;background:none;border:0;",
     "  padding:var(--s1) var(--s2);margin:0;font:inherit;font-size:12.5px;font-weight:500;color:#64748b;",
     "  cursor:pointer;border-radius:8px;}",
     ".wel[data-align='center'] .sug-more{align-self:center;}",
@@ -427,11 +664,21 @@ window.__gotchaShopifyChatApp = function (boot) {
     ".row{display:flex;flex-direction:column;max-width:100%;}",
     ".row[data-me='1']{align-items:flex-end;}",
     ".row[data-me='0']{align-items:flex-start;}",
-    ".bub{max-width:84%;padding:10px 13px;border-radius:16px;font-size:14.5px;white-space:pre-wrap;word-break:break-word;}",
+    // `text-align:start` resolves against the element's OWN dir, which is
+    // the message's, not the panel's. The two explicit rules below are
+    // not redundancy: they are what makes the intent readable in devtools
+    // when a bubble disagrees with the widget around it.
+    ".bub{max-width:84%;padding:10px 13px;border-radius:16px;font-size:14.5px;white-space:pre-wrap;word-break:break-word;text-align:start;}",
+    ".bub[dir='rtl']{text-align:right;}",
+    ".bub[dir='ltr']{text-align:left;}",
+    // A URL, price or part code inside prose of the other direction. The
+    // isolation is <bdi>'s own; this only stops a long link from forcing
+    // the bubble wider than the panel.
+    ".bub bdi,.why bdi,.card-ti bdi{unicode-bidi:isolate;overflow-wrap:anywhere;}",
     ".row[data-me='1'] .bub{background:" + brand + ";color:" + onBrand + ";border-bottom-" + (dir === "rtl" ? "left" : "right") + "-radius:6px;}",
     ".row[data-me='0'] .bub{background:#f1f5f9;color:#0f172a;border-bottom-" + (dir === "rtl" ? "right" : "left") + "-radius:6px;}",
-    ".who{font-size:11.5px;color:#94a3b8;margin:0 4px 3px;}",
-    ".mst{font-size:11px;color:#94a3b8;margin:3px 4px 0;}",
+    ".who{font-size:11.5px;color:#94a3b8;margin:0 4px 3px;text-align:start;}",
+    ".mst{font-size:11px;color:#94a3b8;margin:3px 4px 0;text-align:start;}",
     ".typ{display:inline-flex;gap:4px;align-items:center;padding:12px 14px;background:#f1f5f9;border-radius:16px;}",
     ".typ i{width:6px;height:6px;border-radius:3px;background:#94a3b8;animation:blink 1.2s infinite;}",
     ".typ i:nth-child(2){animation-delay:.2s}.typ i:nth-child(3){animation-delay:.4s}",
@@ -444,7 +691,7 @@ window.__gotchaShopifyChatApp = function (boot) {
     ".card-top{display:flex;gap:12px;padding:12px;}",
     ".card-im{width:78px;height:78px;border-radius:11px;object-fit:cover;background:#f1f5f9;flex:0 0 auto;}",
     ".card-in{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:3px;}",
-    ".card-ti{font-weight:620;font-size:14.5px;line-height:1.3;}",
+    ".card-ti{font-weight:620;font-size:14.5px;line-height:1.3;text-align:start;}",
     ".card-pr{display:flex;align-items:baseline;gap:7px;flex-wrap:wrap;}",
     ".pr{font-weight:650;font-size:15px;}",
     ".pr-was{font-size:12.5px;color:#94a3b8;text-decoration:line-through;}",
@@ -452,7 +699,7 @@ window.__gotchaShopifyChatApp = function (boot) {
     ".tag-sale{background:#fee2e2;color:#b91c1c;}",
     ".tag-out{background:#f1f5f9;color:#64748b;}",
     ".tag-dr{background:#fef3c7;color:#92400e;}",
-    ".why{font-size:12.5px;color:#475569;padding:0 12px 10px;}",
+    ".why{font-size:12.5px;color:#475569;padding:0 12px 10px;text-align:start;}",
     ".opts{padding:0 12px 10px;display:flex;flex-direction:column;gap:7px;}",
     ".opt-l{font-size:11.5px;color:#64748b;}",
     ".chips{display:flex;flex-wrap:wrap;gap:6px;}",
@@ -520,7 +767,11 @@ window.__gotchaShopifyChatApp = function (boot) {
     "  font:inherit;font-size:16px;line-height:1.4;max-height:104px;min-height:38px;color:#0f172a;background:#fff;",
     "  transition:border-color .15s,box-shadow .15s;}",
     "@media (min-width: 561px){.ta{font-size:14px;}}",
-    ".ta::placeholder{color:#9aa7b8;}",
+    // `start`, not `left`: with dir="auto" the caret begins on the side
+    // the shopper's language starts from, and the placeholder sits there
+    // waiting for it.
+    ".ta{text-align:start;}",
+    ".ta::placeholder{color:#9aa7b8;text-align:start;}",
     ".ta:focus{outline:none;border-color:" + brand + ";box-shadow:0 0 0 3px " + brand + "1f;}",
     "@media (prefers-reduced-motion: reduce){.ta{transition:none}}",
     ".snd{width:38px;height:38px;flex:0 0 auto;border-radius:10px;border:0;background:" + brand + ";",
@@ -662,7 +913,18 @@ window.__gotchaShopifyChatApp = function (boot) {
   var composer = el("form", "cmp");
   var textarea = document.createElement("textarea");
   textarea.className = "ta";
-  attr(textarea, { rows: "1", placeholder: T.placeholder, "aria-label": T.placeholder, maxlength: "2000" });
+  // The ONE place `dir="auto"` is the right answer rather than a guess:
+  // the input has no history to reason from, first-strong is exactly the
+  // rule a typist expects, and it re-evaluates as they type. Empty, it
+  // inherits the panel, so the placeholder sits where the shopper is
+  // about to start typing.
+  attr(textarea, {
+    rows: "1",
+    dir: "auto",
+    placeholder: T.placeholder,
+    "aria-label": T.placeholder,
+    maxlength: "2000",
+  });
   var sendBtn = el("button", "snd");
   attr(sendBtn, { type: "submit", "aria-label": T.send, disabled: "" });
   sendBtn.innerHTML =
@@ -926,7 +1188,10 @@ window.__gotchaShopifyChatApp = function (boot) {
     if (!kind) { banner.hidden = true; return; }
     banner.hidden = false;
     banner.setAttribute("data-kind", kind);
-    banner.textContent = text;
+    // `S.error` can be a server sentence in the shopper's language while
+    // the rest of these are widget strings, so the banner resolves rather
+    // than assumes.
+    setDirectedText(banner, text);
   }
 
   function hasAgentMessage() {
@@ -1091,8 +1356,8 @@ window.__gotchaShopifyChatApp = function (boot) {
     // Grouped: a title and its subtitle are one thought, and should not be
     // separated by the same gap that separates them from the questions.
     var copy = el("div", "wel-cp");
-    copy.appendChild(el("h2", "wel-h", title));
-    if (subtitle) copy.appendChild(el("p", "wel-s", subtitle));
+    copy.appendChild(directedEl("h2", "wel-h", title));
+    if (subtitle) copy.appendChild(directedEl("p", "wel-s", subtitle));
     wrap.appendChild(copy);
     if (!W || W.textAlign !== "start") {
       wrap.style.textAlign = "center";
@@ -1100,8 +1365,7 @@ window.__gotchaShopifyChatApp = function (boot) {
     }
 
     if (boot.availability === "offline" && widget.offline && widget.offline.message) {
-      var note = el("p", "wel-s", widget.offline.message);
-      wrap.appendChild(note);
+      wrap.appendChild(directedEl("p", "wel-s", widget.offline.message));
     }
 
     var questions = (W && W.suggestedQuestions && W.suggestedQuestions.length ? W.suggestedQuestions : welcome.suggestedQuestions) || [];
@@ -1114,7 +1378,9 @@ window.__gotchaShopifyChatApp = function (boot) {
       var VISIBLE = 3;
       var hidden = [];
       questions.forEach(function (q, i) {
-        var b = el("button", "sug-b", q);
+        // A merchant may write suggestions in a language other than the
+        // widget's; each chip reads in its own.
+        var b = directedEl("button", "sug-b", q);
         attr(b, { type: "button" });
         on(b, "click", function () {
           track("suggested_question_clicked");
@@ -1169,7 +1435,9 @@ window.__gotchaShopifyChatApp = function (boot) {
 
     if (S.awaitingReply && !S.ended) {
       var typing = el("div", "row");
-      attr(typing, { "data-me": "0" });
+      // The dots stand in for a reply that has not arrived, so they take
+      // the direction the conversation is being held in.
+      attr(typing, { "data-me": "0", dir: dir });
       var t = el("div", "typ");
       attr(t, { "aria-label": T.waitingAi });
       t.appendChild(el("i"));
@@ -1188,7 +1456,9 @@ window.__gotchaShopifyChatApp = function (boot) {
     attr(row, { "data-me": m.direction === "INBOUND" ? "1" : "0" });
 
     if (m.direction === "OUTBOUND" && m.author && !sameAuthorAsPrevious) {
-      row.appendChild(el("div", "who", m.author));
+      // An agent called "דנה" and one called "Dana" belong on opposite
+      // sides of their own label.
+      row.appendChild(directedEl("div", "who", m.author));
     }
     if (m.commerce && m.commerce.products && m.commerce.products.length) {
       row.appendChild(
@@ -1204,15 +1474,19 @@ window.__gotchaShopifyChatApp = function (boot) {
       }
       return row;
     }
-    if (m.body) row.appendChild(el("div", "bub", m.body));
+    // `m.locale` is the server's own statement about this message's
+    // language when it has one (a translated or generated reply knows);
+    // otherwise the text decides.
+    if (m.body) row.appendChild(directedEl("div", "bub", m.body, m.locale));
     return row;
   }
 
   function pendingRow(p) {
     var row = el("div", "row");
     attr(row, { "data-me": "1" });
-    row.appendChild(el("div", "bub", p.body));
-    row.appendChild(el("div", "mst", p.failed ? T.failed : "· · ·"));
+    row.appendChild(directedEl("div", "bub", p.body));
+    // The status line is widget chrome, so it follows the widget.
+    row.appendChild(attr(el("div", "mst", p.failed ? T.failed : "· · ·"), { dir: dir }));
     if (p.failed) {
       var retry = el("button", "lnk", T.retry);
       attr(retry, { type: "button" });
@@ -1237,6 +1511,12 @@ window.__gotchaShopifyChatApp = function (boot) {
    */
   function productCard(product, addToCartAllowed, compact) {
     var card = el("div", "card");
+    // The card is CHROME. Its layout follows the widget, not the message
+    // it happens to sit under, so an English-titled product inside a
+    // Hebrew reply does not flip the image, the buttons and the stepper
+    // to the other side mid-conversation. Only the text inside it -
+    // title, reason - resolves per string.
+    attr(card, { dir: dir });
     var vState = {
       variantId: product.selectedVariantId || autoVariant(product),
       quantity: 1,
@@ -1268,16 +1548,22 @@ window.__gotchaShopifyChatApp = function (boot) {
       }
 
       var info = el("div", "card-in");
-      info.appendChild(el("div", "card-ti", product.title));
+      // A product title is the merchant's, in whatever language they sell
+      // in - never assumed to match the shopper's.
+      info.appendChild(directedEl("div", "card-ti", product.title));
 
+      // Prices, discounts and the row that holds them are LTR whatever
+      // language surrounds them: "₪120.00" reversed is not a price, and a
+      // "-25%" whose minus sign has migrated is a price rise.
       var priceRow = el("div", "card-pr");
+      attr(priceRow, { dir: "ltr" });
       var price = variant && variant.price != null ? variant.price : product.price;
       var wasPrice =
         variant && variant.compareAtPrice != null ? variant.compareAtPrice : product.compareAtPrice;
-      priceRow.appendChild(el("span", "pr", money(price, product.currency)));
+      priceRow.appendChild(ltrAtom("pr", money(price, product.currency)));
       if (wasPrice && Number(wasPrice) > Number(price)) {
-        priceRow.appendChild(el("span", "pr-was", money(wasPrice, product.currency)));
-        priceRow.appendChild(el("span", "tag tag-sale", "-" +
+        priceRow.appendChild(ltrAtom("pr-was", money(wasPrice, product.currency)));
+        priceRow.appendChild(ltrAtom("tag tag-sale", "-" +
           Math.round((1 - Number(price) / Number(wasPrice)) * 100) + "%"));
       }
       info.appendChild(priceRow);
@@ -1289,7 +1575,10 @@ window.__gotchaShopifyChatApp = function (boot) {
       top.appendChild(info);
       card.appendChild(top);
 
-      if (product.reason) card.appendChild(el("div", "why", product.reason));
+      // The "why this one" line is written by the AI employee in the
+      // shopper's language, so it resolves its own direction rather than
+      // inheriting the card's.
+      if (product.reason) card.appendChild(directedEl("div", "why", product.reason));
 
       // Variant picker. A product with real options never gets an
       // arbitrary variant chosen for the shopper — Add to Cart stays
@@ -1384,7 +1673,9 @@ window.__gotchaShopifyChatApp = function (boot) {
         after.appendChild(keep);
         card.appendChild(after);
       }
-      if (vState.error) card.appendChild(el("div", "cart-err", vState.error));
+      // The shopper-safe sentence the server sends is in the shopper's
+      // language, not the widget's.
+      if (vState.error) card.appendChild(directedEl("div", "cart-err", vState.error));
     }
 
     paint();
@@ -1406,30 +1697,52 @@ window.__gotchaShopifyChatApp = function (boot) {
     return null;
   }
 
+  var CAROUSEL_STEP = 224;
+
+  /**
+   * Scroll the strip one card FORWARD or BACKWARD in reading order.
+   *
+   * `scrollLeft` is physical. In an RTL container the first card sits at
+   * scrollLeft 0 and later cards are at NEGATIVE offsets (the modern
+   * spec; older WebKit used positive-descending, which is why the value
+   * is read back rather than assumed). Adding a positive step to advance
+   * therefore scrolled an RTL carousel backwards into its own start edge,
+   * and the shopper saw the arrows do nothing.
+   */
+  function scrollStrip(strip, cards) {
+    var delta = CAROUSEL_STEP * cards;
+    strip.scrollLeft += dir === "rtl" ? -delta : delta;
+  }
+
   function carousel(commerce) {
     var wrap = el("div", "car");
     var strip = el("div", "car-tr");
-    attr(strip, { role: "group", "aria-label": T.next, tabindex: "0" });
+    // The strip is chrome: it lays out in the widget's direction so the
+    // first recommendation is at the edge a shopper starts reading from.
+    attr(strip, { role: "group", "aria-label": T.next, tabindex: "0", dir: dir });
     commerce.products.forEach(function (p) {
       strip.appendChild(productCard(p, commerce.addToCartEnabled, true));
     });
 
     // Keyboard: the strip itself is focusable and arrow keys scroll it,
     // so a keyboard user is never stuck at a horizontal list they can
-    // see but cannot move.
+    // see but cannot move. The keys stay PHYSICAL - ArrowRight moves the
+    // content right on screen in both directions, which is what the key
+    // says on the keycap and what a screen reader user expects.
     on(strip, "keydown", function (e) {
-      var step = 224;
-      if (e.key === "ArrowRight") { strip.scrollLeft += step; e.preventDefault(); }
-      if (e.key === "ArrowLeft") { strip.scrollLeft -= step; e.preventDefault(); }
+      if (e.key === "ArrowRight") { strip.scrollLeft += CAROUSEL_STEP; e.preventDefault(); }
+      if (e.key === "ArrowLeft") { strip.scrollLeft -= CAROUSEL_STEP; e.preventDefault(); }
     });
 
     var nav = el("div", "car-nav");
-    var prev = el("button", "car-n", "‹");
-    attr(prev, { type: "button", "aria-label": T.previous });
-    var next = el("button", "car-n", "›");
-    attr(next, { type: "button", "aria-label": T.next });
-    on(prev, "click", function () { strip.scrollLeft -= 224; });
-    on(next, "click", function () { strip.scrollLeft += 224; });
+    // The chevrons point along the reading order, so "previous" is the
+    // one aiming back toward the start edge whichever side that is.
+    var prev = el("button", "car-n", dir === "rtl" ? "›" : "‹");
+    attr(prev, { type: "button", "aria-label": T.previous, "data-act": "carousel-prev" });
+    var next = el("button", "car-n", dir === "rtl" ? "‹" : "›");
+    attr(next, { type: "button", "aria-label": T.next, "data-act": "carousel-next" });
+    on(prev, "click", function () { scrollStrip(strip, -1); });
+    on(next, "click", function () { scrollStrip(strip, 1); });
     nav.appendChild(prev);
     nav.appendChild(next);
 

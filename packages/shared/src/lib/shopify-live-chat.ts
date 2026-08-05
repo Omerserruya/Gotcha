@@ -975,6 +975,19 @@ export interface VisitorMessageView {
   /** Display name only — never a staff email address. */
   author: string | null;
   authorKind: "visitor" | "agent" | "ai";
+  /**
+   * The message's OWN language, when something upstream actually knows it
+   * (a generated reply that was told which language to write in, a
+   * translated message). Absent means "nobody stated one" - the widget
+   * then detects the dominant script of the body and only falls back to
+   * the conversation/store locale after that. See lib/text-direction.
+   *
+   * Deliberately not defaulted to the conversation locale here: a default
+   * would be indistinguishable from a statement, and would override the
+   * per-message script detection that makes an English agent reply inside
+   * a Hebrew conversation render correctly.
+   */
+  locale?: string;
   createdAt: string;
   commerce: {
     addToCartEnabled: boolean;
@@ -1025,11 +1038,20 @@ export function projectVisitorMessage(
   const direction = message.direction === "INBOUND" ? "INBOUND" : "OUTBOUND";
   const isAgent = direction === "OUTBOUND" && meta.source !== "ai_bot";
 
+  // Only a well-formed language tag survives. A junk value would be worse
+  // than none: it is the highest-priority rung of the direction chain, so
+  // it would silently beat the script the message is actually written in.
+  const declaredLocale =
+    typeof meta.locale === "string" && /^[a-zA-Z]{2,3}(-[a-zA-Z0-9]{2,8})*$/.test(meta.locale.trim())
+      ? meta.locale.trim()
+      : undefined;
+
   return {
     id: message.id,
     direction,
     body,
     messageType,
+    ...(declaredLocale ? { locale: declaredLocale } : {}),
     author:
       direction === "INBOUND"
         ? null

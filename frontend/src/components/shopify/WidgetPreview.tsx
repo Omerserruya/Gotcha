@@ -97,7 +97,12 @@ export function previewWidgetConfig(
       // The preview's own language control, not the merchant's setting:
       // these two switches are what the control is FOR.
       language: opts.language,
-      direction: opts.language === "he" ? "rtl" : "ltr",
+      // "auto", not a hard "rtl": a pinned direction short-circuits the
+      // per-message resolution, so the merchant would be previewing a
+      // widget no shopper gets. With "auto" the panel still comes out
+      // RTL for Hebrew, and a bubble that is actually English still
+      // renders left to right - which is the thing worth previewing.
+      direction: "auto",
     },
     welcome: {
       headline: welcome.headline ?? "",

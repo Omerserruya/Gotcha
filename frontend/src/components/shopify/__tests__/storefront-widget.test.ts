@@ -338,7 +338,13 @@ describe("welcome polish", () => {
     const h = await boot({ messages: [], appearance: { language: "he", direction: "rtl" } });
     const sheet = css(h.shadow);
     expect(sheet).toContain("position:absolute;top:var(--s2);left:var(--s2);");
-    expect(sheet).toContain(".sug-more{align-self:flex-end;");
+    // The toggle is NOT flipped by hand any more. In a COLUMN flex
+    // container `align-self` runs along the inline axis, so `flex-start`
+    // already resolves to the right in RTL; flipping it here as well was
+    // a double flip that put the toggle opposite the questions it belongs
+    // to. Asserting the un-flipped value is what keeps it un-flipped.
+    expect(sheet).toContain(".sug-more{align-self:flex-start;");
+    expect(sheet).not.toContain(".sug-more{align-self:flex-end;");
   });
 
   // (19) Every hero media type still lays out.
