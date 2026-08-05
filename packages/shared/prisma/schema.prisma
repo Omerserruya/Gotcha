@@ -141,6 +141,7 @@ model Tenant {
   messages                Message[]
   chatbotFlows            ChatbotFlow[]
   channelAccounts         ChannelAccount[]
+  whatsappNumbers         WhatsAppNumber[]
   shopifyChatInstalls     ShopifyChatInstallation[]
   channelConfig           TenantChannelConfig?
   departments             Department[]
@@ -337,12 +338,225 @@ model ChannelAccount {
   conversations            Conversation[]
   templates                MessageTemplate[]
   shopifyChatInstallations ShopifyChatInstallation[]
+  whatsappNumber           WhatsAppNumber?
 
   @@unique([channel, externalId])
   @@index([tenantId])
   @@index([connectionStatus])
   @@index([tokenExpiresAt])
   @@map("channel_accounts")
+}
+
+// ─── WhatsApp: per-number lifecycle ──────────────────────────
+//
+// One row per connected WhatsApp business phone number, hanging off the
+// ChannelAccount that already carries the messaging identity and the
+// encrypted token.
+//
+// Why a satellite table rather than more `platformMeta` JSON:
+//
+//   * Phase 7 requires each number to have its OWN lifecycle. A lifecycle
+//     you cannot index, constrain or query is not a lifecycle, and JSON
+//     gives none of those. "Which numbers are unhealthy" and "which numbers
+//     are still waiting on the customer" have to be one query each.
+//   * Meta's model is three levels deep (portfolio -> WABA -> number) and a
+//     tenant legitimately spans several of each. Flattening that into a blob
+//     is what produced the current single-number assumptions.
+//
+// Why NOT a table that replaces ChannelAccount: conversations, templates,
+// the send adapters and the inbound router all key off ChannelAccount.
+// Forking the messaging core to add onboarding state would risk the working
+// part of the system to improve the broken part.
+//
+// Token storage stays in `ChannelAccount.credentials` (already encrypted at
+// rest, already what the send path reads). It is deliberately duplicated per
+// number rather than shared per WABA: revoking one number must never reach
+// another number's ability to send, which is the Phase 7/8 isolation rule.
+
+/// Which official Meta onboarding path connected this number. Chosen by the
+/// flow selector from inspector output, never asked of the customer.
+enum WhatsAppOnboardingFlow {
+  /// Scenario A. Brand new business phone number, created during signup.
+  NEW_NUMBER
+  /// Scenario B. Number already live in the WhatsApp Business app; onboarded
+  /// through Meta's Coexistence flow. Number stays usable in the app.
+  COEXISTENCE
+  /// Scenario C. Number already on Cloud API under an existing WABA. Assets
+  /// are reused; nothing is created.
+  EXISTING_CLOUD_API
+  /// Scenario D. Number GOTCHA already knew about, being revalidated or
+  /// repaired rather than onboarded.
+  RECONNECT
+  /// Scenario E. Number moved between WABAs through Meta's programmatic
+  /// migration. Only ever selected when every documented prerequisite holds.
+  MIGRATION
+}
+
+/// Lifecycle of ONE number. Independent of every other number on the tenant.
+enum WhatsAppNumberState {
+  /// The inspector has seen this number on the customer's assets, but it is
+  /// not connected to GOTCHA. Never messages, never counted as a channel.
+  DISCOVERED
+  /// The post-onboarding pipeline is running.
+  ONBOARDING
+  /// Blocked on something only the customer can do: a two-step verification
+  /// PIN, a verification code, or the tap-to-connect step of Coexistence.
+  /// `pendingAction` says which. This is an honest state, not an error.
+  ACTION_REQUIRED
+  /// Every configuration step Meta exposes an API for has succeeded and the
+  /// last health check passed.
+  CONNECTED
+  /// Connected and previously working, but the last health check found a
+  /// problem. Messages may still flow; `healthSnapshot` says what broke.
+  DEGRADED
+  /// Deliberately disconnected by an admin.
+  DISCONNECTED
+  /// Onboarding failed on a step that is not the customer's to fix.
+  FAILED
+}
+
+/// What the customer must do before onboarding can continue. Drives the copy
+/// shown on the number's card; `null` whenever we are not waiting on a human.
+enum WhatsAppPendingAction {
+  /// Number has two-step verification enabled and Meta requires the existing
+  /// 6-digit PIN to register. There is NO API to reset or disable it, so it
+  /// can only be collected from the customer.
+  TWO_STEP_PIN
+  /// Meta sent an SMS/voice code that must be entered.
+  VERIFICATION_CODE
+  /// Coexistence: the customer must tap Connect in their WhatsApp Business
+  /// app and paste the code Meta messaged them.
+  BUSINESS_APP_CONFIRMATION
+  /// Meta requires the business itself to complete Business Verification.
+  BUSINESS_VERIFICATION
+  /// Meta is reviewing the display name; we can only read `name_status`.
+  DISPLAY_NAME_REVIEW
+}
+
+model WhatsAppNumber {
+  id       String @id @default(cuid())
+  tenantId String @map("tenant_id")
+
+  /// The messaging identity. One-to-one; deleting the channel deletes this.
+  channelAccountId String @unique @map("channel_account_id")
+
+  // ── Meta asset identity, stored per number so no lookup is ever implied ──
+  /// Business Portfolio ID (`business_id` in the Embedded Signup payload).
+  /// Nullable: readable only when `business_management` was granted.
+  businessPortfolioId String? @map("business_portfolio_id")
+  wabaId              String  @map("waba_id")
+  /// Meta's `<PHONE_NUMBER_ID>`. NOT the phone number. Globally unique at
+  /// Meta, so unique here too - it is what stops one number being connected
+  /// twice, including across tenants.
+  phoneNumberId       String  @unique @map("phone_number_id")
+  /// E.164 as Meta formats it, for display only. Never used for routing.
+  displayPhoneNumber  String? @map("display_phone_number")
+  verifiedName        String? @map("verified_name")
+
+  // ── Platform facts, read from Meta, never inferred ──
+  /// `CLOUD_API` | `ON_PREMISE` | `NOT_APPLICABLE`. Open string, not an enum:
+  /// Meta does not publish a closed set and an unknown value must not throw.
+  platformType String? @map("platform_type")
+  /// `is_on_biz_app`. True with platformType CLOUD_API means Coexistence.
+  isOnBizApp   Boolean @default(false) @map("is_on_biz_app")
+
+  // ── Lifecycle ──
+  onboardingFlow WhatsAppOnboardingFlow @map("onboarding_flow")
+  state          WhatsAppNumberState    @default(ONBOARDING)
+  pendingAction  WhatsAppPendingAction? @map("pending_action")
+
+  // ── Status mirrors of Meta fields. Open strings for the same reason as
+  //    platformType: Meta documents members, not a closed enumeration. ──
+  /// `CONNECTED`, `PENDING`, `FLAGGED`, `RESTRICTED`, `BANNED`, ...
+  messagingStatus        String? @map("messaging_status")
+  /// `VERIFIED` | `NOT_VERIFIED` | `EXPIRED`.
+  codeVerificationStatus String? @map("code_verification_status")
+  /// `APPROVED` | `PENDING_REVIEW` | `DECLINED` | `NONE`.
+  nameStatus             String? @map("name_status")
+  /// `GREEN` | `YELLOW` | `RED` | `NA` | `UNKNOWN`.
+  qualityRating          String? @map("quality_rating")
+  /// `throughput.level`: `STANDARD` | `HIGH` | `NOT_APPLICABLE`. Coexistence
+  /// numbers are fixed at 20 messages per second by Meta.
+  throughputLevel        String? @map("throughput_level")
+  messagingLimitTier     String? @map("messaging_limit_tier")
+
+  // ── Webhook configuration, per number ──
+  /// Our app present in `GET /<WABA_ID>/subscribed_apps`. This is the ONLY
+  /// proof inbound messages can reach us; without it a number is not
+  /// connected however healthy everything else looks.
+  webhookSubscribed  Boolean   @default(false) @map("webhook_subscribed")
+  webhookVerifiedAt  DateTime? @map("webhook_verified_at")
+  /// A callback override read back from Meta. We never SET one (see
+  /// docs/integrations/whatsapp/01-meta-api-inventory.md section 7), so a
+  /// value here means another platform owns this number's webhooks, which is
+  /// a diagnosis rather than a setting.
+  webhookOverrideUri String?   @map("webhook_override_uri")
+
+  // ── Health ──
+  /// Last `?fields=health_status` response, stored whole. Meta's own
+  /// `possible_solution` text is more accurate than anything we could infer,
+  /// so it is shown verbatim rather than paraphrased.
+  healthSnapshot  Json?     @map("health_snapshot")
+  /// `AVAILABLE` | `LIMITED` | `BLOCKED`.
+  canSendMessage  String?   @map("can_send_message")
+  lastHealthCheck DateTime? @map("last_health_check")
+  /// Customer-facing reason the number is not fully healthy. Empty when fine.
+  lastError       String?   @map("last_error")
+
+  connectedAt    DateTime? @map("connected_at")
+  connectedBy    String?   @map("connected_by")
+  disconnectedAt DateTime? @map("disconnected_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant         Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  channelAccount ChannelAccount        @relation(fields: [channelAccountId], references: [id], onDelete: Cascade)
+  events         WhatsAppNumberEvent[]
+
+  @@index([tenantId])
+  @@index([tenantId, state])
+  @@index([wabaId])
+  @@index([businessPortfolioId])
+  @@map("whatsapp_numbers")
+}
+
+/// Append-only audit of every onboarding, repair and health step taken
+/// against ONE number.
+///
+/// Phase 10 requires showing the exact reason and the API response when
+/// something fails. That is only possible if the raw response was kept at the
+/// moment it happened; reconstructing it later means guessing. It also gives
+/// the idempotency evidence the pipeline needs: a step that already succeeded
+/// is not re-run against a customer's rate-limited number.
+model WhatsAppNumberEvent {
+  id       String @id @default(cuid())
+  numberId String @map("number_id")
+
+  /// Pipeline step name, e.g. `EXCHANGE_TOKEN`, `SUBSCRIBE_WEBHOOKS`,
+  /// `REGISTER_NUMBER`, `HEALTH_CHECK`, `REPAIR_WEBHOOKS`.
+  step    String
+  /// `SUCCESS` | `FAILED` | `SKIPPED` | `ACTION_REQUIRED`.
+  outcome String
+
+  /// Meta's error code, when there was one. Kept as its own column because
+  /// specific codes drive specific handling: 133016 registration rate limit,
+  /// 136024 already verified, 133005 wrong PIN.
+  metaErrorCode Int?    @map("meta_error_code")
+  message       String?
+  /// Meta's response body, secrets stripped. Shown verbatim in the UI.
+  detail        Json?
+
+  /// Wall-clock cost of the call, for spotting Meta-side slowness.
+  durationMs Int? @map("duration_ms")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  number WhatsAppNumber @relation(fields: [numberId], references: [id], onDelete: Cascade)
+
+  @@index([numberId, createdAt])
+  @@index([numberId, step])
+  @@map("whatsapp_number_events")
 }
 
 // ─── Shopify Chat App installation ───────────────────────────
