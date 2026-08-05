@@ -18,6 +18,7 @@ import {
   numericPrice,
   filterByAvailability,
   countAboveBudget,
+  stripProductEnumeration,
 } from "../services/recommendation-autosend.service";
 import { normalizeShopifyProducts } from "../services/product-search.service";
 import { capabilitiesFor } from "@chatcenter/shared";
@@ -465,5 +466,40 @@ describe("the introduction describes what actually ships", () => {
     expect(p.introduction).toBe(
       "Both of these are above your limit, but they are the closest we have.",
     );
+  });
+});
+
+describe("the introduction never re-lists the products", () => {
+  it("drops a sentence that names two or more of the carded products", () => {
+    // Live: four boards named inline above a carousel of three, one of
+    // which was not even shown.
+    const p = plan({
+      modelText:
+        "I loaded matching items below. Quick note: Alpha Board, Beta Board and Gamma Board are all above your limit.",
+    });
+    expect(p.introduction).toBe("I loaded matching items below.");
+  });
+
+  it("leaves a SINGLE product mention alone - that is normal speech", () => {
+    const p = plan({ modelText: "Alpha Board is the closest to what you described." });
+    expect(p.introduction).toBe("Alpha Board is the closest to what you described.");
+  });
+
+  it("cleans up a parenthesis left dangling by the removed clause", () => {
+    const out = stripProductEnumeration(
+      "Here is what I found ( Alpha Board Beta Board are marked ) and that is all.",
+      ["Alpha Board", "Beta Board"],
+    );
+    expect(out).not.toContain("( )");
+    expect(out).not.toContain("Beta Board");
+  });
+
+  it("falls back to a real lead-in when the whole reply was a list", () => {
+    const p = plan({ modelText: "Alpha Board, Beta Board and Gamma Board." });
+    expect(p.introduction).toBe("מצאתי כמה אפשרויות שיכולות להתאים:");
+  });
+
+  it("does nothing when there are fewer than two titles to match", () => {
+    expect(stripProductEnumeration("Anything at all.", ["Solo"])).toBe("Anything at all.");
   });
 });

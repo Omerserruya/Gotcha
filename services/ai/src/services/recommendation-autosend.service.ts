@@ -261,6 +261,33 @@ function aboveBudgetIntro(count: number, locale: RecoLocale, total: number): str
     : `${count} of them are above the budget you gave, and they are marked.`;
 }
 
+/**
+ * Drop a sentence that ENUMERATES the products.
+ *
+ * Live on Dev: the reply named four boards inline - "(The Inventory Not
+ * Tracked Snowboard The Minimal Snowboard The Hidden Snowboard The
+ * Compare at Price Snowboard are marked...)" - above a carousel of
+ * three. That is the numbered list again wearing a sentence, it
+ * duplicates the cards, and it named one product that was not shown.
+ *
+ * A SINGLE title is left alone: "The Hidden is the closest to your
+ * budget" is exactly the sentence a person would say. Two or more in one
+ * sentence is a list.
+ */
+export function stripProductEnumeration(text: string, titles: string[]): string {
+  const named = titles.map((t) => t.trim()).filter((t) => t.length >= 4);
+  if (named.length < 2) return text;
+
+  const sentences = text.match(/[^.!?\n]+[.!?]?/g) ?? [text];
+  const kept = sentences.filter((sentence) => {
+    const hits = named.filter((t) => sentence.toLowerCase().includes(t.toLowerCase())).length;
+    return hits < 2;
+  });
+  const out = kept.map((x) => x.trim()).filter(Boolean).join(" ").trim();
+  // Strip a parenthesis left dangling by a removed clause.
+  return out.replace(/\(\s*\)/g, "").replace(/\s+([,.])/g, "$1").trim();
+}
+
 /** Has the model already made a budget claim in its own words? */
 function mentionsBudget(text: string): boolean {
   return /budget|תקציב|above your limit|over your limit|מעל המחיר|above what you/i.test(text);
@@ -297,10 +324,13 @@ export function extractIntroduction(
     .replace(MONEY_RE, " ");
 
   // Drop any line that is a list entry. The cards are the list.
-  const kept = text
+  let kept = text
     .split(/\r?\n/)
     .filter((line) => !NUMBERED_LINE_RE.test(line))
     .join(" ");
+
+  // ...and the same list written as a sentence.
+  kept = stripProductEnumeration(kept, opts.candidates.map((c) => c.title));
 
   let intro = kept.replace(/[ \t]{2,}/g, " ").replace(/\s+([,.!?])/g, "$1").trim();
 
