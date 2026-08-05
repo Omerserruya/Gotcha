@@ -398,7 +398,7 @@ describe("localization", () => {
 
   it("uses no em dash in customer-facing pricing copy", () => {
     for (const blob of [JSON.stringify(en.pricing), JSON.stringify(he.pricing), JSON.stringify(en.landing.pricing), JSON.stringify(he.landing.pricing)]) {
-      expect(blob).not.toMatch(/[-–]/);
+      expect(blob).not.toMatch(/[\u2014\u2013]/);
     }
   });
 
