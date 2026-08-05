@@ -350,8 +350,25 @@ export function getChannelsSummary(token: string) {
 
 // Provider OAuth/app configuration state (which providers CAN be connected
 // in this environment) - drives honest "Requires setup" cards.
+/**
+ * The canonical Embedded Signup launch parameters, built server-side.
+ *
+ * The browser passes these straight to FB.login instead of assembling its own.
+ * That is the whole point: two independently-assembled payloads is how the
+ * frontend ended up on Embedded Signup v3 while the configuration was v4.
+ */
+export interface EmbeddedSignupLaunch {
+  appId: string;
+  configId: string;
+  esVersion: "v2" | "v3" | "v4";
+  responseType: "code";
+  overrideDefaultResponseType: true;
+  extras: Record<string, unknown>;
+  configured: boolean;
+}
+
 export function getChannelsOauthConfig(token: string) {
-  return apiFetch<{ data: { metaAppId?: string; oauthConfigured: boolean; whatsappConfigured: boolean; providers?: Record<string, boolean> } }>(
+  return apiFetch<{ data: { metaAppId?: string; oauthConfigured: boolean; whatsappConfigured: boolean; embeddedSignup?: EmbeddedSignupLaunch; providers?: Record<string, boolean> } }>(
     "/api/channels/config",
     { token },
   );
@@ -402,6 +419,246 @@ export function connectWhatsApp(
       phoneNumberId: sessionInfo?.phoneNumberId,
     }),
   });
+}
+
+// ─── WhatsApp: multi-number management ───────────────────────
+//
+// One number per call, everywhere. The older /connect/whatsapp route above
+// binds every number on the customer's WhatsApp account at once, which is why
+// these exist; it stays for the legacy connect card until that card is retired.
+
+export interface WhatsAppHealthCheck {
+  id: "CONNECTED" | "MESSAGING" | "WEBHOOKS" | "VERIFICATION" | "QUALITY";
+  label: string;
+  status: "PASS" | "WARN" | "FAIL" | "UNKNOWN";
+  detail?: string;
+  /** Meta's own remediation text. Rendered verbatim, never rewritten. */
+  metaSolution?: string;
+  metaErrorCode?: number;
+}
+
+export type WhatsAppRepairAction = "RESUBSCRIBE_WEBHOOKS" | "REFRESH_STATUS";
+
+export interface WhatsAppHealthReport {
+  numberId: string;
+  phoneNumberId: string;
+  displayPhoneNumber?: string | null;
+  verifiedName?: string | null;
+  state: string;
+  ready: boolean;
+  checks: WhatsAppHealthCheck[];
+  availableRepairs: WhatsAppRepairAction[];
+  customerActions: WhatsAppHealthCheck[];
+  lastCheckedAt?: string | null;
+  healthSnapshot?: unknown;
+}
+
+export interface WhatsAppNumberRow {
+  id: string;
+  phoneNumber?: string | null;
+  name?: string | null;
+  state: string;
+  pendingAction?: string | null;
+  onboardingFlow: string;
+  usesBusinessApp: boolean;
+  qualityRating?: string | null;
+  throughputLevel?: string | null;
+  connectedAt?: string | null;
+  health: WhatsAppHealthReport;
+}
+
+export interface WhatsAppUnprofiledRow {
+  channelAccountId: string;
+  phoneNumberId: string;
+  name: string;
+  connectionStatus: string;
+  note: string;
+}
+
+export interface WhatsAppBlocker {
+  code: string;
+  message: string;
+  customerActionable: boolean;
+  metaSolution?: string;
+  metaErrorCode?: number;
+}
+
+export interface WhatsAppBusinessAppOptions {
+  keepUsingBusinessApp: {
+    recommended: true;
+    title: string;
+    description: string;
+    throughputNote: string;
+    limitations: string[];
+  };
+  fullMigration: { available: false; title: string; reason: string };
+}
+
+export interface WhatsAppCandidate {
+  phoneNumberId: string;
+  phoneNumber?: string | null;
+  name?: string | null;
+  usesBusinessApp: boolean;
+  alreadyConnectedHere: boolean;
+  scenario:
+    | "NEW_NUMBER"
+    | "COEXISTENCE"
+    | "EXISTING_CLOUD_API"
+    | "RECONNECT"
+    | "MIGRATION"
+    | "BLOCKED";
+  message: string;
+  customerAction: string | null;
+  blockers: WhatsAppBlocker[];
+  businessAppOptions?: WhatsAppBusinessAppOptions;
+}
+
+export type WhatsAppSignupPath = "new" | "business-app";
+
+/**
+ * What to tell the customer when a flow yielded nothing usable.
+ *
+ * Computed server-side (and unit-tested there) so the UI cannot drift from the
+ * rule. `switchTo` is null whenever relaunching down the other path would not
+ * actually help, so the UI never offers a pointless second attempt.
+ */
+export interface WhatsAppPathOutcome {
+  path: WhatsAppSignupPath;
+  eligibleCount: number;
+  switchTo: WhatsAppSignupPath | null;
+  reason:
+    | "OK"
+    | "NO_CANDIDATES"
+    | "NO_BUSINESS_APP_NUMBER"
+    | "ALL_ALREADY_CONNECTED"
+    | "ALL_BLOCKED";
+}
+
+export interface WhatsAppInspection {
+  /**
+   * Opaque handle to the business token, which is held server-side and never
+   * sent to the browser. Pass it back to connect a number. Valid until it is
+   * replaced by the next inspect, so one authorization can add several numbers.
+   */
+  sessionId: string;
+  path: WhatsAppSignupPath;
+  outcome: WhatsAppPathOutcome;
+  candidates: WhatsAppCandidate[];
+  /** True when part of the sweep could not be completed. */
+  degraded: boolean;
+  degradedReasons: string[];
+  missingPermissions: string[];
+  inspectedAt: string;
+}
+
+export function listWhatsAppNumbers(token: string) {
+  return apiFetch<{ data: WhatsAppNumberRow[]; unprofiled: WhatsAppUnprofiledRow[] }>(
+    "/api/channels/whatsapp/numbers",
+    { token },
+  );
+}
+
+/**
+ * Exchange the Embedded Signup code server-side and report what the customer
+ * has. Writes nothing at Meta. The code is single-use, so this is called once
+ * per authorization and the resulting session is reused for each number.
+ */
+export function inspectWhatsApp(
+  token: string,
+  body: {
+    code: string;
+    businessPortfolioId?: string;
+    wabaIds?: string[];
+  },
+) {
+  return apiFetch<{ data: WhatsAppInspection }>("/api/channels/whatsapp/inspect", {
+    token,
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+/** Connect exactly ONE number. `phoneNumberId` is deliberately required. */
+export function connectWhatsAppNumber(
+  token: string,
+  body: {
+    sessionId: string;
+    phoneNumberId: string;
+    twoStepPin?: string;
+  },
+) {
+  return apiFetch<{
+    data: {
+      scenario: string;
+      message: string;
+      state: string;
+      pendingAction?: string | null;
+      completedSteps?: string[];
+      health?: WhatsAppHealthReport;
+    };
+  }>("/api/channels/whatsapp/connect", {
+    token,
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+/** Supply what one number was waiting on, and continue only that number. */
+export function resumeWhatsAppNumber(
+  token: string,
+  numberId: string,
+  body: { twoStepPin?: string; verificationCode?: string },
+) {
+  return apiFetch<{ data: { state: string; message?: string; health?: WhatsAppHealthReport } }>(
+    `/api/channels/whatsapp/numbers/${numberId}/resume`,
+    { token, method: "POST", body: JSON.stringify(body) },
+  );
+}
+
+export function refreshWhatsAppNumber(token: string, numberId: string) {
+  return apiFetch<{ data: WhatsAppHealthReport }>(
+    `/api/channels/whatsapp/numbers/${numberId}/refresh`,
+    { token, method: "POST" },
+  );
+}
+
+export function repairWhatsAppNumber(
+  token: string,
+  numberId: string,
+  action: WhatsAppRepairAction,
+) {
+  return apiFetch<{
+    data: { action: string; succeeded: boolean; message: string; report?: WhatsAppHealthReport };
+  }>(`/api/channels/whatsapp/numbers/${numberId}/repair`, {
+    token,
+    method: "POST",
+    body: JSON.stringify({ action }),
+  });
+}
+
+export function disconnectWhatsAppNumber(token: string, numberId: string) {
+  return apiFetch<{ data: { succeeded: boolean; message: string } }>(
+    `/api/channels/whatsapp/numbers/${numberId}`,
+    { token, method: "DELETE" },
+  );
+}
+
+export interface WhatsAppNumberEvent {
+  id: string;
+  step: string;
+  outcome: string;
+  metaErrorCode?: number | null;
+  message?: string | null;
+  detail?: unknown;
+  durationMs?: number | null;
+  createdAt: string;
+}
+
+export function getWhatsAppNumberEvents(token: string, numberId: string) {
+  return apiFetch<{ data: WhatsAppNumberEvent[] }>(
+    `/api/channels/whatsapp/numbers/${numberId}/events`,
+    { token },
+  );
 }
 
 export function connectEmail(token: string, data: {

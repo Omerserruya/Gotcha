@@ -10,7 +10,6 @@ import {
   getChannelsOauthConfig,
   connectWhatsappSession,
   listVoiceChannels,
-  connectWhatsApp,
   disconnectChannel,
   deleteChannelAccount,
   getChannelStatus,
@@ -23,8 +22,12 @@ import { WebchatWidgetSettings } from "@/components/chat-widget/WebchatWidgetSet
 import ConfirmModal from "@/components/ConfirmModal";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
-const META_APP_ID = process.env.NEXT_PUBLIC_META_APP_ID || "";
-const EMBEDDED_SIGNUP_CONFIG_ID = process.env.NEXT_PUBLIC_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID || "";
+// NEXT_PUBLIC_META_APP_ID is read by lib/facebook-sdk.ts, the single SDK
+// loader. Not duplicated here now that this page makes no FB.login call.
+// NEXT_PUBLIC_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID is read on
+// /settings/channels/whatsapp, which owns the signup launcher. It is
+// deliberately not duplicated here: two launchers with two config ids is how
+// they drift apart.
 
 // ─── Status Badge Component ──────────────────────────────────
 
@@ -181,25 +184,11 @@ function ChannelsPageContent() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // ─── Load Facebook JS SDK ────────────────────────────────
-  useEffect(() => {
-    if (document.getElementById("facebook-jssdk")) return;
-    (window as any).fbAsyncInit = function () {
-      (window as any).FB.init({
-        appId: META_APP_ID,
-        autoLogAppEvents: true,
-        xfbml: true,
-        version: "v25.0",
-      });
-    };
-    const script = document.createElement("script");
-    script.id = "facebook-jssdk";
-    script.src = "https://connect.facebook.net/en_US/sdk.js";
-    script.async = true;
-    script.defer = true;
-    script.crossOrigin = "anonymous";
-    document.body.appendChild(script);
-  }, []);
+  // The Facebook JS SDK is no longer loaded here. Nothing on this page calls
+  // FB.login any more - the WhatsApp signup launcher lives on
+  // /channels/whatsapp, which loads the SDK itself through
+  // `useFacebookSdk()` (lib/facebook-sdk.ts). Loading it here as well would
+  // mean two copies of the app id and SDK version, free to drift.
 
   // ─── WA_EMBEDDED_SIGNUP session info listener ────────────
   useEffect(() => {
@@ -258,60 +247,16 @@ function ChannelsPageContent() {
   }, [searchParams]);
 
   // ─── WhatsApp Embedded Signup ─────────────────────────────
-  // Uses FB.login with config_id to trigger the Embedded Signup wizard.
-  // 1. FB.login opens a popup managed by the Facebook SDK
-  // 2. WA_EMBEDDED_SIGNUP message event fires with waba_id (captured by our listener)
-  // 3. FB.login callback returns the code directly
-  // 4. We send code + session info to our backend for token exchange
-  function handleConnectWhatsApp() {
-    if (!token) return;
-
-    const FB = (window as any).FB;
-    if (!FB) {
-      showMessage("Facebook SDK not loaded. Please refresh the page.", "error");
-      return;
-    }
-
-    sessionInfoRef.current = {};
-    setConnecting(true);
-
-    FB.login(
-      (response: any) => {
-        if (!response.authResponse?.code) {
-          setConnecting(false);
-          return;
-        }
-
-        const code = response.authResponse.code;
-
-        // Brief delay to allow WA_EMBEDDED_SIGNUP postMessage to arrive with session info
-        setTimeout(() => {
-          const sessionInfo = sessionInfoRef.current;
-          console.log("[WA-CONNECT] FB.login code received. Session info:", sessionInfo);
-
-          connectWhatsApp(token, code, sessionInfo)
-            .then(() => {
-              showMessage(t("channels.connected"), "success");
-              fetchData();
-            })
-            .catch((err: any) => {
-              showMessage(err.message || t("channels.connectionFailed"), "error");
-            })
-            .finally(() => {
-              setConnecting(false);
-            });
-        }, 500);
-      },
-      {
-        config_id: EMBEDDED_SIGNUP_CONFIG_ID,
-        response_type: "code",
-        override_default_response_type: true,
-        extras: {
-          version: "v3",
-        },
-      }
-    );
-  }
+  //
+  // The signup launcher lives on /channels/whatsapp, not here. WhatsApp is the
+  // one channel where a business legitimately has SEVERAL accounts (sales,
+  // support, per store, per country), so connecting has to start by asking
+  // which number, and that needs a screen rather than a card. This page's
+  // WhatsApp card and its repair button both route there.
+  //
+  // `sessionInfoRef` above still feeds the `?connected=whatsapp&pending=true`
+  // recovery path below, which finishes an OAuth-redirect connection that
+  // could not identify the account on its own.
 
   // ─── OAuth Redirect (Messenger / Instagram) ─────────────
 
@@ -530,7 +475,10 @@ function ChannelsPageContent() {
           requiresSetup={providerCfg && providerCfg.whatsapp === false ? t("channels.requiresSetupHint") : undefined}
           description={t("channels.whatsappDesc")}
           buttonLabel={t("channels.connectWhatsapp")}
-          onClick={handleConnectWhatsApp}
+          // Goes to the numbers screen rather than launching signup here. A
+          // business has one WhatsApp card but many WhatsApp numbers, and the
+          // connect flow needs the customer to pick which one they are adding.
+          onClick={() => router.push("/settings/channels/whatsapp")}
           disabled={connecting}
         />
 
@@ -773,7 +721,10 @@ function ChannelsPageContent() {
                     <button
                       onClick={() => {
                         const p = String(account.channel || "").toLowerCase();
-                        if (p === "whatsapp") handleConnectWhatsApp();
+                        // WhatsApp repair is per number and lives on the
+                        // numbers screen, where it can say exactly what is
+                        // wrong and fix only the number in question.
+                        if (p === "whatsapp") router.push("/settings/channels/whatsapp");
                         else if (p === "webchat") handleCreateWebchat();
                         else handleOAuthConnect(p as "messenger" | "instagram" | "gmail" | "outlook" | "slack");
                       }}

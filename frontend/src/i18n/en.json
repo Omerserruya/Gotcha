@@ -5199,5 +5199,95 @@
       "title": "You don't have access to this page",
       "subtitle": "Ask a workspace admin if you need access."
     }
+  },
+  "whatsappNumbers": {
+    "title": "WhatsApp numbers",
+    "subtitle": "Connect a number for each team, store or country. Each one works on its own.",
+    "loading": "Loading...",
+    "loadFailed": "We could not load your WhatsApp numbers.",
+    "noneYet": "No WhatsApp numbers are connected yet.",
+    "summaryWorking": "{count} working",
+    "summaryAttention": "{count} need attention",
+    "state": {
+      "connected": "Working",
+      "degraded": "Needs attention",
+      "actionRequired": "Needs you",
+      "onboarding": "Setting up",
+      "disconnected": "Disconnected",
+      "failed": "Setup failed",
+      "discovered": "Not connected"
+    },
+    "badge": {
+      "alsoOnPhone": "Also on your phone",
+      "legacy": "Connected the old way"
+    },
+    "card": {
+      "fallbackName": "WhatsApp number",
+      "details": "Details",
+      "hideDetails": "Hide details",
+      "technical": "Technical details for support",
+      "checkAgain": "Check again",
+      "checking": "Checking...",
+      "fixDelivery": "Fix message delivery",
+      "fixing": "Fixing...",
+      "remove": "Remove",
+      "removeTitle": "Remove this number?",
+      "removeBody": "GOTCHA will stop sending and receiving on {number}. Your other WhatsApp numbers keep working exactly as they are, and the number itself stays yours.",
+      "genericError": "That did not work. Try again shortly.",
+      "refreshed": "Status refreshed."
+    },
+    "pending": {
+      "pinTitle": "Enter your WhatsApp PIN",
+      "pinBody": "This number has two-step verification switched on. Enter the 6-digit PIN you set for it. WhatsApp does not let anyone else reset it, so if you cannot recall it you will need to change it in WhatsApp first.",
+      "pinContinue": "Continue",
+      "pinChecking": "Checking...",
+      "pinThanks": "Thanks. Setup is continuing.",
+      "confirmTitle": "Confirm in your WhatsApp Business app",
+      "confirmBody": "Follow the instructions shown by Meta and confirm the connection in your WhatsApp Business app. Only you can complete this step, which is how WhatsApp makes sure nobody connects your number without you."
+    },
+    "checks": {
+      "connected": "Connected to WhatsApp",
+      "messaging": "Messaging enabled",
+      "webhooks": "Receiving incoming messages",
+      "verification": "Number verified",
+      "quality": "Quality rating",
+      "metaSays": "What WhatsApp says:"
+    },
+    "add": {
+      "title": "Add a WhatsApp number",
+      "subtitle": "Connect another number for a different team, store or country. Your existing numbers keep working while you do it.",
+      "opening": "Opening WhatsApp...",
+      "preparing": "Preparing...",
+      "notConfigured": "WhatsApp connection is not configured in this environment yet.",
+      "sdkUnavailable": "WhatsApp's sign-in window could not load. It comes straight from WhatsApp, so a browser extension or a network filter can stop it reaching you. Reload the page, and if it keeps happening let your IT team know that connect.facebook.net needs to be allowed.",
+      "sdkFailed": "WhatsApp's sign-in window would not open. Reload the page and try again.",
+      "cancelled": "You closed the WhatsApp window before finishing.",
+      "inspectFailed": "We could not read your WhatsApp setup. Try connecting again in a moment.",
+      "connectFailed": "We could not connect that number.",
+      "connect": "Connect WhatsApp"
+    },
+    "choose": {
+      "title": "Choose the number to connect",
+      "degraded": "Some of your WhatsApp setup could not be checked, so this list may be incomplete.",
+      "connectThis": "Connect this one",
+      "alreadyAdded": "Already added",
+      "connecting": "Connecting...",
+      "cancel": "Cancel",
+      "back": "Start over"
+    },
+    "outcome": {
+      "allAlreadyConnected": "Every number WhatsApp offered is already connected to this workspace. There is nothing new to add.",
+      "allBlocked": "None of the numbers WhatsApp offered can be connected right now. The reason for each one is shown above.",
+      "unknown": "We could not find a number to connect.",
+      "noCandidates": "WhatsApp did not offer any numbers to connect. If the number you want is already set up elsewhere, disconnect it there first."
+    },
+    "businessApp": {
+      "recommended": "recommended",
+      "notAvailable": "not available"
+    },
+    "legacy": {
+      "note": "Connected before per-number health was available. Reconnect it to enable health checks and repair."
+    },
+    "backToChannels": "Back to channels"
   }
 }
