@@ -404,7 +404,7 @@ export default function BillingSettingsPage() {
                         {t("settings.billing.view")}
                       </a>
                     ) : (
-                      <span className="text-gray-300">—</span>
+                      <span className="text-gray-300">-</span>
                     )}
                   </td>
                 </tr>

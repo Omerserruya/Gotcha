@@ -34,7 +34,7 @@ function fail(msg) {
   problems.push(msg);
 }
 
-/** Last four characters only — enough to compare, useless if leaked. */
+/** Last four characters only - enough to compare, useless if leaked. */
 function suffix(value) {
   if (!value) return "(unset)";
   return `…${String(value).slice(-4)}`;
@@ -60,7 +60,7 @@ const envFile = path.join(ROOT, isDev ? ".env" : ".env.prod");
 const fileEnv = loadEnvFile(envFile);
 const env = { ...fileEnv, ...process.env };
 
-// ─── Parse the manifest (small, fixed shape — no TOML dependency) ──
+// ─── Parse the manifest (small, fixed shape - no TOML dependency) ──
 
 if (!fs.existsSync(configPath)) {
   console.error(`✗ Config not found: ${configPath}`);
@@ -120,7 +120,7 @@ const coreClientId = env.SHOPIFY_API_KEY || "";
 
 if (!manifest.clientId) {
   fail(
-    "Manifest has no client_id — the CLI project is not linked. Run `shopify app config link` " +
+    "Manifest has no client_id - the CLI project is not linked. Run `shopify app config link` " +
       "and choose the GOTCHA Chat app (NOT the Core app).",
   );
 }
@@ -249,16 +249,16 @@ if (blockHandle && blockHandle !== expectedBlock) {
   fail(`App Embed block file is "${blockHandle}" but SHOPIFY_CHAT_BLOCK_HANDLE is "${expectedBlock}".`);
 }
 if (!env.SHOPIFY_CHAT_APP_SECRET) {
-  notes.push("SHOPIFY_CHAT_APP_SECRET is not set — webhooks and OAuth callbacks will be refused at runtime.");
+  notes.push("SHOPIFY_CHAT_APP_SECRET is not set - webhooks and OAuth callbacks will be refused at runtime.");
 }
 if (!isDev && !env.WIDGET_SESSION_SECRET) {
-  fail("WIDGET_SESSION_SECRET is not set for production — visitor sessions cannot be minted and the widget cannot start.");
+  fail("WIDGET_SESSION_SECRET is not set for production - visitor sessions cannot be minted and the widget cannot start.");
 }
 
 // ─── Report ──────────────────────────────────────────────────
 
 console.log("");
-console.log("  GOTCHA Shopify Chat — deployment identity check");
+console.log("  GOTCHA Shopify Chat - deployment identity check");
 console.log("  ───────────────────────────────────────────────");
 console.log(`  config file        ${configName}`);
 console.log(`  environment        ${isDev ? "development" : "production"}`);
@@ -270,7 +270,7 @@ console.log(`  core client id     ${suffix(coreClientId)}  ← must differ`);
 console.log(`  host               ${host}`);
 console.log(`  application url    ${manifest.applicationUrl ?? "(none)"}`);
 console.log(`  redirect urls      ${redirectUrls.join(", ") || "(none)"}`);
-console.log(`  scopes             ${manifest.scopes === "" ? "(none — by design)" : manifest.scopes}`);
+console.log(`  scopes             ${manifest.scopes === "" ? "(none - by design)" : manifest.scopes}`);
 console.log(`  embedded           ${manifest.embedded}`);
 console.log(`  webhook api        ${manifest.apiVersion ?? "(none)"}`);
 console.log(`  extension handle   ${extensionHandle ?? "(none)"}`);

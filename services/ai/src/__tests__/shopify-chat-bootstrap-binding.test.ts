@@ -4,7 +4,7 @@
  * This is the test that guards the product promise: a merchant who
  * installed from the App Store never copies an identifier, so the widget
  * must be able to identify itself with the one fact the Theme App Embed
- * already knows — `shop.permanent_domain` — and the server must still
+ * already knows - `shop.permanent_domain` - and the server must still
  * refuse anything whose Origin does not belong to that shop.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -157,7 +157,7 @@ describe("product messaging honesty", () => {
     expect(res.ok && res.coreConnected).toBe(true);
   });
 
-  it("is FALSE when the Core Shopify integration is gone — text chat continues", async () => {
+  it("is FALSE when the Core Shopify integration is gone - text chat continues", async () => {
     H.loadConnection.mockResolvedValue(null);
     const res = await resolveForBootstrap({ shopDomain: SHOP, origin: `https://${SHOP}` });
     // The widget still loads. It just does not promise product cards the

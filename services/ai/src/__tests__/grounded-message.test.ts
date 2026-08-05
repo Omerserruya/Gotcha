@@ -29,7 +29,7 @@ describe("validateGroundedMessage", () => {
   });
 
   it("rejects em dashes (AI-signature punctuation must not reach customers)", () => {
-    const v = validateGroundedMessage("ביצעתי את ההחזר — 600.00 USD יוחזרו אליך.", REFUND_OK);
+    const v = validateGroundedMessage("ביצעתי את ההחזר - 600.00 USD יוחזרו אליך.", REFUND_OK);
     expect(v.ok).toBe(false);
     expect(v.problems).toContain("em_dash_present");
   });
@@ -98,7 +98,7 @@ describe("buildFallbackMessage (deterministic, always safe)", () => {
     const msg = buildFallbackMessage(REFUND_OK, "אני רוצה זיכוי\nכן");
     expect(msg).toContain("600.00 USD");
     expect(msg).toContain("#1004");
-    expect(/[–—―]/.test(msg)).toBe(false);
+    expect(/[–-―]/.test(msg)).toBe(false);
     expect(/[֐-׿]/.test(msg)).toBe(true);
     expect(validateGroundedMessage(msg, REFUND_OK).ok).toBe(true);
   });

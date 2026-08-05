@@ -152,7 +152,7 @@ export interface ContextSlot {
    */
   sessionFactsBlock?: string;
   /**
-   * Shopify storefront context — where on the store the customer is
+   * Shopify storefront context - where on the store the customer is
    * standing, plus the SERVER-RESOLVED product for that page. Only
    * present on Shopify Live Chat conversations. It is ground truth: the
    * handle came from the browser, but every fact in the block was

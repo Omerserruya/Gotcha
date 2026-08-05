@@ -1,5 +1,5 @@
 /**
- * Shopify Live Chat — merchant admin API.
+ * Shopify Live Chat - merchant admin API.
  *
  * Channel setup rules and the human-agent product picker, driven through
  * the real router. Auth middleware is replaced with a pass-through that
@@ -254,7 +254,7 @@ describe("channel configuration", () => {
     // This used to be refused with NO_ROUTING_TARGET. The channel no longer
     // owns an AI employee or a department: the Main Playbook decides, as it
     // does for every other channel, and an unrouted conversation waits in
-    // the inbox for a human — which is the platform's normal behaviour, not
+    // the inbox for a human - which is the platform's normal behaviour, not
     // a misconfiguration to block on.
     const res = await request(app())
       .put("/api/shopify-live-chat/channels/ch1")
@@ -264,7 +264,7 @@ describe("channel configuration", () => {
 
   it("cannot be pointed at another workspace's AI employee, because it cannot be pointed anywhere", async () => {
     // (case 48) The old cross-tenant check existed because a channel could
-    // name an employee by id. It cannot any more — the ids are dropped on
+    // name an employee by id. It cannot any more - the ids are dropped on
     // normalisation, so the whole class of mistake is gone rather than
     // guarded.
     const res = await request(app())

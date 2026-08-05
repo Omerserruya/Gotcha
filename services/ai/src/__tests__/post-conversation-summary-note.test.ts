@@ -3,7 +3,7 @@
  *
  * Regression context: the summary was persisted GOTCHA-side only. The single
  * vendor write was the sparse FIELD patch, whose note fallback fires ONLY
- * when the field update fails — and on Shopify it does not fail, because
+ * when the field update fails - and on Shopify it does not fail, because
  * `updateRecord` maps to a real `shopify.update_customer` call. So a merchant
  * reading their own Shopify customer record found no trace of the
  * conversation and had to come back to GOTCHA to learn what happened.
@@ -49,7 +49,7 @@ describe("writeSummaryNoteKindAware", () => {
     const call = adapter.createNote.mock.calls[0][0];
     expect(call.contact_id).toBe("cust-1");
     expect(call.kind).toBe("contact");
-    // The summary itself must be in the body — not just a field list.
+    // The summary itself must be in the body - not just a field list.
     expect(call.body).toContain("exchange a jacket");
   });
 
@@ -73,7 +73,7 @@ describe("writeSummaryNoteKindAware", () => {
     expect(adapter.createNote.mock.calls[0][0].source_interaction_id).toBe("conv-1:summary");
   });
 
-  it("bounds the body — Shopify's customer note is one field every write appends to", async () => {
+  it("bounds the body - Shopify's customer note is one field every write appends to", async () => {
     const adapter = stubAdapter();
     getCrmAdapter.mockResolvedValue(adapter);
 

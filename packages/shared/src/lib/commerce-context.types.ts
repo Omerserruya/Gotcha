@@ -228,7 +228,7 @@ export type CommerceContextResponse =
   | { state: "unavailable"; retryable: true }
   | { state: "ok"; data: CommerceContext };
 
-// ── AI snapshot (spec §7) — stripped of adminUrl / refundableMax / internal LTV ──
+// ── AI snapshot (spec §7) - stripped of adminUrl / refundableMax / internal LTV ──
 
 export interface AICommerceOrder {
   orderId: string;

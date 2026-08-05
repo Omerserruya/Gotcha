@@ -30,7 +30,7 @@ const RATIOS: EstimationRatios = {
 
 const plan = (key: string) => PRICING_PLAN_SEEDS.find((p) => p.key === key)!;
 
-describe("seed catalog — three public plans", () => {
+describe("seed catalog - three public plans", () => {
   it("seeds exactly Foundation, AI Workforce and AI Voice", () => {
     expect(PRICING_PLAN_SEEDS.map((p) => p.key)).toEqual(["foundation", "ai_workforce", "ai_voice"]);
   });
@@ -52,7 +52,7 @@ describe("seed catalog — three public plans", () => {
   });
 });
 
-describe("seed catalog — advertised capacity matches the allocation", () => {
+describe("seed catalog - advertised capacity matches the allocation", () => {
   it("Foundation: 2,000 credits is 250 chats a month, 10 a business day", () => {
     const e = estimatePlanCapacity({
       chatCredits: plan("foundation").baseChatCredits,
@@ -94,7 +94,7 @@ describe("seed catalog — advertised capacity matches the allocation", () => {
   });
 });
 
-describe("seed catalog — chat volume options", () => {
+describe("seed catalog - chat volume options", () => {
   const base = plan("ai_workforce").baseChatCredits;
 
   it("offers 10 / 25 / 50 / 100 / 200 per business day", () => {
@@ -133,7 +133,7 @@ describe("seed catalog — chat volume options", () => {
   });
 });
 
-describe("seed catalog — voice volume options", () => {
+describe("seed catalog - voice volume options", () => {
   const base = plan("ai_voice").baseVoiceCredits;
 
   it("offers 10 / 25 / 50 / 100 / 200 calls per business day", () => {
@@ -169,7 +169,7 @@ describe("seed catalog — voice volume options", () => {
   });
 });
 
-describe("seed catalog — credit packages", () => {
+describe("seed catalog - credit packages", () => {
   it("seeds four USD packages in ascending size", () => {
     expect(CREDIT_PACKAGES.map((c) => c.units)).toEqual([1000, 5000, 20000, 50000]);
   });
@@ -185,7 +185,7 @@ describe("seed catalog — credit packages", () => {
   });
 });
 
-describe("seed catalog — commercial honesty", () => {
+describe("seed catalog - commercial honesty", () => {
   it("never entitles a capability the product has not built", () => {
     const unbuilt = FEATURE_CATALOG.filter((f) => !f.implemented).map((f) => f.key);
     expect(unbuilt.length).toBeGreaterThan(0); // the guard is actually exercised
@@ -242,7 +242,7 @@ describe("seed catalog — commercial honesty", () => {
   });
 });
 
-describe("seed catalog — price per conversation stays sane", () => {
+describe("seed catalog - price per conversation stays sane", () => {
   it("Foundation is under $1 per estimated conversation", () => {
     const p = plan("foundation");
     const e = estimateChannel(p.baseChatCredits, RATIOS.chatCreditsPerEstimatedConversation, RATIOS.businessDaysPerMonth);

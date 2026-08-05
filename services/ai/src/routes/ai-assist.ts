@@ -493,7 +493,7 @@ router.get("/:conversationId/suggestions", requireEntitlement("ai.copilot"), asy
   }
 });
 
-// Gated on communication.crm_summaries — the SAME key as the background
+// Gated on communication.crm_summaries - the SAME key as the background
 // pipeline, and deliberately NOT ai.copilot. Foundation denies Copilot and
 // grants summaries; gating this route on ai.copilot would break exactly the
 // plan combination the product sells.

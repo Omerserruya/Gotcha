@@ -1,12 +1,12 @@
 /**
- * Shopify App Proxy — the only trustworthy way the storefront can tell us
+ * Shopify App Proxy - the only trustworthy way the storefront can tell us
  * WHO is chatting.
  *
  * Liquid exposes `customer.id` to the theme, and passing it to us is the
  * obvious thing to do. It is also worthless as proof: it reaches us
  * through the shopper's browser, where anyone can change it. Believing it
  * would let a visitor type someone else's customer id and read their
- * orders — exactly what `customer-access-guard.ts` exists to prevent.
+ * orders - exactly what `customer-access-guard.ts` exists to prevent.
  *
  * An App Proxy request cannot be forged that way. The shopper's browser
  * calls the MERCHANT's own origin (`https://shop.myshopify.com/apps/…`);
@@ -81,7 +81,7 @@ export function verifyAppProxySignature(
 /**
  * The customer id Shopify asserts for this request.
  *
- * Empty or absent means a signed-in shopper was not present — a logged-out
+ * Empty or absent means a signed-in shopper was not present - a logged-out
  * visitor still produces a perfectly valid signed request, so "no id" is a
  * normal answer and not a failure.
  */
@@ -137,7 +137,7 @@ function fromB64url(s: string): Buffer {
 const IV_BYTES = 12;
 const TAG_BYTES = 16;
 
-/** AES-256-GCM, `iv || tag || ciphertext`, base64url — as the visitor session. */
+/** AES-256-GCM, `iv || tag || ciphertext`, base64url - as the visitor session. */
 export function signCustomerIdentity(input: {
   shopDomain: string;
   customerId: string;

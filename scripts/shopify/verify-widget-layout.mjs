@@ -3,8 +3,8 @@
  * Measure the chat widget's layout in a REAL rendering engine.
  *
  * Scope, stated plainly: this proves the CSS resolves to the intended
- * numbers in Chromium — header height, the gap above the hero, the hero
- * clamp, the close target — using the merchant's live configuration
+ * numbers in Chromium - header height, the gap above the hero, the hero
+ * clamp, the close target - using the merchant's live configuration
  * fetched from the dev API. jsdom cannot do this: it does not lay out, so
  * a rule that loses the cascade still "passes" there. That is exactly how
  * the close button shipped broken once.
@@ -33,7 +33,7 @@ const ROOT = path.resolve(new URL("../..", import.meta.url).pathname);
 const results = [];
 function check(name, pass, detail = "") {
   results.push({ name, pass, detail });
-  console.log(`${pass ? "✓" : "✗"} ${name}${detail ? "  — " + detail : ""}`);
+  console.log(`${pass ? "✓" : "✗"} ${name}${detail ? "  - " + detail : ""}`);
 }
 
 // The merchant's real configuration, not a fixture.
@@ -64,7 +64,7 @@ async function measure({ width, height, messages }) {
   const page = await (await browser.newContext({ viewport: { width, height } })).newPage();
   // A real https origin, not about:blank. On about:blank
   // `window.location.origin` is the string "null", so the widget's own
-  // `new URL(raw, origin)` throws and every media URL is refused — which
+  // `new URL(raw, origin)` throws and every media URL is refused - which
   // looked exactly like "the merchant configured no hero".
   await page.goto(API, { waitUntil: "domcontentloaded" });
   await page.addScriptTag({ content: bundle });
@@ -135,7 +135,7 @@ async function measure({ width, height, messages }) {
         });
       })(),
       // The clamp is computed against the panel's MAXIMUM height, because
-      // in the welcome view the panel hugs its content — measuring the
+      // in the welcome view the panel hugs its content - measuring the
       // rendered height would be circular.
       panelBasis: window.matchMedia("(max-width: 560px)").matches
         ? window.innerHeight
@@ -174,7 +174,7 @@ async function measure({ width, height, messages }) {
         const last = all[all.length - 1];
         // `behavior: "instant"` matters: .bd sets scroll-behavior:smooth,
         // so a plain `scrollTop = n` animates and a synchronous read after
-        // it sees the OLD position — which reads as "unreachable".
+        // it sees the OLD position - which reads as "unreachable".
         e.scrollTo({ top: e.scrollHeight, behavior: "instant" });
         const r = last.getBoundingClientRect();
         const composer = s.querySelector(".ft");
@@ -282,7 +282,7 @@ await browser.close();
 
 const failed = results.filter((r) => !r.pass);
 console.log(`\n${results.length - failed.length}/${results.length} layout checks passed in Chromium`);
-if (failed.length) { console.log("\nFAILED:"); for (const r of failed) console.log(`  • ${r.name} — ${r.detail}`); }
+if (failed.length) { console.log("\nFAILED:"); for (const r of failed) console.log(`  • ${r.name} - ${r.detail}`); }
 console.log("\nNote: this measures the widget in a real browser. It does NOT prove the");
-console.log("published Shopify theme serves this bundle — see verify-storefront-widget.mjs.");
+console.log("published Shopify theme serves this bundle - see verify-storefront-widget.mjs.");
 process.exit(failed.length ? 1 : 0);

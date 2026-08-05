@@ -14,8 +14,8 @@ describe("adapter calls are bounded in time", () => {
 
   it("rejects with a NAMED timeout instead of hanging forever", async () => {
     process.env.ADAPTER_TIMEOUT_MS = "20";
-    // A provider that never answers. Before this, the caller — a customer
-    // conversation turn holding a worker — waited indefinitely.
+    // A provider that never answers. Before this, the caller - a customer
+    // conversation turn holding a worker - waited indefinitely.
     const hung = new Promise(() => {});
     await expect(withAdapterTimeout("shopify", "get_order", hung as Promise<unknown>))
       .rejects.toThrow(/adapter_timeout_after_20ms: shopify\.get_order/);

@@ -1,5 +1,5 @@
 /**
- * Shopify Live Chat — what the AI employee can and cannot do with
+ * Shopify Live Chat - what the AI employee can and cannot do with
  * products.
  *
  * The claim under test is "the AI cannot invent a product". These prove

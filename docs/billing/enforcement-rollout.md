@@ -14,12 +14,12 @@ consequences from the organizations whose bots went quiet.
 
 `hard`, `soft` and `observe` are accepted as older spellings of `enforce`,
 `audit` and `audit`. Both vocabularies work because a deployment set to the
-other one used to fall through to `off` — which does not merely skip
+other one used to fall through to `off` - which does not merely skip
 enforcement, it skips **metering**, so usage stops being recorded and no number
 anywhere looks wrong.
 
 Services refuse to start on a missing or misspelt value in production. `off` in
-production requires `BILLING_ALLOW_UNENFORCED=true` — deliberately hard to do by
+production requires `BILLING_ALLOW_UNENFORCED=true` - deliberately hard to do by
 accident, because running production unenforced should be a decision someone had
 to write down.
 
@@ -47,7 +47,7 @@ It calls the same gate the runtime calls, under an assumed `enforce`, so it
 reports what would actually happen rather than a second opinion about it. It is
 read-only.
 
-The number that matters is **actively serving** — organizations with
+The number that matters is **actively serving** - organizations with
 conversations in the last 7 days. A tenant with none can be refused today and
 nobody notices. A tenant with conversations goes quiet in front of their
 customers.
@@ -70,7 +70,7 @@ Two deliberate exemptions:
 - **Onboarding.** A tenant mid-onboarding has no subscription by definition, and
   onboarding is the flow through which one gets bought. Refusing it would make
   the product impossible to start using. The paid product stays out of reach
-  anyway — the tenant access matrix denies that scope for those statuses.
+  anyway - the tenant access matrix denies that scope for those statuses.
 - **Grandfathered subscriptions**, which have `enforcementEnabled` false. That
   is a commercial decision recorded on the row, not an accident.
 
@@ -94,4 +94,4 @@ subscription" is not treated as "they do".
 Every service that can produce billable work receives these: `ai`, `billing`,
 `conversation`, `chatbot`, `voice-copilot`, `incoming-worker`,
 `outgoing-worker`. Only `ai` and `billing` used to, and the other five defaulted
-to `off` — five services producing billable work, each a way in.
+to `off` - five services producing billable work, each a way in.

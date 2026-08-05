@@ -1,5 +1,5 @@
 /**
- * GOTCHA Shopify Chat App — identity, verification and state.
+ * GOTCHA Shopify Chat App - identity, verification and state.
  *
  * This module is the boundary between the two Shopify products. Everything
  * here belongs to the **Chat App**: its own client id, its own secret, its
@@ -8,7 +8,7 @@
  * It must never read SHOPIFY_API_KEY / SHOPIFY_API_SECRET. Those are the
  * **Core Shopify Integration's** credentials, and a single accidental reuse
  * would mean a chat uninstall could revoke a merchant's commerce connection
- * — the exact coupling the two-app split exists to prevent. The one-way
+ * - the exact coupling the two-app split exists to prevent. The one-way
  * dependency is: Chat may READ a safe product projection that Core owns.
  * Nothing flows the other way.
  */
@@ -26,7 +26,7 @@ export interface ShopifyChatAppConfig {
   redirectUri: string;
   /** Theme App Extension handle (directory name). */
   extensionHandle: string;
-  /** App Embed BLOCK handle — the .liquid file name, underscores and all. */
+  /** App Embed BLOCK handle - the .liquid file name, underscores and all. */
   blockHandle: string;
   /** App handle used in admin deep links. */
   appHandle: string;
@@ -253,7 +253,7 @@ export interface ChatActivationInput {
   chatEntitled: boolean;
   /** The merchant has switched the App Embed on (or we have never seen it). */
   lastHeartbeatAt: Date | null;
-  /** Core Shopify connection present — only affects product messaging. */
+  /** Core Shopify connection present - only affects product messaging. */
   coreConnected: boolean;
   now?: Date;
 }

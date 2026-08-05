@@ -7,7 +7,7 @@
  * `?v=20260729`, four commits then changed the bundle without touching
  * it, and every browser that had already fetched that URL kept the old
  * code for the four hours of its max-age. Verification never caught it
- * because the test page invented a fresh `?v=` each run — a URL no cache
+ * because the test page invented a fresh `?v=` each run - a URL no cache
  * had ever seen.
  *
  * The shape that cannot rot:

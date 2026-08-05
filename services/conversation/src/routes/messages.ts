@@ -54,7 +54,7 @@ router.post("/:conversationId/messages", validate(sendMessageSchema), async (req
     }
 
     // Browser-delivered channels: there is no external API to call. The
-    // message row IS the delivery — the widget receives it over the
+    // message row IS the delivery - the widget receives it over the
     // visitor socket and re-reads it on reconnect. Enqueuing an outbound
     // send here would only produce a no-op job and a misleading PENDING.
     if (channel === "WEBCHAT" || channel === "SHOPIFY_LIVE_CHAT") {

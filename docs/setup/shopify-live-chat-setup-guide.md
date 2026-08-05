@@ -48,7 +48,7 @@ so they come back to the same wizard, on the same step.
 
 Only organizations where they hold `channels:manage:update` are offered.
 The organization must be ACTIVE and must hold the `shopify_live_chat`
-entitlement — a Shopify install does not bypass plan enforcement.
+entitlement - a Shopify install does not bypass plan enforcement.
 
 ### 2.4 Connect
 
@@ -338,8 +338,8 @@ anything over 8000 is refused outright without being processed.
 The assigned AI employee gets two extra tools on Shopify Live Chat
 conversations where product messaging is allowed:
 
-- `send_product_card` — one product
-- `send_product_carousel` — up to five, default three
+- `send_product_card` - one product
+- `send_product_carousel` - up to five, default three
 
 They are separate tools on purpose. "Here is the one I recommend" and
 "here are a few to compare" are different answers; folding them into a
@@ -348,7 +348,7 @@ count parameter reliably produced one-item carousels.
 **Both accept references only.** The server re-reads title, price, image
 and stock from Shopify. An invented product id resolves to nothing and
 the model is told so. That is the mechanism behind "the AI cannot invent
-a product" — not a prompt instruction.
+a product" - not a prompt instruction.
 
 Cards are **staged**, not written. The bot's text reply is persisted
 first by the incoming worker, then the cards. A card that arrives before

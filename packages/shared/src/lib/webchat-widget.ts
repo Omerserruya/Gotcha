@@ -1,5 +1,5 @@
 /**
- * The website chat widget — configuration for the embeddable widget a
+ * The website chat widget - configuration for the embeddable widget a
  * tenant pastes onto their own site.
  *
  * This deliberately shares its experience block with the Shopify
@@ -41,7 +41,7 @@ export interface WebchatConfig {
     direction: "auto" | "ltr" | "rtl";
     showPoweredBy: boolean;
   };
-  /** The shared experience block — the same one the storefront widget uses. */
+  /** The shared experience block - the same one the storefront widget uses. */
   ux: ShopifyChatUx;
   behaviour: {
     /** Offer "talk to a person" in the composer footer. */
@@ -61,7 +61,7 @@ function hex(raw: unknown, fallback: string): string {
 
 function text(raw: unknown, max: number, fallback: string): string {
   if (typeof raw !== "string") return fallback;
-  // Plain text only — no markup ever reaches a visitor's page from config.
+  // Plain text only - no markup ever reaches a visitor's page from config.
   const cleaned = raw.replace(/[<>]/g, "").trim().slice(0, max);
   return cleaned || fallback;
 }
@@ -109,7 +109,7 @@ export function defaultWebchatConfig(): WebchatConfig {
  * The settings this widget had before it shared an experience with the
  * storefront one: a flat blob stored straight into `credentials`.
  *
- * `welcome` there was a single string — the first bubble the visitor saw —
+ * `welcome` there was a single string - the first bubble the visitor saw -
  * which is the SUBTITLE of the new welcome screen, not its title. Reading
  * it as the title would replace every tenant's greeting with a sentence.
  */

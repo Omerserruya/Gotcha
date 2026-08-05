@@ -159,7 +159,7 @@ const COMMUNICATION: FeatureDef[] = [
   // catalog key, so nothing ever materialised a row for them and
   // `isFeatureEnabledForTenant` fell through to `FEATURE_METADATA.defaultEnabled`.
   //
-  // The consequence was not that they were blocked — `defaultEnabled` is TRUE
+  // The consequence was not that they were blocked - `defaultEnabled` is TRUE
   // for the Shopify pair, so everyone had them. The consequence was that they
   // could not be SOLD: no PlanVersion could grant or withhold them, because
   // there was no key to grant. Availability was decided by a hardcoded default
@@ -214,7 +214,7 @@ const COMMUNICATION: FeatureDef[] = [
     entitlementType: "BOOLEAN",
     // Deliberately FALSE, unlike the two above: this one spends a customer's
     // money. `FEATURES.AUTO_BUY` has no explicit defaultEnabled, so the legacy
-    // resolver already fell back to `?? false` — this preserves that, it does
+    // resolver already fell back to `?? false` - this preserves that, it does
     // not tighten it.
     defaultValue: bool(false),
     enforcementLocations: ["services/conversation:auto-buy.routes (via requireFeature)"],

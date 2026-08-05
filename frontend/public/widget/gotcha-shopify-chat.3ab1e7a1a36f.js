@@ -1,5 +1,5 @@
 /**
- * GOTCHA Shopify Live Chat — chat application.
+ * GOTCHA Shopify Live Chat - chat application.
  *
  * Loaded lazily by the bootstrap, so nothing in this file is on the
  * critical path of a storefront page.
@@ -444,7 +444,7 @@ window.__gotchaShopifyChatApp = function (boot) {
 
   var css = [
     // `el.hidden = true` only hides anything because of the UA stylesheet's
-    // `[hidden]{display:none}` — the weakest rule there is. Every element
+    // `[hidden]{display:none}` - the weakest rule there is. Every element
     // below that sets its own `display` (the panel is `display:flex`) beat
     // it, so the close button ran, state flipped to closed, analytics
     // fired, and the panel stayed on screen looking exactly like a dead
@@ -505,7 +505,7 @@ window.__gotchaShopifyChatApp = function (boot) {
     // The avatar hangs below the media's bottom edge. z-index keeps it
     // above the fade, and the ring separates it from any busy image.
     // Attached to the hero, not floating below it: a 3px ring, a soft
-    // shadow, and no bottom margin of its own — the .wel gap owns the
+    // shadow, and no bottom margin of its own - the .wel gap owns the
     // distance to the title so there is only one number to tune.
     ".wel-av{display:block;border-radius:50%;object-fit:cover;position:relative;z-index:2;",
     "  background:#fff;border:3px solid #fff;box-shadow:0 3px 10px rgba(15,23,42,.14);margin-bottom:0;}",
@@ -513,8 +513,8 @@ window.__gotchaShopifyChatApp = function (boot) {
     // ── The spacing scale ──
     //
     // Every gap in the welcome screen is one of these. The widget was
-    // built with margins chosen per-rule — 18px here, 14px there, a -8px
-    // correction to undo one of them — and the sum was a panel that felt
+    // built with margins chosen per-rule - 18px here, 14px there, a -8px
+    // correction to undo one of them - and the sum was a panel that felt
     // loose at the top and ran out of room at the bottom. One scale means
     // tightening the layout is a change to five numbers, not fifty.
     ":host,.panel{",
@@ -547,7 +547,7 @@ window.__gotchaShopifyChatApp = function (boot) {
     "@media (prefers-reduced-motion: reduce){.panel{animation:none}}",
     // Phones: a floating card wastes the screen and fights the keyboard.
     "@media (max-width: 560px){",
-    // width:auto, driven by the insets — `width:100%` resolves against a
+    // width:auto, driven by the insets - `width:100%` resolves against a
     // containing block that a wide page can inflate, which is how the
     // panel ends up 12px past the screen on a theme that already
     // overflows.
@@ -559,7 +559,7 @@ window.__gotchaShopifyChatApp = function (boot) {
     // already talking to. 44px visual height, 30px avatar.
     // LOGICAL padding, not physical. The inline-END reservation is what
     // keeps the header's own controls clear of the absolutely-positioned
-    // close button — and in RTL that corner is on the left, so a hardcoded
+    // close button - and in RTL that corner is on the left, so a hardcoded
     // `padding-right` left the mute button sitting under the close button.
     ".hd{display:flex;align-items:center;gap:10px;",
     "  padding-block:6px;padding-inline:14px 56px;",
@@ -575,7 +575,7 @@ window.__gotchaShopifyChatApp = function (boot) {
     ".dot{width:7px;height:7px;border-radius:4px;background:#16a34a;flex:0 0 auto;}",
     ".dot[data-off='1']{background:#cbd5e1;}",
     // 44x44 is the accessibility floor for a touch target, and this one
-    // is the shopper's way out of the widget — the last control that
+    // is the shopper's way out of the widget - the last control that
     // should be fiddly on a phone. The icon stays visually small; the
     // hit area does not.
     // 44x44 is the accessibility floor and this is the shopper's way out,
@@ -737,7 +737,7 @@ window.__gotchaShopifyChatApp = function (boot) {
     // A carousel item is a shortlist entry, not a product page. Two lines
     // of reasoning is enough to choose between three shoes; more turns
     // the strip into a wall and buries the actions below the fold.
-    // padding-bottom would reveal a sliver of the clamped third line —
+    // padding-bottom would reveal a sliver of the clamped third line -
     // `overflow:hidden` clips at the PADDING box, not the content box.
     ".car-tr .why{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;",
     "  line-height:1.35;max-height:2.7em;padding:0 10px;margin-bottom:8px;}",
@@ -755,13 +755,13 @@ window.__gotchaShopifyChatApp = function (boot) {
     ".car-n:focus-visible{outline:2px solid " + brand + ";outline-offset:2px;}",
 
     // Composer
-    // A one-line composer by default. It was 115px of a 640px panel —
-    // more than the hero is allowed now — mostly padding around an empty
+    // A one-line composer by default. It was 115px of a 640px panel -
+    // more than the hero is allowed now - mostly padding around an empty
     // textarea.
     ".ft{border-top:1px solid #f0f3f7;padding:var(--s2) var(--s3);",
     "  padding-bottom:calc(var(--s2) + env(safe-area-inset-bottom));background:#fff;flex:0 0 auto;}",
     ".cmp{display:flex;align-items:flex-end;gap:var(--s2);}",
-    // border-box, or min-height:38 becomes 38 + padding + border = 56 —
+    // border-box, or min-height:38 becomes 38 + padding + border = 56 -
     // the same trap that made a "44px" header measure 57.
     ".ta{flex:1 1 auto;box-sizing:border-box;resize:none;border:1px solid #e4e9f0;border-radius:11px;padding:8px 12px;",
     "  font:inherit;font-size:16px;line-height:1.4;max-height:104px;min-height:38px;color:#0f172a;background:#fff;",
@@ -823,7 +823,7 @@ window.__gotchaShopifyChatApp = function (boot) {
   // ── Panel shell ─────────────────────────────────────────────────
 
   // The hero video, when one is playing. Held so it can be stopped the
-  // moment it stops being visible — a muted loop running behind a closed
+  // moment it stops being visible - a muted loop running behind a closed
   // panel is battery and bandwidth a shopper never agreed to spend.
   var heroVideo = null;
   var panel = el("div", "panel");
@@ -872,7 +872,7 @@ window.__gotchaShopifyChatApp = function (boot) {
 
   header.appendChild(headerAvatar);
   header.appendChild(headerText);
-  // Visitor mute. Only offered when the merchant enabled sound at all —
+  // Visitor mute. Only offered when the merchant enabled sound at all -
   // a mute button for silence a shopper already has is just clutter.
   var muteBtn = null;
   var soundsOn = !!(boot.widget && boot.widget.ux && boot.widget.ux.sounds && boot.widget.ux.sounds.enabled);
@@ -1129,7 +1129,7 @@ window.__gotchaShopifyChatApp = function (boot) {
   /**
    * @param live  true when these messages just arrived, false when they
    *              are history being replayed. Only the former may make a
-   *              sound — a shopper reopening a chat must not hear a
+   *              sound - a shopper reopening a chat must not hear a
    *              burst of chimes for messages they already read.
    */
   function ingest(incoming, live) {
@@ -1233,12 +1233,12 @@ window.__gotchaShopifyChatApp = function (boot) {
     var configured = mobile ? h.mobileHeight : h.height;
 
     // The merchant's height is a PREFERENCE; the panel has the last word.
-    // Mirrors resolveHeroHeight() in @chatcenter/shared — the widget ships
+    // Mirrors resolveHeroHeight() in @chatcenter/shared - the widget ships
     // without a bundler and cannot import it, so the rule is duplicated
     // deliberately and tested on both sides.
     // The panel's MAXIMUM height, not its current one. In the welcome view
     // the panel sizes to its content, so measuring it here would be
-    // circular — and before first paint it measures zero.
+    // circular - and before first paint it measures zero.
     var panelH = mobile ? window.innerHeight : Math.min(640, window.innerHeight - 120);
     var reserved = mobile ? 264 : 288;
     var height = Math.min(configured, Math.max(0, panelH - reserved), Math.floor(panelH * (mobile ? 0.22 : 0.25)));
@@ -1581,7 +1581,7 @@ window.__gotchaShopifyChatApp = function (boot) {
       if (product.reason) card.appendChild(directedEl("div", "why", product.reason));
 
       // Variant picker. A product with real options never gets an
-      // arbitrary variant chosen for the shopper — Add to Cart stays
+      // arbitrary variant chosen for the shopper - Add to Cart stays
       // disabled until they pick one that actually exists.
       var needsChoice = (product.optionNames || []).length > 0 && product.variants.length > 1;
       if (needsChoice && !compact) {
@@ -1597,7 +1597,7 @@ window.__gotchaShopifyChatApp = function (boot) {
           });
           if (!v.available) {
             chip.disabled = true;
-            attr(chip, { "aria-label": v.title + " — " + T.soldOut });
+            attr(chip, { "aria-label": v.title + " - " + T.soldOut });
           }
           on(chip, "click", function () {
             vState.variantId = v.variantId;
@@ -1756,7 +1756,7 @@ window.__gotchaShopifyChatApp = function (boot) {
    *
    * The server half re-resolves the product and variant from Shopify and
    * answers with a variant id it is willing to stand behind. The browser
-   * half posts that id to the THEME's own /cart/add.js — same origin,
+   * half posts that id to the THEME's own /cart/add.js - same origin,
    * the merchant's own cart, no Admin credential anywhere near the page,
    * and no order created from chat.
    */
@@ -1800,7 +1800,7 @@ window.__gotchaShopifyChatApp = function (boot) {
         vState.busy = false;
         // The server sends a shopper-safe sentence for the cases it
         // knows (out of stock, option gone, subscription-only). Anything
-        // else stays generic — a raw Shopify error is not an answer.
+        // else stays generic - a raw Shopify error is not an answer.
         vState.error =
           (err && err.body && err.body.message) ||
           (err && err.status === 409 && err.message) ||
@@ -1814,7 +1814,7 @@ window.__gotchaShopifyChatApp = function (boot) {
   /**
    * Tell the theme its cart changed, using the events Shopify's own
    * Dawn-lineage themes and most app ecosystems already listen for. We
-   * only ever *announce* — opening a merchant's cart drawer ourselves
+   * only ever *announce* - opening a merchant's cart drawer ourselves
    * would mean guessing at their markup and breaking themes we have
    * never seen.
    */
@@ -1969,7 +1969,7 @@ window.__gotchaShopifyChatApp = function (boot) {
           S.rateLimited = true;
           entry.failed = true;
         } else if (err && err.status === 401) {
-          // Session expired — re-bootstrap silently on the next open.
+          // Session expired - re-bootstrap silently on the next open.
           store.del("session");
           store.del("conversation");
           entry.failed = true;
@@ -2198,7 +2198,7 @@ window.__gotchaShopifyChatApp = function (boot) {
    * Safe UI state for debugging a live storefront.
    *
    * Deliberately contains no tenant id, channel id, session token,
-   * conversation body or AI configuration — only what somebody looking at
+   * conversation body or AI configuration - only what somebody looking at
    * a stuck widget needs to see. Attached by the bootstrap.
    */
   function debugState() {

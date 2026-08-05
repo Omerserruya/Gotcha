@@ -128,7 +128,7 @@ app.use("/api/router-rules", routerRuleRoutes);
 app.use("/api/flow-canvas", flowCanvasRoutes);
 app.use("/api/usage", usageRoutes);
 app.use("/api/embedded-chat", embeddedChatRouter);
-// Public storefront surface — unauthenticated by design, guarded by
+// Public storefront surface - unauthenticated by design, guarded by
 // (public channel key + Origin + signed visitor session). Mounted before
 // the authenticated admin router so neither can shadow the other.
 // Shopify CHAT app: install handshake, tenant binding and webhooks. Mounted

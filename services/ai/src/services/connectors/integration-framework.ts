@@ -683,7 +683,7 @@ export function getToolPriority(dottedName: string): number {
 
 /**
  * Every provider adapter issued a bare `fetch` with no timeout, so a hung
- * connection blocked the caller indefinitely — and the caller is a customer
+ * connection blocked the caller indefinitely - and the caller is a customer
  * conversation turn holding a worker. The custom-API path already did this
  * correctly (`custom-api.service.ts` aborts on `AbortSignal`); the adapters
  * simply never got it.
@@ -701,7 +701,7 @@ export function getToolPriority(dottedName: string): number {
  *
  * NOTE: `CatalogTool.timeoutMs` is NOT consulted. That column, along with
  * `maxRetries`, `retryBackoffMs` and `circuitBreakerThreshold`, is read by
- * nothing in the codebase — populating it would create configuration that
+ * nothing in the codebase - populating it would create configuration that
  * appears to work and does not. See the remediation appendix; the columns
  * should be implemented or dropped, not quietly filled in.
  */

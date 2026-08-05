@@ -31,11 +31,11 @@ ERROR | DISCONNECTED`) is the source of truth, and a callback only writes
 | `slug` | Catalog slug |
 | `tools()` | Tools this adapter really implements |
 | `execute(...)` | Run one tool |
-| `validate?(...)` | **Connection probe** — prove the stored credential works |
+| `validate?(...)` | **Connection probe** - prove the stored credential works |
 | `refreshTokens?(...)` | OAuth refresh |
 
-`validate()` exists because the generic fallback — "call the first READ tool
-with `{}`" — is wrong for any provider whose read tools have required
+`validate()` exists because the generic fallback - "call the first READ tool
+with `{}`" - is wrong for any provider whose read tools have required
 arguments. `google_calendar.list_events` demands `from_iso`/`to_iso`, so that
 provider could *never* pass a test and sat permanently in `ERROR`. Adapters
 with argument-hungry reads implement a cheap identity call instead.
@@ -48,7 +48,7 @@ read-tool probe.
 `packages/shared/src/lib/oauth-state-store.ts`
 
 A signature proves *we* issued the state. It does **not** prove the state has
-not been used before — a signed JWT with a 10-minute expiry is replayable for
+not been used before - a signed JWT with a 10-minute expiry is replayable for
 those ten minutes by anyone who captures it (referrer logs, shared machine,
 proxy). Every provider here had that hole.
 
@@ -58,11 +58,11 @@ So each state carries a `jti` and the callback **consumes** it:
   `userId`, `flow`, plus provider extras.
 - `consumeOAuthState(raw, provider)` → verifies, then burns the `jti` via
   Redis `SET NX EX`. First consume wins; later ones return `replayed`.
-- **Fails closed** when Redis is unreachable — degrading to "allow" would
+- **Fails closed** when Redis is unreachable - degrading to "allow" would
   silently reopen the replay window.
 - Legacy tokens with no `jti` are rejected.
 
-**Return context travels inside the signed state**, never a query parameter —
+**Return context travels inside the signed state**, never a query parameter -
 that would be an open redirect, and it is also how onboarding lost its place
 (the callback fell back to a hard-coded marketplace path). `returnPathForFlow()`
 derives the destination and only ever emits a relative path.
@@ -83,7 +83,7 @@ connector, and a real consent round-trip is needed to verify.
 
 OAuth init routes must use `requireOnboardingOrActiveTenant()`, **not**
 `requireActiveTenant()`. During onboarding the tenant is `PENDING_ONBOARDING`,
-so the stricter guard answers 403 and the connect silently dies — this was the
+so the stricter guard answers 403 and the connect silently dies - this was the
 actual cause of "Monday doesn't connect in onboarding", and the same bug was
 later found on the AI-employee builder routes.
 
@@ -96,14 +96,14 @@ reaches them during onboarding.
 | Provider | Status | Notes |
 |---|---|---|
 | **Monday** | Working | OAuth2. Callback now probes `api.monday.com/v2` (`query { me { id } }`) before persisting `CONNECTED`; failure persists `ERROR` + `lastError`. |
-| **Google Calendar** | Working, narrow | Implements **`list_events` only**. The catalog previously advertised `create_event` and `check_availability`, which the adapter *throws* on — those rows were deleted. Booking goes through the validated `schedule_meeting` flow; availability through the built-in `check_availability` resolver. |
-| **Calendly** | **Unavailable (unpublished)** | OAuth plumbing exists, but there is no registered `ProviderAdapter`, no tools, and nothing populates the `eventTypeUri` its booking path requires. Presenting a connect button would be a fake workflow, so `is_published = false` with an honest description. Existing `tenant_integrations` rows untouched — it returns the moment the adapter lands. |
+| **Google Calendar** | Working, narrow | Implements **`list_events` only**. The catalog previously advertised `create_event` and `check_availability`, which the adapter *throws* on - those rows were deleted. Booking goes through the validated `schedule_meeting` flow; availability through the built-in `check_availability` resolver. |
+| **Calendly** | **Unavailable (unpublished)** | OAuth plumbing exists, but there is no registered `ProviderAdapter`, no tools, and nothing populates the `eventTypeUri` its booking path requires. Presenting a connect button would be a fake workflow, so `is_published = false` with an honest description. Existing `tenant_integrations` rows untouched - it returns the moment the adapter lands. |
 
 ## 6. The UI bug worth remembering
 
 `IntegrationDrawer` rendered a **"Connect with OAuth" button with no `onClick`**.
 Clicking it did literally nothing, for *every* OAuth provider surfaced there.
-No error, no network call — which is why the reports said "connection does not
+No error, no network call - which is why the reports said "connection does not
 work" while backend traces looked clean.
 
 When a connect appears dead, check the handler exists before suspecting the
@@ -111,7 +111,7 @@ provider.
 
 ## 7. Testing
 
-- `packages/shared/src/__tests__/oauth-state-store.test.ts` (11) — single use,
+- `packages/shared/src/__tests__/oauth-state-store.test.ts` (11) - single use,
   concurrent consume, provider mismatch, expiry, fail-closed, no open redirect.
 - Live sweep: all 8 providers accept a state once and return
   `state_already_used` on replay of the same token.

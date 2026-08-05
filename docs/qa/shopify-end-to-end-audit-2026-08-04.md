@@ -15,7 +15,7 @@ run. Where something is not done, it says so.
 
 | # | Area | State |
 |---|------|-------|
-| 1 | Production Partner app linked | **NOT DONE — blocked on you** |
+| 1 | Production Partner app linked | **NOT DONE - blocked on you** |
 | 2 | Other channels connectable | **OK** (3 provider credentials unset in prod) |
 | 3 | Shopify tools | **OK** |
 | 4 | Summary written to Shopify customer | **WAS BROKEN → FIXED** |
@@ -25,7 +25,7 @@ run. Where something is not done, it says so.
 
 ---
 
-## 1. Production Partner app — not linked
+## 1. Production Partner app - not linked
 
 `shopify-app/shopify.app.toml` has **no `client_id`**, and in `.env.prod` both
 `SHOPIFY_CHAT_APP_CLIENT_ID` and `SHOPIFY_CHAT_APP_SECRET` are present but
@@ -43,7 +43,7 @@ verified by test suite, not against a live production store.
 
 ---
 
-## 2. Other channels — code complete
+## 2. Other channels - code complete
 
 All ten `ChannelType` values have an adapter in
 `packages/shared/src/channels/` and a connect surface in
@@ -53,7 +53,7 @@ Messenger / Instagram / Gmail / Outlook / Slack; the page shows a
 `requiresSetup` hint when the platform credential is absent rather than
 offering a button that fails.
 
-**Gap, and it is configuration not code** — these are unset in `.env.prod`:
+**Gap, and it is configuration not code** - these are unset in `.env.prod`:
 
 - `MICROSOFT_CLIENT_ID` (Outlook cannot be connected)
 - `TWILIO_ACCOUNT_SID`
@@ -63,7 +63,7 @@ Set (Meta, Instagram, Google, Slack) are fine.
 
 ---
 
-## 3. Shopify tools — healthy
+## 3. Shopify tools - healthy
 
 45+ dotted `shopify.*` tools. `services/ai/src/__tests__/shopify-tool-parity.test.ts`
 enforces that **every declared tool reaches a real handler**, which is the class
@@ -77,19 +77,19 @@ adapter suites.
 
 One real defect found and fixed here: **`shopify.create_note` appended
 blindly**, so a redelivered post-chat run duplicated a note into
-`customer.note` — a single free-text field every future note appends to —
+`customer.note` - a single free-text field every future note appends to -
 permanently. It now skips when the caller's idempotency marker is already
 present. Unmarked notes still append every time, because a human note has no
 idempotency key and swallowing the second one would lose it.
 
 ---
 
-## 4. Conversation summary → Shopify customer note — was broken, now fixed
+## 4. Conversation summary → Shopify customer note - was broken, now fixed
 
 **The summary never reached Shopify.** The post-chat pipeline persisted it
 GOTCHA-side only (`CallAnalysis.finalSummary`, `Conversation.aiSummary`). Its
 only vendor write was the sparse FIELD patch, and `applyCrmPatchKindAware`
-writes a note **only when that patch fails** — which on Shopify it does not,
+writes a note **only when that patch fails** - which on Shopify it does not,
 because `updateRecord` maps to a real `shopify.update_customer` call.
 
 Net effect: a merchant reading their own Shopify customer record found no trace
@@ -107,11 +107,11 @@ Entitlement is unchanged: the whole pipeline is already gated on
 
 ---
 
-## 5. Agent workspace parity — was 5 actions, now 7
+## 5. Agent workspace parity - was 5 actions, now 7
 
 The panel had: cancel, refund, add tag, remove tag, add note. The AI had ~45
-tools. Returns and exchanges — the highest-volume support request a store gets
-— were absent, so an agent finished those in Shopify admin and left the
+tools. Returns and exchanges - the highest-volume support request a store gets
+- were absent, so an agent finished those in Shopify admin and left the
 conversation context, the audit trail and the customer notification behind.
 
 Added `create_return` and `exchange_item` on the same hardened chain
@@ -133,7 +133,7 @@ Three things were not obvious:
   and reports it as missing rather than offering a button that fails.
 
 `OrderLineDetail` also gained `lineItemId`, without which the only expressible
-return was "all of it" — the wrong answer to a three-item order with one faulty
+return was "all of it" - the wrong answer to a three-item order with one faulty
 item.
 
 **Still not in the panel** (the AI can do these, a human cannot): order edits,
@@ -143,9 +143,9 @@ and exchanges.
 
 ---
 
-## 6. Customer brief from store data — was absent, now built
+## 6. Customer brief from store data - was absent, now built
 
-`customer-brief.service.ts` had **zero** commerce signals — grepping it for
+`customer-brief.service.ts` had **zero** commerce signals - grepping it for
 `shopify|orders|total_spent|engagement|commerce` returned nothing. The brief
 reasoned only from conversation evidence, so a first-time shopper and someone
 who had spent 8,400 read identically to the agent about to talk to them.
@@ -177,7 +177,7 @@ direct vendor access.
 
 ---
 
-## 7. Plans, billing, credits — healthy
+## 7. Plans, billing, credits - healthy
 
 Audited and found already built:
 

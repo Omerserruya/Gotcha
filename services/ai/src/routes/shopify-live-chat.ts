@@ -1,9 +1,9 @@
 /**
- * Shopify Live Chat — MERCHANT admin API.
+ * Shopify Live Chat - MERCHANT admin API.
  *
  * Authenticated, tenant-scoped counterpart to the public storefront
  * surface. Lives in services/ai because everything it does needs the
- * connected Shopify integration (owned here) — channel CRUD, the product
+ * connected Shopify integration (owned here) - channel CRUD, the product
  * picker, the live preview and install diagnostics all resolve through
  * the same adapter the AI employee uses.
  */
@@ -147,7 +147,7 @@ router.post(
       base.shopDomain = store.store.shopDomain;
       base.tenantIntegrationId = store.store.tenantIntegrationId;
       const config = normalizeShopifyLiveChatConfig(req.body?.config ?? {}, base);
-      // Explicit merchant activation only — creating the channel never
+      // Explicit merchant activation only - creating the channel never
       // silently starts serving a widget on a live storefront.
       config.enabled = false;
 
@@ -205,7 +205,7 @@ router.put(
       // tenant-checked so an admin could not point their widget at another
       // workspace's employee by id. Both now come from the Main Playbook
       // graph, which is already tenant-scoped, so there is nothing left
-      // here to validate — or to get wrong.
+      // here to validate - or to get wrong.
 
       // No owner gate any more. Every other channel lets a conversation
       // land in the inbox unassigned when the graph declines to route it,
@@ -468,7 +468,7 @@ router.get(
  *
  * The product references are re-resolved from Shopify here; the browser's
  * copy of the price is never persisted. The conversation is loaded
- * tenant-scoped, and the channel binding decides which store is legal —
+ * tenant-scoped, and the channel binding decides which store is legal -
  * an agent cannot send another workspace's product.
  */
 router.post(

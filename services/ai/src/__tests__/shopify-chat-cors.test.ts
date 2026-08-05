@@ -172,8 +172,8 @@ describe("widget asset CORS (gateway templates)", () => {
     const dirBody = dirBlock.slice(0, dirBlock.indexOf("\n        }"));
     expect(dirBody).toMatch(/Cache-Control "public, max-age=31536000, immutable"/);
 
-    // The bootstrap's filename is stable — it is what the theme points at
-    // — so it must be revalidated on every load, or a change to it can sit
+    // The bootstrap's filename is stable - it is what the theme points at
+    // - so it must be revalidated on every load, or a change to it can sit
     // unseen in a shopper's browser for as long as the TTL allows.
     const bootIdx = conf.indexOf("location = /widget/gotcha-shopify-bootstrap.js");
     expect(bootIdx).toBeGreaterThan(-1);
@@ -261,7 +261,7 @@ describe("API CORS", () => {
 
   it("lets a recognised storefront READ a refusal", async () => {
     // The merchant switched the channel off. The body is deliberately
-    // detail-free, but the browser must be able to see it — otherwise it
+    // detail-free, but the browser must be able to see it - otherwise it
     // is replaced by an opaque CORS error and the merchant debugs the
     // wrong thing.
     H.channelRow.current = channel({ enabled: false });
@@ -302,7 +302,7 @@ describe("API CORS", () => {
       // The session token is deliberately opaque ciphertext, and its
       // opacity is asserted where it is minted. Scanning random base64 for
       // a two-character tenant id like "t1" finds one roughly 3% of runs
-      // and says nothing either way — so scan everything EXCEPT the token,
+      // and says nothing either way - so scan everything EXCEPT the token,
       // and check the token by decrypting it instead.
       const clone = JSON.parse(JSON.stringify(res.body ?? {}));
       const token = clone?.data?.session?.token;
@@ -315,7 +315,7 @@ describe("API CORS", () => {
       expect(body).not.toContain("sfy_key");
 
       if (token) {
-        // Readable only with the server's key — which is the point.
+        // Readable only with the server's key - which is the point.
         expect(token).not.toContain("t1");
         expect(Buffer.from(token, "base64").toString("utf8")).not.toContain("tenantId");
       }

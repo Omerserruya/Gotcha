@@ -1,5 +1,5 @@
 /**
- * Chat installation lifecycle — the decisions, not the plumbing.
+ * Chat installation lifecycle - the decisions, not the plumbing.
  *
  * Exactly one channel per store, one store per organization, a reinstall
  * that restores rather than duplicates, and an uninstall that stops the

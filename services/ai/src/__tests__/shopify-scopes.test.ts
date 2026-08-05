@@ -82,7 +82,7 @@ describe("expandImpliedScopes", () => {
   });
 });
 
-describe("readScopeState — unknown is not permission", () => {
+describe("readScopeState - unknown is not permission", () => {
   it.each([
     ["missing config", null],
     ["no grantedScopes key", {}],
@@ -98,7 +98,7 @@ describe("readScopeState — unknown is not permission", () => {
   });
 });
 
-describe("hasScope — fails closed", () => {
+describe("hasScope - fails closed", () => {
   it("refuses every scope when the grant was never read", () => {
     // The old gate returned TRUE here for everything, which is how an
     // unverified store came to advertise refund and cancel buttons.

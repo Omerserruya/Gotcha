@@ -15,7 +15,7 @@ import { CORE_FEATURES } from "../plan-seeds";
  * declarations, the field reads to any reviewer as an enforcement map. It was
  * not one.
  *
- * These tests fail if that drifts again — either the enforcement exists, or the
+ * These tests fail if that drifts again - either the enforcement exists, or the
  * claim comes out of the catalog. Documentation that cannot be wrong is worth
  * more than documentation that is thorough.
  */
@@ -78,7 +78,7 @@ describe("every sellable capability is real", () => {
     // A key's shape is how every caller reads it. `limit:` means a number to
     // compare against; a dotted key means a capability to switch on. If a
     // COUNTER ever hides behind a dotted key, `hasFeature` returns truthy for
-    // the limit VALUE — so a limit of 0 reads as "allowed".
+    // the limit VALUE - so a limit of 0 reads as "allowed".
     for (const f of FEATURE_CATALOG) {
       const isLimitKey = f.key.startsWith("limit:");
       expect(isLimitKey, `${f.key} is ${f.entitlementType}`).toBe(f.entitlementType === "COUNTER");
@@ -133,7 +133,7 @@ describe("enforcementLocations is a contract, not prose", () => {
 
     // Not asserted to be empty. The audit measured ~9 of 90 capabilities
     // enforced, and closing that in one sprint would mean bolting middleware
-    // onto paths nobody has thought about — which is how you ship a gate that
+    // onto paths nobody has thought about - which is how you ship a gate that
     // denies a paying customer. This test PRINTS the gap so it stays visible
     // and shrinks deliberately, and fails only if it GROWS past today's mark.
     if (missing.length) {

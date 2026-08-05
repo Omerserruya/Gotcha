@@ -103,9 +103,9 @@ export function CurrentRate({ data }: { data: RatesPayload | null }) {
         )}
       </div>
       <dl className="mt-5 grid gap-x-8 gap-y-2 border-t border-gray-100 pt-4 text-[13px] sm:grid-cols-2">
-        <Row label="Approved by" value={r.approvedBy ?? "—"} />
-        <Row label="Approved at" value={r.approvedAt ? new Date(r.approvedAt).toLocaleString() : "—"} />
-        <Row label="Proposed by" value={r.createdBy ?? "—"} />
+        <Row label="Approved by" value={r.approvedBy ?? "-"} />
+        <Row label="Approved at" value={r.approvedAt ? new Date(r.approvedAt).toLocaleString() : "-"} />
+        <Row label="Proposed by" value={r.createdBy ?? "-"} />
         <Row label="In effect from" value={new Date(r.activeFrom).toLocaleString()} />
       </dl>
     </section>
@@ -177,7 +177,7 @@ export function Enforcement({ preview }: { preview: EnforcementPreview | null })
                 <td className="px-4 py-2.5 text-gray-900">{t.name}</td>
                 <td className="px-4 py-2.5 text-gray-600">{reasonLabel(t.reason)}</td>
                 <td className="px-4 py-2.5 tabular-nums text-gray-700">
-                  {t.recentConversations || "—"}
+                  {t.recentConversations || "-"}
                 </td>
               </tr>
             ))}
@@ -261,13 +261,13 @@ export function Reconciliations({
           <tbody className="divide-y divide-amber-50">
             {rows.map((r) => (
               <tr key={r.id}>
-                <td className="px-4 py-2.5 text-gray-900">{r.organizationName ?? "—"}</td>
+                <td className="px-4 py-2.5 text-gray-900">{r.organizationName ?? "-"}</td>
                 <td className="px-4 py-2.5 text-gray-500">{r.purpose.toLowerCase().replace(/_/g, " ")}</td>
                 <td className="px-4 py-2.5 tabular-nums text-gray-700" dir="ltr">
                   {r.amount} {r.currency}
                 </td>
                 <td className="px-4 py-2.5 tabular-nums text-gray-900" dir="ltr">
-                  {r.chargeAmount ? `${r.chargeAmount} ${r.chargeCurrency ?? ""}` : "—"}
+                  {r.chargeAmount ? `${r.chargeAmount} ${r.chargeCurrency ?? ""}` : "-"}
                 </td>
                 <td className="px-4 py-2.5">
                   <span className="text-gray-700">{describeState(r)}</span>

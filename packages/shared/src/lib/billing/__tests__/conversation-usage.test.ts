@@ -147,7 +147,7 @@ beforeEach(() => {
   idSeq = 0;
 });
 
-describe("conversation usage — attribution", () => {
+describe("conversation usage - attribution", () => {
   it("attributes a usage event by its conversationId metadata", () => {
     expect(conversationIdOf({ metadata: { conversationId: "abc" } })).toBe("abc");
     expect(conversationIdOf({ metadata: { conversation_id: "abc" } })).toBe("abc");
@@ -199,7 +199,7 @@ describe("conversation usage — attribution", () => {
   });
 });
 
-describe("conversation usage — idempotency", () => {
+describe("conversation usage - idempotency", () => {
   it("re-aggregating the same events does not double-count", async () => {
     seedConversation();
     seedLog({ id: "l1", unitsConsumed: 3 });
@@ -239,7 +239,7 @@ describe("conversation usage — idempotency", () => {
   });
 });
 
-describe("conversation usage — lifecycle", () => {
+describe("conversation usage - lifecycle", () => {
   it("stays OPEN while the conversation is open", async () => {
     seedConversation({ closedAt: null });
     seedLog({ id: "l1" });
@@ -303,7 +303,7 @@ describe("conversation usage — lifecycle", () => {
   });
 });
 
-describe("conversation usage — statistics", () => {
+describe("conversation usage - statistics", () => {
   const rows = (credits: number[]) =>
     credits.map((c) => ({ credits: c, inputTokens: c * 100, outputTokens: c * 20, costUsd: c * 0.001 }));
 
@@ -361,7 +361,7 @@ describe("conversation usage — statistics", () => {
   });
 });
 
-describe("estimate vs actual — advisory only", () => {
+describe("estimate vs actual - advisory only", () => {
   const stats = (avg: number, n: number) =>
     computeStats(new Array(n).fill(0).map(() => ({ credits: avg, inputTokens: 0, outputTokens: 0, costUsd: 0 })));
 

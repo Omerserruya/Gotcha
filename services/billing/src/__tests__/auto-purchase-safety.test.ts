@@ -126,7 +126,7 @@ function reset() {
 
 beforeEach(reset);
 
-describe("auto-purchase — refuses when it should", () => {
+describe("auto-purchase - refuses when it should", () => {
   it("does nothing when the policy is disabled", async () => {
     db.policy.enabled = false;
     const r = await triggerAutoPurchase({ tenantId: TENANT });
@@ -195,7 +195,7 @@ describe("auto-purchase — refuses when it should", () => {
   });
 });
 
-describe("auto-purchase — succeeds correctly", () => {
+describe("auto-purchase - succeeds correctly", () => {
   it("charges once and grants the package's credits", async () => {
     const r = await triggerAutoPurchase({ tenantId: TENANT, reason: "usage_threshold" });
     expect(r).toMatchObject({ success: true, units: 5000 });
@@ -234,7 +234,7 @@ describe("auto-purchase — succeeds correctly", () => {
   });
 });
 
-describe("auto-purchase — concurrency", () => {
+describe("auto-purchase - concurrency", () => {
   /**
    * Before the lock, two concurrent threshold crossings could both read the same
    * monthSpentAmount, both pass the ceiling check, and both charge - overshooting

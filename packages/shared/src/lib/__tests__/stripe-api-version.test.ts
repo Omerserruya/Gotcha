@@ -12,7 +12,7 @@ afterEach(() => vi.restoreAllMocks());
 
 describe("the version is pinned in code, not inherited from the dashboard", () => {
   it("defaults to an established MAJOR, not the brand-new one", () => {
-    // Dahlia shipped 2026-07-29 — two days before this was written. Majors are
+    // Dahlia shipped 2026-07-29 - two days before this was written. Majors are
     // where Stripe puts breaking changes; inheriting one by accident on the
     // path that refunds a merchant's customers is not a sane default.
     expect(stripeApiVersion({} as NodeJS.ProcessEnv)).toBe("2026-02-25.clover");

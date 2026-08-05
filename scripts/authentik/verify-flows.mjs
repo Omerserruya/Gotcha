@@ -43,7 +43,7 @@ if (!TOKEN) {
 const failures = [];
 function check(name, ok, detail = "") {
   const mark = ok ? "PASS" : "FAIL";
-  console.log(`[${mark}] ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(`[${mark}] ${name}${detail ? ` - ${detail}` : ""}`);
   if (!ok) failures.push(name);
 }
 

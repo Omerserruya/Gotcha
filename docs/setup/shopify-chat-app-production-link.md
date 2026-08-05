@@ -14,7 +14,7 @@ expected chat id   (unset)
 core client id     …5f76  ← must differ
 
 ✗ REFUSING TO PROCEED
-  • Manifest has no client_id — the CLI project is not linked.
+  • Manifest has no client_id - the CLI project is not linked.
   • SHOPIFY_CHAT_APP_CLIENT_ID is not set (looked in .env.prod and the environment).
 ```
 
@@ -59,7 +59,7 @@ not reuse `GOTCHA Chat (Dev)` (`96c9417a…`), which is bound to
 
 ```bash
 cd shopify-app
-shopify app config link          # choose GOTCHA Chat — NOT the Core app, NOT Dev
+shopify app config link          # choose GOTCHA Chat - NOT the Core app, NOT Dev
 ```
 
 This writes `client_id` into `shopify.app.toml`.

@@ -190,7 +190,7 @@ if (!guards.some((g) => g.label === "no plan-kind collision")) {
 }
 
 console.log("  Safety checks");
-for (const g of guards) console.log(`    ${g.ok ? "✓" : "✗"} ${g.label}${g.detail ? ` — ${g.detail}` : ""}`);
+for (const g of guards) console.log(`    ${g.ok ? "✓" : "✗"} ${g.label}${g.detail ? ` - ${g.detail}` : ""}`);
 
 if (problems.length) {
   console.error("\n  ✗ REFUSING TO PROCEED\n");
@@ -222,8 +222,8 @@ for (const p of unchanged) console.log(`    = SAME    ${p.key} v${p.version}`);
 if (!creates.length && !updates.length && !unchanged.length) console.log("    (none)");
 
 if (productionOnly.length) {
-  console.log(`\n  Target-only plans (${productionOnly.length}) — NOT touched, NOT deleted`);
-  for (const p of productionOnly) console.log(`    ! ${p.key} v${p.version} (${p.status}/${p.kind}) — archiving requires a separate, deliberate change`);
+  console.log(`\n  Target-only plans (${productionOnly.length}) - NOT touched, NOT deleted`);
+  for (const p of productionOnly) console.log(`    ! ${p.key} v${p.version} (${p.status}/${p.kind}) - archiving requires a separate, deliberate change`);
 }
 
 // ── Build the script ───────────────────────────────────────────────────────
@@ -349,7 +349,7 @@ console.log(`\n  ${DRY ? "Executing inside a transaction and rolling back…" : 
 try {
   runner.sql(script);
 } catch (e) {
-  console.error(`\n  ✗ ${DRY ? "DRY RUN FAILED" : "IMPORT FAILED"} — the transaction was rolled back, nothing changed.\n`);
+  console.error(`\n  ✗ ${DRY ? "DRY RUN FAILED" : "IMPORT FAILED"} - the transaction was rolled back, nothing changed.\n`);
   const detail = (e.stderr || e.stdout || e.message || "").toString().trim().split("\n").slice(0, 12);
   for (const l of detail) console.error(`    ${l}`);
   console.error("");
@@ -357,7 +357,7 @@ try {
 }
 
 if (DRY) {
-  console.log("\n  ✓ DRY RUN PASSED — the import executed cleanly and was rolled back.");
+  console.log("\n  ✓ DRY RUN PASSED - the import executed cleanly and was rolled back.");
   console.log("    Nothing changed. Re-run with --apply --confirm-source=" + doc.sourceEnvironment + " to commit.\n");
   process.exit(0);
 }

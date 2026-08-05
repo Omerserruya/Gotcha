@@ -33,7 +33,7 @@ It never appears in a URL, a query string, or a request body.
 > Verified against iCount's own first-party integration, which constructs every
 > request this way. Whether a UI-generated API token uses an identical transport
 > to one obtained via `token/create` has not been confirmed against the live
-> account — one authenticated `auth/info` call will settle it.
+> account - one authenticated `auth/info` call will settle it.
 
 ## Variables
 
@@ -88,8 +88,8 @@ sets `ICOUNT_MODE=live` by mistake.
 ## Secret handling
 
 - The token is never logged. Provider errors are rebuilt from scratch rather
-  than rethrown, because an axios error carries `config.headers` — including
-  `Authorization` — and would otherwise leak the token into every log that
+  than rethrown, because an axios error carries `config.headers` - including
+  `Authorization` - and would otherwise leak the token into every log that
   catches it.
 - `redactIcount()` masks Bearer headers, token-shaped fields, and the literal
   configured token value wherever it appears.
@@ -113,8 +113,8 @@ service:
 docker compose exec billing npm run icount:inspect
 ```
 
-It calls exactly three actions — `auth/info`, `paypage/info`,
-`paypage/get_list` — enforced by an allowlist checked on every request, with no
+It calls exactly three actions - `auth/info`, `paypage/info`,
+`paypage/get_list` - enforced by an allowlist checked on every request, with no
 override flag. It cannot charge, refund, tokenize, create a document, or mutate
 anything, and it never enables live charging.
 

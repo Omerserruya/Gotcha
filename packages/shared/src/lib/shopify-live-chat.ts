@@ -1,5 +1,5 @@
 /**
- * Shopify Live Chat — shared domain module.
+ * Shopify Live Chat - shared domain module.
  *
  * One place for everything three different processes need to agree on:
  *
@@ -73,7 +73,7 @@ const SHOP_DOMAIN_RE = /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/;
 /**
  * Normalize whatever the merchant/integration stored into a bare
  * `*.myshopify.com` host. Returns null when it is not a plausible shop
- * domain — callers treat null as "not connected", never as "allow".
+ * domain - callers treat null as "not connected", never as "allow".
  */
 export function normalizeShopDomain(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
@@ -119,7 +119,7 @@ export function normalizeStorefrontDomain(raw: unknown): string | null {
 }
 
 /**
- * Origin check for the public bootstrap. Exact origin match only — no
+ * Origin check for the public bootstrap. Exact origin match only - no
  * suffix matching (`evil-myshop.com` must never satisfy `myshop.com`) and
  * no wildcard.
  */
@@ -148,15 +148,15 @@ export type WidgetDirection = "auto" | "ltr" | "rtl";
 export type OfflineBehavior = "ai" | "form" | "message_only";
 
 export interface ShopifyLiveChatAppearance {
-  /** Primary brand colour — hex only. */
+  /** Primary brand colour - hex only. */
   primaryColor: string;
-  /** Text/icon colour used on top of primaryColor — hex only. */
+  /** Text/icon colour used on top of primaryColor - hex only. */
   contrastColor: string;
   /** Store logo shown in the welcome header. Must be https. */
   logoUrl: string | null;
   /** Assistant avatar shown next to replies. Must be https. */
   avatarUrl: string | null;
-  /** Launcher glyph. A small named set — never merchant markup. */
+  /** Launcher glyph. A small named set - never merchant markup. */
   launcherIcon: "chat" | "sparkle" | "bag" | "question";
   launcherPosition: WidgetPosition;
   /** Corner radius token, clamped to a safe range. */
@@ -206,7 +206,7 @@ export interface ShopifyLiveChatCommerce {
   /** Allow Add to Cart from chat. View Product stays available regardless. */
   addToCartEnabled: boolean;
   /**
-   * Send DRAFT/ARCHIVED products. Off by default — a merchant who turns
+   * Send DRAFT/ARCHIVED products. Off by default - a merchant who turns
    * this on gets an explicit "not published" badge on the card.
    */
   allowUnpublishedProducts: boolean;
@@ -228,7 +228,7 @@ export interface ShopifyLiveChatInstall {
   storefrontDomains: string[];
   /** Last time a storefront bootstrap succeeded for this channel. */
   lastHeartbeatAt: string | null;
-  /** Theme id seen on the last heartbeat — a change hints at a theme swap. */
+  /** Theme id seen on the last heartbeat - a change hints at a theme swap. */
   lastThemeId: string | null;
   /** Last storefront page that booted the widget (path only, no query). */
   lastSeenPath: string | null;
@@ -405,7 +405,7 @@ function sanitizeWeek(raw: unknown): Record<string, string[]> {
 /**
  * Merge an untrusted patch over the current config and return a fully
  * normalized object. Every field is validated; unknown fields are dropped.
- * `shopDomain` / `tenantIntegrationId` are NOT patchable here — binding a
+ * `shopDomain` / `tenantIntegrationId` are NOT patchable here - binding a
  * channel to a different store is a create-time decision (see §8: a
  * product reference must never cross stores).
  */
@@ -570,7 +570,7 @@ export type Availability = "online" | "offline";
 
 // resolveAvailability(hours) used to live here and evaluated the channel's
 // own week/timezone. Availability is now answered from the TENANT's
-// business hours (lib/business-hours.ts) — one schedule for the whole
+// business hours (lib/business-hours.ts) - one schedule for the whole
 // business, evaluated in one place, so the widget can never disagree with
 // the AI employee about whether the store is open.
 
@@ -582,7 +582,7 @@ export interface VisitorSessionPayload {
   v: 1;
   tenantId: string;
   channelAccountId: string;
-  /** Stable per-browser id — the Conversation.customerExternalId when anonymous. */
+  /** Stable per-browser id - the Conversation.customerExternalId when anonymous. */
   visitorId: string;
   /**
    * Shopify's customer id, present ONLY when Shopify itself vouched for it
@@ -728,7 +728,7 @@ const HANDLE_RE = /^[a-z0-9][a-z0-9-_]{0,120}$/;
 
 export interface StorefrontContext {
   pageType: StorefrontPageType;
-  /** Product handle when on a product page — the only product hint we keep. */
+  /** Product handle when on a product page - the only product hint we keep. */
   productHandle: string | null;
   collectionHandle: string | null;
   /** Path only. Query strings routinely carry PII and marketing ids. */
@@ -814,11 +814,11 @@ export interface ProductSnapshot {
   variants: ProductVariantSnapshot[];
   /** Optional short "why this one" line from the AI employee. */
   reason: string | null;
-  /** When the snapshot was taken — the card shows prices as of this time. */
+  /** When the snapshot was taken - the card shows prices as of this time. */
   capturedAt: string;
 }
 
-/** Image hosts we will render. Shopify CDN only — no merchant-supplied hosts. */
+/** Image hosts we will render. Shopify CDN only - no merchant-supplied hosts. */
 const ALLOWED_IMAGE_HOSTS = [
   "cdn.shopify.com",
   "cdn.shopifycdn.net",
@@ -972,7 +972,7 @@ export interface VisitorMessageView {
   direction: "INBOUND" | "OUTBOUND";
   body: string;
   messageType: string;
-  /** Display name only — never a staff email address. */
+  /** Display name only - never a staff email address. */
   author: string | null;
   authorKind: "visitor" | "agent" | "ai";
   /**
@@ -1006,8 +1006,8 @@ export interface VisitorProjectionContext {
  *
  * Used by both the polling endpoint and the realtime socket projection,
  * so the two can never drift into disagreeing about what is safe to
- * expose. Internal fields — tenant id, tool logs, approval state, the
- * agent's email — stop here.
+ * expose. Internal fields - tenant id, tool logs, approval state, the
+ * agent's email - stop here.
  *
  * Returns null for anything the shopper should not receive at all
  * (system breadcrumbs, empty rows, a commerce payload from another

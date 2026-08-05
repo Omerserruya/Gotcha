@@ -4,7 +4,7 @@ import { prisma } from "../prisma";
 /**
  * Guards the tool-policy invariants that the 2026-07-31 audit found violated.
  *
- * These assert against the CATALOG DEFAULT (`catalog_tools.hitl_policy`) — the
+ * These assert against the CATALOG DEFAULT (`catalog_tools.hitl_policy`) - the
  * floor a tenant inherits when they have never expressed a policy of their own.
  * A tenant override in `tenant_tools.config_overrides` is authoritative and is
  * deliberately NOT asserted here: tenants are allowed to make their own call,

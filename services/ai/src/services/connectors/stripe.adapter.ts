@@ -284,7 +284,7 @@ async function stripeRequest(
       Authorization: `Bearer ${bearer}`,
       // Pinned in code. Without this header Stripe uses the ACCOUNT's dashboard
       // default, so the contract would be set in a web console rather than here
-      // — invisible to review and changeable with no deploy. Stripe's own
+      // - invisible to review and changeable with no deploy. Stripe's own
       // guidance is to specify the version you integrate against.
       ...stripeVersionHeader(),
       ...(body ? { "Content-Type": "application/x-www-form-urlencoded" } : {}),

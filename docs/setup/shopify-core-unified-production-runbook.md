@@ -1,4 +1,4 @@
-# Unified GOTCHA Shopify app — production runbook
+# Unified GOTCHA Shopify app - production runbook
 
 **Date:** 2026-08-04
 **Decision:** one production Shopify app (the existing **GOTCHA** app) owns OAuth, the Admin token, the 26-scope set, webhooks, the app proxy **and** the Chat Theme App Extension. Chat becomes a channel toggle inside GOTCHA, with no second OAuth.
@@ -19,10 +19,10 @@ Evidence marks: **[R]** repository · **[L]** live (dev DB / Shopify Admin API r
 | Production application URL | **[?]** dashboard-managed; no Core TOML exists in the repo | **[R]** absence |
 | Production redirect URL | `https://app.gotcha.co.il/api/connectors/shopify/oauth/callback` | **[R]** `.env.prod` |
 | Development redirect URL | `https://dev.gotcha.co.il/api/connectors/shopify/oauth/callback` | **[R]** `.env` |
-| Declared scopes | see §2 — **the app grants more than the OAuth code requests** | **[L]** |
-| Protected Customer Data status | **[?]** — a dev-store grant is not proof of production approval |
+| Declared scopes | see §2 - **the app grants more than the OAuth code requests** | **[L]** |
+| Protected Customer Data status | **[?]** - a dev-store grant is not proof of production approval |
 | Installed stores (dev DB) | 3 tenant rows, all `urban-supply-gotcha-demo.myshopify.com` | **[L]** |
-| Installed stores (production) | **[?]** — production DB not read by this audit |
+| Installed stores (production) | **[?]** - production DB not read by this audit |
 | Is this the app Core OAuth uses? | **Yes.** `connectors-admin.ts` builds the authorize URL from `SHOPIFY_API_KEY` | **[R]** |
 
 ### Critical identity finding
@@ -81,7 +81,7 @@ The one exception is **`write_merchant_managed_fulfillment_orders`**, which `upd
 `connectors-admin.ts` requests only **15** scopes **[R]**. The app granted 25. The grant therefore comes from the **app-level configuration** (Shopify managed installation), not from the `scope` parameter in the authorize URL. Consequences:
 
 - The app config is already authoritative for scopes; the code's list is vestigial and misleading.
-- The code list omits eight scopes the app actually holds, and its comment states draft-order scopes are *"Deliberately NOT requested... no draft-order tool exists"* **[R]** — yet `read_draft_orders` is granted and is in the approved 25. That deliberate exclusion is being reversed and should be an explicit product decision, not a silent one.
+- The code list omits eight scopes the app actually holds, and its comment states draft-order scopes are *"Deliberately NOT requested... no draft-order tool exists"* **[R]** - yet `read_draft_orders` is granted and is in the approved 25. That deliberate exclusion is being reversed and should be an explicit product decision, not a silent one.
 
 ---
 
@@ -89,33 +89,33 @@ The one exception is **`write_merchant_managed_fulfillment_orders`**, which `upd
 
 | Scope | Valid | Declared (app) | App approved | Existing stores granted | Special review | GOTCHA usage |
 |---|---|---|---|---|---|---|
-| `read_all_orders` | ✅ **[L]** | ✅ | ✅ **[L]** | newest ✅ / older ✅ | **YES — Shopify-gated** | orders >60 days; lifetime history, commerce facts |
-| `read_customers` | ✅ | ✅ (implied) | ✅ | newest ✅ / older ✅ | **YES — PCD** | customer lookup, CRM projection |
-| `write_customers` | ✅ | ✅ | ✅ | newest ✅ / older ✅ | **YES — PCD** | tags, notes, profile updates |
-| `read_orders` | ✅ | ✅ (implied) | ✅ | newest ✅ / older ✅ | **YES — PCD** | order lookup |
-| `write_orders` | ✅ | ✅ | ✅ | newest ✅ / older ✅ | — | cancel, refund, invoice, order note |
-| `read_returns` | ✅ | ✅ (implied) | ✅ | newest ✅ / older ✅ | — | `get_returns` |
-| `write_returns` | ✅ | ✅ | ✅ | newest ✅ / **older ❌** | — | `create_return` |
-| `read_merchant_managed_fulfillment_orders` | ✅ | ✅ | ✅ | newest ✅ / **older ❌** | — | tracking, cancel preflight, returns |
-| `read_assigned_fulfillment_orders` | ✅ | ✅ | ✅ | newest ✅ / **older ❌** | — | **unused in code** |
-| `read_third_party_fulfillment_orders` | ✅ | ✅ | ✅ | newest ✅ / **older ❌** | — | **unused in code** |
-| `read_fulfillments` | ✅ | ✅ | ✅ | newest ✅ / **older ❌** | — | **unused in code** |
-| `read_inventory` | ✅ | ✅ | ✅ | newest ✅ / **older ❌** | — | `inventory_status`, `variant_information` |
-| `read_inventory_shipments` | ✅ | ✅ | ✅ | newest ✅ / **older ❌** | — | **unused in code** |
-| `read_inventory_shipments_received_items` | ✅ | ✅ | ✅ | newest ✅ / **older ❌** | — | **unused in code** |
-| `read_inventory_transfers` | ✅ | ✅ | ✅ | newest ✅ / **older ❌** | — | **unused in code** |
-| `write_order_edits` | ✅ | ✅ | ✅ | newest ✅ / **older ❌** | — | exchanges |
-| `read_order_edits` | ✅ | ✅ (implied) | ✅ | newest ✅ / **older ❌** | — | exchanges |
-| `read_price_rules` | ✅ | ✅ (implied) | ✅ | newest ✅ / older ✅ | — | `list_discounts`, `validate_discount` |
-| `write_price_rules` | ✅ | ✅ | ✅ | newest ✅ / older ✅ | — | coupons, compensation |
-| `read_discounts` | ✅ | ✅ (implied) | ✅ | newest ✅ / older ✅ | — | **unused in code** (code uses price rules) |
-| `write_discounts` | ✅ | ✅ | ✅ | newest ✅ / older ✅ | — | **unused in code** |
-| `read_draft_orders` | ✅ | ✅ | ✅ | newest ✅ / older ✅ | — | **unused in code**, explicitly excluded by a code comment |
-| `read_products` | ✅ | ✅ | ✅ | newest ✅ / older ✅ | — | catalog, chat product cards |
-| `read_product_feeds` | ✅ | ✅ | ✅ | newest ✅ / older ✅ | — | **unused in code** |
-| `read_product_listings` | ✅ | ✅ | ✅ | newest ✅ / older ✅ | — | **unused in code** |
+| `read_all_orders` | ✅ **[L]** | ✅ | ✅ **[L]** | newest ✅ / older ✅ | **YES - Shopify-gated** | orders >60 days; lifetime history, commerce facts |
+| `read_customers` | ✅ | ✅ (implied) | ✅ | newest ✅ / older ✅ | **YES - PCD** | customer lookup, CRM projection |
+| `write_customers` | ✅ | ✅ | ✅ | newest ✅ / older ✅ | **YES - PCD** | tags, notes, profile updates |
+| `read_orders` | ✅ | ✅ (implied) | ✅ | newest ✅ / older ✅ | **YES - PCD** | order lookup |
+| `write_orders` | ✅ | ✅ | ✅ | newest ✅ / older ✅ | - | cancel, refund, invoice, order note |
+| `read_returns` | ✅ | ✅ (implied) | ✅ | newest ✅ / older ✅ | - | `get_returns` |
+| `write_returns` | ✅ | ✅ | ✅ | newest ✅ / **older ❌** | - | `create_return` |
+| `read_merchant_managed_fulfillment_orders` | ✅ | ✅ | ✅ | newest ✅ / **older ❌** | - | tracking, cancel preflight, returns |
+| `read_assigned_fulfillment_orders` | ✅ | ✅ | ✅ | newest ✅ / **older ❌** | - | **unused in code** |
+| `read_third_party_fulfillment_orders` | ✅ | ✅ | ✅ | newest ✅ / **older ❌** | - | **unused in code** |
+| `read_fulfillments` | ✅ | ✅ | ✅ | newest ✅ / **older ❌** | - | **unused in code** |
+| `read_inventory` | ✅ | ✅ | ✅ | newest ✅ / **older ❌** | - | `inventory_status`, `variant_information` |
+| `read_inventory_shipments` | ✅ | ✅ | ✅ | newest ✅ / **older ❌** | - | **unused in code** |
+| `read_inventory_shipments_received_items` | ✅ | ✅ | ✅ | newest ✅ / **older ❌** | - | **unused in code** |
+| `read_inventory_transfers` | ✅ | ✅ | ✅ | newest ✅ / **older ❌** | - | **unused in code** |
+| `write_order_edits` | ✅ | ✅ | ✅ | newest ✅ / **older ❌** | - | exchanges |
+| `read_order_edits` | ✅ | ✅ (implied) | ✅ | newest ✅ / **older ❌** | - | exchanges |
+| `read_price_rules` | ✅ | ✅ (implied) | ✅ | newest ✅ / older ✅ | - | `list_discounts`, `validate_discount` |
+| `write_price_rules` | ✅ | ✅ | ✅ | newest ✅ / older ✅ | - | coupons, compensation |
+| `read_discounts` | ✅ | ✅ (implied) | ✅ | newest ✅ / older ✅ | - | **unused in code** (code uses price rules) |
+| `write_discounts` | ✅ | ✅ | ✅ | newest ✅ / older ✅ | - | **unused in code** |
+| `read_draft_orders` | ✅ | ✅ | ✅ | newest ✅ / older ✅ | - | **unused in code**, explicitly excluded by a code comment |
+| `read_products` | ✅ | ✅ | ✅ | newest ✅ / older ✅ | - | catalog, chat product cards |
+| `read_product_feeds` | ✅ | ✅ | ✅ | newest ✅ / older ✅ | - | **unused in code** |
+| `read_product_listings` | ✅ | ✅ | ✅ | newest ✅ / older ✅ | - | **unused in code** |
 
-Every scope in the list is **VALID** — proven by Shopify having granted all 25 **[L]**. None are invalid or deprecated.
+Every scope in the list is **VALID** - proven by Shopify having granted all 25 **[L]**. None are invalid or deprecated.
 
 ### Scope used by code but MISSING from the approved 25
 
@@ -125,7 +125,7 @@ Every scope in the list is **VALID** — proven by Shopify having granted all 25
 
 ### Unused scopes flagged for review (not removed, per instruction)
 
-`read_assigned_fulfillment_orders`, `read_third_party_fulfillment_orders`, `read_fulfillments`, `read_inventory_shipments`, `read_inventory_shipments_received_items`, `read_inventory_transfers`, `read_discounts`, `write_discounts`, `read_draft_orders`, `read_product_feeds`, `read_product_listings` — **11 of 25 have no code path today [R]**. They are harmless to hold but enlarge the consent screen and the PCD review surface.
+`read_assigned_fulfillment_orders`, `read_third_party_fulfillment_orders`, `read_fulfillments`, `read_inventory_shipments`, `read_inventory_shipments_received_items`, `read_inventory_transfers`, `read_discounts`, `write_discounts`, `read_draft_orders`, `read_product_feeds`, `read_product_listings` - **11 of 25 have no code path today [R]**. They are harmless to hold but enlarge the consent screen and the PCD review surface.
 
 ---
 
@@ -138,13 +138,13 @@ Read live from each stored token **[L]**. No token value was printed, logged or 
 | `cms4ug98n0004chmrp4lv6ujl` | urban-supply-gotcha-demo | 2026-08-03 | HTTP 401 (expired) | **25/25** | **FULLY GRANTED** (token needs refresh only) |
 | `cms4tcrb90008tpldh1vu2tbc` | urban-supply-gotcha-demo | 2026-07-28 | HTTP 401 (expired) | 14/25 | **REAUTHORIZATION REQUIRED** |
 | `cms4ayrz700047h8pse45hvx8` | urban-supply-gotcha-demo | 2026-07-28 | HTTP 401 (expired) | 14/25 | **REAUTHORIZATION REQUIRED** |
-| Production stores | — | — | not read | — | **UNKNOWN [?]** |
+| Production stores | - | - | not read | - | **UNKNOWN [?]** |
 
 **Missing on both older installs (11):** `read_assigned_fulfillment_orders`, `read_fulfillments`, `read_inventory`, `read_inventory_shipments`, `read_inventory_shipments_received_items`, `read_inventory_transfers`, `read_merchant_managed_fulfillment_orders`, `write_order_edits`, `read_order_edits`, `write_returns`, `read_third_party_fulfillment_orders`.
 
 ### Two consequences worth stating plainly
 
-1. **All three tokens are expired.** Every one carries a `refreshToken` and an `expiresAt` in the past **[L]**. Expiry alone needs **no merchant action** — the adapter's refresh grant handles it. This audit did **not** refresh them, because that mutates stored credentials.
+1. **All three tokens are expired.** Every one carries a `refreshToken` and an `expiresAt` in the past **[L]**. Expiry alone needs **no merchant action** - the adapter's refresh grant handles it. This audit did **not** refresh them, because that mutates stored credentials.
 2. **The returns and exchanges capability cannot work on the two older installs.** They lack `write_returns` and `write_order_edits`, which `create_return` and the exchange path require **[R]**. Scope expansion is a **merchant-consent action**: Shopify cannot silently widen an existing grant. The merchant must re-approve, which for a managed-install app happens on next open/update rather than through a full reconnect **[I, confirm in B4]**.
 
 ---
@@ -156,7 +156,7 @@ Target file: **`shopify-app/shopify.app.production.toml`** (new). Do not reuse `
 > The pre-existing `name`/`handle` edit toward "GOTCHA Chat Production" has been **reverted**; `shopify.app.toml` is back to its committed state **[R]**.
 
 ```toml
-client_id = "b1ce3aa50d8d2e67b978918629bc5f76"   # existing GOTCHA app — never change
+client_id = "b1ce3aa50d8d2e67b978918629bc5f76"   # existing GOTCHA app - never change
 name      = "GOTCHA"                              # [?] confirm exact name first (B1)
 handle    = "<confirm in dashboard>"              # [?] B1
 embedded  = false
@@ -216,7 +216,7 @@ Fails closed unless **all** hold:
 1. `client_id` == `b1ce3aa50d8d2e67b978918629bc5f76`
 2. app name/handle matches the confirmed GOTCHA identity
 3. `client_id` != `96c9417a8e0b8b7ea17b8c9bf7f4c3ad` (Chat Dev)
-4. scope set is **exactly** the 25, compared as a **set** after expanding implied reads — order-insensitive, no extras, no omissions
+4. scope set is **exactly** the 25, compared as a **set** after expanding implied reads - order-insensitive, no extras, no omissions
 5. `application_url` is `https://app.gotcha.co.il`
 6. every redirect URL present on the live app is present in the config
 7. app-proxy URL is the production proxy
@@ -234,16 +234,16 @@ Prints a normalized summary, exits non-zero on any mismatch. **No `--force`, no 
 
 - [x] **B1** app name supplied (GOTCHA); handle dropped as a blocker; **live redirect list and app-proxy config still required before CONFIG deploy only**
 - [ ] **B2** Protected Customer Data approval confirmed for **production**, not inferred from a dev-store grant
-- [x] **B3** RESOLVED — `write_merchant_managed_fulfillment_orders` kept, `update_order_fulfillment` kept
+- [x] **B3** RESOLVED - `write_merchant_managed_fulfillment_orders` kept, `update_order_fulfillment` kept
 - [ ] **B4** Shopify behaviour confirmed for extension re-registration and for scope expansion on existing installs
 - [ ] Production installed-store count and their granted scopes established from the production database
 - [ ] `shopify.app.production.toml` authored, verifier green
 - [ ] `include_config_on_deploy` still `false` for the first deploy
-- [ ] Rollback rehearsed on a Core **dev** app (which does not exist yet — see §10)
+- [ ] Rollback rehearsed on a Core **dev** app (which does not exist yet - see §10)
 
 ---
 
-## 8. Deployment command — DO NOT EXECUTE YET
+## 8. Deployment command - DO NOT EXECUTE YET
 
 ```bash
 # Only after every box in §7 is ticked.
@@ -273,10 +273,10 @@ node scripts/shopify/verify-unified-app-identity.mjs --config shopify.app.produc
 | Population | Action | Merchant involvement |
 |---|---|---|
 | Expired-but-refreshable tokens (all 3 dev rows today) | adapter refresh grant | **None** |
-| Installs missing scopes (2 dev rows, 11 scopes short) | scope expansion requires consent | **Yes** — re-approve |
-| Production stores | **UNKNOWN [?]** — establish before rollout | TBD |
+| Installs missing scopes (2 dev rows, 11 scopes short) | scope expansion requires consent | **Yes** - re-approve |
+| Production stores | **UNKNOWN [?]** - establish before rollout | TBD |
 
-Do **not** auto-disconnect or auto-reconnect any store. Surface a "reconnect to enable returns and exchanges" prompt driven by a real granted-scope read, and record `grantedScopes` at OAuth time — it is currently **null for every row [L]**, which is why this audit had to ask Shopify directly. Fixing that is a prerequisite for managing this at scale.
+Do **not** auto-disconnect or auto-reconnect any store. Surface a "reconnect to enable returns and exchanges" prompt driven by a real granted-scope read, and record `grantedScopes` at OAuth time - it is currently **null for every row [L]**, which is why this audit had to ask Shopify directly. Fixing that is a prerequisite for managing this at scale.
 
 ---
 
@@ -292,7 +292,7 @@ Do **not** auto-disconnect or auto-reconnect any store. Surface a "reconnect to 
 
 ---
 
-## Appendix — blockers
+## Appendix - blockers
 
 - ~~**B1**~~ RESOLVED for identity: name supplied, handle dropped as a blocker, client id is authoritative. Live redirect allowlist and app-proxy read-back remain required **before config deploy only**.
 - **B2 [CRITICAL]** Confirm production Protected Customer Data approval for `read_customers` / `write_customers` / `read_orders` / `read_all_orders`. A dev-store grant does not prove it.
@@ -319,7 +319,7 @@ two environment names for one secret means the first rotation that misses one
 breaks app-proxy verification with an error that reads like a misconfigured
 proxy.
 
-**KEEP unchanged** (names only — values are not reproduced here):
+**KEEP unchanged** (names only - values are not reproduced here):
 
 | Variable | Note |
 |---|---|
@@ -362,7 +362,7 @@ SERVICES=ai,gateway ./scripts/docker-publish.sh
 
 ### 12.3 Extension-only Shopify deployment
 
-**CANCELLED — no such thing exists.**
+**CANCELLED - no such thing exists.**
 
 Shopify CLI 3.x removed `include_config_on_deploy`. Running `app deploy`
 prints *"The `include_config_on_deploy` field is no longer supported and has
@@ -420,11 +420,11 @@ Nothing below is guessed.
 | App name | GOTCHA | GOTCHA | ✅ | none |
 | Client ID | `b1ce3aa5…5f76` | `b1ce3aa5…5f76` | ✅ | none |
 | Embedded | false | false | ✅ | none |
-| Application URL | `https://gotcha.co.il` | `https://app.gotcha.co.il` | ❌ | **CHANGE — approved.** The app moved off the marketing apex; every OAuth, proxy and webhook endpoint resolves at `app.` |
-| Redirect — app | released | present | ✅ | preserved |
-| Redirect — apex | released | present | ✅ | **preserved deliberately** — not dropped despite the app URL move |
-| Redirect — dev | released | present | ✅ | **preserved deliberately** |
-| Webhook API version | 2026-04 | 2026-04 | ✅ | none — the repo's 2026-07 pin governs ADMIN calls, a separate contract |
+| Application URL | `https://gotcha.co.il` | `https://app.gotcha.co.il` | ❌ | **CHANGE - approved.** The app moved off the marketing apex; every OAuth, proxy and webhook endpoint resolves at `app.` |
+| Redirect - app | released | present | ✅ | preserved |
+| Redirect - apex | released | present | ✅ | **preserved deliberately** - not dropped despite the app URL move |
+| Redirect - dev | released | present | ✅ | **preserved deliberately** |
+| Webhook API version | 2026-04 | 2026-04 | ✅ | none - the repo's 2026-07 pin governs ADMIN calls, a separate contract |
 | Access scopes | 25 effective | 26 | ❌ | **ADDITIVE ONLY.** `write_merchant_managed_fulfillment_orders` added; zero removed (proven by diff) |
 | App proxy | **could not be read** | `/apps/gotcha-chat` → `https://app.gotcha.co.il/api/shopify-chat/proxy` | ? | **ADD.** See below |
 
@@ -437,7 +437,7 @@ Proceeding with the intended proxy, on the authority given and because:
 
 - there are **zero** Shopify production installations, so no merchant flow can break;
 - the Chat runtime already expects exactly this path (`/api/shopify-chat/proxy`), verified in `shopify-chat-public.ts`;
-- no repository code references any other proxy path — grepped;
+- no repository code references any other proxy path - grepped;
 - rollback is prepared (previous app version + previous image digests recorded).
 
 If the released version turns out to have replaced a different live proxy,

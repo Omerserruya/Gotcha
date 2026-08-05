@@ -871,7 +871,7 @@ export const ESCALATE_TOOL = {
  * Two tools rather than one because the model's *intent* differs: "here
  * is the one I recommend" and "here are a few to compare" are different
  * answers, and collapsing them into a count parameter reliably produced
- * one-item carousels. Both accept references only — the server re-reads
+ * one-item carousels. Both accept references only - the server re-reads
  * title, price, image and stock from Shopify, so the model cannot invent
  * a product or quote a stale price even if it tries.
  */
@@ -882,7 +882,7 @@ export const SEND_PRODUCT_CARD_TOOL = {
     description:
       "Show the customer ONE specific product as a rich card with its live price, image, availability and an Add to Cart button. " +
       "Use after you have identified the single best product for them. " +
-      "Write your normal reply text as usual — the card is sent alongside it, so do NOT paste the product URL or price into your message.",
+      "Write your normal reply text as usual - the card is sent alongside it, so do NOT paste the product URL or price into your message.",
     parameters: {
       type: "object",
       properties: {
@@ -951,7 +951,7 @@ export interface SendShopifyProductsArgs {
 export type SendShopifyProductsResult =
   | {
       ok: true;
-      /** Titles the model may safely refer to — resolved from Shopify. */
+      /** Titles the model may safely refer to - resolved from Shopify. */
       products: Array<{ title: string; price: string | null; currency: string; available: boolean }>;
     }
   | { ok: false; reason: string };

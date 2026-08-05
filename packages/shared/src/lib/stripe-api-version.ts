@@ -4,12 +4,12 @@
  * Why this module exists
  * ----------------------
  * No `Stripe-Version` header was sent anywhere. Stripe's documented behaviour
- * when the header is absent is to use **the account's default API version** —
+ * when the header is absent is to use **the account's default API version** -
  * a setting in the Stripe Dashboard.
  *
  * So the effective API contract lived in a web console, not in this repository:
  * invisible to code review, unversioned, untested, and changeable by anyone
- * with dashboard access clicking "upgrade" — with no deploy and no diff.
+ * with dashboard access clicking "upgrade" - with no deploy and no diff.
  *
  * Stripe's own guidance, quoted from docs.stripe.com/upgrades:
  *
@@ -20,7 +20,7 @@
  * How Stripe differs from Shopify and Meta
  * ---------------------------------------
  * Shopify and Meta EXPIRE versions and silently fall forward, so the risk
- * there is an aging pin. Stripe does not expire versions — a pinned version
+ * there is an aging pin. Stripe does not expire versions - a pinned version
  * keeps working indefinitely, which is the whole point of pinning. The risk
  * here is the opposite: having no pin at all, and inheriting whatever the
  * dashboard says today.
@@ -39,7 +39,7 @@
  *   Basil    2025-08-27
  *
  * Clover: a major release with five months of production behind it. Dahlia is
- * a brand-new MAJOR, and majors are where Stripe puts breaking changes —
+ * a brand-new MAJOR, and majors are where Stripe puts breaking changes -
  * adopting one sight-unseen, on the path that issues refunds against a
  * merchant's own Stripe account, is not a reasonable default. Moving to Dahlia
  * is a deliberate upgrade with its own migration review, not something to
@@ -47,7 +47,7 @@
  *
  * NOTE: Stripe here is a TOOL INTEGRATION (Stripe Connect, acting on the
  * merchant's account for refunds and payment links). It is NOT GOTCHA's own
- * billing provider — that is iCount (`BillingProvider` has one value). Nothing
+ * billing provider - that is iCount (`BillingProvider` has one value). Nothing
  * in this module affects GOTCHA's subscriptions, invoices or dunning.
  */
 
@@ -86,14 +86,14 @@ export function stripeApiVersion(env: NodeJS.ProcessEnv = process.env): string {
   return chosen;
 }
 
-/** Test seam — the cache would otherwise pin the first value read. */
+/** Test seam - the cache would otherwise pin the first value read. */
 export function __resetStripeApiVersionCache(): void {
   cached = null;
 }
 
 /**
  * Headers every Stripe request must carry. Centralised so a new call site
- * cannot forget the version and quietly inherit the dashboard default —
+ * cannot forget the version and quietly inherit the dashboard default -
  * which is how this integration spent its whole life until now.
  */
 export function stripeVersionHeader(env: NodeJS.ProcessEnv = process.env): Record<string, string> {

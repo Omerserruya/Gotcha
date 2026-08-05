@@ -1,5 +1,5 @@
 /**
- * Shopify Chat — activation routes (unified app).
+ * Shopify Chat - activation routes (unified app).
  *
  * There is no longer a Shopify install handshake here. Under the unified app
  * the merchant authorizes ONE Shopify app, the Theme App Extension ships
@@ -8,7 +8,7 @@
  *
  * What was removed, and why it is safe to remove:
  *
- *   • `/connectors/shopify-chat/oauth/init` and `/callback` — the second
+ *   • `/connectors/shopify-chat/oauth/init` and `/callback` - the second
  *     install. Nothing can arrive at them any more: the Chat app's
  *     application_url pointed at init, and that app is not the production
  *     app. Leaving them mounted would keep a second identity alive that the
@@ -20,7 +20,7 @@
  *     and a reusable binding handle with no purpose is just attack surface.
  *
  * What replaces them: `POST /enable`, which reads the shop from the tenant's
- * existing Core connection. The shop is never taken from the request body —
+ * existing Core connection. The shop is never taken from the request body -
  * accepting one would let a tenant claim a storefront it never connected.
  *
  * Every route here is authenticated, tenant-scoped, and permission-gated.

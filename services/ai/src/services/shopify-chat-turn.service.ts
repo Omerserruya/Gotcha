@@ -1,5 +1,5 @@
 /**
- * Shopify Live Chat — per-turn AI wiring.
+ * Shopify Live Chat - per-turn AI wiring.
  *
  * Everything the AI employee needs that is specific to this channel,
  * assembled once per bot turn:
@@ -52,7 +52,7 @@ export interface ShopifyTurn {
 
 /**
  * Returns null for every non-Shopify-Live-Chat conversation, which is the
- * common case — callers treat null as "nothing to add this turn".
+ * common case - callers treat null as "nothing to add this turn".
  */
 export async function prepareShopifyTurn(opts: {
   tenantId: string;
@@ -183,7 +183,7 @@ function describeProduct(p: ProductSnapshot): string {
     .join(", ");
   const idLine = `  product_id: ${p.productId}`;
   return [
-    parts.join(" — "),
+    parts.join(" - "),
     idLine,
     p.optionNames.length ? `  options: ${p.optionNames.join(", ")}` : "",
     variantSummary ? `  variants: ${variantSummary}` : "",
@@ -215,7 +215,7 @@ async function stageProducts(
   if (!resolved.ok) return { ok: false, reason: resolved.reason };
 
   // A model that hallucinated an id gets nothing back rather than an
-  // invented card — this is the concrete mechanism behind "the AI cannot
+  // invented card - this is the concrete mechanism behind "the AI cannot
   // invent a product".
   const products: ProductSnapshot[] = resolved.data.filter((p) =>
     turn.channel.config.commerce.allowUnpublishedProducts ? true : p.status === "active",

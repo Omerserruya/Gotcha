@@ -14,7 +14,7 @@ import { Card, Field, Toggle, Select, ColorInput } from "./primitives";
  * Deliberately the SAME editor as the Shopify storefront widget: the
  * welcome screen, launcher, hero, proactive teaser and sounds are shared
  * sections, and the preview boots the same bundle a visitor loads. The
- * website widget used to have four fields — colour, icon, title, side —
+ * website widget used to have four fields - colour, icon, title, side -
  * which is how the two ended up feeling like different products.
  *
  * What is genuinely local sits in "appearance" and "behaviour": the
@@ -87,7 +87,7 @@ export function WebchatWidgetSettings({
 
   /**
    * The preview renders the real widget, which expects the PUBLIC config
-   * shape rather than the stored one — the same projection the server
+   * shape rather than the stored one - the same projection the server
    * makes before a visitor's browser ever sees it.
    */
   const previewConfig = useMemo(() => {
@@ -228,7 +228,7 @@ export function WebchatWidgetSettings({
               />
             </Field>
             {/* Availability itself belongs to the business, not to this
-                widget — the same schedule the AI employee reads. */}
+                widget - the same schedule the AI employee reads. */}
             <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-600">
               <p>{t("shopifyChat.hoursMovedHint")}</p>
               <a href="/settings/business-hours" className="mt-1 inline-block text-primary-600 hover:text-primary-700">

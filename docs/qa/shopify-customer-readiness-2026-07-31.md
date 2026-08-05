@@ -339,7 +339,7 @@ Every arrow emits exactly one customer continuation, claimed by CAS.
 6. **D-3 scopes must be granted** before any fulfillment, tracking, ETA or
    cancellability scenario can be answered honestly.
 7. **Pre-existing:** an older bot message on this conversation contains an
-   em-dash (*"היי, מבינה — אני מטפלת..."*), which violates the no-em-dash rule.
+   em-dash (*"היי, מבינה - אני מטפלת..."*), which violates the no-em-dash rule.
    It came from the `bridge_ack_for_approval` path, which was not touched.
 
 ---
@@ -1288,7 +1288,7 @@ A fourth contributor made recovery impossible: operator decisions for
 *integration* tools were written **only** to the connection-scoped row.
 `tool-permissions.ts` routed them there deliberately, with the comment *"Writing
 to TenantToolPermission for an integration tool would silently no-op against the
-gate."* True of the gate — and precisely why no durable record ever existed.
+gate."* True of the gate - and precisely why no durable record ever existed.
 
 Static tools had a durable, connection-independent policy table the whole time.
 Integration tools did not.
@@ -1310,7 +1310,7 @@ integration the product called disconnected.
 which clears credentials, preserves policy, stamps `disconnectedAt` /
 `disconnectedBy`, and writes an audit event carrying no credential material.
 Nothing executes afterwards because the tool surface already requires a
-`CONNECTED` integration — availability and policy are separate questions, and
+`CONNECTED` integration - availability and policy are separate questions, and
 answering the first by destroying the answer to the second is what caused this.
 
 **A durable record of intent.** `TenantToolPermission` already existed, keyed by
@@ -1319,7 +1319,7 @@ header already called it authoritative. Integration-tool policy changes now
 write **both**: `TenantTool` is the live policy the gate reads, and
 `TenantToolPermission` is the decision. Reconnect rebuilds the first from the
 second. Absence of a decision means nobody ever configured that tool, so the
-catalogue default is used — which is what stops this inventing a disabled state
+catalogue default is used - which is what stops this inventing a disabled state
 for a tool no human has touched.
 
 **The cascade.** `CatalogTool → TenantTool` is now `RESTRICT`. No amount of care
@@ -1334,11 +1334,11 @@ in application code can stop a foreign key doing what it was declared to do.
 | Granted scopes | refreshed on reconnect | unchanged |
 | Tenant tool policy | **deleted on disconnect** | **preserved**, and restorable from a durable record even after a hard delete |
 | Disconnect metadata | none | `disconnectedAt`, `disconnectedBy`, audit event |
-| Execution gating | surface requires `CONNECTED` | unchanged — policy alone never grants execution |
+| Execution gating | surface requires `CONNECTED` | unchanged - policy alone never grants execution |
 
 ## Migration
 
-`20260803090000_integration_lifecycle_policy` — metadata only. No row is
+`20260803090000_integration_lifecycle_policy` - metadata only. No row is
 created, deleted or rewritten. Ships with `down.sql`. New columns are nullable
 with no default, because back-filling a disconnect timestamp would invent an
 event that never happened. The rollback restores the previous cascade exactly,

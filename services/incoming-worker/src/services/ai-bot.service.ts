@@ -463,7 +463,7 @@ export async function processAIBot(
 
   // Structured follow-ups (Shopify product cards). Persisted after the
   // text so the customer reads the reasoning before the card. Their
-  // content was already resolved and validated by the AI service — the
+  // content was already resolved and validated by the AI service - the
   // worker only owns the write and the realtime fan-out.
   for (const extra of result.structuredMessages ?? []) {
     try {
@@ -491,7 +491,7 @@ export async function processAIBot(
       });
     } catch (err: any) {
       // A card that fails to persist must not lose the reply that was
-      // already delivered — log and move on.
+      // already delivered - log and move on.
       console.error("[AI-Bot] structured message persist failed:", err?.message);
     }
   }

@@ -341,7 +341,7 @@ export async function runPostChatPipeline(params: {
   //
   //     Everything above persists the summary GOTCHA-side only (CallAnalysis
   //     + Conversation.aiSummary). The only vendor write was the sparse FIELD
-  //     patch, and its note fallback runs ONLY when that patch fails — which
+  //     patch, and its note fallback runs ONLY when that patch fails - which
   //     on Shopify it doesn't, because `updateRecord` maps to a real
   //     `shopify.update_customer` call. Net effect: a merchant reading their
   //     own Shopify customer record saw no trace of the conversation and had
@@ -349,7 +349,7 @@ export async function runPostChatPipeline(params: {
   //
   //     Ordered AFTER the field patch on purpose: `shopify.create_note` is a
   //     read-modify-write on `customer.note`, so running it second keeps it
-  //     from racing the field update on the same record. Best-effort — a
+  //     from racing the field update on the same record. Best-effort - a
   //     vendor failure here must not cost us the tasks and follow-up below.
   const summaryNote = await writeSummaryNoteKindAware({
     tenantId: params.tenantId,

@@ -31,7 +31,7 @@ const RATIOS: EstimationRatios = {
   scope: "GLOBAL",
 };
 
-describe("money — integer minor units", () => {
+describe("money - integer minor units", () => {
   it("parses Prisma Decimal, string and number identically", () => {
     expect(toMinor("149.00")).toBe(14_900);
     expect(toMinor(149)).toBe(14_900);
@@ -70,7 +70,7 @@ describe("money — integer minor units", () => {
   });
 });
 
-describe("money — ILS upward rounding", () => {
+describe("money - ILS upward rounding", () => {
   const ils = (v: string) => money(v, "ILS");
 
   it("rounds ₪151 up to ₪155 at a ₪5 increment", () => {
@@ -101,7 +101,7 @@ describe("money — ILS upward rounding", () => {
   });
 });
 
-describe("money — conversion", () => {
+describe("money - conversion", () => {
   it("converts USD to ILS deterministically at a decimal rate", () => {
     const usd = money("149.00", "USD");
     const ils = convertMoney(usd, "3.70", "ILS");
@@ -124,7 +124,7 @@ describe("money — conversion", () => {
   });
 });
 
-describe("estimation — chat formula", () => {
+describe("estimation - chat formula", () => {
   it("2,000 credits at 8 per chat is ~250 per month, ~10 per business day", () => {
     const e = estimateChannel(2000, 8, 25);
     expect(e.estimatedMonthly).toBe(250);
@@ -153,7 +153,7 @@ describe("estimation — chat formula", () => {
   });
 });
 
-describe("estimation — voice formula", () => {
+describe("estimation - voice formula", () => {
   it("5,000 voice credits at 20 per call is 250 calls, 10 per business day", () => {
     const e = estimateChannel(5000, 20, 25);
     expect(e.estimatedMonthly).toBe(250);
@@ -181,7 +181,7 @@ describe("estimation — voice formula", () => {
  * global 8-credit assumption answered ~94 a month, so the configurator
  * contradicted the selector the visitor had just moved.
  */
-describe("estimation — a declared volume outranks the ratio", () => {
+describe("estimation - a declared volume outranks the ratio", () => {
   it("reports the volume the plan sells, not the volume its credits imply", () => {
     const e = estimateDeclaredChannel(750, { daily: 10, monthly: 250 }, 25);
     expect(e.estimatedMonthly).toBe(250);
@@ -244,7 +244,7 @@ describe("estimation — a declared volume outranks the ratio", () => {
   });
 });
 
-describe("estimation — price per interaction", () => {
+describe("estimation - price per interaction", () => {
   it("divides the monthly price across estimated chats", () => {
     const est = estimatePlanCapacity({ chatCredits: 2000, voiceCredits: 0, ratios: RATIOS });
     const p = estimatePricePerInteraction(money("149.00", "USD"), est);
@@ -271,7 +271,7 @@ describe("estimation — price per interaction", () => {
   });
 });
 
-describe("estimation — remaining conversations", () => {
+describe("estimation - remaining conversations", () => {
   it("floors so we never promise a conversation the balance cannot fund", () => {
     expect(estimateRemainingConversations(100, RATIOS)).toBe(12); // 100/8 = 12.5
     expect(estimateRemainingConversations(7, RATIOS)).toBe(0);
@@ -287,7 +287,7 @@ describe("estimation — remaining conversations", () => {
   });
 });
 
-describe("estimation — snapshots", () => {
+describe("estimation - snapshots", () => {
   it("captures the ratios and reads them back", () => {
     const snap = snapshotEstimation(RATIOS);
     expect(snap.chatCreditsPerEstimatedConversation).toBe(8);
@@ -316,7 +316,7 @@ describe("estimation — snapshots", () => {
   });
 });
 
-describe("estimation — honesty guarantees", () => {
+describe("estimation - honesty guarantees", () => {
   it("the fallback is a configured constant, not an analytics-derived value", () => {
     expect(FALLBACK_ESTIMATION.scope).toBe("FALLBACK");
     expect(FALLBACK_ESTIMATION.chatCreditsPerEstimatedConversation).toBe(8);

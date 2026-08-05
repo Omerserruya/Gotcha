@@ -52,7 +52,7 @@ export interface IncomingMessageJob {
     /**
      * Extra, already-sanitized context to persist on the created Message
      * row's `metadata`. Producers must put only safe, structured values
-     * here — the worker copies it verbatim. Used by Shopify Live Chat to
+     * here - the worker copies it verbatim. Used by Shopify Live Chat to
      * carry the storefront page context the visitor asked from.
      */
     metadata?: Record<string, unknown>;

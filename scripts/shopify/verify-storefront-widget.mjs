@@ -74,7 +74,7 @@ function check(name, pass, detail = "") {
   results.push({ name, pass, detail });
   if (!pass) failures++;
   const mark = pass ? "✓" : "✗";
-  console.log(`${mark} ${name}${detail ? "  — " + detail : ""}`);
+  console.log(`${mark} ${name}${detail ? "  - " + detail : ""}`);
 }
 
 /** Read the widget's live geometry from inside its shadow root. */
@@ -132,7 +132,7 @@ async function main() {
   const consoleErrors = [];
   page.on("console", (m) => { if (m.type() === "error") consoleErrors.push(m.text()); });
   const blocked = [];
-  page.on("requestfailed", (r) => blocked.push(`${r.url()} — ${r.failure()?.errorText}`));
+  page.on("requestfailed", (r) => blocked.push(`${r.url()} - ${r.failure()?.errorText}`));
 
   console.log(`\nStorefront: ${STORE}\n`);
   await page.goto(STORE, { waitUntil: "domcontentloaded", timeout: 60000 });
@@ -167,7 +167,7 @@ async function main() {
         await browser.close();
         process.exit(3);
       }
-      console.log("The storefront is password protected. A browser window is open —");
+      console.log("The storefront is password protected. A browser window is open -");
       console.log("please enter the password there. Waiting up to 3 minutes...\n");
       await page.waitForSelector('input[type="password"]', { state: "detached", timeout: 180000 });
     }
@@ -312,7 +312,7 @@ function report() {
   console.log(`\n${results.length - failures}/${results.length} checks passed`);
   if (failures) {
     console.log("\nFAILED:");
-    for (const r of results.filter((x) => !x.pass)) console.log(`  • ${r.name}${r.detail ? " — " + r.detail : ""}`);
+    for (const r of results.filter((x) => !x.pass)) console.log(`  • ${r.name}${r.detail ? " - " + r.detail : ""}`);
   }
   process.exit(failures ? 1 : 0);
 }

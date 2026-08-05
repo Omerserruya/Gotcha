@@ -317,7 +317,7 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
       status: "DELIVERED",
       // Producer-supplied metadata (already sanitized at the edge) merges
       // under the interactive reply so a channel can attach its own
-      // context — e.g. the Shopify storefront page a visitor asked from.
+      // context - e.g. the Shopify storefront page a visitor asked from.
       metadata:
         interactiveReply || producerMetadata
           ? { ...(producerMetadata ?? {}), ...(interactiveReply ? { interactiveReply } : {}) }

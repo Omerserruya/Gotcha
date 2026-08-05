@@ -1053,7 +1053,7 @@ http {
         # Loaded by <script> from arbitrary merchant storefronts, so this
         # is the one place a wildcard CORS origin is correct: public
         # JavaScript, no tenant data, no credentials, no cookie. Without
-        # it the browser refuses the script and the widget never runs —
+        # it the browser refuses the script and the widget never runs -
         # which from the server side looks exactly like "the merchant
         # never enabled the embed".
         #
@@ -1064,7 +1064,7 @@ http {
         # Two cache tiers, because one of them already went wrong:
         #
         #   the ENTRY POINT must revalidate on every page load, or a fixed
-        #   URL pins whatever bytes a browser saw first — that is exactly
+        #   URL pins whatever bytes a browser saw first - that is exactly
         #   how a fixed ?v= kept serving a broken close button for hours.
         #
         #   the HASHED bundle is immutable by construction: new content is
@@ -1079,7 +1079,7 @@ http {
             add_header Access-Control-Allow-Origin "*" always;
             add_header Access-Control-Allow-Methods "GET, HEAD, OPTIONS" always;
 
-            # `no-cache` still allows a cached copy — it requires it to be
+            # `no-cache` still allows a cached copy - it requires it to be
             # revalidated first, so an unchanged file costs a 304.
             add_header Cache-Control "public, no-cache, must-revalidate" always;
 

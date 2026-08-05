@@ -1,5 +1,5 @@
 /**
- * App Proxy verification — the boundary that decides whether we believe a
+ * App Proxy verification - the boundary that decides whether we believe a
  * claim about who is chatting.
  *
  * Everything here is weighted toward the ways that goes wrong, because a
@@ -140,7 +140,7 @@ describe("identity token", () => {
     expect(identity).toMatchObject({ v: 1, shopDomain: SHOP, customerId: "6820381" });
   });
 
-  it("is opaque — the customer id is not simply readable from it", () => {
+  it("is opaque - the customer id is not simply readable from it", () => {
     const token = signCustomerIdentity({ shopDomain: SHOP, customerId: "6820381" });
     expect(token).not.toContain("6820381");
     expect(token).not.toContain(SHOP);

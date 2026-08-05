@@ -1,11 +1,11 @@
 /**
- * Shopify chat settings — the few rules the FORM needs to know locally.
+ * Shopify chat settings - the few rules the FORM needs to know locally.
  *
  * The frontend deliberately does not import `@chatcenter/shared`. It is not
  * an npm workspace, has its own dependency tree, and the dev container
  * mounts only `./frontend`, so the package is not resolvable at runtime.
  * A production build can find it by walking up to the root `node_modules`
- * and the dev server cannot — which is a build that passes CI and a
+ * and the dev server cannot - which is a build that passes CI and a
  * settings page that is broken for whoever is actually working on it.
  *
  * The server stays authoritative. Every channel read and write goes

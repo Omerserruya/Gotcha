@@ -347,7 +347,7 @@ notes.push("Every deploy republishes this file in full - CLI 3.x has no extensio
 // ─── Report ──────────────────────────────────────────────────
 
 console.log(`
-  GOTCHA unified Shopify app — deployment identity check
+  GOTCHA unified Shopify app - deployment identity check
   ─────────────────────────────────────────────────────
   config file        ${configName}
   linked client id   ${suffix(manifest.clientId)}

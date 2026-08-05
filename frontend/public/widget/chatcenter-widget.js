@@ -1,12 +1,12 @@
 /**
- * GOTCHA website chat — the script a tenant pastes onto their own site.
+ * GOTCHA website chat - the script a tenant pastes onto their own site.
  *
  * The filename and the `window.__chatcenter` contract are load-bearing:
  * snippets are already pasted on customer sites and on gotcha.co.il
  * itself, and none of them can be edited from here. Everything below is
  * free to change; those two are not.
  *
- * This used to be a self-contained widget — its own markup, its own CSS,
+ * This used to be a self-contained widget - its own markup, its own CSS,
  * its own idea of what a chat looks like. It had drifted a long way from
  * the storefront widget, so a tenant configuring both learned two editors
  * and got two products. It now loads the SAME bundle the Shopify
@@ -16,7 +16,7 @@
  *
  *   1. Ask the server whether this widget still exists, BEFORE drawing
  *      anything. The old script painted its launcher unconditionally and
- *      only called the server when a visitor opened it — so a deleted
+ *      only called the server when a visitor opened it - so a deleted
  *      channel left a button on a customer's site that opened onto
  *      silence. Asking first means a deleted widget simply is not there.
  *
@@ -179,7 +179,7 @@
 
   function loadBundle() {
     // The bundle's filename is content-hashed, so it is read from the
-    // manifest rather than hard-coded — a hard-coded name is how a stale
+    // manifest rather than hard-coded - a hard-coded name is how a stale
     // widget once stayed in browsers for hours.
     return request("/widget/widget-manifest.json", { credentials: "omit" })
       .then(function (manifest) {
@@ -292,7 +292,7 @@
       .catch(function (err) {
         // A removed widget is not an error: the server answers 200 with an
         // empty body and the branch above simply returns. This is for the
-        // genuinely exceptional — the network is down, or we are broken —
+        // genuinely exceptional - the network is down, or we are broken -
         // and even then it stays a warning on someone else's website.
         if (err && err.status !== 404) {
           console.warn("[gotcha-chat] unavailable:", err.message);

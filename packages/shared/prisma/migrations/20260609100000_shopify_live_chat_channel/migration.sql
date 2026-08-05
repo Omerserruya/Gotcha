@@ -1,4 +1,4 @@
--- Shopify Live Chat channel — ADDITIVE ONLY.
+-- Shopify Live Chat channel - ADDITIVE ONLY.
 --
 -- Adds one value to the ChannelType enum. Nothing else is needed: the
 -- channel reuses ChannelAccount (public key in external_id, config in

@@ -4,7 +4,7 @@
  * The point of these tests is that the NUMBERS are arithmetic, not model
  * output. Lifetime spend, average order value and recency are quoted to a
  * human agent who repeats them to a paying customer, so each one is pinned
- * here — including the cases where the honest answer is "unknown".
+ * here - including the cases where the honest answer is "unknown".
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
@@ -43,7 +43,7 @@ beforeEach(() => {
 describe("loadCustomerCommerceFacts", () => {
   it("takes lifetime totals from the customer record, not from the order page", async () => {
     // 42 lifetime orders but only 2 in the recent window. Summing the window
-    // would report a customer who has spent 300 as having spent 300 — the
+    // would report a customer who has spent 300 as having spent 300 - the
     // exact understatement that makes an agent treat a whale like a stranger.
     getCrmAdapter.mockResolvedValue(
       stubAdapter(

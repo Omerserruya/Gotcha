@@ -3,7 +3,7 @@
  *
  * The question every case here answers is the same one: can a shopper
  * make us believe they are somebody else? Identity may enter through
- * exactly one door — an App Proxy request Shopify signed — and these
+ * exactly one door - an App Proxy request Shopify signed - and these
  * drive the actual Express routes to prove no other door exists.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";

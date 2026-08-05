@@ -7,8 +7,8 @@ import { heroHeightWarning, WELCOME_FALLBACK, HERO_FALLBACK } from "@/lib/shopif
 /**
  * The chat widget's experience editor.
  *
- * Every section here edits the SHARED experience block — launcher, hero,
- * welcome screen, proactive teaser, sounds, behaviour — which is the same
+ * Every section here edits the SHARED experience block - launcher, hero,
+ * welcome screen, proactive teaser, sounds, behaviour - which is the same
  * on the Shopify storefront and on a tenant's own website. Nothing in it
  * is about commerce, so nothing in it belongs to one channel.
  *
