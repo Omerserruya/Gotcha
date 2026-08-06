@@ -11,7 +11,7 @@
  * neither can be proven from the return value alone.
  */
 import { describe, it, expect, afterAll, beforeAll } from "vitest";
-import { prisma, getBalance, getEffectiveEntitlements, checkPaidAccess } from "@chatcenter/shared";
+import { prisma, getBalance, getEffectiveEntitlements, checkPaidAccess, getLimits } from "@chatcenter/shared";
 import {
   provisionPoc,
   expireDuePocs,
@@ -351,5 +351,44 @@ describe("the estate audit", () => {
     const report = await auditTenantPlans();
     const grouped = Object.values(report.groups).reduce((n, rows) => n + rows.length, 0);
     expect(grouped).toBe(report.total);
+  });
+});
+
+/**
+ * A pilot has to be able to exercise the product it is a pilot of.
+ *
+ * The `poc` plan grants no entitlements, so before this every limit fell
+ * through to the feature catalog's defaults - which exist for a tenant with NO
+ * plan: 2 channels, 0 AI employees. A real customer connected four channels
+ * through the OAuth paths (which do not check the cap) and then met a bare
+ * "Request failed: 402" on the first gated connect, with nothing on screen to
+ * say a limit had been reached. 0 AI employees meant a POC could never create
+ * the thing the product is named after.
+ */
+describe("pilot limits", () => {
+  it("grants limits a pilot can use, not the no-plan defaults", async () => {
+    const t = await makeTenant();
+    await provisionPoc({ tenantId: t.id, credits: 500, actor: "test" });
+    const limits = await getLimits(t.id);
+
+    // The two that actually blocked a customer.
+    expect(limits["limit:channels"]).toBeGreaterThan(2);
+    expect(limits["limit:ai_employees"]).toBeGreaterThan(0);
+    // And the rest of the set, so a pilot is not shaped like a free tier.
+    expect(limits["limit:users"]).toBeGreaterThan(3);
+    expect(limits["limit:departments"]).toBeGreaterThan(3);
+  });
+
+  it("leaves the credit budget to the operator, not to an invented limit", async () => {
+    const t = await makeTenant();
+    await provisionPoc({ tenantId: t.id, credits: 777, actor: "test" });
+    // The allowance is granted as credits through the ledger. Provisioning must
+    // not also write an included-units LIMIT row, which would be a second,
+    // competing statement of the same budget.
+    const invented = await prisma.tenantEntitlement.findFirst({
+      where: { tenantId: t.id, entitlementKey: "limit:included_ai_units" },
+    });
+    expect(invented).toBeNull();
+    expect((await getBalance(t.id)).includedRemaining).toBe(777);
   });
 });
