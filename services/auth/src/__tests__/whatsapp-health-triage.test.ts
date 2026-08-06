@@ -25,8 +25,6 @@ vi.mock("@chatcenter/shared", () => ({
   decryptCredentials: () => null,
 }));
 
-vi.mock("../lib/meta-whatsapp", () => ({ MetaWhatsAppClient: class {} }), { virtual: true } as never);
-
 import { buildHealthReport } from "../services/whatsapp/health.service";
 
 const SNAPSHOT = {
@@ -121,9 +119,13 @@ describe("the number card, on a real blocked number", () => {
     expect(blocking.some((c) => c.id === "QUALITY")).toBe(false);
   });
 
-  it("still says plainly that receiving works", () => {
+  it("does not claim messages are arriving on a number that was never registered", () => {
+    // The webhook subscription exists, but WhatsApp delivers nothing for an
+    // unregistered number - so "Receiving incoming messages ✓" was a lie that
+    // sent a customer looking for their messages in the inbox.
     const webhooks = report.checks.find((c) => c.id === "WEBHOOKS");
-    expect(webhooks?.status).toBe("PASS");
+    expect(webhooks?.status).toBe("FAIL");
+    expect(webhooks?.detail).toMatch(/registration/i);
     expect(report.ready).toBe(false);
   });
 

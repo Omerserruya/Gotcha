@@ -360,7 +360,23 @@ export function selectFlow(opts: SelectFlowOptions): FlowDecision {
       customerMessage: needsWork
         ? "This number is already connected. We will check it over and fix what we can."
         : "This number is already connected and working.",
-      automatedSteps: ["RESOLVE_ASSETS", "SUBSCRIBE_WEBHOOKS", "SYNC_PROFILE", "HEALTH_CHECK"],
+      // REGISTER_NUMBER belongs here too, and its absence was a dead end.
+      //
+      // `connectedToThisTenant` means WE have a row for this number. It says
+      // nothing about whether META ever registered it for Cloud API. A customer
+      // completed Embedded Signup, got a row, and their number sat
+      // platform_type=NOT_APPLICABLE - classified UNREGISTERED, reporting Meta
+      // error 141000 "not linked to your WhatsApp account", unable to send.
+      // Every press of Finish setup ran webhooks, profile and health, recorded
+      // three cheerful SUCCESS steps, and never once called register. There was
+      // no path in the product that could ever register that number.
+      //
+      // Safe for the numbers that do not need it: registerNumber() skips
+      // COEXISTENCE (already registered by the Business app), CLOUD_API
+      // (registered by definition) and any number a previous run registered, so
+      // this cannot spend the customer's 10-calls-per-72-hours budget on a
+      // number that is already live.
+      automatedSteps: ["RESOLVE_ASSETS", "SUBSCRIBE_WEBHOOKS", "REGISTER_NUMBER", "SYNC_PROFILE", "HEALTH_CHECK"],
       customerAction: firstCustomerAction(target),
       blockers: target.blockers,
     };

@@ -223,15 +223,24 @@ export function buildHealthReport(number: WhatsAppNumber): NumberHealthReport {
 
   // 3. Webhooks. The load-bearing one: without it nothing arrives, however
   // healthy everything else looks.
+  //
+  // A subscription is necessary and NOT sufficient. WhatsApp does not deliver
+  // anything for a number that was never registered for Cloud API, so reporting
+  // "Receiving incoming messages ✓" off the subscription alone told a customer
+  // their messages were arriving when nothing could reach them. The two facts
+  // are now both required before this claims to pass.
+  const registered = number.messagingStatus !== "PENDING";
   checks.push({
     id: "WEBHOOKS",
     label: "Receiving incoming messages",
-    status: number.webhookSubscribed ? "PASS" : "FAIL",
-    detail: number.webhookSubscribed
-      ? undefined
-      : number.webhookOverrideUri
+    status: number.webhookSubscribed && registered ? "PASS" : "FAIL",
+    detail: !number.webhookSubscribed
+      ? number.webhookOverrideUri
         ? "Another platform is currently receiving this number's messages."
-        : "Incoming messages are not being delivered to GOTCHA.",
+        : "Incoming messages are not being delivered to GOTCHA."
+      : !registered
+        ? "Nothing can arrive until this number finishes registration."
+        : undefined,
   });
 
   // 4. Verification

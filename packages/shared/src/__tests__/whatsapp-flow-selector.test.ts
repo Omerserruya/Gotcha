@@ -148,11 +148,32 @@ describe("selectFlow scenarios", () => {
     expect(d.customerAction).toBeNull();
   });
 
-  it("D: a number already connected here is revalidated, not re-onboarded", () => {
+  it("D: a number already connected here is revalidated, and CAN still be registered", () => {
+    // This assertion used to read `not.toContain("REGISTER_NUMBER")`, and that
+    // was the bug rather than the contract.
+    //
+    // `connectedToThisTenant` means WE hold a row for the number. It says
+    // nothing about whether META ever registered it for Cloud API. A real
+    // customer finished Embedded Signup, got a row, and sat at
+    // platform_type=NOT_APPLICABLE with Meta error 141000, unable to send or
+    // receive. Every press of Finish setup ran webhooks, profile and health,
+    // recorded three SUCCESS steps, and never called register - so no path in
+    // the product could ever fix it.
+    //
+    // Including the step is safe: registerNumber() skips COEXISTENCE, CLOUD_API
+    // and any prior successful registration, so it cannot spend the customer's
+    // ten-per-72-hours budget on a number that is already live.
     const n = number({ connectedToThisTenant: true });
     const d = selectFlow({ inspection: inspection({ numbers: [n] }) });
     expect(d.scenario).toBe("RECONNECT");
-    expect(d.automatedSteps).not.toContain("REGISTER_NUMBER");
+    expect(d.automatedSteps).toContain("REGISTER_NUMBER");
+    // ...and in the same position as every other flow that registers.
+    expect(d.automatedSteps.indexOf("REGISTER_NUMBER")).toBeGreaterThan(
+      d.automatedSteps.indexOf("SUBSCRIBE_WEBHOOKS"),
+    );
+    expect(d.automatedSteps.indexOf("REGISTER_NUMBER")).toBeLessThan(
+      d.automatedSteps.indexOf("HEALTH_CHECK"),
+    );
   });
 });
 
