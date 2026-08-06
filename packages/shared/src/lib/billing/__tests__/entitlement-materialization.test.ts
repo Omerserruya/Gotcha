@@ -17,6 +17,8 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 const upserts: Array<{ feature: string; enabled: boolean }> = [];
 /** Voice is gated by COLUMNS on the tenant, so its projection lands here. */
 const tenantUpdates: Array<Record<string, unknown>> = [];
+/** ...and by ENTITLEMENT rows, which is what the 402 gate actually reads. */
+const entitlementWrites: Array<{ key: string; value: unknown; source: string; expiresAt: unknown }> = [];
 
 const resolved = {
   tenantId: "t1",
@@ -38,6 +40,20 @@ vi.mock("../../prisma", () => ({
         tenantUpdates.push(data);
       },
     },
+    tenantEntitlement: {
+      upsert: async ({ where, create }: any) => {
+        entitlementWrites.push({
+          key: where.tenantId_entitlementKey_source.entitlementKey,
+          value: create.value,
+          source: create.source,
+          expiresAt: create.expiresAt,
+        });
+      },
+      create: async ({ data }: any) => {
+        entitlementWrites.push({ key: data.entitlementKey, value: data.value, source: data.source, expiresAt: data.expiresAt });
+      },
+      findFirst: async () => null,
+    },
   },
 }));
 
@@ -56,6 +72,7 @@ const BRIDGED = FEATURE_CATALOG.find((f) => f.materializesTo)!;
 beforeEach(() => {
   upserts.length = 0;
   tenantUpdates.length = 0;
+  entitlementWrites.length = 0;
   resolved.entries = new Map();
 });
 
@@ -185,5 +202,66 @@ describe("materializing the voice license", () => {
     const { isUnsellable } = await import("../feature-catalog");
     expect(ALL_LICENSE_KEYS).toContain("voice");
     expect(isUnsellable("voice")).toBe(false);
+  });
+});
+
+/**
+ * The half that actually clears the 402.
+ *
+ * `requireEntitlement("voice.call_pilot")` resolves through
+ * resolveEntitlements - plan entitlements, tenant overrides, catalog defaults -
+ * and never reads tenant_features. Projecting the license into that
+ * materialized cache therefore left the gate answering from the catalog
+ * default of FALSE, and a customer who had been sold voice still could not
+ * connect Twilio. These pin the rows that reach the resolver.
+ */
+describe("granting the voice license", () => {
+  const EXPIRES = new Date("2026-08-31T23:59:59.000Z");
+
+  async function grant(value: boolean) {
+    const { setTenantEntitlement } = await import("../entitlements");
+    await setTenantEntitlement({
+      tenantId: "t1", key: "voice", valueType: "BOOLEAN", value,
+      source: "TRIAL", expiresAt: EXPIRES, reason: "POC", createdBy: "op",
+    });
+  }
+
+  it("writes the capability rows the gates ask for", async () => {
+    await grant(true);
+    const keys = entitlementWrites.map((w) => w.key);
+    expect(keys).toContain("voice");
+    expect(keys).toContain("voice.call_pilot");
+    const callPilot = entitlementWrites.find((w) => w.key === "voice.call_pilot")!;
+    expect(callPilot.value).toEqual({ bool: true });
+  });
+
+  it("gives them the license's own source and expiry, so they rise and fall with it", async () => {
+    await grant(true);
+    for (const w of entitlementWrites.filter((x) => x.key.startsWith("voice."))) {
+      expect(w.source).toBe("TRIAL");
+      expect(w.expiresAt).toEqual(EXPIRES);
+    }
+  });
+
+  it("grants a channel allowance, because the gate behind the feature defaults to zero", async () => {
+    await grant(true);
+    const limit = entitlementWrites.find((w) => w.key === "limit:voice_channels");
+    expect(limit?.value).toEqual({ count: 5 });
+  });
+
+  it("withdraws the capabilities when the license is withheld", async () => {
+    await grant(false);
+    const callPilot = entitlementWrites.find((w) => w.key === "voice.call_pilot")!;
+    expect(callPilot.value).toEqual({ bool: false });
+    // ...and does not hand out channels on the way out.
+    expect(entitlementWrites.find((w) => w.key === "limit:voice_channels")).toBeUndefined();
+  });
+
+  it("leaves other licenses alone", async () => {
+    const { setTenantEntitlement } = await import("../entitlements");
+    await setTenantEntitlement({
+      tenantId: "t1", key: "analytics", valueType: "BOOLEAN", value: true, source: "TRIAL",
+    });
+    expect(entitlementWrites.filter((w) => w.key.startsWith("voice"))).toHaveLength(0);
   });
 });

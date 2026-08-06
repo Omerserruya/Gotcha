@@ -150,6 +150,91 @@ export async function materializeEntitlements(tenantId: string, updatedBy?: stri
   invalidatePermissionsCache({ tenantId });
 }
 
+
+/** The license key that stands for "this organization has telephony". */
+const VOICE_LICENSE_KEY = "voice";
+
+/**
+ * Voice channels a tenant may connect once voice is licensed but no plan or
+ * operator has said otherwise. Mirrors the `ai_voice` plan, so a pilot behaves
+ * like the product it is a pilot of.
+ */
+const DEFAULT_VOICE_CHANNELS = 5;
+
+/**
+ * Write the capability rows the voice license implies.
+ *
+ * Category-driven, so a voice capability added to the catalog later is covered
+ * without anyone remembering this function exists.
+ */
+async function expandVoiceLicense(input: {
+  tenantId: string;
+  value: unknown;
+  source: EntitlementSource;
+  expiresAt?: Date | null;
+  reason?: string;
+  createdBy?: string;
+}): Promise<void> {
+  const granted = input.value === true || (input.value as { bool?: boolean } | null)?.bool === true;
+
+  for (const f of featuresByCategory("VOICE")) {
+    if (!f.implemented) continue;
+    await prisma.tenantEntitlement.upsert({
+      where: {
+        tenantId_entitlementKey_source: {
+          tenantId: input.tenantId,
+          entitlementKey: f.key,
+          source: input.source,
+        },
+      },
+      create: {
+        tenantId: input.tenantId,
+        entitlementKey: f.key,
+        valueType: "BOOLEAN",
+        value: { bool: granted } as any,
+        source: input.source,
+        expiresAt: input.expiresAt ?? null,
+        reason: input.reason ?? "voice license",
+        createdBy: input.createdBy,
+      },
+      update: {
+        valueType: "BOOLEAN",
+        value: { bool: granted } as any,
+        expiresAt: input.expiresAt ?? null,
+        reason: input.reason ?? "voice license",
+        createdBy: input.createdBy,
+      },
+    });
+  }
+
+  // The gate immediately behind the feature check is
+  // requireCapacity("limit:voice_channels"), which defaults to 0 - so without
+  // this a licensed tenant clears one refusal and meets the next with their
+  // Twilio credentials already typed in. Only ever written when there is no
+  // decision recorded for this tenant already: a plan that sells a different
+  // number, or an operator who set one by hand, is the more specific answer.
+  if (granted) {
+    const existing = await prisma.tenantEntitlement.findFirst({
+      where: { tenantId: input.tenantId, entitlementKey: "limit:voice_channels" },
+      select: { id: true },
+    });
+    if (!existing) {
+      await prisma.tenantEntitlement.create({
+        data: {
+          tenantId: input.tenantId,
+          entitlementKey: "limit:voice_channels",
+          valueType: "COUNTER",
+          value: { count: DEFAULT_VOICE_CHANNELS } as any,
+          source: input.source,
+          expiresAt: input.expiresAt ?? null,
+          reason: input.reason ?? "voice license",
+          createdBy: input.createdBy,
+        },
+      });
+    }
+  }
+}
+
 /** Upsert a single tenant override (beta/promo/trial/manual/add-on). */
 export async function setTenantEntitlement(input: {
   tenantId: string;
@@ -181,5 +266,26 @@ export async function setTenantEntitlement(input: {
       createdBy: input.createdBy,
     },
   });
+
+  // Granting the voice LICENSE has to grant the voice CAPABILITIES, because
+  // they are what the gates ask for.
+  //
+  // POST /voice-channels mounts requireEntitlement("voice.call_pilot"), which
+  // resolves through resolveEntitlements - plan entitlements, tenant overrides,
+  // catalog defaults. It never reads tenant_features. So projecting the license
+  // into that materialized cache (which materializeEntitlements does, for the
+  // permission resolver and the tenant's voice columns) left the 402 exactly
+  // where it was: `voice.call_pilot` still fell through to its catalog default
+  // of false, and a customer who had been SOLD voice still could not connect
+  // Twilio.
+  //
+  // Writing real entitlement rows is what reaches the resolver. Same source and
+  // same expiry as the license, so they rise and fall with it: a POC's TRIAL
+  // grant drops out on the same day, and a COMPLIANCE_DENY (rank 100) still
+  // outranks all of it.
+  if (input.key === VOICE_LICENSE_KEY && input.valueType === "BOOLEAN") {
+    await expandVoiceLicense(input);
+  }
+
   if (input.valueType === "BOOLEAN") await materializeEntitlements(input.tenantId, input.createdBy);
 }
