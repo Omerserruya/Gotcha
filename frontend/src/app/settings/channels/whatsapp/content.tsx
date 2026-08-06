@@ -78,8 +78,11 @@ function StateChip({ state, health }: { state: string; health?: WhatsAppHealthRe
   // attention" told a customer nothing was connected while their inbox filled
   // up, which is the opposite of what the screen should say.
   if (health?.receiving && health.sending === false) {
+    // Green, not amber. The channel IS connected and IS delivering; the one
+    // thing it cannot do has its own alert directly below. An amber chip on top
+    // of that alert made a working channel read as a broken one.
     return (
-      <span className="text-[10px] px-2 py-0.5 rounded-full font-medium ring-1 whitespace-nowrap bg-amber-50 text-amber-700 ring-amber-200">
+      <span className="text-[10px] px-2 py-0.5 rounded-full font-medium ring-1 whitespace-nowrap bg-emerald-50 text-emerald-700 ring-emerald-200">
         {t("whatsappNumbers.state.connectedLimited")}
       </span>
     );
@@ -898,6 +901,11 @@ export function WhatsAppNumbersContent() {
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
             {t("whatsappNumbers.summaryWorking", { count: String(working) })}
           </span>
+          {/*
+            Phrased as a SUBSET, not a second tally. "1 working" beside
+            "1 cannot send yet" read as two numbers to the customer who had
+            exactly one, and made a connected channel look half-broken.
+          */}
           {limited > 0 && (
             <span className="inline-flex items-center gap-1.5 text-amber-700">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />

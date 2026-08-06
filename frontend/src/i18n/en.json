@@ -5206,7 +5206,7 @@
     "loading": "Loading...",
     "loadFailed": "We could not load your WhatsApp numbers.",
     "noneYet": "No WhatsApp numbers are connected yet.",
-    "summaryWorking": "{count} working",
+    "summaryWorking": "{count} connected",
     "summaryAttention": "{count} need attention",
     "state": {
       "connected": "Working",
@@ -5216,7 +5216,7 @@
       "disconnected": "Disconnected",
       "failed": "Setup failed",
       "discovered": "Not connected",
-      "connectedLimited": "Connected, cannot send"
+      "connectedLimited": "Connected"
     },
     "badge": {
       "alsoOnPhone": "Also on your phone",
@@ -5303,6 +5303,6 @@
     "meta": {
       "fixInMeta": "Fix this in Meta Business settings"
     },
-    "summaryLimited": "{count} cannot send yet"
+    "summaryLimited": "sending blocked on {count} of them"
   }
 }

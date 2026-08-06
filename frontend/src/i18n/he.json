@@ -5207,7 +5207,7 @@
     "loading": "טוען...",
     "loadFailed": "לא הצלחנו לטעון את מספרי הוואטסאפ שלכם.",
     "noneYet": "עדיין לא חוברו מספרי וואטסאפ.",
-    "summaryWorking": "{count} פעילים",
+    "summaryWorking": "{count} מחוברים",
     "summaryAttention": "{count} דורשים טיפול",
     "state": {
       "connected": "פעיל",
@@ -5217,7 +5217,7 @@
       "disconnected": "מנותק",
       "failed": "ההתקנה נכשלה",
       "discovered": "לא מחובר",
-      "connectedLimited": "מחובר, לא שולח"
+      "connectedLimited": "מחובר"
     },
     "badge": {
       "alsoOnPhone": "גם בטלפון שלכם",
@@ -5304,6 +5304,6 @@
     "meta": {
       "fixInMeta": "לתיקון בהגדרות העסק של מטא"
     },
-    "summaryLimited": "{count} עדיין לא יכולים לשלוח"
+    "summaryLimited": "השליחה חסומה ב-{count} מהם"
   }
 }

@@ -25,7 +25,7 @@ vi.mock("@chatcenter/shared", () => ({
   decryptCredentials: () => null,
 }));
 
-import { buildHealthReport } from "../services/whatsapp/health.service";
+import { buildHealthReport, channelStatusForNumber } from "../services/whatsapp/health.service";
 
 const SNAPSHOT = {
   can_send_message: "BLOCKED",
@@ -182,5 +182,41 @@ describe("a registered number that receives but cannot send", () => {
 
   it("no longer asks for a registration that already happened", () => {
     expect(report.needsRegistration).toBe(false);
+  });
+});
+
+/**
+ * What the rest of the product is told about the channel.
+ *
+ * Everything outside this page - the Channels list, the journey, the inbox
+ * routing - reads ChannelAccount.connectionStatus, not the number's state. Both
+ * writers used `state === "CONNECTED" ? "CONNECTED" : "PENDING"`, and a number
+ * is DEGRADED whenever Meta blocks sending. So a registered, subscribed number
+ * that was delivering customer messages marked its channel PENDING over a
+ * payment method, and the Channels page offered "Connect WhatsApp" to a
+ * customer whose WhatsApp was already working.
+ */
+describe("what the channel status says", () => {
+  const base = { state: "DEGRADED" as never, webhookSubscribed: true, messagingStatus: "CONNECTED" };
+
+  it("is CONNECTED when the number carries traffic, even if Meta blocks sending", () => {
+    expect(channelStatusForNumber(base)).toBe("CONNECTED");
+  });
+
+  it("is PENDING while the number is not registered", () => {
+    expect(channelStatusForNumber({ ...base, messagingStatus: "PENDING" })).toBe("PENDING");
+  });
+
+  it("is PENDING while nothing can be delivered", () => {
+    expect(channelStatusForNumber({ ...base, webhookSubscribed: false })).toBe("PENDING");
+  });
+
+  it("is PENDING while the customer still owes a step", () => {
+    expect(channelStatusForNumber({ ...base, state: "ACTION_REQUIRED" as never })).toBe("PENDING");
+  });
+
+  it("keeps the terminal states terminal", () => {
+    expect(channelStatusForNumber({ ...base, state: "FAILED" as never })).toBe("ERROR");
+    expect(channelStatusForNumber({ ...base, state: "DISCONNECTED" as never })).toBe("DISCONNECTED");
   });
 });

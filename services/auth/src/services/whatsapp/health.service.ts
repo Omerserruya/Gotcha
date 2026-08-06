@@ -179,6 +179,36 @@ function entityLabel(type?: string): string {
   }
 }
 
+
+/**
+ * What the CHANNEL's status should be, given the number's condition.
+ *
+ * A channel is connected when it can carry traffic: registered with Meta and
+ * subscribed for delivery. Whether Meta currently permits OUTBOUND is a
+ * separate question, and a separate warning.
+ *
+ * Both call sites used to write `state === "CONNECTED" ? "CONNECTED" :
+ * "PENDING"`, and a number is DEGRADED whenever Meta blocks sending - so a
+ * number that was registered, subscribed and delivering customer messages into
+ * the inbox marked its channel PENDING because of a payment method on the
+ * WhatsApp account. Every surface that reads ChannelAccount then reported the
+ * channel as not connected, and the Channels page offered "Connect WhatsApp"
+ * to a customer whose WhatsApp was already working.
+ */
+export function channelStatusForNumber(number: {
+  state: WhatsAppNumberState;
+  webhookSubscribed: boolean;
+  messagingStatus?: string | null;
+}): "CONNECTED" | "PENDING" | "ERROR" | "DISCONNECTED" {
+  if (number.state === "DISCONNECTED") return "DISCONNECTED";
+  if (number.state === "FAILED") return "ERROR";
+  const registered = number.messagingStatus !== "PENDING";
+  // ACTION_REQUIRED means the customer still owes us a step; the channel is not
+  // carrying anything yet whatever the other flags say.
+  if (number.state === "ACTION_REQUIRED" || number.state === "ONBOARDING") return "PENDING";
+  return number.webhookSubscribed && registered ? "CONNECTED" : "PENDING";
+}
+
 /**
  * Build the report from what is already stored.
  *
@@ -424,7 +454,13 @@ export async function refreshNumberHealth(numberId: string): Promise<NumberHealt
     });
     await prisma.channelAccount.update({
       where: { id: refreshed.channelAccountId },
-      data: { connectionStatus: nextState === "CONNECTED" ? "CONNECTED" : "PENDING" },
+      data: {
+        connectionStatus: channelStatusForNumber({
+          state: nextState,
+          webhookSubscribed: refreshed.webhookSubscribed,
+          messagingStatus: refreshed.messagingStatus,
+        }),
+      },
     });
     report.state = nextState;
     report.ready = nextState === "CONNECTED" && report.ready;

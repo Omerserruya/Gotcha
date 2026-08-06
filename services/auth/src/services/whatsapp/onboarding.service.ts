@@ -21,6 +21,7 @@
  * Reference: docs/integrations/whatsapp/01-meta-api-inventory.md
  */
 
+import { channelStatusForNumber } from "./health.service";
 import {
   prisma,
   encryptCredentials,
@@ -246,9 +247,12 @@ export async function onboardNumber(input: OnboardNumberInput): Promise<OnboardR
     },
   });
 
+  // The CHANNEL is connected when it can carry traffic. Whether Meta currently
+  // permits outbound is a warning on a connected channel, not a reason to tell
+  // the whole product the channel does not exist. See channelStatusForNumber.
   await syncChannelStatus(
     channelAccount.id,
-    state === "CONNECTED" ? "CONNECTED" : "PENDING",
+    channelStatusForNumber(finalNumber),
     usable ? null : "Incoming messages are not reaching GOTCHA yet.",
   );
 
