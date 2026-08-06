@@ -95,4 +95,45 @@ describe("static export: dynamic route segments", () => {
       .sort();
     expect(unmapped, "these build, then render a blank page on refresh").toEqual([]);
   });
+
+  /**
+   * The half the rule above does not cover, and the half that shipped broken.
+   *
+   * `[^/]+` cannot cross a slash, so a rule written for /<base>/<id> does not
+   * match /<base>/<id>/routing. The export emits that page as
+   * /<base>/_/routing/index.html, nginx matched nothing, and the request fell
+   * through to /index.html - the root shell. Three pages were unreachable in
+   * production this way (voice-channel routing, department copilot, call
+   * replay) while building perfectly and passing every test above. The merchant
+   * report was "the option is gone from the UI", which is exactly what a page
+   * that never mounts looks like.
+   */
+  it("every SUB-PAGE of a dynamic segment has an nginx rule too", () => {
+    const conf = fs.readFileSync(NGINX, "utf8");
+    // Locations shaped ^/(bases)/[^/]+/([^/]+) - i.e. id PLUS one more segment.
+    const nested = [...conf.matchAll(/location ~ \^\/\(([^)]+)\)\/\[\^\/\]\+\/\(\[\^\/\]\+\)/g)].map((m) => m[1]);
+    const coveredNested = new Set(nested.flatMap((a) => a.split("|")));
+
+    /** Child routes of a dynamic segment: `routing`, `copilot`, `replay`… */
+    function subPages(segDir: string): string[] {
+      return fs
+        .readdirSync(segDir, { withFileTypes: true })
+        .filter((e) => e.isDirectory() && !e.name.startsWith("[") && !e.name.startsWith("("))
+        .filter((e) =>
+          ["page.tsx", "page.ts"].some((f) => fs.existsSync(path.join(segDir, e.name, f))),
+        )
+        .map((e) => e.name);
+    }
+
+    const unmapped: string[] = [];
+    for (const seg of segments) {
+      const subs = subPages(seg.dir);
+      if (!subs.length) continue;
+      const base = seg.route.replace(/^\//, "");
+      for (const sub of subs) {
+        if (!coveredNested.has(base)) unmapped.push(`${base}/[id]/${sub}`);
+      }
+    }
+    expect(unmapped.sort(), "these build, then serve the root shell on refresh or deep-link").toEqual([]);
+  });
 });

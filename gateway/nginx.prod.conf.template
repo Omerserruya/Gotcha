@@ -1606,6 +1606,23 @@ http {
             try_files $uri $uri/index.html /$1/_/index.html /index.html;
         }
 
+        # ...and the SUB-PAGES of a dynamic id, which the two rules above do not
+        # reach: `[^/]+` cannot cross a slash, so /settings/voice-channels/<id>/routing
+        # matched neither and fell through to /index.html - the root shell. The
+        # export emits these as /<base>/_/<sub>/index.html, and today that is
+        #   settings/voice-channels/_/routing   (inbound + outbound call routing)
+        #   departments/_/copilot
+        #   voice/_/replay
+        # all three of which were unreachable in production while building
+        # perfectly. A merchant reported it as "the option is gone from the UI",
+        # which is precisely what a page that never mounts looks like.
+        location ~ ^/(departments|integrations|voice|contacts|system/tenants|ai-studio/flows|ai-studio/marketplace|ai-studio/agents|settings/voice-channels|settings/funnels|settings/business-systems|system/plans)/[^/]+/([^/]+)/index\.txt$ {
+            try_files $uri /$1/_/$2/index.txt /index.html;
+        }
+        location ~ ^/(departments|integrations|voice|contacts|system/tenants|ai-studio/flows|ai-studio/marketplace|ai-studio/agents|settings/voice-channels|settings/funnels|settings/business-systems|system/plans)/[^/]+/([^/]+)/?$ {
+            try_files $uri $uri/index.html /$1/_/$2/index.html /index.html;
+        }
+
         # Next.js export with trailingSlash:true: /foo resolves to /foo/index.html.
         # Unknown URLs fall back to /index.html so the SPA client router can mount
         # the matching route at runtime.
