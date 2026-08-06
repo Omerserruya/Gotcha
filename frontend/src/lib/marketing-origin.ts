@@ -43,3 +43,69 @@ export function rendersMarketing(currentOrigin: string): boolean {
   if (!marketingOrigin) return true;
   return normalizeOrigin(currentOrigin) === marketingOrigin;
 }
+
+/**
+ * True when the browser is on the MARKETING host of a configured split.
+ *
+ * Not the negation of rendersMarketing(): that one fails open and answers "may
+ * `/` show the landing page here", which is also true on every host when no
+ * split is configured. This answers "am I on the host that must NOT run
+ * application flows", which is only ever true when a split actually exists.
+ */
+export function isMarketingHost(currentOrigin: string): boolean {
+  if (!marketingOrigin) return false;
+  return normalizeOrigin(currentOrigin) === marketingOrigin;
+}
+
+/**
+ * The APPLICATION origin, derived from the OIDC callback rather than declared
+ * separately.
+ *
+ * The two can never legitimately disagree: Authentik only ever returns a user
+ * to a redirect_uri on its registered allow-list, so whichever origin owns
+ * `/auth/callback` IS the application. Deriving it removes a second hostname
+ * variable that could be set to something the IdP would reject - a mismatch
+ * that does not fail at build time and only surfaces as a refused login.
+ *
+ * "" when unset (dev, single-host), which callers must treat as "no cross-host
+ * hop to make" rather than guessing a hostname.
+ */
+export const appOrigin = normalizeOrigin(
+  (process.env.NEXT_PUBLIC_OIDC_REDIRECT_URI ?? "").trim(),
+);
+
+/**
+ * Where a "Log in" affordance should point from the page currently being shown.
+ *
+ * On the marketing host this is an ABSOLUTE url on the application host, and
+ * that is the whole point. `/login` is a relative path, so a Next `<Link>` to it
+ * resolved against gotcha.co.il and the router serviced it CLIENT-SIDE - no
+ * request left the browser, so nginx's `return 301 https://app.gotcha.co.il`
+ * never ran and the visitor stayed on the marketing origin. There the login shim
+ * cannot work at all: OIDC discovery is a cross-origin fetch, and Authentik
+ * grants CORS only to origins it has registered as redirect URIs, so the
+ * request is blocked and sign-in dead-ends on "We could not reach secure
+ * sign-in".
+ *
+ * Everywhere else (the application host, dev, any single-host deployment) the
+ * relative path is correct and is returned unchanged.
+ */
+export function loginUrl(currentOrigin: string, next?: string): string {
+  const path = isSafeReturnPath(next) ? `/login?next=${encodeURIComponent(next)}` : "/login";
+  if (!isMarketingHost(currentOrigin) || !appOrigin) return path;
+  return `${appOrigin}${path}`;
+}
+
+/**
+ * Is this a path we are willing to send someone to after they authenticate?
+ *
+ * A leading "/" alone is not enough. `//evil.test` starts with one and is a
+ * PROTOCOL-RELATIVE url - browsers resolve it to https://evil.test, so it turns
+ * our own login into an open redirect. `/\evil.test` is the same trick with the
+ * separator browsers also accept. Only a single slash followed by something
+ * that is not a slash or backslash is a path on this origin.
+ */
+export function isSafeReturnPath(next: string | null | undefined): next is string {
+  if (!next || !next.startsWith("/")) return false;
+  return next[1] !== "/" && next[1] !== "\\";
+}

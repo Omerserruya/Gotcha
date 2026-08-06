@@ -15,6 +15,7 @@ import { useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { useAuth } from "@/context/AuthContext";
 import { beginLogin } from "@/lib/oidc";
+import { isMarketingHost, appOrigin, isSafeReturnPath } from "@/lib/marketing-origin";
 
 function LoginRedirect() {
   const { user, isLoading } = useAuth();
@@ -23,11 +24,24 @@ function LoginRedirect() {
   const [failed, setFailed] = useState(false);
 
   const rawNext = params.get("next") || params.get("redirect");
-  const next = rawNext && rawNext.startsWith("/") ? rawNext : "/";
+  // Not just "starts with /": `//evil.test` does too, and window.location
+  // resolves it as a protocol-relative url to another site - which would make
+  // this route an open redirect. isSafeReturnPath rejects that form.
+  const next = isSafeReturnPath(rawNext) ? rawNext : "/";
 
   const start = useCallback(() => {
     started.current = true;
     setFailed(false);
+    // Never run the OIDC flow on the marketing host. Any client-side route
+    // change lands here without a request reaching nginx, so the vhost redirect
+    // to the application host cannot have run - and from this origin Authentik
+    // refuses the discovery fetch (CORS is granted only to registered redirect
+    // URIs), which strands the user on the failure card. Hop hosts first; the
+    // shim then runs again on the application origin, where it works.
+    if (typeof window !== "undefined" && isMarketingHost(window.location.origin) && appOrigin) {
+      window.location.replace(`${appOrigin}/login${window.location.search}`);
+      return;
+    }
     if (user) {
       window.location.assign(next);
       return;

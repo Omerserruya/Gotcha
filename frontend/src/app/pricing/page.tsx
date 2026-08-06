@@ -17,6 +17,7 @@ import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import { publicPricingEnabled } from "@/lib/api-public-pricing";
+import LoginLink from "@/components/LoginLink";
 import { usePublicPricing, planCopy } from "@/components/pricing/usePublicPricing";
 import {
   Eyebrow, SectionHeading, CurrencyToggle, PlanSkeleton, Reveal,
@@ -217,12 +218,9 @@ function Shell({ t, children }: { t: (k: string) => string; children: React.Reac
             >
               {locale === "he" ? "English" : "עברית"}
             </button>
-            <Link
-              href="/login"
-              className="text-[13px] font-medium text-gray-500 transition-colors hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 rounded px-1"
-            >
+            <LoginLink className="text-[13px] font-medium text-gray-500 transition-colors hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 rounded px-1">
               {t("landing.nav.login")}
-            </Link>
+            </LoginLink>
             <Link
               href="/early-access"
               className="rounded-full bg-primary-500 px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:ring-offset-2"

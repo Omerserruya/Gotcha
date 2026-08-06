@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useI18n } from "@/context/I18nContext";
 import type { Locale } from "@/i18n";
 import JsonLd from "@/components/JsonLd";
+import LoginLink from "@/components/LoginLink";
 import CustomerStorySection from "@/components/landing/CustomerStorySection";
 import PricingSection from "./PricingSection";
 import SocialLinks from "./SocialLinks";
@@ -528,9 +529,9 @@ function MobileMenu({
               {t("landing.nav.pricing")}
             </Link>
           )}
-          <Link href="/login" onClick={onClose} className="px-4 py-3 text-[15px] font-medium text-gray-700 hover:bg-gray-50 rounded-xl transition-colors">
+          <LoginLink onClick={onClose} className="px-4 py-3 text-[15px] font-medium text-gray-700 hover:bg-gray-50 rounded-xl transition-colors">
             {t("landing.nav.login")}
-          </Link>
+          </LoginLink>
           <Link href="/early-access" onClick={onClose} className="mt-2 px-4 py-3 text-[15px] font-semibold text-white bg-primary-500 rounded-xl text-center hover:bg-primary-600 transition-colors">
             {t("landing.nav.getStarted")}
           </Link>
@@ -948,11 +949,11 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
           <div className="flex items-center gap-2">
             <div className="hidden md:flex items-center gap-2">
               <LocaleDropdown locale={locale} setLocale={setLocale} forcedLocale={forcedLocale} />
-              <Link href="/login" className={`px-3.5 py-1.5 text-[13px] font-medium rounded-full transition-all ${
+              <LoginLink className={`px-3.5 py-1.5 text-[13px] font-medium rounded-full transition-all ${
                 navDark ? "text-white/70 hover:text-white hover:bg-white/10" : "text-gray-600 hover:text-black hover:bg-gray-100/80"
               }`}>
                 {t("landing.nav.login")}
-              </Link>
+              </LoginLink>
             </div>
             <Link href="/early-access" className="hidden sm:inline-flex px-5 py-2 text-[13px] font-semibold text-white bg-primary-500 rounded-full hover:bg-primary-600 transition-all">
               {t("landing.nav.getStarted")}
