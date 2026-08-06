@@ -70,8 +70,21 @@ const META_APP_ID = process.env.NEXT_PUBLIC_META_APP_ID || "";
  * "Needs you" rather than "error" for ACTION_REQUIRED: waiting on a PIN is not
  * a fault, and calling it one sends people looking for a bug that is not there.
  */
-function StateChip({ state }: { state: string }) {
+function StateChip({ state, health }: { state: string; health?: WhatsAppHealthReport }) {
   const { t } = useI18n();
+
+  // Connected and receiving, but Meta will not let it send: that is a
+  // connected number with a warning, not a broken one. Labelling it "needs
+  // attention" told a customer nothing was connected while their inbox filled
+  // up, which is the opposite of what the screen should say.
+  if (health?.receiving && health.sending === false) {
+    return (
+      <span className="text-[10px] px-2 py-0.5 rounded-full font-medium ring-1 whitespace-nowrap bg-amber-50 text-amber-700 ring-amber-200">
+        {t("whatsappNumbers.state.connectedLimited")}
+      </span>
+    );
+  }
+
   const map: Record<string, { cls: string; key: string }> = {
     CONNECTED: { cls: "bg-emerald-50 text-emerald-700 ring-emerald-200", key: "connected" },
     DEGRADED: { cls: "bg-amber-50 text-amber-700 ring-amber-200", key: "degraded" },
@@ -236,7 +249,7 @@ function NumberCard({
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-medium text-gray-900 truncate">{label}</span>
-              <StateChip state={row.state} />
+              <StateChip state={row.state} health={health} />
               {/*
                 Coexistence changes what the customer can expect (throughput,
                 no group chats), so it is labelled on the card rather than
@@ -836,10 +849,19 @@ export function WhatsAppNumbersContent() {
     void load();
   }, [load]);
 
-  const working = rows.filter((r) => r.state === "CONNECTED").length;
-  const needsAttention = rows.filter(
-    (r) => r.state === "DEGRADED" || r.state === "ACTION_REQUIRED" || r.state === "FAILED",
-  ).length;
+  // Counted by what the number DOES, not by its lifecycle label.
+  //
+  // A number whose inbox is filling up is working, even while Meta blocks
+  // outbound over a billing problem on the WhatsApp account. Counting by state
+  // alone told a customer "0 working, 1 needs attention" about a number that
+  // was delivering their customers' messages at that moment.
+  const isReceiving = (r: WhatsAppNumberRow) =>
+    r.health?.receiving ?? r.state === "CONNECTED";
+  const working = rows.filter(isReceiving).length;
+  const needsAttention = rows.filter((r) => !isReceiving(r)).length;
+  // Working, but Meta will not let it send yet. Worth saying out loud rather
+  // than hiding inside a green count.
+  const limited = rows.filter((r) => isReceiving(r) && r.health?.sending === false).length;
 
   return (
     <div className="max-w-3xl mx-auto p-4 sm:p-6">
@@ -876,9 +898,15 @@ export function WhatsAppNumbersContent() {
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
             {t("whatsappNumbers.summaryWorking", { count: String(working) })}
           </span>
-          {needsAttention > 0 && (
+          {limited > 0 && (
             <span className="inline-flex items-center gap-1.5 text-amber-700">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+              {t("whatsappNumbers.summaryLimited", { count: String(limited) })}
+            </span>
+          )}
+          {needsAttention > 0 && (
+            <span className="inline-flex items-center gap-1.5 text-red-700">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
               {t("whatsappNumbers.summaryAttention", { count: String(needsAttention) })}
             </span>
           )}

@@ -134,3 +134,53 @@ describe("the number card, on a real blocked number", () => {
     expect(payment?.metaSolution).toContain("payment method");
   });
 });
+
+/**
+ * The same number an hour later: registration succeeded, customer messages are
+ * arriving, and Meta still blocks outbound over a payment method on the WABA.
+ *
+ * The customer's words: "the connected whatsapp was successful finally, but yet
+ * show as nothing is connected (even though i getting messages into gotcha!)".
+ * The screen said 0 working, 1 needs attention, while their inbox filled up.
+ */
+describe("a registered number that receives but cannot send", () => {
+  const report = buildHealthReport({
+    ...(ROW as object),
+    state: "DEGRADED",
+    messagingStatus: "CONNECTED",
+    canSendMessage: "BLOCKED",
+    webhookSubscribed: true,
+    healthSnapshot: {
+      can_send_message: "BLOCKED",
+      entities: [
+        {
+          id: "2223476021776931",
+          entity_type: "WABA",
+          can_send_message: "BLOCKED",
+          errors: [
+            {
+              error_code: 141006,
+              error_description:
+                "There is an error with the payment method. This will block business initiated conversations.",
+              possible_solution: "Please add a new payment method to the account.",
+            },
+          ],
+        },
+      ],
+    },
+  } as never);
+
+  it("says messages are arriving, because they are", () => {
+    expect(report.receiving).toBe(true);
+    expect(report.checks.find((c) => c.id === "WEBHOOKS")?.status).toBe("PASS");
+  });
+
+  it("says it cannot send, because it cannot", () => {
+    expect(report.sending).toBe(false);
+    expect(report.ready).toBe(false);
+  });
+
+  it("no longer asks for a registration that already happened", () => {
+    expect(report.needsRegistration).toBe(false);
+  });
+});

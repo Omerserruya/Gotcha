@@ -5215,7 +5215,8 @@
       "onboarding": "Setting up",
       "disconnected": "Disconnected",
       "failed": "Setup failed",
-      "discovered": "Not connected"
+      "discovered": "Not connected",
+      "connectedLimited": "Connected, cannot send"
     },
     "badge": {
       "alsoOnPhone": "Also on your phone",
@@ -5295,12 +5296,13 @@
     "backToChannels": "Back to channels",
     "headline": {
       "working": "This number is working. Messages send and arrive normally.",
-      "receivingOnly": "Messages from customers are arriving, but this number cannot send yet. Finish the step below and sending starts working.",
+      "receivingOnly": "Connected. Customer messages are arriving normally. Sending is blocked by WhatsApp until the account issue below is resolved.",
       "sendingOnly": "This number can send, but incoming messages are not reaching GOTCHA yet.",
       "neither": "This number is connected, but messages are not flowing yet."
     },
     "meta": {
       "fixInMeta": "Fix this in Meta Business settings"
-    }
+    },
+    "summaryLimited": "{count} cannot send yet"
   }
 }

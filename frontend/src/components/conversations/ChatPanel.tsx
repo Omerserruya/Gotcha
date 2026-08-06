@@ -1,5 +1,6 @@
 "use client";
 
+import { renderMessageText } from "@/lib/whatsapp-text";
 import { useState, useEffect, useRef, useCallback, FormEvent, DragEvent, ChangeEvent } from "react";
 import { useAuth } from "@/context/AuthContext";
 import ApprovalCard from "@/components/approvals/ApprovalCard";
@@ -712,7 +713,16 @@ export function ChatPanel({ conversationId, onBack }: Props) {
                     className="whitespace-pre-wrap break-words"
                     onMouseUp={msg.direction === "INBOUND" ? handleMessageMouseUp : undefined}
                   >
-                    {msg.body}
+                    {/*
+                      WhatsApp senders write *bold*, _italic_, ~strike~ and
+                      ```mono```, and Meta's own onboarding messages are full of
+                      it. Printing the raw characters made every one of those
+                      look broken, and left links as dead text to copy by hand.
+                      renderMessageText builds NODES - a message body is written
+                      by whoever messages the business, so it never becomes
+                      markup.
+                    */}
+                    {renderMessageText(msg.body)}
                   </p>
                 )}
                 <div className={clsx(

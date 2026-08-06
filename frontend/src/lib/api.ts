@@ -448,6 +448,10 @@ export interface WhatsAppHealthReport {
   verifiedName?: string | null;
   state: string;
   ready: boolean;
+  /** Customer messages reach GOTCHA. */
+  receiving?: boolean;
+  /** The number may send (possibly rate-limited by Meta). */
+  sending?: boolean;
   checks: WhatsAppHealthCheck[];
   availableRepairs: WhatsAppRepairAction[];
   /** The number can receive but was never registered to send (Meta 141000). */

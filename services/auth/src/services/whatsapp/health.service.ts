@@ -65,6 +65,17 @@ export interface NumberHealthReport {
   state: WhatsAppNumberState;
   /** Overall verdict, derived from the checks below rather than stored. */
   ready: boolean;
+  /**
+   * The two halves of "does this number work", separately, because they fail
+   * separately and a number can genuinely be doing one and not the other.
+   *
+   * A number that receives customer messages IS connected and IS doing work,
+   * even while Meta blocks outbound over a billing problem on the WABA. Folding
+   * both into one verdict reported that number as "0 working, 1 needs
+   * attention" to a customer whose inbox was filling up.
+   */
+  receiving: boolean;
+  sending: boolean;
   checks: HealthCheck[];
   /** Repairs we can genuinely perform. Empty when there is nothing to try. */
   availableRepairs: RepairAction[];
@@ -307,10 +318,9 @@ export function buildHealthReport(number: WhatsAppNumber): NumberHealthReport {
   }
   availableRepairs.push("REFRESH_STATUS");
 
-  const ready =
-    number.state === "CONNECTED" &&
-    number.webhookSubscribed &&
-    canSend !== "BLOCKED";
+  const receiving = number.webhookSubscribed && registered && number.state !== "DISCONNECTED";
+  const sending = canSend === "AVAILABLE" || canSend === "LIMITED";
+  const ready = receiving && canSend === "AVAILABLE";
 
   return {
     numberId: number.id,
@@ -319,6 +329,8 @@ export function buildHealthReport(number: WhatsAppNumber): NumberHealthReport {
     verifiedName: number.verifiedName,
     state: number.state,
     ready,
+    receiving,
+    sending,
     checks,
     availableRepairs,
     needsRegistration,
