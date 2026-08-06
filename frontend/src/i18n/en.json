@@ -4232,28 +4232,12 @@
     "tourCta": "Take the guided tour",
     "title": "Welcome to GOTCHA",
     "titleWithBiz": "Welcome, {business}",
-    "subtitle": "Your AI employee already knows your business. Take your first steps - talk to it, take it live, and watch it work.",
+    "subtitle": "Your AI employee already knows your business. Finish these steps to take it live.",
     "progress": "First steps",
     "chips": {
       "core": "Connected to {system}",
       "kb": "Knowledge loaded",
       "channels": "{n} channels detected"
-    },
-    "chat": {
-      "title": "Talk to {name}",
-      "subtitle": "A private sandbox - nothing is sent to customers.",
-      "ready": "Ready to work",
-      "empty": "Say hello - ask anything a customer would.",
-      "s1": "What do you know about our business?",
-      "s2": "How would you answer a customer asking about prices?",
-      "s3": "What can you do for me?",
-      "placeholder": "Write a message…",
-      "send": "Send",
-      "error": "Something went wrong - try again.",
-      "noEmployeeTitle": "Create your AI employee",
-      "noEmployeeSub": "You skipped this during setup",
-      "noEmployeeBody": "Your workspace is ready - all that's missing is the employee. It takes about two minutes: tell us the goal and we'll draft everything else.",
-      "createCta": "Create my AI employee"
     },
     "milestones": {
       "title": "Your first steps",
@@ -4285,55 +4269,12 @@
       "channels": "Channels",
       "knowledge": "Knowledge",
       "analytics": "Analytics"
-    }
-  },
-  "businessRules": {
-    "title": "Business Rules",
-    "subtitle": "Decide what your AI employee may offer and execute for refunds, cancellations and compensation. These rules are enforced by the system itself, before an offer is made, before an approval is requested, and again right before execution.",
-    "kind": {
-      "COMPENSATION": "Compensation coupons",
-      "COUPON": "Discount coupons",
-      "REFUND": "Refunds",
-      "CANCEL_ORDER": "Order cancellations"
     },
-    "enabled": "Enabled",
-    "version": "Version",
-    "approvedReasons": "Approved reasons",
-    "reasonsHint": "If none are selected, any reason is acceptable. When selected, the AI may only proceed for these reasons.",
-    "reason": {
-      "late_delivery": "Delivery was materially late",
-      "damaged_or_wrong_item": "Damaged or wrong item",
-      "confirmed_business_error": "Confirmed business error",
-      "just_because": "Other (not approved)"
-    },
-    "maxAmount": "Maximum amount",
-    "maxPercent": "Max % of order value",
-    "managerAbove": "Manager approval above",
-    "preventDuplicate": "Prevent a second compensation for the same incident",
-    "save": "Save rules",
-    "saving": "Saving...",
-    "saved": "Saved. A new version is now active.",
-    "previewTitle": "Test these rules",
-    "previewAmount": "Requested amount",
-    "previewReason": "Reason",
-    "previewRun": "Check decision",
-    "previewFailed": "Could not evaluate the sample.",
-    "maxLabel": "max allowed",
-    "decision": {
-      "ALLOWED": "Allowed",
-      "DENIED": "Denied",
-      "REQUIRES_INFORMATION": "Needs more information",
-      "REQUIRES_EVIDENCE": "Needs evidence",
-      "REQUIRES_HUMAN_APPROVAL": "Needs manager approval",
-      "ALLOWED_WITH_LIMIT": "Allowed up to the limit",
-      "FAIL_CLOSED": "Blocked (safety)"
-    },
-    "defaultNote": {
-      "COMPENSATION": "No policy is configured yet. Until you save one, the AI will not offer or issue compensation coupons at all. Saving a policy is what turns this on.",
-      "COUPON": "No policy is configured yet. Until you save one, the AI will not create or manage discount coupons.",
-      "REFUND": "No policy is configured yet. Default: customers may request refunds and the AI can prepare them, but every refund still requires human approval, and amounts always come from verified store data.",
-      "CANCEL_ORDER": "No policy is configured yet. Default: customers may request cancellations and the AI can prepare them, but every cancellation still requires human approval."
-    }
+    "progressCount": "{done} of {total} complete",
+    "upNext": "Up next",
+    "allDoneTitle": "You are all set",
+    "allDoneBody": "Every setup step is done. Your AI employee is live and handling messages. Head to the inbox to watch it work.",
+    "allDoneCta": "Open the inbox"
   },
   "setupChecklist": {
     "title": "Complete setup",

@@ -14,7 +14,6 @@ import { ReadinessReportModal, readinessBadgeTone } from "@/components/Readiness
 import { builderReadinessTest, type ReadinessReport } from "@/lib/gotcha-api";
 import { IntegrationWorkspace } from "@/components/integrations/IntegrationWorkspace";
 import { EmployeeReadinessStrip } from "@/components/ai-studio/EmployeeReadinessStrip";
-import ActionPoliciesPanel from "@/components/ai-studio/ActionPoliciesPanel";
 import { MainPlaybookEditor } from "@/components/mainPlaybook/MainPlaybookEditor";
 import { FlowEditor } from "@/components/chatbot/FlowEditor";
 import { AI_STUDIO_TABS, aiStudioTabI18nKey, normalizeAiStudioTab, type AiStudioTab } from "@/lib/ai-studio-tabs";
@@ -815,15 +814,15 @@ function SkillsTab({ t }: { t: (key: string) => string }) {
       {subView === "workspace" ? (
         // ONE canonical governance surface. An integration is selected in the
         // sidebar; its tools are grouped by risk and each carries Autonomous /
-        // HITL / Disabled, mapped straight onto what the runtime enforces. The
-        // business-policy spend caps render below because they bound the
-        // financial tools above - no separate tab to drift out of sync.
-        <div className="space-y-10">
-          <IntegrationWorkspace />
-          <div className="pt-8 border-t border-gray-200">
-            <ActionPoliciesPanel />
-          </div>
-        </div>
+        // HITL / Disabled, mapped straight onto what the runtime enforces.
+        //
+        // The Business Rules editor (per-action compensation / coupon / refund
+        // / cancel caps) was removed from the product: it asked owners to
+        // configure limits for a retail-refund flow most tenants never run,
+        // and it sat under the tool workspace as a second, unrelated form.
+        // The backend policy engine is untouched, so any caps already stored
+        // keep being enforced.
+        <IntegrationWorkspace />
       ) : (
         <>
           {/* Marketplace */}
