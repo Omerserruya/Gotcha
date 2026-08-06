@@ -41,6 +41,7 @@ import {
   type WhatsAppCandidate,
   type WhatsAppInspection,
   type WhatsAppHealthCheck,
+  type WhatsAppHealthReport,
 } from "@/lib/api";
 import {
   interpretSignupMessage,
@@ -93,6 +94,46 @@ function StateChip({ state }: { state: string }) {
   );
 }
 
+/**
+ * What is true about this number, in one sentence, before any diagnostics.
+ *
+ * The card used to open with a five-row list of ticks and crosses in Meta's
+ * English. A customer read "Connected to WhatsApp ✓" and "WhatsApp is blocking
+ * this number ✕" and could not tell whether the number worked. Receiving and
+ * sending are separate facts and are now stated separately, because a number
+ * that receives but cannot send is the single most common state here and it is
+ * genuinely half-working.
+ */
+function StatusHeadline({
+  health,
+  t,
+}: {
+  health: WhatsAppHealthReport;
+  t: (k: string) => string;
+}) {
+  const receiving = health.checks.find((c) => c.id === "WEBHOOKS")?.status === "PASS";
+  const sending = health.checks.find((c) => c.id === "MESSAGING")?.status === "PASS";
+
+  const key = health.ready
+    ? "whatsappNumbers.headline.working"
+    : receiving && !sending
+      ? "whatsappNumbers.headline.receivingOnly"
+      : !receiving && sending
+        ? "whatsappNumbers.headline.sendingOnly"
+        : "whatsappNumbers.headline.neither";
+
+  return (
+    <p
+      className={
+        "mt-2.5 text-sm leading-relaxed " +
+        (health.ready ? "text-emerald-800" : "text-gray-800")
+      }
+    >
+      {t(key)}
+    </p>
+  );
+}
+
 function CheckRow({ check }: { check: WhatsAppHealthCheck }) {
   const { t } = useI18n();
   const tone =
@@ -121,6 +162,19 @@ function CheckRow({ check }: { check: WhatsAppHealthCheck }) {
           <div className="text-xs text-gray-600 mt-1.5 bg-gray-50 border border-gray-200 rounded-md px-2.5 py-1.5">
             <span className="font-medium">{t("whatsappNumbers.checks.metaSays")} </span>
             {check.metaSolution}
+            {/*
+              Meta's advice is always "go to business settings and do X", and
+              the customer had no idea where that was. One link, on the rows
+              that are genuinely theirs to fix in Meta rather than ours.
+            */}
+            <a
+              href="https://business.facebook.com/settings"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block mt-1 font-medium text-blue-700 hover:text-blue-800 underline"
+            >
+              {t("whatsappNumbers.meta.fixInMeta")}
+            </a>
           </div>
         )}
       </div>
@@ -149,6 +203,17 @@ function NumberCard({
 
   const health = row.health;
   const label = row.phoneNumber || row.name || t("whatsappNumbers.card.fallbackName");
+
+  // Two ways to land in "you have one step left": Meta asked for the two-step
+  // PIN explicitly, or the number was never registered at all.
+  const needsPin = row.state === "ACTION_REQUIRED" && row.pendingAction === "TWO_STEP_PIN";
+  const needsFinish = needsPin || !!health.needsRegistration;
+
+  // Registration has its own box above; showing it again in the list would read
+  // as two separate problems.
+  const problems = health.checks.filter((c) => c.status !== "PASS");
+  const blocking = problems.filter((c) => c.blocking && !(needsFinish && c.id === "REGISTRATION"));
+  const advisory = problems.filter((c) => !blocking.includes(c) && !(needsFinish && c.id === "REGISTRATION"));
 
   async function run(key: string, fn: () => Promise<string>) {
     if (!token) return;
@@ -196,14 +261,25 @@ function NumberCard({
           </button>
         </div>
 
-        {/* Waiting on the customer. Shown inline so the next action is obvious. */}
-        {row.state === "ACTION_REQUIRED" && row.pendingAction === "TWO_STEP_PIN" && canManage && (
+        {/* The one thing to do next, in one sentence, before any diagnostics. */}
+        <StatusHeadline health={health} t={t} />
+
+        {/*
+          Waiting on the customer. Shown inline so the next action is obvious.
+
+          Also shown when Meta reports the number as never registered (141000):
+          that state arrives as DEGRADED with no pendingAction, so keying the box
+          on pendingAction alone left the customer looking at "WhatsApp is
+          blocking this number" with nothing on screen to press. `resume` runs
+          the register step, with the two-step PIN if the number has one.
+        */}
+        {(needsFinish) && canManage && (
           <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-3">
             <div className="text-sm text-blue-900 font-medium">
-              {t("whatsappNumbers.pending.pinTitle")}
+              {t(needsPin ? "whatsappNumbers.pending.pinTitle" : "whatsappNumbers.pending.registerTitle")}
             </div>
             <p className="text-xs text-blue-800 mt-1 leading-relaxed">
-              {t("whatsappNumbers.pending.pinBody")}
+              {t(needsPin ? "whatsappNumbers.pending.pinBody" : "whatsappNumbers.pending.registerBody")}
             </p>
             <div className="flex gap-2 mt-2.5">
               <input
@@ -228,7 +304,7 @@ function NumberCard({
               >
                 {busy === "resume"
                   ? t("whatsappNumbers.pending.pinChecking")
-                  : t("whatsappNumbers.pending.pinContinue")}
+                  : t(needsPin ? "whatsappNumbers.pending.pinContinue" : "whatsappNumbers.pending.registerContinue")}
               </button>
             </div>
           </div>
@@ -251,11 +327,30 @@ function NumberCard({
           </div>
         )}
 
-        <ul className="mt-3 divide-y divide-gray-100">
-          {health.checks.map((c, i) => (
-            <CheckRow key={`${c.id}-${i}`} check={c} />
-          ))}
-        </ul>
+        {/*
+          Triaged, not dumped. Every signal Meta emits used to render at the
+          same weight - an unregistered number sat in the same flat list as a
+          SIP calling notice and an unapproved display name, all in Meta's
+          English, and the customer could not tell which line was the reason
+          nothing worked. Blocking problems lead; the rest is one quiet line
+          and the full list stays under Details.
+        */}
+        {blocking.length > 0 && (
+          <ul className="mt-3 divide-y divide-gray-100">
+            {blocking.map((c, i) => (
+              <CheckRow key={`${c.id}-${i}`} check={c} />
+            ))}
+          </ul>
+        )}
+
+        {advisory.length > 0 && (
+          <button
+            onClick={() => setExpanded(true)}
+            className="mt-2.5 text-[11px] text-gray-500 hover:text-gray-700 underline text-start"
+          >
+            {t("whatsappNumbers.card.alsoWorthKnowing").replace("{count}", String(advisory.length))}
+          </button>
+        )}
 
         {message && (
           <div className="mt-3 text-xs rounded-md bg-gray-50 border border-gray-200 px-2.5 py-2 text-gray-700">

@@ -32,7 +32,7 @@ import { checkNumberHealth } from "./onboarding.service";
 
 /** One line item on the number's health card. */
 export interface HealthCheck {
-  id: "CONNECTED" | "MESSAGING" | "WEBHOOKS" | "VERIFICATION" | "QUALITY";
+  id: "CONNECTED" | "MESSAGING" | "WEBHOOKS" | "VERIFICATION" | "QUALITY" | "REGISTRATION";
   label: string;
   status: "PASS" | "WARN" | "FAIL" | "UNKNOWN";
   /** Plain sentence. Shown under the label when not PASS. */
@@ -40,6 +40,15 @@ export interface HealthCheck {
   /** Meta's own remediation text, verbatim. Never rewritten. */
   metaSolution?: string;
   metaErrorCode?: number;
+  /**
+   * Does this stop messages flowing TODAY?
+   *
+   * The card leads with the blocking ones and files the rest under "worth
+   * knowing". Without this every signal Meta emits arrived at the same weight -
+   * an unregistered number sat in the same flat list as a SIP calling notice,
+   * and the customer could not tell which one was the reason nothing worked.
+   */
+  blocking?: boolean;
 }
 
 export type RepairAction =
@@ -59,6 +68,16 @@ export interface NumberHealthReport {
   checks: HealthCheck[];
   /** Repairs we can genuinely perform. Empty when there is nothing to try. */
   availableRepairs: RepairAction[];
+  /**
+   * Meta has the number but it was never registered for Cloud API, so it can
+   * receive and cannot send (error 141000, "finish the OTP authentication").
+   *
+   * Surfaced as its own flag because it is the one blocked state the CUSTOMER
+   * can clear from inside GOTCHA - resume runs the register step, with their
+   * two-step PIN if the number has one. Everything else in a blocked report is
+   * resolved in Meta's own settings.
+   */
+  needsRegistration: boolean;
   /**
    * Problems only the customer can resolve. Separated from `availableRepairs`
    * so the UI never offers a button that cannot work; offering one and having
@@ -101,19 +120,33 @@ async function clientForNumber(
 
 // ─── Reporting ───────────────────────────────────────────────
 
+/**
+ * WhatsApp Business calling over SIP. GOTCHA does not offer it, so Meta's
+ * complaints about it are noise on every single number: two of the five red
+ * crosses a customer saw were "configure SIP using {PHONE_NUMBER_ID}/settings",
+ * which is not a thing they can act on and not a thing they asked for. Still in
+ * the raw snapshot under Details for support.
+ */
+const SIP_ERROR_CODES = new Set([138024, 138025]);
+
+/** "Not linked to your WhatsApp account" - the number was never registered. */
+const NOT_REGISTERED = 141000;
+
 function healthEntitiesToChecks(health: MetaHealthStatus | null | undefined): HealthCheck[] {
   if (!health?.entities) return [];
   const out: HealthCheck[] = [];
   for (const entity of health.entities) {
     if (entity.can_send_message === "AVAILABLE") continue;
     for (const err of entity.errors || []) {
+      if (err.error_code != null && SIP_ERROR_CODES.has(err.error_code)) continue;
       out.push({
-        id: "MESSAGING",
+        id: err.error_code === NOT_REGISTERED ? "REGISTRATION" : "MESSAGING",
         label: entityLabel(entity.entity_type),
         status: entity.can_send_message === "BLOCKED" ? "FAIL" : "WARN",
         detail: err.error_description,
         metaSolution: err.possible_solution,
         metaErrorCode: err.error_code,
+        blocking: entity.can_send_message === "BLOCKED",
       });
     }
   }
@@ -241,6 +274,20 @@ export function buildHealthReport(number: WhatsAppNumber): NumberHealthReport {
 
   checks.push(...healthEntitiesToChecks(health));
 
+  const needsRegistration =
+    checks.some((c) => c.metaErrorCode === NOT_REGISTERED) || number.messagingStatus === "PENDING";
+
+  // Blocking = messages do not flow. Webhooks down means nothing arrives;
+  // BLOCKED means nothing can be sent. A quality dip or an unapproved display
+  // name is worth knowing and is not why the number is not working.
+  for (const c of checks) {
+    if (c.blocking != null) continue;
+    c.blocking =
+      (c.id === "WEBHOOKS" && c.status === "FAIL") ||
+      (c.id === "MESSAGING" && c.status === "FAIL") ||
+      (c.id === "CONNECTED" && c.status === "FAIL");
+  }
+
   const customerActions = checks.filter(
     (c) => c.status !== "PASS" && (c.metaSolution != null || c.id === "VERIFICATION"),
   );
@@ -265,6 +312,7 @@ export function buildHealthReport(number: WhatsAppNumber): NumberHealthReport {
     ready,
     checks,
     availableRepairs,
+    needsRegistration,
     customerActions,
     lastCheckedAt: number.lastHealthCheck,
     healthSnapshot: health,

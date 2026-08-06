@@ -5234,7 +5234,8 @@
       "removeTitle": "Remove this number?",
       "removeBody": "GOTCHA will stop sending and receiving on {number}. Your other WhatsApp numbers keep working exactly as they are, and the number itself stays yours.",
       "genericError": "That did not work. Try again shortly.",
-      "refreshed": "Status refreshed."
+      "refreshed": "Status refreshed.",
+      "alsoWorthKnowing": "Also worth knowing ({count})"
     },
     "pending": {
       "pinTitle": "Enter your WhatsApp PIN",
@@ -5243,7 +5244,10 @@
       "pinChecking": "Checking...",
       "pinThanks": "Thanks. Setup is continuing.",
       "confirmTitle": "Confirm in your WhatsApp Business app",
-      "confirmBody": "Follow the instructions shown by Meta and confirm the connection in your WhatsApp Business app. Only you can complete this step, which is how WhatsApp makes sure nobody connects your number without you."
+      "confirmBody": "Follow the instructions shown by Meta and confirm the connection in your WhatsApp Business app. Only you can complete this step, which is how WhatsApp makes sure nobody connects your number without you.",
+      "registerTitle": "One step left: register this number",
+      "registerBody": "WhatsApp has this number but has not registered it for sending yet. Enter a 6-digit PIN and press Finish setup. If two-step verification is already switched on for this number, use its existing PIN. If one has never been set, choose one now - it becomes this number's PIN, so keep it somewhere safe.",
+      "registerContinue": "Finish setup"
     },
     "checks": {
       "connected": "Connected to WhatsApp",
@@ -5288,6 +5292,15 @@
     "legacy": {
       "note": "Connected before per-number health was available. Reconnect it to enable health checks and repair."
     },
-    "backToChannels": "Back to channels"
+    "backToChannels": "Back to channels",
+    "headline": {
+      "working": "This number is working. Messages send and arrive normally.",
+      "receivingOnly": "Messages from customers are arriving, but this number cannot send yet. Finish the step below and sending starts working.",
+      "sendingOnly": "This number can send, but incoming messages are not reaching GOTCHA yet.",
+      "neither": "This number is connected, but messages are not flowing yet."
+    },
+    "meta": {
+      "fixInMeta": "Fix this in Meta Business settings"
+    }
   }
 }

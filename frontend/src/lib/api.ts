@@ -428,13 +428,15 @@ export function connectWhatsApp(
 // these exist; it stays for the legacy connect card until that card is retired.
 
 export interface WhatsAppHealthCheck {
-  id: "CONNECTED" | "MESSAGING" | "WEBHOOKS" | "VERIFICATION" | "QUALITY";
+  id: "CONNECTED" | "MESSAGING" | "WEBHOOKS" | "VERIFICATION" | "QUALITY" | "REGISTRATION";
   label: string;
   status: "PASS" | "WARN" | "FAIL" | "UNKNOWN";
   detail?: string;
   /** Meta's own remediation text. Rendered verbatim, never rewritten. */
   metaSolution?: string;
   metaErrorCode?: number;
+  /** Does this stop messages flowing today, or is it merely worth knowing? */
+  blocking?: boolean;
 }
 
 export type WhatsAppRepairAction = "RESUBSCRIBE_WEBHOOKS" | "REFRESH_STATUS";
@@ -448,6 +450,8 @@ export interface WhatsAppHealthReport {
   ready: boolean;
   checks: WhatsAppHealthCheck[];
   availableRepairs: WhatsAppRepairAction[];
+  /** The number can receive but was never registered to send (Meta 141000). */
+  needsRegistration?: boolean;
   customerActions: WhatsAppHealthCheck[];
   lastCheckedAt?: string | null;
   healthSnapshot?: unknown;
