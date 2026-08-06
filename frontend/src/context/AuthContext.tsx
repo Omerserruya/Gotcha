@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import { getMe, postSwitchTenant } from "@/lib/api";
 import { connectSocket, disconnectSocket } from "@/lib/socket";
-import { beginLogin, refreshTokens, logoutUrl, type TokenSet } from "@/lib/oidc";
+import { beginLogin, refreshTokens, logoutUrl, markSigningOut, type TokenSet } from "@/lib/oidc";
 import {
   installTenantFetchInterceptor,
   getActiveTenantId,
@@ -234,12 +234,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
-    hardLogout();
-    // End the Authentik session too, otherwise the next login silently
-    // re-authenticates and the user never actually logged out.
+    // Order matters, and it used to be wrong.
+    //
+    // `hardLogout()` first meant `user` became null while the end-session URL
+    // was still being fetched. AppLayout's "no user -> /login" effect fired on
+    // the next render, /login started a fresh OIDC login, and the still-live
+    // IdP session completed it silently - so pressing Sign out signed you back
+    // in. Measured on production, the navigation trail was
+    // /login -> consent -> /auth/callback -> back in the app, with the token
+    // still in storage at the end.
+    //
+    // So: mark the intent, resolve the IdP URL, and only then tear down local
+    // state - immediately before leaving for the IdP.
+    markSigningOut();
     void logoutUrl()
-      .then((url) => window.location.assign(url))
-      .catch(() => window.location.assign("/"));
+      .then((url) => {
+        hardLogout();
+        window.location.assign(url);
+      })
+      .catch(() => {
+        // The IdP is unreachable. Still end the LOCAL session rather than
+        // leaving someone signed in because a network call failed; the marker
+        // stops /login from silently signing them back in.
+        hardLogout();
+        window.location.assign("/login?signedOut=1");
+      });
   }, [hardLogout]);
 
   return (

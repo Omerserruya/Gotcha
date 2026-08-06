@@ -202,6 +202,33 @@ function toTokenSet(json: any): TokenSet {
  * login would silently re-authenticate and the user would not experience
  * having logged out at all.
  */
+/**
+ * Set for the moment between "the user pressed Sign out" and the browser
+ * actually leaving for the IdP.
+ *
+ * Signing out tears down local state, which makes the app's own "no user ->
+ * /login" redirect fire; /login is a shim that immediately starts a fresh OIDC
+ * login, and while the IdP session is alive that login succeeds SILENTLY. The
+ * user watched the app flash and land back exactly where they were. This marker
+ * is how /login knows not to do that.
+ */
+export const SIGNING_OUT_KEY = "auth.signingOut";
+
+export function markSigningOut(): void {
+  try { sessionStorage.setItem(SIGNING_OUT_KEY, "1"); } catch { /* private mode */ }
+}
+
+/** True once, then cleared: a sign-out is in progress, do not re-authenticate. */
+export function consumeSigningOut(): boolean {
+  try {
+    const v = sessionStorage.getItem(SIGNING_OUT_KEY);
+    if (v) sessionStorage.removeItem(SIGNING_OUT_KEY);
+    return !!v;
+  } catch {
+    return false;
+  }
+}
+
 export async function logoutUrl(): Promise<string> {
   const config = await discover();
   const params = new URLSearchParams({
