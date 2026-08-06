@@ -256,8 +256,17 @@ function missingRequiredFields(n: Node): RequiredCheck[] {
         if (empty(d.text)) r.push({ key: "text", label: "Reply text", hint: "Type the public reply." });
       }
       break;
+    // Routing to a person needs no target - the runtime parks the conversation
+    // in WAITING for whoever claims it, and a department is optional. Only an
+    // agent or sub-flow route has something that must be chosen.
+    // default_fallback shares the rule: it is the same dispatch node wearing
+    // different chrome (flow-executor runs both from one case), and it had no
+    // rule at all, so an agent fallback with nothing selected passed validation
+    // and then routed nowhere.
     case "route_target":
-      if (empty(d.targetId)) r.push({ key: "targetId", label: "Target", hint: "Pick an AI agent, sub-flow, or department from the dropdown." });
+    case "default_fallback":
+      if ((d.routeType === "agent" || d.routeType === "flow") && empty(d.targetId))
+        r.push({ key: "targetId", label: "Target", hint: "Pick the AI agent or sub-flow this should route to." });
       break;
     case "collect_input":
       if (empty(d.prompt))   r.push({ key: "prompt",   label: "Prompt",   hint: "Write the question to ask the user." });

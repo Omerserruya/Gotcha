@@ -39,7 +39,15 @@ function missingConfig(n: GNode): { key: string; label: string }[] {
     case "send_message_text": if (empty(d.text)) out.push({ key: "text", label: "message text" }); break;
     case "send_message_image":
     case "send_message_file": if (empty(d.url)) out.push({ key: "url", label: "file URL" }); break;
-    case "route_target": if (empty(d.targetId)) out.push({ key: "targetId", label: "route target" }); break;
+    // A human route needs no target - dispatchRoute parks the conversation in
+    // WAITING for whoever claims it, and a department is optional. Only agent
+    // and sub-flow routes have something that must be chosen. Mirrors
+    // frontend/src/components/mainPlaybook/flow-validator.ts.
+    case "route_target":
+    case "default_fallback":
+      if ((d.routeType === "agent" || d.routeType === "flow") && empty(d.targetId))
+        out.push({ key: "targetId", label: "route target" });
+      break;
     case "collect_input":
       if (empty(d.prompt)) out.push({ key: "prompt", label: "prompt" });
       if (empty(d.variable)) out.push({ key: "variable", label: "variable name" });
