@@ -253,6 +253,7 @@ export {
   DAY_KEYS,
 } from "./lib/business-hours";
 export type { BusinessHoursConfig, BusinessOpenState, DayKey, DaySchedule } from "./lib/business-hours";
+export { FLOW_TRIGGER_TYPES, isFlowTrigger, canvasHasRunnableProcess } from "./lib/flow-canvas";
 export { verifyAccessToken, verifyIdToken } from "./lib/jwt";
 export { resolvePrincipal, AuthError } from "./lib/principal";
 export { getOAuthStateSecret } from "./lib/oauth-state";
