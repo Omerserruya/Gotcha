@@ -15,6 +15,8 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
  */
 
 const upserts: Array<{ feature: string; enabled: boolean }> = [];
+/** Voice is gated by COLUMNS on the tenant, so its projection lands here. */
+const tenantUpdates: Array<Record<string, unknown>> = [];
 
 const resolved = {
   tenantId: "t1",
@@ -29,6 +31,11 @@ vi.mock("../../prisma", () => ({
     tenantFeature: {
       upsert: async ({ where, create }: any) => {
         upserts.push({ feature: where.tenantId_feature.feature, enabled: create.enabled });
+      },
+    },
+    tenant: {
+      update: async ({ data }: any) => {
+        tenantUpdates.push(data);
       },
     },
   },
@@ -48,6 +55,7 @@ const BRIDGED = FEATURE_CATALOG.find((f) => f.materializesTo)!;
 
 beforeEach(() => {
   upserts.length = 0;
+  tenantUpdates.length = 0;
   resolved.entries = new Map();
 });
 
@@ -115,5 +123,67 @@ describe("materializing an unbridged capability", () => {
     put("limit:users", { count: 0 }, "COUNTER");
     await materializeEntitlements("t1");
     expect(upserts).toEqual([]);
+  });
+});
+
+/**
+ * Voice is the case where the gate is not a TenantFeature row at all: it is
+ * three booleans on the tenant that predate entitlements, and that only a
+ * SYSTEM_ADMIN could set. Selling voice therefore took two unrelated acts -
+ * grant the feature area, then remember to flip the flags - and a POC with
+ * voice selected showed a Voice option that refused to open. The license is now
+ * canonical; these pin that it actually reaches the columns.
+ */
+describe("materializing the voice license", () => {
+  it("switches the tenant's voice columns on when the license is granted", async () => {
+    put("voice", { bool: true });
+    await materializeEntitlements("t1");
+    expect(tenantUpdates).toEqual([
+      { voiceCopilotEnabled: true, voiceInboxUiEnabled: true, voiceIncomingEnabled: true },
+    ]);
+  });
+
+  it("switches them off when the license is withheld", async () => {
+    put("voice", { bool: false });
+    await materializeEntitlements("t1");
+    expect(tenantUpdates).toEqual([
+      { voiceCopilotEnabled: false, voiceInboxUiEnabled: false, voiceIncomingEnabled: false },
+    ]);
+  });
+
+  it("leaves the columns alone when no voice decision has been recorded", async () => {
+    // License semantics are default-ALLOW, and voice costs real telephony
+    // money: "nobody has decided" must never read as "yes".
+    put("communication.omnichannel", { bool: true });
+    await materializeEntitlements("t1");
+    expect(tenantUpdates).toEqual([]);
+  });
+
+  it("entitles the VOICE plan features, which is the gate that returned 402", async () => {
+    // POST /voice-channels mounts requireEntitlement("voice.call_pilot"), and
+    // that key defaults to FALSE - so a customer sold a voice POC met a 402 the
+    // moment they submitted their Twilio credentials.
+    put("voice", { bool: true });
+    await materializeEntitlements("t1");
+    const voiceRows = upserts.filter((u) => u.feature.startsWith("voice."));
+    expect(voiceRows.length).toBeGreaterThan(0);
+    expect(voiceRows.map((u) => u.feature)).toContain("voice.call_pilot");
+    expect(voiceRows.every((u) => u.enabled)).toBe(true);
+  });
+
+  it("does not overrule an explicit decision about one voice capability", async () => {
+    put("voice", { bool: true });
+    put("voice.inbound", { bool: false });
+    await materializeEntitlements("t1");
+    const inbound = upserts.filter((u) => u.feature === "voice.inbound");
+    // Written once, by the entry's own branch, with the explicit answer.
+    expect(inbound).toEqual([{ feature: "voice.inbound", enabled: false }]);
+  });
+
+  it("is a grantable license key, not an unsellable unknown", async () => {
+    const { ALL_LICENSE_KEYS } = await import("../../permission-catalog");
+    const { isUnsellable } = await import("../feature-catalog");
+    expect(ALL_LICENSE_KEYS).toContain("voice");
+    expect(isUnsellable("voice")).toBe(false);
   });
 });

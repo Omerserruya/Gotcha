@@ -20,7 +20,7 @@ import { prisma } from "../prisma";
 import { invalidatePermissionsCache } from "../permissions";
 import type { EntitlementValueType, EntitlementSource } from "@prisma/client";
 import { resolveEntitlements, resolveLimit, resolveLimits, entitledIn } from "./entitlement-resolver";
-import { getFeatureDef } from "./feature-catalog";
+import { getFeatureDef, featuresByCategory } from "./feature-catalog";
 
 export interface EffectiveEntitlement {
   key: string;
@@ -63,6 +63,8 @@ export async function getLimit(tenantId: string, key: string): Promise<number | 
  */
 export async function materializeEntitlements(tenantId: string, updatedBy?: string): Promise<void> {
   const set = await resolveEntitlements(tenantId);
+  /** The voice license's answer, if this tenant has one recorded at all. */
+  let voiceLicensed: boolean | undefined;
   for (const e of set.entries.values()) {
     if (e.valueType !== "BOOLEAN") continue;
     // Route through the resolver's own check so the two hard guards - a
@@ -91,7 +93,60 @@ export async function materializeEntitlements(tenantId: string, updatedBy?: stri
         update: { enabled, updatedBy },
       });
     }
+
+    if (e.key === "voice") voiceLicensed = enabled;
   }
+
+  // ── The voice license, projected onto the two gates that actually guard it ──
+  //
+  // Voice was sold in one place and enforced in three, none of them connected:
+  //
+  //   1. the POC / plan feature area (a LICENSE key),
+  //   2. `Tenant.voiceCopilotEnabled` + siblings - columns that predate
+  //      entitlements, settable only by a SYSTEM_ADMIN, which decide whether
+  //      /settings/voice-channels exists at all,
+  //   3. `requireEntitlement("voice.call_pilot")` on POST /voice-channels - a
+  //      FEATURE key in the plan catalog, defaulting to FALSE.
+  //
+  // So a customer sold a voice POC hit a 402 the moment they submitted their
+  // Twilio credentials, having already had the flags flipped by hand for them.
+  // Measured on production: all three tenant columns true, zero `voice%` rows in
+  // tenant_features, no `voice.call_pilot` entitlement anywhere.
+  //
+  // The license is now the single commercial act, projected here - the same
+  // shape as the `materializesTo` bridge above. Only ever when an EXPLICIT
+  // `voice` row exists: license semantics are default-ALLOW and telephony costs
+  // real money, so "nobody decided" must never read as "yes".
+  if (voiceLicensed !== undefined) {
+    await prisma.tenant.update({
+      where: { id: tenantId },
+      // Between entitlement changes these remain an operational override (kill
+      // a tenant's telephony now, without touching their plan); the next
+      // materialize restores the licensed answer.
+      data: {
+        voiceCopilotEnabled: voiceLicensed,
+        voiceInboxUiEnabled: voiceLicensed,
+        voiceIncomingEnabled: voiceLicensed,
+      },
+    });
+
+    // Driven by the catalog's own category, so a voice capability added later
+    // is covered without anyone remembering this line exists.
+    for (const f of featuresByCategory("VOICE")) {
+      if (!f.implemented) continue;
+      // An explicit per-feature entitlement is a more specific decision than
+      // the blanket license and has already been written by the loop above.
+      // Leave it alone: a plan that deliberately withholds one voice capability
+      // must not have it handed back by the licence that grants the rest.
+      if (set.entries.has(f.key)) continue;
+      await prisma.tenantFeature.upsert({
+        where: { tenantId_feature: { tenantId, feature: f.key } },
+        create: { tenantId, feature: f.key, enabled: voiceLicensed, updatedBy },
+        update: { enabled: voiceLicensed, updatedBy },
+      });
+    }
+  }
+
   invalidatePermissionsCache({ tenantId });
 }
 

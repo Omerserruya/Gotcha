@@ -32,6 +32,8 @@ import { periodKeyFor } from "../lib/period";
 import { emitBillingEvent } from "../lib/events";
 
 export const POC_PLAN_KEY = "poc";
+/** Voice channels a POC that includes voice may connect. Mirrors `ai_voice`. */
+const POC_VOICE_CHANNELS = 5;
 const FAR_FUTURE_DAYS = 3650; // "no expiry" - far enough to be effectively unlimited
 
 async function ensurePocPlan(): Promise<void> {
@@ -220,6 +222,31 @@ export async function provisionPoc(input: PocProvisioningInput): Promise<PocProv
       createdBy: input.actor,
     });
     (on ? enabled : denied).push(domain);
+  }
+
+  // A voice POC needs a voice-channel allowance, or it dead-ends one gate later.
+  //
+  // Booleans are not the whole of what guards telephony: POST /voice-channels
+  // mounts `requireEntitlement("voice.call_pilot")` AND
+  // `requireCapacity("limit:voice_channels")`. That limit defaults to 0 in the
+  // feature catalog and the POC plan carries no limit rows at all, so a customer
+  // granted voice cleared the first gate and met a second refusal with their
+  // Twilio credentials already typed in.
+  //
+  // 5 mirrors the `ai_voice` plan, so a pilot behaves like the product it is a
+  // pilot OF. Usage is still bounded by the POC's credit budget, which is the
+  // control that actually costs money.
+  if (enabled.includes("voice")) {
+    await setTenantEntitlement({
+      tenantId: input.tenantId,
+      key: "limit:voice_channels",
+      valueType: "COUNTER",
+      value: POC_VOICE_CHANNELS,
+      source: "TRIAL",
+      expiresAt,
+      reason: input.note ? `POC provisioning: ${input.note}` : "POC provisioning",
+      createdBy: input.actor,
+    });
   }
 
   // Materialize so the permission resolver and the workspace UI agree with the

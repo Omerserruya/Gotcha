@@ -488,9 +488,14 @@ export default function TenantDetailPage() {
           )}
         </div>
 
-        {/* Voice CoPilot - Phase-1 master + sub-flags. These live on the
-            Tenant model (voice_copilot_enabled, etc.), separate from the
-            general FeaturesSection toggles below. */}
+        {/* Voice CoPilot - master + sub-flags. These live on the Tenant model
+            (voice_copilot_enabled, etc.) rather than in tenant_features, so
+            they are shown apart from the general FeaturesSection below.
+            They are no longer the place voice is SOLD: the `voice` license is,
+            and materializeEntitlements projects it onto these columns. These
+            switches remain an immediate operational override (kill a tenant's
+            telephony now, without touching their plan), which the next
+            entitlement change resets to the licensed answer. */}
         <div className="bg-white rounded-2xl border border-gray-200 p-6">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-9 h-9 rounded-xl bg-sky-100 flex items-center justify-center">
@@ -501,6 +506,10 @@ export default function TenantDetailPage() {
             <div>
               <h2 className="font-semibold text-gray-900">Voice CoPilot</h2>
               <p className="text-xs text-gray-400 mt-0.5">Master switches for the voice channel and call assistance features.</p>
+              <p className="text-xs text-amber-600 mt-1">
+                Follows the tenant&apos;s <span className="font-medium">voice</span> license. Grant it on the plan or POC and
+                these switch on by themselves; changing them here is an override until the next entitlement change.
+              </p>
             </div>
           </div>
 
