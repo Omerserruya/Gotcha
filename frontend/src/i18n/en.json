@@ -697,6 +697,8 @@
     "routingCtaTitle": "Channel connected - set up what happens to its messages",
     "routingCtaSub": "Route it to an AI employee, a team, or a subflow.",
     "routingCtaButton": "Set up routing",
+    "setFlow": "Set flow",
+    "setFlowHint": "Build what happens to this channel's messages",
     "connectionFailed": "Connection failed. Please try again.",
     "noPages": "No Facebook Pages found. Make sure you manage at least one page.",
     "noInstagram": "No Instagram Business Account found. Link your Instagram to a Facebook Page first.",

@@ -734,6 +734,30 @@ function ChannelsPageContent() {
                     </button>
                   )}
 
+                  {/* Set flow - the standing way into the builder for THIS
+                      channel. The post-connect banner above only appears once
+                      and is dismissable, so a merchant who closed it (or came
+                      back the next day) had no route from a live channel to
+                      the process that answers its messages. The builder seeds
+                      this channel's trigger on arrival, so the link always
+                      lands on something to wire up.
+                      PENDING is included on purpose: a WhatsApp number can be
+                      receiving while Meta still blocks sending, and that
+                      merchant needs a flow more than anyone. */}
+                  {["CONNECTED", "PENDING"].includes(account.connectionStatus) && (
+                    <button
+                      onClick={() =>
+                        router.push(
+                          `/ai-studio/router?focus=${encodeURIComponent(String(account.channel || "").toLowerCase())}`,
+                        )
+                      }
+                      className="text-[11px] px-2.5 py-1 rounded-lg border border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100 transition font-medium"
+                      title={t("channels.setFlowHint") || "Build what happens to this channel's messages"}
+                    >
+                      {t("channels.setFlow") || "Set flow"}
+                    </button>
+                  )}
+
                   {/* Check Status button */}
                   {account.connectionStatus === "CONNECTED" && (
                     <button
