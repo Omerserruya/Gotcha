@@ -1,8 +1,7 @@
 import crypto from "crypto";
 import nodemailer from "nodemailer";
-import { prisma, publishEvent, ensureIdentity, createRecoveryLink, findIdentityBySubject,
-  resolveAppPublicUrl,
-} from "@chatcenter/shared";
+import { prisma, publishEvent, resolveAppPublicUrl } from "@chatcenter/shared";
+import { issueSetupLink } from "./setup-link.service";
 
 type NotificationChannel = "email" | "slack" | "webhook" | "internal";
 
@@ -77,6 +76,21 @@ async function logNotification(payload: NotificationPayload, status: "sent" | "f
   });
 }
 
+/**
+ * Strip credential-bearing URLs out of the copy we PERSIST.
+ *
+ * `notification_logs.body` is a full-text copy of what was mailed, kept so
+ * support can answer "what exactly did they receive". That is worth having, but
+ * a setup link is a bearer credential: anyone who can read the row can set that
+ * person's password until it expires. The email keeps the link, the log does
+ * not.
+ */
+function withoutCredentialUrls(text: string, ...urls: (string | null | undefined)[]): string {
+  return urls
+    .filter((u): u is string => !!u)
+    .reduce((acc, u) => acc.split(u).join("[link removed from log]"), text);
+}
+
 async function sendHtmlEmail(to: string, subject: string, html: string, text: string): Promise<void> {
   const from = process.env.SMTP_FROM || process.env.SMTP_USER || "noreply@gotcha.app";
   const mail = getTransporter();
@@ -87,25 +101,89 @@ async function sendHtmlEmail(to: string, subject: string, html: string, text: st
 // ─── Setup / Sign-in Links ──────────────────────────────────
 
 /**
- * One-time link that drops a user into Authentik to set their password.
+ * The link that drops a user into Authentik to set their password.
  *
- * This replaces the old home-grown magic link. GOTCHA no longer mints
- * credentials-bearing tokens of any kind: the link is issued by Authentik,
- * expires on Authentik's schedule, and is single-use by Authentik's rules.
+ * GOTCHA still mints no credential: the thing this returns is a pointer to
+ * `GET /api/auth/setup/:token`, which mints the Authentik recovery link at the
+ * moment the person clicks and redirects them into Authentik's own flow.
+ *
+ * The indirection is not decoration. Authentik's recovery FlowToken inherits
+ * `default_token_duration` (30 minutes), and mailing that token directly meant
+ * the clock started when the mail was SENT: a customer who opened their
+ * invitation an hour later met a password form that refused after they had
+ * already typed a password. See setup-link.service.ts for the full story.
  */
 export async function createSetupLink(userId: string): Promise<string> {
+  const { url } = await issueSetupLink(userId);
+  return url;
+}
+
+/**
+ * Mail a fresh setup link to someone whose previous one expired.
+ *
+ * Deliberately terse and self-contained: the recipient already knows what
+ * GOTCHA is (they were invited), and the only thing they asked for is a link
+ * that works. Issuing revokes the dead one, so there is never more than one
+ * live link per person.
+ */
+export async function sendSetupLinkEmail(userId: string): Promise<void> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { email: true, name: true, identity: { select: { authentikSubject: true } } },
+    select: { email: true, name: true, tenantId: true, tenant: { select: { name: true } } },
   });
   if (!user) throw new Error("User not found");
 
-  const identity = user.identity?.authentikSubject
-    ? await findIdentityBySubject(user.identity.authentikSubject)
-    : await ensureIdentity(user.email, user.name);
-  if (!identity) throw new Error("No Authentik identity for user");
+  const { url } = await issueSetupLink(userId);
+  const tenantName = user.tenant?.name ?? "your workspace";
+  const subject = "Your new GOTCHA setup link";
+  const html = renderBrandEmail({
+    title: "Set your password - GOTCHA.",
+    preheader: "Here is a fresh link. This one is good for 48 hours.",
+    eyebrow: "New link",
+    icon: "&#128273;",
+    headline: "Here is a fresh link.",
+    subhead: `${escapeHtml(user.name)}, set your password and you are into ${escapeHtml(tenantName)}.`,
+    bodyHtml: emailParagraph(
+      "The previous link had expired. Nothing is wrong with your account and nothing was lost.",
+    ),
+    cta: { label: "Set my password", url },
+    fallbackUrl: url,
+    expiryNote: `This link expires in <strong style="color:#7C3291;">48 hours</strong>`,
+    footerNote: "You're receiving this because you asked for a new setup link.",
+  });
+  const text = [
+    `Hello ${user.name},`,
+    "",
+    "Here is a fresh link to set your password:",
+    url,
+    "",
+    "This link expires in 48 hours.",
+    "",
+    "The Gotcha. Team",
+  ].join("\n");
 
-  return createRecoveryLink(identity.pk);
+  const payload: NotificationPayload = {
+    tenantId: user.tenantId,
+    channel: "email",
+    type: "setup_link_resend",
+    recipient: user.email,
+    subject,
+    body: withoutCredentialUrls(text, url),
+    // The raw token is NOT recorded here. The onboarding email logs its
+    // setupUrl, which is how the 2026-08-06 incident was reconstructed, but
+    // that URL was already dead by then. A live 48-hour token in a log row is
+    // a different thing entirely.
+    metadata: {},
+  };
+
+  try {
+    await sendHtmlEmail(user.email, subject, html, text);
+    await logNotification(payload, "sent");
+  } catch (err: any) {
+    console.error("Failed to send setup link email:", err);
+    await logNotification(payload, "failed", err.message);
+    throw err;
+  }
 }
 
 /**
@@ -487,8 +565,12 @@ export async function sendOnboardingEmail(
     type: "onboarding_email",
     recipient: adminEmail,
     subject,
-    body: text,
-    metadata: { tenantSlug, setupUrl },
+    body: withoutCredentialUrls(text, setupUrl),
+    // The setup URL is NOT recorded. It used to be, and that is how the
+    // 2026-08-06 incident was reconstructed - but back then the token in it was
+    // already dead 30 minutes after sending. It now stays live for 48 hours,
+    // and a live credential does not belong in a queryable log row.
+    metadata: { tenantSlug },
   };
 
   try {
@@ -813,7 +895,7 @@ export async function sendTeamInviteEmail(
   const text =
     `Hi ${name},\n\nYou've been invited to join ${workspaceName} on GOTCHA.\n` +
     `Set your password to activate your account:\n${setupLink}\n\n` +
-    `The link can be used once. If you weren't expecting this invite, you can ignore this email.`;
+    `The link is good for 48 hours. If you weren't expecting this invite, you can ignore this email.`;
   const html = renderBrandEmail({
     title: `Join ${workspaceName} on GOTCHA.`,
     preheader: `Set your password to join ${workspaceName}.`,
@@ -823,7 +905,11 @@ export async function sendTeamInviteEmail(
     subhead: `${escapeHtml(name)}, you've been invited to join <strong>${escapeHtml(workspaceName)}</strong> on GOTCHA. Set your password and you're in.`,
     cta: { label: "Set your password", url: setupLink },
     fallbackUrl: setupLink,
-    expiryNote: `This link can be used <strong style="color:#7C3291;">once</strong>.`,
+    // Accurate as of the GOTCHA-owned setup link: valid for 48 hours and
+    // usable more than once inside that window. It said "once" while the link
+    // was Authentik's, which was true of the IdP token but not of the window
+    // the recipient actually had.
+    expiryNote: `This link is good for <strong style="color:#7C3291;">48 hours</strong>.`,
     footerNote: `You're receiving this because an administrator of ${escapeHtml(workspaceName)} invited this address. If that wasn't expected, ignore this email.`,
   });
   await sendHtmlEmail(email, subject, html, text);

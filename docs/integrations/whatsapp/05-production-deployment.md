@@ -303,6 +303,38 @@ docker compose -f docker-compose.prod.yml -f docker-compose.rollback.yml up -d -
 service in the file (gateway `depends_on` most of the stack) and aborts when a
 tag does not exist at that TAG.
 
+### Gateway rebuild (2026-08-06, commit `870c44e`)
+
+The login fix is frontend-only, but in production the Next.js static export is
+baked into the **gateway** image, so a frontend change ships as a gateway
+rebuild. No backend image, no migration.
+
+| | |
+|---|---|
+| Image | `gotcha:gateway-870c44e` (also moved `gateway-latest`) |
+| Digest (deployed) | `sha256:5ab2991262b36451ea33cbfef1f33213fb070d4e0f970d3d79468a2689de7124` |
+| Rollback digest | `sha256:36e18f21b8a414a0c74547e9e620f9fd2ece2d6a7080e46e4cfd9ac4046f6431` (gateway-12da0bc) |
+| Arch | `arm64` verified on the box before recreate |
+
+Deployed with `docker compose -f docker-compose.prod.yml up -d --no-deps gateway`
+after `pull gateway`, so nothing else in the stack was touched.
+
+Verified on the artifact, not the build:
+
+- new build id `h-SVHRNFdVaOeTuh7ds4Q` serves 200 (the old bundle is gone)
+- CSP header still carries the Meta allowance from `12da0bc`
+- `https://gotcha.co.il/login` still 301s to the application origin
+- `/api/health` 200 through the recreated gateway (upstreams re-resolved)
+- real browser on `gotcha.co.il`: the hydrated "Login" anchor is the absolute
+  `https://app.gotcha.co.il/login`, and following it reaches the Authentik flow
+  with the correct `redirect_uri` and PKCE challenge. The
+  "We could not reach secure sign-in" dead end is gone.
+
+Unrelated finding while verifying: Cloudflare auto-injects
+`static.cloudflareinsights.com/beacon.min.js`, which our `script-src` blocks on
+both hostnames. Pre-existing, fails closed, only costs Cloudflare's own
+analytics.
+
 ## 10. THE trap this deploy hit: there are TWO nginx templates
 
 | File | Used by |

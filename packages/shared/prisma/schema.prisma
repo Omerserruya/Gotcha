@@ -868,6 +868,7 @@ model User {
   roleAssignments         UserRoleAssignment[]
   featureGrants           UserFeatureGrant[]
   approvalRecipients      ApprovalRecipient[]
+  setupLinks              SetupLink[]
 
   @@unique([tenantId, email])
   // One membership per identity per tenant - the same person cannot hold two
@@ -1531,6 +1532,47 @@ model TenantInvite {
   @@index([tenantId])
   @@index([email])
   @@map("tenant_invites")
+}
+
+/// A GOTCHA-owned "set your password" link, redeemed for an Authentik recovery
+/// link at CLICK time rather than at send time.
+///
+/// Why this exists: Authentik's `/core/users/{pk}/recovery/` mints a FlowToken
+/// with no explicit expiry, so it inherits the Authentik tenant's
+/// `default_token_duration`, which is 30 minutes out of the box. Mailing that
+/// token directly meant every invitation died 30 minutes after it was SENT -
+/// and died silently, because a recovery flow with no identification stage
+/// still renders the password form and only refuses at user_write, after the
+/// person has typed a password ("No user found and can't create new user").
+///
+/// Holding our own token instead moves the 30-minute IdP window to the moment
+/// of the click, which is the only moment it can be spent, and makes the
+/// advertised 48 hours a promise this system can actually keep.
+model SetupLink {
+  id String @id @default(cuid())
+
+  /// SHA-256 of the raw token. Unique so a lookup is one indexed probe, and so
+  /// a database dump yields hashes rather than working links.
+  tokenHash String @map("token_hash")
+
+  userId String @map("user_id")
+
+  expiresAt DateTime  @map("expires_at")
+  /// Multi-use until expiry. Setting a password can take more than one attempt
+  /// (a rejected password, a closed tab, a mail client that prefetches links),
+  /// and a single-use link strands the person on exactly the screen this model
+  /// exists to prevent. Recorded on FIRST use for audit only.
+  usedAt    DateTime? @map("used_at")
+  revokedAt DateTime? @map("revoked_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tokenHash])
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("setup_links")
 }
 
 // ─── Tenant Onboarding Tracker ──────────────────────────────

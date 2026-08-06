@@ -1620,6 +1620,17 @@ export function createInviteLink(token: string, role?: "ADMIN" | "AGENT") {
   });
 }
 
+// Public - ask for a replacement password-setup link (used by
+// /setup-link/expired). The dead token is the identification, so no email
+// address is collected here. The response is identical whether or not the token
+// is known: it must not be an oracle for whether an account exists.
+export function requestNewSetupLink(setupToken: string) {
+  return apiFetch<{ ok: true }>("/api/auth/setup/resend", {
+    method: "POST",
+    body: JSON.stringify({ token: setupToken }),
+  });
+}
+
 // Public - fetch invite details by token (used by /join page).
 export function getPublicInvite(inviteToken: string) {
   return apiFetch<{ data: { tenant: { name: string; slug: string }; email: string | null; role: string } }>(`/api/public/onboarding/invite/${encodeURIComponent(inviteToken)}`, {});
