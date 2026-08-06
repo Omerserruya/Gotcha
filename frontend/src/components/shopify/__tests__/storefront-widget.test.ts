@@ -70,6 +70,8 @@ async function boot(
     appearance?: Record<string, any>;
     /** Wire the visitor mute control, which only renders when the host offers it. */
     sounds?: boolean;
+    /** Settings-editor preview: renders everything, takes nothing (not even focus). */
+    preview?: boolean;
   } = {},
 ): Promise<Harness> {
   const host = document.createElement("div");
@@ -106,6 +108,7 @@ async function boot(
     },
     post,
     shadow,
+    ...(options.preview ? { preview: true } : {}),
     setUnread: vi.fn(),
     onOpened: vi.fn(),
     onClosed: vi.fn(),
@@ -196,7 +199,7 @@ describe("welcome polish", () => {
     // A merchant's hero can be any colour; the way out must be legible on
     // all of them without being a black disc on a pale one.
     const sheet = css((await boot({ messages: [], ux: hero() })).shadow);
-    expect(sheet).toContain(".panel[data-view='welcome'] .x::before{background:rgba(15,23,42,.32);");
+    expect(sheet).toContain(".panel[data-view='welcome'][data-hero='1'] .x::before{background:rgba(15,23,42,.32);");
     expect(sheet).toContain("backdrop-filter:blur(8px)");
     // ...and stays quiet everywhere else.
     expect(sheet).toContain(".x::before,.mute::before{content:'';position:absolute;width:30px;height:30px;border-radius:50%;");
@@ -369,10 +372,30 @@ describe("panel layout", () => {
     return Array.from(shadow.querySelectorAll("style")).map((n) => n.textContent ?? "").join("\n");
   }
 
-  it("gives the welcome screen no conversation header at all", async () => {
+  it("gives the welcome screen no conversation header at all - when a hero owns the top edge", async () => {
     const { shadow } = await boot({ messages: [], ux: hero() });
     expect(shadow.querySelector(".panel")!.getAttribute("data-view")).toBe("welcome");
-    expect(css(shadow)).toContain(".panel[data-view='welcome'] .hd{display:none;}");
+    expect(shadow.querySelector(".panel")!.getAttribute("data-hero")).toBe("1");
+    expect(css(shadow)).toContain(".panel[data-view='welcome'][data-hero='1'] .hd{display:none;}");
+  });
+
+  it("keeps the header when the welcome screen has NO hero", async () => {
+    // Hiding it unconditionally left a bare white strip with the title
+    // against the top edge and the close button - restyled white for
+    // legibility over a photograph - invisible on it. Merchants went looking
+    // for a blank placeholder image to prop the thing open.
+    const { shadow } = await boot({ messages: [] });
+    const panel = shadow.querySelector(".panel")!;
+    expect(panel.getAttribute("data-view")).toBe("welcome");
+    expect(panel.hasAttribute("data-hero")).toBe(false);
+  });
+
+  it("gives the welcome screen a floor as well as a ceiling", async () => {
+    // Hugging the content is right WITH a hero; without one the same rule
+    // collapsed the card to about half its height, which reads as broken.
+    const sheet = css((await boot({ messages: [] })).shadow);
+    expect(sheet).toContain("min-height:min(430px, calc(100vh - 120px))");
+    expect(sheet).toContain("max-height:min(640px, calc(100vh - 120px))");
   });
 
   it("switches to the conversation view once there are messages", async () => {
@@ -401,9 +424,27 @@ describe("panel layout", () => {
     // The gap was .wel's own padding-top surviving the hero's negative
     // margin. In the welcome view the hero owns the panel's top edge.
     const sheet = css((await boot({ messages: [], ux: hero() })).shadow);
-    expect(sheet).toContain(".panel[data-view='welcome'] .bd{padding-top:0;}");
-    expect(sheet).toContain(".panel[data-view='welcome'] .wel{padding-top:0;}");
-    expect(sheet).toContain(".panel[data-view='welcome'] .hero{margin-top:0;");
+    expect(sheet).toContain(".panel[data-view='welcome'][data-hero='1'] .bd{padding-top:0;}");
+    expect(sheet).toContain(".panel[data-view='welcome'][data-hero='1'] .wel{padding-top:0;}");
+    expect(sheet).toContain(".panel[data-view='welcome'][data-hero='1'] .hero{margin-top:0;");
+  });
+
+  it("takes the caret on open, but never in a preview", async () => {
+    // The settings editor rebuilds this widget on every keystroke. Focusing
+    // the composer here pulled the merchant's caret out of the field they
+    // were typing in, one character at a time, so they had to click back
+    // into the box per letter.
+    const live = await boot({ messages: [] });
+    await new Promise((r) => setTimeout(r, 120));
+    const focusedLive = live.shadow.activeElement;
+
+    document.body.innerHTML = "";
+    const preview = await boot({ messages: [], preview: true });
+    const before = preview.shadow.activeElement;
+    await new Promise((r) => setTimeout(r, 120));
+
+    expect(focusedLive).not.toBeNull();
+    expect(preview.shadow.activeElement).toBe(before);
   });
 
   it("hangs the close button off the panel, not the header", async () => {

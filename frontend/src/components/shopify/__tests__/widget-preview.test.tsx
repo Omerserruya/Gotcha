@@ -341,3 +341,27 @@ describe("money", () => {
     expect(formatMoney("not-a-number", "USD", "en")).toBe("");
   });
 });
+
+/**
+ * The preview must announce itself as one.
+ *
+ * The widget focuses its composer 60ms after open(), which is right on a
+ * storefront and catastrophic here: this component rebuilds the whole widget
+ * on every keystroke in the settings editor, so the merchant's caret was
+ * yanked out of the field they were typing in after every single character.
+ * The widget honours `boot.preview` (pinned in storefront-widget.test.ts);
+ * this pins the other half - that the preview actually sets it, and does not
+ * rebuild on every keystroke either.
+ */
+describe("the preview declares itself", () => {
+  const SOURCE = readFileSync(resolve(__dirname, "../WidgetPreview.tsx"), "utf8");
+
+  it("passes preview:true into the widget boot object", () => {
+    expect(SOURCE).toMatch(/preview:\s*true/);
+  });
+
+  it("rebuilds from a SETTLED config, not from every keystroke", () => {
+    expect(SOURCE).toContain("setSettledKey");
+    expect(SOURCE).toContain("JSON.parse(settledKey)");
+  });
+});

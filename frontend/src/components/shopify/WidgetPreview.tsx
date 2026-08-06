@@ -172,6 +172,18 @@ export function WidgetPreview({ config, device, state, language, sampleProducts,
   // Serialising the config is what makes the effect re-run on every edit,
   // including nested ones a reference check would miss.
   const configKey = useMemo(() => JSON.stringify(config ?? {}), [config]);
+
+  // ...but not on every KEYSTROKE. Rebuilding means tearing the document down,
+  // re-fetching the bundle and re-running the whole widget, which flickered
+  // once per character while a merchant typed a headline. Settle first: the
+  // first render is immediate (the initial value), later edits wait for a
+  // pause.
+  const [settledKey, setSettledKey] = useState(configKey);
+  useEffect(() => {
+    if (settledKey === configKey) return;
+    const id = window.setTimeout(() => setSettledKey(configKey), 300);
+    return () => window.clearTimeout(id);
+  }, [configKey, settledKey]);
   const products = sampleProducts.length ? sampleProducts : PREVIEW_FIXTURE;
 
   useEffect(() => {
@@ -201,7 +213,7 @@ export function WidgetPreview({ config, device, state, language, sampleProducts,
       doc.body.appendChild(host);
       const shadow = host.attachShadow({ mode: "open" });
 
-      const draft = JSON.parse(configKey);
+      const draft = JSON.parse(settledKey);
       const msgs = messagesFor(state, products, copy);
       const widget = previewWidgetConfig(draft, {
         language,
@@ -223,6 +235,11 @@ export function WidgetPreview({ config, device, state, language, sampleProducts,
           return { data: {} };
         },
         shadow,
+        // Never take the caret. This effect re-runs on every keystroke in the
+        // settings editor, and the widget focuses its composer 60ms after
+        // open() - which pulled the merchant out of the field they were typing
+        // in, one character at a time.
+        preview: true,
         setUnread: () => {}, onOpened: () => {}, onClosed: () => {},
         // Sounds are never wired in the preview: a settings page that
         // chimes at the merchant while they type is its own bug.
@@ -234,7 +251,7 @@ export function WidgetPreview({ config, device, state, language, sampleProducts,
     doc.body.appendChild(script);
 
     return () => { cancelled = true; };
-  }, [bundle, configKey, state, language, device, products, copy]);
+  }, [bundle, settledKey, state, language, device, products, copy]);
 
   return (
     <div className="flex flex-col items-center gap-3">

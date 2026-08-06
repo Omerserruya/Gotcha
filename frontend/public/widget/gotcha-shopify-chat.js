@@ -471,12 +471,17 @@ window.__gotchaShopifyChatApp = function (boot) {
     // at all, hero flush against the top edge. CONVERSATION swaps in a
     // compact header, because by then the shopper knows where they are
     // and the messages need the room.
-    ".panel[data-view='welcome'] .hd{display:none;}",
+    // …but only when there IS a hero to give it to. Every rule below is
+    // scoped to [data-hero='1'] for that reason: with the hero switched off
+    // (or its media missing) hiding the header left a bare white strip with
+    // the title jammed against the top edge, and the close button - restyled
+    // white for legibility over a photograph - invisible on it.
+    ".panel[data-view='welcome'][data-hero='1'] .hd{display:none;}",
     // The gap above the hero was .wel's own padding-top surviving the
     // hero's negative margin. In welcome the hero owns the top edge.
-    ".panel[data-view='welcome'] .bd{padding-top:0;}",
-    ".panel[data-view='welcome'] .wel{padding-top:0;}",
-    ".panel[data-view='welcome'] .hero{margin-top:0;border-radius:" + radius + "px " + radius + "px 0 0;}",
+    ".panel[data-view='welcome'][data-hero='1'] .bd{padding-top:0;}",
+    ".panel[data-view='welcome'][data-hero='1'] .wel{padding-top:0;}",
+    ".panel[data-view='welcome'][data-hero='1'] .hero{margin-top:0;border-radius:" + radius + "px " + radius + "px 0 0;}",
 
     // One close button for both states, moved rather than duplicated, so
     // there is a single handler and a single data-act="close".
@@ -488,11 +493,11 @@ window.__gotchaShopifyChatApp = function (boot) {
     // Over a photograph the chip needs its own contrast, because a
     // merchant's hero can be any colour and the way out must be legible on
     // all of them. Everywhere else it stays a quiet neutral.
-    ".panel[data-view='welcome'] .x{color:#fff;}",
-    ".panel[data-view='welcome'] .x::before{background:rgba(15,23,42,.32);",
+    ".panel[data-view='welcome'][data-hero='1'] .x{color:#fff;}",
+    ".panel[data-view='welcome'][data-hero='1'] .x::before{background:rgba(15,23,42,.32);",
     "  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);}",
-    ".panel[data-view='welcome'] .x:hover::before{background:rgba(15,23,42,.46);}",
-    ".panel[data-view='welcome'] .x:active::before{transform:scale(.92);}",
+    ".panel[data-view='welcome'][data-hero='1'] .x:hover::before{background:rgba(15,23,42,.46);}",
+    ".panel[data-view='welcome'][data-hero='1'] .x:active::before{transform:scale(.92);}",
     // ── Welcome hero ──
     // Bleeds to the panel edges by cancelling the body's padding, so the
     // media touches the sides instead of floating in a gutter.
@@ -541,7 +546,12 @@ window.__gotchaShopifyChatApp = function (boot) {
     // Hug the content; the max-height keeps a long question list scrolling
     // rather than growing off the screen.
     "@media (min-width: 561px){",
-    "  .panel[data-view='welcome']{height:auto;max-height:min(640px, calc(100vh - 120px));}",
+    // The floor matters as much as the ceiling. Hugging the content is right
+    // WITH a hero; without one the same rule collapsed the card to about half
+    // its height, which reads as a broken widget rather than a short one - and
+    // sent merchants looking for a blank placeholder image to prop it open.
+    "  .panel[data-view='welcome']{height:auto;min-height:min(430px, calc(100vh - 120px));",
+    "    max-height:min(640px, calc(100vh - 120px));}",
     "}",
     "@keyframes rise{from{opacity:0;transform:translateY(12px) scale(.985)}to{opacity:1;transform:none}}",
     "@media (prefers-reduced-motion: reduce){.panel{animation:none}}",
@@ -1324,6 +1334,7 @@ window.__gotchaShopifyChatApp = function (boot) {
     // exactly one place to look.
     var W = (boot.widget && boot.widget.ux && boot.widget.ux.welcome) || null;
     var hero = renderHero(wrap);
+    setPanelHero(!!hero);
 
     // With a hero the avatar overlaps its bottom edge; without one the
     // original logo treatment is unchanged.
@@ -2116,6 +2127,12 @@ window.__gotchaShopifyChatApp = function (boot) {
       })
       .then(function () {
         render();
+        // Opening a chat should put the caret where the shopper is about to
+        // type. A PREVIEW must not: the settings editor rebuilds this whole
+        // widget on every keystroke, so focusing in here pulled the merchant's
+        // caret out of the field they were typing in after every single
+        // character - they had to click back into the box per letter.
+        if (boot.preview) return;
         setTimeout(function () {
           var target = S.phase === "welcome" ? focusables()[0] : textarea;
           try { (target || closeBtn).focus({ preventScroll: true }); } catch (e) {}
@@ -2145,6 +2162,19 @@ window.__gotchaShopifyChatApp = function (boot) {
    */
   function setPanelView(view) {
     panel.setAttribute("data-view", view);
+  }
+
+  /**
+   * Whether the welcome screen actually rendered a hero.
+   *
+   * The welcome layout gives the top edge away to the hero - no header, no
+   * body padding, a close button restyled for a photograph. All of that is
+   * wrong when there is no hero, so the stylesheet keys on this instead of
+   * assuming one is always there.
+   */
+  function setPanelHero(present) {
+    if (present) panel.setAttribute("data-hero", "1");
+    else panel.removeAttribute("data-hero");
   }
 
   function setPanelOpen(open) {
