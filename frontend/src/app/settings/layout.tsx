@@ -1,7 +1,8 @@
 "use client";
 
+import { useAppPathname } from "@/lib/pathname";
 import { useEffect } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
@@ -14,7 +15,7 @@ import { settingsNav, type SettingsNavItem } from "./settings-nav";
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
   const { t } = useI18n();
-  const pathname = usePathname();
+  const pathname = useAppPathname();
   const router = useRouter();
   const flags = useVoiceFlags();
   const { user } = useAuth();

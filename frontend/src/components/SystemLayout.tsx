@@ -1,9 +1,10 @@
 "use client";
 
+import { useAppPathname } from "@/lib/pathname";
 import { useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { SystemMobileHeader, SystemMobileBottomNav } from "./MobileNav";
 import clsx from "clsx";
@@ -31,7 +32,7 @@ const navItems = [
 export function SystemLayout({ children }: { children: React.ReactNode }) {
   const { user, isLoading, logout } = useAuth();
   const router = useRouter();
-  const pathname = usePathname();
+  const pathname = useAppPathname();
 
   useEffect(() => {
     if (!isLoading && !user) {

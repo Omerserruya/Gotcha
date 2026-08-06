@@ -1,9 +1,10 @@
 "use client";
 
+import { useAppPathname } from "@/lib/pathname";
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+
 import { useAuth } from "@/context/AuthContext";
 import { usePermissions } from "@/context/PermissionsContext";
 import { useI18n } from "@/context/I18nContext";
@@ -125,7 +126,7 @@ export function MobileBottomNav() {
   const { user } = useAuth();
   const { atLeastRole } = usePermissions();
   const { t } = useI18n();
-  const pathname = usePathname();
+  const pathname = useAppPathname();
   const [showMore, setShowMore] = useState(false);
 
   // Only show the admin bottom-nav for tenant admins/owners (effective role).
@@ -223,7 +224,7 @@ const systemNavItems = [
 ];
 
 export function SystemMobileBottomNav() {
-  const pathname = usePathname();
+  const pathname = useAppPathname();
 
   return (
     <nav className="md:hidden fixed bottom-0 inset-x-0 bg-white border-t border-gray-200 z-40 pb-safe">

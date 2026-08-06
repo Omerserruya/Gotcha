@@ -1,7 +1,8 @@
 "use client";
 
+import { useAppPathname } from "@/lib/pathname";
 import { useState, useEffect } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import { Sidebar } from "./Sidebar";
@@ -23,7 +24,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => { setAnalyticsToken(token || null); }, [token]);
   const { t } = useI18n();
   const router = useRouter();
-  const pathname = usePathname();
+  const pathname = useAppPathname();
   const [collapsed, setCollapsed] = useState(false);
   const [userCollapsed, setUserCollapsed] = useState(false);
   const [panelAutoCollapsed, setPanelAutoCollapsed] = useState(false);
@@ -126,9 +127,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   if (!user) return null;
-
-  // Check if current page is conversations with a selected chat (to hide bottom nav)
-  const isConversationPage = pathname === "/conversations";
 
   return (
     <CommandCenterProvider>

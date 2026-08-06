@@ -10,8 +10,9 @@
 // (User.onboardingGuides) so it survives devices and never replays a guide
 // the user already finished.
 
+import { useAppPathname } from "@/lib/pathname";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
+
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import { getOnboardingGuides, patchOnboardingGuide, type GuideState } from "@/lib/api";
@@ -92,7 +93,7 @@ export function FeatureGuides() {
   const { token } = useAuth();
   const { locale } = useI18n();
   const lang = locale === "he" ? 1 : 0;
-  const pathname = usePathname();
+  const pathname = useAppPathname();
 
   const [guides, setGuides] = useState<Record<string, GuideState> | null>(null);
   const sessionHidden = useRef<Set<string>>(new Set()); // snoozed/dismissed this session

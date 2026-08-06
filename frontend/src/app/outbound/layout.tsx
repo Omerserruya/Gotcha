@@ -1,7 +1,8 @@
 "use client";
 
+import { useAppPathname } from "@/lib/pathname";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+
 import { AppLayout } from "@/components/AppLayout";
 import { useI18n } from "@/context/I18nContext";
 import clsx from "clsx";
@@ -15,7 +16,7 @@ const tabs = [
 
 export default function OutboundLayout({ children }: { children: React.ReactNode }) {
   const { t } = useI18n();
-  const pathname = usePathname();
+  const pathname = useAppPathname();
 
   // The dialer at /outbound/call hands off to /voice/[sessionId] once the
   // call connects, so the layout chrome (title + tab strip) is always shown
