@@ -68,7 +68,7 @@ describe("applyDepartmentPickerReply", () => {
     const res = await applyDepartmentPickerReply({
       tenantId: TENANT,
       conversationId: CONV,
-      payload: "מכירה",
+      payload: "מכירה", activeFlowCursor: null,
     });
 
     expect(res).toEqual({
@@ -109,7 +109,7 @@ describe("applyDepartmentPickerReply", () => {
     const res = await applyDepartmentPickerReply({
       tenantId: TENANT,
       conversationId: CONV,
-      payload: "שירות",
+      payload: "שירות", activeFlowCursor: null,
     });
 
     expect(res.handled).toBe(true);
@@ -126,7 +126,7 @@ describe("applyDepartmentPickerReply", () => {
     const res = await applyDepartmentPickerReply({
       tenantId: TENANT,
       conversationId: CONV,
-      payload: "hello there",
+      payload: "hello there", activeFlowCursor: null,
     });
 
     expect(res).toEqual({ handled: false });
@@ -143,7 +143,7 @@ describe("applyDepartmentPickerReply", () => {
     const res = await applyDepartmentPickerReply({
       tenantId: TENANT,
       conversationId: CONV,
-      payload: "מכירה",
+      payload: "מכירה", activeFlowCursor: null,
     });
 
     expect(res).toEqual({ handled: false });
@@ -153,5 +153,98 @@ describe("applyDepartmentPickerReply", () => {
     // No department created and no assignment made when the role is unfilled.
     expect(department.upsert).not.toHaveBeenCalled();
     expect(conversation.update).not.toHaveBeenCalled();
+  });
+});
+
+// ─── An authored flow outranks the picker ───────────────────────
+//
+// The production incident: a customer inside a working flow tapped a button
+// labelled "שירות". The picker fired first, pinned an agent, NULLED the flow
+// cursor and called the AI directly - so send_message C and send_interactive D
+// never ran, nothing could resume, and with an exhausted wallet the AI turn
+// escalated to a human. The flow was authored correctly the whole time.
+describe("active flow cursor outranks the department picker", () => {
+  const ACTIVE = "quick-reply-node-B";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    aIAgent.findFirst.mockResolvedValue({ id: "agent-support" });
+    department.upsert.mockResolvedValue({ id: "dept-1" });
+    conversation.update.mockResolvedValue({});
+  });
+
+  for (const payload of ["שירות", "תמיכה", "support", "service", "מכירה", "מכירות", "sales"]) {
+    it(`refuses "${payload}" while a flow cursor is parked`, async () => {
+      const res = await applyDepartmentPickerReply({
+        tenantId: TENANT,
+        conversationId: CONV,
+        payload,
+        activeFlowCursor: ACTIVE,
+      });
+
+      expect(res.handled).toBe(false);
+      expect(res.skippedReason).toBe("active_flow_cursor");
+    });
+  }
+
+  it("performs NO side effects at all - no pin, no department, no cursor clear", async () => {
+    await applyDepartmentPickerReply({
+      tenantId: TENANT, conversationId: CONV, payload: "שירות", activeFlowCursor: ACTIVE,
+    });
+
+    // The three writes that abandoned the flow. None may happen.
+    expect(conversation.update).not.toHaveBeenCalled();
+    expect(department.upsert).not.toHaveBeenCalled();
+    expect(aIAgent.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("refuses before even resolving the selection, so token changes cannot reintroduce it", async () => {
+    // The guard runs ahead of resolveDepartmentSelection: whatever the token
+    // table grows to later, an active flow still owns the reply.
+    const res = await applyDepartmentPickerReply({
+      tenantId: TENANT, conversationId: CONV, payload: "anything at all", activeFlowCursor: ACTIVE,
+    });
+    expect(res.skippedReason).toBe("active_flow_cursor");
+  });
+
+  it("still routes normally when no flow is driving the conversation", async () => {
+    const res = await applyDepartmentPickerReply({
+      tenantId: TENANT, conversationId: CONV, payload: "שירות", activeFlowCursor: null,
+    });
+
+    expect(res.handled).toBe(true);
+    expect(res.role).toBe("customer_support");
+    expect(conversation.update).toHaveBeenCalled();
+  });
+
+  it("treats undefined the same as null - fallback still available", async () => {
+    const res = await applyDepartmentPickerReply({
+      tenantId: TENANT, conversationId: CONV, payload: "sales", activeFlowCursor: undefined,
+    });
+    expect(res.handled).toBe(true);
+    expect(res.role).toBe("sales");
+  });
+
+  it("is idempotent under retry - a repeated reply routes once per call, never twice", async () => {
+    for (let i = 0; i < 3; i++) {
+      vi.clearAllMocks();
+      const res = await applyDepartmentPickerReply({
+        tenantId: TENANT, conversationId: CONV, payload: "שירות", activeFlowCursor: ACTIVE,
+      });
+      expect(res.handled).toBe(false);
+      expect(conversation.update).not.toHaveBeenCalled();
+    }
+  });
+});
+
+// ─── Free text can never reach the picker ───────────────────────
+
+describe("free text never triggers department routing", () => {
+  it("does not match a sentence that merely contains a token", () => {
+    // The worker only calls the picker for an INTERACTIVE reply payload, and
+    // the matcher is exact-normalized on top of that. Both layers matter.
+    expect(resolveDepartmentSelection("אני צריך שירות בבקשה")).toBeNull();
+    expect(resolveDepartmentSelection("I need support with my order")).toBeNull();
+    expect(resolveDepartmentSelection("pre-sales question")).toBeNull();
   });
 });

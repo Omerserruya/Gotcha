@@ -236,3 +236,117 @@ describe.skipIf(!DB)("Dev E2E against the real database (zero AI credits assumed
     });
   }
 });
+
+// ─── The production incident shape, end to end ──────────────────
+//
+//   START -> send_message A -> quick_reply B (label "שירות")
+//         -> send_message C -> send_interactive D -> route_target AI
+//
+// Tenant AI balance = 0. What went wrong in production was not the routing
+// inside this flow - it was the department-picker override consuming the
+// "שירות" tap before the flow ever got it, nulling the cursor and calling the
+// AI directly. This pins the flow half: given the reply, every deterministic
+// node runs first and the AI node is reached last.
+describe.skipIf(!DB)("production incident shape (label=שירות)", () => {
+  const P_NODES = [
+    { id: "e0", type: "channel_entry", data: { channel: "whatsapp" }, position: { x: 0, y: 0 } },
+    { id: "A", type: "send_message_text", data: { text: "message A" }, position: { x: 0, y: 100 } },
+    {
+      id: "B", type: "send_message_quick_reply",
+      data: {
+        text: "במה נוכל לעזור?",
+        replies: [
+          { id: "r1", label: "שירות", payload: "srv_support" },
+          { id: "r2", label: "מכירות", payload: "srv_sales" },
+        ],
+      },
+      position: { x: 0, y: 200 },
+    },
+    { id: "C", type: "send_message_text", data: { text: "message C" }, position: { x: 0, y: 300 } },
+    {
+      id: "D", type: "send_message_interactive",
+      data: { text: "interactive D", buttonLabel: "Open", buttonUrl: "https://example.com" },
+      position: { x: 0, y: 400 },
+    },
+    { id: "AI", type: "route_target", data: { routeType: "agent", targetId: "ai-employee-1" }, position: { x: 0, y: 500 } },
+    { id: "HU", type: "route_target", data: { routeType: "human", targetId: null }, position: { x: 200, y: 300 } },
+  ];
+  const P_EDGES = [
+    { id: "p0", source: "e0", target: "A" },
+    { id: "p1", source: "A", target: "B" },
+    { id: "p2", source: "B", target: "HU", sourceHandle: "srv_sales" },
+    { id: "p3", source: "B", target: "C", sourceHandle: "srv_support" },
+    { id: "p4", source: "C", target: "D" },
+    { id: "p5", source: "D", target: "AI" },
+  ];
+
+  beforeEach(async () => {
+    await prisma.flowCanvas.upsert({
+      where: { tenantId: TENANT },
+      create: { tenantId: TENANT, nodes: P_NODES as any, edges: P_EDGES as any },
+      update: { nodes: P_NODES as any, edges: P_EDGES as any },
+    });
+  });
+
+  it("runs A, parks on B, then C and D, and only then the AI node", async () => {
+    const first = await executeMainFlow({
+      tenantId: TENANT, conversationId: CONV, message: "היי אני צריך עזרה", channel: "whatsapp",
+    });
+    expect(first.reason).toBe("wait_for_reply");
+    expect(await persistedOutbound()).toEqual(["message A", "במה נוכל לעזור?"]);
+    const conv = await prisma.conversation.findUnique({
+      where: { id: CONV }, select: { chatbotNodeId: true, handledBy: true },
+    });
+    expect(conv).toEqual({ chatbotNodeId: "B", handledBy: "flow" });
+    expect(processAIBot).not.toHaveBeenCalled();
+
+    await prisma.message.deleteMany({ where: { tenantId: TENANT, conversationId: CONV } });
+
+    const res = await executeMainFlow({
+      tenantId: TENANT, conversationId: CONV,
+      message: "שירות", replyPayload: "srv_support",
+      channel: "whatsapp", resumeNodeId: "B",
+    });
+
+    expect(await persistedOutbound()).toEqual(["message C", "interactive D\n\nOpen: https://example.com"]);
+    const order = res.trace.map((t: any) => t.nodeId);
+    expect(order.indexOf("C")).toBeLessThan(order.indexOf("D"));
+    expect(order.indexOf("D")).toBeLessThan(order.indexOf("AI"));
+    expect(processAIBot).toHaveBeenCalledTimes(1);
+    expect(res.route).toEqual({ routeType: "AI_AGENT", targetId: "ai-employee-1" });
+  });
+
+  it("the sales button still takes its own branch, never the support one", async () => {
+    await executeMainFlow({
+      tenantId: TENANT, conversationId: CONV, message: "היי", channel: "whatsapp",
+    });
+    await prisma.message.deleteMany({ where: { tenantId: TENANT, conversationId: CONV } });
+
+    await executeMainFlow({
+      tenantId: TENANT, conversationId: CONV,
+      message: "מכירות", replyPayload: "srv_sales",
+      channel: "whatsapp", resumeNodeId: "B",
+    });
+
+    expect(await persistedOutbound()).toEqual([]);
+    expect(processAIBot).not.toHaveBeenCalled();
+    const conv = await prisma.conversation.findUnique({
+      where: { id: CONV }, select: { handledBy: true },
+    });
+    expect(conv?.handledBy).toBe("human");
+  });
+
+  it("a typed Hebrew label resolves without the payload", async () => {
+    await executeMainFlow({
+      tenantId: TENANT, conversationId: CONV, message: "היי", channel: "whatsapp",
+    });
+    await prisma.message.deleteMany({ where: { tenantId: TENANT, conversationId: CONV } });
+
+    await executeMainFlow({
+      tenantId: TENANT, conversationId: CONV, message: "שירות",
+      channel: "whatsapp", resumeNodeId: "B",
+    });
+
+    expect(await persistedOutbound()).toEqual(["message C", "interactive D\n\nOpen: https://example.com"]);
+  });
+});
