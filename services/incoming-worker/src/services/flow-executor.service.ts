@@ -1518,17 +1518,34 @@ async function dispatchRoute(
     return routeType === "agent" ? "AI_AGENT" : routeType === "flow" ? "FLOW" : "HUMAN";
   }
   if (routeType === "agent" && targetId) {
-    // Persist the assigned AI agent on the conversation so subsequent inbound
-    // messages resume against the same agent without re-routing through the
-    // graph or the legacy RouterRule lookup.
+    // Persist WHICH employee, so subsequent inbound messages resume against
+    // the same agent without re-routing through the graph. Ownership is a
+    // separate question and is not answered yet.
     await prisma.conversation.update({
       where: { id: ctx.conversationId },
-      data: { handledBy: "ai_agent", assignedAiAgentId: targetId },
+      data: { assignedAiAgentId: targetId },
     });
+
     await processAIBot(ctx.tenantId, ctx.conversationId, ctx.message, targetId);
+
+    // Ownership transfers only once the AI employee has actually taken the
+    // turn. This used to be written BEFORE the call, so a turn the AI
+    // refused - no credits, suspended plan, service down - still left the
+    // conversation recorded as AI-owned. `processAIBot` returns true in that
+    // case too (it escalated, which is a successful outcome for IT), so the
+    // return value cannot answer this; the handoff flag can.
+    const after = await prisma.conversation.findFirst({
+      where: { id: ctx.conversationId, tenantId: ctx.tenantId },
+      select: { isHandedOver: true },
+    });
+    if (!after?.isHandedOver) {
+      await prisma.conversation.update({
+        where: { id: ctx.conversationId },
+        data: { handledBy: "ai_agent" },
+      });
+    }
     return "AI_AGENT";
   }
-
   if (routeType === "flow" && targetId) {
     const sub = await prisma.chatbotFlow.findFirst({
       where: { id: targetId, tenantId: ctx.tenantId, isActive: true },
@@ -1544,17 +1561,33 @@ async function dispatchRoute(
       });
       // Use the new graph walker for the sub-flow too, so Start / Send*
       // nodes authored there execute identically to the main playbook.
-      await executeSubFlow({
+      const subResult = await executeSubFlow({
         tenantId: ctx.tenantId,
         conversationId: ctx.conversationId,
         message: ctx.message,
         channel: ctx.channel,
         flowId: sub.id,
       });
-      await prisma.conversation.update({
-        where: { id: ctx.conversationId },
-        data: { handledBy: "flow" },
-      });
+
+      // Restore flow ownership ONLY when the sub-flow left the decision open.
+      //
+      // This write used to be unconditional, and it is the whole bug. A
+      // sub-flow that routed to an AI employee, a human or a department set
+      // ownership correctly on its way out, and then the parent overwrote it
+      // with "flow" the moment control came back. The result was a
+      // conversation that had already crossed the AI billing boundary and
+      // escalated, yet still read `handledBy = "flow"` - so the next inbound
+      // took the flow branch in incoming.worker, re-walked the same graph,
+      // and crossed the boundary again. Every message, a fresh escalation.
+      //
+      // `route` is set when the sub-flow dispatched to a target; `endKind`
+      // when it terminated. Either means ownership is already spoken for.
+      if (!subResult.route && !subResult.endKind) {
+        await prisma.conversation.update({
+          where: { id: ctx.conversationId },
+          data: { handledBy: "flow" },
+        });
+      }
     }
     return "FLOW";
   }

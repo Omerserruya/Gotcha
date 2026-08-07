@@ -922,6 +922,11 @@ async function escalateToHuman(
     data: {
       isHandedOver: true,
       status: "WAITING",
+      // Ownership follows the handoff. Leaving this as "ai_agent" (or
+      // "flow") described a conversation the AI had just handed away as
+      // still being driven by it, which is what let a refused AI turn keep
+      // presenting itself as an AI-owned conversation.
+      handledBy: "human",
     },
   });
 
