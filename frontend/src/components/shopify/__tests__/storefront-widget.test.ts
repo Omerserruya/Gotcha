@@ -175,6 +175,8 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  // Tests that pose as a localized storefront install this global.
+  delete (window as any).Shopify;
 });
 
 // ─── Rendering ──────────────────────────────────────────────
@@ -828,6 +830,153 @@ describe("add to cart", () => {
       expect(JSON.stringify(call[1] ?? {})).not.toMatch(/X-Shopify-Access-Token|shpat_/);
     }
   });
+
+  /** A card whose variant the server has already resolved. */
+  async function addable(product?: Record<string, any>) {
+    return await boot({
+      messages: [
+        {
+          id: "p1",
+          direction: "OUTBOUND",
+          body: "This one",
+          messageType: "shopify_product",
+          author: "AI",
+          authorKind: "ai",
+          createdAt: new Date().toISOString(),
+          commerce: {
+            addToCartEnabled: true,
+            products: [product ?? makeProduct({ selectedVariantId: "9001" })],
+          },
+        },
+      ],
+    });
+  }
+
+  function addButton(shadow: ShadowRoot) {
+    return Array.from(shadow.querySelectorAll("button")).find(
+      (b) => b.textContent === "Add to cart",
+    ) as HTMLButtonElement;
+  }
+
+  it("shows the THEME's own reason when the storefront cart refuses", async () => {
+    // The regression: this reason was read off Shopify's response, put on
+    // the error, and then dropped, because the only branch that showed a
+    // message required a status the storefront error never carried. Every
+    // storefront-side refusal reached the shopper as "Something went
+    // wrong. Try again." - which is what a merchant reported.
+    const { shadow, fetchMock } = await addable();
+    fetchMock.mockImplementation(async () => ({
+      ok: false,
+      json: async () => ({ description: "You can only add 1 Cloud Pro Runner to your cart." }),
+    }));
+
+    addButton(shadow).click();
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(shadow.querySelector(".cart-err")!.textContent).toBe(
+      "You can only add 1 Cloud Pro Runner to your cart.",
+    );
+  });
+
+  it("names the reason when the server answers with a code and no sentence", async () => {
+    const { shadow, post } = await addable();
+    post.mockImplementation(async (p: string) => {
+      if (p.endsWith("/cart/validate")) {
+        const err: any = new Error("add_to_cart_disabled");
+        err.status = 403;
+        err.body = { error: "add_to_cart_disabled" };
+        throw err;
+      }
+      return { data: {} };
+    });
+
+    addButton(shadow).click();
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(shadow.querySelector(".cart-err")!.textContent).toBe(
+      "Add to cart is switched off for this store right now.",
+    );
+  });
+
+  it("still falls back to a generic sentence for an unrecognised failure", async () => {
+    const { shadow, fetchMock } = await addable();
+    fetchMock.mockImplementation(async () => {
+      throw new Error("NetworkError");
+    });
+
+    addButton(shadow).click();
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(shadow.querySelector(".cart-err")!.textContent).toBe("Something went wrong. Try again.");
+  });
+
+  it("posts to the storefront's OWN cart root on a localized store", async () => {
+    // A market or translated locale serves the cart under a prefix. The
+    // bare "/cart/add.js" earns a 302, a redirected POST becomes a GET,
+    // and the add fails for every shopper on that storefront.
+    (window as any).Shopify = { routes: { root: "/en-il/" } };
+    const { shadow, fetchMock } = await addable();
+
+    addButton(shadow).click();
+    await new Promise((r) => setTimeout(r, 20));
+
+    const cartCall = fetchMock.mock.calls.find((c: any[]) => String(c[0]).includes("cart/add.js")) as any[];
+    expect(cartCall![0]).toBe("/en-il/cart/add.js");
+
+    const viewCart = Array.from(shadow.querySelectorAll("a")).find((a) => a.textContent === "View cart");
+    expect(viewCart!.getAttribute("href")).toBe("/en-il/cart");
+  });
+
+  it("posts to the root cart on a store that has no locale prefix", async () => {
+    const { shadow, fetchMock } = await addable();
+
+    addButton(shadow).click();
+    await new Promise((r) => setTimeout(r, 20));
+
+    const cartCall = fetchMock.mock.calls.find((c: any[]) => String(c[0]).includes("cart/add.js")) as any[];
+    expect(cartCall![0]).toBe("/cart/add.js");
+  });
+
+  /**
+   * Several variants, nothing to choose between them: Shopify named the
+   * only option "Title", so the projection drops it and `optionNames` is
+   * empty. The server resolves the FIRST variant, which is sold out.
+   */
+  function titleOptionProduct() {
+    return makeProduct({
+      optionNames: [],
+      selectedVariantId: "9001",
+      variants: [
+        { variantId: "9001", title: "Small", price: "120.00", compareAtPrice: null, available: false, options: [], requiresSellingPlan: false },
+        { variantId: "9002", title: "Large", price: "120.00", compareAtPrice: null, available: true, options: [], requiresSellingPlan: false },
+      ],
+    });
+  }
+
+  it("falls back to a variant that can be bought when nothing is being chosen", async () => {
+    // Opening on the server's sold-out first variant left the button
+    // disabled on a product that was in stock in another size.
+    const { shadow, post } = await addable(titleOptionProduct());
+    const add = addButton(shadow);
+    expect(add.disabled).toBe(false);
+
+    add.click();
+    await new Promise((r) => setTimeout(r, 20));
+
+    // The variant the card asked the server to validate is the one that
+    // can actually be bought, not the sold-out one it was handed.
+    const validate = post.mock.calls.find((c) => String(c[0]).includes("/cart/validate")) as any[];
+    expect(validate![1].variantId).toBe("9002");
+  });
+
+  it("gives a multi-variant product a picker even when its options are unnamed", async () => {
+    // Without this the card was a dead end: no picker to change the
+    // variant, and a disabled button nothing on the card could enable.
+    const { shadow } = await addable(titleOptionProduct());
+    const chips = Array.from(shadow.querySelectorAll(".chip")).map((c) => c.textContent);
+    expect(chips).toEqual(["Small", "Large"]);
+    expect((shadow.querySelectorAll(".chip")[0] as HTMLButtonElement).disabled).toBe(true);
+  });
 });
 
 // ─── Carousel + keyboard ────────────────────────────────────
@@ -903,6 +1052,44 @@ describe("carousel", () => {
     expect(labels[0]).toEqual(["View product"]);
     // Cards 2 and 3 are single-variant: Add to Cart is honest there.
     expect(labels[1]).toContain("Add to cart");
+  });
+
+  it("keeps Add to Cart on a shortlist entry whose first variant is sold out", async () => {
+    // A carousel card has no picker, so opening on the server's sold-out
+    // first variant did not disable the button - it removed it, and the
+    // product looked unbuyable from chat while being in stock.
+    const { shadow } = await boot({
+      messages: [
+        {
+          id: "c2",
+          direction: "OUTBOUND",
+          body: "two options",
+          messageType: "shopify_product_carousel",
+          author: "AI",
+          authorKind: "ai",
+          createdAt: new Date().toISOString(),
+          commerce: {
+            addToCartEnabled: true,
+            products: [
+              makeProduct({
+                optionNames: [],
+                selectedVariantId: "9001",
+                variants: [
+                  { variantId: "9001", title: "Small", price: "120.00", compareAtPrice: null, available: false, options: [], requiresSellingPlan: false },
+                  { variantId: "9002", title: "Large", price: "120.00", compareAtPrice: null, available: true, options: [], requiresSellingPlan: false },
+                ],
+              }),
+              makeProduct({ productId: "333", title: "Road Max" }),
+            ],
+          },
+        },
+      ],
+    });
+    const first = shadow.querySelectorAll(".car-tr .card")[0];
+    const labels = Array.from(first.querySelectorAll(".btn")).map((b) => b.textContent);
+    expect(labels).toContain("Add to cart");
+    // Still no picker on a shortlist entry.
+    expect(shadow.querySelectorAll(".car-tr .chip")).toHaveLength(0);
   });
 
   it("gives its navigation buttons accessible names", async () => {

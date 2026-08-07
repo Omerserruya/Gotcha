@@ -198,6 +198,13 @@ window.__gotchaShopifyChatApp = function (boot) {
       addToCart: "Add to cart",
       adding: "Adding…",
       added: "Added to cart",
+      // Reasons an Add to Cart can fail that the SERVER names by code
+      // rather than by sentence. Everything the server does send a
+      // sentence for (out of stock, option gone, subscription-only) is
+      // shown in the shopper's language as the server wrote it.
+      cartDisabled: "Add to cart is switched off for this store right now.",
+      cartSessionExpired: "This chat session has expired. Refresh the page and try again.",
+      cartStoreBusy: "The store did not answer. Please try again in a moment.",
       viewProduct: "View product",
       viewCart: "View cart",
       keepShopping: "Keep shopping",
@@ -240,6 +247,9 @@ window.__gotchaShopifyChatApp = function (boot) {
       addToCart: "הוספה לסל",
       adding: "מוסיפים…",
       added: "נוסף לסל",
+      cartDisabled: "ההוספה לסל כבויה בחנות הזו כרגע.",
+      cartSessionExpired: "החיבור לצ׳אט פג. רעננו את הדף ונסו שוב.",
+      cartStoreBusy: "החנות לא הגיבה. אפשר לנסות שוב עוד רגע.",
       viewProduct: "למוצר",
       viewCart: "לסל הקניות",
       keepShopping: "להמשיך לגלוש",
@@ -1529,7 +1539,7 @@ window.__gotchaShopifyChatApp = function (boot) {
     // title, reason - resolves per string.
     attr(card, { dir: dir });
     var vState = {
-      variantId: product.selectedVariantId || autoVariant(product),
+      variantId: initialVariant(product),
       quantity: 1,
       busy: false,
       done: false,
@@ -1593,8 +1603,17 @@ window.__gotchaShopifyChatApp = function (boot) {
 
       // Variant picker. A product with real options never gets an
       // arbitrary variant chosen for the shopper - Add to Cart stays
-      // disabled until they pick one that actually exists.
-      var needsChoice = (product.optionNames || []).length > 0 && product.variants.length > 1;
+      // disabled until they pick one that actually exists. Anything with
+      // more than one variant gets the picker.
+      //
+      // It used to also require named options, and `optionNames` drops
+      // the option Shopify calls "Title". A product whose only option is
+      // named Title but whose values are real ("Small", "Large") showed
+      // no picker at all, and if the variant it opened on could not be
+      // bought, Add to Cart sat there disabled with nothing on the card
+      // that could ever enable it. The variant titles are always present,
+      // so there is always something to label the chips with.
+      var needsChoice = product.variants.length > 1;
       if (needsChoice && !compact) {
         var opts = el("div", "opts");
         opts.appendChild(el("div", "opt-l", T.chooseOption));
@@ -1676,7 +1695,7 @@ window.__gotchaShopifyChatApp = function (boot) {
         card.appendChild(ok);
         var after = el("div", "acts");
         var cart = el("a", "btn btn-s", T.viewCart);
-        attr(cart, { href: "/cart", target: "_top" });
+        attr(cart, { href: storefrontRoute("cart"), target: "_top" });
         after.appendChild(cart);
         var keep = el("button", "btn btn-s", T.keepShopping);
         attr(keep, { type: "button" });
@@ -1693,11 +1712,44 @@ window.__gotchaShopifyChatApp = function (boot) {
     return card;
   }
 
+  /**
+   * The variant the card opens on.
+   *
+   * The server resolves one for us, but it resolves the FIRST variant,
+   * which is not always a purchasable one. Opening on a sold-out variant
+   * left Add to Cart disabled on a product that was in stock in every
+   * other size, and in a carousel - where there is no picker - it removed
+   * the button entirely. So: keep the server's choice when it can
+   * actually be bought, and only fall back when there is genuinely
+   * nothing being chosen on the shopper's behalf.
+   */
+  function initialVariant(product) {
+    var chosen = product.selectedVariantId ? findVariant(product, product.selectedVariantId) : null;
+    if (chosen && chosen.available && !chosen.requiresSellingPlan) return chosen.variantId;
+    var auto = autoVariant(product);
+    if (auto) return auto;
+    // Nothing purchasable to fall back to. Keep the server's variant so
+    // the card still shows its price and its "sold out" tag rather than
+    // going blank.
+    return chosen ? chosen.variantId : null;
+  }
+
   function autoVariant(product) {
-    // Only auto-select when there is genuinely nothing to choose: a
-    // single-variant product. Otherwise the shopper picks.
-    if (!product.variants || product.variants.length !== 1) return null;
-    return product.variants[0].variantId;
+    var variants = product.variants || [];
+    if (!variants.length) return null;
+    // One variant: nothing to choose, so it IS the choice.
+    if (variants.length === 1) return variants[0].variantId;
+    // Real options mean real decisions (size, colour). Picking one of
+    // those for the shopper is how somebody ends up with the wrong size,
+    // so we never do it - the picker below is their way in.
+    if ((product.optionNames || []).length > 0) return null;
+    // Several variants and no options to choose between them. There is
+    // no decision to take away from anyone; prefer one that can be
+    // bought.
+    for (var i = 0; i < variants.length; i++) {
+      if (variants[i].available && !variants[i].requiresSellingPlan) return variants[i].variantId;
+    }
+    return null;
   }
 
   function findVariant(product, variantId) {
@@ -1784,14 +1836,23 @@ window.__gotchaShopifyChatApp = function (boot) {
     })
       .then(function (res) {
         var v = res.data;
-        return fetch("/cart/add.js", {
+        return fetch(storefrontRoute("cart/add.js"), {
           method: "POST",
           headers: { "Content-Type": "application/json", Accept: "application/json" },
           body: JSON.stringify({ items: [{ id: Number(v.variantId), quantity: v.quantity }] }),
           credentials: "same-origin",
         }).then(function (r) {
           return r.json().catch(function () { return {}; }).then(function (j) {
-            if (!r.ok) throw new Error(j.description || j.message || T.failed);
+            if (!r.ok) {
+              // Shopify's own sentence, in the storefront's language. It
+              // is the only party that knows "you can only add 1 of
+              // this", so it gets tagged and carried rather than
+              // flattened into a generic failure the shopper can do
+              // nothing with.
+              var e = new Error(j.description || j.message || T.failed);
+              e.storefront = true;
+              throw e;
+            }
             return j;
           });
         });
@@ -1809,17 +1870,59 @@ window.__gotchaShopifyChatApp = function (boot) {
       })
       .catch(function (err) {
         vState.busy = false;
-        // The server sends a shopper-safe sentence for the cases it
-        // knows (out of stock, option gone, subscription-only). Anything
-        // else stays generic - a raw Shopify error is not an answer.
-        vState.error =
-          (err && err.body && err.body.message) ||
-          (err && err.status === 409 && err.message) ||
-          T.failed;
+        vState.error = cartErrorSentence(err);
         repaint();
         scrollToEnd();
         api("/cart/result", { ok: false }).catch(function () {});
       });
+  }
+
+  /**
+   * Why an Add to Cart failed, in a sentence the shopper can act on.
+   *
+   * Every failure used to collapse to "Something went wrong. Try again."
+   * The reason was being computed and then thrown away: the storefront
+   * error carried Shopify's own explanation on `err.message`, and the
+   * only branch that read `message` required a status this error never
+   * had. A shopper who could not add an item was told nothing, and so
+   * was anybody they reported it to.
+   *
+   * Order matters. The server's own sentence first (it is written for
+   * shoppers and already in their language), then Shopify's, then a
+   * sentence for the server codes that ship a code and nothing else.
+   */
+  function cartErrorSentence(err) {
+    if (!err) return T.failed;
+    if (err.body && err.body.message) return err.body.message;
+    if (err.storefront && err.message) return err.message;
+    if (err.status === 409 && err.message) return err.message;
+    var code = (err.body && err.body.error) || err.message;
+    if (code === "add_to_cart_disabled") return T.cartDisabled;
+    if (code === "session_expired") return T.cartSessionExpired;
+    if (code === "unavailable") return T.cartStoreBusy;
+    return T.failed;
+  }
+
+  /**
+   * A storefront path, respecting the shop's own root.
+   *
+   * A store with markets or translated locales serves the cart under a
+   * prefix ("/en-il/cart/add.js"). Posting to the bare "/cart/add.js"
+   * earns a 302 to the localized route, and a redirected POST becomes a
+   * GET, which the cart endpoint does not answer - so Add to Cart failed
+   * for every shopper on a localized storefront. `Shopify.routes.root` is
+   * what the theme itself uses; "/" is the right answer everywhere else,
+   * including the website widget that shares this bundle.
+   */
+  function storefrontRoute(path) {
+    var root = "/";
+    try {
+      var r = window.Shopify && window.Shopify.routes && window.Shopify.routes.root;
+      if (typeof r === "string" && r.charAt(0) === "/") {
+        root = r.charAt(r.length - 1) === "/" ? r : r + "/";
+      }
+    } catch (e) {}
+    return root + path;
   }
 
   /**
@@ -1834,7 +1937,7 @@ window.__gotchaShopifyChatApp = function (boot) {
       document.dispatchEvent(new CustomEvent("cart:refresh", { bubbles: true }));
       document.dispatchEvent(new CustomEvent("cart:build", { bubbles: true }));
       if (window.Shopify && window.Shopify.onCartUpdate) {
-        fetch("/cart.js", { credentials: "same-origin" })
+        fetch(storefrontRoute("cart.js"), { credentials: "same-origin" })
           .then(function (r) { return r.json(); })
           .then(function (cart) { window.Shopify.onCartUpdate(cart); })
           .catch(function () {});
