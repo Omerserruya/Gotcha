@@ -528,6 +528,11 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
           message: body,
           channel: channel.toLowerCase(),
           resumeNodeId: (conversation as any).chatbotNodeId,
+          // `body` is the button's TITLE for an interactive reply (the webhook
+          // sets it from `interactiveReply.title`), while a quick-reply edge is
+          // keyed on the reply's PAYLOAD. Passing the payload is what lets the
+          // resume pick the branch the customer actually tapped.
+          replyPayload: interactiveReply?.payload ?? null,
         });
         return;
       }
