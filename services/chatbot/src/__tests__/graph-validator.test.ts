@@ -79,6 +79,53 @@ describe("§3 authoritative graph validation (backend, gates publish)", () => {
     expect(codes(warnings)).toContain("unreachable");
   });
 
+
+  // A step drawn AFTER a route step can never run: the executor returns the
+  // moment it dispatches and never follows the route node's outgoing edge.
+  // Reachability used to walk edges blindly, so these validated clean while
+  // silently never executing - the shape behind a real incident where a
+  // send_message and a send_interactive after an AI handoff never went out.
+  it("warns on steps stranded behind a terminal route step", () => {
+    const nodes = [
+      { id: "s", type: "start" },
+      { id: "m1", type: "send_message_text", data: { text: "step 1" } },
+      { id: "r", type: "route_target", data: { routeType: "agent", targetId: "agent-1" } },
+      { id: "m2", type: "send_message_text", data: { text: "never runs" } },
+      { id: "i1", type: "send_message_interactive", data: { text: "never runs either" } },
+    ];
+    const edges = [
+      { source: "s", target: "m1" },
+      { source: "m1", target: "r" },
+      { source: "r", target: "m2" },
+      { source: "m2", target: "i1" },
+    ];
+    const { errors, warnings } = validateGraph(nodes, edges);
+    // The topology is already an ERROR at publish: a terminal step must not
+    // carry an outgoing connection. What was missing is naming the nodes that
+    // the mistake strands, so the author knows what stopped running.
+    expect(codes(errors)).toContain("no_output");
+    const unreachable = warnings.filter((w: any) => w.code === "unreachable").map((w: any) => w.nodeId);
+    expect(unreachable).toContain("m2");
+    expect(unreachable).toContain("i1");
+    expect(unreachable).not.toContain("m1");
+  });
+
+  it("does not warn when the same steps precede the route step", () => {
+    const nodes = [
+      { id: "s", type: "start" },
+      { id: "m1", type: "send_message_text", data: { text: "step 1" } },
+      { id: "i1", type: "send_message_interactive", data: { text: "step 2" } },
+      { id: "r", type: "route_target", data: { routeType: "agent", targetId: "agent-1" } },
+    ];
+    const edges = [
+      { source: "s", target: "m1" },
+      { source: "m1", target: "i1" },
+      { source: "i1", target: "r" },
+    ];
+    const { warnings } = validateGraph(nodes, edges);
+    expect(warnings.filter((w: any) => w.code === "unreachable")).toHaveLength(0);
+  });
+
   it("§3 rejects duplicate singleton static nodes (two starts)", () => {
     const nodes = [
       { id: "s1", type: "start" },
