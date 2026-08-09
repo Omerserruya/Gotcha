@@ -9,7 +9,7 @@
  *
  *   paypage/generate_sale  create a hosted tokenization session -> sale_url
  *   client/get_cc_tokens   server-side pull of the stored card token
- *   cc/bill                charge a stored token: sum, token, client_id,
+ *   cc/bill                charge a stored token: sum, cc_token_id, client_id,
  *                          currency_id (1 = ILS)
  *   cc/transactions        transaction lookup, for reconciling an UNKNOWN
  *   doc/cancel             full document-linked refund, with refund_cc: true

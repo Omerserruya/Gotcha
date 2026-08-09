@@ -107,9 +107,18 @@ describe("cc/bill", () => {
    * mistake above, and with the same consequence: a request the API cannot
    * act on.
    *
-   * Unlike the assertions above this one is NOT live-verified, because
-   * verifying it means charging a card. It is pinned from the published
-   * contract, and the note stands until a real charge confirms it.
+   * Since confirmed in writing by iCount support, along with the three points
+   * that used to be open questions here:
+   *
+   *   - cc/bill with cc_token_id is routed automatically through the account's
+   *     configured primary billing terminal. A token is NOT locked to the
+   *     terminal that created it, and GOTCHA neither selects nor names a
+   *     terminal - the API exposes no such parameter.
+   *   - cc_require_cvv applies only when a customer enters card details again.
+   *     Stored-token charges do not require it, and CVV is never stored. So an
+   *     unattended renewal on a cc_require_cvv=true account is valid.
+   *   - currency_id 1 is ILS for cc/bill. A PayPage's own currency_id uses a
+   *     different mapping and must never be reused as this enum.
    */
   it("identifies the stored card as cc_token_id", () => {
     expect(code).toContain("cc_token_id: input.token");
