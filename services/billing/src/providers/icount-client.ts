@@ -402,7 +402,17 @@ export function normalizeTokens(data: any): StoredCardToken[] {
   const out: StoredCardToken[] = [];
   for (const entry of list as any[]) {
     if (!entry) continue;
-    const token = typeof entry === "string" ? entry : entry.token ?? entry.cc_token ?? entry.card_token;
+    // `cc_token_id` first: it is iCount's own name for a stored card, and the
+    // exact identifier cc/bill expects back. Reading only `token` / `cc_token`
+    // / `card_token` meant an entry that carried the canonical field and
+    // nothing else was dropped by the guard below as "no usable token" - so
+    // tokenization would report that no card was stored, on a response that
+    // said one was. The looser aliases stay: this reader is deliberately
+    // tolerant about the envelope.
+    const token =
+      typeof entry === "string"
+        ? entry
+        : entry.cc_token_id ?? entry.token ?? entry.cc_token ?? entry.card_token;
     if (typeof token !== "string" || !token.trim()) continue;
     const exp = parseExpiry(entry);
     out.push({

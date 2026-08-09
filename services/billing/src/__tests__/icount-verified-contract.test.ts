@@ -137,3 +137,26 @@ describe("cc/bill", () => {
     expect(code).not.toContain("cc_cvv");
   });
 });
+
+// ─── client/get_cc_tokens ───────────────────────────────────────
+
+describe("client/get_cc_tokens", () => {
+  it("accepts cc_token_id, the identifier cc/bill expects back", () => {
+    // The two halves have to agree on the same field. cc/bill charges
+    // `cc_token_id`; if the reader that produced the value never looked for
+    // `cc_token_id`, a response carrying only that field is dropped by the
+    // "no usable token" guard - and tokenization reports no card stored on a
+    // response that said one was.
+    expect(code).toContain("entry.cc_token_id");
+  });
+
+  it("still tolerates the looser envelopes", () => {
+    for (const alias of ["entry.token", "entry.cc_token", "entry.card_token"]) {
+      expect(code).toContain(alias);
+    }
+  });
+
+  it("drops an entry with no usable identifier rather than inventing one", () => {
+    expect(code).toMatch(/typeof token !== "string"/);
+  });
+});
