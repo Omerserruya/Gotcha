@@ -5,6 +5,7 @@ import { executeAdapterTool, getAdapter, clearMissingScopes } from "../services/
 import { invalidateCrmAdapterCache, getCrmAdapter, resolveCrmVendor } from "../services/connectors/crm-adapter-resolver";
 import { maskPhone, maskEmail } from "../lib/mask";
 import { getSourceOfTruth, type SourceOfTruthCapability } from "../services/connectors/source-of-truth";
+import { disconnectIntegration } from "../services/integration-lifecycle.service";
 
 const router = Router();
 
@@ -564,18 +565,29 @@ router.post("/:slug/disconnect", canManageSystems, async (req: Request, res: Res
       return;
     }
 
-    // Explicitly delete tenant tools (cascade on TenantIntegration deletion handles this,
-    // but we delete them explicitly to be safe when only updating status)
-    await prisma.tenantTool.deleteMany({
-      where: { tenantId: req.tenantId!, tenantIntegrationId: tenantIntegration.id },
+    // ONE canonical disconnect, shared with the connectors-admin route.
+    //
+    // This used to run an explicit `tenantTool.deleteMany`, described as
+    // belt-and-braces for the cascade, and it destroyed the customer's own
+    // configuration. An operator who disabled `process_refund`, disconnected to
+    // re-grant OAuth scopes, and reconnected got the tool back ENABLED. Nothing
+    // overrode their decision - the record of it was deleted, so reconnect had
+    // nothing to preserve and fell back to catalogue defaults.
+    //
+    // The other disconnect route had the mirror-image bug: it kept the policy
+    // and left the credentials live. Both now call the same function, so they
+    // cannot drift apart again.
+    const result = await disconnectIntegration({
+      tenantId: req.tenantId!,
+      tenantIntegrationId: tenantIntegration.id,
+      slug,
+      actorId: (req as any).userId ?? null,
     });
 
-    const updated = await prisma.tenantIntegration.update({
+    const updated = await prisma.tenantIntegration.findUnique({
       where: { id: tenantIntegration.id },
-      data: { status: "DISCONNECTED", credentials: {} },
     });
-
-    res.json({ data: updated });
+    res.json({ data: updated, policyRowsPreserved: result.policyRowsPreserved });
   } catch (err) {
     console.error("Disconnect integration error:", err);
     res.status(500).json({ error: "Failed to disconnect integration" });

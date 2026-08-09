@@ -14,5 +14,18 @@ services:
     environment:
       OPENAI_LOG: debug
       NODE_OPTIONS: --require /app/tools/inspect-deep.js
+      # Dev-only AI budget headroom (2026-08-02). The Urban Supply Dev fixture
+      # hit the 24h rolling tenant ceiling (5,013,188 / 5,000,000) during
+      # release verification, and over the ceiling the bot escalates instead of
+      # running - which reads as a Shopify regression, a dead tool flow or a
+      # broken webhook test, none of which would be true.
+      #
+      # This dev stack only. Not a plan change, not a global default, and it
+      # does not touch entitlement enforcement or hide usage metrics.
+      #   old effective: 5,000,000 (code default, env unset)
+      #   new effective: 50,000,000
+      #   expiry: remove these two lines when release verification is finished.
+      AI_BUDGET_TOKENS_PER_TENANT_DAY: "50000000"
+      AI_BUDGET_TOKENS_PER_CONVERSATION: "5000000"
     volumes:
       - ./services/ai/src:/app/services/ai/src

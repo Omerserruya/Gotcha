@@ -767,6 +767,23 @@ export async function executeAdapterTool(opts: {
    * AI-supplied "isAuthorized" can never influence it.
    */
   accessScope?: "internal" | "customer";
+  /**
+   * WHO is asking, for the final policy gate. Set by the calling code path.
+   *
+   * `accessScope` answers "whose data may this touch"; `actor` answers "what
+   * rights does this caller have". They were the same question only for as long
+   * as "internal" was treated as one thing - the approval dispatcher, the CRM
+   * writeback and the copilot all shared a label and therefore shared the most
+   * permissive rule available, which is how a tool an operator had switched off
+   * stayed executable.
+   *
+   * Omitted means the gate derives a conservative actor from `accessScope`.
+   */
+  actor?: import("../dispatch-policy-gate.service").DispatchActor;
+  /** Set by the approval dispatcher. Re-verified by the gate, never trusted. */
+  approvalId?: string;
+  /** Stable "this same operation" key, for the duplicate-execution check. */
+  operationKey?: string;
 }): Promise<{ ok: true; result: unknown } | { ok: false; reason: string }> {
   const start = Date.now();
   const dot = opts.toolFunctionName.indexOf(".");
@@ -873,6 +890,54 @@ export async function executeAdapterTool(opts: {
       ok: false,
       reason: `missing_scope:${blockedScopes[0]} - ${slug} connection needs re-authorization (merchant approval)`,
     };
+  }
+
+  // ── Final policy gate ────────────────────────────────────────────────────
+  // The last check before anything real happens, and the only one positioned
+  // where no caller can route around it. Everything above answers questions
+  // about the CONNECTION; this answers whether this actor may run this tool for
+  // this tenant right now.
+  //
+  // Placed before the token refresh on purpose: a denied call should not mint
+  // fresh provider credentials on its way to being refused.
+  {
+    const { assertDispatchAllowed, recordGateAudit } = await import("../dispatch-policy-gate.service");
+    // A caller that did not declare itself gets the conservative reading of
+    // what it did declare. "customer" is unambiguous. "internal" is not, so it
+    // becomes a purpose-tagged service rather than silently inheriting the
+    // rights of a human or an admin.
+    const actor = opts.actor ?? (opts.accessScope === "customer"
+      ? { type: "customer_ai" as const, conversationId: opts.conversationId }
+      : { type: "internal_service" as const, purpose: "unspecified_legacy_caller" });
+
+    const verdict = await assertDispatchAllowed({
+      tenantId: opts.tenantId,
+      toolFunctionName: opts.toolFunctionName,
+      args: opts.args,
+      actor,
+      conversationId: opts.conversationId,
+      approvalId: opts.approvalId,
+      operationKey: opts.operationKey,
+    });
+
+    if (verdict.decision !== "ALLOW") {
+      void recordGateAudit({
+        tenantId: opts.tenantId,
+        toolFunctionName: opts.toolFunctionName,
+        actor,
+        decision: verdict.decision,
+        approvalId: verdict.approvalId,
+      });
+      // The decision code is for operators and tests. It is deliberately NOT
+      // customer-facing text - the Customer Outcome Contract maps it upstream.
+      const reason = `${verdict.decision.toLowerCase()}: ${verdict.reason}`;
+      await auditAdapterCall({
+        tenantId: opts.tenantId, conversationId: opts.conversationId, contactId: opts.contactId,
+        toolFunctionName: opts.toolFunctionName, args: opts.args, ok: false, reason,
+        durationMs: Date.now() - start,
+      });
+      return { ok: false, reason };
+    }
   }
 
   // Proactively refresh on use. Force a refresh when the integration was ERROR

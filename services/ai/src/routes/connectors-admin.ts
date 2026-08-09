@@ -25,11 +25,14 @@
 import { Router, type Request, type Response } from "express";
 import * as crypto from "crypto";
 import { provisionIntegrationTools } from "../services/integration-provisioning.service";
+import { disconnectIntegration } from "../services/integration-lifecycle.service";
+import { assessIntegrationHealth } from "../services/integration-health.service";
 import {
   prisma,
   authenticate,
   resolveTenant,
   requireActiveTenant,
+  requireRole,
   requireOnboardingOrActiveTenant,
   mintOAuthState,
   consumeOAuthState,
@@ -201,7 +204,34 @@ function base64url(buf: Buffer): string {
   return buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-// ─── Status / disconnect / config (universal) ─────────────────
+// ─── Status / health / disconnect / config (universal) ────────
+
+/**
+ * Whether the assistant can actually USE this integration.
+ *
+ * `/status` above answers a different question - what the connection row says -
+ * and it answered CONNECTED throughout the incident where a reconnect left the
+ * assistant with 42 read tools and zero write or action tools. Every signal we
+ * had asked about the connection; none asked what the assistant could do.
+ *
+ * Read-only. Remediation is returned as a list of actions and never performed:
+ * a diagnostic that repairs things destroys the state somebody is trying to
+ * understand, and repairing policy automatically is exactly how an operator's
+ * decision gets overwritten.
+ */
+router.get(
+  "/connectors/:slug/health",
+  authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"),
+  async (req: Request, res: Response) => {
+    try {
+      const health = await assessIntegrationHealth(req.tenantId!, String(req.params.slug));
+      res.json({ data: health });
+    } catch (err: any) {
+      console.error("[connectors] health assessment failed:", err?.message);
+      res.status(500).json({ error: "health_check_failed" });
+    }
+  },
+);
 
 router.get(
   "/connectors/:slug/status",
@@ -223,11 +253,23 @@ router.post(
   async (req: Request, res: Response) => {
     const cat = await findCatalog(req.params.slug);
     if (!cat) { res.status(404).json({ error: "unknown_provider" }); return; }
-    await (prisma as any).tenantIntegration.updateMany({
-      where: { tenantId: req.tenantId, integrationId: cat.id },
-      data: { status: "DISCONNECTED" },
+    // This route used to flip the status and stop, leaving the encrypted
+    // credentials in place - so an integration the product called
+    // "disconnected" still held a usable access token. The other disconnect
+    // route had the mirror-image bug: it cleared credentials and deleted the
+    // tenant's tool policy. Both now go through one function, which clears the
+    // credentials AND keeps the policy.
+    const ti = await (prisma as any).tenantIntegration.findUnique({
+      where: { tenantId_integrationId: { tenantId: req.tenantId, integrationId: cat.id } },
     });
-    res.json({ ok: true });
+    if (!ti) { res.json({ ok: true, alreadyDisconnected: true }); return; }
+    const result = await disconnectIntegration({
+      tenantId: req.tenantId!,
+      tenantIntegrationId: ti.id,
+      slug: String(req.params.slug),
+      actorId: (req as any).userId ?? null,
+    });
+    res.json({ ok: true, policyRowsPreserved: result.policyRowsPreserved });
   },
 );
 

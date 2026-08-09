@@ -17,6 +17,7 @@ import {
   toolBlockedByMissingScopes,
   getAdapter,
 } from "../services/connectors/integration-framework";
+import { recordOperatorToolIntent } from "../services/tool-policy-intent.service";
 
 /**
  * F4/F8 - Per-tenant tool permissions (HITL + enable/disable).
@@ -386,6 +387,29 @@ router.put("/:toolName", requirePermissionOrRole("ai:tools:manage", "ADMIN"), as
         where: { id: tenantTool.id },
         data: tenantToolPatch,
       });
+
+      // The same decision, recorded somewhere the connection cannot take with
+      // it. The row above is what the gate reads and it hangs off
+      // TenantIntegration, so it dies with the connection - which is how an
+      // operator who disabled `process_refund`, disconnected to re-grant OAuth
+      // scopes and reconnected got the tool back enabled. Their decision was
+      // never overridden; the record of it was deleted, and provisioning fell
+      // back to a catalogue default nobody chose.
+      //
+      // Both are written, each for what it is good at: TenantTool is the live
+      // policy, TenantToolPermission is the DECISION, and reconnect restores
+      // the first from the second.
+      await recordOperatorToolIntent({
+        tenantId,
+        catalogToolSlug: slug,
+        actorId: (req as any).userId ?? null,
+        enabled: typeof enabled === "boolean" ? enabled : undefined,
+        requiresApproval: typeof requiresApproval === "boolean" ? requiresApproval : undefined,
+        approverRole: approverRole === null || typeof approverRole === "string" ? approverRole : undefined,
+        expiresAfterMin: typeof expiresAfterMin === "number" ? expiresAfterMin : undefined,
+        allowModification: typeof allowModification === "boolean" ? allowModification : undefined,
+      });
+
       res.json({ data: updated });
       return;
     }
