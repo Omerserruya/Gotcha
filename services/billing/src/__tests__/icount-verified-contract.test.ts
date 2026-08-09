@@ -92,4 +92,39 @@ describe("cc/bill", () => {
     // Unchanged, and restated here because these are the same request builders.
     expect(client).toContain("CURRENCY_ID_ILS = 1");
   });
+
+  /**
+   * Source: the API's own published parameter list for cc/bill, at
+   * https://apiv3.icount.co.il (the documentation SPA loads it from
+   * /index.json.php). It defines two ways to identify what to charge:
+   *
+   *   a stored card   cc_token_id
+   *   a raw card      cc_number, cc_type, cc_cvv, cc_validity,
+   *                   cc_holder_id, cc_holder_name
+   *
+   * `token` is not among them. This builder had been sending `token`, which
+   * identifies nothing - the same shape as the `page_id` / `paypage_id`
+   * mistake above, and with the same consequence: a request the API cannot
+   * act on.
+   *
+   * Unlike the assertions above this one is NOT live-verified, because
+   * verifying it means charging a card. It is pinned from the published
+   * contract, and the note stands until a real charge confirms it.
+   */
+  it("identifies the stored card as cc_token_id", () => {
+    expect(code).toContain("cc_token_id: input.token");
+  });
+
+  it("does not send `token` as the wire field", () => {
+    // The exact spelling that identifies no stored card. `input.token` remains
+    // our own domain name for the value; only the wire field changed.
+    expect(code).not.toMatch(/^\s*token: input\.token,/m);
+  });
+
+  it("sends no CVV - a stored-card charge is unattended by definition", () => {
+    // cc_cvv belongs to the raw-card branch of cc/bill. A merchant-initiated
+    // renewal has no customer present to supply one, and sending a stored
+    // CVV would be both wrong and a compliance problem.
+    expect(code).not.toContain("cc_cvv");
+  });
 });

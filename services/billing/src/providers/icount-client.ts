@@ -12,7 +12,7 @@
  *   client/create           create the client a sale is attached to
  *   paypage/generate_sale   create a hosted page session, returns `sale_url`
  *   client/get_cc_tokens    server-side pull of a client's stored card tokens
- *   cc/bill                 charge a stored token: sum, token, client_id,
+ *   cc/bill                 charge a stored token: sum, cc_token_id, client_id,
  *                           currency_id
  *   cc/transactions         transaction lookup, for reconciling an UNKNOWN
  *   doc/cancel              full document-linked refund, with refund_cc: true
@@ -474,7 +474,22 @@ export async function bill(input: BillInput): Promise<BillResult> {
     "cc/bill",
     {
       sum: input.sum,
-      token: input.token,
+      // `cc_token_id`, NOT `token`.
+      //
+      // The API documents cc/bill as taking either a stored token
+      // (`cc_token_id`) or a raw card (`cc_number` + `cc_cvv` + ...). `token`
+      // is not a parameter it defines, and this request builder had been
+      // sending exactly that - so the stored card was never identified and the
+      // charge could only ever have been rejected.
+      //
+      // It survived because nothing exercised it: mock and simulator modes are
+      // local fixtures that never see the real parameter contract, and no card
+      // has ever been stored in production, so cc/bill has not once been
+      // reached. The same class of mistake has bitten this integration twice
+      // already - `page_id` for `paypage_id`, which the API answers with
+      // reason="missing_paypage_id" - which is why the contract test alongside
+      // this now pins the field name.
+      cc_token_id: input.token,
       currency_id: input.currencyId,
       ...(input.clientId ? { client_id: input.clientId } : {}),
       ...(input.customClientId ? { custom_client_id: input.customClientId } : {}),
