@@ -19,6 +19,7 @@ import {
   type CreditPackage,
   type CreditSummary,
 } from "@/lib/api-billing";
+import { ReceiptDetailsForm, useBillingIdentity } from "@/components/billing/ReceiptDetailsForm";
 
 function BuyCreditsInner() {
   const { token } = useAuth();
@@ -29,6 +30,12 @@ function BuyCreditsInner() {
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [confirmPkg, setConfirmPkg] = useState<CreditPackage | null>(null);
+  // A purchase cannot be priced without a declared country, and the receipt
+  // cannot be made out to anyone without a name. Asking here, at the point of
+  // sale, is the alternative to a charge that fails with `charge_not_taxable`
+  // and reads to the customer as a broken card.
+  const { identity, setIdentity, complete: identityComplete } = useBillingIdentity();
+  const isHe = String(locale ?? "").startsWith("he");
 
   const fmt = (n: number) => Math.round(n).toLocaleString();
   const money = (amount: string | number, currency = "ILS") => {
@@ -130,7 +137,12 @@ function BuyCreditsInner() {
             <li key={pk.id} className="flex items-center justify-between gap-4 py-3">
               <div>
                 <p className="text-sm font-semibold text-gray-900">{t("usage.buy.credits").replace("{n}", fmt(pk.units))}</p>
-                <p className="text-xs text-gray-400" dir="ltr">{money(pk.price, pk.currency)}</p>
+                <p className="text-xs text-gray-400" dir="ltr">
+                  {money(pk.price, pk.currency)}
+                  {pk.taxed && !pk.taxed.exempt && (
+                    <span> + {pk.taxed.label ?? "VAT"} {pk.taxed.percent}%</span>
+                  )}
+                </p>
               </div>
               <button
                 disabled={busy !== null}
@@ -151,24 +163,79 @@ function BuyCreditsInner() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
           <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
             <h4 className="text-base font-semibold text-gray-900">{t("usage.buy.confirmTitle")}</h4>
-            <p className="mt-2 text-sm text-gray-600">
-              {t("usage.buy.confirmBody").replace("{n}", fmt(confirmPkg.units)).replace("{price}", money(confirmPkg.price, confirmPkg.currency))}
-            </p>
-            <div className="mt-5 flex justify-end gap-2">
-              <button onClick={() => setConfirmPkg(null)} className="rounded-lg px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700">
-                {t("usage.buy.cancel")}
-              </button>
-              <button
-                onClick={() => {
-                  const pk = confirmPkg;
-                  setConfirmPkg(null);
-                  void purchase(pk);
-                }}
-                className="rounded-lg bg-emerald-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700"
-              >
-                {t("usage.buy.confirmCta")}
-              </button>
-            </div>
+
+            {!identityComplete ? (
+              // Asked before the charge, not after it fails. Without a country
+              // the amount cannot be priced at all, and without a name the
+              // receipt has nobody to be made out to.
+              <div className="mt-3">
+                <p className="mb-4 text-xs text-gray-500">
+                  {isHe
+                    ? "לפני הרכישה - על שם מי להוציא את חשבונית המס/קבלה? המדינה קובעת אם נגבה מע״מ."
+                    : "Before buying - who should the tax invoice/receipt be made out to? The country decides whether VAT is charged."}
+                </p>
+                <ReceiptDetailsForm
+                  value={identity}
+                  compact
+                  onSaved={setIdentity}
+                  saveLabel={isHe ? "שמירה והמשך" : "Save and continue"}
+                />
+                <div className="mt-4 flex justify-end">
+                  <button onClick={() => setConfirmPkg(null)} className="rounded-lg px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700">
+                    {t("usage.buy.cancel")}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <p className="mt-2 text-sm text-gray-600">
+                  {t("usage.buy.confirmBody").replace("{n}", fmt(confirmPkg.units)).replace("{price}", money(confirmPkg.price, confirmPkg.currency))}
+                </p>
+
+                {/* Sum, tax, total. The last line is the one that reaches the
+                    statement, and showing only the first is what makes the
+                    difference look like an error. */}
+                {confirmPkg.taxed && !confirmPkg.taxed.exempt && (
+                  <dl className="mt-3 space-y-1.5 rounded-xl bg-gray-50 p-3 text-sm">
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-gray-500">{isHe ? "סכום לפני מע״מ" : "Subtotal"}</dt>
+                      <dd className="text-gray-700" dir="ltr">{confirmPkg.taxed.net}</dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-gray-500">
+                        {confirmPkg.taxed.label ?? (isHe ? "מע״מ" : "VAT")} {confirmPkg.taxed.percent}%
+                      </dt>
+                      <dd className="text-gray-700" dir="ltr">{confirmPkg.taxed.tax}</dd>
+                    </div>
+                    <div className="flex justify-between gap-2 border-t border-gray-200 pt-1.5">
+                      <dt className="text-gray-500">{isHe ? 'סה"כ לחיוב' : "Total charged"}</dt>
+                      <dd className="font-semibold text-gray-900" dir="ltr">{confirmPkg.taxed.gross}</dd>
+                    </div>
+                  </dl>
+                )}
+
+                <p className="mt-3 text-xs text-gray-400">
+                  {isHe ? "הקבלה על שם " : "Receipt made out to "}
+                  <span className="font-medium text-gray-600">{identity?.billingName}</span>
+                </p>
+
+                <div className="mt-5 flex justify-end gap-2">
+                  <button onClick={() => setConfirmPkg(null)} className="rounded-lg px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700">
+                    {t("usage.buy.cancel")}
+                  </button>
+                  <button
+                    onClick={() => {
+                      const pk = confirmPkg;
+                      setConfirmPkg(null);
+                      void purchase(pk);
+                    }}
+                    className="rounded-lg bg-emerald-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700"
+                  >
+                    {t("usage.buy.confirmCta")}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

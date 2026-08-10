@@ -19,7 +19,8 @@ import {
   getUsdIlsRate,
   ESTIMATE_DISCLAIMER,
 } from "@chatcenter/shared";
-import { listCatalogPlans, quote, describeSubscription } from "../services/pricing.service";
+import { listCatalogPlans, quote, describeSubscription, taxSummaryForTenant } from "../services/pricing.service";
+import { applyTax } from "../services/tax.service";
 import { getSubscriptionForTenant } from "../services/billable-entity.service";
 import { packageAvailable, effectivePackagePrice } from "../services/purchase.service";
 
@@ -42,14 +43,18 @@ async function displayCurrency(raw: unknown): Promise<string> {
 router.get("/billing/pricing", authenticate, resolveTenant, async (req, res) => {
   const display = await displayCurrency(req.query.currency);
   const cfg = await getCurrencyConfig();
-  const [plans, sub, fx] = await Promise.all([
+  const [plans, sub, fx, tax] = await Promise.all([
     listCatalogPlans({ tenantId: req.tenantId, displayCurrency: display }),
     getSubscriptionForTenant(req.tenantId!),
     display === cfg.baseCurrency ? Promise.resolve(null) : getUsdIlsRate(),
+    taxSummaryForTenant(req.tenantId),
   ]);
 
   res.json({
     plans,
+    // Catalogue prices are net. The cards say "+ VAT" off this rather than
+    // presenting a number the charge will not match.
+    tax,
     currentPlanKey: (sub as any)?.planKey ?? null,
     currentPlanVersion: (sub as any)?.planVersion ?? null,
     currency: {
@@ -90,6 +95,10 @@ router.post("/billing/pricing/quote", authenticate, resolveTenant, async (req, r
       monthlyPrice: q.monthlyPriceDisplay,
       includedCredits: q.includedCredits,
       estimate: q.estimate,
+      // Catalogue prices are NET, so the figure above is not what leaves the
+      // card. The three numbers travel together or the page shows a total
+      // nobody can check against the one on their statement.
+      tax: q.tax,
       disclaimer: ESTIMATE_DISCLAIMER,
     });
   } catch (err: any) {
@@ -138,7 +147,12 @@ router.get("/billing/pricing/packages", authenticate, resolveTenant, async (req,
   });
 
   const display = await displayCurrency(req.query.currency);
-  const { toDisplayPrice, money } = await import("@chatcenter/shared");
+  const { toDisplayPrice, money, toDecimalString } = await import("@chatcenter/shared");
+
+  // Package prices are net, like every catalogue price. Carrying the tax with
+  // them is what lets the confirm dialog state the amount that will actually
+  // be charged instead of the one on the tile.
+  const tax = await taxSummaryForTenant(req.tenantId);
 
   const packages = [];
   for (const p of rows) {
@@ -150,13 +164,14 @@ router.get("/billing/pricing/packages", authenticate, resolveTenant, async (req,
       nameHe: p.nameHe,
       credits: p.units,
       price: await toDisplayPrice(price, display),
+      taxed: applyTax(toDecimalString(price), tax),
       discountLabel: p.discountLabel,
       maxPurchaseQuantity: p.maxPurchaseQuantity,
       expiryPolicy: p.expiryPolicy,
       expiryDays: p.expiryDays,
     });
   }
-  res.json({ packages, eligible: true });
+  res.json({ packages, tax, eligible: true });
 });
 
 /**

@@ -573,7 +573,36 @@ export interface CreateDocumentInput {
 export interface CreateDocumentResult {
   docNumber: string | null;
   docUrl: string | null;
+  /**
+   * Whether iCount says it sent the document.
+   *
+   * `null` means it did not say - which is NOT the same as "no". A silent
+   * response is exactly why the caller sends the document explicitly
+   * afterwards instead of trusting a flag it set on the way in.
+   */
+  emailSent: boolean | null;
+  emailReason: string | null;
   raw: unknown;
+}
+
+/**
+ * Read the email outcome out of whatever shape iCount answered with.
+ *
+ * Documented as `iCountDocEmailStatus` (`email`, `name`, `email_sent`,
+ * `reason`), but it turns up under more than one key and sometimes as a list -
+ * one entry per recipient. Anything unrecognised returns null rather than
+ * false, so "we could not tell" never reads as "it did not send".
+ */
+export function readEmailStatus(data: any): { sent: boolean | null; reason: string | null } {
+  const raw = data?.email_status ?? data?.emails ?? data?.email ?? null;
+  const entries = Array.isArray(raw) ? raw : raw && typeof raw === "object" ? [raw] : [];
+  if (!entries.length) {
+    if (typeof data?.email_sent === "boolean") return { sent: data.email_sent, reason: null };
+    return { sent: null, reason: null };
+  }
+  const sent = entries.some((e: any) => e?.email_sent === true || e?.email_sent === 1 || e?.email_sent === "1");
+  const reason = entries.map((e: any) => e?.reason).find((r: any) => typeof r === "string" && r.trim()) ?? null;
+  return { sent, reason };
 }
 
 /**
@@ -628,11 +657,62 @@ export async function createDocument(input: CreateDocumentInput): Promise<Create
     { mutating: true },
   );
 
+  const email = readEmailStatus(data);
   return {
     docNumber: extractRef(data, ["docnum", "doc_number"]),
     docUrl: typeof data?.doc_url === "string" ? data.doc_url : null,
+    emailSent: email.sent,
+    emailReason: email.reason,
     raw: data,
   };
+}
+
+// ─── doc/email ────────────────────────────────────────────────────────────
+
+export interface EmailDocumentInput {
+  doctype: string;
+  docNumber: string;
+  /** The address the receipt goes to. Explicit - never "whoever is on file". */
+  to: string;
+  lang?: "he" | "en";
+  subject?: string;
+}
+
+export interface EmailDocumentResult {
+  sent: boolean | null;
+  reason: string | null;
+  raw: unknown;
+}
+
+/**
+ * Send an already-issued document to a named address.
+ *
+ * `doc/create`'s `send_email` flag is a request, not a receipt: it names no
+ * recipient we chose and its answer may say nothing about what happened. This
+ * call states the address and comes back with `email_sent`, so "the customer
+ * got their receipt" is something observed rather than assumed.
+ *
+ * Safe to call after a create that may already have sent - a duplicate receipt
+ * is a mild annoyance, a missing one is a customer with no proof of payment.
+ */
+export async function emailDocument(input: EmailDocumentInput): Promise<EmailDocumentResult> {
+  assertLiveTransport("doc/email");
+  await assertTestAccount("doc/email");
+
+  const data = await call(
+    "doc/email",
+    {
+      doctype: input.doctype,
+      docnum: input.docNumber,
+      email_to: input.to,
+      email_lang: input.lang ?? "he",
+      ...(input.subject ? { email_subject: input.subject } : {}),
+    },
+    { mutating: true },
+  );
+
+  const status = readEmailStatus(data);
+  return { sent: status.sent, reason: status.reason, raw: data };
 }
 
 /**

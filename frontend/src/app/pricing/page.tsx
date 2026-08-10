@@ -58,6 +58,17 @@ export default function PricingPage() {
 
   const disclaimer = isHe ? p.catalog?.disclaimer.he ?? "" : p.catalog?.disclaimer.en ?? "";
 
+  // Listed prices are net. The public page has no visitor country to go on, so
+  // it names the rate rather than folding it into a total - a total including
+  // tax a visitor abroad will not be charged is the worse of the two errors.
+  const tax = p.catalog?.tax;
+  const taxNote =
+    tax && !tax.exempt
+      ? isHe
+        ? `המחירים אינם כוללים ${tax.label ?? 'מע"מ'} ${tax.percent}%`
+        : `Prices exclude ${tax.label ?? "VAT"} ${tax.percent}%`
+      : null;
+
   return (
     <Shell t={t}>
       {/* ── Introduction ── */}
@@ -107,6 +118,7 @@ export default function PricingPage() {
               t={t}
               ctaHref={ctaHref}
               ctaLabel={ctaLabel}
+              taxNote={taxNote}
             />
           )}
           <p className="mt-5 text-[12px] leading-[1.6] text-gray-400">{disclaimer}</p>

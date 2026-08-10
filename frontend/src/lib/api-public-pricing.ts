@@ -94,9 +94,27 @@ export interface PublicPlan {
   estimate: PublicEstimate;
 }
 
+/**
+ * The tax the listed prices are BEFORE.
+ *
+ * No visitor has declared where they are, so this is the default jurisdiction
+ * and `assumed` is always true here. The page states it as "+ VAT" rather than
+ * folding it into a total: an Israeli consumer may not be quoted a price with
+ * the tax left unmentioned, and a visitor abroad must not be shown a total
+ * including one they will not be charged.
+ */
+export interface PublicTaxSummary {
+  percent: number;
+  label: string | null;
+  countryCode: string;
+  exempt: boolean;
+  assumed: boolean;
+}
+
 export interface PublicPricingCatalog {
   enabled: true;
   plans: PublicPlan[];
+  tax: PublicTaxSummary;
   currency: {
     base: string;
     display: string;

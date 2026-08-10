@@ -29,7 +29,7 @@ import {
   type BillingMoney as Money,
   type DisplayPrice,
 } from "@chatcenter/shared";
-import { taxForDisplay, type DisplayTax } from "./tax.service";
+import { taxForDisplay, resolveTaxRate, DEFAULT_DISPLAY_COUNTRY, type DisplayTax } from "./tax.service";
 
 export interface VolumeOptionView {
   key: string;
@@ -405,6 +405,26 @@ async function declaredBillingCountry(tenantId: string): Promise<string | null> 
     select: { billingCountry: true },
   });
   return profile?.billingCountry ?? null;
+}
+
+/**
+ * The tax that applies to this tenant, without pricing anything.
+ *
+ * What a catalogue needs in order to say "+ VAT" honestly: the rate, and
+ * whether it was declared or assumed. A page that shows only net prices with
+ * no mention of tax is a price the customer cannot reconcile with the charge,
+ * and in Israel is not a price you are allowed to advertise to a consumer.
+ */
+export async function taxSummaryForTenant(tenantId?: string | null): Promise<{
+  percent: number;
+  label: string | null;
+  countryCode: string;
+  exempt: boolean;
+  assumed: boolean;
+}> {
+  const declared = tenantId ? await declaredBillingCountry(tenantId) : null;
+  const rate = await resolveTaxRate(declared || DEFAULT_DISPLAY_COUNTRY);
+  return { ...rate, assumed: !declared };
 }
 
 export async function quote(input: {

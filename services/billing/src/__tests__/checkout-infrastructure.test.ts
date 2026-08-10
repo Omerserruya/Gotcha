@@ -526,7 +526,42 @@ describe("tax reaches the card and the document", () => {
   });
 
   it("emails the receipt when there is an address to send it to", () => {
-    expect(inv).toMatch(/sendEmail: Boolean\(ctx\.customer\.email\)/);
+    expect(inv).toMatch(/sendEmail: Boolean\(recipient\)/);
+  });
+
+  it("falls back to an admin of the tenant rather than sending the receipt nowhere", () => {
+    // A document nobody receives is, to the customer, a payment with no proof.
+    expect(inv).toMatch(/async function receiptRecipient/);
+    expect(inv).toMatch(/role: "ADMIN"/);
+    // The declared billing email always wins - the fallback is a fallback.
+    const fn = inv.slice(inv.indexOf("async function receiptRecipient"), inv.indexOf("async function receiptRecipient") + 700);
+    expect(fn.indexOf("if (declared) return declared")).toBeLessThan(fn.indexOf("findFirst"));
+  });
+
+  it("confirms delivery instead of trusting the flag it set", () => {
+    // `send_email` is a request whose answer may say nothing. "We asked for it
+    // to be sent" is not the same fact as "it was sent".
+    expect(inv).toMatch(/doc\.emailSent !== true/);
+    expect(inv).toMatch(/emailDocument\(\{/);
+    expect(client).toMatch(/"doc\/email"/);
+    expect(client).toMatch(/email_to: input\.to/);
+  });
+
+  it("treats an unreadable email status as unknown, never as sent", () => {
+    // Returning false where iCount simply said nothing would suppress the
+    // resend that is the whole point of asking.
+    expect(client).toMatch(/export function readEmailStatus/);
+    expect(client).toMatch(/return \{ sent: null, reason: null \}/);
+  });
+
+  it("reports an undelivered receipt without failing the charge", () => {
+    const block = inv.slice(inv.indexOf("emailDocument({"), inv.indexOf("emailDocument({") + 1200);
+    expect(block).toContain("payment.document_failed");
+    expect(block).not.toMatch(/return \{ success: false/);
+  });
+
+  it("says so when there is nobody at all to send the receipt to", () => {
+    expect(inv).toContain("no_receipt_recipient");
   });
 
   it("states the rate on the document, or says exempt", () => {

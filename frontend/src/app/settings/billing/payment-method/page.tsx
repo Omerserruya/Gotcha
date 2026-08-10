@@ -20,13 +20,20 @@ import {
   removePaymentMethod,
   type PaymentMethod,
 } from "@/lib/api-billing";
+import { ReceiptDetailsForm, useBillingIdentity } from "@/components/billing/ReceiptDetailsForm";
 
 /** Survives the round trip to the provider's page, which leaves our origin. */
 const SESSION_KEY = "gotcha.paymentMethodSession";
 
 function PaymentMethodInner() {
   const { token } = useAuth();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const he = String(locale ?? "").startsWith("he");
+  // Asked BEFORE the card, not after. The name travels with the tokenization
+  // session and becomes the provider's client record, so a card stored without
+  // it belongs to "GOTCHA customer" forever - and every receipt after it says
+  // so. The country is what makes the charge legal to price at all.
+  const { identity, setIdentity, loading: identityLoading, complete: identityComplete } = useBillingIdentity();
   const [methods, setMethods] = useState<PaymentMethod[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
@@ -135,13 +142,49 @@ function PaymentMethodInner() {
           <p className="mt-1 text-sm text-gray-500">{t("settings.billing.paymentSubtitle")}</p>
         </div>
         <button
-          disabled={busy !== null}
+          disabled={busy !== null || identityLoading || !identityComplete}
           onClick={addCard}
           className="shrink-0 rounded-lg bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
         >
           {methods.length ? t("settings.billing.replaceCard") : t("settings.billing.addCard")}
         </button>
       </div>
+
+      {/* The receipt details, up front. Collecting them after the card would
+          mean the provider's client record is already named wrong, and renaming
+          it does not rename the receipts already issued against it. */}
+      {!identityLoading && !identityComplete && (
+        <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50/50 p-5">
+          <h2 className="text-sm font-semibold text-amber-900">
+            {he ? "קודם - על שם מי הקבלה?" : "First - who is the receipt for?"}
+          </h2>
+          <p className="mb-4 mt-1 text-xs text-amber-800">
+            {he
+              ? "השם הזה יופיע על כל חשבונית מס/קבלה, והמדינה קובעת אם נגבה מע״מ. אי אפשר לשמור כרטיס לפני שהם ידועים."
+              : "This name appears on every tax invoice/receipt, and the country decides whether VAT is charged. A card cannot be stored before they are known."}
+          </p>
+          <ReceiptDetailsForm
+            value={identity}
+            compact
+            onSaved={setIdentity}
+            saveLabel={he ? "שמירה והמשך" : "Save and continue"}
+          />
+        </div>
+      )}
+
+      {!identityLoading && identityComplete && (
+        <div className="mb-6 flex items-center justify-between gap-4 rounded-xl border border-gray-200 px-4 py-2.5 text-sm">
+          <span className="text-gray-600">
+            {he ? "הקבלה על שם" : "Receipt made out to"}{" "}
+            <span className="font-medium text-gray-900">{identity?.billingName}</span>
+            {identity?.vatId && <span className="text-gray-400"> · {identity.vatId}</span>}
+            <span className="text-gray-400"> · {identity?.billingCountry}</span>
+          </span>
+          <Link href="/settings/billing/details" className="shrink-0 text-xs font-medium text-primary-600 hover:underline">
+            {he ? "עריכה" : "Edit"}
+          </Link>
+        </div>
+      )}
 
       {msg && (
         <div className={`mb-6 rounded-xl px-4 py-2.5 text-sm border ${msg.kind === "ok" ? "bg-green-50 text-green-700 border-green-200" : "bg-red-50 text-red-700 border-red-200"}`}>

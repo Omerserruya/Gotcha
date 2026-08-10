@@ -17,6 +17,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import { usePermissions } from "@/context/PermissionsContext";
 import { track } from "@/lib/analytics";
+import { useBillingIdentity } from "@/components/billing/ReceiptDetailsForm";
 import {
   getSubscription,
   getPlans,
@@ -105,6 +106,8 @@ export default function BillingSettingsPage() {
 
   const canCancel = can("settings:billing:cancel");
   const canManage = can("settings:billing:manage");
+  const isHe = String(locale ?? "").startsWith("he");
+  const { identity } = useBillingIdentity();
 
   const dateFmt = (iso: string | null | undefined) =>
     iso ? new Date(iso).toLocaleDateString(locale === "he" ? "he-IL" : undefined, { year: "numeric", month: "short", day: "numeric" }) : "";
@@ -361,6 +364,37 @@ export default function BillingSettingsPage() {
         )}
       </Section>
 
+      {/* ── Receipt details ── */}
+      {/* Its own section rather than a line inside Payment: the card is how
+          money leaves, this is who the document says it left. Neither answers
+          for the other, and the country here is what makes a charge priceable
+          at all. */}
+      <Section
+        title={isHe ? "פרטי קבלה" : "Receipt details"}
+        action={
+          canManage ? (
+            <Link href="/settings/billing/details" className="shrink-0 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50">
+              {t("settings.billing.update")}
+            </Link>
+          ) : undefined
+        }
+      >
+        {identity?.billingName && identity?.billingCountry ? (
+          <div className="space-y-0.5 text-sm text-gray-700">
+            <div className="font-medium text-gray-900">{identity.billingName}</div>
+            {identity.vatId && <div className="text-gray-500" dir="ltr">{identity.vatId}</div>}
+            <div className="text-gray-500">{identity.billingCountry}</div>
+            {identity.billingEmail && <div className="text-gray-400" dir="ltr">{identity.billingEmail}</div>}
+          </div>
+        ) : (
+          <p className="text-sm text-amber-700">
+            {isHe
+              ? "עוד לא הוגדרו שם ומדינה לקבלה. בלעדיהם לא נוכל לחייב ולא נוכל להנפיק חשבונית מס."
+              : "No name or country has been set yet. Without them we cannot charge or issue a tax invoice."}
+          </p>
+        )}
+      </Section>
+
       {/* ── Invoices ── */}
       <Section title={t("settings.billing.invoices")}>
         {invoices.length === 0 ? (
@@ -399,13 +433,26 @@ export default function BillingSettingsPage() {
                     {t(`settings.billing.invStatuses.${inv.status}`) || inv.status}
                   </td>
                   <td className="py-2.5 text-end">
-                    {inv.providerPdfUrl ? (
-                      <a href={inv.providerPdfUrl} target="_blank" rel="noreferrer" className="font-medium text-primary-600 hover:underline">
-                        {t("settings.billing.view")}
-                      </a>
-                    ) : (
-                      <span className="text-gray-300">-</span>
-                    )}
+                    {/* The iCount document first: it is the legal receipt, and
+                        our own PDF link is a mirror of it at best. Falling back
+                        keeps older rows, issued before documents existed,
+                        openable. */}
+                    {(() => {
+                      const charge = settledCharge(inv);
+                      const href = charge?.documentUrl ?? inv.providerPdfUrl;
+                      if (!href) {
+                        return charge?.documentRef ? (
+                          <span className="text-xs text-gray-400" dir="ltr">#{charge.documentRef}</span>
+                        ) : (
+                          <span className="text-gray-300">-</span>
+                        );
+                      }
+                      return (
+                        <a href={href} target="_blank" rel="noreferrer" className="font-medium text-primary-600 hover:underline">
+                          {t("settings.billing.view")}
+                        </a>
+                      );
+                    })()}
                   </td>
                 </tr>
               ))}

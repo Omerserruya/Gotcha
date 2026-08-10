@@ -19,6 +19,8 @@ import { ensureBillableEntity, getEntityIdForTenant, getSubscriptionForTenant } 
 import { listActivePlans } from "../services/plan.service";
 import { buyCredits } from "../services/purchase.service";
 import { periodKeyFor } from "../lib/period";
+import { taxSummaryForTenant } from "../services/pricing.service";
+import { applyTax } from "../services/tax.service";
 
 const router = Router();
 
@@ -169,9 +171,16 @@ router.get("/billing/credits/balance", authenticate, resolveTenant, async (req, 
   });
 });
 
-router.get("/billing/credits/packages", authenticate, async (_req, res) => {
+router.get("/billing/credits/packages", authenticate, resolveTenant, async (req, res) => {
   const packages = await prisma.creditPackage.findMany({ where: { active: true }, orderBy: { units: "asc" } });
-  res.json({ packages });
+  // Package prices are net, like every catalogue price. The tax travels with
+  // them so the confirm dialog can state the amount that will actually be
+  // charged rather than the one on the tile.
+  const tax = await taxSummaryForTenant(req.tenantId);
+  res.json({
+    packages: packages.map((p) => ({ ...p, taxed: applyTax(String(p.price), tax) })),
+    tax,
+  });
 });
 
 router.post("/billing/credits/buy", authenticate, resolveTenant, requirePermission("settings:billing:manage"), async (req, res) => {

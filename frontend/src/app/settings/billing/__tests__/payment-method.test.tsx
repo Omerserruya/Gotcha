@@ -14,9 +14,20 @@ const startSession = vi.fn();
 const confirm = vi.fn();
 const getMethods = vi.fn();
 const removeMethod = vi.fn();
+const getIdentity = vi.fn();
+const saveIdentity = vi.fn();
+
+/** A receipt already has a name and a country, unless a test says otherwise. */
+const COMPLETE_IDENTITY = {
+  billingName: "Urban Supply Ltd",
+  vatId: "515151515",
+  billingEmail: "billing@urban.example",
+  billingCountry: "IL",
+  billingAddress: null,
+};
 
 vi.mock("@/context/AuthContext", () => ({ useAuth: () => ({ token: "tok" }) }));
-vi.mock("@/context/I18nContext", () => ({ useI18n: () => ({ t: (k: string) => k }) }));
+vi.mock("@/context/I18nContext", () => ({ useI18n: () => ({ t: (k: string) => k, locale: "en" }) }));
 vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams("") }));
 vi.mock("@/components/RequirePermission", () => ({
   RequirePermission: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -26,6 +37,8 @@ vi.mock("@/lib/api-billing", () => ({
   startPaymentMethodSession: (...a: unknown[]) => startSession(...a),
   confirmPaymentMethod: (...a: unknown[]) => confirm(...a),
   removePaymentMethod: (...a: unknown[]) => removeMethod(...a),
+  getBillingIdentity: (...a: unknown[]) => getIdentity(...a),
+  saveBillingIdentity: (...a: unknown[]) => saveIdentity(...a),
 }));
 
 import PaymentMethodPage from "../payment-method/page";
@@ -35,6 +48,7 @@ const assign = vi.fn();
 beforeEach(() => {
   vi.clearAllMocks();
   getMethods.mockResolvedValue({ paymentMethods: [] });
+  getIdentity.mockResolvedValue({ data: COMPLETE_IDENTITY });
   sessionStorage.clear();
   Object.defineProperty(window, "location", {
     value: { ...window.location, assign },
@@ -129,5 +143,30 @@ describe("coming back from the provider", () => {
     await waitFor(() => expect(getMethods).toHaveBeenCalled());
     // A page load is not a returning customer.
     expect(confirm).not.toHaveBeenCalled();
+  });
+});
+
+describe("who the receipt is for, asked before the card", () => {
+  it("will not start card entry until a name and country are known", async () => {
+    // The name travels with the tokenization session and becomes the
+    // provider's client record. A card stored without it belongs to "GOTCHA
+    // customer" forever, and renaming the client does not rename the receipts
+    // already issued against it.
+    getIdentity.mockResolvedValue({ data: { ...COMPLETE_IDENTITY, billingName: null, billingCountry: null } });
+    render(<PaymentMethodPage />);
+
+    const button = await screen.findByText("settings.billing.addCard");
+    fireEvent.click(button);
+
+    await waitFor(() => expect(screen.getByText(/who is the receipt for/i)).toBeTruthy());
+    expect(startSession).not.toHaveBeenCalled();
+    expect(assign).not.toHaveBeenCalled();
+  });
+
+  it("lets it through once they are", async () => {
+    startSession.mockResolvedValue({ data: { redirectUrl: "https://provider.example/pay", sessionId: "s-ok" } });
+    render(<PaymentMethodPage />);
+    fireEvent.click(await screen.findByText("settings.billing.addCard"));
+    await waitFor(() => expect(startSession).toHaveBeenCalled());
   });
 });
