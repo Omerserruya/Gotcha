@@ -90,7 +90,11 @@ describe("paypage/info", () => {
 describe("cc/bill", () => {
   it("still charges in ILS", () => {
     // Unchanged, and restated here because these are the same request builders.
-    expect(client).toContain("CURRENCY_ID_ILS = 1");
+    // 5, not 1. Confirmed against the account: currency/get_list reports
+    // ILS { currency_id: 5 }, USD { 2 }, EUR { 1 }. This constant said 1, so
+    // every "ILS only" guard in the codebase was enforcing euros, and a live
+    // charge went out as EUR.
+    expect(client).toContain("CURRENCY_ID_ILS = 5");
   });
 
   /**
@@ -117,8 +121,10 @@ describe("cc/bill", () => {
    *   - cc_require_cvv applies only when a customer enters card details again.
    *     Stored-token charges do not require it, and CVV is never stored. So an
    *     unattended renewal on a cc_require_cvv=true account is valid.
-   *   - currency_id 1 is ILS for cc/bill. A PayPage's own currency_id uses a
-   *     different mapping and must never be reused as this enum.
+   *   - iCount described currency_id 1 as ILS for cc/bill. The account's own
+   *     currency/get_list and currency/info both report ILS as 5 and EUR as 1,
+   *     and a live charge confirmed it by settling in euros. The account is
+   *     authoritative; the value here is 5.
    */
   it("identifies the stored card as cc_token_id", () => {
     expect(code).toContain("cc_token_id: input.token");

@@ -15,7 +15,7 @@ function CHARGE(over: Record<string, any> = {}): any {
     currency: "USD",
     chargeAmount: "1821.35",
     chargeCurrency: "ILS",
-    providerCurrencyId: 1,
+    providerCurrencyId: 5,
     description: "t",
     idempotencyKey: "k1",
     ...over,

@@ -422,3 +422,54 @@ describe("a charge that never left the process is a failure, not an unknown", ()
     expect(inv).toMatch(/status: "UNKNOWN"/);
   });
 });
+
+// ─── Currency ids are the account's, not a guess ────────────────
+
+describe("iCount currency ids match the account", () => {
+  /**
+   * From the account itself - currency/get_list, cross-checked by
+   * currency/info reporting the account's own base currency:
+   *
+   *   ILS 5    USD 2    EUR 1    GBP 4
+   *
+   * ILS was 1 here. 1 is EUR. Every "ILS only" guard in this codebase was
+   * therefore enforcing euros, and because the wrong value agreed with itself
+   * in all three places that defined it, nothing disagreed and nothing failed.
+   * A live charge settled as EUR 3.00 instead of ILS 3.00 - about four times
+   * the intended amount. On a multi-currency account a wrong currency id does
+   * not error, it succeeds for the wrong money, which is the whole reason this
+   * is pinned rather than trusted.
+   *
+   * Both PayPages carried currency_id 5 the entire time. That was the clue.
+   */
+  const ACCOUNT_IDS = { ILS: 5, USD: 2, EUR: 1, GBP: 4 } as const;
+
+  it("ILS is 5 in the wire constant", () => {
+    const client = readFileSync(join(__dirname, "../providers/icount-client.ts"), "utf8");
+    expect(client).toContain(`CURRENCY_ID_ILS = ${ACCOUNT_IDS.ILS}`);
+  });
+
+  it("ILS is 5 in the quote enum, and USD stays 2", () => {
+    const quote = readFileSync(join(__dirname, "../services/payment-quote.service.ts"), "utf8");
+    expect(quote).toContain(`ILS: ${ACCOUNT_IDS.ILS}`);
+    expect(quote).toContain(`USD: ${ACCOUNT_IDS.USD}`);
+  });
+
+  it("ILS is 5 in the chargeable-currency map", () => {
+    const caps = readFileSync(join(__dirname, "../providers/capabilities.ts"), "utf8");
+    expect(caps).toContain(`{ ILS: ${ACCOUNT_IDS.ILS} }`);
+  });
+
+  it("nothing anywhere still calls 1 the shekel", () => {
+    // 1 is the euro. Any surviving "ILS: 1" is a charge in the wrong currency.
+    for (const rel of [
+      "../providers/icount-client.ts",
+      "../providers/capabilities.ts",
+      "../services/payment-quote.service.ts",
+    ]) {
+      const src = readFileSync(join(__dirname, rel), "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+      expect(src, `${rel} still maps ILS to 1`).not.toMatch(/ILS:\s*1\b/);
+      expect(src, `${rel} still sets CURRENCY_ID_ILS to 1`).not.toMatch(/CURRENCY_ID_ILS\s*=\s*1\b/);
+    }
+  });
+});

@@ -31,7 +31,24 @@ import {
 } from "./icount-config";
 
 /** iCount currency ids. 1 = ILS, 2 = USD. Product policy charges ILS only. */
-export const CURRENCY_ID_ILS = 1;
+/**
+ * ILS is currency_id 5. Confirmed against the account itself:
+ *
+ *   currency/get_list -> ILS { currency_id: 5 }, USD { currency_id: 2 },
+ *                        EUR { currency_id: 1 }, GBP { currency_id: 4 }
+ *   currency/info     -> { currency: "ILS", currency_id: 5 }
+ *
+ * This was 1, which is EUR. Every guard in the codebase was written to enforce
+ * "ILS only" and every one of them was enforcing euros, so nothing caught it:
+ * the value agreed with itself everywhere. A live charge of 3.00 went out as
+ * EUR 3.00 rather than ILS 3.00 - roughly four times the intended amount, and
+ * on a multi-currency account a wrong id does not fail, it succeeds for the
+ * wrong money.
+ *
+ * The PayPages both carried currency_id 5 and that was ILS all along, which
+ * was the visible clue.
+ */
+export const CURRENCY_ID_ILS = 5;
 export const CURRENCY_ID_USD = 2;
 
 export class IcountApiError extends Error {

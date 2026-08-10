@@ -445,7 +445,7 @@ describe("an ILS-priced plan needs no conversion", () => {
           commercialAmount: 499, commercialCurrency: "USD",
           fxRateId: null, fxRate: 1, fxRateSource: "IDENTITY", fxRateVersion: 0,
           fxQuotedAt: new Date(), chargeAmount: 499, chargeCurrency: "ILS",
-          providerCurrencyId: 1, expiresAt: new Date(Date.now() + 60_000),
+          providerCurrencyId: 5, expiresAt: new Date(Date.now() + 60_000),
         },
       }),
     ).rejects.toThrow();
@@ -460,7 +460,7 @@ describe("an ILS-priced plan needs no conversion", () => {
           commercialAmount: 499, commercialCurrency: "USD",
           fxRateId: null, fxRate: "3.65", fxRateSource: "MANUAL_PLATFORM_RATE", fxRateVersion: 1,
           fxQuotedAt: new Date(), chargeAmount: "1821.35", chargeCurrency: "ILS",
-          providerCurrencyId: 1, expiresAt: new Date(Date.now() + 60_000),
+          providerCurrencyId: 5, expiresAt: new Date(Date.now() + 60_000),
         },
       }),
     ).rejects.toThrow();
@@ -474,7 +474,7 @@ describe("an ILS-priced plan needs no conversion", () => {
       checkoutId: checkout.id,
       commercialAmount: new Prisma.Decimal("499.00"), commercialCurrency: "USD",
       fxRateId: rate.id, fxRate: new Prisma.Decimal(1), fxRateSource: "IDENTITY", fxRateVersion: 0,
-      chargeAmount: new Prisma.Decimal("499.00"), chargeCurrency: "ILS", providerCurrencyId: 1,
+      chargeAmount: new Prisma.Decimal("499.00"), chargeCurrency: "ILS", providerCurrencyId: 5,
       consumedByAttemptId: null,
     };
     expect(() => assertActivatable(checkout, attemptFor(checkout, quote), quote)).toThrow(

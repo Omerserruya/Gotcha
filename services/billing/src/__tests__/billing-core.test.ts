@@ -43,7 +43,7 @@ describe("billing/iCount provider (mock mode)", () => {
       token: "icmock_x", providerCustomerId: "cli_1",
       amount: 499, currency: "USD",
       // The ILS figure and currency id come from a frozen payment quote.
-      chargeAmount: "1821.35", chargeCurrency: "ILS", providerCurrencyId: 1,
+      chargeAmount: "1821.35", chargeCurrency: "ILS", providerCurrencyId: 5,
       description: "Pro", idempotencyKey: "k1", issueInvoice: true,
     });
     expect(res.success).toBe(true);

@@ -130,12 +130,12 @@ describe("the provider uses only iCount-verified operations", () => {
     expect(body).toContain("cc_token_id:");
     expect(body).not.toMatch(/^\s*token:/m);
     expect(body).toContain("client_id:");
-    // currency_id IS confirmed (1 = ILS). The rest remain invented.
+    // currency_id IS confirmed (5 = ILS, per the account itself). The rest remain invented.
     expect(body).toContain("currency_id:");
     expect(body).not.toMatch(/currency_code:|idempotency_key:|description:/);
   });
 
-  it("refuses any charge that is not ILS with currency_id 1", () => {
+  it("refuses any charge that is not ILS with currency_id 5", () => {
     expect(provider).toContain("assertChargeSafety");
     expect(provider).toMatch(/only ILS charges are enabled/);
     // The account is multi-currency, so a wrong id does not fail - it charges
