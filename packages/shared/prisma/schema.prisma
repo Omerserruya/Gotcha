@@ -3069,6 +3069,16 @@ model BillingProfile {
   currency           String               @default("ILS")
   billingEmail       String?              @map("billing_email")
   vatId              String?              @map("vat_id")
+  /// Who the tax document is made out to. Asked for explicitly - never derived
+  /// from the tenant name, because a receipt carrying the wrong legal entity is
+  /// worse than one that was never issued.
+  billingName        String?              @map("billing_name")
+  /// ISO-3166-1 alpha-2, DECLARED by the customer. Deliberately not defaulted
+  /// from Tenant.defaultCountryCode (a phone-normalisation default) or from the
+  /// onboarding website crawl: neither is a statement anyone made about where
+  /// they are liable for tax, and tax is not a thing to infer.
+  billingCountry     String?              @map("billing_country")
+  billingAddress     String?              @map("billing_address")
   status             BillingProfileStatus @default(ACTIVE)
   createdAt          DateTime             @default(now()) @map("created_at")
   updatedAt          DateTime             @updatedAt @map("updated_at")
@@ -3077,6 +3087,32 @@ model BillingProfile {
   paymentMethods PaymentMethod[]
 
   @@map("billing_profiles")
+}
+
+/// Tax rate by country, as configuration rather than code.
+///
+/// A country with no active row is 0%. That is what makes "Israel 18, everyone
+/// else nothing" expressible without seeding a row per country, and it means
+/// adding a jurisdiction later is a row, not a deploy.
+///
+/// `percent` is stored, never a multiplier: 18.00 reads as 18% to whoever
+/// checks it against the law, and a document has to state the rate it applied.
+model TaxRate {
+  id            String   @id @default(cuid())
+  /// ISO-3166-1 alpha-2, uppercase.
+  countryCode   String   @unique @map("country_code")
+  percent       Decimal  @db.Decimal(5, 2)
+  /// Shown on the document, in the customer's language. e.g. "מע\"מ".
+  label         String?
+  active        Boolean  @default(true)
+  effectiveFrom DateTime @default(now()) @map("effective_from")
+  internalNote  String?  @map("internal_note")
+  createdBy     String?  @map("created_by")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@index([active, countryCode])
+  @@map("tax_rates")
 }
 
 model PaymentMethod {
