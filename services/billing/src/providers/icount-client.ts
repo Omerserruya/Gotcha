@@ -540,6 +540,101 @@ export async function bill(input: BillInput): Promise<BillResult> {
   };
 }
 
+// ─── doc/create ───────────────────────────────────────────────────────────
+
+export interface CreateDocumentInput {
+  /** "invrec" - חשבונית מס קבלה. Confirmed against the account's doc/types. */
+  doctype: string;
+  clientId?: string;
+  customClientId?: string;
+  clientName: string;
+  vatId?: string;
+  email?: string;
+  address?: string;
+  /** The provider's currency id. Never defaulted - see CURRENCY_ID_ILS. */
+  currencyId: number;
+  /** What the line is for, in the customer's language. */
+  description: string;
+  /** Ex-tax, as a decimal string. */
+  net: string;
+  /** Whole percent. 0 means exempt, and `taxExempt` is set alongside. */
+  vatPercent: number;
+  /** Inclusive of tax - what the card was actually charged. */
+  gross: string;
+  /** The charge this documents, so the two can be reconciled. */
+  confirmationCode?: string;
+  cardType?: string;
+  cardLast4?: string;
+  /** Email the document to the customer. */
+  sendEmail?: boolean;
+  lang?: "he" | "en";
+}
+
+export interface CreateDocumentResult {
+  docNumber: string | null;
+  docUrl: string | null;
+  raw: unknown;
+}
+
+/**
+ * Issue the tax document for a charge that already happened.
+ *
+ * Separate from cc/bill on purpose, because iCount keeps them separate:
+ * cc/bill takes money and issues nothing. Its documented parameters have no
+ * field that would produce a document, which is why charges were landing with
+ * no receipt anywhere.
+ *
+ * The payment is recorded as a credit-card line carrying the confirmation code
+ * the charge returned, so the document and the transaction point at each other
+ * rather than merely agreeing on an amount. No card number and no CVV: the
+ * type accepts them, and a stored-card charge has neither to give.
+ *
+ * Totals are NOT sent. The line price and the VAT percent are, and iCount
+ * computes from them - sending a total as well would be two sources for one
+ * number, and the one that loses is the one nobody checked.
+ */
+export async function createDocument(input: CreateDocumentInput): Promise<CreateDocumentResult> {
+  assertLiveTransport("doc/create");
+  await assertTestAccount("doc/create");
+  if (!input.clientId && !input.customClientId) {
+    throw new IcountApiError("doc/create", "a client identifier is required");
+  }
+
+  const data = await call(
+    "doc/create",
+    {
+      doctype: input.doctype,
+      ...(input.clientId ? { client_id: input.clientId } : {}),
+      ...(input.customClientId ? { custom_client_id: input.customClientId } : {}),
+      client_name: input.clientName,
+      ...(input.vatId ? { vat_id: input.vatId } : {}),
+      ...(input.email ? { email: input.email } : {}),
+      ...(input.address ? { client_address: input.address } : {}),
+      currency_id: input.currencyId,
+      doc_lang: input.lang ?? "he",
+      items: [{ description: input.description, unitprice: input.net, quantity: 1 }],
+      // Exempt is a STATEMENT on the document, not the absence of a rate.
+      ...(input.vatPercent > 0 ? { vat_percent: input.vatPercent } : { tax_exempt: true }),
+      cc: [
+        {
+          sum: input.gross,
+          ...(input.confirmationCode ? { confirmation_code: input.confirmationCode } : {}),
+          ...(input.cardType ? { card_type: input.cardType } : {}),
+          ...(input.cardLast4 ? { card_number: input.cardLast4 } : {}),
+        },
+      ],
+      ...(input.sendEmail ? { send_email: true } : {}),
+    },
+    { mutating: true },
+  );
+
+  return {
+    docNumber: extractRef(data, ["docnum", "doc_number"]),
+    docUrl: typeof data?.doc_url === "string" ? data.doc_url : null,
+    raw: data,
+  };
+}
+
 /**
  * Pull an identifying reference out of a response.
  *

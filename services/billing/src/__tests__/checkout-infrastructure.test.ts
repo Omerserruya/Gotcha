@@ -473,3 +473,83 @@ describe("iCount currency ids match the account", () => {
     }
   });
 });
+
+// ─── Charging gross, and issuing the document ───────────────────
+
+describe("tax reaches the card and the document", () => {
+  const inv = readFileSync(join(__dirname, "../services/invoice.service.ts"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+  const client = readFileSync(join(__dirname, "../providers/icount-client.ts"), "utf8");
+
+  it("submits the gross, not the catalogue price", () => {
+    // Catalogue prices are net. Charging `net` would leave an Israeli customer
+    // owing VAT that nobody collected.
+    expect(inv).toMatch(/const chargeAmount = taxed\.gross/);
+  });
+
+  it("taxes the CONVERTED amount, so the three figures reconcile", () => {
+    // Taxing before conversion rounds twice, and net + tax stops equalling
+    // gross - which is a document whose own numbers disagree.
+    expect(inv).toMatch(/const netAmount = quote\.chargeAmount/);
+    expect(inv).toMatch(/taxForProfile\(netAmount/);
+  });
+
+  it("records what the charge was made of", () => {
+    for (const f of ["netAmount: taxed.net", "taxPercent: taxed.percent", "taxAmount: taxed.tax"]) {
+      expect(inv, `charge must record ${f}`).toContain(f);
+    }
+  });
+
+  it("fails the charge when no country was declared, rather than charging net", () => {
+    expect(inv).toContain("charge_not_taxable");
+    expect(inv).toMatch(/status: "FAILED", failureCode: code/);
+  });
+
+  it("issues invrec - the tax invoice AND receipt", () => {
+    expect(inv).toContain('const TAX_DOCTYPE = "invrec"');
+    expect(inv).toMatch(/doctype: TAX_DOCTYPE/);
+  });
+
+  it("issues it only after the money actually moved", () => {
+    // A receipt for a charge that then declined is a document for money nobody
+    // paid.
+    expect(inv).toMatch(/if \(result\.success && ctx\.provider === "ICOUNT"\)/);
+  });
+
+  it("never lets a failed document fail the charge", () => {
+    // The money is gone. Reporting an error here tells the caller to retry a
+    // completed payment.
+    const block = inv.slice(inv.indexOf("createDocument({"), inv.indexOf("payment.document_failed") + 200);
+    expect(block).toContain("catch");
+    expect(block).toContain("payment.document_failed");
+    expect(block).not.toMatch(/return \{ success: false/);
+  });
+
+  it("emails the receipt when there is an address to send it to", () => {
+    expect(inv).toMatch(/sendEmail: Boolean\(ctx\.customer\.email\)/);
+  });
+
+  it("states the rate on the document, or says exempt", () => {
+    // Exempt is a statement, not the absence of a rate.
+    expect(client).toMatch(/vat_percent: input\.vatPercent/);
+    expect(client).toMatch(/tax_exempt: true/);
+  });
+
+  it("links the payment line to the charge by confirmation code", () => {
+    // So the document and the transaction point at each other rather than
+    // merely agreeing on an amount.
+    expect(client).toMatch(/confirmation_code: input\.confirmationCode/);
+  });
+
+  it("puts no card number or CVV on the document", () => {
+    const doc = client.slice(client.indexOf('call(\n    "doc/create"'), client.indexOf('call(\n    "doc/create"') + 1400);
+    expect(doc).not.toContain("cvv");
+    expect(doc).toMatch(/card_number: input\.cardLast4/);
+  });
+
+  it("sends line price and rate, not a total as well", () => {
+    // Two sources for one number, and the one that loses is the unchecked one.
+    const doc = client.slice(client.indexOf('call(\n    "doc/create"'), client.indexOf('call(\n    "doc/create"') + 1400);
+    expect(doc).not.toMatch(/totalsum:|totalwithvat:/);
+  });
+});

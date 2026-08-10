@@ -3272,6 +3272,18 @@ model Charge {
   fxRate             Decimal? @map("fx_rate") @db.Decimal(18, 8)
   fxRateVersion      Int?     @map("fx_rate_version")
 
+  /// What the charge was made of, in the CHARGE currency.
+  ///
+  /// Catalogue prices are net, so `chargeAmount` (what was submitted) is
+  /// net + tax. Keeping the parts means a receipt reconciles against the
+  /// charge without recomputing tax back out of a rounded total.
+  netAmount   Decimal? @map("net_amount") @db.Decimal(12, 2)
+  taxPercent  Decimal? @map("tax_percent") @db.Decimal(5, 2)
+  taxAmount   Decimal? @map("tax_amount") @db.Decimal(12, 2)
+  /// The tax document issued for this charge, once the provider confirmed it.
+  documentRef String?  @map("document_ref")
+  documentUrl String?  @map("document_url")
+
   status         ChargeStatus @default(PENDING)
   attemptNumber  Int          @default(1) @map("attempt_number")
   failureCode    String?      @map("failure_code")
@@ -3279,6 +3291,8 @@ model Charge {
   createdAt      DateTime     @default(now()) @map("created_at")
 
   invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([documentRef])
 
   @@index([invoiceId])
   @@map("charges")

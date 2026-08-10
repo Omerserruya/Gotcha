@@ -24,6 +24,10 @@ export type BillingEventType =
   // nothing automated may act on it.
   | "subscription.renewal_unknown"
   | "payment.reconciliation_required"
+  // The money moved and the tax document did not issue. NOT a payment failure -
+  // nothing may retry the charge on the strength of it. It is a document to
+  // chase, with the charge reference already in hand.
+  | "payment.document_failed"
   | "invoice.issued"
   | "invoice.paid"
   | "payment.failed"
