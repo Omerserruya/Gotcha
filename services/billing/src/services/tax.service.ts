@@ -111,3 +111,39 @@ export async function taxForProfile(
   const rate = await resolveTaxRate(profile.billingCountry);
   return applyTax(net, rate);
 }
+
+/**
+ * The jurisdiction a price is SHOWN in before anyone has said where they are.
+ *
+ * A catalogue has to display a total, and a pricing page is read by people who
+ * have not filled anything in yet. Refusing there would leave the page unable
+ * to answer "what will this cost me", which is the only question it exists to
+ * answer.
+ */
+export const DEFAULT_DISPLAY_COUNTRY = "IL";
+
+export interface DisplayTax extends TaxedAmount {
+  /**
+   * True when the rate came from the default jurisdiction rather than from
+   * something the customer told us. The UI must say so - a total presented as
+   * fact to someone who turns out to be exempt is a quoted price we cannot
+   * honour.
+   */
+  assumed: boolean;
+}
+
+/**
+ * Tax for DISPLAY. Assumes a jurisdiction when none was declared, and says it.
+ *
+ * Deliberately a different function from `taxForProfile` rather than a flag on
+ * it. Showing an assumed total is reasonable; CHARGING an assumed total is not,
+ * and the two must not be one call away from each other.
+ */
+export async function taxForDisplay(
+  net: string,
+  countryCode?: string | null,
+): Promise<DisplayTax> {
+  const declared = String(countryCode || "").trim();
+  const rate = await resolveTaxRate(declared || DEFAULT_DISPLAY_COUNTRY);
+  return { ...applyTax(net, rate), assumed: !declared };
+}

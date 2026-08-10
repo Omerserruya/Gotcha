@@ -21,7 +21,7 @@ vi.mock("@chatcenter/shared", () => ({
   stripeVersionHeader: () => ({ "Stripe-Version": "2026-02-25.clover" }),
 }));
 
-import { resolveTaxRate, applyTax, taxForProfile, TaxCountryUndeclared } from "../services/tax.service";
+import { resolveTaxRate, applyTax, taxForProfile, taxForDisplay, TaxCountryUndeclared } from "../services/tax.service";
 
 const IL = { countryCode: "IL", percent: 18, label: 'מע"מ', exempt: false };
 
@@ -109,5 +109,37 @@ describe("pricing for a profile", () => {
     // There is no fallback parameter to pass a tenant default into - the only
     // input is what the customer declared.
     await expect(taxForProfile("39.00", {})).rejects.toBeInstanceOf(TaxCountryUndeclared);
+  });
+});
+
+describe("display versus charging", () => {
+  it("assumes the default jurisdiction when nobody has declared one, and says so", async () => {
+    taxRate.findFirst.mockResolvedValue({ countryCode: "IL", percent: "18.00", label: 'מע"מ', active: true });
+    const t = await taxForDisplay("39.00");
+    expect(t).toMatchObject({ net: "39.00", tax: "7.02", gross: "46.02", assumed: true });
+  });
+
+  it("uses a declared country and stops assuming", async () => {
+    taxRate.findFirst.mockResolvedValue(null);
+    const t = await taxForDisplay("39.00", "US");
+    expect(t).toMatchObject({ gross: "39.00", exempt: true, assumed: false });
+  });
+
+  it("is a separate function from the charging one, which still refuses", async () => {
+    // Showing an assumed total is reasonable. Charging one is not, and the two
+    // must not be a flag apart.
+    await expect(taxForProfile("39.00", { billingCountry: null })).rejects.toBeInstanceOf(TaxCountryUndeclared);
+    taxRate.findFirst.mockResolvedValue({ countryCode: "IL", percent: "18.00", label: 'מע"מ', active: true });
+    await expect(taxForDisplay("39.00")).resolves.toMatchObject({ assumed: true });
+  });
+
+  it("gives the three numbers a page needs to show a sum", async () => {
+    taxRate.findFirst.mockResolvedValue({ countryCode: "IL", percent: "18.00", label: 'מע"מ', active: true });
+    const t = await taxForDisplay("97.00", "IL");
+    expect(t.net).toBe("97.00");
+    expect(t.tax).toBe("17.46");
+    expect(t.gross).toBe("114.46");
+    expect(t.percent).toBe(18);
+    expect(t.label).toBe('מע"מ');
   });
 });
