@@ -25,6 +25,18 @@ import { getCapabilities } from "../providers";
 import { buildReturnUrl } from "../lib/public-url";
 import { contractedPrice } from "../services/subscription.service";
 
+/** The billing identity a document is issued against. Empty when never set. */
+async function billingIdentity(tenantId: string) {
+  const empty = { billingName: null, vatId: null, billingEmail: null, billingCountry: null, billingAddress: null };
+  const link = await prisma.billableEntityTenant.findUnique({ where: { tenantId } });
+  if (!link) return empty;
+  const profile = await prisma.billingProfile.findUnique({
+    where: { billableEntityId: link.billableEntityId },
+    select: { billingName: true, vatId: true, billingEmail: true, billingCountry: true, billingAddress: true },
+  });
+  return profile ?? empty;
+}
+
 const router = Router();
 
 /**
@@ -87,9 +99,17 @@ router.post(
     }
     try {
       await ensureBillableEntity(req.tenantId!);
+      // The identity the receipt will carry. Sent at client creation so the
+      // provider's client record - and every document issued against it -
+      // matches what the customer told us, rather than the placeholder that
+      // made every receipt read "GOTCHA customer".
+      const identity = await billingIdentity(req.tenantId!);
       const { session, saleUrl } = await startTokenizationSession({
         tenantId: req.tenantId!,
-        customerEmail: req.user?.email,
+        customerName: identity.billingName ?? undefined,
+        customerVatId: identity.vatId ?? undefined,
+        customerAddress: identity.billingAddress ?? undefined,
+        customerEmail: identity.billingEmail ?? req.user?.email,
         successUrl: cardReturnUrl(),
       });
       return res.json({ data: { redirectUrl: saleUrl, sessionId: session.id } });
@@ -204,6 +224,51 @@ router.delete("/billing/payment-methods/:id", authenticate, resolveTenant, requi
     data: { status: "REMOVED", isDefault: false },
   });
   res.json({ ok: true });
+});
+
+/**
+ * The identity a tax document is made out to.
+ *
+ * Deliberately separate from the payment method: the card and the entity being
+ * invoiced are different facts, and one is not evidence of the other.
+ */
+router.get("/billing/profile", authenticate, resolveTenant, requirePermission("settings:billing:manage"), async (req, res) => {
+  res.json({ data: await billingIdentity(req.tenantId!) });
+});
+
+router.put("/billing/profile", authenticate, resolveTenant, requirePermission("settings:billing:manage"), async (req, res) => {
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const str = (v: unknown, max: number) => {
+    const t = String(v ?? "").trim();
+    return t ? t.slice(0, max) : null;
+  };
+
+  // Uppercased and shape-checked, because this selects a TAX RATE. A stray
+  // "isr" would resolve to no configured rate, which reads as 0% - a typo
+  // must not be able to zero somebody's VAT.
+  const country = str(b.billingCountry, 2)?.toUpperCase() ?? null;
+  if (country && !/^[A-Z]{2}$/.test(country)) {
+    return res.status(400).json({ error: "billing_country_must_be_iso_alpha2" });
+  }
+
+  await ensureBillableEntity(req.tenantId!);
+  const link = await prisma.billableEntityTenant.findUnique({ where: { tenantId: req.tenantId! } });
+  if (!link) return res.status(409).json({ error: "no_billable_entity" });
+  const profile = await prisma.billingProfile.findUnique({ where: { billableEntityId: link.billableEntityId } });
+  if (!profile) return res.status(409).json({ error: "no_billing_profile" });
+
+  const updated = await prisma.billingProfile.update({
+    where: { id: profile.id },
+    data: {
+      billingName: str(b.billingName, 200),
+      vatId: str(b.vatId, 40),
+      billingEmail: str(b.billingEmail, 200),
+      billingAddress: str(b.billingAddress, 300),
+      billingCountry: country,
+    },
+    select: { billingName: true, vatId: true, billingEmail: true, billingCountry: true, billingAddress: true },
+  });
+  res.json({ data: updated });
 });
 
 export default router;

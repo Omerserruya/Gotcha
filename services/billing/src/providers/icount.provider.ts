@@ -173,9 +173,15 @@ export const icountProvider: PaymentProvider = {
     // so a retry of the same session reuses the same reference. iCount treats
     // a repeat as an update rather than a duplicate.
     const client = await api.createClient({
+      // The customer's own billing name when we have one. The fallback is a
+      // placeholder of last resort: a client record - and therefore every tax
+      // document issued against it - reading "GOTCHA customer" is not a
+      // receipt anybody can file.
       clientName: input.clientName || "GOTCHA customer",
       customClientId: input.customClientId,
       ...(input.email ? { email: input.email } : {}),
+      ...(input.vatId ? { vatId: input.vatId } : {}),
+      ...(input.address ? { address: input.address } : {}),
     });
 
     // Carry the client id back out. It used to be thrown away here, and the

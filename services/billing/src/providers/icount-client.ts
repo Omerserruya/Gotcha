@@ -306,6 +306,9 @@ export interface CreateClientInput {
   /** OUR reference. This is what everything afterwards is correlated by. */
   customClientId: string;
   email?: string;
+  /** Company / ID number for the tax document. */
+  vatId?: string;
+  address?: string;
 }
 
 /**
@@ -332,6 +335,11 @@ export async function createClient(input: CreateClientInput): Promise<{ clientId
     client_name: input.clientName,
     custom_client_id: input.customClientId,
     ...(input.email ? { email: input.email } : {}),
+    // The company/ID number the tax document is issued against. Carried at
+    // client creation so the document inherits it rather than being patched
+    // afterwards, and so iCount's own client record matches the receipt.
+    ...(input.vatId ? { vat_id: input.vatId } : {}),
+    ...(input.address ? { client_address: input.address } : {}),
   });
   const clientId = data?.client_id != null ? String(data.client_id) : "";
   if (!clientId) throw new IcountApiError("client/create", "response carried no client_id");

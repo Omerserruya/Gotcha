@@ -128,6 +128,8 @@ export interface StartSessionInput {
   checkoutId?: string | null;
   providerClientId?: string | null;
   customerName?: string;
+  customerVatId?: string;
+  customerAddress?: string;
   customerEmail?: string;
   successUrl?: string;
   failureUrl?: string;
@@ -169,6 +171,8 @@ export async function startTokenizationSession(input: StartSessionInput): Promis
     customClientId,
     clientName: input.customerName,
     email: input.customerEmail,
+    vatId: input.customerVatId,
+    address: input.customerAddress,
     successUrl: input.successUrl,
     failureUrl: input.failureUrl,
     cancelUrl: input.cancelUrl,

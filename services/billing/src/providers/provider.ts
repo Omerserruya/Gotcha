@@ -92,6 +92,9 @@ export interface StartTokenizationInput {
   customClientId: string;
   clientName?: string;
   email?: string;
+  /** Company / ID number, so the provider's client record matches the receipt. */
+  vatId?: string;
+  address?: string;
   successUrl?: string;
   failureUrl?: string;
   /** Where the customer lands if they abandon the hosted page. */
