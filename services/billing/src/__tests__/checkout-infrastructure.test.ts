@@ -335,3 +335,42 @@ describe("the last card cannot be removed out from under a live subscription", (
     expect(route).toMatch(/billingProfileId: profile\.id/);
   });
 });
+
+// ─── The provider's customer id has to survive tokenization ─────
+
+describe("the provider customer id reaches the charge", () => {
+  const provSrc = readFileSync(join(__dirname, "../providers/icount.provider.ts"), "utf8");
+  const prov = provSrc.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+  const tokSrc = readFileSync(join(__dirname, "../services/tokenization.service.ts"), "utf8");
+  const tok = tokSrc.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+
+  /**
+   * iCount will not create a client during generate_sale - it answers
+   * client_not_found - so one is created first and returns an id. That id is
+   * what cc/bill attributes the charge to.
+   *
+   * It was created and then discarded. The card stored correctly, the billing
+   * profile kept an empty provider_customer_id, and every later charge was
+   * refused with "no client identifier - the charge could not be attributed".
+   * Observed in production, and the failure surfaced a step removed from its
+   * cause, which is why each hop is pinned separately here.
+   */
+  it("createClient's answer is kept, not discarded", () => {
+    expect(prov).toMatch(/const client = await api\.createClient\(/);
+    expect(prov).toMatch(/providerClientId: client\.clientId/);
+  });
+
+  it("the session records it, preferring what the provider just said", () => {
+    expect(tok).toMatch(/providerClientId: start\.providerClientId \?\? input\.providerClientId/);
+  });
+
+  it("storing a card carries it onto the billing profile", () => {
+    expect(tok).toMatch(/billingProfile\.updateMany\(/);
+    expect(tok).toMatch(/providerCustomerId: session\.providerClientId/);
+  });
+
+  it("fills it only when empty, so history cannot be reassigned", () => {
+    expect(tok).toMatch(/providerCustomerId: null/);
+    expect(tok).toMatch(/providerCustomerId: ""/);
+  });
+});

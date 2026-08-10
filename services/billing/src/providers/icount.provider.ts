@@ -144,13 +144,18 @@ export const icountProvider: PaymentProvider = {
     // Idempotent in effect: our reference is minted per tokenization session,
     // so a retry of the same session reuses the same reference. iCount treats
     // a repeat as an update rather than a duplicate.
-    await api.createClient({
+    const client = await api.createClient({
       clientName: input.clientName || "GOTCHA customer",
       customClientId: input.customClientId,
       ...(input.email ? { email: input.email } : {}),
     });
 
-    return api.generateSale(input);
+    // Carry the client id back out. It used to be thrown away here, and the
+    // consequence surfaced much later and somewhere else: a stored card with
+    // no provider customer id on the billing profile, and every charge refused
+    // with "no client identifier - the charge could not be attributed".
+    const sale = await api.generateSale(input);
+    return { ...sale, providerClientId: client.clientId };
   },
 
   /**

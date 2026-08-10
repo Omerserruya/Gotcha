@@ -110,6 +110,18 @@ export interface StartTokenizationInput {
 
 export interface StartTokenizationResult {
   saleUrl: string;
+  /**
+   * The provider's own id for the customer this session belongs to.
+   *
+   * Established while starting the session - iCount will not create a client
+   * during generate_sale, so one is created first and answers with an id. That
+   * id is what a later charge is attributed to, so it has to travel back out
+   * of here; discarding it left the charge with nothing to name and iCount
+   * refusing it as unattributable.
+   *
+   * Optional because a provider that has no such concept is free to omit it.
+   */
+  providerClientId?: string;
   raw: unknown;
 }
 
