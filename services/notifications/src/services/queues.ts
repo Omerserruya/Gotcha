@@ -14,6 +14,7 @@
  */
 
 import { Queue, type JobsOptions } from "bullmq";
+import { NOTIFICATIONS_EMAIL_QUEUE_NAME as EMAIL_QUEUE } from "@chatcenter/shared";
 
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
 
@@ -29,7 +30,7 @@ export function getNotificationsQueue(): Queue {
 
 export function getNotificationsEmailQueue(): Queue {
   if (!_notificationsEmailQueue) {
-    _notificationsEmailQueue = new Queue("notifications-email", { connection: { url: REDIS_URL } });
+    _notificationsEmailQueue = new Queue(EMAIL_QUEUE, { connection: { url: REDIS_URL } });
   }
   return _notificationsEmailQueue;
 }
@@ -51,4 +52,7 @@ export function __setQueuesForTests(opts: { dispatcher?: Queue | null; email?: Q
 }
 
 export const NOTIFICATIONS_QUEUE_NAME = "notifications";
-export const NOTIFICATIONS_EMAIL_QUEUE_NAME = "notifications-email";
+// Re-exported, not redeclared: billing fills this queue and needs the same name
+// from a place it is allowed to import. Two copies of a queue name is a silent
+// misroute waiting for someone to edit one of them.
+export { NOTIFICATIONS_EMAIL_QUEUE_NAME } from "@chatcenter/shared";

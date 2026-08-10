@@ -529,8 +529,13 @@ describe("tax reaches the card and the document", () => {
     expect(block).not.toMatch(/throw /);
   });
 
-  it("emails the receipt when there is an address to send it to", () => {
-    expect(doc).toMatch(/sendEmail: Boolean\(recipient\)/);
+  it("sends the receipt itself, and tells the provider not to", () => {
+    // The document is still ISSUED by iCount. The email that carries it is
+    // ours, from no-reply@, in the product's own design. Two senders would mean
+    // the customer gets the same receipt twice, once from an address they have
+    // no relationship with.
+    expect(doc).toMatch(/sendEmail: false/);
+    expect(doc).toMatch(/sendReceiptEmail\(\{/);
   });
 
   it("falls back to an admin of the tenant rather than sending the receipt nowhere", () => {
@@ -542,11 +547,13 @@ describe("tax reaches the card and the document", () => {
     expect(fn.indexOf("if (declared) return declared")).toBeLessThan(fn.indexOf("findFirst"));
   });
 
-  it("confirms delivery instead of trusting the flag it set", () => {
-    // `send_email` is a request whose answer may say nothing. "We asked for it
-    // to be sent" is not the same fact as "it was sent".
-    expect(doc).toMatch(/doc\.emailSent !== true/);
-    expect(doc).toMatch(/emailDocument\(\{/);
+  it("keeps the provider as a fallback, so a refused queue is not a lost receipt", () => {
+    // Our send is the default and the provider is the exception, not the other
+    // way round. The fallback covers the queue refusing the job; once accepted,
+    // delivery and its retries belong to the notifications worker.
+    const block = doc.slice(doc.indexOf("const ours = await sendReceiptEmail"));
+    expect(block).toMatch(/if \(!ours\)/);
+    expect(block).toMatch(/emailDocument\(\{/);
     expect(client).toMatch(/"doc\/email"/);
     expect(client).toMatch(/email_to: input\.to/);
   });

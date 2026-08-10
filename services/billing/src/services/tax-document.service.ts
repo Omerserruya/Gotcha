@@ -14,6 +14,7 @@
 import { prisma } from "@chatcenter/shared";
 import { createDocument, emailDocument } from "../providers/icount-client";
 import { emitBillingEvent } from "../lib/events";
+import { sendReceiptEmail } from "./receipt-email.service";
 
 /**
  * חשבונית מס קבלה - the document that is both the tax invoice and the receipt.
@@ -115,11 +116,15 @@ export interface IssuedDocument {
  * chase with the charge reference in hand, not one to solve by taking the
  * money again. Returns null when nothing was issued.
  *
- * Delivery is OBSERVED rather than requested. `send_email` on doc/create is a
- * flag whose answer may say nothing at all, so unless iCount explicitly
- * confirmed it, the document is sent again to a named address through
- * doc/email - which answers with `email_sent`. A duplicate receipt is a mild
- * annoyance; a customer with no proof of payment is not.
+ * The document is ISSUED by iCount and DELIVERED by us. `send_email` on
+ * doc/create is off deliberately: two senders means two receipts, one of them
+ * from an address the customer has no relationship with.
+ *
+ * The fallback to the provider covers the queue refusing the job, which is the
+ * failure we can still see from here. It does NOT cover a later SMTP failure:
+ * once the job is accepted, delivery belongs to the notifications worker, which
+ * retries with backoff and records the outcome in NotificationLog. A receipt
+ * that dies there is visible in that log, not here.
  */
 export async function issueTaxDocument(input: IssueTaxDocumentInput): Promise<IssuedDocument | null> {
   const { identity } = input;
@@ -141,24 +146,46 @@ export async function issueTaxDocument(input: IssueTaxDocumentInput): Promise<Is
       confirmationCode: input.confirmationCode,
       cardType: input.cardBrand ?? undefined,
       cardLast4: input.cardLast4 ?? undefined,
-      // The customer gets their receipt without having to come and find it.
-      sendEmail: Boolean(recipient),
+      // We send the receipt ourselves now, so iCount must NOT also send one.
+      // Leaving this on is how the customer gets the same receipt twice, once
+      // from us and once from an address they do not recognise.
+      sendEmail: false,
     });
 
     if (!recipient) {
       await report(input, doc.docNumber, "no_receipt_recipient");
-    } else if (doc.docNumber && doc.emailSent !== true) {
+    } else if (doc.docNumber) {
       // Its own catch: the document exists by this point, so a failure here
       // must not be reported as one that never issued. The two are chased
       // differently - one needs resending, the other reissuing.
-      const sent = await emailDocument({
-        doctype: TAX_DOCTYPE,
-        docNumber: doc.docNumber,
+      const ours = await sendReceiptEmail({
         to: recipient,
-      }).catch((e: any) => ({ sent: false as const, reason: e?.message ?? "send_failed", raw: null }));
+        tenantId: input.tenantId,
+        billingName: identity.billingName,
+        billingCountry: identity.billingCountry,
+        description: input.description,
+        net: input.net,
+        vatPercent: input.vatPercent,
+        gross: input.gross,
+        currencyId: input.currencyId,
+        docNumber: doc.docNumber,
+        docUrl: doc.docUrl ?? null,
+      });
 
-      if (sent.sent === false) {
-        await report(input, doc.docNumber, `document_email_not_sent: ${sent.reason ?? "unknown"}`, recipient);
+      if (!ours) {
+        // The provider is the fallback, not the default. A customer with no
+        // proof of payment is the one outcome worth an unbranded email.
+        const sent = await emailDocument({
+          doctype: TAX_DOCTYPE,
+          docNumber: doc.docNumber,
+          to: recipient,
+        }).catch((e: any) => ({ sent: false as const, reason: e?.message ?? "send_failed", raw: null }));
+
+        if (sent.sent === false) {
+          await report(input, doc.docNumber, `document_email_not_sent: ${sent.reason ?? "unknown"}`, recipient);
+        } else {
+          await report(input, doc.docNumber, "receipt_email_fell_back_to_provider", recipient);
+        }
       }
     }
 

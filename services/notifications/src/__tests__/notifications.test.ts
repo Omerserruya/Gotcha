@@ -54,6 +54,9 @@ vi.mock("@chatcenter/shared", () => ({
   prisma: prismaMock,
   publishEvent: publishEventMock,
   getRedis: () => redisMock,
+  // The queue name is declared in shared now that billing fills this queue too.
+  // queues.ts imports it from there, so the mock has to carry it.
+  NOTIFICATIONS_EMAIL_QUEUE_NAME: "notifications-email",
 }));
 
 vi.mock("../services/queues", async () => {

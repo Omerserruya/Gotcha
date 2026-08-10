@@ -19,20 +19,13 @@ import type { Job, Worker } from "bullmq";
 import nodemailer, { type Transporter } from "nodemailer";
 import { prisma, getRedis, createWorker,
   resolveAppPublicUrl,
+  type EmailJobData,
 } from "@chatcenter/shared";
 import { NOTIFICATIONS_EMAIL_QUEUE_NAME } from "./queues";
 
-export interface EmailJobData {
-  tenantId: string;
-  userId: string;
-  to: string;
-  eventType: string;
-  eventId: string;
-  priority: string;
-  subject: string;
-  body: string;
-  link?: string;
-}
+// The shape is declared in shared now that billing also fills this queue.
+// Re-exported so existing importers of this module keep working.
+export type { EmailJobData };
 
 let _transporter: Transporter | null = null;
 let _worker: Worker<EmailJobData> | null = null;
@@ -132,7 +125,10 @@ export function startNotificationsEmailWorker(): Worker<EmailJobData> {
       const d = job.data;
       if (!d?.to) return;
 
-      const rl = await checkRateLimit(d.userId);
+      // A receipt is a legal record, not a notification. Holding one back
+      // because the same address was mailed a moment ago would be the wrong
+      // trade: a duplicate is an annoyance, a missing proof of payment is not.
+      const rl = d.bypassRateLimit ? { allowed: true as const, retryAfterMs: 0 } : await checkRateLimit(d.userId);
       if (!rl.allowed) {
         // Re-enqueue with delay so we don't burn attempts. BullMQ counts a
         // throw as an attempt - adding a delayed copy keeps the original
@@ -152,7 +148,9 @@ export function startNotificationsEmailWorker(): Worker<EmailJobData> {
           to: d.to,
           subject: d.subject,
           text: d.body,
-          html: renderHtml(d.body, d.link),
+          // A pre-rendered body is sent as-is. renderHtml wraps plain text in a
+          // <pre>, which would turn a designed email into a screenshot of one.
+          html: d.html || renderHtml(d.body, d.link),
         });
         await logSend(d, "sent");
       } catch (err: any) {
