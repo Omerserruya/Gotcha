@@ -73,21 +73,49 @@ function assertLiveAllowed(operation: string): void {
  * multi-currency, so a charge with the wrong currency id does not fail - it
  * succeeds for the wrong amount, and the customer finds out on their statement.
  */
+/**
+ * A charge refused by our own pre-flight, before anything was sent.
+ *
+ * `neverSent` is the useful part. A charge that failed on the way OUT is a
+ * definite non-charge - the money cannot have moved, because nothing left the
+ * process. Without that marker the caller can only fall back on "we do not
+ * know", which is the safe default for a mid-flight failure and exactly wrong
+ * here: it leaves the attempt PENDING for ever, and every retry reads that
+ * PENDING row and reports an outcome nobody can resolve.
+ */
+export class ChargeRefusedBeforeSend extends Error {
+  readonly neverSent = true;
+  constructor(readonly failureCode: string, message: string) {
+    super(message);
+    this.name = "ChargeRefusedBeforeSend";
+  }
+}
+
 function assertChargeSafety(input: ChargeInput): void {
   const currency = (input.chargeCurrency || input.currency || "").toUpperCase();
   if (currency !== "ILS") {
-    throw new Error(`[icount] refusing a ${currency || "(unspecified)"} charge: only ILS charges are enabled`);
+    throw new ChargeRefusedBeforeSend(
+      "charge_currency_not_ils",
+      `[icount] refusing a ${currency || "(unspecified)"} charge: only ILS charges are enabled`,
+    );
   }
   if (input.providerCurrencyId !== CURRENCY_ID_ILS) {
-    throw new Error(
+    throw new ChargeRefusedBeforeSend(
+      "provider_currency_id_not_ils",
       `[icount] refusing charge with currency_id ${input.providerCurrencyId}: ILS charges must be submitted as currency_id ${CURRENCY_ID_ILS}`,
     );
   }
   if (!input.chargeAmount || Number(input.chargeAmount) <= 0) {
-    throw new Error("[icount] refusing charge: no positive charge amount was supplied");
+    throw new ChargeRefusedBeforeSend(
+      "no_positive_charge_amount",
+      "[icount] refusing charge: no positive charge amount was supplied",
+    );
   }
   if (!input.providerCustomerId && !input.customClientId) {
-    throw new Error("[icount] refusing charge: no client identifier - the charge could not be attributed");
+    throw new ChargeRefusedBeforeSend(
+      "no_client_identifier",
+      "[icount] refusing charge: no client identifier - the charge could not be attributed",
+    );
   }
 }
 

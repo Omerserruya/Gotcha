@@ -212,6 +212,30 @@ export async function chargeFor(input: ChargeForInput): Promise<ChargeForResult>
         outcomeUnknown: true,
       };
     }
+
+    // Refused on the way OUT, before anything was sent. The money cannot have
+    // moved, so this is a definite failure and must be recorded as one.
+    //
+    // Leaving it PENDING was worse than it looks. The idempotency lookup treats
+    // a PENDING row as a charge still in flight, so every retry of the same key
+    // came back "outcome unknown" - a clean, fixable local error (a missing
+    // client identifier, a currency mismatch) turned into a permanent "we do
+    // not know whether we took your money", and the customer could never get
+    // past it even once the underlying problem was fixed.
+    if (err?.neverSent === true) {
+      const failureCode = err.failureCode ?? "charge_refused_before_send";
+      await prisma.charge.update({
+        where: { id: chargeId },
+        data: { status: "FAILED", failureCode },
+      });
+      await emitBillingEvent({
+        type: "payment.failed",
+        tenantId: input.tenantId,
+        data: { invoiceId: invoice.id, reason: failureCode, amount: input.amount },
+      });
+      return { success: false, invoiceId: invoice.id, failureCode };
+    }
+
     throw err;
   }
 

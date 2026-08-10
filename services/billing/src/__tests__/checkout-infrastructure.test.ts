@@ -374,3 +374,51 @@ describe("the provider customer id reaches the charge", () => {
     expect(tok).toMatch(/providerCustomerId: ""/);
   });
 });
+
+// ─── A charge refused before it was sent ────────────────────────
+
+describe("a charge that never left the process is a failure, not an unknown", () => {
+  const invSrc = readFileSync(join(__dirname, "../services/invoice.service.ts"), "utf8");
+  const inv = invSrc.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+  const provSrc = readFileSync(join(__dirname, "../providers/icount.provider.ts"), "utf8");
+
+  /**
+   * Observed in production. assertChargeSafety rejected a charge for a missing
+   * client identifier - before any network call - but the Charge row had
+   * already been created PENDING, and only an `outcomeUnknown` provider error
+   * was handled. The row stayed PENDING for ever.
+   *
+   * The idempotency lookup reads a PENDING row as "still in flight", so every
+   * retry of that key answered outcome-unknown. A clean local misconfiguration
+   * became a permanent "we do not know whether we took your money" - the worst
+   * state this system has, reached without a single request being sent.
+   */
+  it("pre-flight refusals carry a neverSent marker", () => {
+    expect(provSrc).toContain("class ChargeRefusedBeforeSend");
+    expect(provSrc).toContain("readonly neverSent = true");
+    expect(provSrc).toContain("no_client_identifier");
+  });
+
+  it("every pre-flight guard raises it rather than a bare Error", () => {
+    const guard = provSrc.slice(provSrc.indexOf("function assertChargeSafety"), provSrc.indexOf("export const icountProvider"));
+    expect(guard).not.toMatch(/throw new Error\(/);
+    expect((guard.match(/ChargeRefusedBeforeSend/g) ?? []).length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("the charge is recorded FAILED, so the row cannot sit PENDING", () => {
+    expect(inv).toMatch(/err\?\.neverSent === true/);
+    expect(inv).toMatch(/status: "FAILED", failureCode/);
+  });
+
+  it("and is NOT reported as outcomeUnknown", () => {
+    const branch = inv.slice(inv.indexOf("err?.neverSent === true"), inv.indexOf("if (result.requiresReconciliation)"));
+    expect(branch).not.toContain("outcomeUnknown");
+  });
+
+  it("still treats a genuine provider ambiguity as unknown", () => {
+    // The conservative default has to survive: a mid-flight failure may have
+    // taken the money, and retrying it would take it twice.
+    expect(inv).toMatch(/err\?\.outcomeUnknown === true/);
+    expect(inv).toMatch(/status: "UNKNOWN"/);
+  });
+});
