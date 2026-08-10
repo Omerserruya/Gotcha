@@ -254,3 +254,44 @@ describe("structural safety", () => {
     expect(provider).toContain('process.env.NODE_ENV === "production"');
   });
 });
+
+// ─── The card-entry round trip ──────────────────────────────────
+
+describe("adding a card sends the provider somewhere to return to", () => {
+  const routeSrc = readFileSync(join(__dirname, "../routes/payment-methods.ts"), "utf8");
+  const route = routeSrc.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+  const checkoutSrc = readFileSync(join(__dirname, "../routes/checkout-session.ts"), "utf8");
+
+  /**
+   * Storing a card is two steps: the provider's page takes it, then OUR server
+   * asks the provider what happened. The second step runs when the browser
+   * comes back - so without a return URL the provider shows its own thank-you
+   * page, the browser never returns, and the confirm never fires.
+   *
+   * Observed in production: the card was stored at iCount, the tokenization
+   * session sat at AWAITING_RETURN until it expired, and the customer was told
+   * no card was saved. The plumbing for successUrl existed all the way through
+   * to `success_url` on generate_sale; only this call site omitted it, while
+   * the checkout route next door passed one.
+   */
+  it("passes a successUrl when starting a tokenization session", () => {
+    expect(route).toMatch(/startTokenizationSession\(\{[\s\S]*?successUrl:/);
+  });
+
+  it("builds that URL on our own origin rather than trusting the request", () => {
+    expect(route).toContain("buildReturnUrl(");
+    // The provider-boundary test already forbids reading a redirect off the
+    // request; this keeps the positive half in view next to it.
+    expect(route).not.toMatch(/req\.(body|query)\.(successUrl|returnUrl|redirect)/);
+  });
+
+  it("degrades instead of blocking when the public origin is unset", () => {
+    // A missing return URL costs the round trip. Throwing here would remove
+    // the only way to add a card at all.
+    expect(route).toMatch(/return undefined/);
+  });
+
+  it("stays consistent with the checkout route, which already returned", () => {
+    expect(checkoutSrc).toMatch(/successUrl:/);
+  });
+});

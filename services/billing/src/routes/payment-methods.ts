@@ -22,8 +22,36 @@ import {
 } from "../services/tokenization.service";
 import { checkoutEnabled } from "../providers/capabilities";
 import { getCapabilities } from "../providers";
+import { buildReturnUrl } from "../lib/public-url";
 
 const router = Router();
+
+/**
+ * Where the provider sends the person once the card is stored.
+ *
+ * Without it the hosted page has nowhere to go, so it shows its own "thank
+ * you" and the browser never returns. The card really is stored at the
+ * provider, but the confirm step - the server-side pull that turns a stored
+ * card into a PaymentMethod row - is only triggered when the page reloads. The
+ * result was a customer who had entered their card being told none was saved,
+ * and a tokenization session left AWAITING_RETURN until it expired.
+ *
+ * The path is the add-card page itself: it keeps the session id in
+ * sessionStorage and confirms on mount, so simply arriving back is enough. No
+ * identifier travels in the URL.
+ *
+ * Returns undefined rather than throwing when the public origin is not
+ * configured. A missing return URL degrades the experience; refusing to start
+ * the session at all would remove the only way to add a card.
+ */
+function cardReturnUrl(): string | undefined {
+  try {
+    return buildReturnUrl("/settings/billing/payment-method");
+  } catch (err) {
+    console.error("[billing] cannot build a card return URL:", (err as Error).message);
+    return undefined;
+  }
+}
 
 router.get("/billing/payment-methods", authenticate, resolveTenant, requirePermission("settings:billing:manage"), async (req, res) => {
   const link = await prisma.billableEntityTenant.findUnique({ where: { tenantId: req.tenantId! } });
@@ -52,6 +80,7 @@ router.post(
       const { session, saleUrl } = await startTokenizationSession({
         tenantId: req.tenantId!,
         customerEmail: req.user?.email,
+        successUrl: cardReturnUrl(),
       });
       return res.json({ data: { redirectUrl: saleUrl, sessionId: session.id } });
     } catch (err: any) {
