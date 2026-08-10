@@ -3654,6 +3654,17 @@ model PaymentAttempt {
   chargeCurrency     String?  @map("charge_currency")
   providerCurrencyId Int?     @map("provider_currency_id")
 
+  /// What the charge was made of. `chargeAmount` above is the GROSS - the
+  /// figure that left the card - so without these the tax on the document
+  /// cannot be checked against the money that moved.
+  netAmount  Decimal? @map("net_amount") @db.Decimal(12, 2)
+  taxPercent Decimal? @map("tax_percent") @db.Decimal(5, 2)
+  taxAmount  Decimal? @map("tax_amount") @db.Decimal(12, 2)
+
+  /// The legal document iCount issued for this payment.
+  documentRef String? @map("document_ref")
+  documentUrl String? @map("document_url")
+
   /// How the money was proven: PROVIDER_CONFIRMED or MANUAL_EXTERNAL_CONTRACT.
   /// Recorded on the attempt itself so billing history can never present a
   /// Sysadmin-activated contract as a card payment that actually cleared.

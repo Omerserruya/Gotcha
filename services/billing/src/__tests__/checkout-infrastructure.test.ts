@@ -480,6 +480,9 @@ describe("tax reaches the card and the document", () => {
   const inv = readFileSync(join(__dirname, "../services/invoice.service.ts"), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
   const client = readFileSync(join(__dirname, "../providers/icount-client.ts"), "utf8");
+  // The document and its delivery are shared by both charging paths, so they
+  // are asserted where they live rather than in one caller.
+  const doc = readFileSync(join(__dirname, "../services/tax-document.service.ts"), "utf8");
 
   it("submits the gross, not the catalogue price", () => {
     // Catalogue prices are net. Charging `net` would leave an Israeli customer
@@ -506,8 +509,8 @@ describe("tax reaches the card and the document", () => {
   });
 
   it("issues invrec - the tax invoice AND receipt", () => {
-    expect(inv).toContain('const TAX_DOCTYPE = "invrec"');
-    expect(inv).toMatch(/doctype: TAX_DOCTYPE/);
+    expect(doc).toContain('export const TAX_DOCTYPE = "invrec"');
+    expect(doc).toMatch(/doctype: TAX_DOCTYPE/);
   });
 
   it("issues it only after the money actually moved", () => {
@@ -519,30 +522,31 @@ describe("tax reaches the card and the document", () => {
   it("never lets a failed document fail the charge", () => {
     // The money is gone. Reporting an error here tells the caller to retry a
     // completed payment.
-    const block = inv.slice(inv.indexOf("createDocument({"), inv.indexOf("payment.document_failed") + 200);
+    const block = doc.slice(doc.indexOf("createDocument({"));
     expect(block).toContain("catch");
     expect(block).toContain("payment.document_failed");
-    expect(block).not.toMatch(/return \{ success: false/);
+    expect(block).toMatch(/return null/);
+    expect(block).not.toMatch(/throw /);
   });
 
   it("emails the receipt when there is an address to send it to", () => {
-    expect(inv).toMatch(/sendEmail: Boolean\(recipient\)/);
+    expect(doc).toMatch(/sendEmail: Boolean\(recipient\)/);
   });
 
   it("falls back to an admin of the tenant rather than sending the receipt nowhere", () => {
     // A document nobody receives is, to the customer, a payment with no proof.
-    expect(inv).toMatch(/async function receiptRecipient/);
-    expect(inv).toMatch(/role: "ADMIN"/);
+    expect(doc).toMatch(/export async function receiptRecipient/);
+    expect(doc).toMatch(/role: "ADMIN"/);
     // The declared billing email always wins - the fallback is a fallback.
-    const fn = inv.slice(inv.indexOf("async function receiptRecipient"), inv.indexOf("async function receiptRecipient") + 700);
+    const fn = doc.slice(doc.indexOf("export async function receiptRecipient"), doc.indexOf("export async function receiptRecipient") + 900);
     expect(fn.indexOf("if (declared) return declared")).toBeLessThan(fn.indexOf("findFirst"));
   });
 
   it("confirms delivery instead of trusting the flag it set", () => {
     // `send_email` is a request whose answer may say nothing. "We asked for it
     // to be sent" is not the same fact as "it was sent".
-    expect(inv).toMatch(/doc\.emailSent !== true/);
-    expect(inv).toMatch(/emailDocument\(\{/);
+    expect(doc).toMatch(/doc\.emailSent !== true/);
+    expect(doc).toMatch(/emailDocument\(\{/);
     expect(client).toMatch(/"doc\/email"/);
     expect(client).toMatch(/email_to: input\.to/);
   });
@@ -555,13 +559,13 @@ describe("tax reaches the card and the document", () => {
   });
 
   it("reports an undelivered receipt without failing the charge", () => {
-    const block = inv.slice(inv.indexOf("emailDocument({"), inv.indexOf("emailDocument({") + 1200);
+    const block = doc.slice(doc.indexOf("emailDocument({"), doc.indexOf("emailDocument({") + 1200);
     expect(block).toContain("payment.document_failed");
     expect(block).not.toMatch(/return \{ success: false/);
   });
 
   it("says so when there is nobody at all to send the receipt to", () => {
-    expect(inv).toContain("no_receipt_recipient");
+    expect(doc).toContain("no_receipt_recipient");
   });
 
   it("states the rate on the document, or says exempt", () => {
@@ -586,5 +590,62 @@ describe("tax reaches the card and the document", () => {
     // Two sources for one number, and the one that loses is the unchecked one.
     const doc = client.slice(client.indexOf('call(\n    "doc/create"'), client.indexOf('call(\n    "doc/create"') + 1400);
     expect(doc).not.toMatch(/totalsum:|totalwithvat:/);
+  });
+});
+
+/**
+ * The OTHER charging path.
+ *
+ * `chargeFor` covers renewals, plan changes and credit purchases.
+ * `executeCharge` covers the self-serve checkout - a customer's FIRST payment.
+ * It was charging net and issuing nothing, which made the one payment a new
+ * customer is most likely to ask about the one we could say least about.
+ */
+describe("the self-serve checkout charges and documents like every other path", () => {
+  const exec = readFileSync(join(__dirname, "../services/charge-execution.service.ts"), "utf8");
+  const shared = readFileSync(join(__dirname, "../services/tax-document.service.ts"), "utf8");
+
+  it("adds tax before submitting, rather than charging the catalogue figure", () => {
+    expect(exec).toMatch(/taxForProfile\(/);
+    expect(exec).toMatch(/chargeAmount = taxed\.gross/);
+  });
+
+  it("refuses when no country was declared, exactly as the other path does", () => {
+    // The refusal is inside the try that deletes the attempt and releases the
+    // key, so a corrected retry can reuse it rather than being locked out.
+    const block = exec.slice(exec.indexOf("assertChargeable(quote, now)"), exec.indexOf("await consumeQuote("));
+    expect(block).toMatch(/taxForProfile/);
+  });
+
+  it("records what the charge was made of", () => {
+    for (const f of ["netAmount: taxed.net", "taxPercent: taxed.percent", "taxAmount: taxed.tax"]) {
+      expect(exec, `attempt must record ${f}`).toContain(f);
+    }
+  });
+
+  it("issues the document only after the money moved", () => {
+    expect(exec).toMatch(/result\.state === "SUCCEEDED" && method\.provider === "ICOUNT"/);
+    expect(exec).toMatch(/issueTaxDocument\(\{/);
+  });
+
+  it("never lets a failed document fail the charge", () => {
+    const block = exec.slice(exec.indexOf("issueTaxDocument({"));
+    expect(block).not.toMatch(/throw /);
+    expect(shared).toMatch(/catch \(err: any\)/);
+    expect(shared).toMatch(/return null/);
+  });
+
+  it("shares the document code with the other path instead of copying it", () => {
+    // Two copies is how one path quietly stops emailing.
+    const inv = readFileSync(join(__dirname, "../services/invoice.service.ts"), "utf8");
+    expect(inv).toMatch(/from "\.\/tax-document\.service"/);
+    expect(exec).toMatch(/from "\.\/tax-document\.service"/);
+    for (const src of [inv, exec]) {
+      expect(src).not.toMatch(/createDocument\(\{/);
+    }
+  });
+
+  it("resolves the receipt identity from the entity the card belongs to", () => {
+    expect(exec).toMatch(/receiptIdentityForEntity\(method\.profile\.billableEntityId\)/);
   });
 });

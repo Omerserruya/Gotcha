@@ -6,17 +6,11 @@
  */
 import { prisma, decryptPaymentToken } from "@chatcenter/shared";
 import { taxForProfile } from "./tax.service";
-import { createDocument, emailDocument } from "../providers/icount-client";
+import { issueTaxDocument } from "./tax-document.service";
 import type { BillingProvider, InvoiceType } from "@prisma/client";
 import { getProvider } from "../providers";
 import { assertChargeable, consumeQuote, createPaymentQuote, type QuotePurpose } from "./payment-quote.service";
 import { emitBillingEvent } from "../lib/events";
-
-/**
- * חשבונית מס קבלה - the document that is both the tax invoice and the receipt.
- * Confirmed against the account's own doc/types, which lists it as "invrec".
- */
-const TAX_DOCTYPE = "invrec";
 
 export interface ChargeForInput {
   entityId: string;
@@ -80,30 +74,6 @@ async function paymentContext(entityId: string): Promise<{
     },
     card: { brand: pm?.brand ?? null, last4: pm?.last4 ?? null },
   };
-}
-
-/**
- * Where the receipt is sent.
- *
- * The billing email is the answer whenever there is one - it is the address
- * somebody chose for this. When there is not, the receipt still has to reach a
- * person, so it falls back to an admin of the tenant being billed rather than
- * going nowhere: a document nobody receives is, to the customer, a payment
- * with no proof.
- *
- * Returns null only when there is genuinely no one to send to, which the
- * caller records rather than swallows.
- */
-async function receiptRecipient(billingEmail: string | undefined, tenantId: string): Promise<string | null> {
-  const declared = String(billingEmail ?? "").trim();
-  if (declared) return declared;
-
-  const admin = await prisma.user.findFirst({
-    where: { tenantId, role: "ADMIN", isActive: true },
-    orderBy: { createdAt: "asc" },
-    select: { email: true },
-  });
-  return admin?.email?.trim() || null;
 }
 
 /**
@@ -348,88 +318,30 @@ export async function chargeFor(input: ChargeForInput): Promise<ChargeForResult>
   // issue is a real problem, but it is a problem to chase with the charge
   // reference in hand, not one to solve by taking the money again.
   if (result.success && ctx.provider === "ICOUNT") {
-    try {
-      const recipient = await receiptRecipient(ctx.customer.email, input.tenantId);
-      const doc = await createDocument({
-        doctype: TAX_DOCTYPE,
-        clientId: ctx.providerCustomerId,
-        clientName: ctx.identity.billingName || recipient || "Customer",
-        vatId: ctx.customer.vatId,
-        email: recipient ?? undefined,
-        address: ctx.identity.billingAddress ?? undefined,
-        currencyId: quote.providerCurrencyId,
-        description: input.description,
-        net: taxed.net,
-        vatPercent: taxed.percent,
-        gross: taxed.gross,
-        confirmationCode: result.providerChargeRef,
-        cardType: ctx.card.brand ?? undefined,
-        cardLast4: ctx.card.last4 ?? undefined,
-        // The customer gets their receipt without having to come and find it.
-        sendEmail: Boolean(recipient),
-      });
+    const doc = await issueTaxDocument({
+      tenantId: input.tenantId,
+      invoiceId: invoice.id,
+      identity: {
+        billingName: ctx.identity.billingName,
+        billingCountry: ctx.identity.billingCountry,
+        billingAddress: ctx.identity.billingAddress,
+        billingEmail: ctx.customer.email ?? null,
+        vatId: ctx.customer.vatId ?? null,
+        providerCustomerId: ctx.providerCustomerId ?? null,
+      },
+      description: input.description,
+      currencyId: quote.providerCurrencyId,
+      net: taxed.net,
+      vatPercent: taxed.percent,
+      gross: taxed.gross,
+      confirmationCode: result.providerChargeRef,
+      cardBrand: ctx.card.brand,
+      cardLast4: ctx.card.last4,
+    });
+    if (doc) {
       await prisma.charge.update({
         where: { id: chargeId },
         data: { documentRef: doc.docNumber, documentUrl: doc.docUrl },
-      });
-
-      // Then make sure it actually went out.
-      //
-      // `send_email` on the create is a request whose answer may say nothing,
-      // and "we asked for it to be sent" is not the same fact as "it was sent".
-      // So unless iCount explicitly confirmed delivery, the document is sent
-      // again to a named address and the outcome recorded. A duplicate receipt
-      // is a mild annoyance; a customer with no proof of payment is not.
-      if (recipient && doc.docNumber && doc.emailSent !== true) {
-        // Its own try/catch: the document exists by this point, so a failure
-        // here must not be reported as one that never issued. The two are
-        // chased differently - one needs resending, the other reissuing.
-        const sendResult = await emailDocument({
-          doctype: TAX_DOCTYPE,
-          docNumber: doc.docNumber,
-          to: recipient,
-        }).catch((e: any) => ({ sent: false as const, reason: e?.message ?? "send_failed", raw: null }));
-        if (sendResult.sent === false) {
-          // Issued but undelivered. Not a charge failure - the money moved and
-          // the document exists - but a real problem, and it must be visible
-          // rather than inferred later from a customer complaint.
-          await emitBillingEvent({
-            type: "payment.document_failed",
-            tenantId: input.tenantId,
-            data: {
-              invoiceId: invoice.id,
-              chargeRef: result.providerChargeRef,
-              documentRef: doc.docNumber,
-              reason: `document_email_not_sent: ${sendResult.reason ?? "unknown"}`,
-              recipient,
-            },
-          });
-        }
-      } else if (!recipient) {
-        await emitBillingEvent({
-          type: "payment.document_failed",
-          tenantId: input.tenantId,
-          data: {
-            invoiceId: invoice.id,
-            chargeRef: result.providerChargeRef,
-            documentRef: doc.docNumber,
-            reason: "no_receipt_recipient",
-          },
-        });
-      }
-    } catch (err: any) {
-      console.error(
-        `[billing] charge ${chargeId} succeeded but its tax document did not issue:`,
-        err?.message ?? err,
-      );
-      await emitBillingEvent({
-        type: "payment.document_failed",
-        tenantId: input.tenantId,
-        data: {
-          invoiceId: invoice.id,
-          chargeRef: result.providerChargeRef,
-          reason: err?.message ?? "document_failed",
-        },
       });
     }
   }
