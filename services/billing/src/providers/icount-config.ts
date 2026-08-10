@@ -297,12 +297,27 @@ export function paymentCapabilityEnabled(capability: PaymentCapability): boolean
 
 export class PaymentCapabilityDisabledError extends Error {
   readonly code = "PAYMENT_CAPABILITY_DISABLED";
+  /**
+   * Nothing was sent, and nothing could have been.
+   *
+   * This is thrown by a switch that is read before any I/O happens, so the
+   * money provably did not move. Saying so is not a detail: without it the
+   * caller falls back on "we do not know", which is the right default for a
+   * mid-flight failure and exactly wrong here - it left the charge PENDING,
+   * and a PENDING row reads as in-flight for ever, so the idempotency key was
+   * permanently occupied and that subscription could never be charged again.
+   *
+   * It is the earliest guard in the chain and was the only one not marked.
+   */
+  readonly neverSent = true;
+  readonly failureCode: string;
   constructor(readonly capability: PaymentCapability) {
     super(
       `[icount] the "${capability}" capability is disabled. ` +
         `Set ${CAPABILITY_ENV[capability]}=true to enable it.`,
     );
     this.name = "PaymentCapabilityDisabledError";
+    this.failureCode = `capability_disabled: ${capability}`;
   }
 }
 

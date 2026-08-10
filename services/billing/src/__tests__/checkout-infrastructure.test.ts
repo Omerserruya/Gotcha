@@ -649,3 +649,62 @@ describe("the self-serve checkout charges and documents like every other path", 
     expect(exec).toMatch(/receiptIdentityForEntity\(method\.profile\.billableEntityId\)/);
   });
 });
+
+/**
+ * A refusal must not become an outage.
+ *
+ * A disabled capability switch took the billing service down in production:
+ * the error was thrown before any I/O, was not marked as such, propagated out
+ * of the renewal sweep, and killed the process. The charge it was part-way
+ * through stayed PENDING - which reads as in-flight for ever, so that
+ * subscription's idempotency key was permanently occupied.
+ *
+ * Nothing here is about the switch itself. It is about a pre-flight refusal
+ * being recorded as the definite non-charge it is, and about one subscription
+ * being unable to decide that nobody else gets billed.
+ */
+describe("a pre-flight refusal is a definite non-charge, not an outage", () => {
+  const cfg = readFileSync(join(__dirname, "../providers/icount-config.ts"), "utf8");
+  const prov = readFileSync(join(__dirname, "../providers/icount.provider.ts"), "utf8");
+  const subs = readFileSync(join(__dirname, "../services/subscription.service.ts"), "utf8");
+
+  it("marks a disabled capability as never sent", () => {
+    // It is read before any I/O, so the money provably did not move. Without
+    // the marker the caller falls back on "we do not know" and leaves the
+    // charge PENDING for ever.
+    const cls = cfg.slice(cfg.indexOf("class PaymentCapabilityDisabledError"), cfg.indexOf("export function assertPaymentCapability"));
+    expect(cls).toMatch(/readonly neverSent = true/);
+    expect(cls).toMatch(/failureCode/);
+  });
+
+  it("marks the live-mode guard the same way", () => {
+    // The two earliest guards in the chain were the only ones unmarked, which
+    // is the opposite of what their position implies.
+    const fn = prov.slice(prov.indexOf("function assertLiveAllowed"), prov.indexOf("function assertLiveAllowed") + 1400);
+    expect(fn).toMatch(/ChargeRefusedBeforeSend/);
+    expect(fn).not.toMatch(/throw new Error\(/);
+  });
+
+  it("every guard before the network call carries the marker", () => {
+    // The property that matters, stated once: nothing in charge()'s pre-flight
+    // may throw a bare Error, because a bare Error is indistinguishable from a
+    // mid-flight failure.
+    const body = prov.slice(prov.indexOf("async charge(input: ChargeInput)"), prov.indexOf("async refund("));
+    expect(body).not.toMatch(/throw new Error\(/);
+  });
+
+  it("one subscription cannot abandon the rest of the sweep", () => {
+    expect(subs).toMatch(/async function renewInIsolation/);
+    // The sweep must go through it, not call activateOrRenew directly.
+    const cycle = subs.slice(subs.indexOf("export async function runBillingCycle"), subs.indexOf("const pocsExpired"));
+    expect(cycle).toMatch(/renewInIsolation\(s\.id, "trial_end"\)/);
+    expect(cycle).toMatch(/renewInIsolation\(s\.id, "renewal"\)/);
+    expect(cycle).not.toMatch(/await activateOrRenew\(/);
+  });
+
+  it("and cannot kill the process", () => {
+    const fn = subs.slice(subs.indexOf("async function renewInIsolation"), subs.indexOf("export async function runBillingCycle"));
+    expect(fn).toMatch(/catch \(err: any\)/);
+    expect(fn).not.toMatch(/throw /);
+  });
+});

@@ -511,6 +511,35 @@ export async function applyDuePendingChanges(now = new Date()): Promise<number> 
 }
 
 /** Charge trials whose window ended; renew active subs whose period ended. */
+/**
+ * Renew one subscription without letting it take the others down.
+ *
+ * The sweep used to be a bare `for ... await activateOrRenew(...)`. One throw
+ * anywhere in that chain abandoned every subscription after it in the list, and
+ * because nothing above caught it either, it killed the process - which is
+ * exactly what a disabled capability switch did in production: the service
+ * crash-looped and the charge it was mid-way through was left PENDING for ever.
+ *
+ * A renewal that cannot proceed is ordinary: a missing card, a closed
+ * capability, a rate nobody approved. Those are recorded on the charge and
+ * retried by dunning. What must never happen is one of them deciding that
+ * nobody else gets billed this month.
+ *
+ * Deliberately swallows and logs rather than collecting: the per-subscription
+ * outcome already lives on its own Charge row, which is the thing anyone
+ * investigating will actually read.
+ */
+async function renewInIsolation(subscriptionId: string, reason: "trial_end" | "renewal"): Promise<void> {
+  try {
+    await activateOrRenew(subscriptionId, { reason });
+  } catch (err: any) {
+    console.error(
+      `[billing][cycle] ${reason} failed for subscription ${subscriptionId}; continuing with the rest:`,
+      err?.message ?? err,
+    );
+  }
+}
+
 export async function runBillingCycle(now = new Date()): Promise<{
   trials: number;
   renewals: number;
@@ -521,10 +550,10 @@ export async function runBillingCycle(now = new Date()): Promise<{
   const pending = await applyDuePendingChanges(now);
 
   const trials = await prisma.subscription.findMany({ where: { status: "TRIALING", trialEndsAt: { lte: now } } });
-  for (const s of trials) await activateOrRenew(s.id, { reason: "trial_end" });
+  for (const s of trials) await renewInIsolation(s.id, "trial_end");
 
   const renewals = await prisma.subscription.findMany({ where: { status: "ACTIVE", cancelAtPeriodEnd: false, currentPeriodEnd: { lte: now } } });
-  for (const s of renewals) await activateOrRenew(s.id, { reason: "renewal" });
+  for (const s of renewals) await renewInIsolation(s.id, "renewal");
 
   // POCs never renew (cancelAtPeriodEnd=true keeps them out of the sweep
   // above); expiring them is their entire lifecycle.

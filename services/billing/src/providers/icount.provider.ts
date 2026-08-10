@@ -60,7 +60,10 @@ function assertLiveAllowed(operation: string): void {
   const isProd = process.env.NODE_ENV === "production";
   const acknowledged = process.env.ICOUNT_ALLOW_LIVE === "true";
   if (!isProd || !acknowledged) {
-    throw new Error(
+    // Also a never-sent refusal, for the same reason the capability switch is:
+    // it is read before any I/O, so the money provably did not move.
+    throw new ChargeRefusedBeforeSend(
+      "live_mode_not_permitted",
       `[icount] refusing live ${operation}: ICOUNT_MODE=live requires NODE_ENV=production AND ICOUNT_ALLOW_LIVE=true (env guard - dev/test must never charge a real card)`,
     );
   }
