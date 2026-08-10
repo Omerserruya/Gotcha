@@ -64,7 +64,7 @@ async function materializeForEntity(entityId: string, actor?: string): Promise<v
  * has none, and falls back to its pinned plan version's price - which is still
  * its own version, not the newest one.
  */
-function contractedPrice(sub: { snapshotPrice: unknown }, plan: { basePrice: unknown } | null): number {
+export function contractedPrice(sub: { snapshotPrice: unknown }, plan: { basePrice: unknown } | null): number {
   if (sub.snapshotPrice != null) return Number(sub.snapshotPrice);
   return plan?.basePrice != null ? Number(plan.basePrice) : 0;
 }

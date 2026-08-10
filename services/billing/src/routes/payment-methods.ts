@@ -23,8 +23,18 @@ import {
 import { checkoutEnabled } from "../providers/capabilities";
 import { getCapabilities } from "../providers";
 import { buildReturnUrl } from "../lib/public-url";
+import { contractedPrice } from "../services/subscription.service";
 
 const router = Router();
+
+/**
+ * Subscription states that still have a charge ahead of them.
+ *
+ * CANCELED and EXPIRED are done - nothing will be billed - so a card is no
+ * longer holding anything up. PAST_DUE is included deliberately: that is the
+ * state most in need of a card, not least.
+ */
+const CHARGING_STATUSES = new Set(["ACTIVE", "TRIALING", "PAST_DUE"]);
 
 /**
  * Where the provider sends the person once the card is stored.
@@ -166,8 +176,31 @@ router.delete("/billing/payment-methods/:id", authenticate, resolveTenant, requi
   if (!link) return res.json({ ok: true });
   const profile = await prisma.billingProfile.findUnique({ where: { billableEntityId: link.billableEntityId }, select: { id: true } });
   if (!profile) return res.json({ ok: true });
+
+  // Removing the LAST card while something is still due to be charged leaves a
+  // subscription that cannot pay. The next renewal fails with
+  // no_payment_method, the subscription goes PAST_DUE, and the customer's first
+  // notice is losing access - for an action the product presented as safe.
+  //
+  // Only the last card is protected, and only when a charge is actually coming.
+  // A second card, a free or POC plan, or a subscription already set to cancel
+  // at period end all leave nothing to strand, so removal stays allowed.
+  const id = String(req.params.id);
+  const otherActive = await prisma.paymentMethod.count({
+    where: { billingProfileId: profile.id, status: "ACTIVE", id: { not: id } },
+  });
+  if (otherActive === 0) {
+    const sub = await prisma.subscription.findUnique({ where: { billableEntityId: link.billableEntityId } });
+    if (sub && CHARGING_STATUSES.has(sub.status) && !sub.cancelAtPeriodEnd) {
+      const plan = await prisma.plan.findFirst({ where: { key: sub.planKey, version: sub.planVersion } });
+      if (contractedPrice(sub, plan) > 0) {
+        return res.status(409).json({ error: "last_payment_method_in_use" });
+      }
+    }
+  }
+
   await prisma.paymentMethod.updateMany({
-    where: { id: String(req.params.id), billingProfileId: profile.id },
+    where: { id, billingProfileId: profile.id },
     data: { status: "REMOVED", isDefault: false },
   });
   res.json({ ok: true });

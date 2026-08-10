@@ -295,3 +295,43 @@ describe("adding a card sends the provider somewhere to return to", () => {
     expect(checkoutSrc).toMatch(/successUrl:/);
   });
 });
+
+// ─── Removing the last card ─────────────────────────────────────
+
+describe("the last card cannot be removed out from under a live subscription", () => {
+  const routeSrc = readFileSync(join(__dirname, "../routes/payment-methods.ts"), "utf8");
+  const route = routeSrc.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+
+  /**
+   * Reported from production: the only stored card could be removed while a
+   * subscription was active. Nothing stopped it, and nothing warned. The next
+   * renewal would fail with no_payment_method and the subscription would go
+   * PAST_DUE - the customer's first notice being lost access, from an action
+   * the UI presented as safe.
+   */
+  it("counts the other ACTIVE cards before removing", () => {
+    expect(route).toMatch(/paymentMethod\.count\(\{[\s\S]*?status: "ACTIVE"[\s\S]*?id: \{ not:/);
+  });
+
+  it("refuses with a machine-readable code rather than silently succeeding", () => {
+    expect(route).toContain("last_payment_method_in_use");
+    expect(route).toMatch(/status\(409\)/);
+  });
+
+  it("only protects when a charge is actually still coming", () => {
+    // A free/POC plan, or one already cancelling at period end, strands nothing.
+    expect(route).toContain("CHARGING_STATUSES");
+    expect(route).toContain("cancelAtPeriodEnd");
+    expect(route).toMatch(/contractedPrice\(sub, plan\) > 0/);
+  });
+
+  it("uses the subscription's contracted price, not the live plan row alone", () => {
+    // contractedPrice prefers the immutable snapshot, so republishing a plan
+    // cannot change whether a customer is allowed to remove their card.
+    expect(route).toContain("contractedPrice");
+  });
+
+  it("keeps the cross-tenant scoping that was already there", () => {
+    expect(route).toMatch(/billingProfileId: profile\.id/);
+  });
+});
