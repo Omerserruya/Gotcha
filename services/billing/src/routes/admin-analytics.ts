@@ -19,6 +19,7 @@ import {
   requirePlatformPermission,
   PLATFORM_PERMISSIONS,
   prisma,
+  withCrossTenantAccess,
   writeAudit,
   getUsageStats,
   getStatsByTenant,
@@ -151,12 +152,18 @@ router.post("/admin/analytics/backfill", authenticate, requirePlatformPermission
   const existing = await prisma.conversationUsageAggregate.findMany({ select: { conversationId: true }, take: 100_000 });
   const known = new Set(existing.map((e) => e.conversationId));
 
-  const conversations = await prisma.conversation.findMany({
-    where: { ...(tenantId ? { tenantId } : {}), id: { notIn: [...known].slice(0, 30_000) } },
-    select: { id: true },
-    orderBy: { createdAt: "desc" },
-    take: limit,
-  });
+  // `tenantId` is OPTIONAL on this route - omitting it means "backfill the whole
+  // platform", and that shape has no tenantId for the TenantGuard to find. The
+  // route is already behind authenticate + USAGE_ANALYTICS_READ, which is the
+  // authorization the guard is a backstop for.
+  const conversations = await withCrossTenantAccess(() =>
+    prisma.conversation.findMany({
+      where: { ...(tenantId ? { tenantId } : {}), id: { notIn: [...known].slice(0, 30_000) } },
+      select: { id: true },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+    }),
+  );
 
   let processed = 0;
   let linked = 0;
