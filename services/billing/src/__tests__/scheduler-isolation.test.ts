@@ -21,6 +21,7 @@ const leases = vi.fn();
 const quotes = vi.fn();
 const sessions = vi.fn();
 const retention = vi.fn();
+const payg = vi.fn();
 
 vi.mock("../services/subscription.service", () => ({ runBillingCycle: () => cycle() }));
 vi.mock("../services/dunning.service", () => ({ runDunning: () => dunning() }));
@@ -29,6 +30,7 @@ vi.mock("../services/payment-attempt.service", () => ({ expireStaleLeases: () =>
 vi.mock("../services/payment-quote.service", () => ({ expireStaleQuotes: () => quotes() }));
 vi.mock("../services/tokenization.service", () => ({ expireStaleSessions: () => sessions() }));
 vi.mock("../services/billing-retention.service", () => ({ purgeSpentCheckoutArtifacts: () => retention() }));
+vi.mock("../services/payg.service", () => ({ settleDuePaygAccruals: () => payg() }));
 vi.mock("@chatcenter/shared", async () => {
   const actual = await vi.importActual<any>("@chatcenter/shared");
   return { ...actual, settleDueConversations: () => usage() };
@@ -42,6 +44,7 @@ const OK = {
   usage: { settled: 3, discovered: 4 },
   reconcile: { examined: 5, resolvedPaid: 1, resolvedUnpaid: 1, escalated: 3 },
   retention: { tokenizationSessions: 6, continuationLinks: 7, unusedQuotes: 8 },
+  payg: { settled: 1, amount: 12.5 },
 };
 
 beforeEach(() => {
@@ -54,12 +57,13 @@ beforeEach(() => {
   quotes.mockResolvedValue(0);
   sessions.mockResolvedValue(0);
   retention.mockResolvedValue(OK.retention);
+  payg.mockResolvedValue(OK.payg);
 });
 
 describe("a clean tick runs everything", () => {
   it("calls every stage once and reports their results", async () => {
     const r = await runSchedulerTick();
-    for (const fn of [cycle, dunning, usage, reconcile, leases, quotes, sessions, retention]) {
+    for (const fn of [cycle, dunning, usage, payg, reconcile, leases, quotes, sessions, retention]) {
       expect(fn).toHaveBeenCalledTimes(1);
     }
     expect(r.failed).toEqual([]);
@@ -101,7 +105,7 @@ describe("a failing stage is contained", () => {
   });
 
   it("survives every stage failing at once", async () => {
-    for (const fn of [cycle, dunning, usage, reconcile, leases, quotes, sessions, retention]) {
+    for (const fn of [cycle, dunning, usage, payg, reconcile, leases, quotes, sessions, retention]) {
       fn.mockRejectedValue(new Error("everything is down"));
     }
     const r = await runSchedulerTick();
@@ -109,7 +113,7 @@ describe("a failing stage is contained", () => {
     // The tick itself must not throw - it is called from a setInterval with
     // nobody to catch it, and a rejected timer callback is how a scheduler dies
     // quietly.
-    expect(r.failed).toEqual(["cycle", "dunning", "usage", "reconcile", "leases", "quotes", "sessions", "retention"]);
+    expect(r.failed).toEqual(["cycle", "dunning", "usage", "payg", "reconcile", "leases", "quotes", "sessions", "retention"]);
     expect(r.reconciled.examined).toBe(0);
   });
 
@@ -130,6 +134,7 @@ describe("the log line appears when it should", () => {
     usage.mockResolvedValue({ settled: 0, discovered: 0 });
     reconcile.mockResolvedValue({ examined: 0, resolvedPaid: 0, resolvedUnpaid: 0, escalated: 0 });
     retention.mockResolvedValue({ tokenizationSessions: 0, continuationLinks: 0, unusedQuotes: 0 });
+    payg.mockResolvedValue({ settled: 0, amount: 0 });
     // Hourly noise trains people to ignore the channel the failures arrive on.
     expect(tickWasEventful(await runSchedulerTick())).toBe(false);
   });

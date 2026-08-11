@@ -26,7 +26,7 @@ import { prisma, grantUnits, getBalance } from "@chatcenter/shared";
 import { getEntityIdForTenant } from "./billable-entity.service";
 import { chargeFor } from "./invoice.service";
 import { emitBillingEvent } from "../lib/events";
-import { periodKeyFor } from "../lib/period";
+import { spendWindowKey } from "../lib/period";
 
 export interface PurchaseResult {
   success: boolean;
@@ -279,7 +279,10 @@ export async function triggerAutoPurchase(input: { tenantId: string; reason?: st
     const topUp = await resolveTopUp(policy, sub, now);
     if (topUp.units <= 0) return { success: false, failureCode: "no_top_up_configured" };
 
-    const monthKey = periodKeyFor(now);
+    // Anchored to the subscription's cycle, NOT the wall-clock month. See
+    // spendWindowKey: keying on `now` reset the ceiling on the 1st regardless of
+    // the anchor day, which let a 100 cap spend up to 200 in one cycle.
+    const monthKey = spendWindowKey(sub, now);
     const spentThisMonth = policy.monthSpendKey === monthKey ? Number(policy.monthSpentAmount) : 0;
     const ceiling = policy.maxMonthlySpend != null ? Number(policy.maxMonthlySpend) : Infinity;
 

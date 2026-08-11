@@ -196,3 +196,4 @@ export {
   resolveTenantPlanAccessBatch,
   tenantPlanGateFacts,
 } from "./tenant-plan-resolver";
+export * from "./spend-window";

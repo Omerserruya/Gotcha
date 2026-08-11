@@ -2940,8 +2940,8 @@
     "manageSubscription": "Manage or cancel subscription",
     "limit": {
       "back": "Back to Usage",
-      "title": "Usage-credit spending limit",
-      "subtitle": "Automatic top-ups keep the AI operating after plan credits run out, up to a monthly money limit you set.",
+      "title": "What happens when credits run out",
+      "subtitle": "Choose whether the AI stops, buys more, or keeps working and bills you at the end of the cycle.",
       "enableTitle": "Usage credits",
       "enableDesc": "Automatically buy more credits when plan credits run low.",
       "maxSpend": "Maximum additional monthly spend",
@@ -2952,7 +2952,32 @@
       "packageHint": "Which credit package to buy each time the threshold is reached.",
       "atLimitNote": "When the monthly limit is reached, automatic purchases stop for the rest of the month and you are notified. You can still buy credits manually at any time.",
       "cancel": "Cancel",
-      "save": "Save limit"
+      "save": "Save limit",
+      "mode": {
+        "stop": {
+          "title": "Stop at zero",
+          "desc": "The AI stops once plan credits are spent. Nothing further is charged.",
+          "when": "Never charged"
+        },
+        "auto": {
+          "title": "Buy another package automatically",
+          "desc": "When credits drop to your threshold, buy the package you choose.",
+          "when": "Charged at each purchase"
+        },
+        "payg": {
+          "title": "Keep working, pay for what you use",
+          "desc": "The AI carries on past zero and the usage is billed when the cycle closes.",
+          "when": "Charged at the end of the cycle"
+        }
+      },
+      "maxSpendHintPayg": "Usage stops accruing once it reaches this amount, and the AI stops with it.",
+      "uncappedWarning": "With no limit set, spending in this mode is unlimited. Set an amount unless that is genuinely what you want.",
+      "windowNote": "The limit resets on your billing date, not on the first of the month.",
+      "payg": {
+        "rate": "Rate per credit",
+        "rateUnset": "Not set",
+        "rateMissing": "No pay-as-you-go rate is configured for this account, so this mode cannot price usage and the AI will stop at zero. Contact us to set one."
+      }
     },
     "auto": {
       "title": "Automatic credit top-up",

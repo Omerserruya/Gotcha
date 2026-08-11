@@ -18,7 +18,8 @@ import {
 import { ensureBillableEntity, getEntityIdForTenant, getSubscriptionForTenant } from "../services/billable-entity.service";
 import { listActivePlans } from "../services/plan.service";
 import { buyCredits } from "../services/purchase.service";
-import { periodKeyFor } from "../lib/period";
+import { spendWindowKey } from "../lib/period";
+import { commercialCurrencyFor } from "../lib/currency";
 import { taxSummaryForTenant } from "../services/pricing.service";
 import { applyTax } from "../services/tax.service";
 
@@ -45,10 +46,10 @@ router.get("/billing/credit-summary", authenticate, resolveTenant, async (req, r
     ? await prisma.autoPurchasePolicy.findUnique({ where: { billableEntityId: entityId } })
     : null;
 
-  // Auto-purchase spend is written keyed on the WALL-CLOCK month
-  // (triggerAutoPurchase uses periodKeyFor(new Date())); read it back the same
-  // way so a rolled-over month shows 0 spent, not a stale carry-over.
-  const currentMonthKey = periodKeyFor(new Date());
+  // Read the window back exactly as triggerAutoPurchase writes it: anchored to
+  // the subscription's cycle. This comment used to say "wall-clock month", and
+  // matching the writer was the right instinct pointed at the wrong key.
+  const currentMonthKey = spendWindowKey(sub as any);
   const spentAmount =
     policy && policy.monthSpendKey === currentMonthKey ? Number(policy.monthSpentAmount) : 0;
 
@@ -208,7 +209,11 @@ router.post("/billing/credits/buy", authenticate, resolveTenant, requirePermissi
 router.get("/billing/auto-purchase", authenticate, resolveTenant, requirePermission("settings:billing:manage"), async (req, res) => {
   const entityId = await getEntityIdForTenant(req.tenantId!);
   const policy = entityId ? await prisma.autoPurchasePolicy.findUnique({ where: { billableEntityId: entityId } }) : null;
-  res.json({ policy });
+  // The effective currency travels with the answer even when no policy row
+  // exists yet, so the screen states what the ceiling is denominated in instead
+  // of falling back to a guess of its own.
+  const currency = policy?.currency || (await commercialCurrencyFor(entityId));
+  res.json({ policy, currency });
 });
 
 const LIMIT_BEHAVIORS = ["STOP_AI", "HUMAN_ONLY", "REQUIRE_APPROVAL", "PREPAID_ONLY"] as const;
@@ -261,9 +266,12 @@ router.put("/billing/auto-purchase", authenticate, resolveTenant, requirePermiss
     updatedBy: req.user?.userId,
   };
 
+  // The organization's commercial currency, not a literal. A ceiling created
+  // in one currency and displayed in another is a cap that does not cap.
+  const effectiveCurrency = currency ?? (await commercialCurrencyFor(entityId));
   const policy = await prisma.autoPurchasePolicy.upsert({
     where: { billableEntityId: entityId },
-    create: { billableEntityId: entityId, currency: currency ?? "USD", ...fields },
+    create: { billableEntityId: entityId, currency: effectiveCurrency, ...fields },
     update: { ...(currency ? { currency } : {}), ...fields },
   });
   res.json({ ok: true, policy });

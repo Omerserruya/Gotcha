@@ -4,12 +4,22 @@
  * align to the subscription's own anchor day.
  */
 
-/** Stable key for a period, derived from its start (e.g. "2026-06"). */
-export function periodKeyFor(start: Date): string {
-  const y = start.getUTCFullYear();
-  const m = String(start.getUTCMonth() + 1).padStart(2, "0");
-  return `${y}-${m}`;
-}
+/**
+ * Both live in shared, and are re-exported here so the existing call sites in
+ * this service keep their import path.
+ *
+ * They are NOT defined here any more. The AI gate has to compute the same spend
+ * window this service accrues against, the gate cannot import from a service,
+ * and two copies of that arithmetic would eventually disagree - at which point
+ * usage gets through that nothing bills, or budget goes unspent. One definition
+ * is the fix, not two careful ones.
+ *
+ * `spendWindowKey` in particular: pass the subscription, never `now`. Keying on
+ * the wall clock resets a ceiling on the 1st for a customer anchored on the
+ * 10th, which lets one billing cycle spend two ceilings.
+ */
+import { periodKeyFor } from "@chatcenter/shared";
+export { periodKeyFor, spendWindowKey } from "@chatcenter/shared";
 
 /** Add N months preserving the anchor day-of-month where possible. */
 export function addMonths(d: Date, n: number): Date {

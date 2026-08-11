@@ -121,8 +121,17 @@ export interface AutoPurchasePolicy {
   warningThresholdPct?: number | null;
   incrementCredits?: number | null;
   pricePerCredit?: string | null;
-  /** What happens once credits run out and no further top-up is possible. */
-  limitBehavior?: "STOP_AI" | "HUMAN_ONLY" | "REQUIRE_APPROVAL" | "PREPAID_ONLY";
+  /**
+   * What happens once credits run out and no further top-up is possible.
+   *
+   * PAYG is the only one that keeps serving: usage past a spent wallet accrues
+   * and is billed when the cycle CLOSES, unlike a top-up which charges the card
+   * at the moment it happens. Its cap is maxMonthlySpend, the same field, and it
+   * is enforced on every accrual rather than at settlement.
+   */
+  limitBehavior?: "STOP_AI" | "HUMAN_ONLY" | "REQUIRE_APPROVAL" | "PREPAID_ONLY" | "PAYG";
+  /** The pay-as-you-go rate. Separate from pricePerCredit, which prices a top-up. */
+  paygPricePerCredit?: string | null;
 }
 
 // ─── Pricing catalog ─────────────────────────────────────────
@@ -387,7 +396,9 @@ export const buyCredits = (token: string, packageKey: string, intentKey: string)
   );
 
 export const getAutoPurchase = (token: string) =>
-  apiFetch<{ policy: AutoPurchasePolicy | null }>("/api/billing/auto-purchase", { token });
+  // `currency` travels alongside, so the screen states what a ceiling is
+  // denominated in even before a policy row exists rather than guessing.
+  apiFetch<{ policy: AutoPurchasePolicy | null; currency: string }>("/api/billing/auto-purchase", { token });
 
 export const setAutoPurchase = (token: string, policy: Partial<AutoPurchasePolicy>) =>
   apiFetch<{ ok: boolean; policy: AutoPurchasePolicy }>("/api/billing/auto-purchase", {

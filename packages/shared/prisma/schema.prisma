@@ -2677,6 +2677,10 @@ enum InvoiceType {
   SUBSCRIPTION
   CREDIT_PURCHASE
   AUTO_PURCHASE
+  /// Usage served past a spent wallet and billed when the cycle closed. Kept
+  /// distinct from AUTO_PURCHASE so arrears never read as a prepaid top-up on
+  /// a document, in a report, or in revenue.
+  PAYG_SETTLEMENT
 }
 
 enum InvoiceStatus {
@@ -2772,6 +2776,7 @@ model BillableEntity {
   subscription       Subscription?
   invoices           Invoice[]
   autoPurchasePolicy AutoPurchasePolicy?
+  paygAccruals       PaygAccrual[]
 
   @@map("billable_entities")
 }
@@ -3722,6 +3727,11 @@ model AutoPurchasePolicy {
   // What happens once the monthly ceiling is reached (or auto-purchase is off)
   // and the balance hits zero. Enforced server-side by the AI runtime gate.
   limitBehavior       AutoPurchaseLimitBehavior @default(STOP_AI) @map("limit_behavior")
+  /// The pay-as-you-go rate, used only when limitBehavior is PAYG. Separate
+  /// from pricePerCredit, which prices an auto-purchase top-up: the two are
+  /// different products and pricing them off one field would mean a discount on
+  /// one silently discounting the other.
+  paygPricePerCredit  Decimal?                  @map("payg_price_per_credit") @db.Decimal(12, 6)
   // Single-flight lock. A purchase attempt CAS-claims the policy row; a stale
   // lock (older than the TTL) is reclaimable so a crashed worker cannot wedge
   // auto-purchase permanently.
@@ -3738,6 +3748,49 @@ enum AutoPurchaseLimitBehavior {
   HUMAN_ONLY // AI stops, human agents keep working
   REQUIRE_APPROVAL // each further AI action needs an authorized approval
   PREPAID_ONLY // never auto-purchase; consume prepaid balance only
+  PAYG // keep serving past zero, accrue usage, bill it at the END of the cycle
+}
+
+/// Pay-as-you-go usage accrued past a spent wallet, settled once per cycle.
+///
+/// The other two ways to buy credits charge the card at the moment of purchase.
+/// This one deliberately does not: it accumulates what was consumed and bills it
+/// when the cycle closes, which is the only mode where the customer owes money
+/// they have not yet been charged for. That is exactly why `maxMonthlySpend` is
+/// enforced on every accrual rather than at settlement - a ceiling checked only
+/// when the bill is drawn up is not a ceiling, it is a receipt.
+model PaygAccrual {
+  id               String            @id @default(cuid())
+  billableEntityId String            @map("billable_entity_id")
+  /// The subscription's spend window, NOT the calendar month. See spendWindowKey.
+  periodKey        String            @map("period_key")
+  units            Decimal           @default(0) @db.Decimal(18, 6)
+  amount           Decimal           @default(0) @db.Decimal(12, 2)
+  currency         String
+  /// Frozen at first accrual, so a mid-cycle price change cannot restate what
+  /// the customer already consumed at the old rate.
+  pricePerCredit   Decimal           @map("price_per_credit") @db.Decimal(12, 6)
+  status           PaygAccrualStatus @default(OPEN)
+  /// Set when the ceiling stopped further accrual, so the UI can say why the
+  /// AI went quiet instead of leaving it a mystery.
+  cappedAt         DateTime?         @map("capped_at")
+  settledChargeId  String?           @map("settled_charge_id")
+  settledAt        DateTime?         @map("settled_at")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+
+  entity BillableEntity @relation(fields: [billableEntityId], references: [id], onDelete: Cascade)
+
+  @@unique([billableEntityId, periodKey])
+  @@index([status])
+  @@map("payg_accruals")
+}
+
+enum PaygAccrualStatus {
+  OPEN // still accruing
+  SETTLING // a settlement charge is in flight
+  SETTLED // charged
+  VOID // written off, never to be charged
 }
 
 model DunningState {

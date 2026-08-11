@@ -7,12 +7,16 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// Real email helpers, no prisma: the point is to render the true template
-// without dragging the whole shared barrel (and a DATABASE_URL) into the test.
-vi.mock("@chatcenter/shared", async () => {
-  const brand = await import("../../../../packages/shared/src/lib/email/brand-email");
-  const queue = await import("../../../../packages/shared/src/lib/email/email-queue");
-  return { ...brand, ...queue, prisma: {} };
+// Real email helpers, stubbed prisma: the point is to render the TRUE template
+// rather than assert against a mock of it.
+//
+// Deliberately `importOriginal` and not a deep relative import into
+// packages/shared/src. That path compiles here but drags shared's sources into
+// this service's TypeScript program, which then fails rootDir - the service
+// typechecks its own src, not the monorepo.
+vi.mock("@chatcenter/shared", async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
+  return { ...actual, prisma: {} };
 });
 
 import { sendReceiptEmail, __setEmailQueueForTests, currencyCodeFor } from "../services/receipt-email.service";
