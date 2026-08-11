@@ -380,7 +380,7 @@ function PlaybooksTab({ t }: { t: (key: string) => string }) {
   const selectedFlow = flows.find((f) => f.id === selected) || null;
 
   return (
-    <div className="flex flex-col" style={{ height: "calc(100vh - 250px)", minHeight: 520 }} data-tour="new-workflow">
+    <div className="flex flex-col" style={{ height: "calc(100vh - 250px - var(--app-chrome-h, 0px))", minHeight: 520 }} data-tour="new-workflow">
       {/* Compact process selector - NOT a card grid. Switch, create, template. */}
       <div className="flex flex-wrap items-center gap-2 mb-3">
         <label className="text-xs font-semibold text-gray-500">{t("aiStudio.playbooks.process")}</label>

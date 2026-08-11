@@ -89,7 +89,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
   return (
     <aside
       className={clsx(
-        "bg-white flex flex-col shrink-0 h-screen md:h-[calc(100vh-16px)] sticky top-0 transition-all duration-300 shadow-float md:rounded-2xl md:overflow-hidden",
+        "bg-white flex flex-col shrink-0 h-[100vh] md:h-[calc(100vh-16px)] sticky top-0 transition-all duration-300 shadow-float md:rounded-2xl md:overflow-hidden",
         collapsed ? "w-[68px]" : "w-64"
       )}
     >

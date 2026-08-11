@@ -614,6 +614,38 @@ body {
   box-shadow: inset 0 0 100px 10px #000;
 }
 
+/* ───── App chrome: the command bar's own lane ─────
+   The command bar is not an overlay. It owns a thin lane at the top of the
+   content column - not across the whole app, so the menu keeps its full
+   height - that nothing else may render into. As a floating pill it sat on
+   top of page headers, alert banners and toasts and hid them.
+
+   `--app-chrome-h` is everything a full-height page inside .app-frame has to
+   give up: the lane plus the frame's 8px top and bottom gutters. Set on
+   .app-frame so it is inherited by every page, it makes `h-screen` mean "the
+   viewport that is left for this page" (see tailwind.config.ts, where the
+   screen heights subtract it). It is 0 outside the frame, so the sidebar,
+   login, setup and portalled overlays still get the raw viewport.
+
+   The lane's height is a px variable, not a rem utility: Hebrew scales the
+   root font by 105%, so an `h-10` lane is 42px there and every page below it
+   would be off by the difference. */
+:root {
+  --app-bar-h: 40px;
+}
+.app-bar {
+  height: var(--app-bar-h);
+}
+.app-frame {
+  --app-chrome-h: 0px;
+}
+@media (min-width: 768px) {
+  .app-frame {
+    /* the bar, plus the frame's 8px top and bottom gutters */
+    --app-chrome-h: calc(var(--app-bar-h) + 16px);
+  }
+}
+
 /* ───── Premium app background (mirrors hero gradient blobs, no grid) ───── */
 .app-bg {
   background: #ffffff;

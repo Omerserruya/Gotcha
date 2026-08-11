@@ -53,7 +53,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
 
   return (
     <AppLayout>
-      <div className="flex h-[calc(100vh-16px)] md:gap-2 md:p-2">
+      <div className="flex h-screen md:gap-2 md:p-2">
         {/* Settings sidebar - hidden on mobile, shown on md+ */}
         {/* data-tour hooks: the GuidedTour spotlights this menu ("settings-nav")
             and individual entries ("settings-nav-channels") to teach the

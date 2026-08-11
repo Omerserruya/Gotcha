@@ -276,7 +276,7 @@ export default function HistoryPage() {
 
   return (
     <AppLayout>
-      <div className="flex md:gap-2 h-[calc(100vh-48px)] md:h-[calc(100vh-16px)]">
+      <div className="flex md:gap-2 h-[calc(100vh-48px)] md:h-screen">
         {/* Left: Customer list */}
         <div className={clsx(
           "w-full md:w-[340px] border-e border-gray-100 bg-white flex-shrink-0 flex flex-col md:rounded-2xl md:shadow-subtle md:overflow-hidden",
