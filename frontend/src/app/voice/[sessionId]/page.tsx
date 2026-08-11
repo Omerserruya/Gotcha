@@ -501,7 +501,7 @@ function VoiceWorkspaceInner({ sessionId }: { sessionId: string }) {
   const agentName = user?.name || "You";
 
   return (
-    <div className="flex flex-col md:flex-row h-[100dvh] md:h-[calc(100vh-16px)] md:gap-3 md:p-2">
+    <div className="flex flex-col md:flex-row h-[100dvh] md:h-screen md:gap-3 md:p-2">
       {/* Stage - full-height on mobile so the call UI is the primary surface
           and isn't pushed off-screen by the context panel stacked below.
           The context panel is hidden under md and opened via the header

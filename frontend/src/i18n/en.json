@@ -697,6 +697,8 @@
     "routingCtaTitle": "Channel connected - set up what happens to its messages",
     "routingCtaSub": "Route it to an AI employee, a team, or a subflow.",
     "routingCtaButton": "Set up routing",
+    "setFlow": "Set flow",
+    "setFlowHint": "Build what happens to this channel's messages",
     "connectionFailed": "Connection failed. Please try again.",
     "noPages": "No Facebook Pages found. Make sure you manage at least one page.",
     "noInstagram": "No Instagram Business Account found. Link your Instagram to a Facebook Page first.",
@@ -2938,8 +2940,8 @@
     "manageSubscription": "Manage or cancel subscription",
     "limit": {
       "back": "Back to Usage",
-      "title": "Usage-credit spending limit",
-      "subtitle": "Automatic top-ups keep the AI operating after plan credits run out, up to a monthly money limit you set.",
+      "title": "What happens when credits run out",
+      "subtitle": "Choose whether the AI stops, buys more, or keeps working and bills you at the end of the cycle.",
       "enableTitle": "Usage credits",
       "enableDesc": "Automatically buy more credits when plan credits run low.",
       "maxSpend": "Maximum additional monthly spend",
@@ -2950,7 +2952,32 @@
       "packageHint": "Which credit package to buy each time the threshold is reached.",
       "atLimitNote": "When the monthly limit is reached, automatic purchases stop for the rest of the month and you are notified. You can still buy credits manually at any time.",
       "cancel": "Cancel",
-      "save": "Save limit"
+      "save": "Save limit",
+      "mode": {
+        "stop": {
+          "title": "Stop at zero",
+          "desc": "The AI stops once plan credits are spent. Nothing further is charged.",
+          "when": "Never charged"
+        },
+        "auto": {
+          "title": "Buy another package automatically",
+          "desc": "When credits drop to your threshold, buy the package you choose.",
+          "when": "Charged at each purchase"
+        },
+        "payg": {
+          "title": "Keep working, pay for what you use",
+          "desc": "The AI carries on past zero and the usage is billed when the cycle closes.",
+          "when": "Charged at the end of the cycle"
+        }
+      },
+      "maxSpendHintPayg": "Usage stops accruing once it reaches this amount, and the AI stops with it.",
+      "uncappedWarning": "With no limit set, spending in this mode is unlimited. Set an amount unless that is genuinely what you want.",
+      "windowNote": "The limit resets on your billing date, not on the first of the month.",
+      "payg": {
+        "rate": "Rate per credit",
+        "rateUnset": "Not set",
+        "rateMissing": "No pay-as-you-go rate is configured for this account, so this mode cannot price usage and the AI will stop at zero. Contact us to set one."
+      }
     },
     "auto": {
       "title": "Automatic credit top-up",
@@ -4230,28 +4257,12 @@
     "tourCta": "Take the guided tour",
     "title": "Welcome to GOTCHA",
     "titleWithBiz": "Welcome, {business}",
-    "subtitle": "Your AI employee already knows your business. Take your first steps - talk to it, take it live, and watch it work.",
+    "subtitle": "Your AI employee already knows your business. Finish these steps to take it live.",
     "progress": "First steps",
     "chips": {
       "core": "Connected to {system}",
       "kb": "Knowledge loaded",
       "channels": "{n} channels detected"
-    },
-    "chat": {
-      "title": "Talk to {name}",
-      "subtitle": "A private sandbox - nothing is sent to customers.",
-      "ready": "Ready to work",
-      "empty": "Say hello - ask anything a customer would.",
-      "s1": "What do you know about our business?",
-      "s2": "How would you answer a customer asking about prices?",
-      "s3": "What can you do for me?",
-      "placeholder": "Write a message…",
-      "send": "Send",
-      "error": "Something went wrong - try again.",
-      "noEmployeeTitle": "Create your AI employee",
-      "noEmployeeSub": "You skipped this during setup",
-      "noEmployeeBody": "Your workspace is ready - all that's missing is the employee. It takes about two minutes: tell us the goal and we'll draft everything else.",
-      "createCta": "Create my AI employee"
     },
     "milestones": {
       "title": "Your first steps",
@@ -4283,55 +4294,12 @@
       "channels": "Channels",
       "knowledge": "Knowledge",
       "analytics": "Analytics"
-    }
-  },
-  "businessRules": {
-    "title": "Business Rules",
-    "subtitle": "Decide what your AI employee may offer and execute for refunds, cancellations and compensation. These rules are enforced by the system itself, before an offer is made, before an approval is requested, and again right before execution.",
-    "kind": {
-      "COMPENSATION": "Compensation coupons",
-      "COUPON": "Discount coupons",
-      "REFUND": "Refunds",
-      "CANCEL_ORDER": "Order cancellations"
     },
-    "enabled": "Enabled",
-    "version": "Version",
-    "approvedReasons": "Approved reasons",
-    "reasonsHint": "If none are selected, any reason is acceptable. When selected, the AI may only proceed for these reasons.",
-    "reason": {
-      "late_delivery": "Delivery was materially late",
-      "damaged_or_wrong_item": "Damaged or wrong item",
-      "confirmed_business_error": "Confirmed business error",
-      "just_because": "Other (not approved)"
-    },
-    "maxAmount": "Maximum amount",
-    "maxPercent": "Max % of order value",
-    "managerAbove": "Manager approval above",
-    "preventDuplicate": "Prevent a second compensation for the same incident",
-    "save": "Save rules",
-    "saving": "Saving...",
-    "saved": "Saved. A new version is now active.",
-    "previewTitle": "Test these rules",
-    "previewAmount": "Requested amount",
-    "previewReason": "Reason",
-    "previewRun": "Check decision",
-    "previewFailed": "Could not evaluate the sample.",
-    "maxLabel": "max allowed",
-    "decision": {
-      "ALLOWED": "Allowed",
-      "DENIED": "Denied",
-      "REQUIRES_INFORMATION": "Needs more information",
-      "REQUIRES_EVIDENCE": "Needs evidence",
-      "REQUIRES_HUMAN_APPROVAL": "Needs manager approval",
-      "ALLOWED_WITH_LIMIT": "Allowed up to the limit",
-      "FAIL_CLOSED": "Blocked (safety)"
-    },
-    "defaultNote": {
-      "COMPENSATION": "No policy is configured yet. Until you save one, the AI will not offer or issue compensation coupons at all. Saving a policy is what turns this on.",
-      "COUPON": "No policy is configured yet. Until you save one, the AI will not create or manage discount coupons.",
-      "REFUND": "No policy is configured yet. Default: customers may request refunds and the AI can prepare them, but every refund still requires human approval, and amounts always come from verified store data.",
-      "CANCEL_ORDER": "No policy is configured yet. Default: customers may request cancellations and the AI can prepare them, but every cancellation still requires human approval."
-    }
+    "progressCount": "{done} of {total} complete",
+    "upNext": "Up next",
+    "allDoneTitle": "You are all set",
+    "allDoneBody": "Every setup step is done. Your AI employee is live and handling messages. Head to the inbox to watch it work.",
+    "allDoneCta": "Open the inbox"
   },
   "setupChecklist": {
     "title": "Complete setup",
@@ -5199,5 +5167,110 @@
       "title": "You don't have access to this page",
       "subtitle": "Ask a workspace admin if you need access."
     }
+  },
+  "whatsappNumbers": {
+    "title": "WhatsApp numbers",
+    "subtitle": "Connect a number for each team, store or country. Each one works on its own.",
+    "loading": "Loading...",
+    "loadFailed": "We could not load your WhatsApp numbers.",
+    "noneYet": "No WhatsApp numbers are connected yet.",
+    "summaryWorking": "{count} connected",
+    "summaryAttention": "{count} need attention",
+    "state": {
+      "connected": "Working",
+      "degraded": "Needs attention",
+      "actionRequired": "Needs you",
+      "onboarding": "Setting up",
+      "disconnected": "Disconnected",
+      "failed": "Setup failed",
+      "discovered": "Not connected",
+      "connectedLimited": "Connected"
+    },
+    "badge": {
+      "alsoOnPhone": "Also on your phone",
+      "legacy": "Connected the old way"
+    },
+    "card": {
+      "fallbackName": "WhatsApp number",
+      "details": "Details",
+      "hideDetails": "Hide details",
+      "technical": "Technical details for support",
+      "checkAgain": "Check again",
+      "checking": "Checking...",
+      "fixDelivery": "Fix message delivery",
+      "fixing": "Fixing...",
+      "remove": "Remove",
+      "removeTitle": "Remove this number?",
+      "removeBody": "GOTCHA will stop sending and receiving on {number}. Your other WhatsApp numbers keep working exactly as they are, and the number itself stays yours.",
+      "genericError": "That did not work. Try again shortly.",
+      "refreshed": "Status refreshed.",
+      "alsoWorthKnowing": "Also worth knowing ({count})"
+    },
+    "pending": {
+      "pinTitle": "Enter your WhatsApp PIN",
+      "pinBody": "This number has two-step verification switched on. Enter the 6-digit PIN you set for it. WhatsApp does not let anyone else reset it, so if you cannot recall it you will need to change it in WhatsApp first.",
+      "pinContinue": "Continue",
+      "pinChecking": "Checking...",
+      "pinThanks": "Thanks. Setup is continuing.",
+      "confirmTitle": "Confirm in your WhatsApp Business app",
+      "confirmBody": "Follow the instructions shown by Meta and confirm the connection in your WhatsApp Business app. Only you can complete this step, which is how WhatsApp makes sure nobody connects your number without you.",
+      "registerTitle": "One step left: register this number",
+      "registerBody": "WhatsApp has this number but has not registered it for sending yet. Enter a 6-digit PIN and press Finish setup. If two-step verification is already switched on for this number, use its existing PIN. If one has never been set, choose one now - it becomes this number's PIN, so keep it somewhere safe.",
+      "registerContinue": "Finish setup"
+    },
+    "checks": {
+      "connected": "Connected to WhatsApp",
+      "messaging": "Messaging enabled",
+      "webhooks": "Receiving incoming messages",
+      "verification": "Number verified",
+      "quality": "Quality rating",
+      "metaSays": "What WhatsApp says:"
+    },
+    "add": {
+      "title": "Add a WhatsApp number",
+      "subtitle": "Connect another number for a different team, store or country. Your existing numbers keep working while you do it.",
+      "opening": "Opening WhatsApp...",
+      "preparing": "Preparing...",
+      "notConfigured": "WhatsApp connection is not configured in this environment yet.",
+      "sdkUnavailable": "WhatsApp's sign-in window could not load. It comes straight from WhatsApp, so a browser extension or a network filter can stop it reaching you. Reload the page, and if it keeps happening let your IT team know that connect.facebook.net needs to be allowed.",
+      "sdkFailed": "WhatsApp's sign-in window would not open. Reload the page and try again.",
+      "cancelled": "You closed the WhatsApp window before finishing.",
+      "inspectFailed": "We could not read your WhatsApp setup. Try connecting again in a moment.",
+      "connectFailed": "We could not connect that number.",
+      "connect": "Connect WhatsApp"
+    },
+    "choose": {
+      "title": "Choose the number to connect",
+      "degraded": "Some of your WhatsApp setup could not be checked, so this list may be incomplete.",
+      "connectThis": "Connect this one",
+      "alreadyAdded": "Already added",
+      "connecting": "Connecting...",
+      "cancel": "Cancel",
+      "back": "Start over"
+    },
+    "outcome": {
+      "allAlreadyConnected": "Every number WhatsApp offered is already connected to this workspace. There is nothing new to add.",
+      "allBlocked": "None of the numbers WhatsApp offered can be connected right now. The reason for each one is shown above.",
+      "unknown": "We could not find a number to connect.",
+      "noCandidates": "WhatsApp did not offer any numbers to connect. If the number you want is already set up elsewhere, disconnect it there first."
+    },
+    "businessApp": {
+      "recommended": "recommended",
+      "notAvailable": "not available"
+    },
+    "legacy": {
+      "note": "Connected before per-number health was available. Reconnect it to enable health checks and repair."
+    },
+    "backToChannels": "Back to channels",
+    "headline": {
+      "working": "This number is working. Messages send and arrive normally.",
+      "receivingOnly": "Connected. Customer messages are arriving normally. Sending is blocked by WhatsApp until the account issue below is resolved.",
+      "sendingOnly": "This number can send, but incoming messages are not reaching GOTCHA yet.",
+      "neither": "This number is connected, but messages are not flowing yet."
+    },
+    "meta": {
+      "fixInMeta": "Fix this in Meta Business settings"
+    },
+    "summaryLimited": "sending blocked on {count} of them"
   }
 }

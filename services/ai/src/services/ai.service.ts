@@ -326,7 +326,26 @@ async function meterAndReact(
       cachedInputTokens: usage.cached_tokens,
       referenceId: conversationId,
     });
-    if (!m || m.thresholds.length === 0) return;
+    if (!m) return;
+
+    // Usage the wallet could not cover. Reported on EVERY call that has one,
+    // independently of thresholds: a shortfall happens on every turn once the
+    // balance is gone, while thresholds fire only when a percentage boundary is
+    // crossed. Gating this on `thresholds.length` would bill pay-as-you-go only
+    // for the calls that happened to land on 80/90/95/100 and serve the rest
+    // free. Billing decides whether PAYG is even on; this only reports.
+    if (m.shortfall > 0) {
+      await fetch(`${BILLING_SERVICE_URL}/api/internal/billing/payg-accrue`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-internal-key": getInternalServiceKey(),
+        },
+        body: JSON.stringify({ tenantId, units: m.shortfall }),
+      }).catch(() => {});
+    }
+
+    if (m.thresholds.length === 0) return;
     await fetch(`${BILLING_SERVICE_URL}/api/internal/billing/usage-threshold`, {
       method: "POST",
       headers: {

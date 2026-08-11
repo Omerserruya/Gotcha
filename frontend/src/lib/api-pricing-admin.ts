@@ -65,6 +65,8 @@ export interface AdminPlan {
   voiceVolumeEnabled: boolean;
   autoPurchaseEligible: boolean;
   creditPackagesEligible: boolean;
+  /** Pay-as-you-go rate per credit. null = this plan is not sold that way. */
+  paygPricePerCredit?: string | null;
   effectiveFrom: string | null;
   publishedAt: string | null;
   internalNote: string | null;

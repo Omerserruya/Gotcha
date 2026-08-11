@@ -991,3 +991,137 @@ the plan into the FlowToken. Two config errors broke every minted link:
 
 Both fixes were applied to the LIVE dev Authentik via API and made reproducible in
 `scripts/authentik/bootstrap.mjs` (idempotent converge-on-rerun for existing installs).
+
+## 18. "No user found and can't create new user": invitations expired 30 minutes after SENDING (2026-08-06)
+
+Reported from production: a POC tenant's admin clicked their invitation, was shown
+"Set your password", typed one, and got Authentik's denial card reading **"Request has
+been denied. No user found and can't create new user."**
+
+### What actually happened
+
+Read off the production Authentik event log, times UTC:
+
+| Time | Event |
+|---|---|
+| 07:14:50 | identity created for the new POC tenant's admin |
+| 07:14:53 | `onboarding_email` sent, carrying `https://auth.gotcha.co.il/if/flow/gotcha-recovery/?flow_token=...` |
+| **07:44:53** | that FlowToken silently expired |
+| 08:15:33 | link opened, password typed, denied. Two more attempts at 08:17 and 08:18 |
+| 08:19:40 | `login_failed` - they tried signing in with a password that was never set |
+| 08:19:46 | they used "Forgot password"; Authentik mailed its own link |
+| 08:20:01 | `password_set`, then `login` at 08:20:03 |
+
+They recovered on their own in five minutes. Nothing about the tenant was broken.
+
+### Root cause
+
+`POST /core/users/{pk}/recovery/` creates the FlowToken with **no explicit expiry**, so
+`Token.save()` falls back to `default_token_duration()`, which reads
+`authentik_tenants_tenant.default_token_duration`. On both dev and production that is
+Authentik's install-time default, **`minutes=30`** - and `bootstrap.mjs` never converged
+it, so nobody had ever chosen the value. Every invitation email said "This link expires
+in 48 hours".
+
+Two properties turned an expiry into something that reads as a bug:
+
+1. `FlowExecutorView._check_flow_token` looks the token up with
+   `FlowToken.filter_not_expired(key=...)`. An expired token simply **does not match**,
+   and no error is raised: the executor plans `gotcha-recovery` from scratch. That flow
+   has no identification stage, so it renders the password prompt anyway and refuses
+   only at `default-password-change-write`, where `pending_user` is missing. Hence a
+   denial that arrives AFTER the person has typed a password, phrased as though their
+   account does not exist.
+2. Because the token never matched, it was never consumed - which is how we know it
+   expired rather than being burned by a double click or a mail scanner. `token.delete()`
+   is audited as `model_deleted`, and there is no such row for it.
+
+### The fix: mint the IdP link at CLICK time, not at SEND time
+
+The credential window cannot be lengthened safely (a live password-set token sitting in
+an inbox for two days is worse than the bug), and shortening the copy to "30 minutes"
+just keeps producing the ticket. So the mailed link is now GOTCHA's own:
+
+- `SetupLink` (`setup_links`) holds a SHA-256 of a 192-bit token, a 48-hour expiry, and
+  `revokedAt`. Issuing revokes the user's previous live link, so a resend really does
+  invalidate the earlier email. Multi-use inside the window, on purpose.
+- `GET /api/auth/setup/:token` (public, `services/auth/src/routes/setup-link.ts`)
+  resolves it, calls `createRecoveryLink` **then**, and 302s into Authentik. The IdP's
+  30-minute clock now starts at the click, which is the only moment it can be spent.
+- A link that cannot be redeemed lands on `/setup-link/expired`, which says which of
+  expired / replaced / invalid happened and offers "Email me a new link". The dead token
+  travels in the URL so the page needs no email address, which keeps it from becoming an
+  account-existence oracle. `POST /api/auth/setup/resend` answers `{ok:true}` for known
+  and unknown tokens alike.
+- Every mail path routes through it: tenant provisioning, team invites, nudges, resend,
+  `tenantAdminEntry`, and the system-admin seed. The one deliberate exception is
+  `POST /api/account/password-link`, where a signed-in user clicks and uses the link
+  immediately.
+- `notification_logs.body` no longer stores the URL. It used to, which is how this
+  incident was reconstructed - acceptable when the token died in 30 minutes, not when it
+  lives 48 hours.
+
+Verified end to end against dev: live token 302s to `gotcha-recovery` and that
+`flow_token` returns `ak-stage-prompt` with `password` / `password_repeat` fields (the
+step that failed in production); expired token 302s to the expiry page; unknown token
+302s there with `reason=invalid`; resend issues a new link, revokes the old, and reads
+identically for an unknown token; and the page itself was driven in a real browser
+through to "Check your inbox".
+
+**Not changed:** `default_token_duration` stays at `minutes=30`. It is now the right
+value, because 30 minutes is measured from the click.
+
+## 19. "I cannot sign out on production" (2026-08-06)
+
+Reported after the POC tenant went live, reproduced on production with a
+temporary admin account, and fixed. Two independent faults, either of which
+alone was enough.
+
+### A. Our own code raced itself
+
+`AuthContext.logout()` called `hardLogout()` FIRST and then asked the IdP for its
+end-session URL. Clearing local state drops `user`, so AppLayout's
+"no user -> /login" effect fired on the next render while the discovery fetch was
+still in flight. `/login` is a redirect shim that immediately starts a fresh OIDC
+login, and with the Authentik session still alive that login completed silently.
+
+Captured navigation trail on production, from one click of Sign out:
+
+```
+/login/ -> auth.gotcha.co.il/…/authorization-explicit-consent -> /auth/callback -> / -> /getting-started/
+```
+
+with `localStorage.token` still present at the end. The user pressed Sign out,
+saw a flash, and was signed in again.
+
+Fixed by inverting the order (resolve the IdP URL, then tear down local state
+immediately before leaving) and by marking the intent in sessionStorage, which
+`/login` consumes and refuses to turn into a sign-in - it renders "You are
+signed out" with a Sign in again button instead.
+
+### B. The IdP was never asked to end the session
+
+The OIDC provider's `invalidation_flow` was `default-provider-invalidation-flow`,
+which has **zero stages bound to it**. It renders "You've logged out of GOTCHA."
+and ends the application session only; the Authentik session survives, so the
+next authorization succeeds without a credential. `default-invalidation-flow`
+("Logout") is the one that binds `default-invalidation-logout`, a user_logout
+stage that actually ends it.
+
+Verified before the fix by driving the end-session endpoint directly: the page
+said "You've logged out", and the very next visit to the app was signed in.
+
+Fixed by pointing the provider at `default-invalidation-flow` on dev and
+production, and registering the post-logout return URLs - Authentik validates
+`post_logout_redirect_uri` against the provider's `redirect_uris`, and only
+`/auth/callback` entries were listed, so the app's own `?post_logout_redirect_uri`
+never matched.
+
+`scripts/authentik/bootstrap.mjs` pinned the broken flow and carried a comment
+claiming post-logout redirects were unsupported by this Authentik version. Both
+are corrected there, so a bootstrap re-run converges the fix instead of undoing
+it.
+
+Verified end to end on production with the fixed bundle: Sign out leaves for
+`default-invalidation-flow`, the token is cleared, and returning to the app
+demands credentials.

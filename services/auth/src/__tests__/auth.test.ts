@@ -35,6 +35,14 @@ vi.mock("@chatcenter/shared", () => {
     auditLog: {
       create: vi.fn(),
     },
+    // GOTCHA-owned password-setup links. An invite mints one instead of mailing
+    // an Authentik recovery URL, so this table is on the invite path now.
+    setupLink: {
+      create: vi.fn().mockResolvedValue({ id: "sl-1", expiresAt: new Date(Date.now() + 172_800_000) }),
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+      findUnique: vi.fn().mockResolvedValue(null),
+    },
+    $transaction: (fn: any) => fn(mockPrisma),
   };
 
   return {
@@ -73,6 +81,10 @@ vi.mock("@chatcenter/shared", () => {
     findIdentityBySubject: vi.fn(),
     setIdentityActive: vi.fn().mockResolvedValue(undefined),
     getUserLastLogin: vi.fn().mockResolvedValue(null),
+    // The app's public origin. Setup links are built on it, so an exhaustive
+    // mock of this barrel has to supply it or the invite path throws while
+    // building the URL it is supposed to return.
+    resolveAppPublicUrl: () => "https://app.test",
     getLastLoginBySubject: vi.fn().mockResolvedValue(null),
     terminateAllUserSessions: vi.fn().mockResolvedValue(0),
     // Shared audit primitive (fire-safe): no-op in tests.
@@ -188,7 +200,13 @@ describe("Auth Service", () => {
         .send({ email: "new@test.com", name: "New" });
 
       expect(res.status).toBe(201);
-      expect(res.body.setupLink).toBe("https://auth.example/flow/abc");
+      // A GOTCHA link, NOT the IdP's. Authentik's recovery token expires 30
+      // minutes after it is minted, so an invitation carrying one directly was
+      // dead half an hour after being sent (2026-08-06 incident). The IdP link
+      // is now minted when the invitee clicks, which is why nothing here calls
+      // createRecoveryLink.
+      expect(res.body.setupLink).toMatch(/^https:\/\/app\.test\/api\/auth\/setup\/.+/);
+      expect(createRecoveryLink).not.toHaveBeenCalled();
 
       // The membership row links the identity and carries no password and no
       // subject of its own (the subject lives on the Identity row).

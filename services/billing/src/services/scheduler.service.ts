@@ -29,11 +29,13 @@ import { expireStaleLeases } from "./payment-attempt.service";
 import { expireStaleQuotes } from "./payment-quote.service";
 import { expireStaleSessions } from "./tokenization.service";
 import { purgeSpentCheckoutArtifacts } from "./billing-retention.service";
+import { settleDuePaygAccruals } from "./payg.service";
 
 export interface TickResult {
   cycle: Awaited<ReturnType<typeof runBillingCycle>>;
   dunning: { retried: number; suspended: number };
   usage: { settled: number; discovered: number };
+  payg: { settled: number; amount: number };
   reconciled: { examined: number; resolvedPaid: number; resolvedUnpaid: number; escalated: number };
   purged: { tokenizationSessions: number; continuationLinks: number; unusedQuotes: number };
   /** Stages that threw. Empty on a clean tick. */
@@ -78,6 +80,12 @@ export async function runSchedulerTick(): Promise<TickResult> {
   // than on conversation close so the AI hot path never waits on aggregation.
   const usage = await stage("usage", () => settleDueConversations(), { settled: 0, discovered: 0 }, failed);
 
+  // Pay-as-you-go is the only mode that bills in arrears, so a closed window
+  // owes money nobody has charged yet. Driven from here rather than from
+  // renewal alone: a subscription that fails to renew must still be billed for
+  // what it already consumed.
+  const payg = await stage("payg", () => settleDuePaygAccruals(), { settled: 0, amount: 0 }, failed);
+
   // Charges whose outcome we never learned. Nothing else resolves them, and
   // left alone they are either a customer who paid and did not get their plan,
   // or one who did not pay and did. Both need answering.
@@ -103,7 +111,7 @@ export async function runSchedulerTick(): Promise<TickResult> {
     failed,
   );
 
-  return { cycle, dunning, usage, reconciled, purged, failed };
+  return { cycle, dunning, usage, payg, reconciled, purged, failed };
 }
 
 /** True when the tick did anything worth a log line. */
@@ -112,6 +120,7 @@ export function tickWasEventful(r: TickResult): boolean {
     r.cycle.trials || r.cycle.renewals || r.cycle.pending ||
     r.dunning.retried || r.dunning.suspended ||
     r.usage.settled || r.usage.discovered ||
+    r.payg.settled ||
     r.reconciled.examined ||
     r.purged.tokenizationSessions || r.purged.continuationLinks || r.purged.unusedQuotes ||
     // A failure is always worth saying out loud, even on an otherwise idle tick.

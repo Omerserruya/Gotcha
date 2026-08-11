@@ -1,8 +1,20 @@
 import crypto from "crypto";
 import nodemailer from "nodemailer";
-import { prisma, publishEvent, ensureIdentity, createRecoveryLink, findIdentityBySubject,
+import {
+  prisma,
+  publishEvent,
   resolveAppPublicUrl,
+  renderBrandEmail,
+  escapeHtml,
+  emailParagraph,
+  emailSteps,
+  emailStatCards,
+  emailKeyValueTable,
+  emailBadge,
+  emailPills,
+  EMAIL_COLORS as EC,
 } from "@chatcenter/shared";
+import { issueSetupLink } from "./setup-link.service";
 
 type NotificationChannel = "email" | "slack" | "webhook" | "internal";
 
@@ -77,6 +89,21 @@ async function logNotification(payload: NotificationPayload, status: "sent" | "f
   });
 }
 
+/**
+ * Strip credential-bearing URLs out of the copy we PERSIST.
+ *
+ * `notification_logs.body` is a full-text copy of what was mailed, kept so
+ * support can answer "what exactly did they receive". That is worth having, but
+ * a setup link is a bearer credential: anyone who can read the row can set that
+ * person's password until it expires. The email keeps the link, the log does
+ * not.
+ */
+function withoutCredentialUrls(text: string, ...urls: (string | null | undefined)[]): string {
+  return urls
+    .filter((u): u is string => !!u)
+    .reduce((acc, u) => acc.split(u).join("[link removed from log]"), text);
+}
+
 async function sendHtmlEmail(to: string, subject: string, html: string, text: string): Promise<void> {
   const from = process.env.SMTP_FROM || process.env.SMTP_USER || "noreply@gotcha.app";
   const mail = getTransporter();
@@ -87,25 +114,89 @@ async function sendHtmlEmail(to: string, subject: string, html: string, text: st
 // ─── Setup / Sign-in Links ──────────────────────────────────
 
 /**
- * One-time link that drops a user into Authentik to set their password.
+ * The link that drops a user into Authentik to set their password.
  *
- * This replaces the old home-grown magic link. GOTCHA no longer mints
- * credentials-bearing tokens of any kind: the link is issued by Authentik,
- * expires on Authentik's schedule, and is single-use by Authentik's rules.
+ * GOTCHA still mints no credential: the thing this returns is a pointer to
+ * `GET /api/auth/setup/:token`, which mints the Authentik recovery link at the
+ * moment the person clicks and redirects them into Authentik's own flow.
+ *
+ * The indirection is not decoration. Authentik's recovery FlowToken inherits
+ * `default_token_duration` (30 minutes), and mailing that token directly meant
+ * the clock started when the mail was SENT: a customer who opened their
+ * invitation an hour later met a password form that refused after they had
+ * already typed a password. See setup-link.service.ts for the full story.
  */
 export async function createSetupLink(userId: string): Promise<string> {
+  const { url } = await issueSetupLink(userId);
+  return url;
+}
+
+/**
+ * Mail a fresh setup link to someone whose previous one expired.
+ *
+ * Deliberately terse and self-contained: the recipient already knows what
+ * GOTCHA is (they were invited), and the only thing they asked for is a link
+ * that works. Issuing revokes the dead one, so there is never more than one
+ * live link per person.
+ */
+export async function sendSetupLinkEmail(userId: string): Promise<void> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { email: true, name: true, identity: { select: { authentikSubject: true } } },
+    select: { email: true, name: true, tenantId: true, tenant: { select: { name: true } } },
   });
   if (!user) throw new Error("User not found");
 
-  const identity = user.identity?.authentikSubject
-    ? await findIdentityBySubject(user.identity.authentikSubject)
-    : await ensureIdentity(user.email, user.name);
-  if (!identity) throw new Error("No Authentik identity for user");
+  const { url } = await issueSetupLink(userId);
+  const tenantName = user.tenant?.name ?? "your workspace";
+  const subject = "Your new GOTCHA setup link";
+  const html = renderBrandEmail({
+    title: "Set your password - GOTCHA.",
+    preheader: "Here is a fresh link. This one is good for 48 hours.",
+    eyebrow: "New link",
+    icon: "&#128273;",
+    headline: "Here is a fresh link.",
+    subhead: `${escapeHtml(user.name)}, set your password and you are into ${escapeHtml(tenantName)}.`,
+    bodyHtml: emailParagraph(
+      "The previous link had expired. Nothing is wrong with your account and nothing was lost.",
+    ),
+    cta: { label: "Set my password", url },
+    fallbackUrl: url,
+    expiryNote: `This link expires in <strong style="color:#7C3291;">48 hours</strong>`,
+    footerNote: "You're receiving this because you asked for a new setup link.",
+  });
+  const text = [
+    `Hello ${user.name},`,
+    "",
+    "Here is a fresh link to set your password:",
+    url,
+    "",
+    "This link expires in 48 hours.",
+    "",
+    "The Gotcha. Team",
+  ].join("\n");
 
-  return createRecoveryLink(identity.pk);
+  const payload: NotificationPayload = {
+    tenantId: user.tenantId,
+    channel: "email",
+    type: "setup_link_resend",
+    recipient: user.email,
+    subject,
+    body: withoutCredentialUrls(text, url),
+    // The raw token is NOT recorded here. The onboarding email logs its
+    // setupUrl, which is how the 2026-08-06 incident was reconstructed, but
+    // that URL was already dead by then. A live 48-hour token in a log row is
+    // a different thing entirely.
+    metadata: {},
+  };
+
+  try {
+    await sendHtmlEmail(user.email, subject, html, text);
+    await logNotification(payload, "sent");
+  } catch (err: any) {
+    console.error("Failed to send setup link email:", err);
+    await logNotification(payload, "failed", err.message);
+    throw err;
+  }
 }
 
 /**
@@ -117,201 +208,20 @@ export function signInUrl(): string {
   return resolveAppPublicUrl(process.env);
 }
 
-// ─── Brand Email System (light, premium, RTL-aware) ─────────
+// ─── Brand Email System ─────────────────────────────────────
 //
-// One visual system for every email the product sends: a soft light canvas, a
-// single white card with a brand-gradient hairline, generous whitespace, and
-// the brand palette used as accents - never as a wall of color. Every template
-// below composes this shell; the Nudge Engine imports it too, so the AI's
-// Voice and the product's transactional mail read as one product.
+// The shell and its row builders moved to `@chatcenter/shared`. The receipt is
+// now sent by us rather than by the payment provider, so billing renders mail
+// too - and a design system that lives inside one service is a design system
+// the next service will quietly fork. Re-exported here because the Nudge
+// Engine and every template below import them from this module.
 
-const EC = {
-  canvas: "#f4f3f9",
-  border: "#eae7f2",
-  divider: "#f0eef6",
-  ink: "#1d1a26",
-  body: "#5b556b",
-  muted: "#8f89a0",
-  faint: "#b3adc2",
-  violet: "#7C3291",
-  chipBg: "#f6f1fa",
-  tint: "#faf9fc",
-  tintBorder: "#edeaf3",
-  grad: "linear-gradient(90deg,#7C3291 0%,#5A72B3 55%,#6DCED9 100%)",
-  gradBtn: "linear-gradient(135deg,#7C3291 0%,#5A72B3 100%)",
-} as const;
-
-const EMAIL_FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif";
-
-export function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string));
-}
-
-export interface BrandEmailArgs {
-  title: string;               // <title>
-  preheader?: string;          // hidden inbox preview line
-  eyebrow?: string;            // small uppercase label above the headline
-  icon?: string;               // emoji / HTML entity rendered in a soft chip
-  headline: string;            // escape dynamic parts at the call site
-  subhead?: string;
-  bodyHtml?: string;           // inner card rows (use the email* helpers)
-  cta?: { label: string; url: string };
-  fallbackUrl?: string;        // "button not working?" link
-  expiryNote?: string;
-  closingHtml?: string;        // replaces the default sign-off when set
-  belowCardHtml?: string;      // extra block between the card and the footer
-  footerNote?: string;         // the "why you got this" line
-  locale?: string;             // "he" → RTL
-}
-
-export function renderBrandEmail(a: BrandEmailArgs): string {
-  const he = a.locale === "he";
-  const dir = he ? "rtl" : "ltr";
-  const align = he ? "right" : "left";
-  const closing = a.closingHtml ?? `
-      <p style="margin:0 0 14px;font-size:14px;color:${EC.muted};line-height:1.6;">${he ? "צריכים עזרה? פשוט השיבו למייל - בן אדם אמיתי קורא כל הודעה." : "Need help? Just hit reply &mdash; a real human reads every message."}</p>
-      <p style="margin:0;font-size:14px;color:${EC.muted};">${he ? "נתראה בקרוב," : "Talk soon,"}<br><strong style="color:${EC.ink};">${he ? "צוות GOTCHA." : "The GOTCHA. Team"}</strong></p>`;
-  return `<!DOCTYPE html>
-<html lang="${he ? "he" : "en"}" dir="${dir}">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${a.title}</title>
-  <!--[if mso]><style>table,td{font-family:Arial,sans-serif;}</style><![endif]-->
-</head>
-<body dir="${dir}" style="margin:0;padding:0;background-color:${EC.canvas};font-family:${EMAIL_FONT};-webkit-font-smoothing:antialiased;">
-  ${a.preheader ? `<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">${a.preheader}</div>` : ""}
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:${EC.canvas};">
-    <tr><td align="center" style="padding:48px 16px 24px;">
-
-      <!-- wordmark -->
-      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:560px;">
-        <tr><td align="center" style="padding-bottom:26px;">
-          <span style="font-size:15px;font-weight:800;letter-spacing:4px;color:${EC.ink};">GOTCHA<span style="color:${EC.violet};">.</span></span>
-        </td></tr>
-      </table>
-
-      <!-- card -->
-      <table role="presentation" cellpadding="0" cellspacing="0" border="0" dir="${dir}" style="width:100%;max-width:560px;background-color:#ffffff;border:1px solid ${EC.border};border-radius:24px;overflow:hidden;box-shadow:0 12px 40px rgba(29,26,38,0.06);">
-        <tr><td style="height:5px;background:${EC.grad};font-size:0;line-height:0;">&nbsp;</td></tr>
-        <tr><td style="padding:44px 44px 0;text-align:${align};">
-          ${a.icon ? `<div style="width:58px;height:58px;border-radius:18px;background-color:${EC.chipBg};text-align:center;line-height:58px;font-size:27px;margin-bottom:22px;">${a.icon}</div>` : ""}
-          ${a.eyebrow ? `<p style="margin:0 0 10px;font-size:11px;font-weight:700;color:${EC.violet};text-transform:uppercase;letter-spacing:2px;">${a.eyebrow}</p>` : ""}
-          <h1 style="margin:0;font-size:28px;font-weight:800;color:${EC.ink};line-height:1.25;letter-spacing:-0.4px;">${a.headline}</h1>
-          ${a.subhead ? `<p style="margin:10px 0 0;font-size:16px;color:${EC.body};line-height:1.6;">${a.subhead}</p>` : ""}
-        </td></tr>
-        ${a.bodyHtml || ""}
-        ${a.cta ? `<tr><td style="padding:34px 44px 6px;text-align:${align};">
-          <a href="${a.cta.url}" target="_blank" style="display:inline-block;background:${EC.gradBtn};color:#ffffff;font-size:16px;font-weight:700;text-decoration:none;padding:15px 38px;border-radius:14px;box-shadow:0 8px 22px rgba(124,50,145,0.28);mso-padding-alt:15px 38px;">${a.cta.label} ${he ? "&larr;" : "&rarr;"}</a>
-        </td></tr>` : ""}
-        ${a.fallbackUrl ? `<tr><td style="padding:28px 44px 0;text-align:${align};">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid ${EC.divider};"><tr><td style="padding:20px 0 0;">
-            <p style="margin:0;font-size:12px;color:${EC.muted};line-height:1.6;">${he ? "הכפתור לא עובד? העתיקו את הקישור:" : "Button not working? Copy this link:"}<br>
-              <a href="${a.fallbackUrl}" style="color:${EC.violet};word-break:break-all;font-size:12px;">${a.fallbackUrl}</a></p>
-            ${a.expiryNote ? `<p style="margin:8px 0 0;font-size:12px;color:${EC.faint};">${a.expiryNote}</p>` : ""}
-          </td></tr></table>
-        </td></tr>` : ""}
-        <tr><td style="padding:32px 44px 42px;text-align:${align};">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid ${EC.divider};"><tr><td style="padding:24px 0 0;">${closing}</td></tr></table>
-        </td></tr>
-      </table>
-
-      ${a.belowCardHtml || ""}
-
-      <!-- footer -->
-      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:560px;">
-        <tr><td align="center" style="padding:26px 16px 8px;">
-          <p style="margin:0;color:${EC.muted};font-size:11px;line-height:1.7;">${he ? "GOTCHA. - בונים את עתיד התקשורת עם הלקוחות." : "GOTCHA. &mdash; Building the future of customer communication."}</p>
-          ${a.footerNote ? `<p style="margin:6px 0 0;color:${EC.faint};font-size:11px;line-height:1.7;">${a.footerNote}</p>` : ""}
-        </td></tr>
-      </table>
-
-    </td></tr>
-  </table>
-</body>
-</html>`;
-}
-
-// Section builders - each returns a full-width card row (<tr>…</tr>).
-
-export function emailParagraph(html: string, locale?: string): string {
-  const align = locale === "he" ? "right" : "left";
-  return `<tr><td style="padding:26px 44px 0;text-align:${align};"><p style="margin:0;font-size:15px;color:${EC.body};line-height:1.75;">${html}</p></td></tr>`;
-}
-
-function emailSteps(caption: string, steps: Array<{ marker: string; title: string; desc: string }>): string {
-  const rows = steps.map((s, i) => `
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:${i === steps.length - 1 ? "0" : "18px"};">
-      <tr>
-        <td style="width:42px;vertical-align:top;padding-top:1px;">
-          <div style="width:30px;height:30px;background:${EC.gradBtn};border-radius:50%;text-align:center;line-height:30px;color:#ffffff;font-size:13px;font-weight:800;">${s.marker}</div>
-        </td>
-        <td style="vertical-align:top;padding-left:14px;">
-          <p style="margin:0;font-size:15px;font-weight:700;color:${EC.ink};">${s.title}</p>
-          <p style="margin:4px 0 0;font-size:13px;color:${EC.muted};line-height:1.6;">${s.desc}</p>
-        </td>
-      </tr>
-    </table>`).join("");
-  return `<tr><td style="padding:32px 44px 0;">
-    <p style="margin:0 0 18px;font-size:11px;font-weight:700;color:${EC.violet};text-transform:uppercase;letter-spacing:2px;">${caption}</p>
-    ${rows}
-  </td></tr>`;
-}
-
-function emailStatCards(cards: Array<{ label: string; value: string }>): string {
-  const w = Math.floor(100 / Math.max(cards.length, 1));
-  const tds = cards.map((c) => `
-    <td style="width:${w}%;padding:0 4px;vertical-align:top;">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:${EC.tint};border:1px solid ${EC.tintBorder};border-radius:14px;">
-        <tr><td style="padding:16px 12px;text-align:center;">
-          <p style="margin:0;font-size:10px;font-weight:700;color:${EC.violet};text-transform:uppercase;letter-spacing:1px;">${c.label}</p>
-          <p style="margin:6px 0 0;font-size:14px;font-weight:700;color:${EC.ink};">${c.value}</p>
-        </td></tr>
-      </table>
-    </td>`).join("");
-  return `<tr><td style="padding:30px 40px 0;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>${tds}</tr></table>
-  </td></tr>`;
-}
-
-function emailKeyValueTable(headers: [string, string], rows: Array<[string, string]>): string {
-  const body = rows.map(([k, v]) => `
-      <tr>
-        <td style="padding:12px 16px;border-top:1px solid ${EC.divider};font-size:14px;color:${EC.ink};">${k}</td>
-        <td style="padding:12px 16px;border-top:1px solid ${EC.divider};text-align:center;font-size:14px;color:${EC.muted};">${v}</td>
-      </tr>`).join("");
-  return `<tr><td style="padding:26px 44px 0;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:${EC.tint};border:1px solid ${EC.tintBorder};border-radius:14px;overflow:hidden;">
-      <tr>
-        <td style="padding:12px 16px;font-size:11px;font-weight:700;color:${EC.muted};text-transform:uppercase;letter-spacing:1px;">${headers[0]}</td>
-        <td style="padding:12px 16px;font-size:11px;font-weight:700;color:${EC.muted};text-transform:uppercase;letter-spacing:1px;text-align:center;">${headers[1]}</td>
-      </tr>
-      ${body}
-    </table>
-  </td></tr>`;
-}
-
-function emailBadge(caption: string, value: string): string {
-  return `<tr><td style="padding:30px 44px 0;" align="center">
-    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;background-color:${EC.chipBg};border:1px solid ${EC.tintBorder};border-radius:16px;">
-      <tr><td style="padding:16px 36px;text-align:center;">
-        <p style="margin:0 0 2px;font-size:10px;font-weight:700;color:${EC.violet};text-transform:uppercase;letter-spacing:2px;">${caption}</p>
-        <p style="margin:0;font-size:34px;font-weight:800;color:${EC.ink};letter-spacing:-1px;">${value}</p>
-      </td></tr>
-    </table>
-  </td></tr>`;
-}
-
-function emailPills(caption: string, items: string[]): string {
-  const rows = items.map((t) => `
-      <tr><td style="padding:6px 0;"><span style="font-size:13px;color:${EC.body};"><span style="color:${EC.violet};">&#9670;</span>&nbsp;&nbsp;${t}</span></td></tr>`).join("");
-  return `<tr><td style="padding:28px 44px 0;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:${EC.tint};border:1px solid ${EC.tintBorder};border-radius:14px;">
-      <tr><td style="padding:18px 24px 6px;"><p style="margin:0;font-size:10px;font-weight:700;color:${EC.muted};text-transform:uppercase;letter-spacing:1px;">${caption}</p></td></tr>
-      <tr><td style="padding:0 24px 16px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${rows}</table></td></tr>
-    </table>
-  </td></tr>`;
-}
+export {
+  renderBrandEmail,
+  escapeHtml,
+  emailParagraph,
+  type BrandEmailArgs,
+} from "@chatcenter/shared";
 
 // ─── HTML Email Templates ───────────────────────────────────
 
@@ -487,8 +397,12 @@ export async function sendOnboardingEmail(
     type: "onboarding_email",
     recipient: adminEmail,
     subject,
-    body: text,
-    metadata: { tenantSlug, setupUrl },
+    body: withoutCredentialUrls(text, setupUrl),
+    // The setup URL is NOT recorded. It used to be, and that is how the
+    // 2026-08-06 incident was reconstructed - but back then the token in it was
+    // already dead 30 minutes after sending. It now stays live for 48 hours,
+    // and a live credential does not belong in a queryable log row.
+    metadata: { tenantSlug },
   };
 
   try {
@@ -813,7 +727,7 @@ export async function sendTeamInviteEmail(
   const text =
     `Hi ${name},\n\nYou've been invited to join ${workspaceName} on GOTCHA.\n` +
     `Set your password to activate your account:\n${setupLink}\n\n` +
-    `The link can be used once. If you weren't expecting this invite, you can ignore this email.`;
+    `The link is good for 48 hours. If you weren't expecting this invite, you can ignore this email.`;
   const html = renderBrandEmail({
     title: `Join ${workspaceName} on GOTCHA.`,
     preheader: `Set your password to join ${workspaceName}.`,
@@ -823,7 +737,11 @@ export async function sendTeamInviteEmail(
     subhead: `${escapeHtml(name)}, you've been invited to join <strong>${escapeHtml(workspaceName)}</strong> on GOTCHA. Set your password and you're in.`,
     cta: { label: "Set your password", url: setupLink },
     fallbackUrl: setupLink,
-    expiryNote: `This link can be used <strong style="color:#7C3291;">once</strong>.`,
+    // Accurate as of the GOTCHA-owned setup link: valid for 48 hours and
+    // usable more than once inside that window. It said "once" while the link
+    // was Authentik's, which was true of the IdP token but not of the window
+    // the recipient actually had.
+    expiryNote: `This link is good for <strong style="color:#7C3291;">48 hours</strong>.`,
     footerNote: `You're receiving this because an administrator of ${escapeHtml(workspaceName)} invited this address. If that wasn't expected, ignore this email.`,
   });
   await sendHtmlEmail(email, subject, html, text);
@@ -908,8 +826,8 @@ export function paidOnboardingEmailHtml(a: {
     belowCardHtml: a.setupUrl
       ? `<p style="margin:0;font-size:13px;color:${EC.muted};line-height:1.7;text-align:${he ? "right" : "left"};">${
           he
-            ? `משלמים בלי להיכנס למערכת? <a href="${a.continuationUrl}" style="color:${EC.violet};font-weight:600;">מסך התשלום</a>`
-            : `Paying without signing in? <a href="${a.continuationUrl}" style="color:${EC.violet};font-weight:600;">Go to the payment page</a>`
+            ? `משלמים בלי להיכנס למערכת? <a href="${a.continuationUrl}" style="color:${EC.strong};font-weight:600;">מסך התשלום</a>`
+            : `Paying without signing in? <a href="${a.continuationUrl}" style="color:${EC.strong};font-weight:600;">Go to the payment page</a>`
         }</p>`
       : undefined,
     fallbackUrl: a.setupUrl ?? a.continuationUrl,

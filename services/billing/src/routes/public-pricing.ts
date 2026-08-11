@@ -29,7 +29,7 @@ import {
   getFeatureDef,
   isUnsellable,
 } from "@chatcenter/shared";
-import { listCatalogPlans, type PlanView } from "../services/pricing.service";
+import { listCatalogPlans, taxSummaryForTenant, type PlanView } from "../services/pricing.service";
 
 const router = Router();
 
@@ -229,7 +229,7 @@ function toPublicPlan(p: PlanView, locale: string): PublicPlan {
  * after a publish.
  */
 async function catalogVersionTag(displayCurrency: string, locale: string): Promise<string> {
-  const [plan, estimation, currency, fx] = await Promise.all([
+  const [plan, estimation, currency, fx, tax] = await Promise.all([
     prisma.plan.findFirst({
       where: { status: "ACTIVE", kind: "PUBLIC" },
       orderBy: { updatedAt: "desc" },
@@ -242,12 +242,17 @@ async function catalogVersionTag(displayCurrency: string, locale: string): Promi
     }),
     prisma.pricingCurrencyConfig.findFirst({ where: { active: true }, select: { updatedAt: true } }),
     prisma.fxRateSnapshot.findFirst({ orderBy: { fetchedAt: "desc" }, select: { fetchedAt: true } }),
+    // The rate is part of the response now, so it has to be part of the
+    // validator. Otherwise a VAT change keeps revalidating to the same ETag and
+    // the page advertises the old rate until the row is touched again.
+    prisma.taxRate.findFirst({ orderBy: { updatedAt: "desc" }, select: { updatedAt: true } }),
   ]);
   const parts = [
     plan?.updatedAt?.getTime() ?? 0,
     estimation?.createdAt?.getTime() ?? 0,
     currency?.updatedAt?.getTime() ?? 0,
     fx?.fetchedAt?.getTime() ?? 0,
+    tax?.updatedAt?.getTime() ?? 0,
     displayCurrency,
     locale,
   ];
@@ -289,9 +294,19 @@ router.get("/public/pricing", async (req, res) => {
 
     const fx = display === cfg.baseCurrency ? null : await getUsdIlsRate();
 
+    // The tax the listed prices are BEFORE.
+    //
+    // No tenant here, so nobody has declared anything - this is the default
+    // jurisdiction, and the page must present it as "+ VAT" rather than adding
+    // it into a total. An Israeli consumer may not be quoted a price without
+    // the tax stated, and a visitor abroad must not be shown a total that
+    // includes one they will not be charged.
+    const tax = await taxSummaryForTenant(null);
+
     return res.json({
       enabled: true,
       plans: plans.map((p) => toPublicPlan(p, locale)),
+      tax,
       currency: {
         base: cfg.baseCurrency,
         display,

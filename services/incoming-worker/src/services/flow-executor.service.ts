@@ -89,6 +89,9 @@ export interface FlowExecutionResult {
     | "route_dispatched"
     | "wait_for_reply"
     | "no_outgoing_edge"
+    // A quick-reply tap that matched none of the labelled exits. The cursor is
+    // deliberately left where it is rather than guessing a branch.
+    | "quick_reply_unresolved"
     | "loop_guard"
     | "no_adapter"
     | "no_entry";
@@ -106,6 +109,13 @@ export async function executeMainFlow(opts: {
   message: string;
   channel: string; // "whatsapp", "messenger", ...
   resumeNodeId?: string | null; // set when the main flow resumes after a Wait
+  /**
+   * The button id the customer actually tapped, when this inbound is an
+   * interactive reply. Distinct from `message`, which carries the button's
+   * visible TITLE - the two are different strings in every flow whose author
+   * gave a reply a machine-readable payload.
+   */
+  replyPayload?: string | null;
 }): Promise<FlowExecutionResult> {
   const canvas = await prisma.flowCanvas.findUnique({ where: { tenantId: opts.tenantId } });
   const nodes = (canvas?.nodes as unknown as GraphNode[]) || [];
@@ -128,11 +138,28 @@ export async function executeMainFlow(opts: {
         const out = edges.find((e) => e.source === paused.id);
         startId = out?.target ?? null;
       } else if (paused.type === "send_message_quick_reply") {
-        // Reply payload picks the matching edge, else fall through first edge.
-        const out = edges.filter((e) => e.source === paused.id);
-        const payload = opts.message.toLowerCase().trim();
-        const selected = out.find((e) => String(e.sourceHandle || "").toLowerCase() === payload) || out[0];
-        startId = selected?.target ?? null;
+        const pick = pickQuickReplyEdge(paused, edges, opts.message, opts.replyPayload);
+        // Unresolved means "we could not tell which branch". Falling through
+        // to the entry picker below would restart the flow and re-send every
+        // message the customer already has.
+        if (pick.unresolved) {
+          reportUnresolvedQuickReply({
+            tenantId: opts.tenantId,
+            conversationId: opts.conversationId,
+            nodeId: paused.id,
+            message: opts.message,
+            replyPayload: opts.replyPayload,
+            edges,
+          });
+          return {
+            executed: false,
+            halted: true,
+            reason: "quick_reply_unresolved",
+            matchedNodeId: paused.id,
+            trace: [{ nodeId: paused.id, type: paused.type, action: "quick_reply_unresolved" }],
+          };
+        }
+        startId = pick.target;
       } else {
         // Generic resume (Wait, etc) - continue from first outgoing edge.
         const out = edges.find((e) => e.source === paused.id);
@@ -161,6 +188,8 @@ export async function executeSubFlow(opts: {
   channel: string;
   flowId: string;
   resumeNodeId?: string | null; // set when continuing after quick_reply / Wait / collect_input
+  /** See executeMainFlow - the tapped button id, not its visible title. */
+  replyPayload?: string | null;
 }): Promise<FlowExecutionResult> {
   const flow = await prisma.chatbotFlow.findFirst({
     where: { id: opts.flowId, tenantId: opts.tenantId, isActive: true },
@@ -181,10 +210,25 @@ export async function executeSubFlow(opts: {
         const out = edges.find((e) => e.source === paused.id);
         startId = out?.target ?? null;
       } else if (paused.type === "send_message_quick_reply") {
-        const out = edges.filter((e) => e.source === paused.id);
-        const payload = opts.message.toLowerCase().trim();
-        const selected = out.find((e) => String(e.sourceHandle || "").toLowerCase() === payload) || out[0];
-        startId = selected?.target ?? null;
+        const pick = pickQuickReplyEdge(paused, edges, opts.message, opts.replyPayload);
+        if (pick.unresolved) {
+          reportUnresolvedQuickReply({
+            tenantId: opts.tenantId,
+            conversationId: opts.conversationId,
+            nodeId: paused.id,
+            message: opts.message,
+            replyPayload: opts.replyPayload,
+            edges,
+          });
+          return {
+            executed: false,
+            halted: true,
+            reason: "quick_reply_unresolved",
+            matchedNodeId: paused.id,
+            trace: [{ nodeId: paused.id, type: paused.type, action: "quick_reply_unresolved" }],
+          };
+        }
+        startId = pick.target;
       } else {
         const out = edges.find((e) => e.source === paused.id);
         startId = out?.target ?? null;
@@ -426,6 +470,128 @@ async function buildCtx(
     flowId: scope.flowId,
     trace: [],
   };
+}
+
+/**
+ * Which edge a quick-reply tap resumes down.
+ *
+ * The editor writes one exit per reply and sets its handle id to the reply's
+ * lowercased PAYLOAD (see `send_message_quick_reply.getSources` in
+ * frontend/.../node-registry.tsx). What used to be matched against it was
+ * `opts.message` - and for an interactive reply the webhook sets the message
+ * body to the button's TITLE, not its payload:
+ *
+ *   services/webhook/.../webhook.ts
+ *     body = content.interactiveReply.title || content.text || ""
+ *
+ * So the comparison only succeeded when a button's label and payload happened
+ * to be the same word. That is true of the default reply the editor seeds
+ * (`label: "Yes", payload: "yes"`), and false for essentially every real flow.
+ * On a miss the old code fell through to `out[0]` - the first outgoing edge in
+ * PERSISTED ARRAY ORDER, which is not a choice any author made and is not
+ * visible anywhere on the canvas. A customer tapping "Continue" could be sent
+ * down the "Talk to sales" branch, skipping the deterministic steps that were
+ * supposed to run first and landing on an AI handoff early.
+ *
+ * The invariant now: a branch is selected by what the customer actually
+ * pressed, never by edge order.
+ *
+ *   1. the interactive reply payload
+ *   2. the visible label, resolved through the node's own replies to a payload
+ *      (so a customer who TYPES "Continue" instead of tapping still works)
+ *   3. an exit the author deliberately left unlabelled - the catch-all
+ *   4. the only exit, when there is exactly one and nothing can be got wrong
+ *   5. otherwise: unresolved. Never a guess.
+ */
+function normalizeReplyKey(v: unknown): string {
+  return String(v ?? "").toLowerCase().trim().replace(/\s+/g, " ");
+}
+
+/** The handle id the editor would have written for a reply. */
+function replyHandleId(r: any): string {
+  return normalizeReplyKey(r?.payload || r?.label || r?.id || "");
+}
+
+export interface QuickReplyPick {
+  target: string | null;
+  unresolved: boolean;
+  /** Machine-readable, for the diagnostic the caller emits. */
+  how: "payload" | "label" | "catch_all" | "sole_exit" | "no_exits" | "unresolved";
+}
+
+function pickQuickReplyEdge(
+  paused: GraphNode,
+  edges: GraphEdge[],
+  message: string,
+  replyPayload?: string | null,
+): QuickReplyPick {
+  const out = edges.filter((e) => e.source === paused.id);
+  if (out.length === 0) return { target: null, unresolved: false, how: "no_exits" };
+
+  const handle = (e: GraphEdge) => normalizeReplyKey(e.sourceHandle);
+  const payload = normalizeReplyKey(replyPayload);
+  const text = normalizeReplyKey(message);
+
+  // 1. Exact payload - the button the customer actually pressed.
+  if (payload) {
+    const hit = out.find((e) => handle(e) === payload);
+    if (hit) return { target: hit.target, unresolved: false, how: "payload" };
+  }
+
+  // 2. Visible label. Resolve it through the node's replies to the payload the
+  //    editor keyed the edge on, so a Hebrew label over an ASCII payload
+  //    ("המשך" -> "continue_shopping") still lands on the right branch. Falling
+  //    back to the raw text covers a customer who types the payload itself.
+  if (text) {
+    const replies: any[] = Array.isArray(paused.data?.replies) ? paused.data.replies : [];
+    const byLabel = replies.find((r) => normalizeReplyKey(r?.label) === text);
+    const wanted = byLabel ? replyHandleId(byLabel) : text;
+    const hit = out.find((e) => handle(e) === wanted);
+    if (hit) return { target: hit.target, unresolved: false, how: "label" };
+  }
+
+  // 3. An exit the author left unlabelled is the explicit "anything else".
+  const catchAll = out.find((e) => !handle(e));
+  if (catchAll) return { target: catchAll.target, unresolved: false, how: "catch_all" };
+
+  // 4. One exit: there is no branch to get wrong.
+  if (out.length === 1) return { target: out[0].target, unresolved: false, how: "sole_exit" };
+
+  // 5. Several labelled branches, none matched. Guessing here is the defect.
+  return { target: null, unresolved: true, how: "unresolved" };
+}
+
+/**
+ * Say - loudly and in one place - that a tap could not be resolved. Silence is
+ * what let a wrong-branch jump look like a working flow.
+ */
+function reportUnresolvedQuickReply(opts: {
+  tenantId: string;
+  conversationId?: string | null;
+  nodeId: string;
+  message: string;
+  replyPayload?: string | null;
+  edges: GraphEdge[];
+}): void {
+  const exits = opts.edges
+    .filter((e) => e.source === opts.nodeId)
+    .map((e) => normalizeReplyKey(e.sourceHandle) || "(unlabelled)");
+  console.warn(
+    `[flow] quick_reply_unresolved node=${opts.nodeId} conversation=${opts.conversationId ?? "-"} ` +
+      `payload="${normalizeReplyKey(opts.replyPayload)}" text="${normalizeReplyKey(opts.message)}" ` +
+      `exits=[${exits.join(",")}] - cursor kept, flow not advanced`,
+  );
+  publishEvent({
+    event: "flow:quick_reply_unresolved",
+    tenantId: opts.tenantId,
+    data: {
+      conversationId: opts.conversationId ?? null,
+      nodeId: opts.nodeId,
+      replyPayload: opts.replyPayload ?? null,
+      messageText: opts.message,
+      exits,
+    },
+  }).catch(() => {});
 }
 
 function pickMainFlowEntry(nodes: GraphNode[], channel: string, message?: string): GraphNode | null {
@@ -1352,14 +1518,32 @@ async function dispatchRoute(
     return routeType === "agent" ? "AI_AGENT" : routeType === "flow" ? "FLOW" : "HUMAN";
   }
   if (routeType === "agent" && targetId) {
-    // Persist the assigned AI agent on the conversation so subsequent inbound
-    // messages resume against the same agent without re-routing through the
-    // graph or the legacy RouterRule lookup.
+    // Persist WHICH employee, so subsequent inbound messages resume against
+    // the same agent without re-routing through the graph. Ownership is a
+    // separate question and is not answered yet.
     await prisma.conversation.update({
       where: { id: ctx.conversationId },
-      data: { handledBy: "ai_agent", assignedAiAgentId: targetId },
+      data: { assignedAiAgentId: targetId },
     });
+
     await processAIBot(ctx.tenantId, ctx.conversationId, ctx.message, targetId);
+
+    // Ownership transfers only once the AI employee has actually taken the
+    // turn. This used to be written BEFORE the call, so a turn the AI
+    // refused - no credits, suspended plan, service down - still left the
+    // conversation recorded as AI-owned. `processAIBot` returns true in that
+    // case too (it escalated, which is a successful outcome for IT), so the
+    // return value cannot answer this; the handoff flag can.
+    const after = await prisma.conversation.findFirst({
+      where: { id: ctx.conversationId, tenantId: ctx.tenantId },
+      select: { isHandedOver: true },
+    });
+    if (!after?.isHandedOver) {
+      await prisma.conversation.update({
+        where: { id: ctx.conversationId },
+        data: { handledBy: "ai_agent" },
+      });
+    }
     return "AI_AGENT";
   }
   if (routeType === "flow" && targetId) {
@@ -1377,17 +1561,33 @@ async function dispatchRoute(
       });
       // Use the new graph walker for the sub-flow too, so Start / Send*
       // nodes authored there execute identically to the main playbook.
-      await executeSubFlow({
+      const subResult = await executeSubFlow({
         tenantId: ctx.tenantId,
         conversationId: ctx.conversationId,
         message: ctx.message,
         channel: ctx.channel,
         flowId: sub.id,
       });
-      await prisma.conversation.update({
-        where: { id: ctx.conversationId },
-        data: { handledBy: "flow" },
-      });
+
+      // Restore flow ownership ONLY when the sub-flow left the decision open.
+      //
+      // This write used to be unconditional, and it is the whole bug. A
+      // sub-flow that routed to an AI employee, a human or a department set
+      // ownership correctly on its way out, and then the parent overwrote it
+      // with "flow" the moment control came back. The result was a
+      // conversation that had already crossed the AI billing boundary and
+      // escalated, yet still read `handledBy = "flow"` - so the next inbound
+      // took the flow branch in incoming.worker, re-walked the same graph,
+      // and crossed the boundary again. Every message, a fresh escalation.
+      //
+      // `route` is set when the sub-flow dispatched to a target; `endKind`
+      // when it terminated. Either means ownership is already spoken for.
+      if (!subResult.route && !subResult.endKind) {
+        await prisma.conversation.update({
+          where: { id: ctx.conversationId },
+          data: { handledBy: "flow" },
+        });
+      }
     }
     return "FLOW";
   }

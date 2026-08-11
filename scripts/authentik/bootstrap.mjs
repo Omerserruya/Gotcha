@@ -568,7 +568,18 @@ async function main() {
   // consent stage; with its mode set to "permanent" (below) a user consents
   // exactly once, ever, and every later login skips the screen entirely.
   const authorizationFlow = await findFlow("authorization", "default-provider-authorization-explicit-consent");
-  const invalidationFlow = await findFlow("invalidation", "default-provider-invalidation-flow");
+  // The LOGOUT flow, not the "logged out of application" one.
+  //
+  // Authentik ships two invalidation flows and the difference is the whole of
+  // whether Sign out works. `default-provider-invalidation-flow` has NO stages
+  // bound to it: it renders "You've logged out of GOTCHA." and ends the
+  // application session only - the Authentik session survives, so the next
+  // login completes silently and the user is back in the product without ever
+  // typing a credential. `default-invalidation-flow` binds
+  // `default-invalidation-logout` (a user_logout stage), which actually ends
+  // the session. Measured on production before the fix: press Sign out, get
+  // signed straight back in.
+  const invalidationFlow = await findFlow("invalidation", "default-invalidation-flow");
 
   // Store OAuth consent permanently so the authorization screen is a one-time
   // step, not a per-login interruption (see the note on authorizationFlow).
@@ -603,12 +614,17 @@ async function main() {
     invalidation_flow: invalidationFlow,
     client_type: "public", // SPA -> PKCE, no secret
     client_id: CLIENT_ID,
-    // NOTE: post_logout_redirect_uri is NOT supported by this Authentik version
-    // (the provider field was removed in an old migration; end-session always
-    // finishes at the IdP root). Returning users to GOTCHA after logout - and
-    // after any login done ON the IdP itself - relies on users being type
-    // "external" + the brand's default_application (both set by this script).
-    redirect_uris: REDIRECT_URIS.map((url) => ({ matching_mode: "strict", url })),
+    // post_logout_redirect_uri IS honoured - it is validated against THIS
+    // list, which is why the app's post-logout landing URLs have to be in it.
+    // (The provider has no separate field for them; the old note here said the
+    // feature was unsupported and left the app's `?post_logout_redirect_uri=`
+    // silently unmatched.) Returning users to GOTCHA after a login done ON the
+    // IdP itself still relies on users being type "external" + the brand's
+    // default_application, both set by this script.
+    redirect_uris: [...REDIRECT_URIS, ...POST_LOGOUT_URIS].map((url) => ({
+      matching_mode: "strict",
+      url,
+    })),
     property_mappings: propertyMappings,
     signing_key: signingKey,
     // `sub` is the join key to User.authentikSubject, so it must be stable,

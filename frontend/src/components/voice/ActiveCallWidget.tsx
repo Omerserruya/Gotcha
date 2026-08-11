@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { useAppPathname, samePath } from "@/lib/pathname";
 import { useVoiceCall } from "@/context/VoiceCallContext";
 
 function formatDuration(ms: number): string {
@@ -11,12 +11,12 @@ function formatDuration(ms: number): string {
 }
 
 export function ActiveCallWidget() {
-  const pathname = usePathname();
+  const pathname = useAppPathname();
   const { state, call, elapsedMs, error, hangup } = useVoiceCall();
 
   if (state === "idle") return null;
   // The /outbound/call page shows its own full phone UI - don't double up.
-  if (pathname === "/outbound/call") return null;
+  if (samePath(pathname, "/outbound/call")) return null;
 
   const label = {
     connecting: "Connecting…",

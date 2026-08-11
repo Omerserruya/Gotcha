@@ -25,7 +25,7 @@
  *   REOPENED  reopened after finalization; excluded until it settles again
  *   EXCLUDED  test / merged / not attributable
  */
-import { prisma } from "../prisma";
+import { prisma, withCrossTenantAccess } from "../prisma";
 
 /** Bumped when attribution rules change, so historical rows stay interpretable. */
 export const CALCULATION_VERSION = 1;
@@ -92,10 +92,15 @@ export async function aggregateConversation(
 ): Promise<AggregateResult | null> {
   const now = opts.now ?? new Date();
 
-  const convo = await prisma.conversation.findUnique({
-    where: { id: conversationId },
-    select: { id: true, tenantId: true, channel: true, assignedAiAgentId: true, createdAt: true, closedAt: true, status: true },
-  });
+  // A primary-key lookup cannot carry a tenantId filter: the tenant is what we
+  // are here to LEARN. Every caller is a system job or the sysadmin console, and
+  // the tenant read off this row is what scopes the usage query below.
+  const convo = await withCrossTenantAccess(() =>
+    prisma.conversation.findUnique({
+      where: { id: conversationId },
+      select: { id: true, tenantId: true, channel: true, assignedAiAgentId: true, createdAt: true, closedAt: true, status: true },
+    }),
+  );
   if (!convo) return null;
 
   const voiceSession = await prisma.voiceCallSession.findUnique({
@@ -245,12 +250,20 @@ export async function sweepClosedConversations(now = new Date(), limit = 200): P
   // A closed conversation whose settlement window has elapsed and that has no
   // aggregate row yet. The left-join-is-null shape is expressed as a `none`
   // filter so it stays a single query.
-  const candidates = await prisma.conversation.findMany({
-    where: { status: "CLOSED", closedAt: { not: null, lte: cutoff } },
-    select: { id: true },
-    orderBy: { closedAt: "desc" },
-    take: limit * 4,
-  });
+  // Cross-tenant BY DESIGN: this is the platform-wide settlement sweep, run by
+  // the billing scheduler with no tenant in hand. Without the escape hatch the
+  // TenantGuard refuses the query, and because it is the FIRST statement of the
+  // usage stage the throw takes the whole stage with it - the tick reports
+  // `settled: 0, discovered: 0`, which reads as "nothing to do" rather than
+  // "never looked".
+  const candidates = await withCrossTenantAccess(() =>
+    prisma.conversation.findMany({
+      where: { status: "CLOSED", closedAt: { not: null, lte: cutoff } },
+      select: { id: true },
+      orderBy: { closedAt: "desc" },
+      take: limit * 4,
+    }),
+  );
   if (candidates.length === 0) return { discovered: 0 };
 
   const known = await prisma.conversationUsageAggregate.findMany({

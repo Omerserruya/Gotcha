@@ -23,6 +23,7 @@ import {
   publicPricingEnabled,
   type PublicPlan,
   type Selection,
+  type PublicTaxSummary,
 } from "@/lib/api-public-pricing";
 
 interface Props {
@@ -32,6 +33,9 @@ interface Props {
 
 export default function PricingSection({ t, isRtl }: Props) {
   const [plans, setPlans] = useState<PublicPlan[] | null>(null);
+  // Listed prices are net. The landing page knows nothing about the visitor, so
+  // it names the rate instead of folding it into a total.
+  const [tax, setTax] = useState<PublicTaxSummary | null>(null);
   const [selections, setSelections] = useState<Record<string, Selection>>({});
   const [failed, setFailed] = useState(false);
   const [shown, setShown] = useState(false);
@@ -43,6 +47,7 @@ export default function PricingSection({ t, isRtl }: Props) {
     getPublicPricing({ locale: isRtl ? "he" : "en", signal: ac.signal })
       .then((c) => {
         setPlans(c.plans);
+        setTax(c.tax ?? null);
         // Seeded after the catalog arrives, and only for plans not already
         // configured, so switching language cannot discard a chosen volume.
         setSelections((prev) => {
@@ -56,6 +61,13 @@ export default function PricingSection({ t, isRtl }: Props) {
       });
     return () => ac.abort();
   }, [isRtl]);
+
+  const taxNote =
+    tax && !tax.exempt
+      ? isRtl
+        ? `המחירים אינם כוללים ${tax.label ?? 'מע"מ'} ${tax.percent}%`
+        : `Prices exclude ${tax.label ?? "VAT"} ${tax.percent}%`
+      : null;
 
   const setVolume = (planKey: string, channel: "chat" | "voice", optionKey: string) =>
     setSelections((s) => ({
@@ -137,6 +149,7 @@ export default function PricingSection({ t, isRtl }: Props) {
                     onVolumeChange={setVolume}
                     isRtl={isRtl}
                     t={t}
+                    taxNote={taxNote}
                   />
                 ))
               : [0, 1, 2].map((i) => <PreviewSkeleton key={i} />)}
@@ -165,7 +178,7 @@ export default function PricingSection({ t, isRtl }: Props) {
  * breakdown and the limits belong on /pricing.
  */
 function PreviewColumn({
-  plan, previous, selection, onVolumeChange, isRtl, t,
+  plan, previous, selection, onVolumeChange, isRtl, t, taxNote,
 }: {
   plan: PublicPlan;
   previous: PublicPlan | null;
@@ -173,6 +186,8 @@ function PreviewColumn({
   onVolumeChange: (planKey: string, channel: "chat" | "voice", optionKey: string) => void;
   isRtl: boolean;
   t: (key: string, vars?: Record<string, string>) => string;
+  /** e.g. "Prices exclude VAT 18%". Null when nothing is owed. */
+  taxNote?: string | null;
 }) {
   const name = isRtl ? plan.nameHe ?? plan.name : plan.name;
   const q = quoteSelection(plan, selection);
@@ -229,6 +244,12 @@ function PreviewColumn({
         </span>
         {priced && <span className="whitespace-nowrap text-[13px] text-gray-400">/ {t("pricing.month")}</span>}
       </div>
+
+      {/* Listed prices are net. Saying so is the difference between a price and
+          a surprise. */}
+      {priced && taxNote && (
+        <p className="mt-1.5 text-[11px] leading-snug text-gray-400">{taxNote}</p>
+      )}
 
       {/* Adjust the volume here, next to the price it moves. */}
       {adjustable && (

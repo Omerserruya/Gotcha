@@ -114,17 +114,28 @@ describe("the provider uses only iCount-verified operations", () => {
   });
 
   it("sends only the fields iCount confirmed for cc/bill", () => {
-    const start = client.indexOf('call(\n    "cc/bill"') >= 0 ? client.indexOf('call(\n    "cc/bill"') : client.indexOf('"cc/bill"');
-    const body = client.slice(start, start + 500);
+    // Comments are stripped before slicing. The window used to be measured
+    // against raw source, so explaining a field in a comment above it could
+    // push the field itself out of view and fail a request that was correct.
+    const bare = client.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+    // Anchor on the CALL, not on the first mention of the path - the guards at
+    // the top of bill() name "cc/bill" too, and matching those slices the
+    // request body out of the window entirely.
+    const at = bare.search(/call\(\s*\n?\s*"cc\/bill"/);
+    expect(at, "cc/bill must be dispatched through call()").toBeGreaterThan(-1);
+    const body = bare.slice(at, at + 500);
     expect(body).toContain("sum:");
-    expect(body).toContain("token:");
+    // `cc_token_id`, the API's own name for a stored card. Not `token`, which
+    // cc/bill does not define and which therefore identified nothing.
+    expect(body).toContain("cc_token_id:");
+    expect(body).not.toMatch(/^\s*token:/m);
     expect(body).toContain("client_id:");
-    // currency_id IS confirmed (1 = ILS). The rest remain invented.
+    // currency_id IS confirmed (5 = ILS, per the account itself). The rest remain invented.
     expect(body).toContain("currency_id:");
     expect(body).not.toMatch(/currency_code:|idempotency_key:|description:/);
   });
 
-  it("refuses any charge that is not ILS with currency_id 1", () => {
+  it("refuses any charge that is not ILS with currency_id 5", () => {
     expect(provider).toContain("assertChargeSafety");
     expect(provider).toMatch(/only ILS charges are enabled/);
     // The account is multi-currency, so a wrong id does not fail - it charges

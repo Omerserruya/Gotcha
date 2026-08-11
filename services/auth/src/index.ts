@@ -4,6 +4,7 @@ import sessionAuthRoutes from "./routes/session-auth";
 import agentRoutes from "./routes/agents";
 import departmentRoutes from "./routes/departments";
 import channelRoutes from "./routes/channels";
+import whatsappNumberRoutes from "./routes/whatsapp-numbers";
 import systemRoutes from "./routes/system";
 import systemFeatureRoutes from "./routes/system-features";
 import knowledgeBackfillRoutes from "./routes/knowledge-backfill";
@@ -14,6 +15,7 @@ import accountRoutes from "./routes/account";
 import tenantSecurityRoutes from "./routes/tenant-security";
 import gdprRoutes from "./routes/gdpr";
 import internalRoutes from "./routes/internal";
+import setupLinkRoutes from "./routes/setup-link";
 import { startNudgeWorker } from "./services/nudge-engine.service";
 import rateLimit from "express-rate-limit";
 
@@ -40,9 +42,17 @@ app.use("/api/waitlist", authLimiter);
 // legacy auth routes; every route 404s unless SESSION_COOKIE_CREATE is on, so
 // this is inert by default.
 app.use("/api/auth", sessionAuthRoutes);
+// Password-setup links. PUBLIC and mounted before the authenticated auth
+// routes: the caller is someone who does not have a credential yet, which is
+// the whole reason they are here. The token in the URL is the identification.
+app.use("/api/auth/setup", setupLinkRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/agents", agentRoutes);
 app.use("/api/departments", departmentRoutes);
+// Per-number WhatsApp management. Mounted BEFORE the generic channel routes so
+// /api/channels/whatsapp/... resolves here rather than falling into
+// channelRoutes' "/:id" handlers, which would treat "whatsapp" as a channel id.
+app.use("/api/channels/whatsapp", whatsappNumberRoutes);
 app.use("/api/channels", channelRoutes);
 app.use("/api/system", systemFeatureRoutes);
 // Platform operator only: onboarding → Knowledge Base backfill (preview by

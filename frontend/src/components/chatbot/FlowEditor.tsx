@@ -1012,7 +1012,7 @@ function FlowEditorInner({ flowId, onBack, onCreated, embedded }: Props) {
   }
 
   return (
-    <div className={fullscreen ? "fixed inset-0 z-40 bg-white h-screen flex flex-col" : (embedded ? "h-full flex flex-col" : "h-screen flex flex-col")}>
+    <div className={fullscreen ? "fixed inset-0 z-40 bg-white h-[100vh] flex flex-col" : (embedded ? "h-full flex flex-col" : "h-screen flex flex-col")}>
       {/* Toolbar */}
       <div className="bg-white border-b border-gray-100 px-2 md:px-4 py-2 md:py-3 flex items-center gap-2 md:gap-3 shadow-sm">
         {onBack && (

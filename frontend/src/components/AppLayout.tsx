@@ -1,7 +1,8 @@
 "use client";
 
+import { useAppPathname } from "@/lib/pathname";
 import { useState, useEffect } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import { Sidebar } from "./Sidebar";
@@ -23,7 +24,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => { setAnalyticsToken(token || null); }, [token]);
   const { t } = useI18n();
   const router = useRouter();
-  const pathname = usePathname();
+  const pathname = useAppPathname();
   const [collapsed, setCollapsed] = useState(false);
   const [userCollapsed, setUserCollapsed] = useState(false);
   const [panelAutoCollapsed, setPanelAutoCollapsed] = useState(false);
@@ -127,26 +128,30 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   if (!user) return null;
 
-  // Check if current page is conversations with a selected chat (to hide bottom nav)
-  const isConversationPage = pathname === "/conversations";
-
   return (
     <CommandCenterProvider>
-      <CommandCenterTrigger />
       <div className="flex min-h-screen app-bg md:p-2 md:gap-2">
         <div className="app-bg-spots" />
-        {/* Desktop sidebar - hidden on mobile */}
+        {/* Desktop sidebar - hidden on mobile. Full height, from the very top:
+            the command bar's lane belongs to the content column only, it does
+            not push the menu down. */}
         <div className="hidden md:block relative z-10">
           <Sidebar collapsed={collapsed} onToggle={handleToggle} />
         </div>
 
-        {/* Mobile layout */}
-        <div className="flex-1 flex flex-col md:contents overflow-hidden relative z-10">
+        {/* Content column. The command bar owns a thin lane at the top of it
+            that nothing else may enter - as a floating pill it sat on top of
+            page headers, alert banners and toasts and hid them. .app-frame
+            takes the lane's height out of the viewport for everything below
+            it (see globals.css). */}
+        <div className="app-frame flex-1 min-w-0 flex flex-col overflow-hidden md:overflow-visible relative z-10">
           {/* Mobile header - hidden when chat is open on mobile */}
           {!chatOpen && <MobileHeader />}
 
+          <CommandCenterTrigger />
+
           {/* Main content - add bottom padding on mobile for admin bottom nav (not when chat is open) */}
-          <main className={`flex-1 overflow-hidden w-full relative z-10 ${user?.role === "ADMIN" && !chatOpen ? "md:pb-0 pb-[68px]" : ""}`}>
+          <main className={`flex-1 min-h-0 overflow-hidden w-full relative z-10 ${user?.role === "ADMIN" && !chatOpen ? "md:pb-0 pb-[68px]" : ""}`}>
             <CreditAlertBanner />
             {children}
           </main>

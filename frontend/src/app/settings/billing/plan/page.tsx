@@ -34,6 +34,7 @@ import {
   type CatalogPlan,
   type Quote,
   type VolumeOption,
+  type TaxSummary,
 } from "@/lib/api-billing";
 
 /** Volume selection for one plan, keyed by plan so switching tabs keeps state. */
@@ -214,6 +215,7 @@ function AdjustPlanInner() {
             current={isCurrent(p)}
             onSelect={() => setActiveKey(p.key)}
             t={t}
+            tax={catalog?.tax}
           />
         ))}
       </div>
@@ -357,7 +359,7 @@ function CurrencyToggle({
 // ─── Plan card ──────────────────────────────────────────────────────────────
 
 function PlanCard({
-  plan, previous, active, current, onSelect, isHe, t,
+  plan, previous, active, current, onSelect, isHe, t, tax,
 }: {
   plan: CatalogPlan;
   /** The next cheaper plan, used to show what THIS one adds. */
@@ -367,6 +369,8 @@ function PlanCard({
   onSelect: () => void;
   isHe: boolean;
   t: (k: string) => string;
+  /** What is added on top of the card price. Null while the catalog loads. */
+  tax?: TaxSummary | null;
 }) {
   const name = isHe ? plan.nameHe ?? plan.name : plan.name;
   const description = isHe ? plan.descriptionHe ?? plan.description : plan.description;
@@ -415,6 +419,14 @@ function PlanCard({
           <span className="whitespace-nowrap text-sm text-gray-400">/ {t("settings.billing.pricing.month")}</span>
         )}
       </div>
+
+      {/* Catalogue prices are net, so the card price is not what gets charged.
+          Saying "+ VAT" is the difference between a price and a surprise. */}
+      {!plan.salesOnly && tax && !tax.exempt && (
+        <p className="mt-1 text-xs text-gray-400">
+          + {tax.label ?? "VAT"} {tax.percent}%
+        </p>
+      )}
 
       <dl className="mt-4 space-y-1.5 border-t border-gray-100 pt-4 text-sm">
         <div className="flex justify-between gap-2">
@@ -721,10 +733,32 @@ function ConfirmDialog({
         </h4>
 
         <dl className="mt-4 space-y-2 rounded-xl bg-gray-50 p-4 text-sm">
-          <div className="flex justify-between gap-2">
-            <dt className="text-gray-500">{t("settings.billing.pricing.monthlyTotal")}</dt>
-            <dd className="font-semibold text-gray-900" dir="ltr">{quote.monthlyPrice.display.formatted}</dd>
-          </div>
+          {/* Sum, tax, total - as three lines rather than one figure. The
+              amount on the statement is the last one, and a customer who is
+              only shown the first has no way to check the difference. */}
+          {quote.tax && !quote.tax.exempt ? (
+            <>
+              <div className="flex justify-between gap-2">
+                <dt className="text-gray-500">{isHe ? "סכום לפני מע״מ" : "Subtotal"}</dt>
+                <dd className="text-gray-700" dir="ltr">{quote.tax.net}</dd>
+              </div>
+              <div className="flex justify-between gap-2">
+                <dt className="text-gray-500">
+                  {quote.tax.label ?? (isHe ? "מע״מ" : "VAT")} {quote.tax.percent}%
+                </dt>
+                <dd className="text-gray-700" dir="ltr">{quote.tax.tax}</dd>
+              </div>
+              <div className="flex justify-between gap-2 border-t border-gray-200 pt-2">
+                <dt className="text-gray-500">{isHe ? 'סה"כ לתשלום' : "Total charged"}</dt>
+                <dd className="font-semibold text-gray-900" dir="ltr">{quote.tax.gross}</dd>
+              </div>
+            </>
+          ) : (
+            <div className="flex justify-between gap-2">
+              <dt className="text-gray-500">{t("settings.billing.pricing.monthlyTotal")}</dt>
+              <dd className="font-semibold text-gray-900" dir="ltr">{quote.monthlyPrice.display.formatted}</dd>
+            </div>
+          )}
           <div className="flex justify-between gap-2">
             <dt className="text-gray-500">{t("settings.billing.pricing.includedCredits")}</dt>
             <dd className="font-medium text-gray-900" dir="ltr">{quote.includedCredits.toLocaleString()}</dd>
@@ -746,6 +780,14 @@ function ConfirmDialog({
         <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-gray-600">
           {goingUp ? t("settings.billing.pricing.confirmUp") : t("settings.billing.pricing.confirmDown")}
         </p>
+
+        {quote.tax?.assumed && !quote.tax.exempt && (
+          <p className="mt-2 text-[11px] text-amber-600">
+            {isHe
+              ? "המע״מ מחושב לפי ישראל כברירת מחדל. הגדירו מדינה בפרטי הקבלה כדי לקבוע אותו סופית."
+              : "VAT is shown for Israel by default. Set a country in your receipt details to settle it."}
+          </p>
+        )}
 
         {quote.monthlyPrice.isEstimatedConversion && (
           <p className="mt-2 text-[11px] text-gray-400">

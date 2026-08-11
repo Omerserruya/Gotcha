@@ -12,7 +12,7 @@
  *   client/create           create the client a sale is attached to
  *   paypage/generate_sale   create a hosted page session, returns `sale_url`
  *   client/get_cc_tokens    server-side pull of a client's stored card tokens
- *   cc/bill                 charge a stored token: sum, token, client_id,
+ *   cc/bill                 charge a stored token: sum, cc_token_id, client_id,
  *                           currency_id
  *   cc/transactions         transaction lookup, for reconciling an UNKNOWN
  *   doc/cancel              full document-linked refund, with refund_cc: true
@@ -31,7 +31,24 @@ import {
 } from "./icount-config";
 
 /** iCount currency ids. 1 = ILS, 2 = USD. Product policy charges ILS only. */
-export const CURRENCY_ID_ILS = 1;
+/**
+ * ILS is currency_id 5. Confirmed against the account itself:
+ *
+ *   currency/get_list -> ILS { currency_id: 5 }, USD { currency_id: 2 },
+ *                        EUR { currency_id: 1 }, GBP { currency_id: 4 }
+ *   currency/info     -> { currency: "ILS", currency_id: 5 }
+ *
+ * This was 1, which is EUR. Every guard in the codebase was written to enforce
+ * "ILS only" and every one of them was enforcing euros, so nothing caught it:
+ * the value agreed with itself everywhere. A live charge of 3.00 went out as
+ * EUR 3.00 rather than ILS 3.00 - roughly four times the intended amount, and
+ * on a multi-currency account a wrong id does not fail, it succeeds for the
+ * wrong money.
+ *
+ * The PayPages both carried currency_id 5 and that was ILS all along, which
+ * was the visible clue.
+ */
+export const CURRENCY_ID_ILS = 5;
 export const CURRENCY_ID_USD = 2;
 
 export class IcountApiError extends Error {
@@ -289,6 +306,9 @@ export interface CreateClientInput {
   /** OUR reference. This is what everything afterwards is correlated by. */
   customClientId: string;
   email?: string;
+  /** Company / ID number for the tax document. */
+  vatId?: string;
+  address?: string;
 }
 
 /**
@@ -315,6 +335,11 @@ export async function createClient(input: CreateClientInput): Promise<{ clientId
     client_name: input.clientName,
     custom_client_id: input.customClientId,
     ...(input.email ? { email: input.email } : {}),
+    // The company/ID number the tax document is issued against. Carried at
+    // client creation so the document inherits it rather than being patched
+    // afterwards, and so iCount's own client record matches the receipt.
+    ...(input.vatId ? { vat_id: input.vatId } : {}),
+    ...(input.address ? { client_address: input.address } : {}),
   });
   const clientId = data?.client_id != null ? String(data.client_id) : "";
   if (!clientId) throw new IcountApiError("client/create", "response carried no client_id");
@@ -402,7 +427,17 @@ export function normalizeTokens(data: any): StoredCardToken[] {
   const out: StoredCardToken[] = [];
   for (const entry of list as any[]) {
     if (!entry) continue;
-    const token = typeof entry === "string" ? entry : entry.token ?? entry.cc_token ?? entry.card_token;
+    // `cc_token_id` first: it is iCount's own name for a stored card, and the
+    // exact identifier cc/bill expects back. Reading only `token` / `cc_token`
+    // / `card_token` meant an entry that carried the canonical field and
+    // nothing else was dropped by the guard below as "no usable token" - so
+    // tokenization would report that no card was stored, on a response that
+    // said one was. The looser aliases stay: this reader is deliberately
+    // tolerant about the envelope.
+    const token =
+      typeof entry === "string"
+        ? entry
+        : entry.cc_token_id ?? entry.token ?? entry.cc_token ?? entry.card_token;
     if (typeof token !== "string" || !token.trim()) continue;
     const exp = parseExpiry(entry);
     out.push({
@@ -474,7 +509,22 @@ export async function bill(input: BillInput): Promise<BillResult> {
     "cc/bill",
     {
       sum: input.sum,
-      token: input.token,
+      // `cc_token_id`, NOT `token`.
+      //
+      // The API documents cc/bill as taking either a stored token
+      // (`cc_token_id`) or a raw card (`cc_number` + `cc_cvv` + ...). `token`
+      // is not a parameter it defines, and this request builder had been
+      // sending exactly that - so the stored card was never identified and the
+      // charge could only ever have been rejected.
+      //
+      // It survived because nothing exercised it: mock and simulator modes are
+      // local fixtures that never see the real parameter contract, and no card
+      // has ever been stored in production, so cc/bill has not once been
+      // reached. The same class of mistake has bitten this integration twice
+      // already - `page_id` for `paypage_id`, which the API answers with
+      // reason="missing_paypage_id" - which is why the contract test alongside
+      // this now pins the field name.
+      cc_token_id: input.token,
       currency_id: input.currencyId,
       ...(input.clientId ? { client_id: input.clientId } : {}),
       ...(input.customClientId ? { custom_client_id: input.customClientId } : {}),
@@ -488,6 +538,181 @@ export async function bill(input: BillInput): Promise<BillResult> {
     documentUrl: typeof data?.doc_url === "string" ? data.doc_url : null,
     raw: data,
   };
+}
+
+// ─── doc/create ───────────────────────────────────────────────────────────
+
+export interface CreateDocumentInput {
+  /** "invrec" - חשבונית מס קבלה. Confirmed against the account's doc/types. */
+  doctype: string;
+  clientId?: string;
+  customClientId?: string;
+  clientName: string;
+  vatId?: string;
+  email?: string;
+  address?: string;
+  /** The provider's currency id. Never defaulted - see CURRENCY_ID_ILS. */
+  currencyId: number;
+  /** What the line is for, in the customer's language. */
+  description: string;
+  /** Ex-tax, as a decimal string. */
+  net: string;
+  /** Whole percent. 0 means exempt, and `taxExempt` is set alongside. */
+  vatPercent: number;
+  /** Inclusive of tax - what the card was actually charged. */
+  gross: string;
+  /** The charge this documents, so the two can be reconciled. */
+  confirmationCode?: string;
+  cardType?: string;
+  cardLast4?: string;
+  /** Email the document to the customer. */
+  sendEmail?: boolean;
+  lang?: "he" | "en";
+}
+
+export interface CreateDocumentResult {
+  docNumber: string | null;
+  docUrl: string | null;
+  /**
+   * Whether iCount says it sent the document.
+   *
+   * `null` means it did not say - which is NOT the same as "no". A silent
+   * response is exactly why the caller sends the document explicitly
+   * afterwards instead of trusting a flag it set on the way in.
+   */
+  emailSent: boolean | null;
+  emailReason: string | null;
+  raw: unknown;
+}
+
+/**
+ * Read the email outcome out of whatever shape iCount answered with.
+ *
+ * Documented as `iCountDocEmailStatus` (`email`, `name`, `email_sent`,
+ * `reason`), but it turns up under more than one key and sometimes as a list -
+ * one entry per recipient. Anything unrecognised returns null rather than
+ * false, so "we could not tell" never reads as "it did not send".
+ */
+export function readEmailStatus(data: any): { sent: boolean | null; reason: string | null } {
+  const raw = data?.email_status ?? data?.emails ?? data?.email ?? null;
+  const entries = Array.isArray(raw) ? raw : raw && typeof raw === "object" ? [raw] : [];
+  if (!entries.length) {
+    if (typeof data?.email_sent === "boolean") return { sent: data.email_sent, reason: null };
+    return { sent: null, reason: null };
+  }
+  const sent = entries.some((e: any) => e?.email_sent === true || e?.email_sent === 1 || e?.email_sent === "1");
+  const reason = entries.map((e: any) => e?.reason).find((r: any) => typeof r === "string" && r.trim()) ?? null;
+  return { sent, reason };
+}
+
+/**
+ * Issue the tax document for a charge that already happened.
+ *
+ * Separate from cc/bill on purpose, because iCount keeps them separate:
+ * cc/bill takes money and issues nothing. Its documented parameters have no
+ * field that would produce a document, which is why charges were landing with
+ * no receipt anywhere.
+ *
+ * The payment is recorded as a credit-card line carrying the confirmation code
+ * the charge returned, so the document and the transaction point at each other
+ * rather than merely agreeing on an amount. No card number and no CVV: the
+ * type accepts them, and a stored-card charge has neither to give.
+ *
+ * Totals are NOT sent. The line price and the VAT percent are, and iCount
+ * computes from them - sending a total as well would be two sources for one
+ * number, and the one that loses is the one nobody checked.
+ */
+export async function createDocument(input: CreateDocumentInput): Promise<CreateDocumentResult> {
+  assertLiveTransport("doc/create");
+  await assertTestAccount("doc/create");
+  if (!input.clientId && !input.customClientId) {
+    throw new IcountApiError("doc/create", "a client identifier is required");
+  }
+
+  const data = await call(
+    "doc/create",
+    {
+      doctype: input.doctype,
+      ...(input.clientId ? { client_id: input.clientId } : {}),
+      ...(input.customClientId ? { custom_client_id: input.customClientId } : {}),
+      client_name: input.clientName,
+      ...(input.vatId ? { vat_id: input.vatId } : {}),
+      ...(input.email ? { email: input.email } : {}),
+      ...(input.address ? { client_address: input.address } : {}),
+      currency_id: input.currencyId,
+      doc_lang: input.lang ?? "he",
+      items: [{ description: input.description, unitprice: input.net, quantity: 1 }],
+      // Exempt is a STATEMENT on the document, not the absence of a rate.
+      ...(input.vatPercent > 0 ? { vat_percent: input.vatPercent } : { tax_exempt: true }),
+      cc: [
+        {
+          sum: input.gross,
+          ...(input.confirmationCode ? { confirmation_code: input.confirmationCode } : {}),
+          ...(input.cardType ? { card_type: input.cardType } : {}),
+          ...(input.cardLast4 ? { card_number: input.cardLast4 } : {}),
+        },
+      ],
+      ...(input.sendEmail ? { send_email: true } : {}),
+    },
+    { mutating: true },
+  );
+
+  const email = readEmailStatus(data);
+  return {
+    docNumber: extractRef(data, ["docnum", "doc_number"]),
+    docUrl: typeof data?.doc_url === "string" ? data.doc_url : null,
+    emailSent: email.sent,
+    emailReason: email.reason,
+    raw: data,
+  };
+}
+
+// ─── doc/email ────────────────────────────────────────────────────────────
+
+export interface EmailDocumentInput {
+  doctype: string;
+  docNumber: string;
+  /** The address the receipt goes to. Explicit - never "whoever is on file". */
+  to: string;
+  lang?: "he" | "en";
+  subject?: string;
+}
+
+export interface EmailDocumentResult {
+  sent: boolean | null;
+  reason: string | null;
+  raw: unknown;
+}
+
+/**
+ * Send an already-issued document to a named address.
+ *
+ * `doc/create`'s `send_email` flag is a request, not a receipt: it names no
+ * recipient we chose and its answer may say nothing about what happened. This
+ * call states the address and comes back with `email_sent`, so "the customer
+ * got their receipt" is something observed rather than assumed.
+ *
+ * Safe to call after a create that may already have sent - a duplicate receipt
+ * is a mild annoyance, a missing one is a customer with no proof of payment.
+ */
+export async function emailDocument(input: EmailDocumentInput): Promise<EmailDocumentResult> {
+  assertLiveTransport("doc/email");
+  await assertTestAccount("doc/email");
+
+  const data = await call(
+    "doc/email",
+    {
+      doctype: input.doctype,
+      docnum: input.docNumber,
+      email_to: input.to,
+      email_lang: input.lang ?? "he",
+      ...(input.subject ? { email_subject: input.subject } : {}),
+    },
+    { mutating: true },
+  );
+
+  const status = readEmailStatus(data);
+  return { sent: status.sent, reason: status.reason, raw: data };
 }
 
 /**

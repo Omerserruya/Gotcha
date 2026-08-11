@@ -27,6 +27,20 @@ const config: Config = {
           900: "#3b2880",
         },
       },
+      // The command bar owns a permanent strip at the top of the app shell.
+      // Every full-height surface below it must stop short by exactly that
+      // strip, so `h-screen` / `min-h-screen` mean "the viewport that is left
+      // for the app", not the raw viewport. Outside the shell (login, setup,
+      // portalled overlays) --app-chrome-h is unset and these stay 100vh.
+      height: {
+        screen: "calc(100vh - var(--app-chrome-h, 0px))",
+      },
+      minHeight: {
+        screen: "calc(100vh - var(--app-chrome-h, 0px))",
+      },
+      maxHeight: {
+        screen: "calc(100vh - var(--app-chrome-h, 0px))",
+      },
       boxShadow: {
         card: "0 2px 12px 0 rgba(124, 92, 252, 0.08)",
         float: "0 8px 30px rgba(0, 0, 0, 0.06)",

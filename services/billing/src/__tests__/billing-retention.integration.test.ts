@@ -57,7 +57,7 @@ async function makeQuote(checkoutId: string, tenantId: string, status: any, cons
       commercialAmount: 499, commercialCurrency: "USD",
       fxRateId: rateId, fxRate: "3.65", fxRateSource: "MANUAL_PLATFORM_RATE", fxRateVersion: 1,
       fxQuotedAt: new Date(),
-      chargeAmount: "1821.35", chargeCurrency: "ILS", providerCurrencyId: 1,
+      chargeAmount: "1821.35", chargeCurrency: "ILS", providerCurrencyId: 5,
       expiresAt: new Date(Date.now() - DAY),
       status,
       consumedByAttemptId,

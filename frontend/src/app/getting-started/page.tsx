@@ -1,13 +1,19 @@
 "use client";
 
-// Getting Started - the premium post-onboarding "first steps" journey.
+// Getting Started - the post-onboarding "first steps" page.
 //
-// The page has two jobs: (a) let the owner TALK to their AI employee
-// immediately (the hero action - value in under a minute, zero setup), and
-// (b) walk the five canonical setup actions to go live. The checklist is the
-// SAME canonical journey the sidebar panel and nav badge read
-// (lib/journey-cache.ts → GET /onboarding/journey): same items, same labels,
-// same counts, same completion definitions - never computed locally.
+// The page has ONE job: get the owner through the setup actions that take
+// their workspace live, and make it obvious which one to do next.
+//
+// It used to lead with a sandbox chat against the AI employee. That is a
+// rehearsal, not a first step: it changes nothing about readiness, it cannot
+// be completed, and it took the top two thirds of the page from the five
+// actions that actually move the workspace forward. Testing an employee lives
+// where the employee lives (AI Studio), not on the setup page.
+//
+// The checklist is the SAME canonical journey the sidebar panel and nav badge
+// read (lib/journey-cache.ts -> GET /onboarding/journey): same items, same
+// labels, same counts, same completion definitions - never computed locally.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -17,19 +23,60 @@ import clsx from "clsx";
 import { AppLayout } from "@/components/AppLayout";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
-import { testAgentChat, type JourneyData, type JourneyMilestone } from "@/lib/api";
+import { type JourneyData, type JourneyMilestone } from "@/lib/api";
 import { getCachedJourney, refreshJourney, subscribeJourney } from "@/lib/journey-cache";
 import { track } from "@/lib/analytics";
+import { nextAction } from "@/lib/first-steps";
 
-type ChatMsg = { role: "user" | "assistant"; content: string };
-
-const MILESTONE_ICONS: Record<string, string> = {
-  connect_source_of_truth: "🔗",
-  connect_channel: "📡",
-  connect_knowledge: "📚",
-  create_ai_employee: "👋",
-  create_process: "⚙️",
+// One icon per canonical milestone. Line icons rather than emoji: they inherit
+// the step's colour, so a step reads as done / needs-attention / next at a
+// glance instead of every row shouting the same brightness.
+const MILESTONE_ICONS: Record<string, React.ReactNode> = {
+  connect_source_of_truth: (
+    <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+  ),
+  connect_channel: (
+    <path strokeLinecap="round" strokeLinejoin="round" d="M8.288 15.038a5.25 5.25 0 017.424 0M5.106 11.856c3.807-3.808 9.98-3.808 13.788 0M1.924 8.674c5.565-5.565 14.587-5.565 20.152 0M12.53 18.22l-.53.53-.53-.53a.75.75 0 011.06 0z" />
+  ),
+  connect_knowledge: (
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
+  ),
+  create_ai_employee: (
+    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+  ),
+  create_process: (
+    <path strokeLinecap="round" strokeLinejoin="round" d="M14.25 6.087c0-.355.186-.676.401-.959.221-.29.349-.634.349-1.003 0-1.036-1.007-1.875-2.25-1.875s-2.25.84-2.25 1.875c0 .369.128.713.349 1.003.215.283.401.604.401.959v0a.64.64 0 01-.657.643 48.39 48.39 0 01-4.163-.3c.186 1.613.293 3.25.315 4.907a.656.656 0 01-.658.663v0c-.355 0-.676-.186-.959-.401a1.647 1.647 0 00-1.003-.349c-1.036 0-1.875 1.007-1.875 2.25s.84 2.25 1.875 2.25c.369 0 .713-.128 1.003-.349.283-.215.604-.401.959-.401v0c.31 0 .555.26.532.57a48.039 48.039 0 01-.642 5.056c1.518.19 3.058.309 4.616.354a.64.64 0 00.657-.643v0c0-.355-.186-.676-.401-.959a1.647 1.647 0 01-.349-1.003c0-1.035 1.007-1.875 2.25-1.875s2.25.84 2.25 1.875c0 .369-.128.713-.349 1.003-.215.283-.4.604-.4.959v0c0 .333.277.599.61.58a48.1 48.1 0 005.427-.63 48.05 48.05 0 00.582-4.717.532.532 0 00-.533-.57v0c-.355 0-.676.186-.959.401-.29.221-.634.349-1.003.349-1.035 0-1.875-1.007-1.875-2.25s.84-2.25 1.875-2.25c.37 0 .713.128 1.003.349.283.215.604.401.96.401v0a.656.656 0 00.658-.663 48.422 48.422 0 00-.37-5.36c-1.886.342-3.81.574-5.766.689a.578.578 0 01-.61-.58v0z" />
+  ),
 };
+
+/** Where "explore the platform" sends people, once setup is under way. */
+const EXPLORE_LINKS: { key: string; href: string; icon: React.ReactNode }[] = [
+  {
+    key: "inbox",
+    href: "/conversations",
+    icon: <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 13.5h3.86a2.25 2.25 0 012.012 1.244l.256.512a2.25 2.25 0 002.013 1.244h3.218a2.25 2.25 0 002.013-1.244l.256-.512a2.25 2.25 0 012.013-1.244h3.859m-19.5.338V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18v-4.162c0-.224-.034-.447-.1-.661L19.24 5.338a2.25 2.25 0 00-2.15-1.588H6.911a2.25 2.25 0 00-2.15 1.588L2.35 13.177a2.25 2.25 0 00-.1.661z" />,
+  },
+  {
+    key: "aiStudio",
+    href: "/ai-studio",
+    icon: <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" />,
+  },
+  {
+    key: "channels",
+    href: "/channels",
+    icon: <path strokeLinecap="round" strokeLinejoin="round" d="M8.288 15.038a5.25 5.25 0 017.424 0M5.106 11.856c3.807-3.808 9.98-3.808 13.788 0M1.924 8.674c5.565-5.565 14.587-5.565 20.152 0M12.53 18.22l-.53.53-.53-.53a.75.75 0 011.06 0z" />,
+  },
+  {
+    key: "knowledge",
+    href: "/ai-studio?tab=knowledge",
+    icon: <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />,
+  },
+  {
+    key: "analytics",
+    href: "/analytics",
+    icon: <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />,
+  },
+];
 
 export default function GettingStartedPage() {
   return (
@@ -47,13 +94,6 @@ function GettingStartedInner() {
   const [journey, setJourney] = useState<JourneyData | null>(getCachedJourney());
   const [loading, setLoading] = useState(!getCachedJourney());
   const [loadError, setLoadError] = useState(false);
-
-  // chat state
-  const [messages, setMessages] = useState<ChatMsg[]>([]);
-  const [input, setInput] = useState("");
-  const [sending, setSending] = useState(false);
-  const [chatError, setChatError] = useState("");
-  const chatEndRef = useRef<HTMLDivElement | null>(null);
   // For setup_item_completed analytics: which items were incomplete last time.
   const prevIncompleteRef = useRef<Set<string> | null>(null);
 
@@ -101,61 +141,28 @@ function GettingStartedInner() {
     return () => window.removeEventListener("focus", onFocus);
   }, [token]);
 
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  const employee = journey?.employee || null;
-
-  async function send(text?: string) {
-    const msg = (text ?? input).trim();
-    if (!msg || !token || !employee || sending) return;
-    setInput("");
-    setChatError("");
-    setSending(true);
-    // Memory lives in the sandbox conversation on the server now, so no
-    // transcript is sent. `reset` on the first message of a fresh panel starts
-    // a clean thread instead of resuming yesterday's.
-    const isFirst = messages.length === 0;
-    setMessages((m) => [...m, { role: "user", content: msg }]);
-    try {
-      const r = await testAgentChat(token, employee.id, msg, { writes: "safe", reset: isFirst });
-      setMessages((m) => [...m, { role: "assistant", content: r.data.reply }]);
-    } catch {
-      setChatError(t("gettingStarted.chat.error"));
-    } finally {
-      setSending(false);
-    }
-  }
-
   const milestones = journey?.milestones || [];
   const doneCount = journey?.summary?.done ?? milestones.filter((m) => m.done).length;
   const totalCount = journey?.summary?.total ?? milestones.length;
   const bizName = journey?.business?.name;
-  const suggestions = [
-    t("gettingStarted.chat.s1"),
-    t("gettingStarted.chat.s2"),
-    t("gettingStarted.chat.s3"),
-  ];
+  const next = nextAction(milestones);
+  const allDone = totalCount > 0 && doneCount >= totalCount;
+  const pct = Math.round((doneCount / Math.max(totalCount, 1)) * 100);
 
   // Stable skeleton while readiness resolves - never a flash of "everything
   // incomplete" from local guesses.
   if (loading) {
     return (
-      <div className="mx-auto h-full max-w-5xl overflow-y-auto px-6 py-10">
-        <div className="mb-10 space-y-3">
+      <div className="mx-auto h-full max-w-4xl overflow-y-auto px-6 py-10">
+        <div className="mb-8 space-y-3">
           <div className="h-9 w-2/3 animate-pulse rounded-xl bg-slate-100" />
           <div className="h-4 w-1/2 animate-pulse rounded-lg bg-slate-100" />
         </div>
-        <div className="grid gap-8 lg:grid-cols-5">
-          <div className="lg:col-span-3">
-            <div className="h-96 animate-pulse rounded-2xl border border-slate-100 bg-slate-50" />
-          </div>
-          <div className="space-y-2 lg:col-span-2">
-            {[0, 1, 2, 3, 4].map((i) => (
-              <div key={i} className="h-20 animate-pulse rounded-xl border border-slate-100 bg-slate-50" />
-            ))}
-          </div>
+        <div className="mb-8 h-40 animate-pulse rounded-3xl bg-slate-100" />
+        <div className="space-y-3">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-24 animate-pulse rounded-2xl border border-slate-100 bg-slate-50" />
+          ))}
         </div>
       </div>
     );
@@ -177,27 +184,53 @@ function GettingStartedInner() {
   }
 
   return (
-    <div className="mx-auto h-full max-w-5xl overflow-y-auto px-6 py-10">
-      {/* ── Hero ── */}
-      <div className="mb-10 flex items-start justify-between gap-6">
-        <div>
-          <div className="mb-3 flex items-center gap-3">
-            <Image src="/logo_icon.png" alt="GOTCHA" width={40} height={40} className="rounded-xl" />
-            <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-              {bizName
-                ? t("gettingStarted.titleWithBiz").replace("{business}", bizName)
-                : t("gettingStarted.title")}
-            </h1>
+    <div className="mx-auto h-full max-w-4xl overflow-y-auto px-6 py-10">
+      {/* ── Header ── */}
+      <header className="mb-8">
+        <div className="mb-3 flex items-center gap-3">
+          <Image src="/logo_icon.png" alt="GOTCHA" width={40} height={40} className="rounded-xl" />
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900">
+            {bizName
+              ? t("gettingStarted.titleWithBiz").replace("{business}", bizName)
+              : t("gettingStarted.title")}
+          </h1>
+        </div>
+        <p className="max-w-2xl text-slate-500">{t("gettingStarted.subtitle")}</p>
+
+        {/* Progress: one bar, the same numbers the sidebar panel and nav badge
+            show. A bar rather than a ring because it carries the count inline
+            and does not need to hide on small screens. */}
+        <div className="mt-6 max-w-md">
+          <div className="mb-1.5 flex items-baseline justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              {t("gettingStarted.progress")}
+            </span>
+            <span className="text-xs font-medium text-slate-500">
+              {t("gettingStarted.progressCount")
+                .replace("{done}", String(doneCount))
+                .replace("{total}", String(totalCount))}
+            </span>
           </div>
-          <p className="max-w-2xl text-slate-500">{t("gettingStarted.subtitle")}</p>
-          <button
-            onClick={() => window.dispatchEvent(new Event("gotcha:start-tour"))}
-            className="mt-3 inline-flex items-center gap-2 rounded-xl border border-indigo-200 bg-white px-4 py-2 text-sm font-medium text-indigo-600 transition hover:bg-indigo-50"
-          >
-            ✨ {t("gettingStarted.tourCta")}
-          </button>
-          {/* what the AI already has - earned context, not empty promises */}
-          <div className="mt-4 flex flex-wrap gap-2 text-xs">
+          <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+            <div
+              className={clsx(
+                "h-full rounded-full transition-all duration-500",
+                allDone ? "bg-emerald-500" : "bg-indigo-500",
+              )}
+              style={{ width: `${Math.max(pct, doneCount > 0 ? 6 : 0)}%` }}
+              role="progressbar"
+              aria-valuenow={doneCount}
+              aria-valuemin={0}
+              aria-valuemax={totalCount}
+            />
+          </div>
+        </div>
+
+        {/* What the AI already has - earned context, not empty promises. */}
+        {(journey?.context?.coreSystem ||
+          (journey?.context?.kbCount ?? 0) > 0 ||
+          (journey?.context?.detectedChannelCount ?? 0) > 0) && (
+          <div className="mt-5 flex flex-wrap gap-2 text-xs">
             {journey?.context?.coreSystem && (
               <span className="rounded-full bg-emerald-50 px-3 py-1 font-medium text-emerald-700">
                 ✓ {t("gettingStarted.chips.core").replace("{system}", journey.context.coreSystem)}
@@ -217,159 +250,142 @@ function GettingStartedInner() {
               </span>
             )}
           </div>
-        </div>
-        {/* progress ring - same numbers as the sidebar panel and nav badge */}
-        <div className="hidden shrink-0 flex-col items-center sm:flex">
-          <div className="relative h-20 w-20">
-            <svg viewBox="0 0 36 36" className="h-20 w-20 -rotate-90">
-              <circle cx="18" cy="18" r="15.9" fill="none" stroke="#e2e8f0" strokeWidth="3" />
-              <circle
-                cx="18" cy="18" r="15.9" fill="none" stroke="#6366f1" strokeWidth="3"
-                strokeLinecap="round"
-                strokeDasharray={`${(doneCount / Math.max(totalCount, 1)) * 100} 100`}
-              />
-            </svg>
-            <div className="absolute inset-0 flex items-center justify-center text-sm font-bold text-slate-700">
-              {doneCount}/{totalCount}
+        )}
+      </header>
+
+      {/* ── Up next, or the finished state ── */}
+      {allDone ? (
+        <section className="mb-10 rounded-3xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-7">
+          <div className="flex items-start gap-4">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-500 text-2xl text-white">
+              ✓
+            </span>
+            <div className="min-w-0">
+              <h2 className="text-xl font-semibold text-slate-900">{t("gettingStarted.allDoneTitle")}</h2>
+              <p className="mt-1 max-w-xl text-sm text-slate-600">{t("gettingStarted.allDoneBody")}</p>
+              <Link
+                href="/conversations"
+                onClick={() => track("setup_cta_clicked", { item: "all_done", surface: "getting_started" })}
+                className="mt-4 inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700"
+              >
+                {t("gettingStarted.allDoneCta")}
+              </Link>
             </div>
           </div>
-          <span className="mt-1 text-xs text-slate-400">{t("gettingStarted.progress")}</span>
-        </div>
-      </div>
-
-      <div className="grid gap-8 lg:grid-cols-5">
-        {/* ── Hero action: talk to your employee ── */}
-        <section id="chat" className="lg:col-span-3">
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-violet-500 text-lg font-bold text-white">
-                {(employee?.name || "A").charAt(0)}
-              </div>
-              <div>
-                <div className="font-semibold text-slate-900">
-                  {employee
-                    ? t("gettingStarted.chat.title").replace("{name}", employee.name)
-                    : t("gettingStarted.chat.noEmployeeTitle")}
-                </div>
-                <div className="text-xs text-slate-400">
-                  {employee ? t("gettingStarted.chat.subtitle") : t("gettingStarted.chat.noEmployeeSub")}
-                </div>
-              </div>
-              {employee && (
-                <span className="ms-auto rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-medium text-emerald-600">
-                  {t("gettingStarted.chat.ready")}
-                </span>
+        </section>
+      ) : next ? (
+        <section className="mb-10 rounded-3xl border border-indigo-200 bg-gradient-to-br from-indigo-50 to-white p-7">
+          <span className="text-xs font-semibold uppercase tracking-wider text-indigo-500">
+            {t("gettingStarted.upNext")}
+          </span>
+          <div className="mt-3 flex flex-col gap-5 sm:flex-row sm:items-center">
+            <span
+              className={clsx(
+                "flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl",
+                next.state === "attention" ? "bg-amber-100 text-amber-600" : "bg-indigo-100 text-indigo-600",
+              )}
+            >
+              <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7}>
+                {MILESTONE_ICONS[next.id] ?? null}
+              </svg>
+            </span>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-xl font-semibold text-slate-900">
+                {t(`setupChecklist.items.${next.id}.title`)}
+              </h2>
+              <p className="mt-1 text-sm leading-relaxed text-slate-600">{whyFor(t, next)}</p>
+              {next.hint && (
+                <p className="mt-1 truncate text-xs text-slate-400" dir="ltr">{next.hint}</p>
               )}
             </div>
-
-            {employee ? (
-              <>
-                <div className="h-72 space-y-3 overflow-y-auto bg-slate-50/50 px-5 py-4">
-                  {messages.length === 0 && (
-                    <div className="pt-6 text-center">
-                      <p className="mb-4 text-sm text-slate-400">{t("gettingStarted.chat.empty")}</p>
-                      <div className="flex flex-wrap justify-center gap-2">
-                        {suggestions.map((s) => (
-                          <button
-                            key={s}
-                            onClick={() => send(s)}
-                            className="rounded-full border border-indigo-200 bg-white px-3 py-1.5 text-xs text-indigo-600 transition hover:bg-indigo-50"
-                          >
-                            {s}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {messages.map((m, i) => (
-                    <div key={i} className={clsx("flex", m.role === "user" ? "justify-end" : "justify-start")}>
-                      <div
-                        className={clsx(
-                          "max-w-[80%] whitespace-pre-wrap rounded-2xl px-4 py-2 text-sm",
-                          m.role === "user"
-                            ? "bg-indigo-600 text-white"
-                            : "border border-slate-200 bg-white text-slate-700",
-                        )}
-                      >
-                        {m.content}
-                      </div>
-                    </div>
-                  ))}
-                  {sending && (
-                    <div className="flex justify-start">
-                      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-400">
-                        <span className="animate-pulse">···</span>
-                      </div>
-                    </div>
-                  )}
-                  {chatError && <p className="text-center text-xs text-rose-500">{chatError}</p>}
-                  <div ref={chatEndRef} />
-                </div>
-                <form
-                  className="flex items-center gap-2 border-t border-slate-100 px-4 py-3"
-                  onSubmit={(e) => { e.preventDefault(); send(); }}
-                >
-                  <input
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    placeholder={t("gettingStarted.chat.placeholder")}
-                    className="flex-1 rounded-xl border border-slate-200 px-4 py-2 text-sm outline-none focus:border-indigo-400"
-                  />
-                  <button
-                    type="submit"
-                    disabled={sending || !input.trim()}
-                    className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-40"
-                  >
-                    {t("gettingStarted.chat.send")}
-                  </button>
-                </form>
-              </>
-            ) : (
-              <div className="flex flex-col items-center gap-4 px-5 py-12 text-center">
-                <p className="max-w-sm text-sm text-slate-500">{t("gettingStarted.chat.noEmployeeBody")}</p>
-                <Link
-                  href="/ai-studio?tab=overview"
-                  onClick={() => track("setup_cta_clicked", { item: "create_ai_employee", surface: "chat_card" })}
-                  className="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-indigo-700"
-                >
-                  {t("gettingStarted.chat.createCta")}
-                </Link>
-              </div>
-            )}
+            <Link
+              href={next.deepLink}
+              onClick={() =>
+                track("setup_cta_clicked", { item: next.id, state: next.state, surface: "getting_started_next" })
+              }
+              className={clsx(
+                "inline-flex shrink-0 items-center justify-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold text-white shadow-sm transition",
+                next.state === "attention"
+                  ? "bg-amber-500 hover:bg-amber-600"
+                  : "bg-indigo-600 hover:bg-indigo-700",
+              )}
+            >
+              {next.state === "attention" ? t("setupChecklist.fix") : t(`setupChecklist.items.${next.id}.cta`)}
+              <span aria-hidden>→</span>
+            </Link>
           </div>
         </section>
+      ) : null}
 
-        {/* ── Setup checklist: the five canonical actions ── */}
-        <section className="lg:col-span-2">
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">
-            {t("setupChecklist.title")}
+      {/* ── Every step ── */}
+      <section>
+        <div className="mb-3 flex items-center justify-between gap-4">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+            {t("gettingStarted.milestones.title")}
           </h2>
-          <ol className="space-y-2">
-            {milestones.map((m) => (
-              <ActionRow key={m.id} m={m} />
-            ))}
-          </ol>
-        </section>
-      </div>
+          <button
+            onClick={() => window.dispatchEvent(new Event("gotcha:start-tour"))}
+            className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-indigo-600 transition hover:bg-indigo-50"
+          >
+            ✨ {t("gettingStarted.tourCta")}
+          </button>
+        </div>
+        <ol className="space-y-3">
+          {milestones.map((m, i) => (
+            <ActionRow key={m.id} m={m} index={i + 1} isNext={!allDone && next?.id === m.id} />
+          ))}
+        </ol>
+      </section>
+
+      {/* ── Explore the platform ── */}
+      <section className="mt-12 border-t border-slate-100 pt-8">
+        <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-400">
+          {t("gettingStarted.features.title")}
+        </h2>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          {EXPLORE_LINKS.map((f) => (
+            <Link
+              key={f.key}
+              href={f.href}
+              onClick={() => track("setup_cta_clicked", { item: `explore_${f.key}`, surface: "getting_started" })}
+              className="group flex flex-col items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-4 text-center transition hover:border-indigo-200 hover:bg-indigo-50/40"
+            >
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-500 transition group-hover:bg-indigo-100 group-hover:text-indigo-600">
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7}>
+                  {f.icon}
+                </svg>
+              </span>
+              <span className="text-xs font-medium text-slate-600 group-hover:text-indigo-700">
+                {t(`gettingStarted.features.${f.key}`)}
+              </span>
+            </Link>
+          ))}
+        </div>
+      </section>
     </div>
   );
+}
+
+/** The line under a step's title, which depends on the state it is in. */
+function whyFor(t: (key: string) => string, m: JourneyMilestone): string {
+  if (m.state === "attention") {
+    return t(`setupChecklist.items.${m.id}.attention`) || t(`setupChecklist.items.${m.id}.why`);
+  }
+  if (m.state === "in_progress") {
+    return t(`setupChecklist.items.${m.id}.inProgress`) || t(`setupChecklist.items.${m.id}.why`);
+  }
+  return t(`setupChecklist.items.${m.id}.why`);
 }
 
 // One setup action: what's left, why it matters, its live status, and a
 // primary CTA that opens the exact flow. Completed items switch to a quiet
 // "done" look with a small Manage link - never the setup CTA again.
-function ActionRow({ m }: { m: JourneyMilestone }) {
+function ActionRow({ m, index, isNext }: { m: JourneyMilestone; index: number; isNext: boolean }) {
   const { t } = useI18n();
   const done = m.done;
   const attention = m.state === "attention";
   const inProgress = m.state === "in_progress";
-  const active = m.status === "active" && !attention;
 
-  const why = attention
-    ? t(`setupChecklist.items.${m.id}.attention`) || t(`setupChecklist.items.${m.id}.why`)
-    : inProgress
-      ? t(`setupChecklist.items.${m.id}.inProgress`) || t(`setupChecklist.items.${m.id}.why`)
-      : t(`setupChecklist.items.${m.id}.why`);
   const ctaLabel = attention ? t("setupChecklist.fix") : t(`setupChecklist.items.${m.id}.cta`);
   const statusLabel = done
     ? t("setupChecklist.status.done")
@@ -382,31 +398,51 @@ function ActionRow({ m }: { m: JourneyMilestone }) {
   return (
     <li
       className={clsx(
-        "rounded-xl border px-4 py-3 transition",
-        done && "border-emerald-100 bg-emerald-50/50",
+        "rounded-2xl border px-5 py-4 transition",
+        done && "border-slate-100 bg-slate-50/60",
         attention && !done && "border-amber-200 bg-amber-50/50",
-        active && !attention && "border-indigo-200 bg-indigo-50/60 shadow-sm",
-        !done && !active && !attention && "border-slate-200 bg-white",
+        isNext && !attention && "border-indigo-200 bg-white shadow-sm",
+        !done && !isNext && !attention && "border-slate-200 bg-white",
       )}
     >
-      <div className="flex items-start gap-3">
+      <div className="flex items-start gap-4">
+        {/* Step marker: a tick when done, otherwise the step's own icon. The
+            number keeps the sequence readable when several are complete. */}
         <span
           className={clsx(
-            "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm",
-            done ? "bg-emerald-500 text-white" : attention ? "bg-amber-100" : active ? "bg-indigo-100" : "bg-slate-100",
+            "mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
+            done
+              ? "bg-emerald-500 text-white"
+              : attention
+                ? "bg-amber-100 text-amber-600"
+                : isNext
+                  ? "bg-indigo-100 text-indigo-600"
+                  : "bg-slate-100 text-slate-400",
           )}
         >
-          {done ? "✓" : attention ? "!" : MILESTONE_ICONS[m.id] || "•"}
+          {done ? (
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+            </svg>
+          ) : (
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7}>
+              {MILESTONE_ICONS[m.id] ?? null}
+            </svg>
+          )}
         </span>
+
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className={clsx("text-sm font-medium", done ? "text-emerald-700" : "text-slate-800")}>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11px] font-semibold tabular-nums text-slate-300">
+              {String(index).padStart(2, "0")}
+            </span>
+            <span className={clsx("text-sm font-semibold", done ? "text-slate-500" : "text-slate-900")}>
               {t(`setupChecklist.items.${m.id}.title`)}
             </span>
             <span
               className={clsx(
-                "ms-auto shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold",
-                done && "bg-emerald-100 text-emerald-700",
+                "ms-auto shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-semibold",
+                done && "bg-emerald-50 text-emerald-600",
                 attention && !done && "bg-amber-100 text-amber-700",
                 inProgress && !done && !attention && "bg-indigo-100 text-indigo-700",
                 !done && !attention && !inProgress && "bg-slate-100 text-slate-500",
@@ -415,18 +451,24 @@ function ActionRow({ m }: { m: JourneyMilestone }) {
               {statusLabel}
             </span>
           </div>
-          {!done && <p className="mt-0.5 text-xs leading-snug text-slate-500">{why}</p>}
+
+          {!done && <p className="mt-1 text-xs leading-relaxed text-slate-500">{whyFor(t, m)}</p>}
           {!done && m.hint && (
             <p className="mt-0.5 truncate text-[11px] text-slate-400" dir="ltr">{m.hint}</p>
           )}
-          <div className="mt-2 flex items-center gap-3">
+
+          <div className="mt-2.5 flex items-center gap-3">
             {!done ? (
               <Link
                 href={m.deepLink}
                 onClick={() => track("setup_cta_clicked", { item: m.id, state: m.state, surface: "getting_started" })}
                 className={clsx(
-                  "inline-flex items-center rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition",
-                  attention ? "bg-amber-500 hover:bg-amber-600" : "bg-indigo-600 hover:bg-indigo-700",
+                  "inline-flex items-center rounded-lg px-3.5 py-1.5 text-xs font-semibold transition",
+                  attention
+                    ? "bg-amber-500 text-white hover:bg-amber-600"
+                    : isNext
+                      ? "bg-indigo-600 text-white hover:bg-indigo-700"
+                      : "border border-slate-200 bg-white text-slate-600 hover:border-indigo-200 hover:text-indigo-600",
                 )}
               >
                 {ctaLabel}
@@ -435,7 +477,7 @@ function ActionRow({ m }: { m: JourneyMilestone }) {
               <Link
                 href={m.manageLink || m.deepLink}
                 onClick={() => track("setup_cta_clicked", { item: m.id, state: "done", surface: "getting_started" })}
-                className="text-xs font-medium text-emerald-700 underline-offset-2 hover:underline"
+                className="text-xs font-medium text-slate-500 underline-offset-2 hover:text-indigo-600 hover:underline"
               >
                 {t("setupChecklist.manage")}
               </Link>

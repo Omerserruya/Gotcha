@@ -226,6 +226,17 @@ const ICONS: Record<string, React.ReactNode> = {
   phoneEnd: (<svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85" /></svg>),
 };
 
+/**
+ * The id of the single exit every trigger card renders ("Then …").
+ *
+ * TriggerCardNode paints this handle, connection-rules derives the port from
+ * the registry, and React Flow reports it back in onConnect. All three have to
+ * agree on one string: when they did not, the handle existed on screen but the
+ * validator could not name the port behind it, so every trigger → action drag
+ * was rejected as `no_output` and the builder could not be wired at all.
+ */
+export const TRIGGER_SOURCE_HANDLE = "out";
+
 // ─── REGISTRY ─────────────────────────────────────────────────────
 // One entry per node type. Each entry knows how to: render its summary,
 // validate itself, supply default data, and render its inspector body.
@@ -239,7 +250,7 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
   // only fire on a specific channel (e.g. Instagram-only).
   channel_entry: {
     type: "channel_entry", label: "Channel Entry", color: "violet", icon: ICONS.start, category: "Triggers",
-    handles: { sources: [{ position: "bottom" }] },
+    handles: { sources: [{ id: TRIGGER_SOURCE_HANDLE, position: "bottom" }] },
     defaultData: () => ({ channelId: "", channelType: "", label: "", connected: false }),
     summary: (d) => {
       const names: Record<string, string> = {
@@ -649,7 +660,7 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
   // ── Triggers ──────────────────────────────────────────────────────
   comment_trigger: {
     type: "comment_trigger", label: "Trigger: Comment", color: "emerald", icon: ICONS.comment, category: "Triggers",
-    handles: { sources: [{ position: "bottom" }] },
+    handles: { sources: [{ id: TRIGGER_SOURCE_HANDLE, position: "bottom" }] },
     defaultData: () => ({ postSource: "page", postId: "", postPermalink: "", postCaption: "", channelId: "", keywords: [], replyPublicly: true }),
     summary: (d, shared) => {
       const ch = shared?.channels?.find((c) => c.id === d.channelId);
@@ -664,7 +675,7 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
 
   keyword_trigger: {
     type: "keyword_trigger", label: "Trigger: Keyword", color: "emerald", icon: ICONS.search, category: "Triggers",
-    handles: { sources: [{ position: "bottom" }] },
+    handles: { sources: [{ id: TRIGGER_SOURCE_HANDLE, position: "bottom" }] },
     defaultData: () => ({ keywords: [], matchType: "any", caseSensitive: false }),
     validate: (d) => (Array.isArray(d.keywords) && d.keywords.length > 0) ? "ok" : "missing",
     summary: (d) => {
@@ -694,7 +705,7 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
 
   schedule_trigger: {
     type: "schedule_trigger", label: "Trigger: Schedule", color: "emerald", icon: ICONS.schedule, category: "Triggers",
-    handles: { sources: [{ position: "bottom" }] },
+    handles: { sources: [{ id: TRIGGER_SOURCE_HANDLE, position: "bottom" }] },
     defaultData: () => ({ cron: "0 9 * * *", timezone: "UTC" }),
     validate: (d) => d.cron ? "ok" : "missing",
     summary: (d) => `Cron: ${d.cron || "(none)"} ${d.timezone || "UTC"}`,
@@ -703,7 +714,7 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
 
   webhook_trigger: {
     type: "webhook_trigger", label: "Trigger: Webhook", color: "emerald", icon: ICONS.link, category: "Triggers",
-    handles: { sources: [{ position: "bottom" }] },
+    handles: { sources: [{ id: TRIGGER_SOURCE_HANDLE, position: "bottom" }] },
     // targetMode defaults to "flow" - preserves the original separate-flow run.
     defaultData: () => ({ name: "Webhook", workflowId: "", targetMode: "flow" }),
     // Connected mode needs no flow pick - it auto-anchors to the node's own id,
@@ -727,7 +738,7 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
   // services/ai/src/services/voice-flow/voice-flow-runner.ts.
   "voice_trigger:call.incoming": {
     type: "voice_trigger:call.incoming", label: "Voice: Incoming call", color: "emerald", icon: ICONS.phone, category: "Voice Triggers", requires: "voice",
-    handles: { sources: [{ position: "bottom" }] },
+    handles: { sources: [{ id: TRIGGER_SOURCE_HANDLE, position: "bottom" }] },
     defaultData: () => ({}),
     validate: () => "ok",
     summary: () => "When an inbound call rings",
@@ -735,7 +746,7 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
   },
   "voice_trigger:call.answered": {
     type: "voice_trigger:call.answered", label: "Voice: Call answered", color: "emerald", icon: ICONS.phone, category: "Voice Triggers", requires: "voice",
-    handles: { sources: [{ position: "bottom" }] },
+    handles: { sources: [{ id: TRIGGER_SOURCE_HANDLE, position: "bottom" }] },
     defaultData: () => ({}),
     validate: () => "ok",
     summary: () => "When an agent picks up",
@@ -743,7 +754,7 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
   },
   "voice_trigger:call.missed": {
     type: "voice_trigger:call.missed", label: "Voice: Missed call", color: "emerald", icon: ICONS.phoneEnd, category: "Voice Triggers", requires: "voice",
-    handles: { sources: [{ position: "bottom" }] },
+    handles: { sources: [{ id: TRIGGER_SOURCE_HANDLE, position: "bottom" }] },
     defaultData: () => ({}),
     validate: () => "ok",
     summary: () => "Customer hung up before answer",
@@ -751,7 +762,7 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
   },
   "voice_trigger:call.hangup_customer": {
     type: "voice_trigger:call.hangup_customer", label: "Voice: Customer hung up", color: "emerald", icon: ICONS.phoneEnd, category: "Voice Triggers", requires: "voice",
-    handles: { sources: [{ position: "bottom" }] },
+    handles: { sources: [{ id: TRIGGER_SOURCE_HANDLE, position: "bottom" }] },
     defaultData: () => ({}),
     validate: () => "ok",
     summary: () => "Customer ended the call",
@@ -759,7 +770,7 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
   },
   "voice_trigger:call.hangup_agent": {
     type: "voice_trigger:call.hangup_agent", label: "Voice: Agent hung up", color: "emerald", icon: ICONS.phoneEnd, category: "Voice Triggers", requires: "voice",
-    handles: { sources: [{ position: "bottom" }] },
+    handles: { sources: [{ id: TRIGGER_SOURCE_HANDLE, position: "bottom" }] },
     defaultData: () => ({}),
     validate: () => "ok",
     summary: () => "Agent ended the call",
@@ -767,7 +778,7 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
   },
   "voice_trigger:call.intent_detected": {
     type: "voice_trigger:call.intent_detected", label: "Voice: Intent detected", color: "emerald", icon: ICONS.ai, category: "Voice Triggers", requires: "voice",
-    handles: { sources: [{ position: "bottom" }] },
+    handles: { sources: [{ id: TRIGGER_SOURCE_HANDLE, position: "bottom" }] },
     defaultData: () => ({ intent: "", minConfidence: 0.6 }),
     validate: (d) => (d.intent && String(d.intent).trim()) ? "ok" : "missing",
     summary: (d) => d.intent ? `Intent: ${d.intent} (≥${d.minConfidence ?? 0.6})` : "(no intent set)",
@@ -787,7 +798,7 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
   },
   "voice_trigger:call.keyword_spoken": {
     type: "voice_trigger:call.keyword_spoken", label: "Voice: Keyword spoken", color: "emerald", icon: ICONS.search, category: "Voice Triggers", requires: "voice",
-    handles: { sources: [{ position: "bottom" }] },
+    handles: { sources: [{ id: TRIGGER_SOURCE_HANDLE, position: "bottom" }] },
     defaultData: () => ({ keywords: [] }),
     validate: (d) => (Array.isArray(d.keywords) && d.keywords.length > 0) ? "ok" : "missing",
     summary: (d) => {
@@ -827,7 +838,10 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
     type: "route_target", label: "Route Target", color: "violet", icon: ICONS.agent, category: "Routing",
     handles: { target: "top", sources: [] },
     defaultData: () => ({ routeType: "agent", targetId: "" }),
-    validate: (d) => d.targetId ? "ok" : "missing",
+    // A human route needs no target: dispatchRoute parks the conversation in
+    // WAITING for whoever claims it, and picking a department is optional.
+    // Demanding one flagged a correct node as broken with no way to clear it.
+    validate: (d) => (d.routeType === "human" || d.targetId ? "ok" : "missing"),
     summary: (d, shared) => {
       const list = d.routeType === "agent" ? shared?.agents : d.routeType === "flow" ? shared?.flows : shared?.departments;
       const name = list?.find((o) => o.id === d.targetId)?.name;

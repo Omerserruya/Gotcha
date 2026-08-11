@@ -26,8 +26,9 @@
 //     "press Next" fallback - re-pushing on mismatch once looped navigation
 //     forever and DDoSed our own API.
 
+import { useAppPathname, samePath } from "@/lib/pathname";
 import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useI18n } from "@/context/I18nContext";
 import { setTourMock, tourMockActive } from "@/lib/tour-mock";
 import { computeTourGeometry, type Rect } from "@/lib/tour-geometry";
@@ -36,6 +37,13 @@ import { track } from "@/lib/analytics";
 const STORAGE_KEY = "onboarding.launchTour";
 const PROGRESS_KEY = "onboarding.tourStep"; // stores the step ID
 const NAV_ATTEMPT_KEY = "onboarding.tourNav";
+/**
+ * How long the tour may hold the screen waiting to land on a step's page
+ * before it concedes and hands the app back. Generous enough to cover a slow
+ * first compile of a route, short enough that nobody sits in front of a dead
+ * screen wondering whether the product crashed.
+ */
+const STUCK_AFTER_MS = 6000;
 const GUIDE_POS_KEY = "onboarding.tourGuidePos";
 
 interface TourStep {
@@ -75,6 +83,38 @@ interface TourStep {
   title: [string, string];
   body: [string, string];
   cta?: [string, string];
+}
+
+/**
+ * Is the user on the page this step asked for?
+ *
+ * Pure and exported because getting it wrong takes the whole product down: the
+ * tour holds a full-screen click-blocker for as long as this says "no", so a
+ * comparison that can never be true is a frozen app, not a missing tooltip.
+ * That is precisely what `pathname !== navPath` did in production, where the
+ * static export's `trailingSlash: true` makes every in-app navigation land on
+ * "/conversations/" while the step says "/conversations".
+ *
+ * The query is matched by SUBSET, deliberately: a step asking for
+ * `?tab=tools` is satisfied by `?tab=tools&anythingElse=1`, because the app
+ * adds its own params and the tour has no business demanding they be absent.
+ */
+export function stepArrived(
+  navigateTo: string | undefined,
+  pathname: string | null | undefined,
+  search: URLSearchParams | null | undefined,
+): boolean {
+  if (!navigateTo) return true;
+  const [navPath, navQuery] = navigateTo.split("?");
+  if (!samePath(pathname, navPath)) return false;
+  if (navQuery) {
+    const want = new URLSearchParams(navQuery);
+    const entries = Array.from(want.entries());
+    for (const [k, v] of entries) {
+      if ((search?.get(k) ?? null) !== v) return false;
+    }
+  }
+  return true;
 }
 
 // Copy rule: lead with what it DOES for the business, never with the feature
@@ -352,7 +392,7 @@ export function GuidedTour() {
 
 function GuidedTourInner() {
   const router = useRouter();
-  const pathname = usePathname();
+  const pathname = useAppPathname();
   const search = useSearchParams();
   const { locale } = useI18n();
   const lang = locale === "he" ? 1 : 0;
@@ -374,6 +414,10 @@ function GuidedTourInner() {
   const [popupSize, setPopupSize] = useState<{ w: number; h: number }>({ w: 300, h: 200 });
   const [missingTarget, setMissingTarget] = useState(false);
   const [settled, setSettled] = useState(false);
+  // The tour gave up waiting for this step's page. Releases the whole-screen
+  // lock and shows the popup so the user always has a way out (see the
+  // dead-man's-switch effect below).
+  const [stuck, setStuck] = useState(false);
   // Between-steps interaction lock: for ~700ms after every advance the whole
   // screen is inert, so nothing can be clicked mid-transition and the tour can
   // never be knocked out of sync by a fast second click.
@@ -471,19 +515,7 @@ function GuidedTourInner() {
   }, [active, step]);
 
   // ── Arrival: are we on this step's page (path AND query)? ──
-  const arrived = useMemo(() => {
-    if (!step?.navigateTo) return true;
-    const [navPath, navQuery] = step.navigateTo.split("?");
-    if (pathname !== navPath) return false;
-    if (navQuery) {
-      const want = new URLSearchParams(navQuery);
-      const entries = Array.from(want.entries());
-      for (const [k, v] of entries) {
-        if (search.get(k) !== v) return false;
-      }
-    }
-    return true;
-  }, [step, pathname, search]);
+  const arrived = useMemo(() => stepArrived(step?.navigateTo, pathname, search), [step, pathname, search]);
 
   // ── Navigate FIRST (one attempt per step, redirect-proof) ──
   useEffect(() => {
@@ -511,6 +543,27 @@ function GuidedTourInner() {
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, arrived]);
+
+  // ── Dead-man's switch on the whole-screen lock ──
+  //
+  // While the tour has not arrived on a step's page it holds an invisible
+  // full-screen click-blocker, so a half-navigated app can't be poked at. That
+  // is right for the 400ms it normally lasts and catastrophic if arrival never
+  // happens: the popup is not rendered either, so there is no Skip button, and
+  // the entire product is dead until a reload. That is exactly what shipped to
+  // production - `pathname === navigateTo` could never be true against a
+  // trailing-slash build - and the trailing slash is only the bug we KNOW
+  // about. A route that redirects, a page removed in a later release, or any
+  // future path-shape change would strand the user the same way.
+  //
+  // So the lock now expires. After this, the tour admits it is lost, releases
+  // the app, and shows the popup with Skip and Next.
+  useEffect(() => {
+    if (!active) return;
+    if (arrived) { setStuck(false); return; }
+    const t = window.setTimeout(() => setStuck(true), STUCK_AFTER_MS);
+    return () => window.clearTimeout(t);
+  }, [active, arrived, stepIdx]);
 
   // ── Target-rect tracking ──
   // One rAF loop per step: waits for the anchor (route transitions), scrolls
@@ -800,7 +853,10 @@ function GuidedTourInner() {
   if (!active || !step) return null;
 
   const showSpotlight = settled && rect && !missingTarget && holeStyle;
-  const showPopup = settled && (step.center || !step.selector || rect || missingTarget);
+  // `stuck` forces the popup on: it is the only surface carrying Skip and
+  // Next, and a tour that has lost its way must never leave the user without
+  // either.
+  const showPopup = stuck || (settled && (step.center || !step.selector || rect || missingTarget));
   const finalStep = stepIdx === steps.length - 1;
   const total = steps.length;
   // presentCopy swap: when the app already did the step's action (auto-opened
@@ -862,8 +918,11 @@ function GuidedTourInner() {
       ) : null}
 
       {/* Whole-screen lock while navigating / between steps: nothing in the
-          app is clickable until the next step is actually on screen. */}
-      {(!settled || transitionLock) && (
+          app is clickable until the next step is actually on screen. Released
+          unconditionally once the tour concedes it is lost - an invisible
+          blocker with no popup behind it is indistinguishable from a frozen
+          product. */}
+      {(!settled || transitionLock) && !stuck && (
         <div className="absolute inset-0 pointer-events-auto" aria-hidden />
       )}
 
@@ -959,17 +1018,24 @@ function GuidedTourInner() {
           <h3 className="text-sm font-bold text-gray-900 mb-1">{stepTitle}</h3>
           <p className="text-[13px] text-gray-600 leading-snug">{stepBody}</p>
 
-          {canClickTarget && !missingTarget && (
+          {canClickTarget && !missingTarget && !stuck && (
             <p className="mt-1.5 text-[11px] text-primary-700 bg-primary-50 rounded-md px-2 py-1">
               {lang === 1 ? "לחצו על האזור המואר כדי להמשיך ✨" : "Click the highlighted area to continue ✨"}
             </p>
           )}
-          {step.interactive && !missingTarget && (
+          {step.interactive && !missingTarget && !stuck && (
             <p className="mt-1.5 text-[11px] text-primary-700 bg-primary-50 rounded-md px-2 py-1">
               {lang === 1 ? "האזור המואר פתוח בשבילכם - גללו וחקרו ✨" : "The highlighted area is open for you - scroll and explore ✨"}
             </p>
           )}
-          {missingTarget && step.selector && (
+          {stuck && (
+            <p className="mt-1.5 text-[11px] text-amber-700 bg-amber-50 rounded-md px-2 py-1">
+              {lang === 1
+                ? "הדף הזה לא נפתח. אפשר להמשיך לשלב הבא או לדלג על הסיור - המערכת פתוחה לשימוש."
+                : "That page didn't open. Press Next to carry on, or Skip the tour - the app is yours either way."}
+            </p>
+          )}
+          {missingTarget && !stuck && step.selector && (
             <p className="mt-1.5 text-[11px] text-amber-700 bg-amber-50 rounded-md px-2 py-1">
               {lang === 1 ? "האזור עוד לא טעון. לחצו הבא או פעלו ידנית." : "Target isn't visible yet. Press Next or do it manually."}
             </p>

@@ -25,7 +25,7 @@ import { activeRate, convert, ROUNDING_MODE } from "./exchange-rate.service";
  * Product policy pins every charge to ILS. USD submission stays unimplemented
  * rather than merely unused, so it cannot be switched on by changing a constant.
  */
-export const ICOUNT_CURRENCY_ID = { ILS: 1, USD: 2 } as const;
+export const ICOUNT_CURRENCY_ID = { ILS: 5, USD: 2 } as const;
 export const CHARGE_CURRENCY = "ILS" as const;
 export const CHARGE_CURRENCY_ID = ICOUNT_CURRENCY_ID.ILS;
 

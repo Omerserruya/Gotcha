@@ -29,6 +29,7 @@ import {
   type BillingMoney as Money,
   type DisplayPrice,
 } from "@chatcenter/shared";
+import { taxForDisplay, resolveTaxRate, DEFAULT_DISPLAY_COUNTRY, type DisplayTax } from "./tax.service";
 
 export interface VolumeOptionView {
   key: string;
@@ -368,6 +369,18 @@ export interface Quote {
   estimate: QuoteEstimate;
   ratios: EstimationRatios;
   currency: string;
+  /**
+   * What is added on top, and what the customer will actually be charged.
+   *
+   * Catalogue prices are NET, so `monthlyPrice` is not the figure that leaves
+   * the card. Carrying the three numbers together - net, tax, gross - is what
+   * lets a page show them as a sum instead of one total nobody can check.
+   *
+   * `assumed` is true when no billing country has been declared and the
+   * default jurisdiction was used. The UI has to say so rather than present it
+   * as settled.
+   */
+  tax: DisplayTax;
 }
 
 /**
@@ -377,6 +390,43 @@ export interface Quote {
  * in the result is recomputed here from the catalog, so a tampered payload
  * cannot buy a plan at a price the customer chose.
  */
+/**
+ * The billing country this tenant declared, or null.
+ *
+ * Reads only what was declared. There is deliberately no fallback to
+ * Tenant.defaultCountryCode or to the onboarding country - both are guesses,
+ * and a guess that reaches a tax figure stops looking like a guess.
+ */
+async function declaredBillingCountry(tenantId: string): Promise<string | null> {
+  const link = await prisma.billableEntityTenant.findUnique({ where: { tenantId } });
+  if (!link) return null;
+  const profile = await prisma.billingProfile.findUnique({
+    where: { billableEntityId: link.billableEntityId },
+    select: { billingCountry: true },
+  });
+  return profile?.billingCountry ?? null;
+}
+
+/**
+ * The tax that applies to this tenant, without pricing anything.
+ *
+ * What a catalogue needs in order to say "+ VAT" honestly: the rate, and
+ * whether it was declared or assumed. A page that shows only net prices with
+ * no mention of tax is a price the customer cannot reconcile with the charge,
+ * and in Israel is not a price you are allowed to advertise to a consumer.
+ */
+export async function taxSummaryForTenant(tenantId?: string | null): Promise<{
+  percent: number;
+  label: string | null;
+  countryCode: string;
+  exempt: boolean;
+  assumed: boolean;
+}> {
+  const declared = tenantId ? await declaredBillingCountry(tenantId) : null;
+  const rate = await resolveTaxRate(declared || DEFAULT_DISPLAY_COUNTRY);
+  return { ...rate, assumed: !declared };
+}
+
 export async function quote(input: {
   planKey: string;
   planVersion?: number;
@@ -431,6 +481,11 @@ export async function quote(input: {
     now,
   );
 
+  // The country the customer declared, when there is one. Absent for an
+  // anonymous catalogue view, which is exactly when the display falls back to
+  // the default jurisdiction and marks the total as assumed.
+  const billingCountry = input.tenantId ? await declaredBillingCountry(input.tenantId) : null;
+
   return {
     planKey: plan.key,
     planVersion: plan.version,
@@ -438,6 +493,7 @@ export async function quote(input: {
     voiceVolumeOptionKey: voiceOpt?.key ?? null,
     monthlyPrice: price,
     monthlyPriceDisplay: await toDisplayPrice(price, input.displayCurrency ?? "USD", now),
+    tax: await taxForDisplay(toDecimalString(price), billingCountry),
     includedCredits: chatCredits + voiceCredits,
     chatCredits,
     voiceCredits,

@@ -30,6 +30,7 @@ import { getBalance } from "./wallet";
 // answer different questions - "is this in their plan" versus "is this switched
 // on for them" - and the commercial one is the one that decides billing.
 import { isEntitled } from "./entitlement-resolver";
+import { readPaygAccess } from "./spend-window";
 
 export type EnforcementMode = "off" | "audit" | "enforce";
 
@@ -334,6 +335,15 @@ export async function checkPaidAccess(query: PaidAccessQuery): Promise<PaidAcces
     return ALLOW(mode, null);
   }
   if (balance <= 0 || balance < (query.requiredCredits ?? 0)) {
+    // A spent wallet is not the end of the story when the organization chose
+    // pay-as-you-go: the work continues and the bill arrives when the cycle
+    // closes. The ceiling is what stops it, and it is checked HERE, before the
+    // call runs, as well as on every accrual afterwards. Checking it only when
+    // the invoice is drawn up would make it a receipt rather than a limit.
+    const payg = await readPaygAccess(query.tenantId, now);
+    if (payg.enabled && payg.headroom > 0) {
+      return ALLOW(mode, balance);
+    }
     return deny(mode, "credits_exhausted", { feature: query.feature, balance });
   }
 

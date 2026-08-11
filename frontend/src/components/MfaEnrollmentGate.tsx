@@ -19,8 +19,9 @@
  * including the SYSTEM_ADMIN /system console (for whom MFA is always mandatory).
  */
 
+import { useAppPathname } from "@/lib/pathname";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
+
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import { getMfaGate, type MfaGate } from "@/lib/api";
@@ -33,7 +34,7 @@ const EXEMPT_PREFIXES = ["/login", "/auth", "/join", "/logout"];
 export function MfaEnrollmentGate() {
   const { user, token, logout } = useAuth();
   const { locale } = useI18n();
-  const pathname = usePathname();
+  const pathname = useAppPathname();
   const he = locale === "he";
   const L = (en: string, heb: string) => (he ? heb : en);
 

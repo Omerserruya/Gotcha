@@ -47,3 +47,45 @@ describe("§3 FE↔BE validator parity: shared codes exist on both sides", () =>
     expect(feSrc).toMatch(/SINGLETON_TYPES = new Set\(\["start", "default_fallback"\]\)/);
   });
 });
+
+// ─── Nodes stranded behind a terminal step ──────────────────────
+//
+// The incident shape: a flow sent its first message, handed off at a route
+// step, and the send_message / send_interactive drawn AFTER that step never
+// ran. They had an incoming edge, so the dangling-node rule stayed quiet, and
+// the author saw a clean canvas.
+describe("§3 unreachable-after-terminal", () => {
+  const chain = [
+    n("s", "channel_entry"),
+    n("m1", "send_message_text", { text: "step 1" }),
+    n("r", "route_target", { routeType: "agent", targetId: "agent-1" }),
+    n("m2", "send_message_text", { text: "never runs" }),
+    n("i1", "send_message_interactive", { text: "never runs either" }),
+  ];
+  const wiring = [e("s", "m1"), e("m1", "r"), e("r", "m2"), e("m2", "i1")];
+
+  it("flags every node drawn after a route step", () => {
+    const issues = validateFlow(chain, wiring);
+    expect(ids(issues)).toContain("m2__after_terminal");
+    expect(ids(issues)).toContain("i1__after_terminal");
+  });
+
+  it("does not flag the nodes that precede the route step", () => {
+    const issues = validateFlow(chain, wiring);
+    expect(ids(issues)).not.toContain("m1__after_terminal");
+    expect(ids(issues)).not.toContain("r__after_terminal");
+  });
+
+  it("stays quiet on the same nodes wired BEFORE the route step", () => {
+    const ok = validateFlow(chain, [e("s", "m1"), e("m1", "m2"), e("m2", "i1"), e("i1", "r")]);
+    expect(ids(ok).some((i) => i.endsWith("__after_terminal"))).toBe(false);
+  });
+
+  it("treats end as terminal too", () => {
+    const issues = validateFlow(
+      [n("s", "channel_entry"), n("x", "end", { kind: "close" }), n("m", "send_message_text", { text: "hi" })],
+      [e("s", "x"), e("x", "m")],
+    );
+    expect(ids(issues)).toContain("m__after_terminal");
+  });
+});

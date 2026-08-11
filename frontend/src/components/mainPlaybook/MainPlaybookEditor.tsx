@@ -58,6 +58,7 @@ import { VoiceAddParticipantNode } from "./VoiceAddParticipantNode";
 import { TemplateGalleryModal } from "./TemplateGalleryModal";
 import { validateFlow } from "./flow-validator";
 import { validateConnection, type ConnectionError } from "./connection-rules";
+import { seedChannelTriggers } from "./channel-trigger";
 import { FlowIssuesPill } from "./FlowIssuesPill";
 import { NodeInspector } from "./NodeInspector";
 import { TRIGGER_TYPES, isTriggerNode } from "./trigger-types";
@@ -122,6 +123,15 @@ const nodeTypes: NodeTypes = {
 // ─── Node palette ──────────────────────────────────────────────
 // Shared palette for Main Playbook AND sub-flow editors.
 // Export so the sub-flow editor can reuse the same items.
+/**
+ * Ids for auto-seeded channel triggers. Same shape addNode uses, with an index
+ * so a batch seeded in the same millisecond cannot collide - two nodes sharing
+ * an id would make React Flow drop one and the edges pointing at it.
+ */
+function seedTriggerId(index: number): string {
+  return `channel_entry-${Date.now()}-${index}`;
+}
+
 export const NODE_PALETTE = [
   {
     category: "Triggers",
@@ -191,23 +201,13 @@ export const NODE_PALETTE = [
   {
     category: "Flow Control",
     items: [
-      {
-        type: "start",
-        label: "Start",
-        desc: "Entry point (required for sub-flows)",
-        color: "emerald",
-        bg: "bg-emerald-50",
-        border: "border-emerald-200",
-        text: "text-emerald-600",
-        iconBg: "bg-emerald-100",
-        hoverBg: "hover:bg-emerald-100",
-        ring: "ring-emerald-300",
-        icon: (
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z" />
-          </svg>
-        ),
-      },
+      // "Start" is deliberately absent. It was a second way to say the same
+      // thing as Channel Entry - its only real setting was an entry trigger
+      // whose default option read "Message received" - and two entry nodes on
+      // one palette left authors guessing which one actually starts a flow.
+      // Channel Entry is the answer: it names the channel the run comes in on.
+      // The registry keeps the `start` type so canvases already holding one
+      // still render, and the executor still treats it as a sub-flow entry.
       {
         type: "end",
         label: "End",
@@ -972,12 +972,17 @@ function MainPlaybookEditorInner({ onBack, embedded }: Props) {
   // exactly which one was just connected and can wire it up.
   const didFocusParamRef = useRef(false);
   useEffect(() => {
-    if (didFocusParamRef.current || !reactFlowInstance || nodes.length === 0) return;
+    if (didFocusParamRef.current || !reactFlowInstance || loading) return;
     const focus = new URLSearchParams(window.location.search).get("focus");
     if (!focus) return;
     const target = nodes.find(
       (n) => n.type === "channel_entry" && String(n.data?.channelType || "").toLowerCase() === focus.toLowerCase(),
     );
+    // "Set flow" on the Channels page sends the author here to wire that
+    // channel up. Arriving to find no entry node for it - and this effect
+    // quietly returning - was the dead end. Seeding happens on load, so a
+    // miss here means the channel list has not caught up yet; wait for it
+    // rather than dropping the request.
     if (!target) return;
     didFocusParamRef.current = true;
     focusNode(target.id);
@@ -987,7 +992,7 @@ function MainPlaybookEditorInner({ onBack, embedded }: Props) {
     }, 4500);
     // Drop the param so a refresh doesn't re-trigger the focus animation.
     window.history.replaceState({}, "", "/ai-studio/router");
-  }, [nodes, reactFlowInstance, focusNode, setNodes]);
+  }, [nodes, reactFlowInstance, focusNode, setNodes, loading]);
 
   // Shared data for dropdowns inside nodes
   const [agents, setAgents] = useState<any[]>([]);
@@ -1044,14 +1049,22 @@ function MainPlaybookEditorInner({ onBack, embedded }: Props) {
           // older version can arrive with its entry node at a negative X, which
           // would drag the left boundary out with it and open the canvas on
           // empty space.
-          setNodes(normalizeGraphPositions(restoredNodes));
+          // A channel connected after this canvas was last saved has no entry
+          // node, so nothing on the canvas reacts to it. Put its trigger on
+          // the board rather than leaving the author to guess it is missing.
+          const late = seedChannelTriggers(restoredNodes as any, channelsData, seedTriggerId);
+          setNodes(normalizeGraphPositions([...restoredNodes, ...(late as any[])]));
           setEdges(restoredEdges);
         } else {
-          // No saved canvas yet - open the template gallery so the author
-          // can pick a starting point instead of seeing a blank sheet.
-          setNodes([]);
+          // No saved canvas yet. Start them on the triggers for the channels
+          // they have already connected - that is the one part of the process
+          // we can know without asking. The template gallery only takes over
+          // when there is nothing to seed, so it never buries a real trigger
+          // behind a modal.
+          const seeded = seedChannelTriggers([], channelsData, seedTriggerId);
+          setNodes(seeded as any[]);
           setEdges([]);
-          setTemplateGalleryOpen(true);
+          if (seeded.length === 0) setTemplateGalleryOpen(true);
         }
       })
       .catch(console.error)
@@ -1482,7 +1495,7 @@ function MainPlaybookEditorInner({ onBack, embedded }: Props) {
     // Editor must own its own height: AppLayout's <main> is `flex-1` with no
     // explicit height, so `h-full` (= 100% of parent) collapses to auto.
     // Use viewport units, subtracting AppLayout's 8px top + 8px bottom padding.
-    <div className={fullscreen ? "fixed inset-0 z-40 bg-white h-screen flex flex-col overflow-hidden" : (embedded ? "h-full flex flex-col overflow-hidden" : "h-screen md:h-[calc(100vh-1rem)] flex flex-col overflow-hidden")}>
+    <div className={fullscreen ? "fixed inset-0 z-40 bg-white h-[100vh] flex flex-col overflow-hidden" : (embedded ? "h-full flex flex-col overflow-hidden" : "h-screen flex flex-col overflow-hidden")}>
       {/* Toolbar - breadcrumb left, secondary actions middle, primary CTA right */}
       <div className="bg-white border-b border-[var(--border-hairline)] px-2 md:px-4 h-14 flex items-center gap-2 md:gap-3 z-10">
         {onBack && (

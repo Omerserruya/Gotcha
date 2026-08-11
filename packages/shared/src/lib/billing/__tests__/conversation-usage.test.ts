@@ -19,22 +19,47 @@ const db = {
   aggregates: [] as any[],
   links: [] as any[],
   voiceSessions: [] as any[],
+  /**
+   * Every read of the TenantGuard-scoped `Conversation` model, and whether it
+   * happened inside a cross-tenant scope. A `false` here is the exact
+   * production failure this file guards against: the guard refuses the query,
+   * the throw takes the whole usage stage with it, and the tick then reports
+   * `settled: 0, discovered: 0` - indistinguishable from "nothing was due".
+   */
+  guardedReads: [] as { op: string; scoped: boolean }[],
+  crossTenantDepth: 0,
 };
 
 let idSeq = 0;
 const nextId = () => `id-${++idSeq}`;
 
 vi.mock("../../prisma", () => ({
+  // Mirrors the real helper: adopt the promise INSIDE the scope. The module
+  // under test wraps its platform-wide conversation reads in this, so a mock
+  // without it makes every one of those call sites throw.
+  withCrossTenantAccess: async (fn: () => Promise<unknown>) => {
+    db.crossTenantDepth++;
+    try {
+      return await fn();
+    } finally {
+      db.crossTenantDepth--;
+    }
+  },
   prisma: {
     conversation: {
-      findUnique: async ({ where }: any) => db.conversations.find((c) => c.id === where.id) ?? null,
-      findMany: async ({ where }: any) =>
-        db.conversations.filter((c) => {
+      findUnique: async ({ where }: any) => {
+        db.guardedReads.push({ op: "conversation.findUnique", scoped: db.crossTenantDepth > 0 });
+        return db.conversations.find((c) => c.id === where.id) ?? null;
+      },
+      findMany: async ({ where }: any) => {
+        db.guardedReads.push({ op: "conversation.findMany", scoped: db.crossTenantDepth > 0 });
+        return db.conversations.filter((c) => {
           if (where?.status && c.status !== where.status) return false;
           if (where?.closedAt?.lte && (!c.closedAt || c.closedAt > where.closedAt.lte)) return false;
           if (where?.closedAt?.not === null && !c.closedAt) return false;
           return true;
-        }),
+        });
+      },
     },
     voiceCallSession: {
       findUnique: async ({ where }: any) => db.voiceSessions.find((v) => v.conversationId === where.conversationId) ?? null,
@@ -144,7 +169,38 @@ beforeEach(() => {
   db.aggregates = [];
   db.links = [];
   db.voiceSessions = [];
+  db.guardedReads = [];
+  db.crossTenantDepth = 0;
   idSeq = 0;
+});
+
+describe("conversation usage - tenant guard", () => {
+  // Regression: the settlement sweep reads `Conversation` platform-wide, with
+  // no tenant in hand. Unscoped, the TenantGuard refuses it, and since the
+  // sweep is the first statement of the usage stage the throw killed the whole
+  // stage - which then reported `settled: 0, discovered: 0` and looked idle.
+  it("reads conversations platform-wide only inside a cross-tenant scope", async () => {
+    const closedLongAgo = new Date(NOW.getTime() - SETTLEMENT_WINDOW_MS - 60_000);
+    seedConversation({ closedAt: closedLongAgo, status: "CLOSED" });
+    seedLog({ id: "log-1" });
+
+    await settleDueConversations(NOW, 50);
+
+    const unscoped = db.guardedReads.filter((r) => !r.scoped);
+    expect(db.guardedReads.length).toBeGreaterThan(0);
+    expect(unscoped).toEqual([]);
+  });
+
+  it("scopes the primary-key lookup too - the tenant is what it is there to learn", async () => {
+    seedConversation({ closedAt: null });
+    seedLog({ id: "log-1" });
+
+    await aggregateConversation(C, { now: NOW });
+
+    const pk = db.guardedReads.filter((r) => r.op === "conversation.findUnique");
+    expect(pk.length).toBeGreaterThan(0);
+    expect(pk.every((r) => r.scoped)).toBe(true);
+  });
 });
 
 describe("conversation usage - attribution", () => {

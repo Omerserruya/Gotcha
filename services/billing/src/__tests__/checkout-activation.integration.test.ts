@@ -78,7 +78,7 @@ async function fixture(opts: {
           fxQuotedAt: new Date(),
           chargeAmount: 499,
           chargeCurrency: "ILS",
-          providerCurrencyId: 1,
+          providerCurrencyId: 5,
           expiresAt: new Date(Date.now() + 3_600_000),
           status: "ACTIVE",
         },

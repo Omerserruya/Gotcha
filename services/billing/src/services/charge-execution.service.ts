@@ -1,8 +1,14 @@
 /**
- * Taking a payment.
+ * Taking a payment - the self-serve checkout path.
  *
- * One function that every paid path goes through - initial checkout, renewal,
- * credit purchase, auto top-up. Having one means the double-charge protections
+ * The other one is `chargeFor` in invoice.service, which renewals, plan
+ * changes, credit purchases and auto top-ups use. The two claim and lease a
+ * charge differently, and they should: a checkout is a person clicking Pay,
+ * a renewal is a scheduler. What must NOT differ is what the customer ends up
+ * holding, so tax and the tax document are shared code (tax-document.service)
+ * rather than reimplemented here.
+ *
+ * The double-charge protections below are the reason this file exists: they
  * cannot be forgotten by a caller that only meant to add a small feature.
  *
  * The sequence, and why it is this order:
@@ -45,6 +51,8 @@ import {
   createPaymentQuote,
   type QuotePurpose,
 } from "./payment-quote.service";
+import { taxForProfile } from "./tax.service";
+import { issueTaxDocument, receiptIdentityForEntity } from "./tax-document.service";
 
 export class ChargeRefused extends Error {
   constructor(readonly code: string, detail?: string) {
@@ -94,7 +102,12 @@ export async function executeCharge(input: ExecuteChargeInput): Promise<ExecuteC
   const now = input.now ?? new Date();
   const owner = input.owner ?? `${process.pid}:${process.env.HOSTNAME ?? "local"}`;
 
-  const method = await prisma.paymentMethod.findUnique({ where: { id: input.paymentMethodId } });
+  const method = await prisma.paymentMethod.findUnique({
+    where: { id: input.paymentMethodId },
+    // The profile comes with it: it carries the billable entity the receipt is
+    // made out to, and the country without which the charge cannot be priced.
+    include: { profile: true },
+  });
   if (!method) throw new ChargeRefused("payment_method_not_found");
   if (method.status !== "ACTIVE") throw new ChargeRefused("payment_method_not_active", method.status);
 
@@ -131,6 +144,8 @@ export async function executeCharge(input: ExecuteChargeInput): Promise<ExecuteC
 
   let quote;
   let chargeAmount: string;
+  let taxed;
+  let identity;
   try {
     // Freeze the conversion now that this worker holds the exclusive right to
     // charge, so no other caller can retire it before it is used.
@@ -144,7 +159,20 @@ export async function executeCharge(input: ExecuteChargeInput): Promise<ExecuteC
       now,
     });
     assertChargeable(quote, now);
-    chargeAmount = new Prisma.Decimal(quote.chargeAmount).toFixed(2);
+
+    // Tax, on the CONVERTED net. This is the customer's FIRST payment, so a
+    // net charge here is the one that most reliably goes unnoticed: nobody has
+    // a previous invoice to compare it against. Computing it before conversion
+    // would round twice and leave net + tax not equalling gross, which is a
+    // document whose own three numbers disagree.
+    //
+    // Throws when no country has been declared, and that refusal is the point:
+    // charging net would leave an Israeli customer owing VAT nobody collected.
+    identity = await receiptIdentityForEntity(method.profile.billableEntityId);
+    taxed = await taxForProfile(new Prisma.Decimal(quote.chargeAmount).toFixed(2), {
+      billingCountry: identity?.billingCountry ?? null,
+    });
+    chargeAmount = taxed.gross;
 
     // Bound to the attempt BEFORE any request goes out, so a crash mid-flight
     // leaves a row that says exactly what was going to be submitted - which is
@@ -153,7 +181,10 @@ export async function executeCharge(input: ExecuteChargeInput): Promise<ExecuteC
       where: { id: attempt.id },
       data: {
         paymentQuoteId: quote.id,
-        chargeAmount: quote.chargeAmount,
+        chargeAmount: taxed.gross,
+        netAmount: taxed.net,
+        taxPercent: taxed.percent,
+        taxAmount: taxed.tax,
         chargeCurrency: quote.chargeCurrency,
         providerCurrencyId: quote.providerCurrencyId,
       },
@@ -193,6 +224,37 @@ export async function executeCharge(input: ExecuteChargeInput): Promise<ExecuteC
     });
 
     await markProviderResponseReceived({ attemptId: attempt.id, owner }).catch(() => {});
+
+    // The tax document, once the money has actually moved.
+    //
+    // cc/bill takes money and issues nothing - its documented parameters
+    // contain no field that would produce a document - so this is a second
+    // call, and it has to come after, because a receipt for a charge that then
+    // declined is a document for money nobody paid. It can never fail the
+    // charge: the money is gone, and reporting an error would tell the caller
+    // to retry a completed payment.
+    if (result.state === "SUCCEEDED" && method.provider === "ICOUNT" && identity) {
+      const doc = await issueTaxDocument({
+        tenantId: input.tenantId,
+        identity,
+        description: input.description,
+        currencyId: quote.providerCurrencyId,
+        net: taxed.net,
+        vatPercent: taxed.percent,
+        gross: taxed.gross,
+        confirmationCode: result.result?.providerChargeRef,
+        cardBrand: method.brand,
+        cardLast4: method.last4,
+      });
+      if (doc) {
+        await prisma.paymentAttempt
+          .update({
+            where: { id: attempt.id },
+            data: { documentRef: doc.docNumber, documentUrl: doc.docUrl },
+          })
+          .catch(() => {});
+      }
+    }
 
     return {
       state: result.state,

@@ -19,7 +19,9 @@ import {
   decryptCredentials,
   mintOAuthState,
   consumeOAuthState,
-  resolvePrincipal, metaGraphBaseUrl,
+  resolvePrincipal, metaGraphBaseUrl, metaGraphVersion,
+  buildEmbeddedSignupLaunch,
+  embeddedSignupDialogUrl,
   resolveAppPublicUrl,
 } from "@chatcenter/shared";
 
@@ -682,9 +684,16 @@ router.get("/oauth/init", async (req: Request, res: Response) => {
     let oauthUrl: string;
 
     if (platform === "whatsapp") {
-      // WhatsApp Embedded Signup: config_id + extras triggers the signup wizard
-      const extras = encodeURIComponent(JSON.stringify({ setup: { channel: "WHATSAPP" } }));
-      oauthUrl = `https://www.facebook.com/v25.0/dialog/oauth?client_id=${META_APP_ID}&config_id=${EMBEDDED_SIGNUP_CONFIG_ID}&redirect_uri=${encodeURIComponent(OAUTH_REDIRECT_URI)}&state=${encodeURIComponent(state)}&response_type=code&override_default_response_type=true&extras=${extras}`;
+      // Built from the SAME object the browser's FB.login uses, so the two
+      // entry points cannot describe different Embedded Signup experiences.
+      // The old hand-rolled URL sent `setup: { channel: "WHATSAPP" }`, which is
+      // not a documented field, and no version at all.
+      oauthUrl = embeddedSignupDialogUrl({
+        launch: buildEmbeddedSignupLaunch(process.env),
+        redirectUri: OAUTH_REDIRECT_URI,
+        state,
+        dialogVersion: metaGraphVersion(),
+      });
     } else if (platform === "gmail") {
       // Google OAuth2 for Gmail API
       const googleScopes = [
@@ -2000,6 +2009,10 @@ router.get("/config", authenticate, resolveTenant, requirePermission("channels:m
     data: {
       metaAppId: META_APP_ID,
       embeddedSignupConfigId: EMBEDDED_SIGNUP_CONFIG_ID,
+      // The canonical launch parameters. The browser passes these straight to
+      // FB.login rather than assembling its own, which is what let the two
+      // paths drift onto different Embedded Signup versions.
+      embeddedSignup: buildEmbeddedSignupLaunch(process.env),
       oauthConfigured: !!(META_APP_ID && META_APP_SECRET && OAUTH_REDIRECT_URI),
       whatsappConfigured: !!(META_APP_ID && META_APP_SECRET && EMBEDDED_SIGNUP_CONFIG_ID),
       // Per-provider readiness: a provider whose app credentials are absent

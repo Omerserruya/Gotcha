@@ -56,6 +56,15 @@ router.get(
           chargeAmount: c.chargeAmount == null ? null : String(c.chargeAmount),
           chargeCurrency: c.chargeCurrency,
           exchangeRate: c.fxRate == null ? null : Number(c.fxRate).toFixed(4),
+          // What the charge was made of, so the tax on the document can be
+          // checked against the amount that left the card.
+          netAmount: c.netAmount == null ? null : String(c.netAmount),
+          taxPercent: c.taxPercent == null ? null : Number(c.taxPercent),
+          taxAmount: c.taxAmount == null ? null : String(c.taxAmount),
+          // The legal document iCount issued. This is the receipt - our own
+          // Invoice row is a mirror of it, not a substitute.
+          documentRef: c.documentRef,
+          documentUrl: c.documentUrl,
           attemptNumber: c.attemptNumber,
           createdAt: c.createdAt,
         })),

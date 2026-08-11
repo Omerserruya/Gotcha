@@ -19,6 +19,13 @@ const subscriptionUpdates: any[] = [];
 let chargeSucceeds = true;
 
 vi.mock("@chatcenter/shared", () => ({
+  // Spend-window helpers live in shared so the AI gate and this service compute
+  // the same window. Exhaustive mocks of this barrel must supply them.
+  periodKeyFor: (d: Date) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`,
+  spendWindowKey: (sub: { currentPeriodStart: Date | null } | null | undefined, now: Date = new Date()) => {
+    const anchor = sub?.currentPeriodStart ?? now;
+    return `${anchor.getUTCFullYear()}-${String(anchor.getUTCMonth() + 1).padStart(2, "0")}`;
+  },
   // Version pins now live in shared modules, so exhaustive mocks of this
   // barrel must supply them. Returning the real defaults keeps any URL the
   // code builds meaningful instead of "undefined/...".

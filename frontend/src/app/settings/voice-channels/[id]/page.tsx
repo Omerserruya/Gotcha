@@ -363,12 +363,17 @@ export default function VoiceChannelDetailPage() {
           <div className="bg-white rounded-2xl ring-1 ring-gray-100 shadow-sm p-5 md:p-6">
             <div className="flex items-start justify-between gap-3 mb-2">
               <div>
-                <h2 className="font-semibold text-gray-900">AI Employee</h2>
+                <h2 className="font-semibold text-gray-900">
+                  AI Employee{" "}
+                  <span className="align-middle text-[10px] font-medium uppercase tracking-wider text-gray-400">
+                    optional
+                  </span>
+                </h2>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  The AI Employee that drives call-pilot turns on this channel. All
-                  the agent-level configuration (language, persona, tone, goals,
-                  guardrails) is set on the employee - edit it in Settings → AI
-                  Employees.
+                  Calls ring your team and are answered normally without one. Attach an
+                  AI Employee only if you want live call-pilot guidance while the call is
+                  running. All of its configuration (language, persona, tone, goals,
+                  guardrails) lives on the employee - edit it in Settings → AI Employees.
                 </p>
               </div>
               {aiAgentId && (
@@ -393,8 +398,14 @@ export default function VoiceChannelDetailPage() {
               ))}
             </select>
             {aiAgents.length === 0 && (
-              <p className="mt-2 text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded px-2 py-1">
-                No AI Employees exist yet. Create one in Settings → AI Employees first.
+              // Deliberately NOT a warning. This said "Create one ... first" in
+              // amber, on the page a merchant lands on the moment their number
+              // connects - which reads as a prerequisite and stopped people
+              // finishing setup. Nothing here gates anything: inbound routing
+              // never reads ai_agent_id.
+              <p className="mt-2 text-[11px] text-gray-500">
+                No AI Employees yet, and none is needed for calls to work. You can add one
+                any time in Settings → AI Employees.
               </p>
             )}
           </div>
@@ -407,7 +418,12 @@ export default function VoiceChannelDetailPage() {
           <div className="bg-white rounded-2xl ring-1 ring-gray-100 shadow-sm p-5 md:p-6">
             <div className="flex items-start justify-between gap-3 mb-2">
               <div>
-                <h2 className="font-semibold text-gray-900">Pipeline funnel</h2>
+                <h2 className="font-semibold text-gray-900">
+                  Pipeline funnel{" "}
+                  <span className="align-middle text-[10px] font-medium uppercase tracking-wider text-gray-400">
+                    optional
+                  </span>
+                </h2>
                 <p className="text-xs text-gray-500 mt-0.5">
                   Which funnel the live copilot uses for calls answered on this
                   channel. Leave on <em>Auto</em> to fall back to the
@@ -440,12 +456,12 @@ export default function VoiceChannelDetailPage() {
               ))}
             </select>
             {funnels.length === 0 && (
-              <p className="mt-2 text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded px-2 py-1">
-                No funnels exist yet.{" "}
-                <Link href="/settings/funnels" className="font-semibold underline">
-                  Create one first
+              <p className="mt-2 text-[11px] text-gray-500">
+                No funnels yet. Calls work without one;{" "}
+                <Link href="/settings/funnels" className="font-medium underline">
+                  create a funnel
                 </Link>{" "}
-                to enable stage-driven goals.
+                only if you want stage-driven goals during a call.
               </p>
             )}
           </div>

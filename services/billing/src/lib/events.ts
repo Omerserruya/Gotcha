@@ -24,6 +24,10 @@ export type BillingEventType =
   // nothing automated may act on it.
   | "subscription.renewal_unknown"
   | "payment.reconciliation_required"
+  // The money moved and the tax document did not issue. NOT a payment failure -
+  // nothing may retry the charge on the strength of it. It is a document to
+  // chase, with the charge reference already in hand.
+  | "payment.document_failed"
   | "invoice.issued"
   | "invoice.paid"
   | "payment.failed"
@@ -32,7 +36,11 @@ export type BillingEventType =
   | "credit.exhausted"
   | "credit.auto_purchase_succeeded"
   | "credit.auto_purchase_failed"
-  | "credit.auto_purchase_ceiling_reached";
+  | "credit.auto_purchase_ceiling_reached"
+  // Pay-as-you-go hit its cap. Distinct from the auto-purchase ceiling: that one
+  // means "we stopped buying", this one means "we stopped serving", and the
+  // customer needs to be told a different thing in each case.
+  | "credit.payg_ceiling_reached";
 
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
 let _queue: Queue | null = null;

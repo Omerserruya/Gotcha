@@ -128,6 +128,8 @@ export interface StartSessionInput {
   checkoutId?: string | null;
   providerClientId?: string | null;
   customerName?: string;
+  customerVatId?: string;
+  customerAddress?: string;
   customerEmail?: string;
   successUrl?: string;
   failureUrl?: string;
@@ -169,6 +171,8 @@ export async function startTokenizationSession(input: StartSessionInput): Promis
     customClientId,
     clientName: input.customerName,
     email: input.customerEmail,
+    vatId: input.customerVatId,
+    address: input.customerAddress,
     successUrl: input.successUrl,
     failureUrl: input.failureUrl,
     cancelUrl: input.cancelUrl,
@@ -180,7 +184,10 @@ export async function startTokenizationSession(input: StartSessionInput): Promis
       tenantId: input.tenantId,
       checkoutId: input.checkoutId ?? null,
       customClientId,
-      providerClientId: input.providerClientId ?? null,
+      // The id the provider just established wins over whatever the caller
+      // guessed. Without it the session - and later the billing profile - has
+      // no provider-side customer to attribute a charge to.
+      providerClientId: start.providerClientId ?? input.providerClientId ?? null,
       pageId,
       status: "AWAITING_RETURN",
       baselineFingerprints: baseline,
@@ -316,6 +323,24 @@ async function promoteToDefault(paymentMethodId: string): Promise<void> {
  */
 async function storeCard(session: TokenizationSession, card: StoredCard): Promise<string> {
   const profile = await resolveBillingProfile(session.tenantId);
+
+  // Carry the provider's customer id onto the profile. The charge path reads
+  // it from there, and a profile without one makes every charge unattributable
+  // no matter how correctly the card itself was stored.
+  //
+  // Only filled when empty. Overwriting an existing id would silently move a
+  // profile's billing history to a different provider-side customer.
+  // Conditional in the WHERE rather than read-then-write, so two sessions
+  // finishing at once cannot race one another's id in.
+  if (session.providerClientId) {
+    await prisma.billingProfile.updateMany({
+      where: {
+        id: profile,
+        OR: [{ providerCustomerId: null }, { providerCustomerId: "" }],
+      },
+      data: { providerCustomerId: session.providerClientId },
+    });
+  }
 
   const encrypted = encryptPaymentToken(card.token);
   const created = await prisma.paymentMethod.create({

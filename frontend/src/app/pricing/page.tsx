@@ -17,6 +17,7 @@ import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import { publicPricingEnabled } from "@/lib/api-public-pricing";
+import LoginLink from "@/components/LoginLink";
 import { usePublicPricing, planCopy } from "@/components/pricing/usePublicPricing";
 import {
   Eyebrow, SectionHeading, CurrencyToggle, PlanSkeleton, Reveal,
@@ -56,6 +57,17 @@ export default function PricingPage() {
   }
 
   const disclaimer = isHe ? p.catalog?.disclaimer.he ?? "" : p.catalog?.disclaimer.en ?? "";
+
+  // Listed prices are net. The public page has no visitor country to go on, so
+  // it names the rate rather than folding it into a total - a total including
+  // tax a visitor abroad will not be charged is the worse of the two errors.
+  const tax = p.catalog?.tax;
+  const taxNote =
+    tax && !tax.exempt
+      ? isHe
+        ? `המחירים אינם כוללים ${tax.label ?? 'מע"מ'} ${tax.percent}%`
+        : `Prices exclude ${tax.label ?? "VAT"} ${tax.percent}%`
+      : null;
 
   return (
     <Shell t={t}>
@@ -106,6 +118,7 @@ export default function PricingPage() {
               t={t}
               ctaHref={ctaHref}
               ctaLabel={ctaLabel}
+              taxNote={taxNote}
             />
           )}
           <p className="mt-5 text-[12px] leading-[1.6] text-gray-400">{disclaimer}</p>
@@ -217,12 +230,9 @@ function Shell({ t, children }: { t: (k: string) => string; children: React.Reac
             >
               {locale === "he" ? "English" : "עברית"}
             </button>
-            <Link
-              href="/login"
-              className="text-[13px] font-medium text-gray-500 transition-colors hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 rounded px-1"
-            >
+            <LoginLink className="text-[13px] font-medium text-gray-500 transition-colors hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 rounded px-1">
               {t("landing.nav.login")}
-            </Link>
+            </LoginLink>
             <Link
               href="/early-access"
               className="rounded-full bg-primary-500 px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:ring-offset-2"

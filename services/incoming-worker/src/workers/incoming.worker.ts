@@ -445,12 +445,20 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
       // route_target) from handing a sales lead to the support employee. Only
       // fires on recognized picker payloads; ordinary quick-replies / text fall
       // through to the normal routing path below unchanged.
-      if (interactiveReply?.payload) {
+      //
+      // AND only when no flow is mid-execution. A parked `chatbotNodeId` means
+      // an authored flow is waiting on exactly this reply, and that flow is
+      // authoritative - the picker is a fallback for conversations nothing is
+      // driving, not a competing routing engine. `applyDepartmentPickerReply`
+      // re-checks this itself; the condition is repeated here so the common
+      // case does not even reach it.
+      if (interactiveReply?.payload && !(conversation as any).chatbotNodeId) {
         const { applyDepartmentPickerReply } = await import("../services/department-routing.service");
         const picked = await applyDepartmentPickerReply({
           tenantId,
           conversationId: conversation.id,
           payload: interactiveReply.payload,
+          activeFlowCursor: (conversation as any).chatbotNodeId ?? null,
         });
         if (picked.handled && picked.assignedAiAgentId) {
           const { processAIBot } = await import("../services/ai-bot.service");
@@ -528,6 +536,11 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
           message: body,
           channel: channel.toLowerCase(),
           resumeNodeId: (conversation as any).chatbotNodeId,
+          // `body` is the button's TITLE for an interactive reply (the webhook
+          // sets it from `interactiveReply.title`), while a quick-reply edge is
+          // keyed on the reply's PAYLOAD. Passing the payload is what lets the
+          // resume pick the branch the customer actually tapped.
+          replyPayload: interactiveReply?.payload ?? null,
         });
         return;
       }

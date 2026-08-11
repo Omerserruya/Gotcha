@@ -31,6 +31,7 @@ import { ensureBillableEntity } from "./billable-entity.service";
 import { getActivePlanVersion } from "./plan.service";
 import { createTrialSubscription } from "./subscription.service";
 import { periodKeyFor } from "../lib/period";
+import { commercialCurrencyFor } from "../lib/currency";
 import { emitBillingEvent } from "../lib/events";
 
 export async function listEvaluationTemplates() {
@@ -199,7 +200,13 @@ export async function setupEvaluation(input: {
   // No auto top-up on an evaluation unless the template says so.
   await prisma.autoPurchasePolicy.upsert({
     where: { billableEntityId: entityId },
-    create: { billableEntityId: entityId, enabled: template.autoPurchaseEnabled, currency: "USD", updatedBy: input.actor },
+    create: {
+      billableEntityId: entityId,
+      enabled: template.autoPurchaseEnabled,
+      // The organization's commercial currency, not a literal. See lib/currency.
+      currency: await commercialCurrencyFor(entityId),
+      updatedBy: input.actor,
+    },
     update: { enabled: template.autoPurchaseEnabled, updatedBy: input.actor },
   });
 

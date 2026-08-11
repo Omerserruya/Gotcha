@@ -87,6 +87,12 @@ export const AuditAction = {
   //    identity-adjacent actions it CAN perform) ──
   PASSWORD_RESET_REQUESTED: "credential.password_reset_requested",
   SETUP_LINK_ISSUED: "credential.setup_link_issued",
+  // The other two ends of the same link. REDEEMED fires when the recipient
+  // clicks and a fresh IdP recovery link is minted for them; REJECTED when the
+  // link was already expired, revoked or unknown. Recording the refusal is what
+  // makes "why did my invitation not work" answerable without reading logs.
+  SETUP_LINK_REDEEMED: "credential.setup_link_redeemed",
+  SETUP_LINK_REJECTED: "credential.setup_link_rejected",
   INTEGRATION_CREDENTIAL_UPDATED: "credential.integration_updated",
   INTEGRATION_CREDENTIAL_DELETED: "credential.integration_deleted",
   // ── Invite flow ──

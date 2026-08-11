@@ -254,3 +254,464 @@ describe("structural safety", () => {
     expect(provider).toContain('process.env.NODE_ENV === "production"');
   });
 });
+
+// ─── The card-entry round trip ──────────────────────────────────
+
+describe("adding a card sends the provider somewhere to return to", () => {
+  const routeSrc = readFileSync(join(__dirname, "../routes/payment-methods.ts"), "utf8");
+  const route = routeSrc.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+  const checkoutSrc = readFileSync(join(__dirname, "../routes/checkout-session.ts"), "utf8");
+
+  /**
+   * Storing a card is two steps: the provider's page takes it, then OUR server
+   * asks the provider what happened. The second step runs when the browser
+   * comes back - so without a return URL the provider shows its own thank-you
+   * page, the browser never returns, and the confirm never fires.
+   *
+   * Observed in production: the card was stored at iCount, the tokenization
+   * session sat at AWAITING_RETURN until it expired, and the customer was told
+   * no card was saved. The plumbing for successUrl existed all the way through
+   * to `success_url` on generate_sale; only this call site omitted it, while
+   * the checkout route next door passed one.
+   */
+  it("passes a successUrl when starting a tokenization session", () => {
+    expect(route).toMatch(/startTokenizationSession\(\{[\s\S]*?successUrl:/);
+  });
+
+  it("builds that URL on our own origin rather than trusting the request", () => {
+    expect(route).toContain("buildReturnUrl(");
+    // The provider-boundary test already forbids reading a redirect off the
+    // request; this keeps the positive half in view next to it.
+    expect(route).not.toMatch(/req\.(body|query)\.(successUrl|returnUrl|redirect)/);
+  });
+
+  it("degrades instead of blocking when the public origin is unset", () => {
+    // A missing return URL costs the round trip. Throwing here would remove
+    // the only way to add a card at all.
+    expect(route).toMatch(/return undefined/);
+  });
+
+  it("stays consistent with the checkout route, which already returned", () => {
+    expect(checkoutSrc).toMatch(/successUrl:/);
+  });
+});
+
+// ─── Removing the last card ─────────────────────────────────────
+
+describe("the last card cannot be removed out from under a live subscription", () => {
+  const routeSrc = readFileSync(join(__dirname, "../routes/payment-methods.ts"), "utf8");
+  const route = routeSrc.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+
+  /**
+   * Reported from production: the only stored card could be removed while a
+   * subscription was active. Nothing stopped it, and nothing warned. The next
+   * renewal would fail with no_payment_method and the subscription would go
+   * PAST_DUE - the customer's first notice being lost access, from an action
+   * the UI presented as safe.
+   */
+  it("counts the other ACTIVE cards before removing", () => {
+    expect(route).toMatch(/paymentMethod\.count\(\{[\s\S]*?status: "ACTIVE"[\s\S]*?id: \{ not:/);
+  });
+
+  it("refuses with a machine-readable code rather than silently succeeding", () => {
+    expect(route).toContain("last_payment_method_in_use");
+    expect(route).toMatch(/status\(409\)/);
+  });
+
+  it("only protects when a charge is actually still coming", () => {
+    // A free/POC plan, or one already cancelling at period end, strands nothing.
+    expect(route).toContain("CHARGING_STATUSES");
+    expect(route).toContain("cancelAtPeriodEnd");
+    expect(route).toMatch(/contractedPrice\(sub, plan\) > 0/);
+  });
+
+  it("uses the subscription's contracted price, not the live plan row alone", () => {
+    // contractedPrice prefers the immutable snapshot, so republishing a plan
+    // cannot change whether a customer is allowed to remove their card.
+    expect(route).toContain("contractedPrice");
+  });
+
+  it("keeps the cross-tenant scoping that was already there", () => {
+    expect(route).toMatch(/billingProfileId: profile\.id/);
+  });
+});
+
+// ─── The provider's customer id has to survive tokenization ─────
+
+describe("the provider customer id reaches the charge", () => {
+  const provSrc = readFileSync(join(__dirname, "../providers/icount.provider.ts"), "utf8");
+  const prov = provSrc.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+  const tokSrc = readFileSync(join(__dirname, "../services/tokenization.service.ts"), "utf8");
+  const tok = tokSrc.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+
+  /**
+   * iCount will not create a client during generate_sale - it answers
+   * client_not_found - so one is created first and returns an id. That id is
+   * what cc/bill attributes the charge to.
+   *
+   * It was created and then discarded. The card stored correctly, the billing
+   * profile kept an empty provider_customer_id, and every later charge was
+   * refused with "no client identifier - the charge could not be attributed".
+   * Observed in production, and the failure surfaced a step removed from its
+   * cause, which is why each hop is pinned separately here.
+   */
+  it("createClient's answer is kept, not discarded", () => {
+    expect(prov).toMatch(/const client = await api\.createClient\(/);
+    expect(prov).toMatch(/providerClientId: client\.clientId/);
+  });
+
+  it("the session records it, preferring what the provider just said", () => {
+    expect(tok).toMatch(/providerClientId: start\.providerClientId \?\? input\.providerClientId/);
+  });
+
+  it("storing a card carries it onto the billing profile", () => {
+    expect(tok).toMatch(/billingProfile\.updateMany\(/);
+    expect(tok).toMatch(/providerCustomerId: session\.providerClientId/);
+  });
+
+  it("fills it only when empty, so history cannot be reassigned", () => {
+    expect(tok).toMatch(/providerCustomerId: null/);
+    expect(tok).toMatch(/providerCustomerId: ""/);
+  });
+});
+
+// ─── A charge refused before it was sent ────────────────────────
+
+describe("a charge that never left the process is a failure, not an unknown", () => {
+  const invSrc = readFileSync(join(__dirname, "../services/invoice.service.ts"), "utf8");
+  const inv = invSrc.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+  const provSrc = readFileSync(join(__dirname, "../providers/icount.provider.ts"), "utf8");
+
+  /**
+   * Observed in production. assertChargeSafety rejected a charge for a missing
+   * client identifier - before any network call - but the Charge row had
+   * already been created PENDING, and only an `outcomeUnknown` provider error
+   * was handled. The row stayed PENDING for ever.
+   *
+   * The idempotency lookup reads a PENDING row as "still in flight", so every
+   * retry of that key answered outcome-unknown. A clean local misconfiguration
+   * became a permanent "we do not know whether we took your money" - the worst
+   * state this system has, reached without a single request being sent.
+   */
+  it("pre-flight refusals carry a neverSent marker", () => {
+    expect(provSrc).toContain("class ChargeRefusedBeforeSend");
+    expect(provSrc).toContain("readonly neverSent = true");
+    expect(provSrc).toContain("no_client_identifier");
+  });
+
+  it("every pre-flight guard raises it rather than a bare Error", () => {
+    const guard = provSrc.slice(provSrc.indexOf("function assertChargeSafety"), provSrc.indexOf("export const icountProvider"));
+    expect(guard).not.toMatch(/throw new Error\(/);
+    expect((guard.match(/ChargeRefusedBeforeSend/g) ?? []).length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("the charge is recorded FAILED, so the row cannot sit PENDING", () => {
+    expect(inv).toMatch(/err\?\.neverSent === true/);
+    expect(inv).toMatch(/status: "FAILED", failureCode/);
+  });
+
+  it("and is NOT reported as outcomeUnknown", () => {
+    const branch = inv.slice(inv.indexOf("err?.neverSent === true"), inv.indexOf("if (result.requiresReconciliation)"));
+    expect(branch).not.toContain("outcomeUnknown");
+  });
+
+  it("still treats a genuine provider ambiguity as unknown", () => {
+    // The conservative default has to survive: a mid-flight failure may have
+    // taken the money, and retrying it would take it twice.
+    expect(inv).toMatch(/err\?\.outcomeUnknown === true/);
+    expect(inv).toMatch(/status: "UNKNOWN"/);
+  });
+});
+
+// ─── Currency ids are the account's, not a guess ────────────────
+
+describe("iCount currency ids match the account", () => {
+  /**
+   * From the account itself - currency/get_list, cross-checked by
+   * currency/info reporting the account's own base currency:
+   *
+   *   ILS 5    USD 2    EUR 1    GBP 4
+   *
+   * ILS was 1 here. 1 is EUR. Every "ILS only" guard in this codebase was
+   * therefore enforcing euros, and because the wrong value agreed with itself
+   * in all three places that defined it, nothing disagreed and nothing failed.
+   * A live charge settled as EUR 3.00 instead of ILS 3.00 - about four times
+   * the intended amount. On a multi-currency account a wrong currency id does
+   * not error, it succeeds for the wrong money, which is the whole reason this
+   * is pinned rather than trusted.
+   *
+   * Both PayPages carried currency_id 5 the entire time. That was the clue.
+   */
+  const ACCOUNT_IDS = { ILS: 5, USD: 2, EUR: 1, GBP: 4 } as const;
+
+  it("ILS is 5 in the wire constant", () => {
+    const client = readFileSync(join(__dirname, "../providers/icount-client.ts"), "utf8");
+    expect(client).toContain(`CURRENCY_ID_ILS = ${ACCOUNT_IDS.ILS}`);
+  });
+
+  it("ILS is 5 in the quote enum, and USD stays 2", () => {
+    const quote = readFileSync(join(__dirname, "../services/payment-quote.service.ts"), "utf8");
+    expect(quote).toContain(`ILS: ${ACCOUNT_IDS.ILS}`);
+    expect(quote).toContain(`USD: ${ACCOUNT_IDS.USD}`);
+  });
+
+  it("ILS is 5 in the chargeable-currency map", () => {
+    const caps = readFileSync(join(__dirname, "../providers/capabilities.ts"), "utf8");
+    expect(caps).toContain(`{ ILS: ${ACCOUNT_IDS.ILS} }`);
+  });
+
+  it("nothing anywhere still calls 1 the shekel", () => {
+    // 1 is the euro. Any surviving "ILS: 1" is a charge in the wrong currency.
+    for (const rel of [
+      "../providers/icount-client.ts",
+      "../providers/capabilities.ts",
+      "../services/payment-quote.service.ts",
+    ]) {
+      const src = readFileSync(join(__dirname, rel), "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+      expect(src, `${rel} still maps ILS to 1`).not.toMatch(/ILS:\s*1\b/);
+      expect(src, `${rel} still sets CURRENCY_ID_ILS to 1`).not.toMatch(/CURRENCY_ID_ILS\s*=\s*1\b/);
+    }
+  });
+});
+
+// ─── Charging gross, and issuing the document ───────────────────
+
+describe("tax reaches the card and the document", () => {
+  const inv = readFileSync(join(__dirname, "../services/invoice.service.ts"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+  const client = readFileSync(join(__dirname, "../providers/icount-client.ts"), "utf8");
+  // The document and its delivery are shared by both charging paths, so they
+  // are asserted where they live rather than in one caller.
+  const doc = readFileSync(join(__dirname, "../services/tax-document.service.ts"), "utf8");
+
+  it("submits the gross, not the catalogue price", () => {
+    // Catalogue prices are net. Charging `net` would leave an Israeli customer
+    // owing VAT that nobody collected.
+    expect(inv).toMatch(/const chargeAmount = taxed\.gross/);
+  });
+
+  it("taxes the CONVERTED amount, so the three figures reconcile", () => {
+    // Taxing before conversion rounds twice, and net + tax stops equalling
+    // gross - which is a document whose own numbers disagree.
+    expect(inv).toMatch(/const netAmount = quote\.chargeAmount/);
+    expect(inv).toMatch(/taxForProfile\(netAmount/);
+  });
+
+  it("records what the charge was made of", () => {
+    for (const f of ["netAmount: taxed.net", "taxPercent: taxed.percent", "taxAmount: taxed.tax"]) {
+      expect(inv, `charge must record ${f}`).toContain(f);
+    }
+  });
+
+  it("fails the charge when no country was declared, rather than charging net", () => {
+    expect(inv).toContain("charge_not_taxable");
+    expect(inv).toMatch(/status: "FAILED", failureCode: code/);
+  });
+
+  it("issues invrec - the tax invoice AND receipt", () => {
+    expect(doc).toContain('export const TAX_DOCTYPE = "invrec"');
+    expect(doc).toMatch(/doctype: TAX_DOCTYPE/);
+  });
+
+  it("issues it only after the money actually moved", () => {
+    // A receipt for a charge that then declined is a document for money nobody
+    // paid.
+    expect(inv).toMatch(/if \(result\.success && ctx\.provider === "ICOUNT"\)/);
+  });
+
+  it("never lets a failed document fail the charge", () => {
+    // The money is gone. Reporting an error here tells the caller to retry a
+    // completed payment.
+    const block = doc.slice(doc.indexOf("createDocument({"));
+    expect(block).toContain("catch");
+    expect(block).toContain("payment.document_failed");
+    expect(block).toMatch(/return null/);
+    expect(block).not.toMatch(/throw /);
+  });
+
+  it("sends the receipt itself, and tells the provider not to", () => {
+    // The document is still ISSUED by iCount. The email that carries it is
+    // ours, from no-reply@, in the product's own design. Two senders would mean
+    // the customer gets the same receipt twice, once from an address they have
+    // no relationship with.
+    expect(doc).toMatch(/sendEmail: false/);
+    expect(doc).toMatch(/sendReceiptEmail\(\{/);
+  });
+
+  it("falls back to an admin of the tenant rather than sending the receipt nowhere", () => {
+    // A document nobody receives is, to the customer, a payment with no proof.
+    expect(doc).toMatch(/export async function receiptRecipient/);
+    expect(doc).toMatch(/role: "ADMIN"/);
+    // The declared billing email always wins - the fallback is a fallback.
+    const fn = doc.slice(doc.indexOf("export async function receiptRecipient"), doc.indexOf("export async function receiptRecipient") + 900);
+    expect(fn.indexOf("if (declared) return declared")).toBeLessThan(fn.indexOf("findFirst"));
+  });
+
+  it("keeps the provider as a fallback, so a refused queue is not a lost receipt", () => {
+    // Our send is the default and the provider is the exception, not the other
+    // way round. The fallback covers the queue refusing the job; once accepted,
+    // delivery and its retries belong to the notifications worker.
+    const block = doc.slice(doc.indexOf("const ours = await sendReceiptEmail"));
+    expect(block).toMatch(/if \(!ours\)/);
+    expect(block).toMatch(/emailDocument\(\{/);
+    expect(client).toMatch(/"doc\/email"/);
+    expect(client).toMatch(/email_to: input\.to/);
+  });
+
+  it("treats an unreadable email status as unknown, never as sent", () => {
+    // Returning false where iCount simply said nothing would suppress the
+    // resend that is the whole point of asking.
+    expect(client).toMatch(/export function readEmailStatus/);
+    expect(client).toMatch(/return \{ sent: null, reason: null \}/);
+  });
+
+  it("reports an undelivered receipt without failing the charge", () => {
+    const block = doc.slice(doc.indexOf("emailDocument({"), doc.indexOf("emailDocument({") + 1200);
+    expect(block).toContain("payment.document_failed");
+    expect(block).not.toMatch(/return \{ success: false/);
+  });
+
+  it("says so when there is nobody at all to send the receipt to", () => {
+    expect(doc).toContain("no_receipt_recipient");
+  });
+
+  it("states the rate on the document, or says exempt", () => {
+    // Exempt is a statement, not the absence of a rate.
+    expect(client).toMatch(/vat_percent: input\.vatPercent/);
+    expect(client).toMatch(/tax_exempt: true/);
+  });
+
+  it("links the payment line to the charge by confirmation code", () => {
+    // So the document and the transaction point at each other rather than
+    // merely agreeing on an amount.
+    expect(client).toMatch(/confirmation_code: input\.confirmationCode/);
+  });
+
+  it("puts no card number or CVV on the document", () => {
+    const doc = client.slice(client.indexOf('call(\n    "doc/create"'), client.indexOf('call(\n    "doc/create"') + 1400);
+    expect(doc).not.toContain("cvv");
+    expect(doc).toMatch(/card_number: input\.cardLast4/);
+  });
+
+  it("sends line price and rate, not a total as well", () => {
+    // Two sources for one number, and the one that loses is the unchecked one.
+    const doc = client.slice(client.indexOf('call(\n    "doc/create"'), client.indexOf('call(\n    "doc/create"') + 1400);
+    expect(doc).not.toMatch(/totalsum:|totalwithvat:/);
+  });
+});
+
+/**
+ * The OTHER charging path.
+ *
+ * `chargeFor` covers renewals, plan changes and credit purchases.
+ * `executeCharge` covers the self-serve checkout - a customer's FIRST payment.
+ * It was charging net and issuing nothing, which made the one payment a new
+ * customer is most likely to ask about the one we could say least about.
+ */
+describe("the self-serve checkout charges and documents like every other path", () => {
+  const exec = readFileSync(join(__dirname, "../services/charge-execution.service.ts"), "utf8");
+  const shared = readFileSync(join(__dirname, "../services/tax-document.service.ts"), "utf8");
+
+  it("adds tax before submitting, rather than charging the catalogue figure", () => {
+    expect(exec).toMatch(/taxForProfile\(/);
+    expect(exec).toMatch(/chargeAmount = taxed\.gross/);
+  });
+
+  it("refuses when no country was declared, exactly as the other path does", () => {
+    // The refusal is inside the try that deletes the attempt and releases the
+    // key, so a corrected retry can reuse it rather than being locked out.
+    const block = exec.slice(exec.indexOf("assertChargeable(quote, now)"), exec.indexOf("await consumeQuote("));
+    expect(block).toMatch(/taxForProfile/);
+  });
+
+  it("records what the charge was made of", () => {
+    for (const f of ["netAmount: taxed.net", "taxPercent: taxed.percent", "taxAmount: taxed.tax"]) {
+      expect(exec, `attempt must record ${f}`).toContain(f);
+    }
+  });
+
+  it("issues the document only after the money moved", () => {
+    expect(exec).toMatch(/result\.state === "SUCCEEDED" && method\.provider === "ICOUNT"/);
+    expect(exec).toMatch(/issueTaxDocument\(\{/);
+  });
+
+  it("never lets a failed document fail the charge", () => {
+    const block = exec.slice(exec.indexOf("issueTaxDocument({"));
+    expect(block).not.toMatch(/throw /);
+    expect(shared).toMatch(/catch \(err: any\)/);
+    expect(shared).toMatch(/return null/);
+  });
+
+  it("shares the document code with the other path instead of copying it", () => {
+    // Two copies is how one path quietly stops emailing.
+    const inv = readFileSync(join(__dirname, "../services/invoice.service.ts"), "utf8");
+    expect(inv).toMatch(/from "\.\/tax-document\.service"/);
+    expect(exec).toMatch(/from "\.\/tax-document\.service"/);
+    for (const src of [inv, exec]) {
+      expect(src).not.toMatch(/createDocument\(\{/);
+    }
+  });
+
+  it("resolves the receipt identity from the entity the card belongs to", () => {
+    expect(exec).toMatch(/receiptIdentityForEntity\(method\.profile\.billableEntityId\)/);
+  });
+});
+
+/**
+ * A refusal must not become an outage.
+ *
+ * A disabled capability switch took the billing service down in production:
+ * the error was thrown before any I/O, was not marked as such, propagated out
+ * of the renewal sweep, and killed the process. The charge it was part-way
+ * through stayed PENDING - which reads as in-flight for ever, so that
+ * subscription's idempotency key was permanently occupied.
+ *
+ * Nothing here is about the switch itself. It is about a pre-flight refusal
+ * being recorded as the definite non-charge it is, and about one subscription
+ * being unable to decide that nobody else gets billed.
+ */
+describe("a pre-flight refusal is a definite non-charge, not an outage", () => {
+  const cfg = readFileSync(join(__dirname, "../providers/icount-config.ts"), "utf8");
+  const prov = readFileSync(join(__dirname, "../providers/icount.provider.ts"), "utf8");
+  const subs = readFileSync(join(__dirname, "../services/subscription.service.ts"), "utf8");
+
+  it("marks a disabled capability as never sent", () => {
+    // It is read before any I/O, so the money provably did not move. Without
+    // the marker the caller falls back on "we do not know" and leaves the
+    // charge PENDING for ever.
+    const cls = cfg.slice(cfg.indexOf("class PaymentCapabilityDisabledError"), cfg.indexOf("export function assertPaymentCapability"));
+    expect(cls).toMatch(/readonly neverSent = true/);
+    expect(cls).toMatch(/failureCode/);
+  });
+
+  it("marks the live-mode guard the same way", () => {
+    // The two earliest guards in the chain were the only ones unmarked, which
+    // is the opposite of what their position implies.
+    const fn = prov.slice(prov.indexOf("function assertLiveAllowed"), prov.indexOf("function assertLiveAllowed") + 1400);
+    expect(fn).toMatch(/ChargeRefusedBeforeSend/);
+    expect(fn).not.toMatch(/throw new Error\(/);
+  });
+
+  it("every guard before the network call carries the marker", () => {
+    // The property that matters, stated once: nothing in charge()'s pre-flight
+    // may throw a bare Error, because a bare Error is indistinguishable from a
+    // mid-flight failure.
+    const body = prov.slice(prov.indexOf("async charge(input: ChargeInput)"), prov.indexOf("async refund("));
+    expect(body).not.toMatch(/throw new Error\(/);
+  });
+
+  it("one subscription cannot abandon the rest of the sweep", () => {
+    expect(subs).toMatch(/async function renewInIsolation/);
+    // The sweep must go through it, not call activateOrRenew directly.
+    const cycle = subs.slice(subs.indexOf("export async function runBillingCycle"), subs.indexOf("const pocsExpired"));
+    expect(cycle).toMatch(/renewInIsolation\(s\.id, "trial_end"\)/);
+    expect(cycle).toMatch(/renewInIsolation\(s\.id, "renewal"\)/);
+    expect(cycle).not.toMatch(/await activateOrRenew\(/);
+  });
+
+  it("and cannot kill the process", () => {
+    const fn = subs.slice(subs.indexOf("async function renewInIsolation"), subs.indexOf("export async function runBillingCycle"));
+    expect(fn).toMatch(/catch \(err: any\)/);
+    expect(fn).not.toMatch(/throw /);
+  });
+});

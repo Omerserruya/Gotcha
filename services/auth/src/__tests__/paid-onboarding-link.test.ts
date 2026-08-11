@@ -23,7 +23,13 @@ vi.mock("nodemailer", () => ({
   default: { createTransport: () => ({ sendMail }) },
 }));
 
-vi.mock("@chatcenter/shared", () => ({
+vi.mock("@chatcenter/shared", async () => ({
+  // The email design system moved into shared when billing started sending the
+  // receipt, and notification.service.ts now imports it from there. Spread the
+  // real module rather than listing helpers: an exhaustive mock that has to be
+  // hand-extended per helper goes stale the first time one is added.
+  ...(await vi.importActual<any>("../../../../packages/shared/src/lib/email/brand-email")),
+  NOTIFICATIONS_EMAIL_QUEUE_NAME: "notifications-email",
   // Durable tenant settings (business hours, auto-greeting, SLA). Exhaustive
   // mocks of this barrel must supply them or the read path throws instead of
   // returning "not configured". Default: nothing configured.

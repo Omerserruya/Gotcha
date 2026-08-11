@@ -39,7 +39,15 @@ function missingConfig(n: GNode): { key: string; label: string }[] {
     case "send_message_text": if (empty(d.text)) out.push({ key: "text", label: "message text" }); break;
     case "send_message_image":
     case "send_message_file": if (empty(d.url)) out.push({ key: "url", label: "file URL" }); break;
-    case "route_target": if (empty(d.targetId)) out.push({ key: "targetId", label: "route target" }); break;
+    // A human route needs no target - dispatchRoute parks the conversation in
+    // WAITING for whoever claims it, and a department is optional. Only agent
+    // and sub-flow routes have something that must be chosen. Mirrors
+    // frontend/src/components/mainPlaybook/flow-validator.ts.
+    case "route_target":
+    case "default_fallback":
+      if ((d.routeType === "agent" || d.routeType === "flow") && empty(d.targetId))
+        out.push({ key: "targetId", label: "route target" });
+      break;
     case "collect_input":
       if (empty(d.prompt)) out.push({ key: "prompt", label: "prompt" });
       if (empty(d.variable)) out.push({ key: "variable", label: "variable name" });
@@ -53,13 +61,24 @@ function missingConfig(n: GNode): { key: string; label: string }[] {
   return out;
 }
 
-function reachableFrom(starts: string[], edges: GEdge[]): Set<string> {
+/**
+ * Nodes the executor can actually arrive at.
+ *
+ * `stopAt` holds the ids of terminal nodes. They are reachable themselves but
+ * are never expanded THROUGH, because the executor returns the moment it
+ * reaches one: `route_target` dispatches and ends the walk without following
+ * its outgoing edge. Walking blindly over edges - which this used to do -
+ * reported every node drawn after a route step as reachable, so a flow whose
+ * send_message and send_interactive could never run validated clean.
+ */
+function reachableFrom(starts: string[], edges: GEdge[], stopAt?: Set<string>): Set<string> {
   const adj = new Map<string, string[]>();
   for (const e of edges) { (adj.get(e.source) ?? adj.set(e.source, []).get(e.source)!).push(e.target); }
   const seen = new Set<string>(starts);
   const stack = [...starts];
   while (stack.length) {
     const cur = stack.pop()!;
+    if (stopAt?.has(cur) && !starts.includes(cur)) continue;
     for (const nxt of adj.get(cur) ?? []) if (!seen.has(nxt)) { seen.add(nxt); stack.push(nxt); }
   }
   return seen;
@@ -122,7 +141,9 @@ export function validateGraph(nodes: GNode[], edges: GEdge[]): { errors: GraphIs
   }
 
   // 4. Reachability - every non-entry step reachable from an entry.
-  const reach = reachableFrom(entries.map((n) => n.id), edges);
+  //    Terminal steps end the walk, so nothing drawn after one is reachable.
+  const terminalIds = new Set(nodes.filter((n) => TERMINAL_TYPES.has(n.type)).map((n) => n.id));
+  const reach = reachableFrom(entries.map((n) => n.id), edges, terminalIds);
   for (const n of nodes) {
     if (ENTRY_TYPES.has(n.type)) continue;
     if (!reach.has(n.id)) warnings.push({ severity: "warning", code: "unreachable", nodeId: n.id, message: "This step is never reached." });

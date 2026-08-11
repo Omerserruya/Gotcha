@@ -1,5 +1,6 @@
 import { getInternalServiceKey, safeFetch,
   resolveAppPublicUrl,
+  canvasHasRunnableProcess,
 } from "@chatcenter/shared";
 import { Router, Request, Response } from "express";
 import { z } from "zod";
@@ -1242,7 +1243,7 @@ router.get("/missions", requireRole("ADMIN"), async (req: Request, res: Response
 router.get("/journey", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
   try {
     const tenantId = req.tenantId!;
-    const [agent, draftAgent, coreSlug, coreRows, channelRows, discovery, usableKbCount, flowCount, profile] = await Promise.all([
+    const [agent, draftAgent, coreSlug, coreRows, channelRows, discovery, usableKbCount, canvas, flowCount, profile] = await Promise.all([
       prisma.aIAgent.findFirst({
         where: { tenantId, status: { in: ["ACTIVE", "PAUSED"] } },
         orderBy: { createdAt: "desc" },
@@ -1272,12 +1273,27 @@ router.get("/journey", requireRole("ADMIN"), async (req: Request, res: Response)
           OR: [{ documents: { some: {} } }, { integrations: { some: { isActive: true } } }],
         },
       }).catch(() => 0),
+      // The builder saves to FlowCanvas, and FlowCanvas is what the executor
+      // runs. Counting chatbotFlow (a different, legacy store) meant a process
+      // a customer had built and saved never marked this milestone done. The
+      // legacy count is still read so tenants with old ChatbotFlow rows keep
+      // their progress.
+      prisma.flowCanvas.findUnique({
+        where: { tenantId },
+        select: { nodes: true, edges: true },
+      }).catch(() => null),
       prisma.chatbotFlow.count({ where: { tenantId } }).catch(() => 0),
       prisma.businessProfile.findUnique({
         where: { tenantId },
         select: { organizationName: true, industry: true },
       }).catch(() => null),
     ]);
+
+    // A process exists when the canvas the executor reads holds a trigger
+    // that leads somewhere. Legacy ChatbotFlow rows still count, so a tenant
+    // who built one under the old store keeps this milestone.
+    const hasProcess =
+      canvasHasRunnableProcess(canvas?.nodes, canvas?.edges) || flowCount > 0;
 
     const PRIMARY_CH = new Set(["whatsapp", "instagram", "facebook", "messenger", "telegram"]);
     const detectedChannels = (((discovery?.communication as any)?.channels || []) as Array<{ type?: string; identifier?: string }>)
@@ -1333,8 +1349,11 @@ router.get("/journey", requireRole("ADMIN"), async (req: Request, res: Response)
       },
       {
         id: "create_process",
-        done: flowCount > 0,
-        state: stateOf(flowCount > 0, false, false),
+        // A canvas holding a lone trigger is not a process: the executor
+        // starts there, follows no edge, and answers nothing. Marking that
+        // done would promise a customer their automation is live.
+        done: hasProcess,
+        state: stateOf(hasProcess, false, false),
         deepLink: "/ai-studio?tab=playbooks",
         manageLink: "/ai-studio?tab=playbooks",
       },
@@ -1456,10 +1475,13 @@ router.post("/core-system", requireRole("ADMIN"), validate(coreSystemSchema), as
 router.get("/setup-map", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
   try {
     const tenantId = req.tenantId!;
-    const [coreSlug, kbCount, aiAgent, flowCount, userCount, channel, connectedIntegrations, profile] = await Promise.all([
+    const [coreSlug, kbCount, aiAgent, canvas, flowCount, userCount, channel, connectedIntegrations, profile] = await Promise.all([
       connectedCoreSystem(tenantId),
       prisma.knowledgeBase.count({ where: { tenantId } }).catch(() => 0),
       prisma.aIAgent.findFirst({ where: { tenantId }, select: { id: true, status: true } }).catch(() => null),
+      // Same store the builder writes and the executor runs - see the journey
+      // handler above.
+      prisma.flowCanvas.findUnique({ where: { tenantId }, select: { nodes: true, edges: true } }).catch(() => null),
       prisma.chatbotFlow.count({ where: { tenantId } }).catch(() => 0),
       prisma.user.count({ where: { tenantId, isActive: true } }),
       prisma.channelAccount.findFirst({ where: { tenantId, connectionStatus: "CONNECTED" }, select: { id: true } }).catch(() => null),
@@ -1474,7 +1496,7 @@ router.get("/setup-map", requireRole("ADMIN"), async (req: Request, res: Respons
     const tiles = [
       { id: "knowledge_base", done: (kbCount || 0) > 0, deepLink: "/ai-studio/knowledge", stage: "core" as const },
       { id: "ai_employees", done: !!aiAgent, deepLink: "/ai-studio", stage: "core" as const },
-      { id: "workflows", done: (flowCount || 0) > 0, deepLink: "/ai-studio", stage: "core" as const },
+      { id: "workflows", done: canvasHasRunnableProcess(canvas?.nodes, canvas?.edges) || (flowCount || 0) > 0, deepLink: "/ai-studio", stage: "core" as const },
       { id: "settings", done: userCount > 1, deepLink: "/settings", stage: "core" as const },
       { id: "integrations", done: !!coreSlug, deepLink: "/integrations", stage: "later" as const, meta: { slug: coreSlug || profile?.primarySystem || null } },
       { id: "channels", done: !!channel, deepLink: "/channels", stage: "later" as const },

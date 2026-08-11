@@ -69,7 +69,7 @@ function ConversationsInner() {
 
   return (
     <AppLayout>
-      <div className={`flex md:gap-3 md:p-2 ${selectedId ? "h-screen" : "h-[calc(100vh-48px)]"} md:h-[calc(100vh-16px)]`}>
+      <div className={`flex md:gap-3 md:p-2 ${selectedId ? "h-screen" : "h-[calc(100vh-48px)] md:h-screen"}`}>
         {/* Conversation list - hidden on mobile when chat is selected */}
         <div className={`w-full md:w-[380px] flex-shrink-0 md:rounded-2xl md:overflow-hidden ${selectedId ? "hidden md:flex" : "flex"} flex-col`}>
           <ConversationList

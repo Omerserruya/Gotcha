@@ -41,8 +41,8 @@ export interface PlanGridProps {
 
 export function PlanGrid({
   plans, selections, activeKey, onSelect, onVolumeChange, isHe, t, currentPlanKey,
-  ctaHref, ctaLabel, compact = false,
-}: PlanGridProps) {
+  ctaHref, ctaLabel, compact = false, taxNote,
+}: PlanGridProps & { taxNote?: string | null }) {
   return (
     <div className="grid gap-px overflow-hidden rounded-2xl bg-gray-300 ring-1 ring-gray-300 md:grid-cols-2 xl:grid-cols-3">
       {plans.map((plan, i) => (
@@ -60,6 +60,7 @@ export function PlanGrid({
             ctaHref={ctaHref}
             ctaLabel={ctaLabel}
             compact={compact}
+            taxNote={taxNote}
           />
         </Reveal>
       ))}
@@ -69,8 +70,11 @@ export function PlanGrid({
 
 function PlanColumn({
   plan, previous, selection, active, isCurrent, onSelect, onVolumeChange, isHe, t,
-  ctaHref, ctaLabel, compact,
+  ctaHref, ctaLabel, compact, taxNote,
 }: {
+  /** e.g. "+ VAT 18%". Listed prices are net, so leaving this off quotes a
+      price the charge will not match. */
+  taxNote?: string | null;
   plan: PublicPlan;
   previous: PublicPlan | null;
   selection: Selection;
@@ -144,6 +148,11 @@ function PlanColumn({
           />
         ) : (
           <Price formatted={t("pricing.custom.label")} size={compact ? "lg" : "xl"} />
+        )}
+        {/* Listed prices are net. Saying so is the difference between a price
+            and a surprise, and in Israel it is not optional. */}
+        {priced && taxNote && (
+          <p className="mt-1.5 text-[11px] leading-snug text-gray-400">{taxNote}</p>
         )}
         {/* Quotes the SELECTED total in the charged currency, not the plan's
             base price, or the note would understate what is actually billed. */}

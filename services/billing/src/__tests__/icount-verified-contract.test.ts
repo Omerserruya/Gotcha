@@ -90,6 +90,79 @@ describe("paypage/info", () => {
 describe("cc/bill", () => {
   it("still charges in ILS", () => {
     // Unchanged, and restated here because these are the same request builders.
-    expect(client).toContain("CURRENCY_ID_ILS = 1");
+    // 5, not 1. Confirmed against the account: currency/get_list reports
+    // ILS { currency_id: 5 }, USD { 2 }, EUR { 1 }. This constant said 1, so
+    // every "ILS only" guard in the codebase was enforcing euros, and a live
+    // charge went out as EUR.
+    expect(client).toContain("CURRENCY_ID_ILS = 5");
+  });
+
+  /**
+   * Source: the API's own published parameter list for cc/bill, at
+   * https://apiv3.icount.co.il (the documentation SPA loads it from
+   * /index.json.php). It defines two ways to identify what to charge:
+   *
+   *   a stored card   cc_token_id
+   *   a raw card      cc_number, cc_type, cc_cvv, cc_validity,
+   *                   cc_holder_id, cc_holder_name
+   *
+   * `token` is not among them. This builder had been sending `token`, which
+   * identifies nothing - the same shape as the `page_id` / `paypage_id`
+   * mistake above, and with the same consequence: a request the API cannot
+   * act on.
+   *
+   * Since confirmed in writing by iCount support, along with the three points
+   * that used to be open questions here:
+   *
+   *   - cc/bill with cc_token_id is routed automatically through the account's
+   *     configured primary billing terminal. A token is NOT locked to the
+   *     terminal that created it, and GOTCHA neither selects nor names a
+   *     terminal - the API exposes no such parameter.
+   *   - cc_require_cvv applies only when a customer enters card details again.
+   *     Stored-token charges do not require it, and CVV is never stored. So an
+   *     unattended renewal on a cc_require_cvv=true account is valid.
+   *   - iCount described currency_id 1 as ILS for cc/bill. The account's own
+   *     currency/get_list and currency/info both report ILS as 5 and EUR as 1,
+   *     and a live charge confirmed it by settling in euros. The account is
+   *     authoritative; the value here is 5.
+   */
+  it("identifies the stored card as cc_token_id", () => {
+    expect(code).toContain("cc_token_id: input.token");
+  });
+
+  it("does not send `token` as the wire field", () => {
+    // The exact spelling that identifies no stored card. `input.token` remains
+    // our own domain name for the value; only the wire field changed.
+    expect(code).not.toMatch(/^\s*token: input\.token,/m);
+  });
+
+  it("sends no CVV - a stored-card charge is unattended by definition", () => {
+    // cc_cvv belongs to the raw-card branch of cc/bill. A merchant-initiated
+    // renewal has no customer present to supply one, and sending a stored
+    // CVV would be both wrong and a compliance problem.
+    expect(code).not.toContain("cc_cvv");
+  });
+});
+
+// ─── client/get_cc_tokens ───────────────────────────────────────
+
+describe("client/get_cc_tokens", () => {
+  it("accepts cc_token_id, the identifier cc/bill expects back", () => {
+    // The two halves have to agree on the same field. cc/bill charges
+    // `cc_token_id`; if the reader that produced the value never looked for
+    // `cc_token_id`, a response carrying only that field is dropped by the
+    // "no usable token" guard - and tokenization reports no card stored on a
+    // response that said one was.
+    expect(code).toContain("entry.cc_token_id");
+  });
+
+  it("still tolerates the looser envelopes", () => {
+    for (const alias of ["entry.token", "entry.cc_token", "entry.card_token"]) {
+      expect(code).toContain(alias);
+    }
+  });
+
+  it("drops an entry with no usable identifier rather than inventing one", () => {
+    expect(code).toMatch(/typeof token !== "string"/);
   });
 });

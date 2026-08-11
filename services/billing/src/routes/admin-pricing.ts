@@ -154,6 +154,7 @@ router.get("/admin/pricing/plans", authenticate, requirePlatformPermission(P.PRI
       voiceVolumeEnabled: p.voiceVolumeEnabled,
       autoPurchaseEligible: p.autoPurchaseEligible,
       creditPackagesEligible: p.creditPackagesEligible,
+      paygPricePerCredit: p.paygPricePerCredit == null ? null : String(p.paygPricePerCredit),
       effectiveFrom: p.effectiveFrom,
       effectiveTo: p.effectiveTo,
       publishedAt: p.publishedAt,
@@ -243,6 +244,9 @@ router.post("/admin/pricing/plans/:key/versions", authenticate, requirePlatformP
       dataRetentionDays: source.dataRetentionDays,
       autoPurchaseEligible: source.autoPurchaseEligible,
       creditPackagesEligible: source.creditPackagesEligible,
+      // Carried forward deliberately: a new version that lost the rate
+      // would stop pay-as-you-go for everyone on the plan, silently.
+      paygPricePerCredit: source.paygPricePerCredit,
       chatVolumeEnabled: req.body?.chatVolumeEnabled ?? source.chatVolumeEnabled,
       voiceVolumeEnabled: req.body?.voiceVolumeEnabled ?? source.voiceVolumeEnabled,
       internalNote: req.body?.internalNote ?? null,
@@ -327,6 +331,17 @@ router.patch("/admin/pricing/plans/:id", authenticate, requirePlatformPermission
       ...(b.dataRetentionDays != null ? { dataRetentionDays: Number(b.dataRetentionDays) } : {}),
       ...(b.autoPurchaseEligible != null ? { autoPurchaseEligible: Boolean(b.autoPurchaseEligible) } : {}),
       ...(b.creditPackagesEligible != null ? { creditPackagesEligible: Boolean(b.creditPackagesEligible) } : {}),
+      // The pay-as-you-go rate. An explicit null clears it, which is how a plan
+      // stops being sold that way - and is deliberately distinct from omitting
+      // the field, which leaves the current price alone.
+      ...("paygPricePerCredit" in b
+        ? {
+            paygPricePerCredit:
+              b.paygPricePerCredit == null || b.paygPricePerCredit === ""
+                ? null
+                : Number(b.paygPricePerCredit).toFixed(6),
+          }
+        : {}),
       ...(b.chatVolumeEnabled != null ? { chatVolumeEnabled: Boolean(b.chatVolumeEnabled) } : {}),
       ...(b.voiceVolumeEnabled != null ? { voiceVolumeEnabled: Boolean(b.voiceVolumeEnabled) } : {}),
       ...(b.internalNote != null ? { internalNote: String(b.internalNote) } : {}),
@@ -979,6 +994,10 @@ router.post("/admin/pricing/custom-plans", authenticate, requirePlatformPermissi
       supportLevel: b.supportLevel ?? "dedicated",
       autoPurchaseEligible: b.autoPurchaseEligible !== false,
       creditPackagesEligible: b.creditPackagesEligible !== false,
+      paygPricePerCredit:
+        b.paygPricePerCredit == null || b.paygPricePerCredit === ""
+          ? null
+          : Number(b.paygPricePerCredit).toFixed(6),
       chatVolumeEnabled: Boolean(b.chatVolumeEnabled),
       voiceVolumeEnabled: Boolean(b.voiceVolumeEnabled),
       contractStart: b.contractStart ? new Date(b.contractStart) : null,

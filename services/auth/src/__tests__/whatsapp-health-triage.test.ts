@@ -1,0 +1,222 @@
+/**
+ * What the number card actually tells a customer.
+ *
+ * A merchant connected a number and was shown this, in Meta's English, as one
+ * flat list of equal-weight ticks and crosses:
+ *
+ *   ✓ Connected to WhatsApp        ✕ Messaging enabled
+ *   ✓ Receiving incoming messages  ✓ Number verified
+ *   ? Quality rating               ✕ Phone number (not linked)
+ *   ✕ Phone number (SIP)           ✕ WhatsApp account (payment method)
+ *   ! Business verification
+ *
+ * Their words: "that looks not user friendly at all + i dont get what to do."
+ * Fair. Two of those crosses are about SIP calling, which this product does not
+ * offer and no customer can act on. One of them - the number was never
+ * registered - is the entire reason nothing sends, and it looked exactly like
+ * the other four.
+ *
+ * The fixture below is that customer's real production snapshot.
+ */
+import { describe, it, expect, vi } from "vitest";
+
+vi.mock("@chatcenter/shared", () => ({
+  prisma: {},
+  decryptCredentials: () => null,
+}));
+
+import { buildHealthReport, channelStatusForNumber } from "../services/whatsapp/health.service";
+
+const SNAPSHOT = {
+  can_send_message: "BLOCKED",
+  entities: [
+    {
+      id: "1292013250655408",
+      entity_type: "PHONE_NUMBER",
+      can_send_message: "BLOCKED",
+      errors: [
+        {
+          error_code: 141000,
+          error_description:
+            "The phone number you are trying to send messages from is not linked to your WhatsApp account.",
+          possible_solution: "Register and finish the OTP authentication process for your phone number.",
+        },
+        {
+          error_code: 138024,
+          error_description: "WhatsApp Business calling cannot use SIP because it is not enabled",
+          possible_solution: "Configure SIP using {PHONE_NUMBER_ID}/settings API",
+        },
+      ],
+    },
+    {
+      id: "2223476021776931",
+      entity_type: "WABA",
+      can_send_message: "BLOCKED",
+      errors: [
+        {
+          error_code: 141006,
+          error_description:
+            "There is an error with the payment method. This will block business initiated conversations.",
+          possible_solution: "Please add a new payment method to the account.",
+        },
+      ],
+    },
+    {
+      id: "1551544506613779",
+      entity_type: "APP",
+      can_send_message: "AVAILABLE",
+      errors: [
+        {
+          error_code: 138025,
+          error_description: "This app cannot use SIP for WhatsApp Business calling",
+          possible_solution: "Configure SIP server using {PHONE_NUMBER_ID}/settings API",
+        },
+      ],
+    },
+  ],
+};
+
+const ROW = {
+  id: "n1",
+  phoneNumberId: "1292013250655408",
+  displayPhoneNumber: "+972 3-382-2781",
+  verifiedName: "Gotcha App",
+  state: "DEGRADED",
+  pendingAction: null,
+  messagingStatus: "PENDING",
+  codeVerificationStatus: "VERIFIED",
+  qualityRating: "UNKNOWN",
+  webhookSubscribed: true,
+  webhookOverrideUri: null,
+  canSendMessage: "BLOCKED",
+  healthSnapshot: SNAPSHOT,
+  lastError: null,
+  lastHealthCheck: new Date(),
+} as never;
+
+describe("the number card, on a real blocked number", () => {
+  const report = buildHealthReport(ROW);
+
+  it("names the one thing the customer can actually clear from here", () => {
+    // DEGRADED with no pendingAction: keying the finish-setup box on
+    // pendingAction alone left this customer with no button at all.
+    expect(report.needsRegistration).toBe(true);
+  });
+
+  it("does not show SIP calling problems to anyone", () => {
+    const sip = report.checks.filter((c) => /SIP/i.test(`${c.detail ?? ""}${c.metaSolution ?? ""}`));
+    expect(sip).toEqual([]);
+  });
+
+  it("separates what stops messages from what is merely worth knowing", () => {
+    const blocking = report.checks.filter((c) => c.status !== "PASS" && c.blocking);
+    const advisory = report.checks.filter((c) => c.status !== "PASS" && !c.blocking);
+
+    // The registration failure is blocking; it is why nothing sends.
+    expect(blocking.some((c) => c.id === "REGISTRATION")).toBe(true);
+    // Quality rating is unknown, not broken - it must not sit next to it.
+    expect(advisory.some((c) => c.id === "QUALITY")).toBe(true);
+    expect(blocking.some((c) => c.id === "QUALITY")).toBe(false);
+  });
+
+  it("does not claim messages are arriving on a number that was never registered", () => {
+    // The webhook subscription exists, but WhatsApp delivers nothing for an
+    // unregistered number - so "Receiving incoming messages ✓" was a lie that
+    // sent a customer looking for their messages in the inbox.
+    const webhooks = report.checks.find((c) => c.id === "WEBHOOKS");
+    expect(webhooks?.status).toBe("FAIL");
+    expect(webhooks?.detail).toMatch(/registration/i);
+    expect(report.ready).toBe(false);
+  });
+
+  it("keeps Meta's own wording for the problems only Meta can resolve", () => {
+    const payment = report.checks.find((c) => c.metaErrorCode === 141006);
+    expect(payment?.metaSolution).toContain("payment method");
+  });
+});
+
+/**
+ * The same number an hour later: registration succeeded, customer messages are
+ * arriving, and Meta still blocks outbound over a payment method on the WABA.
+ *
+ * The customer's words: "the connected whatsapp was successful finally, but yet
+ * show as nothing is connected (even though i getting messages into gotcha!)".
+ * The screen said 0 working, 1 needs attention, while their inbox filled up.
+ */
+describe("a registered number that receives but cannot send", () => {
+  const report = buildHealthReport({
+    ...(ROW as object),
+    state: "DEGRADED",
+    messagingStatus: "CONNECTED",
+    canSendMessage: "BLOCKED",
+    webhookSubscribed: true,
+    healthSnapshot: {
+      can_send_message: "BLOCKED",
+      entities: [
+        {
+          id: "2223476021776931",
+          entity_type: "WABA",
+          can_send_message: "BLOCKED",
+          errors: [
+            {
+              error_code: 141006,
+              error_description:
+                "There is an error with the payment method. This will block business initiated conversations.",
+              possible_solution: "Please add a new payment method to the account.",
+            },
+          ],
+        },
+      ],
+    },
+  } as never);
+
+  it("says messages are arriving, because they are", () => {
+    expect(report.receiving).toBe(true);
+    expect(report.checks.find((c) => c.id === "WEBHOOKS")?.status).toBe("PASS");
+  });
+
+  it("says it cannot send, because it cannot", () => {
+    expect(report.sending).toBe(false);
+    expect(report.ready).toBe(false);
+  });
+
+  it("no longer asks for a registration that already happened", () => {
+    expect(report.needsRegistration).toBe(false);
+  });
+});
+
+/**
+ * What the rest of the product is told about the channel.
+ *
+ * Everything outside this page - the Channels list, the journey, the inbox
+ * routing - reads ChannelAccount.connectionStatus, not the number's state. Both
+ * writers used `state === "CONNECTED" ? "CONNECTED" : "PENDING"`, and a number
+ * is DEGRADED whenever Meta blocks sending. So a registered, subscribed number
+ * that was delivering customer messages marked its channel PENDING over a
+ * payment method, and the Channels page offered "Connect WhatsApp" to a
+ * customer whose WhatsApp was already working.
+ */
+describe("what the channel status says", () => {
+  const base = { state: "DEGRADED" as never, webhookSubscribed: true, messagingStatus: "CONNECTED" };
+
+  it("is CONNECTED when the number carries traffic, even if Meta blocks sending", () => {
+    expect(channelStatusForNumber(base)).toBe("CONNECTED");
+  });
+
+  it("is PENDING while the number is not registered", () => {
+    expect(channelStatusForNumber({ ...base, messagingStatus: "PENDING" })).toBe("PENDING");
+  });
+
+  it("is PENDING while nothing can be delivered", () => {
+    expect(channelStatusForNumber({ ...base, webhookSubscribed: false })).toBe("PENDING");
+  });
+
+  it("is PENDING while the customer still owes a step", () => {
+    expect(channelStatusForNumber({ ...base, state: "ACTION_REQUIRED" as never })).toBe("PENDING");
+  });
+
+  it("keeps the terminal states terminal", () => {
+    expect(channelStatusForNumber({ ...base, state: "FAILED" as never })).toBe("ERROR");
+    expect(channelStatusForNumber({ ...base, state: "DISCONNECTED" as never })).toBe("DISCONNECTED");
+  });
+});

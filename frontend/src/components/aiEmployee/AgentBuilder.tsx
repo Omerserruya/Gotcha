@@ -453,7 +453,7 @@ export default function AgentBuilder({
   ];
 
   return (
-    <div className="flex flex-col h-[calc(100vh-48px)] md:h-[calc(100vh-16px)]">
+    <div className="flex flex-col h-[calc(100vh-48px)] md:h-screen">
       {/* Header */}
       <div className="shrink-0 px-3 md:px-6 pt-3 md:pt-6 pb-3 flex items-center gap-3">
         <button onClick={onCancel} className="flex items-center gap-2 text-gray-400 hover:text-gray-700 text-sm transition">

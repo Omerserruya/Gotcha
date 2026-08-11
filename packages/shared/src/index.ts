@@ -253,6 +253,7 @@ export {
   DAY_KEYS,
 } from "./lib/business-hours";
 export type { BusinessHoursConfig, BusinessOpenState, DayKey, DaySchedule } from "./lib/business-hours";
+export { FLOW_TRIGGER_TYPES, isFlowTrigger, canvasHasRunnableProcess } from "./lib/flow-canvas";
 export { verifyAccessToken, verifyIdToken } from "./lib/jwt";
 export { resolvePrincipal, AuthError } from "./lib/principal";
 export { getOAuthStateSecret } from "./lib/oauth-state";
@@ -430,6 +431,9 @@ export {
   AppOriginError,
   type OriginPolicy,
 } from "./lib/app-origins";
+// One email look for every service that sends mail, and one queue contract.
+export * from "./lib/email/brand-email";
+export * from "./lib/email/email-queue";
 export {
   readSessionFlags,
   sessionInfraEnabled,
@@ -1008,6 +1012,11 @@ export { ERROR_CODES, CODE_CHANNEL } from "./lib/observability/error-codes";
 export type { ErrorCode } from "./lib/observability/error-codes";
 export { reportOperationalFailure, recordExpectedOutcome, buildFailureTags, projectFor, assertSafeContext, UnsafeContextError } from "./lib/observability/operational-failure";
 export type { OperationalFailure, FailureDomain } from "./lib/observability/operational-failure";
+
+// WhatsApp onboarding & multi-number architecture. Official Meta APIs only:
+// a typed Graph client, the read-only Meta Inspector, and the pure flow
+// selector. Message sending stays in ./channels/whatsapp.adapter.
+export * from "./whatsapp";
 
 // Types import (side-effect for Express augmentation)
 import "./types/express.d";

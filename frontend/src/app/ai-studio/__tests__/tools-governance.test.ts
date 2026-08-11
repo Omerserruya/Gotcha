@@ -21,18 +21,12 @@ describe("§9 ONE governance surface - no standalone policies or tools tab", () 
     expect(page).not.toContain('subView === "connected"');
   });
 
-  it("folds the business-policy caps INTO the workspace surface, below it", () => {
-    // The flat per-tool list was replaced by the Integrations & Tools workspace
-    // (sidebar + one selected integration). ActionPoliciesPanel still renders
-    // beneath it, because those caps bound the financial tools shown above.
+  it("the workspace surface is the integration workspace, and only that", () => {
     const viewIdx = page.indexOf('subView === "workspace"');
     const workspaceIdx = page.indexOf("<IntegrationWorkspace />");
-    const policyPanelIdx = page.indexOf("<ActionPoliciesPanel />");
     expect(viewIdx).toBeGreaterThan(-1);
     expect(workspaceIdx).toBeGreaterThan(viewIdx);
-    expect(policyPanelIdx).toBeGreaterThan(workspaceIdx);
-    // Only ONE render site for each (no duplicate editable surface).
-    expect(page.split("<ActionPoliciesPanel />").length - 1).toBe(1);
+    // Only ONE render site (no duplicate editable surface).
     expect(page.split("<IntegrationWorkspace />").length - 1).toBe(1);
   });
 
@@ -58,15 +52,12 @@ describe("§9 ONE governance surface - no standalone policies or tools tab", () 
 
 describe("§9 governance surface holds ONLY tool-attached config", () => {
   const governance = read("app/ai-studio/page.tsx");
-  const actionPanel = read("components/ai-studio/ActionPoliciesPanel.tsx");
 
   it("the workspace-wide conversation guardrails (PolicyAdmin) are NOT rendered in the AI Studio Tools surface", () => {
     // PolicyAdmin = escalation keywords / blocked topics / quiet hours / blanket
     // discount ceiling - not attached to a specific executable tool. It must not
     // be imported or rendered anywhere in the governance surface (a doc-comment
     // pointer is fine).
-    expect(actionPanel).not.toContain("<PolicyAdmin");
-    expect(actionPanel).not.toMatch(/import\s+PolicyAdmin/);
     expect(governance).not.toContain("<PolicyAdmin");
     expect(governance).not.toMatch(/import\s+PolicyAdmin/);
   });
@@ -81,14 +72,23 @@ describe("§9 governance surface holds ONLY tool-attached config", () => {
     expect(existsSync(join(SRC, "components/business/BusinessTwin.tsx"))).toBe(false);
   });
 
-  it("what stays in the governance surface is tool-attached: the workspace + per-action limits only", () => {
+  it("what stays in the governance surface is tool-attached: the workspace only", () => {
     // IntegrationWorkspace = integration sidebar + per-tool Autonomous/HITL/
-    // Disabled + provider scopes. ActionPoliciesPanel = action-specific limits
-    // (compensation/coupon/refund/cancel). Both are tool-attached.
+    // Disabled + provider scopes. That is the whole surface.
     expect(governance).toContain("<IntegrationWorkspace />");
-    expect(governance).toContain("<ActionPoliciesPanel />");
-    // The action panel is now scoped to per-action caps only (no PolicyAdmin).
-    expect(actionPanel).toContain("ACTION_KINDS");
+  });
+
+  it("the Business Rules editor is gone from the product entirely", () => {
+    // Per-action compensation / coupon / refund / cancel caps asked owners to
+    // configure a retail-refund flow most tenants never run, and sat under the
+    // tool workspace as a second, unrelated form. Removed as a product
+    // decision, the same way PolicyAdmin was. The backend policy engine is
+    // untouched, so anything already stored keeps being enforced - there is
+    // simply no page that mounts an editor for it, and no copy left over.
+    expect(existsSync(join(SRC, "components/ai-studio/ActionPoliciesPanel.tsx"))).toBe(false);
+    expect(governance).not.toContain("ActionPoliciesPanel");
+    expect((en as Record<string, unknown>).businessRules).toBeUndefined();
+    expect((he as Record<string, unknown>).businessRules).toBeUndefined();
   });
 });
 

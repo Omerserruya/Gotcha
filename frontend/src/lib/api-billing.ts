@@ -104,8 +104,11 @@ export interface CreditPackage {
   key: string;
   name: string;
   units: number;
+  /** The catalogue figure, before tax. Not what the card is charged. */
   price: string;
   currency: string;
+  /** Net, tax and total. `gross` is the amount that will be charged. */
+  taxed?: TaxBreakdown;
 }
 
 export interface AutoPurchasePolicy {
@@ -118,8 +121,17 @@ export interface AutoPurchasePolicy {
   warningThresholdPct?: number | null;
   incrementCredits?: number | null;
   pricePerCredit?: string | null;
-  /** What happens once credits run out and no further top-up is possible. */
-  limitBehavior?: "STOP_AI" | "HUMAN_ONLY" | "REQUIRE_APPROVAL" | "PREPAID_ONLY";
+  /**
+   * What happens once credits run out and no further top-up is possible.
+   *
+   * PAYG is the only one that keeps serving: usage past a spent wallet accrues
+   * and is billed when the cycle CLOSES, unlike a top-up which charges the card
+   * at the moment it happens. Its cap is maxMonthlySpend, the same field, and it
+   * is enforced on every accrual rather than at settlement.
+   */
+  limitBehavior?: "STOP_AI" | "HUMAN_ONLY" | "REQUIRE_APPROVAL" | "PREPAID_ONLY" | "PAYG";
+  /** The pay-as-you-go rate. Separate from pricePerCredit, which prices a top-up. */
+  paygPricePerCredit?: string | null;
 }
 
 // ─── Pricing catalog ─────────────────────────────────────────
@@ -210,8 +222,32 @@ export interface CatalogPlan {
   estimate: QuoteEstimate;
 }
 
+
+/**
+ * The tax that applies on top of a catalogue price.
+ *
+ * Catalogue prices are NET, so the price on a card is not the amount that
+ * leaves the card. `assumed` is true when nobody has declared a billing
+ * country and the default jurisdiction was used - the UI has to say so rather
+ * than present it as settled.
+ */
+export interface TaxSummary {
+  percent: number;
+  label: string | null;
+  countryCode: string;
+  exempt: boolean;
+  assumed: boolean;
+}
+
+export interface TaxBreakdown extends TaxSummary {
+  net: string;
+  tax: string;
+  gross: string;
+}
+
 export interface PricingCatalog {
   plans: CatalogPlan[];
+  tax: TaxSummary;
   currentPlanKey: string | null;
   currentPlanVersion: number | null;
   currency: {
@@ -233,6 +269,8 @@ export interface Quote {
   monthlyPrice: DisplayPrice;
   includedCredits: number;
   estimate: QuoteEstimate;
+  /** Net, tax and total. The gross is what the card is charged. */
+  tax: TaxBreakdown;
   disclaimer: { en: string; he: string };
 }
 
@@ -273,6 +311,13 @@ export interface InvoiceCharge {
   chargeAmount: string | null;
   chargeCurrency: string | null;
   exchangeRate: string | null;
+  /** What the charge was made of. Null for rows predating the tax breakdown. */
+  netAmount: string | null;
+  taxPercent: number | null;
+  taxAmount: string | null;
+  /** The legal document iCount issued. THIS is the receipt. */
+  documentRef: string | null;
+  documentUrl: string | null;
   attemptNumber: number;
   createdAt: string;
 }
@@ -334,7 +379,7 @@ export const getCreditSummary = (token: string) =>
   apiFetch<CreditSummary>("/api/billing/credit-summary", { token });
 
 export const getPackages = (token: string) =>
-  apiFetch<{ packages: CreditPackage[] }>("/api/billing/credits/packages", { token });
+  apiFetch<{ packages: CreditPackage[]; tax: TaxSummary }>("/api/billing/credits/packages", { token });
 
 /**
  * Buy a credit package.
@@ -351,7 +396,12 @@ export const buyCredits = (token: string, packageKey: string, intentKey: string)
   );
 
 export const getAutoPurchase = (token: string) =>
-  apiFetch<{ policy: AutoPurchasePolicy | null }>("/api/billing/auto-purchase", { token });
+  // `currency` travels alongside, so the screen states what a ceiling is
+  // denominated in even before a policy row exists rather than guessing.
+  apiFetch<{ policy: AutoPurchasePolicy | null; currency: string; paygRate: string | null }>(
+    "/api/billing/auto-purchase",
+    { token },
+  );
 
 export const setAutoPurchase = (token: string, policy: Partial<AutoPurchasePolicy>) =>
   apiFetch<{ ok: boolean; policy: AutoPurchasePolicy }>("/api/billing/auto-purchase", {
@@ -427,6 +477,8 @@ export interface PricingPackage {
   nameHe: string | null;
   credits: number;
   price: DisplayPrice;
+  /** Net, tax and total. `gross` is the amount that will be charged. */
+  taxed: TaxBreakdown;
   discountLabel: string | null;
   maxPurchaseQuantity: number | null;
   expiryPolicy: string;
@@ -434,7 +486,7 @@ export interface PricingPackage {
 }
 
 export const getPricingPackages = (token: string, currency = "USD") =>
-  apiFetch<{ packages: PricingPackage[]; eligible: boolean }>(
+  apiFetch<{ packages: PricingPackage[]; tax: TaxSummary; eligible: boolean }>(
     `/api/billing/pricing/packages?currency=${encodeURIComponent(currency)}`,
     { token },
   );
@@ -452,3 +504,28 @@ export const applyPlanChange = (
     currency: string;
     includedCredits: number;
   }>("/api/billing/pricing/change", { token, method: "POST", body: JSON.stringify(input) });
+
+// ─── Billing identity ───────────────────────────────────────────
+//
+// Who the tax document is made out to, and where they are liable. Kept apart
+// from the payment method on purpose: the card and the entity being invoiced
+// are different facts, and one is not evidence of the other.
+
+export interface BillingIdentity {
+  billingName: string | null;
+  vatId: string | null;
+  billingEmail: string | null;
+  /** ISO-3166-1 alpha-2. Selects the tax rate, so it is declared, never guessed. */
+  billingCountry: string | null;
+  billingAddress: string | null;
+}
+
+export const getBillingIdentity = (token: string) =>
+  apiFetch<{ data: BillingIdentity }>("/api/billing/profile", { token });
+
+export const saveBillingIdentity = (token: string, identity: Partial<BillingIdentity>) =>
+  apiFetch<{ data: BillingIdentity }>("/api/billing/profile", {
+    token,
+    method: "PUT",
+    body: JSON.stringify(identity),
+  });

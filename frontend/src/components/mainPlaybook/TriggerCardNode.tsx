@@ -2,6 +2,7 @@
 
 import React from "react";
 import { Handle, Position, NodeProps } from "reactflow";
+import { TRIGGER_SOURCE_HANDLE } from "./node-registry";
 
 // Single trigger card rendered ON the canvas as a non-draggable node.
 // Layout (top-down):
@@ -151,7 +152,9 @@ export function TriggerCardNode(props: NodeProps) {
       <Handle
         type="source"
         position={Position.Right}
-        id="out"
+        // Same constant the registry declares this trigger's port with, so the
+        // handle on screen and the port the validator checks cannot drift.
+        id={TRIGGER_SOURCE_HANDLE}
         style={{ top: "auto", bottom: 14 }}
         className="!w-2.5 !h-2.5 !bg-[var(--edge-color)] !border-2 !border-white"
       />

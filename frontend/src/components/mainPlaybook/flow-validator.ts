@@ -196,6 +196,54 @@ export function validateFlow(nodes: Node[], edges: Edge[]): FlowIssue[] {
     });
   }
 
+  // ── Rule 5: nodes stranded BEHIND a terminal node ─────────────
+  //
+  // Having an incoming edge is not the same as being reachable. `route_target`
+  // and `end` terminate the walk: the executor returns the moment it dispatches
+  // and never follows their outgoing edge. Anything wired after one of them has
+  // an incoming edge - so Rule 4 stays quiet - and still never runs.
+  //
+  // This is the shape behind a real incident: a flow whose first message went
+  // out, then handed off at a route node, while the send_message and
+  // send_interactive drawn after that node sat silent forever. The author had
+  // no way to see it. Now they do.
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const outgoing = new Map<string, string[]>();
+  for (const e of edges) {
+    const list = outgoing.get(e.source);
+    if (list) list.push(e.target);
+    else outgoing.set(e.source, [e.target]);
+  }
+
+  const reachable = new Set<string>();
+  const queue = nodes.filter((n) => ENTRY_TYPES.has(n.type)).map((n) => n.id);
+  for (const id of queue) reachable.add(id);
+  while (queue.length) {
+    const id = queue.shift()!;
+    const node = byId.get(id);
+    // Do not walk THROUGH a terminal node - that is the whole point.
+    if (!node || (TERMINAL_TYPES.has(node.type) && !ENTRY_TYPES.has(node.type))) continue;
+    for (const next of outgoing.get(id) ?? []) {
+      if (reachable.has(next)) continue;
+      reachable.add(next);
+      queue.push(next);
+    }
+  }
+
+  for (const n of nodes) {
+    if (ENTRY_TYPES.has(n.type)) continue;
+    if (!hasIncoming.has(n.id)) continue; // Rule 4 already said its piece
+    if (reachable.has(n.id)) continue;
+    issues.push({
+      id: `${n.id}__after_terminal`,
+      severity: "warning",
+      nodeId: n.id,
+      title: `${friendlyType(n.type)} can never run`,
+      message:
+        "It sits after a step that ends the flow - handing the conversation to an AI employee, a person or a department finishes this run. Move this node BEFORE that step if it should happen first.",
+    });
+  }
+
   return issues;
 }
 
@@ -256,8 +304,17 @@ function missingRequiredFields(n: Node): RequiredCheck[] {
         if (empty(d.text)) r.push({ key: "text", label: "Reply text", hint: "Type the public reply." });
       }
       break;
+    // Routing to a person needs no target - the runtime parks the conversation
+    // in WAITING for whoever claims it, and a department is optional. Only an
+    // agent or sub-flow route has something that must be chosen.
+    // default_fallback shares the rule: it is the same dispatch node wearing
+    // different chrome (flow-executor runs both from one case), and it had no
+    // rule at all, so an agent fallback with nothing selected passed validation
+    // and then routed nowhere.
     case "route_target":
-      if (empty(d.targetId)) r.push({ key: "targetId", label: "Target", hint: "Pick an AI agent, sub-flow, or department from the dropdown." });
+    case "default_fallback":
+      if ((d.routeType === "agent" || d.routeType === "flow") && empty(d.targetId))
+        r.push({ key: "targetId", label: "Target", hint: "Pick the AI agent or sub-flow this should route to." });
       break;
     case "collect_input":
       if (empty(d.prompt))   r.push({ key: "prompt",   label: "Prompt",   hint: "Write the question to ask the user." });

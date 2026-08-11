@@ -9,6 +9,9 @@ const BLOCKS = [
   "businessPage",
   "setupChecklist",
   "channels",
+  // Per-number WhatsApp management. Registered here so a missing Hebrew string
+  // fails the suite instead of rendering a raw key at a customer.
+  "whatsappNumbers",
   "departments",
   "usage",
   "settings.nav",

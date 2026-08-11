@@ -8,7 +8,6 @@ import {
   PLATFORM_PERMISSIONS,
   validate,
   ensureIdentity,
-  createRecoveryLink,
   publishEvent,
   crossTenantMiddleware,
   AI_MODEL_PRICING,
@@ -31,6 +30,7 @@ import { createProvisioningRequest, runProvisioning, provisioningStatusForTenant
 import { scheduleOnboardingNudge, triggerNudgeNow } from "../services/nudge-engine.service";
 import { listOnboardingSnapshots, getOnboardingSnapshot } from "../services/onboarding-state.service";
 import { inviteUser, syncIdentityNameByUser, syncMembershipAccess, tenantAdminEntry } from "../services/invitation.service";
+import { issueSetupLink } from "../services/setup-link.service";
 
 const router = Router();
 
@@ -1671,8 +1671,9 @@ router.post("/seed", validate(seedSchema), async (req: Request, res: Response): 
 
     // No token is returned: GOTCHA cannot mint one. The new system admin sets
     // a password via this link and then logs in through Authentik like anyone
-    // else.
-    const setupLink = await createRecoveryLink(identity.pk);
+    // else. The link is a GOTCHA setup link rather than a raw Authentik one so
+    // that a bootstrap performed at 09:00 and acted on at 10:00 still works.
+    const setupLink = (await issueSetupLink(admin.id)).url;
 
     res.status(201).json({
       data: {

@@ -5,6 +5,8 @@
  * our Invoice row is a mirror for in-app display + history.
  */
 import { prisma, decryptPaymentToken } from "@chatcenter/shared";
+import { taxForProfile } from "./tax.service";
+import { issueTaxDocument } from "./tax-document.service";
 import type { BillingProvider, InvoiceType } from "@prisma/client";
 import { getProvider } from "../providers";
 import { assertChargeable, consumeQuote, createPaymentQuote, type QuotePurpose } from "./payment-quote.service";
@@ -44,6 +46,14 @@ async function paymentContext(entityId: string): Promise<{
   providerCustomerId?: string;
   currency: string;
   customer: { email?: string; vatId?: string };
+  /** Who the document is made out to, and where they are liable. */
+  identity: {
+    billingName: string | null;
+    billingCountry: string | null;
+    billingAddress: string | null;
+  };
+  /** Shown on the document so the payment line names the card that paid. */
+  card: { brand: string | null; last4: string | null };
 } | null> {
   const profile = await prisma.billingProfile.findUnique({
     where: { billableEntityId: entityId },
@@ -57,6 +67,12 @@ async function paymentContext(entityId: string): Promise<{
     providerCustomerId: profile.providerCustomerId ?? undefined,
     currency: profile.currency,
     customer: { email: profile.billingEmail ?? undefined, vatId: profile.vatId ?? undefined },
+    identity: {
+      billingName: profile.billingName ?? null,
+      billingCountry: profile.billingCountry ?? null,
+      billingAddress: profile.billingAddress ?? null,
+    },
+    card: { brand: pm?.brand ?? null, last4: pm?.last4 ?? null },
   };
 }
 
@@ -154,7 +170,32 @@ export async function chargeFor(input: ChargeForInput): Promise<ChargeForResult>
     return { success: false, invoiceId: invoice.id, failureCode: code };
   }
 
-  const chargeAmount = quote.chargeAmount.toFixed(2);
+  const netAmount = quote.chargeAmount.toFixed(2);
+
+  // Tax is computed in the currency it is owed in, on the CONVERTED net. Doing
+  // it before conversion would leave net + tax failing to equal the gross after
+  // two roundings, and a document whose three numbers do not add up is worse
+  // than no document.
+  let taxed;
+  try {
+    taxed = await taxForProfile(netAmount, { billingCountry: ctx.identity.billingCountry });
+  } catch (err: any) {
+    // No declared country means no defensible tax figure. Refusing is the
+    // point: charging net would leave an Israeli customer owing VAT nobody
+    // collected. Same shape as refusing without an approved FX rate.
+    const code = `charge_not_taxable: ${err?.code ?? err?.message ?? "unknown"}`;
+    await prisma.charge.update({ where: { id: chargeId }, data: { status: "FAILED", failureCode: code } });
+    await prisma.invoice.update({ where: { id: invoice.id }, data: { status: "FAILED" } });
+    await emitBillingEvent({
+      type: "payment.failed",
+      tenantId: input.tenantId,
+      data: { invoiceId: invoice.id, reason: code, amount: input.amount },
+    });
+    return { success: false, invoiceId: invoice.id, failureCode: code };
+  }
+
+  // What actually leaves the card.
+  const chargeAmount = taxed.gross;
 
   // Recorded BEFORE the request, so a crash mid-flight leaves a row saying what
   // was going to be submitted.
@@ -162,7 +203,10 @@ export async function chargeFor(input: ChargeForInput): Promise<ChargeForResult>
     where: { id: chargeId },
     data: {
       paymentQuoteId: quote.id,
-      chargeAmount: quote.chargeAmount,
+      chargeAmount: taxed.gross,
+      netAmount: taxed.net,
+      taxPercent: taxed.percent,
+      taxAmount: taxed.tax,
       chargeCurrency: quote.chargeCurrency,
       providerCurrencyId: quote.providerCurrencyId,
       fxRate: quote.fxRate,
@@ -212,6 +256,30 @@ export async function chargeFor(input: ChargeForInput): Promise<ChargeForResult>
         outcomeUnknown: true,
       };
     }
+
+    // Refused on the way OUT, before anything was sent. The money cannot have
+    // moved, so this is a definite failure and must be recorded as one.
+    //
+    // Leaving it PENDING was worse than it looks. The idempotency lookup treats
+    // a PENDING row as a charge still in flight, so every retry of the same key
+    // came back "outcome unknown" - a clean, fixable local error (a missing
+    // client identifier, a currency mismatch) turned into a permanent "we do
+    // not know whether we took your money", and the customer could never get
+    // past it even once the underlying problem was fixed.
+    if (err?.neverSent === true) {
+      const failureCode = err.failureCode ?? "charge_refused_before_send";
+      await prisma.charge.update({
+        where: { id: chargeId },
+        data: { status: "FAILED", failureCode },
+      });
+      await emitBillingEvent({
+        type: "payment.failed",
+        tenantId: input.tenantId,
+        data: { invoiceId: invoice.id, reason: failureCode, amount: input.amount },
+      });
+      return { success: false, invoiceId: invoice.id, failureCode };
+    }
+
     throw err;
   }
 
@@ -237,6 +305,46 @@ export async function chargeFor(input: ChargeForInput): Promise<ChargeForResult>
       failureCode: result.failureCode,
     },
   });
+
+  // The tax document, once the money has actually moved.
+  //
+  // cc/bill takes money and issues nothing - its documented parameters contain
+  // no field that would produce a document - so this is a second call, and it
+  // has to come after, because a receipt for a charge that then declined is a
+  // document for money nobody paid.
+  //
+  // It can NEVER fail the charge. The money is gone; turning that into an error
+  // would tell the caller to retry a completed payment. A document that did not
+  // issue is a real problem, but it is a problem to chase with the charge
+  // reference in hand, not one to solve by taking the money again.
+  if (result.success && ctx.provider === "ICOUNT") {
+    const doc = await issueTaxDocument({
+      tenantId: input.tenantId,
+      invoiceId: invoice.id,
+      identity: {
+        billingName: ctx.identity.billingName,
+        billingCountry: ctx.identity.billingCountry,
+        billingAddress: ctx.identity.billingAddress,
+        billingEmail: ctx.customer.email ?? null,
+        vatId: ctx.customer.vatId ?? null,
+        providerCustomerId: ctx.providerCustomerId ?? null,
+      },
+      description: input.description,
+      currencyId: quote.providerCurrencyId,
+      net: taxed.net,
+      vatPercent: taxed.percent,
+      gross: taxed.gross,
+      confirmationCode: result.providerChargeRef,
+      cardBrand: ctx.card.brand,
+      cardLast4: ctx.card.last4,
+    });
+    if (doc) {
+      await prisma.charge.update({
+        where: { id: chargeId },
+        data: { documentRef: doc.docNumber, documentUrl: doc.docUrl },
+      });
+    }
+  }
 
   if (result.success) {
     await prisma.invoice.update({

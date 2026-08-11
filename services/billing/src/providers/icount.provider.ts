@@ -9,7 +9,7 @@
  *
  *   paypage/generate_sale  create a hosted tokenization session -> sale_url
  *   client/get_cc_tokens   server-side pull of the stored card token
- *   cc/bill                charge a stored token: sum, token, client_id,
+ *   cc/bill                charge a stored token: sum, cc_token_id, client_id,
  *                          currency_id (1 = ILS)
  *   cc/transactions        transaction lookup, for reconciling an UNKNOWN
  *   doc/cancel             full document-linked refund, with refund_cc: true
@@ -60,7 +60,10 @@ function assertLiveAllowed(operation: string): void {
   const isProd = process.env.NODE_ENV === "production";
   const acknowledged = process.env.ICOUNT_ALLOW_LIVE === "true";
   if (!isProd || !acknowledged) {
-    throw new Error(
+    // Also a never-sent refusal, for the same reason the capability switch is:
+    // it is read before any I/O, so the money provably did not move.
+    throw new ChargeRefusedBeforeSend(
+      "live_mode_not_permitted",
       `[icount] refusing live ${operation}: ICOUNT_MODE=live requires NODE_ENV=production AND ICOUNT_ALLOW_LIVE=true (env guard - dev/test must never charge a real card)`,
     );
   }
@@ -73,21 +76,49 @@ function assertLiveAllowed(operation: string): void {
  * multi-currency, so a charge with the wrong currency id does not fail - it
  * succeeds for the wrong amount, and the customer finds out on their statement.
  */
+/**
+ * A charge refused by our own pre-flight, before anything was sent.
+ *
+ * `neverSent` is the useful part. A charge that failed on the way OUT is a
+ * definite non-charge - the money cannot have moved, because nothing left the
+ * process. Without that marker the caller can only fall back on "we do not
+ * know", which is the safe default for a mid-flight failure and exactly wrong
+ * here: it leaves the attempt PENDING for ever, and every retry reads that
+ * PENDING row and reports an outcome nobody can resolve.
+ */
+export class ChargeRefusedBeforeSend extends Error {
+  readonly neverSent = true;
+  constructor(readonly failureCode: string, message: string) {
+    super(message);
+    this.name = "ChargeRefusedBeforeSend";
+  }
+}
+
 function assertChargeSafety(input: ChargeInput): void {
   const currency = (input.chargeCurrency || input.currency || "").toUpperCase();
   if (currency !== "ILS") {
-    throw new Error(`[icount] refusing a ${currency || "(unspecified)"} charge: only ILS charges are enabled`);
+    throw new ChargeRefusedBeforeSend(
+      "charge_currency_not_ils",
+      `[icount] refusing a ${currency || "(unspecified)"} charge: only ILS charges are enabled`,
+    );
   }
   if (input.providerCurrencyId !== CURRENCY_ID_ILS) {
-    throw new Error(
+    throw new ChargeRefusedBeforeSend(
+      "provider_currency_id_not_ils",
       `[icount] refusing charge with currency_id ${input.providerCurrencyId}: ILS charges must be submitted as currency_id ${CURRENCY_ID_ILS}`,
     );
   }
   if (!input.chargeAmount || Number(input.chargeAmount) <= 0) {
-    throw new Error("[icount] refusing charge: no positive charge amount was supplied");
+    throw new ChargeRefusedBeforeSend(
+      "no_positive_charge_amount",
+      "[icount] refusing charge: no positive charge amount was supplied",
+    );
   }
   if (!input.providerCustomerId && !input.customClientId) {
-    throw new Error("[icount] refusing charge: no client identifier - the charge could not be attributed");
+    throw new ChargeRefusedBeforeSend(
+      "no_client_identifier",
+      "[icount] refusing charge: no client identifier - the charge could not be attributed",
+    );
   }
 }
 
@@ -144,13 +175,24 @@ export const icountProvider: PaymentProvider = {
     // Idempotent in effect: our reference is minted per tokenization session,
     // so a retry of the same session reuses the same reference. iCount treats
     // a repeat as an update rather than a duplicate.
-    await api.createClient({
+    const client = await api.createClient({
+      // The customer's own billing name when we have one. The fallback is a
+      // placeholder of last resort: a client record - and therefore every tax
+      // document issued against it - reading "GOTCHA customer" is not a
+      // receipt anybody can file.
       clientName: input.clientName || "GOTCHA customer",
       customClientId: input.customClientId,
       ...(input.email ? { email: input.email } : {}),
+      ...(input.vatId ? { vatId: input.vatId } : {}),
+      ...(input.address ? { address: input.address } : {}),
     });
 
-    return api.generateSale(input);
+    // Carry the client id back out. It used to be thrown away here, and the
+    // consequence surfaced much later and somewhere else: a stored card with
+    // no provider customer id on the billing profile, and every charge refused
+    // with "no client identifier - the charge could not be attributed".
+    const sale = await api.generateSale(input);
+    return { ...sale, providerClientId: client.clientId };
   },
 
   /**

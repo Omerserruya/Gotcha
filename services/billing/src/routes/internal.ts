@@ -9,6 +9,7 @@ import { requireInternalKey } from "../lib/internal-auth";
 import { ensureBillableEntity, getEntityIdForTenant } from "../services/billable-entity.service";
 import { createTrialSubscription } from "../services/subscription.service";
 import { triggerAutoPurchase } from "../services/purchase.service";
+import { accruePaygUsage } from "../services/payg.service";
 import { backfillAllTenants, grandfatherTenant } from "../services/grandfather.service";
 import { runBillingCycle } from "../services/subscription.service";
 import { runDunning } from "../services/dunning.service";
@@ -68,6 +69,23 @@ router.post("/internal/billing/usage-threshold", async (req, res) => {
   }
   const autoPurchase = await triggerAutoPurchase({ tenantId, reason: "usage_threshold" });
   res.json({ ok: true, autoPurchase });
+});
+
+/**
+ * Usage the wallet could not cover, reported by the AI runtime.
+ *
+ * Separate from usage-threshold on purpose. That one fires only when a
+ * percentage boundary is crossed; a shortfall happens on every call once the
+ * balance is gone, and folding it into a threshold report would bill only the
+ * calls that happened to land on 80/90/95/100.
+ */
+router.post("/internal/billing/payg-accrue", async (req, res) => {
+  const { tenantId, units } = req.body ?? {};
+  if (!tenantId) return res.status(400).json({ error: "tenantId required" });
+  const n = Number(units);
+  if (!Number.isFinite(n) || n <= 0) return res.status(400).json({ error: "units must be a positive number" });
+  const result = await accruePaygUsage({ tenantId, units: n });
+  res.json({ ok: true, ...result });
 });
 
 router.post("/internal/billing/grandfather", async (req, res) => {

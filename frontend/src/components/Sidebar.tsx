@@ -1,9 +1,10 @@
 "use client";
 
+import { useAppPathname } from "@/lib/pathname";
 import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
+
 import { useAuth } from "@/context/AuthContext";
 import { usePermissions } from "@/context/PermissionsContext";
 import { useI18n } from "@/context/I18nContext";
@@ -58,7 +59,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
   const { user, token, logout } = useAuth();
   const { atLeastRole, permissions, loaded, roleKey } = usePermissions();
   const { t } = useI18n();
-  const pathname = usePathname();
+  const pathname = useAppPathname();
 
   // Getting Started nav: instant answer from the localStorage cache (the
   // Sidebar remounts on every navigation - a per-mount fetch made every click
@@ -88,7 +89,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
   return (
     <aside
       className={clsx(
-        "bg-white flex flex-col shrink-0 h-screen md:h-[calc(100vh-16px)] sticky top-0 transition-all duration-300 shadow-float md:rounded-2xl md:overflow-hidden",
+        "bg-white flex flex-col shrink-0 h-[100vh] md:h-[calc(100vh-16px)] sticky top-0 transition-all duration-300 shadow-float md:rounded-2xl md:overflow-hidden",
         collapsed ? "w-[68px]" : "w-64"
       )}
     >

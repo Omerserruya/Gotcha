@@ -75,7 +75,7 @@ export const ICOUNT_CAPABILITIES: ProviderCapabilities = {
 } as const;
 
 /** The provider currency ids GOTCHA may submit. Deliberately ILS alone. */
-export const ICOUNT_CHARGE_CURRENCY_IDS: Readonly<Record<string, number>> = { ILS: 1 };
+export const ICOUNT_CHARGE_CURRENCY_IDS: Readonly<Record<string, number>> = { ILS: 5 };
 
 /** Manual/offline provider: no automated money movement at all. */
 export const MANUAL_CAPABILITIES: ProviderCapabilities = {

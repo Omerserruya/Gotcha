@@ -18,6 +18,10 @@ let authState: { user: unknown; isLoading: boolean } = { user: null, isLoading: 
 
 vi.mock("@/lib/oidc", () => ({
   beginLogin: (...a: unknown[]) => beginLogin(...a),
+  // The shim asks whether it got here BY signing out - if it did, it must not
+  // turn that into a fresh sign-in. These tests are about the unreachable-IdP
+  // path, so: no sign-out in progress.
+  consumeSigningOut: () => false,
 }));
 
 vi.mock("@/context/AuthContext", () => ({

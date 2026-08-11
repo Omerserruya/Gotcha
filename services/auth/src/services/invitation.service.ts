@@ -2,7 +2,6 @@ import {
   prisma,
   withCrossTenantAccess,
   ensureIdentity,
-  createRecoveryLink,
   setIdentityActive,
   deleteIdentity,
   updateIdentity,
@@ -12,6 +11,7 @@ import {
   resolveAppPublicUrl,
 } from "@chatcenter/shared";
 import { sendTeamInviteEmail } from "./notification.service";
+import { issueSetupLink } from "./setup-link.service";
 
 /**
  * User provisioning.
@@ -113,7 +113,12 @@ export async function inviteUser(
   // already exists. Minting one anyway would email an existing user a "set
   // your password" link, which reads like a phish and can lock them out.
   const hasLoggedIn = await getUserLastLogin(authentik.pk).then((v) => v != null).catch(() => false);
-  const setupLink = hasLoggedIn ? null : await createRecoveryLink(authentik.pk);
+  // A GOTCHA link, not an Authentik one. The IdP's recovery token lives 30
+  // minutes from the moment it is minted, so mailing it directly meant every
+  // invitation expired half an hour after being SENT - silently, and in a way
+  // that only surfaced after the invitee had typed a password. This link is
+  // exchanged for a fresh IdP token when they click.
+  const setupLink = hasLoggedIn ? null : (await issueSetupLink(user.id)).url;
 
   // Email the invitee. Fire-and-forget: the invite must not fail on an SMTP
   // blip - the admin still gets the link back in the UI and can share it by
@@ -251,22 +256,13 @@ export async function eraseUserIdentity(authentikSubject: string | null): Promis
  * for a fresh link into Authentik's own recovery flow.
  */
 export async function resendSetupLink(userId: string): Promise<string> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      email: true,
-      name: true,
-      identity: { select: { authentikSubject: true } },
-    },
-  });
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
   if (!user) throw new Error("User not found");
 
-  const identity = user.identity?.authentikSubject
-    ? await findIdentityBySubject(user.identity.authentikSubject)
-    : await ensureIdentity(user.email, user.name);
-  if (!identity) throw new Error("No Authentik identity for this user");
-
-  return createRecoveryLink(identity.pk);
+  // Issuing revokes any previous live link for this person, so the old email
+  // stops working the moment a new one is sent. That is the property that makes
+  // "resend" a repair rather than a second key in circulation.
+  return (await issueSetupLink(user.id)).url;
 }
 
 /**
@@ -305,7 +301,7 @@ export async function tenantAdminEntry(tenantId: string): Promise<{
   // password, and mailing them a "set your password" link reads like a phish
   // and can lock them out.
   const hasLoggedIn = await getUserLastLogin(identity.pk).then((v) => v != null).catch(() => false);
-  const setupUrl = hasLoggedIn ? null : await createRecoveryLink(identity.pk);
+  const setupUrl = hasLoggedIn ? null : (await issueSetupLink(admin.id)).url;
 
   const frontend = resolveAppPublicUrl(process.env);
   return {

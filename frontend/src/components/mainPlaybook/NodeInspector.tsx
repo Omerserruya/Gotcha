@@ -126,7 +126,7 @@ function PanelShell({ open, onClose, children }: { open: boolean; onClose: () =>
       <div className="fixed inset-0 z-30" onClick={onClose} />
       <aside
         onClick={(e) => e.stopPropagation()}
-        className={`fixed right-0 top-0 h-screen w-[400px] max-w-[92vw] bg-white shadow-2xl border-l border-gray-200 z-40 flex flex-col transition-transform duration-200 ease-out ${open ? "translate-x-0" : "translate-x-full"}`}
+        className={`fixed right-0 top-0 h-[100vh] w-[400px] max-w-[92vw] bg-white shadow-2xl border-l border-gray-200 z-40 flex flex-col transition-transform duration-200 ease-out ${open ? "translate-x-0" : "translate-x-full"}`}
       >
         {children}
       </aside>

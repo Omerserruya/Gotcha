@@ -101,7 +101,15 @@ http {
         # Next.js static export today; tightening to nonces is a follow-up.
         # frame-ancestors 'self' (embedded chat is a script widget, not an
         # iframe of this origin, so it is unaffected).
-        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
+        #
+        # connect.facebook.net / www.facebook.com are allowed ONLY here, on the
+        # app vhost, because WhatsApp Embedded Signup runs Meta's official
+        # JavaScript SDK on /settings/channels/whatsapp. Meta publishes no way
+        # to launch that flow without their SDK, so blocking it blocks the
+        # feature outright. Deliberately NOT added to the /widget/,
+        # /api/embedded-chat or help policies: those serve untrusted storefronts
+        # and public pages and have no reason to reach Facebook.
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://connect.facebook.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il https://www.facebook.com https://web.facebook.com; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
 
         # Health check for the gateway itself
         location /health {

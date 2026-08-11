@@ -261,9 +261,30 @@ export function licenseKeysFor(permissionKey: string): string[] {
   return [subFeatureLicenseKey(permissionKey), featureLicenseKey(permissionKey)];
 }
 
-/** The full set of grantable license (entitlement) keys derived from the catalog. */
+/**
+ * Commercial units that are sold and withheld in their own right, but carry no
+ * permission of their own - so nothing in the catalog above would ever derive
+ * them.
+ *
+ * `voice` is the case that forced this. Telephony is a separate commercial
+ * decision (it costs real Twilio money per tenant), yet its only permissions
+ * live under `outbound:calls:*`, so "voice" was not a grantable license at all.
+ * It was gated instead by three per-tenant booleans that only a SYSTEM_ADMIN
+ * could flip, which meant selling a customer voice took TWO unrelated acts: pick
+ * the feature area on the POC, then remember to go and flip the flags. Miss the
+ * second and the workspace shows a Voice option it refuses to open.
+ *
+ * Listing it here makes it selectable wherever licenses are chosen, and
+ * `materializeEntitlements` projects the answer onto those legacy booleans.
+ */
+export const STANDALONE_LICENSE_KEYS: readonly string[] = ["voice"];
+
+/** The full set of grantable license (entitlement) keys. */
 export const ALL_LICENSE_KEYS: readonly string[] = Array.from(
-  new Set(PERMISSIONS.flatMap((d) => [d.feature, `${d.feature}:${d.subFeature}`])),
+  new Set([
+    ...PERMISSIONS.flatMap((d) => [d.feature, `${d.feature}:${d.subFeature}`]),
+    ...STANDALONE_LICENSE_KEYS,
+  ]),
 ).sort();
 
 // ─────────────────────────────────────────────────────────────

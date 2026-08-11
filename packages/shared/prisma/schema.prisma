@@ -141,6 +141,7 @@ model Tenant {
   messages                Message[]
   chatbotFlows            ChatbotFlow[]
   channelAccounts         ChannelAccount[]
+  whatsappNumbers         WhatsAppNumber[]
   shopifyChatInstalls     ShopifyChatInstallation[]
   channelConfig           TenantChannelConfig?
   departments             Department[]
@@ -337,12 +338,225 @@ model ChannelAccount {
   conversations            Conversation[]
   templates                MessageTemplate[]
   shopifyChatInstallations ShopifyChatInstallation[]
+  whatsappNumber           WhatsAppNumber?
 
   @@unique([channel, externalId])
   @@index([tenantId])
   @@index([connectionStatus])
   @@index([tokenExpiresAt])
   @@map("channel_accounts")
+}
+
+// ─── WhatsApp: per-number lifecycle ──────────────────────────
+//
+// One row per connected WhatsApp business phone number, hanging off the
+// ChannelAccount that already carries the messaging identity and the
+// encrypted token.
+//
+// Why a satellite table rather than more `platformMeta` JSON:
+//
+//   * Phase 7 requires each number to have its OWN lifecycle. A lifecycle
+//     you cannot index, constrain or query is not a lifecycle, and JSON
+//     gives none of those. "Which numbers are unhealthy" and "which numbers
+//     are still waiting on the customer" have to be one query each.
+//   * Meta's model is three levels deep (portfolio -> WABA -> number) and a
+//     tenant legitimately spans several of each. Flattening that into a blob
+//     is what produced the current single-number assumptions.
+//
+// Why NOT a table that replaces ChannelAccount: conversations, templates,
+// the send adapters and the inbound router all key off ChannelAccount.
+// Forking the messaging core to add onboarding state would risk the working
+// part of the system to improve the broken part.
+//
+// Token storage stays in `ChannelAccount.credentials` (already encrypted at
+// rest, already what the send path reads). It is deliberately duplicated per
+// number rather than shared per WABA: revoking one number must never reach
+// another number's ability to send, which is the Phase 7/8 isolation rule.
+
+/// Which official Meta onboarding path connected this number. Chosen by the
+/// flow selector from inspector output, never asked of the customer.
+enum WhatsAppOnboardingFlow {
+  /// Scenario A. Brand new business phone number, created during signup.
+  NEW_NUMBER
+  /// Scenario B. Number already live in the WhatsApp Business app; onboarded
+  /// through Meta's Coexistence flow. Number stays usable in the app.
+  COEXISTENCE
+  /// Scenario C. Number already on Cloud API under an existing WABA. Assets
+  /// are reused; nothing is created.
+  EXISTING_CLOUD_API
+  /// Scenario D. Number GOTCHA already knew about, being revalidated or
+  /// repaired rather than onboarded.
+  RECONNECT
+  /// Scenario E. Number moved between WABAs through Meta's programmatic
+  /// migration. Only ever selected when every documented prerequisite holds.
+  MIGRATION
+}
+
+/// Lifecycle of ONE number. Independent of every other number on the tenant.
+enum WhatsAppNumberState {
+  /// The inspector has seen this number on the customer's assets, but it is
+  /// not connected to GOTCHA. Never messages, never counted as a channel.
+  DISCOVERED
+  /// The post-onboarding pipeline is running.
+  ONBOARDING
+  /// Blocked on something only the customer can do: a two-step verification
+  /// PIN, a verification code, or the tap-to-connect step of Coexistence.
+  /// `pendingAction` says which. This is an honest state, not an error.
+  ACTION_REQUIRED
+  /// Every configuration step Meta exposes an API for has succeeded and the
+  /// last health check passed.
+  CONNECTED
+  /// Connected and previously working, but the last health check found a
+  /// problem. Messages may still flow; `healthSnapshot` says what broke.
+  DEGRADED
+  /// Deliberately disconnected by an admin.
+  DISCONNECTED
+  /// Onboarding failed on a step that is not the customer's to fix.
+  FAILED
+}
+
+/// What the customer must do before onboarding can continue. Drives the copy
+/// shown on the number's card; `null` whenever we are not waiting on a human.
+enum WhatsAppPendingAction {
+  /// Number has two-step verification enabled and Meta requires the existing
+  /// 6-digit PIN to register. There is NO API to reset or disable it, so it
+  /// can only be collected from the customer.
+  TWO_STEP_PIN
+  /// Meta sent an SMS/voice code that must be entered.
+  VERIFICATION_CODE
+  /// Coexistence: the customer must tap Connect in their WhatsApp Business
+  /// app and paste the code Meta messaged them.
+  BUSINESS_APP_CONFIRMATION
+  /// Meta requires the business itself to complete Business Verification.
+  BUSINESS_VERIFICATION
+  /// Meta is reviewing the display name; we can only read `name_status`.
+  DISPLAY_NAME_REVIEW
+}
+
+model WhatsAppNumber {
+  id       String @id @default(cuid())
+  tenantId String @map("tenant_id")
+
+  /// The messaging identity. One-to-one; deleting the channel deletes this.
+  channelAccountId String @unique @map("channel_account_id")
+
+  // ── Meta asset identity, stored per number so no lookup is ever implied ──
+  /// Business Portfolio ID (`business_id` in the Embedded Signup payload).
+  /// Nullable: readable only when `business_management` was granted.
+  businessPortfolioId String? @map("business_portfolio_id")
+  wabaId              String  @map("waba_id")
+  /// Meta's `<PHONE_NUMBER_ID>`. NOT the phone number. Globally unique at
+  /// Meta, so unique here too - it is what stops one number being connected
+  /// twice, including across tenants.
+  phoneNumberId       String  @unique @map("phone_number_id")
+  /// E.164 as Meta formats it, for display only. Never used for routing.
+  displayPhoneNumber  String? @map("display_phone_number")
+  verifiedName        String? @map("verified_name")
+
+  // ── Platform facts, read from Meta, never inferred ──
+  /// `CLOUD_API` | `ON_PREMISE` | `NOT_APPLICABLE`. Open string, not an enum:
+  /// Meta does not publish a closed set and an unknown value must not throw.
+  platformType String? @map("platform_type")
+  /// `is_on_biz_app`. True with platformType CLOUD_API means Coexistence.
+  isOnBizApp   Boolean @default(false) @map("is_on_biz_app")
+
+  // ── Lifecycle ──
+  onboardingFlow WhatsAppOnboardingFlow @map("onboarding_flow")
+  state          WhatsAppNumberState    @default(ONBOARDING)
+  pendingAction  WhatsAppPendingAction? @map("pending_action")
+
+  // ── Status mirrors of Meta fields. Open strings for the same reason as
+  //    platformType: Meta documents members, not a closed enumeration. ──
+  /// `CONNECTED`, `PENDING`, `FLAGGED`, `RESTRICTED`, `BANNED`, ...
+  messagingStatus        String? @map("messaging_status")
+  /// `VERIFIED` | `NOT_VERIFIED` | `EXPIRED`.
+  codeVerificationStatus String? @map("code_verification_status")
+  /// `APPROVED` | `PENDING_REVIEW` | `DECLINED` | `NONE`.
+  nameStatus             String? @map("name_status")
+  /// `GREEN` | `YELLOW` | `RED` | `NA` | `UNKNOWN`.
+  qualityRating          String? @map("quality_rating")
+  /// `throughput.level`: `STANDARD` | `HIGH` | `NOT_APPLICABLE`. Coexistence
+  /// numbers are fixed at 20 messages per second by Meta.
+  throughputLevel        String? @map("throughput_level")
+  messagingLimitTier     String? @map("messaging_limit_tier")
+
+  // ── Webhook configuration, per number ──
+  /// Our app present in `GET /<WABA_ID>/subscribed_apps`. This is the ONLY
+  /// proof inbound messages can reach us; without it a number is not
+  /// connected however healthy everything else looks.
+  webhookSubscribed  Boolean   @default(false) @map("webhook_subscribed")
+  webhookVerifiedAt  DateTime? @map("webhook_verified_at")
+  /// A callback override read back from Meta. We never SET one (see
+  /// docs/integrations/whatsapp/01-meta-api-inventory.md section 7), so a
+  /// value here means another platform owns this number's webhooks, which is
+  /// a diagnosis rather than a setting.
+  webhookOverrideUri String?   @map("webhook_override_uri")
+
+  // ── Health ──
+  /// Last `?fields=health_status` response, stored whole. Meta's own
+  /// `possible_solution` text is more accurate than anything we could infer,
+  /// so it is shown verbatim rather than paraphrased.
+  healthSnapshot  Json?     @map("health_snapshot")
+  /// `AVAILABLE` | `LIMITED` | `BLOCKED`.
+  canSendMessage  String?   @map("can_send_message")
+  lastHealthCheck DateTime? @map("last_health_check")
+  /// Customer-facing reason the number is not fully healthy. Empty when fine.
+  lastError       String?   @map("last_error")
+
+  connectedAt    DateTime? @map("connected_at")
+  connectedBy    String?   @map("connected_by")
+  disconnectedAt DateTime? @map("disconnected_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant         Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  channelAccount ChannelAccount        @relation(fields: [channelAccountId], references: [id], onDelete: Cascade)
+  events         WhatsAppNumberEvent[]
+
+  @@index([tenantId])
+  @@index([tenantId, state])
+  @@index([wabaId])
+  @@index([businessPortfolioId])
+  @@map("whatsapp_numbers")
+}
+
+/// Append-only audit of every onboarding, repair and health step taken
+/// against ONE number.
+///
+/// Phase 10 requires showing the exact reason and the API response when
+/// something fails. That is only possible if the raw response was kept at the
+/// moment it happened; reconstructing it later means guessing. It also gives
+/// the idempotency evidence the pipeline needs: a step that already succeeded
+/// is not re-run against a customer's rate-limited number.
+model WhatsAppNumberEvent {
+  id       String @id @default(cuid())
+  numberId String @map("number_id")
+
+  /// Pipeline step name, e.g. `EXCHANGE_TOKEN`, `SUBSCRIBE_WEBHOOKS`,
+  /// `REGISTER_NUMBER`, `HEALTH_CHECK`, `REPAIR_WEBHOOKS`.
+  step    String
+  /// `SUCCESS` | `FAILED` | `SKIPPED` | `ACTION_REQUIRED`.
+  outcome String
+
+  /// Meta's error code, when there was one. Kept as its own column because
+  /// specific codes drive specific handling: 133016 registration rate limit,
+  /// 136024 already verified, 133005 wrong PIN.
+  metaErrorCode Int?    @map("meta_error_code")
+  message       String?
+  /// Meta's response body, secrets stripped. Shown verbatim in the UI.
+  detail        Json?
+
+  /// Wall-clock cost of the call, for spotting Meta-side slowness.
+  durationMs Int? @map("duration_ms")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  number WhatsAppNumber @relation(fields: [numberId], references: [id], onDelete: Cascade)
+
+  @@index([numberId, createdAt])
+  @@index([numberId, step])
+  @@map("whatsapp_number_events")
 }
 
 // ─── Shopify Chat App installation ───────────────────────────
@@ -654,6 +868,7 @@ model User {
   roleAssignments         UserRoleAssignment[]
   featureGrants           UserFeatureGrant[]
   approvalRecipients      ApprovalRecipient[]
+  setupLinks              SetupLink[]
 
   @@unique([tenantId, email])
   // One membership per identity per tenant - the same person cannot hold two
@@ -1317,6 +1532,47 @@ model TenantInvite {
   @@index([tenantId])
   @@index([email])
   @@map("tenant_invites")
+}
+
+/// A GOTCHA-owned "set your password" link, redeemed for an Authentik recovery
+/// link at CLICK time rather than at send time.
+///
+/// Why this exists: Authentik's `/core/users/{pk}/recovery/` mints a FlowToken
+/// with no explicit expiry, so it inherits the Authentik tenant's
+/// `default_token_duration`, which is 30 minutes out of the box. Mailing that
+/// token directly meant every invitation died 30 minutes after it was SENT -
+/// and died silently, because a recovery flow with no identification stage
+/// still renders the password form and only refuses at user_write, after the
+/// person has typed a password ("No user found and can't create new user").
+///
+/// Holding our own token instead moves the 30-minute IdP window to the moment
+/// of the click, which is the only moment it can be spent, and makes the
+/// advertised 48 hours a promise this system can actually keep.
+model SetupLink {
+  id String @id @default(cuid())
+
+  /// SHA-256 of the raw token. Unique so a lookup is one indexed probe, and so
+  /// a database dump yields hashes rather than working links.
+  tokenHash String @map("token_hash")
+
+  userId String @map("user_id")
+
+  expiresAt DateTime  @map("expires_at")
+  /// Multi-use until expiry. Setting a password can take more than one attempt
+  /// (a rejected password, a closed tab, a mail client that prefetches links),
+  /// and a single-use link strands the person on exactly the screen this model
+  /// exists to prevent. Recorded on FIRST use for audit only.
+  usedAt    DateTime? @map("used_at")
+  revokedAt DateTime? @map("revoked_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tokenHash])
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("setup_links")
 }
 
 // ─── Tenant Onboarding Tracker ──────────────────────────────
@@ -2421,6 +2677,10 @@ enum InvoiceType {
   SUBSCRIPTION
   CREDIT_PURCHASE
   AUTO_PURCHASE
+  /// Usage served past a spent wallet and billed when the cycle closed. Kept
+  /// distinct from AUTO_PURCHASE so arrears never read as a prepaid top-up on
+  /// a document, in a report, or in revenue.
+  PAYG_SETTLEMENT
 }
 
 enum InvoiceStatus {
@@ -2516,6 +2776,7 @@ model BillableEntity {
   subscription       Subscription?
   invoices           Invoice[]
   autoPurchasePolicy AutoPurchasePolicy?
+  paygAccruals       PaygAccrual[]
 
   @@map("billable_entities")
 }
@@ -2585,6 +2846,16 @@ model Plan {
   dataRetentionDays      Int?      @map("data_retention_days")
   autoPurchaseEligible   Boolean   @default(true) @map("auto_purchase_eligible")
   creditPackagesEligible Boolean   @default(true) @map("credit_packages_eligible")
+  /// The pay-as-you-go rate for this plan, per credit.
+  ///
+  /// The catalog is where a product is priced, so this is the answer for every
+  /// tenant on the plan rather than a number typed once per customer.
+  /// AutoPurchasePolicy.paygPricePerCredit stays as a per-tenant OVERRIDE, and
+  /// the resolution is `policy ?? plan` - see readPaygAccess.
+  ///
+  /// NULL means this plan is not sold pay-as-you-go. That is a refusal to serve
+  /// past a spent wallet, never a licence to serve it free.
+  paygPricePerCredit     Decimal?  @map("payg_price_per_credit") @db.Decimal(12, 6)
   // Whether the customer may pick a recurring chat / voice volume. Foundation
   // ships with both OFF; flipping either ON is a data change.
   chatVolumeEnabled      Boolean   @default(false) @map("chat_volume_enabled")
@@ -2813,6 +3084,16 @@ model BillingProfile {
   currency           String               @default("ILS")
   billingEmail       String?              @map("billing_email")
   vatId              String?              @map("vat_id")
+  /// Who the tax document is made out to. Asked for explicitly - never derived
+  /// from the tenant name, because a receipt carrying the wrong legal entity is
+  /// worse than one that was never issued.
+  billingName        String?              @map("billing_name")
+  /// ISO-3166-1 alpha-2, DECLARED by the customer. Deliberately not defaulted
+  /// from Tenant.defaultCountryCode (a phone-normalisation default) or from the
+  /// onboarding website crawl: neither is a statement anyone made about where
+  /// they are liable for tax, and tax is not a thing to infer.
+  billingCountry     String?              @map("billing_country")
+  billingAddress     String?              @map("billing_address")
   status             BillingProfileStatus @default(ACTIVE)
   createdAt          DateTime             @default(now()) @map("created_at")
   updatedAt          DateTime             @updatedAt @map("updated_at")
@@ -2821,6 +3102,32 @@ model BillingProfile {
   paymentMethods PaymentMethod[]
 
   @@map("billing_profiles")
+}
+
+/// Tax rate by country, as configuration rather than code.
+///
+/// A country with no active row is 0%. That is what makes "Israel 18, everyone
+/// else nothing" expressible without seeding a row per country, and it means
+/// adding a jurisdiction later is a row, not a deploy.
+///
+/// `percent` is stored, never a multiplier: 18.00 reads as 18% to whoever
+/// checks it against the law, and a document has to state the rate it applied.
+model TaxRate {
+  id            String   @id @default(cuid())
+  /// ISO-3166-1 alpha-2, uppercase.
+  countryCode   String   @unique @map("country_code")
+  percent       Decimal  @db.Decimal(5, 2)
+  /// Shown on the document, in the customer's language. e.g. "מע\"מ".
+  label         String?
+  active        Boolean  @default(true)
+  effectiveFrom DateTime @default(now()) @map("effective_from")
+  internalNote  String?  @map("internal_note")
+  createdBy     String?  @map("created_by")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@index([active, countryCode])
+  @@map("tax_rates")
 }
 
 model PaymentMethod {
@@ -2980,6 +3287,18 @@ model Charge {
   fxRate             Decimal? @map("fx_rate") @db.Decimal(18, 8)
   fxRateVersion      Int?     @map("fx_rate_version")
 
+  /// What the charge was made of, in the CHARGE currency.
+  ///
+  /// Catalogue prices are net, so `chargeAmount` (what was submitted) is
+  /// net + tax. Keeping the parts means a receipt reconciles against the
+  /// charge without recomputing tax back out of a rounded total.
+  netAmount   Decimal? @map("net_amount") @db.Decimal(12, 2)
+  taxPercent  Decimal? @map("tax_percent") @db.Decimal(5, 2)
+  taxAmount   Decimal? @map("tax_amount") @db.Decimal(12, 2)
+  /// The tax document issued for this charge, once the provider confirmed it.
+  documentRef String?  @map("document_ref")
+  documentUrl String?  @map("document_url")
+
   status         ChargeStatus @default(PENDING)
   attemptNumber  Int          @default(1) @map("attempt_number")
   failureCode    String?      @map("failure_code")
@@ -2987,6 +3306,8 @@ model Charge {
   createdAt      DateTime     @default(now()) @map("created_at")
 
   invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([documentRef])
 
   @@index([invoiceId])
   @@map("charges")
@@ -3348,6 +3669,17 @@ model PaymentAttempt {
   chargeCurrency     String?  @map("charge_currency")
   providerCurrencyId Int?     @map("provider_currency_id")
 
+  /// What the charge was made of. `chargeAmount` above is the GROSS - the
+  /// figure that left the card - so without these the tax on the document
+  /// cannot be checked against the money that moved.
+  netAmount  Decimal? @map("net_amount") @db.Decimal(12, 2)
+  taxPercent Decimal? @map("tax_percent") @db.Decimal(5, 2)
+  taxAmount  Decimal? @map("tax_amount") @db.Decimal(12, 2)
+
+  /// The legal document iCount issued for this payment.
+  documentRef String? @map("document_ref")
+  documentUrl String? @map("document_url")
+
   /// How the money was proven: PROVIDER_CONFIRMED or MANUAL_EXTERNAL_CONTRACT.
   /// Recorded on the attempt itself so billing history can never present a
   /// Sysadmin-activated contract as a card payment that actually cleared.
@@ -3405,6 +3737,11 @@ model AutoPurchasePolicy {
   // What happens once the monthly ceiling is reached (or auto-purchase is off)
   // and the balance hits zero. Enforced server-side by the AI runtime gate.
   limitBehavior       AutoPurchaseLimitBehavior @default(STOP_AI) @map("limit_behavior")
+  /// The pay-as-you-go rate, used only when limitBehavior is PAYG. Separate
+  /// from pricePerCredit, which prices an auto-purchase top-up: the two are
+  /// different products and pricing them off one field would mean a discount on
+  /// one silently discounting the other.
+  paygPricePerCredit  Decimal?                  @map("payg_price_per_credit") @db.Decimal(12, 6)
   // Single-flight lock. A purchase attempt CAS-claims the policy row; a stale
   // lock (older than the TTL) is reclaimable so a crashed worker cannot wedge
   // auto-purchase permanently.
@@ -3421,6 +3758,49 @@ enum AutoPurchaseLimitBehavior {
   HUMAN_ONLY // AI stops, human agents keep working
   REQUIRE_APPROVAL // each further AI action needs an authorized approval
   PREPAID_ONLY // never auto-purchase; consume prepaid balance only
+  PAYG // keep serving past zero, accrue usage, bill it at the END of the cycle
+}
+
+/// Pay-as-you-go usage accrued past a spent wallet, settled once per cycle.
+///
+/// The other two ways to buy credits charge the card at the moment of purchase.
+/// This one deliberately does not: it accumulates what was consumed and bills it
+/// when the cycle closes, which is the only mode where the customer owes money
+/// they have not yet been charged for. That is exactly why `maxMonthlySpend` is
+/// enforced on every accrual rather than at settlement - a ceiling checked only
+/// when the bill is drawn up is not a ceiling, it is a receipt.
+model PaygAccrual {
+  id               String            @id @default(cuid())
+  billableEntityId String            @map("billable_entity_id")
+  /// The subscription's spend window, NOT the calendar month. See spendWindowKey.
+  periodKey        String            @map("period_key")
+  units            Decimal           @default(0) @db.Decimal(18, 6)
+  amount           Decimal           @default(0) @db.Decimal(12, 2)
+  currency         String
+  /// Frozen at first accrual, so a mid-cycle price change cannot restate what
+  /// the customer already consumed at the old rate.
+  pricePerCredit   Decimal           @map("price_per_credit") @db.Decimal(12, 6)
+  status           PaygAccrualStatus @default(OPEN)
+  /// Set when the ceiling stopped further accrual, so the UI can say why the
+  /// AI went quiet instead of leaving it a mystery.
+  cappedAt         DateTime?         @map("capped_at")
+  settledChargeId  String?           @map("settled_charge_id")
+  settledAt        DateTime?         @map("settled_at")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+
+  entity BillableEntity @relation(fields: [billableEntityId], references: [id], onDelete: Cascade)
+
+  @@unique([billableEntityId, periodKey])
+  @@index([status])
+  @@map("payg_accruals")
+}
+
+enum PaygAccrualStatus {
+  OPEN // still accruing
+  SETTLING // a settlement charge is in flight
+  SETTLED // charged
+  VOID // written off, never to be charged
 }
 
 model DunningState {

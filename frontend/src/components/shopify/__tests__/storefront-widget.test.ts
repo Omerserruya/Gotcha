@@ -70,6 +70,8 @@ async function boot(
     appearance?: Record<string, any>;
     /** Wire the visitor mute control, which only renders when the host offers it. */
     sounds?: boolean;
+    /** Settings-editor preview: renders everything, takes nothing (not even focus). */
+    preview?: boolean;
   } = {},
 ): Promise<Harness> {
   const host = document.createElement("div");
@@ -106,6 +108,7 @@ async function boot(
     },
     post,
     shadow,
+    ...(options.preview ? { preview: true } : {}),
     setUnread: vi.fn(),
     onOpened: vi.fn(),
     onClosed: vi.fn(),
@@ -172,6 +175,8 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  // Tests that pose as a localized storefront install this global.
+  delete (window as any).Shopify;
 });
 
 // ─── Rendering ──────────────────────────────────────────────
@@ -196,7 +201,7 @@ describe("welcome polish", () => {
     // A merchant's hero can be any colour; the way out must be legible on
     // all of them without being a black disc on a pale one.
     const sheet = css((await boot({ messages: [], ux: hero() })).shadow);
-    expect(sheet).toContain(".panel[data-view='welcome'] .x::before{background:rgba(15,23,42,.32);");
+    expect(sheet).toContain(".panel[data-view='welcome'][data-hero='1'] .x::before{background:rgba(15,23,42,.32);");
     expect(sheet).toContain("backdrop-filter:blur(8px)");
     // ...and stays quiet everywhere else.
     expect(sheet).toContain(".x::before,.mute::before{content:'';position:absolute;width:30px;height:30px;border-radius:50%;");
@@ -369,10 +374,30 @@ describe("panel layout", () => {
     return Array.from(shadow.querySelectorAll("style")).map((n) => n.textContent ?? "").join("\n");
   }
 
-  it("gives the welcome screen no conversation header at all", async () => {
+  it("gives the welcome screen no conversation header at all - when a hero owns the top edge", async () => {
     const { shadow } = await boot({ messages: [], ux: hero() });
     expect(shadow.querySelector(".panel")!.getAttribute("data-view")).toBe("welcome");
-    expect(css(shadow)).toContain(".panel[data-view='welcome'] .hd{display:none;}");
+    expect(shadow.querySelector(".panel")!.getAttribute("data-hero")).toBe("1");
+    expect(css(shadow)).toContain(".panel[data-view='welcome'][data-hero='1'] .hd{display:none;}");
+  });
+
+  it("keeps the header when the welcome screen has NO hero", async () => {
+    // Hiding it unconditionally left a bare white strip with the title
+    // against the top edge and the close button - restyled white for
+    // legibility over a photograph - invisible on it. Merchants went looking
+    // for a blank placeholder image to prop the thing open.
+    const { shadow } = await boot({ messages: [] });
+    const panel = shadow.querySelector(".panel")!;
+    expect(panel.getAttribute("data-view")).toBe("welcome");
+    expect(panel.hasAttribute("data-hero")).toBe(false);
+  });
+
+  it("gives the welcome screen a floor as well as a ceiling", async () => {
+    // Hugging the content is right WITH a hero; without one the same rule
+    // collapsed the card to about half its height, which reads as broken.
+    const sheet = css((await boot({ messages: [] })).shadow);
+    expect(sheet).toContain("min-height:min(430px, calc(100vh - 120px))");
+    expect(sheet).toContain("max-height:min(640px, calc(100vh - 120px))");
   });
 
   it("switches to the conversation view once there are messages", async () => {
@@ -401,9 +426,27 @@ describe("panel layout", () => {
     // The gap was .wel's own padding-top surviving the hero's negative
     // margin. In the welcome view the hero owns the panel's top edge.
     const sheet = css((await boot({ messages: [], ux: hero() })).shadow);
-    expect(sheet).toContain(".panel[data-view='welcome'] .bd{padding-top:0;}");
-    expect(sheet).toContain(".panel[data-view='welcome'] .wel{padding-top:0;}");
-    expect(sheet).toContain(".panel[data-view='welcome'] .hero{margin-top:0;");
+    expect(sheet).toContain(".panel[data-view='welcome'][data-hero='1'] .bd{padding-top:0;}");
+    expect(sheet).toContain(".panel[data-view='welcome'][data-hero='1'] .wel{padding-top:0;}");
+    expect(sheet).toContain(".panel[data-view='welcome'][data-hero='1'] .hero{margin-top:0;");
+  });
+
+  it("takes the caret on open, but never in a preview", async () => {
+    // The settings editor rebuilds this widget on every keystroke. Focusing
+    // the composer here pulled the merchant's caret out of the field they
+    // were typing in, one character at a time, so they had to click back
+    // into the box per letter.
+    const live = await boot({ messages: [] });
+    await new Promise((r) => setTimeout(r, 120));
+    const focusedLive = live.shadow.activeElement;
+
+    document.body.innerHTML = "";
+    const preview = await boot({ messages: [], preview: true });
+    const before = preview.shadow.activeElement;
+    await new Promise((r) => setTimeout(r, 120));
+
+    expect(focusedLive).not.toBeNull();
+    expect(preview.shadow.activeElement).toBe(before);
   });
 
   it("hangs the close button off the panel, not the header", async () => {
@@ -787,6 +830,153 @@ describe("add to cart", () => {
       expect(JSON.stringify(call[1] ?? {})).not.toMatch(/X-Shopify-Access-Token|shpat_/);
     }
   });
+
+  /** A card whose variant the server has already resolved. */
+  async function addable(product?: Record<string, any>) {
+    return await boot({
+      messages: [
+        {
+          id: "p1",
+          direction: "OUTBOUND",
+          body: "This one",
+          messageType: "shopify_product",
+          author: "AI",
+          authorKind: "ai",
+          createdAt: new Date().toISOString(),
+          commerce: {
+            addToCartEnabled: true,
+            products: [product ?? makeProduct({ selectedVariantId: "9001" })],
+          },
+        },
+      ],
+    });
+  }
+
+  function addButton(shadow: ShadowRoot) {
+    return Array.from(shadow.querySelectorAll("button")).find(
+      (b) => b.textContent === "Add to cart",
+    ) as HTMLButtonElement;
+  }
+
+  it("shows the THEME's own reason when the storefront cart refuses", async () => {
+    // The regression: this reason was read off Shopify's response, put on
+    // the error, and then dropped, because the only branch that showed a
+    // message required a status the storefront error never carried. Every
+    // storefront-side refusal reached the shopper as "Something went
+    // wrong. Try again." - which is what a merchant reported.
+    const { shadow, fetchMock } = await addable();
+    fetchMock.mockImplementation(async () => ({
+      ok: false,
+      json: async () => ({ description: "You can only add 1 Cloud Pro Runner to your cart." }),
+    }));
+
+    addButton(shadow).click();
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(shadow.querySelector(".cart-err")!.textContent).toBe(
+      "You can only add 1 Cloud Pro Runner to your cart.",
+    );
+  });
+
+  it("names the reason when the server answers with a code and no sentence", async () => {
+    const { shadow, post } = await addable();
+    post.mockImplementation(async (p: string) => {
+      if (p.endsWith("/cart/validate")) {
+        const err: any = new Error("add_to_cart_disabled");
+        err.status = 403;
+        err.body = { error: "add_to_cart_disabled" };
+        throw err;
+      }
+      return { data: {} };
+    });
+
+    addButton(shadow).click();
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(shadow.querySelector(".cart-err")!.textContent).toBe(
+      "Add to cart is switched off for this store right now.",
+    );
+  });
+
+  it("still falls back to a generic sentence for an unrecognised failure", async () => {
+    const { shadow, fetchMock } = await addable();
+    fetchMock.mockImplementation(async () => {
+      throw new Error("NetworkError");
+    });
+
+    addButton(shadow).click();
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(shadow.querySelector(".cart-err")!.textContent).toBe("Something went wrong. Try again.");
+  });
+
+  it("posts to the storefront's OWN cart root on a localized store", async () => {
+    // A market or translated locale serves the cart under a prefix. The
+    // bare "/cart/add.js" earns a 302, a redirected POST becomes a GET,
+    // and the add fails for every shopper on that storefront.
+    (window as any).Shopify = { routes: { root: "/en-il/" } };
+    const { shadow, fetchMock } = await addable();
+
+    addButton(shadow).click();
+    await new Promise((r) => setTimeout(r, 20));
+
+    const cartCall = fetchMock.mock.calls.find((c: any[]) => String(c[0]).includes("cart/add.js")) as any[];
+    expect(cartCall![0]).toBe("/en-il/cart/add.js");
+
+    const viewCart = Array.from(shadow.querySelectorAll("a")).find((a) => a.textContent === "View cart");
+    expect(viewCart!.getAttribute("href")).toBe("/en-il/cart");
+  });
+
+  it("posts to the root cart on a store that has no locale prefix", async () => {
+    const { shadow, fetchMock } = await addable();
+
+    addButton(shadow).click();
+    await new Promise((r) => setTimeout(r, 20));
+
+    const cartCall = fetchMock.mock.calls.find((c: any[]) => String(c[0]).includes("cart/add.js")) as any[];
+    expect(cartCall![0]).toBe("/cart/add.js");
+  });
+
+  /**
+   * Several variants, nothing to choose between them: Shopify named the
+   * only option "Title", so the projection drops it and `optionNames` is
+   * empty. The server resolves the FIRST variant, which is sold out.
+   */
+  function titleOptionProduct() {
+    return makeProduct({
+      optionNames: [],
+      selectedVariantId: "9001",
+      variants: [
+        { variantId: "9001", title: "Small", price: "120.00", compareAtPrice: null, available: false, options: [], requiresSellingPlan: false },
+        { variantId: "9002", title: "Large", price: "120.00", compareAtPrice: null, available: true, options: [], requiresSellingPlan: false },
+      ],
+    });
+  }
+
+  it("falls back to a variant that can be bought when nothing is being chosen", async () => {
+    // Opening on the server's sold-out first variant left the button
+    // disabled on a product that was in stock in another size.
+    const { shadow, post } = await addable(titleOptionProduct());
+    const add = addButton(shadow);
+    expect(add.disabled).toBe(false);
+
+    add.click();
+    await new Promise((r) => setTimeout(r, 20));
+
+    // The variant the card asked the server to validate is the one that
+    // can actually be bought, not the sold-out one it was handed.
+    const validate = post.mock.calls.find((c) => String(c[0]).includes("/cart/validate")) as any[];
+    expect(validate![1].variantId).toBe("9002");
+  });
+
+  it("gives a multi-variant product a picker even when its options are unnamed", async () => {
+    // Without this the card was a dead end: no picker to change the
+    // variant, and a disabled button nothing on the card could enable.
+    const { shadow } = await addable(titleOptionProduct());
+    const chips = Array.from(shadow.querySelectorAll(".chip")).map((c) => c.textContent);
+    expect(chips).toEqual(["Small", "Large"]);
+    expect((shadow.querySelectorAll(".chip")[0] as HTMLButtonElement).disabled).toBe(true);
+  });
 });
 
 // ─── Carousel + keyboard ────────────────────────────────────
@@ -862,6 +1052,44 @@ describe("carousel", () => {
     expect(labels[0]).toEqual(["View product"]);
     // Cards 2 and 3 are single-variant: Add to Cart is honest there.
     expect(labels[1]).toContain("Add to cart");
+  });
+
+  it("keeps Add to Cart on a shortlist entry whose first variant is sold out", async () => {
+    // A carousel card has no picker, so opening on the server's sold-out
+    // first variant did not disable the button - it removed it, and the
+    // product looked unbuyable from chat while being in stock.
+    const { shadow } = await boot({
+      messages: [
+        {
+          id: "c2",
+          direction: "OUTBOUND",
+          body: "two options",
+          messageType: "shopify_product_carousel",
+          author: "AI",
+          authorKind: "ai",
+          createdAt: new Date().toISOString(),
+          commerce: {
+            addToCartEnabled: true,
+            products: [
+              makeProduct({
+                optionNames: [],
+                selectedVariantId: "9001",
+                variants: [
+                  { variantId: "9001", title: "Small", price: "120.00", compareAtPrice: null, available: false, options: [], requiresSellingPlan: false },
+                  { variantId: "9002", title: "Large", price: "120.00", compareAtPrice: null, available: true, options: [], requiresSellingPlan: false },
+                ],
+              }),
+              makeProduct({ productId: "333", title: "Road Max" }),
+            ],
+          },
+        },
+      ],
+    });
+    const first = shadow.querySelectorAll(".car-tr .card")[0];
+    const labels = Array.from(first.querySelectorAll(".btn")).map((b) => b.textContent);
+    expect(labels).toContain("Add to cart");
+    // Still no picker on a shortlist entry.
+    expect(shadow.querySelectorAll(".car-tr .chip")).toHaveLength(0);
   });
 
   it("gives its navigation buttons accessible names", async () => {

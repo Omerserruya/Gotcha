@@ -56,6 +56,8 @@ export interface DepartmentPickerResult {
   assignedAiAgentId?: string;
   departmentId?: string;
   role?: string;
+  /** Why the override declined, when it declined for a reason worth naming. */
+  skippedReason?: "active_flow_cursor";
 }
 
 /**
@@ -69,8 +71,39 @@ export async function applyDepartmentPickerReply(args: {
   tenantId: string;
   conversationId: string;
   payload: string | null | undefined;
+  /**
+   * The conversation's `chatbotNodeId`. Non-null means an authored flow is
+   * parked mid-execution and this reply belongs to ITS quick-reply node.
+   *
+   * Required, not optional: a caller that forgets it would silently restore
+   * the behaviour this argument exists to prevent, and the compiler is a
+   * better guard than a comment.
+   */
+  activeFlowCursor: string | null | undefined;
 }): Promise<DepartmentPickerResult> {
-  const { tenantId, conversationId, payload } = args;
+  const { tenantId, conversationId, payload, activeFlowCursor } = args;
+
+  // An authored flow outranks this fallback. Full stop.
+  //
+  // This override used to run first and unconditionally: it pinned an agent,
+  // NULLED chatbotNodeId, and called processAIBot directly - so a customer
+  // tapping a button labelled "שירות" inside a working flow had that flow
+  // abandoned mid-execution. Every deterministic node after the quick reply
+  // (send_message, send_interactive) was never reached, the cursor was gone so
+  // nothing could resume, and the conversation went straight to an AI turn.
+  // With an exhausted wallet that turn escalated to a human, which is how a
+  // correctly authored flow ended up looking like a billing bug.
+  //
+  // The picker is a routing FALLBACK for conversations with no flow driving
+  // them - not a higher-priority execution engine competing with flow edges
+  // and route_target targets for authority over the same conversation.
+  if (activeFlowCursor) {
+    console.log(
+      `[department-routing] conversation=${conversationId} payload="${payload}" ` +
+        `skipped: active flow cursor node=${activeFlowCursor} owns this reply`,
+    );
+    return { handled: false, skippedReason: "active_flow_cursor" };
+  }
 
   const sel = resolveDepartmentSelection(payload);
   if (!sel) return { handled: false };

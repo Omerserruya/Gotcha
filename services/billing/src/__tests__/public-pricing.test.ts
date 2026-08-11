@@ -15,6 +15,9 @@ const plans: any[] = [];
 const estimationRows: any[] = [];
 let currencyRow: any = null;
 let fxRow: any = null;
+// The tax row behind the "+ VAT" note. Israel by default, because that is what
+// the migration seeds and what an un-located visitor is quoted.
+let taxRow: any = { countryCode: "IL", percent: "18.00", label: 'מע"מ', active: true, updatedAt: new Date(0) };
 
 // estimation.ts and currency.ts import prisma from the shared package's own
 // lib/prisma, NOT through the barrel - so mocking "@chatcenter/shared" alone
@@ -30,6 +33,7 @@ vi.mock("../../../../packages/shared/src/lib/prisma", () => ({
     pricingCurrencyConfig: { findFirst: async () => currencyRow },
     fxRateSnapshot: { findFirst: async () => fxRow, upsert: async () => ({}) },
     plan: { findMany: async () => [], findFirst: async () => null },
+    taxRate: { findFirst: async () => taxRow },
   },
   // The shared barrel re-exports these from the same module, so a partial mock
   // would break every import of "@chatcenter/shared".
@@ -57,6 +61,9 @@ vi.mock("@chatcenter/shared", async () => {
       publicEstimationConfig: { findFirst: async () => estimationRows[0] ?? null },
       pricingCurrencyConfig: { findFirst: async () => currencyRow },
       fxRateSnapshot: { findFirst: async () => fxRow },
+      taxRate: { findFirst: async () => taxRow },
+      billableEntityTenant: { findUnique: async () => null },
+      billingProfile: { findUnique: async () => null },
     },
   };
 });
@@ -176,6 +183,46 @@ describe("publication flag", () => {
 });
 
 // ── What it returns ─────────────────────────────────────────────────────────
+
+describe("the tax the listed prices are before", () => {
+  it("publishes the rate, so a net price can be labelled as one", async () => {
+    // Listed prices are net. A public page that shows only the net figure
+    // quotes a price the charge will not match - and in Israel, quoting a
+    // consumer price with no mention of VAT is not a style choice.
+    plans.push(plan({ key: "foundation" }));
+    const res = await request(app()).get("/api/public/pricing");
+    expect(res.status).toBe(200);
+    expect(res.body.tax).toMatchObject({ percent: 18, countryCode: "IL", exempt: false });
+  });
+
+  it("marks the rate as ASSUMED, because no visitor declared anything", async () => {
+    // The page is shared across every visitor and resolves no tenant, so the
+    // jurisdiction is a default. Presenting it as settled would state a total
+    // for someone who turns out to be exempt.
+    plans.push(plan({ key: "foundation" }));
+    const res = await request(app()).get("/api/public/pricing");
+    expect(res.body.tax.assumed).toBe(true);
+  });
+
+  it("says exempt when nothing is configured, rather than omitting the field", async () => {
+    taxRow = null;
+    plans.push(plan({ key: "foundation" }));
+    const res = await request(app()).get("/api/public/pricing");
+    expect(res.body.tax).toMatchObject({ percent: 0, exempt: true });
+    taxRow = { countryCode: "IL", percent: "18.00", label: 'מע"מ', active: true, updatedAt: new Date(0) };
+  });
+
+  it("folds the rate into the cache validator", async () => {
+    // Without this a VAT change keeps revalidating to the same ETag and the
+    // page advertises the old rate until some unrelated row is touched.
+    plans.push(plan({ key: "foundation" }));
+    const before = (await request(app()).get("/api/public/pricing")).headers.etag;
+    taxRow = { countryCode: "IL", percent: "17.00", label: 'מע"מ', active: true, updatedAt: new Date(60_000) };
+    const after = (await request(app()).get("/api/public/pricing")).headers.etag;
+    expect(after).not.toBe(before);
+    taxRow = { countryCode: "IL", percent: "18.00", label: 'מע"מ', active: true, updatedAt: new Date(0) };
+  });
+});
 
 describe("public catalog contents", () => {
   it("returns active public plans", async () => {

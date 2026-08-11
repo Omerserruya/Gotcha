@@ -32,6 +32,22 @@ import { periodKeyFor } from "../lib/period";
 import { emitBillingEvent } from "../lib/events";
 
 export const POC_PLAN_KEY = "poc";
+/**
+ * What a pilot may use, mirroring the `ai_workforce` plan.
+ *
+ * Deliberately NOT `limit:included_ai_units` (the operator sets the credit
+ * budget) and NOT `limit:voice_channels` (granted by the voice license).
+ */
+const PILOT_LIMITS: Record<string, number> = {
+  "limit:channels": 8,
+  "limit:ai_employees": 5,
+  "limit:users": 15,
+  "limit:departments": 8,
+  "limit:knowledge_sources": 50,
+  "limit:workflows": 30,
+  "limit:storage_gb": 100,
+  "limit:data_retention_days": 365,
+};
 const FAR_FUTURE_DAYS = 3650; // "no expiry" - far enough to be effectively unlimited
 
 async function ensurePocPlan(): Promise<void> {
@@ -220,6 +236,34 @@ export async function provisionPoc(input: PocProvisioningInput): Promise<PocProv
       createdBy: input.actor,
     });
     (on ? enabled : denied).push(domain);
+  }
+
+  // A pilot has to be able to exercise the product it is a pilot OF.
+  //
+  // The `poc` plan carries no entitlements at all, so without this every limit
+  // fell through to the feature catalog's defaults - which exist for a tenant
+  // with NO plan, not for an evaluation: 2 channels, 0 AI employees, 3 users.
+  // A customer connected four channels through the OAuth paths (which do not
+  // check the cap) and then met a 402 on the first gated connect, with no way
+  // to see why. And 0 AI employees means a POC could never create the thing the
+  // product is named after.
+  //
+  // Values mirror `ai_workforce`, so a pilot behaves like the product it is
+  // previewing rather than like a number invented here. Two are deliberately
+  // absent: the credit budget is the operator's explicit decision, made above,
+  // and voice channels belong to the voice license (see expandVoiceLicense),
+  // which is the more specific answer for the tenants that have it.
+  for (const [key, count] of Object.entries(PILOT_LIMITS)) {
+    await setTenantEntitlement({
+      tenantId: input.tenantId,
+      key,
+      valueType: "COUNTER",
+      value: { count },
+      source: "TRIAL",
+      expiresAt,
+      reason: input.note ? `POC provisioning: ${input.note}` : "POC provisioning",
+      createdBy: input.actor,
+    });
   }
 
   // Materialize so the permission resolver and the workspace UI agree with the

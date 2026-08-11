@@ -16,6 +16,17 @@ import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 const buy = vi.fn();
 const getPackages = vi.fn();
 const getSummary = vi.fn();
+const getIdentity = vi.fn();
+const saveIdentity = vi.fn();
+
+/** A receipt already has a name and a country, unless a test says otherwise. */
+const COMPLETE_IDENTITY = {
+  billingName: "Urban Supply Ltd",
+  vatId: "515151515",
+  billingEmail: "billing@urban.example",
+  billingCountry: "IL",
+  billingAddress: null,
+};
 
 vi.mock("@/context/AuthContext", () => ({ useAuth: () => ({ token: "tok" }) }));
 vi.mock("@/context/I18nContext", () => ({ useI18n: () => ({ t: (k: string) => k, locale: "en" }) }));
@@ -27,6 +38,8 @@ vi.mock("@/lib/api-billing", () => ({
   getPackages: (...a: unknown[]) => getPackages(...a),
   buyCredits: (...a: unknown[]) => buy(...a),
   getCreditSummary: (...a: unknown[]) => getSummary(...a),
+  getBillingIdentity: (...a: unknown[]) => getIdentity(...a),
+  saveBillingIdentity: (...a: unknown[]) => saveIdentity(...a),
 }));
 
 import BuyCreditsPage from "../credits/page";
@@ -36,6 +49,7 @@ const PACKAGE = { id: "p1", key: "pack_1k", name: "1,000 credits", units: 1000, 
 beforeEach(() => {
   vi.clearAllMocks();
   getPackages.mockResolvedValue({ packages: [PACKAGE] });
+  getIdentity.mockResolvedValue({ data: COMPLETE_IDENTITY });
   // The real shape: getCreditSummary returns the summary itself, not a wrapper,
   // and the page reads summary.purchasedCredits.balance.
   getSummary.mockResolvedValue({
@@ -133,5 +147,26 @@ describe("an unknown outcome is not reported as a failure", () => {
     render(<BuyCreditsPage />);
     await buyThroughDialog();
     expect(await screen.findByText(/usage\.buy\.done/)).toBeTruthy();
+  });
+});
+
+describe("who the receipt is for, asked before the charge", () => {
+  it("asks instead of confirming when no country has been declared", async () => {
+    // Charging refuses without a declared country - the server has no
+    // defensible tax figure. Asking here is the alternative to a decline that
+    // reads to the customer as a broken card.
+    getIdentity.mockResolvedValue({ data: { ...COMPLETE_IDENTITY, billingName: null, billingCountry: null } });
+    render(<BuyCreditsPage />);
+
+    fireEvent.click(await screen.findByText("usage.buy.cta"));
+
+    await waitFor(() => expect(screen.getByText(/who should the tax invoice/i)).toBeTruthy());
+    expect(screen.queryByText("usage.buy.confirmCta")).toBeNull();
+  });
+
+  it("confirms normally once it has been", async () => {
+    render(<BuyCreditsPage />);
+    fireEvent.click(await screen.findByText("usage.buy.cta"));
+    await waitFor(() => expect(screen.getByText("usage.buy.confirmCta")).toBeTruthy());
   });
 });
