@@ -52,6 +52,38 @@ export const PAYG_OFF: PaygAccess = {
 };
 
 /**
+ * The pay-as-you-go rate for an organization: its own override, else the price
+ * on the plan it is subscribed to.
+ *
+ * The catalog is where a product is priced, so the plan carries the number for
+ * everyone on it and the policy column exists to depart from that for one
+ * customer. Reading the policy alone - which is what this did first - made the
+ * rate something a person had to type per tenant, and since nothing wrote it,
+ * something nobody could set at all.
+ *
+ * A plan priced at NULL is not sold pay-as-you-go. That is a refusal to serve
+ * past a spent wallet, never a licence to serve it free.
+ */
+export async function resolvePaygRate(
+  policy: { paygPricePerCredit?: unknown } | null | undefined,
+  sub: { planKey: string; planVersion: number } | null | undefined,
+): Promise<number> {
+  const override = policy?.paygPricePerCredit != null ? Number(policy.paygPricePerCredit) : 0;
+  if (override > 0) return override;
+  if (!sub) return 0;
+  try {
+    const plan = await prisma.plan.findUnique({
+      where: { key_version: { key: sub.planKey, version: sub.planVersion } },
+      select: { paygPricePerCredit: true },
+    });
+    return plan?.paygPricePerCredit != null ? Number(plan.paygPricePerCredit) : 0;
+  } catch {
+    // Unknown price is not a free price.
+    return 0;
+  }
+}
+
+/**
  * What PAYG can still cover for this organization.
  *
  * NEVER throws. A failure has to read as "PAYG is not available", which falls
@@ -69,9 +101,9 @@ export async function readPaygAccess(tenantId: string, now: Date = new Date()): 
     if (!entity || !policy) return PAYG_OFF;
     if (policy.limitBehavior !== "PAYG") return PAYG_OFF;
 
+    const rate = await resolvePaygRate(policy, entity.subscription);
     // A PAYG mode with no rate cannot price what it serves. Treating that as
     // "free" would be the most expensive bug in this file.
-    const rate = policy.paygPricePerCredit != null ? Number(policy.paygPricePerCredit) : 0;
     if (!(rate > 0)) return PAYG_OFF;
 
     const periodKey = spendWindowKey(

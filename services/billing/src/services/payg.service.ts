@@ -24,7 +24,7 @@
  * it would mean serving it for free, and refusing to serve the NEXT call is what
  * the gate is for.
  */
-import { prisma, readPaygAccess } from "@chatcenter/shared";
+import { prisma, readPaygAccess, resolvePaygRate } from "@chatcenter/shared";
 import { spendWindowKey } from "../lib/period";
 import { commercialCurrencyFor } from "../lib/currency";
 import { emitBillingEvent } from "../lib/events";
@@ -54,7 +54,7 @@ interface EntityContext {
     paygPricePerCredit: unknown;
     currency: string;
   };
-  sub: { currentPeriodStart: Date | null } | null;
+  sub: { currentPeriodStart: Date | null; planKey: string; planVersion: number } | null;
 }
 
 async function contextFor(tenantId: string): Promise<EntityContext | null> {
@@ -67,7 +67,15 @@ async function contextFor(tenantId: string): Promise<EntityContext | null> {
   return {
     entityId: entity.id,
     policy: entity.autoPurchasePolicy as any,
-    sub: entity.subscription ? { currentPeriodStart: entity.subscription.currentPeriodStart } : null,
+    // planKey/planVersion travel too: the rate lives on the CATALOG, and the
+    // policy column is only an override.
+    sub: entity.subscription
+      ? {
+          currentPeriodStart: entity.subscription.currentPeriodStart,
+          planKey: entity.subscription.planKey,
+          planVersion: entity.subscription.planVersion,
+        }
+      : null,
   };
 }
 
@@ -134,7 +142,9 @@ export async function accruePaygUsage(input: {
     const ctx = await contextFor(input.tenantId);
     if (!ctx || ctx.policy.limitBehavior !== "PAYG") return { ...none, reason: "payg_not_enabled" };
 
-    const rate = ctx.policy.paygPricePerCredit != null ? Number(ctx.policy.paygPricePerCredit) : 0;
+    // The org's override, else the plan's catalog price. Same resolver the AI
+    // gate uses, so what is served and what is billed cannot disagree.
+    const rate = await resolvePaygRate(ctx.policy, ctx.sub);
     if (!(rate > 0)) return { ...none, reason: NO_PAYG_RATE };
 
     const periodKey = spendWindowKey(ctx.sub, now);

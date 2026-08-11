@@ -20,6 +20,7 @@ import { listActivePlans } from "../services/plan.service";
 import { buyCredits } from "../services/purchase.service";
 import { spendWindowKey } from "../lib/period";
 import { commercialCurrencyFor } from "../lib/currency";
+import { resolvePaygRate } from "@chatcenter/shared";
 import { taxSummaryForTenant } from "../services/pricing.service";
 import { applyTax } from "../services/tax.service";
 
@@ -213,7 +214,12 @@ router.get("/billing/auto-purchase", authenticate, resolveTenant, requirePermiss
   // exists yet, so the screen states what the ceiling is denominated in instead
   // of falling back to a guess of its own.
   const currency = policy?.currency || (await commercialCurrencyFor(entityId));
-  res.json({ policy, currency });
+  // The EFFECTIVE pay-as-you-go rate, not the policy's override column. The
+  // price normally lives on the plan, so a screen reading the override alone
+  // would say "not set" for every customer who is priced perfectly well.
+  const sub = await getSubscriptionForTenant(req.tenantId!);
+  const paygRate = await resolvePaygRate(policy, sub as any);
+  res.json({ policy, currency, paygRate: paygRate > 0 ? String(paygRate) : null });
 });
 
 const LIMIT_BEHAVIORS = ["STOP_AI", "HUMAN_ONLY", "REQUIRE_APPROVAL", "PREPAID_ONLY"] as const;

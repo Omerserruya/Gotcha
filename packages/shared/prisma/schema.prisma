@@ -2846,6 +2846,16 @@ model Plan {
   dataRetentionDays      Int?      @map("data_retention_days")
   autoPurchaseEligible   Boolean   @default(true) @map("auto_purchase_eligible")
   creditPackagesEligible Boolean   @default(true) @map("credit_packages_eligible")
+  /// The pay-as-you-go rate for this plan, per credit.
+  ///
+  /// The catalog is where a product is priced, so this is the answer for every
+  /// tenant on the plan rather than a number typed once per customer.
+  /// AutoPurchasePolicy.paygPricePerCredit stays as a per-tenant OVERRIDE, and
+  /// the resolution is `policy ?? plan` - see readPaygAccess.
+  ///
+  /// NULL means this plan is not sold pay-as-you-go. That is a refusal to serve
+  /// past a spent wallet, never a licence to serve it free.
+  paygPricePerCredit     Decimal?  @map("payg_price_per_credit") @db.Decimal(12, 6)
   // Whether the customer may pick a recurring chat / voice volume. Foundation
   // ships with both OFF; flipping either ON is a data change.
   chatVolumeEnabled      Boolean   @default(false) @map("chat_volume_enabled")

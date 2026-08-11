@@ -61,6 +61,7 @@ interface Draft {
   voiceVolumeEnabled: boolean;
   autoPurchaseEligible: boolean;
   creditPackagesEligible: boolean;
+  paygPricePerCredit: string;
   internalNote: string;
 }
 
@@ -114,6 +115,7 @@ export default function EditPlanPage() {
           voiceVolumeEnabled: p.voiceVolumeEnabled,
           autoPurchaseEligible: p.autoPurchaseEligible,
           creditPackagesEligible: p.creditPackagesEligible,
+          paygPricePerCredit: p.paygPricePerCredit ?? "",
           internalNote: p.internalNote ?? "",
         });
         const map: Record<string, unknown> = {};
@@ -168,6 +170,10 @@ export default function EditPlanPage() {
         voiceVolumeEnabled: draft.voiceVolumeEnabled,
         autoPurchaseEligible: draft.autoPurchaseEligible,
         creditPackagesEligible: draft.creditPackagesEligible,
+        // Empty clears it, which is how a plan stops being sold
+        // pay-as-you-go. Sent explicitly so the server can tell an
+        // intentional clear from an untouched field.
+        paygPricePerCredit: draft.paygPricePerCredit.trim() === "" ? null : draft.paygPricePerCredit.trim(),
         internalNote: draft.internalNote,
       });
 
@@ -409,6 +415,22 @@ export default function EditPlanPage() {
               onChange={(v) => setDraft({ ...draft, autoPurchaseEligible: v })}
               label="Can enable automatic top-up"
             />
+          </div>
+
+          <div className="mt-4">
+            <Field
+              label="Pay-as-you-go rate per credit"
+              hint="Leave empty if this plan is not sold pay-as-you-go. Empty means the AI stops at zero, never that usage past it is free."
+            >
+              <input
+                type="number"
+                min={0}
+                step="0.000001"
+                dir="ltr"
+                value={draft.paygPricePerCredit}
+                onChange={(e) => setDraft({ ...draft, paygPricePerCredit: e.target.value })}
+              />
+            </Field>
           </div>
 
           <div className="mt-4">

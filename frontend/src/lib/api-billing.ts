@@ -398,7 +398,10 @@ export const buyCredits = (token: string, packageKey: string, intentKey: string)
 export const getAutoPurchase = (token: string) =>
   // `currency` travels alongside, so the screen states what a ceiling is
   // denominated in even before a policy row exists rather than guessing.
-  apiFetch<{ policy: AutoPurchasePolicy | null; currency: string }>("/api/billing/auto-purchase", { token });
+  apiFetch<{ policy: AutoPurchasePolicy | null; currency: string; paygRate: string | null }>(
+    "/api/billing/auto-purchase",
+    { token },
+  );
 
 export const setAutoPurchase = (token: string, policy: Partial<AutoPurchasePolicy>) =>
   apiFetch<{ ok: boolean; policy: AutoPurchasePolicy }>("/api/billing/auto-purchase", {

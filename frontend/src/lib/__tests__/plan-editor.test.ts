@@ -55,6 +55,11 @@ describe("it calls what the server actually accepts", () => {
       "name", "nameHe", "descriptionEn", "descriptionHe", "basePrice", "currency",
       "includedCredits", "voiceCredits", "sortOrder", "supportLevel", "autoPurchaseEligible",
       "creditPackagesEligible", "chatVolumeEnabled", "voiceVolumeEnabled", "internalNote",
+      // The pay-as-you-go rate. The catalog is where the product is priced, so
+      // the plan carries it for everyone on it; AutoPurchasePolicy keeps a
+      // per-tenant override. The PATCH reads an explicit null as "stop selling
+      // this plan that way", distinct from omitting the field.
+      "paygPricePerCredit",
     ];
     const call = code.slice(code.indexOf("updateDraftPlan(token, plan.id, {"));
     const body = call.slice(0, call.indexOf("});"));

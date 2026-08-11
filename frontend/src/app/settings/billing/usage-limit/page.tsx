@@ -46,6 +46,7 @@ function UsageLimitInner() {
   const [policy, setPolicy] = useState<AutoPurchasePolicy | null>(null);
   const [packages, setPackages] = useState<CreditPackage[]>([]);
   const [currency, setCurrency] = useState("");
+  const [rate, setRate] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
@@ -60,7 +61,7 @@ function UsageLimitInner() {
     setLoading(true);
     try {
       const [ap, pk] = await Promise.all([
-        getAutoPurchase(token).catch(() => ({ policy: null, currency: "" })),
+        getAutoPurchase(token).catch(() => ({ policy: null, currency: "", paygRate: null })),
         getPackages(token).catch(() => ({ packages: [] as CreditPackage[] })),
       ]);
       setPolicy(ap.policy);
@@ -69,6 +70,7 @@ function UsageLimitInner() {
       // ILS in the schema, USD in the API and ILS again here, so a cap typed as
       // "100" could mean either.
       setCurrency(ap.currency || ap.policy?.currency || "");
+      setRate(ap.paygRate ?? null);
       setMode(modeOf(ap.policy));
       if (ap.policy) {
         setThresholdPct(ap.policy.thresholdPct);
@@ -87,7 +89,9 @@ function UsageLimitInner() {
   // Both spending modes need a cap. Stop does not: it never spends.
   const spends = mode === "AUTO" || mode === "PAYG";
   const uncapped = spends && (maxMonthlySpend === "" || Number(maxMonthlySpend) <= 0);
-  const paygRate = policy?.paygPricePerCredit ?? null;
+  // The EFFECTIVE rate from the server (the org override, else the plan
+  // price), not the policy column - that one is empty for almost everyone.
+  const paygRate = rate;
 
   const save = async () => {
     if (!token) return;
