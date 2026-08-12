@@ -129,6 +129,15 @@ export function CoPilotPanel({ isOpen = true, conversation, messages, crmContext
 
   // Whether a real AI provider is configured (not stub)
   const [aiConfigured, setAiConfigured] = useState<boolean | null>(null);
+  /**
+   * WHY the co-pilot is unavailable, which is not the same question as whether
+   * it is. Every failure used to collapse into "no AI employee configured": a
+   * plan that does not include the co-pilot, a provider error, the org
+   * switching it off, and an actual missing employee all rendered the same
+   * panel, telling someone to go and build an employee they already had.
+   */
+  const [unavailableReason, setUnavailableReason] =
+    useState<"plan" | "disabled" | "error" | "no_employee" | null>(null);
 
   // Real intelligence from backend
   const [realIntelligence, setRealIntelligence] = useState<{
@@ -241,17 +250,44 @@ export function CoPilotPanel({ isOpen = true, conversation, messages, crmContext
 
     try {
       // Step 1: Check suggestions first to detect if AI is configured
-      const suggestionsRes = await getAISuggestions(token, conversation.id, locale, signal, requestInstanceId).catch(() => null);
+      // A holder rather than a `let`: assigned inside a callback, TypeScript's
+      // flow analysis still believes the variable is null at the point of use
+      // and narrows it to `never`.
+      const suggestionsErr: { current: (Error & { status?: number; code?: string; body?: any }) | null } = { current: null };
+      const suggestionsRes = await getAISuggestions(token, conversation.id, locale, signal, requestInstanceId).catch((e) => {
+        suggestionsErr.current = e;
+        return null;
+      });
       if (signal.aborted) return;
 
       if (suggestionsRes?.data && suggestionsRes.data.length > 0) {
-        const isStub = suggestionsRes.data.length === 1 && suggestionsRes.data[0].type === "info";
-        if (isStub) {
-          // No AI employee configured - skip all other calls
+        // The backend answers several different things with a single `info`
+        // item, and they mean different things to the person reading the panel.
+        // "no-match" in particular is a real answer - the co-pilot looked and
+        // had nothing useful to add - and treating it as a broken setup was
+        // telling people to reconfigure a working product.
+        const only = suggestionsRes.data.length === 1 && suggestionsRes.data[0].type === "info"
+          ? String(suggestionsRes.data[0].id ?? "")
+          : null;
+        if (only === "no-config" || only === "stub-1") {
+          setUnavailableReason("no_employee");
           setAiConfigured(false);
           setAiLoading(false);
           return;
         }
+        if (only === "disabled") {
+          setUnavailableReason("disabled");
+          setAiConfigured(false);
+          setAiLoading(false);
+          return;
+        }
+        if (only === "error") {
+          setUnavailableReason("error");
+          setAiConfigured(false);
+          setAiLoading(false);
+          return;
+        }
+        setUnavailableReason(null);
         setAiConfigured(true);
         setAiSuggestions(suggestionsRes.data.map((s: any, i: number) => ({
           text: s.text,
@@ -262,6 +298,19 @@ export function CoPilotPanel({ isOpen = true, conversation, messages, crmContext
           rationale: typeof s.rationale === "string" ? s.rationale : undefined,
         })));
       } else {
+        // Nothing came back. The reason is on the error the request threw, and
+        // this is where "your plan does not include the co-pilot" used to be
+        // rewritten into "you have not built an employee yet".
+        const err = suggestionsErr.current;
+        const status = err?.status;
+        const code = err?.code ?? (err?.body as any)?.code;
+        if (status === 402 || code === "PLAN_FEATURE_REQUIRED") {
+          setUnavailableReason("plan");
+        } else if (err) {
+          setUnavailableReason("error");
+        } else {
+          setUnavailableReason("no_employee");
+        }
         setAiConfigured(false);
         setAiLoading(false);
         return;
@@ -589,17 +638,49 @@ export function CoPilotPanel({ isOpen = true, conversation, messages, crmContext
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
                 </svg>
               </div>
-              <p className="text-sm font-semibold text-gray-800 mb-1.5">{t("copilot.panel.noAiEmployee.title")}</p>
-              <p className="text-xs text-gray-500 leading-relaxed mb-4">{t("copilot.panel.noAiEmployee.description")}</p>
+              <p className="text-sm font-semibold text-gray-800 mb-1.5">
+                {unavailableReason === "plan"
+                  ? t("copilot.panel.planRequired.title")
+                  : unavailableReason === "disabled"
+                    ? t("copilot.panel.disabled.title")
+                    : unavailableReason === "error"
+                      ? t("copilot.panel.failed.title")
+                      : t("copilot.panel.noAiEmployee.title")}
+              </p>
+              <p className="text-xs text-gray-500 leading-relaxed mb-4">
+                {unavailableReason === "plan"
+                  ? t("copilot.panel.planRequired.description")
+                  : unavailableReason === "disabled"
+                    ? t("copilot.panel.disabled.description")
+                    : unavailableReason === "error"
+                      ? t("copilot.panel.failed.description")
+                      : t("copilot.panel.noAiEmployee.description")}
+              </p>
+              {/* Each reason gets its own destination, and a transient failure
+                  gets no button at all - there is nowhere useful to send
+                  someone whose provider call just failed. Sending people to
+                  build an employee they already had was the whole bug. */}
+              {unavailableReason !== "error" && (
               <a
-                href="/ai-studio"
+                href={
+                  unavailableReason === "plan"
+                    ? "/settings/billing/plan"
+                    : unavailableReason === "disabled"
+                      ? "/settings/ai"
+                      : "/ai-studio"
+                }
                 className="inline-flex items-center gap-1.5 px-5 py-2.5 text-xs font-semibold text-white bg-gradient-to-r from-violet-500 to-purple-600 rounded-xl hover:from-violet-600 hover:to-purple-700 transition-all shadow-md shadow-violet-300/40"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
                 </svg>
-                {t("copilot.panel.noAiEmployee.setupButton")}
+                {unavailableReason === "plan"
+                  ? t("copilot.panel.planRequired.button")
+                  : unavailableReason === "disabled"
+                    ? t("copilot.panel.disabled.button")
+                    : t("copilot.panel.noAiEmployee.setupButton")}
               </a>
+              )}
             </div>
           </div>
         ) : activeTab === "suggest" ? (

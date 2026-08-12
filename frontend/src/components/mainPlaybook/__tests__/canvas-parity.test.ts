@@ -42,8 +42,15 @@ describe("both canvases enforce the trigger boundary", () => {
   it("full screen is a real viewport takeover, not a modal over a padded page", () => {
     // The spec is explicit that a fake modal with the old page still
     // constraining the canvas does not count.
+    //
+    // The literal is `h-[100vh]` and not `h-screen` deliberately. Since the
+    // command bar took a permanent strip at the top of the app shell, `h-screen`
+    // means "the viewport that is LEFT for the page" - correct everywhere the
+    // chrome is on screen, and wrong here: a `fixed inset-0` overlay covers the
+    // chrome, so stopping short by its height would leave a dead band at the
+    // bottom of a takeover that has nothing above it.
     for (const [name, src] of [["FlowEditor", flow], ["MainPlaybookEditor", playbook]] as const) {
-      expect(src, name).toMatch(/fullscreen \? "fixed inset-0 z-40 bg-white h-screen/);
+      expect(src, name).toMatch(/fullscreen \? "fixed inset-0 z-40 bg-white h-\[100vh\]/);
     }
   });
 });
