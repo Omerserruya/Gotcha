@@ -665,6 +665,20 @@
         "fromCustomer": "from customer",
         "fromAgent": "from agent",
         "lastCustomerMessage": "Last customer message"
+      },
+      "planRequired": {
+        "title": "The co-pilot is not in your plan",
+        "description": "Your AI employee is set up and working. The co-pilot that assists agents during a conversation is sold separately.",
+        "button": "See plans"
+      },
+      "disabled": {
+        "title": "The co-pilot is switched off",
+        "description": "Someone turned the co-pilot off for this workspace. Your AI employee is unaffected.",
+        "button": "Open AI settings"
+      },
+      "failed": {
+        "title": "The co-pilot could not answer",
+        "description": "Something went wrong reaching the AI. This is usually temporary - send another message or reopen the conversation to try again."
       }
     }
   },
