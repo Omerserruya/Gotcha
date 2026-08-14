@@ -335,6 +335,20 @@ services:
       META_APP_ID: ${META_APP_ID:-}
       META_APP_SECRET: ${META_APP_SECRET:-}
       WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID: ${WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID:-}
+      # The Embedded Signup launch knobs. `buildEmbeddedSignupLaunch` has read
+      # all three since it was written and compose never passed any of them, so
+      # setting one in .env did nothing at all - the container simply never saw
+      # it. This is the same shape as the iCount capability switches: a compose
+      # file that maps variables one by one makes an unlisted variable
+      # indistinguishable from an unset one.
+      #
+      # Empty is the correct default. WHATSAPP_ES_VERSION empty means v4, and
+      # v4 sends an empty `extras`. FEATURE_TYPE requests the WhatsApp Business
+      # app (Coexistence) flow specifically, so leaving it empty is what keeps
+      # the unified dialog for everyone else.
+      WHATSAPP_ES_VERSION: ${WHATSAPP_ES_VERSION:-}
+      WHATSAPP_ES_FEATURE_TYPE: ${WHATSAPP_ES_FEATURE_TYPE:-}
+      WHATSAPP_ES_SESSION_INFO_VERSION: ${WHATSAPP_ES_SESSION_INFO_VERSION:-}
       WHATSAPP_WEBHOOK_VERIFY_TOKEN: ${WHATSAPP_WEBHOOK_VERIFY_TOKEN:-}
       WEBHOOK_URL: ${WEBHOOK_URL:-}
       CHANNEL_ENCRYPTION_KEY: ${CHANNEL_ENCRYPTION_KEY:?CHANNEL_ENCRYPTION_KEY required}

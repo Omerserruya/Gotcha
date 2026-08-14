@@ -218,6 +218,12 @@ services:
       META_APP_ID: ${META_APP_ID:-}
       META_APP_SECRET: ${META_APP_SECRET:-}
       WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID: ${WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID:-}
+      # Mirrors the prod compose. Compose maps variables one by one here too, so
+      # an unlisted variable is indistinguishable from an unset one - which is
+      # how setting WHATSAPP_ES_FEATURE_TYPE in .env did nothing for anybody.
+      WHATSAPP_ES_VERSION: ${WHATSAPP_ES_VERSION:-}
+      WHATSAPP_ES_FEATURE_TYPE: ${WHATSAPP_ES_FEATURE_TYPE:-}
+      WHATSAPP_ES_SESSION_INFO_VERSION: ${WHATSAPP_ES_SESSION_INFO_VERSION:-}
       WHATSAPP_WEBHOOK_VERIFY_TOKEN: ${WHATSAPP_WEBHOOK_VERIFY_TOKEN:-}
       WEBHOOK_URL: ${WEBHOOK_URL:-}
       CHANNEL_ENCRYPTION_KEY: ${CHANNEL_ENCRYPTION_KEY:-}
