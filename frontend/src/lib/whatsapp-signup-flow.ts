@@ -99,6 +99,49 @@ export function readAuthCode(response: unknown): string | null {
   return typeof code === "string" && code.length > 0 ? code : null;
 }
 
+/**
+ * What happened when no authorization code came back.
+ *
+ * `DISMISSED` is the ordinary case - the customer shut the popup - and deserves
+ * silence. `NO_CODE` is not: the flow ran to completion and Meta still handed
+ * back nothing usable.
+ *
+ * Collapsing the two is what made a live failure invisible. A customer finished
+ * the whole Embedded Signup, the popup closed itself, and the panel quietly
+ * returned to its starting state - no message, no error, and no request to our
+ * server, so nothing in the logs either. From the outside it was
+ * indistinguishable from never having clicked the button.
+ *
+ * Meta reports a dismissal as `status: "unknown"` with no `authResponse` at
+ * all. Anything that carries an `authResponse`, or reports `connected`, got far
+ * enough that a missing code is a real fault worth naming.
+ */
+export type SignupAbort = "DISMISSED" | "NO_CODE";
+
+export function classifySignupAbort(response: unknown): SignupAbort {
+  const r = response as any;
+  const hasAuthResponse = r?.authResponse != null && typeof r.authResponse === "object";
+  if (hasAuthResponse || r?.status === "connected") return "NO_CODE";
+  return "DISMISSED";
+}
+
+/**
+ * The response shape, with nothing sensitive in it, for a console breadcrumb.
+ *
+ * Never includes `code` or any token - only whether the fields were present,
+ * which is all that is needed to tell the two aborts apart after the fact.
+ */
+export function describeSignupResponse(response: unknown): string {
+  const r = response as any;
+  const auth = r?.authResponse;
+  return [
+    `status=${r?.status ?? "-"}`,
+    `authResponse=${auth ? "present" : "absent"}`,
+    `code=${typeof auth?.code === "string" && auth.code.length > 0 ? "present" : "absent"}`,
+    `keys=${auth && typeof auth === "object" ? Object.keys(auth).join("|") || "-" : "-"}`,
+  ].join(" ");
+}
+
 
 /**
  * Translation key for an outcome, so copy stays out of the logic.

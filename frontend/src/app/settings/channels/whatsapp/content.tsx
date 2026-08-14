@@ -48,6 +48,8 @@ import {
   isMetaOrigin,
   mergeSignupAssets,
   outcomeMessageKey,
+  classifySignupAbort,
+  describeSignupResponse,
   readAuthCode,
   type SignupAssets,
 } from "@/lib/whatsapp-signup-flow";
@@ -555,7 +557,14 @@ function AddNumberPanel({ onDone }: { onDone: () => void }) {
     const onLogin = (response: unknown) => {
       const code = readAuthCode(response);
       if (!code) {
-        // Closed or declined. Not worth an error message.
+        // A dismissal deserves silence. A flow that RAN and still produced no
+        // code does not: that used to land here too, so a customer who
+        // completed the whole signup saw the panel quietly reset and had no
+        // way to tell that anything had gone wrong.
+        if (classifySignupAbort(response) === "NO_CODE") {
+          console.error("[wa-connect] signup returned no code:", describeSignupResponse(response));
+          setError(t("whatsappNumbers.add.noCode"));
+        }
         setStage("idle");
         return;
       }

@@ -5251,7 +5251,8 @@
       "cancelled": "You closed the WhatsApp window before finishing.",
       "inspectFailed": "We could not read your WhatsApp setup. Try connecting again in a moment.",
       "connectFailed": "We could not connect that number.",
-      "connect": "Connect WhatsApp"
+      "connect": "Connect WhatsApp",
+      "noCode": "The WhatsApp setup finished, but Meta did not return an authorization code, so there was nothing to connect with. This is usually the Embedded Signup configuration rather than anything about your number. Try again, and if it repeats, tell us and we will read the exact response."
     },
     "choose": {
       "title": "Choose the number to connect",
