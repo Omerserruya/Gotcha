@@ -22,6 +22,7 @@ import {
   resolvePrincipal, metaGraphBaseUrl, metaGraphVersion,
   buildEmbeddedSignupLaunch,
   embeddedSignupDialogUrl,
+  EMBEDDED_SIGNUP_DIALOG_VERSION,
   resolveAppPublicUrl,
 } from "@chatcenter/shared";
 
@@ -299,7 +300,10 @@ router.post("/connect/whatsapp", authenticate, resolveTenant, requirePermission(
     // loaded SDK uses, independently of META_GRAPH_VERSION.
     //
     // Review together with the SDK version in the frontend when either moves.
-    const FB_JS_SDK_GRAPH_VERSION = "v25.0";
+    // Tracks the SDK, from the one constant the SDK version is asserted against.
+    // Named `v25` historically; the value now comes from shared so the exchange
+    // cannot fall behind the dialog that minted the code.
+    const FB_JS_SDK_GRAPH_VERSION = EMBEDDED_SIGNUP_DIALOG_VERSION;
     const v25 = `https://graph.facebook.com/${FB_JS_SDK_GRAPH_VERSION}`;
     const exchangeAttempts: Array<{ label: string; method: "get" | "post"; url: string; data: any }> = [
       // Official docs method: GET, no redirect_uri
@@ -692,7 +696,11 @@ router.get("/oauth/init", async (req: Request, res: Response) => {
         launch: buildEmbeddedSignupLaunch(process.env),
         redirectUri: OAUTH_REDIRECT_URI,
         state,
-        dialogVersion: metaGraphVersion(),
+        // The DIALOG version, which is not the Graph API version. This used to
+        // pass metaGraphVersion() (v24.0 by default), so the redirect path and
+        // the popup path opened two different dialogs - and the older one does
+        // not offer the WhatsApp Business app choice at all.
+        dialogVersion: EMBEDDED_SIGNUP_DIALOG_VERSION,
       });
     } else if (platform === "gmail") {
       // Google OAuth2 for Gmail API

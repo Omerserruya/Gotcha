@@ -45,7 +45,7 @@ const SCRIPT_SRC = "https://connect.facebook.net/en_US/sdk.js";
  * the same value in `services/auth/src/routes/channels.ts`. Move one and
  * review the other.
  */
-export const FB_SDK_VERSION = "v25.0";
+export const FB_SDK_VERSION = "v26.0";
 
 /** How long to wait before calling it blocked rather than slow. */
 const READY_TIMEOUT_MS = 8000;
