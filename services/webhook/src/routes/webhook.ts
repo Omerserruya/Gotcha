@@ -19,7 +19,7 @@ import {
 } from "@chatcenter/shared";
 
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
-import type { NormalizedInboundMessage, NormalizedStatusUpdate } from "@chatcenter/shared";
+import type { NormalizedInboundMessage, NormalizedStatusUpdate, NormalizedOutboundEcho } from "@chatcenter/shared";
 
 const router = Router();
 
@@ -307,6 +307,35 @@ router.post("/", async (req: Request, res: Response) => {
       );
     }
 
+    // Step 4c: Messages the BUSINESS sent from a provider-native app, mirrored
+    // back to us. WhatsApp Coexistence only today: the owner replied from the
+    // WhatsApp Business app on their phone. Separate job name → separate
+    // handler, because an echo is OUTBOUND and must never be fed to the bot as
+    // if the customer had written it.
+    const echoes = adapter.extractOutboundEchoes?.(body) || [];
+    for (const echo of echoes) {
+      const { body: echoBody, messageType, mediaUrl } = normalizeContentToBodyAndType(echo);
+      await incomingMessageQueue.add(
+        "process-echo",
+        {
+          tenantId,
+          channel: adapter.channel as "WHATSAPP",
+          channelAccountId,
+          echo: {
+            externalMessageId: echo.externalMessageId,
+            customerExternalId: echo.customerExternalId,
+            businessExternalId: echo.businessExternalId,
+            timestamp: echo.timestamp.toISOString(),
+            contentType: echo.content.type,
+            body: echoBody,
+            messageType,
+            mediaUrl,
+          },
+        },
+        { attempts: 3, backoff: { type: "exponential", delay: 1000 } }
+      );
+    }
+
     // Step 5: Handle status updates inline (lightweight)
     const statusUpdates = adapter.extractStatusUpdates(body);
     for (const status of statusUpdates) {
@@ -320,7 +349,11 @@ router.post("/", async (req: Request, res: Response) => {
 
 // ─── Helpers ─────────────────────────────────────────────────
 
-function normalizeContentToBodyAndType(msg: NormalizedInboundMessage): { body: string; messageType: string; mediaUrl?: string } {
+// Shared by the inbound and the business-app-echo paths: both carry the same
+// normalized `content`, and both need the same body/type/media flattening.
+function normalizeContentToBodyAndType(
+  msg: Pick<NormalizedInboundMessage | NormalizedOutboundEcho, "content">,
+): { body: string; messageType: string; mediaUrl?: string } {
   const content = msg.content;
   if (content.interactiveReply) {
     return { body: content.interactiveReply.title || content.text || "", messageType: "interactive" };

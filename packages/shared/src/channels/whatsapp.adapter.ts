@@ -5,6 +5,7 @@ import type {
   OutboundAdapter,
   NormalizedInboundMessage,
   NormalizedStatusUpdate,
+  NormalizedOutboundEcho,
   ChannelCredentials,
   ProviderSendError,
 } from "./types";
@@ -142,6 +143,27 @@ function buildWaStatusError(e: any): ProviderSendError {
 
 // ─── Inbound Adapter ─────────────────────────────────────────
 
+/**
+ * The ONE Coexistence echo field we ingest: messages the owner sent from the
+ * WhatsApp Business app on their phone.
+ *
+ * Meta also emits `message_echoes`, which mirrors messages sent through the
+ * Cloud API - including OUR OWN sends. Ingesting it would post every GOTCHA
+ * reply into the thread a second time, because the dedupe key
+ * (`Message.externalMessageId`) is written only AFTER the send call returns
+ * and the echo can arrive first. It is excluded on purpose; adding it means
+ * first giving the outbound path a pre-send idempotency key.
+ */
+const WA_ECHO_FIELD = "smb_message_echoes";
+
+/**
+ * Fields whose `value.metadata.phone_number_id` identifies the channel
+ * account. `messages` carries customer traffic and delivery statuses;
+ * `smb_message_echoes` carries the business-app echoes. Both must resolve,
+ * otherwise the webhook drops the payload before any handler sees it.
+ */
+const WA_ACCOUNT_BEARING_FIELDS = new Set(["messages", WA_ECHO_FIELD]);
+
 export const whatsAppInboundAdapter: InboundAdapter = {
   channel: "WHATSAPP",
 
@@ -208,11 +230,48 @@ export const whatsAppInboundAdapter: InboundAdapter = {
     return updates;
   },
 
+  /**
+   * Messages the business sent from the WhatsApp Business app (Coexistence).
+   * Meta mirrors them here so a number that is live in both places shows one
+   * complete thread in GOTCHA.
+   *
+   * The echo's `to` is the CUSTOMER and its `from` is the business number -
+   * the reverse of an inbound message. Keying the conversation off `to` is
+   * what puts the echo in the same thread as the customer's own messages
+   * rather than opening a conversation "with ourselves".
+   */
+  extractOutboundEchoes(body: any): NormalizedOutboundEcho[] {
+    const echoes: NormalizedOutboundEcho[] = [];
+    for (const entry of body.entry || []) {
+      for (const change of entry.changes || []) {
+        if (change.field !== WA_ECHO_FIELD) continue;
+        const value = change.value || {};
+        // Meta has shipped this array under both names; accept either rather
+        // than silently ingesting nothing if the payload shape shifts.
+        const list = value.message_echoes || value.messages || [];
+        for (const msg of list) {
+          const to = msg?.to;
+          if (!msg?.id || !to) continue;
+          echoes.push({
+            externalMessageId: msg.id,
+            channel: "WHATSAPP",
+            customerExternalId: String(to),
+            businessExternalId: msg.from ? String(msg.from) : undefined,
+            timestamp: new Date(parseInt(msg.timestamp) * 1000),
+            content: extractWhatsAppContent(msg),
+          });
+        }
+      }
+    }
+    return echoes;
+  },
+
   resolveChannelAccountExternalId(body: any): string | null {
     for (const entry of body.entry || []) {
       for (const change of entry.changes || []) {
-        if (change.field !== "messages") continue;
-        return change.value?.metadata?.phone_number_id || null;
+        if (!WA_ACCOUNT_BEARING_FIELDS.has(change.field)) continue;
+        const phoneNumberId = change.value?.metadata?.phone_number_id;
+        if (phoneNumberId) return phoneNumberId;
       }
     }
     return null;

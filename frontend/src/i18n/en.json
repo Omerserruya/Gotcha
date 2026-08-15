@@ -185,6 +185,7 @@
     },
     "attach": "Attach",
     "systemAiEscalation": "AI handed off to a human",
+    "systemWhatsappAppTakeover": "Answered from the WhatsApp Business app, AI stopped",
     "escalationReason": {
       "agent_paused": "the AI employee is paused",
       "customer_requested_human": "customer asked for a person",

@@ -5,6 +5,7 @@ export type { ServiceConfig } from "./lib/service-app";
 export type {
   IncomingMessageJob,
   IncomingCommentJob,
+  OutboundEchoJob,
   WebhookTriggerJob,
   OutgoingMessageJob,
   AnalyticsJob,
@@ -19,6 +20,7 @@ export type {
   NormalizedInboundMessage,
   NormalizedStatusUpdate,
   NormalizedCommentEvent,
+  NormalizedOutboundEcho,
   MessageContent,
   OutboundMessagePayload,
   ChannelCredentials,

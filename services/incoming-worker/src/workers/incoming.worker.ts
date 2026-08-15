@@ -4,7 +4,7 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { handleApprovalButtonReply } from "../services/whatsapp-approval-inbound.service";
-import { prisma, createWorker, IncomingMessageJob, IncomingCommentJob, WebhookTriggerJob, analyticsQueue, outgoingMessageQueue, publishEvent, decryptCredentials, metaGraphBaseUrl } from "@chatcenter/shared";
+import { prisma, createWorker, IncomingMessageJob, IncomingCommentJob, OutboundEchoJob, WebhookTriggerJob, analyticsQueue, outgoingMessageQueue, publishEvent, decryptCredentials, metaGraphBaseUrl } from "@chatcenter/shared";
 import { processCommentTrigger } from "../services/comment-trigger.service";
 
 const FB_API_URL = metaGraphBaseUrl(process.env.FACEBOOK_API_URL);
@@ -105,7 +105,7 @@ async function fetchWhatsAppAvatar(phoneNumberId: string, contactWaId: string, a
  * 3. Save to local uploads directory
  * 4. Return local URL path
  */
-async function resolveWhatsAppMedia(mediaId: string, accessToken: string, messageType: string): Promise<{ localUrl: string; fileName: string } | null> {
+export async function resolveWhatsAppMedia(mediaId: string, accessToken: string, messageType: string): Promise<{ localUrl: string; fileName: string } | null> {
   try {
     // Step 1: Get the CDN download URL
     const metaRes = await axios.get(`${WA_API_URL}/${mediaId}`, {
@@ -585,9 +585,16 @@ async function processWebhookTrigger(job: Job<WebhookTriggerJob>): Promise<void>
 // same DLQ, same concurrency budget - but each job kind has its own handler.
 // Exported for unit tests that exercise the job-name routing without standing
 // up a real BullMQ worker.
-export async function dispatch(job: Job<IncomingMessageJob | IncomingCommentJob | WebhookTriggerJob>): Promise<void> {
+export async function dispatch(job: Job<IncomingMessageJob | IncomingCommentJob | WebhookTriggerJob | OutboundEchoJob>): Promise<void> {
   if (job.name === "process-comment") {
     await processCommentTrigger(job as Job<IncomingCommentJob>);
+    return;
+  }
+  if (job.name === "process-echo") {
+    // A message the BUSINESS sent from the WhatsApp Business app. OUTBOUND,
+    // and it takes the conversation away from the AI - never the inbound path.
+    const { processOutboundEcho } = await import("../services/outbound-echo.service");
+    await processOutboundEcho(job as Job<OutboundEchoJob>);
     return;
   }
   if (job.name === "webhook-trigger") {
@@ -600,6 +607,6 @@ export async function dispatch(job: Job<IncomingMessageJob | IncomingCommentJob 
 
 let worker: any;
 export function startIncomingWorker() {
-  worker = createWorker<IncomingMessageJob | IncomingCommentJob | WebhookTriggerJob>("incoming-messages", dispatch, 3);
-  console.log("[incoming-worker] Incoming message worker started (handles: process, process-comment, webhook-trigger)");
+  worker = createWorker<IncomingMessageJob | IncomingCommentJob | WebhookTriggerJob | OutboundEchoJob>("incoming-messages", dispatch, 3);
+  console.log("[incoming-worker] Incoming message worker started (handles: process, process-comment, process-echo, webhook-trigger)");
 }

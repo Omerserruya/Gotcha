@@ -80,6 +80,33 @@ export interface IncomingCommentJob {
   };
 }
 
+// A message the BUSINESS sent from a provider-native app, mirrored back to us.
+// Today: WhatsApp Coexistence (`smb_message_echoes`) - the owner replied from
+// the WhatsApp Business app on their phone. Shares the "incoming-messages"
+// queue, discriminated by job.name = "process-echo".
+//
+// It rides the same queue as customer messages but must never take the same
+// path: an echo is OUTBOUND, skips the bot entirely, and pulls the
+// conversation away from the AI because a human just spoke in it.
+export interface OutboundEchoJob {
+  tenantId: string;
+  channel: "WHATSAPP";
+  channelAccountId: string;
+  echo: {
+    externalMessageId: string;
+    /** The customer that was written TO - the conversation key. */
+    customerExternalId: string;
+    /** The business number the message came FROM. Audit only. */
+    businessExternalId?: string;
+    timestamp: string; // ISO
+    contentType: string;
+    body: string;
+    messageType: string;
+    /** WhatsApp media ID, resolved to a local file by the worker. */
+    mediaUrl?: string;
+  };
+}
+
 // Generic inbound webhook trigger. Shares the "incoming-messages" BullMQ queue
 // with the message + comment paths (one worker, discriminated by
 // job.name = "webhook-trigger"). Emitted by services/webhook when an

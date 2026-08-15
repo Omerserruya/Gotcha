@@ -185,6 +185,7 @@
     },
     "attach": "צרף",
     "systemAiEscalation": "ה-AI העביר לנציג אנושי",
+    "systemWhatsappAppTakeover": "נענה מאפליקציית WhatsApp Business, ה-AI נעצר",
     "escalationReason": {
       "agent_paused": "העובד הדיגיטלי מושהה",
       "customer_requested_human": "הלקוח ביקש נציג אנושי",

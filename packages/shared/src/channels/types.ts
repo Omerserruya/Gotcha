@@ -125,6 +125,32 @@ export interface NormalizedCommentEvent {
   parentCommentId?: string;    // Set when this is a reply to another comment, not a top-level comment
 }
 
+/**
+ * A message the BUSINESS sent from outside GOTCHA, echoed back to us by the
+ * provider. Today this is only WhatsApp Coexistence (`smb_message_echoes`):
+ * the owner replies from the WhatsApp Business app on their phone and Meta
+ * mirrors that message to our webhook.
+ *
+ * It is NOT a customer message, so it must never enter the inbound pipeline:
+ * no bot turn, no routing, no language detection, no identity-link. It lands
+ * as an OUTBOUND row in the thread and, because a human just spoke, it takes
+ * the conversation away from the AI.
+ *
+ * `customerExternalId` is the ECHO's `to` (the customer), not its `from` -
+ * that is what makes it addressable to the same conversation as the
+ * customer's own inbound messages.
+ */
+export interface NormalizedOutboundEcho {
+  externalMessageId: string;
+  channel: ChannelType;
+  /** The customer the business wrote to - the conversation key. */
+  customerExternalId: string;
+  /** The business number the message was sent from. Audit only. */
+  businessExternalId?: string;
+  timestamp: Date;
+  content: MessageContent;
+}
+
 export interface OutboundMessagePayload {
   type: "text" | "interactive";
   text?: string;
@@ -155,6 +181,9 @@ export interface InboundAdapter {
   // Optional - only IG/Messenger implement it today. Returning [] for all other
   // channels keeps the webhook handler indifferent.
   extractCommentEvents?(payload: any): NormalizedCommentEvent[];
+  // Optional - only WhatsApp (Coexistence) implements it today. Messages the
+  // business sent from a provider-native app, mirrored back to us.
+  extractOutboundEchoes?(payload: any): NormalizedOutboundEcho[];
 }
 
 export interface OutboundAdapter {

@@ -12,6 +12,7 @@ endpoints, no WhatsApp Web.
 | 02 | [Permission review](./02-permissions-review.md) | Which Facebook Login permissions we request and the endpoint each one buys. |
 | 03 | [Architecture](./03-architecture.md) | Layering, data model, sequence diagram, state machine, flow-selection diagram, isolation guarantees. |
 | 04 | [Manual limitations](./04-manual-limitations.md) | Every step that stays manual because Meta requires a human, with citations. |
+| 06 | [Coexistence sync](./06-coexistence-sync.md) | Messages the owner sends from the WhatsApp Business app appearing in GOTCHA, and the AI takeover that follows. |
 
 Research was read from Meta's documentation on **2026-08-05**. Source URLs are
 carried on every claim so a later reader can re-check rather than trust.
