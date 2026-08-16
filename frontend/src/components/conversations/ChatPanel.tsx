@@ -16,6 +16,7 @@ import {
   closeConversation,
   reassignConversation,
   getAgents,
+  getAIAgent,
   getDepartments,
   transferToDepartment,
 } from "@/lib/api";
@@ -25,6 +26,7 @@ import clsx from "clsx";
 import { ChannelBadge } from "./ChannelBadge";
 import { CustomerAvatar } from "./CustomerAvatar";
 import { CoPilotPanel } from "./CoPilotPanel";
+import { isAiManaged, isFlowManaged } from "@/lib/conversation-ownership";
 import { HistoryPanel } from "./HistoryPanel";
 import { DecisionTimelinePanel } from "./DecisionTimelinePanel";
 import { MessageSignals } from "./MessageSignals";
@@ -212,22 +214,55 @@ export function ChatPanel({ conversationId, onBack }: Props) {
     fetchConversation();
   }, [fetchConversation]);
 
+  // Is an AI employee (or a flow) driving this conversation right now?
+  // Same predicate the inbox list files rows by, so the section a conversation
+  // sits in and the behaviour of opening it can never disagree.
+  const aiManaged = isAiManaged(conversation);
+
   // Auto-open copilot when entering a conversation where last message is inbound.
   // Mobile constraint: the panel is `fixed inset-0` and takes the whole screen,
   // so auto-opening hides the chat. Only auto-open on desktop (md+). On mobile
   // the AI still runs in the background and surfaces via the floating suggestion
   // bubble above the input - the agent taps it to expand the full panel.
+  //
+  // NEVER on an AI-managed conversation. The trigger is "last message is
+  // inbound", which is precisely the state an AI-handled thread sits in for the
+  // seconds before the employee answers - so opening one to see what the AI is
+  // doing would greet you with a co-pilot drafting a reply nobody asked you to
+  // send, over a reply already on its way. Reading along must stay read-only.
   const hasAutoOpenedRef = useRef<string | null>(null);
   useEffect(() => {
     if (messages.length > 0 && hasAutoOpenedRef.current !== conversationId) {
       hasAutoOpenedRef.current = conversationId;
+      if (aiManaged) return;
       const lastMsg = messages[messages.length - 1];
       const isDesktop = typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches;
       if (lastMsg?.direction === "INBOUND" && isDesktop) {
         setCopilotOpen(true);
       }
     }
-  }, [messages, conversationId]);
+  }, [messages, conversationId, aiManaged]);
+
+  // Taking over mid-thread must also close a co-pilot the agent opened by hand
+  // BEFORE the AI took the conversation back (returnToAi), which would
+  // otherwise keep drafting against a thread that is no longer theirs.
+  useEffect(() => {
+    if (aiManaged) setCopilotOpen(false);
+  }, [aiManaged]);
+
+  // Which employee is answering. Fetched only when the banner will actually
+  // show it - Conversation carries `assignedAiAgentId` but has no AI-agent
+  // relation, and a schema migration for one label is not worth it.
+  const [aiAgentName, setAiAgentName] = useState<string | null>(null);
+  useEffect(() => {
+    const agentId = conversation?.assignedAiAgentId;
+    if (!token || !aiManaged || !agentId) { setAiAgentName(null); return; }
+    let cancelled = false;
+    getAIAgent(token, agentId)
+      .then((res) => { if (!cancelled) setAiAgentName(res.data?.name ?? null); })
+      .catch(() => { if (!cancelled) setAiAgentName(null); });
+    return () => { cancelled = true; };
+  }, [token, aiManaged, conversation?.assignedAiAgentId]);
 
   // Mark conversation as read (for unread indicator)
   useEffect(() => {
@@ -318,6 +353,18 @@ export function ChatPanel({ conversationId, onBack }: Props) {
 
     setSending(true);
     try {
+      // Typing a reply into a conversation the AI owns IS the takeover, so
+      // claim before sending. Without this the agent's message goes out
+      // alongside whatever the employee was already composing, and the
+      // customer gets two answers from one business.
+      //
+      // Claim first, send second: a failed claim must not produce a sent
+      // message in a thread the AI still believes is its own.
+      if (isAiManaged(conversation)) {
+        await claimConversation(token, conversationId);
+        await fetchConversation();
+      }
+
       // Send files first
       for (const file of attachedFiles) {
         const res = await sendMediaMessage(token, conversationId, file, inputText.trim() || undefined);
@@ -613,6 +660,36 @@ export function ChatPanel({ conversationId, onBack }: Props) {
             </div>
           </div>
         </div>
+
+        {/* Reading along on a conversation an AI employee owns.
+            States who is answering and why the co-pilot is not here, because
+            an agent who opens one of these and finds the panel missing will
+            otherwise read it as the co-pilot being broken. */}
+        {aiManaged && (
+          <div className="flex items-center gap-2.5 px-4 py-2 bg-purple-50/70 border-b border-purple-100">
+            <svg className="w-4 h-4 text-purple-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+            </svg>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold text-purple-700 truncate">
+                {isFlowManaged(conversation)
+                  ? t("conversations.aiWatchingBannerFlow")
+                  : t("conversations.aiWatchingBanner", {
+                      name: aiAgentName || t("conversations.aiHandledByAgent"),
+                    })}
+              </p>
+              <p className="text-[11px] text-purple-500/80 leading-snug hidden sm:block">
+                {t("conversations.aiWatchingBannerDesc")}
+              </p>
+            </div>
+            <button
+              onClick={handleClaim}
+              className="text-xs px-2.5 py-1 rounded-lg font-medium bg-white text-purple-600 ring-1 ring-purple-200 hover:bg-purple-100 transition shrink-0"
+            >
+              {t("conversations.aiWatchingTakeOver")}
+            </button>
+          </div>
+        )}
 
         {/* Where the shopper is standing right now, for Shopify chats */}
         <StorefrontContextStrip
