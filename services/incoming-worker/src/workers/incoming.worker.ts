@@ -4,7 +4,7 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { handleApprovalButtonReply } from "../services/whatsapp-approval-inbound.service";
-import { prisma, createWorker, IncomingMessageJob, IncomingCommentJob, OutboundEchoJob, WebhookTriggerJob, analyticsQueue, outgoingMessageQueue, publishEvent, decryptCredentials, metaGraphBaseUrl } from "@chatcenter/shared";
+import { prisma, createWorker, IncomingMessageJob, IncomingCommentJob, OutboundEchoJob, WebhookTriggerJob, analyticsQueue, outgoingMessageQueue, publishEvent, decryptCredentials, metaGraphBaseUrl, isInboundExcluded } from "@chatcenter/shared";
 import { processCommentTrigger } from "../services/comment-trigger.service";
 
 const FB_API_URL = metaGraphBaseUrl(process.env.FACEBOOK_API_URL);
@@ -244,6 +244,19 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
     where: { externalMessageId },
   });
   if (existing) return;
+
+  // Numbers the owner keeps on their own phone. Checked BEFORE any Contact,
+  // Conversation or Message row exists, because that is the only point where
+  // dropping the message actually means anything - one step later and the
+  // thread is created, an agent is notified, and a bot may already have
+  // answered a conversation that was never meant to reach the team.
+  //
+  // Coexistence is why this exists: a number live in both the Business app and
+  // the Cloud API delivers EVERYTHING to us, private threads included.
+  if (await isInboundExcluded({ tenantId, channel, customerExternalId: senderId, channelAccountId })) {
+    console.log(`[incoming-worker] dropping message from excluded sender on ${channel} (tenant ${tenantId})`);
+    return;
+  }
 
   // A manager tapping Approve/Reject on WhatsApp is NOT a customer message.
   // Intercept before any contact/conversation is created - otherwise a staff

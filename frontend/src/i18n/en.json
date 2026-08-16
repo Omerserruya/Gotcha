@@ -2049,7 +2049,8 @@
     "disabled": "Disabled",
     "connected": "Connected",
     "notConnected": "Not connected",
-    "unsavedChanges": "Unsaved changes"
+    "unsavedChanges": "Unsaved changes",
+    "remove": "Remove"
   },
   "onboarding": {
     "channelsBanner": "Pick WhatsApp, Instagram, or Email to connect your first channel.",
@@ -5304,6 +5305,15 @@
     "meta": {
       "fixInMeta": "Fix this in Meta Business settings"
     },
-    "summaryLimited": "sending blocked on {count} of them"
+    "summaryLimited": "sending blocked on {count} of them",
+    "exclusions": {
+      "title": "Numbers handled in the app only",
+      "body": "This number also runs in the WhatsApp Business app, so every conversation on it reaches GOTCHA. Numbers listed here are ignored completely: no conversation, no notification, no AI. Use it for the people you answer from your phone.",
+      "numberPlaceholder": "Phone number",
+      "notePlaceholder": "Who is this? (optional)",
+      "add": "Add",
+      "addFailed": "Could not add the number",
+      "empty": "Nothing excluded. Every conversation on this number reaches the inbox."
+    }
   }
 }

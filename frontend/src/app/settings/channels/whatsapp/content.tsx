@@ -21,7 +21,7 @@
  *     one click to try the other way.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { usePermissions } from "@/context/PermissionsContext";
@@ -42,6 +42,10 @@ import {
   type WhatsAppInspection,
   type WhatsAppHealthCheck,
   type WhatsAppHealthReport,
+  listWhatsAppExclusions,
+  addWhatsAppExclusion,
+  removeWhatsAppExclusion,
+  type WhatsAppExclusion,
 } from "@/lib/api";
 import {
   interpretSignupMessage,
@@ -832,6 +836,117 @@ function AddNumberPanel({ onDone }: { onDone: () => void }) {
 
 // ─── Page ────────────────────────────────────────────────────
 
+
+/**
+ * Numbers that must never enter the shared inbox.
+ *
+ * Only rendered when a number actually runs in the Business app. On a pure
+ * Cloud API number nothing arrives that the owner did not route here on
+ * purpose, so the control would be an answer to a question nobody asked - and
+ * a list of phone numbers on screen that has no effect is worse than absent.
+ */
+function ExclusionsPanel({ canManage }: { canManage: boolean }) {
+  const { token } = useAuth();
+  const { t } = useI18n();
+  const [rules, setRules] = useState<WhatsAppExclusion[]>([]);
+  const [value, setValue] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    if (!token) return;
+    try {
+      setRules((await listWhatsAppExclusions(token)).data);
+    } catch { /* the panel is additive - a failed read must not break the page */ }
+  }, [token]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  async function add(e: FormEvent) {
+    e.preventDefault();
+    if (!token || !value.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await addWhatsAppExclusion(token, value.trim(), note.trim() || undefined);
+      setValue("");
+      setNote("");
+      await load();
+    } catch (err: any) {
+      setError(err?.message || t("whatsappNumbers.exclusions.addFailed"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(id: string) {
+    if (!token) return;
+    try {
+      await removeWhatsAppExclusion(token, id);
+      await load();
+    } catch { /* the row stays; the next load reconciles */ }
+  }
+
+  return (
+    <div className="border border-gray-200 rounded-xl bg-white shadow-sm p-4">
+      <div className="font-medium text-gray-900">{t("whatsappNumbers.exclusions.title")}</div>
+      <p className="text-xs text-gray-600 mt-1 leading-relaxed">
+        {t("whatsappNumbers.exclusions.body")}
+      </p>
+
+      {canManage && (
+        <form onSubmit={add} className="mt-3 flex flex-col sm:flex-row gap-2">
+          <input
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder={t("whatsappNumbers.exclusions.numberPlaceholder")}
+            inputMode="tel"
+            className="flex-1 px-3 py-2 text-sm rounded-lg ring-1 ring-gray-200 outline-none focus:ring-2 focus:ring-primary-300"
+          />
+          <input
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder={t("whatsappNumbers.exclusions.notePlaceholder")}
+            className="flex-1 px-3 py-2 text-sm rounded-lg ring-1 ring-gray-200 outline-none focus:ring-2 focus:ring-primary-300"
+          />
+          <button
+            type="submit"
+            disabled={busy || !value.trim()}
+            className="px-3 py-2 text-sm rounded-lg bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-40 shrink-0"
+          >
+            {t("whatsappNumbers.exclusions.add")}
+          </button>
+        </form>
+      )}
+
+      {error && <div className="mt-2 text-xs text-red-600">{error}</div>}
+
+      <div className="mt-3 divide-y divide-gray-100">
+        {rules.length === 0 && (
+          <p className="text-xs text-gray-400 py-2">{t("whatsappNumbers.exclusions.empty")}</p>
+        )}
+        {rules.map((r) => (
+          <div key={r.id} className="flex items-center gap-3 py-2">
+            <div className="min-w-0 flex-1">
+              <div className="text-sm text-gray-900 truncate" dir="ltr">{r.value}</div>
+              {r.note && <div className="text-xs text-gray-500 truncate">{r.note}</div>}
+            </div>
+            {canManage && (
+              <button
+                onClick={() => remove(r.id)}
+                className="text-xs text-gray-400 hover:text-red-600 shrink-0"
+              >
+                {t("common.remove")}
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function WhatsAppNumbersContent() {
   const { token } = useAuth();
   const { can } = usePermissions();
@@ -960,6 +1075,11 @@ export function WhatsAppNumbersContent() {
             <p className="text-xs text-gray-600 mt-1">{t("whatsappNumbers.legacy.note")}</p>
           </div>
         ))}
+
+        {/* Coexistence only - see the panel's own note for why. */}
+        {!loading && rows.some((r) => r.usesBusinessApp) && (
+          <ExclusionsPanel canManage={canManage} />
+        )}
 
         {!loading && canManage && <AddNumberPanel onDone={load} />}
 

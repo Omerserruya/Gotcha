@@ -86,6 +86,17 @@ const INITIAL_THINKING_STEPS: ThinkingStep[] = [
   { id: "gen", label: "generatingSuggestions", status: "pending" },
 ];
 
+/**
+ * Set once the AI service answers "your plan does not include the co-pilot".
+ * See the note at `aiSuggestions` for why this is module scope and not state.
+ */
+let copilotDeniedForSession = false;
+
+/** Exported for tests, and for a future entitlements provider to reset. */
+export function __resetCopilotDenial() {
+  copilotDeniedForSession = false;
+}
+
 export function CoPilotPanel({ isOpen = true, conversation, messages, crmContext, crmLoading, onRefetchCrm, onInsertReply, onClose, onAiLoadingChange, onTopSuggestion, repliesRef, prefillQuote }: CoPilotPanelProps) {
   const { token } = useAuth();
   const { t, locale } = useI18n();
@@ -121,6 +132,20 @@ export function CoPilotPanel({ isOpen = true, conversation, messages, crmContext
   }, [prefillQuote?.version]);
 
   // AI-powered state
+  // A plan denial is a property of the WORKSPACE, not of this conversation, so
+  // it is remembered for the session instead of being rediscovered per chat.
+  //
+  // The panel is mounted for every conversation the agent opens, whether or not
+  // it is visible, and `fetchAI` had no idea the co-pilot was unavailable - so
+  // a workspace whose plan excludes it fired one suggestions request per
+  // conversation, forever, each one travelling to the AI service only to be
+  // refused by `requireEntitlement("ai.copilot")`. No AI was spent (the gate
+  // runs before the handler), but nothing stopped the asking either.
+  //
+  // Module scope, not state: it must survive the remount that happens when the
+  // agent moves to the next conversation, which is exactly when the repeat
+  // request was being made. Cleared on reload, so granting the entitlement
+  // takes effect without any invalidation plumbing.
   const [aiSuggestions, setAiSuggestions] = useState<{ text: string; label: string; confidence: number; type: "reply" | "action" | "info"; approach?: string; rationale?: string }[] | null>(null);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
@@ -229,6 +254,14 @@ export function CoPilotPanel({ isOpen = true, conversation, messages, crmContext
   // Fetch AI suggestions when conversation/messages change
   const fetchAI = useCallback(async () => {
     if (!token || !conversation?.id || paused) return;
+    // Already refused for this workspace - do not ask again for every
+    // conversation the agent opens. The panel still explains itself below.
+    if (copilotDeniedForSession) {
+      setUnavailableReason("plan");
+      setAiConfigured(false);
+      setAiLoading(false);
+      return;
+    }
     // Abort any older in-flight fetch BEFORE installing a new controller.
     if (fetchAbortRef.current && !fetchAbortRef.current.signal.aborted) {
       fetchAbortRef.current.abort();
@@ -305,6 +338,7 @@ export function CoPilotPanel({ isOpen = true, conversation, messages, crmContext
         const status = err?.status;
         const code = err?.code ?? (err?.body as any)?.code;
         if (status === 402 || code === "PLAN_FEATURE_REQUIRED") {
+          copilotDeniedForSession = true;
           setUnavailableReason("plan");
         } else if (err) {
           setUnavailableReason("error");

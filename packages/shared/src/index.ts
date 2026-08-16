@@ -14,6 +14,15 @@ export type {
   FlowResumeJob,
 } from "./lib/queue";
 
+// Numbers the owner keeps on their own phone - enforced at ingest, before any
+// Conversation, Contact or Message row exists.
+export {
+  normalizeExclusionValue,
+  exclusionDisplayValue,
+  isInboundExcluded,
+} from "./lib/inbound-exclusions";
+export type { ExclusionLookup } from "./lib/inbound-exclusions";
+
 // Channel types & adapters
 export type {
   ChannelType,

@@ -27,6 +27,7 @@ vi.mock("@chatcenter/shared", () => ({
   publishEvent,
   decryptCredentials: vi.fn(),
   resolveContactByChannelId: vi.fn().mockResolvedValue(null),
+  isInboundExcluded: vi.fn().mockResolvedValue(false),
   readDurableSetting: async () => null,
   writeDurableSetting: async () => undefined,
   settingCacheKey: (t: string, k: string) => `tenant:${t}:${k}`,

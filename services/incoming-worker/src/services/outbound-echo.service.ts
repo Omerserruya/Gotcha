@@ -1,5 +1,5 @@
 import { Job } from "bullmq";
-import { prisma, OutboundEchoJob, publishEvent, decryptCredentials } from "@chatcenter/shared";
+import { prisma, OutboundEchoJob, publishEvent, decryptCredentials, isInboundExcluded } from "@chatcenter/shared";
 
 /**
  * Business-app echo ingestion (WhatsApp Coexistence).
@@ -32,6 +32,18 @@ export async function processOutboundEcho(job: Job<OutboundEchoJob>): Promise<vo
   });
   if (!tenant || tenant.status !== "ACTIVE") {
     console.log(`[incoming-worker] Skipping echo for non-active tenant ${tenantId} (status: ${tenant?.status})`);
+    return;
+  }
+
+  // The same exclusion the inbound path honours, applied to the echo.
+  //
+  // Without this an excluded number is only half excluded: the customer's
+  // messages are dropped, but the owner's own replies from the app still open
+  // a conversation for them - which is the private thread appearing in the
+  // shared inbox, one side of it, with no incoming context. Worse than not
+  // filtering at all.
+  if (await isInboundExcluded({ tenantId, channel, customerExternalId: echo.customerExternalId, channelAccountId })) {
+    console.log(`[incoming-worker] dropping business-app echo to an excluded number (tenant ${tenantId})`);
     return;
   }
 

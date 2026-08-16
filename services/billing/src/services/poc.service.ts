@@ -25,6 +25,8 @@ import {
   setTenantEntitlement,
   materializeEntitlements,
   ALL_LICENSE_KEYS,
+  BOOLEAN_FEATURE_KEYS,
+  isUnsellable,
   type BalanceView,
 } from "@chatcenter/shared";
 import { ensureBillableEntity, tenantsForEntity } from "./billable-entity.service";
@@ -48,6 +50,17 @@ const PILOT_LIMITS: Record<string, number> = {
   "limit:storage_gb": 100,
   "limit:data_retention_days": 365,
 };
+/**
+ * The fine-grained, default-DENY capability keys a pilot receives. Mirrors the
+ * `ai_workforce` plan, minus voice - see the block that consumes this.
+ *
+ * Derived from the shipped catalog so a capability added later cannot be
+ * silently missing from every pilot.
+ */
+export const PILOT_CAPABILITY_KEYS: string[] = BOOLEAN_FEATURE_KEYS.filter(
+  (k) => !isUnsellable(k) && !k.startsWith("voice."),
+);
+
 const FAR_FUTURE_DAYS = 3650; // "no expiry" - far enough to be effectively unlimited
 
 async function ensurePocPlan(): Promise<void> {
@@ -259,6 +272,42 @@ export async function provisionPoc(input: PocProvisioningInput): Promise<PocProv
       key,
       valueType: "COUNTER",
       value: { count },
+      source: "TRIAL",
+      expiresAt,
+      reason: input.note ? `POC provisioning: ${input.note}` : "POC provisioning",
+      createdBy: input.actor,
+    });
+  }
+
+  // The SAME hole as the limits above, in the other namespace, and the one that
+  // actually reached a customer.
+  //
+  // There are two key namespaces. The license domains written above (`ai`,
+  // `conversation`) are default-ALLOW and drive navigation. The fine-grained
+  // capability keys are dotted (`ai.copilot`, `ai.employee`) and are
+  // default-DENY - `requireEntitlement("ai.copilot")` refuses anything it
+  // cannot find. Every sellable plan carries 44 rows covering them. The `poc`
+  // plan carries none, and POC provisioning wrote only the coarse domains.
+  //
+  // So a pilot got `ai: true` - the AI section appeared in the nav, the
+  // operator's console said the feature was enabled - and then every co-pilot
+  // request 402'd with "your plan does not include the co-pilot". Enabled
+  // everywhere a human looked, denied at the only place that decides.
+  //
+  // Derived from the catalog rather than listed, for the reason
+  // POC_FEATURE_DOMAINS is: a capability shipped later must not be silently
+  // absent here. Gated on the operator's chosen domains, so restricting a
+  // pilot to `conversation` does not hand it the co-pilot through the back
+  // door. Voice is excluded for the same reason `limit:voice_channels` is -
+  // it belongs to the voice license, which is the more specific answer.
+  for (const key of PILOT_CAPABILITY_KEYS) {
+    const domain = key.split(".")[0] as string;
+    const on = picked ? picked.has(domain) : true;
+    await setTenantEntitlement({
+      tenantId: input.tenantId,
+      key,
+      valueType: "BOOLEAN",
+      value: on,
       source: "TRIAL",
       expiresAt,
       reason: input.note ? `POC provisioning: ${input.note}` : "POC provisioning",

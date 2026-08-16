@@ -117,6 +117,35 @@ export function ChatPanel({ conversationId, onBack }: Props) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const repliesRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  /**
+   * Enter sends, Shift+Enter breaks the line.
+   *
+   * `isComposing` is the load-bearing part and the reason this is not a
+   * one-liner. While an IME candidate window is open - Chinese, Japanese,
+   * Korean, and some Hebrew/Arabic input methods - Enter CONFIRMS the
+   * candidate. Sending on it would fire the message mid-word, every time,
+   * for those users only.
+   */
+  const handleComposerKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key !== "Enter" || e.shiftKey) return;
+    if (e.nativeEvent.isComposing || (e as any).keyCode === 229) return;
+    e.preventDefault();
+    // Reuse the form's own submit path so attachments, the AI-managed claim
+    // and the sending guard all behave identically to the button.
+    void handleSend(e as unknown as FormEvent);
+  }, [handleSend]);
+
+  // Grow with the message, then scroll. Measured from `scrollHeight`, which
+  // needs the height reset first or the box can only ever get taller - it
+  // would never shrink back after the text is sent or deleted.
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [inputText]);
 
   // Notify AppLayout to auto-collapse sidebar when panels open
   useEffect(() => {
@@ -913,7 +942,7 @@ export function ChatPanel({ conversationId, onBack }: Props) {
             >
               <AIComposePanel />
             <div className={clsx("rounded-2xl transition-all relative", aiGenerating ? "p-[2px] ai-border-glow" : "p-0")}>
-            <form onSubmit={handleSend} className={clsx("flex items-center gap-2 bg-white rounded-2xl shadow-lg shadow-gray-200/50 px-3 py-1.5 transition", aiGenerating ? "" : "ring-1 ring-gray-200/80 focus-within:ring-2 focus-within:ring-primary-300")}>
+            <form onSubmit={handleSend} className={clsx("flex items-end gap-2 bg-white rounded-2xl shadow-lg shadow-gray-200/50 px-3 py-1.5 transition", aiGenerating ? "" : "ring-1 ring-gray-200/80 focus-within:ring-2 focus-within:ring-primary-300")}>
               {/* Hidden file input */}
               <input
                 ref={fileInputRef}
@@ -958,13 +987,20 @@ export function ChatPanel({ conversationId, onBack }: Props) {
               {/* AI compose trigger - panel opens above the input */}
               <AIComposeTrigger compact />
 
-              {/* Text input */}
-              <input
-                type="text"
+              {/* Text input.
+                  A textarea rather than an <input>, because an input cannot
+                  hold a newline at all - Shift+Enter had nothing to insert.
+                  Enter still sends; Shift+Enter breaks the line. It grows with
+                  the message and stops at ~6 lines, after which it scrolls,
+                  so a long paste cannot push the composer off the screen. */}
+              <textarea
+                ref={inputRef}
+                rows={1}
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
+                onKeyDown={handleComposerKeyDown}
                 placeholder={attachedFiles.length > 0 ? t("conversations.addCaption") : t("conversations.typeMessage")}
-                className="flex-1 py-2 bg-transparent border-0 text-base md:text-sm outline-none placeholder:text-gray-400"
+                className="flex-1 py-2 bg-transparent border-0 text-base md:text-sm outline-none placeholder:text-gray-400 resize-none max-h-[9rem] overflow-y-auto leading-6"
                 disabled={sending}
               />
 

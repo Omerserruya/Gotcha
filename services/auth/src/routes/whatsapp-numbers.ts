@@ -24,6 +24,8 @@ import { Router, Request, Response } from "express";
 import { z } from "zod";
 import {
   prisma,
+  normalizeExclusionValue,
+  exclusionDisplayValue,
   authenticate,
   resolveTenant,
   requirePermission,
@@ -503,6 +505,111 @@ router.delete(
     const result = await disconnectNumber(paramId(req), req.tenantId!);
     if (!result.succeeded) return res.status(404).json({ error: result.message });
     return res.json({ data: result });
+  },
+);
+
+// ─── Exclusions - numbers the owner keeps on their own phone ─
+
+/**
+ * Coexistence delivers EVERY conversation on the number to us, including the
+ * ones that were never meant for a shared inbox. These rules are the only way
+ * to say "that one is mine" short of not connecting Coexistence at all.
+ *
+ * Scoped to a `channelAccountId` when the caller names a number, so a tenant
+ * running two WhatsApp numbers can exclude a contact on the one that lives in
+ * the app without silently dropping the same person on the other.
+ */
+router.get(
+  "/exclusions",
+  authenticate,
+  resolveTenant,
+  requirePermission("channels:manage:read"),
+  async (req: Request, res: Response) => {
+    const rules = await prisma.inboundExclusion.findMany({
+      where: { tenantId: req.tenantId!, channel: "WHATSAPP" },
+      orderBy: { createdAt: "desc" },
+    });
+    return res.json({
+      data: rules.map((r) => ({
+        id: r.id,
+        value: r.displayValue || r.customerExternalId,
+        normalized: r.customerExternalId,
+        channelAccountId: r.channelAccountId,
+        note: r.note,
+        createdAt: r.createdAt,
+      })),
+    });
+  },
+);
+
+router.post(
+  "/exclusions",
+  authenticate,
+  resolveTenant,
+  requirePermission("channels:manage:update"),
+  async (req: Request, res: Response) => {
+    const raw = String(req.body?.value ?? "");
+    const normalized = normalizeExclusionValue(raw);
+    // A rule that matches nothing is worse than no rule: it sits in the list
+    // looking like protection the owner does not actually have.
+    if (normalized.length < 6) {
+      return res.status(400).json({ error: "invalid_number", message: "Enter a phone number with at least 6 digits." });
+    }
+
+    // An account id from another tenant must not scope our rule.
+    const channelAccountId = req.body?.channelAccountId ? String(req.body.channelAccountId) : null;
+    if (channelAccountId) {
+      const owned = await prisma.channelAccount.findFirst({
+        where: { id: channelAccountId, tenantId: req.tenantId!, channel: "WHATSAPP" },
+        select: { id: true },
+      });
+      if (!owned) return res.status(404).json({ error: "channel_account_not_found" });
+    }
+
+    const note = req.body?.note ? String(req.body.note).slice(0, 280) : null;
+
+    // Upsert, matching the unique key: re-adding a number the owner already
+    // excluded should update the note, not fail with a duplicate they cannot
+    // see or fix from the UI.
+    const rule = await prisma.inboundExclusion.upsert({
+      where: {
+        tenantId_channel_customerExternalId: {
+          tenantId: req.tenantId!,
+          channel: "WHATSAPP",
+          customerExternalId: normalized,
+        },
+      },
+      create: {
+        tenantId: req.tenantId!,
+        channel: "WHATSAPP",
+        channelAccountId,
+        customerExternalId: normalized,
+        displayValue: exclusionDisplayValue(raw),
+        note,
+        createdBy: req.user?.userId ?? null,
+      },
+      update: { channelAccountId, displayValue: exclusionDisplayValue(raw), note },
+    });
+
+    return res.status(201).json({
+      data: { id: rule.id, value: rule.displayValue, normalized: rule.customerExternalId, note: rule.note },
+    });
+  },
+);
+
+router.delete(
+  "/exclusions/:id",
+  authenticate,
+  resolveTenant,
+  requirePermission("channels:manage:update"),
+  async (req: Request, res: Response) => {
+    // deleteMany with the tenant in the filter: `delete` by id alone would
+    // remove another workspace's rule on a guessed id.
+    const removed = await prisma.inboundExclusion.deleteMany({
+      where: { id: paramId(req), tenantId: req.tenantId! },
+    });
+    if (removed.count === 0) return res.status(404).json({ error: "not_found" });
+    return res.json({ data: { removed: removed.count } });
   },
 );
 
