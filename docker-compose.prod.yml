@@ -456,6 +456,12 @@ services:
       WHATSAPP_WEBHOOK_VERIFY_TOKEN: ${WHATSAPP_WEBHOOK_VERIFY_TOKEN:-}
       WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:-}
       META_APP_SECRET: ${META_APP_SECRET:-}
+      # Instagram Login is a SEPARATE Meta app with its own secret, and Meta
+      # signs each delivery with the secret of the app that owns the
+      # subscription. Without this the webhook verifies IG payloads with the
+      # Facebook app's secret, the HMAC never matches, and every Instagram
+      # message is dropped fail-closed while the channel still reads CONNECTED.
+      INSTAGRAM_APP_SECRET: ${INSTAGRAM_APP_SECRET:-}
       EMAIL_WEBHOOK_SECRET: ${EMAIL_WEBHOOK_SECRET:-}
       GMAIL_PUBSUB_TOKEN: ${GMAIL_PUBSUB_TOKEN:-}
       OUTLOOK_WEBHOOK_CLIENT_STATE: ${OUTLOOK_WEBHOOK_CLIENT_STATE:-}

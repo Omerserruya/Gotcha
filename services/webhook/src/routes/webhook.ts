@@ -23,6 +23,65 @@ import type { NormalizedInboundMessage, NormalizedStatusUpdate, NormalizedOutbou
 
 const router = Router();
 
+/**
+ * Verify a Meta webhook against every app secret that could legitimately have
+ * signed it.
+ *
+ * GOTCHA talks to Meta through TWO apps, not one. WhatsApp and Messenger live
+ * in the Facebook app (`META_APP_ID`); Instagram is connected through Instagram
+ * Login, which is a SEPARATE app with its own id and its own secret. Meta signs
+ * each delivery with the secret of the app that owns the subscription.
+ *
+ * This code used to verify everything with `WHATSAPP_APP_SECRET ||
+ * META_APP_SECRET`, so every Instagram message failed the HMAC and was dropped
+ * fail-closed at the door - while the connect flow, the subscription and the
+ * channel row all looked perfectly healthy, because those go through the auth
+ * service, which DOES have the Instagram secret. The customer sees "connected"
+ * and never receives a DM. Confirmed in production on 2026-08-16:
+ * `Rejected INSTAGRAM webhook: signature mismatch`, immediately after a real
+ * customer message reached us.
+ *
+ * Both secrets are tried rather than switching strictly on channel. The app
+ * layout is a deployment fact, not a property of the payload: a workspace may
+ * run one app for everything, or two, and either app's secret can be rotated
+ * independently. Trying both is correct in all of those and needs no redeploy
+ * when one changes.
+ *
+ * This does NOT weaken the gate. Each candidate is the full HMAC check, a
+ * signature matching none of them is still rejected, and a request with no
+ * signature or no configured secret still fails closed.
+ */
+function verifyMetaSignature(adapter: { channel: string; getSignatureHeader(): string; verifySignature(s: string, b: Buffer, sig: string): boolean }, req: Request) {
+  // Ordered by which app most likely signed this channel, so the common case
+  // matches on the first try.
+  const fbSecret = process.env.WHATSAPP_APP_SECRET || process.env.META_APP_SECRET;
+  const igSecret = process.env.INSTAGRAM_APP_SECRET;
+  const ordered = adapter.channel === "INSTAGRAM" ? [igSecret, fbSecret] : [fbSecret, igSecret];
+
+  const configured = Array.from(new Set(ordered.filter((s): s is string => !!s)));
+  // With nothing configured, still make ONE call with an empty secret so the
+  // "not configured" verdict keeps coming from the shared verifier rather than
+  // being re-implemented here with a reason string that could drift from it.
+  const candidates: Array<string | undefined> = configured.length > 0 ? configured : [undefined];
+
+  let last: ReturnType<typeof verifyWebhookSignature> = { ok: false, reason: "signature mismatch" };
+  for (const secret of candidates) {
+    const verdict = verifyWebhookSignature({
+      secret,
+      rawBody: (req as any).rawBody,
+      signature: req.headers[adapter.getSignatureHeader()] as string | undefined,
+      verify: (s, b, sig) => adapter.verifySignature(s, b, sig),
+    });
+    if (verdict.ok) return verdict;
+    // A missing body or missing header is a property of the REQUEST, not of the
+    // secret, so retrying with another key cannot help and the reason must not
+    // be flattened into "signature mismatch" - that is the difference between
+    // "the wrong app signed this" and "our body parser is misconfigured".
+    if (verdict.reason !== "signature mismatch") return verdict;
+    last = verdict;
+  }
+  return last;
+}
 
 // Inbound webhooks arrive without a user JWT - the tenant is derived by
 // looking up the target ChannelAccount across all tenants. That lookup
@@ -104,13 +163,7 @@ router.post("/", async (req: Request, res: Response) => {
     // via the shared verifier so no route can regress to the old "skip when the
     // header is absent" bypass. A missing signature, missing/unconfigured app
     // secret, or HMAC mismatch all drop the request.
-    const appSecret = process.env.WHATSAPP_APP_SECRET || process.env.META_APP_SECRET;
-    const verdict = verifyWebhookSignature({
-      secret: appSecret,
-      rawBody: (req as any).rawBody,
-      signature: req.headers[adapter.getSignatureHeader()] as string | undefined,
-      verify: (s, b, sig) => adapter.verifySignature(s, b, sig),
-    });
+    const verdict = verifyMetaSignature(adapter, req);
     if (!verdict.ok) {
       console.error(`[WEBHOOK] Rejected ${adapter.channel} webhook: ${verdict.reason}`);
       // Single failures are internet background noise - a scanner, a stale
