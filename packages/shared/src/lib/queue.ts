@@ -48,7 +48,14 @@ export interface IncomingMessageJob {
       title: string;
     };
     mediaUrl?: string;
+    /**
+     * The name the SENDER gave the file. WhatsApp media is stored under a
+     * generated UUID, so without this the agent is offered a download called
+     * "9f3c1e....pdf" and cannot tell one attachment from another.
+     */
     fileName?: string;
+    /** MIME type the channel reported, used to pick the saved extension. */
+    mimeType?: string;
     /**
      * Extra, already-sanitized context to persist on the created Message
      * row's `metadata`. Producers must put only safe, structured values
@@ -104,6 +111,10 @@ export interface OutboundEchoJob {
     messageType: string;
     /** WhatsApp media ID, resolved to a local file by the worker. */
     mediaUrl?: string;
+    /** The name the owner's phone gave the file. */
+    fileName?: string;
+    /** MIME type the channel reported, used to pick the saved extension. */
+    mimeType?: string;
   };
 }
 

@@ -773,19 +773,8 @@ export function ChatPanel({ conversationId, onBack }: Props) {
                     )}
                   </p>
                 )}
-                {msg.mediaUrl && (msg.messageType === "image" || msg.mediaUrl.match(/\.(jpg|jpeg|png|gif|webp)$/i)) ? (
-                  <img src={msg.mediaUrl} alt="" className="max-w-full rounded-lg mb-1 cursor-pointer" onClick={() => window.open(msg.mediaUrl, "_blank")} />
-                ) : msg.mediaUrl && (msg.messageType === "video" || msg.mediaUrl.match(/\.(mp4|webm|mov)$/i)) ? (
-                  <video src={msg.mediaUrl} controls className="max-w-full rounded-lg mb-1" />
-                ) : msg.mediaUrl ? (
-                  <a href={msg.mediaUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-3 py-2 bg-white/20 rounded-lg mb-1 hover:bg-white/30 transition">
-                    <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m.75 12l3 3m0 0l3-3m-3 3v-6m-1.5-9H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-                    </svg>
-                    <span className="text-xs truncate">{msg.fileName || t("conversations.downloadFile")}</span>
-                  </a>
-                ) : null}
-                {msg.body && (
+                <MessageMedia msg={msg} t={t} />
+                {msg.body && !isRedundantMediaCaption(msg) && (
                   <p
                     className="whitespace-pre-wrap break-words"
                     onMouseUp={msg.direction === "INBOUND" ? handleMessageMouseUp : undefined}
@@ -1215,6 +1204,107 @@ function ActionButton({
     >
       {children}
     </button>
+  );
+}
+
+/**
+ * Adapters fill an empty caption with a placeholder - "[Image]", "[Document]" -
+ * so a media message is never a blank row in a list preview. Once the picture
+ * itself is on screen that placeholder is noise printed under it, and it is
+ * the thing that made an attachment look like the customer had typed the word
+ * "[Document]" at us. Hidden in the bubble, kept everywhere the body is the
+ * only thing shown.
+ */
+const MEDIA_PLACEHOLDER_BODIES = new Set([
+  "[Image]", "[Video]", "[Document]", "[Audio message]", "[Voice message]", "[Sticker]",
+]);
+
+function isRedundantMediaCaption(msg: any): boolean {
+  if (!msg.mediaUrl) return false;
+  const body = String(msg.body ?? "").trim();
+  // The sender's own filename is used as the document caption, and it is
+  // already the label on the download link.
+  return MEDIA_PLACEHOLDER_BODIES.has(body) || (!!msg.fileName && body === msg.fileName);
+}
+
+/**
+ * The media part of a message bubble: image, video, voice note, or a file to
+ * download. Identical for inbound, outbound and business-app echoes - a photo
+ * is a photo whoever sent it.
+ *
+ * Two things this has to get right that the previous inline version did not.
+ *
+ * Audio fell through to the generic file link, so a voice note - the single
+ * most common attachment on WhatsApp - was a download rather than something
+ * you could listen to without leaving the inbox.
+ *
+ * And an attachment that failed to download rendered as nothing at all,
+ * leaving a bubble whose whole content was the literal text "[Document]". That
+ * reads as the customer having typed it. WhatsApp media expires a few days
+ * after it is sent and the id is the only handle on it, so this state is
+ * permanent and has to say so rather than look like a rendering glitch.
+ */
+function MessageMedia({ msg, t }: { msg: any; t: (key: string, vars?: Record<string, string>) => string }) {
+  const url: string | undefined = msg.mediaUrl || undefined;
+  const type: string = msg.messageType || "";
+  const mediaError: string | undefined = msg.metadata?.mediaError;
+
+  if (!url) {
+    if (!mediaError) return null;
+    return (
+      <div className="flex items-center gap-2 px-3 py-2 rounded-lg mb-1 bg-black/5 ring-1 ring-black/10">
+        <svg className="w-4 h-4 shrink-0 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+        </svg>
+        <span className="text-xs opacity-80">{t("conversations.mediaUnavailable")}</span>
+      </div>
+    );
+  }
+
+  // messageType is authoritative; the extension is the fallback for rows
+  // written before the type was recorded, and for pass-through CDN URLs.
+  const isImage = type === "image" || /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(url);
+  const isVideo = type === "video" || /\.(mp4|webm|mov|m4v)$/i.test(url);
+  const isAudio = type === "audio" || type === "voice" || /\.(ogg|oga|mp3|m4a|aac|wav|opus)$/i.test(url);
+
+  if (isImage) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={url}
+        alt={msg.fileName || ""}
+        loading="lazy"
+        className="max-w-full rounded-lg mb-1 cursor-pointer"
+        onClick={() => window.open(url, "_blank")}
+      />
+    );
+  }
+  if (isVideo) {
+    return <video src={url} controls preload="metadata" className="max-w-full rounded-lg mb-1" />;
+  }
+  if (isAudio) {
+    return (
+      <div className="mb-1">
+        <audio src={url} controls preload="metadata" className="max-w-full w-[240px]" />
+      </div>
+    );
+  }
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      // `download` is what makes a PDF save instead of taking over the tab.
+      // The browser only honours it same-origin, which uploads are - they are
+      // served from /api/uploads on this host.
+      download={msg.fileName || undefined}
+      className="flex items-center gap-2 px-3 py-2 bg-white/20 rounded-lg mb-1 hover:bg-white/30 transition"
+    >
+      <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m.75 12l3 3m0 0l3-3m-3 3v-6m-1.5-9H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+      </svg>
+      <span className="text-xs truncate">{msg.fileName || t("conversations.downloadFile")}</span>
+    </a>
   );
 }
 

@@ -14,8 +14,29 @@ export interface NormalizedInboundMessage {
 export interface MessageContent {
   type: "text" | "image" | "document" | "audio" | "video" | "interactive" | "location";
   text?: string;
+  /**
+   * WhatsApp hands us a media ID to resolve; Meta's other channels hand us a
+   * ready CDN URL. Either way this is what the worker turns into a local file.
+   */
   mediaUrl?: string;
   caption?: string;
+  /**
+   * The name the SENDER gave the file, when the channel tells us. Carried
+   * separately from `caption` because the download link needs a real name:
+   * WhatsApp media is stored under a generated UUID, so without this the
+   * agent is offered "9f3c1e....pdf" and cannot tell one attachment from
+   * another.
+   */
+  fileName?: string;
+  /** MIME type as reported by the channel, when it reports one. */
+  mimeType?: string;
+  /**
+   * A voice note rather than an attached audio file. Both arrive as `audio`
+   * on WhatsApp and differ only by this flag, and they read completely
+   * differently in a transcript - one is someone talking to you, the other is
+   * a file they forwarded.
+   */
+  voice?: boolean;
   interactiveReply?: {
     type: "button" | "quick_reply" | "postback";
     payload: string;

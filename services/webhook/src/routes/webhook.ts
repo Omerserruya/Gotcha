@@ -23,6 +23,7 @@ import type { NormalizedInboundMessage, NormalizedStatusUpdate, NormalizedOutbou
 
 const router = Router();
 
+
 // Inbound webhooks arrive without a user JWT - the tenant is derived by
 // looking up the target ChannelAccount across all tenants. That lookup
 // is a legitimate cross-tenant query; enable the Prisma tenant-guard
@@ -257,7 +258,7 @@ router.post("/", async (req: Request, res: Response) => {
     // Step 4: Extract and enqueue normalized messages
     const messages = adapter.extractMessages(body);
     for (const msg of messages) {
-      const { body: msgBody, messageType, mediaUrl } = normalizeContentToBodyAndType(msg);
+      const { body: msgBody, messageType, mediaUrl, fileName, mimeType } = normalizeContentToBodyAndType(msg);
       await incomingMessageQueue.add(
         "process",
         {
@@ -274,6 +275,8 @@ router.post("/", async (req: Request, res: Response) => {
             messageType,
             interactiveReply: msg.content.interactiveReply,
             mediaUrl,
+            fileName,
+            mimeType,
           },
         },
         { attempts: 3, backoff: { type: "exponential", delay: 1000 } }
@@ -314,7 +317,7 @@ router.post("/", async (req: Request, res: Response) => {
     // if the customer had written it.
     const echoes = adapter.extractOutboundEchoes?.(body) || [];
     for (const echo of echoes) {
-      const { body: echoBody, messageType, mediaUrl } = normalizeContentToBodyAndType(echo);
+      const { body: echoBody, messageType, mediaUrl, fileName, mimeType } = normalizeContentToBodyAndType(echo);
       await incomingMessageQueue.add(
         "process-echo",
         {
@@ -330,6 +333,8 @@ router.post("/", async (req: Request, res: Response) => {
             body: echoBody,
             messageType,
             mediaUrl,
+            fileName,
+            mimeType,
           },
         },
         { attempts: 3, backoff: { type: "exponential", delay: 1000 } }
@@ -353,22 +358,33 @@ router.post("/", async (req: Request, res: Response) => {
 // normalized `content`, and both need the same body/type/media flattening.
 function normalizeContentToBodyAndType(
   msg: Pick<NormalizedInboundMessage | NormalizedOutboundEcho, "content">,
-): { body: string; messageType: string; mediaUrl?: string } {
+): { body: string; messageType: string; mediaUrl?: string; fileName?: string; mimeType?: string } {
   const content = msg.content;
   if (content.interactiveReply) {
     return { body: content.interactiveReply.title || content.text || "", messageType: "interactive" };
   }
+  // The sender's own filename and the channel's MIME type ride along on every
+  // media kind. They are what let the worker save the file under a name a
+  // human recognises and pick the right extension when the download's
+  // content-type is generic (`application/octet-stream`, which is what a lot
+  // of documents actually arrive as).
+  const media = { mediaUrl: content.mediaUrl, fileName: content.fileName, mimeType: content.mimeType };
   switch (content.type) {
     case "text":
       return { body: content.text || "", messageType: "text" };
     case "image":
-      return { body: content.caption || "[Image]", messageType: "image", mediaUrl: content.mediaUrl };
+      return { body: content.caption || "[Image]", messageType: "image", ...media };
     case "document":
-      return { body: content.caption || "[Document]", messageType: "document", mediaUrl: content.mediaUrl };
+      return { body: content.caption || content.fileName || "[Document]", messageType: "document", ...media };
     case "audio":
-      return { body: content.text || "[Audio message]", messageType: "audio", mediaUrl: content.mediaUrl };
+      // Voice notes stay `messageType: "audio"` rather than getting their own
+      // value. `messageType` is read by the unsupported-media gate, the
+      // outbound dispatcher and the bubble renderer; a new value would have to
+      // be taught to all three to gain nothing, since both render as a player.
+      // The distinction lives in the body text the adapter chose.
+      return { body: content.text || "[Audio message]", messageType: "audio", ...media };
     case "video":
-      return { body: content.caption || "[Video]", messageType: "video", mediaUrl: content.mediaUrl };
+      return { body: content.caption || "[Video]", messageType: "video", ...media };
     case "location":
       return { body: content.text || "[Location]", messageType: "location" };
     default:

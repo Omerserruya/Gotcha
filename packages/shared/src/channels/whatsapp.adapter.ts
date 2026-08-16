@@ -306,13 +306,46 @@ function extractWhatsAppContent(msg: any): NormalizedInboundMessage["content"] {
         },
       };
     case "image":
-      return { type: "image", mediaUrl: msg.image?.id, caption: msg.image?.caption || "[Image]" };
+      return {
+        type: "image",
+        mediaUrl: msg.image?.id,
+        caption: msg.image?.caption || "[Image]",
+        mimeType: msg.image?.mime_type,
+      };
     case "document":
-      return { type: "document", mediaUrl: msg.document?.id, caption: msg.document?.caption || "[Document]" };
+      return {
+        type: "document",
+        mediaUrl: msg.document?.id,
+        // The sender's own filename is the only human-readable thing about a
+        // document, and WhatsApp gives it to us. Preferring it over the
+        // literal "[Document]" is the difference between a row that says what
+        // arrived and one that says a file did.
+        caption: msg.document?.caption || msg.document?.filename || "[Document]",
+        fileName: msg.document?.filename,
+        mimeType: msg.document?.mime_type,
+      };
     case "audio":
-      return { type: "audio", text: "[Audio message]" };
+      // `mediaUrl` was missing here, which is why voice notes were
+      // unrecoverable: the id is the ONLY handle on the file, Meta expires the
+      // media after a few days, and without it the recording is gone for good.
+      return {
+        type: "audio",
+        mediaUrl: msg.audio?.id,
+        text: msg.audio?.voice ? "[Voice message]" : "[Audio message]",
+        mimeType: msg.audio?.mime_type,
+        voice: !!msg.audio?.voice,
+      };
     case "video":
-      return { type: "video", mediaUrl: msg.video?.id, caption: msg.video?.caption || "[Video]" };
+      return {
+        type: "video",
+        mediaUrl: msg.video?.id,
+        caption: msg.video?.caption || "[Video]",
+        mimeType: msg.video?.mime_type,
+      };
+    case "sticker":
+      // A sticker is an image (webp, often animated). Treated as one so it
+      // renders instead of printing "[sticker message]" as dead text.
+      return { type: "image", mediaUrl: msg.sticker?.id, caption: "[Sticker]", mimeType: msg.sticker?.mime_type };
     case "location":
       return { type: "location", text: `[Location: ${msg.location?.latitude}, ${msg.location?.longitude}]` };
     default:

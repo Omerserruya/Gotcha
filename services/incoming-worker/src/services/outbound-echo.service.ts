@@ -91,19 +91,28 @@ export async function processOutboundEcho(job: Job<OutboundEchoJob>): Promise<vo
   // inbox instead of showing as a bare "[Image]".
   let resolvedMediaUrl: string | undefined;
   let resolvedFileName: string | undefined;
+  let mediaError: string | undefined;
   if (echo.mediaUrl && channelAccount) {
     try {
       const creds = channelAccount.credentials;
       const decrypted = typeof creds === "string" ? decryptCredentials(creds) : (creds as any);
       if (decrypted?.accessToken) {
         const { resolveWhatsAppMedia } = await import("../workers/incoming.worker");
-        const resolved = await resolveWhatsAppMedia(echo.mediaUrl, decrypted.accessToken, echo.messageType);
+        const resolved = await resolveWhatsAppMedia(echo.mediaUrl, decrypted.accessToken, echo.messageType, {
+          fileName: echo.fileName,
+          mimeType: echo.mimeType,
+        });
         if (resolved) {
           resolvedMediaUrl = resolved.localUrl;
-          resolvedFileName = resolved.fileName;
+          resolvedFileName = resolved.displayName;
+        } else {
+          mediaError = "download_failed";
         }
+      } else {
+        mediaError = "no_channel_token";
       }
     } catch (err: any) {
+      mediaError = "download_failed";
       console.warn("[incoming-worker] echo media resolution failed:", err?.message);
     }
   }
@@ -129,6 +138,7 @@ export async function processOutboundEcho(job: Job<OutboundEchoJob>): Promise<vo
         source: "whatsapp_business_app",
         echo: true,
         ...(echo.businessExternalId ? { businessExternalId: echo.businessExternalId } : {}),
+        ...(mediaError ? { mediaError } : {}),
       },
     },
   });

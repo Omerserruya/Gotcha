@@ -127,6 +127,7 @@
     "dropFilesHere": "Drop files here",
     "addCaption": "Add a caption...",
     "downloadFile": "Download file",
+    "mediaUnavailable": "Attachment could not be downloaded",
     "transferSubtitle": "Transfer this conversation to an agent or department",
     "suggestion": {
       "aiRecommendation": "AI Recommendation",
