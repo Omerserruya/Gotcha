@@ -77,6 +77,14 @@
     "aiHandledHint": "Your AI employees are answering these. Open one to read along, or take it over to reply yourself.",
     "aiHandledByAgent": "AI employee",
     "aiHandledByFlow": "Automated flow",
+    "flowHandledSection": "In an automated flow",
+    "flowHandledHint": "A scripted flow is stepping these customers through something. Open one to see where it is, or take it over.",
+    "systemFlowEndedHandoff": "Flow ended without a next step, passed to a human",
+    "flowEndReason": {
+      "no_outgoing_edge": "the last node has nothing wired after it",
+      "node_not_found": "an edge points at a node that no longer exists",
+      "loop_guard": "the flow looped back on itself"
+    },
     "aiWatchingBanner": "{name} is answering this conversation",
     "aiWatchingBannerFlow": "An automated flow is running this conversation",
     "aiWatchingBannerDesc": "You are reading along. The co-pilot stays closed so it does not draft over the reply already on its way.",

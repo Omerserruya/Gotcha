@@ -673,6 +673,7 @@ async function walk(
     steps++;
     if (visited.has(currentId)) {
       ctx.trace.push({ nodeId: currentId, type: "?", action: "loop_detected" });
+      await applyOrphanedHandoff(ctx, "loop_guard", currentId);
       return { executed: true, halted: true, reason: "loop_guard", trace: ctx.trace };
     }
     visited.add(currentId);
@@ -680,6 +681,7 @@ async function walk(
     const node = nodes.find((n) => n.id === currentId);
     if (!node) {
       ctx.trace.push({ nodeId: currentId, type: "?", action: "node_not_found" });
+      await applyOrphanedHandoff(ctx, "node_not_found", currentId);
       return { executed: true, halted: true, trace: ctx.trace };
     }
 
@@ -1062,8 +1064,11 @@ async function walk(
   await persistVars(ctx);
   if (!currentId) {
     ctx.trace.push({ nodeId: "", type: "-", action: "no_outgoing_edge" });
+    await applyOrphanedHandoff(ctx, "no_outgoing_edge");
     return { executed: true, halted: true, reason: "no_outgoing_edge", trace: ctx.trace };
   }
+  // MAX_STEPS exhausted. Same strandedness as a detected loop, same rescue.
+  await applyOrphanedHandoff(ctx, "loop_guard", currentId);
   return { executed: true, halted: true, reason: "loop_guard", trace: ctx.trace };
 }
 
@@ -1604,6 +1609,98 @@ async function dispatchRoute(
     data: { status: "WAITING", handledBy: "human" },
   });
   return "HUMAN";
+}
+
+/**
+ * The safety net under every way a flow can stop WITHOUT saying what should
+ * happen next.
+ *
+ * A deliberate halt always leaves a disposition: a paused node parks a cursor,
+ * `route_target` dispatches, an End node closes or hands off. Three exits leave
+ * nothing at all - the walk runs off the last node with no outgoing edge, an
+ * edge points at a node that no longer exists, or the loop guard trips.
+ *
+ * Before this, those returned and touched nothing. The row kept
+ * `handledBy: "flow"` with no cursor, which reads as "an automation is driving
+ * this" to every consumer - and the inbox list EXCLUDES automated
+ * conversations by default. So the conversation vanished from every human
+ * queue while nothing was actually driving it. The customer's next message
+ * arrives to no one. Those are the lost conversations.
+ *
+ * A flow that ends without deciding is an authoring gap, and the only safe
+ * default for an authoring gap is a person. WAITING + `handledBy: "human"`
+ * puts it in the queue a human actually reads. The divider carries the reason
+ * so the gap is fixable rather than merely survived.
+ */
+async function applyOrphanedHandoff(
+  ctx: FlowExecCtx,
+  reason: "no_outgoing_edge" | "node_not_found" | "loop_guard",
+  atNodeId?: string,
+): Promise<void> {
+  // Context-free run (webhook trigger): no Conversation row, nothing to strand.
+  if (!ctx.conversationId) return;
+  try {
+    const conv = await prisma.conversation.findUnique({
+      where: { id: ctx.conversationId },
+      select: { status: true, handledBy: true, isHandedOver: true, assignedAgentId: true },
+    });
+    // Only rescue what is actually stranded. A conversation already closed,
+    // already owned by a person, or already handed over has a disposition -
+    // re-opening it or yanking it back to WAITING would undo a real decision
+    // somebody made.
+    if (!conv || conv.status === "CLOSED" || conv.isHandedOver || conv.assignedAgentId) return;
+    if (conv.handledBy !== "flow") return;
+
+    await prisma.conversation.update({
+      where: { id: ctx.conversationId },
+      data: {
+        chatbotFlowId: null,
+        chatbotNodeId: null,
+        status: "WAITING",
+        handledBy: "human",
+      },
+    });
+
+    await prisma.message.create({
+      data: {
+        tenantId: ctx.tenantId,
+        conversationId: ctx.conversationId,
+        // ctx.channel is lowercased for graph comparisons; Message.channel is
+        // the ChannelType enum. Writing the lowercase form is a hard Prisma
+        // reject, which would turn the rescue into the failure it exists to
+        // prevent. Omitted entirely when absent - the column is nullable.
+        ...(ctx.channel ? { channel: ctx.channel.toUpperCase() as any } : {}),
+        direction: "INBOUND",
+        body: "",
+        messageType: "system",
+        senderName: "System",
+        status: "DELIVERED",
+        metadata: {
+          systemEvent: "flow_ended_handoff",
+          // Which of the three gaps it was, and where. This is the difference
+          // between "a flow is broken somewhere" and a node to go fix.
+          flowEndReason: reason,
+          ...(atNodeId ? { flowNodeId: atNodeId } : {}),
+          ...(ctx.flowId ? { flowId: ctx.flowId } : {}),
+        },
+      },
+    });
+
+    await publishEvent({
+      event: "conversation:updated",
+      tenantId: ctx.tenantId,
+      data: { id: ctx.conversationId, status: "WAITING", handledBy: "human", isHandedOver: false },
+    });
+
+    console.warn(
+      `[flow-executor] flow ended with no disposition (${reason}) conv=${ctx.conversationId} ` +
+        `flow=${ctx.flowId ?? "-"} node=${atNodeId ?? "-"} - handed to a human`,
+    );
+  } catch (err) {
+    // A failed rescue must never bubble into the inbound pipeline and turn a
+    // stranded conversation into a retried job that strands it again.
+    console.error("[flow-executor] orphaned-handoff failed:", (err as Error).message);
+  }
 }
 
 async function applyEnd(

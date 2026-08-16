@@ -77,6 +77,14 @@
     "aiHandledHint": "העובדים הדיגיטליים שלך עונים על אלה. אפשר לפתוח ולקרוא, או לקחת שיחה לעצמך.",
     "aiHandledByAgent": "עובד AI",
     "aiHandledByFlow": "תהליך אוטומטי",
+    "flowHandledSection": "בתוך תהליך אוטומטי",
+    "flowHandledHint": "תהליך מוגדר מוביל את הלקוחות האלה שלב אחר שלב. אפשר לפתוח ולראות איפה זה עומד, או לקחת לעצמך.",
+    "systemFlowEndedHandoff": "התהליך נגמר בלי המשך, הועבר לנציג אנושי",
+    "flowEndReason": {
+      "no_outgoing_edge": "לצומת האחרון לא מחובר כלום אחריו",
+      "node_not_found": "חיבור מצביע על צומת שכבר לא קיים",
+      "loop_guard": "התהליך חזר על עצמו בלולאה"
+    },
     "aiWatchingBanner": "{name} עונה לשיחה הזו",
     "aiWatchingBannerFlow": "תהליך אוטומטי מנהל את השיחה הזו",
     "aiWatchingBannerDesc": "אתה קורא מהצד. הקו-פיילוט נשאר סגור כדי שלא ינסח תשובה מעל אחת שכבר בדרך.",
