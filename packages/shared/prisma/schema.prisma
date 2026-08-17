@@ -189,6 +189,8 @@ model Tenant {
   durableSettings         TenantSetting[]
 
   @@index([status])
+  inboundExclusions InboundExclusion[]
+
   @@map("tenants")
 }
 
@@ -344,6 +346,8 @@ model ChannelAccount {
   @@index([tenantId])
   @@index([connectionStatus])
   @@index([tokenExpiresAt])
+  inboundExclusions InboundExclusion[]
+
   @@map("channel_accounts")
 }
 
@@ -519,6 +523,53 @@ model WhatsAppNumber {
   @@index([wabaId])
   @@index([businessPortfolioId])
   @@map("whatsapp_numbers")
+}
+
+/// Customer phone numbers that must NEVER enter GOTCHA on a given channel.
+///
+/// Exists for Coexistence. A number running in both the WhatsApp Business app
+/// and the Cloud API delivers EVERY conversation to us, including the ones the
+/// owner deliberately keeps on their phone - the accountant, a supplier, family
+/// using the business line. Before this there was no way to say "that one is
+/// mine": the only options were letting private threads into the shared inbox,
+/// or not connecting Coexistence at all.
+///
+/// The match is on the digits of the customer's number, so the same rule holds
+/// whether the channel hands us `972541111111` or `+972-54-111-1111`.
+///
+/// `channelAccountId` is nullable and means "every account on this channel".
+/// A tenant with two WhatsApp numbers usually wants the exclusion on the one
+/// that runs in the app, not on the other one.
+model InboundExclusion {
+  id       String @id @default(cuid())
+  tenantId String @map("tenant_id")
+
+  channel ChannelType @default(WHATSAPP)
+  /// NULL = every account on this channel for this tenant.
+  channelAccountId String? @map("channel_account_id")
+
+  /// Digits only, no `+`, no separators. Normalized on write so a lookup is a
+  /// plain equality check and can never miss on formatting.
+  customerExternalId String @map("customer_external_id")
+
+  /// What the owner typed, kept verbatim for display. The normalized form is
+  /// unreadable and showing it back would look like we mangled their input.
+  displayValue String? @map("display_value")
+  /// Why. Shown in the list so a rule nobody remembers adding is explainable.
+  note      String?
+  createdBy String?  @map("created_by")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  channelAccount ChannelAccount? @relation(fields: [channelAccountId], references: [id], onDelete: Cascade)
+
+  /// One rule per number per channel. A second attempt updates the note
+  /// rather than creating a duplicate that the reader cannot tell apart.
+  @@unique([tenantId, channel, customerExternalId])
+  @@index([tenantId, channel])
+  @@map("inbound_exclusions")
 }
 
 /// Append-only audit of every onboarding, repair and health step taken

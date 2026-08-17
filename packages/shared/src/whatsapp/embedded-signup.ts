@@ -72,6 +72,27 @@ export interface EmbeddedSignupEnv extends Record<string, string | undefined> {
   WHATSAPP_ES_FEATURE_TYPE?: string;
 }
 
+/**
+ * The Facebook dialog/SDK version Embedded Signup opens against.
+ *
+ * NOT the Graph API version and NOT the Embedded Signup version. This is the
+ * `/vNN.N/dialog/oauth` path segment, and it decides which onboarding CHOICES
+ * Meta's own dialog renders.
+ *
+ * Found the hard way: with an identical app id, an identical `config_id` and an
+ * empty `extras`, Meta's Launch Tool link opened v26.0 and offered "connect
+ * your WhatsApp Business app" (Coexistence), while ours opened v25.0 and did
+ * not offer it at all. Same configuration, two different experiences, no error.
+ *
+ * Three things must move together, because the SDK mints the authorization code
+ * against its own version and the exchange fails when they disagree:
+ *   1. this constant (the server redirect dialog + the token exchange)
+ *   2. FB_SDK_VERSION in frontend/src/lib/facebook-sdk.ts
+ *   3. nothing else - META_GRAPH_VERSION is a separate concern and stays put
+ * A parity test asserts 1 and 2 are equal, since the frontend cannot import it.
+ */
+export const EMBEDDED_SIGNUP_DIALOG_VERSION = "v26.0";
+
 const DEFAULT_ES_VERSION: EmbeddedSignupVersion = "v4";
 
 function parseVersion(raw: string | undefined): EmbeddedSignupVersion {

@@ -48,7 +48,14 @@ export interface IncomingMessageJob {
       title: string;
     };
     mediaUrl?: string;
+    /**
+     * The name the SENDER gave the file. WhatsApp media is stored under a
+     * generated UUID, so without this the agent is offered a download called
+     * "9f3c1e....pdf" and cannot tell one attachment from another.
+     */
     fileName?: string;
+    /** MIME type the channel reported, used to pick the saved extension. */
+    mimeType?: string;
     /**
      * Extra, already-sanitized context to persist on the created Message
      * row's `metadata`. Producers must put only safe, structured values
@@ -77,6 +84,37 @@ export interface IncomingCommentJob {
     fromUsername?: string;
     timestamp: string; // ISO
     parentCommentId?: string;
+  };
+}
+
+// A message the BUSINESS sent from a provider-native app, mirrored back to us.
+// Today: WhatsApp Coexistence (`smb_message_echoes`) - the owner replied from
+// the WhatsApp Business app on their phone. Shares the "incoming-messages"
+// queue, discriminated by job.name = "process-echo".
+//
+// It rides the same queue as customer messages but must never take the same
+// path: an echo is OUTBOUND, skips the bot entirely, and pulls the
+// conversation away from the AI because a human just spoke in it.
+export interface OutboundEchoJob {
+  tenantId: string;
+  channel: "WHATSAPP";
+  channelAccountId: string;
+  echo: {
+    externalMessageId: string;
+    /** The customer that was written TO - the conversation key. */
+    customerExternalId: string;
+    /** The business number the message came FROM. Audit only. */
+    businessExternalId?: string;
+    timestamp: string; // ISO
+    contentType: string;
+    body: string;
+    messageType: string;
+    /** WhatsApp media ID, resolved to a local file by the worker. */
+    mediaUrl?: string;
+    /** The name the owner's phone gave the file. */
+    fileName?: string;
+    /** MIME type the channel reported, used to pick the saved extension. */
+    mimeType?: string;
   };
 }
 

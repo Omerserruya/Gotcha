@@ -16,6 +16,7 @@ import {
   closeConversation,
   reassignConversation,
   getAgents,
+  getAIAgent,
   getDepartments,
   transferToDepartment,
 } from "@/lib/api";
@@ -25,6 +26,7 @@ import clsx from "clsx";
 import { ChannelBadge } from "./ChannelBadge";
 import { CustomerAvatar } from "./CustomerAvatar";
 import { CoPilotPanel } from "./CoPilotPanel";
+import { isAiManaged, isFlowManaged } from "@/lib/conversation-ownership";
 import { HistoryPanel } from "./HistoryPanel";
 import { DecisionTimelinePanel } from "./DecisionTimelinePanel";
 import { MessageSignals } from "./MessageSignals";
@@ -115,6 +117,35 @@ export function ChatPanel({ conversationId, onBack }: Props) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const repliesRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  /**
+   * Enter sends, Shift+Enter breaks the line.
+   *
+   * `isComposing` is the load-bearing part and the reason this is not a
+   * one-liner. While an IME candidate window is open - Chinese, Japanese,
+   * Korean, and some Hebrew/Arabic input methods - Enter CONFIRMS the
+   * candidate. Sending on it would fire the message mid-word, every time,
+   * for those users only.
+   */
+  const handleComposerKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key !== "Enter" || e.shiftKey) return;
+    if (e.nativeEvent.isComposing || (e as any).keyCode === 229) return;
+    e.preventDefault();
+    // Reuse the form's own submit path so attachments, the AI-managed claim
+    // and the sending guard all behave identically to the button.
+    void handleSend(e as unknown as FormEvent);
+  }, [handleSend]);
+
+  // Grow with the message, then scroll. Measured from `scrollHeight`, which
+  // needs the height reset first or the box can only ever get taller - it
+  // would never shrink back after the text is sent or deleted.
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [inputText]);
 
   // Notify AppLayout to auto-collapse sidebar when panels open
   useEffect(() => {
@@ -212,22 +243,55 @@ export function ChatPanel({ conversationId, onBack }: Props) {
     fetchConversation();
   }, [fetchConversation]);
 
+  // Is an AI employee (or a flow) driving this conversation right now?
+  // Same predicate the inbox list files rows by, so the section a conversation
+  // sits in and the behaviour of opening it can never disagree.
+  const aiManaged = isAiManaged(conversation);
+
   // Auto-open copilot when entering a conversation where last message is inbound.
   // Mobile constraint: the panel is `fixed inset-0` and takes the whole screen,
   // so auto-opening hides the chat. Only auto-open on desktop (md+). On mobile
   // the AI still runs in the background and surfaces via the floating suggestion
   // bubble above the input - the agent taps it to expand the full panel.
+  //
+  // NEVER on an AI-managed conversation. The trigger is "last message is
+  // inbound", which is precisely the state an AI-handled thread sits in for the
+  // seconds before the employee answers - so opening one to see what the AI is
+  // doing would greet you with a co-pilot drafting a reply nobody asked you to
+  // send, over a reply already on its way. Reading along must stay read-only.
   const hasAutoOpenedRef = useRef<string | null>(null);
   useEffect(() => {
     if (messages.length > 0 && hasAutoOpenedRef.current !== conversationId) {
       hasAutoOpenedRef.current = conversationId;
+      if (aiManaged) return;
       const lastMsg = messages[messages.length - 1];
       const isDesktop = typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches;
       if (lastMsg?.direction === "INBOUND" && isDesktop) {
         setCopilotOpen(true);
       }
     }
-  }, [messages, conversationId]);
+  }, [messages, conversationId, aiManaged]);
+
+  // Taking over mid-thread must also close a co-pilot the agent opened by hand
+  // BEFORE the AI took the conversation back (returnToAi), which would
+  // otherwise keep drafting against a thread that is no longer theirs.
+  useEffect(() => {
+    if (aiManaged) setCopilotOpen(false);
+  }, [aiManaged]);
+
+  // Which employee is answering. Fetched only when the banner will actually
+  // show it - Conversation carries `assignedAiAgentId` but has no AI-agent
+  // relation, and a schema migration for one label is not worth it.
+  const [aiAgentName, setAiAgentName] = useState<string | null>(null);
+  useEffect(() => {
+    const agentId = conversation?.assignedAiAgentId;
+    if (!token || !aiManaged || !agentId) { setAiAgentName(null); return; }
+    let cancelled = false;
+    getAIAgent(token, agentId)
+      .then((res) => { if (!cancelled) setAiAgentName(res.data?.name ?? null); })
+      .catch(() => { if (!cancelled) setAiAgentName(null); });
+    return () => { cancelled = true; };
+  }, [token, aiManaged, conversation?.assignedAiAgentId]);
 
   // Mark conversation as read (for unread indicator)
   useEffect(() => {
@@ -318,6 +382,18 @@ export function ChatPanel({ conversationId, onBack }: Props) {
 
     setSending(true);
     try {
+      // Typing a reply into a conversation the AI owns IS the takeover, so
+      // claim before sending. Without this the agent's message goes out
+      // alongside whatever the employee was already composing, and the
+      // customer gets two answers from one business.
+      //
+      // Claim first, send second: a failed claim must not produce a sent
+      // message in a thread the AI still believes is its own.
+      if (isAiManaged(conversation)) {
+        await claimConversation(token, conversationId);
+        await fetchConversation();
+      }
+
       // Send files first
       for (const file of attachedFiles) {
         const res = await sendMediaMessage(token, conversationId, file, inputText.trim() || undefined);
@@ -614,6 +690,36 @@ export function ChatPanel({ conversationId, onBack }: Props) {
           </div>
         </div>
 
+        {/* Reading along on a conversation an AI employee owns.
+            States who is answering and why the co-pilot is not here, because
+            an agent who opens one of these and finds the panel missing will
+            otherwise read it as the co-pilot being broken. */}
+        {aiManaged && (
+          <div className="flex items-center gap-2.5 px-4 py-2 bg-purple-50/70 border-b border-purple-100">
+            <svg className="w-4 h-4 text-purple-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+            </svg>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold text-purple-700 truncate">
+                {isFlowManaged(conversation)
+                  ? t("conversations.aiWatchingBannerFlow")
+                  : t("conversations.aiWatchingBanner", {
+                      name: aiAgentName || t("conversations.aiHandledByAgent"),
+                    })}
+              </p>
+              <p className="text-[11px] text-purple-500/80 leading-snug hidden sm:block">
+                {t("conversations.aiWatchingBannerDesc")}
+              </p>
+            </div>
+            <button
+              onClick={handleClaim}
+              className="text-xs px-2.5 py-1 rounded-lg font-medium bg-white text-purple-600 ring-1 ring-purple-200 hover:bg-purple-100 transition shrink-0"
+            >
+              {t("conversations.aiWatchingTakeOver")}
+            </button>
+          </div>
+        )}
+
         {/* Where the shopper is standing right now, for Shopify chats */}
         <StorefrontContextStrip
           channel={conversation?.channel}
@@ -696,19 +802,8 @@ export function ChatPanel({ conversationId, onBack }: Props) {
                     )}
                   </p>
                 )}
-                {msg.mediaUrl && (msg.messageType === "image" || msg.mediaUrl.match(/\.(jpg|jpeg|png|gif|webp)$/i)) ? (
-                  <img src={msg.mediaUrl} alt="" className="max-w-full rounded-lg mb-1 cursor-pointer" onClick={() => window.open(msg.mediaUrl, "_blank")} />
-                ) : msg.mediaUrl && (msg.messageType === "video" || msg.mediaUrl.match(/\.(mp4|webm|mov)$/i)) ? (
-                  <video src={msg.mediaUrl} controls className="max-w-full rounded-lg mb-1" />
-                ) : msg.mediaUrl ? (
-                  <a href={msg.mediaUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-3 py-2 bg-white/20 rounded-lg mb-1 hover:bg-white/30 transition">
-                    <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m.75 12l3 3m0 0l3-3m-3 3v-6m-1.5-9H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-                    </svg>
-                    <span className="text-xs truncate">{msg.fileName || t("conversations.downloadFile")}</span>
-                  </a>
-                ) : null}
-                {msg.body && (
+                <MessageMedia msg={msg} t={t} />
+                {msg.body && !isRedundantMediaCaption(msg) && (
                   <p
                     className="whitespace-pre-wrap break-words"
                     onMouseUp={msg.direction === "INBOUND" ? handleMessageMouseUp : undefined}
@@ -847,7 +942,7 @@ export function ChatPanel({ conversationId, onBack }: Props) {
             >
               <AIComposePanel />
             <div className={clsx("rounded-2xl transition-all relative", aiGenerating ? "p-[2px] ai-border-glow" : "p-0")}>
-            <form onSubmit={handleSend} className={clsx("flex items-center gap-2 bg-white rounded-2xl shadow-lg shadow-gray-200/50 px-3 py-1.5 transition", aiGenerating ? "" : "ring-1 ring-gray-200/80 focus-within:ring-2 focus-within:ring-primary-300")}>
+            <form onSubmit={handleSend} className={clsx("flex items-end gap-2 bg-white rounded-2xl shadow-lg shadow-gray-200/50 px-3 py-1.5 transition", aiGenerating ? "" : "ring-1 ring-gray-200/80 focus-within:ring-2 focus-within:ring-primary-300")}>
               {/* Hidden file input */}
               <input
                 ref={fileInputRef}
@@ -892,13 +987,20 @@ export function ChatPanel({ conversationId, onBack }: Props) {
               {/* AI compose trigger - panel opens above the input */}
               <AIComposeTrigger compact />
 
-              {/* Text input */}
-              <input
-                type="text"
+              {/* Text input.
+                  A textarea rather than an <input>, because an input cannot
+                  hold a newline at all - Shift+Enter had nothing to insert.
+                  Enter still sends; Shift+Enter breaks the line. It grows with
+                  the message and stops at ~6 lines, after which it scrolls,
+                  so a long paste cannot push the composer off the screen. */}
+              <textarea
+                ref={inputRef}
+                rows={1}
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
+                onKeyDown={handleComposerKeyDown}
                 placeholder={attachedFiles.length > 0 ? t("conversations.addCaption") : t("conversations.typeMessage")}
-                className="flex-1 py-2 bg-transparent border-0 text-base md:text-sm outline-none placeholder:text-gray-400"
+                className="flex-1 py-2 bg-transparent border-0 text-base md:text-sm outline-none placeholder:text-gray-400 resize-none max-h-[9rem] overflow-y-auto leading-6"
                 disabled={sending}
               />
 
@@ -1141,6 +1243,107 @@ function ActionButton({
   );
 }
 
+/**
+ * Adapters fill an empty caption with a placeholder - "[Image]", "[Document]" -
+ * so a media message is never a blank row in a list preview. Once the picture
+ * itself is on screen that placeholder is noise printed under it, and it is
+ * the thing that made an attachment look like the customer had typed the word
+ * "[Document]" at us. Hidden in the bubble, kept everywhere the body is the
+ * only thing shown.
+ */
+const MEDIA_PLACEHOLDER_BODIES = new Set([
+  "[Image]", "[Video]", "[Document]", "[Audio message]", "[Voice message]", "[Sticker]",
+]);
+
+function isRedundantMediaCaption(msg: any): boolean {
+  if (!msg.mediaUrl) return false;
+  const body = String(msg.body ?? "").trim();
+  // The sender's own filename is used as the document caption, and it is
+  // already the label on the download link.
+  return MEDIA_PLACEHOLDER_BODIES.has(body) || (!!msg.fileName && body === msg.fileName);
+}
+
+/**
+ * The media part of a message bubble: image, video, voice note, or a file to
+ * download. Identical for inbound, outbound and business-app echoes - a photo
+ * is a photo whoever sent it.
+ *
+ * Two things this has to get right that the previous inline version did not.
+ *
+ * Audio fell through to the generic file link, so a voice note - the single
+ * most common attachment on WhatsApp - was a download rather than something
+ * you could listen to without leaving the inbox.
+ *
+ * And an attachment that failed to download rendered as nothing at all,
+ * leaving a bubble whose whole content was the literal text "[Document]". That
+ * reads as the customer having typed it. WhatsApp media expires a few days
+ * after it is sent and the id is the only handle on it, so this state is
+ * permanent and has to say so rather than look like a rendering glitch.
+ */
+function MessageMedia({ msg, t }: { msg: any; t: (key: string, vars?: Record<string, string>) => string }) {
+  const url: string | undefined = msg.mediaUrl || undefined;
+  const type: string = msg.messageType || "";
+  const mediaError: string | undefined = msg.metadata?.mediaError;
+
+  if (!url) {
+    if (!mediaError) return null;
+    return (
+      <div className="flex items-center gap-2 px-3 py-2 rounded-lg mb-1 bg-black/5 ring-1 ring-black/10">
+        <svg className="w-4 h-4 shrink-0 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+        </svg>
+        <span className="text-xs opacity-80">{t("conversations.mediaUnavailable")}</span>
+      </div>
+    );
+  }
+
+  // messageType is authoritative; the extension is the fallback for rows
+  // written before the type was recorded, and for pass-through CDN URLs.
+  const isImage = type === "image" || /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(url);
+  const isVideo = type === "video" || /\.(mp4|webm|mov|m4v)$/i.test(url);
+  const isAudio = type === "audio" || type === "voice" || /\.(ogg|oga|mp3|m4a|aac|wav|opus)$/i.test(url);
+
+  if (isImage) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={url}
+        alt={msg.fileName || ""}
+        loading="lazy"
+        className="max-w-full rounded-lg mb-1 cursor-pointer"
+        onClick={() => window.open(url, "_blank")}
+      />
+    );
+  }
+  if (isVideo) {
+    return <video src={url} controls preload="metadata" className="max-w-full rounded-lg mb-1" />;
+  }
+  if (isAudio) {
+    return (
+      <div className="mb-1">
+        <audio src={url} controls preload="metadata" className="max-w-full w-[240px]" />
+      </div>
+    );
+  }
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      // `download` is what makes a PDF save instead of taking over the tab.
+      // The browser only honours it same-origin, which uploads are - they are
+      // served from /api/uploads on this host.
+      download={msg.fileName || undefined}
+      className="flex items-center gap-2 px-3 py-2 bg-white/20 rounded-lg mb-1 hover:bg-white/30 transition"
+    >
+      <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m.75 12l3 3m0 0l3-3m-3 3v-6m-1.5-9H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+      </svg>
+      <span className="text-xs truncate">{msg.fileName || t("conversations.downloadFile")}</span>
+    </a>
+  );
+}
+
 function SystemDivider({ metadata, timestamp, t }: { metadata: any; timestamp: string; t: (key: string, vars?: Record<string, string>) => string }) {
   const event = metadata?.systemEvent;
   let icon: React.ReactNode;
@@ -1182,6 +1385,36 @@ function SystemDivider({ metadata, timestamp, t }: { metadata: any; timestamp: s
       );
       label = event === "ai_bot_escalation" ? t("conversations.systemAiEscalation") : t("conversations.systemBotHandover");
       if (escalationReason) label = `${label} - ${escalationReason}`;
+      colors = "bg-amber-50 text-amber-600";
+      break;
+    case "flow_ended_handoff":
+      // A flow stopped without saying what happens next and the conversation
+      // was handed to a person rather than left stranded. The reason names the
+      // authoring gap, because this divider is the only place anyone will
+      // learn the graph has a hole in it.
+      icon = (
+        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+        </svg>
+      );
+      label = t("conversations.systemFlowEndedHandoff");
+      {
+        const reasonKey = typeof metadata?.flowEndReason === "string" ? metadata.flowEndReason : "";
+        const why = reasonKey ? t(`conversations.flowEndReason.${reasonKey}`) : "";
+        if (why && !why.includes("flowEndReason.")) label = `${label} - ${why}`;
+      }
+      colors = "bg-orange-50 text-orange-600";
+      break;
+    case "whatsapp_app_takeover":
+      // The owner answered from the WhatsApp Business app on their phone.
+      // Same shape as an escalation - the AI stopped and a person is driving -
+      // so it reads with the handover colors, not as a neutral note.
+      icon = (
+        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 006 3.75v16.5a2.25 2.25 0 002.25 2.25h7.5A2.25 2.25 0 0018 20.25V3.75a2.25 2.25 0 00-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3" />
+        </svg>
+      );
+      label = t("conversations.systemWhatsappAppTakeover");
       colors = "bg-amber-50 text-amber-600";
       break;
     case "agent_claimed":

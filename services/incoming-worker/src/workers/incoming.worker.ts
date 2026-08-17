@@ -4,7 +4,7 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { handleApprovalButtonReply } from "../services/whatsapp-approval-inbound.service";
-import { prisma, createWorker, IncomingMessageJob, IncomingCommentJob, WebhookTriggerJob, analyticsQueue, outgoingMessageQueue, publishEvent, decryptCredentials, metaGraphBaseUrl } from "@chatcenter/shared";
+import { prisma, createWorker, IncomingMessageJob, IncomingCommentJob, OutboundEchoJob, WebhookTriggerJob, analyticsQueue, outgoingMessageQueue, publishEvent, decryptCredentials, metaGraphBaseUrl, isInboundExcluded } from "@chatcenter/shared";
 import { processCommentTrigger } from "../services/comment-trigger.service";
 
 const FB_API_URL = metaGraphBaseUrl(process.env.FACEBOOK_API_URL);
@@ -15,8 +15,15 @@ const WA_API_URL = metaGraphBaseUrl(process.env.WHATSAPP_API_URL);
 const UPLOADS_DIR = process.env.UPLOADS_DIR || path.resolve(process.cwd(), "uploads");
 const UPLOADS_BASE_URL = process.env.UPLOADS_BASE_URL || "/api/uploads";
 
-// Unsupported media types that trigger an auto-reply
-const UNSUPPORTED_MEDIA_TYPES = ["audio", "location"];
+// Media kinds we cannot turn into anything an agent or a bot can act on, and
+// which therefore get an auto-reply asking for something else.
+//
+// `audio` was on this list, which is why voice notes were answered with "we
+// don't support this type of media" and then dropped before the bot ever saw
+// them. They are received now: the recording is downloaded and playable in the
+// inbox. Sending audio is still not supported, and deliberately so - a voice
+// note costs the customer nothing and would cost us a synthesis bill.
+const UNSUPPORTED_MEDIA_TYPES = ["location"];
 
 // Ensure uploads dir exists
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });
@@ -105,7 +112,16 @@ async function fetchWhatsAppAvatar(phoneNumberId: string, contactWaId: string, a
  * 3. Save to local uploads directory
  * 4. Return local URL path
  */
-async function resolveWhatsAppMedia(mediaId: string, accessToken: string, messageType: string): Promise<{ localUrl: string; fileName: string } | null> {
+export async function resolveWhatsAppMedia(
+  mediaId: string,
+  accessToken: string,
+  messageType: string,
+  // What the SENDER called the file, and what the channel said it was. Both
+  // are optional because only documents carry a filename, but when they exist
+  // they beat anything we can infer: `application/octet-stream` is a very
+  // common content-type on the download and tells us nothing.
+  opts?: { fileName?: string; mimeType?: string },
+): Promise<{ localUrl: string; fileName: string; displayName: string } | null> {
   try {
     // Step 1: Get the CDN download URL
     const metaRes = await axios.get(`${WA_API_URL}/${mediaId}`, {
@@ -120,20 +136,60 @@ async function resolveWhatsAppMedia(mediaId: string, accessToken: string, messag
       responseType: "arraybuffer",
     });
 
-    // Determine file extension from content-type
+    // Determine file extension. Order matters: the sender's own filename is
+    // the most reliable, then the MIME the channel declared, then the
+    // download's content-type, then the message kind.
     const contentType = String(fileRes.headers["content-type"] ?? "");
-    const ext = getExtensionFromMime(contentType, messageType);
+    const senderExt = opts?.fileName ? path.extname(opts.fileName) : "";
+    const declaredExt = extensionFromMimeOrEmpty(opts?.mimeType);
+    const ext = senderExt || declaredExt || getExtensionFromMime(contentType, messageType);
+
+    // Stored under a UUID (never the sender's name - that is attacker-supplied
+    // text and this path is written straight to disk), but the sender's name
+    // is carried back separately for the download link to use.
     const fileName = `${crypto.randomUUID()}${ext}`;
     const filePath = path.join(UPLOADS_DIR, fileName);
 
     // Step 3: Save to disk
     fs.writeFileSync(filePath, fileRes.data);
 
-    return { localUrl: `${UPLOADS_BASE_URL}/${fileName}`, fileName };
+    return {
+      localUrl: `${UPLOADS_BASE_URL}/${fileName}`,
+      fileName,
+      displayName: sanitizeDisplayName(opts?.fileName) || fileName,
+    };
   } catch (err: any) {
     console.error(`[incoming-worker] Failed to resolve WhatsApp media ${mediaId}:`, err.message);
     return null;
   }
+}
+
+/**
+ * The sender's filename, made safe to render and to put in a download
+ * attribute. It never touches the filesystem - the stored name is always a
+ * UUID - so this only has to defend the UI: strip path separators so nothing
+ * reads as a directory, drop control characters, and cap the length.
+ */
+function sanitizeDisplayName(name?: string): string {
+  if (!name) return "";
+  return name
+    .replace(/[\\/]/g, "_")
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u001f\u007f]/g, "")
+    .trim()
+    .slice(0, 180);
+}
+
+/**
+ * Extension for a declared MIME type, or "" when we have no opinion. Distinct
+ * from `getExtensionFromMime`, which always answers (falling back to ".bin")
+ * and so can never be used as one link in a preference chain.
+ */
+function extensionFromMimeOrEmpty(mimeType?: string): string {
+  const mime = mimeType?.split(";")[0]?.trim().toLowerCase();
+  if (!mime) return "";
+  const ext = getExtensionFromMime(mime, "__none__");
+  return ext === ".bin" ? "" : ext;
 }
 
 function getExtensionFromMime(contentType: string, messageType: string): string {
@@ -178,6 +234,8 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
     messageType,
     interactiveReply,
     mediaUrl: rawMediaUrl,
+    fileName: senderFileName,
+    mimeType: senderMimeType,
     metadata: producerMetadata,
   } = normalizedMessage;
 
@@ -186,6 +244,19 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
     where: { externalMessageId },
   });
   if (existing) return;
+
+  // Numbers the owner keeps on their own phone. Checked BEFORE any Contact,
+  // Conversation or Message row exists, because that is the only point where
+  // dropping the message actually means anything - one step later and the
+  // thread is created, an agent is notified, and a bot may already have
+  // answered a conversation that was never meant to reach the team.
+  //
+  // Coexistence is why this exists: a number live in both the Business app and
+  // the Cloud API delivers EVERYTHING to us, private threads included.
+  if (await isInboundExcluded({ tenantId, channel, customerExternalId: senderId, channelAccountId })) {
+    console.log(`[incoming-worker] dropping message from excluded sender on ${channel} (tenant ${tenantId})`);
+    return;
+  }
 
   // A manager tapping Approve/Reject on WhatsApp is NOT a customer message.
   // Intercept before any contact/conversation is created - otherwise a staff
@@ -284,6 +355,10 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
   // Resolve media URL (download WhatsApp media, pass through Messenger/Instagram URLs)
   let resolvedMediaUrl: string | undefined;
   let resolvedFileName: string | undefined;
+  // Set when the attachment was announced but could not be fetched. Persisted
+  // on the message so the inbox can say the file did not arrive, instead of
+  // rendering a bare "[Document]" that looks like the customer sent the word.
+  let mediaError: string | undefined;
   if (rawMediaUrl) {
     if (channel === "WHATSAPP") {
       // WhatsApp gives us a media ID, not a URL - resolve and download it
@@ -291,15 +366,27 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
       const creds = channelAccount?.credentials;
       const decrypted = typeof creds === "string" ? decryptCredentials(creds) : (creds as any);
       if (decrypted?.accessToken) {
-        const resolved = await resolveWhatsAppMedia(rawMediaUrl, decrypted.accessToken, messageType);
+        const resolved = await resolveWhatsAppMedia(rawMediaUrl, decrypted.accessToken, messageType, {
+          fileName: senderFileName,
+          mimeType: senderMimeType,
+        });
         if (resolved) {
           resolvedMediaUrl = resolved.localUrl;
-          resolvedFileName = resolved.fileName;
+          // The name the AGENT sees. The file on disk keeps its UUID.
+          resolvedFileName = resolved.displayName;
+        } else {
+          // Meta expires media after a few days and the id is the only handle
+          // on it, so a failure here is permanent for that file. Say so.
+          mediaError = "download_failed";
+          console.warn(`[incoming-worker] media ${rawMediaUrl} (${messageType}) could not be downloaded for conv of ${senderId}`);
         }
+      } else {
+        mediaError = "no_channel_token";
       }
     } else {
       // Messenger/Instagram: URL is directly usable
       resolvedMediaUrl = rawMediaUrl;
+      resolvedFileName = senderFileName;
     }
   }
 
@@ -319,8 +406,14 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
       // under the interactive reply so a channel can attach its own
       // context - e.g. the Shopify storefront page a visitor asked from.
       metadata:
-        interactiveReply || producerMetadata
-          ? { ...(producerMetadata ?? {}), ...(interactiveReply ? { interactiveReply } : {}) }
+        interactiveReply || producerMetadata || mediaError
+          ? {
+              ...(producerMetadata ?? {}),
+              ...(interactiveReply ? { interactiveReply } : {}),
+              // Why the attachment is not here. The bubble reads this to
+              // explain itself rather than showing an empty "[Document]".
+              ...(mediaError ? { mediaError } : {}),
+            }
           : undefined,
       mediaUrl: resolvedMediaUrl,
       fileName: resolvedFileName,
@@ -585,9 +678,16 @@ async function processWebhookTrigger(job: Job<WebhookTriggerJob>): Promise<void>
 // same DLQ, same concurrency budget - but each job kind has its own handler.
 // Exported for unit tests that exercise the job-name routing without standing
 // up a real BullMQ worker.
-export async function dispatch(job: Job<IncomingMessageJob | IncomingCommentJob | WebhookTriggerJob>): Promise<void> {
+export async function dispatch(job: Job<IncomingMessageJob | IncomingCommentJob | WebhookTriggerJob | OutboundEchoJob>): Promise<void> {
   if (job.name === "process-comment") {
     await processCommentTrigger(job as Job<IncomingCommentJob>);
+    return;
+  }
+  if (job.name === "process-echo") {
+    // A message the BUSINESS sent from the WhatsApp Business app. OUTBOUND,
+    // and it takes the conversation away from the AI - never the inbound path.
+    const { processOutboundEcho } = await import("../services/outbound-echo.service");
+    await processOutboundEcho(job as Job<OutboundEchoJob>);
     return;
   }
   if (job.name === "webhook-trigger") {
@@ -600,6 +700,6 @@ export async function dispatch(job: Job<IncomingMessageJob | IncomingCommentJob 
 
 let worker: any;
 export function startIncomingWorker() {
-  worker = createWorker<IncomingMessageJob | IncomingCommentJob | WebhookTriggerJob>("incoming-messages", dispatch, 3);
-  console.log("[incoming-worker] Incoming message worker started (handles: process, process-comment, webhook-trigger)");
+  worker = createWorker<IncomingMessageJob | IncomingCommentJob | WebhookTriggerJob | OutboundEchoJob>("incoming-messages", dispatch, 3);
+  console.log("[incoming-worker] Incoming message worker started (handles: process, process-comment, process-echo, webhook-trigger)");
 }

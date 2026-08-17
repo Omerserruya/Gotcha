@@ -5,6 +5,7 @@ import type {
   OutboundAdapter,
   NormalizedInboundMessage,
   NormalizedStatusUpdate,
+  NormalizedOutboundEcho,
   ChannelCredentials,
   ProviderSendError,
 } from "./types";
@@ -142,6 +143,27 @@ function buildWaStatusError(e: any): ProviderSendError {
 
 // ─── Inbound Adapter ─────────────────────────────────────────
 
+/**
+ * The ONE Coexistence echo field we ingest: messages the owner sent from the
+ * WhatsApp Business app on their phone.
+ *
+ * Meta also emits `message_echoes`, which mirrors messages sent through the
+ * Cloud API - including OUR OWN sends. Ingesting it would post every GOTCHA
+ * reply into the thread a second time, because the dedupe key
+ * (`Message.externalMessageId`) is written only AFTER the send call returns
+ * and the echo can arrive first. It is excluded on purpose; adding it means
+ * first giving the outbound path a pre-send idempotency key.
+ */
+const WA_ECHO_FIELD = "smb_message_echoes";
+
+/**
+ * Fields whose `value.metadata.phone_number_id` identifies the channel
+ * account. `messages` carries customer traffic and delivery statuses;
+ * `smb_message_echoes` carries the business-app echoes. Both must resolve,
+ * otherwise the webhook drops the payload before any handler sees it.
+ */
+const WA_ACCOUNT_BEARING_FIELDS = new Set(["messages", WA_ECHO_FIELD]);
+
 export const whatsAppInboundAdapter: InboundAdapter = {
   channel: "WHATSAPP",
 
@@ -208,11 +230,48 @@ export const whatsAppInboundAdapter: InboundAdapter = {
     return updates;
   },
 
+  /**
+   * Messages the business sent from the WhatsApp Business app (Coexistence).
+   * Meta mirrors them here so a number that is live in both places shows one
+   * complete thread in GOTCHA.
+   *
+   * The echo's `to` is the CUSTOMER and its `from` is the business number -
+   * the reverse of an inbound message. Keying the conversation off `to` is
+   * what puts the echo in the same thread as the customer's own messages
+   * rather than opening a conversation "with ourselves".
+   */
+  extractOutboundEchoes(body: any): NormalizedOutboundEcho[] {
+    const echoes: NormalizedOutboundEcho[] = [];
+    for (const entry of body.entry || []) {
+      for (const change of entry.changes || []) {
+        if (change.field !== WA_ECHO_FIELD) continue;
+        const value = change.value || {};
+        // Meta has shipped this array under both names; accept either rather
+        // than silently ingesting nothing if the payload shape shifts.
+        const list = value.message_echoes || value.messages || [];
+        for (const msg of list) {
+          const to = msg?.to;
+          if (!msg?.id || !to) continue;
+          echoes.push({
+            externalMessageId: msg.id,
+            channel: "WHATSAPP",
+            customerExternalId: String(to),
+            businessExternalId: msg.from ? String(msg.from) : undefined,
+            timestamp: new Date(parseInt(msg.timestamp) * 1000),
+            content: extractWhatsAppContent(msg),
+          });
+        }
+      }
+    }
+    return echoes;
+  },
+
   resolveChannelAccountExternalId(body: any): string | null {
     for (const entry of body.entry || []) {
       for (const change of entry.changes || []) {
-        if (change.field !== "messages") continue;
-        return change.value?.metadata?.phone_number_id || null;
+        if (!WA_ACCOUNT_BEARING_FIELDS.has(change.field)) continue;
+        const phoneNumberId = change.value?.metadata?.phone_number_id;
+        if (phoneNumberId) return phoneNumberId;
       }
     }
     return null;
@@ -247,13 +306,46 @@ function extractWhatsAppContent(msg: any): NormalizedInboundMessage["content"] {
         },
       };
     case "image":
-      return { type: "image", mediaUrl: msg.image?.id, caption: msg.image?.caption || "[Image]" };
+      return {
+        type: "image",
+        mediaUrl: msg.image?.id,
+        caption: msg.image?.caption || "[Image]",
+        mimeType: msg.image?.mime_type,
+      };
     case "document":
-      return { type: "document", mediaUrl: msg.document?.id, caption: msg.document?.caption || "[Document]" };
+      return {
+        type: "document",
+        mediaUrl: msg.document?.id,
+        // The sender's own filename is the only human-readable thing about a
+        // document, and WhatsApp gives it to us. Preferring it over the
+        // literal "[Document]" is the difference between a row that says what
+        // arrived and one that says a file did.
+        caption: msg.document?.caption || msg.document?.filename || "[Document]",
+        fileName: msg.document?.filename,
+        mimeType: msg.document?.mime_type,
+      };
     case "audio":
-      return { type: "audio", text: "[Audio message]" };
+      // `mediaUrl` was missing here, which is why voice notes were
+      // unrecoverable: the id is the ONLY handle on the file, Meta expires the
+      // media after a few days, and without it the recording is gone for good.
+      return {
+        type: "audio",
+        mediaUrl: msg.audio?.id,
+        text: msg.audio?.voice ? "[Voice message]" : "[Audio message]",
+        mimeType: msg.audio?.mime_type,
+        voice: !!msg.audio?.voice,
+      };
     case "video":
-      return { type: "video", mediaUrl: msg.video?.id, caption: msg.video?.caption || "[Video]" };
+      return {
+        type: "video",
+        mediaUrl: msg.video?.id,
+        caption: msg.video?.caption || "[Video]",
+        mimeType: msg.video?.mime_type,
+      };
+    case "sticker":
+      // A sticker is an image (webp, often animated). Treated as one so it
+      // renders instead of printing "[sticker message]" as dead text.
+      return { type: "image", mediaUrl: msg.sticker?.id, caption: "[Sticker]", mimeType: msg.sticker?.mime_type };
     case "location":
       return { type: "location", text: `[Location: ${msg.location?.latitude}, ${msg.location?.longitude}]` };
     default:

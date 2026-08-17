@@ -169,9 +169,17 @@ function extractMessengerContent(message: any): NormalizedInboundMessage["conten
       case "video":
         return { type: "video", mediaUrl: attachment.payload?.url, caption: "[Video]" };
       case "audio":
-        return { type: "audio", mediaUrl: attachment.payload?.url, text: "[Audio message]" };
+        return { type: "audio", mediaUrl: attachment.payload?.url, text: "[Audio message]", voice: true };
       case "file":
-        return { type: "document", mediaUrl: attachment.payload?.url, caption: "[Document]" };
+        // Messenger puts the sender's filename on the attachment when it has
+        // one. Without it the inbox offers a download labelled by our own
+        // generated name, which tells the agent nothing about what it is.
+        return {
+          type: "document",
+          mediaUrl: attachment.payload?.url,
+          caption: attachment.name || "[Document]",
+          fileName: attachment.name,
+        };
       case "location":
         const coords = attachment.payload?.coordinates;
         return { type: "location", text: `[Location: ${coords?.lat}, ${coords?.long}]` };

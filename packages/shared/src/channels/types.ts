@@ -14,8 +14,29 @@ export interface NormalizedInboundMessage {
 export interface MessageContent {
   type: "text" | "image" | "document" | "audio" | "video" | "interactive" | "location";
   text?: string;
+  /**
+   * WhatsApp hands us a media ID to resolve; Meta's other channels hand us a
+   * ready CDN URL. Either way this is what the worker turns into a local file.
+   */
   mediaUrl?: string;
   caption?: string;
+  /**
+   * The name the SENDER gave the file, when the channel tells us. Carried
+   * separately from `caption` because the download link needs a real name:
+   * WhatsApp media is stored under a generated UUID, so without this the
+   * agent is offered "9f3c1e....pdf" and cannot tell one attachment from
+   * another.
+   */
+  fileName?: string;
+  /** MIME type as reported by the channel, when it reports one. */
+  mimeType?: string;
+  /**
+   * A voice note rather than an attached audio file. Both arrive as `audio`
+   * on WhatsApp and differ only by this flag, and they read completely
+   * differently in a transcript - one is someone talking to you, the other is
+   * a file they forwarded.
+   */
+  voice?: boolean;
   interactiveReply?: {
     type: "button" | "quick_reply" | "postback";
     payload: string;
@@ -125,6 +146,32 @@ export interface NormalizedCommentEvent {
   parentCommentId?: string;    // Set when this is a reply to another comment, not a top-level comment
 }
 
+/**
+ * A message the BUSINESS sent from outside GOTCHA, echoed back to us by the
+ * provider. Today this is only WhatsApp Coexistence (`smb_message_echoes`):
+ * the owner replies from the WhatsApp Business app on their phone and Meta
+ * mirrors that message to our webhook.
+ *
+ * It is NOT a customer message, so it must never enter the inbound pipeline:
+ * no bot turn, no routing, no language detection, no identity-link. It lands
+ * as an OUTBOUND row in the thread and, because a human just spoke, it takes
+ * the conversation away from the AI.
+ *
+ * `customerExternalId` is the ECHO's `to` (the customer), not its `from` -
+ * that is what makes it addressable to the same conversation as the
+ * customer's own inbound messages.
+ */
+export interface NormalizedOutboundEcho {
+  externalMessageId: string;
+  channel: ChannelType;
+  /** The customer the business wrote to - the conversation key. */
+  customerExternalId: string;
+  /** The business number the message was sent from. Audit only. */
+  businessExternalId?: string;
+  timestamp: Date;
+  content: MessageContent;
+}
+
 export interface OutboundMessagePayload {
   type: "text" | "interactive";
   text?: string;
@@ -155,6 +202,9 @@ export interface InboundAdapter {
   // Optional - only IG/Messenger implement it today. Returning [] for all other
   // channels keeps the webhook handler indifferent.
   extractCommentEvents?(payload: any): NormalizedCommentEvent[];
+  // Optional - only WhatsApp (Coexistence) implements it today. Messages the
+  // business sent from a provider-native app, mirrored back to us.
+  extractOutboundEchoes?(payload: any): NormalizedOutboundEcho[];
 }
 
 export interface OutboundAdapter {

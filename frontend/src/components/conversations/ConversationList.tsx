@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
-import { getConversations, getDepartments, getSlaSettings, getDepartmentSla, deleteConversation } from "@/lib/api";
+import { getConversations, getDepartments, getSlaSettings, getDepartmentSla, deleteConversation, getAIAgents } from "@/lib/api";
 import { getSocket } from "@/lib/socket";
 import Image from "next/image";
 function shortTimeAgo(date: Date): string {
@@ -36,6 +36,18 @@ interface Props {
   selectedId: string | null;
   onSelect: (id: string) => void;
 }
+
+// Collapsed is the DEFAULT, and the stored value only ever un-collapses a
+// returning user who opened it themselves. These sections are ambient
+// awareness, not work: expanded by default they would compete with the queues
+// that do need attention.
+//
+// Two keys, because they answer different questions. "An employee is talking
+// to this customer" and "a scripted flow is stepping this customer through
+// something" fail differently and get looked at by different people, so one
+// shared toggle would force whoever cares about one to keep opening the other.
+const AI_SECTION_COLLAPSED_KEY = "chatcenter:inboxAiSectionCollapsed";
+const FLOW_SECTION_COLLAPSED_KEY = "chatcenter:inboxFlowSectionCollapsed";
 
 function getLastReadMap(): Record<string, string> {
   try { return JSON.parse(localStorage.getItem("chatcenter:lastRead") || "{}"); } catch { return {}; }
@@ -75,11 +87,24 @@ export function ConversationList({ selectedId, onSelect }: Props) {
   const [slaConfig, setSlaConfig] = useState<{ enabled: boolean; slaMinutes: number; warningThreshold: number } | null>(null);
   const [deptSlaMap, setDeptSlaMap] = useState<Record<string, { enabled: boolean; slaMinutes: number }>>({});
   const [markedUnread, setMarkedUnread] = useState<Set<string>>(() => new Set());
+  // Conversations an AI employee / flow currently owns. Fetched separately
+  // from the human queues rather than filtered out of them: they are excluded
+  // server-side by default, and sharing one paginated request would let a busy
+  // AI push real work off the first page.
+  const [aiConversations, setAiConversations] = useState<any[]>([]);
+  const [aiCollapsed, setAiCollapsed] = useState(true);
+  const [flowCollapsed, setFlowCollapsed] = useState(true);
+  const [aiAgentNames, setAiAgentNames] = useState<Record<string, string>>({});
 
   // Post-hydration warm-up from localStorage.
   useEffect(() => {
     setLastReadMap(getLastReadMap());
     setMarkedUnread(getMarkedUnread());
+    try {
+      // Absent key → stays collapsed. Only an explicit "0" opens it.
+      if (localStorage.getItem(AI_SECTION_COLLAPSED_KEY) === "0") setAiCollapsed(false);
+      if (localStorage.getItem(FLOW_SECTION_COLLAPSED_KEY) === "0") setFlowCollapsed(false);
+    } catch {}
   }, []);
   const [contextMenu, setContextMenu] = useState<{ convId: string; x: number; y: number } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
@@ -180,6 +205,26 @@ export function ConversationList({ selectedId, onSelect }: Props) {
     }
   }, [token, search, channelFilter, departmentFilter, historyMode]);
 
+  // The AI-handled section. Its own request, and its own failure: if this one
+  // errors the inbox still renders every human queue, because an ambient panel
+  // must never be able to take the actual work down with it.
+  const fetchAiConversations = useCallback(async () => {
+    if (!token || historyMode) { setAiConversations([]); return; }
+    try {
+      const params: Record<string, string> = { automatedOnly: "true" };
+      // The same filters the human queues obey. A channel filter that silently
+      // did not apply here would make the counts disagree with what is shown.
+      if (search) params.search = search;
+      if (channelFilter) params.channel = channelFilter;
+      if (departmentFilter) params.departmentId = departmentFilter;
+      const res = await getConversations(token, params);
+      setAiConversations(res.data || []);
+    } catch (err) {
+      console.error("Failed to fetch AI-handled conversations:", err);
+      setAiConversations([]);
+    }
+  }, [token, search, channelFilter, departmentFilter, historyMode]);
+
   const handleDeleteConfirm = useCallback(async () => {
     if (!token || !deleteTarget) return;
     setDeleteLoading(true);
@@ -197,6 +242,24 @@ export function ConversationList({ selectedId, onSelect }: Props) {
   useEffect(() => {
     fetchConversations();
   }, [fetchConversations]);
+
+  useEffect(() => {
+    fetchAiConversations();
+  }, [fetchAiConversations]);
+
+  // Names for the `assignedAiAgentId` on each row. Resolved from the employee
+  // roster rather than joined onto Conversation, which has no AI-agent
+  // relation - a schema migration for one label is not worth it.
+  useEffect(() => {
+    if (!token) return;
+    getAIAgents(token)
+      .then((res) => {
+        const map: Record<string, string> = {};
+        for (const a of res.data || []) if (a?.id) map[a.id] = a.name;
+        setAiAgentNames(map);
+      })
+      .catch(() => {});
+  }, [token]);
 
   // Guided-tour demo mode toggled while we're already mounted (the tour can
   // start from /conversations): swap between real and fixture data live.
@@ -240,7 +303,10 @@ export function ConversationList({ selectedId, onSelect }: Props) {
     const socket = getSocket();
     if (!socket) return;
 
-    const handleUpdate = () => fetchConversations();
+    // Both lists refresh together. An escalation moves a conversation OUT of
+    // the AI section and INTO a human queue in the same instant, so refreshing
+    // one without the other shows it in both places or in neither.
+    const handleUpdate = () => { fetchConversations(); fetchAiConversations(); };
     socket.on("conversation:updated", handleUpdate);
     socket.on("conversation:closed", handleUpdate);
     socket.on("message:new", handleUpdate);
@@ -250,7 +316,7 @@ export function ConversationList({ selectedId, onSelect }: Props) {
       socket.off("conversation:closed", handleUpdate);
       socket.off("message:new", handleUpdate);
     };
-  }, [fetchConversations]);
+  }, [fetchConversations, fetchAiConversations]);
 
   // Listen for read events from ChatPanel
   useEffect(() => {
@@ -327,6 +393,60 @@ export function ConversationList({ selectedId, onSelect }: Props) {
       ),
       color: "text-gray-500",
       bgColor: "bg-gray-50",
+    },
+  ];
+
+  // One request returns everything an automation owns; `handledBy` splits it.
+  // Partitioned here rather than in two requests because the distinction is a
+  // field already on the row, and a second round-trip to re-ask the same
+  // question would only add a way for the two halves to disagree.
+  const { aiEmployeeConvs, flowConvs } = useMemo(() => {
+    const aiEmployeeConvs: any[] = [];
+    const flowConvs: any[] = [];
+    for (const conv of aiConversations) {
+      (conv.handledBy === "flow" ? flowConvs : aiEmployeeConvs).push(conv);
+    }
+    return { aiEmployeeConvs, flowConvs };
+  }, [aiConversations]);
+
+  const automationSections = [
+    {
+      key: "ai",
+      items: aiEmployeeConvs,
+      collapsed: aiCollapsed,
+      setCollapsed: setAiCollapsed,
+      storageKey: AI_SECTION_COLLAPSED_KEY,
+      label: t("conversations.aiHandledSection"),
+      hint: t("conversations.aiHandledHint"),
+      icon: (
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+        </svg>
+      ),
+      iconColor: "text-purple-500",
+      labelColor: "text-purple-600",
+      countClass: "bg-purple-50 text-purple-600",
+      chevronColor: "text-purple-400",
+      hoverBg: "hover:bg-purple-50/40",
+    },
+    {
+      key: "flow",
+      items: flowConvs,
+      collapsed: flowCollapsed,
+      setCollapsed: setFlowCollapsed,
+      storageKey: FLOW_SECTION_COLLAPSED_KEY,
+      label: t("conversations.flowHandledSection"),
+      hint: t("conversations.flowHandledHint"),
+      icon: (
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+        </svg>
+      ),
+      iconColor: "text-sky-500",
+      labelColor: "text-sky-600",
+      countClass: "bg-sky-50 text-sky-600",
+      chevronColor: "text-sky-400",
+      hoverBg: "hover:bg-sky-50/40",
     },
   ];
 
@@ -629,93 +749,93 @@ export function ConversationList({ selectedId, onSelect }: Props) {
                 </div>
               ) : (
                 section.items.map((conv) => (
-                  <button
+                  <ConversationRow
                     key={conv.id}
-                    onClick={() => handleSelect(conv.id)}
-                    onContextMenu={(e) => handleContextMenu(e, conv.id)}
-                    // Guided-tour anchor: the tour spotlights ONLY the demo
-                    // conversation it narrates (Dana, tour-1) - other rows are
-                    // deliberately not targetable so a stray click can't derail
-                    // the walkthrough.
-                    data-tour={conv.id === "tour-1" ? "inbox-row-primary" : "inbox-row"}
-                    className={clsx(
-                      "w-full text-start px-4 py-3 hover:bg-gray-50/80 transition-colors",
-                      selectedId === conv.id && "bg-primary-50/60 rounded-lg mx-2"
-                    )}
-                  >
-                    <div className="flex items-center gap-3">
-                      {/* Avatar with channel badge */}
-                      <CustomerAvatar
-                        name={conv.customerName || conv.customerPhone}
-                        avatarUrl={conv.customerAvatarUrl}
-                        channel={conv.channel}
-                        size="md"
-                      />
-
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className={clsx(
-                            "font-semibold text-sm truncate",
-                            isUnread(conv, lastReadMap, markedUnread) ? "text-gray-900" : "text-gray-900"
-                          )}>
-                            {conv.customerName || conv.customerExternalId || conv.customerPhone}
-                          </p>
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            {conv.lastMessageAt && (
-                              <span className="text-[10px] text-gray-400 shrink-0">
-                                {shortTimeAgo(new Date(conv.lastMessageAt))}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <p className={clsx(
-                          "text-xs truncate mt-0.5",
-                          isUnread(conv, lastReadMap, markedUnread) ? "text-gray-500 font-medium" : "text-gray-400"
-                        )}>
-                          {conv.lastMessageBody || conv.customerPhone}
-                        </p>
-                        <div className="flex items-center justify-between mt-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            {conv.department && (
-                              <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-gray-100 text-gray-600">
-                                {conv.department.name}
-                              </span>
-                            )}
-                            {conv.assignedAgent && conv.assignedAgentId !== user?.id && (
-                              <span className="text-[10px] text-gray-400">
-                                {conv.assignedAgent.name}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Status dot: blue=unread, red=SLA breach */}
-                      {(() => {
-                        let dotColor = "";
-                        if (slaConfig?.enabled && conv.status !== "CLOSED") {
-                          let slaMins = slaConfig.slaMinutes;
-                          if (conv.departmentId && deptSlaMap[conv.departmentId]?.enabled) {
-                            slaMins = deptSlaMap[conv.departmentId].slaMinutes;
-                          }
-                          const ref = conv.lastMessageAt || conv.createdAt;
-                          if (ref) {
-                            const pct = ((Date.now() - new Date(ref).getTime()) / 60000 / slaMins) * 100;
-                            if (pct >= 100) dotColor = "bg-red-500";
-                          }
-                        }
-                        if (!dotColor && isUnread(conv, lastReadMap, markedUnread)) dotColor = "bg-blue-500";
-                        return dotColor ? (
-                          <span className={clsx("w-2 h-2 rounded-full shrink-0", dotColor)} />
-                        ) : <span className="w-2 shrink-0" />;
-                      })()}
-                    </div>
-                  </button>
+                    conv={conv}
+                    selected={selectedId === conv.id}
+                    unread={isUnread(conv, lastReadMap, markedUnread)}
+                    onSelect={handleSelect}
+                    onContextMenu={handleContextMenu}
+                    slaConfig={slaConfig}
+                    deptSlaMap={deptSlaMap}
+                    currentUserId={user?.id}
+                  />
                 ))
               )}
             </div>
           ))
         )}
+
+        {/* Work already in progress: an AI employee answering, or a scripted
+            flow stepping a customer through something.
+            Collapsed by default and last in the column, because the promise of
+            these sections is "nobody is waiting on you for these" - they are a
+            window onto work being done, not a queue. Each renders only when
+            non-empty, so a workspace with no AI employees and no flows never
+            sees a box it has to reason about.
+
+            Two sections rather than one: an employee holding a conversation and
+            a flow holding a conversation are different situations with
+            different people responsible, and a flow that stalls mid-graph is an
+            authoring bug rather than a busy employee. */}
+        {!historyMode && !loading && automationSections.map((section) => (
+          section.items.length === 0 ? null : (
+            <div key={section.key} className="bg-white rounded-2xl ring-1 ring-gray-100 shadow-sm overflow-hidden">
+              <button
+                onClick={() => {
+                  const next = !section.collapsed;
+                  section.setCollapsed(next);
+                  try { localStorage.setItem(section.storageKey, next ? "1" : "0"); } catch {}
+                  track("inbox_automation_section_toggled", { section: section.key, open: !next, count: section.items.length });
+                }}
+                aria-expanded={!section.collapsed}
+                className={clsx("w-full px-3.5 py-2.5 flex items-center gap-2 transition-colors", section.hoverBg)}
+              >
+                <span className={section.iconColor}>{section.icon}</span>
+                <span className={clsx("text-[10px] font-semibold uppercase tracking-widest", section.labelColor)}>
+                  {section.label}
+                </span>
+                <span className={clsx("text-[10px] font-bold px-1.5 py-0.5 rounded-full ms-auto", section.countClass)}>
+                  {section.items.length}
+                </span>
+                <svg
+                  className={clsx("w-3.5 h-3.5 transition-transform", section.chevronColor, !section.collapsed && "rotate-180")}
+                  fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                </svg>
+              </button>
+
+              {!section.collapsed && (
+                <>
+                  <p className="px-4 pb-2 text-[11px] leading-snug text-gray-400">
+                    {section.hint}
+                  </p>
+                  {section.items.map((conv: any) => (
+                    <ConversationRow
+                      key={conv.id}
+                      conv={conv}
+                      selected={selectedId === conv.id}
+                      unread={false}
+                      onSelect={handleSelect}
+                      onContextMenu={handleContextMenu}
+                      slaConfig={slaConfig}
+                      deptSlaMap={deptSlaMap}
+                      currentUserId={user?.id}
+                      // Names who is answering, so "who has this?" is readable
+                      // without opening the conversation.
+                      aiLabel={
+                        section.key === "flow"
+                          ? t("conversations.aiHandledByFlow")
+                          : aiAgentNames[conv.assignedAiAgentId] || t("conversations.aiHandledByAgent")
+                      }
+                    />
+                  ))}
+                </>
+              )}
+            </div>
+          )
+        ))}
       </div>
 
       {/* New Conversation Panel */}
@@ -768,6 +888,119 @@ export function ConversationList({ selectedId, onSelect }: Props) {
         onCancel={() => setDeleteTarget(null)}
       />
     </>
+  );
+}
+
+/**
+ * One row in the inbox list. Extracted so the human queues and the
+ * AI-handled section render the SAME row and cannot drift - a row that looked
+ * different in the AI section would read as a different kind of object rather
+ * than the same conversation seen from another angle.
+ *
+ * `aiLabel` is the only difference: present, it names the employee answering.
+ */
+function ConversationRow({
+  conv, selected, unread, onSelect, onContextMenu, slaConfig, deptSlaMap, currentUserId, aiLabel,
+}: {
+  conv: any;
+  selected: boolean;
+  unread: boolean;
+  onSelect: (id: string) => void;
+  onContextMenu: (e: React.MouseEvent, id: string) => void;
+  slaConfig: { enabled: boolean; slaMinutes: number; warningThreshold: number } | null;
+  deptSlaMap: Record<string, { enabled: boolean; slaMinutes: number }>;
+  currentUserId?: string;
+  aiLabel?: string;
+}) {
+  return (
+    <button
+      onClick={() => onSelect(conv.id)}
+      onContextMenu={(e) => onContextMenu(e, conv.id)}
+      // Guided-tour anchor: the tour spotlights ONLY the demo
+      // conversation it narrates (Dana, tour-1) - other rows are
+      // deliberately not targetable so a stray click can't derail
+      // the walkthrough.
+      data-tour={conv.id === "tour-1" ? "inbox-row-primary" : "inbox-row"}
+      className={clsx(
+        "w-full text-start px-4 py-3 hover:bg-gray-50/80 transition-colors",
+        selected && "bg-primary-50/60 rounded-lg mx-2"
+      )}
+    >
+      <div className="flex items-center gap-3">
+        {/* Avatar with channel badge */}
+        <CustomerAvatar
+          name={conv.customerName || conv.customerPhone}
+          avatarUrl={conv.customerAvatarUrl}
+          channel={conv.channel}
+          size="md"
+        />
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <p className="font-semibold text-sm truncate text-gray-900">
+              {conv.customerName || conv.customerExternalId || conv.customerPhone}
+            </p>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {conv.lastMessageAt && (
+                <span className="text-[10px] text-gray-400 shrink-0">
+                  {shortTimeAgo(new Date(conv.lastMessageAt))}
+                </span>
+              )}
+            </div>
+          </div>
+          <p className={clsx(
+            "text-xs truncate mt-0.5",
+            unread ? "text-gray-500 font-medium" : "text-gray-400"
+          )}>
+            {conv.lastMessageBody || conv.customerPhone}
+          </p>
+          <div className="flex items-center justify-between mt-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              {aiLabel && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-purple-50 text-purple-600 truncate max-w-[140px]">
+                  {aiLabel}
+                </span>
+              )}
+              {conv.department && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-gray-100 text-gray-600">
+                  {conv.department.name}
+                </span>
+              )}
+              {conv.assignedAgent && conv.assignedAgentId !== currentUserId && (
+                <span className="text-[10px] text-gray-400">
+                  {conv.assignedAgent.name}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Status dot: blue=unread, red=SLA breach.
+            Both are suppressed in the AI section (`aiLabel`): an SLA clock
+            counts a human's time to respond, and nobody is late for a
+            conversation an employee is already answering. Showing red here
+            would manufacture an alarm out of the system working. */}
+        {(() => {
+          if (aiLabel) return <span className="w-2 shrink-0" />;
+          let dotColor = "";
+          if (slaConfig?.enabled && conv.status !== "CLOSED") {
+            let slaMins = slaConfig.slaMinutes;
+            if (conv.departmentId && deptSlaMap[conv.departmentId]?.enabled) {
+              slaMins = deptSlaMap[conv.departmentId].slaMinutes;
+            }
+            const ref = conv.lastMessageAt || conv.createdAt;
+            if (ref) {
+              const pct = ((Date.now() - new Date(ref).getTime()) / 60000 / slaMins) * 100;
+              if (pct >= 100) dotColor = "bg-red-500";
+            }
+          }
+          if (!dotColor && unread) dotColor = "bg-blue-500";
+          return dotColor ? (
+            <span className={clsx("w-2 h-2 rounded-full shrink-0", dotColor)} />
+          ) : <span className="w-2 shrink-0" />;
+        })()}
+      </div>
+    </button>
   );
 }
 

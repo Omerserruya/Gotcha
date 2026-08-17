@@ -3,6 +3,7 @@ export type {
   NormalizedInboundMessage,
   NormalizedStatusUpdate,
   NormalizedCommentEvent,
+  NormalizedOutboundEcho,
   MessageContent,
   OutboundMessagePayload,
   ChannelCredentials,

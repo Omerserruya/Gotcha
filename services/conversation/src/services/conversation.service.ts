@@ -12,18 +12,48 @@ export interface ConversationFilters {
   page?: number;
   limit?: number;
   includeAutomated?: boolean;
+  /**
+   * Return ONLY the conversations an automation currently owns - the exact
+   * complement of the default exclusion below. Powers the inbox's collapsed
+   * "handled by AI" section, which is a separate request on purpose: folding
+   * these into the main list would let a busy AI crowd the human queues out
+   * of the same 50-row page.
+   *
+   * Wins over `includeAutomated` when both are set, because "only automated"
+   * is the narrower, more specific ask.
+   */
+  automatedOnly?: boolean;
   // User context for scoping
   userRole?: string;
   userId?: string;
   userDepartmentId?: string;
 }
 
+/** What "an automation owns this" means, in one place. */
+const AUTOMATED_HANDLERS = ["ai_agent", "flow"];
+
 export async function list(tenantId: string, filters: ConversationFilters) {
-  const { status, assignedAgentId, channel, departmentId, search, page = 1, limit = 50, includeAutomated = false, userRole, userId, userDepartmentId } = filters;
+  const { status, assignedAgentId, channel, departmentId, search, page = 1, limit = 50, includeAutomated = false, automatedOnly = false, userRole, userId, userDepartmentId } = filters;
   const where: any = { tenantId };
   if (status) where.status = status;
-  // By default, exclude AI/flow-handled conversations unless explicitly requested or handed over
-  if (!includeAutomated) {
+  if (automatedOnly) {
+    // All three conditions are required, and each one alone is wrong:
+    // `handledBy` names the driver, `isHandedOver` is the latch a takeover
+    // sets, and `assignedAgentId` catches a claim that never flipped the
+    // latch. A conversation failing any of them has a human on it and does
+    // not belong in a section whose whole promise is "nobody is waiting on
+    // you for these".
+    where.AND = where.AND || [];
+    where.AND.push({
+      handledBy: { in: AUTOMATED_HANDLERS },
+      isHandedOver: false,
+      assignedAgentId: null,
+    });
+    // The section is a live view, not an archive. Without this a closed AI
+    // chat sits in it forever, since the caller passes no status.
+    if (!status) where.status = { not: "CLOSED" };
+  } else if (!includeAutomated) {
+    // By default, exclude AI/flow-handled conversations unless explicitly requested or handed over
     where.AND = where.AND || [];
     where.AND.push({
       OR: [

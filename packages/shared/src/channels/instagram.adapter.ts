@@ -198,7 +198,16 @@ function extractInstagramContent(message: any): NormalizedInboundMessage["conten
       case "video":
         return { type: "video", mediaUrl: attachment.payload?.url, caption: "[Video]" };
       case "audio":
-        return { type: "audio", mediaUrl: attachment.payload?.url, text: "[Audio message]" };
+        // Instagram audio attachments are voice clips in practice - there is
+        // no "attach an mp3" affordance in the DM composer.
+        return { type: "audio", mediaUrl: attachment.payload?.url, text: "[Voice message]", voice: true };
+      case "file":
+        return {
+          type: "document",
+          mediaUrl: attachment.payload?.url,
+          caption: attachment.name || "[Document]",
+          fileName: attachment.name,
+        };
       case "share":
         return { type: "text", text: "[Shared post]" };
       case "story_mention":

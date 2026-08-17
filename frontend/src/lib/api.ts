@@ -567,6 +567,39 @@ export function listWhatsAppNumbers(token: string) {
 }
 
 /**
+ * Numbers the owner keeps on their own phone. Only meaningful for Coexistence:
+ * a number live in both the Business app and the Cloud API delivers every
+ * conversation to GOTCHA, private ones included.
+ */
+export interface WhatsAppExclusion {
+  id: string;
+  value: string;
+  normalized: string;
+  channelAccountId: string | null;
+  note: string | null;
+  createdAt: string;
+}
+
+export function listWhatsAppExclusions(token: string) {
+  return apiFetch<{ data: WhatsAppExclusion[] }>("/api/channels/whatsapp/exclusions", { token });
+}
+
+export function addWhatsAppExclusion(token: string, value: string, note?: string) {
+  return apiFetch<{ data: WhatsAppExclusion }>("/api/channels/whatsapp/exclusions", {
+    token,
+    method: "POST",
+    body: JSON.stringify({ value, note }),
+  });
+}
+
+export function removeWhatsAppExclusion(token: string, id: string) {
+  return apiFetch<{ data: { removed: number } }>(`/api/channels/whatsapp/exclusions/${id}`, {
+    token,
+    method: "DELETE",
+  });
+}
+
+/**
  * Exchange the Embedded Signup code server-side and report what the customer
  * has. Writes nothing at Meta. The code is single-use, so this is called once
  * per authorization and the resulting session is reused for each number.

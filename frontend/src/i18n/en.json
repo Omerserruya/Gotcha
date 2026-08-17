@@ -73,6 +73,22 @@
     "generalQueue": "Waiting Queue",
     "selectConversation": "Select a conversation to start chatting",
     "noChatsInSection": "No chats in this section",
+    "aiHandledSection": "Handled by AI employees",
+    "aiHandledHint": "Your AI employees are answering these. Open one to read along, or take it over to reply yourself.",
+    "aiHandledByAgent": "AI employee",
+    "aiHandledByFlow": "Automated flow",
+    "flowHandledSection": "In an automated flow",
+    "flowHandledHint": "A scripted flow is stepping these customers through something. Open one to see where it is, or take it over.",
+    "systemFlowEndedHandoff": "Flow ended without a next step, passed to a human",
+    "flowEndReason": {
+      "no_outgoing_edge": "the last node has nothing wired after it",
+      "node_not_found": "an edge points at a node that no longer exists",
+      "loop_guard": "the flow looped back on itself"
+    },
+    "aiWatchingBanner": "{name} is answering this conversation",
+    "aiWatchingBannerFlow": "An automated flow is running this conversation",
+    "aiWatchingBannerDesc": "You are reading along. The co-pilot stays closed so it does not draft over the reply already on its way.",
+    "aiWatchingTakeOver": "Take over",
     "systemBotHandover": "Bot transferred to agent queue",
     "systemAgentClaimed": "{agentName} joined the conversation",
     "systemAgentTransferred": "Transferred from {fromAgent} to {toAgent}",
@@ -111,6 +127,7 @@
     "dropFilesHere": "Drop files here",
     "addCaption": "Add a caption...",
     "downloadFile": "Download file",
+    "mediaUnavailable": "Attachment could not be downloaded",
     "transferSubtitle": "Transfer this conversation to an agent or department",
     "suggestion": {
       "aiRecommendation": "AI Recommendation",
@@ -185,6 +202,7 @@
     },
     "attach": "Attach",
     "systemAiEscalation": "AI handed off to a human",
+    "systemWhatsappAppTakeover": "Answered from the WhatsApp Business app, AI stopped",
     "escalationReason": {
       "agent_paused": "the AI employee is paused",
       "customer_requested_human": "customer asked for a person",
@@ -2031,7 +2049,8 @@
     "disabled": "Disabled",
     "connected": "Connected",
     "notConnected": "Not connected",
-    "unsavedChanges": "Unsaved changes"
+    "unsavedChanges": "Unsaved changes",
+    "remove": "Remove"
   },
   "onboarding": {
     "channelsBanner": "Pick WhatsApp, Instagram, or Email to connect your first channel.",
@@ -5251,7 +5270,8 @@
       "cancelled": "You closed the WhatsApp window before finishing.",
       "inspectFailed": "We could not read your WhatsApp setup. Try connecting again in a moment.",
       "connectFailed": "We could not connect that number.",
-      "connect": "Connect WhatsApp"
+      "connect": "Connect WhatsApp",
+      "noCode": "The WhatsApp setup finished, but Meta did not return an authorization code, so there was nothing to connect with. This is usually the Embedded Signup configuration rather than anything about your number. Try again, and if it repeats, tell us and we will read the exact response."
     },
     "choose": {
       "title": "Choose the number to connect",
@@ -5285,6 +5305,15 @@
     "meta": {
       "fixInMeta": "Fix this in Meta Business settings"
     },
-    "summaryLimited": "sending blocked on {count} of them"
+    "summaryLimited": "sending blocked on {count} of them",
+    "exclusions": {
+      "title": "Numbers handled in the app only",
+      "body": "This number also runs in the WhatsApp Business app, so every conversation on it reaches GOTCHA. Numbers listed here are ignored completely: no conversation, no notification, no AI. Use it for the people you answer from your phone.",
+      "numberPlaceholder": "Phone number",
+      "notePlaceholder": "Who is this? (optional)",
+      "add": "Add",
+      "addFailed": "Could not add the number",
+      "empty": "Nothing excluded. Every conversation on this number reaches the inbox."
+    }
   }
 }

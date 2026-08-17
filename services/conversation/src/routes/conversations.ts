@@ -46,7 +46,7 @@ router.get("/stats/workload", requireRole("ADMIN"), async (req: Request, res: Re
 
 router.get("/", async (req: Request, res: Response) => {
   try {
-    const { status, assignedAgentId, channel, departmentId, search, page, limit, includeAutomated } = req.query;
+    const { status, assignedAgentId, channel, departmentId, search, page, limit, includeAutomated, automatedOnly } = req.query;
     const result = await conversationService.list(req.tenantId!, {
       status: status as string | undefined,
       assignedAgentId: assignedAgentId as string | undefined,
@@ -56,6 +56,7 @@ router.get("/", async (req: Request, res: Response) => {
       page: page ? parseInt(page as string, 10) : undefined,
       limit: limit ? parseInt(limit as string, 10) : undefined,
       includeAutomated: includeAutomated === "true",
+      automatedOnly: automatedOnly === "true",
       userRole: req.user!.role,
       userId: req.user!.userId,
       userDepartmentId: req.user!.departmentId,

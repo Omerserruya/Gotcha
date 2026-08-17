@@ -135,6 +135,55 @@ describe("Webhook Service", () => {
       );
     });
 
+    it("queues a business-app echo on its own job name, not the inbound one", async () => {
+      // Coexistence: the owner answered from the WhatsApp Business app. It
+      // shares the queue with customer messages but MUST NOT share the job
+      // name - "process" would run it through the bot as if the customer
+      // had written it.
+      (prisma.channelAccount.findFirst as any).mockResolvedValue({ id: "ca-1", tenantId: "tenant-1", externalId: "phone-1" });
+
+      (detectInboundAdapter as any).mockReturnValue({
+        channel: "WHATSAPP",
+        getSignatureHeader: () => "x-hub-signature-256",
+        verifySignature: vi.fn().mockReturnValue(true),
+        resolveChannelAccountExternalId: vi.fn().mockReturnValue("phone-1"),
+        extractMessages: vi.fn().mockReturnValue([]),
+        extractStatusUpdates: vi.fn().mockReturnValue([]),
+        extractOutboundEchoes: vi.fn().mockReturnValue([{
+          externalMessageId: "wamid.ECHO1",
+          channel: "WHATSAPP",
+          customerExternalId: "+123",
+          businessExternalId: "+972500000000",
+          timestamp: new Date(),
+          content: { type: "text", text: "on it" },
+        }]),
+      });
+
+      const app = createTestApp();
+      const res = await request(app)
+        .post("/api/webhook")
+        .send({ object: "whatsapp_business_account", entry: [{ changes: [{ field: "smb_message_echoes", value: {} }] }] });
+
+      expect(res.status).toBe(200);
+      await new Promise((r) => setTimeout(r, 100));
+
+      expect(incomingMessageQueue.add).toHaveBeenCalledWith(
+        "process-echo",
+        expect.objectContaining({
+          tenantId: "tenant-1",
+          channel: "WHATSAPP",
+          channelAccountId: "ca-1",
+          echo: expect.objectContaining({
+            externalMessageId: "wamid.ECHO1",
+            customerExternalId: "+123",
+            body: "on it",
+          }),
+        }),
+        expect.any(Object)
+      );
+      expect(incomingMessageQueue.add).not.toHaveBeenCalledWith("process", expect.anything(), expect.anything());
+    });
+
     it("drops a Meta webhook whose signature fails verification (no enqueue)", async () => {
       (verifyWebhookSignature as any).mockReturnValueOnce({ ok: false, reason: "signature mismatch" });
       (prisma.channelAccount.findFirst as any).mockResolvedValue({ id: "ca-1", tenantId: "tenant-1", externalId: "phone-1" });

@@ -73,6 +73,22 @@
     "generalQueue": "תור המתנה",
     "selectConversation": "בחר שיחה כדי להתחיל",
     "noChatsInSection": "אין שיחות בחלק זה",
+    "aiHandledSection": "מטופל על ידי עובדי AI",
+    "aiHandledHint": "העובדים הדיגיטליים שלך עונים על אלה. אפשר לפתוח ולקרוא, או לקחת שיחה לעצמך.",
+    "aiHandledByAgent": "עובד AI",
+    "aiHandledByFlow": "תהליך אוטומטי",
+    "flowHandledSection": "בתוך תהליך אוטומטי",
+    "flowHandledHint": "תהליך מוגדר מוביל את הלקוחות האלה שלב אחר שלב. אפשר לפתוח ולראות איפה זה עומד, או לקחת לעצמך.",
+    "systemFlowEndedHandoff": "התהליך נגמר בלי המשך, הועבר לנציג אנושי",
+    "flowEndReason": {
+      "no_outgoing_edge": "לצומת האחרון לא מחובר כלום אחריו",
+      "node_not_found": "חיבור מצביע על צומת שכבר לא קיים",
+      "loop_guard": "התהליך חזר על עצמו בלולאה"
+    },
+    "aiWatchingBanner": "{name} עונה לשיחה הזו",
+    "aiWatchingBannerFlow": "תהליך אוטומטי מנהל את השיחה הזו",
+    "aiWatchingBannerDesc": "אתה קורא מהצד. הקו-פיילוט נשאר סגור כדי שלא ינסח תשובה מעל אחת שכבר בדרך.",
+    "aiWatchingTakeOver": "קח לעצמך",
     "systemBotHandover": "הבוט העביר לתור הנציגים",
     "systemAgentClaimed": "{agentName} הצטרף לשיחה",
     "systemAgentTransferred": "הועבר מ-{fromAgent} אל {toAgent}",
@@ -111,6 +127,7 @@
     "dropFilesHere": "שחרר קבצים כאן",
     "addCaption": "הוסף כיתוב...",
     "downloadFile": "הורד קובץ",
+    "mediaUnavailable": "לא ניתן היה להוריד את הקובץ המצורף",
     "transferSubtitle": "העבר שיחה זו לנציג או למחלקה",
     "suggestion": {
       "aiRecommendation": "המלצת AI",
@@ -185,6 +202,7 @@
     },
     "attach": "צרף",
     "systemAiEscalation": "ה-AI העביר לנציג אנושי",
+    "systemWhatsappAppTakeover": "נענה מאפליקציית WhatsApp Business, ה-AI נעצר",
     "escalationReason": {
       "agent_paused": "העובד הדיגיטלי מושהה",
       "customer_requested_human": "הלקוח ביקש נציג אנושי",
@@ -2032,7 +2050,8 @@
     "disabled": "כבוי",
     "connected": "מחובר",
     "notConnected": "לא מחובר",
-    "unsavedChanges": "יש שינויים שלא נשמרו"
+    "unsavedChanges": "יש שינויים שלא נשמרו",
+    "remove": "הסר"
   },
   "onboarding": {
     "channelsBanner": "בחרו WhatsApp, אינסטגרם או אימייל כדי לחבר את הערוץ הראשון.",
@@ -5252,7 +5271,8 @@
       "cancelled": "סגרתם את חלון וואטסאפ לפני הסיום.",
       "inspectFailed": "לא הצלחנו לקרוא את הגדרות הוואטסאפ שלכם. נסו לחבר שוב בעוד רגע.",
       "connectFailed": "לא הצלחנו לחבר את המספר הזה.",
-      "connect": "חיבור וואטסאפ"
+      "connect": "חיבור וואטסאפ",
+      "noCode": "ההגדרה של WhatsApp הסתיימה, אבל Meta לא החזירה קוד הרשאה, כך שלא היה עם מה להתחבר. לרוב זו קונפיגורציית ה-Embedded Signup ולא משהו במספר שלכם. נסו שוב, ואם זה חוזר תגידו לנו ונקרא את התשובה המדויקת."
     },
     "choose": {
       "title": "בחרו את המספר לחיבור",
@@ -5286,6 +5306,15 @@
     "meta": {
       "fixInMeta": "לתיקון בהגדרות העסק של מטא"
     },
-    "summaryLimited": "השליחה חסומה ב-{count} מהם"
+    "summaryLimited": "השליחה חסומה ב-{count} מהם",
+    "exclusions": {
+      "title": "מספרים שמנוהלים באפליקציה בלבד",
+      "body": "המספר הזה פעיל גם באפליקציית WhatsApp Business, ולכן כל שיחה שמגיעה אליו נכנסת ל-GOTCHA. מספרים שתוסיף כאן ידלגו לגמרי: בלי שיחה, בלי התראה, בלי AI. מתאים לאנשים שאתה עונה להם מהטלפון.",
+      "numberPlaceholder": "מספר טלפון",
+      "notePlaceholder": "מי זה? (לא חובה)",
+      "add": "הוסף",
+      "addFailed": "לא ניתן היה להוסיף את המספר",
+      "empty": "אין החרגות. כל שיחה במספר הזה מגיעה לתיבה."
+    }
   }
 }
