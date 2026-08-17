@@ -1,4 +1,5 @@
 import { resolveTourMock } from "./tour-mock";
+import type { HistoricalImportView } from "./historical-import-client";
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
@@ -468,6 +469,12 @@ export interface WhatsAppNumberRow {
   state: string;
   pendingAction?: string | null;
   onboardingFlow: string;
+  /**
+   * The messaging identity behind this number. A history import is keyed by
+   * channel account, so this is what pairs a number with its own import - a
+   * tenant with two Coexistence numbers has two separate imports.
+   */
+  channelAccountId?: string | null;
   usesBusinessApp: boolean;
   qualityRating?: string | null;
   throughputLevel?: string | null;
@@ -3854,4 +3861,141 @@ export interface TenantSecurityMember {
 }
 export function getTenantSecurityReview(token: string) {
   return apiFetch<{ idpAvailable: boolean; members: TenantSecurityMember[] }>("/api/tenant/security/review", { token });
+}
+
+// ─── Historical Intelligence Import ──────────────────────────
+//
+// The import's state is SEPARATE from the channel's. A WhatsApp number can be
+// perfectly connected while its history import is still transferring, still
+// being analyzed, or has failed outright - and a failed import must never make
+// a working number look disconnected. That is why these are their own calls
+// against their own resource rather than fields on the channel row.
+
+export type { HistoricalImportView };
+
+export interface KnowledgeCandidateExample {
+  question: string;
+  answer: string;
+  occurredAt: string | null;
+  variantKey: string | null;
+}
+
+export interface KnowledgeCandidateVariant {
+  key: string;
+  answer: string;
+  occurrenceCount: number;
+  customerCount: number;
+}
+
+export interface KnowledgeCandidateView {
+  id: string;
+  topic: string;
+  question: string;
+  answer: string;
+  originalAnswer: string;
+  status: "PENDING" | "APPROVED" | "REJECTED" | "SUPERSEDED";
+  confidence: number;
+  confidenceLabel: "high" | "medium" | "low";
+  occurrenceCount: number;
+  customerCount: number;
+  conflict: boolean;
+  variants: KnowledgeCandidateVariant[] | null;
+  alreadyCoveredBy: { id: string; title: string } | null;
+  firstSeenAt: string | null;
+  lastSeenAt: string | null;
+  examples: KnowledgeCandidateExample[];
+  bulkApprovable: boolean;
+}
+
+export interface HistoricalImportSummary {
+  importedMessages: number;
+  importedConversations: number;
+  importedCustomers: number;
+  matchedExistingCustomers: number;
+  matchedSourceOfTruth: number;
+  sourceOfTruthShare: number;
+  customerMemories: number;
+  knowledgeCandidates: number;
+  knowledgeConflicts: number;
+  alreadyCoveredByKnowledgeBase: number;
+  classifiedConversations: number;
+  recurringInquiryShare: number;
+  methodology: Record<string, string>;
+  generatedAt: string;
+}
+
+export interface HistoricalTopic {
+  topic: string;
+  conversations: number;
+  share: number;
+}
+
+export function listHistoricalImports(token: string) {
+  return apiFetch<{ imports: HistoricalImportView[] }>("/api/historical-imports", { token });
+}
+
+export function getHistoricalImport(token: string, id: string) {
+  return apiFetch<
+    HistoricalImportView & {
+      summary: HistoricalImportSummary | null;
+      topTopics: HistoricalTopic[];
+    }
+  >(`/api/historical-imports/${id}`, { token });
+}
+
+export function listKnowledgeCandidates(
+  token: string,
+  importId: string,
+  status: "PENDING" | "APPROVED" | "REJECTED" | "SUPERSEDED" = "PENDING",
+) {
+  return apiFetch<{
+    candidates: KnowledgeCandidateView[];
+    counts: Record<string, number>;
+    bulkApproveMinConfidence: number;
+  }>(`/api/historical-imports/${importId}/candidates?status=${status}`, { token });
+}
+
+export function listCandidateEvidence(token: string, candidateId: string) {
+  return apiFetch<{ evidence: KnowledgeCandidateExample[] }>(
+    `/api/historical-imports/candidates/${candidateId}/evidence`,
+    { token },
+  );
+}
+
+/**
+ * `answer` carries the owner's edit. For a conflicted suggestion it is
+ * REQUIRED and the server refuses without it: there is no "the" answer to
+ * approve when the business gave two, and picking one for them would be exactly
+ * the silent choice this flow exists to avoid.
+ */
+export function approveKnowledgeCandidate(
+  token: string,
+  candidateId: string,
+  body?: { answer?: string; question?: string; knowledgeBaseId?: string; force?: boolean },
+) {
+  return apiFetch<{ ok: boolean; documentId: string | null; alreadyApproved?: boolean }>(
+    `/api/historical-imports/candidates/${candidateId}/approve`,
+    { token, method: "POST", body: JSON.stringify(body ?? {}) },
+  );
+}
+
+export function rejectKnowledgeCandidate(token: string, candidateId: string) {
+  return apiFetch<{ ok: boolean }>(
+    `/api/historical-imports/candidates/${candidateId}/reject`,
+    { token, method: "POST" },
+  );
+}
+
+export function bulkApproveKnowledgeCandidates(token: string, importId: string) {
+  return apiFetch<{ approved: number; skipped: number }>(
+    `/api/historical-imports/${importId}/bulk-approve`,
+    { token, method: "POST" },
+  );
+}
+
+export function bulkRejectKnowledgeCandidates(token: string, importId: string, ids?: string[]) {
+  return apiFetch<{ rejected: number }>(
+    `/api/historical-imports/${importId}/bulk-reject`,
+    { token, method: "POST", body: JSON.stringify({ ids: ids ?? [] }) },
+  );
 }

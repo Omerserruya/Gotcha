@@ -7,6 +7,7 @@ import {
   requireRole,
   writeAudit,
   AuditAction,
+  withHistoricalRecords,
 } from "@chatcenter/shared";
 
 const router = Router();
@@ -44,19 +45,28 @@ router.get("/:id/export", async (req: Request, res: Response) => {
     const contactIds = family.map((c) => c.id);
     const externalIds = Array.from(new Set(family.map((c) => c.externalId)));
 
-    const conversations = await prisma.conversation.findMany({
-      where: {
-        tenantId: req.tenantId!,
-        customerExternalId: { in: externalIds },
-      },
+    // Imported history is the subject's data too.
+    //
+    // `prisma` narrows Conversation and Message to live rows by default, which
+    // is right for every product surface and WRONG here: a subject-access
+    // request that silently returned half of somebody's conversations, with no
+    // indication the other half existed, would be a compliance failure of
+    // exactly the kind Article 15 exists to prevent.
+    const { conversations, messages } = await withHistoricalRecords(async () => {
+      const convos = await prisma.conversation.findMany({
+        where: {
+          tenantId: req.tenantId!,
+          customerExternalId: { in: externalIds },
+        },
+      });
+      const ids = convos.map((c) => c.id);
+      const msgs = ids.length
+        ? await prisma.message.findMany({
+            where: { tenantId: req.tenantId!, conversationId: { in: ids } },
+          })
+        : [];
+      return { conversations: convos, messages: msgs };
     });
-    const conversationIds = conversations.map((c) => c.id);
-
-    const messages = conversationIds.length
-      ? await prisma.message.findMany({
-          where: { tenantId: req.tenantId!, conversationId: { in: conversationIds } },
-        })
-      : [];
 
     const consents = await prisma.consentRecord.findMany({
       where: { tenantId: req.tenantId!, subjectType: "contact", subjectId: { in: contactIds } },
@@ -132,38 +142,57 @@ router.delete("/:id", async (req: Request, res: Response) => {
     });
     const allContactIds = Array.from(new Set([...familyIds, ...mergedInRows.map((c) => c.id)]));
 
-    const conversations = await prisma.conversation.findMany({
-      where: { tenantId: req.tenantId!, customerExternalId: { in: externalIds } },
-    });
-    const conversationIds = conversations.map((c) => c.id);
-
-    const counts = await prisma.$transaction(async (tx) => {
-      const deletedMessages = conversationIds.length
-        ? await tx.message.deleteMany({
-            where: { tenantId: req.tenantId!, conversationId: { in: conversationIds } },
-          })
-        : { count: 0 };
-
-      const deletedConversations = conversationIds.length
-        ? await tx.conversation.deleteMany({
-            where: { tenantId: req.tenantId!, id: { in: conversationIds } },
-          })
-        : { count: 0 };
-
-      const deletedConsents = await tx.consentRecord.deleteMany({
-        where: { tenantId: req.tenantId!, subjectType: "contact", subjectId: { in: allContactIds } },
+    // Erasure must reach imported history as well.
+    //
+    // The live-by-default filter is deliberately suspended for both the lookup
+    // and the deletes: an erasure that removed the live conversations and left
+    // 180 days of imported ones behind would report success while the person's
+    // data was still there - the worst possible outcome for this endpoint,
+    // because nothing would ever surface the remainder.
+    //
+    // Deleting the conversations also removes the historical_customers rows
+    // that point at them and the candidate evidence beneath, by cascade.
+    const counts = await withHistoricalRecords(async () => {
+      const conversations = await prisma.conversation.findMany({
+        where: { tenantId: req.tenantId!, customerExternalId: { in: externalIds } },
       });
+      const conversationIds = conversations.map((c) => c.id);
 
-      const deletedContacts = await tx.contact.deleteMany({
-        where: { tenantId: req.tenantId!, id: { in: allContactIds } },
+      return prisma.$transaction(async (tx) => {
+        const deletedMessages = conversationIds.length
+          ? await tx.message.deleteMany({
+              where: { tenantId: req.tenantId!, conversationId: { in: conversationIds } },
+            })
+          : { count: 0 };
+
+        const deletedConversations = conversationIds.length
+          ? await tx.conversation.deleteMany({
+              where: { tenantId: req.tenantId!, id: { in: conversationIds } },
+            })
+          : { count: 0 };
+
+        const deletedConsents = await tx.consentRecord.deleteMany({
+          where: { tenantId: req.tenantId!, subjectType: "contact", subjectId: { in: allContactIds } },
+        });
+
+        const deletedContacts = await tx.contact.deleteMany({
+          where: { tenantId: req.tenantId!, id: { in: allContactIds } },
+        });
+
+        // Everything the import learned ABOUT this person, which lives outside
+        // the message tables and would otherwise survive their erasure.
+        const deletedMemory = await tx.customerHistoricalMemory.deleteMany({
+          where: { tenantId: req.tenantId!, customerExternalId: { in: externalIds } },
+        });
+
+        return {
+          messages: deletedMessages.count,
+          conversations: deletedConversations.count,
+          consents: deletedConsents.count,
+          contacts: deletedContacts.count,
+          historicalMemory: deletedMemory.count,
+        };
       });
-
-      return {
-        messages: deletedMessages.count,
-        conversations: deletedConversations.count,
-        consents: deletedConsents.count,
-        contacts: deletedContacts.count,
-      };
     });
 
     await prisma.dataSubjectRequest.create({

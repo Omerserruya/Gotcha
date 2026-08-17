@@ -104,6 +104,14 @@ router.get(
       state: n.state,
       pendingAction: n.pendingAction,
       onboardingFlow: n.onboardingFlow,
+      /**
+       * The messaging identity behind this number. Exposed so the card can pair
+       * a number with its history import, which is keyed by channel account
+       * rather than by number - a tenant with two Coexistence numbers has two
+       * separate imports, and the wrong pairing would show one number the
+       * other's progress.
+       */
+      channelAccountId: n.channelAccountId,
       /** Coexistence numbers behave differently, so the UI must know. */
       usesBusinessApp: n.isOnBizApp,
       qualityRating: n.qualityRating,

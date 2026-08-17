@@ -191,6 +191,11 @@ model Tenant {
   @@index([status])
   inboundExclusions InboundExclusion[]
 
+  historicalImports         HistoricalImport[]
+  historicalCustomers       HistoricalCustomer[]
+  customerHistoricalMemory  CustomerHistoricalMemory[]
+  knowledgeCandidates       KnowledgeCandidate[]
+
   @@map("tenants")
 }
 
@@ -347,6 +352,7 @@ model ChannelAccount {
   @@index([connectionStatus])
   @@index([tokenExpiresAt])
   inboundExclusions InboundExclusion[]
+  historicalImports HistoricalImport[]
 
   @@map("channel_accounts")
 }
@@ -996,6 +1002,11 @@ model Conversation {
   // never be written to a CRM, tagged onto a Shopify customer, or read by
   // authorization, segmentation, pricing or tool-gating code.
   grammaticalAddress Json?              @map("grammatical_address")
+  /// LIVE or HISTORICAL_IMPORT. A historical thread is a record of something
+  /// that already finished; it is never routed, never assigned, never escalated
+  /// and never answered. Defaulted so every existing conversation stays LIVE.
+  origin             RecordOrigin       @default(LIVE)
+  historicalImportId String?            @map("historical_import_id")
   createdAt          DateTime           @default(now()) @map("created_at")
   updatedAt          DateTime           @updatedAt @map("updated_at")
 
@@ -1008,7 +1019,14 @@ model Conversation {
   intelligence     ConversationIntelligence?
   voiceCallSession VoiceCallSession?
   callAnalysis     CallAnalysis?
+  historicalImport HistoricalImport?         @relation(fields: [historicalImportId], references: [id], onDelete: SetNull)
+  historicalCustomer HistoricalCustomer?
 
+  /// Every inbox, routing and analytics query means LIVE conversations. Without
+  /// this index they would all start scanning imported history the moment a
+  /// tenant connects Coexistence.
+  @@index([tenantId, origin, status])
+  @@index([historicalImportId])
   @@index([tenantId, status])
   @@index([tenantId, assignedAgentId])
   @@index([tenantId, assignedAiAgentId])
@@ -1040,6 +1058,12 @@ model Message {
   channel            ChannelType?
   externalMessageId  String?          @map("external_message_id") // WA msg ID or Messenger mid
   direction          MessageDirection
+  /// Whether this row is something that JUST HAPPENED or something we imported.
+  /// See RecordOrigin. Defaulted to LIVE so every existing row keeps its
+  /// meaning and every existing writer keeps working unchanged.
+  origin             RecordOrigin     @default(LIVE)
+  /// Which import produced this row. Null for live traffic.
+  historicalImportId String?          @map("historical_import_id")
   body               String
   messageType        String           @default("text") @map("message_type")
   status             MessageStatus    @default(PENDING)
@@ -1056,12 +1080,18 @@ model Message {
 
   tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  historicalImport HistoricalImport? @relation(fields: [historicalImportId], references: [id], onDelete: SetNull)
 
   @@index([conversationId, createdAt])
   @@index([externalMessageId])
   @@index([tenantId])
   @@index([broadcastId])
   @@index([scheduledMessageId])
+  /// "Everything this import wrote", for the summary counts and for a clean
+  /// re-import. Also the index that keeps `origin: LIVE` filters cheap once a
+  /// tenant has six months of imported history sitting in the same table.
+  @@index([historicalImportId])
+  @@index([tenantId, origin])
   @@map("messages")
 }
 
@@ -1702,6 +1732,11 @@ model KnowledgeDocument {
 
   knowledgeBase KnowledgeBase    @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
   chunks        KnowledgeChunk[]
+  /// Candidates that were approved INTO this document. Kept so an approved
+  /// piece of knowledge can always be traced back to the conversations that
+  /// produced it - the difference between a knowledge base and a guess.
+  approvedFromCandidates KnowledgeCandidate[] @relation("CandidateApprovedDocument")
+  supersedesCandidates   KnowledgeCandidate[] @relation("CandidateDuplicateDocument")
 
   @@index([knowledgeBaseId])
   @@index([tenantId])
@@ -6326,4 +6361,456 @@ model DiscoveryActionAttempt {
 
   @@index([sessionId, createdAt])
   @@map("discovery_action_attempts")
+}
+
+// ─── Historical Intelligence Import ──────────────────────────
+//
+// How GOTCHA learns from a business's EXISTING conversation history, so the
+// first thing a new customer sees is a product that already knows their
+// business rather than an empty form.
+//
+// First and only source: the WhatsApp Business App, through Meta Coexistence
+// chat-history sync. Everything below the adapter is deliberately source
+// agnostic - `source` is an enum, not a boolean, and no model here has a
+// WhatsApp column. Adding Glassix or a CSV importer later means writing an
+// adapter, not rebuilding the pipeline. See
+// docs/architecture/historical-intelligence-import.md.
+//
+// Three facts about Meta's history sync shape all of this and cannot be
+// engineered around:
+//   * 180 days maximum, and ONLY within 24 hours of onboarding.
+//   * It can be requested ONCE. A re-import needs the customer to offboard and
+//     redo Embedded Signup - which is why a channel RECONNECT must never be
+//     treated as a new import.
+//   * Chunks arrive OUT OF ORDER and are re-sequenced by `chunkOrder`.
+
+/// Whether a row is something that just happened, or something we imported.
+///
+/// This is an explicit column rather than an inference from `createdAt`,
+/// because the two are indistinguishable by timestamp: an import writes rows
+/// dated months ago, and a late webhook writes a row dated yesterday. Getting
+/// it wrong in either direction is severe - a historical message treated as
+/// live would have the AI answer a customer about an order from March.
+enum RecordOrigin {
+  LIVE
+  HISTORICAL_IMPORT
+}
+
+/// Where imported history came from. One member today, on purpose.
+enum HistoricalImportSource {
+  /// Meta Coexistence chat-history sync from the WhatsApp Business app.
+  WHATSAPP_BUSINESS_APP
+}
+
+/// The import's own lifecycle, entirely separate from whether the CHANNEL
+/// works. A failed import must never make a healthy WhatsApp number look
+/// disconnected, and a connected number is not evidence that history arrived.
+enum HistoricalImportStatus {
+  /// The source cannot give us history at all. Usually the business declined
+  /// sharing during signup (Meta error 2593109). An honest end state, not a
+  /// failure, and the UI says so differently.
+  NOT_AVAILABLE
+  /// Row exists, nothing has arrived yet.
+  PENDING
+  /// History webhooks are arriving. `sourceProgress` is Meta's own percentage.
+  SOURCE_SYNCING
+  /// Meta reported progress = 100. Transfer done, nothing analyzed yet.
+  SOURCE_COMPLETE
+  /// Turning raw chunks into Conversation + Message rows.
+  INGESTING
+  /// Resolving participants to GOTCHA contacts and, where they exist, to
+  /// records in the tenant's source of truth. Lookup only - never creation.
+  IDENTITY_RESOLUTION
+  /// Building durable per-customer understanding.
+  CUSTOMER_LEARNING
+  /// Mining reusable business knowledge out of the conversations.
+  KNOWLEDGE_EXTRACTION
+  /// Clustering, deduplicating and conflict-checking the candidates.
+  KNOWLEDGE_CLUSTERING
+  /// Computing the aggregate topic breakdown and summary counts.
+  ANALYTICS
+  /// Everything finished; suggestions are waiting for the owner.
+  REVIEW_READY
+  /// The owner has been notified and the import is closed. Candidates may
+  /// still be pending review - COMPLETED is about the PIPELINE, not the queue.
+  COMPLETED
+  /// A stage failed in a way that retrying did not clear. Partial results are
+  /// kept: a failure at knowledge extraction does not discard imported
+  /// messages or customer memory.
+  FAILED
+}
+
+/// One import run.
+///
+/// Keyed per channel account rather than per tenant, because a tenant can
+/// legitimately connect several WhatsApp numbers and each has its own history
+/// and its own 24-hour window.
+model HistoricalImport {
+  id       String @id @default(cuid())
+  tenantId String @map("tenant_id")
+
+  source HistoricalImportSource
+  /// The channel this history belongs to. Nullable because a future source
+  /// (a CSV upload) has no ChannelAccount at all.
+  channelAccountId String? @map("channel_account_id")
+
+  status HistoricalImportStatus @default(PENDING)
+
+  // ── Progress ──
+  /// Meta's own history-sync percentage, 0-100. The ONLY honest number we have
+  /// during transfer, and the only one the progress bar is allowed to show.
+  sourceProgress Int @default(0) @map("source_progress")
+  /// Highest phase seen (0 = day 0-1, 1 = day 1-90, 2 = day 90-180).
+  sourcePhase    Int? @map("source_phase")
+  chunksReceived Int  @default(0) @map("chunks_received")
+  /// Analysis has no percentage we can measure honestly, so the UI counts
+  /// real work instead: "842 / 1,247 customers". These are those numbers.
+  customersTotal    Int @default(0) @map("customers_total")
+  customersAnalyzed Int @default(0) @map("customers_analyzed")
+
+  // ── Results (all read from rows that exist; nothing here is estimated) ──
+  importedMessages        Int @default(0) @map("imported_messages")
+  /// Messages the source sent us that we already had. Proof the dedupe works.
+  duplicateMessages       Int @default(0) @map("duplicate_messages")
+  importedCustomers       Int @default(0) @map("imported_customers")
+  matchedExistingCustomers Int @default(0) @map("matched_existing_customers")
+  matchedSourceOfTruth    Int @default(0) @map("matched_source_of_truth")
+  knowledgeCandidateCount Int @default(0) @map("knowledge_candidate_count")
+  knowledgeConflictCount  Int @default(0) @map("knowledge_conflict_count")
+  /// [{ topic, conversations, share }] - the "customers mostly ask about" list.
+  topTopics               Json? @map("top_topics")
+  /// The persisted completion summary, read by the channel card, the results
+  /// page and the email so all three can never disagree.
+  summary                 Json?
+
+  // ── Lifecycle timestamps ──
+  startedAt                     DateTime  @default(now()) @map("started_at")
+  sourceCompletedAt             DateTime? @map("source_completed_at")
+  intelligenceStartedAt         DateTime? @map("intelligence_started_at")
+  reviewReadyAt                 DateTime? @map("review_ready_at")
+  completedAt                   DateTime? @map("completed_at")
+  /// Meta's 24-hour window. Past this with no completion, a watchdog fails the
+  /// import honestly instead of leaving a bar at 60% forever.
+  sourceDeadlineAt              DateTime? @map("source_deadline_at")
+  /// The completion-email latch. Claimed with a conditional update, so of any
+  /// number of concurrent retries exactly one sends.
+  completionEmailSentAt         DateTime? @map("completion_email_sent_at")
+
+  /// Customer-facing reason, when something went wrong. Empty when fine.
+  failureReason String? @map("failure_reason")
+  /// Which stage failed, so a retry knows where to resume.
+  failedStage   String? @map("failed_stage")
+
+  /// Source-specific facts that have no column: WABA id, phone number id,
+  /// display phone number, Meta error codes. Never read by the generic stages.
+  sourceMetadata Json? @map("source_metadata")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  channelAccount ChannelAccount? @relation(fields: [channelAccountId], references: [id], onDelete: Cascade)
+  chunks         HistoricalImportChunk[]
+  events         HistoricalImportEvent[]
+  customers      HistoricalCustomer[]
+  candidates     KnowledgeCandidate[]
+  conversations  Conversation[]
+  messages       Message[]
+  memories       CustomerHistoricalMemory[]
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([channelAccountId])
+  /// The watchdog's query: imports still in flight whose window has closed.
+  @@index([status, sourceDeadlineAt])
+  @@map("historical_imports")
+}
+
+/// One chunk exactly as the source delivered it.
+///
+/// This table is what makes the whole feature safe to retry. Meta redelivers
+/// on any non-2xx, BullMQ retries on throw, and a chunk can legitimately arrive
+/// twice; the unique constraint below turns all of that into a no-op instead of
+/// a duplicated conversation. Keeping the raw payload also means a parser fix
+/// can be replayed against history we already hold, rather than needing a
+/// re-import Meta will not grant.
+model HistoricalImportChunk {
+  id       String @id @default(cuid())
+  importId String @map("import_id")
+  tenantId String @map("tenant_id")
+
+  /// Meta phase: 0 = day 0-1, 1 = day 1-90, 2 = day 90-180.
+  phase      Int
+  /// Sequence within the transfer. Chunks ARRIVE OUT OF ORDER - Meta documents
+  /// this explicitly - so ordering is by this column, never by arrival.
+  chunkOrder Int @map("chunk_order")
+  /// The percentage the source reported alongside this chunk.
+  progress   Int @default(0)
+
+  /// The raw `threads[]` array, untouched.
+  payload      Json
+  messageCount Int  @default(0) @map("message_count")
+  threadCount  Int  @default(0) @map("thread_count")
+
+  receivedAt  DateTime  @default(now()) @map("received_at")
+  processedAt DateTime? @map("processed_at")
+  /// Set when THIS chunk could not be normalized. The import continues: one
+  /// malformed chunk must not cost the customer the other 179 days.
+  error       String?
+
+  historicalImport HistoricalImport @relation(fields: [importId], references: [id], onDelete: Cascade)
+
+  /// The idempotency anchor. A redelivered chunk collides here and is dropped.
+  @@unique([importId, phase, chunkOrder])
+  @@index([importId, processedAt])
+  @@index([tenantId])
+  @@map("historical_import_chunks")
+}
+
+/// Append-only audit of every step taken during one import.
+///
+/// Same reasoning as WhatsAppNumberEvent: when a customer asks why their
+/// history is missing, the answer has to come from what was recorded at the
+/// time, not from reconstructing it afterwards.
+model HistoricalImportEvent {
+  id       String @id @default(cuid())
+  importId String @map("import_id")
+
+  /// Stage name, e.g. `CHUNK_RECEIVED`, `INGEST`, `IDENTITY_RESOLUTION`,
+  /// `CUSTOMER_LEARNING`, `KNOWLEDGE_EXTRACTION`, `ANALYTICS`, `EMAIL`.
+  step    String
+  /// `SUCCESS` | `FAILED` | `SKIPPED` | `PARTIAL`.
+  outcome String
+  message String?
+  /// Counts and safe metadata only. Never message bodies - see the privacy
+  /// note on HistoricalCustomer.
+  detail  Json?
+
+  durationMs Int? @map("duration_ms")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  historicalImport HistoricalImport @relation(fields: [importId], references: [id], onDelete: Cascade)
+
+  @@index([importId, createdAt])
+  @@index([importId, step])
+  @@map("historical_import_events")
+}
+
+/// One participant in the imported history, and what we managed to link them to.
+///
+/// This is the unit of work for customer learning - it is what "842 / 1,247"
+/// counts - and the source of the linkage statistics. It is NOT a second
+/// customer table: the durable identity stays `Contact`, and this row points
+/// at it.
+model HistoricalCustomer {
+  id       String @id @default(cuid())
+  importId String @map("import_id")
+  tenantId String @map("tenant_id")
+
+  /// The identifier the source used, verbatim (a WhatsApp phone number).
+  externalId String @map("external_id")
+  /// E.164 via the shared `normalizePhone`. Matching happens on THIS, so
+  /// "0501234567" and "+972-50-123-4567" can never become two customers.
+  normalizedPhone String? @map("normalized_phone")
+  displayName     String? @map("display_name")
+
+  // ── Linkage. All lookup, never creation. ──
+  contactId      String? @map("contact_id")
+  conversationId String? @unique @map("conversation_id")
+  /// Which system of record matched, e.g. "shopify" / "hubspot". Null when the
+  /// tenant has none connected or the customer simply is not in it - which is
+  /// a perfectly normal outcome and NEVER a reason to create one there.
+  sourceOfTruthVendor     String?   @map("source_of_truth_vendor")
+  sourceOfTruthCustomerId String?   @map("source_of_truth_customer_id")
+  sourceOfTruthMatchedAt  DateTime? @map("source_of_truth_matched_at")
+
+  /// Identifiers the conversations revealed that we did not already hold, e.g.
+  /// { emails: [...], instagramHandles: [...] }, each stamped with its
+  /// provenance. Applied to the Contact only where the field is EMPTY: weaker
+  /// inferred data never overwrites something stronger, and none of it is ever
+  /// written back out to Shopify or a CRM.
+  discoveredIdentities Json? @map("discovered_identities")
+
+  messageCount   Int       @default(0) @map("message_count")
+  inboundCount   Int       @default(0) @map("inbound_count")
+  firstMessageAt DateTime? @map("first_message_at")
+  lastMessageAt  DateTime? @map("last_message_at")
+
+  /// `PENDING` | `DONE` | `SKIPPED` | `FAILED`. Drives the analyzed counter and
+  /// lets a retry pick up only the customers that did not finish.
+  learningStatus String  @default("PENDING") @map("learning_status")
+  learningError  String? @map("learning_error")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  historicalImport HistoricalImport @relation(fields: [importId], references: [id], onDelete: Cascade)
+  tenant           Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversation     Conversation?    @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+
+  /// One row per person per import. Re-running identity resolution updates
+  /// rather than duplicating.
+  @@unique([importId, externalId])
+  @@index([tenantId])
+  @@index([importId, learningStatus])
+  @@index([tenantId, normalizedPhone])
+  @@map("historical_customers")
+}
+
+/// Durable understanding of ONE customer, learned from their history.
+///
+/// Deliberately NOT AgentCustomerMemory: that is keyed by agentId and holds the
+/// last turn's working memory for a specific employee. What we learn from
+/// history is a fact about the CUSTOMER and belongs to the tenant, so every
+/// agent that ever speaks to them benefits.
+///
+/// The unique key is what makes a retry safe: a re-run REBUILDS this row. It
+/// never appends, so a crashed pipeline cannot leave a customer with three
+/// copies of the same observation.
+model CustomerHistoricalMemory {
+  id       String @id @default(cuid())
+  tenantId String @map("tenant_id")
+  /// Normalized phone. The join key to Conversation.customerExternalId.
+  customerExternalId String  @map("customer_external_id")
+  contactId          String? @map("contact_id")
+
+  /// [{ text, category, confidence, evidenceConversationIds[], firstSeenAt,
+  ///    lastSeenAt }]
+  ///
+  /// Durable observations only. "Previously experienced a delayed shipment" is
+  /// a fact that stays true; "is waiting for a package" was true for a week in
+  /// March and would be a lie the moment it is read back. The prompt that
+  /// produces these is explicit about the difference, and speculative
+  /// personality profiling is excluded outright.
+  facts   Json
+  /// A short prose digest, injected into agent context.
+  summary String?
+
+  /// Provenance, e.g. "historical_whatsapp_import".
+  source   String
+  importId String? @map("import_id")
+
+  messageCount Int? @map("message_count")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  historicalImport HistoricalImport? @relation(fields: [importId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, customerExternalId])
+  @@index([tenantId, updatedAt])
+  @@index([importId])
+  @@map("customer_historical_memory")
+}
+
+/// What a mined piece of knowledge is BEFORE a human agrees with it.
+enum KnowledgeCandidateStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  /// An equivalent answer already exists in the knowledge base. Surfaced as
+  /// "already covered" rather than offered as a second copy of it.
+  SUPERSEDED
+}
+
+/// A reusable piece of business knowledge observed in historical conversations.
+///
+/// The central rule of this table: historical answers are EVIDENCE, NOT TRUTH.
+/// Human agents make mistakes, grant one-off exceptions, quote superseded
+/// policies and contradict each other. `confidence: HIGH` therefore means only
+/// "we consistently observed this", never "this is current policy", and nothing
+/// here reaches the production knowledge base without the owner approving it.
+model KnowledgeCandidate {
+  id       String @id @default(cuid())
+  tenantId String @map("tenant_id")
+  importId String @map("import_id")
+
+  /// e.g. "Shipping", "Returns & Exchanges", "Sizing".
+  topic    String
+  /// The canonical form of what customers actually asked.
+  question String
+  /// The suggested answer, synthesized from what the business actually replied.
+  answer   String
+  /// The owner's edit, when they changed it before approving. Kept separate
+  /// from `answer` so the original observation is still auditable.
+  editedAnswer String? @map("edited_answer")
+
+  status KnowledgeCandidateStatus @default(PENDING)
+
+  // ── Evidence. Every number here is a count of rows, never an estimate. ──
+  confidence      Float    @default(0)
+  occurrenceCount Int      @default(0) @map("occurrence_count")
+  customerCount   Int      @default(0) @map("customer_count")
+  firstSeenAt     DateTime? @map("first_seen_at")
+  lastSeenAt      DateTime? @map("last_seen_at")
+
+  /// Stable id of the semantic cluster this candidate canonicalizes. "Where are
+  /// you located", "what's your address" and "do you have a Tel Aviv branch"
+  /// share one cluster and produce ONE candidate, not four.
+  clusterKey String @map("cluster_key")
+
+  /// The business answered this differently at different times. We do NOT pick
+  /// one - `variants` keeps every version with its own counts and the owner
+  /// decides. Conflicted candidates are excluded from bulk approve.
+  conflict Boolean @default(false)
+  /// [{ answer, occurrenceCount, customerCount, exampleEvidenceIds[] }]
+  variants Json?
+
+  /// An existing KB document that already says this. Set by the semantic check
+  /// that runs both at creation and again at approval, so a document added in
+  /// between is still caught.
+  duplicateOfDocumentId String? @map("duplicate_of_document_id")
+  /// The KB document created when this was approved.
+  approvedDocumentId    String? @map("approved_document_id")
+
+  decidedAt DateTime? @map("decided_at")
+  decidedBy String?   @map("decided_by")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant           Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  historicalImport HistoricalImport   @relation(fields: [importId], references: [id], onDelete: Cascade)
+  evidence         KnowledgeCandidateEvidence[]
+  approvedDocument KnowledgeDocument? @relation("CandidateApprovedDocument", fields: [approvedDocumentId], references: [id], onDelete: SetNull)
+  duplicateOf      KnowledgeDocument? @relation("CandidateDuplicateDocument", fields: [duplicateOfDocumentId], references: [id], onDelete: SetNull)
+
+  /// One candidate per cluster per import. Re-running clustering updates the
+  /// counts on the existing row instead of producing a second suggestion for
+  /// knowledge the owner may already have rejected.
+  @@unique([importId, clusterKey])
+  @@index([tenantId, status])
+  @@index([importId, status])
+  @@map("knowledge_candidates")
+}
+
+/// The conversations behind a candidate, for "view examples".
+///
+/// Stored as links plus the two quoted lines, not as a copy of the thread. The
+/// review UI shows a handful of representative examples; it never dumps the
+/// underlying dataset, and nothing here crosses a tenant boundary.
+model KnowledgeCandidateEvidence {
+  id          String @id @default(cuid())
+  candidateId String @map("candidate_id")
+  tenantId    String @map("tenant_id")
+
+  conversationId String? @map("conversation_id")
+  /// Which variant of a conflicted candidate this example supports.
+  variantKey     String? @map("variant_key")
+
+  questionText String  @map("question_text")
+  answerText   String  @map("answer_text")
+  occurredAt   DateTime? @map("occurred_at")
+  /// True for the two or three examples shown by default.
+  representative Boolean @default(false)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  candidate KnowledgeCandidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@index([candidateId, representative])
+  @@index([tenantId])
+  @@map("knowledge_candidate_evidence")
 }

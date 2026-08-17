@@ -27,6 +27,20 @@ export const scheduledMessageQueue = new Queue("scheduled-messages", { connectio
 // walker enqueues a job here with { delay: 5000 } and halts. The worker
 // picks it up after the delay and resumes the flow at the next node.
 export const flowResumeQueue = new Queue("flow-resume", { connection: { url: REDIS_URL } });
+/**
+ * The multi-stage analysis of imported conversation history.
+ *
+ * Its own queue rather than a job name on `incoming-messages`, because the two
+ * have opposite shapes: inbound work is thousands of small jobs that must run
+ * within seconds, this is a handful of long jobs that run for minutes and call
+ * an LLM. Sharing a concurrency budget would let one import's knowledge
+ * extraction sit in front of a customer's message.
+ *
+ * One job per STAGE per import, so a stage that fails can be retried without
+ * redoing the ones before it - which matters when the expensive stages are the
+ * later ones.
+ */
+export const historicalIntelligenceQueue = new Queue("historical-intelligence", { connection: { url: REDIS_URL } });
 
 // ─── Job types ──────────────────────────────────────────────
 
@@ -136,6 +150,67 @@ export interface WebhookTriggerJob {
   // Optional + defaults to "flow" downstream so jobs enqueued before this field
   // existed keep the original behavior.
   targetMode?: "flow" | "connected";
+}
+
+/**
+ * One chunk of imported conversation history. Shares the "incoming-messages"
+ * queue, discriminated by job.name = "process-history", exactly as the
+ * Coexistence echo does - the webhook stays a thin, fast producer and all the
+ * work happens here.
+ *
+ * The payload carries the chunk ALREADY NORMALIZED by the channel adapter, so
+ * the handler below it is source agnostic and a second importer can enqueue the
+ * same job shape without the handler learning anything new.
+ */
+export interface HistoricalImportChunkJob {
+  tenantId: string;
+  channelAccountId: string;
+  /** Matches the HistoricalImportSource enum. */
+  source: "WHATSAPP_BUSINESS_APP";
+  chunk: {
+    phase: number;
+    /** Chunks arrive out of order; this is what re-sequences them. */
+    chunkOrder: number;
+    /** 0-100. 100 is the only completion signal the source gives. */
+    progress: number;
+    threadCount: number;
+    messages: Array<{
+      externalMessageId: string;
+      customerExternalId: string;
+      direction: "INBOUND" | "OUTBOUND";
+      timestamp: string; // ISO
+      body: string;
+      messageType: string;
+      mediaUrl?: string;
+      fileName?: string;
+      mimeType?: string;
+      sourceStatus?: string;
+    }>;
+    /** The source cannot provide history at all (e.g. the business declined). */
+    unavailable?: { code?: number; reason: string };
+  };
+}
+
+/**
+ * One STAGE of the intelligence pipeline for one import. Runs on the
+ * `historical-intelligence` queue.
+ *
+ * Stages are separate jobs rather than one long function so that a failure in,
+ * say, knowledge extraction is retried on its own instead of re-importing
+ * messages and re-running every LLM call that already succeeded.
+ */
+export interface HistoricalIntelligenceJob {
+  tenantId: string;
+  importId: string;
+  stage:
+    | "identity"
+    | "customer-learning"
+    | "knowledge-extraction"
+    | "knowledge-clustering"
+    | "analytics"
+    | "finalize";
+  /** Set by the customer-learning stage to process one batch of customers. */
+  cursor?: string;
 }
 
 export interface OutgoingMessageJob {

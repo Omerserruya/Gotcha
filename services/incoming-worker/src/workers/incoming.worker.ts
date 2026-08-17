@@ -4,7 +4,7 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { handleApprovalButtonReply } from "../services/whatsapp-approval-inbound.service";
-import { prisma, createWorker, IncomingMessageJob, IncomingCommentJob, OutboundEchoJob, WebhookTriggerJob, analyticsQueue, outgoingMessageQueue, publishEvent, decryptCredentials, metaGraphBaseUrl, isInboundExcluded } from "@chatcenter/shared";
+import { prisma, createWorker, IncomingMessageJob, IncomingCommentJob, OutboundEchoJob, WebhookTriggerJob, HistoricalImportChunkJob, analyticsQueue, outgoingMessageQueue, publishEvent, decryptCredentials, metaGraphBaseUrl, isInboundExcluded } from "@chatcenter/shared";
 import { processCommentTrigger } from "../services/comment-trigger.service";
 
 const FB_API_URL = metaGraphBaseUrl(process.env.FACEBOOK_API_URL);
@@ -678,7 +678,7 @@ async function processWebhookTrigger(job: Job<WebhookTriggerJob>): Promise<void>
 // same DLQ, same concurrency budget - but each job kind has its own handler.
 // Exported for unit tests that exercise the job-name routing without standing
 // up a real BullMQ worker.
-export async function dispatch(job: Job<IncomingMessageJob | IncomingCommentJob | WebhookTriggerJob | OutboundEchoJob>): Promise<void> {
+export async function dispatch(job: Job<IncomingMessageJob | IncomingCommentJob | WebhookTriggerJob | OutboundEchoJob | HistoricalImportChunkJob>): Promise<void> {
   if (job.name === "process-comment") {
     await processCommentTrigger(job as Job<IncomingCommentJob>);
     return;
@@ -694,12 +694,21 @@ export async function dispatch(job: Job<IncomingMessageJob | IncomingCommentJob 
     await processWebhookTrigger(job as Job<WebhookTriggerJob>);
     return;
   }
+  if (job.name === "process-history") {
+    // A batch of the business's PAST conversations. Data import only: the
+    // handler writes rows and never reaches the bot, the router or a flow.
+    // This early return is what guarantees history can never fall through to
+    // `processIncomingMessage` below.
+    const { processHistoricalChunk } = await import("../services/historical-import.service");
+    await processHistoricalChunk(job as Job<HistoricalImportChunkJob>);
+    return;
+  }
   // Default ("process") - DM / message path.
   await processIncomingMessage(job as Job<IncomingMessageJob>);
 }
 
 let worker: any;
 export function startIncomingWorker() {
-  worker = createWorker<IncomingMessageJob | IncomingCommentJob | WebhookTriggerJob | OutboundEchoJob>("incoming-messages", dispatch, 3);
-  console.log("[incoming-worker] Incoming message worker started (handles: process, process-comment, process-echo, webhook-trigger)");
+  worker = createWorker<IncomingMessageJob | IncomingCommentJob | WebhookTriggerJob | OutboundEchoJob | HistoricalImportChunkJob>("incoming-messages", dispatch, 3);
+  console.log("[incoming-worker] Incoming message worker started (handles: process, process-comment, process-echo, webhook-trigger, process-history)");
 }

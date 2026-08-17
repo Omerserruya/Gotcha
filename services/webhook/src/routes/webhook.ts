@@ -394,6 +394,66 @@ router.post("/", async (req: Request, res: Response) => {
       );
     }
 
+    // Step 4d: The business's PAST conversations, delivered once in the minutes
+    // after Coexistence onboarding.
+    //
+    // Enqueued rather than handled here for the usual reason - Meta expects a
+    // fast 200 and a chunk can carry thousands of messages - but also for a
+    // second one specific to history: this data must never touch the live
+    // pipeline. A separate job name means there is no code path from a
+    // historical message to the bot, rather than a flag somewhere deciding not
+    // to call it.
+    //
+    // `attempts: 5` is higher than the inbound paths use. Meta grants ONE
+    // history sync per onboarding, with no way to ask again; a chunk dropped
+    // because Redis blinked is a chunk the customer can never get back without
+    // offboarding and repeating Embedded Signup.
+    const historyChunks = adapter.extractHistorySync?.(body) || [];
+    for (const chunk of historyChunks) {
+      await incomingMessageQueue.add(
+        "process-history",
+        {
+          tenantId,
+          channelAccountId,
+          source: "WHATSAPP_BUSINESS_APP" as const,
+          chunk: {
+            phase: chunk.phase,
+            chunkOrder: chunk.chunkOrder,
+            progress: chunk.progress,
+            threadCount: chunk.threadCount,
+            ...(chunk.unavailable ? { unavailable: chunk.unavailable } : {}),
+            messages: chunk.messages.map((m) => {
+              const { body: mBody, messageType, mediaUrl, fileName, mimeType } =
+                normalizeContentToBodyAndType(m);
+              return {
+                externalMessageId: m.externalMessageId,
+                customerExternalId: m.customerExternalId,
+                direction: m.direction,
+                timestamp: m.timestamp.toISOString(),
+                body: mBody,
+                messageType,
+                mediaUrl,
+                fileName,
+                mimeType,
+                sourceStatus: m.sourceStatus,
+              };
+            }),
+          },
+        },
+        { attempts: 5, backoff: { type: "exponential", delay: 2000 } }
+      );
+    }
+    if (historyChunks.length > 0) {
+      // Counts only - a history chunk is a customer's private correspondence
+      // and none of it belongs in a log line.
+      const totalMessages = historyChunks.reduce((n, c) => n + c.messages.length, 0);
+      const progress = Math.max(...historyChunks.map((c) => c.progress));
+      console.log(
+        `[WEBHOOK] history chunks=${historyChunks.length} messages=${totalMessages} ` +
+          `progress=${progress} account=${channelExternalId}`,
+      );
+    }
+
     // Step 5: Handle status updates inline (lightweight)
     const statusUpdates = adapter.extractStatusUpdates(body);
     for (const status of statusUpdates) {

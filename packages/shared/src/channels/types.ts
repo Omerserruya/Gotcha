@@ -172,6 +172,63 @@ export interface NormalizedOutboundEcho {
   content: MessageContent;
 }
 
+// ─── Historical import ───────────────────────────────────────
+
+/**
+ * One message inside an imported history chunk.
+ *
+ * Deliberately NOT `NormalizedInboundMessage`. An inbound message is an event
+ * that just happened and carries only a sender; a historical message is a
+ * record of something finished and has to carry BOTH ends, because the same
+ * chunk contains what the customer wrote and what the business replied. The
+ * direction is a property of the row, not of the pipeline that received it.
+ */
+export interface NormalizedHistoricalMessage {
+  externalMessageId: string;
+  /** The customer's identifier - the thread key, whichever way the message went. */
+  customerExternalId: string;
+  direction: "INBOUND" | "OUTBOUND";
+  timestamp: Date;
+  content: MessageContent;
+  /** The source's own delivery status, when it reports one. Audit only. */
+  sourceStatus?: string;
+}
+
+/**
+ * A batch of history as the source delivered it, already normalized.
+ *
+ * This interface is the seam that keeps the intelligence pipeline free of
+ * WhatsApp: everything below it sees threads, messages and a progress number,
+ * and nothing below it knows what a WABA is. A second source (Glassix, a CSV)
+ * implements `extractHistorySync` and reuses the entire pipeline.
+ */
+export interface NormalizedHistoryChunk {
+  channel: ChannelType;
+  /** The account this history belongs to, for tenant + channel resolution. */
+  accountExternalId: string;
+  /**
+   * Meta phase: 0 = day 0-1, 1 = day 1-90, 2 = day 90-180. Sources without a
+   * phase concept report 0.
+   */
+  phase: number;
+  /**
+   * Sequence number within the transfer. Chunks ARRIVE OUT OF ORDER - Meta
+   * documents this - so consumers order by this and never by arrival time.
+   */
+  chunkOrder: number;
+  /** Percentage complete, 0-100. 100 is the only completion signal there is. */
+  progress: number;
+  messages: NormalizedHistoricalMessage[];
+  /** Distinct customers seen in this chunk. */
+  threadCount: number;
+  /**
+   * The source says it cannot provide history at all - typically because the
+   * business declined sharing during signup (Meta code 2593109). An honest end
+   * state rather than a failure, and reported as such.
+   */
+  unavailable?: { code?: number; reason: string };
+}
+
 export interface OutboundMessagePayload {
   type: "text" | "interactive";
   text?: string;
@@ -205,6 +262,10 @@ export interface InboundAdapter {
   // Optional - only WhatsApp (Coexistence) implements it today. Messages the
   // business sent from a provider-native app, mirrored back to us.
   extractOutboundEchoes?(payload: any): NormalizedOutboundEcho[];
+  // Optional - only WhatsApp (Coexistence) implements it today. Batches of the
+  // business's PAST conversations, delivered once after onboarding. Data
+  // import, never live traffic: nothing extracted here may reach the bot.
+  extractHistorySync?(payload: any): NormalizedHistoryChunk[];
 }
 
 export interface OutboundAdapter {

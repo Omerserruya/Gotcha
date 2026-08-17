@@ -137,6 +137,7 @@ import {
   buildConversationMemory,
   renderMemoryBlock,
 } from "./conversation-memory.service";
+import { renderHistoricalMemoryBlock } from "./historical-intelligence/memory-block.service";
 import { loadFunnelForTenant } from "./funnel-config.repo";
 import { missingContractInputs } from "./tool-contracts";
 import { computeProspectState, type ProspectState } from "./prospect-state";
@@ -1540,6 +1541,17 @@ async function generateAIBotReplyInner(
   });
   const memoryBlock = renderMemoryBlock(memory);
 
+  // ── What we learned from this customer's history, if we imported any ──
+  //
+  // Appended to the memory block rather than given a slot of its own so it
+  // flows into `factTextOf` with everything else: a fact the Knowledge Ledger
+  // can see is a question the agent stops re-asking. Empty string for every
+  // tenant that never ran an import, which is the overwhelming majority.
+  const historicalBlock = await renderHistoricalMemoryBlock({
+    tenantId: opts.tenantId,
+    customerExternalId: conversation.customerExternalId,
+  });
+
   // ── Follow-up flow facts: WhatsApp 24h window + approved templates ──
   // The bot's follow-up decision tree (prompt-builder STRICT block) needs
   // these as ground truth so it can pick free-text vs template path
@@ -1570,7 +1582,7 @@ async function generateAIBotReplyInner(
       email: resolvedCustomerEmail,
     }),
     crmBlock,
-    memoryBlock,
+    memoryBlock: [memoryBlock, historicalBlock].filter((s) => !!s && !!s.trim()).join("\n\n"),
     pendingApprovalsBlock: renderPendingApprovalsBlock(pendingApprovals),
     whatsappWindowBlock: followupFacts.whatsappWindowBlock,
     templatesBlock: followupFacts.templatesBlock,

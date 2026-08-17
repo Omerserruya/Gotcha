@@ -121,6 +121,14 @@ export const AuditAction = {
   // asking "why did the bot start saying 14 days?" has no trail to follow.
   KNOWLEDGE_SCAN_SYNCED: "knowledge.scan_synced",
   KNOWLEDGE_BACKFILL_RUN: "knowledge.backfill_run",
+  // A piece of knowledge mined from historical conversations, approved by a
+  // human into the live knowledge base. Audited separately from a scan sync
+  // because the provenance is different in a way that matters: a scan copies
+  // what the business PUBLISHED, this promotes what an employee once SAID to
+  // one customer. When somebody later asks "why does the bot say 45 days", the
+  // answer has to name the person who approved it and the conversations it came
+  // from.
+  KNOWLEDGE_HISTORICAL_APPROVED: "knowledge.historical_approved",
   // ── The rate money is charged at ──
   // Platform-level (tenantId "platform"). These decide what every Israeli
   // customer's card is debited, so they are audited separately from pricing:
