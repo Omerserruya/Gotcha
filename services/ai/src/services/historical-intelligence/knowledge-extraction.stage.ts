@@ -54,8 +54,13 @@ const RawCandidateSchema = z.object({
     .describe("A short reusable category, for example: Shipping, Returns & Exchanges, Sizing"),
   question: z.string().min(5).max(300).describe("The customer's question, generalized"),
   answer: z.string().min(5).max(800).describe("The business's answer, stated as reusable policy"),
-  quotedQuestion: z.string().max(400).optional(),
-  quotedAnswer: z.string().max(600).optional(),
+  // Required, not optional: the quotes are the only thing the direction guard
+  // below can verify against the transcript. An extraction that cannot point
+  // at the exact Customer line it read the question from and the exact
+  // Business line it read the answer from is unverifiable, and unverifiable
+  // here has a concrete failure mode - see directionGuard.
+  quotedQuestion: z.string().min(5).max(400).describe("Verbatim quote of the Customer line the question came from"),
+  quotedAnswer: z.string().min(5).max(600).describe("Verbatim quote of the Business line the answer came from"),
 });
 
 const ExtractionSchema = z.object({
@@ -74,7 +79,12 @@ EXTRACT knowledge that would help answer a DIFFERENT customer in future:
 - product facts that apply to a product line, not one unit
 - procedures the business follows
 
+WHO SAID WHAT - ABSOLUTE:
+- Every transcript line is labeled "Customer:" or "Business:". An answer may come ONLY from a "Business:" line. A question may come ONLY from a "Customer:" line. Never swap these roles, no matter how much a Customer line sounds like a policy statement.
+- Some conversations in this history are the business owner talking to OTHER businesses (suppliers, service centers, bots). There the "Customer:" side is another company's agent or auto-reply ("your request has been received", "here is our service bot"). That is the OTHER business's knowledge, not this one's. Extract NOTHING from such a conversation - an empty list is the correct answer.
+
 NEVER extract:
+- Anything a "Customer:" line stated, even if it reads like policy. Auto-replies and bot messages the business RECEIVED are the clearest case: they are someone else's knowledge.
 - Anything specific to one customer or one order. Order numbers, tracking codes, names, addresses, phone numbers, payment details, "your parcel is in Modiin".
 - Greetings, thanks, small talk, or the scheduling of a single call.
 - The status of one order at one moment.
@@ -87,6 +97,7 @@ HOW TO PHRASE IT
 - question: generalize away the individual. "Can I exchange the shirt I bought on Sunday?" becomes "Can an item be exchanged after purchase?"
 - answer: state it as a rule that applies to anyone, in the business's own terms. Do not add conditions the business did not state, and do not soften an answer that was given plainly.
 - Keep the business's own numbers exactly. If they said 45 days, write 45 days.
+- quotedQuestion: the exact "Customer:" line the question came from, verbatim. quotedAnswer: the exact "Business:" line the answer came from, verbatim. Items whose quotes are not found in the transcript on the correct side are discarded.
 
 Return AT MOST 8 items, and prefer few strong ones over many weak ones. An empty list is a correct answer for a conversation that was only about one order.
 
@@ -146,6 +157,7 @@ export async function runKnowledgeExtractionStage(args: {
   let created = 0;
   let conflicts = 0;
   let failures = 0;
+  let rejectedByDirection = 0;
 
   await mapLimited(customers, CONCURRENCY, async (customer) => {
     const transcript = await loadConversationTranscript({
@@ -174,6 +186,22 @@ export async function runKnowledgeExtractionStage(args: {
     const customerKey = customer.normalizedPhone || customer.externalId;
 
     for (const item of result.items) {
+      // The guard the prompt cannot be trusted to be: the quoted answer must
+      // actually be something the BUSINESS sent, and the quoted question
+      // something the CUSTOMER sent. The failure mode is real, not
+      // theoretical: this history contains threads where the business owner
+      // was the CUSTOMER of some other business, and that side's auto-replies
+      // ("your request has been received and will be handled shortly") read
+      // exactly like policy. The model mined them as this business's answers.
+      // Knowledge may enter the pipeline ONLY from the business's own
+      // messages; questions only from the customer's.
+      if (
+        !quoteMatchesDirection(transcript, item.quotedAnswer, "OUTBOUND") ||
+        !quoteMatchesDirection(transcript, item.quotedQuestion, "INBOUND")
+      ) {
+        rejectedByDirection += 1;
+        continue;
+      }
       extracted += 1;
       const outcome = await mergeIntoCluster({
         tenantId,
@@ -204,6 +232,7 @@ export async function runKnowledgeExtractionStage(args: {
       merged,
       newConflicts: conflicts,
       failures,
+      rejectedByDirection,
     },
     Date.now() - startedAt,
   );
@@ -211,8 +240,38 @@ export async function runKnowledgeExtractionStage(args: {
   return {
     ok: true,
     done: customers.length < BATCH_SIZE,
-    detail: { extracted, created, merged, conflicts, failures },
+    detail: { extracted, created, merged, conflicts, failures, rejectedByDirection },
   };
+}
+
+/**
+ * Does this quote actually appear in the transcript ON THE CLAIMED SIDE?
+ *
+ * The renderer clips each line to 400 chars before the model sees it, so the
+ * quote may be a prefix of the stored body. A 60-char normalized head is long
+ * enough to be unambiguous and short enough to survive the clipping. The
+ * reverse containment (body inside quote) covers a model that quoted a short
+ * line and kept typing; the length floor stops a two-word body ("תודה רבה")
+ * from matching everything.
+ */
+export function quoteMatchesDirection(
+  transcript: Array<{ direction: "INBOUND" | "OUTBOUND"; body: string }>,
+  quote: string,
+  direction: "INBOUND" | "OUTBOUND",
+): boolean {
+  const q = normalizeForMatch(quote);
+  if (q.length < 5) return false;
+  const head = q.slice(0, 60);
+  return transcript.some((m) => {
+    if (m.direction !== direction) return false;
+    const b = normalizeForMatch(m.body);
+    if (b.length === 0) return false;
+    return b.includes(head) || (b.length >= 20 && q.includes(b.slice(0, 60)));
+  });
+}
+
+function normalizeForMatch(text: string): string {
+  return text.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
 type MergeOutcome = "created" | "merged" | "conflict" | "skipped";
