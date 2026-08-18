@@ -20,6 +20,16 @@ const { writeFileSync, mkdirSync } = vi.hoisted(() => ({
 vi.mock("fs", () => ({ default: { writeFileSync, mkdirSync }, writeFileSync, mkdirSync }));
 
 vi.mock("@chatcenter/shared", () => ({
+  // The uploads write probe runs at module load. Stubbed as writable so these
+  // tests exercise their own subject rather than the storage check.
+  probeUploadsDir: () => ({ ok: true, dir: "/tmp/uploads" }),
+  describeUploadsProbe: () => "uploads ok",
+  classifyMediaFailure: (err: any) =>
+    err?.code === "EACCES" || err?.code === "EPERM" || err?.code === "EROFS"
+      ? "storage_unwritable"
+      : "download_failed",
+  reportOperationalFailure: () => {},
+  ERROR_CODES: new Proxy({}, { get: (_t, k) => String(k) }),
   prisma: { tenant: { findUnique: vi.fn() }, message: { findFirst: vi.fn() } },
   createWorker: vi.fn(),
   analyticsQueue: { add: vi.fn() },

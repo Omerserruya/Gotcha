@@ -39,6 +39,7 @@ import postConversationConfigRoutes from "./routes/post-conversation-config";
 import industryPacksRoutes from "./routes/industry-packs";
 import fieldDefinitionsRoutes from "./routes/field-definitions";
 import intelligenceReviewsRoutes from "./routes/intelligence-reviews";
+import historicalImportRoutes from "./routes/historical-import";
 import customerSnapshotRoutes from "./routes/customer-snapshot";
 import crmAutoLinkRoutes from "./routes/crm-auto-link";
 import customerSummaryRoutes from "./routes/customer-summary";
@@ -152,6 +153,7 @@ app.use("/api/post-conversation-config", postConversationConfigRoutes);
 app.use("/api/industry-packs", industryPacksRoutes);
 app.use("/api/field-definitions", fieldDefinitionsRoutes);
 app.use("/api/intelligence-reviews", intelligenceReviewsRoutes);
+app.use("/api/historical-imports", historicalImportRoutes);
 app.use("/api/customer-snapshot", customerSnapshotRoutes);
 app.use("/api/crm", crmAutoLinkRoutes);
 app.use("/api/customer-summary", customerSummaryRoutes);
@@ -208,6 +210,18 @@ startPostCallAnalyzeWorker();
 // re-embeds what actually changed. See services/knowledge-sync.service.ts.
 import { startKnowledgeSyncScheduler } from "./services/knowledge-sync.service";
 startKnowledgeSyncScheduler();
+
+// Historical Intelligence Import: the multi-stage analysis of a business's
+// imported conversation history. Ingest happens in incoming-worker; everything
+// that calls an LLM lives here, per the repository rule. The watchdog closes
+// out imports whose 24-hour Meta window expired without finishing.
+// See docs/architecture/historical-intelligence-import.md.
+import {
+  startHistoricalIntelligenceWorker,
+  startHistoricalImportWatchdog,
+} from "./workers/historical-intelligence/worker";
+startHistoricalIntelligenceWorker();
+startHistoricalImportWatchdog();
 
 // Data-retention purge: repeatable BullMQ job (RETENTION_PURGE_CRON, default
 // daily 03:30) executing tenant policies + platform env defaults. Without this

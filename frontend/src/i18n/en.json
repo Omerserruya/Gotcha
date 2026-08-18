@@ -230,7 +230,20 @@
     "fixChannelCta": "Fix connection",
     "emptyReadyTitle": "The channel is ready, no conversations have arrived yet",
     "emptyReadyDesc": "As soon as a customer writes to you, the conversation will appear here.",
-    "viewChannels": "View connected channels"
+    "viewChannels": "View connected channels",
+    "reply": {
+      "action": "Reply",
+      "cancel": "Cancel reply",
+      "you": "You",
+      "customer": "Customer",
+      "replyingToYou": "Replying to your message",
+      "replyingToCustomer": "Replying to the customer",
+      "unavailable": "An earlier message",
+      "photo": "Photo",
+      "voice": "Voice message",
+      "video": "Video",
+      "file": "File"
+    }
   },
   "dashboard": {
     "title": "Dashboard",
@@ -5314,6 +5327,77 @@
       "add": "Add",
       "addFailed": "Could not add the number",
       "empty": "Nothing excluded. Every conversation on this number reaches the inbox."
+    }
+  },
+  "historicalImport": {
+    "transferring": {
+      "title": "Importing WhatsApp history",
+      "body": "Your WhatsApp is connected and working. We are bringing in your previous conversations in the background."
+    },
+    "analyzing": {
+      "title": "Analyzing previous conversations",
+      "body": "We are learning your customers and looking for useful business knowledge in what you have already answered.",
+      "customers": "Customers analyzed: {analyzed} of {total}"
+    },
+    "ready": {
+      "title": "History imported",
+      "stats": "{messages} messages analyzed, {customers} customers identified",
+      "suggestions": "{count} knowledge suggestions waiting for your review",
+      "cta": "View what GOTCHA learned"
+    },
+    "unavailable": {
+      "title": "No history was shared",
+      "body": "Chat history sharing is turned off in your WhatsApp Business app, so there was nothing for us to import. Everything else about this channel works normally."
+    },
+    "failed": {
+      "title": "History import did not finish",
+      "body": "Something went wrong while importing your previous conversations.",
+      "reimport": "Your WhatsApp channel is unaffected and keeps working. WhatsApp allows history to be shared only once per connection, so importing again means disconnecting this number and connecting it a second time.",
+      "partial": "We did keep what arrived: {messages} messages and {customers} customers."
+    },
+    "results": {
+      "title": "What we learned from your WhatsApp history",
+      "subtitle": "Everything here comes from conversations you have already had.",
+      "messages": "Messages analyzed",
+      "customers": "Customers identified",
+      "matched": "Matched to existing customers",
+      "suggestions": "Knowledge suggestions",
+      "topicsTitle": "What your customers ask about most",
+      "topicsEmpty": "We did not find enough repeated questions to build a breakdown.",
+      "methodology": "How this is measured",
+      "recurring": "{percent}% of imported conversations contained a question that came up in more than one conversation.",
+      "windowNote": "WhatsApp shares up to {days} days of history, so this covers that period rather than everything you have ever sent."
+    },
+    "review": {
+      "title": "Discovered knowledge",
+      "subtitle": "Found in your past conversations. Nothing here reaches your knowledge base until you approve it.",
+      "empty": "No suggestions are waiting for review.",
+      "emptyHint": "Suggestions appear here after a WhatsApp history import finishes.",
+      "evidence": "Found in {conversations} conversations, {customers} customers",
+      "confidence": "Consistency",
+      "confidenceHigh": "High",
+      "confidenceMedium": "Medium",
+      "confidenceLow": "Low",
+      "confidenceNote": "This means we saw the same answer consistently. It does not mean the answer is still correct.",
+      "viewExamples": "View examples",
+      "hideExamples": "Hide examples",
+      "approve": "Approve",
+      "reject": "Reject",
+      "edit": "Edit",
+      "save": "Save and approve",
+      "cancel": "Cancel",
+      "bulkApprove": "Approve all high consistency",
+      "bulkReject": "Reject all",
+      "bulkApproved": "{count} suggestions added to your knowledge base.",
+      "bulkRejected": "{count} suggestions rejected.",
+      "alreadyCovered": "Already covered by {title}",
+      "conflictTitle": "We found conflicting answers",
+      "conflictBody": "Different answers were given to different customers. Choose or write the one that is correct today.",
+      "conflictVariant": "Observed in {count} conversations",
+      "conflictRequired": "Choose or write the correct answer before approving.",
+      "approved": "Added to your knowledge base.",
+      "rejected": "Rejected.",
+      "tab": "Discovered"
     }
   }
 }

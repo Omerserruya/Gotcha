@@ -81,6 +81,67 @@ export function crossTenantMiddleware(_req: any, _res: any, next: any): void {
 }
 
 /**
+ * Models that hold BOTH live traffic and imported history.
+ *
+ * Historical Intelligence Import backfills up to 180 days of a business's past
+ * WhatsApp conversations into these two tables. For one customer that is
+ * routinely twelve thousand messages and a thousand conversations, all of it
+ * dated before GOTCHA existed for them.
+ *
+ * Every query written before that feature existed - the inbox list, the unread
+ * count, the analytics aggregates, the idle-conversation sweeper, the AI's own
+ * "what did we last talk about" lookups - means LIVE. None of them say so,
+ * because until now there was nothing else it could mean.
+ */
+const ORIGIN_SCOPED_MODELS = new Set<string>(["Conversation", "Message"]);
+
+/**
+ * Escape hatch for the queries that legitimately mean "everything, imported
+ * history included".
+ *
+ * There are exactly two kinds, and both are ones where excluding history would
+ * be a bug rather than a nicety:
+ *
+ *   * The import pipeline itself, which exists to read what it wrote.
+ *   * GDPR export and erasure. A subject-access request that returned only the
+ *     live half of somebody's data, or an erasure that left two years of their
+ *     conversations behind, would be a compliance failure - and a silent one.
+ *
+ * Anything else asking for this is probably a mistake.
+ */
+const historicalContext = new AsyncLocalStorage<boolean>();
+
+export function withHistoricalRecords<T>(fn: () => Promise<T>): Promise<T> {
+  // Same lazy-promise reasoning as withCrossTenantAccess: await INSIDE the
+  // scope, or Prisma executes the query after run() has already exited.
+  return historicalContext.run(true, async () => await fn());
+}
+
+/**
+ * True when the caller has said something about origin themselves, in which
+ * case their intent is explicit and nothing is injected.
+ *
+ * Mentioning `historicalImportId` counts: filtering by a specific import is an
+ * unambiguous request for that import's rows, and forcing those callers to also
+ * write `origin` would be ceremony that a future reader would eventually drop.
+ */
+export function mentionsOrigin(where: unknown): boolean {
+  if (!where || typeof where !== "object") return false;
+  const w = where as Record<string, unknown>;
+  if ("origin" in w && w.origin !== undefined) return true;
+  if ("historicalImportId" in w && w.historicalImportId !== undefined) return true;
+  for (const key of ["AND", "OR", "NOT"] as const) {
+    const branch = w[key];
+    if (Array.isArray(branch)) {
+      if (branch.some((clause) => mentionsOrigin(clause))) return true;
+    } else if (branch && typeof branch === "object") {
+      if (mentionsOrigin(branch)) return true;
+    }
+  }
+  return false;
+}
+
+/**
  * BULK operations - they return or affect MANY rows. These are the
  * dangerous ones: a missing tenantId filter means "return everyone's
  * data" or "return the first match from any tenant". These MUST have
@@ -154,6 +215,38 @@ function hasTenantIdInData(data: unknown): boolean {
   return "tenantId" in (data as Record<string, unknown>);
 }
 
+/**
+ * Narrow a Conversation or Message query to live rows unless the caller said
+ * otherwise.
+ *
+ * Extracted from the client extension so the decision itself is testable
+ * without a database. It is a pure function of (model, operation, args,
+ * scope) and returns the args to run, unchanged whenever it does not apply.
+ *
+ * Injecting here rather than editing every call site is the entire point.
+ * There are more than twenty conversation and message queries across six
+ * services, and the twenty-first will be written by somebody who has never
+ * heard of historical import. A default that has to be remembered is a default
+ * that will be forgotten, and the failure is silent in the worst direction.
+ */
+export function applyLiveByDefault(
+  model: string | undefined,
+  operation: string,
+  args: unknown,
+  historicalScope: boolean,
+): unknown {
+  if (!model || !ORIGIN_SCOPED_MODELS.has(model)) return args;
+  if (historicalScope) return args;
+  if (!BULK_WHERE_OPERATIONS.has(operation)) return args;
+
+  const a = (args ?? {}) as Record<string, unknown>;
+  if (mentionsOrigin(a.where)) return args;
+  return {
+    ...a,
+    where: { ...((a.where as Record<string, unknown>) ?? {}), origin: "LIVE" },
+  };
+}
+
 const globalForPrisma = globalThis as unknown as {
   prisma: ReturnType<typeof buildClient>;
 };
@@ -167,6 +260,26 @@ function buildClient() {
     query: {
       $allModels: {
         async $allOperations({ model, operation, args, query }) {
+          // ── Live-by-default ──
+          //
+          // Runs BEFORE the tenant guard and independently of it, because the
+          // two protect against different things and a query can need one
+          // without the other.
+          //
+          // Injecting the filter here rather than editing every call site is
+          // the point. There are more than twenty existing conversation and
+          // message queries across six services, and the twenty-first will be
+          // written by somebody who has never heard of this feature. A default
+          // that has to be remembered is a default that will be forgotten, and
+          // the failure is silent in the worst direction: the AI answering a
+          // customer about an order from last March.
+          args = applyLiveByDefault(
+            model,
+            operation,
+            args,
+            historicalContext.getStore() === true,
+          ) as typeof args;
+
           // Not a tenant-scoped model → pass through.
           if (!model || !TENANT_SCOPED_MODELS.has(model)) {
             return query(args);

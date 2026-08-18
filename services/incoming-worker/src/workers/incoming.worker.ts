@@ -4,7 +4,7 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { handleApprovalButtonReply } from "../services/whatsapp-approval-inbound.service";
-import { prisma, createWorker, IncomingMessageJob, IncomingCommentJob, OutboundEchoJob, WebhookTriggerJob, analyticsQueue, outgoingMessageQueue, publishEvent, decryptCredentials, metaGraphBaseUrl, isInboundExcluded } from "@chatcenter/shared";
+import { prisma, createWorker, IncomingMessageJob, IncomingCommentJob, OutboundEchoJob, WebhookTriggerJob, HistoricalImportChunkJob, analyticsQueue, outgoingMessageQueue, publishEvent, decryptCredentials, metaGraphBaseUrl, isInboundExcluded, probeUploadsDir, describeUploadsProbe, classifyMediaFailure, reportOperationalFailure, ERROR_CODES, type MediaFailureReason } from "@chatcenter/shared";
 import { processCommentTrigger } from "../services/comment-trigger.service";
 
 const FB_API_URL = metaGraphBaseUrl(process.env.FACEBOOK_API_URL);
@@ -25,8 +25,26 @@ const UPLOADS_BASE_URL = process.env.UPLOADS_BASE_URL || "/api/uploads";
 // note costs the customer nothing and would cost us a synthesis bill.
 const UNSUPPORTED_MEDIA_TYPES = ["location"];
 
-// Ensure uploads dir exists
-fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+// Prove at boot that media can actually be stored.
+//
+// This used to be a bare `fs.mkdirSync`, which succeeds against a directory
+// that already exists and tells you nothing about whether you may WRITE to it.
+// The uploads volume was root-owned while this process runs as `node`, so every
+// attachment failed later at writeFileSync, was swallowed by the resolver's
+// catch, and surfaced to the agent as "media unavailable" with no cause
+// recorded anywhere. A real customer lost every image and voice note they sent.
+const uploadsProbe = probeUploadsDir(UPLOADS_DIR);
+if (!uploadsProbe.ok) {
+  console.error(describeUploadsProbe(uploadsProbe, "incoming-worker"));
+  reportOperationalFailure({
+    errorCode: ERROR_CODES.media_storage_unwritable,
+    domain: "media",
+    service: "incoming-worker",
+    context: { dir: uploadsProbe.dir, reason: uploadsProbe.reason ?? "unknown" },
+  });
+} else {
+  console.log(describeUploadsProbe(uploadsProbe, "incoming-worker"));
+}
 
 async function fetchMetaProfile(senderId: string, accessToken: string, channel: string, pageId?: string, igLogin?: boolean): Promise<{ name: string | null; avatarUrl: string | null }> {
   let name: string | null = null;
@@ -159,9 +177,45 @@ export async function resolveWhatsAppMedia(
       displayName: sanitizeDisplayName(opts?.fileName) || fileName,
     };
   } catch (err: any) {
-    console.error(`[incoming-worker] Failed to resolve WhatsApp media ${mediaId}:`, err.message);
+    // Which half failed matters, and the two have completely different fixes:
+    // Meta expiring a media id is nothing an operator can act on, while an
+    // unwritable volume is a one-line chown. Collapsing both into
+    // "download_failed" is what sent a real investigation to the wrong place.
+    const reason = classifyMediaFailure(err);
+    if (reason !== "download_failed") {
+      console.error(
+        `[incoming-worker] media ${mediaId} could not be STORED (${reason}): ${err.message}`,
+      );
+      reportOperationalFailure({
+        errorCode: ERROR_CODES.media_storage_unwritable,
+        domain: "media",
+        service: "incoming-worker",
+        cause: err,
+        context: { dir: UPLOADS_DIR, reason },
+      });
+    } else {
+      console.error(`[incoming-worker] Failed to resolve WhatsApp media ${mediaId}:`, err.message);
+    }
+    lastMediaFailure = reason;
     return null;
   }
+}
+
+/**
+ * Why the most recent media resolution failed.
+ *
+ * A module-level value rather than a return type, deliberately: the resolver is
+ * called from two services and returns `null` on failure in both, and widening
+ * that contract would mean touching every caller to carry a reason most of them
+ * do nothing with. The one caller that DOES care reads it immediately after the
+ * call, on the same tick.
+ */
+let lastMediaFailure: MediaFailureReason = "download_failed";
+
+export function takeLastMediaFailure(): MediaFailureReason {
+  const reason = lastMediaFailure;
+  lastMediaFailure = "download_failed";
+  return reason;
 }
 
 /**
@@ -233,6 +287,7 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
     body,
     messageType,
     interactiveReply,
+    replyToExternalId,
     mediaUrl: rawMediaUrl,
     fileName: senderFileName,
     mimeType: senderMimeType,
@@ -376,9 +431,11 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
           resolvedFileName = resolved.displayName;
         } else {
           // Meta expires media after a few days and the id is the only handle
-          // on it, so a failure here is permanent for that file. Say so.
-          mediaError = "download_failed";
-          console.warn(`[incoming-worker] media ${rawMediaUrl} (${messageType}) could not be downloaded for conv of ${senderId}`);
+          // on it, so a download failure here is permanent for that file. A
+          // STORAGE failure is not permanent at all - it is an operator fix -
+          // and the two must not be recorded as the same thing.
+          mediaError = takeLastMediaFailure();
+          console.warn(`[incoming-worker] media ${rawMediaUrl} (${messageType}) unavailable (${mediaError}) for conv of ${senderId}`);
         }
       } else {
         mediaError = "no_channel_token";
@@ -391,6 +448,25 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
   }
 
   // Create message record with channel metadata
+  // ── Quoted reply ──
+  //
+  // Scoped to THIS conversation, not the whole tenant. `externalMessageId` is
+  // globally unique at the provider so a tenant-wide lookup would find the same
+  // row, but scoping it means a corrupt or spoofed id can never attach a reply
+  // to another customer's message - and it is the query the index is built for.
+  //
+  // A miss is normal and not an error: customers quote messages from before
+  // GOTCHA was connected, and messages that were deleted. The external id is
+  // kept either way so the bubble can still say a reply happened.
+  let replyToMessageId: string | undefined;
+  if (replyToExternalId) {
+    const quoted = await prisma.message.findFirst({
+      where: { tenantId, conversationId: conversation.id, externalMessageId: replyToExternalId },
+      select: { id: true },
+    });
+    replyToMessageId = quoted?.id;
+  }
+
   const message = await prisma.message.create({
     data: {
       tenantId,
@@ -398,6 +474,8 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
       channel,
       externalMessageId,
       direction: "INBOUND",
+      replyToExternalId,
+      replyToMessageId,
       body,
       messageType,
       senderName: displayName || senderDisplayName,
@@ -678,7 +756,7 @@ async function processWebhookTrigger(job: Job<WebhookTriggerJob>): Promise<void>
 // same DLQ, same concurrency budget - but each job kind has its own handler.
 // Exported for unit tests that exercise the job-name routing without standing
 // up a real BullMQ worker.
-export async function dispatch(job: Job<IncomingMessageJob | IncomingCommentJob | WebhookTriggerJob | OutboundEchoJob>): Promise<void> {
+export async function dispatch(job: Job<IncomingMessageJob | IncomingCommentJob | WebhookTriggerJob | OutboundEchoJob | HistoricalImportChunkJob>): Promise<void> {
   if (job.name === "process-comment") {
     await processCommentTrigger(job as Job<IncomingCommentJob>);
     return;
@@ -694,12 +772,21 @@ export async function dispatch(job: Job<IncomingMessageJob | IncomingCommentJob 
     await processWebhookTrigger(job as Job<WebhookTriggerJob>);
     return;
   }
+  if (job.name === "process-history") {
+    // A batch of the business's PAST conversations. Data import only: the
+    // handler writes rows and never reaches the bot, the router or a flow.
+    // This early return is what guarantees history can never fall through to
+    // `processIncomingMessage` below.
+    const { processHistoricalChunk } = await import("../services/historical-import.service");
+    await processHistoricalChunk(job as Job<HistoricalImportChunkJob>);
+    return;
+  }
   // Default ("process") - DM / message path.
   await processIncomingMessage(job as Job<IncomingMessageJob>);
 }
 
 let worker: any;
 export function startIncomingWorker() {
-  worker = createWorker<IncomingMessageJob | IncomingCommentJob | WebhookTriggerJob | OutboundEchoJob>("incoming-messages", dispatch, 3);
-  console.log("[incoming-worker] Incoming message worker started (handles: process, process-comment, process-echo, webhook-trigger)");
+  worker = createWorker<IncomingMessageJob | IncomingCommentJob | WebhookTriggerJob | OutboundEchoJob | HistoricalImportChunkJob>("incoming-messages", dispatch, 3);
+  console.log("[incoming-worker] Incoming message worker started (handles: process, process-comment, process-echo, webhook-trigger, process-history)");
 }

@@ -62,6 +62,17 @@ export const ERROR_CODES = {
   /** An inbound webhook could not be processed. */
   webhook_processing_failed: "webhook_processing_failed",
 
+  // ── Attachment storage: #gotcha-prod-alerts ───────────────────────────────
+  /**
+   * Inbound media could not be written to the uploads volume.
+   *
+   * Almost always an ownership mismatch: the volume is root-owned and the
+   * services run as `node`. Alert on the FIRST occurrence rather than on a
+   * rate - unlike a signature mismatch, this is never background noise, and
+   * every minute it lasts is a customer's attachments being lost permanently.
+   */
+  media_storage_unwritable: "media_storage_unwritable",
+
   // ── Billing: #gotcha-prod-alerts ──────────────────────────────────────────
   /** A payment provider callback could not be processed. */
   payment_callback_failed: "payment_callback_failed",
@@ -151,4 +162,5 @@ export const CODE_CHANNEL: Record<ErrorCode, "#gotcha-security" | "#gotcha-ai-op
   action_notification_failed: "#gotcha-ai-ops",
 
   webhook_processing_failed: "#gotcha-prod-alerts",
+  media_storage_unwritable: "#gotcha-prod-alerts",
 };

@@ -33,7 +33,10 @@ function repoRoot(): string {
 const ROOT = repoRoot();
 
 const VALID_DOMAINS = new Set([
-  "ai", "hitl", "integration", "webhook", "billing", "voice", "security", "action",
+  // Mirrors FailureDomain in lib/observability/operational-failure.ts.
+  // "media" is attachment STORAGE, not delivery: the owner is an operator with
+  // shell access, not whoever watches webhooks.
+  "ai", "hitl", "integration", "webhook", "billing", "voice", "security", "action", "media",
 ]);
 
 interface CallSite {

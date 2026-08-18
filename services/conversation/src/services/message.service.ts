@@ -13,6 +13,8 @@ interface CreateMessageData {
   metadata?: any;
   mediaUrl?: string;
   fileName?: string;
+  /** The message this one replies to, when the agent quoted one. */
+  replyToMessageId?: string;
 }
 
 export async function listByConversation(tenantId: string, conversationId: string, options: { page?: number; limit?: number } = {}) {
@@ -20,7 +22,33 @@ export async function listByConversation(tenantId: string, conversationId: strin
   const limit = Math.min(Math.max(options.limit ?? 50, 1), 100);
   const skip = (page - 1) * limit;
   const [messages, total] = await Promise.all([
-    prisma.message.findMany({ where: { tenantId, conversationId }, orderBy: { createdAt: "asc" }, skip, take: limit }),
+    prisma.message.findMany({
+      where: { tenantId, conversationId },
+      orderBy: { createdAt: "asc" },
+      skip,
+      take: limit,
+      // The quoted message travels WITH the reply.
+      //
+      // Included rather than resolved client-side because the quoted message is
+      // very often outside the page being rendered - somebody replying to
+      // something from last week - and an inbox that shows the quote only when
+      // both happen to be on screen is worse than one that never shows it: it
+      // looks broken rather than absent. Four fields, not the whole row: the
+      // preview needs to say who said what, and nothing else.
+      include: {
+        replyTo: {
+          select: {
+            id: true,
+            body: true,
+            direction: true,
+            messageType: true,
+            senderName: true,
+            mediaUrl: true,
+            fileName: true,
+          },
+        },
+      },
+    }),
     prisma.message.count({ where: { tenantId, conversationId } }),
   ]);
   return { data: messages, meta: { page, limit, total, totalPages: Math.ceil(total / limit) } };
@@ -37,6 +65,10 @@ export async function create(data: CreateMessageData) {
         metadata: data.metadata ?? undefined,
         mediaUrl: data.mediaUrl ?? undefined,
         fileName: data.fileName ?? undefined,
+        // An agent replying to one specific message. Only the local id is set
+        // here; the provider's id is stamped by the outgoing worker once the
+        // send returns, because it does not exist until then.
+        replyToMessageId: data.replyToMessageId ?? undefined,
         status: data.direction === "OUTBOUND" ? "PENDING" : "DELIVERED",
       },
     });

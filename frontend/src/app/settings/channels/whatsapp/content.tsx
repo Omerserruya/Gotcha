@@ -21,12 +21,16 @@
  *     one click to try the other way.
  */
 
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { usePermissions } from "@/context/PermissionsContext";
 import { useI18n } from "@/context/I18nContext";
+import { HistoricalImportPanel } from "@/components/channels/HistoricalImportPanel";
+import { isHistoricalImportTerminal } from "@/lib/historical-import-client";
 import {
+  listHistoricalImports,
+  type HistoricalImportView,
   listWhatsAppNumbers,
   inspectWhatsApp,
   connectWhatsAppNumber,
@@ -210,10 +214,16 @@ function NumberCard({
   row,
   onChanged,
   canManage,
+  historicalImport,
 }: {
   row: WhatsAppNumberRow;
   onChanged: () => void;
   canManage: boolean;
+  /**
+   * The history import for this number, when there is one. Undefined for every
+   * number that never had one, which is every number outside Coexistence.
+   */
+  historicalImport?: HistoricalImportView;
 }) {
   const { token } = useAuth();
   const { t } = useI18n();
@@ -285,6 +295,17 @@ function NumberCard({
 
         {/* The one thing to do next, in one sentence, before any diagnostics. */}
         <StatusHeadline health={health} t={t} />
+
+        {/*
+          The history import, BELOW the channel's own status and never mixed
+          into it.
+
+          The order is the message: whether this number works is answered
+          first, by StateChip and StatusHeadline, and stays answered whatever
+          the import is doing. An import that failed shows an amber panel here
+          while the chip above still reads Connected, because it is.
+        */}
+        {historicalImport && <HistoricalImportPanel imp={historicalImport} />}
 
         {/*
           Waiting on the customer. Shown inline so the next action is obvious.
@@ -976,6 +997,57 @@ export function WhatsAppNumbersContent() {
     void load();
   }, [load]);
 
+  // ── History imports, polled separately from the numbers ──
+  //
+  // Its own request and its own cadence, because the two change at completely
+  // different rates: a number's health is checked in minutes, while an import's
+  // progress moves every few seconds during transfer. Folding the import into
+  // the numbers response would mean either polling health far too often or
+  // watching a progress bar that updates once a minute.
+  //
+  // Polling stops the moment every import reaches a terminal state, so a
+  // settings page left open on a finished import is not a permanent request
+  // every ten seconds.
+  const [imports, setImports] = useState<HistoricalImportView[]>([]);
+
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const tick = async () => {
+      try {
+        const res = await listHistoricalImports(token);
+        if (cancelled) return;
+        setImports(res.imports);
+        const active = res.imports.some((i) => !isHistoricalImportTerminal(i.status));
+        if (active) timer = setTimeout(tick, 10000);
+      } catch {
+        // A failing status poll must never take the channels page down with it.
+        // The numbers themselves are loaded separately and are what matters.
+        if (!cancelled) timer = setTimeout(tick, 30000);
+      }
+    };
+    void tick();
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [token]);
+
+  const importsByChannel = useMemo(() => {
+    const map = new Map<string, HistoricalImportView>();
+    // Newest first from the API, so the first row for a channel wins and a
+    // previous import from before a re-onboarding does not shadow the current one.
+    for (const imp of imports) {
+      if (imp.channelAccountId && !map.has(imp.channelAccountId)) {
+        map.set(imp.channelAccountId, imp);
+      }
+    }
+    return map;
+  }, [imports]);
+
   // Counted by what the number DOES, not by its lifecycle label.
   //
   // A number whose inbox is filling up is working, even while Meta blocks
@@ -1056,7 +1128,15 @@ export function WhatsAppNumbersContent() {
 
         {!loading &&
           rows.map((row) => (
-            <NumberCard key={row.id} row={row} onChanged={load} canManage={canManage} />
+            <NumberCard
+              key={row.id}
+              row={row}
+              onChanged={load}
+              canManage={canManage}
+              historicalImport={
+                row.channelAccountId ? importsByChannel.get(row.channelAccountId) : undefined
+              }
+            />
           ))}
 
         {/*

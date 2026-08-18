@@ -6,6 +6,8 @@ import type {
   NormalizedInboundMessage,
   NormalizedStatusUpdate,
   NormalizedOutboundEcho,
+  NormalizedHistoryChunk,
+  NormalizedHistoricalMessage,
   ChannelCredentials,
   ProviderSendError,
 } from "./types";
@@ -157,12 +159,26 @@ function buildWaStatusError(e: any): ProviderSendError {
 const WA_ECHO_FIELD = "smb_message_echoes";
 
 /**
+ * Coexistence chat-history sync. Delivered once, in the minutes after
+ * onboarding, and only if the business agreed to share.
+ */
+const WA_HISTORY_FIELD = "history";
+
+/**
+ * Meta's code for "the business turned history sharing off". Not an error on
+ * our side and not a broken channel - the customer said no, and the product
+ * has to say that rather than showing a failed import.
+ */
+export const WA_HISTORY_DECLINED_CODE = 2593109;
+
+/**
  * Fields whose `value.metadata.phone_number_id` identifies the channel
  * account. `messages` carries customer traffic and delivery statuses;
- * `smb_message_echoes` carries the business-app echoes. Both must resolve,
- * otherwise the webhook drops the payload before any handler sees it.
+ * `smb_message_echoes` carries the business-app echoes; `history` carries the
+ * one-time backfill. All must resolve, otherwise the webhook drops the payload
+ * before any handler sees it.
  */
-const WA_ACCOUNT_BEARING_FIELDS = new Set(["messages", WA_ECHO_FIELD]);
+const WA_ACCOUNT_BEARING_FIELDS = new Set(["messages", WA_ECHO_FIELD, WA_HISTORY_FIELD]);
 
 export const whatsAppInboundAdapter: InboundAdapter = {
   channel: "WHATSAPP",
@@ -187,6 +203,12 @@ export const whatsAppInboundAdapter: InboundAdapter = {
             senderDisplayName: contactName,
             timestamp: new Date(parseInt(msg.timestamp) * 1000),
             content: extractWhatsAppContent(msg),
+            // `context` is present only when the customer used WhatsApp's
+            // reply affordance. It also appears on messages forwarded from a
+            // business-initiated template, where `context.forwarded` is set and
+            // `id` still points at a real message - so the id is taken and the
+            // rest ignored.
+            replyToExternalId: msg.context?.id ? String(msg.context.id) : undefined,
           });
         }
       }
@@ -266,6 +288,118 @@ export const whatsAppInboundAdapter: InboundAdapter = {
     return echoes;
   },
 
+  /**
+   * The business's past conversations, delivered once after Coexistence
+   * onboarding.
+   *
+   * Three things about Meta's shape drive this parser and are worth stating,
+   * because getting any of them wrong is silent rather than loud:
+   *
+   * 1. `phase` / `chunk_order` / `progress` are documented under
+   *    `value.metadata` by Meta and under `value.history[].metadata` by
+   *    360Dialog. We read BOTH and prefer whichever is present. Reading only
+   *    one location yields progress 0 forever and a bar that never moves.
+   *
+   * 2. Chunks ARRIVE OUT OF ORDER. Meta says so explicitly and tells partners
+   *    to re-sequence by `chunk_order`, which is why it is carried through
+   *    rather than assumed from arrival.
+   *
+   * 3. `threads[].id` is the CUSTOMER's number, and each thread mixes both
+   *    directions. Direction comes from comparing `from` against the business
+   *    number in `value.metadata.display_phone_number` - never from assuming
+   *    a historical message is inbound.
+   *
+   * A business that declined sharing produces an `errors[]` entry instead of
+   * threads. That is surfaced as `unavailable`, not thrown: it is an answer,
+   * not a fault.
+   */
+  extractHistorySync(body: any): NormalizedHistoryChunk[] {
+    const chunks: NormalizedHistoryChunk[] = [];
+    for (const entry of body?.entry || []) {
+      for (const change of entry?.changes || []) {
+        if (change?.field !== WA_HISTORY_FIELD) continue;
+        const value = change.value || {};
+        const outerMeta = value.metadata || {};
+        const accountExternalId = String(outerMeta.phone_number_id || "");
+        if (!accountExternalId) continue;
+
+        // Digits only: Meta writes the business number with and without a
+        // leading "+" depending on the field, and a direction check that
+        // depends on punctuation is a direction check that will be wrong.
+        const businessNumber = digitsOnly(outerMeta.display_phone_number);
+
+        for (const historyEntry of value.history || []) {
+          const innerMeta = historyEntry?.metadata || {};
+          const errors = Array.isArray(historyEntry?.errors) ? historyEntry.errors : [];
+
+          const phase = firstNumber(innerMeta.phase, outerMeta.phase) ?? 0;
+          const chunkOrder = firstNumber(innerMeta.chunk_order, outerMeta.chunk_order) ?? 0;
+          const progress = firstNumber(innerMeta.progress, outerMeta.progress) ?? 0;
+
+          if (errors.length > 0) {
+            const err = errors[0] || {};
+            chunks.push({
+              channel: "WHATSAPP",
+              accountExternalId,
+              phase,
+              chunkOrder,
+              progress,
+              messages: [],
+              threadCount: 0,
+              unavailable: {
+                code: typeof err.code === "number" ? err.code : undefined,
+                reason:
+                  err.error_data?.details ||
+                  err.title ||
+                  err.message ||
+                  "The source did not provide chat history",
+              },
+            });
+            continue;
+          }
+
+          const messages: NormalizedHistoricalMessage[] = [];
+          const threads = Array.isArray(historyEntry?.threads) ? historyEntry.threads : [];
+          for (const thread of threads) {
+            const customerExternalId = String(thread?.id || "");
+            if (!customerExternalId) continue;
+            for (const msg of thread?.messages || []) {
+              if (!msg?.id) continue;
+              const from = digitsOnly(msg.from);
+              // Compared against the business number rather than against the
+              // thread id: a message can be `from` the business to the
+              // customer, or from the customer to the business, and only one
+              // of those two endpoints is stable across every thread.
+              const direction: "INBOUND" | "OUTBOUND" =
+                businessNumber && from === businessNumber ? "OUTBOUND" : "INBOUND";
+              messages.push({
+                externalMessageId: String(msg.id),
+                customerExternalId,
+                direction,
+                timestamp: parseSourceTimestamp(msg.timestamp),
+                content: extractWhatsAppContent(msg),
+                sourceStatus: msg.history_context?.status
+                  ? String(msg.history_context.status)
+                  : undefined,
+              });
+            }
+          }
+
+          chunks.push({
+            channel: "WHATSAPP",
+            accountExternalId,
+            phase,
+            chunkOrder,
+            progress,
+            messages,
+            threadCount: threads.length,
+          });
+        }
+      }
+    }
+    return chunks;
+  },
+
   resolveChannelAccountExternalId(body: any): string | null {
     for (const entry of body.entry || []) {
       for (const change of entry.changes || []) {
@@ -290,6 +424,44 @@ export const whatsAppInboundAdapter: InboundAdapter = {
     return "x-hub-signature-256";
   },
 };
+
+/** Digits only, so "+972 50-123-4567" and "972501234567" compare equal. */
+function digitsOnly(v: unknown): string {
+  return typeof v === "string" || typeof v === "number"
+    ? String(v).replace(/\D/g, "")
+    : "";
+}
+
+/**
+ * First value that is actually a number. Meta documents the history counters in
+ * one place and 360Dialog in another, so both are offered here and the present
+ * one wins. `0` is a legitimate value (phase 0, chunk 0, progress 0), which is
+ * why this cannot be a `||` chain.
+ */
+function firstNumber(...values: unknown[]): number | undefined {
+  for (const v of values) {
+    if (typeof v === "number" && Number.isFinite(v)) return v;
+    if (typeof v === "string" && v.trim() !== "") {
+      const n = Number(v);
+      if (Number.isFinite(n)) return n;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * History timestamps are the DEVICE's, in seconds, and occasionally absent or
+ * junk on very old messages. An unparseable one yields the epoch rather than
+ * `Invalid Date`, which Postgres rejects outright - losing the true date of one
+ * ancient message is a far smaller loss than failing the chunk it sits in.
+ */
+function parseSourceTimestamp(raw: unknown): Date {
+  const seconds = firstNumber(raw);
+  if (seconds === undefined) return new Date(0);
+  const ms = seconds > 1e12 ? seconds : seconds * 1000;
+  const d = new Date(ms);
+  return Number.isNaN(d.getTime()) ? new Date(0) : d;
+}
 
 function extractWhatsAppContent(msg: any): NormalizedInboundMessage["content"] {
   switch (msg.type) {
@@ -362,12 +534,23 @@ export const whatsAppOutboundAdapter: OutboundAdapter = {
     credentials: ChannelCredentials,
     accountExternalId: string,
     recipientId: string,
-    text: string
+    text: string,
+    replyToExternalId?: string,
   ): Promise<string | null> {
     try {
       const response = await axios.post(
         `${WA_API_URL}/${accountExternalId}/messages`,
-        { messaging_product: "whatsapp", to: recipientId, type: "text", text: { body: formatWhatsAppText(text) } },
+        {
+          messaging_product: "whatsapp",
+          to: recipientId,
+          type: "text",
+          text: { body: formatWhatsAppText(text) },
+          // `context.message_id` is what makes this render as a reply in the
+          // customer's WhatsApp, quoting the message above it. Meta rejects the
+          // send outright if the id is not a real message in this thread, which
+          // is why the caller validates it against the conversation first.
+          ...(replyToExternalId ? { context: { message_id: replyToExternalId } } : {}),
+        },
         { headers: { Authorization: `Bearer ${credentials.accessToken}`, "Content-Type": "application/json" } }
       );
       return response.data?.messages?.[0]?.id || null;

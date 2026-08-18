@@ -9,6 +9,16 @@ const { tenant, executeWebhookFlow } = vi.hoisted(() => ({
   executeWebhookFlow: vi.fn(),
 }));
 vi.mock("@chatcenter/shared", () => ({
+  // The uploads write probe runs at module load. Stubbed as writable so these
+  // tests exercise their own subject rather than the storage check.
+  probeUploadsDir: () => ({ ok: true, dir: "/tmp/uploads" }),
+  describeUploadsProbe: () => "uploads ok",
+  classifyMediaFailure: (err: any) =>
+    err?.code === "EACCES" || err?.code === "EPERM" || err?.code === "EROFS"
+      ? "storage_unwritable"
+      : "download_failed",
+  reportOperationalFailure: () => {},
+  ERROR_CODES: new Proxy({}, { get: (_t, k) => String(k) }),
   // Durable tenant settings (business hours, auto-greeting, SLA). Exhaustive
   // mocks of this barrel must supply them or the read path throws instead of
   // returning "not configured". Default: nothing configured.

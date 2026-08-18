@@ -39,6 +39,14 @@ router.post("/:conversationId/messages", validate(sendMessageSchema), async (req
   try {
     const conversationId = req.params.conversationId as string;
     const { body, messageType } = req.body;
+    // The message the agent is replying to, if any. Validated below against
+    // this conversation: a reply must quote something in the thread it is sent
+    // to, or WhatsApp rejects the send and the agent gets a failure they cannot
+    // explain.
+    const replyToMessageId: string | undefined =
+      typeof req.body?.replyToMessageId === "string" && req.body.replyToMessageId
+        ? req.body.replyToMessageId
+        : undefined;
 
     const conversation = await prisma.conversation.findFirst({
       where: { id: conversationId, tenantId: req.tenantId! },
@@ -48,6 +56,26 @@ router.post("/:conversationId/messages", validate(sendMessageSchema), async (req
 
     const channel = conversation.channel || "WHATSAPP";
     const recipientId = conversation.customerExternalId;
+
+    // Resolve the quote before anything is sent.
+    //
+    // Scoped to this conversation and this tenant, so a stale or hand-crafted
+    // id cannot make GOTCHA quote another customer's message into this thread.
+    // A quoted message with no provider id (a webchat row, or one that never
+    // reached the channel) can still be shown locally but cannot be quoted at
+    // the provider, so the reply is sent as a normal message rather than
+    // failing - the agent's words matter more than the quote decoration.
+    let quoted: { id: string; externalMessageId: string | null } | null = null;
+    if (replyToMessageId) {
+      quoted = await prisma.message.findFirst({
+        where: { id: replyToMessageId, tenantId: req.tenantId!, conversationId },
+        select: { id: true, externalMessageId: true },
+      });
+      if (!quoted) {
+        res.status(400).json({ error: "The message you are replying to is not in this conversation" });
+        return;
+      }
+    }
 
     if (!conversation.channelAccount) {
       res.status(400).json({ error: "Channel not configured for this tenant" }); return;
@@ -66,6 +94,7 @@ router.post("/:conversationId/messages", validate(sendMessageSchema), async (req
         messageType,
         channel,
         senderName: req.user!.email,
+        replyToMessageId: quoted?.id,
       });
 
       await prisma.conversation.update({
@@ -98,6 +127,7 @@ router.post("/:conversationId/messages", validate(sendMessageSchema), async (req
       body,
       messageType,
       senderName: req.user!.email,
+      replyToMessageId: quoted?.id,
     });
 
     await outgoingMessageQueue.add("send", {
@@ -110,6 +140,9 @@ router.post("/:conversationId/messages", validate(sendMessageSchema), async (req
       messageType: messageType || "text",
       senderName: req.user!.email,
       messageId: message.id,
+      // The PROVIDER's id, not ours. This is what the channel needs to render
+      // the quote on the customer's phone.
+      replyToExternalId: quoted?.externalMessageId ?? undefined,
     }, { attempts: 3, backoff: { type: "exponential", delay: 1000 } });
 
     res.status(201).json({ data: message });

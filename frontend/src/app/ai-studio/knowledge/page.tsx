@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { aiStudioHref, normalizeAiStudioTab } from "@/lib/ai-studio-tabs";
 import { AppLayout } from "@/components/AppLayout";
+import { DiscoveredKnowledge } from "@/components/knowledge/DiscoveredKnowledge";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import {
@@ -108,6 +109,18 @@ function KnowledgePageInner() {
   // A knowledge source belongs to the Knowledge tab; Back must return there.
   const rt = searchParams.get("returnTab");
   const returnTab = rt ? normalizeAiStudioTab(rt) : "knowledge";
+
+  /**
+   * Discovered knowledge lives under this page rather than on a page of its
+   * own, because it IS knowledge - just knowledge that has not been agreed to
+   * yet. Giving it a separate destination in the navigation would put "your
+   * knowledge" in two places, and the second one would be the one nobody
+   * returns to after the first visit.
+   *
+   * The channel card and the completion email both link here with
+   * `?tab=discovered`.
+   */
+  const showDiscovered = searchParams.get("tab") === "discovered";
 
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([]);
   const [loading, setLoading] = useState(true);
@@ -645,6 +658,34 @@ function KnowledgePageInner() {
       <AppLayout>
         <div className="flex items-center justify-center h-screen">
           <div className="w-6 h-6 border-2 border-violet-200 border-t-violet-500 rounded-full animate-spin" />
+        </div>
+      </AppLayout>
+    );
+  }
+
+  /*
+   * The discovered-knowledge view REPLACES the knowledge-base browser rather
+   * than sitting above it. Somebody arriving from "View what GOTCHA learned"
+   * came to review suggestions, and putting a list of knowledge bases between
+   * them and that queue is how a review queue goes unread.
+   *
+   * Returned before the main body rather than branching inside it, so none of
+   * the browser's state or effects run for a visitor who is not looking at it.
+   */
+  if (showDiscovered) {
+    return (
+      <AppLayout>
+        <div className="p-3 md:p-6 overflow-y-auto h-screen">
+          <button
+            onClick={() => router.push(aiStudioHref(returnTab))}
+            className="flex items-center gap-2 text-gray-400 hover:text-gray-700 text-sm mb-5 transition"
+          >
+            <svg className="w-4 h-4 rtl:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+            </svg>
+            {t("aiStudio.knowledge.page.backToStudio")}
+          </button>
+          <DiscoveredKnowledge />
         </div>
       </AppLayout>
     );

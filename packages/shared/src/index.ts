@@ -12,7 +12,26 @@ export type {
   BroadcastJob,
   ScheduledMessageJob,
   FlowResumeJob,
+  HistoricalImportChunkJob,
+  HistoricalIntelligenceJob,
 } from "./lib/queue";
+
+// Historical import: the one mapping between the pipeline's thirteen states and
+// the four the customer actually sees.
+export {
+  historicalImportStage,
+  isHistoricalImportTerminal,
+  hasHistoricalResults,
+  historicalImportPercent,
+  historicalAnalysisCounts,
+  isForwardTransition,
+  HISTORICAL_SOURCE_WINDOW_MS,
+  HISTORICAL_SOURCE_WINDOW_DAYS,
+} from "./lib/historical-import";
+export type {
+  HistoricalImportStatus,
+  HistoricalImportStage,
+} from "./lib/historical-import";
 
 // Numbers the owner keeps on their own phone - enforced at ingest, before any
 // Conversation, Contact or Message row exists.
@@ -23,6 +42,15 @@ export {
 } from "./lib/inbound-exclusions";
 export type { ExclusionLookup } from "./lib/inbound-exclusions";
 
+// Attachment storage. The probe exists because an unwritable uploads volume
+// failed silently in production and was reported as a download failure.
+export {
+  probeUploadsDir,
+  describeUploadsProbe,
+  classifyMediaFailure,
+} from "./lib/media-storage";
+export type { MediaFailureReason, UploadsProbe } from "./lib/media-storage";
+
 // Channel types & adapters
 export type {
   ChannelType,
@@ -30,6 +58,8 @@ export type {
   NormalizedStatusUpdate,
   NormalizedCommentEvent,
   NormalizedOutboundEcho,
+  NormalizedHistoryChunk,
+  NormalizedHistoricalMessage,
   MessageContent,
   OutboundMessagePayload,
   ChannelCredentials,
@@ -63,7 +93,7 @@ export {
 } from "./channels";
 
 // Lib
-export { prisma, withCrossTenantAccess, crossTenantMiddleware } from "./lib/prisma";
+export { prisma, withCrossTenantAccess, crossTenantMiddleware, withHistoricalRecords } from "./lib/prisma";
 export {
   resolveContactByChannelId,
   unifyContact,
@@ -477,6 +507,7 @@ export {
   broadcastQueue,
   scheduledMessageQueue,
   flowResumeQueue,
+  historicalIntelligenceQueue,
   createWorker,
   CHANNEL_RATE_LIMITS,
 } from "./lib/queue";

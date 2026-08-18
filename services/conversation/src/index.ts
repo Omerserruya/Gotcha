@@ -1,6 +1,6 @@
 import path from "path";
 import express from "express";
-import { createServiceApp, startService, subscribeToEvents } from "@chatcenter/shared";
+import { createServiceApp, startService, subscribeToEvents, probeUploadsDir, describeUploadsProbe, reportOperationalFailure, ERROR_CODES } from "@chatcenter/shared";
 import { createServer } from "http";
 import { initSocket, getIO } from "./lib/socket";
 import conversationRoutes from "./routes/conversations";
@@ -63,6 +63,24 @@ subscribeToEvents((event) => {
 
 // Serve uploaded media files
 const uploadsDir = process.env.UPLOADS_DIR || path.resolve(process.cwd(), "uploads");
+
+// Same boot probe the incoming worker runs, for the same reason. This service
+// is the one that SERVES attachments and also the one that stores an agent's
+// own uploads, so a root-owned volume breaks it in both directions - and did,
+// silently, until it was found by hand. See packages/shared/src/lib/media-storage.ts.
+const uploadsProbe = probeUploadsDir(uploadsDir);
+if (!uploadsProbe.ok) {
+  console.error(describeUploadsProbe(uploadsProbe, "conversation"));
+  reportOperationalFailure({
+    errorCode: ERROR_CODES.media_storage_unwritable,
+    domain: "media",
+    service: "conversation",
+    context: { dir: uploadsProbe.dir, reason: uploadsProbe.reason ?? "unknown" },
+  });
+} else {
+  console.log(describeUploadsProbe(uploadsProbe, "conversation"));
+}
+
 app.use("/api/uploads", express.static(uploadsDir));
 
 // Routes

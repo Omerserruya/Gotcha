@@ -25,7 +25,11 @@ import { isProductionSentry } from "./sentry";
 
 /** Coarse area of the product, used for grouping and dashboards. */
 export type FailureDomain =
-  | "ai" | "hitl" | "integration" | "webhook" | "billing" | "voice" | "security" | "action";
+  // "media" is attachment STORAGE, not delivery. Its own domain because the
+  // owner is an operator with shell access rather than whoever watches webhooks:
+  // the failure is a directory the service cannot write to, and every minute it
+  // lasts is a customer's photos and voice notes being lost for good.
+  | "ai" | "hitl" | "integration" | "webhook" | "billing" | "voice" | "security" | "action" | "media";
 
 export interface OperationalFailure {
   /** The alerting contract. Never an ad-hoc string. */

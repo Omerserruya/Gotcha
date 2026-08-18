@@ -38,6 +38,8 @@ export const messengerInboundAdapter: InboundAdapter = {
             senderId,
             timestamp: new Date(event.timestamp),
             content: extractMessengerContent(event.message),
+            // Meta's other channels put the quoted message on `reply_to.mid`.
+            replyToExternalId: event.message.reply_to?.mid ? String(event.message.reply_to.mid) : undefined,
           });
         } else if (event.postback) {
           messages.push({

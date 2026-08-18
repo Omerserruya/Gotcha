@@ -1,0 +1,139 @@
+import { prisma, withHistoricalRecords } from "@chatcenter/shared";
+
+export interface StageResult {
+  ok: boolean;
+  detail?: Record<string, unknown>;
+}
+
+/**
+ * Append-only audit for one step of one import.
+ *
+ * Counts and safe metadata only. The subject of this pipeline is a business's
+ * entire customer correspondence, and an observability trail that quoted it
+ * would put private messages into log aggregation, Sentry breadcrumbs and
+ * anywhere else logs are shipped. Every question in the runbook - did sync
+ * start, how many chunks, how many customers matched, where did it fail - is
+ * answerable from numbers.
+ */
+export async function recordEvent(
+  importId: string,
+  step: string,
+  outcome: "SUCCESS" | "FAILED" | "SKIPPED" | "PARTIAL",
+  message?: string | null,
+  detail?: Record<string, unknown>,
+  durationMs?: number,
+): Promise<void> {
+  try {
+    await prisma.historicalImportEvent.create({
+      data: {
+        importId,
+        step,
+        outcome,
+        message: message ?? null,
+        detail: (detail ?? undefined) as any,
+        durationMs: durationMs ?? null,
+      },
+    });
+  } catch (err: any) {
+    console.warn(`[historical-intelligence] event write failed: ${err?.message}`);
+  }
+}
+
+/**
+ * One customer's imported conversation, oldest first, bounded.
+ *
+ * The bound is the point. A single WhatsApp thread can hold years of messages,
+ * and a customer with 2,700 of them would blow any context window and cost more
+ * than the insight is worth. Taking the OLDEST first is deliberate: the durable
+ * facts this pipeline is looking for - what they bought, what went wrong, what
+ * they always ask - are established across the relationship, while the last
+ * fifty messages are disproportionately about whatever happened most recently,
+ * which is exactly the transient state that must NOT become permanent truth.
+ */
+export async function loadConversationTranscript(args: {
+  tenantId: string;
+  conversationId: string;
+  limit?: number;
+}): Promise<Array<{ direction: "INBOUND" | "OUTBOUND"; body: string; at: Date }>> {
+  const rows = await withHistoricalRecords(() =>
+    prisma.message.findMany({
+      where: {
+        tenantId: args.tenantId,
+        conversationId: args.conversationId,
+        // System dividers and empty media placeholders carry no meaning for a
+        // reader and would waste a slot in the bounded window.
+        NOT: { body: "" },
+      },
+      select: { direction: true, body: true, createdAt: true },
+      orderBy: { createdAt: "asc" },
+      take: args.limit ?? 400,
+    }),
+  );
+  return rows.map((r) => ({
+    direction: r.direction as "INBOUND" | "OUTBOUND",
+    body: r.body,
+    at: r.createdAt,
+  }));
+}
+
+/**
+ * Render a transcript for a prompt, with a hard character budget.
+ *
+ * Truncation happens per message rather than by cutting the transcript short,
+ * so the shape of the relationship survives even when individual messages do
+ * not. A model that sees the whole arc with clipped lines understands the
+ * customer better than one that sees the first tenth of it verbatim.
+ */
+export function renderTranscript(
+  messages: Array<{ direction: "INBOUND" | "OUTBOUND"; body: string; at: Date }>,
+  maxChars = 12000,
+): string {
+  const PER_MESSAGE = 400;
+  const lines: string[] = [];
+  let used = 0;
+  for (const m of messages) {
+    const who = m.direction === "INBOUND" ? "Customer" : "Business";
+    const day = m.at.toISOString().slice(0, 10);
+    const text = m.body.length > PER_MESSAGE ? `${m.body.slice(0, PER_MESSAGE)}...` : m.body;
+    const line = `[${day}] ${who}: ${text}`;
+    if (used + line.length > maxChars) break;
+    lines.push(line);
+    used += line.length + 1;
+  }
+  return lines.join("\n");
+}
+
+/** Fixed-size batches, so a stage can iterate thousands of rows predictably. */
+export function chunked<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
+/**
+ * Bounded-concurrency map. Used everywhere a stage fans out over customers or
+ * clusters: unbounded `Promise.all` over a thousand LLM calls would hit the
+ * provider rate limit on the first import and look like an outage.
+ */
+export async function mapLimited<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<Array<R | null>> {
+  const results: Array<R | null> = new Array(items.length).fill(null);
+  let cursor = 0;
+  const workers = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
+    for (;;) {
+      const index = cursor++;
+      if (index >= items.length) return;
+      try {
+        results[index] = await fn(items[index], index);
+      } catch (err: any) {
+        console.warn(`[historical-intelligence] item ${index} failed: ${err?.message}`);
+        results[index] = null;
+      }
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
