@@ -46,6 +46,19 @@ export type AutomatedStep =
   | "SUBSCRIBE_WEBHOOKS"
   | "REGISTER_NUMBER"
   | "SYNC_PROFILE"
+  /**
+   * Ask Meta to send the business's past conversations.
+   *
+   * Coexistence only, and REQUIRED: subscribing to the `history` webhook says
+   * where to deliver, it does not ask for anything. Without this step Meta
+   * sends nothing, forever, with no error - which is exactly what happened.
+   *
+   * Runs after the health check so it is the last thing the pipeline does: it
+   * is once-only per onboarding and cannot be retried without the customer
+   * offboarding, so it must not fire on a run that is about to fail for an
+   * unrelated reason.
+   */
+  | "REQUEST_HISTORY_SYNC"
   | "HEALTH_CHECK";
 
 export interface FlowDecision {
@@ -399,7 +412,7 @@ export function selectFlow(opts: SelectFlowOptions): FlowDecision {
       // registration step, as the number is already registered." Sending a
       // Coexistence number to /register burns its 72-hour rate budget for
       // nothing.
-      automatedSteps: ["EXCHANGE_TOKEN", "RESOLVE_ASSETS", "SUBSCRIBE_WEBHOOKS", "SYNC_PROFILE", "HEALTH_CHECK"],
+      automatedSteps: ["EXCHANGE_TOKEN", "RESOLVE_ASSETS", "SUBSCRIBE_WEBHOOKS", "SYNC_PROFILE", "HEALTH_CHECK", "REQUEST_HISTORY_SYNC"],
       customerAction: "BUSINESS_APP_CONFIRMATION",
       blockers: target.blockers,
     };

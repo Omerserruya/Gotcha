@@ -128,6 +128,45 @@ export type Attempted<T> =
   | { ok: true; value: T }
   | { ok: false; error: MetaApiError };
 
+/**
+ * One structured line per Graph request.
+ *
+ * Added after the Coexistence history sync silently never happened. The
+ * onboarding pipeline recorded a tidy list of SUCCESS steps and the customer
+ * saw a connected number, while the one call that actually starts the history
+ * transfer was never made by anybody - and there was no way to see that from
+ * the outside, because we only ever logged the steps we DID run.
+ *
+ * The token is never logged: it is in a header this function is not given, and
+ * the response is capped rather than dumped, because a Graph response can carry
+ * a customer's phone numbers and display names.
+ */
+function logGraphCall(entry: {
+  operation: string;
+  method: string;
+  path: string;
+  status?: number;
+  durationMs: number;
+  request?: unknown;
+  response?: unknown;
+  failed?: boolean;
+}): void {
+  const body = (v: unknown) => {
+    if (v === undefined) return "-";
+    try {
+      return JSON.stringify(v).slice(0, 400);
+    } catch {
+      return "[unserializable]";
+    }
+  };
+  const line =
+    `[meta-graph] op=${entry.operation} ${entry.method.toUpperCase()} ${entry.path} ` +
+    `status=${entry.status ?? "net"} ms=${entry.durationMs} ` +
+    `req=${body(entry.request)} res=${body(entry.response)}`;
+  if (entry.failed) console.error(line);
+  else console.log(line);
+}
+
 export class MetaWhatsAppClient {
   private readonly http: AxiosInstance;
   private readonly token: string;
@@ -155,6 +194,7 @@ export class MetaWhatsAppClient {
     opts: { params?: Record<string, unknown>; data?: unknown; token?: string } = {},
   ): Promise<T> {
     const url = `${this.baseUrl}${path.startsWith("/") ? path : `/${path}`}`;
+    const startedAt = Date.now();
     try {
       const res = await this.http.request<T>({
         method,
@@ -163,8 +203,28 @@ export class MetaWhatsAppClient {
         data: opts.data,
         headers: { Authorization: `Bearer ${opts.token ?? this.token}` },
       });
+      logGraphCall({
+        operation,
+        method,
+        path,
+        status: res.status,
+        durationMs: Date.now() - startedAt,
+        request: opts.data,
+        response: res.data,
+      });
       return res.data;
     } catch (err) {
+      const anyErr = err as { response?: { status?: number; data?: unknown } };
+      logGraphCall({
+        operation,
+        method,
+        path,
+        status: anyErr?.response?.status,
+        durationMs: Date.now() - startedAt,
+        request: opts.data,
+        response: anyErr?.response?.data,
+        failed: true,
+      });
       throw new MetaApiError(operation, err);
     }
   }
@@ -432,6 +492,40 @@ export class MetaWhatsAppClient {
    * disconnect one number would silence its siblings. That check lives in the
    * disconnect service, where the tenant's other numbers are visible.
    */
+  /**
+   * Ask Meta to start a Coexistence synchronization.
+   *
+   * THIS is what starts it. Subscribing to the `history` webhook only says
+   * where to deliver; it does not ask for anything, and without this call
+   * nothing is ever sent. That was the defect: the webhook field was
+   * subscribed, the number connected cleanly, every pipeline step reported
+   * SUCCESS, and no history ever arrived - with nothing anywhere to say why.
+   *
+   * Two sync types, per Meta's onboarding guide:
+   *   `smb_app_state_sync` - the business's contacts
+   *   `history`            - up to 180 days of past messages
+   *
+   * Both are ONCE ONLY. Repeating either requires the customer to offboard in
+   * the WhatsApp Business app and complete Embedded Signup again, so a caller
+   * must not retry this blindly. There is also a hard 24-hour deadline from
+   * onboarding, after which Meta refuses.
+   *
+   * https://developers.facebook.com/documentation/business-messaging/whatsapp/embedded-signup/onboarding-business-app-users/
+   */
+  async requestSmbSync(
+    phoneNumberId: string,
+    syncType: "history" | "smb_app_state_sync",
+  ): Promise<Attempted<{ success?: boolean }>> {
+    return this.attempt(() =>
+      this.call<{ success?: boolean }>(
+        `requestSmbSync:${syncType}`,
+        "post",
+        `/${phoneNumberId}/smb_app_data`,
+        { data: { messaging_product: "whatsapp", sync_type: syncType } },
+      ),
+    );
+  }
+
   async unsubscribeApp(wabaId: string): Promise<Attempted<{ success?: boolean }>> {
     return this.attempt(() =>
       this.call<{ success?: boolean }>(

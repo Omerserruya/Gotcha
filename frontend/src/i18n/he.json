@@ -5297,7 +5297,10 @@
       "alreadyAdded": "כבר נוסף",
       "connecting": "מחבר...",
       "cancel": "ביטול",
-      "back": "התחלה מחדש"
+      "back": "התחלה מחדש",
+      "otherNumbers": "עוד {count} מספרים שאי אפשר להוסיף כאן",
+      "unavailable": "לא זמין",
+      "moreBlockers": "ועוד {count}"
     },
     "outcome": {
       "allAlreadyConnected": "כל המספרים שוואטסאפ הציעה כבר מחוברים לסביבת העבודה הזו. אין מה להוסיף.",
@@ -5331,6 +5334,22 @@
       "add": "הוסף",
       "addFailed": "לא ניתן היה להוסיף את המספר",
       "empty": "אין החרגות. כל שיחה במספר הזה מגיעה לתיבה."
+    },
+    "blocker": {
+      "CHOICE_REQUIRED": "בחרו איך אתם רוצים להשתמש במספר הזה לפני החיבור.",
+      "CONNECTED_ELSEWHERE": "המספר הזה שייך לסביבת עבודה אחרת ב-GOTCHA. נתקו אותו שם קודם.",
+      "NAME_DECLINED": "וואטסאפ דחתה את שם התצוגה של המספר. שנו אותו בהגדרות העסק במטא.",
+      "NOT_VERIFIED": "המספר עדיין ממתין לקוד האימות שוואטסאפ שלחה לכם.",
+      "ON_PREMISE": "המספר רץ על On-Premise API, ש-GOTCHA לא תומכת בו.",
+      "WEBHOOK_NOT_SUBSCRIBED": "הודעות נכנסות עדיין לא מגיעות ל-GOTCHA.",
+      "WEBHOOK_OVERRIDDEN": "פלטפורמה אחרת מקבלת את ההודעות של המספר הזה."
+    },
+    "health": {
+      "CONNECTED": "מחובר לוואטסאפ",
+      "MESSAGING": "יכול לשלוח הודעות",
+      "QUALITY": "דירוג איכות",
+      "VERIFICATION": "המספר אומת",
+      "WEBHOOKS": "מקבל הודעות נכנסות"
     }
   },
   "historicalImport": {

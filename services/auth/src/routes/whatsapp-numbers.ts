@@ -473,7 +473,7 @@ router.post(
 );
 
 const repairSchema = z.object({
-  action: z.enum(["RESUBSCRIBE_WEBHOOKS", "REFRESH_STATUS"]),
+  action: z.enum(["RESUBSCRIBE_WEBHOOKS", "REFRESH_STATUS", "REQUEST_HISTORY_SYNC"]),
 });
 
 router.post(
