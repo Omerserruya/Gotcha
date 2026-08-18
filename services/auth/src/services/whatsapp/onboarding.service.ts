@@ -704,6 +704,21 @@ async function requestHistorySync(ctx: StepContext): Promise<StepResult> {
   });
 
   const history = await client.requestSmbSync(phoneNumberId, "history");
+
+  // Recorded HERE, by this step, not by the pipeline.
+  //
+  // The runner does not write a SUCCESS event - every step records its own -
+  // and without this row the once-only guard above could never fire, so a
+  // re-run would call an endpoint Meta grants once per onboarding a second
+  // time. It is also the only durable evidence that the request was made at
+  // all, which is exactly what was missing when history silently never
+  // arrived. Meta's `request_id` is kept: it is what support asks for.
+  await recordStep(number.id, "REQUEST_HISTORY_SYNC", history.ok ? "SUCCESS" : "FAILED", {
+    ...(history.ok
+      ? { detail: history.value as Record<string, unknown> }
+      : { error: history.error }),
+  });
+
   if (!history.ok) {
     return {
       outcome: "SKIPPED",
