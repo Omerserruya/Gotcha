@@ -162,10 +162,25 @@ export function getMessages(token: string, conversationId: string, params?: Reco
   );
 }
 
-export function sendMessage(token: string, conversationId: string, body: string) {
+/**
+ * `replyToMessageId` quotes one specific earlier message, so the reply lands on
+ * the customer's phone as a reply rather than as a loose line. Our own id, not
+ * the provider's: the server resolves it and refuses one that is not in this
+ * conversation.
+ */
+export function sendMessage(
+  token: string,
+  conversationId: string,
+  body: string,
+  replyToMessageId?: string,
+) {
   return apiFetch<{ data: any }>(
     `/api/conversations/${conversationId}/messages`,
-    { token, method: "POST", body: JSON.stringify({ body }) }
+    {
+      token,
+      method: "POST",
+      body: JSON.stringify({ body, ...(replyToMessageId ? { replyToMessageId } : {}) }),
+    }
   );
 }
 

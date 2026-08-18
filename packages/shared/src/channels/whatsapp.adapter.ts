@@ -203,6 +203,12 @@ export const whatsAppInboundAdapter: InboundAdapter = {
             senderDisplayName: contactName,
             timestamp: new Date(parseInt(msg.timestamp) * 1000),
             content: extractWhatsAppContent(msg),
+            // `context` is present only when the customer used WhatsApp's
+            // reply affordance. It also appears on messages forwarded from a
+            // business-initiated template, where `context.forwarded` is set and
+            // `id` still points at a real message - so the id is taken and the
+            // rest ignored.
+            replyToExternalId: msg.context?.id ? String(msg.context.id) : undefined,
           });
         }
       }
@@ -528,12 +534,23 @@ export const whatsAppOutboundAdapter: OutboundAdapter = {
     credentials: ChannelCredentials,
     accountExternalId: string,
     recipientId: string,
-    text: string
+    text: string,
+    replyToExternalId?: string,
   ): Promise<string | null> {
     try {
       const response = await axios.post(
         `${WA_API_URL}/${accountExternalId}/messages`,
-        { messaging_product: "whatsapp", to: recipientId, type: "text", text: { body: formatWhatsAppText(text) } },
+        {
+          messaging_product: "whatsapp",
+          to: recipientId,
+          type: "text",
+          text: { body: formatWhatsAppText(text) },
+          // `context.message_id` is what makes this render as a reply in the
+          // customer's WhatsApp, quoting the message above it. Meta rejects the
+          // send outright if the id is not a real message in this thread, which
+          // is why the caller validates it against the conversation first.
+          ...(replyToExternalId ? { context: { message_id: replyToExternalId } } : {}),
+        },
         { headers: { Authorization: `Bearer ${credentials.accessToken}`, "Content-Type": "application/json" } }
       );
       return response.data?.messages?.[0]?.id || null;

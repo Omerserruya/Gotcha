@@ -6,7 +6,7 @@ import { recordBroadcastResult } from "./broadcast.worker";
 const MEDIA_MESSAGE_TYPES = ["image", "video", "document"];
 
 async function processOutgoingMessage(job: Job<OutgoingMessageJob>): Promise<void> {
-  const { tenantId, channel, channelAccountId, recipientExternalId, body: rawBody, messageId, messageType, mediaUrl, fileName, broadcastId, broadcastRecipientId } = job.data;
+  const { tenantId, channel, channelAccountId, recipientExternalId, body: rawBody, messageId, messageType, mediaUrl, fileName, broadcastId, broadcastRecipientId, replyToExternalId } = job.data;
   // OUTBOX chokepoint: every customer-bound body from EVERY producer (bot
   // replies, approval continuations, broadcasts, scheduled sends, voice
   // callbacks) passes through the AI-signature sanitizer here, so no path -
@@ -65,7 +65,11 @@ async function processOutgoingMessage(job: Job<OutgoingMessageJob>): Promise<voi
         credentials,
         channelAccount.externalId,
         recipientExternalId,
-        body
+        body,
+        // Renders the send as a reply quoting a specific earlier message.
+        // Adapters that do not support quoting ignore it and still deliver the
+        // text, which is the half that matters.
+        replyToExternalId,
       );
     }
   } catch (err: any) {

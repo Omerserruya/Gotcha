@@ -80,6 +80,9 @@ const EXPECTED_EMITTED: ErrorCode[] = [
   "integration_credentials_invalid", "integration_provisioning_failed",
   "integration_disconnect_cleanup_failed",
   "webhook_signature_invalid", "webhook_verification_failed", "webhook_processing_failed",
+  // Emitted from the boot probe in incoming-worker and conversation, and from
+  // the media resolver when a write is refused rather than a download.
+  "media_storage_unwritable",
   "payment_callback_failed", "subscription_update_failed", "entitlement_creation_failed",
   "voice_provisioning_failed", "voice_number_activation_failed",
   "voice_twiml_failed", "voice_media_stream_failed", "voice_transcription_failed",

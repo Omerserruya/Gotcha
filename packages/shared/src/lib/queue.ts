@@ -63,6 +63,13 @@ export interface IncomingMessageJob {
     };
     mediaUrl?: string;
     /**
+     * The provider's id of the message being replied to, when the customer
+     * quoted one. Resolved to a local Message row by the worker; kept even when
+     * that resolution misses, because "replying to an earlier message" is still
+     * more than nothing.
+     */
+    replyToExternalId?: string;
+    /**
      * The name the SENDER gave the file. WhatsApp media is stored under a
      * generated UUID, so without this the agent is offered a download called
      * "9f3c1e....pdf" and cannot tell one attachment from another.
@@ -224,6 +231,13 @@ export interface OutgoingMessageJob {
   senderName: string;
   messageId: string;
   retryCount?: number;
+  /**
+   * The PROVIDER's id of the message being replied to. Carried separately from
+   * our own id because this is what the channel API needs: WhatsApp takes it as
+   * `context.message_id` and renders the quote on the customer's phone.
+   * Undefined for a normal send.
+   */
+  replyToExternalId?: string;
   mediaUrl?: string;
   fileName?: string;
   // Broadcast linkage - when set, the outgoing worker writes the send result

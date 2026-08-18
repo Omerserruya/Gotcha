@@ -42,6 +42,15 @@ export {
 } from "./lib/inbound-exclusions";
 export type { ExclusionLookup } from "./lib/inbound-exclusions";
 
+// Attachment storage. The probe exists because an unwritable uploads volume
+// failed silently in production and was reported as a download failure.
+export {
+  probeUploadsDir,
+  describeUploadsProbe,
+  classifyMediaFailure,
+} from "./lib/media-storage";
+export type { MediaFailureReason, UploadsProbe } from "./lib/media-storage";
+
 // Channel types & adapters
 export type {
   ChannelType,

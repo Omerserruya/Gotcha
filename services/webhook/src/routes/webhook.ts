@@ -327,6 +327,7 @@ router.post("/", async (req: Request, res: Response) => {
             body: msgBody,
             messageType,
             interactiveReply: msg.content.interactiveReply,
+            replyToExternalId: msg.replyToExternalId,
             mediaUrl,
             fileName,
             mimeType,

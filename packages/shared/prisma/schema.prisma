@@ -1064,6 +1064,27 @@ model Message {
   origin             RecordOrigin     @default(LIVE)
   /// Which import produced this row. Null for live traffic.
   historicalImportId String?          @map("historical_import_id")
+
+  // ── Quoted replies ──
+  //
+  // Every channel here lets a customer reply to ONE specific earlier message,
+  // and until now we dropped that entirely. The agent saw "yes, that one works"
+  // with no way to tell which of four options it answered, and neither did the
+  // AI - which is how a bot confirms the wrong date.
+  //
+  // Two columns because the two ids answer different questions and arrive at
+  // different times. The provider's id is what the payload carries and is
+  // always available; ours is a resolution that can legitimately fail, because
+  // a customer can quote a message from before GOTCHA was connected, or one
+  // that was deleted. Keeping the external id when the lookup misses is what
+  // lets the UI say "replying to an earlier message" instead of silently
+  // showing nothing.
+  /// The provider's id for the message being replied to (WhatsApp
+  /// `context.id`, Meta `reply_to.mid`).
+  replyToExternalId  String?          @map("reply_to_external_id")
+  /// Our own Message row for it, when we hold one.
+  replyToMessageId   String?          @map("reply_to_message_id")
+
   body               String
   messageType        String           @default("text") @map("message_type")
   status             MessageStatus    @default(PENDING)
@@ -1081,6 +1102,11 @@ model Message {
   tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   historicalImport HistoricalImport? @relation(fields: [historicalImportId], references: [id], onDelete: SetNull)
+  /// Self-relation for quoted replies. SetNull rather than Cascade: deleting a
+  /// quoted message must not delete the reply to it, which is somebody's actual
+  /// answer and the more valuable of the two.
+  replyTo      Message?      @relation("MessageReply", fields: [replyToMessageId], references: [id], onDelete: SetNull)
+  replies      Message[]     @relation("MessageReply")
 
   @@index([conversationId, createdAt])
   @@index([externalMessageId])
@@ -1092,6 +1118,10 @@ model Message {
   /// tenant has six months of imported history sitting in the same table.
   @@index([historicalImportId])
   @@index([tenantId, origin])
+  /// Resolving an inbound quote is a lookup by the provider's id, scoped to the
+  /// conversation. Without this it is a scan of every message the tenant has.
+  @@index([conversationId, replyToExternalId])
+  @@index([replyToMessageId])
   @@map("messages")
 }
 

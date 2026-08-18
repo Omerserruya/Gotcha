@@ -44,6 +44,23 @@ COPY --from=builder /app/node_modules/@prisma/client ./node_modules/@prisma/clie
 # so deploy verification never depends on guessing whether a cache layer is stale.
 ARG BUILD_SHA=dev
 ENV BUILD_SHA=$BUILD_SHA
+# The uploads volume mounts here, and this directory has to EXIST in the image
+# before that happens.
+#
+# Docker seeds a named volume from the image path it is mounted at, ownership
+# included - but only when the image actually has that path. Without this line
+# Docker created /app/uploads itself, root-owned and mode 755, and the service
+# below runs as `node` (uid 1000). Every inbound WhatsApp image, voice note and
+# document then failed at fs.writeFileSync with EACCES, was swallowed by the
+# media resolver's catch, and reached the agent as "media unavailable" with the
+# real reason nowhere. Confirmed in production 2026-08-18.
+#
+# NOTE for anyone repairing an existing deployment: this fixes new volumes only.
+# Docker will not re-seed a volume that already has files in it, so a box that
+# has been running keeps the root-owned directory until it is chowned once by
+# hand. See docs/operations/uploads-permissions.md.
+RUN mkdir -p /app/uploads && chown -R node:node /app/uploads
+
 USER node
 
 WORKDIR /app/services/conversation

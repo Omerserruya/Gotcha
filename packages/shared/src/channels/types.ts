@@ -9,6 +9,16 @@ export interface NormalizedInboundMessage {
   senderDisplayName?: string;
   timestamp: Date;
   content: MessageContent;
+  /**
+   * The provider's id of the message this one is a reply to, when the customer
+   * used the channel's quote affordance.
+   *
+   * Carried because without it a reply is unreadable. "Yes, that one works"
+   * against a list of four dates is a coin flip for a human agent and worse for
+   * the AI, which will confidently pick the most recent thing it said. WhatsApp
+   * sends it as `context.id`, Meta's other channels as `reply_to.mid`.
+   */
+  replyToExternalId?: string;
 }
 
 export interface MessageContent {
@@ -274,7 +284,17 @@ export interface OutboundAdapter {
     credentials: ChannelCredentials,
     accountExternalId: string,
     recipientId: string,
-    text: string
+    text: string,
+    /**
+     * The provider's id of a message to quote, so the reply renders as a reply
+     * on the customer's phone rather than as a loose message.
+     *
+     * Optional and last so every existing caller and every adapter that does
+     * not support quoting is unaffected. An adapter that ignores it still
+     * delivers the text, which is the part that matters - a reply that arrives
+     * without its quote is a small loss, a reply that fails to send is a real one.
+     */
+    replyToExternalId?: string
   ): Promise<string | null>;
   sendInteractiveMessage(
     credentials: ChannelCredentials,

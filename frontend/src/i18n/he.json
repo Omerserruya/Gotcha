@@ -230,7 +230,20 @@
     "fixChannelCta": "תיקון החיבור",
     "emptyReadyTitle": "הערוץ מוכן, עדיין לא הגיעו שיחות",
     "emptyReadyDesc": "ברגע שלקוח יכתוב לכם, השיחה תופיע כאן.",
-    "viewChannels": "צפייה בערוצים המחוברים"
+    "viewChannels": "צפייה בערוצים המחוברים",
+    "reply": {
+      "action": "תגובה",
+      "cancel": "ביטול התגובה",
+      "you": "אתם",
+      "customer": "הלקוח",
+      "replyingToYou": "מגיבים להודעה שלכם",
+      "replyingToCustomer": "מגיבים ללקוח",
+      "unavailable": "הודעה קודמת",
+      "photo": "תמונה",
+      "voice": "הודעה קולית",
+      "video": "וידאו",
+      "file": "קובץ"
+    }
   },
   "dashboard": {
     "title": "לוח בקרה",

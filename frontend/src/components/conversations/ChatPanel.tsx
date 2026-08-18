@@ -87,6 +87,14 @@ export function ChatPanel({ conversationId, onBack }: Props) {
   const [messages, setMessages] = useState<any[]>([]);
   const [inputText, setInputText] = useState("");
   const [sending, setSending] = useState(false);
+  /**
+   * The message the agent is replying to.
+   *
+   * Held here rather than on the bubble so there is exactly one at a time and
+   * the composer can show it: a reply target that is only visible on the
+   * message you scrolled away from is a reply target you forget you set.
+   */
+  const [replyTo, setReplyTo] = useState<any | null>(null);
   const [showTransfer, setShowTransfer] = useState(false);
   const [transferTab, setTransferTab] = useState<"agents" | "departments">("agents");
   const [agents, setAgents] = useState<any[]>([]);
@@ -405,13 +413,17 @@ export function ChatPanel({ conversationId, onBack }: Props) {
 
       // Send text only if no files or text remains
       if (attachedFiles.length === 0 && inputText.trim()) {
-        const res = await sendMessage(token, conversationId, inputText.trim());
+        const res = await sendMessage(token, conversationId, inputText.trim(), replyTo?.id);
         setMessages((prev) => {
           if (prev.some((m) => m.id === res.data.id)) return prev;
           return [...prev, res.data];
         });
       }
 
+      // Cleared on success only. A failed send keeps the quote, because
+      // re-selecting the right message out of a long thread is exactly the
+      // fiddly step the agent would have to repeat.
+      setReplyTo(null);
       setInputText("");
       setAttachedFiles([]);
     } catch (err) {
@@ -781,9 +793,31 @@ export function ChatPanel({ conversationId, onBack }: Props) {
                 msg.direction === "OUTBOUND" ? "items-end" : "items-start"
               )}
             >
+              <div className="group/msg flex items-center gap-1 max-w-[85%] md:max-w-[75%]">
+              {/*
+                Reply.
+
+                Revealed on hover rather than always drawn: it sits on every
+                bubble in a thread that can be thousands long, and a permanent
+                icon on each one turns the transcript into a wall of controls.
+                On touch there is no hover, so it stays visible below md.
+              */}
+              {msg.direction === "OUTBOUND" && (
+                <button
+                  type="button"
+                  onClick={() => setReplyTo(msg)}
+                  className="order-first shrink-0 rounded-full p-1 text-gray-300 opacity-100 transition hover:bg-gray-100 hover:text-gray-600 md:opacity-0 md:group-hover/msg:opacity-100"
+                  aria-label={t("conversations.reply.action")}
+                  title={t("conversations.reply.action")}
+                >
+                  <svg className="h-3.5 w-3.5 rtl:-scale-x-100" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+                  </svg>
+                </button>
+              )}
               <div
                 className={clsx(
-                  "max-w-[85%] md:max-w-[75%] px-2.5 py-1 md:py-1.5 text-sm",
+                  "min-w-0 px-2.5 py-1 md:py-1.5 text-sm",
                   msg.direction === "OUTBOUND"
                     ? "chat-bubble-outbound"
                     : "chat-bubble-inbound"
@@ -801,6 +835,18 @@ export function ChatPanel({ conversationId, onBack }: Props) {
                       </span>
                     )}
                   </p>
+                )}
+                {/*
+                  What this message is replying to.
+
+                  Shown for BOTH directions: a customer's "yes, that one" is
+                  unreadable without it, and an agent needs to see which of
+                  their own messages they quoted. `replyTo` is included by the
+                  API with the message, because the quoted message is very
+                  often outside the page being rendered.
+                */}
+                {(msg.replyTo || msg.replyToExternalId) && (
+                  <QuotedMessage quoted={msg.replyTo} t={t} />
                 )}
                 <MessageMedia msg={msg} t={t} />
                 {msg.body && !isRedundantMediaCaption(msg) && (
@@ -838,6 +884,21 @@ export function ChatPanel({ conversationId, onBack }: Props) {
                     t={t}
                   />
                 )}
+              </div>
+              {/* The inbound side's reply button, mirrored to the far edge. */}
+              {msg.direction === "INBOUND" && (
+                <button
+                  type="button"
+                  onClick={() => setReplyTo(msg)}
+                  className="shrink-0 rounded-full p-1 text-gray-300 opacity-100 transition hover:bg-gray-100 hover:text-gray-600 md:opacity-0 md:group-hover/msg:opacity-100"
+                  aria-label={t("conversations.reply.action")}
+                  title={t("conversations.reply.action")}
+                >
+                  <svg className="h-3.5 w-3.5 rtl:-scale-x-100" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+                  </svg>
+                </button>
+              )}
               </div>
               {msg.direction === "INBOUND" && (
                 <MessageSignals signals={msg.metadata?.signals} />
@@ -941,6 +1002,48 @@ export function ChatPanel({ conversationId, onBack }: Props) {
               onApply={(text) => setInputText(text)}
             >
               <AIComposePanel />
+            {/*
+              What the next message will quote, shown ON the composer.
+
+              Above the input rather than on the bubble, because that is where
+              the agent is looking when they type. A reply target visible only
+              on a message they have scrolled past is one they forget they set,
+              and the customer gets a quote of something unrelated.
+            */}
+            {replyTo && (
+              <div className="mb-1.5 flex items-start gap-2 rounded-xl bg-white px-3 py-2 ring-1 ring-gray-200/80">
+                <div className="w-0.5 self-stretch rounded bg-primary-400 shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <div className="text-[10px] font-medium text-gray-500">
+                    {replyTo.direction === "OUTBOUND"
+                      ? t("conversations.reply.replyingToYou")
+                      : t("conversations.reply.replyingToCustomer")}
+                  </div>
+                  <div className="truncate text-xs text-gray-700">
+                    {replyTo.messageType === "image"
+                      ? t("conversations.reply.photo")
+                      : replyTo.messageType === "audio"
+                        ? t("conversations.reply.voice")
+                        : replyTo.messageType === "video"
+                          ? t("conversations.reply.video")
+                          : replyTo.messageType === "document"
+                            ? replyTo.fileName || t("conversations.reply.file")
+                            : replyTo.body}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setReplyTo(null)}
+                  className="shrink-0 rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                  aria-label={t("conversations.reply.cancel")}
+                  title={t("conversations.reply.cancel")}
+                >
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            )}
             <div className={clsx("rounded-2xl transition-all relative", aiGenerating ? "p-[2px] ai-border-glow" : "p-0")}>
             <form onSubmit={handleSend} className={clsx("flex items-end gap-2 bg-white rounded-2xl shadow-lg shadow-gray-200/50 px-3 py-1.5 transition", aiGenerating ? "" : "ring-1 ring-gray-200/80 focus-within:ring-2 focus-within:ring-primary-300")}>
               {/* Hidden file input */}
@@ -1254,6 +1357,50 @@ function ActionButton({
 const MEDIA_PLACEHOLDER_BODIES = new Set([
   "[Image]", "[Video]", "[Document]", "[Audio message]", "[Voice message]", "[Sticker]",
 ]);
+
+/**
+ * The message a bubble is replying to, rendered above it.
+ *
+ * `quoted` is null when the customer replied to something we do not hold - a
+ * message from before GOTCHA was connected, or one since deleted. That is a
+ * normal outcome and NOT an error, so it says "an earlier message" rather than
+ * rendering nothing: the fact that this IS a reply changes how the text above
+ * it reads, and hiding that is worse than an unresolved preview.
+ */
+function QuotedMessage({
+  quoted,
+  t,
+}: {
+  quoted: any | null | undefined;
+  t: (key: string, vars?: Record<string, string>) => string;
+}) {
+  const label = quoted
+    ? quoted.direction === "OUTBOUND"
+      ? quoted.senderName || t("conversations.reply.you")
+      : t("conversations.reply.customer")
+    : null;
+
+  // Media has no body worth quoting, so the preview names the kind instead of
+  // showing a placeholder like "[Image]" that reads as literal text.
+  const preview = !quoted
+    ? t("conversations.reply.unavailable")
+    : quoted.messageType === "image"
+      ? t("conversations.reply.photo")
+      : quoted.messageType === "audio"
+        ? t("conversations.reply.voice")
+        : quoted.messageType === "video"
+          ? t("conversations.reply.video")
+          : quoted.messageType === "document"
+            ? quoted.fileName || t("conversations.reply.file")
+            : (quoted.body || "").slice(0, 140);
+
+  return (
+    <div className="mb-1 rounded-md border-s-2 border-current/40 bg-black/5 px-2 py-1">
+      {label && <div className="text-[10px] font-medium opacity-70">{label}</div>}
+      <div className="text-[11px] opacity-80 line-clamp-2 break-words">{preview}</div>
+    </div>
+  );
+}
 
 function isRedundantMediaCaption(msg: any): boolean {
   if (!msg.mediaUrl) return false;

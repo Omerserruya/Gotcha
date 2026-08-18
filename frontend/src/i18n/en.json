@@ -230,7 +230,20 @@
     "fixChannelCta": "Fix connection",
     "emptyReadyTitle": "The channel is ready, no conversations have arrived yet",
     "emptyReadyDesc": "As soon as a customer writes to you, the conversation will appear here.",
-    "viewChannels": "View connected channels"
+    "viewChannels": "View connected channels",
+    "reply": {
+      "action": "Reply",
+      "cancel": "Cancel reply",
+      "you": "You",
+      "customer": "Customer",
+      "replyingToYou": "Replying to your message",
+      "replyingToCustomer": "Replying to the customer",
+      "unavailable": "An earlier message",
+      "photo": "Photo",
+      "voice": "Voice message",
+      "video": "Video",
+      "file": "File"
+    }
   },
   "dashboard": {
     "title": "Dashboard",
