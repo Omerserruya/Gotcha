@@ -183,3 +183,116 @@ describe("sending a reply", () => {
     }
   });
 });
+
+describe("shared contacts", () => {
+  function contactsPayload(contacts: unknown) {
+    return {
+      object: "whatsapp_business_account",
+      entry: [
+        {
+          id: "WABA_1",
+          changes: [
+            {
+              field: "messages",
+              value: {
+                metadata: { phone_number_id: "PN_1" },
+                messages: [
+                  {
+                    from: "972541111111",
+                    id: "wamid.CONTACT",
+                    timestamp: "1760000000",
+                    type: "contacts",
+                    contacts,
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    };
+  }
+
+  it("keeps the number, the name and the wa_id", () => {
+    // The entire point of a shared contact is that somebody can ring it. Before
+    // this it rendered as the dead string "[contacts message]" and the number
+    // was not stored anywhere at all.
+    const [msg] = whatsAppInboundAdapter.extractMessages(
+      contactsPayload([
+        {
+          name: { formatted_name: "Dana Levi", first_name: "Dana" },
+          phones: [{ phone: "+972 54-111-2222", type: "MOBILE", wa_id: "972541112222" }],
+          emails: [{ email: "dana@example.com", type: "WORK" }],
+          org: { company: "Levi Events" },
+        },
+      ]),
+    );
+    expect(msg.content.type).toBe("contact");
+    expect(msg.content.contacts).toHaveLength(1);
+    expect(msg.content.contacts![0]).toMatchObject({
+      name: "Dana Levi",
+      organization: "Levi Events",
+    });
+    expect(msg.content.contacts![0].phones[0]).toMatchObject({
+      number: "+972 54-111-2222",
+      waId: "972541112222",
+    });
+    expect(msg.content.contacts![0].emails[0].address).toBe("dana@example.com");
+  });
+
+  it("builds a name when Meta sends only the parts", () => {
+    const [msg] = whatsAppInboundAdapter.extractMessages(
+      contactsPayload([
+        { name: { first_name: "Noa", last_name: "Cohen" }, phones: [{ phone: "0501234567" }] },
+      ]),
+    );
+    expect(msg.content.contacts![0].name).toBe("Noa Cohen");
+  });
+
+  it("summarizes several contacts without losing any of them", () => {
+    const [msg] = whatsAppInboundAdapter.extractMessages(
+      contactsPayload([
+        { name: { formatted_name: "A" }, phones: [{ phone: "1" }] },
+        { name: { formatted_name: "B" }, phones: [{ phone: "2" }] },
+        { name: { formatted_name: "C" }, phones: [{ phone: "3" }] },
+      ]),
+    );
+    expect(msg.content.contacts).toHaveLength(3);
+    // The body is what an inbox list and a push notification show.
+    expect(msg.content.text).toBe("A +2");
+  });
+
+  it("drops entries with nothing usable in them", () => {
+    const [msg] = whatsAppInboundAdapter.extractMessages(
+      contactsPayload([{ name: {}, phones: [], emails: [] }, { name: { formatted_name: "Real" } }]),
+    );
+    expect(msg.content.contacts).toHaveLength(1);
+    expect(msg.content.contacts![0].name).toBe("Real");
+  });
+
+  it("does not carry the address book Meta also sends", () => {
+    // Meta's payload is a full vCard: addresses, urls, birthdays. Copying it
+    // wholesale would put a customer's relatives' home addresses in our
+    // database for no benefit to anyone answering the message.
+    const [msg] = whatsAppInboundAdapter.extractMessages(
+      contactsPayload([
+        {
+          name: { formatted_name: "Dana" },
+          phones: [{ phone: "1" }],
+          addresses: [{ street: "Somewhere 4", city: "Haifa" }],
+          birthday: "1990-01-01",
+          urls: [{ url: "https://example.com" }],
+        },
+      ]),
+    );
+    const card = msg.content.contacts![0] as Record<string, unknown>;
+    expect(Object.keys(card).sort()).toEqual(["emails", "name", "organization", "phones"]);
+  });
+
+  it("falls back to a plain label when the array is empty or malformed", () => {
+    for (const payload of [[], null, "nonsense"]) {
+      const [msg] = whatsAppInboundAdapter.extractMessages(contactsPayload(payload));
+      expect(msg.content.text).toBe("[Contact]");
+    }
+  });
+});

@@ -22,7 +22,7 @@ export interface NormalizedInboundMessage {
 }
 
 export interface MessageContent {
-  type: "text" | "image" | "document" | "audio" | "video" | "interactive" | "location";
+  type: "text" | "image" | "document" | "audio" | "video" | "interactive" | "location" | "contact";
   text?: string;
   /**
    * WhatsApp hands us a media ID to resolve; Meta's other channels hand us a
@@ -52,6 +52,24 @@ export interface MessageContent {
     payload: string;
     title: string;
   };
+  /**
+   * A shared contact card. WhatsApp's "send a contact" lands here.
+   *
+   * Structured rather than flattened into text because the useful thing about
+   * a shared contact is that you can act on it: call the number, or open a
+   * conversation with it. A customer forwarding their spouse's number so the
+   * business can arrange delivery was previously rendered as the dead string
+   * "[contacts message]", which loses the entire point of the message.
+   */
+  contacts?: SharedContact[];
+}
+
+/** One contact from a shared contact card, reduced to what an agent can use. */
+export interface SharedContact {
+  name: string;
+  phones: Array<{ number: string; type?: string; waId?: string }>;
+  emails: Array<{ address: string; type?: string }>;
+  organization?: string;
 }
 
 export interface NormalizedStatusUpdate {
