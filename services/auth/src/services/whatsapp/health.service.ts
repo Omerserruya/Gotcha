@@ -55,7 +55,17 @@ export type RepairAction =
   /** Re-subscribe our app to the WABA's webhooks. */
   | "RESUBSCRIBE_WEBHOOKS"
   /** Re-read every field from Meta and refresh the stored snapshot. */
-  | "REFRESH_STATUS";
+  | "REFRESH_STATUS"
+  /**
+   * Ask Meta to send the business's history, for a Coexistence number that was
+   * onboarded before the pipeline knew to ask.
+   *
+   * Exists because the request is once-only and time-boxed: numbers connected
+   * while the step was missing are still eligible for up to 24 hours after
+   * onboarding, and this is the only way to claim that window without making
+   * the customer offboard in the WhatsApp Business app and start again.
+   */
+  | "REQUEST_HISTORY_SYNC";
 
 export interface NumberHealthReport {
   numberId: string;
@@ -506,6 +516,58 @@ export async function repairNumber(
     };
   }
 
+  if (action === "REQUEST_HISTORY_SYNC") {
+    if (!number.isOnBizApp) {
+      return {
+        action,
+        succeeded: false,
+        message: "Only a number that runs in the WhatsApp Business app has history to import.",
+      };
+    }
+    const done = await prisma.whatsAppNumberEvent.findFirst({
+      where: { numberId, step: "REQUEST_HISTORY_SYNC", outcome: "SUCCESS" },
+      select: { id: true },
+    });
+    if (done) {
+      return {
+        action,
+        succeeded: false,
+        message: "History was already requested for this connection. WhatsApp allows it only once.",
+      };
+    }
+
+    const contacts = await client.requestSmbSync(number.phoneNumberId, "smb_app_state_sync");
+    await prisma.whatsAppNumberEvent.create({
+      data: {
+        numberId,
+        step: "REQUEST_CONTACT_SYNC",
+        outcome: contacts.ok ? "SUCCESS" : "FAILED",
+        message: contacts.ok ? null : contacts.error.message,
+        metaErrorCode: contacts.ok ? null : (contacts.error.code ?? null),
+      },
+    });
+
+    const history = await client.requestSmbSync(number.phoneNumberId, "history");
+    await prisma.whatsAppNumberEvent.create({
+      data: {
+        numberId,
+        step: "REQUEST_HISTORY_SYNC",
+        outcome: history.ok ? "SUCCESS" : "FAILED",
+        message: history.ok ? null : history.error.message,
+        metaErrorCode: history.ok ? null : (history.error.code ?? null),
+        detail: history.ok ? null : (history.error.redactedBody() as any),
+      },
+    });
+
+    return {
+      action,
+      succeeded: history.ok,
+      message: history.ok
+        ? "Asked WhatsApp for this number's history. It arrives in the background over the next few minutes."
+        : "WhatsApp would not start the history transfer. The 24 hour window after connecting may have closed, in which case importing history means disconnecting in the WhatsApp Business app and connecting again.",
+    };
+  }
+
   if (action === "RESUBSCRIBE_WEBHOOKS") {
     const sub = await client.subscribeApp(number.wabaId);
     if (!sub.ok) {
@@ -633,29 +695,42 @@ export async function disconnectNumber(
     });
   }
 
-  await prisma.whatsAppNumber.update({
-    where: { id: numberId },
-    data: {
-      state: "DISCONNECTED",
-      disconnectedAt: new Date(),
-      webhookSubscribed: false,
-      pendingAction: null,
-      lastError: null,
-    },
-  });
-
-  await prisma.channelAccount.update({
-    where: { id: number.channelAccountId },
-    data: { connectionStatus: "DISCONNECTED", isActive: false },
-  });
+  // ── Remove the rows, do not just mark them ──
+  //
+  // A row left behind as DISCONNECTED still counts as "known" to the asset
+  // inspector, which builds its map from every whatsapp_numbers row with no
+  // state filter. The number therefore came back as `connectedToThisTenant`,
+  // the flow selector chose RECONNECT instead of COEXISTENCE, and the picker
+  // reported "all your numbers are already connected" with no button. A
+  // customer who disconnected could never re-onboard the same number - and
+  // never get a history sync, which Meta only grants on a fresh onboarding.
+  //
+  // Conversations and any history import SURVIVE this. Both foreign keys were
+  // changed from Cascade to SetNull in 20260818150000 precisely so that
+  // removing a channel cannot erase the business's record of what was said on
+  // it. What does go is the number's own lifecycle: its events, its inbound
+  // exclusions and the channel row itself.
+  // Deleting the channel row is the whole operation. The number, its events and
+  // its inbound exclusions cascade from it; conversations and any history
+  // import are detached rather than deleted, by the SetNull foreign keys.
+  //
+  // Deliberately NOT counting what survived first: that is a scan of the
+  // messages table on a path a customer waits on, to produce a number for a log
+  // line. The guarantee lives in the schema and in the test that exercises it.
+  await prisma.channelAccount.delete({ where: { id: number.channelAccountId } });
 
   await getRedis().del(`channel_account:WHATSAPP:${number.phoneNumberId}`);
+
+  console.log(
+    `[whatsapp] removed number=${numberId} phoneNumberId=${number.phoneNumberId} ` +
+      `wabaId=${number.wabaId} conversationsRetained=true`,
+  );
 
   return {
     succeeded: true,
     message: siblings
-      ? "Number disconnected. Your other WhatsApp numbers are unaffected."
-      : "Number disconnected.",
+      ? "Number removed. Your conversations are kept, and your other WhatsApp numbers are unaffected."
+      : "Number removed. Your conversations with it are kept.",
     webhooksPreserved,
   };
 }

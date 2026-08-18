@@ -20,6 +20,13 @@ const state = {
   numbers: [] as Row[],
   channels: [] as Row[],
   events: [] as Row[],
+  /**
+   * Conversations that happened on these numbers. Present so removal can be
+   * checked for what it LEAVES BEHIND: the foreign key is SetNull, and a
+   * business's record of what was said must survive them removing the phone
+   * number it arrived on.
+   */
+  conversations: [] as Row[],
   /** WABA ids our app was told to unsubscribe from. The thing under test. */
   unsubscribed: [] as string[],
   subscribed: [] as string[],
@@ -91,6 +98,7 @@ beforeEach(() => {
   state.numbers = [];
   state.channels = [];
   state.events = [];
+  state.conversations = [];
   state.unsubscribed = [];
   state.subscribed = [];
   state.deregistered = [];
@@ -118,6 +126,25 @@ beforeEach(() => {
       if (!hit) throw new Error("update on a row that does not exist");
       Object.assign(hit, data);
       return hit;
+    },
+    /**
+     * Modelled with the real foreign-key behaviour, because the point of
+     * removal is WHAT SURVIVES it.
+     *
+     * The number cascades away with its channel. Conversations do not: that
+     * key is SetNull (migration 20260818150000), so a business keeps its
+     * record of what was said on a number it has since removed.
+     */
+    delete: async ({ where }: any) => {
+      const idx = state.channels.findIndex((c) => matches(c, where));
+      if (idx < 0) throw new Error("delete on a row that does not exist");
+      const [removed] = state.channels.splice(idx, 1);
+      const numIdx = state.numbers.findIndex((n) => n.channelAccountId === removed.id);
+      if (numIdx >= 0) state.numbers.splice(numIdx, 1);
+      for (const c of state.conversations ?? []) {
+        if (c.channelAccountId === removed.id) c.channelAccountId = null;
+      }
+      return removed;
     },
   };
   mocks.prismaMock.whatsAppNumberEvent = {
@@ -250,14 +277,36 @@ describe("disconnecting one number", () => {
     expect(state.deregistered).toEqual([]);
   });
 
-  it("marks only the removed number disconnected", async () => {
+  it("removes only that number, and leaves the sibling connected", async () => {
+    // Removal DELETES the row rather than marking it DISCONNECTED.
+    //
+    // A row left behind still counted as "known" to the asset inspector, which
+    // reads every whatsapp_numbers row with no state filter. The number came
+    // back as already ours, the flow selector chose RECONNECT over COEXISTENCE,
+    // and the picker said "all your numbers are already connected" with no
+    // button. A customer who disconnected could never re-onboard that number,
+    // and so could never get a history sync, which Meta grants only on a fresh
+    // onboarding.
     seedNumber({ id: "sales", wabaId: "waba_1" });
     seedNumber({ id: "support", wabaId: "waba_1" });
 
     await disconnectNumber("sales", "tenant_a");
 
-    expect(state.numbers.find((n) => n.id === "sales")!.state).toBe("DISCONNECTED");
+    expect(state.numbers.find((n) => n.id === "sales")).toBeUndefined();
     expect(state.numbers.find((n) => n.id === "support")!.state).toBe("CONNECTED");
+  });
+
+  it("keeps the conversations that happened on the removed number", async () => {
+    // The business's record of what was said is not ours to delete because
+    // they stopped using a phone number.
+    seedNumber({ id: "sales", wabaId: "waba_1" });
+    const channelId = state.numbers.find((n) => n.id === "sales")!.channelAccountId;
+    state.conversations.push({ id: "conv_1", channelAccountId: channelId } as Row);
+
+    await disconnectNumber("sales", "tenant_a");
+
+    expect(state.conversations).toHaveLength(1);
+    expect(state.conversations[0].channelAccountId).toBeNull();
   });
 
   it("refuses to disconnect a number belonging to another workspace", async () => {

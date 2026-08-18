@@ -250,9 +250,21 @@ export async function onboardNumber(input: OnboardNumberInput): Promise<OnboardR
   // The CHANNEL is connected when it can carry traffic. Whether Meta currently
   // permits outbound is a warning on a connected channel, not a reason to tell
   // the whole product the channel does not exist. See channelStatusForNumber.
+  //
+  // `state` rather than `finalNumber.state`, and that is the whole fix.
+  // `finalNumber` was read BEFORE the update above wrote the settled state, so
+  // it still held ONBOARDING - which channelStatusForNumber maps to PENDING.
+  // The channel row was therefore left PENDING on every successful onboarding,
+  // and the Channels page showed a working, message-carrying number as
+  // "Connecting..." indefinitely. Nothing ever corrected it, because this is
+  // the only place the initial status is written.
   await syncChannelStatus(
     channelAccount.id,
-    channelStatusForNumber(finalNumber),
+    channelStatusForNumber({
+      state,
+      webhookSubscribed: finalNumber.webhookSubscribed,
+      messagingStatus: finalNumber.messagingStatus,
+    }),
     usable ? null : "Incoming messages are not reaching GOTCHA yet.",
   );
 
@@ -296,6 +308,8 @@ async function runStep(step: AutomatedStep, ctx: StepContext): Promise<StepResul
       return syncProfile(ctx);
     case "HEALTH_CHECK":
       return healthCheckStep(ctx);
+    case "REQUEST_HISTORY_SYNC":
+      return requestHistorySync(ctx);
     default:
       // EXCHANGE_TOKEN and RESOLVE_ASSETS happen before the pipeline, in the
       // route. Reaching here means the step list gained a member nobody
@@ -626,6 +640,84 @@ async function upsertNumberRecord(args: {
   });
 
   return { channelAccount, number };
+}
+
+/**
+ * Ask Meta to send the business's past conversations and contacts.
+ *
+ * ── Why this exists ──
+ *
+ * Subscribing to the `history` webhook field says WHERE to deliver. It does not
+ * ask for anything. Meta requires an explicit
+ * `POST /<PHONE_NUMBER_ID>/smb_app_data` to start the transfer, and without it
+ * nothing is ever sent.
+ *
+ * That was the defect, and it was invisible: the field was subscribed, the
+ * number connected cleanly, every step in this pipeline reported SUCCESS, and
+ * the customer's history simply never arrived. Nothing anywhere recorded that
+ * the one call that matters had never been made, because we only logged the
+ * steps we did run.
+ *
+ * ── Once only, and a 24-hour deadline ──
+ *
+ * Meta grants one synchronization per onboarding. Repeating it requires the
+ * customer to offboard in the WhatsApp Business app and complete Embedded
+ * Signup again, so this must never retry blindly. The step log is the guard:
+ * a run that already recorded SUCCESS here skips, which also makes the whole
+ * pipeline safe to re-run for any other reason.
+ *
+ * ── Why a failure here is not a failure of onboarding ──
+ *
+ * The number works. Messages flow. What the customer loses is the history
+ * import, which is an onboarding bonus rather than the channel itself, so this
+ * returns SKIPPED rather than FAILED and the connection stands.
+ */
+async function requestHistorySync(ctx: StepContext): Promise<StepResult> {
+  const { number, client, phoneNumberId } = ctx;
+
+  // Coexistence only. Meta rejects it for any other number, and a number that
+  // was never on the WhatsApp Business app has no history to send. Read from
+  // the row rather than the inspection, so a re-run after a restart still knows.
+  const row = await prisma.whatsAppNumber.findUnique({
+    where: { id: number.id },
+    select: { isOnBizApp: true },
+  });
+  if (!row?.isOnBizApp) {
+    return { outcome: "SKIPPED", message: "Not a WhatsApp Business app number." };
+  }
+
+  // Once only. A second request cannot succeed and Meta counts the attempt.
+  const already = await prisma.whatsAppNumberEvent.findFirst({
+    where: { numberId: number.id, step: "REQUEST_HISTORY_SYNC", outcome: "SUCCESS" },
+    select: { id: true },
+  });
+  if (already) {
+    return { outcome: "SKIPPED", message: "History was already requested for this onboarding." };
+  }
+
+  // Contacts first, then messages, in the order Meta documents them. The
+  // contact sync is best-effort: it is genuinely optional, and letting it stop
+  // the message history would trade the valuable half for the cheap half.
+  const contacts = await client.requestSmbSync(phoneNumberId, "smb_app_state_sync");
+  await recordStep(number.id, "REQUEST_CONTACT_SYNC", contacts.ok ? "SUCCESS" : "FAILED", {
+    ...(contacts.ok ? { detail: contacts.value } : { error: contacts.error }),
+  });
+
+  const history = await client.requestSmbSync(phoneNumberId, "history");
+  if (!history.ok) {
+    return {
+      outcome: "SKIPPED",
+      message:
+        "WhatsApp would not start the history transfer. The number is connected and working; " +
+        "importing past conversations would need disconnecting in the WhatsApp Business app and connecting again.",
+    };
+  }
+
+  console.log(
+    `[whatsapp-history] requested sync number=${number.id} phoneNumberId=${phoneNumberId} ` +
+      `contacts=${contacts.ok ? "ok" : "failed"} history=ok`,
+  );
+  return { outcome: "SUCCESS" };
 }
 
 /** Keep the channel row's status honest and in step with the number's. */

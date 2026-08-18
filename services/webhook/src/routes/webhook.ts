@@ -450,14 +450,29 @@ router.post("/", async (req: Request, res: Response) => {
         { attempts: 5, backoff: { type: "exponential", delay: 2000 } }
       );
     }
-    if (historyChunks.length > 0) {
-      // Counts only - a history chunk is a customer's private correspondence
-      // and none of it belongs in a log line.
-      const totalMessages = historyChunks.reduce((n, c) => n + c.messages.length, 0);
-      const progress = Math.max(...historyChunks.map((c) => c.progress));
+    // One structured line PER CHUNK, not one summary per delivery.
+    //
+    // Chunks arrive out of order across three phases and there is no "done"
+    // event other than progress reaching 100, so the only way to answer "did
+    // Meta actually send everything" after the fact is a line per chunk with
+    // its phase and sequence number. A single aggregate line cannot show a
+    // missing chunk 7.
+    //
+    // Counts and sequence only. A history chunk is a customer's private
+    // correspondence and none of it belongs in log aggregation.
+    for (const chunk of historyChunks) {
+      if (chunk.unavailable) {
+        console.warn(
+          `[WEBHOOK.HISTORY] account=${channelExternalId} UNAVAILABLE ` +
+            `code=${chunk.unavailable.code ?? "-"} reason=${JSON.stringify(chunk.unavailable.reason)}`,
+        );
+        continue;
+      }
       console.log(
-        `[WEBHOOK] history chunks=${historyChunks.length} messages=${totalMessages} ` +
-          `progress=${progress} account=${channelExternalId}`,
+        `[WEBHOOK.HISTORY] account=${channelExternalId} phase=${chunk.phase} ` +
+          `chunk=${chunk.chunkOrder} progress=${chunk.progress} ` +
+          `threads=${chunk.threadCount} messages=${chunk.messages.length}` +
+          (chunk.progress >= 100 ? " COMPLETE" : ""),
       );
     }
 

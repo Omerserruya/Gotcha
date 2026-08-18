@@ -5296,7 +5296,10 @@
       "alreadyAdded": "Already added",
       "connecting": "Connecting...",
       "cancel": "Cancel",
-      "back": "Start over"
+      "back": "Start over",
+      "otherNumbers": "{count} more numbers that cannot be added here",
+      "unavailable": "Not available",
+      "moreBlockers": "and {count} more"
     },
     "outcome": {
       "allAlreadyConnected": "Every number WhatsApp offered is already connected to this workspace. There is nothing new to add.",
@@ -5330,6 +5333,22 @@
       "add": "Add",
       "addFailed": "Could not add the number",
       "empty": "Nothing excluded. Every conversation on this number reaches the inbox."
+    },
+    "blocker": {
+      "CHOICE_REQUIRED": "Choose how you want to use this number before connecting it.",
+      "CONNECTED_ELSEWHERE": "This number belongs to another GOTCHA workspace. Disconnect it there first.",
+      "NAME_DECLINED": "WhatsApp declined the display name for this number. Change it in Meta Business settings.",
+      "NOT_VERIFIED": "This number still needs the verification code WhatsApp sent you.",
+      "ON_PREMISE": "This number runs on the On-Premise API, which GOTCHA does not support.",
+      "WEBHOOK_NOT_SUBSCRIBED": "Incoming messages are not reaching GOTCHA yet.",
+      "WEBHOOK_OVERRIDDEN": "Another platform is receiving this number's messages."
+    },
+    "health": {
+      "CONNECTED": "Connected to WhatsApp",
+      "MESSAGING": "Can send messages",
+      "QUALITY": "Quality rating",
+      "VERIFICATION": "Number verified",
+      "WEBHOOKS": "Receiving incoming messages"
     }
   },
   "historicalImport": {

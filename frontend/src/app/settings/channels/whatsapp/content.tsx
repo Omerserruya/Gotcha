@@ -46,6 +46,7 @@ import {
   type WhatsAppInspection,
   type WhatsAppHealthCheck,
   type WhatsAppHealthReport,
+  type WhatsAppBlocker,
   listWhatsAppExclusions,
   addWhatsAppExclusion,
   removeWhatsAppExclusion,
@@ -177,7 +178,7 @@ function CheckRow({ check }: { check: WhatsAppHealthCheck }) {
         {tone.icon}
       </span>
       <div className="min-w-0 flex-1">
-        <div className="text-sm text-gray-800 leading-5">{check.label}</div>
+        <div className="text-sm text-gray-800 leading-5">{healthText(check, t)}</div>
         {check.detail && <div className="text-xs text-gray-500 mt-0.5">{check.detail}</div>}
         {/*
           Meta's own remediation text, shown verbatim. It is written by the team
@@ -495,6 +496,55 @@ function NumberCard({
   );
 }
 
+/**
+ * Can this candidate actually be added right now?
+ *
+ * The picker used to render EVERY number Meta returned, each with a Connect
+ * button, and then disable the ones that could not be connected. A customer who
+ * authorized one number was shown three, two of them greyed out with red text
+ * about another workspace and about payment methods - none of it actionable
+ * here. The eligible ones are now separated from the rest, and the rest lose
+ * the button entirely, because a button that can never be pressed is noise.
+ */
+function isConnectable(c: WhatsAppCandidate): boolean {
+  return c.scenario !== "BLOCKED" && !c.alreadyConnectedHere;
+}
+
+/**
+ * A blocker, in the reader's language.
+ *
+ * The server composes these strings in English - `flow-selector.ts` and
+ * `buildHealthReport` both build prose rather than returning keys - so a Hebrew
+ * customer got Hebrew page furniture wrapped around English sentences about
+ * SIP, payment methods and business verification. It read like a broken page.
+ *
+ * Translating by CODE rather than replacing the server strings keeps this a UI
+ * change: the codes are already a closed set and already travel to the client.
+ * An unrecognised code falls back to the server's own text, so a new blocker
+ * added server-side degrades to English instead of disappearing.
+ */
+function blockerText(
+  b: WhatsAppBlocker,
+  t: (key: string, vars?: Record<string, string>) => string,
+): string {
+  const key = `whatsappNumbers.blocker.${b.code}`;
+  const translated = t(key);
+  return translated === key ? b.message : translated;
+}
+
+/**
+ * The same idea for a health check row. `id` is the closed set; `label` and
+ * `detail` are the server's English.
+ */
+function healthText(
+  check: { id: string; label: string },
+  t: (key: string, vars?: Record<string, string>) => string,
+): string {
+  const key = `whatsappNumbers.health.${check.id}`;
+  const translated = t(key);
+  return translated === key ? check.label : translated;
+}
+
 // ─── Add a number ────────────────────────────────────────────
 
 /**
@@ -625,6 +675,23 @@ function AddNumberPanel({ onDone }: { onDone: () => void }) {
       // before anything is committed.
       const res = await inspectWhatsApp(token!, { code, ...assetsRef.current });
       setInspection(res.data);
+
+      // One eligible number: connect it. Do not ask.
+      //
+      // The customer has just spent a minute inside Meta's dialog choosing this
+      // exact number and pressing Finish. Coming back to a list containing that
+      // one number and a "Connect this" button reads as though the thing they
+      // just did did not register - and several people simply stopped there,
+      // believing they were done, which is how a number ends up authorized at
+      // Meta and absent from GOTCHA.
+      //
+      // Only when there is genuinely nothing to choose between. Two or more
+      // eligible numbers is a real decision and still gets the picker.
+      const eligible = (res.data.candidates ?? []).filter(isConnectable);
+      if (eligible.length === 1) {
+        await connect(eligible[0]);
+        return;
+      }
       setStage("choosing");
     } catch (err: any) {
       setError(err?.message || t("whatsappNumbers.add.inspectFailed"));
@@ -644,8 +711,25 @@ function AddNumberPanel({ onDone }: { onDone: () => void }) {
       });
       setNote(res.data.message);
       onDone();
-      // Stay on the picker: the session is still valid, so a customer with
-      // three numbers adds all three without re-authorising for each.
+
+      // Mark it connected in the list we are already showing.
+      //
+      // Staying on the picker is deliberate - a customer with three numbers
+      // adds all three without re-authorising - but the list was never updated
+      // afterwards, so the number just connected sat there with a live
+      // "Connect this" button WHILE also appearing as a connected card above.
+      // The same number, twice, in two contradictory states.
+      const remaining = (inspection?.candidates ?? []).map((x) =>
+        x.phoneNumberId === candidate.phoneNumberId ? { ...x, alreadyConnectedHere: true } : x,
+      );
+      setInspection((prev) => (prev ? { ...prev, candidates: remaining } : prev));
+
+      // Nothing left to add: close, rather than leaving a picker whose every
+      // row is disabled. That screen has no purpose and reads as a dead end.
+      if (!remaining.some(isConnectable)) {
+        setStage("idle");
+        return;
+      }
       setStage("choosing");
     } catch (err: any) {
       setError(err?.message || t("whatsappNumbers.add.connectFailed"));
@@ -737,7 +821,11 @@ function AddNumberPanel({ onDone }: { onDone: () => void }) {
       )}
 
       <div className="mt-3 space-y-2.5">
-        {inspection?.candidates.map((c) => {
+        {/*
+          Only what can actually be added. Everything else moves below, without
+          a button, because it is context rather than a choice.
+        */}
+        {(inspection?.candidates ?? []).filter(isConnectable).map((c) => {
           const blocked = c.scenario === "BLOCKED";
           const isConnecting = stage === "connecting" && chosen === c.phoneNumberId;
           return (
@@ -754,11 +842,23 @@ function AddNumberPanel({ onDone }: { onDone: () => void }) {
                     {c.phoneNumber || c.name || t("whatsappNumbers.card.fallbackName")}
                   </div>
                   <p className="text-xs text-gray-600 mt-1 leading-relaxed">{c.message}</p>
-                  {c.blockers.map((b) => (
-                    <p key={b.code} className="text-xs text-red-600 mt-1">
-                      {b.message}
+                  {/*
+                    Two at most. The screen showed five near-identical red
+                    lines per number, which turned a list of things to fix into
+                    a wall that reads as "this is broken" and gets skipped.
+                  */}
+                  {c.blockers.slice(0, 2).map((b) => (
+                    <p key={b.code} className="text-xs text-amber-700 mt-1">
+                      {blockerText(b, t)}
                     </p>
                   ))}
+                  {c.blockers.length > 2 && (
+                    <p className="text-[11px] text-gray-500 mt-1">
+                      {t("whatsappNumbers.choose.moreBlockers", {
+                        count: String(c.blockers.length - 2),
+                      })}
+                    </p>
+                  )}
                 </div>
 
                 <button
@@ -818,6 +918,50 @@ function AddNumberPanel({ onDone }: { onDone: () => void }) {
           );
         })}
       </div>
+
+      {/*
+        Numbers Meta returned that cannot be added from here: already on this
+        workspace, or held by another one. Listed so a customer who expected to
+        see them is not left wondering, and collapsed because none of it is a
+        decision they make on this screen.
+      */}
+      {(inspection?.candidates ?? []).some((c) => !isConnectable(c)) && (
+        <details className="mt-3">
+          <summary className="cursor-pointer text-xs text-gray-500 hover:text-gray-700">
+            {t("whatsappNumbers.choose.otherNumbers", {
+              count: String((inspection?.candidates ?? []).filter((c) => !isConnectable(c)).length),
+            })}
+          </summary>
+          <div className="mt-2 space-y-2">
+            {(inspection?.candidates ?? [])
+              .filter((c) => !isConnectable(c))
+              .map((c) => (
+                <div key={c.phoneNumberId} className="rounded-lg border border-gray-200 bg-gray-50 p-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-medium text-gray-800" dir="ltr">
+                      {c.phoneNumber || c.name}
+                    </span>
+                    <span className="shrink-0 rounded-full bg-gray-200 px-2 py-0.5 text-[10px] text-gray-700">
+                      {c.alreadyConnectedHere
+                        ? t("whatsappNumbers.choose.alreadyAdded")
+                        : t("whatsappNumbers.choose.unavailable")}
+                    </span>
+                  </div>
+                  {/*
+                    ONE reason, not the whole list. Five identical red lines on
+                    a number the customer cannot act on here is what made this
+                    screen unreadable.
+                  */}
+                  {c.blockers[0] && (
+                    <p className="mt-1 text-[11px] text-gray-600">
+                      {blockerText(c.blockers[0], t)}
+                    </p>
+                  )}
+                </div>
+              ))}
+          </div>
+        </details>
+      )}
 
       {/*
         The recoverable dead end. Never a bare empty list: the server computed

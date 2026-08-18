@@ -1011,7 +1011,18 @@ model Conversation {
   updatedAt          DateTime           @updatedAt @map("updated_at")
 
   tenant           Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  channelAccount   ChannelAccount?           @relation(fields: [channelAccountId], references: [id], onDelete: Cascade)
+  /// SetNull, NOT Cascade.
+  ///
+  /// Disconnecting a channel must never erase the customer conversations that
+  /// happened on it. Those are the business's record of what was said, they are
+  /// what the AI learned from, and they are subject to retention rules that a
+  /// disconnect does not override. `channelAccountId` is nullable precisely so
+  /// a conversation can outlive the account it arrived through.
+  ///
+  /// This was Cascade, which meant removing a WhatsApp number silently deleted
+  /// every conversation it had ever carried - discovered while making offboard
+  /// delete its rows so a number can be re-onboarded.
+  channelAccount   ChannelAccount?           @relation(fields: [channelAccountId], references: [id], onDelete: SetNull)
   assignedAgent    User?                     @relation("AssignedAgent", fields: [assignedAgentId], references: [id], onDelete: SetNull)
   department       Department?               @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   chatbotFlow      ChatbotFlow?              @relation(fields: [chatbotFlowId], references: [id], onDelete: SetNull)
@@ -6539,7 +6550,11 @@ model HistoricalImport {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  channelAccount ChannelAccount? @relation(fields: [channelAccountId], references: [id], onDelete: Cascade)
+  /// SetNull for the same reason as Conversation: an import holds mined
+  /// knowledge, customer memory and an analytics summary that survive the
+  /// channel. Re-onboarding a number to import history again must not destroy
+  /// what the previous import already taught the business.
+  channelAccount ChannelAccount? @relation(fields: [channelAccountId], references: [id], onDelete: SetNull)
   chunks         HistoricalImportChunk[]
   events         HistoricalImportEvent[]
   customers      HistoricalCustomer[]
