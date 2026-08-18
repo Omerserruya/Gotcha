@@ -8,6 +8,7 @@ import type {
   NormalizedOutboundEcho,
   NormalizedHistoryChunk,
   NormalizedHistoricalMessage,
+  SharedContact,
   ChannelCredentials,
   ProviderSendError,
 } from "./types";
@@ -425,6 +426,58 @@ export const whatsAppInboundAdapter: InboundAdapter = {
   },
 };
 
+/**
+ * Reduce Meta's contact payload to what an agent can act on.
+ *
+ * Meta's shape is a full vCard: name broken into five parts, addresses, urls,
+ * birthdays. Almost none of it helps somebody answering a message, and copying
+ * it wholesale would put a customer's relatives' home addresses into our
+ * database for no benefit. Name, numbers, emails and organization only.
+ *
+ * `wa_id` is kept where Meta provides it, because that is the difference
+ * between a number an agent has to type somewhere and one they can open a
+ * conversation with.
+ */
+function extractWhatsAppContacts(raw: unknown): SharedContact[] {
+  if (!Array.isArray(raw)) return [];
+  const out: SharedContact[] = [];
+  for (const c of raw.slice(0, 5)) {
+    if (!c || typeof c !== "object") continue;
+    const any = c as any;
+    const name =
+      any.name?.formatted_name ||
+      [any.name?.first_name, any.name?.last_name].filter(Boolean).join(" ") ||
+      "";
+    const phones = Array.isArray(any.phones)
+      ? any.phones
+          .filter((p: any) => p?.phone)
+          .slice(0, 5)
+          .map((p: any) => ({
+            number: String(p.phone),
+            type: p.type ? String(p.type) : undefined,
+            waId: p.wa_id ? String(p.wa_id) : undefined,
+          }))
+      : [];
+    const emails = Array.isArray(any.emails)
+      ? any.emails
+          .filter((e: any) => e?.email)
+          .slice(0, 5)
+          .map((e: any) => ({
+            address: String(e.email),
+            type: e.type ? String(e.type) : undefined,
+          }))
+      : [];
+    if (!name && phones.length === 0 && emails.length === 0) continue;
+    out.push({
+      name,
+      phones,
+      emails,
+      organization: any.org?.company ? String(any.org.company) : undefined,
+    });
+  }
+  return out;
+}
+
 /** Digits only, so "+972 50-123-4567" and "972501234567" compare equal. */
 function digitsOnly(v: unknown): string {
   return typeof v === "string" || typeof v === "number"
@@ -520,6 +573,22 @@ function extractWhatsAppContent(msg: any): NormalizedInboundMessage["content"] {
       return { type: "image", mediaUrl: msg.sticker?.id, caption: "[Sticker]", mimeType: msg.sticker?.mime_type };
     case "location":
       return { type: "location", text: `[Location: ${msg.location?.latitude}, ${msg.location?.longitude}]` };
+    case "contacts": {
+      // "Send a contact" from the WhatsApp attach menu. Arrives as an array,
+      // because a customer can share several at once.
+      //
+      // Kept structured. The point of a shared contact is that somebody can
+      // ring it - a customer sending their partner's number so a delivery can
+      // be arranged is common, and flattening it into text was throwing that
+      // away and rendering the literal string "[contacts message]".
+      const cards = extractWhatsAppContacts(msg.contacts);
+      if (cards.length === 0) return { type: "text", text: "[Contact]" };
+      const summary =
+        cards.length === 1
+          ? cards[0].name || cards[0].phones[0]?.number || "[Contact]"
+          : `${cards[0].name || "[Contact]"} +${cards.length - 1}`;
+      return { type: "contact", text: summary, contacts: cards };
+    }
     default:
       return { type: "text", text: `[${msg.type || "unknown"} message]` };
   }

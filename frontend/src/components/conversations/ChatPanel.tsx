@@ -123,6 +123,29 @@ export function ChatPanel({ conversationId, onBack }: Props) {
   // send. Versioned so the same quote can be re-sent if the agent clicks twice.
   const [askPrefill, setAskPrefill] = useState<{ quote: string; version: number } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  /** Briefly highlighted after jumping to it, so the eye lands on the right one. */
+  const [flashedMessageId, setFlashedMessageId] = useState<string | null>(null);
+
+  /**
+   * Scroll to the message a reply is quoting.
+   *
+   * The scroll alone is not enough: in a dense thread it lands the reader
+   * somewhere plausible with no idea which line they were sent to, so the
+   * target flashes for a moment. The flash is time-boxed rather than cleared on
+   * the next click, because the reader may simply scroll away and a permanently
+   * highlighted message would look like a selection they cannot dismiss.
+   *
+   * A quoted message can legitimately be outside the loaded page - somebody
+   * replying to something from weeks ago. Nothing happens then, which is the
+   * honest outcome; jumping to the wrong place would be worse.
+   */
+  const jumpToMessage = useCallback((messageId: string) => {
+    const el = document.getElementById(`msg-${messageId}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    setFlashedMessageId(messageId);
+    window.setTimeout(() => setFlashedMessageId((cur) => (cur === messageId ? null : cur)), 1600);
+  }, []);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const repliesRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -793,7 +816,13 @@ export function ChatPanel({ conversationId, onBack }: Props) {
                 msg.direction === "OUTBOUND" ? "items-end" : "items-start"
               )}
             >
-              <div className="group/msg flex items-center gap-1 max-w-[85%] md:max-w-[75%]">
+              <div
+                id={`msg-${msg.id}`}
+                className={clsx(
+                  "group/msg flex items-center gap-1 max-w-[85%] md:max-w-[75%] rounded-2xl transition-shadow duration-500",
+                  flashedMessageId === msg.id && "ring-2 ring-primary-400 ring-offset-2",
+                )}
+              >
               {/*
                 Reply.
 
@@ -845,8 +874,21 @@ export function ChatPanel({ conversationId, onBack }: Props) {
                   API with the message, because the quoted message is very
                   often outside the page being rendered.
                 */}
-                {(msg.replyTo || msg.replyToExternalId) && (
-                  <QuotedMessage quoted={msg.replyTo} t={t} />
+                {(msg.replyTo || msg.replyToMessageId || msg.replyToExternalId) && (
+                  <QuotedMessage
+                    // Two sources, because they cover different moments. The
+                    // API includes `replyTo` on the page it returns, but a
+                    // message that has just arrived over the socket carries
+                    // only the id - which is why every live reply read as "an
+                    // earlier message" until the page was reloaded. The thread
+                    // is already in state, so resolve from there first.
+                    quoted={msg.replyTo || messages.find((m: any) => m.id === msg.replyToMessageId) || null}
+                    onJump={msg.replyToMessageId ? () => jumpToMessage(msg.replyToMessageId) : undefined}
+                    t={t}
+                  />
+                )}
+                {msg.messageType === "contact" && msg.metadata?.contacts && (
+                  <ContactCard contacts={msg.metadata.contacts} t={t} />
                 )}
                 <MessageMedia msg={msg} t={t} />
                 {msg.body && !isRedundantMediaCaption(msg) && (
@@ -1356,6 +1398,7 @@ function ActionButton({
  */
 const MEDIA_PLACEHOLDER_BODIES = new Set([
   "[Image]", "[Video]", "[Document]", "[Audio message]", "[Voice message]", "[Sticker]",
+  "[Contact]",
 ]);
 
 /**
@@ -1369,9 +1412,11 @@ const MEDIA_PLACEHOLDER_BODIES = new Set([
  */
 function QuotedMessage({
   quoted,
+  onJump,
   t,
 }: {
   quoted: any | null | undefined;
+  onJump?: () => void;
   t: (key: string, vars?: Record<string, string>) => string;
 }) {
   const label = quoted
@@ -1381,7 +1426,7 @@ function QuotedMessage({
     : null;
 
   // Media has no body worth quoting, so the preview names the kind instead of
-  // showing a placeholder like "[Image]" that reads as literal text.
+  // printing a placeholder like "[Image]" that reads as literal text.
   const preview = !quoted
     ? t("conversations.reply.unavailable")
     : quoted.messageType === "image"
@@ -1390,19 +1435,130 @@ function QuotedMessage({
         ? t("conversations.reply.voice")
         : quoted.messageType === "video"
           ? t("conversations.reply.video")
-          : quoted.messageType === "document"
-            ? quoted.fileName || t("conversations.reply.file")
-            : (quoted.body || "").slice(0, 140);
+          : quoted.messageType === "contact"
+            ? t("conversations.reply.contact")
+            : quoted.messageType === "document"
+              ? quoted.fileName || t("conversations.reply.file")
+              : (quoted.body || "").slice(0, 140);
+
+  // A thumbnail when the quoted message was a photo. WhatsApp does this and it
+  // is the fastest way to know which of five images is meant, which is exactly
+  // the case where a text label helps least.
+  const thumb = quoted?.messageType === "image" && quoted?.mediaUrl ? quoted.mediaUrl : null;
+
+  const jumpable = !!onJump && !!quoted;
+  const Tag: any = jumpable ? "button" : "div";
 
   return (
-    <div className="mb-1 rounded-md border-s-2 border-current/40 bg-black/5 px-2 py-1">
-      {label && <div className="text-[10px] font-medium opacity-70">{label}</div>}
-      <div className="text-[11px] opacity-80 line-clamp-2 break-words">{preview}</div>
+    <Tag
+      type={jumpable ? "button" : undefined}
+      onClick={jumpable ? onJump : undefined}
+      className={[
+        "mb-1 flex w-full items-center gap-2 rounded-md border-s-2 border-current/40 bg-black/5 px-2 py-1 text-start",
+        // Only offer the affordance when there is somewhere to go. An
+        // unresolved quote that looked clickable and did nothing would read as
+        // a broken button rather than as a message we do not hold.
+        jumpable ? "cursor-pointer hover:bg-black/10 transition" : "",
+      ].join(" ")}
+    >
+      <div className="min-w-0 flex-1">
+        {label && <div className="text-[10px] font-medium opacity-70">{label}</div>}
+        <div className="text-[11px] opacity-80 line-clamp-2 break-words">{preview}</div>
+      </div>
+      {thumb && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={thumb} alt="" className="h-8 w-8 shrink-0 rounded object-cover" />
+      )}
+    </Tag>
+  );
+}
+
+/**
+ * A contact somebody shared through the WhatsApp attach menu.
+ *
+ * Rendered as something actionable rather than as text. The whole reason a
+ * customer sends a contact is so the business can ring it - a partner's number
+ * for a delivery, an accountant's for an invoice - and until now it arrived as
+ * the dead string "[contacts message]", which lost both the number and the
+ * point.
+ */
+function ContactCard({
+  contacts,
+  t,
+}: {
+  contacts: any[];
+  t: (key: string, vars?: Record<string, string>) => string;
+}) {
+  if (!Array.isArray(contacts) || contacts.length === 0) return null;
+  return (
+    <div className="mb-1 space-y-1.5">
+      {contacts.map((c, i) => (
+        <div key={i} className="rounded-lg bg-black/5 px-2.5 py-2">
+          <div className="flex items-center gap-2">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-black/10 text-[11px] font-semibold">
+              {(c.name || "?").trim().charAt(0).toUpperCase()}
+            </span>
+            <div className="min-w-0">
+              <div className="truncate text-xs font-medium">
+                {c.name || t("conversations.reply.contact")}
+              </div>
+              {c.organization && (
+                <div className="truncate text-[10px] opacity-70">{c.organization}</div>
+              )}
+            </div>
+          </div>
+          {(c.phones ?? []).map((p: any, j: number) => (
+            <div key={j} className="mt-1 flex items-center justify-between gap-2 ps-9">
+              <span className="truncate text-[11px] opacity-90" dir="ltr">
+                {p.number}
+              </span>
+              <span className="flex shrink-0 gap-1.5">
+                {/*
+                  `wa_id` is present only when Meta knows the number is on
+                  WhatsApp. Offering the WhatsApp link without it would send the
+                  agent to a dead end, so it is conditional while `tel:` - which
+                  always works - is not.
+                */}
+                {p.waId && (
+                  <a
+                    href={`https://wa.me/${String(p.waId).replace(/\D/g, "")}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="rounded px-1.5 py-0.5 text-[10px] font-medium underline opacity-80 hover:opacity-100"
+                  >
+                    {t("conversations.reply.openWhatsapp")}
+                  </a>
+                )}
+                <a
+                  href={`tel:${String(p.number).replace(/[^\d+]/g, "")}`}
+                  className="rounded px-1.5 py-0.5 text-[10px] font-medium underline opacity-80 hover:opacity-100"
+                >
+                  {t("conversations.reply.call")}
+                </a>
+              </span>
+            </div>
+          ))}
+          {(c.emails ?? []).map((e: any, j: number) => (
+            <div key={j} className="mt-1 ps-9">
+              <a
+                href={`mailto:${e.address}`}
+                className="truncate text-[11px] underline opacity-80 hover:opacity-100"
+                dir="ltr"
+              >
+                {e.address}
+              </a>
+            </div>
+          ))}
+        </div>
+      ))}
     </div>
   );
 }
 
 function isRedundantMediaCaption(msg: any): boolean {
+  // A shared contact has no mediaUrl but its body IS the card's headline - the
+  // name - so printing it above the card says the same thing twice.
+  if (msg.messageType === "contact" && msg.metadata?.contacts?.length) return true;
   if (!msg.mediaUrl) return false;
   const body = String(msg.body ?? "").trim();
   // The sender's own filename is used as the document caption, and it is
@@ -1457,13 +1613,26 @@ function MessageMedia({ msg, t }: { msg: any; t: (key: string, vars?: Record<str
         src={url}
         alt={msg.fileName || ""}
         loading="lazy"
-        className="max-w-full rounded-lg mb-1 cursor-pointer"
+        // Bounded in BOTH directions, and `object-contain` so nothing is
+        // cropped. Width alone was not enough: a tall photo from a phone
+        // camera is far taller than it is wide, so `max-w-full` left a single
+        // message occupying several screens and the agent had to scroll past
+        // one image to reach the next message. Capped at 320px it stays a
+        // glance, and the full picture is one click away.
+        className="max-h-[320px] w-auto max-w-full rounded-lg mb-1 cursor-pointer object-contain"
         onClick={() => window.open(url, "_blank")}
       />
     );
   }
   if (isVideo) {
-    return <video src={url} controls preload="metadata" className="max-w-full rounded-lg mb-1" />;
+    return (
+      <video
+        src={url}
+        controls
+        preload="metadata"
+        className="max-h-[320px] w-auto max-w-full rounded-lg mb-1"
+      />
+    );
   }
   if (isAudio) {
     return (

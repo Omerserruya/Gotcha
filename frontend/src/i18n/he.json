@@ -242,7 +242,10 @@
       "photo": "תמונה",
       "voice": "הודעה קולית",
       "video": "וידאו",
-      "file": "קובץ"
+      "file": "קובץ",
+      "contact": "איש קשר",
+      "call": "חיוג",
+      "openWhatsapp": "וואטסאפ"
     }
   },
   "dashboard": {

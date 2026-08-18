@@ -328,6 +328,12 @@ router.post("/", async (req: Request, res: Response) => {
             messageType,
             interactiveReply: msg.content.interactiveReply,
             replyToExternalId: msg.replyToExternalId,
+            // Structured and already reduced by the adapter to name, numbers,
+            // emails and organization. The worker copies producer metadata onto
+            // the message row verbatim.
+            ...(msg.content.contacts?.length
+              ? { metadata: { contacts: msg.content.contacts } }
+              : {}),
             mediaUrl,
             fileName,
             mimeType,
@@ -501,6 +507,11 @@ function normalizeContentToBodyAndType(
       return { body: content.caption || "[Video]", messageType: "video", ...media };
     case "location":
       return { body: content.text || "[Location]", messageType: "location" };
+    case "contact":
+      // The card itself rides on `metadata.contacts`, not in the body. The body
+      // is the readable summary an inbox list and a notification need; the
+      // structure is what the bubble turns into something clickable.
+      return { body: content.text || "[Contact]", messageType: "contact" };
     default:
       return { body: content.text || `[${content.type} message]`, messageType: content.type };
   }

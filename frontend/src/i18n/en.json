@@ -242,7 +242,10 @@
       "photo": "Photo",
       "voice": "Voice message",
       "video": "Video",
-      "file": "File"
+      "file": "File",
+      "contact": "Contact",
+      "call": "Call",
+      "openWhatsapp": "WhatsApp"
     }
   },
   "dashboard": {
