@@ -20,6 +20,13 @@ const state = {
   numbers: [] as Row[],
   channels: [] as Row[],
   events: [] as Row[],
+  /**
+   * Conversations that happened on these numbers. Present so removal can be
+   * checked for what it LEAVES BEHIND: the foreign key is SetNull, and a
+   * business's record of what was said must survive them removing the phone
+   * number it arrived on.
+   */
+  conversations: [] as Row[],
   /** WABA ids our app was told to unsubscribe from. The thing under test. */
   unsubscribed: [] as string[],
   subscribed: [] as string[],
@@ -91,6 +98,7 @@ beforeEach(() => {
   state.numbers = [];
   state.channels = [];
   state.events = [];
+  state.conversations = [];
   state.unsubscribed = [];
   state.subscribed = [];
   state.deregistered = [];
@@ -293,7 +301,7 @@ describe("disconnecting one number", () => {
     // they stopped using a phone number.
     seedNumber({ id: "sales", wabaId: "waba_1" });
     const channelId = state.numbers.find((n) => n.id === "sales")!.channelAccountId;
-    state.conversations = [{ id: "conv_1", channelAccountId: channelId }];
+    state.conversations.push({ id: "conv_1", channelAccountId: channelId } as Row);
 
     await disconnectNumber("sales", "tenant_a");
 
