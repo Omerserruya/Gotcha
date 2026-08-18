@@ -58,6 +58,10 @@ export type CustomerMemory = z.infer<typeof CustomerMemorySchema>;
 
 const SYSTEM_PROMPT = `You extract durable, actionable facts about ONE customer from their past conversations with a business.
 
+WHO IS WHO - READ THIS FIRST
+Every transcript line is labeled "Customer:" or "Business:". Facts describe the person on the CUSTOMER side, based on what THEY wrote.
+Some threads in this history are not customer relationships at all: the business owner was writing TO another business, and the "Customer:" side is that other company's agent or auto-responder (canned replies like "your request has been received", bots introducing themselves). That is not a customer. Return {"facts":[]} for such a thread - do not build a memory of a service center's answering machine.
+
 WHAT TO EXTRACT
 Only things that will still be true in a year and that would help someone serve this customer better:
 - what they have bought, and how often

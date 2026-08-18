@@ -18,6 +18,7 @@ import {
 import { processDocument } from "../services/embedding.service";
 import { findExistingKnowledge } from "../services/historical-intelligence/candidate-index";
 import { BULK_APPROVE_MIN_CONFIDENCE } from "../services/historical-intelligence/knowledge-clustering.stage";
+import { rerunIntelligence } from "../services/historical-intelligence";
 
 /**
  * The read and review surface for Historical Intelligence Import.
@@ -457,6 +458,28 @@ router.post("/:id/bulk-reject", writeGuard, async (req: Request, res: Response) 
   } catch (err: any) {
     console.error("[historical-import] bulk reject failed:", err?.message);
     res.status(500).json({ error: "Failed to reject suggestions" });
+  }
+});
+
+/**
+ * POST /api/historical-imports/:id/rerun-intelligence
+ *
+ * Wipe the derived artifacts (memories, candidates, vectors) and run the
+ * intelligence stages again over the already-imported conversations. For when
+ * the analysis was wrong but the data is fine - the imported messages are the
+ * one thing Meta will never send twice, and they are untouched.
+ */
+router.post("/:id/rerun-intelligence", writeGuard, async (req: Request, res: Response) => {
+  try {
+    const result = await rerunIntelligence({
+      tenantId: req.tenantId!,
+      importId: req.params.id as string,
+    });
+    if (!result.ok) return res.status(409).json({ error: result.reason });
+    res.json(result);
+  } catch (err: any) {
+    console.error("[historical-import] rerun failed:", err?.message);
+    res.status(500).json({ error: "Failed to rerun analysis" });
   }
 });
 

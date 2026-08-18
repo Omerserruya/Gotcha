@@ -1,4 +1,5 @@
 import { Job } from "bullmq";
+import { Prisma } from "@prisma/client";
 import {
   prisma,
   withHistoricalRecords,
@@ -12,6 +13,7 @@ import { runKnowledgeClusteringStage } from "./knowledge-clustering.stage";
 import { runAnalyticsStage } from "./analytics.stage";
 import { runFinalizeStage } from "./finalize.stage";
 import { recordEvent } from "./stage-utils";
+import { dropImportClusters } from "./candidate-index";
 
 /**
  * The stage machine.
@@ -175,6 +177,87 @@ function failureCopy(stage: HistoricalIntelligenceJob["stage"]): string {
     case "finalize":
       return "Your results are ready, but we could not send the completion email.";
   }
+}
+
+/**
+ * Wipe everything the intelligence stages produced and run them again over the
+ * already-imported conversations.
+ *
+ * This exists because the STAGES can be wrong while the DATA is fine - the
+ * first live import mined another business's auto-replies as this business's
+ * policy, and the customer memories drew on the same mislabeled threads. Meta
+ * grants ONE history sync per onboarding, so "delete the import and reconnect"
+ * is not an option; the raw Conversation/Message rows are the one thing that
+ * must survive. This deletes only derived artifacts:
+ *
+ *   - customer memories (CustomerHistoricalMemory)
+ *   - knowledge candidates + their evidence (cascade)
+ *   - the import's Qdrant cluster vectors
+ *   - per-customer learning progress (back to PENDING)
+ *   - the KNOWLEDGE_EXTRACTION progress events - the extraction stage pages by
+ *     summing them, so stale ones would make the rerun skip conversations
+ *
+ * Candidates a human already APPROVED have their knowledge documents left
+ * untouched - the approval was a person's decision; the rerun only regenerates
+ * what was still a machine suggestion.
+ */
+export async function rerunIntelligence(args: {
+  tenantId: string;
+  importId: string;
+}): Promise<{ ok: true; deleted: { memories: number; candidates: number } } | { ok: false; reason: string }> {
+  const { tenantId, importId } = args;
+  return withHistoricalRecords(async () => {
+    const row = await prisma.historicalImport.findFirst({
+      where: { id: importId, tenantId },
+      select: { id: true, status: true, sourceProgress: true, chunksReceived: true },
+    });
+    if (!row) return { ok: false as const, reason: "Import not found." };
+    // Only once the source data is fully on disk. A rerun racing ingest would
+    // analyze half a history and record the result as complete.
+    const settled = ["COMPLETED", "REVIEW_READY", "FAILED"].includes(row.status);
+    if (!settled || row.sourceProgress !== 100) {
+      return { ok: false as const, reason: `Import is ${row.status} at ${row.sourceProgress}% - it can be rerun only after it settles.` };
+    }
+
+    const [memories, candidates] = await prisma.$transaction([
+      prisma.customerHistoricalMemory.deleteMany({ where: { tenantId, importId } }),
+      prisma.knowledgeCandidate.deleteMany({ where: { tenantId, importId } }),
+      prisma.historicalCustomer.updateMany({
+        where: { tenantId, importId },
+        data: { learningStatus: "PENDING" },
+      }),
+      prisma.historicalImportEvent.deleteMany({
+        where: { importId, step: "KNOWLEDGE_EXTRACTION" },
+      }),
+      prisma.historicalImport.update({
+        where: { id: importId },
+        data: {
+          status: "IDENTITY_RESOLUTION",
+          customersAnalyzed: 0,
+          knowledgeCandidateCount: 0,
+          knowledgeConflictCount: 0,
+          topTopics: Prisma.DbNull,
+          summary: Prisma.DbNull,
+          intelligenceStartedAt: new Date(),
+          reviewReadyAt: null,
+          completedAt: null,
+          // Released so the rerun's finalize can send a fresh completion email.
+          completionEmailSentAt: null,
+          failedStage: null,
+          failureReason: null,
+        },
+      }),
+    ]);
+
+    await dropImportClusters(tenantId, importId);
+    await recordEvent(importId, "IDENTITY_RESOLUTION", "SUCCESS", "intelligence rerun requested", {
+      deletedMemories: memories.count,
+      deletedCandidates: candidates.count,
+    });
+    await enqueue(tenantId, importId, "identity");
+
+    return { ok: true as const, deleted: { memories: memories.count, candidates: candidates.count } };
+  });
 }
 
 export { NEXT_STAGE };
