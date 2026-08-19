@@ -32,6 +32,7 @@ import {
 import { ensureBillableEntity, tenantsForEntity } from "./billable-entity.service";
 import { periodKeyFor } from "../lib/period";
 import { emitBillingEvent } from "../lib/events";
+import { sendEvaluationEndedEmail } from "./evaluation-ended.service";
 
 export const POC_PLAN_KEY = "poc";
 /**
@@ -372,6 +373,7 @@ export async function expireDuePocs(now = new Date()): Promise<number> {
 
   for (const sub of due) {
     await prisma.subscription.update({ where: { id: sub.id }, data: { status: "CANCELED" } });
+    const kind = kindBy.get(`${sub.planKey}@${sub.planVersion}`) === "POC" ? "POC" : "TRIAL";
     for (const tenantId of await tenantsForEntity(sub.billableEntityId)) {
       const expired = await prisma.tenantEntitlement.findMany({
         where: { tenantId, source: "TRIAL", valueType: "BOOLEAN", expiresAt: { lte: now } },
@@ -385,6 +387,17 @@ export async function expireDuePocs(now = new Date()): Promise<number> {
         type: "subscription.canceled",
         tenantId,
         data: { planKey: sub.planKey, poc: true, reason: "poc_expired" },
+      });
+      // Ask. An evaluation that ends without anyone being invited to subscribe
+      // is a customer who simply finds the product stopped working - which is
+      // both a worse experience and a lost sale. The in-app prompt is derived
+      // from this same subscription row (see evaluationPromptFor); this is the
+      // one email that goes with it.
+      await sendEvaluationEndedEmail({
+        tenantId,
+        subscriptionId: sub.id,
+        kind,
+        planName: sub.planKey,
       });
     }
   }

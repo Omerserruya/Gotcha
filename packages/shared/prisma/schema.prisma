@@ -137,6 +137,7 @@ model Tenant {
   autoResumeAfterUnclaimMinutes Int? @map("auto_resume_after_unclaim_minutes")
 
   users                   User[]
+  coupons                 TenantCoupon[]
   conversations           Conversation[]
   messages                Message[]
   chatbotFlows            ChatbotFlow[]
@@ -3368,6 +3369,97 @@ model SubscriptionEvent {
   @@map("subscription_events")
 }
 
+// ─── Coupons (Sysadmin-issued recurring discounts) ──────────
+//
+// A coupon is a DISCOUNT ON A PRICE, never a different price. The plan the
+// customer is on, and the price they contracted for, are untouched: the
+// discount is computed at charge time and shown as its own line. That
+// distinction is the whole design - it keeps "what does this plan cost" and
+// "what is this customer paying right now" separately answerable, and it is
+// why the billing page can show the list price struck through rather than
+// quietly rendering a smaller number.
+//
+// Recurrence: a coupon applies to EVERY billing period whose charge falls
+// inside the assignment window. "20% off for a year" is one assignment with
+// endsAt = +12 months, and it discounts all twelve monthly charges - there is
+// no per-period bookkeeping to drift out of sync.
+
+enum CouponDiscountType {
+  /// percentOff, 1-100. Currency-agnostic, so it survives a currency switch.
+  PERCENT
+  /// amountOff in `currency`. Only ever applied to a charge in that same
+  /// currency - see applyCouponToPrice.
+  FIXED
+}
+
+enum TenantCouponStatus {
+  ACTIVE
+  /// Past its endsAt. Set by the billing tick, not inferred at read time, so
+  /// "why did this stop applying" has an answer with a timestamp.
+  EXPIRED
+  /// Operator pulled it. Distinct from EXPIRED on purpose.
+  REVOKED
+}
+
+model Coupon {
+  id     String @id @default(cuid())
+  /// Human-typed, case-insensitively unique (stored upper-case).
+  code   String @unique
+  nameEn String @map("name_en")
+  nameHe String? @map("name_he")
+
+  discountType CouponDiscountType @map("discount_type")
+  /// PERCENT only. 1-100.
+  percentOff   Int?               @map("percent_off")
+  /// FIXED only, in `currency`.
+  amountOff    Decimal?           @map("amount_off") @db.Decimal(12, 2)
+  currency     String?
+
+  /// Default window length applied when an operator assigns this coupon
+  /// without naming an end date. Null means "until revoked".
+  defaultDurationMonths Int? @map("default_duration_months")
+
+  active          Boolean @default(true)
+  /// Null = unlimited. Counted across assignments, not charges.
+  maxRedemptions  Int?    @map("max_redemptions")
+  redemptionCount Int     @default(0) @map("redemption_count")
+
+  internalNote String?  @map("internal_note")
+  createdBy    String?  @map("created_by")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  assignments TenantCoupon[]
+
+  @@index([active])
+  @@map("coupons")
+}
+
+model TenantCoupon {
+  id       String @id @default(cuid())
+  tenantId String @map("tenant_id")
+  couponId String @map("coupon_id")
+
+  startsAt DateTime  @default(now()) @map("starts_at")
+  /// Null = no end date; it discounts every period until revoked.
+  endsAt   DateTime? @map("ends_at")
+
+  status TenantCouponStatus @default(ACTIVE)
+
+  assignedBy String?  @map("assigned_by")
+  note       String?
+  revokedAt  DateTime? @map("revoked_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  coupon Coupon @relation(fields: [couponId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, status])
+  @@index([status, endsAt])
+  @@map("tenant_coupons")
+}
+
 model Invoice {
   id                 String          @id @default(cuid())
   billableEntityId   String          @map("billable_entity_id")
@@ -3400,9 +3492,19 @@ model Charge {
   invoiceId         String          @map("invoice_id")
   provider          BillingProvider @default(ICOUNT)
   providerChargeRef String?         @map("provider_charge_ref")
-  /// The agreed commercial figure, in the commercial currency.
+  /// The agreed commercial figure, in the commercial currency. When a coupon
+  /// applied this is the DISCOUNTED figure - it is what we asked for, and a
+  /// receipt must reconcile against it.
   amount            Decimal         @db.Decimal(12, 2)
   currency          String          @default("ILS")
+
+  /// What the price would have been without a coupon, and what was taken off.
+  /// Both null when no coupon applied. Kept on the charge rather than derived
+  /// later: an assignment can be revoked or edited afterwards, and "why was
+  /// this charge 80" must stay answerable regardless.
+  listAmount     Decimal? @map("list_amount") @db.Decimal(12, 2)
+  discountAmount Decimal? @map("discount_amount") @db.Decimal(12, 2)
+  couponCode     String?  @map("coupon_code")
 
   /// What was actually submitted to the provider, and the frozen conversion
   /// behind it. Keeping only the commercial figure would make "how much was

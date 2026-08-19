@@ -26,6 +26,7 @@ import {
   getPaymentMethods,
   getInvoices,
   getCurrentPricing,
+  type EvaluationPrompt,
   type Subscription,
   type Plan,
   type PaymentMethod,
@@ -97,6 +98,9 @@ export default function BillingSettingsPage() {
   // the live plan row is what stops a published price change from restating what
   // an existing customer sees on their own billing page.
   const [current, setCurrent] = useState<CurrentSubscriptionView | null>(null);
+  // The ask when a POC or trial is ending, or has ended. Derived server-side
+  // from the subscription itself, so it disappears the moment they convert.
+  const [evaluation, setEvaluation] = useState<EvaluationPrompt | null>(null);
   const [methods, setMethods] = useState<PaymentMethod[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
@@ -130,11 +134,15 @@ export default function BillingSettingsPage() {
         getPlans(token),
         getPaymentMethods(token).catch(() => ({ paymentMethods: [] as PaymentMethod[] })),
         getInvoices(token).catch(() => ({ invoices: [] as Invoice[] })),
-        getCurrentPricing(token).catch(() => ({ subscription: null as CurrentSubscriptionView | null })),
+        getCurrentPricing(token).catch(() => ({
+          subscription: null as CurrentSubscriptionView | null,
+          evaluationPrompt: null as EvaluationPrompt | null,
+        })),
       ]);
       setSub(s.subscription);
       setPlans(p.plans);
       setCurrent(cur.subscription);
+      setEvaluation(cur.evaluationPrompt ?? null);
       setMethods(pm.paymentMethods);
       setInvoices(inv.invoices);
     } catch (e: any) {
@@ -199,6 +207,39 @@ export default function BillingSettingsPage() {
         </div>
       )}
 
+      {/* The ask. An evaluation that ends without inviting anyone to subscribe
+          is a customer who simply finds the product stopped working - so this
+          sits above everything, states plainly that the data is safe, and
+          gives one obvious next step. It disappears on conversion because it
+          is derived from the subscription, not a flag someone has to clear. */}
+      {evaluation && (
+        <div
+          className={`mb-6 rounded-xl border px-4 py-3 ${
+            evaluation.endedAt
+              ? "border-amber-200 bg-amber-50 text-amber-900"
+              : "border-blue-200 bg-blue-50 text-blue-900"
+          }`}
+        >
+          <div className="font-medium">
+            {evaluation.endedAt
+              ? t(`settings.billing.evaluation.ended.${evaluation.kind}`)
+              : t(`settings.billing.evaluation.ending.${evaluation.kind}`).replace(
+                  "{days}",
+                  String(evaluation.daysLeft ?? 0),
+                )}
+          </div>
+          <p className="mt-1 text-sm opacity-90">{t("settings.billing.evaluation.dataSafe")}</p>
+          {canManage && (
+            <Link
+              href="/settings/billing/plan"
+              className="mt-3 inline-block rounded-lg bg-gray-900 px-3.5 py-1.5 text-sm font-medium text-white hover:bg-gray-800"
+            >
+              {t("settings.billing.evaluation.cta")}
+            </Link>
+          )}
+        </div>
+      )}
+
       {/* ── Current plan ── */}
       <Section
         first
@@ -245,10 +286,44 @@ export default function BillingSettingsPage() {
                     )}
                     <span className="text-gray-400">
                       {current.includedCredits > 0 ? " · " : ""}
-                      <span dir="ltr">{current.monthlyPrice.display.formatted}</span>
+                      {/* With a coupon the plan price stays visible, struck
+                          through, and the payable figure sits beside it. The
+                          customer must be able to see the DISCOUNT - a quietly
+                          rewritten price makes "what does this plan cost"
+                          unanswerable, and makes the day the coupon lapses
+                          look like a price rise. */}
+                      <span dir="ltr" className={current.discount ? "line-through" : undefined}>
+                        {current.monthlyPrice.display.formatted}
+                      </span>
+                      {current.discount && (
+                        <>
+                          {" "}
+                          <span dir="ltr" className="font-medium text-gray-900">
+                            {current.discount.payableNow.display.formatted}
+                          </span>
+                        </>
+                      )}
                       {" / "}
                       {t("settings.billing.interval.MONTHLY")}
                     </span>
+                    {current.discount && (
+                      <div className="mt-1 inline-flex flex-wrap items-center gap-2 rounded-lg bg-green-50 px-2.5 py-1 text-xs text-green-800">
+                        <span className="font-medium">
+                          {t("settings.billing.discount.applied").replace("{label}", current.discount.label)}
+                        </span>
+                        <span className="text-green-700">
+                          {t("settings.billing.discount.saving").replace(
+                            "{amount}",
+                            current.discount.amount.display.formatted,
+                          )}
+                        </span>
+                        <span className="text-green-700">
+                          {current.discount.endsAt
+                            ? t("settings.billing.discount.until").replace("{date}", dateFmt(current.discount.endsAt))
+                            : t("settings.billing.discount.ongoing")}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 ) : currentPlan ? (
                   <div>

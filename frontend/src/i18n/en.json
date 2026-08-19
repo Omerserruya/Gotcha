@@ -1568,7 +1568,25 @@
         },
         "everythingIn": "Everything in {plan}, plus"
       },
-      "paymentSetupUnavailable": "Secure payment setup is not enabled in this environment."
+      "paymentSetupUnavailable": "Secure payment setup is not enabled in this environment.",
+      "discount": {
+        "applied": "{label}",
+        "saving": "You save {amount} each month",
+        "until": "until {date}",
+        "ongoing": "ongoing"
+      },
+      "evaluation": {
+        "ended": {
+          "POC": "Your proof of concept has ended.",
+          "TRIAL": "Your trial has ended."
+        },
+        "ending": {
+          "POC": "Your proof of concept ends in {days} days.",
+          "TRIAL": "Your trial ends in {days} days."
+        },
+        "dataSafe": "Your data, conversations and settings are all still here. Choosing a plan switches them back on.",
+        "cta": "Choose a plan"
+      }
     }
   },
   "outbound": {
