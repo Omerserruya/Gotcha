@@ -8,7 +8,10 @@
  */
 import { describe, it, expect, vi } from "vitest";
 
-vi.mock("@chatcenter/shared", () => ({
+vi.mock("@chatcenter/shared", async () => ({
+  // Real coupon arithmetic, not stubs: it is pure, and a stub here would
+  // make the discount path this file exercises meaningless.
+  ...(await import("../../../../packages/shared/src/lib/billing/coupon")),
   prisma: {},
   readDurableSetting: async () => null,
   writeDurableSetting: async () => undefined,

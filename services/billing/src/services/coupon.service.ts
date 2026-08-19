@@ -38,10 +38,24 @@ export interface LiveAssignment {
  * past resolves the coupon that was live THEN, not the one live now.
  */
 export async function liveAssignmentsFor(tenantId: string, at: Date = new Date()): Promise<LiveAssignment[]> {
-  const rows = await prisma.tenantCoupon.findMany({
-    where: { tenantId, status: "ACTIVE" },
-    include: { coupon: true },
-  });
+  // A coupon is a REDUCTION on a charge that is going to happen anyway, so a
+  // failure to read them must never stop the charge: the customer would go
+  // unbilled and the subscription would not renew, which is far worse than
+  // paying the price they contracted for. On any failure here the caller sees
+  // "no discount" and bills the list price - loudly, so it gets fixed.
+  let rows: Array<any>;
+  try {
+    rows = await prisma.tenantCoupon.findMany({
+      where: { tenantId, status: "ACTIVE" },
+      include: { coupon: true },
+    });
+  } catch (err: any) {
+    console.error(
+      `[billing][coupon] could not read assignments for ${tenantId}; charging the list price:`,
+      err?.message ?? err,
+    );
+    return [];
+  }
   return rows
     .filter((r) => assignmentIsLive(r, at) && r.coupon.active)
     .map((r) => ({

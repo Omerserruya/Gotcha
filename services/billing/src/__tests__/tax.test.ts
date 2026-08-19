@@ -10,7 +10,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const { taxRate } = vi.hoisted(() => ({ taxRate: { findFirst: vi.fn() } }));
 
-vi.mock("@chatcenter/shared", () => ({
+vi.mock("@chatcenter/shared", async () => ({
+  // Real coupon arithmetic, not stubs: it is pure, and a stub here would
+  // make the discount path this file exercises meaningless.
+  ...(await import("../../../../packages/shared/src/lib/billing/coupon")),
   prisma: { taxRate },
   readDurableSetting: async () => null,
   writeDurableSetting: async () => undefined,
