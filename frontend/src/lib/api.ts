@@ -1637,6 +1637,17 @@ export interface AirtableMappingPayload {
   idempotencyField?: string;
   createMissing?: boolean;
 }
+export interface AirtableMappingView {
+  baseId: string | null;
+  tableId: string | null;
+  tableName: string | null;
+  fieldMap: { email?: string; phone?: string; display_name?: string; stage?: string };
+  notesField: string | null;
+  idempotencyField: string | null;
+}
+export function getAirtableMapping(token: string) {
+  return apiFetch<{ data: AirtableMappingView }>("/api/connectors/airtable/mapping", { token });
+}
 export function saveAirtableMapping(token: string, payload: AirtableMappingPayload) {
   return apiFetch<{ data: { id: string; config: Record<string, unknown> } | null; warning?: string }>(
     "/api/connectors/airtable/mapping",

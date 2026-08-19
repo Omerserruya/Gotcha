@@ -2895,7 +2895,28 @@
     "manageInSettings": "Manage in Settings →",
     "selectAllTools": "Select all",
     "clearAllTools": "Clear all",
-    "applying": "Applying..."
+    "applying": "Applying...",
+    "airtable": {
+      "mappingTitle": "Customer table mapping",
+      "mappingHint": "Which Airtable columns hold your customers' name, phone and email. The AI and the outbound page look customers up through this mapping.",
+      "refreshFields": "Refresh fields",
+      "refreshing": "Refreshing…",
+      "refreshed": "Field list refreshed from Airtable.",
+      "refreshFailed": "Could not refresh from Airtable. Check the connection.",
+      "base": "Base",
+      "table": "Table",
+      "field_display_name": "Name column",
+      "field_phone": "Phone column",
+      "field_email": "Email column",
+      "field_stage": "Stage / status column",
+      "field_notes": "Notes column",
+      "saveMapping": "Save mapping",
+      "saving": "Saving…",
+      "saved": "Mapping saved.",
+      "saveFailed": "Could not save the mapping.",
+      "needName": "Map the name column before saving.",
+      "needIdentifier": "Map at least a phone or an email column."
+    }
   },
   "usage": {
     "title": "Usage",

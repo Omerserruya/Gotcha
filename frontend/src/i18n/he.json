@@ -2896,7 +2896,28 @@
     "manageInSettings": "ניהול בהגדרות ←",
     "selectAllTools": "בחר הכל",
     "clearAllTools": "נקה הכל",
-    "applying": "מחיל..."
+    "applying": "מחיל...",
+    "airtable": {
+      "mappingTitle": "מיפוי טבלת הלקוחות",
+      "mappingHint": "אילו עמודות ב-Airtable מכילות שם, טלפון ואימייל של הלקוחות. ה-AI ועמוד השיחות היוצאות מאתרים לקוחות דרך המיפוי הזה.",
+      "refreshFields": "רענון שדות",
+      "refreshing": "מרענן…",
+      "refreshed": "רשימת השדות עודכנה מ-Airtable.",
+      "refreshFailed": "לא הצלחנו לרענן מ-Airtable. בדקו את החיבור.",
+      "base": "בסיס (Base)",
+      "table": "טבלה",
+      "field_display_name": "עמודת שם",
+      "field_phone": "עמודת טלפון",
+      "field_email": "עמודת אימייל",
+      "field_stage": "עמודת שלב / סטטוס",
+      "field_notes": "עמודת הערות",
+      "saveMapping": "שמירת מיפוי",
+      "saving": "שומר…",
+      "saved": "המיפוי נשמר.",
+      "saveFailed": "שמירת המיפוי נכשלה.",
+      "needName": "יש למפות את עמודת השם לפני שמירה.",
+      "needIdentifier": "יש למפות לפחות עמודת טלפון או אימייל."
+    }
   },
   "usage": {
     "title": "צריכה",
