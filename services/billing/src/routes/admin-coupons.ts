@@ -108,11 +108,16 @@ router.post(
 /**
  * Every assignment for one organization, live ones flagged.
  *
+ * Namespaced under /admin/coupons rather than /admin/tenants: the gateway
+ * proxies admin routes by prefix, so a second prefix would need its own
+ * location block - and a route the gateway does not know about is a feature
+ * that works in development and 404s in production.
+ *
  * Read-level permission: seeing that a customer has 20% off is support
  * information; granting it is not.
  */
 router.get(
-  "/admin/tenants/:tenantId/coupons",
+  "/admin/coupons/tenants/:tenantId",
   authenticate,
   requirePlatformPermission(PLATFORM_PERMISSIONS.BILLING_READ),
   async (req: Request, res: Response) => {
@@ -121,7 +126,7 @@ router.get(
 );
 
 router.post(
-  "/admin/tenants/:tenantId/coupons",
+  "/admin/coupons/tenants/:tenantId",
   authenticate,
   requirePlatformPermission(PLATFORM_PERMISSIONS.COUPONS_MANAGE),
   async (req: Request, res: Response) => {
@@ -153,7 +158,7 @@ router.post(
 );
 
 router.delete(
-  "/admin/tenant-coupons/:assignmentId",
+  "/admin/coupons/assignments/:assignmentId",
   authenticate,
   requirePlatformPermission(PLATFORM_PERMISSIONS.COUPONS_MANAGE),
   async (req: Request, res: Response) => {

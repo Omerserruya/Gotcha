@@ -18,13 +18,16 @@ const rollovers: Array<{ tenantId: string; allowance: number; source: string }> 
 const subscriptionUpdates: any[] = [];
 let chargeSucceeds = true;
 
-vi.mock("@chatcenter/shared", async () => ({
+vi.mock("@chatcenter/shared", async (importOriginal) => ({
   // The coupon helpers are PURE arithmetic; a stub would test nothing. The
   // real ones come in so the discount path this file exercises is the real
   // one - including "no coupon assigned" returning the list price untouched.
-  // Real coupon arithmetic, not stubs: it is pure, and a stub here would
-  // make the discount path this file exercises meaningless.
-  ...(await import("../../../../packages/shared/src/lib/billing/coupon")),
+  // Real coupon arithmetic, not stubs: it is pure, and a stub here would make
+  // the discount path this file exercises meaningless. Taken from
+  // importOriginal rather than a deep relative import into packages/shared/src
+  // - that path compiles but drags shared's sources into this service's
+  // TypeScript program, which then fails rootDir (see receipt-email.test.ts).
+  ...(await importOriginal<Record<string, unknown>>()),
   // Spend-window helpers live in shared so the AI gate and this service compute
   // the same window. Exhaustive mocks of this barrel must supply them.
   periodKeyFor: (d: Date) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`,

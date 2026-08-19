@@ -633,21 +633,21 @@ export const setCouponActive = (token: string, couponId: string, active: boolean
   });
 
 export const listTenantCoupons = (token: string, tenantId: string) =>
-  apiFetch<{ assignments: TenantCouponAssignment[] }>(`/api/admin/tenants/${tenantId}/coupons`, { token });
+  apiFetch<{ assignments: TenantCouponAssignment[] }>(`/api/admin/coupons/tenants/${tenantId}`, { token });
 
 export const assignCouponToTenant = (
   token: string,
   tenantId: string,
   input: { couponId?: string; code?: string; startsAt?: string; endsAt?: string | null; durationMonths?: number | null; note?: string | null },
 ) =>
-  apiFetch<{ assignment: { id: string } }>(`/api/admin/tenants/${tenantId}/coupons`, {
+  apiFetch<{ assignment: { id: string } }>(`/api/admin/coupons/tenants/${tenantId}`, {
     token,
     method: "POST",
     body: JSON.stringify(input),
   });
 
 export const revokeTenantCoupon = (token: string, assignmentId: string) =>
-  apiFetch<{ assignment: { id: string } }>(`/api/admin/tenant-coupons/${assignmentId}`, {
+  apiFetch<{ assignment: { id: string } }>(`/api/admin/coupons/assignments/${assignmentId}`, {
     token,
     method: "DELETE",
   });
