@@ -194,6 +194,50 @@ describe("authenticate", () => {
       process.env.NODE_ENV = "test";
     });
 
+    // PROD REGRESSION GUARD (2026-08-19): a weak 24-char legacy
+    // INTERNAL_SERVICE_TOKEN sat next to the strong KEY in two services, and
+    // the weakness check ran over the whole list - so EVERY internal call
+    // threw, including callers presenting the strong key. All conversation→ai
+    // bridge calls 401'd in production. The check must judge only the secret
+    // that matched.
+    it("a weak secondary secret does not poison the strong one (production)", async () => {
+      process.env.NODE_ENV = "production";
+      process.env.INTERNAL_SERVICE_KEY = "s".repeat(64);
+      process.env.INTERNAL_SERVICE_TOKEN = "short-legacy-token";
+      prismaMock.tenant.findUnique.mockResolvedValue({ id: "t9" });
+      const res = mockRes();
+      const next = vi.fn();
+
+      await authenticate(
+        mockReq({ authorization: `Bearer ${"s".repeat(64)}`, "x-tenant-id": "t9" }),
+        res,
+        next,
+      );
+
+      expect(next).toHaveBeenCalled();
+      process.env.NODE_ENV = "test";
+      delete process.env.INTERNAL_SERVICE_TOKEN;
+    });
+
+    it("still refuses when the weak secret itself is the one presented (production)", async () => {
+      process.env.NODE_ENV = "production";
+      process.env.INTERNAL_SERVICE_KEY = "s".repeat(64);
+      process.env.INTERNAL_SERVICE_TOKEN = "short-legacy-token";
+      const res = mockRes();
+      const next = vi.fn();
+
+      await authenticate(
+        mockReq({ authorization: "Bearer short-legacy-token", "x-tenant-id": "t9" }),
+        res,
+        next,
+      );
+
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(401);
+      process.env.NODE_ENV = "test";
+      delete process.env.INTERNAL_SERVICE_TOKEN;
+    });
+
     it("falls through to user auth when the key does not match", async () => {
       process.env.INTERNAL_SERVICE_KEY = "s".repeat(40);
       resolvePrincipalMock.mockResolvedValue({
