@@ -137,3 +137,49 @@ export async function mapLimited<T, R>(
   await Promise.all(workers);
   return results;
 }
+
+/**
+ * The language every GENERATED artifact of the import is written in -
+ * questions, answers, topics, customer facts and summaries.
+ *
+ * Tenant.defaultLocale is the org's system language and the schema comment
+ * already promises it governs AI-generated content; the import stages were
+ * the one place that ignored it, so a Hebrew business got its own FAQ handed
+ * back in English. Verbatim quotes are exempt - they stay in whatever
+ * language the conversation actually happened in.
+ *
+ * The map is deliberately forgiving: real rows hold "he" but also "English"
+ * (free-typed), so both codes and names resolve. Unknown values fall back to
+ * English rather than passing garbage into a prompt.
+ */
+const PROMPT_LANGUAGE_NAMES: Record<string, string> = {
+  he: "Hebrew",
+  hebrew: "Hebrew",
+  "עברית": "Hebrew",
+  en: "English",
+  english: "English",
+  ar: "Arabic",
+  arabic: "Arabic",
+  ru: "Russian",
+  russian: "Russian",
+  fr: "French",
+  es: "Spanish",
+};
+
+export async function tenantPromptLanguage(tenantId: string): Promise<string> {
+  const t = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { defaultLocale: true },
+  });
+  return resolvePromptLanguage(t?.defaultLocale);
+}
+
+export function resolvePromptLanguage(defaultLocale: string | null | undefined): string {
+  const raw = (defaultLocale || "en").trim().toLowerCase();
+  return PROMPT_LANGUAGE_NAMES[raw] ?? "English";
+}
+
+/** Appended to a stage's system prompt. One sentence, so it cannot be missed. */
+export function languageDirective(language: string): string {
+  return `\n\nOUTPUT LANGUAGE\nWrite every generated field in ${language}. Verbatim quote fields are the exception: copy them exactly as written in the conversation, whatever language that is.`;
+}

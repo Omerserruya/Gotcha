@@ -6,6 +6,8 @@ import {
   loadConversationTranscript,
   renderTranscript,
   mapLimited,
+  tenantPromptLanguage,
+  languageDirective,
   type StageResult,
 } from "./stage-utils";
 
@@ -107,6 +109,8 @@ export async function runCustomerLearningStage(args: {
 }): Promise<StageResult & { done: boolean }> {
   const { tenantId, importId } = args;
   const startedAt = Date.now();
+  // Facts and summaries follow the org's system language.
+  const language = await tenantPromptLanguage(tenantId);
 
   const pending = await prisma.historicalCustomer.findMany({
     where: { importId, tenantId, learningStatus: "PENDING" },
@@ -160,7 +164,7 @@ export async function runCustomerLearningStage(args: {
       tenantId,
       importId,
       schema: CustomerMemorySchema,
-      system: SYSTEM_PROMPT,
+      system: SYSTEM_PROMPT + languageDirective(language),
       user: `Conversation history with one customer:\n\n${rendered}`,
       feature: "historical_customer_memory",
       maxTokens: 900,

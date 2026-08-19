@@ -91,7 +91,13 @@ export function DiscoveredKnowledge() {
       setCandidates((prev) => prev.filter((c) => c.id !== candidate.id));
       setNotice(t("historicalImport.review.approved"));
     } catch (err: any) {
-      setNotice(err?.message ?? "");
+      // The server's error field is a machine code ("conflict_requires_answer"),
+      // not something to show a reviewer raw.
+      setNotice(
+        err?.code === "conflict_requires_answer"
+          ? t("historicalImport.review.conflictRequired")
+          : err?.message ?? "",
+      );
     } finally {
       setBusy(false);
     }
@@ -467,8 +473,11 @@ function CandidateCard({
             </button>
             <button
               onClick={() => {
-                setEditing(false);
-                setDraft(candidate.answer);
+                // For a conflict, "cancel" clears the choice but stays in the
+                // choose-an-answer flow - leaving it would land on a plain
+                // Approve that the server must refuse.
+                setEditing(candidate.conflict);
+                setDraft(candidate.conflict ? "" : candidate.answer);
               }}
               disabled={busy}
               className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
@@ -479,7 +488,13 @@ function CandidateCard({
         ) : (
           <>
             <button
-              onClick={() => onApprove(candidate)}
+              // A conflicted item has no "the" answer to approve - the server
+              // 409s a bare approve by design (conflict_requires_answer).
+              // Matan hit exactly this: Cancel dropped him back here, the
+              // plain Approve fired the bare request, and four silent 409s
+              // later nothing had happened. For a conflict this button now
+              // reopens the choose-an-answer flow instead of calling the API.
+              onClick={() => (candidate.conflict ? setEditing(true) : onApprove(candidate))}
               disabled={busy}
               className="rounded-md bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-50"
             >

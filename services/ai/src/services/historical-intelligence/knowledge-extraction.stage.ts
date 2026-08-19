@@ -8,6 +8,8 @@ import {
   loadConversationTranscript,
   renderTranscript,
   mapLimited,
+  tenantPromptLanguage,
+  languageDirective,
   type StageResult,
 } from "./stage-utils";
 
@@ -122,6 +124,8 @@ export async function runKnowledgeExtractionStage(args: {
 }): Promise<StageResult & { done: boolean }> {
   const { tenantId, importId } = args;
   const startedAt = Date.now();
+  // Generated fields follow the org's system language; verbatim quotes do not.
+  const language = await tenantPromptLanguage(tenantId);
 
   // Ordered by volume, then paged by how many we have already done. The
   // customers who talked most produce the densest knowledge, so an import cut
@@ -171,7 +175,7 @@ export async function runKnowledgeExtractionStage(args: {
       tenantId,
       importId,
       schema: ExtractionSchema,
-      system: SYSTEM_PROMPT,
+      system: SYSTEM_PROMPT + languageDirective(language),
       user: `Conversation history between a business and one of its customers:\n\n${rendered}`,
       feature: "historical_knowledge_extraction",
       maxTokens: 1600,
