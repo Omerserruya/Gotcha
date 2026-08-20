@@ -248,3 +248,50 @@ describe("static vhosts declare a document root", () => {
     ).toEqual([]);
   });
 });
+
+/**
+ * A CORS-enabled location must not let the upstream's own header through.
+ *
+ * services/ai mounts cors({origin: FRONTEND_URL, credentials: true}) for the
+ * dashboard, so an embedded-chat response arrived at nginx already carrying
+ * Access-Control-Allow-Origin: https://app.gotcha.co.il. nginx then added its
+ * wildcard on top, and a browser refuses a response whose
+ * Access-Control-Allow-Origin "contains multiple values" - so the widget was
+ * blocked on every site that embedded it, including our own landing page,
+ * while curl reported a perfectly healthy 200.
+ */
+describe("public widget CORS is emitted exactly once", () => {
+  const TEMPLATES = ["gateway/nginx.prod.conf.template", "nginx/nginx.conf.template"];
+
+  /** The `location <path> {` block bodies in a template, by brace depth. */
+  function locationBlocks(conf: string, pathMatch: RegExp): string[] {
+    const out: string[] = [];
+    const lines = conf.split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      if (!/^\s*location\s/.test(lines[i]) || !pathMatch.test(lines[i])) continue;
+      let depth = 0, body = "";
+      for (let j = i; j < lines.length; j++) {
+        depth += (lines[j].match(/\{/g) ?? []).length;
+        depth -= (lines[j].match(/\}/g) ?? []).length;
+        body += lines[j] + "\n";
+        if (depth === 0) break;
+      }
+      out.push(body);
+    }
+    return out;
+  }
+
+  for (const rel of TEMPLATES) {
+    it(`${rel}: every location that adds a wildcard origin hides the upstream one`, () => {
+      const conf = fs.readFileSync(path.join(ROOT, rel), "utf8");
+      const offenders = locationBlocks(conf, /./)
+        .filter((b) => /add_header\s+Access-Control-Allow-Origin\s+\*/.test(b))
+        .filter((b) => /proxy_pass/.test(b))
+        .filter((b) => !/proxy_hide_header\s+Access-Control-Allow-Origin;/.test(b));
+      expect(
+        offenders.map((b) => (/^\s*location\s+(\S+)/.exec(b) ?? [])[1]),
+        "a proxied location that adds its own CORS origin must hide the upstream's, or the browser sees two",
+      ).toEqual([]);
+    });
+  }
+});

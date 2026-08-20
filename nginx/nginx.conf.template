@@ -988,6 +988,19 @@ http {
         # ─── Embedded Chat (public, CORS enabled) ────────
         location /api/embedded-chat {
             # CORS for widget on external sites
+            #
+            # The upstream's headers are HIDDEN first, and that is the whole
+            # fix: services/ai mounts cors({origin: FRONTEND_URL, credentials:
+            # true}) for the dashboard, so every embedded-chat response also
+            # carried Access-Control-Allow-Origin: https://app.gotcha.co.il.
+            # Added to the wildcard below that made TWO of the header, and a
+            # browser refuses a response whose Access-Control-Allow-Origin
+            # "contains multiple values" - so the widget was blocked on every
+            # site that embedded it, ours included, while curl saw a healthy
+            # 200. The credentials flag goes too: it is invalid beside "*",
+            # and this surface carries no cookie and no token anyway.
+            proxy_hide_header Access-Control-Allow-Origin;
+            proxy_hide_header Access-Control-Allow-Credentials;
             add_header Access-Control-Allow-Origin * always;
             add_header Access-Control-Allow-Methods "GET, POST, OPTIONS" always;
             add_header Access-Control-Allow-Headers "Content-Type" always;
