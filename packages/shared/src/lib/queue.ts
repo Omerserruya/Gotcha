@@ -214,6 +214,9 @@ export interface HistoricalIntelligenceJob {
     | "customer-learning"
     | "knowledge-extraction"
     | "knowledge-clustering"
+    // Merges candidates that are the same question phrased differently.
+    // Embeddings cannot do this for Hebrew paraphrase at any threshold.
+    | "knowledge-dedupe"
     | "analytics"
     | "finalize";
   /** Set by the customer-learning stage to process one batch of customers. */

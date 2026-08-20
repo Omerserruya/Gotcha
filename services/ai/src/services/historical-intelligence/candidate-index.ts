@@ -76,8 +76,22 @@ async function ensureCandidateCollection(): Promise<void> {
  * candidates that quietly disagree, which is the single worst output this
  * feature could produce.
  */
-export function clusterText(topic: string, question: string): string {
-  return `${topic}: ${question}`;
+/**
+ * What gets embedded to decide whether two extractions are the same question.
+ *
+ * The QUESTION only. The topic used to be part of this, and it was actively
+ * harmful: the topic is invented per conversation by a language model, so the
+ * same question arrived as "ערוצי מדיה חברתית" once and "נוכחות ברשתות
+ * חברתיות" the next time. Measured on a real import, that alone dropped the
+ * similarity of two IDENTICAL question strings from 1.00 to 0.76 - under the
+ * 0.90 threshold - and one question about social media became thirteen
+ * separate review items.
+ *
+ * `topic` stays in the signature: it is still stored on the candidate, and
+ * callers pass it. It is simply not part of the identity.
+ */
+export function clusterText(_topic: string, question: string): string {
+  return question;
 }
 
 export async function embedForCluster(tenantId: string, text: string): Promise<number[] | null> {
@@ -206,6 +220,27 @@ export async function dropImportClusters(tenantId: string, importId: string): Pr
       must: [
         { key: "tenantId", match: { value: tenantId } },
         { key: "importId", match: { value: importId } },
+      ],
+    },
+  });
+}
+
+/**
+ * Remove the cluster vectors for specific candidates.
+ *
+ * Used when the dedupe stage merges candidates away: a vector left pointing at
+ * a deleted candidate would match a later extraction and merge it into
+ * nothing.
+ */
+export async function dropCandidateVectors(tenantId: string, candidateIds: string[]): Promise<void> {
+  if (candidateIds.length === 0) return;
+  await ensureCandidateCollection();
+  const qdrant = getQdrantClient();
+  await qdrant.delete(COLLECTION_NAME, {
+    filter: {
+      must: [
+        { key: "tenantId", match: { value: tenantId } },
+        { key: "candidateId", match: { any: candidateIds } },
       ],
     },
   });

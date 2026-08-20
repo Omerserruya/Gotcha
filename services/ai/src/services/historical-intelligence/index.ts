@@ -10,6 +10,7 @@ import { runIdentityStage } from "./identity.stage";
 import { runCustomerLearningStage } from "./customer-learning.stage";
 import { runKnowledgeExtractionStage } from "./knowledge-extraction.stage";
 import { runKnowledgeClusteringStage } from "./knowledge-clustering.stage";
+import { runKnowledgeDedupeStage } from "./knowledge-dedupe.stage";
 import { runAnalyticsStage } from "./analytics.stage";
 import { runFinalizeStage } from "./finalize.stage";
 import { recordEvent } from "./stage-utils";
@@ -39,7 +40,8 @@ const NEXT_STAGE: Record<HistoricalIntelligenceJob["stage"], HistoricalIntellige
   identity: "customer-learning",
   "customer-learning": "knowledge-extraction",
   "knowledge-extraction": "knowledge-clustering",
-  "knowledge-clustering": "analytics",
+  "knowledge-clustering": "knowledge-dedupe",
+  "knowledge-dedupe": "analytics",
   analytics: "finalize",
   finalize: null,
 };
@@ -49,6 +51,7 @@ const STAGE_STATUS: Record<HistoricalIntelligenceJob["stage"], string> = {
   "customer-learning": "CUSTOMER_LEARNING",
   "knowledge-extraction": "KNOWLEDGE_EXTRACTION",
   "knowledge-clustering": "KNOWLEDGE_CLUSTERING",
+  "knowledge-dedupe": "KNOWLEDGE_CLUSTERING",
   analytics: "ANALYTICS",
   finalize: "REVIEW_READY",
 };
@@ -106,6 +109,16 @@ async function runStage(job: Job<HistoricalIntelligenceJob>): Promise<void> {
       }
       case "knowledge-clustering": {
         await runKnowledgeClusteringStage({ tenantId, importId });
+        await enqueue(tenantId, importId, "knowledge-dedupe");
+        return;
+      }
+      // Same question, different words. Embeddings cannot separate Hebrew
+      // paraphrase from genuinely different questions at any single threshold
+      // (measured: 0.42 for two phrasings of "how long is delivery"), so a
+      // language model merges the survivors - tens of items, one call, after
+      // pruning rather than during extraction.
+      case "knowledge-dedupe": {
+        await runKnowledgeDedupeStage({ tenantId, importId });
         await enqueue(tenantId, importId, "analytics");
         return;
       }
@@ -171,6 +184,7 @@ function failureCopy(stage: HistoricalIntelligenceJob["stage"]): string {
       return "We imported your conversations but could not finish learning from them.";
     case "knowledge-extraction":
     case "knowledge-clustering":
+    case "knowledge-dedupe":
       return "We imported your conversations but could not finish looking for reusable knowledge in them.";
     case "analytics":
       return "We imported and analyzed your conversations but could not finish the summary.";
