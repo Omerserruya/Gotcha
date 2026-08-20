@@ -1717,7 +1717,14 @@ http {
         add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
         add_header X-Frame-Options "SAMEORIGIN" always;
         add_header Permissions-Policy "camera=(), geolocation=(), payment=()" always;
-        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
+        # script-src also names app.gotcha.co.il, for ONE script: the embedded
+        # chat widget the landing pages load from the application host. It is
+        # cross-origin from here by design (one widget, one canonical URL), and
+        # under a bare script-src 'self' the browser refused it - the widget
+        # silently never appeared on the marketing site. /widget/ and
+        # /api/embedded-chat answer with wildcard CORS on that host, so the
+        # fetches it makes are already allowed by connect-src https:.
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://app.gotcha.co.il; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
 
         location /health {
             return 200 '{"status":"ok","service":"gateway","vhost":"marketing"}';
