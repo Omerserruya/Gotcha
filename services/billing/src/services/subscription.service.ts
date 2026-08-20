@@ -31,7 +31,7 @@ import { currentPeriod, nextPeriod, periodKeyFor } from "../lib/period";
 import { emitBillingEvent } from "../lib/events";
 import { chargeFor } from "./invoice.service";
 import { unsuspendTenants } from "./tenant-status.service";
-import { expireDuePocs } from "./poc.service";
+import { expireDuePocs, reconcileLiveEvaluations } from "./poc.service";
 import { resolveDiscount, expireDueAssignments } from "./coupon.service";
 
 const TRIAL_DAYS = parseInt(process.env.BILLING_TRIAL_DAYS || "14", 10);
@@ -581,6 +581,15 @@ export async function runBillingCycle(now = new Date()): Promise<{
   // the previous period's included allowance, so without this sweep an expiring
   // purchased lot would keep counting toward the balance forever.
   const { expiredLots } = await expireDueLots(now);
+
+  // Live evaluations that are missing capabilities added to the catalog after
+  // they were provisioned. Cheap (one indexed read per evaluation, and a write
+  // only when something is genuinely absent) and it is what makes
+  // PILOT_CAPABILITY_KEYS a promise that holds over time rather than at one
+  // instant - see reconcileEvaluationCapabilities.
+  await reconcileLiveEvaluations(now).catch((err) =>
+    console.warn("[billing][cycle] evaluation capability reconcile failed:", err?.message ?? err),
+  );
 
   // Coupon windows that have closed. Changes no money on its own - the
   // resolver already refuses an elapsed window - but it is what turns a
