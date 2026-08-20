@@ -13,6 +13,7 @@ import {
   HISTORICAL_SOURCE_WINDOW_DAYS,
   writeAudit,
   AuditAction,
+  normalizePhone,
   type HistoricalImportStatus,
 } from "@chatcenter/shared";
 import { processDocument } from "../services/embedding.service";
@@ -480,6 +481,57 @@ router.post("/:id/rerun-intelligence", writeGuard, async (req: Request, res: Res
   } catch (err: any) {
     console.error("[historical-import] rerun failed:", err?.message);
     res.status(500).json({ error: "Failed to rerun analysis" });
+  }
+});
+
+/**
+ * GET /api/historical-imports/customer-context?externalId=<phone>
+ *
+ * What we learned about THIS person, for the live inbox - keyed by the
+ * customer's own identifier rather than an import-internal id.
+ *
+ * The import already produced this (a summary and durable facts per customer)
+ * but only the AI could see it: the memory went into the bot prompt and
+ * nowhere else, so a human agent opening the same chat saw nothing and the
+ * import looked like it had done nothing. This is the endpoint the
+ * conversation panel reads.
+ */
+router.get("/customer-context", async (req: Request, res: Response) => {
+  try {
+    const raw = String(req.query.externalId ?? "").trim();
+    if (!raw) return res.json({ context: null });
+
+    // Same both-shapes probe as the prompt block: a conversation carries
+    // whatever the channel handed us, the memory row is keyed normalized.
+    const normalized = normalizePhone(raw);
+    const keys = Array.from(new Set([raw, normalized].filter(Boolean) as string[]));
+
+    const memory = await prisma.customerHistoricalMemory.findFirst({
+      where: { tenantId: req.tenantId!, customerExternalId: { in: keys } },
+      select: { summary: true, facts: true, messageCount: true, source: true, updatedAt: true, importId: true },
+    });
+    if (!memory) return res.json({ context: null });
+
+    const facts = Array.isArray(memory.facts) ? (memory.facts as Array<Record<string, unknown>>) : [];
+    res.json({
+      context: {
+        summary: memory.summary,
+        facts: facts
+          .filter((f) => typeof f.text === "string" && String(f.text).trim())
+          .map((f) => ({
+            text: String(f.text).trim(),
+            category: typeof f.category === "string" ? f.category : null,
+            confidence: typeof f.confidence === "string" ? f.confidence : null,
+          })),
+        messageCount: memory.messageCount,
+        source: memory.source,
+        learnedAt: memory.updatedAt,
+      },
+    });
+  } catch (err: any) {
+    // Context is an enhancement; never let it break the panel.
+    console.warn("[historical-import] customer-context failed:", err?.message);
+    res.json({ context: null });
   }
 });
 

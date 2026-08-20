@@ -184,7 +184,8 @@
       "noCrmActivity": "No CRM activity yet.",
       "noCrmNotes": "No CRM notes yet.",
       "seeAll": "See all",
-      "showLess": "Show less"
+      "showLess": "Show less",
+      "imported": "Imported"
     },
     "initiate": {
       "title": "Start New Conversation",
@@ -246,6 +247,13 @@
       "contact": "Contact",
       "call": "Call",
       "openWhatsapp": "WhatsApp"
+    },
+    "importedHistory": {
+      "badge": "From imported history",
+      "fromMessages": "learned from {n} earlier messages",
+      "showMore": "+{n} more",
+      "showLess": "Show less",
+      "disclaimer": "Learned from conversations imported from the WhatsApp Business app. Useful context - check before stating it back."
     }
   },
   "dashboard": {

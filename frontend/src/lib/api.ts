@@ -4025,3 +4025,23 @@ export function bulkRejectKnowledgeCandidates(token: string, importId: string, i
     { token, method: "POST", body: JSON.stringify({ ids: ids ?? [] }) },
   );
 }
+
+// ─── Imported WhatsApp history: per-customer context for the live inbox ──
+//
+// The import writes a summary + durable facts per customer. This is how a
+// human sees them; the AI reads the same rows through its prompt block.
+
+export interface ImportedCustomerContext {
+  summary: string | null;
+  facts: Array<{ text: string; category: string | null; confidence: string | null }>;
+  messageCount: number | null;
+  source: string;
+  learnedAt: string;
+}
+
+export function getImportedCustomerContext(token: string, customerExternalId: string) {
+  return apiFetch<{ context: ImportedCustomerContext | null }>(
+    `/api/historical-imports/customer-context?externalId=${encodeURIComponent(customerExternalId)}`,
+    { token },
+  );
+}

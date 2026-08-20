@@ -33,6 +33,10 @@ vi.mock("@chatcenter/shared", () => {
 
   return {
     prisma: mockPrisma,
+    // Opening a chosen conversation reads through the historical scope, so
+    // imported threads are not blanked once an agent clicks into one. The
+    // real implementation is a scope wrapper; here it just runs the callback.
+    withHistoricalRecords: <T,>(fn: () => Promise<T>) => fn(),
     authenticate: (req: any, _res: any, next: any) => {
       req.user = { userId: "user-1", tenantId: "tenant-1", role: "ADMIN", email: "admin@test.com" };
       req.tenantId = "tenant-1";

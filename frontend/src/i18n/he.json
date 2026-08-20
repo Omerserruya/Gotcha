@@ -184,7 +184,8 @@
       "noCrmActivity": "אין פעילות CRM עדיין.",
       "noCrmNotes": "אין הערות CRM עדיין.",
       "seeAll": "הצג הכל",
-      "showLess": "הצג פחות"
+      "showLess": "הצג פחות",
+      "imported": "יובא"
     },
     "initiate": {
       "title": "התחל שיחה חדשה",
@@ -246,6 +247,13 @@
       "contact": "איש קשר",
       "call": "חיוג",
       "openWhatsapp": "וואטסאפ"
+    },
+    "importedHistory": {
+      "badge": "מהיסטוריה שיובאה",
+      "fromMessages": "נלמד מ-{n} הודעות קודמות",
+      "showMore": "עוד {n}",
+      "showLess": "הצגה מצומצמת",
+      "disclaimer": "נלמד משיחות שיובאו מאפליקציית WhatsApp Business. הקשר מועיל - כדאי לוודא לפני שמשתמשים בו מול הלקוח."
     }
   },
   "dashboard": {

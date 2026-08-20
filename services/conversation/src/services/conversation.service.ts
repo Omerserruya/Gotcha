@@ -1,5 +1,5 @@
 import { getInternalServiceKey, readDurableSetting } from "@chatcenter/shared";
-import { prisma, publishEvent, outgoingMessageQueue } from "@chatcenter/shared";
+import { prisma, publishEvent, outgoingMessageQueue, withHistoricalRecords } from "@chatcenter/shared";
 import { getIO } from "../lib/socket";
 import * as messageService from "./message.service";
 
@@ -437,23 +437,43 @@ export async function getHistoryByCustomerExternalId(
     }
   }
 
-  const conversations = await prisma.conversation.findMany({
-    where: {
-      tenantId,
-      customerExternalId: { in: Array.from(externalIds) },
-    },
-    include: {
-      assignedAgent: { select: { id: true, name: true } },
-      _count: { select: { messages: true } },
-      messages: { orderBy: { createdAt: "desc" }, take: 1, select: { direction: true, body: true, createdAt: true } },
-    },
-    orderBy: { createdAt: "desc" },
-  });
+  // Imported history belongs HERE and nowhere else.
+  //
+  // `origin: LIVE` is injected into every conversation query by default, which
+  // is what keeps a WhatsApp history import out of the inbox, the unread
+  // counts and the routing. But this endpoint answers exactly one question -
+  // "what happened with this person before?" - and answering it while hiding
+  // the conversations we imported for that purpose made the whole import
+  // invisible: 7,986 messages in the database and an empty History panel.
+  //
+  // So this one call site opts in deliberately, and every row carries its
+  // `origin` onward so the panel can label imported threads rather than
+  // passing them off as conversations that happened in GOTCHA.
+  const conversations = await withHistoricalRecords(() =>
+    prisma.conversation.findMany({
+      where: {
+        tenantId,
+        customerExternalId: { in: Array.from(externalIds) },
+      },
+      include: {
+        assignedAgent: { select: { id: true, name: true } },
+        _count: { select: { messages: true } },
+        messages: { orderBy: { createdAt: "desc" }, take: 1, select: { direction: true, body: true, createdAt: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+  );
 
   return conversations.map((c) => {
     const lastMsg = c.messages[0] || null;
     const { messages, ...rest } = c;
-    return { ...rest, lastMessageBody: lastMsg?.body || null, lastMessageDirection: lastMsg?.direction || null };
+    return {
+      ...rest,
+      lastMessageBody: lastMsg?.body || null,
+      lastMessageDirection: lastMsg?.direction || null,
+      /** "LIVE" or "HISTORICAL" - the panel marks the imported ones. */
+      origin: (c as { origin?: string }).origin ?? "LIVE",
+    };
   });
 }
 
