@@ -232,7 +232,7 @@ export function HistoryPanel({ conversation, crmContext, crmLoading, onCrmNotePo
                               the customer's real history, from before they
                               connected - and an agent reading one needs to
                               know that. */}
-                          {conv.origin === "HISTORICAL" && (
+                          {conv.origin === "HISTORICAL_IMPORT" && (
                             <span className="rounded-full bg-violet-50 px-1.5 py-0.5 text-[9px] font-medium text-violet-700">
                               {t("conversations.historyPanel.imported")}
                             </span>

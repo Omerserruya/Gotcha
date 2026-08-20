@@ -471,7 +471,7 @@ export async function getHistoryByCustomerExternalId(
       ...rest,
       lastMessageBody: lastMsg?.body || null,
       lastMessageDirection: lastMsg?.direction || null,
-      /** "LIVE" or "HISTORICAL" - the panel marks the imported ones. */
+      /** RecordOrigin: "LIVE" or "HISTORICAL_IMPORT". The panel marks the imported ones. */
       origin: (c as { origin?: string }).origin ?? "LIVE",
     };
   });
