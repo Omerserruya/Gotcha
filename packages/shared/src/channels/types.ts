@@ -62,6 +62,25 @@ export interface MessageContent {
    * "[contacts message]", which loses the entire point of the message.
    */
   contacts?: SharedContact[];
+  /**
+   * Everything we know about a message the channel could not represent.
+   *
+   * WhatsApp answers `type: "unsupported"` with an `errors[]` array naming the
+   * reason and NO content - and we used to drop that array on the floor, so
+   * "why did this arrive empty" had no answer anywhere: not in the logs (the
+   * payload log truncates at 500 chars, one field short of `type`), not in the
+   * queue (the raw message is normalized before it is enqueued) and not on the
+   * row. The provider's own reason is the only evidence that exists; it is
+   * kept here and written to the message's metadata.
+   */
+  unsupported?: {
+    /** The provider's own type string, e.g. "unsupported", "revoke", "edit". */
+    providerType: string;
+    /** Meta's `errors[]`: code, title, message, details. Empty when absent. */
+    errors: Array<{ code?: number; title?: string; message?: string; details?: string }>;
+    /** The message object as it arrived, minus nothing. Small by definition. */
+    raw?: unknown;
+  };
 }
 
 /** One contact from a shared contact card, reduced to what an agent can use. */

@@ -122,7 +122,13 @@ router.post("/", async (req: Request, res: Response) => {
 
   try {
     const body = req.body;
-    console.log(`[WEBHOOK] Incoming: object=${body?.object}, entries=${body?.entry?.length || 0}`, JSON.stringify(body).slice(0, 500));
+    // 500 chars used to be the cap, and it cut one field short of the message
+    // `type` on a real WhatsApp payload - so the one investigation that needed
+    // it found the log stopping exactly before the answer. 2000 covers a
+    // message object with its contacts block and errors array; a media-heavy
+    // history chunk is still truncated, which is fine - those are diagnosed
+    // from their own [WEBHOOK.HISTORY] line.
+    console.log(`[WEBHOOK] Incoming: object=${body?.object}, entries=${body?.entry?.length || 0}`, JSON.stringify(body).slice(0, 2000));
 
     // Surface `failed` message statuses as their own untruncated log line.
     // The block above caps at 500 chars, which chops off the error code we
@@ -331,8 +337,17 @@ router.post("/", async (req: Request, res: Response) => {
             // Structured and already reduced by the adapter to name, numbers,
             // emails and organization. The worker copies producer metadata onto
             // the message row verbatim.
-            ...(msg.content.contacts?.length
-              ? { metadata: { contacts: msg.content.contacts } }
+            ...(msg.content.contacts?.length || msg.content.unsupported
+              ? {
+                  metadata: {
+                    ...(msg.content.contacts?.length ? { contacts: msg.content.contacts } : {}),
+                    // The provider's own reason for a message it could not
+                    // represent. Persisted because it is the ONLY evidence
+                    // that will exist: the payload log truncates, and the
+                    // queue holds the already-normalized message.
+                    ...(msg.content.unsupported ? { unsupported: msg.content.unsupported } : {}),
+                  },
+                }
               : {}),
             mediaUrl,
             fileName,
