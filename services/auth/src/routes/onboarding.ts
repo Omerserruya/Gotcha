@@ -2119,15 +2119,39 @@ function deriveHealth(report: any, live: { coreSystemSlug: string | null; connec
 const discoverSchema = z.object({
   domain: z.string().min(3).max(255),
   locale: z.string().min(2).max(10).optional().default("en"),
+  /**
+   * The admin ticked the Terms and Privacy Policy box on the first setup
+   * screen. Optional so an older client still works, and never trusted as a
+   * gate: the checkbox is the consent, this is the record of it.
+   */
+  legalAccepted: z.boolean().optional(),
 });
 
 router.post("/discover", requireRole("ADMIN"), validate(discoverSchema), async (req: Request, res: Response): Promise<void> => {
   try {
-    const { domain, locale } = req.body as { domain: string; locale: string };
+    const { domain, locale, legalAccepted } = req.body as { domain: string; locale: string; legalAccepted?: boolean };
     const origin = normalizeDomain(domain);
     if (!origin) {
       res.json({ data: { ok: false, reason: "invalid_domain" } });
       return;
+    }
+
+    // A tickbox nobody recorded is not evidence of anything. This is the first
+    // write of the whole setup, so it is where acceptance gets a timestamp, an
+    // actor and the document list. Fire-and-forget: failing to log the consent
+    // must not block the person who just gave it.
+    if (legalAccepted) {
+      prisma.auditLog.create({
+        data: {
+          tenantId: req.tenantId!,
+          actorType: "user",
+          actorId: (req as any).userId || null,
+          action: "legal.terms.accepted",
+          targetType: "tenant",
+          targetId: req.tenantId!,
+          metadata: { surface: "onboarding_setup", documents: ["terms-of-service", "privacy-policy"], locale },
+        },
+      }).catch((err: any) => console.warn("[onboarding] consent audit failed:", err?.message));
     }
 
     // Re-scan concurrency guard (T-2): refuse a second scan while one is
