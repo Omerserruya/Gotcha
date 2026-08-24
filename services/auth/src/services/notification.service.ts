@@ -12,6 +12,7 @@ import {
   emailKeyValueTable,
   emailBadge,
   emailPills,
+  withLegalConsentText,
   EMAIL_COLORS as EC,
 } from "@chatcenter/shared";
 import { issueSetupLink } from "./setup-link.service";
@@ -107,7 +108,10 @@ function withoutCredentialUrls(text: string, ...urls: (string | null | undefined
 async function sendHtmlEmail(to: string, subject: string, html: string, text: string): Promise<void> {
   const from = process.env.SMTP_FROM || process.env.SMTP_USER || "noreply@gotcha.app";
   const mail = getTransporter();
-  await mail.sendMail({ from, to, subject, html, text });
+  // The HTML half already carries the consent line, because every template here
+  // renders through renderBrandEmail. The plain-text half is composed per call
+  // site, so it gets the line at the single point they all pass through.
+  await mail.sendMail({ from, to, subject, html, text: withLegalConsentText(text) });
   console.log(`[EMAIL] Sent to: ${to} | Subject: ${subject}`);
 }
 

@@ -19,6 +19,8 @@ import type { Job, Worker } from "bullmq";
 import nodemailer, { type Transporter } from "nodemailer";
 import { prisma, getRedis, createWorker,
   resolveAppPublicUrl,
+  legalConsentHtml,
+  withLegalConsentText,
   type EmailJobData,
 } from "@chatcenter/shared";
 import { NOTIFICATIONS_EMAIL_QUEUE_NAME } from "./queues";
@@ -88,10 +90,16 @@ function renderHtml(body: string, link?: string): string {
   const linkBlock = fullLink
     ? `<p style="margin-top:24px"><a href="${fullLink}" style="background:#7c5cfc;color:#fff;padding:8px 16px;border-radius:6px;text-decoration:none">Open in dashboard</a></p>`
     : "";
+  // The same consent line the branded template carries in its footer, so a
+  // notification is not the one email that omits it.
+  const legalBlock =
+    `<p style="margin:28px 0 0;padding-top:12px;border-top:1px solid #eee;` +
+    `font-size:11px;line-height:18px;color:#8a8a90">${legalConsentHtml()}</p>`;
   return (
     `<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#111;line-height:1.5;max-width:560px">` +
     `<pre style="white-space:pre-wrap;font-family:inherit;margin:0">${body}</pre>` +
     linkBlock +
+    legalBlock +
     `</div>`
   );
 }
@@ -147,7 +155,9 @@ export function startNotificationsEmailWorker(): Worker<EmailJobData> {
           from: process.env.SMTP_FROM || process.env.SMTP_USER,
           to: d.to,
           subject: d.subject,
-          text: d.body,
+          // text/plain gets the consent line too: a client that renders only
+          // the plain part would otherwise show an email with no terms on it.
+          text: withLegalConsentText(d.body),
           // A pre-rendered body is sent as-is. renderHtml wraps plain text in a
           // <pre>, which would turn a designed email into a screenshot of one.
           html: d.html || renderHtml(d.body, d.link),
