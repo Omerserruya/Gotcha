@@ -152,7 +152,7 @@ Some tenant-connected integrations access Google user data through Google APIs, 
 
 - Google Calendar (calendar and calendar events scopes): to check availability and create, update, or cancel appointments as part of scheduling features.
 - Google Drive (read-only scope): to sync files the business selects into its knowledge base.
-- Gmail (read, send, and modify scopes, plus the account email address): to operate Gmail as a connected support email channel, receiving and sending messages in the shared inbox.
+- Gmail (a single scope, `gmail.modify`): to operate Gmail as a connected support email channel, receiving and sending messages in the shared inbox. The connected mailbox address is read from the Gmail profile under that same scope, so no separate Google identity scope is requested.
 
 GOTCHA's use and transfer of information received from Google APIs adheres to the Google API Services User Data Policy, including the Limited Use requirements. Specifically, we use Google user data only to provide the connected feature the business enabled; we do not use it for advertising; we do not sell it; and we do not transfer it to third parties except as necessary to provide those features, to comply with applicable law, or as part of a merger or acquisition with prior notice. Human access to Google user data is limited to what is necessary for security, compliance, support at the customer's request, or as required by law.
 
