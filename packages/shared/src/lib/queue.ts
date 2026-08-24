@@ -1,4 +1,5 @@
 import { Queue, Worker, Job, WorkerOptions } from "bullmq";
+import type { EmailThreadContext } from "../channels/email-thread";
 import { withCrossTenantAccess } from "./prisma";
 
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
@@ -241,6 +242,24 @@ export interface OutgoingMessageJob {
    * Undefined for a normal send.
    */
   replyToExternalId?: string;
+  /**
+   * Email threading for this send.
+   *
+   * Present when the agent is answering an existing email thread, absent when
+   * they deliberately chose to start a new one. Resolved by the producer rather
+   * than the worker because only the producer knows which conversation the
+   * agent was looking at and which button they pressed.
+   */
+  emailThread?: EmailThreadContext;
+  /**
+   * Email only. "new" makes the send start a fresh thread; anything else (the
+   * default) continues the conversation's existing one.
+   *
+   * The default matters more than the option: every producer that never heard
+   * of email threading - the bot, flows, approvals, scheduled sends - reaches
+   * the worker with this unset, and unset has to mean "reply properly".
+   */
+  emailReplyMode?: "reply" | "new";
   mediaUrl?: string;
   fileName?: string;
   // Broadcast linkage - when set, the outgoing worker writes the send result

@@ -90,6 +90,22 @@ export {
   outlookOutboundAdapter,
   slackInboundAdapter,
   slackOutboundAdapter,
+  // Email threading: turning a reply from the inbox into a reply in the
+  // customer's mail client instead of a second, unrelated email.
+  resolveEmailThread,
+  readEmailMeta,
+  replySubject,
+  baseSubject,
+  buildReferences,
+  parseMessageIdList,
+  threadHeaderLines,
+  outgoingSubject,
+  DEFAULT_EMAIL_SUBJECT,
+} from "./channels";
+export type {
+  EmailThreadContext,
+  EmailMessageMeta,
+  EmailThreadSourceMessage,
 } from "./channels";
 
 // Lib

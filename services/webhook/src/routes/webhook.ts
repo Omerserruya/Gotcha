@@ -796,6 +796,11 @@ router.post("/gmail", async (req: Request, res: Response) => {
             body: msg.body,
             subject: msg.subject,
             messageType: "email",
+            // Threading headers, carried through to Message.metadata.email.
+            // This is the ONLY moment they exist: by the time an agent types a
+            // reply, the customer's Message-ID is gone unless we wrote it down
+            // here. Without it every reply starts a new email thread.
+            metadata: { email: msg.email },
           },
         },
         { attempts: 3, backoff: { type: "exponential", delay: 1000 } }

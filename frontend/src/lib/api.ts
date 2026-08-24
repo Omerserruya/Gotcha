@@ -168,18 +168,32 @@ export function getMessages(token: string, conversationId: string, params?: Reco
  * the provider's: the server resolves it and refuses one that is not in this
  * conversation.
  */
+/**
+ * Send a message from the inbox.
+ *
+ * `emailReplyMode` only means anything on an email conversation. Omitting it
+ * replies in the customer's existing mail thread, which is the behaviour an
+ * agent answering an email expects and the one the product had wrong: every
+ * reply used to arrive as a separate email titled "Message".
+ */
 export function sendMessage(
   token: string,
   conversationId: string,
   body: string,
   replyToMessageId?: string,
+  email?: { mode: "reply" | "new"; subject?: string },
 ) {
   return apiFetch<{ data: any }>(
     `/api/conversations/${conversationId}/messages`,
     {
       token,
       method: "POST",
-      body: JSON.stringify({ body, ...(replyToMessageId ? { replyToMessageId } : {}) }),
+      body: JSON.stringify({
+        body,
+        ...(replyToMessageId ? { replyToMessageId } : {}),
+        ...(email ? { emailReplyMode: email.mode } : {}),
+        ...(email?.mode === "new" && email.subject ? { subject: email.subject } : {}),
+      }),
     }
   );
 }
@@ -1523,7 +1537,14 @@ export interface KnowledgeSyncReport {
   }>;
 }
 
-export function discoverBusiness(token: string, domain: string, locale?: string) {
+/**
+ * Start the onboarding scan.
+ *
+ * `legalAccepted` records that the admin ticked the Terms and Privacy Policy
+ * box on the first setup screen. It is a record, not a gate: the button that
+ * calls this is already disabled until the box is ticked.
+ */
+export function discoverBusiness(token: string, domain: string, locale?: string, legalAccepted?: boolean) {
   return apiFetch<{ data: {
     ok: boolean; domain?: string; reason?: string;
     discovery?: BusinessDiscoveryRecord;
@@ -1533,7 +1554,7 @@ export function discoverBusiness(token: string, domain: string, locale?: string)
     knowledge?: KnowledgeSyncReport | null;
   } }>(
     "/api/onboarding/discover",
-    { token, method: "POST", body: JSON.stringify({ domain, locale }) },
+    { token, method: "POST", body: JSON.stringify({ domain, locale, legalAccepted }) },
   );
 }
 // Fast, LLM-free plan for the discovery ceremony: business-typed steps that
@@ -1894,16 +1915,37 @@ export function getKnowledgeIntegrations(token: string, kbId: string) {
   return apiFetch<{ data: any[] }>(`/api/knowledge/kb/${kbId}/integrations`, { token });
 }
 
-export function deleteKnowledgeIntegration(token: string, intId: string) {
-  return apiFetch<{ data: any }>(`/api/knowledge/integrations/${intId}`, { token, method: "DELETE" });
+/**
+ * Disconnect a knowledge integration.
+ *
+ * `removeData` is opt-in on purpose: stopping a sync and throwing away
+ * everything the AI learned from it are two different decisions, and the
+ * destructive one is never the default.
+ */
+export function deleteKnowledgeIntegration(token: string, intId: string, removeData = false) {
+  const qs = removeData ? "?removeData=1" : "";
+  return apiFetch<{ data: { deleted: boolean; removed: number } }>(
+    `/api/knowledge/integrations/${intId}${qs}`,
+    { token, method: "DELETE" },
+  );
 }
 
 export function initConfluenceOAuth(token: string, kbId: string) {
   return apiFetch<{ url: string }>(`/api/knowledge/oauth/confluence/init?kbId=${kbId}`, { token });
 }
 
-export function initGoogleDriveOAuth(token: string, kbId: string, flow?: "onboarding") {
-  return apiFetch<{ url: string }>(`/api/knowledge/oauth/google-drive/init?kbId=${kbId}${flow ? `&flow=${flow}` : ""}`, { token });
+export function initGoogleDriveOAuth(
+  token: string,
+  kbId: string,
+  flow?: "onboarding",
+  reconnect = false,
+) {
+  const params = new URLSearchParams({ kbId });
+  if (flow) params.set("flow", flow);
+  // Only a reconnect needs to walk the admin through Google's consent screen
+  // again; a normal connect on an already-linked account should not.
+  if (reconnect) params.set("reconnect", "1");
+  return apiFetch<{ url: string }>(`/api/knowledge/oauth/google-drive/init?${params}`, { token });
 }
 
 export function getConfluenceSpaces(token: string, intId: string) {
@@ -1937,6 +1979,62 @@ export function syncDriveFiles(token: string, intId: string, fileIds: string[]) 
   return apiFetch<{ data: any }>(`/api/knowledge/integrations/${intId}/drive/sync`, {
     token, method: "POST", body: JSON.stringify({ fileIds }),
   });
+}
+
+/** One thing the admin picked in the Drive browser: a file or a whole folder. */
+export interface DriveSourceSelection {
+  id: string;
+  kind: "file" | "folder";
+  name: string;
+  driveId?: string;
+  mimeType?: string;
+}
+
+/** A connected source plus the sync status the server keeps for it. */
+export interface DriveSource extends DriveSourceSelection {
+  key: string;
+  paused?: boolean;
+  syncState?: "pending" | "synced" | "partial" | "failed" | "paused" | "action_required";
+  lastSyncAt?: string;
+  lastSuccessfulSyncAt?: string;
+  lastError?: string;
+  fileCount?: number;
+}
+
+/**
+ * Import a selection. Folders and files go in separate calls: a batch holding
+ * both is ambiguous about which source owns the resulting documents, and the
+ * server refuses it rather than guessing.
+ */
+export function syncDriveSources(token: string, intId: string, sources: DriveSourceSelection[]) {
+  return apiFetch<{ data: any }>(`/api/knowledge/integrations/${intId}/drive/sync`, {
+    token, method: "POST", body: JSON.stringify({ sources }),
+  });
+}
+
+export function getDriveSources(token: string, intId: string) {
+  return apiFetch<{ data: DriveSource[] }>(`/api/knowledge/integrations/${intId}/drive/sources`, { token });
+}
+
+export function syncDriveNow(token: string, intId: string, sourceKey?: string) {
+  return apiFetch<{ data: any }>(`/api/knowledge/integrations/${intId}/drive/sync-now`, {
+    token, method: "POST", body: JSON.stringify(sourceKey ? { sourceKey } : {}),
+  });
+}
+
+export function setDriveSourcePaused(token: string, intId: string, sourceKey: string, paused: boolean) {
+  return apiFetch<{ data: DriveSource }>(
+    `/api/knowledge/integrations/${intId}/drive/sources/${encodeURIComponent(sourceKey)}`,
+    { token, method: "PATCH", body: JSON.stringify({ paused }) },
+  );
+}
+
+export function removeDriveSource(token: string, intId: string, sourceKey: string, removeData = false) {
+  const qs = removeData ? "?removeData=1" : "";
+  return apiFetch<{ data: { removed: number } }>(
+    `/api/knowledge/integrations/${intId}/drive/sources/${encodeURIComponent(sourceKey)}${qs}`,
+    { token, method: "DELETE" },
+  );
 }
 
 // Enable/disable hourly background auto-sync for a connected source.

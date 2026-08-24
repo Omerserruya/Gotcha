@@ -254,6 +254,13 @@
       "showMore": "עוד {n}",
       "showLess": "הצגה מצומצמת",
       "disclaimer": "נלמד משיחות שיובאו מאפליקציית WhatsApp Business. הקשר מועיל - כדאי לוודא לפני שמשתמשים בו מול הלקוח."
+    },
+    "email": {
+      "replyInThread": "תגובה בשרשור",
+      "newEmail": "מייל חדש",
+      "replyHint": "ממשיך את שרשור המייל של הלקוח.",
+      "newHint": "פותח שרשור מייל נפרד.",
+      "subjectPlaceholder": "נושא"
     }
   },
   "dashboard": {
@@ -3740,7 +3747,44 @@
         "sharedDrives": "כוננים משותפים"
       },
       "removeKb": "הסרת מאגר ידע",
-      "confirmRemoveKbBody": "“{name}” וכל המסמכים שבו יוסרו. העובדים שלכם יפסיקו לענות ממנו."
+      "confirmRemoveKbBody": "“{name}” וכל המסמכים שבו יוסרו. העובדים שלכם יפסיקו לענות ממנו.",
+      "drive": {
+        "consentTitle": "חיבור Google Drive",
+        "consentAccess": "GOTCHA משתמשת בגישת קריאה בלבד כדי לאפשר לך לבחור קבצים בודדים או תיקיות שלמות כמקורות ידע עבור עובדי ה-AI שלך.",
+        "consentFolders": "כאשר בוחרים תיקייה, GOTCHA מסנכרנת באופן מתמשך את הקבצים הנתמכים שבתוכה, כולל קבצים שיתווספו או יעודכנו בעתיד.",
+        "consentNeverModifies": "GOTCHA לעולם אינה משנה, מוחקת, מעבירה או משתפת קבצים ב-Google Drive. אף שהרשאת הקריאה של Google חלה על ה-Drive, GOTCHA מעבדת רק את הקבצים והתיקיות שבחרת במפורש.",
+        "consentContinue": "המשך ל-Google",
+        "folderSyncNote": "כל הקבצים הנתמכים שנמצאים כרגע בתיקייה שנבחרה ייובאו. קבצים חדשים או מעודכנים שיתווספו אליה בעתיד יסונכרנו אוטומטית.",
+        "sharedDrivesNote": "ניתן לבחור גם קבצים ותיקיות מתוך Shared Drives שיש לך הרשאה אליהם.",
+        "folderSelected": "התיקייה תסונכרן, כולל תת-תיקיות",
+        "selected": "נבחרו",
+        "importSelected": "ייבוא הנבחרים",
+        "importing": "מייבא...",
+        "inMyDrive": "ה-Drive שלי",
+        "inSharedDrive": "Shared Drive",
+        "filesSynced": "{count} קבצים מסונכרנים",
+        "lastSync": "סנכרון אחרון:",
+        "syncNow": "סנכרן עכשיו",
+        "syncing": "מסנכרן...",
+        "pause": "השהה",
+        "resume": "המשך",
+        "remove": "הסרת מקור",
+        "statePending": "ממתין",
+        "stateSynced": "מסונכרן",
+        "statePartial": "מסונכרן חלקית",
+        "statePaused": "מושהה",
+        "stateFailed": "נכשל",
+        "stateActionRequired": "נדרשת פעולה",
+        "removeSourceTitle": "להפסיק את הסנכרון של “{name}”?",
+        "disconnectTitle": "לנתק את “{name}”?",
+        "removeBody": "בחר מה יקרה לידע שכבר יובא. לא ניתן לבטל פעולה זו.",
+        "removeKeepData": "להפסיק סנכרון ולשמור את הידע",
+        "removeKeepDataHint": "מסמכים שכבר יובאו יישארו במאגר הידע.",
+        "removeWithData": "להפסיק סנכרון ולהסיר את הידע",
+        "removeWithDataHint": "מוחק כל מסמך וכל אמבדינג שיובאו מהמקור הזה.",
+        "reconnectNeeded": "הגישה ל-Google בוטלה או פגה. התחבר מחדש כדי לחדש את הסנכרון.",
+        "reconnect": "התחבר מחדש"
+      }
     },
     "tools": {
       "title": "כלים מחוברים",

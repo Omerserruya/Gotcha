@@ -1,3 +1,5 @@
+import type { EmailThreadContext } from "./email-thread";
+
 // ─── Channel Types & Interfaces ──────────────────────────────
 
 export type ChannelType = "WHATSAPP" | "MESSENGER" | "INSTAGRAM" | "EMAIL" | "GMAIL" | "OUTLOOK" | "SLACK" | "WEBCHAT" | "SHOPIFY_LIVE_CHAT";
@@ -331,14 +333,25 @@ export interface OutboundAdapter {
      * delivers the text, which is the part that matters - a reply that arrives
      * without its quote is a small loss, a reply that fails to send is a real one.
      */
-    replyToExternalId?: string
+    replyToExternalId?: string,
+    /**
+     * Email threading. Only the mail adapters read it.
+     *
+     * Email has no native notion of a conversation, so a reply carrying no
+     * In-Reply-To / References / matching Subject arrives in the customer's
+     * inbox as an unrelated new message. This is how the inbox tells a mail
+     * adapter which thread the agent is answering. Absent means "send a fresh
+     * email", which is also the only correct reading for every other channel.
+     */
+    emailThread?: EmailThreadContext,
   ): Promise<string | null>;
   sendInteractiveMessage(
     credentials: ChannelCredentials,
     accountExternalId: string,
     recipientId: string,
     bodyText: string,
-    buttons: Array<{ id: string; title: string }>
+    buttons: Array<{ id: string; title: string }>,
+    emailThread?: EmailThreadContext,
   ): Promise<string | null>;
   sendMediaMessage?(
     credentials: ChannelCredentials,

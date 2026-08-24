@@ -6,6 +6,7 @@ import type {
   NormalizedStatusUpdate,
   ChannelCredentials,
 } from "./types";
+import { type EmailThreadContext, outgoingSubject } from "./email-thread";
 
 // ─── Outlook Inbound Adapter ───────────────────────────────
 
@@ -95,10 +96,41 @@ export const outlookOutboundAdapter: OutboundAdapter = {
     credentials: ChannelCredentials,
     _accountExternalId: string,
     recipientId: string,
-    text: string
+    text: string,
+    _replyToExternalId?: string,
+    thread?: EmailThreadContext,
   ): Promise<string | null> {
     try {
       const accessToken = await resolveAccessToken(credentials);
+
+      // Graph's own reply endpoint is the reliable path: it copies the subject,
+      // the recipients and the whole threading header set off the original, so
+      // the reply lands in the customer's existing conversation instead of
+      // beside it. Only available when we recorded which message we are
+      // answering.
+      if (thread?.providerMessageId) {
+        const replyRes = await fetch(
+          `${GRAPH_API_URL}/me/messages/${encodeURIComponent(thread.providerMessageId)}/reply`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ comment: text }),
+          },
+        );
+        if (replyRes.ok) return crypto.randomUUID();
+        const replyErr = await replyRes.json().catch(() => ({})) as Record<string, any>;
+        // Fall through to a normal send rather than dropping the agent's reply:
+        // an un-threaded answer still reaches the customer, silence does not.
+        console.error("Outlook reply error, falling back to sendMail:", replyErr);
+      }
+
+      const internetHeaders = [
+        ...(thread?.inReplyTo ? [{ name: "In-Reply-To", value: thread.inReplyTo }] : []),
+        ...(thread?.references?.length ? [{ name: "References", value: thread.references.join(" ") }] : []),
+      ];
 
       const response = await fetch(`${GRAPH_API_URL}/me/sendMail`, {
         method: "POST",
@@ -108,7 +140,7 @@ export const outlookOutboundAdapter: OutboundAdapter = {
         },
         body: JSON.stringify({
           message: {
-            subject: "Message",
+            subject: outgoingSubject(thread),
             body: {
               contentType: "Text",
               content: text,
@@ -118,6 +150,11 @@ export const outlookOutboundAdapter: OutboundAdapter = {
                 emailAddress: { address: recipientId },
               },
             ],
+            // Graph only accepts custom internet headers whose name starts with
+            // "x-" EXCEPT for a small allow-list that includes the threading
+            // pair, which is precisely why they can be set here.
+            ...(internetHeaders.length ? { internetMessageHeaders: internetHeaders } : {}),
+            ...(thread?.threadId ? { conversationId: thread.threadId } : {}),
           },
         }),
       });

@@ -3,7 +3,9 @@ import { z } from "zod";
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
-import { prisma, authenticate, resolveTenant, validate, outgoingMessageQueue, decryptCredentials, requireActiveTenant } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, validate, outgoingMessageQueue, decryptCredentials, requireActiveTenant,
+  type EmailThreadContext,
+} from "@chatcenter/shared";
 import * as messageService from "../services/message.service";
 
 const router = Router();
@@ -19,7 +21,31 @@ fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 const sendMessageSchema = z.object({
   body: z.string().min(1),
   messageType: z.string().optional(),
+  /**
+   * The message being quoted.
+   *
+   * Declared here because `validate` reassigns `req.body` to the PARSED value
+   * and Zod strips keys the schema does not name. Without this line the handler
+   * below read `req.body.replyToMessageId` off an object it had already been
+   * removed from, so every quoted reply from the inbox was silently sent as a
+   * plain message. The resolution code was correct; it was never reached.
+   */
+  replyToMessageId: z.string().optional(),
+  /**
+   * Email only. "reply" (the default) continues the customer's existing mail
+   * thread; "new" deliberately starts a fresh one.
+   *
+   * Defaulting to "reply" is the whole point: an agent answering from the inbox
+   * is answering something, and a mail client that cannot see that puts the
+   * answer in a separate message the customer has to connect by hand.
+   */
+  emailReplyMode: z.enum(["reply", "new"]).optional(),
+  /** Subject for a deliberately new email thread. Ignored when replying. */
+  subject: z.string().max(200).optional(),
 });
+
+/** Channels where a send is an email and therefore needs threading. */
+const EMAIL_CHANNELS = new Set(["GMAIL", "OUTLOOK", "EMAIL"]);
 
 router.get("/:conversationId/messages", async (req: Request, res: Response) => {
   try {
@@ -38,7 +64,7 @@ router.get("/:conversationId/messages", async (req: Request, res: Response) => {
 router.post("/:conversationId/messages", validate(sendMessageSchema), async (req: Request, res: Response) => {
   try {
     const conversationId = req.params.conversationId as string;
-    const { body, messageType } = req.body;
+    const { body, messageType, emailReplyMode, subject } = req.body;
     // The message the agent is replying to, if any. Validated below against
     // this conversation: a reply must quote something in the thread it is sent
     // to, or WhatsApp rejects the send and the agent gets a failure they cannot
@@ -120,6 +146,22 @@ router.post("/:conversationId/messages", validate(sendMessageSchema), async (req
       res.status(400).json({ error: "Channel not configured for this tenant" }); return;
     }
 
+    // ── Email threading ──
+    //
+    // The route carries the agent's CHOICE; the outgoing worker does the
+    // resolution. Keeping it there means the bot, flows, approvals and
+    // scheduled sends thread correctly too, without every producer having to
+    // learn what a References header is.
+    //
+    // A deliberately new thread is the only case that needs anything here: its
+    // subject is the agent's, and it must carry no In-Reply-To, no References
+    // and no thread id, because those are exactly what would drag it back into
+    // the conversation they chose to leave.
+    const isEmail = EMAIL_CHANNELS.has(channel);
+    const startsNewThread = isEmail && emailReplyMode === "new";
+    const emailThread: EmailThreadContext | undefined =
+      startsNewThread && subject ? { subject } : undefined;
+
     const message = await messageService.create({
       tenantId: req.tenantId!,
       conversationId,
@@ -128,6 +170,11 @@ router.post("/:conversationId/messages", validate(sendMessageSchema), async (req
       messageType,
       senderName: req.user!.email,
       replyToMessageId: quoted?.id,
+      // Recorded on our side too, so the NEXT reply can chain onto this one
+      // even if the customer never writes back in between.
+      // A new thread's subject is recorded now so the NEXT reply chains onto
+      // it. Everything else is stamped by the worker once the provider answers.
+      metadata: emailThread ? { email: { subject: emailThread.subject } } : undefined,
     });
 
     await outgoingMessageQueue.add("send", {
@@ -143,6 +190,8 @@ router.post("/:conversationId/messages", validate(sendMessageSchema), async (req
       // The PROVIDER's id, not ours. This is what the channel needs to render
       // the quote on the customer's phone.
       replyToExternalId: quoted?.externalMessageId ?? undefined,
+      emailThread,
+      emailReplyMode: isEmail ? (emailReplyMode || "reply") : undefined,
     }, { attempts: 3, backoff: { type: "exponential", delay: 1000 } });
 
     res.status(201).json({ data: message });

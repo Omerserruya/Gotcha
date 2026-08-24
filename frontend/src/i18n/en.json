@@ -254,6 +254,13 @@
       "showMore": "+{n} more",
       "showLess": "Show less",
       "disclaimer": "Learned from conversations imported from the WhatsApp Business app. Useful context - check before stating it back."
+    },
+    "email": {
+      "replyInThread": "Reply in thread",
+      "newEmail": "New email",
+      "replyHint": "Continues the customer's email thread.",
+      "newHint": "Starts a separate email thread.",
+      "subjectPlaceholder": "Subject"
     }
   },
   "dashboard": {
@@ -3739,7 +3746,44 @@
         "sharedDrives": "Shared Drives"
       },
       "removeKb": "Remove knowledge base",
-      "confirmRemoveKbBody": "“{name}” and all of its documents will be removed. Your employees will stop answering from it."
+      "confirmRemoveKbBody": "“{name}” and all of its documents will be removed. Your employees will stop answering from it.",
+      "drive": {
+        "consentTitle": "Connect Google Drive",
+        "consentAccess": "GOTCHA uses read-only access to let you select individual files or entire folders as knowledge sources for your AI employees.",
+        "consentFolders": "When you select a folder, GOTCHA continuously synchronizes supported files contained in that folder, including files added or updated in the future.",
+        "consentNeverModifies": "GOTCHA never modifies, deletes, moves or shares files in your Google Drive. Although Google's read-only permission applies to your Drive, GOTCHA only processes the files and folders you explicitly select.",
+        "consentContinue": "Continue to Google",
+        "folderSyncNote": "All supported files currently inside the selected folder will be imported. New or updated files added to this folder in the future will be synchronized automatically.",
+        "sharedDrivesNote": "You can also select files and folders from Shared Drives that you have permission to access.",
+        "folderSelected": "Folder will be synced, including sub-folders",
+        "selected": "selected",
+        "importSelected": "Import Selected",
+        "importing": "Importing...",
+        "inMyDrive": "My Drive",
+        "inSharedDrive": "Shared Drive",
+        "filesSynced": "{count} files synced",
+        "lastSync": "Last sync:",
+        "syncNow": "Sync now",
+        "syncing": "Syncing...",
+        "pause": "Pause",
+        "resume": "Resume",
+        "remove": "Remove source",
+        "statePending": "Pending",
+        "stateSynced": "Synced",
+        "statePartial": "Partially synced",
+        "statePaused": "Paused",
+        "stateFailed": "Failed",
+        "stateActionRequired": "Action required",
+        "removeSourceTitle": "Stop syncing “{name}”?",
+        "disconnectTitle": "Disconnect “{name}”?",
+        "removeBody": "Choose what happens to the knowledge that was already imported. This cannot be undone.",
+        "removeKeepData": "Stop syncing, keep the knowledge",
+        "removeKeepDataHint": "Documents already imported stay in the knowledge base.",
+        "removeWithData": "Stop syncing and remove the knowledge",
+        "removeWithDataHint": "Deletes every document and embedding imported from this source.",
+        "reconnectNeeded": "Google access was revoked or expired. Reconnect to resume syncing.",
+        "reconnect": "Reconnect"
+      }
     },
     "tools": {
       "title": "Connected Tools",

@@ -545,6 +545,15 @@ function UploadView({
                   <p className="text-xs text-gray-400">
                     {connected ? t("knowledge.sourceConnected") : t("knowledge.sourceNotConnected")}
                   </p>
+                  {/* The second place Drive can be connected from, so the
+                      read-only disclosure has to appear here too. The full
+                      version lives in the dialog on the Manage Knowledge page;
+                      this is the short form that fits a drawer row. */}
+                  {provider === "google_drive" && !connected && (
+                    <p className="text-[11px] leading-relaxed text-gray-400 mt-1">
+                      {t("aiStudio.knowledge.drive.consentAccess")}
+                    </p>
+                  )}
                 </div>
                 {connected ? (
                   <a

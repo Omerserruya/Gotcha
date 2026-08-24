@@ -1,3 +1,4 @@
+export * from "./email-thread";
 export type {
   ChannelType,
   NormalizedInboundMessage,
