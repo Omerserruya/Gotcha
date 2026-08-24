@@ -1,11 +1,73 @@
 import { Router, Request, Response } from "express";
 import { prisma, authenticate, resolveTenant, requireActiveTenant, requireOnboardingOrActiveTenant, requireRole, mintOAuthState, consumeOAuthState,
-  resolveAppPublicUrl,
+  resolveAppPublicUrl, encryptCredentials, decryptCredentials, isEncrypted,
 } from "@chatcenter/shared";
 import * as confluenceService from "../services/confluence.service";
 import * as googleDriveService from "../services/google-drive.service";
 
 const router = Router();
+
+/**
+ * Read a stored refresh token without caring how it was stored.
+ *
+ * Drive credentials are encrypted now; rows written before that are plain JSON.
+ * Both have to be readable or a quiet re-auth would look like a first connect
+ * and lose the grant. Returns undefined rather than throwing: an unreadable
+ * blob just means we must ask for consent again.
+ */
+function readRefreshToken(credentials: unknown): string | undefined {
+  try {
+    if (typeof credentials === "string") {
+      if (!isEncrypted(credentials)) return undefined;
+      return decryptCredentials(credentials).refreshToken || undefined;
+    }
+    return (credentials as any)?.refreshToken || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function hasRefreshToken(credentials: unknown): boolean {
+  return Boolean(readRefreshToken(credentials));
+}
+
+/**
+ * Normalise what the client picked into the stored source shape.
+ *
+ * Accepts the structured `sources` array and the original `fileIds` array. Only
+ * the fields the server actually trusts are carried over: sync state belongs to
+ * the server, so a client cannot post itself a "synced" badge.
+ */
+function parseRequestedSources(body: any): googleDriveService.DriveSource[] {
+  if (Array.isArray(body?.sources)) {
+    return body.sources
+      .filter((s: any) => s && typeof s.id === "string" && s.id)
+      .map((s: any) => {
+        const kind: googleDriveService.DriveSourceKind = s.kind === "folder" ? "folder" : "file";
+        return {
+          key: googleDriveService.sourceKey(kind, s.id),
+          kind,
+          id: s.id,
+          name: typeof s.name === "string" && s.name ? s.name : s.id,
+          driveId: typeof s.driveId === "string" && s.driveId ? s.driveId : undefined,
+          mimeType: typeof s.mimeType === "string" ? s.mimeType : undefined,
+        };
+      });
+  }
+
+  if (Array.isArray(body?.fileIds)) {
+    return body.fileIds
+      .filter((id: any) => typeof id === "string" && id)
+      .map((id: string) => ({
+        key: googleDriveService.sourceKey("file", id),
+        kind: "file" as const,
+        id,
+        name: id,
+      }));
+  }
+
+  return [];
+}
 
 
 // ─── Confluence OAuth ───────────────────────────────────────
@@ -111,7 +173,7 @@ router.get("/oauth/confluence/callback", async (req: Request, res: Response) => 
 // PENDING_ONBOARDING allowed: onboarding Movement 6 connects Drive before the
 // tenant flips ACTIVE. `flow=onboarding` rides the state so the callback can
 // land back on /setup instead of the app's knowledge page.
-router.get("/oauth/google-drive/init", authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"), (req: Request, res: Response) => {
+router.get("/oauth/google-drive/init", authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"), async (req: Request, res: Response) => {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const redirectUri = process.env.GOOGLE_REDIRECT_URI;
   if (!clientId || !redirectUri) {
@@ -127,8 +189,26 @@ router.get("/oauth/google-drive/init", authenticate, resolveTenant, requireOnboa
     flow: req.query.flow === "onboarding" ? "onboarding" : undefined,
   });
 
+  // ONE scope. Folder sources are a standing subscription to a subtree,
+  // including files that do not exist yet, and `drive.file` only ever grants
+  // per-file access to what the user picked in that one session. It cannot
+  // reach tomorrow's file, so it cannot back this feature.
   const scopes = "https://www.googleapis.com/auth/drive.readonly";
-  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scopes)}&state=${state}&access_type=offline&prompt=consent`;
+
+  // Google only returns a refresh token when it shows the consent screen. Force
+  // it for a first connect or an explicit reconnect, and stay quiet otherwise -
+  // re-consenting an admin who is already connected is noise, not security.
+  const existing = await prisma.knowledgeIntegration.findFirst({
+    where: { tenantId: req.tenantId!, knowledgeBaseId: kbId, provider: "google_drive" },
+    select: { credentials: true },
+  });
+  const needsConsent = req.query.reconnect === "1" || !hasRefreshToken(existing?.credentials);
+
+  const authUrl =
+    `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}` +
+    `&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code` +
+    `&scope=${encodeURIComponent(scopes)}&state=${state}&access_type=offline` +
+    (needsConsent ? "&prompt=consent" : "");
 
   res.json({ url: authUrl });
 });
@@ -178,20 +258,42 @@ router.get("/oauth/google-drive/callback", async (req: Request, res: Response) =
     });
     const userInfo: any = userRes.ok ? await userRes.json() : null;
 
-    await prisma.knowledgeIntegration.create({
-      data: {
-        tenantId,
-        knowledgeBaseId: kbId,
-        provider: "google_drive",
-        credentials: {
-          accessToken: tokens.access_token,
-          refreshToken: tokens.refresh_token,
-          expiresAt: Date.now() + tokens.expires_in * 1000,
-        },
-        displayName: userInfo?.user?.displayName || "Google Drive",
-        config: {},
-      },
+    // Re-authorizing an already-connected knowledge base must land on the SAME
+    // integration row. Creating a second one would fork the picked sources: the
+    // scheduler would keep syncing the old row's selection while the UI showed
+    // the new, empty one.
+    const existing = await prisma.knowledgeIntegration.findFirst({
+      where: { tenantId, knowledgeBaseId: kbId, provider: "google_drive" },
     });
+
+    // Google omits refresh_token when it did not show the consent screen, which
+    // is exactly the quiet re-auth path above. Dropping the stored one there
+    // would silently turn a working connection into a one-hour connection.
+    const previousRefreshToken = readRefreshToken(existing?.credentials);
+    const credentials = encryptCredentials({
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token || previousRefreshToken,
+      expiresAt: Date.now() + (tokens.expires_in || 3600) * 1000,
+    });
+    const displayName = userInfo?.user?.displayName || "Google Drive";
+
+    if (existing) {
+      await prisma.knowledgeIntegration.update({
+        where: { id: existing.id },
+        data: { credentials: credentials as any, displayName, isActive: true },
+      });
+    } else {
+      await prisma.knowledgeIntegration.create({
+        data: {
+          tenantId,
+          knowledgeBaseId: kbId,
+          provider: "google_drive",
+          credentials: credentials as any,
+          displayName,
+          config: {},
+        },
+      });
+    }
 
     const frontendUrl = resolveAppPublicUrl(process.env);
     // Onboarding-initiated connects return to the wizard (Movement 6 resumes
@@ -237,7 +339,13 @@ router.get("/kb/:kbId/integrations", async (req: Request, res: Response) => {
   }
 });
 
-// Delete (disconnect) integration
+// Delete (disconnect) integration.
+//
+// Two different requests hide behind one button, so they are two different
+// calls: disconnecting stops the sync and keeps what was already learned, while
+// `removeData=1` also deletes the documents and embeddings this integration
+// produced. Defaulting to deletion would throw away a customer's knowledge base
+// because they wanted to stop a sync.
 router.delete("/integrations/:intId", async (req: Request, res: Response) => {
   try {
     const integration = await prisma.knowledgeIntegration.findFirst({
@@ -245,8 +353,13 @@ router.delete("/integrations/:intId", async (req: Request, res: Response) => {
     });
     if (!integration) { res.status(404).json({ error: "Integration not found" }); return; }
 
+    let removed = 0;
+    if (req.query.removeData === "1" && integration.provider === "google_drive") {
+      removed = await googleDriveService.removeSourceData(integration as any, () => true);
+    }
+
     await prisma.knowledgeIntegration.delete({ where: { id: integration.id } });
-    res.json({ data: { deleted: true } });
+    res.json({ data: { deleted: true, removed } });
   } catch (err) {
     console.error("Delete integration error:", err);
     res.status(500).json({ error: "Failed to delete integration" });
@@ -357,7 +470,10 @@ router.get("/integrations/:intId/drive/files", async (req: Request, res: Respons
   }
 });
 
-// ─── Google Drive: sync files ─────────────────────────────────
+// ─── Google Drive: import a selection ────────────────────────
+//
+// Accepts the structured `sources` list (files and/or folders) and still
+// accepts the original bare `fileIds`, so an older client keeps working.
 
 router.post("/integrations/:intId/drive/sync", async (req: Request, res: Response) => {
   try {
@@ -366,20 +482,150 @@ router.post("/integrations/:intId/drive/sync", async (req: Request, res: Respons
     });
     if (!integration) { res.status(404).json({ error: "Integration not found" }); return; }
 
-    const { fileIds } = req.body;
-    if (!fileIds?.length) { res.status(400).json({ error: "fileIds required" }); return; }
+    const picked = parseRequestedSources(req.body);
+    if (!picked.length) { res.status(400).json({ error: "sources or fileIds required" }); return; }
 
-    // Remember the selected files + turn on auto-sync (see Confluence note above).
+    // A batch mixing a folder with loose files is ambiguous about what the
+    // folder's cleanup owns, so it is refused at the door rather than resolved
+    // by a guess. Separate imports of each are fine.
+    const kinds = new Set(picked.map((p) => p.kind));
+    if (kinds.size > 1) {
+      res.status(400).json({ error: "Import folders and files separately, not in the same selection" });
+      return;
+    }
+
     const cfg = (integration.config && typeof integration.config === "object" ? integration.config : {}) as Record<string, unknown>;
-    const newConfig = { ...cfg, fileIds, autoSync: cfg.autoSync ?? true };
+    const merged = googleDriveService.mergeSources(
+      googleDriveService.normalizeSources(cfg),
+      picked,
+    );
+    // `fileIds` is intentionally left as it was: it is the pre-folder format and
+    // nothing writes it any more, but leaving it lets a rollback still find the
+    // original selection.
+    const newConfig = { ...cfg, sources: merged, autoSync: cfg.autoSync ?? true };
     await prisma.knowledgeIntegration.update({ where: { id: integration.id }, data: { config: newConfig } });
     (integration as any).config = newConfig;
 
-    const result = await googleDriveService.syncFiles(integration as any, fileIds);
-    res.json({ data: result });
+    const run = await googleDriveService.syncIntegration(integration as any, {
+      actorId: (req as any).userId,
+      onlyKeys: picked.map((p) => p.key),
+    });
+    if (!run) { res.status(409).json({ error: "A sync is already running for this source" }); return; }
+
+    res.json({ data: { ...run.counts, sources: run.sources } });
   } catch (err: any) {
     console.error("Drive sync error:", err.message);
     res.status(500).json({ error: "Failed to sync" });
+  }
+});
+
+// ─── Google Drive: sync now ──────────────────────────────────
+
+router.post("/integrations/:intId/drive/sync-now", async (req: Request, res: Response) => {
+  try {
+    const integration = await prisma.knowledgeIntegration.findFirst({
+      where: { id: String(req.params.intId), tenantId: req.tenantId!, provider: "google_drive" },
+    });
+    if (!integration) { res.status(404).json({ error: "Integration not found" }); return; }
+
+    const onlyKeys = typeof req.body?.sourceKey === "string" ? [req.body.sourceKey] : undefined;
+    const run = await googleDriveService.syncIntegration(integration as any, {
+      actorId: (req as any).userId,
+      onlyKeys,
+    });
+    if (!run) { res.status(409).json({ error: "A sync is already running for this source" }); return; }
+
+    res.json({ data: { ...run.counts, sources: run.sources } });
+  } catch (err: any) {
+    console.error("Drive sync-now error:", err.message);
+    res.status(500).json({ error: "Failed to sync" });
+  }
+});
+
+// ─── Google Drive: list connected sources ────────────────────
+
+router.get("/integrations/:intId/drive/sources", async (req: Request, res: Response) => {
+  try {
+    const integration = await prisma.knowledgeIntegration.findFirst({
+      where: { id: String(req.params.intId), tenantId: req.tenantId!, provider: "google_drive" },
+      select: { id: true, config: true },
+    });
+    if (!integration) { res.status(404).json({ error: "Integration not found" }); return; }
+
+    res.json({ data: googleDriveService.normalizeSources(integration.config) });
+  } catch (err: any) {
+    console.error("Drive list sources error:", err.message);
+    res.status(500).json({ error: "Failed to list sources" });
+  }
+});
+
+// ─── Google Drive: pause / resume one source ─────────────────
+
+router.patch("/integrations/:intId/drive/sources/:sourceKey", async (req: Request, res: Response) => {
+  try {
+    const integration = await prisma.knowledgeIntegration.findFirst({
+      where: { id: String(req.params.intId), tenantId: req.tenantId!, provider: "google_drive" },
+    });
+    if (!integration) { res.status(404).json({ error: "Integration not found" }); return; }
+
+    const key = decodeURIComponent(String(req.params.sourceKey));
+    const sources = googleDriveService.normalizeSources(integration.config);
+    const target = sources.find((s) => s.key === key);
+    if (!target) { res.status(404).json({ error: "Source not found" }); return; }
+
+    target.paused = req.body?.paused === true;
+    target.syncState = target.paused ? "paused" : "pending";
+
+    const cfg = (integration.config && typeof integration.config === "object" ? integration.config : {}) as Record<string, unknown>;
+    await prisma.knowledgeIntegration.update({
+      where: { id: integration.id },
+      data: { config: { ...cfg, sources } },
+    });
+
+    res.json({ data: target });
+  } catch (err: any) {
+    console.error("Drive pause source error:", err.message);
+    res.status(500).json({ error: "Failed to update source" });
+  }
+});
+
+// ─── Google Drive: remove one source ─────────────────────────
+//
+// `removeData=1` also deletes the knowledge that source produced. Without it
+// the documents stay: unsubscribing from a folder is not the same request as
+// throwing away everything the AI learned from it.
+
+router.delete("/integrations/:intId/drive/sources/:sourceKey", async (req: Request, res: Response) => {
+  try {
+    const integration = await prisma.knowledgeIntegration.findFirst({
+      where: { id: String(req.params.intId), tenantId: req.tenantId!, provider: "google_drive" },
+    });
+    if (!integration) { res.status(404).json({ error: "Integration not found" }); return; }
+
+    const key = decodeURIComponent(String(req.params.sourceKey));
+    const sources = googleDriveService.normalizeSources(integration.config);
+    const target = sources.find((s) => s.key === key);
+    if (!target) { res.status(404).json({ error: "Source not found" }); return; }
+
+    let removed = 0;
+    if (req.query.removeData === "1") {
+      removed = await googleDriveService.removeSourceData(integration as any, (meta) =>
+        target.kind === "folder"
+          ? meta.driveFolderSourceId === target.id
+          : meta.driveFileId === target.id && !meta.driveFolderSourceId,
+      );
+    }
+
+    const cfg = (integration.config && typeof integration.config === "object" ? integration.config : {}) as Record<string, unknown>;
+    await prisma.knowledgeIntegration.update({
+      where: { id: integration.id },
+      data: { config: { ...cfg, sources: sources.filter((s) => s.key !== key) } },
+    });
+
+    res.json({ data: { removed } });
+  } catch (err: any) {
+    console.error("Drive remove source error:", err.message);
+    res.status(500).json({ error: "Failed to remove source" });
   }
 });
 
