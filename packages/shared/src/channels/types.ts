@@ -21,6 +21,29 @@ export interface NormalizedInboundMessage {
    * sends it as `context.id`, Meta's other channels as `reply_to.mid`.
    */
   replyToExternalId?: string;
+  /**
+   * Where this conversation came from, when the channel says so.
+   *
+   * WhatsApp attaches `referral` to the FIRST message of a conversation that
+   * started from a Click-to-WhatsApp ad. It is the only moment this is ever
+   * sent - miss it and the origin of that lead is unknowable afterwards.
+   */
+  referral?: InboundReferral;
+}
+
+/** Meta's `referral` object, reduced to what a business can act on. */
+export interface InboundReferral {
+  /** "ad" | "post". */
+  sourceType?: string;
+  /** The AD id. Resolving it to a campaign needs `ads_read` separately. */
+  sourceId?: string;
+  sourceUrl?: string;
+  /** The creative's own words - what makes this readable without an API call. */
+  headline?: string;
+  body?: string;
+  /** Meta's click id, for attributing a conversion back to the click. */
+  ctwaClid?: string;
+  mediaUrl?: string;
 }
 
 export interface MessageContent {
@@ -102,6 +125,17 @@ export interface NormalizedStatusUpdate {
   // stays for back-compat (human string); `error` carries the full breakdown
   // so a failed send is diagnosable from the DB/UI without server logs.
   error?: ProviderSendError;
+  /**
+   * Meta's `conversation.origin.type` / `pricing.category`, when they say the
+   * conversation was opened from an ad ("referral_conversion").
+   *
+   * The referral object itself arrives ONCE, on the customer's first message.
+   * This arrives on every delivery status for the whole 72-hour window, so it
+   * is the fallback that still identifies an ad-sourced conversation when the
+   * first message was missed - which is exactly what happened in production
+   * before any of this was captured.
+   */
+  conversationOrigin?: string;
 }
 
 /**

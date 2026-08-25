@@ -17,7 +17,7 @@ interface GEdge { id?: string; source: string; target: string; sourceHandle?: st
 
 // Nodes with no input port - legitimate flow entries.
 const ENTRY_TYPES = new Set([
-  "channel_entry", "start", "keyword_trigger", "comment_trigger", "schedule_trigger",
+  "channel_entry", "campaign_entry", "start", "keyword_trigger", "comment_trigger", "schedule_trigger",
 ]);
 // Nodes with no output port - they terminate a branch.
 const TERMINAL_TYPES = new Set(["end", "route_target", "default_fallback"]);

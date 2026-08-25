@@ -71,6 +71,20 @@ export interface IncomingMessageJob {
      */
     replyToExternalId?: string;
     /**
+     * Click-to-WhatsApp origin, when this is the first message of a
+     * conversation opened from an ad. The worker owns conversation creation,
+     * so it has to travel with the job to be recorded at all.
+     */
+    referral?: {
+      sourceType?: string;
+      sourceId?: string;
+      sourceUrl?: string;
+      headline?: string;
+      body?: string;
+      ctwaClid?: string;
+      mediaUrl?: string;
+    };
+    /**
      * The name the SENDER gave the file. WhatsApp media is stored under a
      * generated UUID, so without this the agent is offered a download called
      * "9f3c1e....pdf" and cannot tell one attachment from another.

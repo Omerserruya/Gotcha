@@ -261,6 +261,13 @@
       "replyHint": "ממשיך את שרשור המייל של הלקוח.",
       "newHint": "פותח שרשור מייל נפרד.",
       "subjectPlaceholder": "נושא"
+    },
+    "campaign": {
+      "from": "מ: {ad}",
+      "short": "קמפיין",
+      "unknownAd": "מודעה",
+      "openAd": "פתיחת המודעה",
+      "adId": "מזהה מודעה"
     }
   },
   "dashboard": {

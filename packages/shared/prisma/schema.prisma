@@ -982,6 +982,37 @@ model Conversation {
   reminderSentAt     DateTime?          @map("reminder_sent_at")
   closedAt           DateTime?          @map("closed_at")
   aiSummary          String?            @map("ai_summary")
+
+  // ── Where this conversation came from ──
+  //
+  // A Click-to-WhatsApp ad opens a conversation and Meta tells us so, twice:
+  // a `referral` object on the customer's FIRST message (which names the ad),
+  // and `conversation.origin.type = "referral_conversion"` on the delivery
+  // statuses (which does not). Both used to be dropped, so a business running
+  // ads could not tell an ad-sourced lead from a walk-in - the single most
+  // valuable thing to know about an inbound message.
+  //
+  // Denormalised onto the conversation rather than left on the message: every
+  // surface that asks "where did this person come from" (inbox badge, filter,
+  // playbook trigger, reporting) asks it about the CONVERSATION, and none of
+  // them should have to find message #1 to answer it.
+  /// "ad" | "post" - Meta's `referral.source_type`. Null when not referred.
+  referralSourceType String?            @map("referral_source_type")
+  /// Meta's `referral.source_id`: the AD id. The campaign it belongs to needs
+  /// `ads_read` on the customer's ad account, which is a separate grant - the
+  /// ad id and headline below identify the creative without it.
+  referralSourceId   String?            @map("referral_source_id")
+  referralSourceUrl  String?            @map("referral_source_url")
+  /// The ad's own headline and body. This is what makes the badge readable
+  /// to a human ("from: ברית בסוף השבוע?") with no Marketing API call.
+  referralHeadline   String?            @map("referral_headline")
+  referralBody       String?            @map("referral_body")
+  /// Meta's click id, for attributing a conversion back to the click.
+  referralCtwaClid   String?            @map("referral_ctwa_clid")
+  /// True when Meta billed this as `referral_conversion` / free entry point,
+  /// even if the referral object itself never reached us.
+  fromAdCampaign     Boolean            @default(false) @map("from_ad_campaign")
+  referralAt         DateTime?          @map("referral_at")
   // Detected language of the conversation thread - set once from the
   // first inbound message (heuristic + LLM fallback). Drives the
   // language of suggested-reply drafts and any other "match the
@@ -1038,6 +1069,10 @@ model Conversation {
   /// this index they would all start scanning imported history the moment a
   /// tenant connects Coexistence.
   @@index([tenantId, origin, status])
+  // "Everything that came from an ad", and "everything from THIS ad" - the
+  // inbox filter and the playbook trigger both ask exactly these.
+  @@index([tenantId, fromAdCampaign])
+  @@index([tenantId, referralSourceId])
   @@index([historicalImportId])
   @@index([tenantId, status])
   @@index([tenantId, assignedAgentId])

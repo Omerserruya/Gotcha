@@ -2,6 +2,7 @@ export * from "./email-thread";
 export type {
   ChannelType,
   NormalizedInboundMessage,
+  InboundReferral,
   NormalizedStatusUpdate,
   NormalizedCommentEvent,
   NormalizedOutboundEcho,

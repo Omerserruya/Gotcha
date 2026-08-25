@@ -55,6 +55,7 @@ export type { MediaFailureReason, UploadsProbe } from "./lib/media-storage";
 export type {
   ChannelType,
   NormalizedInboundMessage,
+  InboundReferral,
   NormalizedStatusUpdate,
   NormalizedCommentEvent,
   NormalizedOutboundEcho,

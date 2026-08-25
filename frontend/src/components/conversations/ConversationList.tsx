@@ -23,6 +23,7 @@ function shortTimeAgo(date: Date): string {
 }
 import clsx from "clsx";
 import { ChannelBadge } from "./ChannelBadge";
+import { CampaignBadge } from "./CampaignBadge";
 import { CustomerAvatar } from "./CustomerAvatar";
 import { EmptyState } from "@/components/EmptyState";
 import { useChannelsSummary } from "@/lib/use-channels-summary";
@@ -708,6 +709,9 @@ export function ConversationList({ selectedId, onSelect }: Props) {
                         {conv.lastMessageBody || conv.customerPhone}
                       </p>
                       <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        {/* Ad-sourced leads are worth spotting while SCANNING
+                            the list, not only after opening the chat. */}
+                        <CampaignBadge conversation={conv} t={t} compact />
                         {conv.department && (
                           <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-gray-100 text-gray-600">
                             {conv.department.name}

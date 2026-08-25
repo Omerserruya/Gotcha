@@ -261,6 +261,13 @@
       "replyHint": "Continues the customer's email thread.",
       "newHint": "Starts a separate email thread.",
       "subjectPlaceholder": "Subject"
+    },
+    "campaign": {
+      "from": "From: {ad}",
+      "short": "Campaign",
+      "unknownAd": "an ad",
+      "openAd": "Open the ad",
+      "adId": "Ad ID"
     }
   },
   "dashboard": {

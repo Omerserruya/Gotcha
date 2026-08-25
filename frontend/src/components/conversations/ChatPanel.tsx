@@ -28,6 +28,7 @@ import { CustomerAvatar } from "./CustomerAvatar";
 import { CoPilotPanel } from "./CoPilotPanel";
 import { isAiManaged, isFlowManaged } from "@/lib/conversation-ownership";
 import { HistoryPanel } from "./HistoryPanel";
+import { CampaignBadge } from "./CampaignBadge";
 import { DecisionTimelinePanel } from "./DecisionTimelinePanel";
 import { MessageSignals } from "./MessageSignals";
 import { AIComposeScope, AIComposeTrigger, AIComposePanel } from "@/components/ai/AIComposeInline";
@@ -637,6 +638,10 @@ export function ChatPanel({ conversationId, onBack }: Props) {
               </p>
             </div>
             <p className="text-[10px] md:text-xs text-gray-400 truncate">{conversation?.customerExternalId || conversation?.customerPhone}</p>
+            {/* Where this lead came from. Directly under the phone number
+                because "who is this" and "how did they get here" are the same
+                question for an agent opening a chat. */}
+            <CampaignBadge conversation={conversation} t={t} />
           </div>
 
           {/* Actions */}

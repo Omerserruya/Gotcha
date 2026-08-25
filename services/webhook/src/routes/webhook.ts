@@ -334,6 +334,10 @@ router.post("/", async (req: Request, res: Response) => {
             messageType,
             interactiveReply: msg.content.interactiveReply,
             replyToExternalId: msg.replyToExternalId,
+            // Click-to-WhatsApp origin. Travels with the message because the
+            // worker owns conversation creation - it is the only place that
+            // knows whether this is the conversation's FIRST message.
+            referral: msg.referral,
             // Structured and already reduced by the adapter to name, numbers,
             // emails and organization. The worker copies producer metadata onto
             // the message row verbatim.
@@ -547,7 +551,33 @@ function normalizeContentToBodyAndType(
   }
 }
 
+/**
+ * Meta repeats the conversation's origin on every delivery status for the
+ * whole 72-hour window. That redundancy is the point: a conversation whose
+ * first message arrived before we captured referrals - or whose referral Meta
+ * simply did not send - is still identifiable as ad-sourced from any status
+ * that follows.
+ *
+ * Only ever turns the flag ON. A later status without the marker means Meta
+ * stopped repeating it, not that the ad stopped being the source.
+ */
+async function markAdSourcedConversation(tenantId: string, status: NormalizedStatusUpdate) {
+  if (status.conversationOrigin !== "referral_conversion") return;
+  const message = await prisma.message.findFirst({
+    where: { tenantId, externalMessageId: status.externalMessageId },
+    select: { conversationId: true },
+  });
+  if (!message?.conversationId) return;
+  await prisma.conversation.updateMany({
+    where: { id: message.conversationId, tenantId, fromAdCampaign: false },
+    data: { fromAdCampaign: true, referralAt: new Date() },
+  });
+}
+
 async function handleStatusUpdate(tenantId: string, status: NormalizedStatusUpdate) {
+  await markAdSourcedConversation(tenantId, status).catch((err) =>
+    console.warn("[webhook] could not mark ad-sourced conversation:", err?.message ?? err),
+  );
   const statusMap: Record<string, string> = {
     sent: "SENT", delivered: "DELIVERED", read: "READ", failed: "FAILED",
   };

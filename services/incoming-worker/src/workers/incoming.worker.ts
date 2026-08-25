@@ -4,7 +4,7 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { handleApprovalButtonReply } from "../services/whatsapp-approval-inbound.service";
-import { prisma, createWorker, IncomingMessageJob, IncomingCommentJob, OutboundEchoJob, WebhookTriggerJob, HistoricalImportChunkJob, analyticsQueue, outgoingMessageQueue, publishEvent, decryptCredentials, metaGraphBaseUrl, isInboundExcluded, probeUploadsDir, describeUploadsProbe, classifyMediaFailure, reportOperationalFailure, ERROR_CODES, type MediaFailureReason } from "@chatcenter/shared";
+import { prisma, createWorker, IncomingMessageJob, IncomingCommentJob, OutboundEchoJob, WebhookTriggerJob, HistoricalImportChunkJob, analyticsQueue, outgoingMessageQueue, publishEvent, decryptCredentials, metaGraphBaseUrl, isInboundExcluded, probeUploadsDir, describeUploadsProbe, classifyMediaFailure, reportOperationalFailure, ERROR_CODES, type MediaFailureReason, type InboundReferral } from "@chatcenter/shared";
 import { processCommentTrigger } from "../services/comment-trigger.service";
 
 const FB_API_URL = metaGraphBaseUrl(process.env.FACEBOOK_API_URL);
@@ -105,6 +105,27 @@ async function fetchMetaProfile(senderId: string, accessToken: string, channel: 
  * Fetch WhatsApp contact profile picture via Cloud API contacts endpoint.
  * Uses POST /{phone_number_id}/contacts to retrieve profile info.
  */
+/**
+ * Flatten Meta's referral into the conversation's columns.
+ *
+ * `fromAdCampaign` is set from the presence of the referral itself, so the
+ * boolean is true even when Meta sends a sparse object with only a source id -
+ * "came from an ad" is answerable long before "which ad".
+ */
+function referralFields(referral: InboundReferral | undefined) {
+  if (!referral) return {};
+  return {
+    fromAdCampaign: true,
+    referralSourceType: referral.sourceType ?? null,
+    referralSourceId: referral.sourceId ?? null,
+    referralSourceUrl: referral.sourceUrl ?? null,
+    referralHeadline: referral.headline ?? null,
+    referralBody: referral.body ?? null,
+    referralCtwaClid: referral.ctwaClid ?? null,
+    referralAt: new Date(),
+  };
+}
+
 async function fetchWhatsAppAvatar(phoneNumberId: string, contactWaId: string, accessToken: string): Promise<string | null> {
   try {
     const res = await axios.post(
@@ -292,6 +313,7 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
     fileName: senderFileName,
     mimeType: senderMimeType,
     metadata: producerMetadata,
+    referral,
   } = normalizedMessage;
 
   // Idempotency check
@@ -386,12 +408,17 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
         customerName: displayName,
         customerAvatarUrl: avatarUrl || undefined,
         status: "OPEN",
+        ...referralFields(referral),
       },
     });
   } else {
     const updates: any = {};
     if (displayName && !conversation.customerName) updates.customerName = displayName;
     if (avatarUrl && !conversation.customerAvatarUrl) updates.customerAvatarUrl = avatarUrl;
+    // A referral on an EXISTING conversation means the customer came back
+    // through a (possibly different) ad. The newest one wins: "which ad
+    // brought them here" is a question about the current visit.
+    if (referral) Object.assign(updates, referralFields(referral));
     if (Object.keys(updates).length > 0) {
       await prisma.conversation.update({ where: { id: conversation.id }, data: updates });
     }
