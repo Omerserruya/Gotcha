@@ -181,5 +181,20 @@ export function resolvePromptLanguage(defaultLocale: string | null | undefined):
 
 /** Appended to a stage's system prompt. One sentence, so it cannot be missed. */
 export function languageDirective(language: string): string {
-  return `\n\nOUTPUT LANGUAGE\nWrite every generated field in ${language}. Verbatim quote fields are the exception: copy them exactly as written in the conversation, whatever language that is.`;
+  return (
+    `\n\nOUTPUT LANGUAGE\n` +
+    `Write generated PROSE in ${language} - questions, answers, topics, reasoning, summaries.\n` +
+    // Two exceptions, and the second one cost a full pipeline run to find.
+    //
+    // "Write every generated field in ${language}" is true of prose and false
+    // of a field whose value must match a fixed list. The model dutifully
+    // translated the `category` enum into Hebrew, every value failed
+    // validation, and 185 of 199 items were coerced to OTHER - destroying the
+    // grouping that makes the review queue usable. It stayed hidden for two
+    // runs because an invalid enum used to fail the whole call and the retry
+    // silently corrected it; the enum was never the problem, this sentence was.
+    `Two exceptions:\n` +
+    `- Verbatim quote fields: copy them exactly as written in the conversation, whatever language that is.\n` +
+    `- Fields with a fixed list of allowed values (enums such as category and scope): reply with the EXACT value from the list, in English, spelled exactly as given. Never translate these, never rephrase them.`
+  );
 }
