@@ -181,6 +181,8 @@ router.get("/:id/candidates", async (req: Request, res: Response) => {
         // Why the answer is what it is. The rule answers the exact question;
         // this is what lets an agent handle the next variation of it.
         reasoning: c.reasoning,
+        requiresLiveLookup: c.requiresLiveLookup,
+        curationNote: c.curationNote,
         status: c.status,
         confidence: c.confidence,
         // The label the UI shows. "High" here means only that we observed this
@@ -334,7 +336,7 @@ router.post("/candidates/:candidateId/approve", writeGuard, async (req: Request,
         knowledgeBaseId: target.id,
         tenantId,
         title: questionOverride.slice(0, 200),
-        content: knowledgeDocumentBody(questionOverride, finalAnswer, candidate.reasoning),
+        content: knowledgeDocumentBody(questionOverride, finalAnswer, candidate.reasoning, candidate.requiresLiveLookup),
         sourceType: "historical_conversations",
         status: "pending",
         // Provenance travels with the document. Months later, "where did this
@@ -683,8 +685,22 @@ router.get("/conversations/:conversationId/messages", async (req: Request, res: 
  * knowing the job. Labelled so the model reads it as background rather than as
  * something to recite back to the customer.
  */
-function knowledgeDocumentBody(question: string, answer: string, reasoning: string | null): string {
+function knowledgeDocumentBody(
+  question: string,
+  answer: string,
+  reasoning: string | null,
+  requiresLiveLookup = false,
+): string {
   const parts = [question.trim(), "", answer.trim()];
+  if (requiresLiveLookup) {
+    // Inside the document, not in metadata, because only what is in the body
+    // reaches the model through retrieval. Without it an agent reads "usually
+    // Thursday and Friday" and promises a slot nobody checked.
+    parts.push(
+      "",
+      "This depends on live availability. Treat it as the usual pattern, not a commitment: check the calendar or current stock before telling a customer anything specific.",
+    );
+  }
   if (reasoning && reasoning.trim()) {
     parts.push("", `How we approach this: ${reasoning.trim()}`);
   }
@@ -818,7 +834,7 @@ async function approveOne(
       knowledgeBaseId: target.id,
       tenantId,
       title: candidate.question.slice(0, 200),
-      content: knowledgeDocumentBody(candidate.question, candidate.answer, candidate.reasoning),
+      content: knowledgeDocumentBody(candidate.question, candidate.answer, candidate.reasoning, candidate.requiresLiveLookup),
       sourceType: "historical_conversations",
       status: "pending",
       metadata: {

@@ -235,6 +235,10 @@ export interface HistoricalIntelligenceJob {
     // Counts how the business actually writes and turns it into prompt guidance.
     // Runs after the knowledge work because it reads the same conversations and
     // a failure here must not cost the expensive stages a retry.
+    // Reads the whole candidate set as a person would: restates answers that do
+    // not stand alone, marks the ones that depend on live data, drops one
+    // customer's logistics and merges what dedupe could not see.
+    | "knowledge-curation"
     | "brand-voice"
     | "analytics"
     | "finalize";

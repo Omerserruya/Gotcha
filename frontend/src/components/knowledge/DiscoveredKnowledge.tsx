@@ -369,6 +369,11 @@ function CandidateCard({
         <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-700">
           {candidate.topic}
         </span>
+        {candidate.requiresLiveLookup && (
+          <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-medium text-violet-800 ring-1 ring-violet-200">
+            {t("historicalImport.review.liveLookup")}
+          </span>
+        )}
         {candidate.conflict && (
           <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800 ring-1 ring-amber-200">
             {t("historicalImport.review.conflictTitle")}

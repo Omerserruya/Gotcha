@@ -6948,9 +6948,22 @@ model KnowledgeCandidate {
   /// `topic` stays the specific label inside it. Free-text topics alone gave 57
   /// groups for 58 items on a real import.
   category String?
-  /// POLICY | PRODUCT | PROCESS. ONE_OFF never reaches this table - it is
-  /// dropped at extraction by the reusability gate.
+  /// standing_rule | product_fact | how_we_work. one_off never reaches this
+  /// table - it is dropped at extraction by the reusability gate.
   scope    String?
+
+  /// The answer cannot be given without checking something live: a calendar, a
+  /// person's availability, current stock, a price that moves. The knowledge is
+  /// still real and worth keeping - "we usually do viewings Thursday and
+  /// Friday" is true - but an agent that states it as fact will promise a slot
+  /// nobody checked. The KB document carries the caveat and the agent is told
+  /// to look it up rather than assert.
+  requiresLiveLookup Boolean @default(false) @map("requires_live_lookup")
+  /// What the curation pass decided: kept | rewritten | live_data. Items it
+  /// dropped or merged are deleted, so those values never persist here.
+  curationVerdict    String? @map("curation_verdict")
+  /// Why, in one line, for the reviewer. Null when the item passed untouched.
+  curationNote       String? @map("curation_note")
 
   status KnowledgeCandidateStatus @default(PENDING)
 

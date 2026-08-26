@@ -5521,7 +5521,8 @@
       "approved": "Added to your knowledge base.",
       "rejected": "Rejected.",
       "tab": "Discovered",
-      "reasoningLabel": "How we approach this"
+      "reasoningLabel": "How we approach this",
+      "liveLookup": "Depends on availability"
     },
     "category": {
       "ORDERING_AND_PAYMENT": "Ordering & payment",

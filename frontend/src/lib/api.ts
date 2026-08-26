@@ -4020,6 +4020,10 @@ export interface KnowledgeCandidateView {
   question: string;
   /** How the business reaches this answer. Null on older candidates. */
   reasoning: string | null;
+  /** The answer depends on a calendar, stock or someone's availability. */
+  requiresLiveLookup: boolean;
+  /** What the curation pass changed, when it changed something. */
+  curationNote: string | null;
   answer: string;
   originalAnswer: string;
   status: "PENDING" | "APPROVED" | "REJECTED" | "SUPERSEDED";

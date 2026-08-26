@@ -5522,7 +5522,8 @@
       "approved": "נוסף למאגר הידע שלכם.",
       "rejected": "נדחה.",
       "tab": "התגלה",
-      "reasoningLabel": "איך ניגשים לזה"
+      "reasoningLabel": "איך ניגשים לזה",
+      "liveLookup": "תלוי בזמינות"
     },
     "category": {
       "ORDERING_AND_PAYMENT": "הזמנות ותשלום",
