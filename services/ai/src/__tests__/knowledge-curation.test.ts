@@ -66,3 +66,25 @@ describe("ordering lets the duplicate verdict actually fire", () => {
     expect(order).not.toContain("occurrenceCount");
   });
 });
+
+describe("stage order has one source of truth", () => {
+  it("every stage advances through NEXT_STAGE, never a hardcoded name", () => {
+    const src = readFileSync("src/services/historical-intelligence/index.ts", "utf8");
+    // The curation stage was deployed, verified present in the container, and
+    // never ran: the routing table listed it while the switch still enqueued
+    // "brand-voice" by name. Nothing failed and no event was written.
+    const runStage = src.slice(src.indexOf("async function runStage"), src.indexOf("async function enqueue"));
+    const enqueues = runStage.match(/await enqueue\([^)]*\)/g) ?? [];
+    expect(enqueues.length).toBeGreaterThan(5);
+    for (const call of enqueues) {
+      expect(call, `hardcoded stage name in: ${call}`).toContain("NEXT_STAGE[stage]");
+    }
+  });
+
+  it("lists curation between dedupe and brand voice", () => {
+    const src = readFileSync("src/services/historical-intelligence/index.ts", "utf8");
+    const table = src.slice(src.indexOf("const NEXT_STAGE"), src.indexOf("const STAGE_STATUS"));
+    expect(table).toContain('"knowledge-dedupe": "knowledge-curation"');
+    expect(table).toContain('"knowledge-curation": "brand-voice"');
+  });
+});

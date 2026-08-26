@@ -58,10 +58,16 @@ const VoiceSchema = z.object({
   summary: z.string().min(10).max(300).describe("One sentence describing the voice"),
   /** The emoji an agent may actually use, drawn from the counted palette. */
   emojiPalette: z.array(z.string()).max(10).describe("Emoji this business genuinely uses"),
+  // 200 was too small and it failed the whole call twice, losing the guidance
+  // while the counted evidence was already stored. This business opens with a
+  // multi-line template that runs past 200 characters on its own, and the stage
+  // now feeds the model complete messages to quote precisely so it stops
+  // producing fragments - which makes a long example the expected case, not an
+  // error. Trimmed rather than rejected if it still overruns.
   /** A greeting written in their voice, for the agent to open with. */
-  greetingExample: z.string().max(200).describe("One opening line in the business's own voice"),
+  greetingExample: z.string().max(600).describe("One opening line in the business's own voice"),
   /** A sign-off in their voice. */
-  closingExample: z.string().max(200).describe("One closing line in the business's own voice"),
+  closingExample: z.string().max(600).describe("One closing line in the business's own voice"),
 });
 
 const SYSTEM_PROMPT = `You are given MEASURED statistics about how one business writes to its customers: which emoji it uses and how often, how it opens and closes conversations, which phrases it repeats, and the length and rhythm of its messages. Every number was counted over the business's own sent messages.

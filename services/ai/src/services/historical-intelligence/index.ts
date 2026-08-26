@@ -38,6 +38,19 @@ import { dropImportClusters } from "./candidate-index";
  * resumes there. Nothing here is an all-or-nothing transaction.
  */
 
+/**
+ * The stage order, and the ONLY place it is written down.
+ *
+ * This table used to sit beside a switch statement that enqueued the next stage
+ * by name, which is two sources of truth for one fact. Adding the curation stage
+ * updated the table and not the switch, so dedupe kept handing straight to
+ * brand-voice: the stage existed, was deployed, was verified present in the
+ * container, and simply never ran. Nothing failed, no event was written, and the
+ * import completed successfully without it.
+ *
+ * Every case now advances via `NEXT_STAGE[stage]`. A self-paced stage passes
+ * `stage` to re-enqueue itself. Inserting a stage is a one-line change here.
+ */
 const NEXT_STAGE: Record<HistoricalIntelligenceJob["stage"], HistoricalIntelligenceJob["stage"] | null> = {
   identity: "customer-learning",
   "customer-learning": "knowledge-extraction",
@@ -98,27 +111,23 @@ async function runStage(job: Job<HistoricalIntelligenceJob>): Promise<void> {
     switch (stage) {
       case "identity": {
         await runIdentityStage({ tenantId, importId });
-        await enqueue(tenantId, importId, "customer-learning");
+        await enqueue(tenantId, importId, NEXT_STAGE[stage]);
         return;
       }
       case "customer-learning": {
         const result = await runCustomerLearningStage({ tenantId, importId });
         // Self-paced: re-enqueue while customers remain, otherwise move on.
-        await enqueue(tenantId, importId, result.done ? "knowledge-extraction" : "customer-learning");
+        await enqueue(tenantId, importId, result.done ? NEXT_STAGE[stage] : stage);
         return;
       }
       case "knowledge-extraction": {
         const result = await runKnowledgeExtractionStage({ tenantId, importId });
-        await enqueue(
-          tenantId,
-          importId,
-          result.done ? "knowledge-clustering" : "knowledge-extraction",
-        );
+        await enqueue(tenantId, importId, result.done ? NEXT_STAGE[stage] : stage);
         return;
       }
       case "knowledge-clustering": {
         await runKnowledgeClusteringStage({ tenantId, importId });
-        await enqueue(tenantId, importId, "knowledge-dedupe");
+        await enqueue(tenantId, importId, NEXT_STAGE[stage]);
         return;
       }
       // Same question, different words. Embeddings cannot separate Hebrew
@@ -128,7 +137,7 @@ async function runStage(job: Job<HistoricalIntelligenceJob>): Promise<void> {
       // pruning rather than during extraction.
       case "knowledge-dedupe": {
         await runKnowledgeDedupeStage({ tenantId, importId });
-        await enqueue(tenantId, importId, "brand-voice");
+        await enqueue(tenantId, importId, NEXT_STAGE[stage]);
         return;
       }
       // How the business writes, counted from its own outbound messages and
@@ -137,17 +146,17 @@ async function runStage(job: Job<HistoricalIntelligenceJob>): Promise<void> {
       // before analytics so the topic counts describe what survived.
       case "knowledge-curation": {
         await runKnowledgeCurationStage({ tenantId, importId });
-        await enqueue(tenantId, importId, "brand-voice");
+        await enqueue(tenantId, importId, NEXT_STAGE[stage]);
         return;
       }
       case "brand-voice": {
         await runBrandVoiceStage({ tenantId, importId });
-        await enqueue(tenantId, importId, "analytics");
+        await enqueue(tenantId, importId, NEXT_STAGE[stage]);
         return;
       }
       case "analytics": {
         await runAnalyticsStage({ tenantId, importId });
-        await enqueue(tenantId, importId, "finalize");
+        await enqueue(tenantId, importId, NEXT_STAGE[stage]);
         return;
       }
       case "finalize": {
