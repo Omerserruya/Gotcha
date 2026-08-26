@@ -1,3 +1,9 @@
+/**
+ * Telegram transport. The lead message itself is built in
+ * lead-alert.service.ts, which renders the same fields for every channel -
+ * this file used to carry its own field list, and that is how the phone
+ * number ended up missing from the alert while sitting in the database.
+ */
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID || "";
 
@@ -32,36 +38,4 @@ export async function sendTelegramNotification(message: string): Promise<void> {
   } catch (err: any) {
     console.error("[TELEGRAM] Failed to send notification:", err.message);
   }
-}
-
-export function formatNewLeadMessage(lead: {
-  firstName: string;
-  email: string;
-  company?: string | null;
-  role: string;
-  companySize: string;
-  source: string;
-  createdAt: Date;
-}): string {
-  const time = lead.createdAt.toISOString().replace("T", " ").substring(0, 19);
-  const lines = [
-    "🚀 <b>New Whitelist Signup</b>",
-    "",
-    `<b>Name:</b> ${escapeHtml(lead.firstName)}`,
-    `<b>Email:</b> ${escapeHtml(lead.email)}`,
-    lead.company ? `<b>Company:</b> ${escapeHtml(lead.company)}` : null,
-    `<b>Role:</b> ${escapeHtml(lead.role)}`,
-    `<b>Company Size:</b> ${escapeHtml(lead.companySize)}`,
-    `<b>Source:</b> ${escapeHtml(lead.source)}`,
-    `<b>Time:</b> ${time} UTC`,
-  ].filter(Boolean);
-
-  return lines.join("\n");
-}
-
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
 }

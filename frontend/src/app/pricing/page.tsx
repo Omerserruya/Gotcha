@@ -12,12 +12,11 @@
 // that; this component's flag check is a fast local mirror so a disabled build
 // renders the notice instead of flashing a request that 404s.
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import { publicPricingEnabled } from "@/lib/api-public-pricing";
-import LoginLink from "@/components/LoginLink";
+import { MarketingFooter, MarketingHeader } from "@/components/marketing/MarketingChrome";
 import { usePublicPricing, planCopy } from "@/components/pricing/usePublicPricing";
 import {
   Eyebrow, SectionHeading, CurrencyToggle, PlanSkeleton, Reveal,
@@ -188,21 +187,14 @@ export default function PricingPage() {
 }
 
 /**
- * Minimal public chrome: a link back to the marketing site and the language
- * switch. Deliberately not the app shell - this page is for people who are not
- * signed in.
+ * Public chrome. The header and footer are the SAME ones the landing page and
+ * the Trust Center render - see components/marketing/MarketingChrome. This page
+ * used to draw its own bar with the brand set in type instead of the logo, so
+ * the mark changed shape when a visitor clicked through from the homepage.
+ *
+ * The header floats, so the first section carries its own top padding.
  */
 function Shell({ t, children }: { t: (k: string) => string; children: React.ReactNode }) {
-  const { locale, setLocale } = useI18n();
-  const [scrolled, setScrolled] = useState(false);
-
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 8);
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
   return (
     <div className="min-h-screen bg-white">
       <a
@@ -212,38 +204,9 @@ function Shell({ t, children }: { t: (k: string) => string; children: React.Reac
         {t("pricing.a11y.skipToPlans")}
       </a>
 
-      <header
-        className={`fixed inset-x-0 top-0 z-50 transition-colors duration-300 ${
-          scrolled ? "border-b border-gray-200 bg-white/90 backdrop-blur-xl" : "bg-transparent"
-        }`}
-      >
-        <div className="mx-auto flex max-w-[1240px] items-center justify-between px-4 py-3.5 sm:px-12 lg:px-20">
-          <Link href="/" className="flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 rounded">
-            {/* dir="ltr": in RTL the trailing period is reordered to the
-                front and the brand reads ".GOTCHA". */}
-            <span dir="ltr" className="text-[17px] font-bold tracking-[-0.02em] text-gray-900">GOTCHA.</span>
-          </Link>
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => setLocale(locale === "he" ? "en" : "he")}
-              className="text-[13px] font-medium text-gray-500 transition-colors hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 rounded px-1"
-            >
-              {locale === "he" ? "English" : "עברית"}
-            </button>
-            <LoginLink className="text-[13px] font-medium text-gray-500 transition-colors hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 rounded px-1">
-              {t("landing.nav.login")}
-            </LoginLink>
-            <Link
-              href="/early-access"
-              className="rounded-full bg-primary-500 px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:ring-offset-2"
-            >
-              {t("landing.nav.getStarted")}
-            </Link>
-          </div>
-        </div>
-      </header>
-
+      <MarketingHeader />
       <main>{children}</main>
+      <MarketingFooter />
     </div>
   );
 }

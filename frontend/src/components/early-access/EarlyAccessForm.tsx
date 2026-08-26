@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useI18n } from "@/context/I18nContext";
 import { submitWaitlistEntry } from "@/lib/api";
+import { MarketingLogo } from "@/components/marketing/MarketingChrome";
 
 /* ─── Step config ─────────────────────────────────────────── */
 
@@ -18,7 +19,10 @@ interface StepConfig {
 const STEPS: StepConfig[] = [
   { key: "firstName", type: "text", required: true },
   { key: "email", type: "email", required: true },
-  { key: "phone", type: "tel", required: false },
+  // Both ways of reaching a lead are mandatory. A waitlist row with only an
+  // address is a lead nobody calls, and the alert that reaches the team over
+  // chat is worthless without a number to reply to.
+  { key: "phone", type: "tel", required: true },
   { key: "role", type: "select", required: true },
   { key: "companySize", type: "select", required: true },
   { key: "companyDomain", type: "select", required: true },
@@ -67,6 +71,11 @@ export default function EarlyAccessForm() {
     }));
   }
 
+  /** Option key -> the label shown in the picker, e.g. "ecommerce" -> "E-Commerce". */
+  function industryLabel(key: string): string {
+    return getOptions("companyDomain").find((o) => o.value === key)?.label || key;
+  }
+
   function validate(): boolean {
     const cfg = currentStep;
     const value = formData[cfg.key]?.trim() ?? "";
@@ -80,6 +89,16 @@ export default function EarlyAccessForm() {
       const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRe.test(value)) {
         setErrors({ [cfg.key]: t("earlyAccess.errors.invalidEmail") });
+        return false;
+      }
+    }
+
+    // Digits only, so "+972 52-540-1686" and "052-5401686" both pass and
+    // "0525" does not. Seven is the shortest real Israeli landline without an
+    // area code; anything under it is a typo, not a number.
+    if (cfg.type === "tel" && value) {
+      if (value.replace(/\D/g, "").length < 7) {
+        setErrors({ [cfg.key]: t("earlyAccess.errors.invalidPhone") });
         return false;
       }
     }
@@ -128,10 +147,13 @@ export default function EarlyAccessForm() {
       await submitWaitlistEntry({
         firstName: formData.firstName.trim(),
         email: formData.email.trim().toLowerCase(),
-        phone: formData.phone?.trim() || undefined,
+        phone: formData.phone.trim(),
         role: formData.role,
         companySize: formData.companySize,
-        companyDomain: formData.companyDomain,
+        // The readable label, not the option key: this is stored as the
+        // lead's industry and read by a human in the alert, and the
+        // landing form already sends the label for the same column.
+        companyDomain: industryLabel(formData.companyDomain),
         frustration: formData.frustration?.trim() || undefined,
       });
       setSubmitted(true);
@@ -256,6 +278,9 @@ export default function EarlyAccessForm() {
             placeholder={placeholder}
             className={inputClasses}
             autoComplete={currentStep.type === "email" ? "email" : currentStep.type === "tel" ? "tel" : "off"}
+            // A phone number is not Hebrew text: in RTL an unmarked field
+            // reorders the leading "+" to the end while you type it.
+            dir={currentStep.type === "tel" || currentStep.type === "email" ? "ltr" : undefined}
           />
         );
     }
@@ -269,8 +294,8 @@ export default function EarlyAccessForm() {
     <div dir={dir} className="min-h-screen flex flex-col bg-white">
       {/* Header */}
       <header className="flex items-center justify-between px-6 py-4">
-        <Link href="/" className="text-xl font-bold tracking-tight text-gray-900">
-          GOTCHA
+        <Link href="/" aria-label="GOTCHA" className="rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400">
+          <MarketingLogo />
         </Link>
         <span className="text-xs text-gray-400 font-medium">
           {t("earlyAccess.stepOf", { current: String(step + 1), total: String(STEPS.length) })}

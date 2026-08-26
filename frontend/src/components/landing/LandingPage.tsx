@@ -2,18 +2,15 @@
 
 import { memo, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useI18n } from "@/context/I18nContext";
 import type { Locale } from "@/i18n";
 import JsonLd from "@/components/JsonLd";
-import LoginLink from "@/components/LoginLink";
 import CustomerStorySection from "@/components/landing/CustomerStorySection";
 import PricingSection from "./PricingSection";
-import SocialLinks from "./SocialLinks";
-import { publicPricingEnabled } from "@/lib/api-public-pricing";
 import SolutionsSection from "@/components/landing/SolutionsSection";
 import CtaForm from "@/components/landing/CtaForm";
 import FeaturesSection from "@/components/landing/FeaturesSection";
+import { MarketingFooter, MarketingHeader } from "@/components/marketing/MarketingChrome";
 
 // CRMs / tools shown in the gray scrolling marquee under the channels section.
 const INTEGRATION_MARQUEE = [
@@ -403,155 +400,6 @@ function RotatingPlatform({ locale }: { locale: string }) {
   );
 }
 
-/* ───── Locale Dropdown ───── */
-
-function LocaleDropdown({ locale, setLocale, forcedLocale }: { locale: string; setLocale: (l: "en" | "he") => void; forcedLocale?: string }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const router = useRouter();
-
-  useEffect(() => {
-    const close = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
-  }, []);
-
-  function handleSwitch(l: "en" | "he") {
-    setOpen(false);
-    if (forcedLocale) {
-      router.push(`/${l}`);
-    } else {
-      setLocale(l);
-    }
-  }
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen(!open)}
-        className="flex items-center gap-1 px-2.5 py-1.5 text-[13px] font-medium text-gray-500 hover:text-black rounded-full hover:bg-gray-100/80 transition-all"
-      >
-        {locale.toUpperCase()}
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className={`transition-transform ${open ? "rotate-180" : ""}`}>
-          <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </button>
-      {open && (
-        <div className="absolute top-full mt-1 end-0 bg-white rounded-lg border border-gray-200/60 shadow-lg py-1 min-w-[72px] z-50">
-          {(["en", "he"] as const).map((l) => (
-            <button
-              key={l}
-              onClick={() => handleSwitch(l)}
-              className={`w-full px-3 py-1.5 text-[13px] text-start transition-colors ${
-                l === locale ? "font-semibold text-primary-500 bg-primary-50" : "text-gray-600 hover:bg-gray-50"
-              }`}
-            >
-              {l.toUpperCase()}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ───── Mobile Menu ───── */
-
-function MobileMenu({
-  open,
-  onClose,
-  t,
-  locale,
-  setLocale,
-  navDark,
-  forcedLocale,
-}: {
-  open: boolean;
-  onClose: () => void;
-  t: (key: string) => any;
-  locale: string;
-  setLocale: (l: "en" | "he") => void;
-  navDark: boolean;
-  forcedLocale?: string;
-}) {
-  const router = useRouter();
-
-  useEffect(() => {
-    if (open) document.body.style.overflow = "hidden";
-    else document.body.style.overflow = "";
-    return () => { document.body.style.overflow = ""; };
-  }, [open]);
-
-  function handleSwitch(l: "en" | "he") {
-    onClose();
-    if (forcedLocale) {
-      router.push(`/${l}`);
-    } else {
-      setLocale(l);
-    }
-  }
-
-  if (!open) return null;
-
-  return (
-    <div className="fixed inset-0 z-[60] md:hidden">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="absolute top-0 inset-x-0 bg-white rounded-b-2xl shadow-xl animate-slide-up p-6 pt-20 pb-safe">
-        <button onClick={onClose} className="absolute top-5 end-5 p-2 text-gray-400 hover:text-black">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
-        </button>
-        <nav className="flex flex-col gap-1">
-          <a href="#how-it-works" onClick={onClose} className="px-4 py-3 text-[15px] font-medium text-gray-700 hover:bg-gray-50 rounded-xl transition-colors">
-            {t("landing.nav.howItWorks")}
-          </a>
-          <a href="#product-features" onClick={onClose} className="px-4 py-3 text-[15px] font-medium text-gray-700 hover:bg-gray-50 rounded-xl transition-colors">
-            {t("landing.nav.features")}
-          </a>
-          <div className="h-px bg-gray-100 my-2" />
-          <div className="flex items-center gap-2 px-4 py-2">
-            {(["en", "he"] as const).map((l) => (
-              <button
-                key={l}
-                onClick={() => handleSwitch(l)}
-                className={`px-4 py-2 text-sm rounded-lg transition-colors ${
-                  l === locale ? "bg-primary-50 text-primary-500 font-semibold" : "text-gray-500 hover:bg-gray-50"
-                }`}
-              >
-                {l.toUpperCase()}
-              </button>
-            ))}
-          </div>
-          <div className="h-px bg-gray-100 my-2" />
-          {publicPricingEnabled && (
-            <Link href="/pricing" onClick={onClose} className="px-4 py-3 text-[15px] font-medium text-gray-700 hover:bg-gray-50 rounded-xl transition-colors">
-              {t("landing.nav.pricing")}
-            </Link>
-          )}
-          <LoginLink onClick={onClose} className="px-4 py-3 text-[15px] font-medium text-gray-700 hover:bg-gray-50 rounded-xl transition-colors">
-            {t("landing.nav.login")}
-          </LoginLink>
-          <Link href="/early-access" onClick={onClose} className="mt-2 px-4 py-3 text-[15px] font-semibold text-white bg-primary-500 rounded-xl text-center hover:bg-primary-600 transition-colors">
-            {t("landing.nav.getStarted")}
-          </Link>
-        </nav>
-      </div>
-    </div>
-  );
-}
-
-/* ───── Logo ───── */
-
-function Logo({ light }: { light?: boolean }) {
-  return (
-    <img
-      src="/logo_icon.png"
-      alt="GOTCHA"
-      className={`h-7 w-auto ${light ? "brightness-0 invert" : ""}`}
-    />
-  );
-}
 
 /* ───── Product Mockup ───── */
 
@@ -848,7 +696,6 @@ function FaqItem({ question, answer }: { question: string; answer: string }) {
 export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale }) {
   const { t, locale, setLocale, dir } = useI18n();
   const [navDark, setNavDark] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const rafRef = useRef<number>(0);
 
   useEffect(() => {
@@ -880,8 +727,6 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
     };
   }, []);
 
-  const otherLabel = locale === "en" ? "עברית" : "English";
-  const otherPath = locale === "en" ? "/he" : "/en";
   const isRtl = dir === "rtl";
 
   return (
@@ -916,63 +761,7 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
         })) ?? [],
       }} />
 
-      {/* ───── Floating Nav ───── */}
-      <header className="fixed top-0 inset-x-0 z-50 flex justify-center pt-3 sm:pt-4 px-3 sm:px-4">
-        <nav className={`w-full max-w-[1240px] flex items-center justify-between px-4 sm:px-5 py-2.5 rounded-2xl backdrop-blur-xl border transition-colors duration-500 ${
-          navDark
-            ? "bg-white/[0.06] border-white/[0.08] shadow-[0_2px_20px_rgba(0,0,0,0.3)]"
-            : "bg-white/80 border-gray-200/60 shadow-[0_2px_20px_rgba(0,0,0,0.06)]"
-        }`}>
-          <div className="flex items-center gap-6">
-            <Logo light={navDark} />
-            <div className="hidden md:flex items-center gap-1">
-              <a href="#how-it-works" className={`px-3.5 py-1.5 text-[13px] font-medium rounded-full transition-all ${
-                navDark ? "text-white/60 hover:text-white hover:bg-white/10" : "text-gray-500 hover:text-black hover:bg-gray-100/80"
-              }`}>
-                {t("landing.nav.howItWorks")}
-              </a>
-              {publicPricingEnabled && (
-                <Link href="/pricing" className={`px-3.5 py-1.5 text-[13px] font-medium rounded-full transition-all ${
-                  navDark ? "text-white/60 hover:text-white hover:bg-white/10" : "text-gray-500 hover:text-black hover:bg-gray-100/80"
-                }`}>
-                  {t("landing.nav.pricing")}
-                </Link>
-              )}
-              <a href="#product-features" className={`px-3.5 py-1.5 text-[13px] font-medium rounded-full transition-all ${
-                navDark ? "text-white/60 hover:text-white hover:bg-white/10" : "text-gray-500 hover:text-black hover:bg-gray-100/80"
-              }`}>
-                {t("landing.nav.features")}
-              </a>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <div className="hidden md:flex items-center gap-2">
-              <LocaleDropdown locale={locale} setLocale={setLocale} forcedLocale={forcedLocale} />
-              <LoginLink className={`px-3.5 py-1.5 text-[13px] font-medium rounded-full transition-all ${
-                navDark ? "text-white/70 hover:text-white hover:bg-white/10" : "text-gray-600 hover:text-black hover:bg-gray-100/80"
-              }`}>
-                {t("landing.nav.login")}
-              </LoginLink>
-            </div>
-            <Link href="/early-access" className="hidden sm:inline-flex px-5 py-2 text-[13px] font-semibold text-white bg-primary-500 rounded-full hover:bg-primary-600 transition-all">
-              {t("landing.nav.getStarted")}
-            </Link>
-            {/* Mobile hamburger */}
-            <button
-              onClick={() => setMobileMenuOpen(true)}
-              className={`md:hidden p-2 rounded-lg transition-colors ${
-                navDark ? "text-white/70 hover:bg-white/10" : "text-gray-600 hover:bg-gray-100"
-              }`}
-            >
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <path d="M4 7h16M4 12h16M4 17h16" />
-              </svg>
-            </button>
-          </div>
-        </nav>
-      </header>
-      <MobileMenu open={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} t={t} locale={locale} setLocale={setLocale} navDark={navDark} forcedLocale={forcedLocale} />
+      <MarketingHeader navDark={navDark} forcedLocale={forcedLocale} />
 
       {/* ───── Hero: Split Layout ───── */}
       <section className="relative min-h-[80vh] sm:min-h-[95vh] flex items-center px-4 sm:px-12 lg:px-20 pt-24 sm:pt-28 pb-16 sm:pb-0 overflow-hidden bg-white">
@@ -1123,60 +912,7 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
       {/* ───── CTA: embedded early-access form ───── */}
       <CtaForm t={t as (key: string, vars?: Record<string, string>) => string} isRtl={isRtl} />
 
-      {/* ───── Footer ───── */}
-      <footer className="py-10 sm:py-14 px-4 sm:px-12 lg:px-20 bg-[#fafafa]">
-        <div className="max-w-[1240px] mx-auto">
-          <div className="flex flex-col md:flex-row justify-between gap-10">
-            <div className="max-w-xs">
-              <Logo />
-              <p className="mt-4 text-[13px] text-[#b0b0b0] leading-relaxed">
-                {t("landing.hero.title1")}
-              </p>
-              <SocialLinks t={t as (key: string) => string} className="mt-5" />
-            </div>
-
-            <div className="grid grid-cols-3 gap-8 sm:gap-12 text-sm">
-              <div>
-                <h4 className="font-medium text-gray-900 mb-3 sm:mb-4 text-[13px]">{t("landing.footer.product")}</h4>
-                <ul className="space-y-2.5 text-[#b0b0b0]">
-                  <li><a href="#how-it-works" className="hover:text-gray-900 transition-colors duration-200 text-[13px]">{t("landing.nav.howItWorks")}</a></li>
-                  <li><a href="#product-features" className="hover:text-gray-900 transition-colors duration-200 text-[13px]">{t("landing.nav.features")}</a></li>
-                  {publicPricingEnabled && (
-                    <li><Link href="/pricing" className="hover:text-gray-900 transition-colors duration-200 text-[13px]">{t("landing.nav.pricing")}</Link></li>
-                  )}
-                </ul>
-              </div>
-              <div>
-                <h4 className="font-medium text-gray-900 mb-3 sm:mb-4 text-[13px]">{t("landing.footer.company")}</h4>
-                <ul className="space-y-2.5 text-[#b0b0b0]">
-                  <li><a href="#" className="hover:text-gray-900 transition-colors duration-200 text-[13px]">{t("landing.footer.about")}</a></li>
-                  <li><a href="#" className="hover:text-gray-900 transition-colors duration-200 text-[13px]">{t("landing.footer.blog")}</a></li>
-                </ul>
-              </div>
-              <div>
-                <h4 className="font-medium text-gray-900 mb-3 sm:mb-4 text-[13px]">{t("landing.footer.legal")}</h4>
-                {/* Canonical /legal URLs, not the /terms and /privacy-policy
-                    redirects: those survive only for external references. */}
-                <ul className="space-y-2.5 text-[#b0b0b0]">
-                  <li><Link href="/legal" className="hover:text-gray-900 transition-colors duration-200 text-[13px] font-medium text-gray-700">{t("landing.footer.trustCenter")}</Link></li>
-                  <li><Link href="/legal/privacy-policy" className="hover:text-gray-900 transition-colors duration-200 text-[13px]">{t("landing.footer.privacy")}</Link></li>
-                  <li><Link href="/legal/terms-of-service" className="hover:text-gray-900 transition-colors duration-200 text-[13px]">{t("landing.footer.terms")}</Link></li>
-                  <li><Link href="/legal/cookie-policy" className="hover:text-gray-900 transition-colors duration-200 text-[13px]">{t("landing.footer.cookies")}</Link></li>
-                  <li><Link href="/legal/cancellation-refunds" className="hover:text-gray-900 transition-colors duration-200 text-[13px]">{t("landing.footer.cancellation")}</Link></li>
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-8 sm:mt-10 pt-6 sm:pt-8 border-t border-gray-200/60 flex flex-col sm:flex-row items-center justify-between gap-3 text-[13px] text-[#b0b0b0]">
-            <p>&copy; {new Date().getFullYear()} GOTCHA. {t("landing.footer.copyright")}</p>
-            <p className="text-[11px] text-[#c0c0c0]">Founds and Operated by Omer Serruya | עומר צרויה, Matan Amran | מתן עמרן</p>
-            <Link href={otherPath} className="hover:text-gray-900 transition-colors duration-200">
-              {otherLabel}
-            </Link>
-          </div>
-        </div>
-      </footer>
+      <MarketingFooter forcedLocale={forcedLocale} />
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { Inter, Assistant } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 import { LOCALE_BOOT_SCRIPT } from "@/lib/locale-boot";
+import ChatWidget from "@/components/landing/ChatWidget";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
 const assistant = Assistant({ subsets: ["hebrew", "latin"], variable: "--font-assistant", display: "swap" });
@@ -85,7 +86,14 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: LOCALE_BOOT_SCRIPT }} />
       </head>
       <body className={`${inter.variable} ${assistant.variable} bg-gray-50 text-gray-900 min-h-screen`}>
-        <Providers>{children}</Providers>
+        <Providers>
+          {children}
+          {/* Mounted once for the whole site rather than per page: it is a
+              single page app, so a widget injected by one page stays on
+              screen on the next one. Deciding here means one place answers
+              which pages it belongs on - see ChatWidget. */}
+          <ChatWidget />
+        </Providers>
       </body>
     </html>
   );

@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import LandingPage from "@/components/landing/LandingPage";
-import ChatWidget from "@/components/landing/ChatWidget";
 import { cachedJourneyIncomplete, refreshJourneyIncomplete } from "@/lib/journey-cache";
 import { rendersMarketing } from "@/lib/marketing-origin";
 
@@ -111,7 +110,6 @@ export default function Home() {
     <>
       <PurposeStatement />
       <LandingPage />
-      <ChatWidget />
     </>
   );
 }

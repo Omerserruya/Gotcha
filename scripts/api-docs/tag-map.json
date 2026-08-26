@@ -1,0 +1,366 @@
+[
+  [
+    "/api/channels/whatsapp",
+    "WhatsApp"
+  ],
+  [
+    "/api/public/onboarding",
+    "Onboarding"
+  ],
+  [
+    "/api/public/pricing",
+    "Billing"
+  ],
+  [
+    "/api/admin/pricing",
+    "Billing"
+  ],
+  [
+    "/api/admin/coupons",
+    "Billing"
+  ],
+  [
+    "/api/admin/billing",
+    "Billing"
+  ],
+  [
+    "/api/admin/evaluation",
+    "Billing"
+  ],
+  [
+    "/api/admin/analytics",
+    "Analytics"
+  ],
+  [
+    "/api/shopify-live-chat",
+    "Shopify"
+  ],
+  [
+    "/api/shopify-chat-install",
+    "Shopify"
+  ],
+  [
+    "/api/shopify-chat",
+    "Shopify"
+  ],
+  [
+    "/api/notification-preferences",
+    "Notifications"
+  ],
+  [
+    "/api/historical-imports",
+    "Historical Import"
+  ],
+  [
+    "/api/integration-workspace",
+    "Integrations"
+  ],
+  [
+    "/api/commerce-context",
+    "Integrations"
+  ],
+  [
+    "/api/customer-snapshot",
+    "Integrations"
+  ],
+  [
+    "/api/customer-summary",
+    "Integrations"
+  ],
+  [
+    "/api/scheduled-messages",
+    "Conversations"
+  ],
+  [
+    "/api/business-policies",
+    "Tenant Settings"
+  ],
+  [
+    "/api/field-definitions",
+    "Tenant Settings"
+  ],
+  [
+    "/api/tenant-settings",
+    "Tenant Settings"
+  ],
+  [
+    "/api/tenant",
+    "Tenant Settings"
+  ],
+  [
+    "/api/action-contracts",
+    "AI Studio"
+  ],
+  [
+    "/api/action-planner",
+    "AI Studio"
+  ],
+  [
+    "/api/custom-api-tools",
+    "AI Studio"
+  ],
+  [
+    "/api/custom-db-tools",
+    "AI Studio"
+  ],
+  [
+    "/api/tool-permissions",
+    "AI Studio"
+  ],
+  [
+    "/api/tools",
+    "AI Studio"
+  ],
+  [
+    "/api/tool-policy-migration",
+    "AI Studio"
+  ],
+  [
+    "/api/stage-transitions",
+    "AI Studio"
+  ],
+  [
+    "/api/post-conversation-config",
+    "AI Studio"
+  ],
+  [
+    "/api/intelligence-reviews",
+    "AI Studio"
+  ],
+  [
+    "/api/decision-timeline",
+    "AI Studio"
+  ],
+  [
+    "/api/reasoner-shadow",
+    "AI Studio"
+  ],
+  [
+    "/api/industry-packs",
+    "AI Studio"
+  ],
+  [
+    "/api/knowledge-bases",
+    "Knowledge"
+  ],
+  [
+    "/api/knowledge",
+    "Knowledge"
+  ],
+  [
+    "/api/chatbot-flows",
+    "AI Studio"
+  ],
+  [
+    "/api/agent-scores",
+    "AI Studio"
+  ],
+  [
+    "/api/system-chat",
+    "AI Studio"
+  ],
+  [
+    "/api/ai-agents",
+    "AI Studio"
+  ],
+  [
+    "/api/ai-assist",
+    "AI Studio"
+  ],
+  [
+    "/api/ai-skills",
+    "AI Studio"
+  ],
+  [
+    "/api/agent-loop",
+    "AI Studio"
+  ],
+  [
+    "/api/flow-canvas",
+    "AI Studio"
+  ],
+  [
+    "/api/router-rules",
+    "Conversations"
+  ],
+  [
+    "/api/conversations",
+    "Conversations"
+  ],
+  [
+    "/api/broadcasts",
+    "Conversations"
+  ],
+  [
+    "/api/audiences",
+    "Conversations"
+  ],
+  [
+    "/api/templates",
+    "Conversations"
+  ],
+  [
+    "/api/contacts",
+    "Contacts & CRM"
+  ],
+  [
+    "/api/identity",
+    "Contacts & CRM"
+  ],
+  [
+    "/api/departments",
+    "Tenant Settings"
+  ],
+  [
+    "/api/permissions",
+    "Auth & Identity"
+  ],
+  [
+    "/api/onboarding",
+    "Onboarding"
+  ],
+  [
+    "/api/waitlist",
+    "Onboarding"
+  ],
+  [
+    "/api/integrations",
+    "Integrations"
+  ],
+  [
+    "/api/connectors",
+    "Integrations"
+  ],
+  [
+    "/api/scheduler",
+    "Integrations"
+  ],
+  [
+    "/api/notifications",
+    "Notifications"
+  ],
+  [
+    "/api/approvals",
+    "AI Studio"
+  ],
+  [
+    "/api/analytics",
+    "Analytics"
+  ],
+  [
+    "/api/checkout",
+    "Billing"
+  ],
+  [
+    "/api/billing",
+    "Billing"
+  ],
+  [
+    "/api/channels",
+    "Channels"
+  ],
+  [
+    "/api/embedded-chat",
+    "Embedded Chat"
+  ],
+  [
+    "/api/voice-copilot",
+    "Voice"
+  ],
+  [
+    "/api/voice-channels",
+    "Voice"
+  ],
+  [
+    "/api/voice-sessions",
+    "Voice"
+  ],
+  [
+    "/api/voice",
+    "Voice"
+  ],
+  [
+    "/api/post-call",
+    "Voice"
+  ],
+  [
+    "/api/webhook-triggers",
+    "Webhooks"
+  ],
+  [
+    "/api/webhook",
+    "Webhooks"
+  ],
+  [
+    "/webhooks",
+    "Webhooks"
+  ],
+  [
+    "/twilio",
+    "Voice"
+  ],
+  [
+    "/api/gdpr-internal",
+    "GDPR & Compliance"
+  ],
+  [
+    "/api/gdpr",
+    "GDPR & Compliance"
+  ],
+  [
+    "/api/account",
+    "Auth & Identity"
+  ],
+  [
+    "/api/auth",
+    "Auth & Identity"
+  ],
+  [
+    "/api/agents",
+    "AI Studio"
+  ],
+  [
+    "/api/agent",
+    "AI Studio"
+  ],
+  [
+    "/api/funnels",
+    "AI Studio"
+  ],
+  [
+    "/api/crm",
+    "Contacts & CRM"
+  ],
+  [
+    "/api/usage",
+    "Analytics"
+  ],
+  [
+    "/api/admin",
+    "Platform Admin"
+  ],
+  [
+    "/api/system",
+    "Platform Admin"
+  ],
+  [
+    "/api/internal",
+    "Internal"
+  ],
+  [
+    "/api/ai-bot",
+    "Internal"
+  ],
+  [
+    "/api/copilot",
+    "Internal"
+  ],
+  [
+    "/api/auto-buy",
+    "Internal"
+  ],
+  [
+    "/api/public",
+    "Public"
+  ]
+]

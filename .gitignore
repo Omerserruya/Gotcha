@@ -42,3 +42,8 @@ coverage/
 .claude/
 .omc/
 graphify-out/
+
+# Intermediate route inventory for the API docs generator. The two published
+# artifacts (docs/openapi.yaml, docs/API_EXECUTION_MAP.md) are committed; this
+# is scratch that would only add diff noise.
+docs/.api-extract/

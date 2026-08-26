@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import LandingPage from "@/components/landing/LandingPage";
-import ChatWidget from "@/components/landing/ChatWidget";
 
 export const metadata: Metadata = {
   title: "GOTCHA - AI-Powered Customer Communication",
@@ -25,7 +24,6 @@ export default function EnglishLanding() {
   return (
     <>
       <LandingPage forcedLocale="en" />
-      <ChatWidget />
     </>
   );
 }
