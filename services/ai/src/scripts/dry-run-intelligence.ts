@@ -21,6 +21,7 @@ import { structuredCall } from "../services/historical-intelligence/llm";
 import {
   ExtractionSchema,
   SYSTEM_PROMPT,
+  parseItems,
   quoteMatchesDirection,
 } from "../services/historical-intelligence/knowledge-extraction.stage";
 import { judgeSpecificity, redactSpecifics } from "../services/historical-intelligence/specificity";
@@ -169,7 +170,9 @@ async function main(): Promise<void> {
     }
 
     const customerKey = customer.normalizedPhone || customer.externalId;
-    for (let item of result.items) {
+    // Same per-item validation the stage uses, so the dry run reports the same
+    // numbers the pipeline would produce rather than a more optimistic set.
+    for (let item of parseItems(result.items)) {
       raw += 1;
       scopes.set(item.scope, (scopes.get(item.scope) ?? 0) + 1);
 

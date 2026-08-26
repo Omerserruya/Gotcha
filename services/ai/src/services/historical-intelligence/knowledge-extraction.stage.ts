@@ -79,8 +79,11 @@ export const RawCandidateSchema = z.object({
       "OTHER",
     ])
     .describe("The fixed category this belongs to. Use OTHER only when nothing else fits."),
-  question: z.string().min(5).max(300).describe("The customer's question, generalized"),
-  answer: z.string().min(5).max(800).describe("The business's answer, stated as reusable policy"),
+  question: z.string().min(2).max(300).describe("The customer's question, generalized"),
+  // Two characters, not five. "כן" and "בשמחה" are complete answers in Hebrew,
+  // and the floor was rejecting them - along with everything extracted from the
+  // same conversation, back when one bad item failed the whole array.
+  answer: z.string().min(2).max(800).describe("The business's answer, stated as reusable policy"),
   /**
    * What KIND of thing this is. The gate that replaced occurrence counting
    * reads this first: an item the model itself calls ONE_OFF is dropped
@@ -112,13 +115,74 @@ export const RawCandidateSchema = z.object({
   // at the exact Customer line it read the question from and the exact
   // Business line it read the answer from is unverifiable, and unverifiable
   // here has a concrete failure mode - see directionGuard.
-  quotedQuestion: z.string().min(5).max(400).describe("Verbatim quote of the Customer line the question came from"),
-  quotedAnswer: z.string().min(5).max(600).describe("Verbatim quote of the Business line the answer came from"),
+  quotedQuestion: z.string().min(2).max(400).describe("Verbatim quote of the Customer line the question came from"),
+  // A quote shorter than the matcher's floor cannot be verified, so it is
+  // rejected by quoteMatchesDirection rather than here - one item lost instead
+  // of a whole conversation.
+  quotedAnswer: z.string().min(2).max(600).describe("Verbatim quote of the Business line the answer came from"),
 });
 
+/**
+ * Items are parsed ONE AT A TIME, and that is the whole point of this shape.
+ *
+ * Validating `z.array(RawCandidateSchema)` makes the call all-or-nothing: one
+ * malformed item discards every good item from the same conversation. Measured
+ * on the first live run, that cost 11 of 40 conversations - a 27% loss, almost
+ * all of it from a single cause. Hebrew answers are often shorter than the
+ * five-character floor ("כן", "בשמחה", "אין בעיה"), so one two-word reply threw
+ * away the eight real policies extracted alongside it.
+ *
+ * Keeping the array loose here and validating per item means a bad item costs
+ * exactly itself. `parseItems` below does the validation.
+ */
 export const ExtractionSchema = z.object({
-  items: z.array(RawCandidateSchema).max(20),
+  items: z.array(z.unknown()).max(20),
 });
+
+const CATEGORIES = [
+  "ORDERING_AND_PAYMENT",
+  "SHIPPING_AND_DELIVERY",
+  "RETURNS_AND_CANCELLATION",
+  "PRODUCT_AND_SPECS",
+  "AVAILABILITY_AND_STOCK",
+  "PRICING_AND_DISCOUNTS",
+  "BOOKING_AND_SCHEDULING",
+  "LOCATION_AND_HOURS",
+  "POLICIES_AND_REQUIREMENTS",
+  "SUPPORT_AND_TROUBLESHOOTING",
+  "ABOUT_THE_BUSINESS",
+  "OTHER",
+] as const;
+
+/**
+ * Validate each proposed item on its own, keeping what survives.
+ *
+ * Two coercions happen before validation, both for failures the model makes
+ * predictably and neither of which is a reason to lose the item:
+ *
+ *   * `category` gets the SCOPE value ("PROCESS", "PRODUCT", "POLICY") because
+ *     the prompt asks for two enums and they read alike. An unrecognised
+ *     category becomes OTHER - a mislabelled group is a minor annoyance, and
+ *     dropping a real policy over it is not.
+ *   * `reasoning` may be missing. It is the most valuable field but the least
+ *     essential: an answer without its reasoning is still a correct answer.
+ */
+export function parseItems(raw: unknown[]): Array<z.infer<typeof RawCandidateSchema>> {
+  const out: Array<z.infer<typeof RawCandidateSchema>> = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const o = { ...(item as Record<string, unknown>) };
+    if (typeof o.category !== "string" || !CATEGORIES.includes(o.category as any)) {
+      o.category = "OTHER";
+    }
+    if (typeof o.reasoning !== "string" || !o.reasoning.trim()) {
+      o.reasoning = "Not stated - the business gave the answer without explaining its reasoning.";
+    }
+    const parsed = RawCandidateSchema.safeParse(o);
+    if (parsed.success) out.push(parsed.data);
+  }
+  return out;
+}
 
 export const SYSTEM_PROMPT = `You read one customer's conversation history with a business and extract REUSABLE business knowledge: questions this business gets asked, the factual answers it gave, and the thinking behind those answers.
 
@@ -249,6 +313,7 @@ export async function runKnowledgeExtractionStage(args: {
   let rejectedByDirection = 0;
   let rejectedBySpecificity = 0;
   let redeemedByRedaction = 0;
+  let droppedByShape = 0;
 
   await mapLimited(customers, CONCURRENCY, async (customer) => {
     const transcript = await loadConversationTranscript({
@@ -276,7 +341,9 @@ export async function runKnowledgeExtractionStage(args: {
     const occurredAt = transcript[transcript.length - 1]?.at ?? null;
     const customerKey = customer.normalizedPhone || customer.externalId;
 
-    for (let item of result.items) {
+    const proposed = parseItems(result.items);
+    droppedByShape += result.items.length - proposed.length;
+    for (let item of proposed) {
       // The guard the prompt cannot be trusted to be: the quoted answer must
       // actually be something the BUSINESS sent, and the quoted question
       // something the CUSTOMER sent. The failure mode is real, not
@@ -364,6 +431,7 @@ export async function runKnowledgeExtractionStage(args: {
       rejectedByDirection,
       rejectedBySpecificity,
       redeemedByRedaction,
+      droppedByShape,
     },
     Date.now() - startedAt,
   );
@@ -371,7 +439,7 @@ export async function runKnowledgeExtractionStage(args: {
   return {
     ok: true,
     done: customers.length < BATCH_SIZE,
-    detail: { extracted, created, merged, conflicts, failures, rejectedByDirection, rejectedBySpecificity, redeemedByRedaction },
+    detail: { extracted, created, merged, conflicts, failures, rejectedByDirection, rejectedBySpecificity, redeemedByRedaction, droppedByShape },
   };
 }
 

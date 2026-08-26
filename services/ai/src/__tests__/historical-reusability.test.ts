@@ -156,3 +156,55 @@ describe("renderObservedVoice", () => {
     expect(out).not.toContain("Emoji this business actually uses");
   });
 });
+
+describe("parseItems", () => {
+  const good = (over: Record<string, unknown> = {}) => ({
+    topic: "Returns",
+    category: "RETURNS_AND_CANCELLATION",
+    question: "האם אפשר להחזיר?",
+    answer: "כן, תוך 14 יום",
+    reasoning: "They check whether the item is unworn first.",
+    scope: "POLICY",
+    generalized: true,
+    quotedQuestion: "אפשר להחזיר את זה?",
+    quotedAnswer: "כן בטח, תוך 14 יום",
+    ...over,
+  });
+
+  it("keeps the good items when one is malformed", async () => {
+    const { parseItems } = await import("../services/historical-intelligence/knowledge-extraction.stage");
+    // The measured production failure: one bad item discarded eight good ones,
+    // losing 27% of conversations. A bad item must cost exactly itself.
+    const out = parseItems([good(), { topic: "x" }, good({ question: "מתי נפתחים?" })]);
+    expect(out).toHaveLength(2);
+  });
+
+  it("accepts the short answers Hebrew actually uses", async () => {
+    const { parseItems } = await import("../services/historical-intelligence/knowledge-extraction.stage");
+    for (const answer of ["כן", "בשמחה", "אין בעיה"]) {
+      const out = parseItems([good({ answer, quotedAnswer: answer })]);
+      expect(out, answer).toHaveLength(1);
+      expect(out[0].answer).toBe(answer);
+    }
+  });
+
+  it("coerces a scope value written into category instead of dropping the item", async () => {
+    const { parseItems } = await import("../services/historical-intelligence/knowledge-extraction.stage");
+    // The model confuses the two enums because the prompt asks for both.
+    const out = parseItems([good({ category: "PROCESS" }), good({ category: "PRODUCT" })]);
+    expect(out).toHaveLength(2);
+    expect(out.every((i) => i.category === "OTHER")).toBe(true);
+  });
+
+  it("survives a missing reasoning rather than losing the answer", async () => {
+    const { parseItems } = await import("../services/historical-intelligence/knowledge-extraction.stage");
+    const out = parseItems([good({ reasoning: undefined })]);
+    expect(out).toHaveLength(1);
+    expect(out[0].reasoning).toContain("Not stated");
+  });
+
+  it("ignores non-objects without throwing", async () => {
+    const { parseItems } = await import("../services/historical-intelligence/knowledge-extraction.stage");
+    expect(parseItems([null, "nope", 42, good()])).toHaveLength(1);
+  });
+});
