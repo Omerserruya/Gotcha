@@ -246,8 +246,15 @@ router.get("/:id/posts", authenticate, resolveTenant, requirePermission("channel
     }
 
     // Instagram
+    // Instagram-Login accounts hold an IG-user token that only graph.instagram.com
+    // can parse; legacy Facebook-Login accounts hold a Page token for
+    // graph.facebook.com. The `igLogin` credential flag selects the host, exactly
+    // as the inbound adapter and the health worker do. Sending an IG-user token
+    // to graph.facebook.com fails with "Cannot parse access token".
     const igUserId = creds.igBusinessId || account.externalId;
-    const url = `${FB_API_URL}/${igUserId}/media`;
+    const url = creds.igLogin
+      ? `${IG_API_URL}/me/media`
+      : `${FB_API_URL}/${igUserId}/media`;
     const resp = await axios.get(url, {
       params: {
         fields: "id,caption,media_url,thumbnail_url,permalink,timestamp,media_type",
@@ -269,6 +276,16 @@ router.get("/:id/posts", authenticate, resolveTenant, requirePermission("channel
   } catch (err: any) {
     const detail = err?.response?.data?.error?.message || err?.message;
     console.error(`[channels] GET /${String(req.params.id)}/posts failed:`, detail);
+    // Meta answers a dead token and a missing permission with the same HTTP
+    // shape, but the fix differs and only the user can apply it. Say which one
+    // it is instead of bubbling an opaque 502 into the trigger picker.
+    const text = String(detail || "");
+    if (/parse access token|access token.*expired|session (has been )?invalidated|OAuthException/i.test(text)) {
+      return res.status(409).json({ error: "This channel's connection has expired. Reconnect it in Settings > Channels, then load posts again.", detail });
+    }
+    if (/pages_read_engagement|pages_manage_metadata|permission/i.test(text)) {
+      return res.status(403).json({ error: "This channel is missing the permission to read its posts. Reconnect it in Settings > Channels and approve all requested permissions.", detail });
+    }
     return res.status(502).json({ error: "Failed to load posts", detail });
   }
 });

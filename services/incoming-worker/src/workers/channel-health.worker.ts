@@ -41,13 +41,22 @@ async function processChannelHealth(job: Job<ChannelHealthJob>): Promise<void> {
 
 // ─── Health Check ────────────────────────────────────────────
 
-async function runHealthCheck(): Promise<void> {
+export async function runHealthCheck(): Promise<void> {
   console.log("[channel-health] Running health check...");
 
   // Only check Meta channels - Facebook's debug_token API doesn't apply to Gmail/Outlook/Slack
+  //
+  // ERROR rows are included for the same reason Outlook includes them: a Meta
+  // channel breaks for reasons the OWNER fixes outside our product - a page
+  // grant revoked in Business Settings, an app permission removed, an admin
+  // role lost. Checking only CONNECTED rows made ERROR a one-way door: the
+  // channel was never probed again, `lastHealthCheck` froze at the minute it
+  // broke, and re-granting the permission on Facebook changed nothing here.
+  // A user-initiated disconnect uses DISCONNECTED, not ERROR, so nothing a
+  // person deliberately turned off is resurrected by this.
   const accounts = await prisma.channelAccount.findMany({
     where: {
-      connectionStatus: "CONNECTED",
+      connectionStatus: { in: ["CONNECTED", "ERROR"] },
       isActive: true,
       channel: { in: ["WHATSAPP", "MESSENGER", "INSTAGRAM"] },
     },
@@ -60,6 +69,7 @@ async function runHealthCheck(): Promise<void> {
 
   let checked = 0;
   let errors = 0;
+  let recovered = 0;
 
   for (const account of accounts) {
     try {
@@ -94,9 +104,12 @@ async function runHealthCheck(): Promise<void> {
           await axios.get(`${IG_API_URL}/me`, {
             params: { fields: "user_id", access_token: accessToken },
           });
+          // A passing probe is the only evidence that matters: whatever broke
+          // this channel has been fixed at Meta, so clear the error with it.
+          if (account.connectionStatus === "ERROR") recovered++;
           await prisma.channelAccount.update({
             where: { id: account.id },
-            data: { lastHealthCheck: new Date() },
+            data: { connectionStatus: "CONNECTED", lastError: null, lastHealthCheck: new Date() },
           });
         } catch (igErr: any) {
           await prisma.channelAccount.update({
@@ -122,7 +135,13 @@ async function runHealthCheck(): Promise<void> {
       const isValid = tokenData?.is_valid === true;
 
       if (isValid) {
-        const updateData: any = { lastHealthCheck: new Date() };
+        const updateData: any = {
+          lastHealthCheck: new Date(),
+          // Same recovery rule as Instagram above and Outlook below.
+          connectionStatus: "CONNECTED",
+          lastError: null,
+        };
+        if (account.connectionStatus === "ERROR") recovered++;
         if (tokenData.expires_at && tokenData.expires_at > 0) {
           updateData.tokenExpiresAt = new Date(tokenData.expires_at * 1000);
         }
@@ -149,7 +168,7 @@ async function runHealthCheck(): Promise<void> {
     }
   }
 
-  console.log(`[channel-health] Health check complete: ${checked} checked, ${errors} errors, ${accounts.length} total`);
+  console.log(`[channel-health] Health check complete: ${checked} checked, ${errors} errors, ${recovered} recovered, ${accounts.length} total`);
 }
 
 // ─── Token Refresh ───────────────────────────────────────────
