@@ -91,8 +91,15 @@ export const RawCandidateSchema = z.object({
    * their own - they still face the deterministic specificity check.
    */
   scope: z
-    .enum(["POLICY", "PRODUCT", "PROCESS", "ONE_OFF"])
-    .describe("POLICY = a standing rule; PRODUCT = a durable product fact; PROCESS = how the business does something; ONE_OFF = true only for this customer or this order"),
+    // Lowercase and deliberately unlike a category. Both fields were
+    // SCREAMING_SNAKE enums and the model routinely wrote "PROCESS" or
+    // "PRODUCT" where a category belonged. That used to fail the whole call
+    // and the retry fixed it; once items were parsed individually the bad
+    // value was silently coerced instead, and 263 of 266 candidates came back
+    // as OTHER. Making the two vocabularies visibly different removes the
+    // confusion at the source rather than papering over it downstream.
+    .enum(["standing_rule", "product_fact", "how_we_work", "one_off"])
+    .describe("standing_rule = a rule that always applies; product_fact = a durable fact about a product line; how_we_work = a procedure the business follows; one_off = true only for this customer or this order"),
   /**
    * The model's assertion that nothing customer-specific survives in the text.
    * Read only as a veto: `false` drops the item, `true` proves nothing.
@@ -167,6 +174,11 @@ const CATEGORIES = [
  *   * `reasoning` may be missing. It is the most valuable field but the least
  *     essential: an answer without its reasoning is still a correct answer.
  */
+export let coercedCategories = 0;
+export function resetParseCounters(): void {
+  coercedCategories = 0;
+}
+
 export function parseItems(raw: unknown[]): Array<z.infer<typeof RawCandidateSchema>> {
   const out: Array<z.infer<typeof RawCandidateSchema>> = [];
   for (const item of raw) {
@@ -174,6 +186,7 @@ export function parseItems(raw: unknown[]): Array<z.infer<typeof RawCandidateSch
     const o = { ...(item as Record<string, unknown>) };
     if (typeof o.category !== "string" || !CATEGORIES.includes(o.category as any)) {
       o.category = "OTHER";
+      coercedCategories += 1;
     }
     if (typeof o.reasoning !== "string" || !o.reasoning.trim()) {
       o.reasoning = "Not stated - the business gave the answer without explaining its reasoning.";
@@ -227,12 +240,12 @@ CATEGORY AND TOPIC
 - topic: a short label INSIDE that category, in three words or fewer. Reuse the obvious wording rather than inventing a new phrasing for the same subject - "Kashrut certification" twice is right, "Which kashrut do you have" and "Is there Mehadrin certification" as two separate topics is wrong.
 
 SCOPE AND GENERALIZATION
-- scope: POLICY for a standing rule, PRODUCT for a durable product fact, PROCESS for how the business does something, ONE_OFF for anything true only of this customer or this order. Be honest with ONE_OFF - it is the correct label for most of a normal conversation.
-- generalized: true ONLY if neither the question nor the answer contains an order number, tracking code, person's name, address, phone number, email or a specific calendar date. If you had to remove such a detail to write the item, remove it and set true. If the item cannot survive without it, set ONE_OFF.
+- scope: lowercase, one of standing_rule, product_fact, how_we_work, one_off. These are NOT categories - never put one of them in the category field. Be honest with one_off; it is the correct label for most of a normal conversation.
+- generalized: true ONLY if neither the question nor the answer contains an order number, tracking code, person's name, address, phone number, email or a specific calendar date. If you had to remove such a detail to write the item, remove it and set true. If the item cannot survive without it, set scope to one_off.
 
 Return up to 20 items. An empty list is the correct answer for a conversation that was only about one order.
 
-Reply with ONLY a JSON object: {"items":[{"topic":"...","category":"SHIPPING_AND_DELIVERY","question":"...","answer":"...","reasoning":"...","scope":"POLICY","generalized":true,"quotedQuestion":"...","quotedAnswer":"..."}]}`;
+Reply with ONLY a JSON object: {"items":[{"topic":"...","category":"SHIPPING_AND_DELIVERY","question":"...","answer":"...","reasoning":"...","scope":"standing_rule","generalized":true,"quotedQuestion":"...","quotedAnswer":"..."}]}`;
 
 const CONCURRENCY = 4;
 const BATCH_SIZE = 40;
@@ -255,6 +268,7 @@ export async function runKnowledgeExtractionStage(args: {
   const startedAt = Date.now();
   // Generated fields follow the org's system language; verbatim quotes do not.
   const language = await tenantPromptLanguage(tenantId);
+  resetParseCounters();
 
   // Ordered by volume, then paged by how many we have already done. The
   // customers who talked most produce the densest knowledge, so an import cut
@@ -432,6 +446,10 @@ export async function runKnowledgeExtractionStage(args: {
       rejectedBySpecificity,
       redeemedByRedaction,
       droppedByShape,
+      // A silent coercion is a silent quality loss. 263 of 266 candidates once
+      // came back as OTHER and nothing in the events said so; the number was
+      // only visible by counting rows afterwards.
+      coercedCategories,
     },
     Date.now() - startedAt,
   );

@@ -100,7 +100,7 @@ const PATTERNS: Array<{ re: RegExp; reason: RejectReason }> = [
  * Is this candidate reusable for a customer who is not the one it came from?
  *
  * `scope` is the model's own classification and is trusted only to say NO:
- * an item it labelled ONE_OFF is dropped without further inspection, but an
+ * an item it labelled one_off is dropped without further inspection, but an
  * item it labelled POLICY still has to survive every pattern above. The model
  * calling something reusable is an opinion; a tracking number in the text is a
  * fact.
@@ -120,7 +120,7 @@ export function judgeSpecificity(item: {
   if (q.length < 5 || a.length < 5) {
     return { ok: false, reasons: ["too-short"], evidence: [] };
   }
-  if (item.scope === "ONE_OFF") {
+  if (item.scope === "one_off" || item.scope === "ONE_OFF") {
     reasons.push("one-off-scope");
   }
   // Judged on the ANSWER only. A question may legitimately refer to something

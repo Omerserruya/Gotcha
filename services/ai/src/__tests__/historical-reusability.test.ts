@@ -12,7 +12,7 @@ describe("judgeSpecificity", () => {
     const v = judgeSpecificity({
       question: "האם אפשר לאסוף הזמנה בשבת?",
       answer: "איסוף עצמי אפשרי בימים א-ה בלבד, לא בשבת.",
-      scope: "POLICY",
+      scope: "standing_rule",
       generalized: true,
     });
     expect(v.ok).toBe(true);
@@ -22,7 +22,7 @@ describe("judgeSpecificity", () => {
     // A rule stripped of its numbers is not a rule. Four digits and fewer must
     // survive: days, percentages, prices.
     for (const answer of ["החזרה תוך 45 יום", "משלוח חינם מעל 199 ש\"ח", "20% הנחה לחברי מועדון", "אנחנו פתוחים עד 2026"]) {
-      expect(judgeSpecificity({ question: "מה המדיניות?", answer, scope: "POLICY", generalized: true }).ok).toBe(true);
+      expect(judgeSpecificity({ question: "מה המדיניות?", answer, scope: "standing_rule", generalized: true }).ok).toBe(true);
     }
   });
 
@@ -37,25 +37,25 @@ describe("judgeSpecificity", () => {
       ["id-number", "ת.ז שלך 123456789 נרשמה"],
     ];
     for (const [reason, answer] of cases) {
-      const v = judgeSpecificity({ question: "מתי מגיע?", answer, scope: "POLICY", generalized: true });
+      const v = judgeSpecificity({ question: "מתי מגיע?", answer, scope: "standing_rule", generalized: true });
       expect(v.ok, answer).toBe(false);
       expect(v.reasons, answer).toContain(reason);
     }
   });
 
   it("drops what the model itself called a one-off, and what it says is not generalized", () => {
-    expect(judgeSpecificity({ question: "מה שלום ההזמנה", answer: "יצאה אתמול", scope: "ONE_OFF", generalized: true }).ok).toBe(false);
-    expect(judgeSpecificity({ question: "מה שלום ההזמנה", answer: "יצאה אתמול", scope: "POLICY", generalized: false }).ok).toBe(false);
+    expect(judgeSpecificity({ question: "מה שלום ההזמנה", answer: "יצאה אתמול", scope: "one_off", generalized: true }).ok).toBe(false);
+    expect(judgeSpecificity({ question: "מה שלום ההזמנה", answer: "יצאה אתמול", scope: "standing_rule", generalized: false }).ok).toBe(false);
   });
 
   it("redaction rescues a real policy wearing one customer's order id", () => {
     const answer = "ההזמנה 104325 תצא מחר, אנחנו תמיד שולחים תוך 3 ימי עסקים";
-    expect(judgeSpecificity({ question: "מתי נשלח?", answer, scope: "POLICY", generalized: true }).ok).toBe(false);
+    expect(judgeSpecificity({ question: "מתי נשלח?", answer, scope: "standing_rule", generalized: true }).ok).toBe(false);
 
     const redacted = redactSpecifics(answer);
     expect(redacted).not.toContain("104325");
     expect(redacted).toContain("3 ימי עסקים");
-    expect(judgeSpecificity({ question: "מתי נשלח?", answer: redacted, scope: "POLICY", generalized: true }).ok).toBe(true);
+    expect(judgeSpecificity({ question: "מתי נשלח?", answer: redacted, scope: "standing_rule", generalized: true }).ok).toBe(true);
   });
 });
 
@@ -164,7 +164,7 @@ describe("parseItems", () => {
     question: "האם אפשר להחזיר?",
     answer: "כן, תוך 14 יום",
     reasoning: "They check whether the item is unworn first.",
-    scope: "POLICY",
+    scope: "standing_rule",
     generalized: true,
     quotedQuestion: "אפשר להחזיר את זה?",
     quotedAnswer: "כן בטח, תוך 14 יום",
@@ -217,7 +217,7 @@ describe("placeholders are not answers", () => {
     const v = judgeSpecificity({
       question: "כמה עולה מנת ילד?",
       answer: "[media_placeholder message]",
-      scope: "PRICING",
+      scope: "standing_rule",
       generalized: true,
     });
     expect(v.ok).toBe(false);
@@ -228,7 +228,7 @@ describe("placeholders are not answers", () => {
     const v = judgeSpecificity({
       question: "אפשר לקבל את התפריט?",
       answer: "כן, אנחנו שולחים את התפריט המלא בוואטסאפ",
-      scope: "PROCESS",
+      scope: "how_we_work",
       generalized: true,
     });
     expect(v.ok).toBe(true);
@@ -275,5 +275,30 @@ describe("analysis progress never goes backwards", () => {
     for (const field of ["customersAnalyzed: 0", "conversationsExtracted: 0", "conversationsEligible: 0"]) {
       expect(reset, `rerun must reset ${field}`).toContain(field);
     }
+  });
+});
+
+describe("scope and category cannot be confused", () => {
+  it("uses vocabularies that do not look alike", async () => {
+    const { readFileSync } = await import("fs");
+    const src = readFileSync("src/services/historical-intelligence/knowledge-extraction.stage.ts", "utf8");
+    // Both fields were SCREAMING_SNAKE and the model put PROCESS/PRODUCT where a
+    // category belonged. While the call failed outright the retry corrected it;
+    // once items were parsed individually the bad value was coerced silently and
+    // 263 of 266 candidates came back as OTHER. The vocabularies must stay
+    // visibly different so the confusion cannot return.
+    expect(src).toContain('"standing_rule", "product_fact", "how_we_work", "one_off"');
+    for (const scope of ["standing_rule", "product_fact", "how_we_work", "one_off"]) {
+      expect(scope, `${scope} must not look like a category`).toBe(scope.toLowerCase());
+    }
+  });
+
+  it("still drops a one-off under the new spelling", () => {
+    expect(judgeSpecificity({
+      question: "מה קורה עם ההזמנה",
+      answer: "יצאה אתמול",
+      scope: "one_off",
+      generalized: true,
+    }).ok).toBe(false);
   });
 });
