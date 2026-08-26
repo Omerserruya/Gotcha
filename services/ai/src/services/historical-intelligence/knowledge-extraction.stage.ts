@@ -175,8 +175,56 @@ const CATEGORIES = [
  *     essential: an answer without its reasoning is still a correct answer.
  */
 export let coercedCategories = 0;
+export let unmappableCategories = 0;
 export function resetParseCounters(): void {
   coercedCategories = 0;
+  unmappableCategories = 0;
+}
+
+/**
+ * Map what the model actually returns onto the list it was given.
+ *
+ * Measured over 65 real items: 42 carried a category that is not in the enum,
+ * and none of them were nonsense. The model paraphrases the list rather than
+ * copying from it, producing PAYMENT, OPENING_HOURS, BOOKINGS_AND_APPOINTMENTS,
+ * PRODUCT_FACT, LOGISTICS - each an obvious near-miss of a real value. Sending
+ * all of those to OTHER threw away a correct classification because the label
+ * was worded differently, which is how 263 of 266 candidates ended up
+ * ungrouped.
+ *
+ * Matching on shared significant words rather than a hand-written synonym list:
+ * the tail of invented names is open-ended, and "shares a meaningful word with
+ * exactly one canonical category" generalises to names nobody predicted.
+ * Ambiguity is resolved to OTHER rather than guessed - a wrong group is worse
+ * than an honest ungrouped one.
+ */
+const FILLER = new Set(["and", "or", "the", "of"]);
+
+function words(name: string): string[] {
+  return name
+    .toLowerCase()
+    .split(/[^a-z]+/)
+    .filter((w) => w.length > 2 && !FILLER.has(w))
+    // Singular/plural and simple suffixes: BOOKINGS matches BOOKING.
+    .map((w) => w.replace(/(ies|s)$/, ""));
+}
+
+const CANONICAL = CATEGORIES.map((c) => ({ value: c, words: words(c) }));
+
+export function normalizeCategory(raw: unknown): string {
+  if (typeof raw !== "string" || !raw.trim()) return "OTHER";
+  const exact = raw.trim().toUpperCase();
+  if ((CATEGORIES as readonly string[]).includes(exact)) return exact;
+
+  const given = words(exact);
+  if (given.length === 0) return "OTHER";
+
+  const hits = CANONICAL.filter(
+    (c) => c.value !== "OTHER" && c.words.some((w) => given.includes(w)),
+  );
+  // Exactly one canonical category shares a meaningful word: that is the match.
+  // Zero means genuinely new, several means ambiguous, and both become OTHER.
+  return hits.length === 1 ? hits[0].value : "OTHER";
 }
 
 export function parseItems(raw: unknown[]): Array<z.infer<typeof RawCandidateSchema>> {
@@ -184,9 +232,11 @@ export function parseItems(raw: unknown[]): Array<z.infer<typeof RawCandidateSch
   for (const item of raw) {
     if (!item || typeof item !== "object") continue;
     const o = { ...(item as Record<string, unknown>) };
-    if (typeof o.category !== "string" || !CATEGORIES.includes(o.category as any)) {
-      o.category = "OTHER";
+    const rawCategory = o.category;
+    o.category = normalizeCategory(rawCategory);
+    if (o.category !== rawCategory) {
       coercedCategories += 1;
+      if (o.category === "OTHER") unmappableCategories += 1;
     }
     if (typeof o.reasoning !== "string" || !o.reasoning.trim()) {
       o.reasoning = "Not stated - the business gave the answer without explaining its reasoning.";
@@ -236,7 +286,20 @@ REASONING - THE PART THAT IS NOT A FAQ
 For each item, also record HOW this business arrives at the answer. Not the answer again in other words: the consideration behind it. What do they check before answering? What do they offer when the plain answer is no? Where do they bend and where do they not? "We say no to returns after 14 days, but if it is unworn with tags we exchange anyway" is the reasoning; "returns within 14 days" is only the rule. A new employee who read the rules alone would answer the exact question and fail the next one.
 
 CATEGORY AND TOPIC
-- category: pick from the fixed list. It is what makes the output navigable, so choose the closest fit and reserve OTHER for genuine misfits.
+- category: COPY ONE OF THESE STRINGS EXACTLY. Do not invent a category, do not translate it, do not reword it, do not use a scope value here:
+    ORDERING_AND_PAYMENT
+    SHIPPING_AND_DELIVERY
+    RETURNS_AND_CANCELLATION
+    PRODUCT_AND_SPECS
+    AVAILABILITY_AND_STOCK
+    PRICING_AND_DISCOUNTS
+    BOOKING_AND_SCHEDULING
+    LOCATION_AND_HOURS
+    POLICIES_AND_REQUIREMENTS
+    SUPPORT_AND_TROUBLESHOOTING
+    ABOUT_THE_BUSINESS
+    OTHER
+  Choose the closest fit from that list; use OTHER only when none of them fits at all.
 - topic: a short label INSIDE that category, in three words or fewer. Reuse the obvious wording rather than inventing a new phrasing for the same subject - "Kashrut certification" twice is right, "Which kashrut do you have" and "Is there Mehadrin certification" as two separate topics is wrong.
 
 SCOPE AND GENERALIZATION
@@ -450,6 +513,7 @@ export async function runKnowledgeExtractionStage(args: {
       // came back as OTHER and nothing in the events said so; the number was
       // only visible by counting rows afterwards.
       coercedCategories,
+      unmappableCategories,
     },
     Date.now() - startedAt,
   );
