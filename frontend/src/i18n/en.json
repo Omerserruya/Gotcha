@@ -2306,7 +2306,9 @@
       "howItWorks": "How It Works",
       "pricing": "Pricing",
       "login": "Login",
-      "getStarted": "Get Early Access"
+      "getStarted": "Get Early Access",
+      "home": "Home",
+      "menu": "Open menu"
     },
     "hero": {
       "badge": "AI for your agents - not instead of them",
@@ -2656,7 +2658,7 @@
       "phone": {
         "label": "Your phone number?",
         "placeholder": "+1 (555) 000-0000",
-        "micro": "Optional. For WhatsApp-based onboarding support."
+        "micro": "So we can reach you fast on WhatsApp or by phone."
       },
       "role": {
         "label": "What's your role?",
@@ -2714,7 +2716,8 @@
       "required": "This field is required.",
       "invalidEmail": "Please enter a valid email address.",
       "alreadyOnWaitlist": "You're already on the waitlist! Check your inbox.",
-      "generic": "Something went wrong. Please try again."
+      "generic": "Something went wrong. Please try again.",
+      "invalidPhone": "Please enter a valid phone number."
     },
     "thankYou": {
       "badge": "Early Access Member",
@@ -5455,8 +5458,8 @@
       "body": "Your WhatsApp is connected and working. We are bringing in your previous conversations in the background."
     },
     "analyzing": {
-      "title": "Analyzing previous conversations",
-      "body": "We are learning your customers and looking for useful business knowledge in what you have already answered.",
+      "title": "Building your knowledge base",
+      "body": "We are reading what you have already answered and turning it into knowledge your AI can use.",
       "customers": "Customers analyzed: {analyzed} of {total}"
     },
     "ready": {
@@ -5517,7 +5520,22 @@
       "conflictRequired": "Choose or write the correct answer before approving.",
       "approved": "Added to your knowledge base.",
       "rejected": "Rejected.",
-      "tab": "Discovered"
+      "tab": "Discovered",
+      "reasoningLabel": "How we approach this"
+    },
+    "category": {
+      "ORDERING_AND_PAYMENT": "Ordering & payment",
+      "SHIPPING_AND_DELIVERY": "Shipping & delivery",
+      "RETURNS_AND_CANCELLATION": "Returns & cancellation",
+      "PRODUCT_AND_SPECS": "Product details",
+      "AVAILABILITY_AND_STOCK": "Availability & stock",
+      "PRICING_AND_DISCOUNTS": "Pricing & discounts",
+      "BOOKING_AND_SCHEDULING": "Booking & scheduling",
+      "LOCATION_AND_HOURS": "Location & hours",
+      "POLICIES_AND_REQUIREMENTS": "Policies & requirements",
+      "SUPPORT_AND_TROUBLESHOOTING": "Support & troubleshooting",
+      "ABOUT_THE_BUSINESS": "About the business",
+      "OTHER": "Other"
     }
   }
 }

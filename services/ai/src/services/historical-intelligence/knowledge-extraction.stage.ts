@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import { prisma } from "@chatcenter/shared";
 import { structuredCall } from "./llm";
 import { clusterText, embedForCluster, findCluster, indexCluster } from "./candidate-index";
+import { judgeSpecificity, redactSpecifics } from "./specificity";
 import {
   recordEvent,
   loadConversationTranscript,
@@ -48,14 +49,64 @@ import {
  * have to hold every extraction from every customer at once.
  */
 
-const RawCandidateSchema = z.object({
+export const RawCandidateSchema = z.object({
   topic: z
     .string()
     .min(2)
     .max(60)
     .describe("A short reusable category, for example: Shipping, Returns & Exchanges, Sizing"),
+  /**
+   * A fixed category, so the output GROUPS.
+   *
+   * `topic` is free text and the model invents a fresh one per conversation -
+   * on the first real run that produced 57 topics for 58 items, which is a list
+   * rather than a knowledge base. The enum is the axis a person can actually
+   * navigate; `topic` stays as the specific label inside it.
+   */
+  category: z
+    .enum([
+      "ORDERING_AND_PAYMENT",
+      "SHIPPING_AND_DELIVERY",
+      "RETURNS_AND_CANCELLATION",
+      "PRODUCT_AND_SPECS",
+      "AVAILABILITY_AND_STOCK",
+      "PRICING_AND_DISCOUNTS",
+      "BOOKING_AND_SCHEDULING",
+      "LOCATION_AND_HOURS",
+      "POLICIES_AND_REQUIREMENTS",
+      "SUPPORT_AND_TROUBLESHOOTING",
+      "ABOUT_THE_BUSINESS",
+      "OTHER",
+    ])
+    .describe("The fixed category this belongs to. Use OTHER only when nothing else fits."),
   question: z.string().min(5).max(300).describe("The customer's question, generalized"),
   answer: z.string().min(5).max(800).describe("The business's answer, stated as reusable policy"),
+  /**
+   * What KIND of thing this is. The gate that replaced occurrence counting
+   * reads this first: an item the model itself calls ONE_OFF is dropped
+   * without further inspection. The other three values are not trusted on
+   * their own - they still face the deterministic specificity check.
+   */
+  scope: z
+    .enum(["POLICY", "PRODUCT", "PROCESS", "ONE_OFF"])
+    .describe("POLICY = a standing rule; PRODUCT = a durable product fact; PROCESS = how the business does something; ONE_OFF = true only for this customer or this order"),
+  /**
+   * The model's assertion that nothing customer-specific survives in the text.
+   * Read only as a veto: `false` drops the item, `true` proves nothing.
+   */
+  generalized: z
+    .boolean()
+    .describe("true only if the question and answer contain no order number, tracking code, person, address, phone or specific date"),
+  /**
+   * Why the answer is what it is - the reasoning a new agent would need to
+   * handle the NEXT variation of this question rather than only this exact
+   * phrasing. This is the difference between a FAQ and knowing the job.
+   */
+  reasoning: z
+    .string()
+    .min(5)
+    .max(400)
+    .describe("The thinking behind the answer: what the business weighs, what it checks, what it offers when the plain answer is no"),
   // Required, not optional: the quotes are the only thing the direction guard
   // below can verify against the transcript. An extraction that cannot point
   // at the exact Customer line it read the question from and the exact
@@ -65,11 +116,11 @@ const RawCandidateSchema = z.object({
   quotedAnswer: z.string().min(5).max(600).describe("Verbatim quote of the Business line the answer came from"),
 });
 
-const ExtractionSchema = z.object({
-  items: z.array(RawCandidateSchema).max(8),
+export const ExtractionSchema = z.object({
+  items: z.array(RawCandidateSchema).max(20),
 });
 
-const SYSTEM_PROMPT = `You read one customer's conversation history with a business and extract REUSABLE business knowledge: questions this business gets asked, and the factual answers it gave.
+export const SYSTEM_PROMPT = `You read one customer's conversation history with a business and extract REUSABLE business knowledge: questions this business gets asked, the factual answers it gave, and the thinking behind those answers.
 
 EXTRACT knowledge that would help answer a DIFFERENT customer in future:
 - store policies (returns, exchanges, warranty, cancellation)
@@ -101,9 +152,23 @@ HOW TO PHRASE IT
 - Keep the business's own numbers exactly. If they said 45 days, write 45 days.
 - quotedQuestion: the exact "Customer:" line the question came from, verbatim. quotedAnswer: the exact "Business:" line the answer came from, verbatim. Items whose quotes are not found in the transcript on the correct side are discarded.
 
-Return AT MOST 8 items, and prefer few strong ones over many weak ones. An empty list is a correct answer for a conversation that was only about one order.
+COVERAGE - READ THIS TWICE
+Extract EVERY reusable exchange in this conversation, not the most typical ones. A question asked by one customer once is worth exactly as much as one asked by two hundred, PROVIDED the answer would serve a different customer tomorrow. The rare questions are the valuable ones: the common ones are already known to everyone who works here, and the unusual ones are what a new agent gets wrong. Do not skip an exchange because it seems niche, because you already returned a similar topic, or because it feels too small. Breadth is the goal; the only floor is reusability.
 
-Reply with ONLY a JSON object: {"items":[{"topic":"...","question":"...","answer":"...","quotedQuestion":"...","quotedAnswer":"..."}]}`;
+REASONING - THE PART THAT IS NOT A FAQ
+For each item, also record HOW this business arrives at the answer. Not the answer again in other words: the consideration behind it. What do they check before answering? What do they offer when the plain answer is no? Where do they bend and where do they not? "We say no to returns after 14 days, but if it is unworn with tags we exchange anyway" is the reasoning; "returns within 14 days" is only the rule. A new employee who read the rules alone would answer the exact question and fail the next one.
+
+CATEGORY AND TOPIC
+- category: pick from the fixed list. It is what makes the output navigable, so choose the closest fit and reserve OTHER for genuine misfits.
+- topic: a short label INSIDE that category, in three words or fewer. Reuse the obvious wording rather than inventing a new phrasing for the same subject - "Kashrut certification" twice is right, "Which kashrut do you have" and "Is there Mehadrin certification" as two separate topics is wrong.
+
+SCOPE AND GENERALIZATION
+- scope: POLICY for a standing rule, PRODUCT for a durable product fact, PROCESS for how the business does something, ONE_OFF for anything true only of this customer or this order. Be honest with ONE_OFF - it is the correct label for most of a normal conversation.
+- generalized: true ONLY if neither the question nor the answer contains an order number, tracking code, person's name, address, phone number, email or a specific calendar date. If you had to remove such a detail to write the item, remove it and set true. If the item cannot survive without it, set ONE_OFF.
+
+Return up to 20 items. An empty list is the correct answer for a conversation that was only about one order.
+
+Reply with ONLY a JSON object: {"items":[{"topic":"...","category":"SHIPPING_AND_DELIVERY","question":"...","answer":"...","reasoning":"...","scope":"POLICY","generalized":true,"quotedQuestion":"...","quotedAnswer":"..."}]}`;
 
 const CONCURRENCY = 4;
 const BATCH_SIZE = 40;
@@ -131,6 +196,22 @@ export async function runKnowledgeExtractionStage(args: {
   // customers who talked most produce the densest knowledge, so an import cut
   // short still has the best material in it.
   const alreadyDone = await extractedConversationCount(importId);
+  // The denominator of the extraction half of the progress bar. Counted once
+  // per batch rather than once per import so a resumed or rerun import still
+  // reports against the right total.
+  //
+  // The filter is written out at both call sites rather than extracted to a
+  // shared constant: the tenant-isolation guard reads this file as source, and
+  // a `where` it cannot see through is a tenant filter no reviewer can check
+  // either. Duplication is the cheaper half of that trade.
+  const eligibleTotal = await prisma.historicalCustomer.count({
+    where: {
+      importId,
+      tenantId,
+      conversationId: { not: null },
+      messageCount: { gte: MIN_MESSAGES },
+    },
+  });
   const customers = await prisma.historicalCustomer.findMany({
     where: {
       importId,
@@ -150,6 +231,10 @@ export async function runKnowledgeExtractionStage(args: {
   });
 
   if (customers.length === 0) {
+    await prisma.historicalImport.update({
+      where: { id: importId },
+      data: { conversationsEligible: eligibleTotal, conversationsExtracted: eligibleTotal },
+    });
     await recordEvent(importId, "KNOWLEDGE_EXTRACTION", "SUCCESS", "nothing left to extract", {
       conversations: 0,
     });
@@ -162,6 +247,8 @@ export async function runKnowledgeExtractionStage(args: {
   let conflicts = 0;
   let failures = 0;
   let rejectedByDirection = 0;
+  let rejectedBySpecificity = 0;
+  let redeemedByRedaction = 0;
 
   await mapLimited(customers, CONCURRENCY, async (customer) => {
     const transcript = await loadConversationTranscript({
@@ -178,7 +265,7 @@ export async function runKnowledgeExtractionStage(args: {
       system: SYSTEM_PROMPT + languageDirective(language),
       user: `Conversation history between a business and one of its customers:\n\n${rendered}`,
       feature: "historical_knowledge_extraction",
-      maxTokens: 1600,
+      maxTokens: 4000,
     });
 
     if (!result) {
@@ -189,7 +276,7 @@ export async function runKnowledgeExtractionStage(args: {
     const occurredAt = transcript[transcript.length - 1]?.at ?? null;
     const customerKey = customer.normalizedPhone || customer.externalId;
 
-    for (const item of result.items) {
+    for (let item of result.items) {
       // The guard the prompt cannot be trusted to be: the quoted answer must
       // actually be something the BUSINESS sent, and the quoted question
       // something the CUSTOMER sent. The failure mode is real, not
@@ -206,6 +293,36 @@ export async function runKnowledgeExtractionStage(args: {
         rejectedByDirection += 1;
         continue;
       }
+
+      // ── The reusability gate ──
+      //
+      // This is what replaced "did it happen twice". Frequency said nothing
+      // about whether an answer is true for the next customer; a tracking
+      // number in the text says it plainly. An item that fails only because of
+      // stray specifics gets one chance: strip them and re-judge, because
+      // "your order … ships Sunday, we always ship within two business days"
+      // is a real policy wearing one customer's order id.
+      let gated = item;
+      let verdict = judgeSpecificity(item);
+      if (!verdict.ok && !verdict.reasons.includes("one-off-scope")) {
+        const redacted = {
+          ...item,
+          question: redactSpecifics(item.question),
+          answer: redactSpecifics(item.answer),
+        };
+        const second = judgeSpecificity(redacted);
+        if (second.ok) {
+          gated = redacted;
+          verdict = second;
+          redeemedByRedaction += 1;
+        }
+      }
+      if (!verdict.ok) {
+        rejectedBySpecificity += 1;
+        continue;
+      }
+      item = gated;
+
       extracted += 1;
       const outcome = await mergeIntoCluster({
         tenantId,
@@ -224,6 +341,14 @@ export async function runKnowledgeExtractionStage(args: {
     }
   });
 
+  await prisma.historicalImport.update({
+    where: { id: importId },
+    data: {
+      conversationsEligible: eligibleTotal,
+      conversationsExtracted: Math.min(eligibleTotal, alreadyDone + customers.length),
+    },
+  });
+
   await recordEvent(
     importId,
     "KNOWLEDGE_EXTRACTION",
@@ -237,6 +362,8 @@ export async function runKnowledgeExtractionStage(args: {
       newConflicts: conflicts,
       failures,
       rejectedByDirection,
+      rejectedBySpecificity,
+      redeemedByRedaction,
     },
     Date.now() - startedAt,
   );
@@ -244,7 +371,7 @@ export async function runKnowledgeExtractionStage(args: {
   return {
     ok: true,
     done: customers.length < BATCH_SIZE,
-    detail: { extracted, created, merged, conflicts, failures, rejectedByDirection },
+    detail: { extracted, created, merged, conflicts, failures, rejectedByDirection, rejectedBySpecificity, redeemedByRedaction },
   };
 }
 
@@ -312,8 +439,11 @@ async function mergeIntoCluster(args: {
           tenantId,
           importId,
           topic: item.topic.trim(),
+          category: item.category,
+          scope: item.scope,
           question: item.question.trim(),
           answer: item.answer.trim(),
+          reasoning: item.reasoning.trim(),
           clusterKey,
           occurrenceCount: 1,
           customerCount: 1,
@@ -384,6 +514,7 @@ async function mergeIntoExisting(args: {
       firstSeenAt: true,
       lastSeenAt: true,
       status: true,
+      reasoning: true,
     },
   });
   if (!candidate) return "skipped";
@@ -430,6 +561,12 @@ async function mergeIntoExisting(args: {
       answer: dominant?.answer ?? item.answer.trim(),
       conflict,
       variants: variants as unknown as object,
+      // Fill the reasoning only when the candidate has none. The first
+      // extraction that produced this cluster explained it; a later one that
+      // merged in has no better claim, and overwriting on every merge would
+      // mean the stored reasoning is simply whichever conversation happened to
+      // be processed last.
+      ...(candidate.reasoning ? {} : { reasoning: item.reasoning.trim() }),
       firstSeenAt:
         candidate.firstSeenAt && occurredAt && occurredAt < candidate.firstSeenAt
           ? occurredAt

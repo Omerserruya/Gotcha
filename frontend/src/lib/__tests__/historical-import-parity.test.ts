@@ -20,6 +20,7 @@ import {
   historicalImportStage,
   historicalImportPercent,
   historicalAnalysisCounts,
+  historicalAnalysisPercent,
   hasHistoricalResults,
   isHistoricalImportTerminal,
   HISTORICAL_SOURCE_WINDOW_DAYS,
@@ -43,6 +44,87 @@ const ALL_STATUSES: HistoricalImportStatus[] = [
 ];
 
 describe("the client mirror matches the shared original", () => {
+  it("uses the same analysis progress bands as the shared helper", async () => {
+    const { readFileSync } = await import("fs");
+    const shared = readFileSync("../packages/shared/src/lib/historical-import.ts", "utf8");
+
+    // The bands decide what percentage the customer sees. If the two copies
+    // disagree, the bar jumps whenever the API and the client disagree about
+    // which stage it is - so compare the numbers, not the prose around them.
+    const block = shared.match(/const ANALYSIS_BANDS[\s\S]*?\n\];/);
+    expect(block, "ANALYSIS_BANDS not found in the shared helper").toBeTruthy();
+    // exec-loop rather than [...matchAll()]: the frontend tsconfig targets a
+    // level where spreading an iterator needs --downlevelIteration, and the
+    // whole point of this file is that it compiles under the FRONTEND config.
+    const bandRe = /status: "(\w+)", from: (\d+), to: (\d+)/g;
+    const sharedBands: string[] = [];
+    let m: RegExpExecArray | null;
+    while ((m = bandRe.exec(block![0])) !== null) {
+      sharedBands.push(`${m[1]}:${m[2]}-${m[3]}`);
+    }
+    expect(sharedBands.length).toBeGreaterThan(0);
+
+    for (const entry of sharedBands) {
+      const [status, range] = entry.split(":");
+      const [from, to] = range.split("-").map(Number);
+      // Floor of the band: nothing measured yet inside this stage.
+      expect(
+        historicalAnalysisPercent({
+          status: status as HistoricalImportStatus,
+          customersAnalyzed: 0,
+          customersTotal: 0,
+          conversationsExtracted: 0,
+          conversationsEligible: 0,
+        }),
+        `${status} floor`,
+      ).toBe(from);
+      // Ceiling: the stage's measured work is complete.
+      expect(
+        historicalAnalysisPercent({
+          status: status as HistoricalImportStatus,
+          customersAnalyzed: 10,
+          customersTotal: 10,
+          conversationsExtracted: 10,
+          conversationsEligible: 10,
+        }),
+        `${status} ceiling`,
+      ).toBe(status === "CUSTOMER_LEARNING" || status === "KNOWLEDGE_EXTRACTION" ? to : from);
+    }
+  });
+
+  it("reports no analysis percentage outside the analyzing stage", () => {
+    for (const status of ALL_STATUSES) {
+      const percent = historicalAnalysisPercent({
+        status,
+        customersAnalyzed: 5,
+        customersTotal: 10,
+        conversationsExtracted: 5,
+        conversationsEligible: 10,
+      });
+      if (historicalImportStage(status) === "analyzing") {
+        expect(percent, status).not.toBeNull();
+      } else {
+        expect(percent, status).toBeNull();
+      }
+    }
+  });
+
+  it("moves the bar only as measured work completes", () => {
+    const at = (customersAnalyzed: number) =>
+      historicalAnalysisPercent({
+        status: "CUSTOMER_LEARNING",
+        customersAnalyzed,
+        customersTotal: 100,
+        conversationsExtracted: 0,
+        conversationsEligible: 0,
+      });
+    expect(at(0)).toBe(15);
+    expect(at(50)).toBe(33);
+    expect(at(100)).toBe(50);
+    // A count beyond the total cannot push the bar past its band.
+    expect(at(500)).toBe(50);
+  });
+
   it("declares every status the Prisma enum declares", async () => {
     const { readFileSync } = await import("fs");
     const schema = readFileSync("../packages/shared/prisma/schema.prisma", "utf8");

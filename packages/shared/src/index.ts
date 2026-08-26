@@ -23,6 +23,7 @@ export {
   isHistoricalImportTerminal,
   hasHistoricalResults,
   historicalImportPercent,
+  historicalAnalysisPercent,
   historicalAnalysisCounts,
   isForwardTransition,
   HISTORICAL_SOURCE_WINDOW_MS,

@@ -11,6 +11,7 @@ import { runCustomerLearningStage } from "./customer-learning.stage";
 import { runKnowledgeExtractionStage } from "./knowledge-extraction.stage";
 import { runKnowledgeClusteringStage } from "./knowledge-clustering.stage";
 import { runKnowledgeDedupeStage } from "./knowledge-dedupe.stage";
+import { runBrandVoiceStage } from "./brand-voice.stage";
 import { runAnalyticsStage } from "./analytics.stage";
 import { runFinalizeStage } from "./finalize.stage";
 import { recordEvent } from "./stage-utils";
@@ -41,7 +42,8 @@ const NEXT_STAGE: Record<HistoricalIntelligenceJob["stage"], HistoricalIntellige
   "customer-learning": "knowledge-extraction",
   "knowledge-extraction": "knowledge-clustering",
   "knowledge-clustering": "knowledge-dedupe",
-  "knowledge-dedupe": "analytics",
+  "knowledge-dedupe": "brand-voice",
+  "brand-voice": "analytics",
   analytics: "finalize",
   finalize: null,
 };
@@ -52,6 +54,10 @@ const STAGE_STATUS: Record<HistoricalIntelligenceJob["stage"], string> = {
   "knowledge-extraction": "KNOWLEDGE_EXTRACTION",
   "knowledge-clustering": "KNOWLEDGE_CLUSTERING",
   "knowledge-dedupe": "KNOWLEDGE_CLUSTERING",
+  // No status of its own: the stage is short and adding one would mean a new
+  // enum value, a new progress band and a new label in two languages for
+  // something the customer sees for under a minute.
+  "brand-voice": "ANALYTICS",
   analytics: "ANALYTICS",
   finalize: "REVIEW_READY",
 };
@@ -119,6 +125,13 @@ async function runStage(job: Job<HistoricalIntelligenceJob>): Promise<void> {
       // pruning rather than during extraction.
       case "knowledge-dedupe": {
         await runKnowledgeDedupeStage({ tenantId, importId });
+        await enqueue(tenantId, importId, "brand-voice");
+        return;
+      }
+      // How the business writes, counted from its own outbound messages and
+      // rendered into the system prompt every agent runs with.
+      case "brand-voice": {
+        await runBrandVoiceStage({ tenantId, importId });
         await enqueue(tenantId, importId, "analytics");
         return;
       }
@@ -186,6 +199,8 @@ function failureCopy(stage: HistoricalIntelligenceJob["stage"]): string {
     case "knowledge-clustering":
     case "knowledge-dedupe":
       return "We imported your conversations but could not finish looking for reusable knowledge in them.";
+    case "brand-voice":
+      return "We imported and analyzed your conversations but could not finish learning how you write.";
     case "analytics":
       return "We imported and analyzed your conversations but could not finish the summary.";
     case "finalize":
@@ -252,6 +267,11 @@ export async function rerunIntelligence(args: {
           knowledgeConflictCount: 0,
           topTopics: Prisma.DbNull,
           summary: Prisma.DbNull,
+          // Derived like everything else here, so a rerun regenerates it. The
+          // tenant's `observedVoice` is deliberately NOT cleared: the rerun's
+          // brand-voice stage overwrites it, and blanking it first would leave
+          // every agent with no voice for as long as the rerun takes.
+          brandVoice: Prisma.DbNull,
           intelligenceStartedAt: new Date(),
           reviewReadyAt: null,
           completedAt: null,

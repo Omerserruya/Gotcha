@@ -59,10 +59,7 @@ export function hasHistoricalResults(status: HistoricalImportStatus): boolean {
   return status === "REVIEW_READY" || status === "COMPLETED";
 }
 
-/**
- * The one number the progress bar may show, or null when no honest number
- * exists. Null during analysis is deliberate: see the shared original.
- */
+/** How much of the history the source has sent. Mirror of the shared original. */
 export function historicalImportPercent(input: {
   status: HistoricalImportStatus;
   sourceProgress: number;
@@ -73,6 +70,42 @@ export function historicalImportPercent(input: {
   }
   if (stage === "ready") return 100;
   return null;
+}
+
+/**
+ * How far analysis has got, 0-100. Mirror of the shared original - the bands
+ * and the measured fractions must match it exactly, and the parity test says so.
+ */
+const ANALYSIS_BANDS: Array<{ status: HistoricalImportStatus; from: number; to: number }> = [
+  { status: "SOURCE_COMPLETE", from: 0, to: 3 },
+  { status: "INGESTING", from: 3, to: 8 },
+  { status: "IDENTITY_RESOLUTION", from: 8, to: 15 },
+  { status: "CUSTOMER_LEARNING", from: 15, to: 50 },
+  { status: "KNOWLEDGE_EXTRACTION", from: 50, to: 85 },
+  { status: "KNOWLEDGE_CLUSTERING", from: 85, to: 95 },
+  { status: "ANALYTICS", from: 95, to: 99 },
+];
+
+export function historicalAnalysisPercent(input: {
+  status: HistoricalImportStatus;
+  customersAnalyzed: number;
+  customersTotal: number;
+  conversationsExtracted: number;
+  conversationsEligible: number;
+}): number | null {
+  if (historicalImportStage(input.status) !== "analyzing") return null;
+  const band = ANALYSIS_BANDS.find((b) => b.status === input.status);
+  if (!band) return null;
+
+  let fraction = 0;
+  if (input.status === "CUSTOMER_LEARNING" && input.customersTotal > 0) {
+    fraction = input.customersAnalyzed / input.customersTotal;
+  } else if (input.status === "KNOWLEDGE_EXTRACTION" && input.conversationsEligible > 0) {
+    fraction = input.conversationsExtracted / input.conversationsEligible;
+  }
+  fraction = Math.max(0, Math.min(1, fraction));
+
+  return Math.round(band.from + (band.to - band.from) * fraction);
 }
 
 export function historicalAnalysisCounts(input: {
@@ -98,6 +131,8 @@ export interface HistoricalImportView {
   status: HistoricalImportStatus;
   stage: HistoricalImportStage;
   percent: number | null;
+  /** Analysis progress, 0-100. Null unless analysis is running. */
+  analysisPercent: number | null;
   analysisCounts: { analyzed: number; total: number } | null;
   hasResults: boolean;
   importedMessages: number;

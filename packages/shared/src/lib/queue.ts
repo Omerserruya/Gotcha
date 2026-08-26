@@ -232,6 +232,10 @@ export interface HistoricalIntelligenceJob {
     // Merges candidates that are the same question phrased differently.
     // Embeddings cannot do this for Hebrew paraphrase at any threshold.
     | "knowledge-dedupe"
+    // Counts how the business actually writes and turns it into prompt guidance.
+    // Runs after the knowledge work because it reads the same conversations and
+    // a failure here must not cost the expensive stages a retry.
+    | "brand-voice"
     | "analytics"
     | "finalize";
   /** Set by the customer-learning stage to process one batch of customers. */

@@ -2307,7 +2307,9 @@
       "howItWorks": "איך זה עובד",
       "pricing": "מחירים",
       "login": "התחברות",
-      "getStarted": "הירשמו לרשימת ההמתנה"
+      "getStarted": "הירשמו לרשימת ההמתנה",
+      "home": "דף הבית",
+      "menu": "פתיחת תפריט"
     },
     "hero": {
       "badge": "AI שמחזק נציגים - לא מחליף אותם",
@@ -2657,7 +2659,7 @@
       "phone": {
         "label": "מספר הטלפון שלך?",
         "placeholder": "050-000-0000",
-        "micro": "אופציונלי. לתמיכה בהטמעה דרך WhatsApp."
+        "micro": "כדי שנוכל להשיג אותך מהר בוואטסאפ או בטלפון."
       },
       "role": {
         "label": "מה התפקיד שלך?",
@@ -2715,7 +2717,8 @@
       "required": "שדה חובה.",
       "invalidEmail": "אנא הזן כתובת אימייל תקינה.",
       "alreadyOnWaitlist": "אתה כבר ברשימת ההמתנה! בדוק את תיבת הדואר.",
-      "generic": "משהו השתבש. נסה שנית."
+      "generic": "משהו השתבש. נסה שנית.",
+      "invalidPhone": "אנא הזינו מספר טלפון תקין."
     },
     "thankYou": {
       "badge": "חבר גישה מוקדמת",
@@ -5456,8 +5459,8 @@
       "body": "הוואטסאפ שלכם מחובר ועובד. אנחנו מביאים את השיחות הקודמות ברקע."
     },
     "analyzing": {
-      "title": "מנתחים את השיחות הקודמות",
-      "body": "אנחנו לומדים את הלקוחות שלכם ומחפשים ידע עסקי שימושי בתשובות שכבר נתתם.",
+      "title": "בונים את מאגר הידע",
+      "body": "אנחנו קוראים את התשובות שכבר נתתם והופכים אותן לידע שה-AI שלכם יוכל להשתמש בו.",
       "customers": "לקוחות שנותחו: {analyzed} מתוך {total}"
     },
     "ready": {
@@ -5518,7 +5521,22 @@
       "conflictRequired": "בחרו או כתבו את התשובה הנכונה לפני האישור.",
       "approved": "נוסף למאגר הידע שלכם.",
       "rejected": "נדחה.",
-      "tab": "התגלה"
+      "tab": "התגלה",
+      "reasoningLabel": "איך ניגשים לזה"
+    },
+    "category": {
+      "ORDERING_AND_PAYMENT": "הזמנות ותשלום",
+      "SHIPPING_AND_DELIVERY": "משלוחים ואספקה",
+      "RETURNS_AND_CANCELLATION": "החזרות וביטולים",
+      "PRODUCT_AND_SPECS": "פרטי מוצר",
+      "AVAILABILITY_AND_STOCK": "זמינות ומלאי",
+      "PRICING_AND_DISCOUNTS": "מחירים והנחות",
+      "BOOKING_AND_SCHEDULING": "הזמנת תור ותיאום",
+      "LOCATION_AND_HOURS": "מיקום ושעות",
+      "POLICIES_AND_REQUIREMENTS": "מדיניות ודרישות",
+      "SUPPORT_AND_TROUBLESHOOTING": "תמיכה ותקלות",
+      "ABOUT_THE_BUSINESS": "על העסק",
+      "OTHER": "אחר"
     }
   }
 }

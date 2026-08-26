@@ -31,11 +31,28 @@ import { recordEvent, mapLimited, type StageResult } from "./stage-utils";
 const CONCURRENCY = 3;
 
 /**
- * A single mention by a single customer is an anecdote. Two customers, or one
- * customer twice, is the floor for showing anything - below that the queue
- * fills with one-offs and the real knowledge is buried.
+ * There is no occurrence floor, and that is the point.
+ *
+ * This stage used to delete every candidate seen fewer than twice. The
+ * reasoning was that one-offs bury the real knowledge in the review queue, and
+ * the queue-noise problem was real - but the cure removed the wrong half. On
+ * the largest import to date, 37,856 messages produced 21 review items, and 23
+ * genuine singletons were deleted to get there: "do you deliver to Eilat",
+ * "can I collect on a Saturday", each asked once, each true for everyone who
+ * asks next.
+ *
+ * Frequency answers "how common is this", and the question that decides whether
+ * knowledge is worth keeping is "would this serve a different customer". That
+ * is a property of the text, and it is now enforced at extraction time by
+ * `judgeSpecificity` - deterministically, with a stated reason, on every item.
+ * What reaches this stage has already been found reusable, so deleting it for
+ * being rare would discard exactly the knowledge nobody has written down.
+ *
+ * Frequency still matters, but as a SORT rather than a FILTER: `confidence`
+ * below scores how consistently an answer was observed, so the review queue
+ * leads with the well-evidenced items and the singletons sit beneath them
+ * instead of being destroyed.
  */
-const MIN_OCCURRENCES = 2;
 
 export async function runKnowledgeClusteringStage(args: {
   tenantId: string;
@@ -58,23 +75,10 @@ export async function runKnowledgeClusteringStage(args: {
   });
 
   let alreadyCovered = 0;
-  let pruned = 0;
   let conflicts = 0;
   let kept = 0;
 
   await mapLimited(candidates, CONCURRENCY, async (candidate) => {
-    // ── Too thin to be worth asking about ──
-    if (candidate.occurrenceCount < MIN_OCCURRENCES) {
-      // Deleted rather than left PENDING at low confidence. A queue is only
-      // useful if everything in it deserves to be there; padding it with
-      // one-offs is how a reviewer learns to skim and then to stop opening it.
-      await prisma.knowledgeCandidate.deleteMany({
-        where: { id: candidate.id, tenantId, status: "PENDING" },
-      });
-      pruned += 1;
-      return;
-    }
-
     // ── Does the knowledge base already say this? ──
     const existing = await findExistingKnowledge({
       tenantId,
@@ -123,7 +127,6 @@ export async function runKnowledgeClusteringStage(args: {
   const detail = {
     examined: candidates.length,
     kept,
-    pruned,
     alreadyCovered,
     conflicts,
     finalCount,

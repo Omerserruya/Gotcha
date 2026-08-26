@@ -8,6 +8,7 @@ import {
   withHistoricalRecords,
   historicalImportStage,
   historicalImportPercent,
+  historicalAnalysisPercent,
   historicalAnalysisCounts,
   hasHistoricalResults,
   HISTORICAL_SOURCE_WINDOW_DAYS,
@@ -140,7 +141,15 @@ router.get("/:id/candidates", async (req: Request, res: Response) => {
         importId: req.params.id as string,
         status: status as any,
       },
-      orderBy: [{ conflict: "desc" }, { confidence: "desc" }, { occurrenceCount: "desc" }],
+      // Conflicts first - they are the only items where doing nothing is the
+      // wrong answer - then grouped by category so a reviewer works through one
+      // subject at a time instead of context-switching down a flat list.
+      orderBy: [
+        { conflict: "desc" },
+        { category: "asc" },
+        { confidence: "desc" },
+        { occurrenceCount: "desc" },
+      ],
       take: 200,
       include: {
         evidence: {
@@ -162,9 +171,16 @@ router.get("/:id/candidates", async (req: Request, res: Response) => {
       candidates: candidates.map((c) => ({
         id: c.id,
         topic: c.topic,
+        // The fixed group. `topic` alone gave 57 groups for 58 items on a real
+        // import, which is a list rather than something a person can review.
+        category: c.category,
+        scope: c.scope,
         question: c.question,
         answer: c.editedAnswer ?? c.answer,
         originalAnswer: c.answer,
+        // Why the answer is what it is. The rule answers the exact question;
+        // this is what lets an agent handle the next variation of it.
+        reasoning: c.reasoning,
         status: c.status,
         confidence: c.confidence,
         // The label the UI shows. "High" here means only that we observed this
@@ -318,7 +334,7 @@ router.post("/candidates/:candidateId/approve", writeGuard, async (req: Request,
         knowledgeBaseId: target.id,
         tenantId,
         title: questionOverride.slice(0, 200),
-        content: `${questionOverride}\n\n${finalAnswer}`,
+        content: knowledgeDocumentBody(questionOverride, finalAnswer, candidate.reasoning),
         sourceType: "historical_conversations",
         status: "pending",
         // Provenance travels with the document. Months later, "where did this
@@ -328,6 +344,7 @@ router.post("/candidates/:candidateId/approve", writeGuard, async (req: Request,
           origin: "historical_import",
           sourceType: "historical_conversations",
           topic: candidate.topic,
+          category: candidate.category,
         },
       },
     });
@@ -656,6 +673,24 @@ router.get("/conversations/:conversationId/messages", async (req: Request, res: 
  * the backend, the frontend mirror and the tests all agree on what
  * "analyzing" means and when a percentage is honest.
  */
+/**
+ * The KB document body for an approved suggestion.
+ *
+ * The reasoning is part of the document, not metadata, because it has to reach
+ * the model the same way the answer does - through retrieval. A document that
+ * carries only the rule answers the question it was mined from and fails the
+ * next variation of it, which is the whole difference between an FAQ and
+ * knowing the job. Labelled so the model reads it as background rather than as
+ * something to recite back to the customer.
+ */
+function knowledgeDocumentBody(question: string, answer: string, reasoning: string | null): string {
+  const parts = [question.trim(), "", answer.trim()];
+  if (reasoning && reasoning.trim()) {
+    parts.push("", `How we approach this: ${reasoning.trim()}`);
+  }
+  return parts.join("\n");
+}
+
 function toStatusView(row: {
   id: string;
   source: string;
@@ -664,6 +699,8 @@ function toStatusView(row: {
   sourceProgress: number;
   customersAnalyzed: number;
   customersTotal: number;
+  conversationsExtracted: number;
+  conversationsEligible: number;
   importedMessages: number;
   importedCustomers: number;
   knowledgeCandidateCount: number;
@@ -683,6 +720,13 @@ function toStatusView(row: {
     status,
     stage: historicalImportStage(status),
     percent: historicalImportPercent({ status, sourceProgress: row.sourceProgress }),
+    analysisPercent: historicalAnalysisPercent({
+      status,
+      customersAnalyzed: row.customersAnalyzed,
+      customersTotal: row.customersTotal,
+      conversationsExtracted: row.conversationsExtracted,
+      conversationsEligible: row.conversationsEligible,
+    }),
     analysisCounts: historicalAnalysisCounts({
       status,
       customersAnalyzed: row.customersAnalyzed,
@@ -774,7 +818,7 @@ async function approveOne(
       knowledgeBaseId: target.id,
       tenantId,
       title: candidate.question.slice(0, 200),
-      content: `${candidate.question}\n\n${candidate.answer}`,
+      content: knowledgeDocumentBody(candidate.question, candidate.answer, candidate.reasoning),
       sourceType: "historical_conversations",
       status: "pending",
       metadata: {

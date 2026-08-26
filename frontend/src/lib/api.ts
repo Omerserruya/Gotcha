@@ -4014,7 +4014,12 @@ export interface KnowledgeCandidateVariant {
 export interface KnowledgeCandidateView {
   id: string;
   topic: string;
+  /** Fixed group. Null on candidates mined before categories existed. */
+  category: string | null;
+  scope: string | null;
   question: string;
+  /** How the business reaches this answer. Null on older candidates. */
+  reasoning: string | null;
   answer: string;
   originalAnswer: string;
   status: "PENDING" | "APPROVED" | "REJECTED" | "SUPERSEDED";

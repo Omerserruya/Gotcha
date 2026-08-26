@@ -1525,6 +1525,13 @@ model BusinessProfile {
   // "event_hall"). Applying a pack clones its scoped FieldDefinitions to the
   // tenant. NULL = generic / not chosen.
   packSlug                    String?          @map("pack_slug")
+  /// How this business actually writes, learned from its own outbound messages
+  /// rather than from the website. Rendered into every agent's system prompt by
+  /// the company-context block, so a correct answer also sounds like them.
+  /// Written by the history import's brand-voice stage; a human edit here is
+  /// never overwritten by a later import (see `observedVoiceEditedAt`).
+  observedVoice               String?          @map("observed_voice")
+  observedVoiceEditedAt       DateTime?        @map("observed_voice_edited_at")
   createdAt                   DateTime         @default(now()) @map("created_at")
   updatedAt                   DateTime         @updatedAt @map("updated_at")
 
@@ -6641,10 +6648,18 @@ model HistoricalImport {
   /// Highest phase seen (0 = day 0-1, 1 = day 1-90, 2 = day 90-180).
   sourcePhase    Int? @map("source_phase")
   chunksReceived Int  @default(0) @map("chunks_received")
-  /// Analysis has no percentage we can measure honestly, so the UI counts
-  /// real work instead: "842 / 1,247 customers". These are those numbers.
+  /// The two measured fractions the analysis progress bar is built from.
+  /// Customer learning walks customers; knowledge extraction walks
+  /// conversations. Both are counts of rows the pipeline actually finished, so
+  /// the percentage derived from them moves only when work completes.
   customersTotal    Int @default(0) @map("customers_total")
   customersAnalyzed Int @default(0) @map("customers_analyzed")
+  /// Conversations with enough messages to be worth mining, and how many of
+  /// them extraction has been through. Stored rather than counted per request:
+  /// the status endpoint is polled every few seconds while an import runs and
+  /// has to stay a single indexed read.
+  conversationsEligible  Int @default(0) @map("conversations_eligible")
+  conversationsExtracted Int @default(0) @map("conversations_extracted")
 
   // ── Results (all read from rows that exist; nothing here is estimated) ──
   importedMessages        Int @default(0) @map("imported_messages")
@@ -6660,6 +6675,10 @@ model HistoricalImport {
   /// The persisted completion summary, read by the channel card, the results
   /// page and the email so all three can never disagree.
   summary                 Json?
+  /// The counted brand-language evidence: emoji palette, openers, closers,
+  /// signature phrases, rhythm. Stored as measured rather than as prose so the
+  /// guidance derived from it can always be traced back to numbers.
+  brandVoice              Json? @map("brand_voice")
 
   // ── Lifecycle timestamps ──
   startedAt                     DateTime  @default(now()) @map("started_at")
@@ -6918,6 +6937,20 @@ model KnowledgeCandidate {
   /// The owner's edit, when they changed it before approving. Kept separate
   /// from `answer` so the original observation is still auditable.
   editedAnswer String? @map("edited_answer")
+
+  /// HOW the business reaches this answer - what it checks, what it offers when
+  /// the plain answer is no. The rule alone ("returns within 14 days") answers
+  /// the exact question and fails the next one; this is what a new agent needs
+  /// to handle the variation. Nullable: candidates mined before this existed
+  /// have none, and an empty reasoning is not a reason to hide a good answer.
+  reasoning String?
+  /// A fixed category, so the review queue and the KB group instead of listing.
+  /// `topic` stays the specific label inside it. Free-text topics alone gave 57
+  /// groups for 58 items on a real import.
+  category String?
+  /// POLICY | PRODUCT | PROCESS. ONE_OFF never reaches this table - it is
+  /// dropped at extraction by the reusability gate.
+  scope    String?
 
   status KnowledgeCandidateStatus @default(PENDING)
 
