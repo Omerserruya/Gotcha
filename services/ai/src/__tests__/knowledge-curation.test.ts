@@ -48,8 +48,19 @@ describe("the three faults it exists to fix are named in the prompt", () => {
 
   it("keeps availability-dependent answers but marks them", () => {
     expect(SRC).toContain("live_data");
-    expect(SRC).toMatch(/Do NOT drop these/);
     expect(SRC).toMatch(/must be confirmed/);
+  });
+
+  it("does not let live_data become a bin for one customer's appointment", () => {
+    // Measured: "we will meet today around 19:00" and "agreed on Wednesday at
+    // 19:00" were kept as live_data. They are records of one conversation, not
+    // answers to a recurring question.
+    expect(SRC).toMatch(/NOT a place to keep one customer's appointment/);
+    // The rule has to be operational, not just a prohibition.
+    expect(SRC).toMatch(/after you remove the specific date, time and person/);
+    expect(SRC).toMatch(/If nothing is left, the verdict is "drop"/);
+    // And both conditions must be required, not either.
+    expect(SRC).toMatch(/ONLY when BOTH are true/);
   });
 
   it("drops one customer's logistics and personal contact details", () => {
