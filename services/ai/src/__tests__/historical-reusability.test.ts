@@ -208,3 +208,58 @@ describe("parseItems", () => {
     expect(parseItems([null, "nope", 42, good()])).toHaveLength(1);
   });
 });
+
+describe("placeholders are not answers", () => {
+  it("rejects an answer that is only the platform's media marker", () => {
+    // Measured on the first live run: "how much is a child's meal?" was stored
+    // with the answer "[media_placeholder message]". A menu really was sent,
+    // but that is not something a customer can be told.
+    const v = judgeSpecificity({
+      question: "כמה עולה מנת ילד?",
+      answer: "[media_placeholder message]",
+      scope: "PRICING",
+      generalized: true,
+    });
+    expect(v.ok).toBe(false);
+    expect(v.reasons).toContain("placeholder-not-an-answer");
+  });
+
+  it("still accepts a question that merely mentions an image was sent", () => {
+    const v = judgeSpecificity({
+      question: "אפשר לקבל את התפריט?",
+      answer: "כן, אנחנו שולחים את התפריט המלא בוואטסאפ",
+      scope: "PROCESS",
+      generalized: true,
+    });
+    expect(v.ok).toBe(true);
+  });
+});
+
+describe("openers and closers carry a quotable example", () => {
+  const at = (d: number) => new Date(2026, 0, d);
+  const msg = (conversationId: string, body: string, day: number) => ({ conversationId, body, at: at(day) });
+
+  it("keeps the full message behind the grouping head", () => {
+    // The head groups; the example is what a model can quote. Without this the
+    // brand voice shipped a closing cut off mid-clause into every prompt.
+    const long = "חשוב לנו לציין שאנחנו סוגרים תאריכים רק אחרי חתימה על חוזה";
+    const messages = [
+      msg("c1", "היי", 1), msg("c1", long, 2),
+      msg("c2", "היי", 1), msg("c2", "חשוב לנו לציין שאנחנו כאן", 2),
+    ];
+    const stats = analyzeBrandVoice(messages, 10);
+    const closer = stats.closers.find((c) => c.value.startsWith("חשוב לנו לציין"));
+    expect(closer?.count).toBe(2);
+    // The longest full message wins - a complete sentence characterises the
+    // habit better than whichever thread was processed first.
+    expect(closer?.example).toBe(long);
+  });
+
+  it("omits the example when the head is already the whole message", () => {
+    const stats = analyzeBrandVoice([
+      msg("c1", "היי", 1), msg("c1", "בשמחה", 2),
+      msg("c2", "היי", 1), msg("c2", "בשמחה", 2),
+    ], 10);
+    expect(stats.closers.find((c) => c.value === "בשמחה")?.example).toBeUndefined();
+  });
+});

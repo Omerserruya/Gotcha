@@ -73,6 +73,17 @@ export interface Counted {
   count: number;
   /** Share of the population this was counted over, 0-1. */
   share: number;
+  /**
+   * A full message this entry was counted from, for openers and closers.
+   *
+   * `value` is a four-word head, which is the right unit for COUNTING - it
+   * groups "היי 😊 תודה שפניתם" with the same greeting plus another clause.
+   * It is the wrong unit to show a model that has to write an example, which
+   * on the first live run produced the closing "חשוב לנו לציין שאנחנו": a
+   * sentence cut off mid-clause, shipped into every system prompt. The head
+   * groups; this is what gets quoted.
+   */
+  example?: string;
 }
 
 export interface BrandVoiceStats {
@@ -214,13 +225,24 @@ export function analyzeBrandVoice(messages: VoiceMessage[], topN = 12): BrandVoi
   }
   const openerCounts = new Map<string, number>();
   const closerCounts = new Map<string, number>();
+  // Head -> the longest full message seen under it. Longest rather than first
+  // because a complete sentence characterises the habit better than whichever
+  // conversation happened to be processed first.
+  const openerExample = new Map<string, string>();
+  const closerExample = new Map<string, string>();
+  const remember = (m: Map<string, string>, head: string, body: string) => {
+    const full = body.replace(/\s+/g, " ").trim().slice(0, 240);
+    const prev = m.get(head);
+    if (!prev || full.length > prev.length) m.set(head, full);
+  };
   for (const [, msgs] of byConversation) {
     msgs.sort((a, b) => a.at.getTime() - b.at.getTime());
     const first = normalizeHead(msgs[0].body);
-    if (first) bump(openerCounts, first);
+    if (first) { bump(openerCounts, first); remember(openerExample, first, msgs[0].body); }
     if (msgs.length > 1) {
-      const last = normalizeHead(msgs[msgs.length - 1].body);
-      if (last) bump(closerCounts, last);
+      const lastBody = msgs[msgs.length - 1].body;
+      const last = normalizeHead(lastBody);
+      if (last) { bump(closerCounts, last); remember(closerExample, last, lastBody); }
     }
   }
 
@@ -235,8 +257,8 @@ export function analyzeBrandVoice(messages: VoiceMessage[], topN = 12): BrandVoi
     emojiPerEmojiMessage: messagesWithEmoji ? round(emojiTotal / messagesWithEmoji) : 0,
     // A greeting used once is not a habit; requiring two keeps prices and
     // stray one-line replies out of the list of "how they open".
-    openers: top(openerCounts, topN, conversations, 2),
-    closers: top(closerCounts, topN, conversations, 2),
+    openers: withExamples(top(openerCounts, topN, conversations, 2), openerExample),
+    closers: withExamples(top(closerCounts, topN, conversations, 2), closerExample),
     // Over-collect, then collapse, so removing fragments does not leave gaps.
     signaturePhrases: collapseNested(top(phraseCounts, topN * 12, counted, 3)).slice(0, topN),
     signatureWords: top(wordCounts, topN, counted, 3),
@@ -250,6 +272,14 @@ export function analyzeBrandVoice(messages: VoiceMessage[], topN = 12): BrandVoi
 }
 
 // ── helpers ──
+
+function withExamples(items: Counted[], examples: Map<string, string>): Counted[] {
+  return items.map((i) => {
+    const full = examples.get(i.value);
+    // Only worth carrying when it says more than the head already does.
+    return full && full.length > i.value.length ? { ...i, example: full } : i;
+  });
+}
 
 function bump(map: Map<string, number>, key: string): void {
   map.set(key, (map.get(key) ?? 0) + 1);
@@ -391,6 +421,17 @@ export function renderVoiceStats(stats: BrandVoiceStats): string {
   const pct = (x: number) => `${Math.round(x * 100)}%`;
   const list = (xs: Counted[]) =>
     xs.length ? xs.map((x) => `  "${x.value}" - ${x.count}x (${pct(x.share)})`).join("\n") : "  (none)";
+  // Openers and closers additionally carry a complete message, because the
+  // model is asked to write an example and can only quote what it is shown.
+  const listWithExamples = (xs: Counted[]) =>
+    xs.length
+      ? xs
+          .map((x) =>
+            `  "${x.value}" - ${x.count}x (${pct(x.share)})` +
+            (x.example ? `\n      full: "${x.example}"` : ""),
+          )
+          .join("\n")
+      : "  (none)";
 
   return [
     `Messages analyzed: ${stats.messagesAnalyzed} across ${stats.conversationsAnalyzed} conversations.`,
@@ -399,11 +440,11 @@ export function renderVoiceStats(stats: BrandVoiceStats): string {
     `${pct(stats.emojiMessageShare)} of messages contain at least one emoji; ${stats.emojiPerEmojiMessage} per such message.`,
     list(stats.emojis),
     ``,
-    `HOW CONVERSATIONS OPEN (first business message)`,
-    list(stats.openers),
+    `HOW CONVERSATIONS OPEN (first business message; "full" is a complete example)`,
+    listWithExamples(stats.openers),
     ``,
-    `HOW CONVERSATIONS CLOSE (last business message)`,
-    list(stats.closers),
+    `HOW CONVERSATIONS CLOSE (last business message; "full" is a complete example)`,
+    listWithExamples(stats.closers),
     ``,
     `REPEATED PHRASES`,
     list(stats.signaturePhrases),

@@ -27,6 +27,7 @@ export type RejectReason =
   | "personal-address"
   | "one-off-scope"
   | "not-generalized"
+  | "placeholder-not-an-answer"
   | "too-short";
 
 export interface SpecificityVerdict {
@@ -42,6 +43,18 @@ export interface SpecificityVerdict {
 // for everyone else. Numbers that express a RULE are deliberately not matched:
 // "45 days", "3 business days", "20% off", "199 shekels" are all four digits or
 // fewer and all survive, because a policy without its numbers is not a policy.
+
+/**
+ * The platform's stand-in for content that is not text.
+ *
+ * A WhatsApp image has no body, so the adapter stores `[image message]` to keep
+ * the thread readable. The transcript therefore contains those strings, and the
+ * first live run mined one as an answer: "how much is a child's meal?" ->
+ * "[media_placeholder message]". The transcript is right to show it - a menu WAS
+ * sent, and the reasoning field said so correctly - but a placeholder is not an
+ * answer any customer can be given, so it cannot become knowledge.
+ */
+const PLACEHOLDER = /\[(?:[a-z_]+ message|Location:[^\]]*)\]/i;
 
 /** Five or more consecutive digits: order ids, tracking codes, card fragments. */
 const LONG_DIGIT_RUN = /\d{5,}/g;
@@ -109,6 +122,13 @@ export function judgeSpecificity(item: {
   }
   if (item.scope === "ONE_OFF") {
     reasons.push("one-off-scope");
+  }
+  // Judged on the ANSWER only. A question may legitimately refer to something
+  // that was sent as an image; an answer that IS the image tells nobody
+  // anything. Stripping the marker instead would leave an empty answer, so
+  // this is a rejection rather than a redaction.
+  if (PLACEHOLDER.test(a)) {
+    reasons.push("placeholder-not-an-answer");
   }
   if (item.generalized === false) {
     reasons.push("not-generalized");

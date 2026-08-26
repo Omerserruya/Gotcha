@@ -82,7 +82,25 @@ export async function runKnowledgeDedupeStage(args: {
 
   const candidates = await prisma.knowledgeCandidate.findMany({
     where: { tenantId, importId, status: "PENDING" },
-    orderBy: { occurrenceCount: "desc" },
+    // Ordered so that duplicates land in the SAME batch.
+    //
+    // Merging happens within a batch of 60 and nowhere else, so ordering decides
+    // what can ever be compared. `occurrenceCount desc` was fine while an import
+    // produced ~46 candidates and the whole set fit in one batch. It broke the
+    // moment breadth was the goal: the first real run produced 462 candidates of
+    // which 453 had a count of exactly 1, so the sort was one giant tie, the
+    // batches were arbitrary, and two phrasings of the same question would only
+    // meet by luck.
+    //
+    // Category first puts related questions together, then topic, then the
+    // question text so identical phrasings are adjacent. Frequency is last: it
+    // is the tie-break, not the axis.
+    orderBy: [
+      { category: "asc" },
+      { topic: "asc" },
+      { question: "asc" },
+      { occurrenceCount: "desc" },
+    ],
     select: {
       id: true,
       topic: true,
