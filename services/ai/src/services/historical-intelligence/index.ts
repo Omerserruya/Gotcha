@@ -263,6 +263,13 @@ export async function rerunIntelligence(args: {
         data: {
           status: "IDENTITY_RESOLUTION",
           customersAnalyzed: 0,
+          // Both halves of the progress bar have to reset together. Leaving
+          // these at the previous run's totals made the bar read 85% the
+          // instant extraction started and then fall back to 54% once the
+          // first batch wrote the real count - progress going backwards, which
+          // is the one thing a progress bar must never do.
+          conversationsExtracted: 0,
+          conversationsEligible: 0,
           knowledgeCandidateCount: 0,
           knowledgeConflictCount: 0,
           topTopics: Prisma.DbNull,

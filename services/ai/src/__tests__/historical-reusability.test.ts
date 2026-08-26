@@ -263,3 +263,17 @@ describe("openers and closers carry a quotable example", () => {
     expect(stats.closers.find((c) => c.value === "בשמחה")?.example).toBeUndefined();
   });
 });
+
+describe("analysis progress never goes backwards", () => {
+  it("resets both halves of the bar, not just customer learning", async () => {
+    // A rerun that cleared customersAnalyzed but left conversationsExtracted at
+    // the previous run's total made the bar read 85% the moment extraction
+    // started, then drop to 54% when the first batch wrote the real count.
+    const { readFileSync } = await import("fs");
+    const src = readFileSync("src/services/historical-intelligence/index.ts", "utf8");
+    const reset = src.slice(src.indexOf("status: \"IDENTITY_RESOLUTION\""), src.indexOf("failureReason: null"));
+    for (const field of ["customersAnalyzed: 0", "conversationsExtracted: 0", "conversationsEligible: 0"]) {
+      expect(reset, `rerun must reset ${field}`).toContain(field);
+    }
+  });
+});
