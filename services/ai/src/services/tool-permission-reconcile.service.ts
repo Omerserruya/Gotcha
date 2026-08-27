@@ -44,6 +44,10 @@ import { prisma } from "@chatcenter/shared";
 /** Sales / SDR: product discovery + order/customer READ context. */
 const SALES_READ_SLUGS = [
   "search_products",
+  // Cross-sell is a sales READ: it names products that go with one the
+  // customer already chose. Its own gate refuses an anchor the customer was
+  // never shown, so granting it here cannot turn into a catalogue dump.
+  "complementary_products",
   "get_product",
   "inventory_status",
   "variant_information",

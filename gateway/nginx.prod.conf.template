@@ -569,6 +569,21 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
+        # ─── Coupons: discounts an operator issues and assigns. Sysadmin
+        #     only, enforced in the service. Its own prefix so the whole
+        #     surface (create, assign, revoke, per-tenant lookup) is one
+        #     location - a coupon route the gateway does not know about is a
+        #     feature that works in dev and 404s here.
+        location /api/admin/coupons {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://billing_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
         # ─── The exchange rate money is charged at. Sysadmin only, in-app.
         #     Separate prefix because this decides what every Israeli customer's
         #     card is debited, and it should be visible as its own surface in
@@ -1041,6 +1056,19 @@ http {
         # ─── Embedded Chat (public, CORS enabled) ────────
         location /api/embedded-chat {
             # CORS for widget on external sites
+            #
+            # The upstream's headers are HIDDEN first, and that is the whole
+            # fix: services/ai mounts cors({origin: FRONTEND_URL, credentials:
+            # true}) for the dashboard, so every embedded-chat response also
+            # carried Access-Control-Allow-Origin: https://app.gotcha.co.il.
+            # Added to the wildcard below that made TWO of the header, and a
+            # browser refuses a response whose Access-Control-Allow-Origin
+            # "contains multiple values" - so the widget was blocked on every
+            # site that embedded it, ours included, while curl saw a healthy
+            # 200. The credentials flag goes too: it is invalid beside "*",
+            # and this surface carries no cookie and no token anyway.
+            proxy_hide_header Access-Control-Allow-Origin;
+            proxy_hide_header Access-Control-Allow-Credentials;
             add_header Access-Control-Allow-Origin * always;
             add_header Access-Control-Allow-Methods "GET, POST, OPTIONS" always;
             add_header Access-Control-Allow-Headers "Content-Type" always;
@@ -1702,7 +1730,14 @@ http {
         add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
         add_header X-Frame-Options "SAMEORIGIN" always;
         add_header Permissions-Policy "camera=(), geolocation=(), payment=()" always;
-        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
+        # script-src also names app.gotcha.co.il, for ONE script: the embedded
+        # chat widget the landing pages load from the application host. It is
+        # cross-origin from here by design (one widget, one canonical URL), and
+        # under a bare script-src 'self' the browser refused it - the widget
+        # silently never appeared on the marketing site. /widget/ and
+        # /api/embedded-chat answer with wildcard CORS on that host, so the
+        # fetches it makes are already allowed by connect-src https:.
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://app.gotcha.co.il; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
 
         location /health {
             return 200 '{"status":"ok","service":"gateway","vhost":"marketing"}';

@@ -19,6 +19,7 @@
 // OAuth round-trip) - connecting one system IS the activation event.
 
 import { Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { DomainScreen } from "./domain-screen";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
@@ -264,7 +265,6 @@ function SetupContent() {
   // here - including after losing the original email.
   const [awaitingPayment, setAwaitingPayment] = useState<{ reference: string } | null>(null);
   const [savingProfile, setSavingProfile] = useState(false);
-  const scannedOnce = useRef(false);
   // Furthest PROGRESS_ORDER index ever reached (seeded from the persisted
   // checkpoint at boot) - the guard that keeps the checkpoint monotonic.
   const maxProgressRef = useRef(-1);
@@ -311,7 +311,7 @@ function SetupContent() {
   const [atBusy, setAtBusy] = useState(false);
 
   // ── Discovery scan (Movement 1) ──
-  const runScan = useCallback(async (dom: string) => {
+  const runScan = useCallback(async (dom: string, legalAccepted?: boolean) => {
     if (!token || !dom.trim() || scanActive) return;
     setError("");
     setScanComplete(false);
@@ -323,7 +323,7 @@ function SetupContent() {
       .then((p) => { const steps = p.data?.steps?.map((s) => s.label) || null; if (steps?.length) setLoaderSteps(steps); })
       .catch(() => { /* the ceremony falls back to its generic hints */ });
     try {
-      const res = await discoverBusiness(token, dom.trim(), uiLocale);
+      const res = await discoverBusiness(token, dom.trim(), uiLocale, legalAccepted);
       if (res.data.ok && res.data.discovery) {
         // Let the final stage visibly land before the briefing takes over.
         const d = res.data.discovery;
@@ -537,16 +537,18 @@ function SetupContent() {
           return;
         }
 
-        // First run - scan from the best available domain (suggested from the
-        // email domain, so the only "ask" is a confirmation, not a question).
+        // First run - pre-fill the best available domain (suggested from the
+        // email domain) and land on the first screen, so the only "ask" is a
+        // confirmation, not a question.
+        //
+        // This used to start the scan immediately and skip the screen. It can no
+        // longer do that: the first screen is where the Terms and Privacy Policy
+        // are accepted, and a consent step most customers never see is not a
+        // consent step. The guess still does its job - the domain is already
+        // typed, and the same single click starts the scan.
         const guess = d?.websiteDomain || data.businessProfile?.websiteDomain || emailDomain(user.email);
-        if (guess && !scannedOnce.current) {
-          scannedOnce.current = true;
-          setDomain(guess);
-          runScan(guess);
-        } else {
-          setPhase("domain");
-        }
+        if (guess) setDomain(guess);
+        setPhase("domain");
       } catch {
         setPhase("domain");
       }
@@ -836,7 +838,7 @@ function SetupContent() {
 
   // Movement 1a - the front door: one question, zero noise, no loader.
   if (phase === "domain") {
-    return (<><LocaleCorner /><DomainScreen he={he} domain={domain} setDomain={setDomain} onScan={() => runScan(domain)} error={error} /></>);
+    return (<><LocaleCorner /><DomainScreen he={he} domain={domain} setDomain={setDomain} onScan={(accepted) => runScan(domain, accepted)} error={error} /></>);
   }
 
   // Movement 1b - the investigation owns the whole screen and FREEZES the
@@ -1130,45 +1132,6 @@ const PROVIDER_LABEL: Record<string, string> = { gmail: "Gmail", outlook: "Outlo
 function Wordmark({ className = "h-7 w-auto" }: { className?: string }) {
   // eslint-disable-next-line @next/next/no-img-element
   return <img src="/logo_icon.png" alt="GOTCHA" className={className} />;
-}
-
-function DomainScreen({ he, domain, setDomain, onScan, error }: { he: boolean; domain: string; setDomain: (v: string) => void; onScan: () => void; error: string }) {
-  const canScan = !!domain.trim();
-  return (
-    <div className="min-h-screen bg-[#fafafa] flex flex-col" dir={he ? "rtl" : "ltr"}>
-      <header className="px-6 md:px-10 py-6"><Wordmark /></header>
-      <main className="flex-1 flex items-center px-6">
-        <div className="w-full max-w-2xl mx-auto pb-24 animate-riseIn">
-          <p className="text-[12px] font-semibold text-primary-500 uppercase tracking-[0.22em] mb-4">{he ? "גילוי עסקי" : "Business Discovery"}</p>
-          <h1 className="text-4xl md:text-[52px] font-bold text-gray-900 tracking-tight leading-[1.06]">
-            {he ? "איפה העסק שלכם חי באינטרנט?" : "Where does your business live online?"}
-          </h1>
-          <p className="text-lg text-gray-500 mt-4 leading-relaxed max-w-xl">
-            {he ? "אני אקרא את האתר מקצה לקצה ואחזור עם כל מה שלמדתי - לפני שאשאל אתכם דבר." : "I'll read it end to end and come back with everything I learned - before asking you a single question."}
-          </p>
-          <div className="mt-10">
-            <input
-              value={domain}
-              onChange={(e) => setDomain(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && canScan) onScan(); }}
-              placeholder="yourbusiness.com"
-              autoFocus
-              dir="ltr"
-              className={"w-full bg-transparent border-0 border-b-2 border-gray-200 focus:border-primary-400 outline-none text-2xl md:text-3xl font-medium text-gray-900 placeholder-gray-300 py-3 transition-colors " + (he ? "text-right" : "")}
-            />
-            {error && <p className="mt-3 text-sm text-amber-600">{error}</p>}
-            <div className="flex items-center gap-4 mt-8">
-              <button type="button" onClick={onScan} disabled={!canScan}
-                className="inline-flex items-center justify-center px-8 py-4 bg-primary-500 hover:bg-primary-600 text-white text-base font-semibold rounded-2xl transition shadow-lg shadow-primary-500/25 disabled:opacity-40 disabled:shadow-none">
-                {he ? "חקרו את העסק שלי ←" : "Investigate my business →"}
-              </button>
-              {canScan && <span className="text-xs text-gray-400 hidden md:block">{he ? "או הקישו Enter ↵" : "press Enter ↵"}</span>}
-            </div>
-          </div>
-        </div>
-      </main>
-    </div>
-  );
 }
 
 // ─── Movement 1b: The investigation - stages land on REAL state ─

@@ -264,8 +264,10 @@ describe("publication flag", () => {
     expect(code).toMatch(/if\s*\(!publicPricingEnabled(\s*\|\|[^)]*)?\)\s*return null/);
   });
 
-  it("every landing pricing link is flag-gated", () => {
-    const code = read("components/landing/LandingPage.tsx");
+  it("every marketing pricing link is flag-gated", () => {
+    // The nav and footer are shared by every public page now, so the links
+    // that used to sit in LandingPage.tsx live in the chrome.
+    const code = read("components/marketing/MarketingChrome.tsx");
     const links = Array.from(code.matchAll(/landing\.nav\.pricing/g));
     expect(links.length).toBeGreaterThanOrEqual(3); // desktop, mobile, footer
     // Each occurrence sits inside a publicPricingEnabled guard.

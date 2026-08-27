@@ -689,7 +689,9 @@ function AddNumberPanel({ onDone }: { onDone: () => void }) {
       // eligible numbers is a real decision and still gets the picker.
       const eligible = (res.data.candidates ?? []).filter(isConnectable);
       if (eligible.length === 1) {
-        await connect(eligible[0]);
+        // The freshly fetched inspection is handed over directly; state is not
+        // readable yet on this tick.
+        await connect(eligible[0], res.data);
         return;
       }
       setStage("choosing");
@@ -699,14 +701,24 @@ function AddNumberPanel({ onDone }: { onDone: () => void }) {
     }
   }
 
-  async function connect(candidate: WhatsAppCandidate) {
-    if (!inspection) return;
+  /**
+   * `session` is passed in rather than read from state.
+   *
+   * The auto-connect path calls this in the same tick as `setInspection`, and a
+   * React state update is not visible until the next render - so reading
+   * `inspection` here found null, returned silently, and the screen sat on
+   * "Opening WhatsApp" forever with no request sent and no error. Silent
+   * because an early return has nothing to report.
+   */
+  async function connect(candidate: WhatsAppCandidate, session?: WhatsAppInspection) {
+    const active = session ?? inspection;
+    if (!active) return;
     setChosen(candidate.phoneNumberId);
     setStage("connecting");
     setError(null);
     try {
       const res = await connectWhatsAppNumber(token!, {
-        sessionId: inspection.sessionId,
+        sessionId: active.sessionId,
         phoneNumberId: candidate.phoneNumberId,
       });
       setNote(res.data.message);
@@ -719,7 +731,7 @@ function AddNumberPanel({ onDone }: { onDone: () => void }) {
       // afterwards, so the number just connected sat there with a live
       // "Connect this" button WHILE also appearing as a connected card above.
       // The same number, twice, in two contradictory states.
-      const remaining = (inspection?.candidates ?? []).map((x) =>
+      const remaining = (active.candidates ?? []).map((x) =>
         x.phoneNumberId === candidate.phoneNumberId ? { ...x, alreadyConnectedHere: true } : x,
       );
       setInspection((prev) => (prev ? { ...prev, candidates: remaining } : prev));

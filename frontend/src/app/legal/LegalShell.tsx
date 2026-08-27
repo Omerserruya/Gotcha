@@ -1,59 +1,38 @@
 "use client";
 
 import { ReactNode } from "react";
-import Link from "next/link";
-import { LanguageToggle, T, useLegalLocale } from "./LegalKit";
-import { PUBLIC_LEGAL_DOCS } from "./content/registry";
-import { LEGAL_CONTENT } from "./content/generated";
+import { useLegalLocale } from "./LegalKit";
+import { MarketingFooter, MarketingHeader } from "@/components/marketing/MarketingChrome";
 
-/** Public page: a plain link home, not the app nav (a visitor has no session). */
+/**
+ * Public page: the SAME chrome as the landing page and /pricing.
+ *
+ * This section used to draw its own header - a small icon, the words "Trust
+ * Center", and no way to reach anything but the homepage - and its own footer
+ * listing only the legal documents. A visitor arriving from the marketing
+ * footer effectively left the site and landed somewhere that looked related but
+ * not identical. It now wears exactly what every other public page wears.
+ *
+ * The one thing this section keeps for itself is its language. The Trust Center
+ * picks a language per DOCUMENT (Hebrew is the governing version of every one of
+ * them), which is not the same choice as the app's UI language, so LegalKit
+ * still owns it. `localeControl` hands that choice to the shared header and
+ * footer: the switch in the nav drives the document, and the nav labels render
+ * in the document's language too. Nothing here touches the visitor's app-wide
+ * language preference - opening a legal page should not restyle the rest of the
+ * site around it.
+ */
 export function LegalShell({ children }: { children: ReactNode }) {
-  const { locale, he } = useLegalLocale();
+  const { locale, setLocale, he } = useLegalLocale();
 
   return (
     <div dir={he ? "rtl" : "ltr"} lang={locale} className="min-h-screen bg-white flex flex-col">
-      <header className="sticky top-0 z-30 border-b border-gray-100 bg-white/85 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-          <Link href="/" className="flex items-center gap-2.5 shrink-0">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo_icon.png" alt="GOTCHA" className="h-6 w-auto" />
-            <span className="text-[13px] font-semibold text-gray-900">
-              <T en="Trust Center" he="מרכז האמון" />
-            </span>
-          </Link>
-          <LanguageToggle />
-        </div>
-      </header>
+      <MarketingHeader localeControl={{ locale, setLocale }} />
 
-      <main className="flex-1">{children}</main>
+      {/* The shared header floats over the page, so the content clears it. */}
+      <main className="flex-1 pt-20 sm:pt-24">{children}</main>
 
-      <footer className="mt-16 border-t border-gray-100 bg-gray-50/60">
-        <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
-          <nav className="flex flex-wrap gap-x-5 gap-y-2">
-            {PUBLIC_LEGAL_DOCS.map((d) => (
-              <Link
-                key={d.slug}
-                href={`/legal/${d.slug}`}
-                className="text-[12px] text-gray-500 hover:text-gray-900"
-              >
-                {LEGAL_CONTENT[d.slug][locale].title}
-              </Link>
-            ))}
-          </nav>
-          <p className="mt-5 text-[12px] text-gray-400">
-            <T
-              en="Questions about these documents: "
-              he="שאלות על המסמכים האלה: "
-            />
-            <a href="mailto:privacy@gotcha.co.il" className="text-gray-500 underline underline-offset-2" dir="ltr">
-              privacy@gotcha.co.il
-            </a>
-          </p>
-          <p className="mt-2 text-[12px] text-gray-400">
-            &copy; {new Date().getFullYear()} GOTCHA
-          </p>
-        </div>
-      </footer>
+      <MarketingFooter localeControl={{ locale, setLocale }} />
     </div>
   );
 }

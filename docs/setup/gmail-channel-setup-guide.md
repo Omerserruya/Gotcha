@@ -97,14 +97,29 @@ Click **Save and Continue**
 
 | Scope | Purpose |
 |-------|---------|
-| `https://www.googleapis.com/auth/gmail.readonly` | Read incoming emails |
-| `https://www.googleapis.com/auth/gmail.send` | Send emails on behalf of the user |
-| `https://www.googleapis.com/auth/gmail.modify` | Mark emails as read, label management |
-| `https://www.googleapis.com/auth/userinfo.email` | Get the user's email address |
+| `https://www.googleapis.com/auth/gmail.modify` | Everything: read the mailbox address and history, arm and stop push notifications, read incoming messages, send replies |
+
+That is the whole list. Add nothing else.
 
 3. Click **Update** → **Save and Continue**
 
-> **Note:** `gmail.readonly`, `gmail.send`, and `gmail.modify` are **sensitive scopes**. For production with External user type, you'll need to submit for **Google OAuth verification** (see Go Live Checklist).
+#### Why only one scope
+
+`gmail.modify` is listed as an accepted authorization scope by every Gmail endpoint GOTCHA calls, so the three scopes it used to ask for alongside it were all redundant:
+
+| Endpoint GOTCHA calls | Covered by `gmail.modify`? | Where |
+|-----------------------|---------------------------|-------|
+| `users.getProfile` | yes | connect callback, mailbox address + starting `historyId` |
+| `users.watch` | yes | connect callback + watch renewal cron |
+| `users.stop` | yes | disconnect |
+| `users.history.list` | yes | inbound fetch |
+| `users.messages.get` | yes | inbound fetch |
+| `users.messages.send` | yes | outbound send |
+
+- `gmail.readonly` and `gmail.send` are strict subsets of `gmail.modify` for these calls.
+- `userinfo.email` was only ever used to learn which mailbox was connected. `users.getProfile` returns `emailAddress` itself, so GOTCHA reads it from Gmail and never touches the Google identity endpoint.
+
+> **Note:** `gmail.modify` is a **restricted scope**. For production with External user type you still need **Google OAuth verification** plus a CASA security assessment (see Go Live Checklist). Reading message content and sending mail cannot be done with a non-restricted scope, so one restricted scope is the floor. What changed is that the review now covers a single scope instead of four.
 
 ### 4.4 Test Users (Development Only)
 
@@ -311,7 +326,7 @@ Before enabling Gmail connection for production tenants:
 
 ### Google OAuth Verification (External Apps)
 
-If your OAuth consent screen is set to **External** user type and uses sensitive scopes (gmail.readonly, gmail.send, gmail.modify), Google requires verification:
+If your OAuth consent screen is set to **External** user type and uses a restricted scope (`gmail.modify`), Google requires verification:
 
 1. Go to **APIs & Services** → **OAuth consent screen**
 2. Click **Publish App** (moves from Testing → In Production)
@@ -319,7 +334,7 @@ If your OAuth consent screen is set to **External** user type and uses sensitive
 4. You'll need to provide:
    - A video demonstrating how the scopes are used
    - A link to your privacy policy
-   - An explanation of each scope's usage
+   - An explanation of the scope's usage (there is only `gmail.modify`)
 5. Verification typically takes **1-3 weeks**
 
 > **While unverified:** Only test users (up to 100) can complete the OAuth flow. Other users will see a "This app isn't verified" warning and may be blocked.
@@ -332,12 +347,12 @@ If your OAuth consent screen is set to **External** user type and uses sensitive
 
 | Problem | Cause | Solution |
 |---------|-------|----------|
-| OAuth redirect returns `gmail_no_email` | Could not read email from Google profile | Ensure `userinfo.email` scope is included |
+| OAuth redirect returns `gmail_no_email` | `users.getProfile` failed or returned no `emailAddress` | Check the auth-service log for `[GMAIL-CALLBACK] getProfile failed`; reconnect and confirm `gmail.modify` was granted |
 | OAuth redirect returns `gmail_already_connected` | Gmail account connected to a different tenant | Disconnect from the other tenant first |
 | "Access denied" during OAuth | App not verified + user not a test user | Add user as test user, or complete verification |
 | No emails arriving in GOTCHA | Pub/Sub not configured correctly | Verify topic, subscription, and service account permissions |
 | No emails arriving in GOTCHA | Gmail watch expired (>7 days) | Renew the watch via Gmail API `/users/me/watch` |
-| `403 Insufficient Permission` when sending | OAuth token missing `gmail.send` scope | Reconnect the account - ensure scopes are correct |
+| `403 Insufficient Permission` when sending | OAuth token missing `gmail.modify` scope | Reconnect the account so consent is re-granted with `gmail.modify` |
 | `invalid_grant` error | Refresh token revoked or expired | Reconnect the Gmail account |
 | Pub/Sub push not reaching webhook | Endpoint not publicly accessible or not HTTPS | Verify your URL is accessible and uses HTTPS |
 | `gmail-api-push@system.gserviceaccount.com` can't publish | Missing Pub/Sub Publisher role | Re-add the principal with the correct role |

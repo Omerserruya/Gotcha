@@ -79,7 +79,13 @@ export async function getConnectedCrm(tenantId: string): Promise<CrmConnection |
     where: {
       tenantId,
       status: "CONNECTED",
-      integration: { category: "CRM" },
+      // Airtable is cataloged as DATABASE (it is one), but a tenant who mapped
+      // a customer table uses it exactly as their CRM - and the AI service's
+      // resolver already treats it that way (SLUG_TO_VENDOR matches on slug,
+      // not category). Matching only category=CRM here made the two halves
+      // disagree: the bot could look customers up in Airtable while the
+      // audience builder and variable picker insisted no CRM was connected.
+      integration: { OR: [{ category: "CRM" }, { slug: "airtable" }] },
     },
     include: { integration: { select: { slug: true, name: true } } },
     orderBy: { connectedAt: "desc" },
@@ -263,6 +269,13 @@ export async function getCrmSchema(
     if (!exec?.ok) return null;
     return { module, providerModule, fields: normalizeFields(conn.slug, exec.output) };
   }
+  if (conn.slug === "airtable") {
+    // One mapped table serves every module - Airtable has no leads/contacts
+    // split, the tenant's rows are whatever their table holds.
+    const exec = await runAdapterTool(tenantId, "airtable.describe_fields", {}, ctx);
+    if (!exec?.ok) return null;
+    return { module, providerModule, fields: normalizeFields(conn.slug, exec.output) };
+  }
   return null;
 }
 
@@ -353,6 +366,22 @@ function normalizeFields(slug: string, raw: unknown): CrmFieldDef[] {
     }).filter((f: CrmFieldDef) => f.name);
   }
 
+  if (slug === "airtable") {
+    // airtable.describe_fields returns [{ id, name, type, choices? }] - the
+    // mapped table's live columns. Records are keyed by field NAME in the
+    // Airtable API, so `name` is the column name (not the fld… id).
+    const arr = Array.isArray(raw) ? raw : [];
+    return arr.map((f: any): CrmFieldDef => ({
+      name: String(f.name ?? ""),
+      label: String(f.name ?? ""),
+      type: mapAirtableType(f.type),
+      picklist: Array.isArray(f.choices) && f.choices.length ? f.choices.map(String) : undefined,
+      custom: true, // every Airtable column is tenant-defined
+      required: false,
+      readOnly: ["formula", "rollup", "count", "lookup", "createdTime", "lastModifiedTime", "autoNumber", "createdBy", "lastModifiedBy"].includes(String(f.type)),
+    })).filter((f: CrmFieldDef) => f.name);
+  }
+
   if (slug === "salesforce") {
     // Salesforce describe returns { fields: [{ name, label, type, picklistValues, custom, nillable, ... }] }
     const arr = Array.isArray((raw as any)?.fields) ? (raw as any).fields : [];
@@ -370,6 +399,23 @@ function normalizeFields(slug: string, raw: unknown): CrmFieldDef[] {
   }
 
   return [];
+}
+
+function mapAirtableType(type: string): CrmFieldType {
+  const t = String(type || "");
+  if (t === "email") return "email";
+  if (t === "phoneNumber") return "phone";
+  if (t === "url") return "url";
+  if (["number", "percent", "rating", "duration", "autoNumber", "count"].includes(t)) return "number";
+  if (t === "currency") return "currency";
+  if (t === "checkbox") return "boolean";
+  if (["date", "createdTime", "lastModifiedTime"].includes(t)) return "date";
+  if (t === "dateTime") return "datetime";
+  if (t === "singleSelect") return "picklist";
+  if (t === "multipleSelects") return "multipicklist";
+  if (["singleLineText", "multilineText", "richText", "formula", "rollup", "lookup", "barcode"].includes(t)) return "text";
+  if (["singleCollaborator", "multipleCollaborators", "multipleRecordLinks", "createdBy", "lastModifiedBy"].includes(t)) return "lookup";
+  return "unknown";
 }
 
 function mapZohoType(dataType: string, jsonType: string): CrmFieldType {
@@ -902,7 +948,91 @@ export async function searchByRules(
   if (conn.slug === "monday") {
     return mondaySearchByRules(tenantId, conn, identityHints, rules, ctx, module);
   }
+  if (conn.slug === "airtable") {
+    return airtableSearchByRules(tenantId, conn, identityHints, rules, ctx);
+  }
   return { rows: [], skipped: rules, provider: conn };
+}
+
+// ─── Airtable ────────────────────────────────────────────────
+
+/**
+ * Rule search over the tenant's mapped Airtable table.
+ *
+ * Rules arrive with Airtable column NAMES as `field` (the audience builder's
+ * field picker is fed by airtable.describe_fields, which returns names), so
+ * they translate to filterByFormula directly. Identity hints go through the
+ * tenant's fieldMap. One table serves every module - Airtable has no
+ * leads/contacts split.
+ */
+async function airtableSearchByRules(
+  tenantId: string,
+  conn: CrmConnection,
+  identityHints: CrmLookupArgs,
+  rules: CrmFilterRule[],
+  ctx?: Partial<AgentToolContext>,
+): Promise<{ rows: CrmRecord[]; skipped: CrmFilterRule[]; provider: CrmConnection }> {
+  const ti = await (prisma as any).tenantIntegration.findUnique({
+    where: { id: conn.id },
+    select: { config: true },
+  });
+  const cfg = (ti?.config && typeof ti.config === "object" ? ti.config : {}) as Record<string, any>;
+  const fm = (cfg.fieldMap && typeof cfg.fieldMap === "object" ? cfg.fieldMap : {}) as Record<string, string | undefined>;
+
+  const parts: string[] = [];
+  const skipped: CrmFilterRule[] = [];
+  for (const r of rules) {
+    const e = airtableRuleExpr(r);
+    if (e) parts.push(e);
+    else skipped.push(r);
+  }
+  if (identityHints.email && fm.email) parts.push(airtableRuleExpr({ field: fm.email, op: "equals", value: identityHints.email })!);
+  if (identityHints.phone && fm.phone) parts.push(airtableRuleExpr({ field: fm.phone, op: "contains", value: identityHints.phone })!);
+  if (identityHints.name && fm.display_name) parts.push(airtableRuleExpr({ field: fm.display_name, op: "contains", value: identityHints.name })!);
+
+  if (parts.length === 0) return { rows: [], skipped, provider: conn };
+  const formula = parts.length === 1 ? parts[0] : `AND(${parts.join(",")})`;
+
+  const exec = await runAdapterTool(tenantId, "airtable.list_records", { filter_formula: formula, max_records: 100 }, ctx);
+  if (!exec?.ok || !Array.isArray(exec.output)) return { rows: [], skipped, provider: conn };
+
+  const rows: CrmRecord[] = [];
+  for (const raw of exec.output as Array<{ id?: unknown; fields?: Record<string, unknown> }>) {
+    if (!raw?.id) continue;
+    const f = raw.fields || {};
+    rows.push({
+      id: String(raw.id),
+      name: fm.display_name ? (f[fm.display_name] as string | undefined) : undefined,
+      email: fm.email ? (f[fm.email] as string | undefined) : undefined,
+      phone: fm.phone ? (f[fm.phone] as string | undefined) : undefined,
+      raw: f,
+    });
+  }
+  return { rows, skipped, provider: conn };
+}
+
+function airtableRuleExpr(r: CrmFilterRule): string | null {
+  const col = String(r.field || "").replace(/[{}]/g, "");
+  if (!col) return null;
+  const v = r.value === undefined || r.value === null ? "" : String(r.value);
+  const esc = (s: string) => s.replace(/'/g, "\\'");
+  switch (r.op) {
+    case "equals":       return v === "" ? null : `{${col}}&''='${esc(v)}'`;
+    case "not_equals":   return v === "" ? null : `{${col}}&''!='${esc(v)}'`;
+    case "contains":     return v === "" ? null : `FIND('${esc(v.toLowerCase())}', LOWER({${col}}&''))>0`;
+    case "starts_with":  return v === "" ? null : `LEFT(LOWER({${col}}&''), ${v.length})='${esc(v.toLowerCase())}'`;
+    case "ends_with":    return v === "" ? null : `RIGHT(LOWER({${col}}&''), ${v.length})='${esc(v.toLowerCase())}'`;
+    case "is_empty":     return `{${col}}&''=''`;
+    case "is_not_empty": return `{${col}}&''!=''`;
+    case "gt":           return v === "" ? null : `{${col}}>${Number(v) || 0}`;
+    case "gte":          return v === "" ? null : `{${col}}>=${Number(v) || 0}`;
+    case "lt":           return v === "" ? null : `{${col}}<${Number(v) || 0}`;
+    case "lte":          return v === "" ? null : `{${col}}<=${Number(v) || 0}`;
+    // Date ops take the value as a date string; IS_AFTER/IS_BEFORE parse it.
+    case "after":        return v === "" ? null : `IS_AFTER({${col}}, '${esc(v)}')`;
+    case "before":       return v === "" ? null : `IS_BEFORE({${col}}, '${esc(v)}')`;
+    default:             return null;
+  }
 }
 
 // ─── Zoho ────────────────────────────────────────────────────

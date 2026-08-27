@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { CustomerIntelligenceCard } from "./CustomerIntelligenceCard";
 import { CommerceContextPanel } from "./CommerceContextPanel";
+import { ImportedHistoryCard } from "./ImportedHistoryCard";
 import { useI18n } from "@/context/I18nContext";
 import { getConversationHistory } from "@/lib/api";
 import { fetchCustomerSummary, postCrmNote, type CrmContextEnvelope, type CustomerSummary } from "@/lib/api-crm";
@@ -181,6 +182,15 @@ export function HistoryPanel({ conversation, crmContext, crmLoading, onCrmNotePo
             generic CRM sections below are hidden while it's active. */}
         <CommerceContextPanel conversationId={conversationId} token={token} onState={setCommerceState} />
 
+        {/* What the WhatsApp history import learned about this person. Above
+            past conversations because it is the one-paragraph answer to "who
+            am I talking to", which an agent needs before a list of threads. */}
+        <ImportedHistoryCard
+          customerExternalId={conversation?.customerExternalId}
+          token={token}
+          t={t}
+        />
+
         {/* Conversation history (collapsible) */}
         <CollapsibleSection title={t("conversations.historyPanel.pastConversations") || "Past conversations"} badge={history.length} defaultOpen>
           {loading ? (
@@ -217,6 +227,16 @@ export function HistoryPanel({ conversation, crmContext, crmLoading, onCrmNotePo
                       <div className="flex items-center justify-between mb-1">
                         <div className="flex items-center gap-1.5">
                           <PlatformBadge channel={conv.channel} />
+                          {/* Imported threads are labelled, never passed off as
+                              conversations that happened in GOTCHA. They are
+                              the customer's real history, from before they
+                              connected - and an agent reading one needs to
+                              know that. */}
+                          {conv.origin === "HISTORICAL_IMPORT" && (
+                            <span className="rounded-full bg-violet-50 px-1.5 py-0.5 text-[9px] font-medium text-violet-700">
+                              {t("conversations.historyPanel.imported")}
+                            </span>
+                          )}
                           <span className="text-[10px] text-gray-400">
                             {format(new Date(conv.createdAt), "MMM d, yyyy")}
                           </span>

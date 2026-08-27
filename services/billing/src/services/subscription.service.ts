@@ -31,7 +31,8 @@ import { currentPeriod, nextPeriod, periodKeyFor } from "../lib/period";
 import { emitBillingEvent } from "../lib/events";
 import { chargeFor } from "./invoice.service";
 import { unsuspendTenants } from "./tenant-status.service";
-import { expireDuePocs } from "./poc.service";
+import { expireDuePocs, reconcileLiveEvaluations } from "./poc.service";
+import { resolveDiscount, expireDueAssignments } from "./coupon.service";
 
 const TRIAL_DAYS = parseInt(process.env.BILLING_TRIAL_DAYS || "14", 10);
 
@@ -185,15 +186,31 @@ export async function activateOrRenew(subscriptionId: string, opts: { reason: "t
   // (no price) skip charging entirely.
   const price = contractedPrice(sub, plan);
   const currency = sub.snapshotCurrency ?? plan.currency;
-  if (price > 0) {
+
+  // A coupon discounts the CHARGE, never the contract: `price` above stays the
+  // price the customer agreed to, and the discount is resolved per period so a
+  // window that closed mid-subscription simply stops applying at the next
+  // renewal. The same resolver feeds the billing page, which is what makes the
+  // number shown there the number taken from the card.
+  const discount = await resolveDiscount({ tenantId, listPrice: price, currency, at: periodStart });
+  const payable = discount.net.minor / 100;
+
+  if (payable > 0) {
     const res = await chargeFor({
       entityId: sub.billableEntityId,
       tenantId,
       type: "SUBSCRIPTION",
-      amount: price,
+      amount: payable,
       currency,
       description: `${plan.name} subscription (${period.key})`,
       idempotencyKey: `sub:${subscriptionId}:${period.key}`,
+      discount: discount.coupon
+        ? {
+            listAmount: discount.list.minor / 100,
+            discountAmount: discount.discount.minor / 100,
+            couponCode: discount.coupon.code,
+          }
+        : undefined,
     });
     if (res.outcomeUnknown) {
       // We do not know whether the customer was charged. PAST_DUE would put
@@ -564,6 +581,22 @@ export async function runBillingCycle(now = new Date()): Promise<{
   // the previous period's included allowance, so without this sweep an expiring
   // purchased lot would keep counting toward the balance forever.
   const { expiredLots } = await expireDueLots(now);
+
+  // Live evaluations that are missing capabilities added to the catalog after
+  // they were provisioned. Cheap (one indexed read per evaluation, and a write
+  // only when something is genuinely absent) and it is what makes
+  // PILOT_CAPABILITY_KEYS a promise that holds over time rather than at one
+  // instant - see reconcileEvaluationCapabilities.
+  await reconcileLiveEvaluations(now).catch((err) =>
+    console.warn("[billing][cycle] evaluation capability reconcile failed:", err?.message ?? err),
+  );
+
+  // Coupon windows that have closed. Changes no money on its own - the
+  // resolver already refuses an elapsed window - but it is what turns a
+  // silently-stopped discount into an EXPIRED row with a date on it.
+  await expireDueAssignments(now).catch((err) =>
+    console.warn("[billing][cycle] coupon expiry sweep failed:", err?.message ?? err),
+  );
 
   // Refresh the representative FX rate on the schedule, so a pricing page never
   // triggers an outbound request while rendering.

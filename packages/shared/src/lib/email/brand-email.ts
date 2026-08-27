@@ -228,6 +228,7 @@ export function renderBrandEmail(a: BrandEmailArgs): string {
                   <td valign="top" align="${align}" style="font-family:${EMAIL_FONT};font-size:11px;line-height:18px;color:${EC.onDarkFaint};">
                     GOTCHA<br>${escapeHtml(tagline(he))}
                     ${a.footerNote ? `<br><span style="color:${EC.onDarkMuted};">${a.footerNote}</span>` : ""}
+                    <br><span style="color:${EC.onDarkFaint};">${legalConsentHtml(he)}</span>
                   </td>
                   <td valign="top" align="${opposite}" style="font-family:${EMAIL_FONT};font-size:11px;line-height:18px;color:${EC.onDarkFaint};">
                     <a href="${safeHref(appUrl())}" style="color:${EC.onDarkLink};text-decoration:none;">gotcha.co.il</a>
@@ -251,6 +252,58 @@ function appUrl(): string {
   } catch {
     return "https://gotcha.co.il";
   }
+}
+
+/**
+ * Where the public Terms and Privacy Policy live.
+ *
+ * `/legal/:slug` is served by the same app on every host and is not gated
+ * behind the marketing check, so the app origin every other email link is
+ * built from is the right base here too.
+ */
+export function legalUrls(): { terms: string; privacy: string } {
+  const base = appUrl();
+  return {
+    terms: `${base}/legal/terms-of-service`,
+    privacy: `${base}/legal/privacy-policy`,
+  };
+}
+
+/**
+ * The standing consent line at the bottom of every email we send.
+ *
+ * Setting a workspace up and connecting accounts is the moment the agreement is
+ * actually entered into, so the email that accompanies it is where the terms
+ * have to be reachable. It is deliberately quiet: this is a disclosure, not a
+ * message, and it should never compete with the thing the email is about.
+ */
+export function legalConsentHtml(he = false): string {
+  const { terms, privacy } = legalUrls();
+  const link = (href: string, label: string) =>
+    `<a href="${safeHref(href)}" style="color:${EC.onDarkLink};text-decoration:underline;">${label}</a>`;
+  return he
+    ? `ההקמה והחיבור של חשבונות מהווים הסכמה ל${link(terms, "תנאי השימוש")} ול${link(privacy, "מדיניות הפרטיות")} שלנו.`
+    : `Setting up your workspace and connecting accounts means you accept our ${link(terms, "Terms of Service")} and ${link(privacy, "Privacy Policy")}.`;
+}
+
+/** The same line for the text/plain part, where a link has to be spelled out. */
+export function legalConsentText(he = false): string {
+  const { terms, privacy } = legalUrls();
+  return he
+    ? `ההקמה והחיבור של חשבונות מהווים הסכמה לתנאי השימוש (${terms}) ולמדיניות הפרטיות (${privacy}) שלנו.`
+    : `Setting up your workspace and connecting accounts means you accept our Terms of Service (${terms}) and Privacy Policy (${privacy}).`;
+}
+
+/**
+ * Append the consent line to a plain-text body once.
+ *
+ * Idempotent, because several senders build their text body by composing
+ * smaller pieces and one of them may already have added it.
+ */
+export function withLegalConsentText(text: string, he = false): string {
+  const line = legalConsentText(he);
+  if (text.includes(legalUrls().terms)) return text;
+  return `${text.replace(/\s+$/, "")}\n\n---\n${line}`;
 }
 
 function safeHref(url: string): string {

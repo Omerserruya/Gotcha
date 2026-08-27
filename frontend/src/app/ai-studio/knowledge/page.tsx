@@ -25,11 +25,22 @@ import {
   syncConfluenceSpaces,
   getDriveFiles,
   getDriveSharedDrives,
-  syncDriveFiles,
+  syncDriveSources,
+  getDriveSources,
+  syncDriveNow,
+  setDriveSourcePaused,
+  removeDriveSource,
   setKnowledgeIntegrationAutoSync,
   getAgents,
   getDepartments,
 } from "@/lib/api";
+import type { DriveSource } from "@/lib/api";
+import {
+  emptyDriveSelection,
+  toggleDriveSelection,
+  driveSelectionList,
+  type DriveSelectionState,
+} from "@/lib/drive-selection";
 import clsx from "clsx";
 import { RefreshWebsiteKnowledge } from "@/components/knowledge/RefreshWebsiteKnowledge";
 import { SourceProvenance, readProvenance } from "@/components/knowledge/SourceProvenance";
@@ -72,6 +83,30 @@ interface Integration {
 type ScopeOption = { value: string; label: string; type: "all" | "agent" | "department" };
 
 // ─── Scope Helpers ────────────────────────────────────────────
+
+/**
+ * How one connected Drive source is doing, as a badge.
+ *
+ * "Partially synced" and "Action required" are separate states on purpose: the
+ * first means some files came through and the rest are still there to retry,
+ * the second means nothing will work until a person reconnects. Collapsing them
+ * into one red "Failed" is how a revoked grant goes unnoticed for a week.
+ */
+function driveStateBadge(src: DriveSource, t: (k: string) => string): { label: string; className: string } {
+  if (src.paused) return { label: t("aiStudio.knowledge.drive.statePaused"), className: "bg-gray-50 text-gray-500 border-gray-200" };
+  switch (src.syncState) {
+    case "synced":
+      return { label: t("aiStudio.knowledge.drive.stateSynced"), className: "bg-green-50 text-green-700 border-green-200" };
+    case "partial":
+      return { label: t("aiStudio.knowledge.drive.statePartial"), className: "bg-amber-50 text-amber-700 border-amber-200" };
+    case "action_required":
+      return { label: t("aiStudio.knowledge.drive.stateActionRequired"), className: "bg-red-50 text-red-700 border-red-200" };
+    case "failed":
+      return { label: t("aiStudio.knowledge.drive.stateFailed"), className: "bg-red-50 text-red-700 border-red-200" };
+    default:
+      return { label: t("aiStudio.knowledge.drive.statePending"), className: "bg-blue-50 text-blue-700 border-blue-200" };
+  }
+}
 
 // `t` is threaded in rather than read from a hook: this is a module-level
 // helper, and the "All AI" default it returns is rendered as a badge on every
@@ -185,6 +220,26 @@ function KnowledgePageInner() {
   const [sharedDrives, setSharedDrives] = useState<any[]>([]);
   const [sharedDrivesLoaded, setSharedDrivesLoaded] = useState(false);
 
+  // What the admin has ticked in the Drive browser. Held apart from
+  // `browseSelected` because a Drive pick carries a folder-or-file kind and a
+  // Shared Drive id, and the import call needs both. The folder-versus-file
+  // rule lives in lib/drive-selection so it can be tested on its own.
+  const [driveSelection, setDriveSelection] = useState<DriveSelectionState>(emptyDriveSelection());
+
+  // Sources already connected on the Drive integration, with their sync status.
+  const [driveSources, setDriveSources] = useState<Record<string, DriveSource[]>>({});
+  const [driveBusyKey, setDriveBusyKey] = useState<string | null>(null);
+  // Disconnecting and deleting the imported knowledge are different decisions,
+  // so the destructive one is a deliberate second click in a dialog.
+  // Shown before OAuth starts, so the admin reads what Drive access means
+  // while they still have the option not to grant it.
+  const [showDriveConsent, setShowDriveConsent] = useState(false);
+  const [confirmDriveRemoval, setConfirmDriveRemoval] = useState<
+    | { kind: "source"; intId: string; source: DriveSource }
+    | { kind: "integration"; intId: string; name: string }
+    | null
+  >(null);
+
   // Confluence child page navigation
   const [confluencePageStack, setConfluencePageStack] = useState<{ id: string; title: string }[]>([]);
 
@@ -260,6 +315,16 @@ function KnowledgePageInner() {
     try {
       const res = await getKnowledgeIntegrations(token, selectedKb);
       setIntegrations(res.data);
+
+      // A Drive integration is a container; what the admin actually manages is
+      // the list of folders and files under it, so pull that with it.
+      const driveIds = res.data.filter((i: Integration) => i.provider === "google_drive").map((i: Integration) => i.id);
+      const loaded = await Promise.all(
+        driveIds.map((id: string) =>
+          getDriveSources(token, id).then((r) => [id, r.data] as const).catch(() => [id, []] as const),
+        ),
+      );
+      setDriveSources(Object.fromEntries(loaded));
     } catch (err) {
       console.error("Failed to load integrations:", err);
     }
@@ -424,14 +489,17 @@ function KnowledgePageInner() {
     }
   }
 
-  async function handleConnect(provider: "confluence" | "google_drive") {
+  async function handleConnect(provider: "confluence" | "google_drive", reconnect = false) {
     if (!token || !selectedKb) return;
     setConnectingProvider(provider);
     setShowConnectMenu(false);
     try {
       const res = provider === "confluence"
         ? await initConfluenceOAuth(token, selectedKb)
-        : await initGoogleDriveOAuth(token, selectedKb);
+        // A reconnect must go through Google's consent screen: that is the only
+        // path that returns a new refresh token, and a revoked grant has no
+        // usable one left.
+        : await initGoogleDriveOAuth(token, selectedKb, undefined, reconnect);
       window.location.href = res.url;
     } catch (err) {
       console.error(`Failed to init ${provider} OAuth:`, err);
@@ -439,10 +507,17 @@ function KnowledgePageInner() {
     }
   }
 
-  async function handleDisconnect(intId: string) {
+  async function handleDisconnect(int: Integration) {
     if (!token) return;
+    // Drive can have imported a whole folder tree, so the admin gets to say
+    // whether that knowledge goes with the connection. Confluence keeps its
+    // existing one-click behaviour.
+    if (int.provider === "google_drive") {
+      setConfirmDriveRemoval({ kind: "integration", intId: int.id, name: int.displayName });
+      return;
+    }
     try {
-      await deleteKnowledgeIntegration(token, intId);
+      await deleteKnowledgeIntegration(token, int.id);
       await loadIntegrations();
     } catch (err) {
       console.error("Failed to disconnect:", err);
@@ -472,6 +547,7 @@ function KnowledgePageInner() {
     setDriveTab("my");
     setSharedDrivesLoaded(false);
     setSharedDrives([]);
+    setDriveSelection(emptyDriveSelection());
     setConfluencePageStack([]);
     try {
       if (integration.provider === "confluence") {
@@ -612,13 +688,17 @@ function KnowledgePageInner() {
   }
 
   async function handleImportSelected() {
-    if (!token || !browseIntegration || browseSelected.size === 0) return;
+    if (!token || !browseIntegration) return;
+    const isDrive = browseIntegration.provider === "google_drive";
+    if (isDrive ? driveSelection.items.size === 0 : browseSelected.size === 0) return;
+
     setSyncing(true);
     try {
-      if (browseIntegration.provider === "confluence") {
-        await syncConfluenceSpaces(token, browseIntegration.id, Array.from(browseSelected));
+      if (isDrive) {
+        await syncDriveSources(token, browseIntegration.id, driveSelectionList(driveSelection));
+        await loadDriveSources(browseIntegration.id);
       } else {
-        await syncDriveFiles(token, browseIntegration.id, Array.from(browseSelected));
+        await syncConfluenceSpaces(token, browseIntegration.id, Array.from(browseSelected));
       }
       setShowBrowseModal(false);
       await loadKnowledgeBases();
@@ -636,6 +716,72 @@ function KnowledgePageInner() {
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
+  }
+
+  function toggleDriveItem(item: { id: string; name: string; mimeType: string }, isFolder: boolean) {
+    // The Shared Drive id comes from where we are browsing, not from the row:
+    // the listing is the only place that knows it.
+    const driveId = driveFolderStack.length > 0 ? driveFolderStack[0].driveId : undefined;
+    setDriveSelection((prev) => toggleDriveSelection(prev, item, isFolder, driveId));
+  }
+
+  const loadDriveSources = useCallback(async (intId: string) => {
+    if (!token) return;
+    try {
+      const res = await getDriveSources(token, intId);
+      setDriveSources((prev) => ({ ...prev, [intId]: res.data }));
+    } catch (err) {
+      console.error("Failed to load Drive sources:", err);
+    }
+  }, [token]);
+
+  async function handleDriveSyncNow(intId: string, sourceKey?: string) {
+    if (!token) return;
+    setDriveBusyKey(sourceKey || intId);
+    try {
+      await syncDriveNow(token, intId, sourceKey);
+      await loadDriveSources(intId);
+      await loadKnowledgeBases();
+    } catch (err) {
+      console.error("Sync now failed:", err);
+    } finally {
+      setDriveBusyKey(null);
+    }
+  }
+
+  async function handleDriveTogglePause(intId: string, source: DriveSource) {
+    if (!token) return;
+    setDriveBusyKey(source.key);
+    try {
+      await setDriveSourcePaused(token, intId, source.key, !source.paused);
+      await loadDriveSources(intId);
+    } catch (err) {
+      console.error("Pause failed:", err);
+    } finally {
+      setDriveBusyKey(null);
+    }
+  }
+
+  /** Runs the choice the removal dialog collected. `removeData` is never implied. */
+  async function runDriveRemoval(removeData: boolean) {
+    if (!token || !confirmDriveRemoval) return;
+    const pending = confirmDriveRemoval;
+    setDeleting(true);
+    try {
+      if (pending.kind === "source") {
+        await removeDriveSource(token, pending.intId, pending.source.key, removeData);
+        await loadDriveSources(pending.intId);
+      } else {
+        await deleteKnowledgeIntegration(token, pending.intId, removeData);
+        await loadIntegrations();
+      }
+      await loadKnowledgeBases();
+      setConfirmDriveRemoval(null);
+    } catch (err) {
+      console.error("Removal failed:", err);
+    } finally {
+      setDeleting(false);
+    }
   }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -892,7 +1038,7 @@ function KnowledgePageInner() {
                           <div className="absolute right-0 top-full mt-1 bg-white rounded-xl shadow-lg border border-gray-200 py-1.5 z-10 w-56">
                             <p className="px-3 py-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">{t("aiStudio.knowledge.manage.externalSources")}</p>
                             <button
-                              onClick={() => gdConnected ? setDetailTab("integrations") : handleConnect("google_drive")}
+                              onClick={() => { setShowConnectMenu(false); if (gdConnected) setDetailTab("integrations"); else setShowDriveConsent(true); }}
                               className="w-full text-left px-3 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3"
                             >
                               <div className="w-7 h-7 bg-green-100 rounded-lg flex items-center justify-center shrink-0 relative">
@@ -1096,7 +1242,8 @@ function KnowledgePageInner() {
                     ) : (
                       <div className="space-y-2">
                         {integrations.map((int) => (
-                          <div key={int.id} className="bg-white rounded-xl shadow-card border border-gray-100 p-4 flex items-center justify-between">
+                          <div key={int.id} className="bg-white rounded-xl shadow-card border border-gray-100">
+                          <div className="p-4 flex items-center justify-between">
                             <div className="flex items-center gap-3 min-w-0">
                               <div className={clsx(
                                 "w-9 h-9 rounded-xl flex items-center justify-center shrink-0 text-xs font-bold",
@@ -1138,7 +1285,7 @@ function KnowledgePageInner() {
                                 {int.provider === "confluence" ? t("aiStudio.knowledge.manage.browseSpaces") : t("aiStudio.knowledge.manage.browseFiles")}
                               </button>
                               <button
-                                onClick={() => handleDisconnect(int.id)}
+                                onClick={() => handleDisconnect(int)}
                                 className="text-red-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition"
                                 title="Disconnect"
                               >
@@ -1147,6 +1294,98 @@ function KnowledgePageInner() {
                                 </svg>
                               </button>
                             </div>
+                          </div>
+
+                          {/* Connected Drive sources. The integration row is
+                              just the account; these are the things that
+                              actually sync, so status and controls belong per
+                              source, not per account. */}
+                          {/* A revoked grant cannot be retried out of; it needs
+                              a person. Saying so once, above the sources, beats
+                              repeating "Action required" on every row with no
+                              way to act on it. */}
+                          {int.provider === "google_drive" && (driveSources[int.id] || []).some((s) => s.syncState === "action_required") && (
+                            <div className="border-t border-red-100 bg-red-50/60 px-4 py-3 flex items-center justify-between gap-3">
+                              <p className="text-xs text-red-700">{t("aiStudio.knowledge.drive.reconnectNeeded")}</p>
+                              <button
+                                onClick={() => handleConnect("google_drive", true)}
+                                disabled={!!connectingProvider}
+                                className="shrink-0 px-3 py-1.5 rounded-xl text-xs font-semibold text-white bg-red-600 hover:bg-red-700 transition disabled:opacity-50"
+                              >
+                                {t("aiStudio.knowledge.drive.reconnect")}
+                              </button>
+                            </div>
+                          )}
+
+                          {int.provider === "google_drive" && (driveSources[int.id]?.length ?? 0) > 0 && (
+                            <div className="border-t border-gray-100 divide-y divide-gray-50">
+                              {driveSources[int.id].map((src) => {
+                                const busy = driveBusyKey === src.key;
+                                const badge = driveStateBadge(src, t);
+                                return (
+                                  <div key={src.key} className="px-4 py-3 flex items-center justify-between gap-3">
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                      <div className={clsx(
+                                        "w-7 h-7 rounded-lg flex items-center justify-center shrink-0",
+                                        src.kind === "folder" ? "bg-amber-50" : "bg-green-50",
+                                      )}>
+                                        <svg className={clsx("w-3.5 h-3.5", src.kind === "folder" ? "text-amber-600" : "text-green-600")} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                          {src.kind === "folder" ? (
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
+                                          ) : (
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                                          )}
+                                        </svg>
+                                      </div>
+                                      <div className="min-w-0">
+                                        <p className="text-sm text-gray-900 truncate">{src.name}</p>
+                                        <p className="text-[11px] text-gray-400 truncate">
+                                          {src.driveId ? t("aiStudio.knowledge.drive.inSharedDrive") : t("aiStudio.knowledge.drive.inMyDrive")}
+                                          {src.kind === "folder" && src.fileCount !== undefined && (
+                                            <> &middot; {t("aiStudio.knowledge.drive.filesSynced").replace("{count}", String(src.fileCount))}</>
+                                          )}
+                                          {src.lastSyncAt && (
+                                            <> &middot; {t("aiStudio.knowledge.drive.lastSync")} {new Date(src.lastSyncAt).toLocaleString()}</>
+                                          )}
+                                        </p>
+                                        {src.lastError && (
+                                          <p className="text-[11px] text-amber-600 mt-0.5">{src.lastError}</p>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 shrink-0">
+                                      <span className={clsx("px-2 py-0.5 rounded-lg text-[11px] font-medium border", badge.className)}>
+                                        {badge.label}
+                                      </span>
+                                      <button
+                                        onClick={() => handleDriveSyncNow(int.id, src.key)}
+                                        disabled={busy}
+                                        className="px-2.5 py-1.5 rounded-xl text-xs font-medium text-violet-700 bg-violet-50 hover:bg-violet-100 transition disabled:opacity-50"
+                                      >
+                                        {busy ? t("aiStudio.knowledge.drive.syncing") : t("aiStudio.knowledge.drive.syncNow")}
+                                      </button>
+                                      <button
+                                        onClick={() => handleDriveTogglePause(int.id, src)}
+                                        disabled={busy}
+                                        className="px-2.5 py-1.5 rounded-xl text-xs font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 transition disabled:opacity-50"
+                                      >
+                                        {src.paused ? t("aiStudio.knowledge.drive.resume") : t("aiStudio.knowledge.drive.pause")}
+                                      </button>
+                                      <button
+                                        onClick={() => setConfirmDriveRemoval({ kind: "source", intId: int.id, source: src })}
+                                        className="text-red-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition"
+                                        title={t("aiStudio.knowledge.drive.remove")}
+                                      >
+                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
                           </div>
                         ))}
                       </div>
@@ -1494,6 +1733,14 @@ function KnowledgePageInner() {
               </div>
             )}
 
+            {/* What Drive access actually means, said where the choice is made
+                rather than buried in a policy page. */}
+            {browseIntegration.provider === "google_drive" && (
+              <p className="text-[11px] leading-relaxed text-gray-400 mb-3">
+                {t("aiStudio.knowledge.drive.sharedDrivesNote")}
+              </p>
+            )}
+
             {/* Content */}
             <div className="flex-1 overflow-y-auto space-y-1">
               {browseLoading ? (
@@ -1586,20 +1833,23 @@ function KnowledgePageInner() {
                   <p className="text-sm text-gray-400 text-center py-8">{t("aiStudio.knowledge.manage.emptyFolder")}</p>
                 ) : browseItems.map((file: any) => {
                   const isFolder = file.mimeType === "application/vnd.google-apps.folder";
+                  // A folder now has two affordances that must not collide: the
+                  // checkbox subscribes to it, the row opens it. Ticking a
+                  // folder used to be impossible, which is why folder sync did
+                  // not exist.
                   return (
                     <div
                       key={file.id}
                       className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 cursor-pointer"
-                      onClick={() => isFolder ? handleDriveEnterFolder(file.id, file.name) : toggleBrowseItem(file.id)}
+                      onClick={() => isFolder ? handleDriveEnterFolder(file.id, file.name) : toggleDriveItem(file, false)}
                     >
-                      {!isFolder && (
-                        <input
-                          type="checkbox"
-                          checked={browseSelected.has(file.id)}
-                          onChange={() => toggleBrowseItem(file.id)}
-                          className="w-4 h-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
-                        />
-                      )}
+                      <input
+                        type="checkbox"
+                        checked={driveSelection.items.has(file.id)}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={() => toggleDriveItem(file, isFolder)}
+                        className="w-4 h-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                      />
                       <div className={clsx(
                         "w-7 h-7 rounded-lg flex items-center justify-center shrink-0",
                         isFolder ? "bg-amber-50" : "bg-green-50"
@@ -1610,7 +1860,12 @@ function KnowledgePageInner() {
                           <svg className="w-3.5 h-3.5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>
                         )}
                       </div>
-                      <p className="text-sm text-gray-900 truncate flex-1">{file.name}</p>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm text-gray-900 truncate">{file.name}</p>
+                        {isFolder && driveSelection.items.has(file.id) && (
+                          <p className="text-[11px] text-violet-600">{t("aiStudio.knowledge.drive.folderSelected")}</p>
+                        )}
+                      </div>
                       {isFolder && (
                         <svg className="w-4 h-4 text-gray-300 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
                       )}
@@ -1621,18 +1876,107 @@ function KnowledgePageInner() {
             </div>
 
             {/* Footer: selection count + import button */}
-            {browseSelected.size > 0 && (
-              <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
-                <p className="text-xs text-gray-500">{browseSelected.size} selected</p>
+            {(browseIntegration.provider === "google_drive" ? driveSelection.items.size : browseSelected.size) > 0 && (
+              <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs text-gray-500">
+                    {browseIntegration.provider === "google_drive" ? driveSelection.items.size : browseSelected.size} {t("aiStudio.knowledge.drive.selected")}
+                  </p>
+                  {browseIntegration.provider === "google_drive" && driveSelection.kind === "folder" && (
+                    <p className="text-[11px] text-gray-400 mt-0.5">{t("aiStudio.knowledge.drive.folderSyncNote")}</p>
+                  )}
+                </div>
                 <button
                   onClick={handleImportSelected}
                   disabled={syncing}
-                  className="bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition disabled:opacity-50 shadow-sm"
+                  className="bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition disabled:opacity-50 shadow-sm shrink-0"
                 >
-                  {syncing ? "Importing..." : "Import Selected"}
+                  {syncing ? t("aiStudio.knowledge.drive.importing") : t("aiStudio.knowledge.drive.importSelected")}
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Google Drive disclosure, shown BEFORE the OAuth redirect.
+          Google's permission is read-only across the whole Drive; what limits
+          GOTCHA to a few folders is GOTCHA's own logic. Saying the scope itself
+          is folder-limited would be untrue, so the copy separates the two. */}
+      {showDriveConsent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowDriveConsent(false)} />
+          <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center shrink-0">
+                <svg className="w-5 h-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-bold text-gray-900">{t("aiStudio.knowledge.drive.consentTitle")}</h3>
+            </div>
+            <div className="space-y-3 text-sm text-gray-600 leading-relaxed">
+              <p>{t("aiStudio.knowledge.drive.consentAccess")}</p>
+              <p>{t("aiStudio.knowledge.drive.consentFolders")}</p>
+              <p className="text-gray-500">{t("aiStudio.knowledge.drive.consentNeverModifies")}</p>
+            </div>
+            <div className="flex items-center justify-end gap-2 mt-6">
+              <button
+                onClick={() => setShowDriveConsent(false)}
+                className="px-4 py-2 rounded-xl text-sm font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 transition"
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                onClick={() => { setShowDriveConsent(false); handleConnect("google_drive"); }}
+                disabled={!!connectingProvider}
+                className="px-4 py-2 rounded-xl text-sm font-semibold text-white bg-violet-600 hover:bg-violet-700 transition disabled:opacity-50 shadow-sm"
+              >
+                {t("aiStudio.knowledge.drive.consentContinue")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Removing a source, or the whole connection. Two buttons because they
+          are two different decisions: stop syncing, or also throw away what the
+          AI already learned. Neither is implied by the other. */}
+      {confirmDriveRemoval && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => !deleting && setConfirmDriveRemoval(null)} />
+          <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl p-6">
+            <h3 className="text-lg font-bold text-gray-900">
+              {confirmDriveRemoval.kind === "source"
+                ? t("aiStudio.knowledge.drive.removeSourceTitle").replace("{name}", confirmDriveRemoval.source.name)
+                : t("aiStudio.knowledge.drive.disconnectTitle").replace("{name}", confirmDriveRemoval.name)}
+            </h3>
+            <p className="text-sm text-gray-500 mt-2">{t("aiStudio.knowledge.drive.removeBody")}</p>
+            <div className="flex flex-col gap-2 mt-5">
+              <button
+                onClick={() => runDriveRemoval(false)}
+                disabled={deleting}
+                className="w-full px-4 py-2.5 rounded-xl text-sm font-semibold text-gray-800 border border-gray-200 hover:bg-gray-50 transition disabled:opacity-50 text-left"
+              >
+                {t("aiStudio.knowledge.drive.removeKeepData")}
+                <span className="block text-xs font-normal text-gray-400 mt-0.5">{t("aiStudio.knowledge.drive.removeKeepDataHint")}</span>
+              </button>
+              <button
+                onClick={() => runDriveRemoval(true)}
+                disabled={deleting}
+                className="w-full px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-red-600 hover:bg-red-700 transition disabled:opacity-50 shadow-sm text-left"
+              >
+                {t("aiStudio.knowledge.drive.removeWithData")}
+                <span className="block text-xs font-normal text-red-100 mt-0.5">{t("aiStudio.knowledge.drive.removeWithDataHint")}</span>
+              </button>
+              <button
+                onClick={() => setConfirmDriveRemoval(null)}
+                disabled={deleting}
+                className="w-full px-4 py-2 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 transition disabled:opacity-50"
+              >
+                {t("common.cancel")}
+              </button>
+            </div>
           </div>
         </div>
       )}

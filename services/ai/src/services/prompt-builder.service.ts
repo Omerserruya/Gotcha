@@ -444,6 +444,10 @@ function buildAgentBlock(opts: BuildPromptOpts, strategy: StrategyContract): str
   // Brand Voice (Layer 4) - agent-stable archetype, directly under Personality.
   if (opts.behaviorState.mode !== "generator") {
     push(parts, renderBrandVoice(asRecord(opts.agent.persona)?.brand_archetype));
+    // The OBSERVED voice, counted from this tenant's own sent messages. It sits
+    // after the archetype because it is evidence rather than a choice: where the
+    // two disagree, what the business has actually written for years wins.
+    push(parts, buildObservedVoiceBlock(opts));
   }
   push(parts, buildAgentPlaybooksStatic(opts));
   // Product Qualification Context (sales-oriented skills) - anchors discovery to
@@ -485,6 +489,27 @@ function buildCompanyBlock(opts: BuildPromptOpts): string | null {
       "Never describe the company as an outsider, never ask the customer what your own company does, and never act like a neutral assistant - you represent this business.",
   );
   return lines.join("\n");
+}
+
+/**
+ * How this business actually writes, learned from its own history.
+ *
+ * Tenant-level and byte-stable across turns, so it costs nothing in prompt
+ * cache. Absent for any tenant that never imported a history, and silence is
+ * the correct output then: a generic paragraph about being warm and helpful
+ * would be worse than nothing, because the model already knows how to do that
+ * and would follow it instead of the business's real habits.
+ */
+function buildObservedVoiceBlock(opts: BuildPromptOpts): string | null {
+  if (opts.behaviorState.mode === "generator") return null;
+  const voice = opts.company?.observedVoice;
+  if (!voice || !voice.trim()) return null;
+  return [
+    "# How this business writes",
+    "Learned by counting this business's own past messages to its customers. Follow it: a correct answer in the wrong voice still reads as a machine.",
+    "",
+    voice.trim(),
+  ].join("\n");
 }
 
 /** Sales-oriented skills that benefit from product/offer context. */

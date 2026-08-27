@@ -824,6 +824,34 @@ router.get(
   },
 );
 
+// Read the mapping currently on the connection config - powers the
+// post-onboarding "refresh fields / edit mapping" card. The onboarding wizard
+// never needed this (it writes a fresh mapping), which is why editing the
+// mapping after onboarding used to be impossible without reconnecting.
+router.get(
+  "/connectors/airtable/mapping",
+  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), canConnectSystems,
+  async (req: Request, res: Response) => {
+    const cat = await findCatalog("airtable");
+    if (!cat) { res.status(404).json({ error: "unknown_provider" }); return; }
+    const ti = await (prisma as any).tenantIntegration.findUnique({
+      where: { tenantId_integrationId: { tenantId: req.tenantId, integrationId: cat.id } },
+    });
+    if (!ti) { res.status(400).json({ error: "not_connected" }); return; }
+    const cfg = (ti.config && typeof ti.config === "object" ? ti.config : {}) as Record<string, unknown>;
+    res.json({
+      data: {
+        baseId: cfg.baseId ?? null,
+        tableId: cfg.tableId ?? null,
+        tableName: cfg.tableName ?? null,
+        fieldMap: cfg.fieldMap ?? {},
+        notesField: cfg.notesField ?? null,
+        idempotencyField: cfg.idempotencyField ?? null,
+      },
+    });
+  },
+);
+
 // Save the mapping onto the connection config. Optionally auto-create the
 // notes / idempotency columns we OWN (never identifier columns) when
 // create_missing=true and the token carries schema.bases:write.

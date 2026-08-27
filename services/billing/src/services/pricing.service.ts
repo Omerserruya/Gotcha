@@ -29,6 +29,7 @@ import {
   type BillingMoney as Money,
   type DisplayPrice,
 } from "@chatcenter/shared";
+import { resolveDiscount } from "./coupon.service";
 import { taxForDisplay, resolveTaxRate, DEFAULT_DISPLAY_COUNTRY, type DisplayTax } from "./tax.service";
 
 export interface VolumeOptionView {
@@ -528,6 +529,16 @@ export function snapshotFor(q: Quote) {
  * the live plan, so publishing a new plan version never restates what a current
  * customer sees.
  */
+/** The tenant a subscription bills, for callers that pass the raw row. */
+async function firstTenantForSubscription(sub: { billableEntityId?: string | null }): Promise<string | null> {
+  if (!sub.billableEntityId) return null;
+  const link = await prisma.billableEntityTenant.findFirst({
+    where: { billableEntityId: sub.billableEntityId },
+    select: { tenantId: true },
+  });
+  return link?.tenantId ?? null;
+}
+
 export async function describeSubscription(sub: any, displayCurrency = "USD") {
   const now = new Date();
   const plan = await prisma.plan.findUnique({
@@ -549,6 +560,15 @@ export async function describeSubscription(sub: any, displayCurrency = "USD") {
   if (chatOpt) chatCredits += chatOpt.additionalCredits;
   if (voiceOpt) voiceCredits += voiceOpt.additionalCredits;
 
+  // The discount, resolved through the SAME function the charge uses. The
+  // customer sees their plan's real price with the saving beside it - never a
+  // quietly rewritten price, which would make "what does this plan cost"
+  // unanswerable and a lapsing coupon look like a price rise.
+  const tenantId: string | null = sub.tenantId ?? (await firstTenantForSubscription(sub));
+  const discount = tenantId
+    ? await resolveDiscount({ tenantId, listPrice: sub.snapshotPrice ?? plan?.basePrice ?? 0, currency, at: now })
+    : null;
+
   return {
     planKey: sub.planKey,
     planVersion: sub.planVersion,
@@ -556,6 +576,20 @@ export async function describeSubscription(sub: any, displayCurrency = "USD") {
     planNameHe: plan?.nameHe ?? null,
     planKind: plan?.kind ?? "LEGACY",
     monthlyPrice: await toDisplayPrice(price, displayCurrency, now),
+    /**
+     * Null when nothing applies. When present, `monthlyPrice` above is still
+     * the list price - `payableNow` is what the next charge will take.
+     */
+    discount:
+      discount?.coupon != null
+        ? {
+            couponCode: discount.coupon.code,
+            label: discount.coupon.label,
+            amount: await toDisplayPrice(discount.discount, displayCurrency, now),
+            payableNow: await toDisplayPrice(discount.net, displayCurrency, now),
+            endsAt: discount.endsAt,
+          }
+        : null,
     includedCredits,
     chatVolumeOptionKey: sub.chatVolumeOptionKey,
     voiceVolumeOptionKey: sub.voiceVolumeOptionKey,

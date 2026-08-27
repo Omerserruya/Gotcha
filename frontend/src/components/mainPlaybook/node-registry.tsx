@@ -301,6 +301,74 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
     },
   },
 
+  // Campaign entry - fires when the conversation came from a Click-to-WhatsApp
+  // ad. Ranked ABOVE channel and keyword entries by the executor: a lead the
+  // business paid for is the most specific thing known about an inbound
+  // message, and an author who wires this means it.
+  campaign_entry: {
+    type: "campaign_entry", label: "From Ad Campaign", color: "amber", icon: ICONS.start, category: "Triggers",
+    handles: { sources: [{ id: TRIGGER_SOURCE_HANDLE, position: "bottom" }] },
+    defaultData: () => ({ scope: "any", sourceIds: [], label: "" }),
+    summary: (d) => {
+      if (d.scope !== "specific") return "On: any ad campaign";
+      const ids: string[] = Array.isArray(d.sourceIds) ? d.sourceIds.filter(Boolean) : [];
+      if (ids.length === 0) return "⚠️ pick an ad (matches nothing)";
+      return ids.length === 1 ? `On ad: ${ids[0]}` : `On ${ids.length} ads`;
+    },
+    Body: ({ data, onChange }) => {
+      const ids: string[] = Array.isArray(data.sourceIds) ? data.sourceIds : [];
+      return (
+        <div className="space-y-3">
+          <Field
+            label="Which campaigns"
+            hint="WhatsApp tells us the ad a conversation came from, on the customer's first message."
+          >
+            <select
+              className={inspectorInput}
+              value={data.scope || "any"}
+              onChange={(e) => onChange({ scope: e.target.value })}
+            >
+              <option value="any">Any ad campaign</option>
+              <option value="specific">Specific ad(s) only</option>
+            </select>
+          </Field>
+
+          {data.scope === "specific" && (
+            <Field
+              label="Ad IDs"
+              hint="One per line. Copy the ad ID from Meta Ads Manager. An ad ID that does not match simply will not fire - it never falls back to every campaign."
+            >
+              <textarea
+                className={inspectorInput}
+                rows={3}
+                value={ids.join("\n")}
+                onChange={(e) =>
+                  onChange({ sourceIds: e.target.value.split("\n").map((v) => v.trim()).filter(Boolean) })
+                }
+                placeholder={"120210000000000000\n120210000000000001"}
+              />
+            </Field>
+          )}
+
+          {data.scope === "specific" && ids.length === 0 && (
+            <p className="text-xs text-amber-700">
+              No ad selected, so this entry matches nothing. Either add an ad ID or switch to &quot;Any ad campaign&quot;.
+            </p>
+          )}
+
+          <Field label="Label" hint="Display name on the canvas card.">
+            <input
+              className={inspectorInput}
+              value={data.label || ""}
+              onChange={(e) => onChange({ label: e.target.value })}
+              placeholder="From ad"
+            />
+          </Field>
+        </div>
+      );
+    },
+  },
+
   start: {
     type: "start", label: "Start", color: "emerald", icon: ICONS.start, category: "Flow Control",
     handles: { sources: [{ position: "bottom" }] },

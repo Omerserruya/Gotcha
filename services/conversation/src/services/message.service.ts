@@ -1,4 +1,4 @@
-import { prisma, publishEvent, type ChannelType } from "@chatcenter/shared";
+import { prisma, publishEvent, type ChannelType, withHistoricalRecords } from "@chatcenter/shared";
 import { getIO } from "../lib/socket";
 
 interface CreateMessageData {
@@ -17,11 +17,21 @@ interface CreateMessageData {
   replyToMessageId?: string;
 }
 
+/**
+ * Read one conversation's messages.
+ *
+ * Wrapped in `withHistoricalRecords` because this is asked for a conversation
+ * the caller has ALREADY chosen. The live-by-default guard exists to keep
+ * imported threads out of listings that decide what an agent works on - the
+ * inbox, unread counts, routing - not to blank the thread after somebody
+ * opens it from the History panel. Without this, an imported conversation
+ * opened cleanly and showed zero messages, which reads as data loss.
+ */
 export async function listByConversation(tenantId: string, conversationId: string, options: { page?: number; limit?: number } = {}) {
   const page = Math.max(options.page ?? 1, 1);
   const limit = Math.min(Math.max(options.limit ?? 50, 1), 100);
   const skip = (page - 1) * limit;
-  const [messages, total] = await Promise.all([
+  const [messages, total] = await withHistoricalRecords(() => Promise.all([
     prisma.message.findMany({
       where: { tenantId, conversationId },
       orderBy: { createdAt: "asc" },
@@ -50,7 +60,7 @@ export async function listByConversation(tenantId: string, conversationId: strin
       },
     }),
     prisma.message.count({ where: { tenantId, conversationId } }),
-  ]);
+  ]));
   return { data: messages, meta: { page, limit, total, totalPages: Math.ceil(total / limit) } };
 }
 

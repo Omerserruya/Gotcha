@@ -21,6 +21,16 @@ export interface ServiceConfig {
    * preflight at all and its origin checks are silently bypassed.
    */
   publicCorsPaths?: string[];
+  /**
+   * Body-size limit for the shared JSON parser (express.json's "100kb" when
+   * omitted). This global parser runs BEFORE any route-mounted parser, so a
+   * service that needs bigger bodies must raise it HERE - a parser mounted
+   * later never sees the request, it has already been rejected. The webhook
+   * service passes "5mb": WhatsApp Coexistence history-sync chunks arrive at
+   * ~300kb and were all 413'd by the default, silently losing the once-only
+   * history delivery.
+   */
+  jsonLimit?: string;
 }
 
 export function createServiceApp(config: ServiceConfig): express.Express {
@@ -61,7 +71,10 @@ export function createServiceApp(config: ServiceConfig): express.Express {
   // HMAC signatures over the EXACT bytes received. JSON.stringify(req.body) is
   // NOT byte-identical (key order / whitespace), so without this the signature
   // check would always fail in production.
-  app.use(express.json({ verify: (req, _res, buf) => { (req as any).rawBody = buf; } }));
+  app.use(express.json({
+    limit: config.jsonLimit,
+    verify: (req, _res, buf) => { (req as any).rawBody = buf; },
+  }));
 
   // Health check. `build` is the image's BUILD_SHA (git SHA injected at
   // docker build time) - the ground truth for "which code is this container

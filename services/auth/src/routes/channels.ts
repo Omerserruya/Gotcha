@@ -246,8 +246,15 @@ router.get("/:id/posts", authenticate, resolveTenant, requirePermission("channel
     }
 
     // Instagram
+    // Instagram-Login accounts hold an IG-user token that only graph.instagram.com
+    // can parse; legacy Facebook-Login accounts hold a Page token for
+    // graph.facebook.com. The `igLogin` credential flag selects the host, exactly
+    // as the inbound adapter and the health worker do. Sending an IG-user token
+    // to graph.facebook.com fails with "Cannot parse access token".
     const igUserId = creds.igBusinessId || account.externalId;
-    const url = `${FB_API_URL}/${igUserId}/media`;
+    const url = creds.igLogin
+      ? `${IG_API_URL}/me/media`
+      : `${FB_API_URL}/${igUserId}/media`;
     const resp = await axios.get(url, {
       params: {
         fields: "id,caption,media_url,thumbnail_url,permalink,timestamp,media_type",
@@ -269,6 +276,16 @@ router.get("/:id/posts", authenticate, resolveTenant, requirePermission("channel
   } catch (err: any) {
     const detail = err?.response?.data?.error?.message || err?.message;
     console.error(`[channels] GET /${String(req.params.id)}/posts failed:`, detail);
+    // Meta answers a dead token and a missing permission with the same HTTP
+    // shape, but the fix differs and only the user can apply it. Say which one
+    // it is instead of bubbling an opaque 502 into the trigger picker.
+    const text = String(detail || "");
+    if (/parse access token|access token.*expired|session (has been )?invalidated|OAuthException/i.test(text)) {
+      return res.status(409).json({ error: "This channel's connection has expired. Reconnect it in Settings > Channels, then load posts again.", detail });
+    }
+    if (/pages_read_engagement|pages_manage_metadata|permission/i.test(text)) {
+      return res.status(403).json({ error: "This channel is missing the permission to read its posts. Reconnect it in Settings > Channels and approve all requested permissions.", detail });
+    }
     return res.status(502).json({ error: "Failed to load posts", detail });
   }
 });
@@ -704,12 +721,14 @@ router.get("/oauth/init", async (req: Request, res: Response) => {
       });
     } else if (platform === "gmail") {
       // Google OAuth2 for Gmail API
-      const googleScopes = [
-        "https://www.googleapis.com/auth/gmail.readonly",
-        "https://www.googleapis.com/auth/gmail.send",
-        "https://www.googleapis.com/auth/gmail.modify",
-        "https://www.googleapis.com/auth/userinfo.email",
-      ].join(" ");
+      // ONE scope. gmail.modify is listed as an accepted authorization scope by
+      // every Gmail endpoint this channel touches: users.getProfile,
+      // users.watch, users.stop, users.history.list, users.messages.get and
+      // users.messages.send. gmail.readonly and gmail.send were strict subsets
+      // of it, and userinfo.email was only ever used to learn the mailbox
+      // address, which getProfile returns itself. A scope we do not need is
+      // still a scope Google has to review and a user has to grant.
+      const googleScopes = "https://www.googleapis.com/auth/gmail.modify";
       oauthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(GOOGLE_OAUTH_REDIRECT_URI)}&response_type=code&scope=${encodeURIComponent(googleScopes)}&access_type=offline&prompt=consent&state=${encodeURIComponent(state)}`;
     } else if (platform === "outlook") {
       // Microsoft OAuth2 for Outlook Mail (Microsoft Graph)
@@ -1285,45 +1304,55 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
       const { access_token: gmailAccessToken, refresh_token: gmailRefreshToken, expires_in } = tokenResponse.data;
       tokenExpiresAt = new Date(Date.now() + (expires_in || 3600) * 1000);
 
-      // Get user email address
-      const profileResponse = await axios.get("https://www.googleapis.com/oauth2/v2/userinfo", {
-        headers: { Authorization: `Bearer ${gmailAccessToken}` },
-      });
-      const emailAddress = profileResponse.data.email;
-      const displayName = profileResponse.data.name || emailAddress;
-
-      if (!emailAddress) {
-        res.redirect(`${frontendUrl}/channels?error=gmail_no_email`);
-        return;
-      }
-
-      // Set up Gmail push notifications via Pub/Sub
-      try {
-        const watchTopic = process.env.GMAIL_PUBSUB_TOPIC || "";
-        if (watchTopic) {
-          await axios.post(
-            `https://gmail.googleapis.com/gmail/v1/users/me/watch`,
-            { topicName: watchTopic, labelIds: ["INBOX"] },
-            { headers: { Authorization: `Bearer ${gmailAccessToken}` } }
-          );
-          console.log(`[GMAIL-CALLBACK] Push notifications enabled for ${emailAddress}`);
-        }
-      } catch (watchErr: any) {
-        console.warn("[GMAIL-CALLBACK] Watch setup warning:", watchErr.response?.data || watchErr.message);
-      }
-
-      // Get current historyId for tracking new messages going forward
+      // The mailbox address comes from Gmail's own getProfile, not from
+      // Google's oauth2 userinfo endpoint. userinfo needs a userinfo.* scope of
+      // its own, while getProfile hands back the address AND the current
+      // historyId under the gmail.modify we already hold. Two calls collapse
+      // into one, and one scope disappears.
+      let emailAddress = "";
       let initialHistoryId: string | undefined;
       try {
         const gmailProfileRes = await axios.get(
           "https://gmail.googleapis.com/gmail/v1/users/me/profile",
           { headers: { Authorization: `Bearer ${gmailAccessToken}` } }
         );
+        emailAddress = gmailProfileRes.data.emailAddress || "";
         initialHistoryId = gmailProfileRes.data.historyId?.toString();
-        console.log(`[GMAIL-CALLBACK] Initial historyId: ${initialHistoryId}`);
-      } catch (histErr: any) {
-        console.warn("[GMAIL-CALLBACK] Failed to get historyId:", histErr.response?.data || histErr.message);
+      } catch (profileErr: any) {
+        console.error("[GMAIL-CALLBACK] getProfile failed:", profileErr.response?.data || profileErr.message);
       }
+
+      if (!emailAddress) {
+        res.redirect(`${frontendUrl}/channels?error=gmail_no_email`);
+        return;
+      }
+
+      // A mailbox is its address. The old code read `name` off userinfo, but we
+      // only ever asked for userinfo.email, never userinfo.profile, so `name`
+      // was absent and this fell through to the address anyway. Same value,
+      // without the scope.
+      const displayName = emailAddress;
+
+      // Set up Gmail push notifications via Pub/Sub. The watch response carries
+      // the mailbox history record at the moment the watch was armed, which is
+      // the correct starting point: an older id would replay mail that arrived
+      // before we were listening.
+      try {
+        const watchTopic = process.env.GMAIL_PUBSUB_TOPIC || "";
+        if (watchTopic) {
+          const watchRes = await axios.post(
+            `https://gmail.googleapis.com/gmail/v1/users/me/watch`,
+            { topicName: watchTopic, labelIds: ["INBOX"] },
+            { headers: { Authorization: `Bearer ${gmailAccessToken}` } }
+          );
+          initialHistoryId = watchRes.data?.historyId?.toString() || initialHistoryId;
+          console.log(`[GMAIL-CALLBACK] Push notifications enabled for ${emailAddress}`);
+        }
+      } catch (watchErr: any) {
+        console.warn("[GMAIL-CALLBACK] Watch setup warning:", watchErr.response?.data || watchErr.message);
+      }
+
+      console.log(`[GMAIL-CALLBACK] Initial historyId: ${initialHistoryId}`);
 
       // Unique-key lookup; refuse if mailbox is already bound elsewhere.
       const existing = await prisma.channelAccount.findUnique({

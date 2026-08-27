@@ -27,6 +27,10 @@ const navItems = [
   // costs, this one decides what a card is actually debited. Burying the second
   // inside the first would make a 10x mistake easy to make quietly.
   { href: "/system/exchange-rate", icon: PricingIcon, label: "Exchange Rate" },
+  // Its own entry rather than a corner of Plans & Pricing: a coupon does not
+  // change what a plan costs, it changes what one customer is charged, and
+  // confusing the two is how discounts turn into pricing chaos.
+  { href: "/system/coupons", icon: PricingIcon, label: "Coupons" },
 ];
 
 export function SystemLayout({ children }: { children: React.ReactNode }) {

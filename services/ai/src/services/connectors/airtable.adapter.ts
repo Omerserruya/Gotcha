@@ -68,6 +68,14 @@ const TOOLS: ToolDefinition[] = [
     },
   },
   {
+    name: "airtable.describe_fields",
+    description: "List the columns of the configured Airtable table (name, type, select options).",
+    whenToUse: "You need to know which fields exist before filtering, creating or mapping records.",
+    category: "READ",
+    riskLevel: "LOW",
+    parameters: { type: "object", properties: {} },
+  },
+  {
     name: "airtable.update_record",
     description: "Patch fields on an existing Airtable record.",
     whenToUse: "Updating status/notes on a known record.",
@@ -106,6 +114,21 @@ const AirtableAdapter: ProviderAdapter = {
         }
         const r: any = await airtable(apiKey, "GET", `${tableUrl}?${params}`);
         return (r.records || []).map((rec: any) => ({ id: rec.id, fields: rec.fields }));
+      }
+      case "describe_fields": {
+        // The table's live column schema - powers the audience builder's
+        // field picker and template-variable mapping, the same way
+        // hubspot.describe_fields does for HubSpot.
+        const r: any = await airtable(apiKey, "GET", `${AIRTABLE_API}/meta/bases/${baseId}/tables`);
+        const table = (r.tables || []).find((t: any) => t.id === tableId || t.name === tableId);
+        return (table?.fields || []).map((f: any) => ({
+          id: f.id,
+          name: f.name,
+          type: f.type,
+          choices: Array.isArray(f.options?.choices)
+            ? f.options.choices.map((c: any) => String(c.name ?? "")).filter(Boolean)
+            : undefined,
+        }));
       }
       case "get_record": {
         const r: any = await airtable(apiKey, "GET", `${tableUrl}/${encodeURIComponent(String(args.record_id))}`);

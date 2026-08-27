@@ -30,6 +30,9 @@ export const PLATFORM_PERMISSIONS = {
   BILLING_PAYMENT_LINK_RESEND: "platform:billing:payment-link:resend",
   BILLING_READ: "platform:billing:read",
   USAGE_ANALYTICS_READ: "platform:usage-analytics:read",
+  /// Issue coupons and give them to organizations. Commercial: it changes
+  /// what a customer is charged, every period the coupon is live.
+  COUPONS_MANAGE: "platform:coupons:manage",
 } as const;
 
 export type PlatformPermission = (typeof PLATFORM_PERMISSIONS)[keyof typeof PLATFORM_PERMISSIONS];
@@ -84,6 +87,13 @@ export const PLATFORM_PERMISSION_CATALOG: readonly PlatformPermissionDef[] = [
     displayName: "Read cross-organization usage analytics",
     description: "Read actual credit, token and model-cost analytics across organizations.",
     commercial: false,
+  },
+  {
+    key: PLATFORM_PERMISSIONS.COUPONS_MANAGE,
+    displayName: "Issue and assign coupons",
+    description:
+      "Create discount coupons and assign them to organizations. Every period inside an assignment window is charged the discounted amount.",
+    commercial: true,
   },
 ] as const;
 

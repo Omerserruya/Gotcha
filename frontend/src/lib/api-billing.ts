@@ -289,6 +289,28 @@ export interface CurrentSubscriptionView {
   voiceDailyVolume: number | null;
   estimate: QuoteEstimate;
   fromSnapshot: boolean;
+  /**
+   * Null when no coupon applies. When present, `monthlyPrice` above is still
+   * the plan's LIST price - the UI shows the saving next to it rather than
+   * quietly rendering a smaller number.
+   */
+  discount: {
+    couponCode: string;
+    label: string;
+    amount: DisplayPrice;
+    payableNow: DisplayPrice;
+    endsAt: string | null;
+  } | null;
+}
+
+/** The ask when a POC or trial is ending, or has ended. */
+export interface EvaluationPrompt {
+  kind: "POC" | "TRIAL";
+  planKey: string;
+  planName: string;
+  endedAt: string | null;
+  endingSoon: boolean;
+  daysLeft: number | null;
 }
 
 export interface PaymentMethod {
@@ -466,7 +488,11 @@ export const getQuote = (
   });
 
 export const getCurrentPricing = (token: string, currency = "USD") =>
-  apiFetch<{ subscription: CurrentSubscriptionView | null; disclaimer: { en: string; he: string } }>(
+  apiFetch<{
+    subscription: CurrentSubscriptionView | null;
+    evaluationPrompt?: EvaluationPrompt | null;
+    disclaimer: { en: string; he: string };
+  }>(
     `/api/billing/pricing/current?currency=${encodeURIComponent(currency)}`,
     { token },
   );
@@ -529,3 +555,105 @@ export const saveBillingIdentity = (token: string, identity: Partial<BillingIden
     method: "PUT",
     body: JSON.stringify(identity),
   });
+
+// ─── Coupons (Sysadmin) ─────────────────────────────────────
+//
+// A coupon is a discount on an existing price. It never changes the plan the
+// customer is on, and the same resolver feeds both the charge and the billing
+// page - so what an operator sets here is exactly what gets taken.
+
+export interface AdminCoupon {
+  id: string;
+  code: string;
+  nameEn: string;
+  nameHe: string | null;
+  discountType: "PERCENT" | "FIXED";
+  percentOff: number | null;
+  amountOff: string | null;
+  currency: string | null;
+  defaultDurationMonths: number | null;
+  active: boolean;
+  maxRedemptions: number | null;
+  redemptionCount: number;
+  assignmentCount: number;
+  internalNote: string | null;
+  label: string;
+  createdAt: string;
+}
+
+export interface TenantCouponAssignment {
+  id: string;
+  code: string;
+  nameEn: string;
+  nameHe: string | null;
+  label: string;
+  discountType: "PERCENT" | "FIXED";
+  percentOff: number | null;
+  amountOff: string | null;
+  currency: string | null;
+  startsAt: string;
+  endsAt: string | null;
+  status: "ACTIVE" | "EXPIRED" | "REVOKED";
+  /** Discounting money right now (window open AND coupon still active). */
+  live: boolean;
+  note: string | null;
+  assignedBy: string | null;
+  createdAt: string;
+}
+
+export const listCoupons = (token: string) =>
+  apiFetch<{ coupons: AdminCoupon[] }>("/api/admin/coupons", { token });
+
+export const createCoupon = (
+  token: string,
+  input: {
+    code: string;
+    nameEn: string;
+    nameHe?: string | null;
+    discountType: "PERCENT" | "FIXED";
+    percentOff?: number | null;
+    amountOff?: string | null;
+    currency?: string | null;
+    defaultDurationMonths?: number | null;
+    maxRedemptions?: number | null;
+    internalNote?: string | null;
+  },
+) =>
+  apiFetch<{ coupon: AdminCoupon }>("/api/admin/coupons", {
+    token,
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+
+export const setCouponActive = (token: string, couponId: string, active: boolean) =>
+  apiFetch<{ coupon: AdminCoupon }>(`/api/admin/coupons/${couponId}/active`, {
+    token,
+    method: "POST",
+    body: JSON.stringify({ active }),
+  });
+
+export const listTenantCoupons = (token: string, tenantId: string) =>
+  apiFetch<{ assignments: TenantCouponAssignment[] }>(`/api/admin/coupons/tenants/${tenantId}`, { token });
+
+export const assignCouponToTenant = (
+  token: string,
+  tenantId: string,
+  input: { couponId?: string; code?: string; startsAt?: string; endsAt?: string | null; durationMonths?: number | null; note?: string | null },
+) =>
+  apiFetch<{ assignment: { id: string } }>(`/api/admin/coupons/tenants/${tenantId}`, {
+    token,
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+
+export const revokeTenantCoupon = (token: string, assignmentId: string) =>
+  apiFetch<{ assignment: { id: string } }>(`/api/admin/coupons/assignments/${assignmentId}`, {
+    token,
+    method: "DELETE",
+  });
+
+export const listAssignableTenants = (token: string, q = "") =>
+  apiFetch<{ tenants: Array<{ id: string; name: string; slug: string }> }>(
+    `/api/admin/coupons/assignable-tenants${q ? `?q=${encodeURIComponent(q)}` : ""}`,
+    { token },
+  );

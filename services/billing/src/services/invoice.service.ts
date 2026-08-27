@@ -22,6 +22,14 @@ export interface ChargeForInput {
   /** Stable key so retries never double-charge. */
   idempotencyKey: string;
   attemptNumber?: number;
+  /**
+   * What the price would have been without a coupon, and what came off.
+   *
+   * `amount` above is always what we actually ask for - the discounted figure.
+   * These are recorded alongside it so a receipt, and anyone reading the row a
+   * year later, can see the discount rather than a mysteriously small charge.
+   */
+  discount?: { listAmount: number; discountAmount: number; couponCode: string };
 }
 
 export interface ChargeForResult {
@@ -103,11 +111,30 @@ export async function chargeFor(input: ChargeForInput): Promise<ChargeForResult>
           amount: input.amount.toFixed(2),
           currency,
           status: "DRAFT",
-          lineItems: [{ description: input.description, amount: input.amount }],
+          lineItems: input.discount
+            ? [
+                { description: input.description, amount: input.discount.listAmount },
+                {
+                  description: `Discount (${input.discount.couponCode})`,
+                  amount: -input.discount.discountAmount,
+                },
+              ]
+            : [{ description: input.description, amount: input.amount }],
         },
       });
       const chg = await tx.charge.create({
-        data: { invoiceId: inv.id, provider: ctx?.provider ?? "ICOUNT", amount: input.amount.toFixed(2), currency, status: "PENDING", attemptNumber: input.attemptNumber ?? 1, idempotencyKey: input.idempotencyKey },
+        data: {
+          invoiceId: inv.id,
+          provider: ctx?.provider ?? "ICOUNT",
+          amount: input.amount.toFixed(2),
+          currency,
+          status: "PENDING",
+          attemptNumber: input.attemptNumber ?? 1,
+          idempotencyKey: input.idempotencyKey,
+          listAmount: input.discount ? input.discount.listAmount.toFixed(2) : null,
+          discountAmount: input.discount ? input.discount.discountAmount.toFixed(2) : null,
+          couponCode: input.discount?.couponCode ?? null,
+        },
       });
       return { invoiceId: inv.id, chargeId: chg.id };
     });

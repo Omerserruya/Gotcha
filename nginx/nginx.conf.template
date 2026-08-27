@@ -45,6 +45,14 @@ http {
         server frontend:${FRONTEND_PORT};
     }
 
+    # API documentation UI. DEV ONLY - gateway/nginx.prod.conf.template has no
+    # equivalent upstream or location, so /api/docs simply does not exist in
+    # production. That is a structural absence, not a runtime flag that could be
+    # flipped by accident.
+    upstream swagger_ui {
+        server swagger-ui:8080;
+    }
+
     # Authentik - the identity provider, fronted at auth-dev.gotcha.co.il by
     # the vhost at the bottom of this file. Mirrors the prod topology so dev
     # exercises the same issuer/proxy path rather than a localhost shortcut.
@@ -193,6 +201,16 @@ http {
             proxy_pass http://billing_service;
             proxy_set_header Host $host;
             proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Coupons: sysadmin-issued discounts. One prefix for the whole
+        # surface - see the prod template for why.
+        location /api/admin/coupons {
+            proxy_pass http://billing_service;
+            proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -978,6 +996,19 @@ http {
         # ─── Embedded Chat (public, CORS enabled) ────────
         location /api/embedded-chat {
             # CORS for widget on external sites
+            #
+            # The upstream's headers are HIDDEN first, and that is the whole
+            # fix: services/ai mounts cors({origin: FRONTEND_URL, credentials:
+            # true}) for the dashboard, so every embedded-chat response also
+            # carried Access-Control-Allow-Origin: https://app.gotcha.co.il.
+            # Added to the wildcard below that made TWO of the header, and a
+            # browser refuses a response whose Access-Control-Allow-Origin
+            # "contains multiple values" - so the widget was blocked on every
+            # site that embedded it, ours included, while curl saw a healthy
+            # 200. The credentials flag goes too: it is invalid beside "*",
+            # and this surface carries no cookie and no token anyway.
+            proxy_hide_header Access-Control-Allow-Origin;
+            proxy_hide_header Access-Control-Allow-Credentials;
             add_header Access-Control-Allow-Origin * always;
             add_header Access-Control-Allow-Methods "GET, POST, OPTIONS" always;
             add_header Access-Control-Allow-Headers "Content-Type" always;
@@ -1525,6 +1556,40 @@ http {
             proxy_pass http://voice_copilot_service;
             proxy_set_header Host $host;
             proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # ─── API documentation (DEV ONLY) ────────────────
+        #
+        # Two things live here:
+        #   /api/docs/openapi.yaml  the generated spec as a raw file, so
+        #                           Postman, Insomnia or an IDE plugin can
+        #                           fetch it over HTTP
+        #   /api/docs/              Swagger UI, which fetches that same URL
+        #
+        # The exact-match location is declared first and, being `=`, wins over
+        # the prefix proxy below regardless of order - otherwise the UI would
+        # proxy the spec request to itself and 404.
+        location = /api/docs/openapi.yaml {
+            alias /usr/share/nginx/api-docs/openapi.yaml;
+            default_type application/yaml;
+            add_header Access-Control-Allow-Origin "*" always;
+            add_header Cache-Control "no-store" always;
+        }
+
+        location = /api/docs {
+            return 301 /api/docs/;
+        }
+
+        # proxy_pass with a trailing slash strips the /api/docs/ prefix, so the
+        # container sees "/" and serves from its own root. That is why BASE_URL
+        # is not set on the container: it must stay root-relative to work on the
+        # published port too.
+        location /api/docs/ {
+            proxy_pass http://swagger_ui/;
+            proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;

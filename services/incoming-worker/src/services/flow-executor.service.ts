@@ -169,7 +169,12 @@ export async function executeMainFlow(opts: {
   }
 
   if (!startId) {
-    const entry = pickMainFlowEntry(nodes, opts.channel, opts.message);
+    // Read the ad origin only when a campaign entry actually exists. Most
+    // tenants have none, and this runs on every inbound message.
+    const campaign = nodes.some((n) => n.type === "campaign_entry")
+      ? await loadCampaignOrigin(opts.tenantId, opts.conversationId)
+      : null;
+    const entry = pickMainFlowEntry(nodes, opts.channel, opts.message, campaign);
     if (!entry) return { executed: false, halted: false, reason: "no_entry", trace: [] };
     startId = entry.id;
   }
@@ -594,9 +599,93 @@ function reportUnresolvedQuickReply(opts: {
   }).catch(() => {});
 }
 
-function pickMainFlowEntry(nodes: GraphNode[], channel: string, message?: string): GraphNode | null {
+/**
+ * The conversation's ad origin. Null when there is no conversation (a
+ * context-free webhook run) or when the row cannot be read - a campaign entry
+ * then simply does not match, which is the safe direction: a paid lead routed
+ * to the normal flow is a missed opportunity, while a normal lead routed into
+ * a campaign flow is a wrong conversation.
+ */
+async function loadCampaignOrigin(
+  tenantId: string,
+  conversationId: string | null,
+): Promise<CampaignOrigin | null> {
+  if (!conversationId) return null;
+  try {
+    const row = await prisma.conversation.findFirst({
+      where: { id: conversationId, tenantId },
+      select: { fromAdCampaign: true, referralSourceId: true, referralHeadline: true },
+    });
+    return row ?? null;
+  } catch (err: any) {
+    console.warn("[flow-executor] could not read campaign origin:", err?.message ?? err);
+    return null;
+  }
+}
+
+/** The conversation's ad origin, for entries that filter on it. */
+export interface CampaignOrigin {
+  fromAdCampaign: boolean;
+  referralSourceId?: string | null;
+  referralHeadline?: string | null;
+}
+
+/**
+ * Does a `campaign_entry` node match this conversation?
+ *
+ * Two modes, and the difference matters commercially:
+ *   * ANY ad - "everyone who came from advertising", the common case;
+ *   * a SPECIFIC ad id - one campaign gets its own greeting and its own flow.
+ *
+ * An ad id typed by a person is matched leniently (trimmed, case-insensitive)
+ * because it is copied out of Meta's UI by hand and a stray space should not
+ * silently route a paid lead into nothing.
+ */
+export function campaignEntryMatches(node: GraphNode, origin: CampaignOrigin | null): boolean {
+  if (!origin?.fromAdCampaign) return false;
+  const scope = String(node.data?.scope || "any");
+  if (scope !== "specific") return true;
+
+  const wantedIds: string[] = (Array.isArray(node.data?.sourceIds) ? node.data.sourceIds : [])
+    .map((v: unknown) => String(v ?? "").trim().toLowerCase())
+    .filter(Boolean);
+  if (wantedIds.length === 0) {
+    // Configured for one ad but no ad named. Refusing to match is the safe
+    // reading: firing on every campaign would be the opposite of what the
+    // author asked for, and silently.
+    return false;
+  }
+  const actual = String(origin.referralSourceId ?? "").trim().toLowerCase();
+  return actual.length > 0 && wantedIds.includes(actual);
+}
+
+function pickMainFlowEntry(
+  nodes: GraphNode[],
+  channel: string,
+  message?: string,
+  campaign?: CampaignOrigin | null,
+): GraphNode | null {
   const wanted = channel.toLowerCase();
   const msg = (message || "").toLowerCase();
+
+  // 0) Campaign entry outranks everything.
+  //
+  // A lead the business PAID for, arriving with a specific ad in mind, is the
+  // most specific thing we know about an inbound message - more specific than
+  // the channel it came in on, and more specific than a keyword that happens
+  // to appear in their text. A flow author who wires a campaign entry means
+  // "when someone comes from this ad, do THIS", and any other entry winning
+  // would make that unreliable.
+  const campaignEntries = nodes.filter((n) => n.type === "campaign_entry");
+  // Specific-ad entries are considered before catch-alls, so a general
+  // "from any ad" flow cannot shadow a per-campaign one.
+  const ordered = [
+    ...campaignEntries.filter((n) => String(n.data?.scope || "any") === "specific"),
+    ...campaignEntries.filter((n) => String(n.data?.scope || "any") !== "specific"),
+  ];
+  for (const entry of ordered) {
+    if (campaignEntryMatches(entry, campaign ?? null)) return entry;
+  }
 
   // 1) Keyword trigger that matches this inbound wins - bypasses channel entry.
   //    Lets authors wire "menu", "help", "start over" flows that fire no matter

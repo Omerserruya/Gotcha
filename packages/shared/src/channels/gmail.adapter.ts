@@ -6,6 +6,13 @@ import type {
   NormalizedStatusUpdate,
   ChannelCredentials,
 } from "./types";
+import {
+  type EmailThreadContext,
+  type EmailMessageMeta,
+  outgoingSubject,
+  parseMessageIdList,
+  threadHeaderLines,
+} from "./email-thread";
 
 // ─── Gmail Inbound Adapter ─────────────────────────────────
 
@@ -84,13 +91,21 @@ export const gmailOutboundAdapter: OutboundAdapter = {
     credentials: ChannelCredentials,
     accountExternalId: string,
     recipientId: string,
-    text: string
+    text: string,
+    _replyToExternalId?: string,
+    thread?: EmailThreadContext,
   ): Promise<string | null> {
     try {
       const accessToken = await resolveAccessToken(credentials);
 
       const fromAddress = (credentials.fromAddress as string) || accountExternalId;
-      const rawMessage = buildRawEmail(fromAddress, recipientId, "Message", text);
+      const rawMessage = buildRawEmail(
+        fromAddress,
+        recipientId,
+        outgoingSubject(thread),
+        text,
+        threadHeaderLines(thread),
+      );
 
       const response = await fetch(`${GMAIL_API_URL}/users/me/messages/send`, {
         method: "POST",
@@ -98,7 +113,10 @@ export const gmailOutboundAdapter: OutboundAdapter = {
           Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ raw: rawMessage }),
+        // threadId is Gmail's own answer to "which conversation". The headers
+        // above are what every other mail client in the chain reads. Sending
+        // one without the other threads the message on one side only.
+        body: JSON.stringify({ raw: rawMessage, ...(thread?.threadId ? { threadId: thread.threadId } : {}) }),
       });
 
       if (!response.ok) {
@@ -120,7 +138,8 @@ export const gmailOutboundAdapter: OutboundAdapter = {
     accountExternalId: string,
     recipientId: string,
     bodyText: string,
-    buttons: Array<{ id: string; title: string }>
+    buttons: Array<{ id: string; title: string }>,
+    thread?: EmailThreadContext,
   ): Promise<string | null> {
     // Gmail doesn't support interactive buttons natively; send as HTML with styled links
     try {
@@ -135,7 +154,13 @@ export const gmailOutboundAdapter: OutboundAdapter = {
 
       const html = `<p>${bodyText}</p><div>${buttonHtml}</div>`;
       const fromAddress = (credentials.fromAddress as string) || accountExternalId;
-      const rawMessage = buildRawHtmlEmail(fromAddress, recipientId, "Message", html);
+      const rawMessage = buildRawHtmlEmail(
+        fromAddress,
+        recipientId,
+        outgoingSubject(thread),
+        html,
+        threadHeaderLines(thread),
+      );
 
       const response = await fetch(`${GMAIL_API_URL}/users/me/messages/send`, {
         method: "POST",
@@ -143,7 +168,7 @@ export const gmailOutboundAdapter: OutboundAdapter = {
           Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ raw: rawMessage }),
+        body: JSON.stringify({ raw: rawMessage, ...(thread?.threadId ? { threadId: thread.threadId } : {}) }),
       });
 
       if (!response.ok) {
@@ -169,6 +194,14 @@ export interface GmailFetchedMessage {
   senderDisplayName: string;
   subject: string;
   body: string;
+  /**
+   * Everything needed to answer this email in its own thread later.
+   *
+   * Captured on the way in because it cannot be recovered on the way out: by
+   * the time an agent types a reply, the only trace of the customer's original
+   * Message-ID is whatever we wrote down when it arrived.
+   */
+  email: EmailMessageMeta;
 }
 
 /**
@@ -227,15 +260,25 @@ export async function fetchNewMessages(
   for (const msgId of seenIds) {
     try {
       const msgRes = await fetch(
-        `${GMAIL_API_URL}/users/me/messages/${msgId}?format=metadata&metadataHeaders=From&metadataHeaders=Subject`,
+        // Message-ID / References / In-Reply-To are requested here and nowhere
+        // else: they are the only way a later reply can rejoin this thread.
+        `${GMAIL_API_URL}/users/me/messages/${msgId}?format=metadata` +
+          "&metadataHeaders=From&metadataHeaders=Subject" +
+          "&metadataHeaders=Message-ID&metadataHeaders=References&metadataHeaders=In-Reply-To",
         { headers }
       );
       if (!msgRes.ok) continue;
 
       const msgData = await msgRes.json() as Record<string, any>;
       const headersArr: Array<{ name: string; value: string }> = msgData.payload?.headers || [];
-      const fromHeader = headersArr.find((h) => h.name === "From")?.value || "";
-      const subject = headersArr.find((h) => h.name === "Subject")?.value || "(no subject)";
+      // Header names are case-insensitive per RFC 5322, and Gmail does return
+      // "Message-Id" for some senders. Matching exactly on "Message-ID" would
+      // silently drop threading for those.
+      const header = (name: string): string =>
+        headersArr.find((h) => h.name?.toLowerCase() === name.toLowerCase())?.value || "";
+
+      const fromHeader = header("From");
+      const subject = header("Subject") || "(no subject)";
       const snippet = (msgData.snippet as string) || "";
 
       const { email, name } = parseFromHeader(fromHeader);
@@ -243,12 +286,27 @@ export async function fetchNewMessages(
       // Skip if sender is the account itself (self-sent)
       if (email.toLowerCase() === accountEmail.toLowerCase()) continue;
 
+      const messageIdHeader = parseMessageIdList(header("Message-ID"))[0];
+      // The chain to inherit: what this email referenced, plus what it was a
+      // direct reply to, in case a sender set only In-Reply-To.
+      const references = [
+        ...parseMessageIdList(header("References")),
+        ...parseMessageIdList(header("In-Reply-To")),
+      ].filter((id, i, all) => all.indexOf(id) === i);
+
       results.push({
         messageId: msgId,
         senderId: email,
         senderDisplayName: name,
         subject,
         body: snippet,
+        email: {
+          messageIdHeader,
+          references,
+          subject,
+          threadId: typeof msgData.threadId === "string" ? msgData.threadId : undefined,
+          providerMessageId: msgId,
+        },
       });
     } catch (err) {
       console.error(`[Gmail] Failed to fetch message ${msgId}:`, err);
@@ -292,11 +350,27 @@ export async function resolveAccessToken(credentials: ChannelCredentials): Promi
   return credentials.accessToken;
 }
 
-function buildRawEmail(from: string, to: string, subject: string, body: string): string {
+/**
+ * Subjects are encoded rather than written raw.
+ *
+ * A raw MIME header is US-ASCII. A Hebrew subject line (or a customer's name
+ * with an accent) written straight into the header is mangled by the receiving
+ * client, and a newline in one would let a crafted subject inject headers of
+ * its own. RFC 2047 base64 encoding solves both.
+ */
+function encodeSubject(subject: string): string {
+  const clean = subject.replace(/[\r\n]+/g, " ").trim();
+  // eslint-disable-next-line no-control-regex
+  if (/^[\x00-\x7F]*$/.test(clean)) return clean;
+  return `=?UTF-8?B?${Buffer.from(clean, "utf8").toString("base64")}?=`;
+}
+
+function buildRawEmail(from: string, to: string, subject: string, body: string, extraHeaders: string[] = []): string {
   const message = [
     `From: ${from}`,
     `To: ${to}`,
-    `Subject: ${subject}`,
+    `Subject: ${encodeSubject(subject)}`,
+    ...extraHeaders,
     "MIME-Version: 1.0",
     "Content-Type: text/plain; charset=utf-8",
     "",
@@ -306,11 +380,12 @@ function buildRawEmail(from: string, to: string, subject: string, body: string):
   return Buffer.from(message).toString("base64url");
 }
 
-function buildRawHtmlEmail(from: string, to: string, subject: string, html: string): string {
+function buildRawHtmlEmail(from: string, to: string, subject: string, html: string, extraHeaders: string[] = []): string {
   const message = [
     `From: ${from}`,
     `To: ${to}`,
-    `Subject: ${subject}`,
+    `Subject: ${encodeSubject(subject)}`,
+    ...extraHeaders,
     "MIME-Version: 1.0",
     "Content-Type: text/html; charset=utf-8",
     "",

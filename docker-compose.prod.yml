@@ -366,6 +366,14 @@ services:
       ONBOARDING_CHAT_MODEL: ${ONBOARDING_CHAT_MODEL:-gpt-4o-mini}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      # New-lead alerts into a WhatsApp group. Optional: unset means the
+      # signup still works and only Telegram hears about it. Needs a WhatsApp
+      # Web bridge (WAHA) reachable from this container - the Meta Cloud API
+      # cannot post to a group at all. CHAT_ID is the group's `<id>@g.us`.
+      WHATSAPP_ALERT_API_URL: ${WHATSAPP_ALERT_API_URL:-}
+      WHATSAPP_ALERT_API_KEY: ${WHATSAPP_ALERT_API_KEY:-}
+      WHATSAPP_ALERT_SESSION: ${WHATSAPP_ALERT_SESSION:-}
+      WHATSAPP_ALERT_CHAT_ID: ${WHATSAPP_ALERT_CHAT_ID:-}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       GOOGLE_OAUTH_REDIRECT_URI: ${GOOGLE_OAUTH_REDIRECT_URI:-}

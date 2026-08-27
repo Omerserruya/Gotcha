@@ -43,7 +43,9 @@ const byName = (slug: string) => tools.find((t: any) => t.name === `shopify.${sl
 /** The tools that change or end an order - a missing target is dangerous. */
 const DESTRUCTIVE = [
   "cancel_order",
-  "edit_order",
+  // `edit_order` was here until 2026-08-26. It was deleted, not fixed: it had
+  // never been implemented, and `exchange_order_item` replaced it.
+  "exchange_order_item",
   "send_invoice",
   "resend_confirmation",
   "process_refund",

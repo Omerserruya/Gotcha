@@ -10,6 +10,7 @@ import { SystemLayout } from "@/components/SystemLayout";
 import { FeaturesSection } from "./FeaturesSection";
 import { EntitlementsSection } from "./EntitlementsSection";
 import { PlanAccessBadge, MissingPlanBanner } from "@/components/system/TenantBilling";
+import { TenantCoupons } from "@/components/system/TenantCoupons";
 import clsx from "clsx";
 
 export default function TenantDetailPage() {
@@ -709,6 +710,10 @@ export default function TenantDetailPage() {
             )}
           </div>
         </div>
+
+        {/* Coupons: what this organization is actually charged, and until
+            when. Above the danger zone because it is routine support work. */}
+        <TenantCoupons tenantId={tenantId} />
 
         {/* Danger Zone */}
         <div className="bg-white rounded-2xl border border-red-200 p-6">

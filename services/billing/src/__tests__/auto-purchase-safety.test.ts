@@ -25,7 +25,13 @@ const grants: Array<{ units: number; source?: string }> = [];
 const events: Array<{ type: string; data: any }> = [];
 let chargeSucceeds = true;
 
-vi.mock("@chatcenter/shared", () => ({
+vi.mock("@chatcenter/shared", async (importOriginal) => ({
+  // Real coupon arithmetic, not stubs: it is pure, and a stub here would make
+  // the discount path this file exercises meaningless. Taken from
+  // importOriginal rather than a deep relative import into packages/shared/src
+  // - that path compiles but drags shared's sources into this service's
+  // TypeScript program, which then fails rootDir (see receipt-email.test.ts).
+  ...(await importOriginal<Record<string, unknown>>()),
   // The spend-window helpers live in shared so the AI gate and this service
   // compute the SAME window - two copies of that arithmetic would eventually
   // disagree, and the ceiling would be measured against a window nothing else

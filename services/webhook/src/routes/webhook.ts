@@ -122,7 +122,13 @@ router.post("/", async (req: Request, res: Response) => {
 
   try {
     const body = req.body;
-    console.log(`[WEBHOOK] Incoming: object=${body?.object}, entries=${body?.entry?.length || 0}`, JSON.stringify(body).slice(0, 500));
+    // 500 chars used to be the cap, and it cut one field short of the message
+    // `type` on a real WhatsApp payload - so the one investigation that needed
+    // it found the log stopping exactly before the answer. 2000 covers a
+    // message object with its contacts block and errors array; a media-heavy
+    // history chunk is still truncated, which is fine - those are diagnosed
+    // from their own [WEBHOOK.HISTORY] line.
+    console.log(`[WEBHOOK] Incoming: object=${body?.object}, entries=${body?.entry?.length || 0}`, JSON.stringify(body).slice(0, 2000));
 
     // Surface `failed` message statuses as their own untruncated log line.
     // The block above caps at 500 chars, which chops off the error code we
@@ -328,11 +334,24 @@ router.post("/", async (req: Request, res: Response) => {
             messageType,
             interactiveReply: msg.content.interactiveReply,
             replyToExternalId: msg.replyToExternalId,
+            // Click-to-WhatsApp origin. Travels with the message because the
+            // worker owns conversation creation - it is the only place that
+            // knows whether this is the conversation's FIRST message.
+            referral: msg.referral,
             // Structured and already reduced by the adapter to name, numbers,
             // emails and organization. The worker copies producer metadata onto
             // the message row verbatim.
-            ...(msg.content.contacts?.length
-              ? { metadata: { contacts: msg.content.contacts } }
+            ...(msg.content.contacts?.length || msg.content.unsupported
+              ? {
+                  metadata: {
+                    ...(msg.content.contacts?.length ? { contacts: msg.content.contacts } : {}),
+                    // The provider's own reason for a message it could not
+                    // represent. Persisted because it is the ONLY evidence
+                    // that will exist: the payload log truncates, and the
+                    // queue holds the already-normalized message.
+                    ...(msg.content.unsupported ? { unsupported: msg.content.unsupported } : {}),
+                  },
+                }
               : {}),
             mediaUrl,
             fileName,
@@ -532,7 +551,33 @@ function normalizeContentToBodyAndType(
   }
 }
 
+/**
+ * Meta repeats the conversation's origin on every delivery status for the
+ * whole 72-hour window. That redundancy is the point: a conversation whose
+ * first message arrived before we captured referrals - or whose referral Meta
+ * simply did not send - is still identifiable as ad-sourced from any status
+ * that follows.
+ *
+ * Only ever turns the flag ON. A later status without the marker means Meta
+ * stopped repeating it, not that the ad stopped being the source.
+ */
+async function markAdSourcedConversation(tenantId: string, status: NormalizedStatusUpdate) {
+  if (status.conversationOrigin !== "referral_conversion") return;
+  const message = await prisma.message.findFirst({
+    where: { tenantId, externalMessageId: status.externalMessageId },
+    select: { conversationId: true },
+  });
+  if (!message?.conversationId) return;
+  await prisma.conversation.updateMany({
+    where: { id: message.conversationId, tenantId, fromAdCampaign: false },
+    data: { fromAdCampaign: true, referralAt: new Date() },
+  });
+}
+
 async function handleStatusUpdate(tenantId: string, status: NormalizedStatusUpdate) {
+  await markAdSourcedConversation(tenantId, status).catch((err) =>
+    console.warn("[webhook] could not mark ad-sourced conversation:", err?.message ?? err),
+  );
   const statusMap: Record<string, string> = {
     sent: "SENT", delivered: "DELIVERED", read: "READ", failed: "FAILED",
   };
@@ -781,6 +826,11 @@ router.post("/gmail", async (req: Request, res: Response) => {
             body: msg.body,
             subject: msg.subject,
             messageType: "email",
+            // Threading headers, carried through to Message.metadata.email.
+            // This is the ONLY moment they exist: by the time an agent types a
+            // reply, the customer's Message-ID is gone unless we wrote it down
+            // here. Without it every reply starts a new email thread.
+            metadata: { email: msg.email },
           },
         },
         { attempts: 3, backoff: { type: "exponential", delay: 1000 } }

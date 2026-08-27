@@ -310,7 +310,21 @@ export function buildKeyedModelSummary(
     return "PRODUCT_SEARCH_FAILED: the live catalog could not be read. Do NOT claim a search ran or that there are no products; tell the customer you can't check the catalog right now and offer a human handoff.";
   }
   if (env.status === "no_results" || env.candidates.length === 0) {
-    return "PRODUCT_SEARCH_RESULTS: 0 products matched. State honestly that no exact matches were found and offer ONE controlled refinement (widen length, raise budget, or preorder). Do NOT invent products.";
+    // Naming the constraint matters now that the budget is a REAL filter on the
+    // query rather than a label applied afterwards. An empty result used to be
+    // impossible - the shopper got three over-budget boards and a sentence
+    // saying none of them fitted - and the honest empty answer that replaced it
+    // is only useful if the next sentence can say what the store DOES start at.
+    // The model is told to go and find that out rather than estimate it.
+    const budgeted = env.appliedFilters.includes("budget");
+    return (
+      "PRODUCT_SEARCH_RESULTS: 0 products matched" +
+      (budgeted ? ` (the search was limited to ${env.budget?.currency ?? ""} ${env.budget?.target ?? ""} and under).` : ".") +
+      " State honestly that nothing matched. Do NOT invent products and do NOT offer something you were not shown." +
+      (budgeted
+        ? " Before replying, run the SAME search again WITHOUT price_max so you can tell the customer the real lowest price in this category, then let them decide whether to raise their budget. Never guess that number."
+        : " Offer ONE controlled refinement (widen length, raise budget, or preorder).")
+    );
   }
   const lines = env.candidates.map((c, i) => {
     const key = `PRODUCT_${i + 1}`;
@@ -329,6 +343,30 @@ export function buildKeyedModelSummary(
     const unknown = askedUnknown.length ? ` | unknown: ${askedUnknown.join(", ")}` : "";
     return `${key}: "${c.title}" | ${price} | ${avail} | ${match}${unknown}`;
   });
+  // ── Too few in budget to fill a recommendation ──
+  //
+  // The zero-result branch above covers "nothing fits". This covers the case
+  // that actually reached a customer: ONE board fitted a 600 budget, the model
+  // wanted two or three options, and it padded from whatever the relevance
+  // ranking happened to return first - offering 949 and 885 while a 629 sat
+  // twelfth in the same list. Padding is not the error; padding blindly is.
+  // Naming the number the shopper gave and the count that fitted lets the model
+  // say why it is reaching above budget, and `sort: price_asc` makes the next
+  // search return the nearest prices instead of the first ones.
+  const inBudget = env.budget
+    ? env.candidates.filter((c) => c.matchQuality === "exact").length
+    : env.candidates.length;
+  const thin =
+    env.budget && inBudget < 2
+      ? [
+          "",
+          `ONLY ${inBudget} of these is within the ${env.budget.currency} ${env.budget.target} budget. ` +
+            "If you show anything else, say plainly that it is above what they asked to spend, and never present it as though it fitted. " +
+            "To find the closest options above the budget, search again with price_min set to the budget and sort: \"price_asc\" - that returns the nearest prices first. " +
+            "Do NOT offer a product far above the budget while a closer one exists; the shopper judges these by distance from the number they gave.",
+        ]
+      : [];
+
   const fx = env.budgetCurrencyMismatch
     ? [
         "",
@@ -339,6 +377,7 @@ export function buildKeyedModelSummary(
   return [
     "PRODUCT_SEARCH_RESULTS (reference products ONLY by their key, e.g. PRODUCT_1):",
     ...lines,
+    ...thin,
     ...fx,
     "",
     "Rules: reference candidates by key. Do NOT write product URLs, prices, or availability yourself - the system attaches the exact values below your text. Do NOT re-list the products as a bulleted catalogue either; that list is already appended, and repeating it just prints every title twice. Write only the short reasoning a person would say out loud, naming at most two or three keys inline. Do NOT mention any product not listed above. Never invent flex, riding style or board length; if the shopper asks for one and it is marked unknown, say that detail is not listed for this product.",

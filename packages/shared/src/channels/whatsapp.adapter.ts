@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import axios from "axios";
 import type {
+  InboundReferral,
   InboundAdapter,
   OutboundAdapter,
   NormalizedInboundMessage,
@@ -181,6 +182,30 @@ export const WA_HISTORY_DECLINED_CODE = 2593109;
  */
 const WA_ACCOUNT_BEARING_FIELDS = new Set(["messages", WA_ECHO_FIELD, WA_HISTORY_FIELD]);
 
+/**
+ * Meta's `referral` object on an inbound message.
+ *
+ * Present only on the first message of a Click-to-WhatsApp conversation.
+ * Everything is optional on Meta's side, so every field is probed rather than
+ * assumed - a referral with only a `source_id` is still worth keeping, because
+ * it still answers "this came from an ad".
+ */
+function extractReferral(raw: any): InboundReferral | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const pick = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
+  const referral: InboundReferral = {
+    sourceType: pick(raw.source_type),
+    sourceId: pick(raw.source_id),
+    sourceUrl: pick(raw.source_url),
+    headline: pick(raw.headline),
+    body: pick(raw.body),
+    ctwaClid: pick(raw.ctwa_clid),
+    mediaUrl: pick(raw.image_url) ?? pick(raw.video_url) ?? pick(raw.thumbnail_url),
+  };
+  // An object with nothing usable in it is not a referral.
+  return Object.values(referral).some(Boolean) ? referral : undefined;
+}
+
 export const whatsAppInboundAdapter: InboundAdapter = {
   channel: "WHATSAPP",
 
@@ -210,6 +235,10 @@ export const whatsAppInboundAdapter: InboundAdapter = {
             // `id` still points at a real message - so the id is taken and the
             // rest ignored.
             replyToExternalId: msg.context?.id ? String(msg.context.id) : undefined,
+            // Click-to-WhatsApp. Meta attaches this to the FIRST message of a
+            // conversation opened from an ad, and never again - so it is
+            // captured here or the origin of that lead is lost for good.
+            referral: extractReferral(msg.referral),
           });
         }
       }
@@ -242,6 +271,15 @@ export const whatsAppInboundAdapter: InboundAdapter = {
             updates.push({
               externalMessageId: status.id,
               status: mapped,
+              // "referral_conversion" = this conversation was opened from a
+              // Click-to-WhatsApp ad. Meta repeats it on every status in the
+              // window, which is what makes it a usable fallback.
+              conversationOrigin:
+                typeof status.conversation?.origin?.type === "string"
+                  ? status.conversation.origin.type
+                  : typeof status.pricing?.category === "string"
+                    ? status.pricing.category
+                    : undefined,
               timestamp: status.timestamp ? new Date(parseInt(status.timestamp) * 1000) : undefined,
               errorMessage,
               error,
@@ -589,8 +627,46 @@ function extractWhatsAppContent(msg: any): NormalizedInboundMessage["content"] {
           : `${cards[0].name || "[Contact]"} +${cards.length - 1}`;
       return { type: "contact", text: summary, contacts: cards };
     }
-    default:
-      return { type: "text", text: `[${msg.type || "unknown"} message]` };
+    default: {
+      // A type this adapter does not model. Two very different things land
+      // here and both used to be reduced to a placeholder string:
+      //
+      //   * `unsupported` - Meta itself could not represent the message. It
+      //     sends NO content and an `errors[]` array saying why. That array is
+      //     the only explanation that will ever exist for this message, and
+      //     dropping it left a support question permanently unanswerable.
+      //   * everything else Meta may add later (revoke, edit, reaction, …).
+      //
+      // The reason travels on the content so the worker can persist it. The
+      // body stays a readable placeholder, because an agent still has to see
+      // that something arrived.
+      const errors = Array.isArray((msg as any).errors)
+        ? ((msg as any).errors as Array<Record<string, unknown>>).map((e) => ({
+            code: typeof e?.code === "number" ? e.code : undefined,
+            title: typeof e?.title === "string" ? e.title : undefined,
+            message: typeof e?.message === "string" ? e.message : undefined,
+            details:
+              typeof (e as any)?.error_data?.details === "string"
+                ? (e as any).error_data.details
+                : typeof e?.details === "string"
+                  ? (e.details as string)
+                  : undefined,
+          }))
+        : [];
+
+      const providerType = String(msg.type || "unknown");
+      // Loud, and untruncated. The 500-char cap on the payload log is what
+      // made the last one undiagnosable.
+      console.warn(
+        `[whatsapp] message type "${providerType}" is not modelled; wamid=${msg.id ?? "?"} errors=${JSON.stringify(errors)} raw=${JSON.stringify(msg).slice(0, 2000)}`,
+      );
+
+      return {
+        type: "text",
+        text: `[${providerType} message]`,
+        unsupported: { providerType, errors, raw: msg },
+      };
+    }
   }
 }
 

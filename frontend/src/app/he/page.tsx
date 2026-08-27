@@ -21,5 +21,9 @@ export const metadata: Metadata = {
 };
 
 export default function HebrewLanding() {
-  return <LandingPage forcedLocale="he" />;
+  return (
+    <>
+      <LandingPage forcedLocale="he" />
+    </>
+  );
 }

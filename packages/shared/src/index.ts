@@ -23,6 +23,7 @@ export {
   isHistoricalImportTerminal,
   hasHistoricalResults,
   historicalImportPercent,
+  historicalAnalysisPercent,
   historicalAnalysisCounts,
   isForwardTransition,
   HISTORICAL_SOURCE_WINDOW_MS,
@@ -55,6 +56,7 @@ export type { MediaFailureReason, UploadsProbe } from "./lib/media-storage";
 export type {
   ChannelType,
   NormalizedInboundMessage,
+  InboundReferral,
   NormalizedStatusUpdate,
   NormalizedCommentEvent,
   NormalizedOutboundEcho,
@@ -90,6 +92,22 @@ export {
   outlookOutboundAdapter,
   slackInboundAdapter,
   slackOutboundAdapter,
+  // Email threading: turning a reply from the inbox into a reply in the
+  // customer's mail client instead of a second, unrelated email.
+  resolveEmailThread,
+  readEmailMeta,
+  replySubject,
+  baseSubject,
+  buildReferences,
+  parseMessageIdList,
+  threadHeaderLines,
+  outgoingSubject,
+  DEFAULT_EMAIL_SUBJECT,
+} from "./channels";
+export type {
+  EmailThreadContext,
+  EmailMessageMeta,
+  EmailThreadSourceMessage,
 } from "./channels";
 
 // Lib

@@ -32,6 +32,7 @@ import {
 import { ensureBillableEntity, tenantsForEntity } from "./billable-entity.service";
 import { periodKeyFor } from "../lib/period";
 import { emitBillingEvent } from "../lib/events";
+import { sendEvaluationEndedEmail } from "./evaluation-ended.service";
 
 export const POC_PLAN_KEY = "poc";
 /**
@@ -330,6 +331,71 @@ export async function provisionPoc(input: PocProvisioningInput): Promise<PocProv
 }
 
 /**
+ * Grant a live evaluation the pilot capabilities it does not have yet.
+ *
+ * `PILOT_CAPABILITY_KEYS` is derived from the shipped catalog precisely so a
+ * capability added later cannot be silently missing from a pilot - but that
+ * derivation only ran at PROVISIONING time, so the promise held for exactly
+ * one moment. A POC set up before a capability existed never received it, and
+ * every fine-grained gate for it answered "not included in your plan" while
+ * the operator believed the pilot had everything.
+ *
+ * Found in production: a POC with 102 legacy feature rows and NONE of the 21
+ * catalog capability keys, so the chat copilot, the knowledge base and the
+ * dashboards were all denied.
+ *
+ * Deliberately narrow:
+ *   * evaluations only (POC / TRIAL plans), never a paying customer - their
+ *     capabilities come from what they bought;
+ *   * only keys that are MISSING; an operator's explicit denial is a row that
+ *     exists, and is left exactly as it is;
+ *   * credits, expiry and everything else are untouched.
+ */
+export async function reconcileEvaluationCapabilities(input: {
+  tenantId: string;
+  actor?: string;
+}): Promise<{ granted: string[]; alreadyPresent: number }> {
+  const link = await prisma.billableEntityTenant.findUnique({
+    where: { tenantId: input.tenantId },
+    include: { entity: { include: { subscription: true } } },
+  });
+  const sub = link?.entity.subscription;
+  if (!sub || sub.status !== "ACTIVE") return { granted: [], alreadyPresent: 0 };
+
+  const plan = await prisma.plan.findUnique({
+    where: { key_version: { key: sub.planKey, version: sub.planVersion } },
+    select: { kind: true },
+  });
+  if (!plan || (plan.kind !== "POC" && plan.kind !== "TRIAL")) return { granted: [], alreadyPresent: 0 };
+
+  const existing = await prisma.tenantEntitlement.findMany({
+    where: { tenantId: input.tenantId, entitlementKey: { in: PILOT_CAPABILITY_KEYS } },
+    select: { entitlementKey: true },
+  });
+  const have = new Set(existing.map((e) => e.entitlementKey));
+  const missing = PILOT_CAPABILITY_KEYS.filter((k) => !have.has(k));
+  if (missing.length === 0) return { granted: [], alreadyPresent: have.size };
+
+  for (const key of missing) {
+    await setTenantEntitlement({
+      tenantId: input.tenantId,
+      key,
+      valueType: "BOOLEAN",
+      value: true,
+      source: "TRIAL",
+      // Same expiry as the evaluation, so a late grant cannot outlive it.
+      expiresAt: sub.currentPeriodEnd ?? undefined,
+      reason: "Evaluation capability reconciliation",
+      createdBy: input.actor,
+    });
+  }
+  await materializeEntitlements(input.tenantId, input.actor);
+  invalidatePermissionsCache({ tenantId: input.tenantId });
+
+  return { granted: missing, alreadyPresent: have.size };
+}
+
+/**
  * Cancel evaluations whose window closed and revert their expired TRIAL feature
  * rows. Expired TRIAL entitlements silently drop out of
  * getEffectiveEntitlements(), but their materialized TenantFeature rows would
@@ -372,6 +438,7 @@ export async function expireDuePocs(now = new Date()): Promise<number> {
 
   for (const sub of due) {
     await prisma.subscription.update({ where: { id: sub.id }, data: { status: "CANCELED" } });
+    const kind = kindBy.get(`${sub.planKey}@${sub.planVersion}`) === "POC" ? "POC" : "TRIAL";
     for (const tenantId of await tenantsForEntity(sub.billableEntityId)) {
       const expired = await prisma.tenantEntitlement.findMany({
         where: { tenantId, source: "TRIAL", valueType: "BOOLEAN", expiresAt: { lte: now } },
@@ -386,7 +453,57 @@ export async function expireDuePocs(now = new Date()): Promise<number> {
         tenantId,
         data: { planKey: sub.planKey, poc: true, reason: "poc_expired" },
       });
+      // Ask. An evaluation that ends without anyone being invited to subscribe
+      // is a customer who simply finds the product stopped working - which is
+      // both a worse experience and a lost sale. The in-app prompt is derived
+      // from this same subscription row (see evaluationPromptFor); this is the
+      // one email that goes with it.
+      await sendEvaluationEndedEmail({
+        tenantId,
+        subscriptionId: sub.id,
+        kind,
+        planName: sub.planKey,
+      });
     }
   }
   return due.length;
+}
+
+/**
+ * Reconcile every live evaluation. Run by the billing tick.
+ *
+ * Iterating evaluations rather than all tenants keeps this proportional to the
+ * number of pilots, which is small by definition.
+ */
+export async function reconcileLiveEvaluations(now = new Date()): Promise<number> {
+  const evaluationPlans = await prisma.plan.findMany({
+    where: { kind: { in: ["POC", "TRIAL"] } },
+    select: { key: true, version: true },
+  });
+  if (evaluationPlans.length === 0) return 0;
+
+  const subs = await prisma.subscription.findMany({
+    where: {
+      status: "ACTIVE",
+      OR: evaluationPlans.map((p) => ({ planKey: p.key, planVersion: p.version })),
+    },
+    select: { billableEntityId: true, currentPeriodEnd: true },
+  });
+
+  let repaired = 0;
+  for (const sub of subs) {
+    // An evaluation already past its end is the expiry sweep's business, not
+    // ours - granting it capabilities on the way out would be absurd.
+    if (sub.currentPeriodEnd && sub.currentPeriodEnd.getTime() <= now.getTime()) continue;
+    for (const tenantId of await tenantsForEntity(sub.billableEntityId)) {
+      const r = await reconcileEvaluationCapabilities({ tenantId, actor: "billing-cycle" });
+      if (r.granted.length > 0) {
+        console.log(
+          `[billing][cycle] granted ${r.granted.length} missing pilot capabilities to ${tenantId}: ${r.granted.join(", ")}`,
+        );
+        repaired += 1;
+      }
+    }
+  }
+  return repaired;
 }

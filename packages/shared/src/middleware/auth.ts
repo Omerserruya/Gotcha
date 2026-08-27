@@ -46,13 +46,20 @@ function internalSecrets(): string[] {
 async function tryInternalAuth(req: Request, token: string): Promise<boolean> {
   const secrets = internalSecrets();
   if (secrets.length === 0) return false;
-  if (!secrets.some((s) => secretMatches(token, s))) return false;
+  const matched = secrets.find((s) => secretMatches(token, s));
+  if (!matched) return false;
 
+  // The weakness check applies to the secret that MATCHED, not to every
+  // secret in the list. Checking the whole list meant one weak legacy var
+  // (a 24-char INTERNAL_SERVICE_TOKEN left in prod env) threw here for EVERY
+  // internal call - including callers presenting the strong 64-char KEY - and
+  // silently killed all service-to-service auth on the services that carried
+  // it. A weak secret still never GRANTS access; it just no longer poisons
+  // the strong one.
   if (process.env.NODE_ENV === "production") {
-    const weak = secrets.some((s) => s.length < 32 || /change-me|placeholder/i.test(s));
-    if (weak) {
+    if (matched.length < 32 || /change-me|placeholder/i.test(matched)) {
       throw new Error(
-        "[auth] INTERNAL_SERVICE_KEY is weak or a placeholder. Refusing internal auth in production.",
+        "[auth] the presented internal secret is weak or a placeholder. Refusing internal auth in production.",
       );
     }
   }

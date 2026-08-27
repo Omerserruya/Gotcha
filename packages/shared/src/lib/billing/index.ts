@@ -197,3 +197,13 @@ export {
   tenantPlanGateFacts,
 } from "./tenant-plan-resolver";
 export * from "./spend-window";
+
+// Coupons: recurring discounts on an existing price. Pure arithmetic - the
+// billing service owns loading the assignment and writing the result.
+export {
+  applyCouponToPrice,
+  couponLabel,
+  assignmentIsLive,
+  breakdownToDecimals,
+} from "./coupon";
+export type { CouponTerms, CouponDiscountKind, DiscountBreakdown } from "./coupon";

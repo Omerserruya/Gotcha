@@ -91,7 +91,13 @@ export function DiscoveredKnowledge() {
       setCandidates((prev) => prev.filter((c) => c.id !== candidate.id));
       setNotice(t("historicalImport.review.approved"));
     } catch (err: any) {
-      setNotice(err?.message ?? "");
+      // The server's error field is a machine code ("conflict_requires_answer"),
+      // not something to show a reviewer raw.
+      setNotice(
+        err?.code === "conflict_requires_answer"
+          ? t("historicalImport.review.conflictRequired")
+          : err?.message ?? "",
+      );
     } finally {
       setBusy(false);
     }
@@ -355,9 +361,19 @@ function CandidateCard({
   return (
     <li className="rounded-xl border border-gray-200 bg-white p-4">
       <div className="flex flex-wrap items-center gap-2">
+        {candidate.category && (
+          <span className="rounded-full bg-gray-900/5 px-2 py-0.5 text-[11px] font-medium text-gray-600">
+            {t(`historicalImport.category.${candidate.category}`)}
+          </span>
+        )}
         <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-700">
           {candidate.topic}
         </span>
+        {candidate.requiresLiveLookup && (
+          <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-medium text-violet-800 ring-1 ring-violet-200">
+            {t("historicalImport.review.liveLookup")}
+          </span>
+        )}
         {candidate.conflict && (
           <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800 ring-1 ring-amber-200">
             {t("historicalImport.review.conflictTitle")}
@@ -398,6 +414,20 @@ function CandidateCard({
         </div>
       ) : (
         <p className="mt-1 text-sm text-gray-700">{candidate.answer}</p>
+      )}
+
+      {/* The reasoning behind the answer, shown because it is the part a
+          reviewer can most easily check and most easily correct. The rule is
+          often obviously right; whether the THINKING behind it is right is the
+          judgement only they can make, and it travels into the knowledge base
+          with the answer. */}
+      {candidate.reasoning && (
+        <p className="mt-2 rounded-lg bg-gray-50 px-3 py-2 text-xs leading-relaxed text-gray-600">
+          <span className="font-medium text-gray-700">
+            {t("historicalImport.review.reasoningLabel")}:
+          </span>{" "}
+          {candidate.reasoning}
+        </p>
       )}
 
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-gray-500">
@@ -467,8 +497,11 @@ function CandidateCard({
             </button>
             <button
               onClick={() => {
-                setEditing(false);
-                setDraft(candidate.answer);
+                // For a conflict, "cancel" clears the choice but stays in the
+                // choose-an-answer flow - leaving it would land on a plain
+                // Approve that the server must refuse.
+                setEditing(candidate.conflict);
+                setDraft(candidate.conflict ? "" : candidate.answer);
               }}
               disabled={busy}
               className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
@@ -479,7 +512,13 @@ function CandidateCard({
         ) : (
           <>
             <button
-              onClick={() => onApprove(candidate)}
+              // A conflicted item has no "the" answer to approve - the server
+              // 409s a bare approve by design (conflict_requires_answer).
+              // Matan hit exactly this: Cancel dropped him back here, the
+              // plain Approve fired the bare request, and four silent 409s
+              // later nothing had happened. For a conflict this button now
+              // reopens the choose-an-answer flow instead of calling the API.
+              onClick={() => (candidate.conflict ? setEditing(true) : onApprove(candidate))}
               disabled={busy}
               className="rounded-md bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-50"
             >

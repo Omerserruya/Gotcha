@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Script from "next/script";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import LandingPage from "@/components/landing/LandingPage";
@@ -111,30 +110,6 @@ export default function Home() {
     <>
       <PurposeStatement />
       <LandingPage />
-      <Script
-        id="chatcenter-widget"
-        strategy="afterInteractive"
-        dangerouslySetInnerHTML={{
-          // Same origin as the page it is on, rather than a hard-coded
-          // production host. On dev that hard-coding made the script
-          // cross-origin, so our own CSP (script-src 'self') blocked it
-          // and our own site never showed the widget we ship.
-          //
-          // Colour and icon are no longer set here either: they live in
-          // the widget's configuration now, alongside every other channel,
-          // and a copy in this snippet would quietly win over it.
-          __html: `
-            window.__chatcenter = {
-              widgetId: "widget_5a3961c3f5dc11493517ffac",
-              apiUrl: window.location.origin,
-            };
-            var s = document.createElement("script");
-            s.src = window.location.origin + "/widget/chatcenter-widget.js";
-            s.async = true;
-            document.head.appendChild(s);
-          `,
-        }}
-      />
     </>
   );
 }

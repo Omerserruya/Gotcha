@@ -90,8 +90,8 @@ platform trust.
 
 13. **Review-program operational prerequisites** (not code gaps, but required):
     - Google: publish the privacy policy on the verified domain, link it on the OAuth consent
-      screen, and prepare for restricted-scope verification (the Gmail scopes
-      `gmail.readonly`/`gmail.send`/`gmail.modify` are restricted and will require a security
+      screen, and prepare for restricted-scope verification (the Gmail channel now requests a
+      single scope, `gmail.modify`, which is restricted and will require a security
       assessment; `drive.readonly` is sensitive). The Limited Use statement now exists in the
       privacy policy as required.
     - Meta: App Review requires the live privacy policy URL and demonstration of each

@@ -1,4 +1,5 @@
 import { Queue, Worker, Job, WorkerOptions } from "bullmq";
+import type { EmailThreadContext } from "../channels/email-thread";
 import { withCrossTenantAccess } from "./prisma";
 
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
@@ -69,6 +70,20 @@ export interface IncomingMessageJob {
      * more than nothing.
      */
     replyToExternalId?: string;
+    /**
+     * Click-to-WhatsApp origin, when this is the first message of a
+     * conversation opened from an ad. The worker owns conversation creation,
+     * so it has to travel with the job to be recorded at all.
+     */
+    referral?: {
+      sourceType?: string;
+      sourceId?: string;
+      sourceUrl?: string;
+      headline?: string;
+      body?: string;
+      ctwaClid?: string;
+      mediaUrl?: string;
+    };
     /**
      * The name the SENDER gave the file. WhatsApp media is stored under a
      * generated UUID, so without this the agent is offered a download called
@@ -214,6 +229,17 @@ export interface HistoricalIntelligenceJob {
     | "customer-learning"
     | "knowledge-extraction"
     | "knowledge-clustering"
+    // Merges candidates that are the same question phrased differently.
+    // Embeddings cannot do this for Hebrew paraphrase at any threshold.
+    | "knowledge-dedupe"
+    // Counts how the business actually writes and turns it into prompt guidance.
+    // Runs after the knowledge work because it reads the same conversations and
+    // a failure here must not cost the expensive stages a retry.
+    // Reads the whole candidate set as a person would: restates answers that do
+    // not stand alone, marks the ones that depend on live data, drops one
+    // customer's logistics and merges what dedupe could not see.
+    | "knowledge-curation"
+    | "brand-voice"
     | "analytics"
     | "finalize";
   /** Set by the customer-learning stage to process one batch of customers. */
@@ -238,6 +264,24 @@ export interface OutgoingMessageJob {
    * Undefined for a normal send.
    */
   replyToExternalId?: string;
+  /**
+   * Email threading for this send.
+   *
+   * Present when the agent is answering an existing email thread, absent when
+   * they deliberately chose to start a new one. Resolved by the producer rather
+   * than the worker because only the producer knows which conversation the
+   * agent was looking at and which button they pressed.
+   */
+  emailThread?: EmailThreadContext;
+  /**
+   * Email only. "new" makes the send start a fresh thread; anything else (the
+   * default) continues the conversation's existing one.
+   *
+   * The default matters more than the option: every producer that never heard
+   * of email threading - the bot, flows, approvals, scheduled sends - reaches
+   * the worker with this unset, and unset has to mean "reply properly".
+   */
+  emailReplyMode?: "reply" | "new";
   mediaUrl?: string;
   fileName?: string;
   // Broadcast linkage - when set, the outgoing worker writes the send result

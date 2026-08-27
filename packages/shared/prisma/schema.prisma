@@ -137,6 +137,7 @@ model Tenant {
   autoResumeAfterUnclaimMinutes Int? @map("auto_resume_after_unclaim_minutes")
 
   users                   User[]
+  coupons                 TenantCoupon[]
   conversations           Conversation[]
   messages                Message[]
   chatbotFlows            ChatbotFlow[]
@@ -981,6 +982,37 @@ model Conversation {
   reminderSentAt     DateTime?          @map("reminder_sent_at")
   closedAt           DateTime?          @map("closed_at")
   aiSummary          String?            @map("ai_summary")
+
+  // ── Where this conversation came from ──
+  //
+  // A Click-to-WhatsApp ad opens a conversation and Meta tells us so, twice:
+  // a `referral` object on the customer's FIRST message (which names the ad),
+  // and `conversation.origin.type = "referral_conversion"` on the delivery
+  // statuses (which does not). Both used to be dropped, so a business running
+  // ads could not tell an ad-sourced lead from a walk-in - the single most
+  // valuable thing to know about an inbound message.
+  //
+  // Denormalised onto the conversation rather than left on the message: every
+  // surface that asks "where did this person come from" (inbox badge, filter,
+  // playbook trigger, reporting) asks it about the CONVERSATION, and none of
+  // them should have to find message #1 to answer it.
+  /// "ad" | "post" - Meta's `referral.source_type`. Null when not referred.
+  referralSourceType String?            @map("referral_source_type")
+  /// Meta's `referral.source_id`: the AD id. The campaign it belongs to needs
+  /// `ads_read` on the customer's ad account, which is a separate grant - the
+  /// ad id and headline below identify the creative without it.
+  referralSourceId   String?            @map("referral_source_id")
+  referralSourceUrl  String?            @map("referral_source_url")
+  /// The ad's own headline and body. This is what makes the badge readable
+  /// to a human ("from: ברית בסוף השבוע?") with no Marketing API call.
+  referralHeadline   String?            @map("referral_headline")
+  referralBody       String?            @map("referral_body")
+  /// Meta's click id, for attributing a conversion back to the click.
+  referralCtwaClid   String?            @map("referral_ctwa_clid")
+  /// True when Meta billed this as `referral_conversion` / free entry point,
+  /// even if the referral object itself never reached us.
+  fromAdCampaign     Boolean            @default(false) @map("from_ad_campaign")
+  referralAt         DateTime?          @map("referral_at")
   // Detected language of the conversation thread - set once from the
   // first inbound message (heuristic + LLM fallback). Drives the
   // language of suggested-reply drafts and any other "match the
@@ -1037,6 +1069,10 @@ model Conversation {
   /// this index they would all start scanning imported history the moment a
   /// tenant connects Coexistence.
   @@index([tenantId, origin, status])
+  // "Everything that came from an ad", and "everything from THIS ad" - the
+  // inbox filter and the playbook trigger both ask exactly these.
+  @@index([tenantId, fromAdCampaign])
+  @@index([tenantId, referralSourceId])
   @@index([historicalImportId])
   @@index([tenantId, status])
   @@index([tenantId, assignedAgentId])
@@ -1489,6 +1525,13 @@ model BusinessProfile {
   // "event_hall"). Applying a pack clones its scoped FieldDefinitions to the
   // tenant. NULL = generic / not chosen.
   packSlug                    String?          @map("pack_slug")
+  /// How this business actually writes, learned from its own outbound messages
+  /// rather than from the website. Rendered into every agent's system prompt by
+  /// the company-context block, so a correct answer also sounds like them.
+  /// Written by the history import's brand-voice stage; a human edit here is
+  /// never overwritten by a later import (see `observedVoiceEditedAt`).
+  observedVoice               String?          @map("observed_voice")
+  observedVoiceEditedAt       DateTime?        @map("observed_voice_edited_at")
   createdAt                   DateTime         @default(now()) @map("created_at")
   updatedAt                   DateTime         @updatedAt @map("updated_at")
 
@@ -3368,6 +3411,97 @@ model SubscriptionEvent {
   @@map("subscription_events")
 }
 
+// ─── Coupons (Sysadmin-issued recurring discounts) ──────────
+//
+// A coupon is a DISCOUNT ON A PRICE, never a different price. The plan the
+// customer is on, and the price they contracted for, are untouched: the
+// discount is computed at charge time and shown as its own line. That
+// distinction is the whole design - it keeps "what does this plan cost" and
+// "what is this customer paying right now" separately answerable, and it is
+// why the billing page can show the list price struck through rather than
+// quietly rendering a smaller number.
+//
+// Recurrence: a coupon applies to EVERY billing period whose charge falls
+// inside the assignment window. "20% off for a year" is one assignment with
+// endsAt = +12 months, and it discounts all twelve monthly charges - there is
+// no per-period bookkeeping to drift out of sync.
+
+enum CouponDiscountType {
+  /// percentOff, 1-100. Currency-agnostic, so it survives a currency switch.
+  PERCENT
+  /// amountOff in `currency`. Only ever applied to a charge in that same
+  /// currency - see applyCouponToPrice.
+  FIXED
+}
+
+enum TenantCouponStatus {
+  ACTIVE
+  /// Past its endsAt. Set by the billing tick, not inferred at read time, so
+  /// "why did this stop applying" has an answer with a timestamp.
+  EXPIRED
+  /// Operator pulled it. Distinct from EXPIRED on purpose.
+  REVOKED
+}
+
+model Coupon {
+  id     String @id @default(cuid())
+  /// Human-typed, case-insensitively unique (stored upper-case).
+  code   String @unique
+  nameEn String @map("name_en")
+  nameHe String? @map("name_he")
+
+  discountType CouponDiscountType @map("discount_type")
+  /// PERCENT only. 1-100.
+  percentOff   Int?               @map("percent_off")
+  /// FIXED only, in `currency`.
+  amountOff    Decimal?           @map("amount_off") @db.Decimal(12, 2)
+  currency     String?
+
+  /// Default window length applied when an operator assigns this coupon
+  /// without naming an end date. Null means "until revoked".
+  defaultDurationMonths Int? @map("default_duration_months")
+
+  active          Boolean @default(true)
+  /// Null = unlimited. Counted across assignments, not charges.
+  maxRedemptions  Int?    @map("max_redemptions")
+  redemptionCount Int     @default(0) @map("redemption_count")
+
+  internalNote String?  @map("internal_note")
+  createdBy    String?  @map("created_by")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  assignments TenantCoupon[]
+
+  @@index([active])
+  @@map("coupons")
+}
+
+model TenantCoupon {
+  id       String @id @default(cuid())
+  tenantId String @map("tenant_id")
+  couponId String @map("coupon_id")
+
+  startsAt DateTime  @default(now()) @map("starts_at")
+  /// Null = no end date; it discounts every period until revoked.
+  endsAt   DateTime? @map("ends_at")
+
+  status TenantCouponStatus @default(ACTIVE)
+
+  assignedBy String?  @map("assigned_by")
+  note       String?
+  revokedAt  DateTime? @map("revoked_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  coupon Coupon @relation(fields: [couponId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, status])
+  @@index([status, endsAt])
+  @@map("tenant_coupons")
+}
+
 model Invoice {
   id                 String          @id @default(cuid())
   billableEntityId   String          @map("billable_entity_id")
@@ -3400,9 +3534,19 @@ model Charge {
   invoiceId         String          @map("invoice_id")
   provider          BillingProvider @default(ICOUNT)
   providerChargeRef String?         @map("provider_charge_ref")
-  /// The agreed commercial figure, in the commercial currency.
+  /// The agreed commercial figure, in the commercial currency. When a coupon
+  /// applied this is the DISCOUNTED figure - it is what we asked for, and a
+  /// receipt must reconcile against it.
   amount            Decimal         @db.Decimal(12, 2)
   currency          String          @default("ILS")
+
+  /// What the price would have been without a coupon, and what was taken off.
+  /// Both null when no coupon applied. Kept on the charge rather than derived
+  /// later: an assignment can be revoked or edited afterwards, and "why was
+  /// this charge 80" must stay answerable regardless.
+  listAmount     Decimal? @map("list_amount") @db.Decimal(12, 2)
+  discountAmount Decimal? @map("discount_amount") @db.Decimal(12, 2)
+  couponCode     String?  @map("coupon_code")
 
   /// What was actually submitted to the provider, and the frozen conversion
   /// behind it. Keeping only the commercial figure would make "how much was
@@ -6504,10 +6648,18 @@ model HistoricalImport {
   /// Highest phase seen (0 = day 0-1, 1 = day 1-90, 2 = day 90-180).
   sourcePhase    Int? @map("source_phase")
   chunksReceived Int  @default(0) @map("chunks_received")
-  /// Analysis has no percentage we can measure honestly, so the UI counts
-  /// real work instead: "842 / 1,247 customers". These are those numbers.
+  /// The two measured fractions the analysis progress bar is built from.
+  /// Customer learning walks customers; knowledge extraction walks
+  /// conversations. Both are counts of rows the pipeline actually finished, so
+  /// the percentage derived from them moves only when work completes.
   customersTotal    Int @default(0) @map("customers_total")
   customersAnalyzed Int @default(0) @map("customers_analyzed")
+  /// Conversations with enough messages to be worth mining, and how many of
+  /// them extraction has been through. Stored rather than counted per request:
+  /// the status endpoint is polled every few seconds while an import runs and
+  /// has to stay a single indexed read.
+  conversationsEligible  Int @default(0) @map("conversations_eligible")
+  conversationsExtracted Int @default(0) @map("conversations_extracted")
 
   // ── Results (all read from rows that exist; nothing here is estimated) ──
   importedMessages        Int @default(0) @map("imported_messages")
@@ -6523,6 +6675,10 @@ model HistoricalImport {
   /// The persisted completion summary, read by the channel card, the results
   /// page and the email so all three can never disagree.
   summary                 Json?
+  /// The counted brand-language evidence: emoji palette, openers, closers,
+  /// signature phrases, rhythm. Stored as measured rather than as prose so the
+  /// guidance derived from it can always be traced back to numbers.
+  brandVoice              Json? @map("brand_voice")
 
   // ── Lifecycle timestamps ──
   startedAt                     DateTime  @default(now()) @map("started_at")
@@ -6781,6 +6937,33 @@ model KnowledgeCandidate {
   /// The owner's edit, when they changed it before approving. Kept separate
   /// from `answer` so the original observation is still auditable.
   editedAnswer String? @map("edited_answer")
+
+  /// HOW the business reaches this answer - what it checks, what it offers when
+  /// the plain answer is no. The rule alone ("returns within 14 days") answers
+  /// the exact question and fails the next one; this is what a new agent needs
+  /// to handle the variation. Nullable: candidates mined before this existed
+  /// have none, and an empty reasoning is not a reason to hide a good answer.
+  reasoning String?
+  /// A fixed category, so the review queue and the KB group instead of listing.
+  /// `topic` stays the specific label inside it. Free-text topics alone gave 57
+  /// groups for 58 items on a real import.
+  category String?
+  /// standing_rule | product_fact | how_we_work. one_off never reaches this
+  /// table - it is dropped at extraction by the reusability gate.
+  scope    String?
+
+  /// The answer cannot be given without checking something live: a calendar, a
+  /// person's availability, current stock, a price that moves. The knowledge is
+  /// still real and worth keeping - "we usually do viewings Thursday and
+  /// Friday" is true - but an agent that states it as fact will promise a slot
+  /// nobody checked. The KB document carries the caveat and the agent is told
+  /// to look it up rather than assert.
+  requiresLiveLookup Boolean @default(false) @map("requires_live_lookup")
+  /// What the curation pass decided: kept | rewritten | live_data. Items it
+  /// dropped or merged are deleted, so those values never persist here.
+  curationVerdict    String? @map("curation_verdict")
+  /// Why, in one line, for the reviewer. Null when the item passed untouched.
+  curationNote       String? @map("curation_note")
 
   status KnowledgeCandidateStatus @default(PENDING)
 

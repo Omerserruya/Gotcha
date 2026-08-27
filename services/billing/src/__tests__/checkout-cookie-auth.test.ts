@@ -19,7 +19,13 @@ const markLinkUsed = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const findFirst = vi.hoisted(() => vi.fn());
 
 vi.mock("../services/continuation-link.service", () => ({ resolveContinuationLink, markLinkUsed }));
-vi.mock("@chatcenter/shared", () => ({
+vi.mock("@chatcenter/shared", async (importOriginal) => ({
+  // Real coupon arithmetic, not stubs: it is pure, and a stub here would make
+  // the discount path this file exercises meaningless. Taken from
+  // importOriginal rather than a deep relative import into packages/shared/src
+  // - that path compiles but drags shared's sources into this service's
+  // TypeScript program, which then fails rootDir (see receipt-email.test.ts).
+  ...(await importOriginal<Record<string, unknown>>()),
   // Version pins now live in shared modules, so exhaustive mocks of this
   // barrel must supply them. Returning the real defaults keeps any URL the
   // code builds meaningful instead of "undefined/...".

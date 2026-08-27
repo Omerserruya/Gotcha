@@ -2,31 +2,57 @@ import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { prisma, validate, authenticate, requireSystemAdmin } from "@chatcenter/shared";
 import { sendWaitlistWelcomeEmail } from "../services/notification.service";
-import { sendTelegramNotification, formatNewLeadMessage } from "../services/telegram.service";
+import { notifyNewLead } from "../services/lead-alert.service";
 
 const router = Router();
 
 // ─── Public: Submit Waitlist Entry ──────────────────────────
 
-// email/role/companySize are optional so the lightweight landing form
-// (name + phone + industry) can submit. The `email` column is NOT NULL +
-// unique, so phone-first leads get a synthetic, clearly-marked key.
+// email/role/companySize are optional at the SCHEMA level so the lightweight
+// landing form (name + phone + industry) can submit against the same endpoint.
+// The full early-access form is held to a stricter rule below. The `email`
+// column is NOT NULL + unique, so phone-first leads get a synthetic,
+// clearly-marked key.
 const waitlistSchema = z.object({
   firstName: z.string().min(1).max(100),
   email: z.string().email().max(255).optional(),
   phone: z.string().max(30).optional().default(""),
   company: z.string().max(200).optional().default(""),
+  // The full form's industry picker. It used to be sent by the client and
+  // dropped silently here - zod strips what it does not declare - so every
+  // early-access lead lost the one field that says what business they run.
+  // It lands in `company`, which is where the landing form already puts the
+  // industry label and which the full form never otherwise fills.
+  companyDomain: z.string().max(200).optional().default(""),
   role: z.string().max(100).optional().default(""),
   companySize: z.string().max(50).optional().default(""),
   frustration: z.string().max(500).optional().default(""),
   source: z.string().max(100).optional(),
 });
 
+/** The source the full /early-access wizard submits under. */
+const FULL_FORM_SOURCE = "early-access-form";
+
 router.post("/", validate(waitlistSchema), async (req: Request, res: Response): Promise<void> => {
-  const { firstName, email, phone, company, role, companySize, frustration, source } = req.body;
+  const { firstName, email, phone, company, companyDomain, role, companySize, frustration, source } = req.body;
 
   const cleanPhone = (phone || "").trim();
   const realEmail = email ? email.toLowerCase().trim() : "";
+  const leadSource = source || FULL_FORM_SOURCE;
+
+  // The full wizard asks for both and makes both mandatory in the UI. Enforced
+  // again here so the rule holds for anything posting straight at the endpoint:
+  // a lead with only one of the two is a lead half the team cannot follow up on.
+  if (leadSource === FULL_FORM_SOURCE) {
+    if (!realEmail) {
+      res.status(400).json({ error: "Email is required." });
+      return;
+    }
+    if (cleanPhone.replace(/\D/g, "").length < 7) {
+      res.status(400).json({ error: "A valid phone number is required." });
+      return;
+    }
+  }
 
   // Dedup by email when given, otherwise by phone.
   if (realEmail) {
@@ -52,11 +78,11 @@ router.post("/", validate(waitlistSchema), async (req: Request, res: Response): 
       firstName: firstName.trim(),
       email: emailKey,
       phone: cleanPhone || null,
-      company: company || null,
+      company: company || companyDomain || null,
       role: role || "",
       companySize: companySize || "",
       frustration: frustration || null,
-      source: source || "early-access-form",
+      source: leadSource,
     },
   });
 
@@ -64,16 +90,21 @@ router.post("/", validate(waitlistSchema), async (req: Request, res: Response): 
   const position = await prisma.waitlistEntry.count();
   if (realEmail) sendWaitlistWelcomeEmail(entry.email, entry.firstName, position).catch(() => {});
 
-  // Send Telegram notification (non-blocking)
-  sendTelegramNotification(formatNewLeadMessage({
+  // Alert the team on every configured channel (non-blocking). `realEmail`
+  // rather than entry.email: a phone-first lead carries a synthetic
+  // lead-…@no-email.gotcha key that exists to satisfy a unique column, and
+  // showing it in the alert reads as an address someone can write to.
+  notifyNewLead({
     firstName: entry.firstName,
-    email: entry.email,
+    email: realEmail,
+    phone: entry.phone,
     company: entry.company,
     role: entry.role,
     companySize: entry.companySize,
+    frustration: entry.frustration,
     source: entry.source,
     createdAt: entry.createdAt,
-  })).catch(() => {});
+  }).catch(() => {});
 
   res.status(201).json({ data: { id: entry.id } });
 });

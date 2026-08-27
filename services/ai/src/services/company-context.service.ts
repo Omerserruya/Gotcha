@@ -20,6 +20,13 @@ export interface CompanyContext {
   businessDescription?: string | null;
   industry?: string | null;
   websiteDomain?: string | null;
+  /**
+   * How this business actually writes, learned by counting its own sent
+   * messages during a history import. Null for a tenant that never imported
+   * one, which is the common case and must stay silent rather than falling
+   * back to a generic description of a friendly brand.
+   */
+  observedVoice?: string | null;
 }
 
 /**
@@ -36,6 +43,7 @@ export async function getCompanyContext(tenantId: string): Promise<CompanyContex
         businessDescription: true,
         industry: true,
         websiteDomain: true,
+        observedVoice: true,
       },
     });
     if (bp && bp.organizationName && String(bp.organizationName).trim()) {
@@ -44,6 +52,7 @@ export async function getCompanyContext(tenantId: string): Promise<CompanyContex
         businessDescription: bp.businessDescription ? String(bp.businessDescription).trim() : null,
         industry: bp.industry ? String(bp.industry).trim() : null,
         websiteDomain: bp.websiteDomain ? String(bp.websiteDomain).trim() : null,
+        observedVoice: bp.observedVoice ? String(bp.observedVoice).trim() : null,
       };
     }
 
@@ -55,7 +64,7 @@ export async function getCompanyContext(tenantId: string): Promise<CompanyContex
       select: { name: true },
     });
     if (tenant?.name && String(tenant.name).trim()) {
-      return { organizationName: String(tenant.name).trim(), businessDescription: null, industry: null, websiteDomain: null };
+      return { organizationName: String(tenant.name).trim(), businessDescription: null, industry: null, websiteDomain: null, observedVoice: null };
     }
     return null;
   } catch (err: any) {

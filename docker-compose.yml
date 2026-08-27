@@ -143,12 +143,50 @@ services:
         condition: service_healthy
 
   # ─── API Gateway ─────────────────────────────────────────
+  # ─── API documentation (DEV ONLY) ──────────────────────────
+  #
+  # Swagger UI for docs/openapi.yaml, reachable through the dev gateway at
+  # /api/docs/. Deliberately a container rather than `swagger-ui-express` in a
+  # service: this repo forbids new npm dependencies, and dev and prod share the
+  # same Docker runtime stage (`npm ci --omit=dev`), so a devDependency would
+  # not be installed in dev either - it would have to become a real dependency
+  # shipped unused into every production image. A compose service costs prod
+  # nothing and cannot leak there, because docker-compose.prod.yml does not
+  # define it.
+  #
+  # Regenerate the spec it serves with `npm run api:docs`.
+  swagger-ui:
+    image: swaggerapi/swagger-ui:latest
+    ports:
+      # Reachable standalone, which matters: the gateway refuses to start
+      # unless EVERY upstream resolves, so tying the docs to it would make them
+      # unavailable exactly when half the stack is down and you most want to
+      # look something up.
+      - "${SWAGGER_UI_PORT:-8088}:8080"
+    volumes:
+      # Mounted rather than fetched over HTTP so the UI works on both paths -
+      # standalone on the published port, and proxied through the gateway.
+      - ./docs/openapi.yaml:/spec/openapi.yaml:ro
+    environment:
+      SWAGGER_JSON: /spec/openapi.yaml
+      # The spec describes ~780 endpoints; without this the UI expands every
+      # operation on load and takes seconds to become interactive.
+      DOC_EXPANSION: none
+      DEEP_LINKING: "true"
+      DISPLAY_REQUEST_DURATION: "true"
+    restart: unless-stopped
+
   gateway:
     image: nginx:alpine
     ports:
       - "${GATEWAY_PORT:-80}:80"
     volumes:
       - ./nginx/nginx.conf.template:/etc/nginx/nginx.conf.template:ro
+      # The generated OpenAPI spec, served read-only at /api/docs/openapi.yaml.
+      # DEV ONLY: docker-compose.prod.yml has no equivalent mount and the prod
+      # nginx template has no /api/docs location, so the spec is unreachable in
+      # production by construction rather than by a runtime check.
+      - ./docs:/usr/share/nginx/api-docs:ro
     environment:
       AUTH_PORT: ${AUTH_PORT:-4001}
       CONVERSATION_PORT: ${CONVERSATION_PORT:-4002}
@@ -246,6 +284,14 @@ services:
       ONBOARDING_CHAT_MODEL: ${ONBOARDING_CHAT_MODEL:-gpt-4o-mini}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      # New-lead alerts into a WhatsApp group. Optional: unset means the
+      # signup still works and only Telegram hears about it. Needs a WhatsApp
+      # Web bridge (WAHA) reachable from this container - the Meta Cloud API
+      # cannot post to a group at all. CHAT_ID is the group's `<id>@g.us`.
+      WHATSAPP_ALERT_API_URL: ${WHATSAPP_ALERT_API_URL:-}
+      WHATSAPP_ALERT_API_KEY: ${WHATSAPP_ALERT_API_KEY:-}
+      WHATSAPP_ALERT_SESSION: ${WHATSAPP_ALERT_SESSION:-}
+      WHATSAPP_ALERT_CHAT_ID: ${WHATSAPP_ALERT_CHAT_ID:-}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       GOOGLE_OAUTH_REDIRECT_URI: ${GOOGLE_OAUTH_REDIRECT_URI:-}

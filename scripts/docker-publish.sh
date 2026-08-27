@@ -70,6 +70,7 @@ echo "Registry : $REGISTRY"
 echo "Repo     : $REPO"
 echo "Tag      : $TAG"
 echo "Platform : $PLATFORM"
+echo "Latest   : $( [ "${PUSH_LATEST:-1}" = "1" ] && echo "yes (rolling tag moves - this deploys)" || echo "no (SHA tag only - production unchanged)" )"
 echo "Services : ${!BACKEND[*]} $( [ -z "${SERVICES:-}" ] && echo gateway )"
 echo
 
@@ -77,17 +78,29 @@ echo
 docker buildx inspect chatcenter-builder >/dev/null 2>&1 || \
   docker buildx create --name chatcenter-builder --use
 
+# Publishing `<service>-latest` IS a deploy, not a preparation for one.
+# Production pins TAG=latest (see .env.prod, which push-deploy.sh lands on the
+# box as .env), so the moment a rolling tag moves, the next container restart
+# picks it up - no deliberate step in between. PUSH_LATEST=0 builds and pushes
+# only the immutable SHA tag, so images can be staged in the registry while
+# production keeps serving exactly what it serves today. Defaults to 1 so
+# existing CI invocations are unchanged.
+PUSH_LATEST="${PUSH_LATEST:-1}"
+
 push_image() {
   local svc="$1"
   local dockerfile="$2"
   local context="$3"
   shift 3
   echo "── $svc ─────────────────────────────────────────"
+  local tags=(-t "$REGISTRY/$REPO:${svc}-${TAG}")
+  if [ "$PUSH_LATEST" = "1" ]; then
+    tags+=(-t "$REGISTRY/$REPO:${svc}-latest")
+  fi
   docker buildx build \
     --platform "$PLATFORM" \
     -f "$dockerfile" \
-    -t "$REGISTRY/$REPO:${svc}-${TAG}" \
-    -t "$REGISTRY/$REPO:${svc}-latest" \
+    "${tags[@]}" \
     --push \
     "$@" \
     "$context"

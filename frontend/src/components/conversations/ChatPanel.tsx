@@ -28,6 +28,7 @@ import { CustomerAvatar } from "./CustomerAvatar";
 import { CoPilotPanel } from "./CoPilotPanel";
 import { isAiManaged, isFlowManaged } from "@/lib/conversation-ownership";
 import { HistoryPanel } from "./HistoryPanel";
+import { CampaignBadge } from "./CampaignBadge";
 import { DecisionTimelinePanel } from "./DecisionTimelinePanel";
 import { MessageSignals } from "./MessageSignals";
 import { AIComposeScope, AIComposeTrigger, AIComposePanel } from "@/components/ai/AIComposeInline";
@@ -95,6 +96,21 @@ export function ChatPanel({ conversationId, onBack }: Props) {
    * message you scrolled away from is a reply target you forget you set.
    */
   const [replyTo, setReplyTo] = useState<any | null>(null);
+  /**
+   * Email only: continue the customer's thread, or deliberately start a new one.
+   *
+   * Defaults to replying because that is what answering an email means. The
+   * alternative exists for the real case it serves - raising a separate matter
+   * with the same customer - and not as a coin flip the agent has to make on
+   * every message.
+   */
+  const [emailMode, setEmailMode] = useState<"reply" | "new">("reply");
+  const [emailSubject, setEmailSubject] = useState("");
+  /** Mail channels: the only ones where a send has a thread and a subject. */
+  const isEmailConversation =
+    conversation?.channel === "GMAIL" ||
+    conversation?.channel === "OUTLOOK" ||
+    conversation?.channel === "EMAIL";
   const [showTransfer, setShowTransfer] = useState(false);
   const [transferTab, setTransferTab] = useState<"agents" | "departments">("agents");
   const [agents, setAgents] = useState<any[]>([]);
@@ -436,7 +452,13 @@ export function ChatPanel({ conversationId, onBack }: Props) {
 
       // Send text only if no files or text remains
       if (attachedFiles.length === 0 && inputText.trim()) {
-        const res = await sendMessage(token, conversationId, inputText.trim(), replyTo?.id);
+        const res = await sendMessage(
+          token,
+          conversationId,
+          inputText.trim(),
+          replyTo?.id,
+          isEmailConversation ? { mode: emailMode, subject: emailSubject.trim() || undefined } : undefined,
+        );
         setMessages((prev) => {
           if (prev.some((m) => m.id === res.data.id)) return prev;
           return [...prev, res.data];
@@ -449,6 +471,10 @@ export function ChatPanel({ conversationId, onBack }: Props) {
       setReplyTo(null);
       setInputText("");
       setAttachedFiles([]);
+      // Back to replying. Starting a new thread is a per-message decision, not
+      // a mode the agent gets stuck in without noticing.
+      setEmailMode("reply");
+      setEmailSubject("");
     } catch (err) {
       console.error("Send failed:", err);
     } finally {
@@ -612,6 +638,10 @@ export function ChatPanel({ conversationId, onBack }: Props) {
               </p>
             </div>
             <p className="text-[10px] md:text-xs text-gray-400 truncate">{conversation?.customerExternalId || conversation?.customerPhone}</p>
+            {/* Where this lead came from. Directly under the phone number
+                because "who is this" and "how did they get here" are the same
+                question for an agent opening a chat. */}
+            <CampaignBadge conversation={conversation} t={t} />
           </div>
 
           {/* Actions */}
@@ -1052,6 +1082,48 @@ export function ChatPanel({ conversationId, onBack }: Props) {
               on a message they have scrolled past is one they forget they set,
               and the customer gets a quote of something unrelated.
             */}
+            {/* Email: reply in thread, or start a new one.
+                Shown only on mail conversations, because it is meaningless
+                anywhere else - every other channel has one continuous thread
+                and no concept of a subject. */}
+            {isEmailConversation && (
+              <div className="mb-1.5 rounded-xl bg-white px-3 py-2 ring-1 ring-gray-200/80">
+                <div className="flex items-center gap-2">
+                  <div className="flex rounded-lg bg-gray-100 p-0.5">
+                    {(["reply", "new"] as const).map((mode) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setEmailMode(mode)}
+                        className={clsx(
+                          "px-2.5 py-1 rounded-md text-[11px] font-medium transition",
+                          emailMode === mode ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700",
+                        )}
+                      >
+                        {mode === "reply"
+                          ? t("conversations.email.replyInThread")
+                          : t("conversations.email.newEmail")}
+                      </button>
+                    ))}
+                  </div>
+                  <span className="text-[11px] text-gray-400 truncate">
+                    {emailMode === "reply"
+                      ? t("conversations.email.replyHint")
+                      : t("conversations.email.newHint")}
+                  </span>
+                </div>
+                {emailMode === "new" && (
+                  <input
+                    value={emailSubject}
+                    onChange={(e) => setEmailSubject(e.target.value)}
+                    maxLength={200}
+                    placeholder={t("conversations.email.subjectPlaceholder")}
+                    className="mt-2 w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs outline-none focus:border-primary-300 focus:ring-2 focus:ring-primary-100"
+                  />
+                )}
+              </div>
+            )}
+
             {replyTo && (
               <div className="mb-1.5 flex items-start gap-2 rounded-xl bg-white px-3 py-2 ring-1 ring-gray-200/80">
                 <div className="w-0.5 self-stretch rounded bg-primary-400 shrink-0" />

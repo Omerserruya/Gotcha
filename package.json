@@ -13,7 +13,9 @@
     "dev": "docker compose up -d db redis && npm run dev --workspaces --if-present",
     "docker:up": "docker compose up --build -d",
     "docker:down": "docker compose down",
-    "test": "npm run test --workspaces --if-present"
+    "test": "npm run test --workspaces --if-present",
+    "api:docs": "tsx scripts/api-docs/extract-routes.ts && tsx scripts/api-docs/generate-openapi.ts && tsx scripts/api-docs/generate-execution-map.ts",
+    "api:docs:check": "tsx scripts/api-docs/check-drift.ts"
   },
   "dependencies": {
     "nodemailer": "^9.0.3"

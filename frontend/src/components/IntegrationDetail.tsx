@@ -22,6 +22,7 @@ import {
 } from "@/lib/api";
 import CustomApiToolsSection from "@/components/CustomApiToolsSection";
 import CustomDbToolsSection from "@/components/CustomDbToolsSection";
+import { AirtableMappingCard } from "@/components/integrations/AirtableMappingCard";
 import clsx from "clsx";
 
 const RISK_BADGE: Record<string, string> = {
@@ -832,6 +833,11 @@ export function IntegrationDetail({
               )}
             </div>
           )}
+
+          {/* Airtable source-of-truth mapping - view, refresh the live field
+              list, and edit which columns map to name/phone/email/stage.
+              Before this card the mapping was write-once in onboarding. */}
+          {slug === "airtable" && isConnected && <AirtableMappingCard />}
 
           {/* Custom API tool builder - always visible for the custom_api integration,
               regardless of connection state, since each tool is tenant-defined and

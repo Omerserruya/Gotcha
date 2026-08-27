@@ -1,3 +1,5 @@
+import type { EmailThreadContext } from "./email-thread";
+
 // ─── Channel Types & Interfaces ──────────────────────────────
 
 export type ChannelType = "WHATSAPP" | "MESSENGER" | "INSTAGRAM" | "EMAIL" | "GMAIL" | "OUTLOOK" | "SLACK" | "WEBCHAT" | "SHOPIFY_LIVE_CHAT";
@@ -19,6 +21,29 @@ export interface NormalizedInboundMessage {
    * sends it as `context.id`, Meta's other channels as `reply_to.mid`.
    */
   replyToExternalId?: string;
+  /**
+   * Where this conversation came from, when the channel says so.
+   *
+   * WhatsApp attaches `referral` to the FIRST message of a conversation that
+   * started from a Click-to-WhatsApp ad. It is the only moment this is ever
+   * sent - miss it and the origin of that lead is unknowable afterwards.
+   */
+  referral?: InboundReferral;
+}
+
+/** Meta's `referral` object, reduced to what a business can act on. */
+export interface InboundReferral {
+  /** "ad" | "post". */
+  sourceType?: string;
+  /** The AD id. Resolving it to a campaign needs `ads_read` separately. */
+  sourceId?: string;
+  sourceUrl?: string;
+  /** The creative's own words - what makes this readable without an API call. */
+  headline?: string;
+  body?: string;
+  /** Meta's click id, for attributing a conversion back to the click. */
+  ctwaClid?: string;
+  mediaUrl?: string;
 }
 
 export interface MessageContent {
@@ -62,6 +87,25 @@ export interface MessageContent {
    * "[contacts message]", which loses the entire point of the message.
    */
   contacts?: SharedContact[];
+  /**
+   * Everything we know about a message the channel could not represent.
+   *
+   * WhatsApp answers `type: "unsupported"` with an `errors[]` array naming the
+   * reason and NO content - and we used to drop that array on the floor, so
+   * "why did this arrive empty" had no answer anywhere: not in the logs (the
+   * payload log truncates at 500 chars, one field short of `type`), not in the
+   * queue (the raw message is normalized before it is enqueued) and not on the
+   * row. The provider's own reason is the only evidence that exists; it is
+   * kept here and written to the message's metadata.
+   */
+  unsupported?: {
+    /** The provider's own type string, e.g. "unsupported", "revoke", "edit". */
+    providerType: string;
+    /** Meta's `errors[]`: code, title, message, details. Empty when absent. */
+    errors: Array<{ code?: number; title?: string; message?: string; details?: string }>;
+    /** The message object as it arrived, minus nothing. Small by definition. */
+    raw?: unknown;
+  };
 }
 
 /** One contact from a shared contact card, reduced to what an agent can use. */
@@ -81,6 +125,17 @@ export interface NormalizedStatusUpdate {
   // stays for back-compat (human string); `error` carries the full breakdown
   // so a failed send is diagnosable from the DB/UI without server logs.
   error?: ProviderSendError;
+  /**
+   * Meta's `conversation.origin.type` / `pricing.category`, when they say the
+   * conversation was opened from an ad ("referral_conversion").
+   *
+   * The referral object itself arrives ONCE, on the customer's first message.
+   * This arrives on every delivery status for the whole 72-hour window, so it
+   * is the fallback that still identifies an ad-sourced conversation when the
+   * first message was missed - which is exactly what happened in production
+   * before any of this was captured.
+   */
+  conversationOrigin?: string;
 }
 
 /**
@@ -312,14 +367,25 @@ export interface OutboundAdapter {
      * delivers the text, which is the part that matters - a reply that arrives
      * without its quote is a small loss, a reply that fails to send is a real one.
      */
-    replyToExternalId?: string
+    replyToExternalId?: string,
+    /**
+     * Email threading. Only the mail adapters read it.
+     *
+     * Email has no native notion of a conversation, so a reply carrying no
+     * In-Reply-To / References / matching Subject arrives in the customer's
+     * inbox as an unrelated new message. This is how the inbox tells a mail
+     * adapter which thread the agent is answering. Absent means "send a fresh
+     * email", which is also the only correct reading for every other channel.
+     */
+    emailThread?: EmailThreadContext,
   ): Promise<string | null>;
   sendInteractiveMessage(
     credentials: ChannelCredentials,
     accountExternalId: string,
     recipientId: string,
     bodyText: string,
-    buttons: Array<{ id: string; title: string }>
+    buttons: Array<{ id: string; title: string }>,
+    emailThread?: EmailThreadContext,
   ): Promise<string | null>;
   sendMediaMessage?(
     credentials: ChannelCredentials,

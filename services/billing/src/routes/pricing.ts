@@ -22,6 +22,7 @@ import {
 import { listCatalogPlans, quote, describeSubscription, taxSummaryForTenant } from "../services/pricing.service";
 import { applyTax } from "../services/tax.service";
 import { getSubscriptionForTenant } from "../services/billable-entity.service";
+import { evaluationPromptFor } from "../services/evaluation-ended.service";
 import { packageAvailable, effectivePackagePrice } from "../services/purchase.service";
 
 const router = Router();
@@ -117,6 +118,9 @@ router.get("/billing/pricing/current", authenticate, resolveTenant, async (req, 
   const display = await displayCurrency(req.query.currency);
   res.json({
     subscription: await describeSubscription(sub, display),
+    // The ask, when an evaluation is ending or has ended. Null the rest of the
+    // time, so the client renders nothing rather than deciding plan kinds.
+    evaluationPrompt: await evaluationPromptFor(sub),
     disclaimer: ESTIMATE_DISCLAIMER,
   });
 });

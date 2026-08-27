@@ -54,28 +54,46 @@ export function HistoricalImportPanel({
     </div>
   );
 
-  function Transferring({ imp }: { imp: HistoricalImportView }) {
-    const percent = imp.percent ?? 0;
+  /**
+   * One bar, two phases.
+   *
+   * An import is two pieces of work of very different length - Meta sending the
+   * history, then GOTCHA reading it - and a single bar spanning both would sit
+   * near halfway for hours. Two labelled bars, each with its own percentage,
+   * say where the work actually is.
+   */
+  function ProgressBar({ percent, label }: { percent: number; label: string }) {
+    const clamped = Math.max(0, Math.min(100, percent));
     return (
-      <div>
+      <>
         <div className="flex items-center justify-between gap-2">
-          <span className="text-sm font-medium text-gray-900">
-            {t("historicalImport.transferring.title")}
-          </span>
-          <span className="text-sm tabular-nums text-gray-700">{percent}%</span>
+          <span className="text-sm font-medium text-gray-900">{label}</span>
+          <span className="text-sm tabular-nums text-gray-700">{clamped}%</span>
         </div>
         <div
           className="mt-2 h-2 w-full overflow-hidden rounded-full bg-white/70"
           role="progressbar"
-          aria-valuenow={percent}
+          aria-label={label}
+          aria-valuenow={clamped}
           aria-valuemin={0}
           aria-valuemax={100}
         >
           <div
             className="h-full rounded-full bg-blue-600 transition-all duration-500"
-            style={{ width: `${percent}%` }}
+            style={{ width: `${clamped}%` }}
           />
         </div>
+      </>
+    );
+  }
+
+  function Transferring({ imp }: { imp: HistoricalImportView }) {
+    return (
+      <div>
+        <ProgressBar
+          percent={imp.percent ?? 0}
+          label={t("historicalImport.transferring.title")}
+        />
         {/* Said plainly, because the anxious question at this moment is
             "is my WhatsApp working right now" and the answer is yes. */}
         <p className="mt-2 text-xs leading-relaxed text-gray-600">
@@ -89,14 +107,26 @@ export function HistoricalImportPanel({
     const counts = imp.analysisCounts;
     return (
       <div>
-        <div className="text-sm font-medium text-gray-900">
-          {t("historicalImport.analyzing.title")}
+        {/* The transfer is finished by definition once analysis starts, so it
+            stays on screen at 100 rather than disappearing - otherwise the bar
+            appears to restart from zero and the work already done looks lost. */}
+        <div className="opacity-60">
+          <ProgressBar percent={100} label={t("historicalImport.transferring.title")} />
         </div>
-        <p className="mt-1 text-xs leading-relaxed text-gray-600">
+        <div className="mt-3">
+          <ProgressBar
+            percent={imp.analysisPercent ?? 0}
+            label={t("historicalImport.analyzing.title")}
+          />
+        </div>
+        <p className="mt-2 text-xs leading-relaxed text-gray-600">
           {t("historicalImport.analyzing.body")}
         </p>
+        {/* The counted work stays beneath the percentage. The bar says roughly
+            how far; this says exactly what was done, and it is the number to
+            trust if the two ever disagree. */}
         {counts && (
-          <p className="mt-2 text-xs tabular-nums text-gray-700">
+          <p className="mt-1 text-xs tabular-nums text-gray-700">
             {t("historicalImport.analyzing.customers", {
               analyzed: n(counts.analyzed),
               total: n(counts.total),

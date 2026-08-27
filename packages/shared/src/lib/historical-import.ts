@@ -83,14 +83,12 @@ export function hasHistoricalResults(status: HistoricalImportStatus): boolean {
 }
 
 /**
- * The ONE number the progress bar is allowed to show, or null when no honest
- * number exists.
+ * The transfer percentage: how much of the history the source has sent.
  *
- * During transfer this is the source's own percentage. Afterwards it is null -
- * deliberately. We cannot measure how far through "understanding your
- * customers" we are, and inventing 87% to keep a bar moving is the kind of
- * detail that makes everything else on the page less believable. The analyzing
- * stage shows counted work instead; see `historicalAnalysisCounts`.
+ * This is Meta's own number and nothing else. It is NOT a percentage of the
+ * whole import - analysis has its own, see `historicalAnalysisPercent` - because
+ * the two phases are different work with different durations, and one bar
+ * covering both would sit at 50% for hours and then finish in a minute.
  */
 export function historicalImportPercent(input: {
   status: HistoricalImportStatus;
@@ -102,6 +100,66 @@ export function historicalImportPercent(input: {
   }
   if (stage === "ready") return 100;
   return null;
+}
+
+/**
+ * Where analysis has got to, 0-100, or null when it is not running.
+ *
+ * ── Why this exists now, when it deliberately did not before ──
+ *
+ * The original rule was that analysis has no honest percentage and a bar that
+ * invents one poisons every real number near it. That reasoning still holds
+ * against an INVENTED number. It does not hold against a counted one, and by
+ * the time the pipeline was finished two of its stages were already counting:
+ * customer learning walks a known set of customers, knowledge extraction walks
+ * a known set of conversations. Those two stages are the long ones - together
+ * they are effectively the whole wait - and within each, the fraction below is
+ * measured from rows that have actually been processed.
+ *
+ * ── What is measured and what is a weight ──
+ *
+ * The fraction INSIDE a stage is measured. The share each stage gets of the
+ * total is a fixed weight, listed here in the open, chosen from observed
+ * durations on real imports rather than divided evenly - identity resolution is
+ * minutes and extraction is hours, so giving them equal thirds would make the
+ * bar lie in a different direction. A weight is not a measurement, which is why
+ * the bands are wide and the UI names the stage next to the number: the
+ * percentage says roughly how far, the label says exactly what is happening.
+ *
+ * Progress never goes backwards: a stage's floor is its band start, so a retry
+ * that re-runs a batch cannot drag the bar down.
+ */
+const ANALYSIS_BANDS: Array<{ status: HistoricalImportStatus; from: number; to: number }> = [
+  { status: "SOURCE_COMPLETE", from: 0, to: 3 },
+  { status: "INGESTING", from: 3, to: 8 },
+  { status: "IDENTITY_RESOLUTION", from: 8, to: 15 },
+  // The two long ones, and the only two with a measured fraction.
+  { status: "CUSTOMER_LEARNING", from: 15, to: 50 },
+  { status: "KNOWLEDGE_EXTRACTION", from: 50, to: 85 },
+  { status: "KNOWLEDGE_CLUSTERING", from: 85, to: 95 },
+  { status: "ANALYTICS", from: 95, to: 99 },
+];
+
+export function historicalAnalysisPercent(input: {
+  status: HistoricalImportStatus;
+  customersAnalyzed: number;
+  customersTotal: number;
+  conversationsExtracted: number;
+  conversationsEligible: number;
+}): number | null {
+  if (historicalImportStage(input.status) !== "analyzing") return null;
+  const band = ANALYSIS_BANDS.find((b) => b.status === input.status);
+  if (!band) return null;
+
+  let fraction = 0;
+  if (input.status === "CUSTOMER_LEARNING" && input.customersTotal > 0) {
+    fraction = input.customersAnalyzed / input.customersTotal;
+  } else if (input.status === "KNOWLEDGE_EXTRACTION" && input.conversationsEligible > 0) {
+    fraction = input.conversationsExtracted / input.conversationsEligible;
+  }
+  fraction = Math.max(0, Math.min(1, fraction));
+
+  return Math.round(band.from + (band.to - band.from) * fraction);
 }
 
 /**

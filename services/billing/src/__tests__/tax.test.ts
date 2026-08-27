@@ -10,7 +10,13 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const { taxRate } = vi.hoisted(() => ({ taxRate: { findFirst: vi.fn() } }));
 
-vi.mock("@chatcenter/shared", () => ({
+vi.mock("@chatcenter/shared", async (importOriginal) => ({
+  // Real coupon arithmetic, not stubs: it is pure, and a stub here would make
+  // the discount path this file exercises meaningless. Taken from
+  // importOriginal rather than a deep relative import into packages/shared/src
+  // - that path compiles but drags shared's sources into this service's
+  // TypeScript program, which then fails rootDir (see receipt-email.test.ts).
+  ...(await importOriginal<Record<string, unknown>>()),
   prisma: { taxRate },
   readDurableSetting: async () => null,
   writeDurableSetting: async () => undefined,

@@ -8,16 +8,19 @@ import {
   withHistoricalRecords,
   historicalImportStage,
   historicalImportPercent,
+  historicalAnalysisPercent,
   historicalAnalysisCounts,
   hasHistoricalResults,
   HISTORICAL_SOURCE_WINDOW_DAYS,
   writeAudit,
   AuditAction,
+  normalizePhone,
   type HistoricalImportStatus,
 } from "@chatcenter/shared";
 import { processDocument } from "../services/embedding.service";
 import { findExistingKnowledge } from "../services/historical-intelligence/candidate-index";
 import { BULK_APPROVE_MIN_CONFIDENCE } from "../services/historical-intelligence/knowledge-clustering.stage";
+import { rerunIntelligence } from "../services/historical-intelligence";
 
 /**
  * The read and review surface for Historical Intelligence Import.
@@ -138,7 +141,15 @@ router.get("/:id/candidates", async (req: Request, res: Response) => {
         importId: req.params.id as string,
         status: status as any,
       },
-      orderBy: [{ conflict: "desc" }, { confidence: "desc" }, { occurrenceCount: "desc" }],
+      // Conflicts first - they are the only items where doing nothing is the
+      // wrong answer - then grouped by category so a reviewer works through one
+      // subject at a time instead of context-switching down a flat list.
+      orderBy: [
+        { conflict: "desc" },
+        { category: "asc" },
+        { confidence: "desc" },
+        { occurrenceCount: "desc" },
+      ],
       take: 200,
       include: {
         evidence: {
@@ -160,9 +171,18 @@ router.get("/:id/candidates", async (req: Request, res: Response) => {
       candidates: candidates.map((c) => ({
         id: c.id,
         topic: c.topic,
+        // The fixed group. `topic` alone gave 57 groups for 58 items on a real
+        // import, which is a list rather than something a person can review.
+        category: c.category,
+        scope: c.scope,
         question: c.question,
         answer: c.editedAnswer ?? c.answer,
         originalAnswer: c.answer,
+        // Why the answer is what it is. The rule answers the exact question;
+        // this is what lets an agent handle the next variation of it.
+        reasoning: c.reasoning,
+        requiresLiveLookup: c.requiresLiveLookup,
+        curationNote: c.curationNote,
         status: c.status,
         confidence: c.confidence,
         // The label the UI shows. "High" here means only that we observed this
@@ -316,7 +336,7 @@ router.post("/candidates/:candidateId/approve", writeGuard, async (req: Request,
         knowledgeBaseId: target.id,
         tenantId,
         title: questionOverride.slice(0, 200),
-        content: `${questionOverride}\n\n${finalAnswer}`,
+        content: knowledgeDocumentBody(questionOverride, finalAnswer, candidate.reasoning, candidate.requiresLiveLookup),
         sourceType: "historical_conversations",
         status: "pending",
         // Provenance travels with the document. Months later, "where did this
@@ -326,6 +346,7 @@ router.post("/candidates/:candidateId/approve", writeGuard, async (req: Request,
           origin: "historical_import",
           sourceType: "historical_conversations",
           topic: candidate.topic,
+          category: candidate.category,
         },
       },
     });
@@ -460,6 +481,79 @@ router.post("/:id/bulk-reject", writeGuard, async (req: Request, res: Response) 
   }
 });
 
+/**
+ * POST /api/historical-imports/:id/rerun-intelligence
+ *
+ * Wipe the derived artifacts (memories, candidates, vectors) and run the
+ * intelligence stages again over the already-imported conversations. For when
+ * the analysis was wrong but the data is fine - the imported messages are the
+ * one thing Meta will never send twice, and they are untouched.
+ */
+router.post("/:id/rerun-intelligence", writeGuard, async (req: Request, res: Response) => {
+  try {
+    const result = await rerunIntelligence({
+      tenantId: req.tenantId!,
+      importId: req.params.id as string,
+    });
+    if (!result.ok) return res.status(409).json({ error: result.reason });
+    res.json(result);
+  } catch (err: any) {
+    console.error("[historical-import] rerun failed:", err?.message);
+    res.status(500).json({ error: "Failed to rerun analysis" });
+  }
+});
+
+/**
+ * GET /api/historical-imports/customer-context?externalId=<phone>
+ *
+ * What we learned about THIS person, for the live inbox - keyed by the
+ * customer's own identifier rather than an import-internal id.
+ *
+ * The import already produced this (a summary and durable facts per customer)
+ * but only the AI could see it: the memory went into the bot prompt and
+ * nowhere else, so a human agent opening the same chat saw nothing and the
+ * import looked like it had done nothing. This is the endpoint the
+ * conversation panel reads.
+ */
+router.get("/customer-context", async (req: Request, res: Response) => {
+  try {
+    const raw = String(req.query.externalId ?? "").trim();
+    if (!raw) return res.json({ context: null });
+
+    // Same both-shapes probe as the prompt block: a conversation carries
+    // whatever the channel handed us, the memory row is keyed normalized.
+    const normalized = normalizePhone(raw);
+    const keys = Array.from(new Set([raw, normalized].filter(Boolean) as string[]));
+
+    const memory = await prisma.customerHistoricalMemory.findFirst({
+      where: { tenantId: req.tenantId!, customerExternalId: { in: keys } },
+      select: { summary: true, facts: true, messageCount: true, source: true, updatedAt: true, importId: true },
+    });
+    if (!memory) return res.json({ context: null });
+
+    const facts = Array.isArray(memory.facts) ? (memory.facts as Array<Record<string, unknown>>) : [];
+    res.json({
+      context: {
+        summary: memory.summary,
+        facts: facts
+          .filter((f) => typeof f.text === "string" && String(f.text).trim())
+          .map((f) => ({
+            text: String(f.text).trim(),
+            category: typeof f.category === "string" ? f.category : null,
+            confidence: typeof f.confidence === "string" ? f.confidence : null,
+          })),
+        messageCount: memory.messageCount,
+        source: memory.source,
+        learnedAt: memory.updatedAt,
+      },
+    });
+  } catch (err: any) {
+    // Context is an enhancement; never let it break the panel.
+    console.warn("[historical-import] customer-context failed:", err?.message);
+    res.json({ context: null });
+  }
+});
+
 // ─── Imported conversations ──────────────────────────────────
 
 /**
@@ -581,6 +675,38 @@ router.get("/conversations/:conversationId/messages", async (req: Request, res: 
  * the backend, the frontend mirror and the tests all agree on what
  * "analyzing" means and when a percentage is honest.
  */
+/**
+ * The KB document body for an approved suggestion.
+ *
+ * The reasoning is part of the document, not metadata, because it has to reach
+ * the model the same way the answer does - through retrieval. A document that
+ * carries only the rule answers the question it was mined from and fails the
+ * next variation of it, which is the whole difference between an FAQ and
+ * knowing the job. Labelled so the model reads it as background rather than as
+ * something to recite back to the customer.
+ */
+function knowledgeDocumentBody(
+  question: string,
+  answer: string,
+  reasoning: string | null,
+  requiresLiveLookup = false,
+): string {
+  const parts = [question.trim(), "", answer.trim()];
+  if (requiresLiveLookup) {
+    // Inside the document, not in metadata, because only what is in the body
+    // reaches the model through retrieval. Without it an agent reads "usually
+    // Thursday and Friday" and promises a slot nobody checked.
+    parts.push(
+      "",
+      "This depends on live availability. Treat it as the usual pattern, not a commitment: check the calendar or current stock before telling a customer anything specific.",
+    );
+  }
+  if (reasoning && reasoning.trim()) {
+    parts.push("", `How we approach this: ${reasoning.trim()}`);
+  }
+  return parts.join("\n");
+}
+
 function toStatusView(row: {
   id: string;
   source: string;
@@ -589,6 +715,8 @@ function toStatusView(row: {
   sourceProgress: number;
   customersAnalyzed: number;
   customersTotal: number;
+  conversationsExtracted: number;
+  conversationsEligible: number;
   importedMessages: number;
   importedCustomers: number;
   knowledgeCandidateCount: number;
@@ -608,6 +736,13 @@ function toStatusView(row: {
     status,
     stage: historicalImportStage(status),
     percent: historicalImportPercent({ status, sourceProgress: row.sourceProgress }),
+    analysisPercent: historicalAnalysisPercent({
+      status,
+      customersAnalyzed: row.customersAnalyzed,
+      customersTotal: row.customersTotal,
+      conversationsExtracted: row.conversationsExtracted,
+      conversationsEligible: row.conversationsEligible,
+    }),
     analysisCounts: historicalAnalysisCounts({
       status,
       customersAnalyzed: row.customersAnalyzed,
@@ -699,7 +834,7 @@ async function approveOne(
       knowledgeBaseId: target.id,
       tenantId,
       title: candidate.question.slice(0, 200),
-      content: `${candidate.question}\n\n${candidate.answer}`,
+      content: knowledgeDocumentBody(candidate.question, candidate.answer, candidate.reasoning, candidate.requiresLiveLookup),
       sourceType: "historical_conversations",
       status: "pending",
       metadata: {

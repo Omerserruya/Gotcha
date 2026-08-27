@@ -50,7 +50,7 @@ import {
   type CreateNoteArgs,
   type InteractionEnvelope,
 } from "./crm-adapter.types";
-import { coerceSearchPhone, normalizeEmail, normalizePhone } from "./crm-identity.service";
+import { coerceSearchPhone, normalizeEmail, normalizePhone, phoneVariants } from "./crm-identity.service";
 
 // ─── Shared helpers ─────────────────────────────────────────
 
@@ -1757,6 +1757,37 @@ function airtableSchemaFromConfig(config: Record<string, any>): AirtableSchema {
 
 function airtableFormulaEscape(v: string): string { return v.replace(/'/g, "\\'"); }
 
+/**
+ * An Airtable formula that normalizes a phone column the way we normalize the
+ * query: spaces, dashes, dots and parentheses stripped. Airtable has no regex
+ * in formulas, so it is a SUBSTITUTE chain - ugly, but it means "+972 50-123"
+ * in the tenant's table still matches a dialer query of 0501234567. Exact
+ * string equality was the previous behavior, and with real-world phone
+ * formatting it matched approximately never.
+ */
+export function airtableNormalizedPhoneExpr(col: string): string {
+  let expr = `{${col}}&''`; // &'' coerces number-typed columns to text
+  for (const ch of [" ", "-", "(", ")", "."]) {
+    expr = `SUBSTITUTE(${expr},'${ch}','')`;
+  }
+  return expr;
+}
+
+export function airtablePhoneMatchFormula(col: string, rawPhone: string): string | null {
+  const variants = new Set<string>();
+  for (const v of phoneVariants(rawPhone)) {
+    variants.add(v);
+    // The stored value may carry or omit the plus regardless of the variant.
+    if (v.startsWith("+")) variants.add(v.slice(1));
+    else variants.add(`+${v}`);
+  }
+  const clauses = [...variants]
+    .filter((v) => v.replace(/\D/g, "").length >= 7)
+    .map((v) => `${airtableNormalizedPhoneExpr(col)}='${airtableFormulaEscape(v)}'`);
+  if (clauses.length === 0) return null;
+  return clauses.length === 1 ? clauses[0] : `OR(${clauses.join(",")})`;
+}
+
 export class AirtableCRMAdapter implements CRMAdapter {
   readonly vendor: CrmVendor = "airtable";
   readonly capabilities: CrmAdapterCapabilities = DEFAULT_CAPABILITIES.airtable;
@@ -1788,6 +1819,49 @@ export class AirtableCRMAdapter implements CRMAdapter {
     };
   }
 
+  /**
+   * Free-text name search over the mapped display-name column.
+   *
+   * This is what the outbound dialer calls for anything that is not an email
+   * or a phone. Without it the route fell through to the vendor-native
+   * lead/contact search, which has no Airtable path - so typing a customer's
+   * NAME into the outbound page returned nothing, silently, for every
+   * Airtable tenant. FIND() returns 0 (not an error) on no match, which is
+   * what makes it usable in a filter formula.
+   */
+  async searchByName(name: string, limit = 8): Promise<CrmNameSearchResult> {
+    const s = await this.schema();
+    const q = name.trim().toLowerCase();
+    if (!q) return { ok: false, candidates: [], reason: "no_query" };
+    if (!s.fieldMap.display_name) return { ok: false, candidates: [], reason: "display_name_not_mapped" };
+    const cap = Math.min(Math.max(1, limit), 20);
+    const formula = `FIND('${airtableFormulaEscape(q)}', LOWER({${s.fieldMap.display_name}}&''))>0`;
+    const r = await executeAdapterTool({
+      tenantId: this.tenantId,
+      toolFunctionName: "airtable.list_records",
+      args: { filter_formula: formula, max_records: cap },
+    });
+    if (!r.ok) return { ok: false, candidates: [], reason: r.reason };
+    const rows = Array.isArray(r.result) ? (r.result as unknown[]) : [];
+    const candidates: CrmNameSearchCandidate[] = [];
+    for (const raw of rows) {
+      const c = this.mapRecord(raw, s);
+      if (!c) continue;
+      candidates.push({
+        id: c.id,
+        kind: c.kind,
+        display_name: c.display_name,
+        email: c.email,
+        phone: c.phone,
+        orders_count: null,
+        total_spent: null,
+        currency: null,
+      });
+      if (candidates.length >= cap) break;
+    }
+    return { ok: true, candidates };
+  }
+
   async findCustomer(query: { phone?: string; email?: string; external_id?: string }): Promise<CrmAdapterFindResult> {
     const s = await this.schema();
     const email = normalizeEmail(query.email);
@@ -1800,13 +1874,14 @@ export class AirtableCRMAdapter implements CRMAdapter {
       return { ok: true, contacts: c ? [c] : [] };
     }
 
-    let col: string | undefined;
-    let val: string | undefined;
-    if (email && s.fieldMap.email) { col = s.fieldMap.email; val = email; }
-    else if (phone && s.fieldMap.phone) { col = s.fieldMap.phone; val = phone; }
-    if (!col || !val) return { ok: false, contacts: [], reason: "no_query_or_unmapped" };
-
-    const formula = `{${col}}='${airtableFormulaEscape(val)}'`;
+    let formula: string | null = null;
+    if (email && s.fieldMap.email) {
+      // Case-insensitive: Airtable emails are free-typed text.
+      formula = `LOWER({${s.fieldMap.email}})='${airtableFormulaEscape(email.toLowerCase())}'`;
+    } else if (phone && s.fieldMap.phone) {
+      formula = airtablePhoneMatchFormula(s.fieldMap.phone, phone);
+    }
+    if (!formula) return { ok: false, contacts: [], reason: "no_query_or_unmapped" };
     const r = await executeAdapterTool({ tenantId: this.tenantId, toolFunctionName: "airtable.list_records", args: { filter_formula: formula, max_records: 5 } });
     if (!r.ok) return { ok: false, contacts: [], reason: r.reason };
     const rows = Array.isArray(r.result) ? r.result : [];

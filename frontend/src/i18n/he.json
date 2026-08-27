@@ -184,7 +184,8 @@
       "noCrmActivity": "אין פעילות CRM עדיין.",
       "noCrmNotes": "אין הערות CRM עדיין.",
       "seeAll": "הצג הכל",
-      "showLess": "הצג פחות"
+      "showLess": "הצג פחות",
+      "imported": "יובא"
     },
     "initiate": {
       "title": "התחל שיחה חדשה",
@@ -246,6 +247,27 @@
       "contact": "איש קשר",
       "call": "חיוג",
       "openWhatsapp": "וואטסאפ"
+    },
+    "importedHistory": {
+      "badge": "מהיסטוריה שיובאה",
+      "fromMessages": "נלמד מ-{n} הודעות קודמות",
+      "showMore": "עוד {n}",
+      "showLess": "הצגה מצומצמת",
+      "disclaimer": "נלמד משיחות שיובאו מאפליקציית WhatsApp Business. הקשר מועיל - כדאי לוודא לפני שמשתמשים בו מול הלקוח."
+    },
+    "email": {
+      "replyInThread": "תגובה בשרשור",
+      "newEmail": "מייל חדש",
+      "replyHint": "ממשיך את שרשור המייל של הלקוח.",
+      "newHint": "פותח שרשור מייל נפרד.",
+      "subjectPlaceholder": "נושא"
+    },
+    "campaign": {
+      "from": "מ: {ad}",
+      "short": "קמפיין",
+      "unknownAd": "מודעה",
+      "openAd": "פתיחת המודעה",
+      "adId": "מזהה מודעה"
     }
   },
   "dashboard": {
@@ -1568,7 +1590,25 @@
         },
         "everythingIn": "כל היכולות של {plan}, ובנוסף"
       },
-      "paymentSetupUnavailable": "הגדרת תשלום מאובטח אינה זמינה בסביבה הזו."
+      "paymentSetupUnavailable": "הגדרת תשלום מאובטח אינה זמינה בסביבה הזו.",
+      "discount": {
+        "applied": "{label}",
+        "saving": "אתם חוסכים {amount} בכל חודש",
+        "until": "עד {date}",
+        "ongoing": "ללא תאריך סיום"
+      },
+      "evaluation": {
+        "ended": {
+          "POC": "תקופת הפיילוט הסתיימה.",
+          "TRIAL": "תקופת הניסיון הסתיימה."
+        },
+        "ending": {
+          "POC": "הפיילוט מסתיים בעוד {days} ימים.",
+          "TRIAL": "תקופת הניסיון מסתיימת בעוד {days} ימים."
+        },
+        "dataSafe": "הנתונים, השיחות וההגדרות שלכם נשמרו במלואם. בחירת תוכנית מפעילה אותם מחדש.",
+        "cta": "בחירת תוכנית"
+      }
     }
   },
   "outbound": {
@@ -2267,7 +2307,9 @@
       "howItWorks": "איך זה עובד",
       "pricing": "מחירים",
       "login": "התחברות",
-      "getStarted": "הירשמו לרשימת ההמתנה"
+      "getStarted": "הירשמו לרשימת ההמתנה",
+      "home": "דף הבית",
+      "menu": "פתיחת תפריט"
     },
     "hero": {
       "badge": "AI שמחזק נציגים - לא מחליף אותם",
@@ -2617,7 +2659,7 @@
       "phone": {
         "label": "מספר הטלפון שלך?",
         "placeholder": "050-000-0000",
-        "micro": "אופציונלי. לתמיכה בהטמעה דרך WhatsApp."
+        "micro": "כדי שנוכל להשיג אותך מהר בוואטסאפ או בטלפון."
       },
       "role": {
         "label": "מה התפקיד שלך?",
@@ -2675,7 +2717,8 @@
       "required": "שדה חובה.",
       "invalidEmail": "אנא הזן כתובת אימייל תקינה.",
       "alreadyOnWaitlist": "אתה כבר ברשימת ההמתנה! בדוק את תיבת הדואר.",
-      "generic": "משהו השתבש. נסה שנית."
+      "generic": "משהו השתבש. נסה שנית.",
+      "invalidPhone": "אנא הזינו מספר טלפון תקין."
     },
     "thankYou": {
       "badge": "חבר גישה מוקדמת",
@@ -2896,7 +2939,28 @@
     "manageInSettings": "ניהול בהגדרות ←",
     "selectAllTools": "בחר הכל",
     "clearAllTools": "נקה הכל",
-    "applying": "מחיל..."
+    "applying": "מחיל...",
+    "airtable": {
+      "mappingTitle": "מיפוי טבלת הלקוחות",
+      "mappingHint": "אילו עמודות ב-Airtable מכילות שם, טלפון ואימייל של הלקוחות. ה-AI ועמוד השיחות היוצאות מאתרים לקוחות דרך המיפוי הזה.",
+      "refreshFields": "רענון שדות",
+      "refreshing": "מרענן…",
+      "refreshed": "רשימת השדות עודכנה מ-Airtable.",
+      "refreshFailed": "לא הצלחנו לרענן מ-Airtable. בדקו את החיבור.",
+      "base": "בסיס (Base)",
+      "table": "טבלה",
+      "field_display_name": "עמודת שם",
+      "field_phone": "עמודת טלפון",
+      "field_email": "עמודת אימייל",
+      "field_stage": "עמודת שלב / סטטוס",
+      "field_notes": "עמודת הערות",
+      "saveMapping": "שמירת מיפוי",
+      "saving": "שומר…",
+      "saved": "המיפוי נשמר.",
+      "saveFailed": "שמירת המיפוי נכשלה.",
+      "needName": "יש למפות את עמודת השם לפני שמירה.",
+      "needIdentifier": "יש למפות לפחות עמודת טלפון או אימייל."
+    }
   },
   "usage": {
     "title": "צריכה",
@@ -3693,7 +3757,44 @@
         "sharedDrives": "כוננים משותפים"
       },
       "removeKb": "הסרת מאגר ידע",
-      "confirmRemoveKbBody": "“{name}” וכל המסמכים שבו יוסרו. העובדים שלכם יפסיקו לענות ממנו."
+      "confirmRemoveKbBody": "“{name}” וכל המסמכים שבו יוסרו. העובדים שלכם יפסיקו לענות ממנו.",
+      "drive": {
+        "consentTitle": "חיבור Google Drive",
+        "consentAccess": "GOTCHA משתמשת בגישת קריאה בלבד כדי לאפשר לך לבחור קבצים בודדים או תיקיות שלמות כמקורות ידע עבור עובדי ה-AI שלך.",
+        "consentFolders": "כאשר בוחרים תיקייה, GOTCHA מסנכרנת באופן מתמשך את הקבצים הנתמכים שבתוכה, כולל קבצים שיתווספו או יעודכנו בעתיד.",
+        "consentNeverModifies": "GOTCHA לעולם אינה משנה, מוחקת, מעבירה או משתפת קבצים ב-Google Drive. אף שהרשאת הקריאה של Google חלה על ה-Drive, GOTCHA מעבדת רק את הקבצים והתיקיות שבחרת במפורש.",
+        "consentContinue": "המשך ל-Google",
+        "folderSyncNote": "כל הקבצים הנתמכים שנמצאים כרגע בתיקייה שנבחרה ייובאו. קבצים חדשים או מעודכנים שיתווספו אליה בעתיד יסונכרנו אוטומטית.",
+        "sharedDrivesNote": "ניתן לבחור גם קבצים ותיקיות מתוך Shared Drives שיש לך הרשאה אליהם.",
+        "folderSelected": "התיקייה תסונכרן, כולל תת-תיקיות",
+        "selected": "נבחרו",
+        "importSelected": "ייבוא הנבחרים",
+        "importing": "מייבא...",
+        "inMyDrive": "ה-Drive שלי",
+        "inSharedDrive": "Shared Drive",
+        "filesSynced": "{count} קבצים מסונכרנים",
+        "lastSync": "סנכרון אחרון:",
+        "syncNow": "סנכרן עכשיו",
+        "syncing": "מסנכרן...",
+        "pause": "השהה",
+        "resume": "המשך",
+        "remove": "הסרת מקור",
+        "statePending": "ממתין",
+        "stateSynced": "מסונכרן",
+        "statePartial": "מסונכרן חלקית",
+        "statePaused": "מושהה",
+        "stateFailed": "נכשל",
+        "stateActionRequired": "נדרשת פעולה",
+        "removeSourceTitle": "להפסיק את הסנכרון של “{name}”?",
+        "disconnectTitle": "לנתק את “{name}”?",
+        "removeBody": "בחר מה יקרה לידע שכבר יובא. לא ניתן לבטל פעולה זו.",
+        "removeKeepData": "להפסיק סנכרון ולשמור את הידע",
+        "removeKeepDataHint": "מסמכים שכבר יובאו יישארו במאגר הידע.",
+        "removeWithData": "להפסיק סנכרון ולהסיר את הידע",
+        "removeWithDataHint": "מוחק כל מסמך וכל אמבדינג שיובאו מהמקור הזה.",
+        "reconnectNeeded": "הגישה ל-Google בוטלה או פגה. התחבר מחדש כדי לחדש את הסנכרון.",
+        "reconnect": "התחבר מחדש"
+      }
     },
     "tools": {
       "title": "כלים מחוברים",
@@ -5358,8 +5459,8 @@
       "body": "הוואטסאפ שלכם מחובר ועובד. אנחנו מביאים את השיחות הקודמות ברקע."
     },
     "analyzing": {
-      "title": "מנתחים את השיחות הקודמות",
-      "body": "אנחנו לומדים את הלקוחות שלכם ומחפשים ידע עסקי שימושי בתשובות שכבר נתתם.",
+      "title": "בונים את מאגר הידע",
+      "body": "אנחנו קוראים את התשובות שכבר נתתם והופכים אותן לידע שה-AI שלכם יוכל להשתמש בו.",
       "customers": "לקוחות שנותחו: {analyzed} מתוך {total}"
     },
     "ready": {
@@ -5420,7 +5521,23 @@
       "conflictRequired": "בחרו או כתבו את התשובה הנכונה לפני האישור.",
       "approved": "נוסף למאגר הידע שלכם.",
       "rejected": "נדחה.",
-      "tab": "התגלה"
+      "tab": "התגלה",
+      "reasoningLabel": "איך ניגשים לזה",
+      "liveLookup": "תלוי בזמינות"
+    },
+    "category": {
+      "ORDERING_AND_PAYMENT": "הזמנות ותשלום",
+      "SHIPPING_AND_DELIVERY": "משלוחים ואספקה",
+      "RETURNS_AND_CANCELLATION": "החזרות וביטולים",
+      "PRODUCT_AND_SPECS": "פרטי מוצר",
+      "AVAILABILITY_AND_STOCK": "זמינות ומלאי",
+      "PRICING_AND_DISCOUNTS": "מחירים והנחות",
+      "BOOKING_AND_SCHEDULING": "הזמנת תור ותיאום",
+      "LOCATION_AND_HOURS": "מיקום ושעות",
+      "POLICIES_AND_REQUIREMENTS": "מדיניות ודרישות",
+      "SUPPORT_AND_TROUBLESHOOTING": "תמיכה ותקלות",
+      "ABOUT_THE_BUSINESS": "על העסק",
+      "OTHER": "אחר"
     }
   }
 }
