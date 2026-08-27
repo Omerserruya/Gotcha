@@ -343,6 +343,30 @@ export function buildKeyedModelSummary(
     const unknown = askedUnknown.length ? ` | unknown: ${askedUnknown.join(", ")}` : "";
     return `${key}: "${c.title}" | ${price} | ${avail} | ${match}${unknown}`;
   });
+  // ── Too few in budget to fill a recommendation ──
+  //
+  // The zero-result branch above covers "nothing fits". This covers the case
+  // that actually reached a customer: ONE board fitted a 600 budget, the model
+  // wanted two or three options, and it padded from whatever the relevance
+  // ranking happened to return first - offering 949 and 885 while a 629 sat
+  // twelfth in the same list. Padding is not the error; padding blindly is.
+  // Naming the number the shopper gave and the count that fitted lets the model
+  // say why it is reaching above budget, and `sort: price_asc` makes the next
+  // search return the nearest prices instead of the first ones.
+  const inBudget = env.budget
+    ? env.candidates.filter((c) => c.matchQuality === "exact").length
+    : env.candidates.length;
+  const thin =
+    env.budget && inBudget < 2
+      ? [
+          "",
+          `ONLY ${inBudget} of these is within the ${env.budget.currency} ${env.budget.target} budget. ` +
+            "If you show anything else, say plainly that it is above what they asked to spend, and never present it as though it fitted. " +
+            "To find the closest options above the budget, search again with price_min set to the budget and sort: \"price_asc\" - that returns the nearest prices first. " +
+            "Do NOT offer a product far above the budget while a closer one exists; the shopper judges these by distance from the number they gave.",
+        ]
+      : [];
+
   const fx = env.budgetCurrencyMismatch
     ? [
         "",
@@ -353,6 +377,7 @@ export function buildKeyedModelSummary(
   return [
     "PRODUCT_SEARCH_RESULTS (reference products ONLY by their key, e.g. PRODUCT_1):",
     ...lines,
+    ...thin,
     ...fx,
     "",
     "Rules: reference candidates by key. Do NOT write product URLs, prices, or availability yourself - the system attaches the exact values below your text. Do NOT re-list the products as a bulleted catalogue either; that list is already appended, and repeating it just prints every title twice. Write only the short reasoning a person would say out loud, naming at most two or three keys inline. Do NOT mention any product not listed above. Never invent flex, riding style or board length; if the shopper asks for one and it is marked unknown, say that detail is not listed for this product.",

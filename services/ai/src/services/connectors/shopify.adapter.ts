@@ -370,6 +370,11 @@ const TOOLS: ToolDefinition[] = [
       tag: { type: "string", description: "Exact tag, from the store's own list." },
       option_name: { type: "string", description: "A variant option to filter on, e.g. 'Color' or 'Size'. Use the store's exact option name." },
       option_value: { type: "string", description: "The value for option_name, e.g. 'Powder'. Use the store's exact value." },
+      sort: {
+        type: "string",
+        enum: ["relevance", "price_asc"],
+        description: "Default 'relevance'. Use 'price_asc' ONLY when showing alternatives ABOVE a budget, together with price_min set to that budget, so the customer sees the nearest-priced options first.",
+      },
     }, ["query"]),
   // "is it in stock?" and "do you have it in a 159?" are the two most common
   // pre-purchase questions there are. Both were being dropped by the 128-tool
@@ -1571,7 +1576,7 @@ const ShopifyAdapter: ProviderAdapter = {
           const nodes = data?.products?.nodes;
           if (Array.isArray(nodes)) {
             const narrowed = narrowProducts(nodes.map(mapGraphQLProduct), bounds, inStockOnly);
-            return filterByOption(narrowed, option).slice(0, limit);
+            return sortProducts(filterByOption(narrowed, option), args.sort, inStockOnly).slice(0, limit);
           }
         } catch (err: any) {
           console.warn("[shopify] GraphQL product search unavailable, falling back to REST:", err?.message);
@@ -1591,7 +1596,11 @@ const ShopifyAdapter: ProviderAdapter = {
           matchesTerm(p?.product_type, args.product_type)
           && matchesTerm(p?.vendor, args.vendor)
           && (!args.tag || splitTags(p?.tags).some((t: string) => matchesTerm(t, args.tag))));
-        return filterByOption(narrowProducts(faceted, bounds, inStockOnly), option).slice(0, limit);
+        return sortProducts(
+          filterByOption(narrowProducts(faceted, bounds, inStockOnly), option),
+          args.sort,
+          inStockOnly,
+        ).slice(0, limit);
       }
       case "complementary_products": {
         const anchorId = String(args.product_id || "").trim();
@@ -3612,6 +3621,37 @@ export function narrowProducts(
     });
   }
   return out;
+}
+
+/**
+ * Order a narrowed candidate list.
+ *
+ * Relevance is the default and stays Shopify's job: re-sorting by price inside
+ * a budget would turn "the best match under 600" into "the cheapest thing in
+ * the store", which is why `narrowProducts` deliberately preserves arrival
+ * order.
+ *
+ * `price_asc` exists for the one case where that reasoning inverts. When
+ * nothing fits the budget, or too little does, the shopper is shown products
+ * ABOVE what they asked to spend - and there, relevance ranking is close to
+ * meaningless while distance from the budget is exactly what they are judging.
+ * Live on Urban Supply a shopper asked for boards around 600 and was offered
+ * 949 and 885 while a 629 sat twelfth in the relevance list, unseen. Ordering
+ * is opt-in rather than automatic so the default path keeps the behaviour the
+ * comment above protects.
+ */
+export function sortProducts(products: any[], sort: unknown, inStockOnly: boolean): any[] {
+  if (sort !== "price_asc") return products;
+  return [...products].sort((a, b) => {
+    const pa = lowestPrice(a, inStockOnly);
+    const pb = lowestPrice(b, inStockOnly);
+    // An unpriced product cannot be ranked against a number, and dropping it
+    // here would hide a product the filters deliberately kept. It sorts last.
+    if (pa === null && pb === null) return 0;
+    if (pa === null) return 1;
+    if (pb === null) return -1;
+    return pa - pb;
+  });
 }
 
 /** One product selection, shared by every query that returns products, so a
