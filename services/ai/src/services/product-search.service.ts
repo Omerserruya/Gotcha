@@ -310,7 +310,21 @@ export function buildKeyedModelSummary(
     return "PRODUCT_SEARCH_FAILED: the live catalog could not be read. Do NOT claim a search ran or that there are no products; tell the customer you can't check the catalog right now and offer a human handoff.";
   }
   if (env.status === "no_results" || env.candidates.length === 0) {
-    return "PRODUCT_SEARCH_RESULTS: 0 products matched. State honestly that no exact matches were found and offer ONE controlled refinement (widen length, raise budget, or preorder). Do NOT invent products.";
+    // Naming the constraint matters now that the budget is a REAL filter on the
+    // query rather than a label applied afterwards. An empty result used to be
+    // impossible - the shopper got three over-budget boards and a sentence
+    // saying none of them fitted - and the honest empty answer that replaced it
+    // is only useful if the next sentence can say what the store DOES start at.
+    // The model is told to go and find that out rather than estimate it.
+    const budgeted = env.appliedFilters.includes("budget");
+    return (
+      "PRODUCT_SEARCH_RESULTS: 0 products matched" +
+      (budgeted ? ` (the search was limited to ${env.budget?.currency ?? ""} ${env.budget?.target ?? ""} and under).` : ".") +
+      " State honestly that nothing matched. Do NOT invent products and do NOT offer something you were not shown." +
+      (budgeted
+        ? " Before replying, run the SAME search again WITHOUT price_max so you can tell the customer the real lowest price in this category, then let them decide whether to raise their budget. Never guess that number."
+        : " Offer ONE controlled refinement (widen length, raise budget, or preorder).")
+    );
   }
   const lines = env.candidates.map((c, i) => {
     const key = `PRODUCT_${i + 1}`;

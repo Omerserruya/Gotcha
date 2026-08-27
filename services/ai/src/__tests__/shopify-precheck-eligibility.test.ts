@@ -156,17 +156,25 @@ describe("scope of the check", () => {
  * was made, and a merchant would have spent a real decision discovering it.
  */
 describe("declared-unsupported tools", () => {
-  it("edit_order is declared unsupported by the adapter", () => {
-    const def = ShopifyAdapter.tools().find((t: any) => t.name === "shopify.edit_order") as any;
+  it("list_segments is declared unsupported by the adapter", () => {
+    const def = ShopifyAdapter.tools().find((t: any) => t.name === "shopify.list_segments") as any;
     expect(def?.unsupported).toBeTruthy();
   });
 
   it("its handler throws rather than pretending", async () => {
     await expect(
       (ShopifyAdapter as any).execute({
-        ctx: {}, toolName: "edit_order", args: { order_name: "#1011" },
+        ctx: {}, toolName: "list_segments", args: {},
         credentials: { shopDomain: "s.myshopify.com", accessToken: "t" }, config: {},
       }),
     ).rejects.toThrow(/unsupported_rest/);
+  });
+
+  it("edit_order is gone entirely, not merely marked unsupported", () => {
+    // Marking it was not enough. It stayed grantable, an agent was given it
+    // instead of exchange_order_item, and a colour swap on an unshipped order
+    // was escalated to a human because the model had no working tool to reach
+    // for. A tool that cannot run must not be offerable.
+    expect(ShopifyAdapter.tools().find((t: any) => t.name === "shopify.edit_order")).toBeUndefined();
   });
 });

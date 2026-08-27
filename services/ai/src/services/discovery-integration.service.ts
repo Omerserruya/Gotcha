@@ -25,6 +25,7 @@ import {
 import { extractFieldsLive } from "./intelligence-live-extract.service";
 import { prisma } from "@chatcenter/shared";
 import { normalizeShopifyProducts, type ProductSearchEnvelope } from "./product-search.service";
+import { getCatalogFacets, profileForStore } from "./shopify-facets.service";
 // STATIC import on purpose. A dynamic `await import(...)` of this module
 // resolved to a second instance whose adapter REGISTRY was empty - the
 // adapters register as an import side-effect of the connectors barrel, which
@@ -100,6 +101,64 @@ async function resolveShopCurrency(tenantId: string, config: any): Promise<strin
   } catch (err: any) {
     console.warn("[discovery] shop currency lookup failed (non-fatal):", err?.message);
     return undefined;
+  }
+}
+
+/**
+ * Fill a product search's arguments from what the conversation already
+ * established, before the call leaves for Shopify.
+ *
+ * The model is asked to pass `price_max` when a budget is known, and mostly
+ * does. This makes it not matter. The failure this closes is not a model that
+ * forgets - it is a model that REMEMBERS out loud and acts anyway: live on the
+ * Urban Supply store the bot wrote "אחפש עכשיו רק בתוך הטווח של 600$" and then
+ * issued a search with no bound at all, four turns running. A promise about
+ * the search has to be kept by the search.
+ *
+ * Only ever NARROWS. An explicit argument from the model is left alone - it
+ * may know something this turn that the stored facts do not - and a budget in
+ * a currency the store does not price in is dropped rather than compared,
+ * exactly as the envelope does downstream.
+ */
+export async function enrichProductSearchArgs(opts: {
+  tenantId: string;
+  conversationId: string;
+  toolName: string;
+  args: Record<string, any>;
+}): Promise<Record<string, any>> {
+  try {
+    if (!isProductSearchTool(opts.toolName)) return opts.args;
+    if (opts.args?.price_max !== undefined) return opts.args;
+
+    const conn = await (prisma as any).tenantIntegration.findFirst({
+      where: { tenantId: opts.tenantId, integration: { slug: "shopify" } },
+      select: { config: true },
+    });
+    if (!conn) return opts.args;
+
+    const profile = getDiscoveryProfile("product_recommendation") as DiscoveryProfile;
+    const session = await getOrCreateActiveSession({
+      tenantId: opts.tenantId,
+      conversationId: opts.conversationId,
+      goalKey: profile.goalKey,
+    });
+    const facts = await (await import("@chatcenter/shared")).activeFacts(session.id);
+    const budget = parseBudget(facts.get("budget")?.valueJson);
+    if (!budget) return opts.args;
+
+    const shopCurrency = await resolveShopCurrency(opts.tenantId, conn?.config);
+    if (shopCurrency && budget.currency !== shopCurrency) {
+      console.log(
+        `[discovery] budget ${budget.currency} vs shop ${shopCurrency} - not passing price_max conv=${opts.conversationId}`,
+      );
+      return opts.args;
+    }
+
+    console.log(`[discovery] applying price_max=${budget.target} conv=${opts.conversationId}`);
+    return { ...opts.args, price_max: budget.target };
+  } catch (err: any) {
+    console.warn("[discovery] search arg enrichment failed (non-fatal):", err?.message);
+    return opts.args;
   }
 }
 
@@ -221,7 +280,13 @@ export async function runProductDiscoveryTurn(opts: {
     if (!productDiscoveryApplies({ role: opts.role, availableToolNames: opts.availableToolNames })) {
       return { active: false };
     }
-    const profile = getDiscoveryProfile("product_recommendation") as DiscoveryProfile;
+    // The profile, adapted to the store actually connected. The static one
+    // demands riding style and flex; a catalogue that records neither turns
+    // those into questions that gate the search and then filter nothing.
+    const profile = profileForStore(
+      getDiscoveryProfile("product_recommendation") as DiscoveryProfile,
+      await getCatalogFacets(opts.tenantId),
+    );
     const session = await getOrCreateActiveSession({
       tenantId: opts.tenantId,
       conversationId: opts.conversationId,
@@ -296,6 +361,66 @@ function productIdsFrom(result: unknown): string[] {
  * search_products call and writes a DiscoveryActionAttempt so re-shows can be
  * deduped and the discovery history is auditable. Non-fatal.
  */
+/** True for the cross-sell tool, whatever provider prefix it carries. */
+export function isComplementaryTool(toolName: string | undefined): boolean {
+  return !!toolName && /(^|\.)complementary_products$/.test(toolName);
+}
+
+/**
+ * May we offer accessories for this product, right now?
+ *
+ * The rule the owner asked for is "only after they have settled on the main
+ * thing", and half of that is checkable: a product the customer has never been
+ * SHOWN cannot be a product they have chosen. `shownResourceIds` is already
+ * written on every search, so the anchor is verified against the conversation's
+ * own history rather than trusted from the model - which also means a
+ * hallucinated product id can never become an upsell.
+ *
+ * The other half - whether "אני אקח את זה" was actually said - stays with the
+ * model, guided by the tool's own usage note. This gate does not try to read
+ * intent; it removes the case where there is provably no choice to build on.
+ */
+export async function complementaryAnchorAllowed(opts: {
+  tenantId: string;
+  conversationId: string;
+  productId: string;
+}): Promise<{ ok: true } | { ok: false; reason: string }> {
+  try {
+    const wanted = String(opts.productId || "").replace(/^gid:\/\/shopify\/Product\//, "");
+    if (!wanted) return { ok: false, reason: "complementary_products needs the product_id of the product the customer chose." };
+
+    const profile = getDiscoveryProfile("product_recommendation") as DiscoveryProfile;
+    const session = await getOrCreateActiveSession({
+      tenantId: opts.tenantId,
+      conversationId: opts.conversationId,
+      goalKey: profile.goalKey,
+    });
+    const attempts = await (prisma as any).discoveryActionAttempt.findMany({
+      where: { sessionId: session.id },
+      select: { shownResourceIds: true },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+    });
+    const shown = new Set<string>();
+    for (const a of attempts) {
+      const ids = Array.isArray(a?.shownResourceIds) ? a.shownResourceIds : [];
+      for (const id of ids) shown.add(String(id));
+    }
+    // Nothing shown yet is the clearest possible "too early".
+    if (shown.size === 0) {
+      return { ok: false, reason: "No product has been shown in this conversation yet, so there is nothing to complement. Search and present options first, and only offer add-ons once the customer has chosen one." };
+    }
+    if (!shown.has(wanted)) {
+      return { ok: false, reason: `Product ${wanted} was never shown to this customer, so it cannot be what they chose. Offer add-ons only for a product from the results you presented.` };
+    }
+    return { ok: true };
+  } catch (err: any) {
+    console.warn("[discovery] complementary gate failed (non-fatal, allowing):", err?.message);
+    // A read-only cross-sell is not worth failing a turn over.
+    return { ok: true };
+  }
+}
+
 export async function recordDiscoverySearchOutcome(opts: {
   tenantId: string;
   conversationId: string;

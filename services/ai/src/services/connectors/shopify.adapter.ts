@@ -279,13 +279,19 @@ const TOOLS: ToolDefinition[] = [
       quantity: { type: "number", description: "How many units to swap. Default: all of that line." },
     }, undefined,
     { sideEffects: "Rewrites what a placed order contains.", priority: 84 })),
-  withOrderTarget(t("edit_order", "ACTION", "HIGH", "Edit an order's line items (add/remove/adjust).",
-    "You must change what's on an existing order and editing is allowed.",
-    { ...P.orderSel, changes: { type: "object" } }, undefined,
-    {
-      sideEffects: "Mutates a placed order. Requires GraphQL orderEdit.",
-      unsupported: "Editing a placed order requires the GraphQL Admin API.",
-    })),
+  // `edit_order` used to sit here. It was declared in June, never implemented -
+  // its whole execution branch was `throw new Error("unsupported_rest: ...")` -
+  // and `exchange_order_item` above replaced it in August. Both stayed in the
+  // catalogue as equals, so an agent created later was granted the dead one and
+  // not its replacement. On 2026-08-26 a customer asked to change the colour of
+  // an unshipped order, the model reached for the only tool it had been given,
+  // was refused at dispatch, and was escalated to a human for a swap the store
+  // could have made. Deleted rather than left declared-unsupported: a tool that
+  // cannot run has no business being grantable.
+  //
+  // If a general order editor is ever needed, it needs orderEditBegin /
+  // orderEditCommit over GraphQL, and it should still not be handed to a
+  // customer-facing agent - see the note on exchange_order_item.
 
   // ── Fulfillment / shipping (read) ──
   t("get_shipment_status", "READ", "LOW", "Get the shipment status of an order's fulfillments.",
@@ -343,9 +349,28 @@ const TOOLS: ToolDefinition[] = [
   // ── Products ──
   t("get_product", "READ", "LOW", "Get a product by id or handle.",
     "Customer asks about a specific product.", { product_id: { type: "string" }, handle: { type: "string" } }),
-  t("search_products", "READ", "LOW", "Search products by title, vendor, product type, tag or SKU.",
-    "Customer asks 'do you sell X?' or you need candidates to recommend.",
-    { query: { type: "string" }, limit: { type: "number" }, status: { type: "string", enum: ["active", "any"], description: "Default 'active' - only products a shopper can actually buy." } }, ["query"]),
+  // The price bounds are not decoration. Without them this tool could only be
+  // asked "find me snowboards", never "find me snowboards under 600", so a
+  // shopper who named a budget got the catalogue in Shopify's own order and was
+  // then TOLD, in prose, that none of it fitted. Live on the Urban Supply
+  // store: three boards at 949.95 / 885.95 / 749.95 offered against a 600
+  // budget, four turns running, while the one board at 600.00 was never shown.
+  t("search_products", "READ", "LOW",
+    "Search products by title, vendor, product type, tag or SKU, optionally bounded by price and stock.",
+    "Customer asks 'do you sell X?' or you need candidates to recommend. When the customer has named a budget, ALWAYS pass price_max - do not filter it yourself afterwards and do not claim to have searched within a budget you did not pass.",
+    {
+      query: { type: "string" },
+      limit: { type: "number" },
+      status: { type: "string", enum: ["active", "any"], description: "Default 'active' - only products a shopper can actually buy." },
+      price_max: { type: "number", description: "Upper bound on price, in the STORE's currency. Inclusive." },
+      price_min: { type: "number", description: "Lower bound on price, in the STORE's currency. Inclusive." },
+      in_stock_only: { type: "boolean", description: "Default true - exclude products with no buyable variant." },
+      product_type: { type: "string", description: "Exact category, from the store's own list. See the catalogue block in your context." },
+      vendor: { type: "string", description: "Exact brand, from the store's own list." },
+      tag: { type: "string", description: "Exact tag, from the store's own list." },
+      option_name: { type: "string", description: "A variant option to filter on, e.g. 'Color' or 'Size'. Use the store's exact option name." },
+      option_value: { type: "string", description: "The value for option_name, e.g. 'Powder'. Use the store's exact value." },
+    }, ["query"]),
   // "is it in stock?" and "do you have it in a 159?" are the two most common
   // pre-purchase questions there are. Both were being dropped by the 128-tool
   // truncation, leaving the model to answer a specific size question with a
@@ -364,6 +389,17 @@ const TOOLS: ToolDefinition[] = [
     undefined, { priority: 92 }),
   // Internal enrichment for the agent panel - never something a customer
   // conversation needs, so it should be among the first to go.
+  // Cross-sell, and ONLY after the customer has settled on something. The
+  // anchor product is required precisely so this cannot be used as a generic
+  // "show me stuff" call: there is nothing to complement until there is a
+  // choice, and an accessory pushed before the main question is answered is
+  // the behaviour the quality rules already forbid.
+  t("complementary_products", "READ", "LOW",
+    "Products that go WITH one the customer has chosen: accessories, consumables, add-ons. Uses the merchant's own curated list when they have set one.",
+    "The customer has settled on a specific product (said they will take it, asked to buy it, or asked what else they need for it). Never call this while they are still choosing between products, and never as a way to list the catalogue.",
+    { product_id: { type: "string", description: "The product the customer chose. Required - this is what the results complement." },
+      limit: { type: "number", description: "Default 3." } },
+    ["product_id"], { priority: 60 }),
   t("get_product_images", "READ", "LOW", "Batch-fetch featured image URLs for a set of product ids (store-scoped).",
     "Internal: enrich order line items with product images for the agent panel.", { product_ids: { type: "array", items: { type: "string" } } }, ["product_ids"],
     { priority: 10 }),
@@ -548,6 +584,9 @@ const TOOL_SCOPES: Record<string, string[]> = {
   inventory_status: ["read_products", "read_inventory"],
   variant_information: ["read_products", "read_inventory"],
   get_product_images: ["read_products"],
+  // Reads the anchor, its collections and the merchant's recommendation
+  // metafield - all product-surface data.
+  complementary_products: ["read_products"],
   // discounts
   list_discounts: ["read_price_rules"], validate_discount: ["read_price_rules"],
   get_customer_discounts: ["read_customers", "read_price_rules"],
@@ -1334,9 +1373,6 @@ const ShopifyAdapter: ProviderAdapter = {
             `It is an order confirmation, NOT a tax invoice - do not call it one.`,
         };
       }
-      case "edit_order":
-        throw new Error("unsupported_rest: editing placed orders requires the GraphQL Admin API (orderEditBegin/orderEditCommit). Not available via REST tools.");
-
       // ── Fulfillment / shipping ──
       case "get_shipment_status":
       case "track_shipment": {
@@ -1499,6 +1535,24 @@ const ShopifyAdapter: ProviderAdapter = {
         const limit = clampLimit(args.limit, 20, 250);
         const q = String(args.query || "").trim();
         const activeOnly = String(args.status || "active") !== "any";
+        const bounds = priceBounds(args);
+        const inStockOnly = args.in_stock_only !== false;
+        const option = optionFilter(args);
+        // product_type / vendor / tag are first-class in Shopify's own search
+        // grammar, so they go to the server and narrow before we page. A
+        // variant OPTION has no such predicate and is narrowed here.
+        const facets = [
+          termClause("product_type", args.product_type),
+          termClause("vendor", args.vendor),
+          termClause("tag", args.tag),
+        ].filter(Boolean).join(" ");
+        // Price and stock are applied HERE, over the widest page we are willing
+        // to read, rather than by the caller over whatever happened to come
+        // back. Shopify's Admin product query has no price predicate - price
+        // lives on the variant - so a narrowing filter applied after a 3-item
+        // slice would keep throwing away the very products the shopper asked
+        // for. Over-fetch first, narrow second, slice last.
+        const wide = bounds || inStockOnly || option ? Math.max(limit, 50) : limit;
         // GraphQL first: REST /products.json cannot search - it pages the
         // whole catalog and we filter client-side, which silently misses
         // anything past the first page. Shopify's `products(query:)` does a
@@ -1506,15 +1560,23 @@ const ShopifyAdapter: ProviderAdapter = {
         // as the fallback so a store without GraphQL access still works.
         try {
           const data = await shopifyGraphQL(ctx, PRODUCT_SEARCH_QUERY, {
-            q: activeOnly ? `${q} status:active` : q,
-            n: Math.min(limit, 50),
+            q: [q, facets, activeOnly ? "status:active" : ""].filter(Boolean).join(" ").trim(),
+            n: Math.min(wide, 50),
+            // RELEVANCE is only meaningful WITH a search term; without one
+            // Shopify rejects it, so an empty query keeps the default order.
+            // Its absence is why "the first three rows of the catalogue" was
+            // the answer to every question.
+            sort: q ? "RELEVANCE" : null,
           });
           const nodes = data?.products?.nodes;
-          if (Array.isArray(nodes)) return nodes.map(mapGraphQLProduct);
+          if (Array.isArray(nodes)) {
+            const narrowed = narrowProducts(nodes.map(mapGraphQLProduct), bounds, inStockOnly);
+            return filterByOption(narrowed, option).slice(0, limit);
+          }
         } catch (err: any) {
           console.warn("[shopify] GraphQL product search unavailable, falling back to REST:", err?.message);
         }
-        const r: any = await sreq(ctx, "GET", `/products.json?limit=${limit}`);
+        const r: any = await sreq(ctx, "GET", `/products.json?limit=${Math.min(wide, 250)}`);
         const lower = q.toLowerCase();
         const products = (r.products || []).filter((p: any) =>
           (!activeOnly || String(p.status || "active").toLowerCase() === "active")
@@ -1524,7 +1586,126 @@ const ShopifyAdapter: ProviderAdapter = {
             || String(p.vendor || "").toLowerCase().includes(lower)
             || String(p.product_type || "").toLowerCase().includes(lower)
             || String(p.tags || "").toLowerCase().includes(lower)));
-        return products.slice(0, limit);
+        // REST has no search grammar, so the facets are applied here too.
+        const faceted = products.filter((p: any) =>
+          matchesTerm(p?.product_type, args.product_type)
+          && matchesTerm(p?.vendor, args.vendor)
+          && (!args.tag || splitTags(p?.tags).some((t: string) => matchesTerm(t, args.tag))));
+        return filterByOption(narrowProducts(faceted, bounds, inStockOnly), option).slice(0, limit);
+      }
+      case "complementary_products": {
+        const anchorId = String(args.product_id || "").trim();
+        if (!anchorId) throw new Error("product_id_required");
+        const want = clampLimit(args.limit, 3, 10);
+        const gid = anchorId.startsWith("gid://")
+          ? anchorId
+          : `gid://shopify/Product/${encodeURIComponent(anchorId)}`;
+
+        const info = await shopifyGraphQL(ctx, PRODUCT_COMPLEMENTS_QUERY, { id: gid });
+        const anchor = info?.product;
+        if (!anchor) throw new Error("product_not_found");
+
+        const anchorType = String(anchor.productType || "").toLowerCase();
+        const anchorPrices = (anchor?.variants?.nodes || [])
+          .map((v: any) => Number(v?.price))
+          .filter((n: number) => Number.isFinite(n));
+        const anchorPrice = anchorPrices.length ? Math.min(...anchorPrices) : null;
+
+        const drop = (list: any[]) =>
+          narrowProducts(list, null, true).filter(
+            (p: any) => String(p?.id ?? "") !== String(anchor.legacyResourceId ?? ""),
+          );
+
+        // ── 1. What the merchant said. ────────────────────────────────
+        const curatedIds: string[] = (() => {
+          try {
+            const raw = anchor?.metafield?.value;
+            const parsed = raw ? JSON.parse(raw) : null;
+            return Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : [];
+          } catch {
+            // A metafield we cannot parse is a merchant setting we do not
+            // understand, not a reason to fail the call.
+            return [];
+          }
+        })();
+
+        if (curatedIds.length > 0) {
+          const data = await shopifyGraphQL(ctx, PRODUCTS_BY_ID_QUERY, { ids: curatedIds.slice(0, 25) });
+          const curated = drop(
+            (data?.nodes || []).filter(Boolean).map(mapGraphQLProduct),
+          );
+          if (curated.length > 0) {
+            return curated.slice(0, want).map((p: any) => ({ ...p, recommendation_source: "merchant" }));
+          }
+        }
+
+        // ── 2. Otherwise, infer. ──────────────────────────────────────
+        //
+        // Same collection, DIFFERENT product type, and not more expensive than
+        // the thing it accompanies. The product-type rule is what stops a
+        // second snowboard being offered as an accessory to the first: another
+        // item from the category the customer just chose from is a competitor,
+        // not a complement.
+        const collectionIds: string[] = (anchor?.collections?.nodes || [])
+          .map((c: any) => c?.id)
+          .filter(Boolean);
+
+        const anchorRef: ComplementAnchor = {
+          id: String(anchor.legacyResourceId ?? ""),
+          type: anchorType,
+          price: anchorPrice,
+        };
+        const seen = new Set<string>();
+        const inferred: any[] = [];
+        for (const cid of collectionIds) {
+          if (inferred.length >= want) break;
+          let nodes: any[] = [];
+          try {
+            const data = await shopifyGraphQL(ctx, COLLECTION_PRODUCTS_QUERY, { id: cid, n: 50 });
+            nodes = data?.collection?.products?.nodes || [];
+          } catch (err: any) {
+            console.warn("[shopify] collection read failed for complements:", err?.message);
+            continue;
+          }
+          const picked = selectComplements(nodes.map(mapGraphQLProduct), anchorRef, {
+            want: want - inferred.length,
+            seen,
+          });
+          inferred.push(...picked.map((p: any) => ({ ...p, recommendation_source: "inferred" })));
+        }
+        if (inferred.length > 0) return inferred.slice(0, want);
+
+        // ── 3. Last resort: the accessories, wherever they live. ──────
+        //
+        // Verified against the live Urban Supply store: every collection the
+        // anchor belongs to contains ONLY snowboards, so rule 2 returns
+        // nothing there while the store does stock wax. Merchants group by
+        // category far more often than by "what goes with what", so a
+        // collection is a weak signal for accessories and its absence must not
+        // be the end of the search.
+        //
+        // The price ratio is what keeps this from becoming "any other product":
+        // an accessory is materially cheaper than the thing it accompanies, so
+        // wax at 24.95 accompanies a 600 board and a 585 board does not.
+        try {
+          const data = await shopifyGraphQL(ctx, PRODUCT_SEARCH_QUERY, {
+            q: "status:active",
+            n: 50,
+            sort: null,
+          });
+          const picked = selectComplements((data?.products?.nodes || []).map(mapGraphQLProduct), anchorRef, {
+            want: want - inferred.length,
+            maxRatio: ACCESSORY_PRICE_RATIO,
+            seen,
+          });
+          inferred.push(...picked.map((p: any) => ({ ...p, recommendation_source: "inferred" })));
+        } catch (err: any) {
+          console.warn("[shopify] store-wide complement scan failed:", err?.message);
+        }
+
+        // An empty list is a real answer: this store has nothing that goes
+        // with it. Saying so beats padding the reply with a competitor.
+        return inferred.slice(0, want);
       }
       case "get_shop": {
         const r: any = await sreq(ctx, "GET", `/shop.json`);
@@ -3239,32 +3420,266 @@ const RETURNS_QUERY = `
 // Product search. Field set is deliberately conservative - every field
 // here exists in 2024-04, because GraphQL fails the WHOLE query on one
 // unknown field and the fallback would then be the only path that ever runs.
+
+/* ───── Product narrowing ───── */
+
+/**
+ * How much cheaper than the anchor a product must be before we are willing to
+ * call it an accessory rather than an alternative.
+ *
+ * 0.6 is a judgement, not a measurement: it admits a 350 binding for a 600
+ * board and refuses a 585 board, which is the distinction that matters. It only
+ * governs the last-resort store-wide scan - a merchant's own curated list and
+ * the shared-collection rule are both better evidence and are tried first.
+ */
+const ACCESSORY_PRICE_RATIO = 0.6;
+
+export interface ComplementAnchor {
+  /** legacyResourceId of the product being complemented. */
+  id: string;
+  /** Its product type, lowercased. "" when the store leaves it blank. */
+  type: string;
+  /** Its lowest buyable price, or null when unpriced. */
+  price: number | null;
+}
+
+/**
+ * Pick the products that go WITH the anchor, out of a candidate list.
+ *
+ * Three rules, all of them exclusions:
+ *  - never the anchor itself, and never something nobody can buy;
+ *  - never the same product type. Another item from the category the customer
+ *    just chose from is a competitor, not a complement - offering a second
+ *    snowboard as an "add-on" to the first reads as not having listened;
+ *  - never above `maxRatio` of the anchor's price. An accessory is materially
+ *    cheaper than what it accompanies; without this the rule degrades into
+ *    "any other product in the store".
+ *
+ * `seen` is carried in so a caller can run this over several sources - the
+ * merchant's collections first, the whole store second - without repeating a
+ * product between them.
+ */
+export function selectComplements(
+  candidates: any[],
+  anchor: ComplementAnchor,
+  opts: { want: number; maxRatio?: number; seen?: Set<string> },
+): any[] {
+  const seen = opts.seen ?? new Set<string>();
+  const ratio = opts.maxRatio;
+  const out: any[] = [];
+  for (const p of narrowProducts(candidates, null, true)) {
+    if (out.length >= opts.want) break;
+    const key = String(p?.id ?? "");
+    if (!key || key === String(anchor.id) || seen.has(key)) continue;
+    if (anchor.type && String(p?.product_type || "").toLowerCase() === anchor.type) continue;
+    const price = lowestPrice(p, true);
+    if (ratio !== undefined) {
+      // A product we cannot price cannot be shown to be accessory-shaped.
+      if (price === null) continue;
+      if (anchor.price !== null && price > anchor.price * ratio) continue;
+    } else if (anchor.price !== null && price !== null && price > anchor.price) {
+      continue;
+    }
+    seen.add(key);
+    out.push(p);
+  }
+  return out;
+}
+
+export interface PriceBounds { min?: number; max?: number }
+
+/** Case-insensitive equality against a store string. An absent filter matches. */
+export function matchesTerm(value: unknown, wanted: unknown): boolean {
+  const w = String(wanted ?? "").trim();
+  if (!w) return true;
+  return String(value ?? "").trim().toLowerCase() === w.toLowerCase();
+}
+
+/**
+ * One `field:"value"` clause for Shopify's search grammar.
+ *
+ * Quoted, because the values are the store's own strings and they contain
+ * spaces: `vendor:Snowboard Vendor` parses as vendor "Snowboard" plus a
+ * free-text term "Vendor", which matches a different set of products entirely.
+ */
+export function termClause(field: string, value: unknown): string {
+  const v = String(value ?? "").trim();
+  if (!v) return "";
+  return `${field}:"${v.replace(/"/g, '\\"')}"`;
+}
+
+export interface OptionFilter { name: string; value: string }
+
+/** Read a variant-option filter off tool args. Both halves or nothing - a name
+ *  with no value cannot narrow, and a value with no name is ambiguous. */
+export function optionFilter(args: Record<string, any>): OptionFilter | null {
+  const name = String(args?.option_name ?? "").trim();
+  const value = String(args?.option_value ?? "").trim();
+  if (!name || !value) return null;
+  return { name, value };
+}
+
+/**
+ * Keep products that have a variant carrying this option value.
+ *
+ * Shopify's Admin search has no predicate for a variant option, so "a snowboard
+ * in Powder" can only be answered after reading the variants. Matching is on
+ * the SELECTED OPTION of a real variant rather than the product's declared
+ * option list, because a product can advertise a Color axis and stock none of
+ * the colours the shopper asked for.
+ */
+export function filterByOption(products: any[], filter: OptionFilter | null): any[] {
+  if (!filter) return Array.isArray(products) ? products : [];
+  return (Array.isArray(products) ? products : []).filter((p: any) => {
+    const idx = (Array.isArray(p?.options) ? p.options : []).findIndex((o: any) =>
+      matchesTerm(o?.name, filter.name),
+    );
+    if (idx < 0) return false;
+    const key = (["option1", "option2", "option3"] as const)[idx];
+    if (!key) return false;
+    return (Array.isArray(p?.variants) ? p.variants : []).some((v: any) => matchesTerm(v?.[key], filter.value));
+  });
+}
+
+/** Read the price window off tool args. Returns null when neither bound is usable. */
+export function priceBounds(args: Record<string, any>): PriceBounds | null {
+  const num = (v: unknown): number | undefined => {
+    const n = typeof v === "string" ? Number(v) : typeof v === "number" ? v : NaN;
+    return Number.isFinite(n) && n >= 0 ? n : undefined;
+  };
+  const min = num(args?.price_min);
+  const max = num(args?.price_max);
+  if (min === undefined && max === undefined) return null;
+  return { ...(min !== undefined ? { min } : {}), ...(max !== undefined ? { max } : {}) };
+}
+
+/**
+ * The lowest buyable price on a product, which is the number a shopper judges
+ * a budget against.
+ *
+ * Lowest and not first: the first variant is an arbitrary one, and on a product
+ * whose 159cm costs more than its 152cm, judging a 600 budget by whichever
+ * variant Shopify happened to list first excludes a board the shopper could
+ * actually have bought. When `inStockOnly`, unbuyable variants do not get a
+ * vote either - an in-budget price you cannot purchase is not a price.
+ */
+export function lowestPrice(product: any, inStockOnly: boolean): number | null {
+  const variants: any[] = Array.isArray(product?.variants) ? product.variants : [];
+  const prices = variants
+    .filter((v) => (inStockOnly ? v?.available !== false : true))
+    // Guard the empties BEFORE Number(): Number(null) and Number("") are both
+    // 0, so a variant with no price would read as free and match every budget
+    // ever named, including "under 20".
+    .map((v) => (v?.price === null || v?.price === undefined || v?.price === "" ? NaN : Number(v.price)))
+    .filter((n) => Number.isFinite(n));
+  if (prices.length === 0) return null;
+  return Math.min(...prices);
+}
+
+/** Does the product have any variant a shopper can actually buy right now? */
+export function hasBuyableVariant(product: any): boolean {
+  const variants: any[] = Array.isArray(product?.variants) ? product.variants : [];
+  // No variant carries an availability verdict -> we do not know, and "unknown"
+  // must not be read as "gone". Only an explicit false on EVERY variant is a
+  // product nobody can buy.
+  if (!variants.some((v) => typeof v?.available === "boolean")) return true;
+  return variants.some((v) => v?.available === true);
+}
+
+/**
+ * Apply stock and price to a candidate list.
+ *
+ * Returns them narrowed, in the order they arrived - relevance is Shopify's
+ * job, and re-sorting by price here would quietly turn "the best match under
+ * 600" into "the cheapest thing in the store".
+ */
+export function narrowProducts(
+  products: any[],
+  bounds: PriceBounds | null,
+  inStockOnly: boolean,
+): any[] {
+  let out = Array.isArray(products) ? products : [];
+  if (inStockOnly) out = out.filter(hasBuyableVariant);
+  if (bounds) {
+    out = out.filter((p) => {
+      const price = lowestPrice(p, inStockOnly);
+      // An unpriced product cannot be shown to breach a bound, so a bound does
+      // not exclude it. Same rule the budget path downstream already uses.
+      if (price === null) return true;
+      if (bounds.min !== undefined && price < bounds.min) return false;
+      if (bounds.max !== undefined && price > bounds.max) return false;
+      return true;
+    });
+  }
+  return out;
+}
+
+/** One product selection, shared by every query that returns products, so a
+ *  field added for search is present in recommendations too. */
+const PRODUCT_NODE_FIELDS = `
+  legacyResourceId
+  title
+  handle
+  status
+  vendor
+  productType
+  featuredImage { url }
+  images(first: 5) { nodes { url } }
+  options { name }
+  variants(first: 50) {
+    nodes {
+      legacyResourceId
+      title
+      sku
+      price
+      compareAtPrice
+      availableForSale
+      inventoryQuantity
+      inventoryPolicy
+      selectedOptions { name value }
+    }
+  }`;
+
 const PRODUCT_SEARCH_QUERY = `
-  query ProductSearch($q: String!, $n: Int!) {
-    products(first: $n, query: $q) {
-      nodes {
-        legacyResourceId
-        title
-        handle
-        status
-        vendor
-        productType
-        featuredImage { url }
-        images(first: 5) { nodes { url } }
-        options { name }
-        variants(first: 50) {
-          nodes {
-            legacyResourceId
-            title
-            sku
-            price
-            compareAtPrice
-            availableForSale
-            inventoryQuantity
-            inventoryPolicy
-            selectedOptions { name value }
-          }
-        }
+  query ProductSearch($q: String!, $n: Int!, $sort: ProductSortKeys) {
+    products(first: $n, query: $q, sortKey: $sort) {
+      nodes { ${PRODUCT_NODE_FIELDS} }
+    }
+  }`;
+
+/**
+ * The anchor product, plus the two things that can name its complements: the
+ * merchant's own curated list, and the collections it belongs to.
+ *
+ * The metafield is Shopify's Search & Discovery app writing where a merchant
+ * clicked "complementary products" in the admin. It is the authoritative
+ * answer when it exists, because it is a human saying "these go together"
+ * rather than us inferring it from a price and a product type.
+ */
+const PRODUCT_COMPLEMENTS_QUERY = `
+  query ProductComplements($id: ID!) {
+    product(id: $id) {
+      legacyResourceId
+      title
+      productType
+      metafield(namespace: "shopify--discovery--product_recommendation", key: "complementary_products") { value }
+      variants(first: 50) { nodes { price availableForSale } }
+      collections(first: 5) { nodes { id } }
+    }
+  }`;
+
+const PRODUCTS_BY_ID_QUERY = `
+  query ProductsByIds($ids: [ID!]!) {
+    nodes(ids: $ids) {
+      ... on Product { ${PRODUCT_NODE_FIELDS} }
+    }
+  }`;
+
+const COLLECTION_PRODUCTS_QUERY = `
+  query CollectionProducts($id: ID!, $n: Int!) {
+    collection(id: $id) {
+      products(first: $n) {
+        nodes { ${PRODUCT_NODE_FIELDS} }
       }
     }
   }`;

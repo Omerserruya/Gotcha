@@ -338,6 +338,26 @@ export function toolBlockedByMissingScopes(def: ToolDefinition, missing: string[
 }
 
 /**
+ * True when the provider itself says this tool can never run.
+ *
+ * ONE predicate, used by the tool SURFACE and by the approval precheck, because
+ * having it in only the second place is what produced the failure it was
+ * written for. `shopify.edit_order` declared `unsupported` from the day it was
+ * added and was still offered to every agent that held it: the model picked it
+ * for a colour swap on 2026-08-26, was refused at dispatch, and the customer
+ * got handed to a human for something the store could do - the replacement
+ * tool, `exchange_order_item`, simply had not been granted.
+ *
+ * A tool that cannot execute must not reach the model at all. Refusing it later
+ * is refusing it after it has already shaped a promise to a customer.
+ */
+export function toolCannotExecute(
+  def: ToolDefinition | null | undefined,
+): def is ToolDefinition & { unsupported: string } {
+  return typeof def?.unsupported === "string" && def.unsupported.length > 0;
+}
+
+/**
  * Parse a provider error into the scope(s) it proves missing. The named
  * capture wins; a generic "missing … scope" message falls back to the tool's
  * declared requiredScopes (the ones the failing call needed).
@@ -619,7 +639,9 @@ export async function precheckAdapterAction(opts: {
   if (!adapter) return { eligible: true };
 
   // A tool the provider has DECLARED unsupported can never run, so it must
-  // never reach a person's approval queue. `shopify.edit_order` raised a
+  // never reach a person's approval queue. The tool SURFACE now drops these
+  // too, so in practice the model is never offered one; this stays as the
+  // backstop for any caller that builds its own tool list. `shopify.edit_order` raised a
   // PENDING approval for a customer's address change and would have thrown
   // `unsupported_rest` the moment anyone approved it - the request was
   // impossible before it was ever made, and the merchant would have spent a
@@ -629,7 +651,7 @@ export async function precheckAdapterAction(opts: {
   // that degrades rather than implements.
   try {
     const def = adapter.tools().find((t) => t.name === opts.toolFunctionName);
-    if (def?.unsupported) {
+    if (toolCannotExecute(def)) {
       return {
         eligible: false,
         reason:

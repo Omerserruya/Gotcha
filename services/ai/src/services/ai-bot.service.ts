@@ -31,7 +31,8 @@ import {
   validateGrammaticalAgreement,
   shouldRegenerateForAddress,
 } from "@chatcenter/shared";
-import { runProductDiscoveryTurn, recordDiscoverySearchOutcome, groundProductSearchResult, isProductSearchTool } from "./discovery-integration.service";
+import { getCatalogFacets, renderFacetsForPrompt } from "./shopify-facets.service";
+import { runProductDiscoveryTurn, recordDiscoverySearchOutcome, groundProductSearchResult, isProductSearchTool, enrichProductSearchArgs, isComplementaryTool, complementaryAnchorAllowed } from "./discovery-integration.service";
 import { buildKeyedModelSummary, renderGroundedProductReply, renderCandidatesForWhatsApp, type ProductSearchEnvelope } from "./product-search.service";
 import {
   planAutoRecommendation,
@@ -200,6 +201,7 @@ import {
   listAdapters,
   missingScopesFromConfig,
   toolBlockedByMissingScopes,
+  toolCannotExecute,
   capabilityStateIsFresh,
   refreshCapabilityState,
   getToolPriority,
@@ -1925,12 +1927,35 @@ async function generateAIBotReplyInner(
           return { ok: false as const, reason: `wrong_order: ${verdict.reason}` };
         }
       }
+      // Accessories are for something the customer actually chose. Refused
+      // rather than silently emptied, so the model is told WHY and can go back
+      // to the main question instead of inventing an anchor.
+      if (isComplementaryTool(toolFunctionName)) {
+        const gate = await complementaryAnchorAllowed({
+          tenantId: opts.tenantId,
+          conversationId: opts.conversationId,
+          productId: String((args as Record<string, any>)?.product_id ?? ""),
+        });
+        if (!gate.ok) {
+          console.warn(`[ai-bot][cross-sell] refused ${toolFunctionName}: ${gate.reason}`);
+          return { ok: false as const, reason: gate.reason };
+        }
+      }
+
+      // A budget the conversation already established is applied to the SEARCH,
+      // not to the prose about the search. See enrichProductSearchArgs.
+      const effectiveArgs = await enrichProductSearchArgs({
+        tenantId: opts.tenantId,
+        conversationId: opts.conversationId,
+        toolName: toolFunctionName,
+        args: args as Record<string, any>,
+      });
       const result = await executeAdapterTool({
         tenantId: opts.tenantId,
         conversationId: opts.conversationId,
         contactId: contactRow?.id,
         toolFunctionName,
-        args,
+        args: effectiveArgs,
         // The LLM is acting FOR the customer channel here - protected
         // customer/order tools are authorized against the conversation's
         // authenticated sender identity (P0 cross-customer guard). Typed
@@ -2137,6 +2162,17 @@ async function generateAIBotReplyInner(
         // (exactly the Matan coupon HITL). State self-heals on re-connect or
         // a passing integration test.
         if (toolBlockedByMissingScopes(def, missingScopesFromConfig(cfg))) continue;
+        // Capability gate, part two: the provider's OWN verdict. A tool
+        // declared `unsupported` throws the moment it is called, so offering it
+        // buys nothing and costs a real conversation - the model picks it,
+        // promises the customer, and is refused at dispatch. This was live on
+        // 2026-08-26: shopify.edit_order was offered, chosen for a colour swap,
+        // denied, and the customer was escalated to a human for something the
+        // store could actually do.
+        if (toolCannotExecute(def)) {
+          console.log(`[ai-bot][tool-surface] hiding ${def.name}: provider declares it unsupported`);
+          continue;
+        }
         tools.push({
           type: "function",
           function: {
@@ -2486,6 +2522,18 @@ async function generateAIBotReplyInner(
   // compares the same numbers the provider quoted.
   let productBudget: { target: number; currency: string } | null = null;
   const replyLocale: "he" | "en" = detectLocale(messages.map((m) => m.body || ""));
+  // What this store can actually be asked about, derived from its catalogue.
+  // Must come BEFORE the discovery snapshot: the snapshot says which facts are
+  // still missing, and this says which facts are worth having here at all.
+  try {
+    if (toolFunctionNames.some((n) => isProductSearchTool(n))) {
+      const block = renderFacetsForPrompt(await getCatalogFacets(opts.tenantId), replyLocale);
+      if (block) chatMessages.push({ role: "system", content: block });
+    }
+  } catch (err: any) {
+    console.warn("[ai-bot] catalogue facets failed (non-fatal):", err?.message);
+  }
+
   try {
     const disc = await runProductDiscoveryTurn({
       tenantId: opts.tenantId,
@@ -2503,9 +2551,14 @@ async function generateAIBotReplyInner(
           role: "system",
           content:
             `Enough information exists to search. Call ${disc.decision.tool} NOW. ` +
-            `IMPORTANT: the store's product catalog is searched by product TITLE, which is in ENGLISH. ` +
-            `Set the query to the ENGLISH product-category noun ONLY (e.g. "snowboard") - do NOT put length, flex, riding style, price or Hebrew words in the query; the store cannot filter by those and a specific query returns nothing. ` +
-            `Apply budget/length/flex yourself when choosing which returned products to present. ` +
+            `The query argument matches product TITLE and is in ENGLISH, so set it to the English category noun ONLY ("snowboard") and put nothing else in it - no price, no colour, no Hebrew. ` +
+            // This used to end "apply budget/length/flex yourself when choosing
+            // which products to present", which was the only option back when
+            // the tool took a query and nothing else. It is now the bug: a
+            // model that filters after the fact is a model that receives the
+            // first N rows of the catalogue and then writes prose about a
+            // budget it never applied.
+            `Everything else goes in ARGUMENTS, not in the query and not in your head: price_max for a budget, plus product_type / vendor / tag / option_name+option_value from the catalogue block above. ` +
             `Do NOT ask more questions and do NOT describe products from general knowledge - only real results from the tool may be shown.`,
         });
       } else if (disc.decision?.kind === "blocked_no_tool") {
