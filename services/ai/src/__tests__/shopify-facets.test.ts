@@ -91,6 +91,16 @@ describe("deriving a store's shape", () => {
     expect(f.vendors).toContain("Snowboard Vendor");
   });
 
+  it("reads tags off the shape the GraphQL mapper produces", () => {
+    // Live regression: the GraphQL product selection did not request `tags`
+    // and the mapper did not emit them, so every product read through the
+    // PRIMARY path looked untagged and the catalogue block listed no tags at
+    // all - while the tool still advertised a `tag` filter argument.
+    const mapped = [{ id: "x", title: "T", product_type: "snowboard", vendor: "V",
+      tags: ["Winter", "Premium"], options: [], variants: [{ price: "10", available: true }] }];
+    expect(deriveFacets(mapped).tags.sort()).toEqual(["Premium", "Winter"]);
+  });
+
   it("survives an empty or unreadable catalogue", () => {
     expect(deriveFacets([]).productTypes).toEqual([]);
     expect(deriveFacets(null as any).scanned).toBe(0);

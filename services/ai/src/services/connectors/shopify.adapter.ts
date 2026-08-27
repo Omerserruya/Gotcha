@@ -3623,6 +3623,7 @@ const PRODUCT_NODE_FIELDS = `
   status
   vendor
   productType
+  tags
   featuredImage { url }
   images(first: 5) { nodes { url } }
   options { name }
@@ -3718,6 +3719,12 @@ function mapGraphQLProduct(p: any): any {
     status: String(p?.status ?? "ACTIVE").toLowerCase(),
     vendor: p?.vendor ?? null,
     product_type: p?.productType ?? null,
+    // The REST path has always carried tags; GraphQL was not asked for them,
+    // so every product read through the (primary) GraphQL path looked untagged.
+    // The catalogue facets are built from these reads, which meant the model
+    // was offered a `tag` filter argument and never told which tags exist -
+    // leaving it to guess a value that narrows to nothing.
+    tags: Array.isArray(p?.tags) ? p.tags : [],
     image: p?.featuredImage?.url ? { src: p.featuredImage.url } : images[0] ?? null,
     images,
     options: (p?.options || []).map((o: any) => ({ name: o?.name })).filter((o: any) => o.name),
