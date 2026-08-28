@@ -9,6 +9,8 @@ import {
   listShopifyLiveChatChannels,
   createShopifyLiveChatChannel,
   enableShopifyChat,
+  getShopifyChatStatus,
+  type ShopifyChatStatus,
   updateShopifyLiveChatChannel,
   deleteShopifyLiveChatChannel,
   getShopifyLiveChatDiagnostics,
@@ -107,6 +109,12 @@ export function ShopifyLiveChatSettings() {
     [hero.height],
   );
 
+  // Installation health, read separately from the channel. The two are
+  // different rows and CAN disagree: an uninstall retires the installation
+  // while the channel keeps enabled=true, which is how the UI came to show a
+  // healthy toggle while the storefront bootstrap refused.
+  const [chatStatus, setChatStatus] = useState<ShopifyChatStatus | null>(null);
+
   const [previewState, setPreviewState] = useState<PreviewState>("welcome");
   const [previewDevice, setPreviewDevice] = useState<PreviewDevice>("desktop");
   const [previewLang, setPreviewLang] = useState<"en" | "he">(locale === "he" ? "he" : "en");
@@ -127,10 +135,13 @@ export function ShopifyLiveChatSettings() {
       // the licence gate or a 500 from the adapter is not the same fact as
       // "this workspace has no Shopify store", and telling a merchant whose
       // store IS connected to go connect one sends them to fix nothing.
-      const [storeRes, channelsRes] = await Promise.all([
+      const [storeRes, channelsRes, statusRes] = await Promise.all([
         getShopifyStore(token),
         listShopifyLiveChatChannels(token),
+        // Best-effort: an older API without this route must not break the page.
+        getShopifyChatStatus(token).catch(() => null),
       ]);
+      setChatStatus(statusRes?.data ?? null);
       setStore(storeRes.data);
       const first = (channelsRes.data || [])[0] || null;
       setChannel(first);
@@ -230,6 +241,29 @@ export function ShopifyLiveChatSettings() {
       await load();
       setSection("installation");
       notify(t("shopifyChat.created"));
+    } catch (err: any) {
+      notify(err.message || t("common.error"), "err");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  /**
+   * Repair a degraded installation by running the full enable path.
+   *
+   * Deliberately NOT a channel save. Saving would flip a flag the storefront
+   * does not consult and leave the merchant believing chat is live.
+   * `enableShopifyChat` revives the retired installation, re-binds it to this
+   * tenant and re-homes its app identity, keeping the existing channel and
+   * every conversation on it.
+   */
+  async function handleRepair() {
+    if (!token) return;
+    setSaving(true);
+    try {
+      await enableShopifyChat(token);
+      await load();
+      notify(t("shopifyChat.repair.done") || t("shopifyChat.created"));
     } catch (err: any) {
       notify(err.message || t("common.error"), "err");
     } finally {
@@ -392,20 +426,50 @@ export function ShopifyLiveChatSettings() {
         </div>
       )}
 
+      {/* A DEGRADED INSTALLATION OUTRANKS THE CHANNEL FLAG.
+          The installation and the channel are separate rows and can
+          disagree: uninstalling the app retires the installation while the
+          channel keeps enabled=true. Showing the normal toggle here told
+          merchants chat was live while the storefront refused with
+          "unavailable", so this state gets a repair action instead. */}
+      {chatStatus?.needsRepair && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 flex items-start gap-3" role="alert">
+          <div className="flex-1">
+            <p className="font-semibold text-sm text-amber-900">
+              {t(`shopifyChat.repair.${chatStatus.installHealth}`) || t("shopifyChat.repair.title")}
+            </p>
+            <p className="text-xs text-amber-800 mt-0.5">
+              {t("shopifyChat.repair.detail")}
+            </p>
+          </div>
+          <button
+            onClick={handleRepair}
+            disabled={saving}
+            className="shrink-0 text-xs font-medium px-3 py-2 rounded-lg bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-40"
+          >
+            {t("shopifyChat.repair.action")}
+          </button>
+        </div>
+      )}
+
       {/* What is stopping this going live, right now */}
       <div
         className={clsx(
           "rounded-2xl border p-4 flex items-start gap-3",
-          blocking ? "bg-red-50 border-red-200" : draft.enabled ? "bg-green-50 border-green-200" : "bg-gray-50 border-gray-200",
+          blocking || chatStatus?.needsRepair
+            ? "bg-red-50 border-red-200"
+            : draft.enabled ? "bg-green-50 border-green-200" : "bg-gray-50 border-gray-200",
         )}
       >
         <div className="flex-1">
           <p className="font-semibold text-sm text-gray-900">
-            {blocking
-              ? blocking.title
-              : draft.enabled
-                ? t("shopifyChat.statusLive")
-                : t("shopifyChat.statusOff")}
+            {chatStatus?.needsRepair
+              ? t("shopifyChat.statusNotServing")
+              : blocking
+                ? blocking.title
+                : draft.enabled
+                  ? t("shopifyChat.statusLive")
+                  : t("shopifyChat.statusOff")}
           </p>
           <p className="text-xs text-gray-600 mt-0.5">
             {blocking ? blocking.fix || blocking.detail : t("shopifyChat.statusHint")}

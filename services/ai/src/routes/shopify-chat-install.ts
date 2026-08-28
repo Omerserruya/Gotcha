@@ -37,10 +37,14 @@ import {
 } from "@chatcenter/shared";
 import {
   findLiveInstallation,
+  findLatestInstallation,
   activationSnapshot,
   refreshVerifiedDomains,
   enableChatForTenant,
   disableChatForTenant,
+  assessInstallHealth,
+  needsReconciliation,
+  readChatChannelEnabled,
 } from "../services/shopify-chat-install.service";
 import { loadConnection } from "../services/connectors/integration-framework";
 
@@ -78,6 +82,8 @@ authed.get("/status", async (req: Request, res: Response) => {
         shopifyConnected: false,
         shopDomain: null,
         state: "shopify_not_connected",
+        installHealth: "installation_missing",
+        needsRepair: false,
         activation: null,
         appAdminLink: null,
       },
@@ -85,22 +91,34 @@ authed.get("/status", async (req: Request, res: Response) => {
     return;
   }
 
-  const installation = await findLiveInstallation(shopDomain);
-  const mine = installation && (!installation.tenantId || installation.tenantId === tenantId);
+  // findLatestInstallation, NOT findLiveInstallation. The "live" lookup
+  // excludes UNINSTALLED rows, so a retired installation came back as null
+  // and this endpoint could not tell "never installed" from "uninstalled" -
+  // which is precisely the state that let the UI show a healthy toggle while
+  // the storefront refused.
+  const installation = await findLatestInstallation(shopDomain);
+  const health = assessInstallHealth(installation, tenantId);
+  const chatEnabled = await readChatChannelEnabled(tenantId);
   const identity = getShopifyAppIdentity();
+
+  // The channel flag alone is never proof. A degraded installation reports
+  // its own reason so the UI can offer a repair instead of a toggle.
+  const state = needsReconciliation(health)
+    ? health
+    : chatEnabled
+      ? "active"
+      : "disabled";
 
   res.json({
     data: {
       shopifyConnected: true,
       shopDomain,
-      state: mine ? "enabled" : "ready_to_activate",
-      activation: mine ? await activationSnapshot(installation!) : null,
-      // Empty until SHOPIFY_APP_HANDLE is read from the Partner Dashboard.
-      // A guessed handle produces a link that 404s in the merchant's admin,
-      // so the UI is given null and can say the link is unavailable.
-      appAdminLink: identity.appHandle
-        ? buildAppAdminLink(shopDomain, identity.appHandle)
-        : null,
+      state,
+      installHealth: health,
+      needsRepair: needsReconciliation(health),
+      chatEnabled,
+      activation: health === "ok" && installation ? await activationSnapshot(installation) : null,
+      appAdminLink: identity.appHandle ? buildAppAdminLink(shopDomain, identity.appHandle) : null,
     },
   });
 });

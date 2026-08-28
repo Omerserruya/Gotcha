@@ -47,6 +47,9 @@ export interface ChatInstallation {
   id: string;
   shopDomain: string;
   status: InstallStatus;
+  /** Which Shopify app wrote this row. Legacy rows carry the retired
+   *  two-app handles and must be re-homed on the next enable. */
+  appIdentity: string | null;
   tenantId: string | null;
   channelAccountId: string | null;
   verifiedDomains: string[];
@@ -61,6 +64,7 @@ function toInstallation(row: any): ChatInstallation {
     id: row.id,
     shopDomain: row.shopDomain,
     status: row.status,
+    appIdentity: row.appIdentity ?? null,
     tenantId: row.tenantId ?? null,
     channelAccountId: row.channelAccountId ?? null,
     verifiedDomains: Array.isArray(row.verifiedDomains) ? (row.verifiedDomains as string[]) : [],
@@ -117,6 +121,54 @@ export async function findInstallationById(id: string): Promise<ChatInstallation
  * that proof would be a takeover: anyone who could name the shop domain
  * would inherit its channel.
  */
+/**
+ * Which Shopify app owns installations written now.
+ *
+ * Falls back to "gotcha-core" because SHOPIFY_APP_HANDLE is deliberately
+ * unset - the handle was never read back from the Dashboard and a guess
+ * would produce broken admin deep links. The literal is a provenance marker
+ * here, not a link target, so a stable default is correct.
+ */
+export function currentAppIdentity(): string {
+  return getShopifyAppIdentity().appHandle || "gotcha-core";
+}
+
+/** Identities written by the retired two-app topology. */
+const LEGACY_APP_IDENTITIES = ["gotcha-chat", "gotcha-chat-dev"];
+
+export type ChatInstallHealth =
+  | "ok"
+  | "installation_missing"
+  | "uninstalled"
+  | "wrong_app_identity"
+  | "tenant_binding_missing";
+
+/**
+ * Is this installation actually able to serve the storefront for `tenantId`?
+ *
+ * The bug this exists to prevent: the CHANNEL and the INSTALLATION are two
+ * rows that can disagree. A merchant who uninstalls and re-adds the app gets
+ * `status = UNINSTALLED` on the installation while the channel keeps
+ * `enabled = true`, so GOTCHA showed a healthy toggle while the storefront
+ * bootstrap refused with "unavailable". `chat_enabled` alone is not proof
+ * that storefront chat works, and nothing may treat it as such.
+ */
+export function assessInstallHealth(
+  installation: ChatInstallation | null,
+  tenantId: string,
+): ChatInstallHealth {
+  if (!installation) return "installation_missing";
+  if (installation.status === "UNINSTALLED") return "uninstalled";
+  if (!installation.tenantId || installation.tenantId !== tenantId) return "tenant_binding_missing";
+  if (LEGACY_APP_IDENTITIES.includes(installation.appIdentity ?? "")) return "wrong_app_identity";
+  return "ok";
+}
+
+/** Does this state require the full enable/reconciliation flow rather than a save? */
+export function needsReconciliation(health: ChatInstallHealth): boolean {
+  return health !== "ok";
+}
+
 export async function recordAuthorizedInstall(input: {
   shopDomain: string;
   accessToken?: string | null;
@@ -143,6 +195,12 @@ export async function recordAuthorizedInstall(input: {
           ...(encrypted ? { accessToken: encrypted, tokenScopes: input.scopes ?? null } : {}),
           lastVerifiedAt: new Date(),
           status: existing.tenantId && existing.channelAccountId ? "ACTIVE" : "PENDING",
+          // Follow the app this row now belongs to. A row created under the
+          // old two-app topology carries "gotcha-chat-dev"; after the
+          // unification the SAME storefront is served by the Core app, and
+          // leaving the old identity makes the row read as belonging to an
+          // app that no longer installs anything.
+          appIdentity: currentAppIdentity(),
         },
       });
       return toInstallation(row);
@@ -162,6 +220,8 @@ export async function recordAuthorizedInstall(input: {
           uninstalledAt: null,
           installedAt: new Date(),
           lastVerifiedAt: new Date(),
+          // Re-installing under the unified app re-homes the row. See above.
+          appIdentity: currentAppIdentity(),
           ...(encrypted ? { accessToken: encrypted, tokenScopes: input.scopes ?? null } : {}),
         },
       });
@@ -176,7 +236,7 @@ export async function recordAuthorizedInstall(input: {
         // unified app; rows written before the cutover carry "gotcha-chat"
         // or "gotcha-chat-dev", which is exactly the provenance this column
         // exists to preserve.
-        appIdentity: getShopifyAppIdentity().appHandle || "gotcha-core",
+        appIdentity: currentAppIdentity(),
         ...(encrypted ? { accessToken: encrypted, tokenScopes: input.scopes ?? null } : {}),
         verifiedDomains: [shop],
         lastVerifiedAt: new Date(),
@@ -660,6 +720,14 @@ export async function activationSnapshot(installation: ChatInstallation): Promis
   };
 }
 
+/** Is the tenant's Shopify chat CHANNEL switched on? Never proof on its own. */
+export async function readChatChannelEnabled(tenantId: string): Promise<boolean> {
+  const rows = await prisma.channelAccount.findMany({
+    where: { tenantId, channel: SHOPIFY_LIVE_CHAT as any },
+  });
+  return rows.some((r) => readShopifyLiveChatConfig(r.platformMeta).enabled);
+}
+
 // ─── Unified app: enable / disable without a second OAuth ─────
 
 /**
@@ -673,7 +741,13 @@ export async function activationSnapshot(installation: ChatInstallation): Promis
  * storefront never needed Admin access, and now there is no second grant it
  * could even draw one from.
  *
- * Idempotent: enabling an already-enabled channel returns the same channel.
+ * Idempotent, and REPAIRING rather than merely additive. `recordAuthorizedInstall`
+ * revives a retired row (keeping its channel, conversations and configuration)
+ * and re-homes its `appIdentity` onto the current app, so this is also the
+ * correct action when the installation is UNINSTALLED, unbound, or still
+ * carrying a legacy two-app identity. The settings surface must call it in
+ * those states instead of merely saving the channel flag - saving would leave
+ * the storefront refusing while the UI claimed success.
  */
 export async function enableChatForTenant(input: {
   tenantId: string;
