@@ -40,6 +40,7 @@ vi.mock("@chatcenter/shared", () => ({
   decryptCredentials: (v: unknown) => v,
 }));
 
+import { orderNode } from "./helpers/shopify-graphql-fixtures";
 import ShopifyAdapter from "../services/connectors/shopify.adapter";
 
 const cancelTool = ShopifyAdapter.tools().find((t: any) => t.name === "shopify.cancel_order") as any;
@@ -87,7 +88,13 @@ function cancel(args: Record<string, unknown>, order: any = ORDER) {
           };
         }
       }
-      const body = String(url).includes("orders.json") ? { orders: [live] } : { order: live };
+      // Every read is a GraphQL operation now; the order lookup and the order
+      // search both answer with the same live order.
+      const q = String(init?.body ?? "");
+      const node = orderNode(live);
+      const body = q.includes("GotchaOrderSearch")
+        ? { data: { orders: { nodes: [node], pageInfo: { hasNextPage: false, endCursor: null } } } }
+        : { data: { order: node } };
       return {
         ok: true,
         status: 200,

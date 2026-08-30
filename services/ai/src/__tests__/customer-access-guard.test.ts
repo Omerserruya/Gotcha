@@ -10,6 +10,7 @@
  * and only a stored-destination OTP grant opens scoped access.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { orderNode } from "./helpers/shopify-graphql-fixtures";
 
 const prismaMock = vi.hoisted(() => ({
   conversation: { findFirst: vi.fn() },
@@ -199,9 +200,9 @@ describe("executeAdapterTool end-to-end attack replay (1/6/20)", () => {
   it("the exact attack - get_order #1004 from Omer's chat - is denied BEFORE the model, with a security event", async () => {
     primeConnection();
     (globalThis as any).fetch = vi.fn(async (url: string) =>
-      /orders\.json/.test(String(url))
-        ? { ok: true, status: 200, json: async () => ({ orders: [MATAN_ORDER] }), text: async () => "{}" }
-        : { ok: true, status: 200, json: async () => ({}), text: async () => "{}" },
+      /graphql\.json/.test(String(url))
+        ? { ok: true, status: 200, headers: { get: () => null }, json: async () => ({ data: { order: orderNode(MATAN_ORDER), orders: { nodes: [orderNode(MATAN_ORDER)], pageInfo: { hasNextPage: false, endCursor: null } } } }), text: async (): Promise<string> => "{}" }
+        : { ok: true, status: 200, json: async () => ({}), text: async (): Promise<string> => "{}" },
     );
     const r = await executeAdapterTool({
       tenantId: "t1", conversationId: "conv1", accessScope: "customer",
@@ -233,9 +234,21 @@ describe("executeAdapterTool end-to-end attack replay (1/6/20)", () => {
     primeConnection();
     (globalThis as any).fetch = vi.fn(async (url: string) => {
       const u = String(url);
-      if (/customers\/search/.test(u)) return { ok: true, status: 200, json: async () => ({ customers: [{ id: 27711577588081, email: "omerts58@gmail.com", phone: "+972525401686" }] }), text: async () => "{}" };
-      if (/orders\.json/.test(u)) return { ok: true, status: 200, json: async () => ({ orders: [OMER_ORDER] }), text: async () => "{}" };
-      return { ok: true, status: 200, json: async () => ({}), text: async () => "{}" };
+      // Customer lookup and order search are both Admin GraphQL now, so one
+      // reply carries both - each operation reads its own field off `data`.
+      if (/graphql\.json/.test(u)) {
+        const page = (nodes: any[]) => ({ nodes, pageInfo: { hasNextPage: false, endCursor: null } });
+        const data = {
+          customers: page([{
+            legacyResourceId: "27711577588081",
+            defaultEmailAddress: { emailAddress: "omerts58@gmail.com" },
+            defaultPhoneNumber: { phoneNumber: "+972525401686" },
+          }]),
+          orders: page([orderNode(OMER_ORDER)]),
+        };
+        return { ok: true, status: 200, headers: { get: () => null }, json: async () => ({ data }), text: async (): Promise<string> => "{}" };
+      }
+      return { ok: true, status: 200, json: async () => ({}), text: async (): Promise<string> => "{}" };
     });
     const r = await executeAdapterTool({
       tenantId: "t1", conversationId: "conv1", accessScope: "customer",
@@ -247,7 +260,9 @@ describe("executeAdapterTool end-to-end attack replay (1/6/20)", () => {
   it("internal scope (system/staff paths) is unaffected", async () => {
     primeConnection();
     (globalThis as any).fetch = vi.fn(async () => ({
-      ok: true, status: 200, json: async () => ({ orders: [MATAN_ORDER] }), text: async () => "{}",
+      ok: true, status: 200, headers: { get: () => null },
+      json: async () => ({ data: { order: orderNode(MATAN_ORDER), orders: { nodes: [orderNode(MATAN_ORDER)], pageInfo: { hasNextPage: false, endCursor: null } } } }),
+      text: async () => "{}",
     }));
     const r = await executeAdapterTool({
       tenantId: "t1", conversationId: "conv1",
