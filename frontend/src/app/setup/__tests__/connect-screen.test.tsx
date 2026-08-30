@@ -22,8 +22,6 @@ const baseProps = (): Props => ({
   setSystemQuery: vi.fn(),
   picked: null,
   setPicked: vi.fn(),
-  shopDomain: "",
-  setShopDomain: vi.fn(),
   fireberryToken: "",
   setFireberryToken: vi.fn(),
   airtableToken: "",

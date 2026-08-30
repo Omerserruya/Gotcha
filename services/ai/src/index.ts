@@ -24,6 +24,7 @@ import usageRoutes from "./routes/usage";
 import embeddedChatRouter from "./routes/embedded-chat";
 import shopifyChatPublicRoutes from "./routes/shopify-chat-public";
 import shopifyChatInstallRoutes from "./routes/shopify-chat-install";
+import shopifyInstallRoutes from "./routes/shopify-install";
 import shopifyWebhookRoutes from "./routes/shopify-webhooks";
 import shopifyLiveChatRoutes from "./routes/shopify-live-chat";
 import actionPlannerRoutes from "./routes/action-planner";
@@ -118,6 +119,10 @@ app.use("/api", stageAdminRoutes);
 app.use("/api", actionContractsAdminRoutes);
 app.use("/api", customApiAdminRoutes);
 app.use("/api", customDbAdminRoutes);
+// Shopify installation. Mounted BEFORE connectorsAdminRoutes: the public
+// install handler must not be shadowed by that router's authenticated
+// `/connectors/:slug/...` patterns, which would answer 401 to Shopify.
+app.use("/api", shopifyInstallRoutes);
 app.use("/api", connectorsAdminRoutes);
 app.use("/api/agent-scores", agentScoreRoutes);
 // Mount the builder BEFORE ai-agents so its routes (/builder/*) resolve

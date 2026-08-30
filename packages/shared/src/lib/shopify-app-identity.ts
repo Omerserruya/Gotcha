@@ -21,6 +21,8 @@
  *   • the Theme Editor deep link is built from the Core client id
  */
 
+import { resolveShopifyInstallUrl } from "./shopify-install";
+
 /** Theme App Extension directory handle. Not the block handle. */
 const DEFAULT_EXTENSION_HANDLE = "gotcha-chat";
 /**
@@ -51,6 +53,16 @@ export interface ShopifyAppIdentity {
   appHandle: string;
   extensionHandle: string;
   blockHandle: string;
+  /**
+   * Shopify-owned page the "Connect Shopify" button sends the merchant to,
+   * where Shopify identifies or lets them pick the store.
+   *
+   * Null when neither SHOPIFY_APP_INSTALL_URL nor SHOPIFY_APP_HANDLE is set.
+   * Null is a real state the UI must render as a configuration error - the
+   * alternative, guessing a listing URL from the app name, is how a merchant
+   * ends up on a 404 with no way to connect and no explanation.
+   */
+  installUrl: string | null;
 }
 
 export function getShopifyAppIdentity(): ShopifyAppIdentity {
@@ -73,6 +85,7 @@ export function getShopifyAppIdentity(): ShopifyAppIdentity {
     appHandle: process.env.SHOPIFY_APP_HANDLE || "",
     extensionHandle: process.env.SHOPIFY_CHAT_EXTENSION_HANDLE || DEFAULT_EXTENSION_HANDLE,
     blockHandle: process.env.SHOPIFY_CHAT_BLOCK_HANDLE || DEFAULT_BLOCK_HANDLE,
+    installUrl: resolveShopifyInstallUrl(process.env),
   };
 }
 

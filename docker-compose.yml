@@ -502,6 +502,22 @@ services:
       SHOPIFY_API_KEY: ${SHOPIFY_API_KEY:-}
       SHOPIFY_API_SECRET: ${SHOPIFY_API_SECRET:-}
       SHOPIFY_REDIRECT_URI: ${SHOPIFY_REDIRECT_URI:-}
+      # Where "Connect Shopify" sends the merchant. Installation must START on
+      # a Shopify-owned page (App Store requirement 2.3.1) - GOTCHA never asks
+      # for a .myshopify.com domain, so without one of these two the Connect
+      # button has nowhere to go and reports a configuration error.
+      #
+      #   SHOPIFY_APP_INSTALL_URL  the limited-visibility install link, for an
+      #                            app that is not publicly listed. Wins when
+      #                            set. Must be a Shopify-owned https host.
+      #   SHOPIFY_APP_HANDLE       the public listing handle, READ FROM the
+      #                            Partner Dashboard, never guessed. Derives
+      #                            https://apps.shopify.com/<handle>.
+      #
+      # Both empty by default: an unconfigured environment must say so plainly
+      # rather than send merchants to a guessed URL that 404s.
+      SHOPIFY_APP_INSTALL_URL: ${SHOPIFY_APP_INSTALL_URL:-}
+      SHOPIFY_APP_HANDLE: ${SHOPIFY_APP_HANDLE:-}
       # ── GOTCHA Shopify CHAT app ───────────────────────────────────
       # RETIRED at the Core/Chat unification. There is ONE Shopify app now,
       # so app-proxy signatures, webhook HMACs and the Theme Editor deep
