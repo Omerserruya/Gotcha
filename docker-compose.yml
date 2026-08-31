@@ -670,6 +670,12 @@ services:
       SHOPIFY_PARTNER_API_TOKEN: ${SHOPIFY_PARTNER_API_TOKEN:-}
       # SECRET. client_credentials identity for the App Events usage endpoint.
       SHOPIFY_APP_EVENTS_CLIENT_ID: ${SHOPIFY_APP_EVENTS_CLIENT_ID:-}
+      # Identifies the build that made a billing policy decision. Same pair
+      # Sentry resolves a release from, so a decision and an error report from
+      # one deploy name the same build. Without them every audited decision
+      # would record codeVersion="unknown", silently.
+      SENTRY_RELEASE: ${SENTRY_RELEASE:-${TAG:-}}
+      BUILD_SHA: ${BUILD_SHA:-dev}
       # Drops Secure from the checkout continuation cookie, for plaintext local
       # work only. Not inferred from the request: TLS terminates at the edge, so
       # X-Forwarded-Proto reports the internal hop and trusting it would drop
