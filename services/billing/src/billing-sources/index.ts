@@ -16,6 +16,8 @@ import type { BillingSource } from "@prisma/client";
 import { gotchaExternalSource } from "./gotcha-external.source";
 import { exemptSource, freeSource } from "./non-charging.source";
 import { makeUnconfiguredShopifySource } from "./unconfigured-shopify.source";
+import { shopifyAppPricingSource } from "./shopify/app-pricing.source";
+import { shopifyManualBillingSource } from "./shopify/manual-billing.source";
 import { shopifyBillingEnabled, shopifyBillingMode } from "./shopify/config";
 import type { BillingSourceProvider } from "./source";
 
@@ -35,13 +37,9 @@ function resolveShopifySource(): BillingSourceProvider {
   }
   switch (shopifyBillingMode()) {
     case "app_pricing":
+      return shopifyAppPricingSource;
     case "manual":
-      // The concrete adapters land with the Shopify implementation. Until then
-      // this stays fail-closed rather than half-wired: a mode that is named but
-      // not yet implemented must refuse, not improvise.
-      return makeUnconfiguredShopifySource(
-        `SHOPIFY_BILLING_MODE="${shopifyBillingMode()}" is recognised but its adapter is not wired in this build`,
-      );
+      return shopifyManualBillingSource;
     default:
       return makeUnconfiguredShopifySource(
         "SHOPIFY_BILLING_MODE is unset or unrecognised",

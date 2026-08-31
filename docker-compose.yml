@@ -670,6 +670,22 @@ services:
       SHOPIFY_PARTNER_API_TOKEN: ${SHOPIFY_PARTNER_API_TOKEN:-}
       # SECRET. client_credentials identity for the App Events usage endpoint.
       SHOPIFY_APP_EVENTS_CLIENT_ID: ${SHOPIFY_APP_EVENTS_CLIENT_ID:-}
+      # App Events (usage) and Partner API (verification) credentials. Both are
+      # APP-level, not per-shop, which is what lets billing hold them without
+      # ever touching a merchant's Admin token - that belongs to services/ai.
+      SHOPIFY_APP_EVENTS_CLIENT_SECRET: ${SHOPIFY_APP_EVENTS_CLIENT_SECRET:-}
+      SHOPIFY_APP_EVENTS_BASE_URL: ${SHOPIFY_APP_EVENTS_BASE_URL:-}
+      # App Pricing sends NO subscription webhooks, so this query is the only
+      # way to learn that a merchant paid. All three are required together.
+      SHOPIFY_PARTNER_ORGANIZATION_ID: ${SHOPIFY_PARTNER_ORGANIZATION_ID:-}
+      SHOPIFY_PARTNER_APP_ID: ${SHOPIFY_PARTNER_APP_ID:-}
+      SHOPIFY_PARTNER_API_BASE_URL: ${SHOPIFY_PARTNER_API_BASE_URL:-}
+      SHOPIFY_PARTNER_API_VERSION: ${SHOPIFY_PARTNER_API_VERSION:-}
+      # For SHOPIFY_BILLING_MODE=manual, billing asks services/ai to perform the
+      # Shopify Admin call: that service owns the merchant's access token, and
+      # billing must never hold a second copy of it.
+      AI_SERVICE_URL: ${AI_SERVICE_URL:-http://ai:4006}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-}
       # Identifies the build that made a billing policy decision. Same pair
       # Sentry resolves a release from, so a decision and an error report from
       # one deploy name the same build. Without them every audited decision

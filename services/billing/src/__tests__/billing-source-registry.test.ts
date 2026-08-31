@@ -79,16 +79,44 @@ describe("defaults preserve today's production behaviour", () => {
 });
 
 describe("a named mode is still not a working mode", () => {
-  it("app_pricing without its adapter refuses rather than improvising", async () => {
+  it("app_pricing with no app handle refuses rather than building a broken URL", async () => {
     process.env.SHOPIFY_BILLING_ENABLED = "true";
     process.env.SHOPIFY_BILLING_MODE = "app_pricing";
     expect(shopifyBillingMode()).toBe("app_pricing");
-    // The flag is on, and it STILL is not usable - that separation is the point.
+    // The flag is on and the real adapter is wired, and it is STILL not usable:
+    // capabilities remain unverified until exercised against a real dev store.
+    // That separation - configured is not the same as proven - is the point.
     expect(shopifyBillingUsable()).toBe(false);
     await expect(getBillingSource("SHOPIFY").beginSubscription({
       tenantId: "t1", billableEntityId: "e1", productKey: "shopify_connector",
+      shopDomain: "acme.myshopify.com",
       returnUrl: "https://app.gotcha.co.il/x", idempotencyKey: "k",
     })).rejects.toBeInstanceOf(BillingSourceUnavailableError);
+  });
+
+  it("app_pricing sends the merchant to Shopify's hosted page, and reports PENDING", async () => {
+    process.env.SHOPIFY_BILLING_ENABLED = "true";
+    process.env.SHOPIFY_BILLING_MODE = "app_pricing";
+    process.env.SHOPIFY_APP_HANDLE = "gotcha-chat";
+    const res = await getBillingSource("SHOPIFY").beginSubscription({
+      tenantId: "t1", billableEntityId: "e1", productKey: "shopify_connector",
+      shopDomain: "acme.myshopify.com",
+      returnUrl: "https://app.gotcha.co.il/x", idempotencyKey: "k",
+    });
+    expect(res.redirectUrl).toBe("https://admin.shopify.com/store/acme/charges/gotcha-chat/pricing_plans");
+    // PENDING no matter what: sending someone to a payment page is not evidence
+    // that they paid, and only fetchSubscription may move this to ACTIVE.
+    expect(res.status).toBe("PENDING");
+  });
+
+  it("a mock app_pricing stack invents NO subscription - so activation cannot pass by accident", async () => {
+    process.env.SHOPIFY_BILLING_ENABLED = "true";
+    process.env.SHOPIFY_BILLING_MODE = "app_pricing";
+    const observed = await getBillingSource("SHOPIFY").fetchSubscription({
+      tenantId: "t1", billableEntityId: "e1", productKey: "shopify_connector",
+      externalShopId: "12345",
+    });
+    expect(observed).toBeNull();
   });
 
   it("a typo in the mode disables Shopify rather than selecting one", () => {
