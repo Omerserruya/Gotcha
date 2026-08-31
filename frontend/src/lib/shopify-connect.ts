@@ -11,11 +11,16 @@
  * reauthorization:
  *
  *   not shopify            → the provider's authorize URL, as before.
- *   shopify, not connected → the Shopify install page. Shopify picks the store.
+ *   shopify, not connected → the App Store listing. Shopify picks the store.
+ *                            Before the listing publishes there is no such
+ *                            page, and the server answers
+ *                            `shopify_install_not_available`; the merchant is
+ *                            told to wait, never asked for their domain.
  *   shopify, connected     → reauthorization. The server reads the shop from
  *                            the stored connection, so this is still a plain
  *                            authorize URL and still needs no input from the
- *                            merchant.
+ *                            merchant. This path does NOT depend on the
+ *                            listing and keeps working today.
  *
  * Lives here rather than inline because two components render this button
  * (Settings → Business Systems and the AI Studio marketplace). Inline, they
@@ -90,15 +95,24 @@ export function connectButtonLabel(slug: string, reauthorize: boolean): string {
 /**
  * A merchant-readable reason for a refused connect.
  *
- * `shopify_install_url_not_configured` is an OPERATOR problem, and saying so
- * plainly is the point: a merchant who reads "OAuth init failed - check
- * provider client ID/secret" will go looking in Shopify for something that is
- * missing in GOTCHA's environment.
+ * The default message is written for an operator ("check the provider
+ * configuration on the server") and is wrong to show a merchant for the two
+ * Shopify cases below - a merchant who reads it goes looking inside Shopify
+ * for something that is not there.
  */
 export function connectErrorMessage(slug: string, err: any): string {
   const code = err?.code || err?.message;
-  if (code === "shopify_install_url_not_configured") {
-    return "Shopify installs are not configured on this environment yet. Ask your GOTCHA administrator to set the Shopify install URL.";
+  if (code === "shopify_install_not_available") {
+    // TEMPORARY STATE, said plainly. The App Store listing is not published
+    // yet, so there is no Shopify page to send the merchant to.
+    //
+    // Note what this message does NOT do: offer a shop-domain box. Falling
+    // back to "just type your store address" is exactly the flow App Store
+    // requirement 2.3.1 forbids, and a fallback added "only until the listing
+    // is live" is one nobody removes afterwards. A merchant who cannot
+    // self-serve today is a support conversation; a merchant who typed their
+    // domain is a rejected submission.
+    return "New Shopify connections aren't available just yet - our Shopify App Store listing is still being published. Contact support and we'll connect your store for you.";
   }
   if (code === "shopify_not_connected") {
     return "This workspace has no Shopify store yet - use Connect Shopify to install it.";

@@ -94,6 +94,15 @@ describe("no manual Shopify shop-domain entry", () => {
     expect(api).toMatch(/startShopifyInstall\(token: string, flow\?: string\)/);
   });
 
+  it("the unavailable-yet message offers no domain fallback", () => {
+    // When the App Store listing is not published, the button must say "not
+    // available yet" - never degrade to asking for the store address.
+    const code = fs.readFileSync(path.join(SRC, "lib/shopify-connect.ts"), "utf8");
+    const msg = code.slice(code.indexOf("shopify_install_not_available"));
+    const returned = msg.slice(0, msg.indexOf("shopify_not_connected"));
+    expect(stripComments(returned)).not.toMatch(/myshopify|enter your|type your|paste/i);
+  });
+
   it("tells merchants Shopify picks the store, not that they should type it", () => {
     const help = fs.readFileSync(path.join(SRC, "app/help/content/integrations.ts"), "utf8");
     expect(help).not.toMatch(/Enter your store's \*\*myshopify domain\*\*/);

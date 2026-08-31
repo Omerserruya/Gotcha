@@ -14698,7 +14698,7 @@ GET /api/connectors/:slug/status
 ### `GET /api/connectors/airtable/mapping`
 
 - **Purpose:** Read the mapping currently on the connection config - powers the post-onboarding "refresh fields / edit mapping" card. The onboarding wizard never needed this (it writes a fresh mapping), which is why editing the mapping after onboarding used to be impossible without reconnecting.
-- **Handler:** `services/ai/src/routes/connectors-admin.ts` line 796
+- **Handler:** `services/ai/src/routes/connectors-admin.ts` line 800
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 - **Authorization:** Gate: `canConnectSystems`
 - **Input validation:** No input.
@@ -14708,7 +14708,7 @@ GET /api/connectors/:slug/status
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/connectors` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/connectors-admin.ts`.
-2. **Handler.** `services/ai/src/routes/connectors-admin.ts:796` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/connectors-admin.ts:800` - inline `async (req, res)` handler.
 3. **Validation.** No input.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 5. **Authorization.** Gate: `canConnectSystems`
@@ -14723,14 +14723,14 @@ GET /api/connectors/:slug/status
 ```text
 GET /api/connectors/airtable/mapping
   → [authenticate → resolveTenant → requireTenantState(PENDING_ONBOARDING or ACTIVE) → canConnectSystems]
-  → handler  services/ai/src/routes/connectors-admin.ts:796
+  → handler  services/ai/src/routes/connectors-admin.ts:800
       → (responds directly; no downstream calls detected)
 ```
 
 ### `POST /api/connectors/airtable/mapping`
 
 - **Purpose:** Save the mapping onto the connection config. Optionally auto-create the notes / idempotency columns we OWN (never identifier columns) when create_missing=true and the token carries schema.bases:write.
-- **Handler:** `services/ai/src/routes/connectors-admin.ts` line 823
+- **Handler:** `services/ai/src/routes/connectors-admin.ts` line 827
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 - **Authorization:** Gate: `canConnectSystems`
 - **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
@@ -14740,7 +14740,7 @@ GET /api/connectors/airtable/mapping
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/connectors` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/connectors-admin.ts`.
-2. **Handler.** `services/ai/src/routes/connectors-admin.ts:823` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/connectors-admin.ts:827` - inline `async (req, res)` handler.
 3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 5. **Authorization.** Gate: `canConnectSystems`
@@ -14755,14 +14755,14 @@ GET /api/connectors/airtable/mapping
 ```text
 POST /api/connectors/airtable/mapping
   → [authenticate → resolveTenant → requireTenantState(PENDING_ONBOARDING or ACTIVE) → canConnectSystems]
-  → handler  services/ai/src/routes/connectors-admin.ts:823
+  → handler  services/ai/src/routes/connectors-admin.ts:827
       → (responds directly; no downstream calls detected)
 ```
 
 ### `GET /api/connectors/airtable/meta/bases`
 
 - **Purpose:** Lists bases. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/ai/src/routes/connectors-admin.ts` line 626
+- **Handler:** `services/ai/src/routes/connectors-admin.ts` line 630
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 - **Authorization:** Gate: `canConnectSystems`
 - **Input validation:** No body schema. Path and query parameters are read directly by the handler.
@@ -14772,7 +14772,7 @@ POST /api/connectors/airtable/mapping
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/connectors` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/connectors-admin.ts`.
-2. **Handler.** `services/ai/src/routes/connectors-admin.ts:626` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/connectors-admin.ts:630` - inline `async (req, res)` handler.
 3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 5. **Authorization.** Gate: `canConnectSystems`
@@ -14787,14 +14787,14 @@ POST /api/connectors/airtable/mapping
 ```text
 GET /api/connectors/airtable/meta/bases
   → [authenticate → resolveTenant → requireTenantState(ACTIVE) → canConnectSystems]
-  → handler  services/ai/src/routes/connectors-admin.ts:626
+  → handler  services/ai/src/routes/connectors-admin.ts:630
       → (responds directly; no downstream calls detected)
 ```
 
 ### `GET /api/connectors/airtable/meta/tables/:baseId`
 
 - **Purpose:** Reads a single table. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/ai/src/routes/connectors-admin.ts` line 641
+- **Handler:** `services/ai/src/routes/connectors-admin.ts` line 645
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 - **Authorization:** Gate: `canConnectSystems`
 - **Input validation:** No body schema. Path and query parameters are read directly by the handler.
@@ -14804,7 +14804,7 @@ GET /api/connectors/airtable/meta/bases
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/connectors` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/connectors-admin.ts`.
-2. **Handler.** `services/ai/src/routes/connectors-admin.ts:641` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/connectors-admin.ts:645` - inline `async (req, res)` handler.
 3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 5. **Authorization.** Gate: `canConnectSystems`
@@ -14819,14 +14819,14 @@ GET /api/connectors/airtable/meta/bases
 ```text
 GET /api/connectors/airtable/meta/tables/:baseId
   → [authenticate → resolveTenant → requireTenantState(ACTIVE) → canConnectSystems]
-  → handler  services/ai/src/routes/connectors-admin.ts:641
+  → handler  services/ai/src/routes/connectors-admin.ts:645
       → (responds directly; no downstream calls detected)
 ```
 
 ### `GET /api/connectors/airtable/oauth/bases`
 
 - **Purpose:** Lists bases. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/ai/src/routes/connectors-admin.ts` line 754
+- **Handler:** `services/ai/src/routes/connectors-admin.ts` line 758
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 - **Authorization:** Gate: `canConnectSystems`
 - **Input validation:** No input.
@@ -14836,7 +14836,7 @@ GET /api/connectors/airtable/meta/tables/:baseId
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/connectors` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/connectors-admin.ts`.
-2. **Handler.** `services/ai/src/routes/connectors-admin.ts:754` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/connectors-admin.ts:758` - inline `async (req, res)` handler.
 3. **Validation.** No input.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 5. **Authorization.** Gate: `canConnectSystems`
@@ -14851,14 +14851,14 @@ GET /api/connectors/airtable/meta/tables/:baseId
 ```text
 GET /api/connectors/airtable/oauth/bases
   → [authenticate → resolveTenant → requireTenantState(PENDING_ONBOARDING or ACTIVE) → canConnectSystems]
-  → handler  services/ai/src/routes/connectors-admin.ts:754
+  → handler  services/ai/src/routes/connectors-admin.ts:758
       → (responds directly; no downstream calls detected)
 ```
 
 ### `GET /api/connectors/airtable/oauth/callback`
 
 - **Purpose:** Lists callback. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/ai/src/routes/connectors-admin.ts` line 689
+- **Handler:** `services/ai/src/routes/connectors-admin.ts` line 693
 - **Authentication / tenant resolution:** **No authentication middleware.** This route is reachable without a token.
 - **Authorization:** None.
 - **Input validation:** No input.
@@ -14868,7 +14868,7 @@ GET /api/connectors/airtable/oauth/bases
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/connectors` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/connectors-admin.ts`.
-2. **Handler.** `services/ai/src/routes/connectors-admin.ts:689` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/connectors-admin.ts:693` - inline `async (req, res)` handler.
 3. **Validation.** No input.
 4. **Authentication / tenant resolution.** **No authentication middleware.** This route is reachable without a token.
 5. **Authorization.** None.
@@ -14882,14 +14882,14 @@ GET /api/connectors/airtable/oauth/bases
 
 ```text
 GET /api/connectors/airtable/oauth/callback
-  → handler  services/ai/src/routes/connectors-admin.ts:689
+  → handler  services/ai/src/routes/connectors-admin.ts:693
       → (responds directly; no downstream calls detected)
 ```
 
 ### `GET /api/connectors/airtable/oauth/fields`
 
 - **Purpose:** Lists fields. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/ai/src/routes/connectors-admin.ts` line 778
+- **Handler:** `services/ai/src/routes/connectors-admin.ts` line 782
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 - **Authorization:** Gate: `canConnectSystems`
 - **Input validation:** No body schema. Path and query parameters are read directly by the handler.
@@ -14899,7 +14899,7 @@ GET /api/connectors/airtable/oauth/callback
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/connectors` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/connectors-admin.ts`.
-2. **Handler.** `services/ai/src/routes/connectors-admin.ts:778` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/connectors-admin.ts:782` - inline `async (req, res)` handler.
 3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 5. **Authorization.** Gate: `canConnectSystems`
@@ -14914,14 +14914,14 @@ GET /api/connectors/airtable/oauth/callback
 ```text
 GET /api/connectors/airtable/oauth/fields
   → [authenticate → resolveTenant → requireTenantState(PENDING_ONBOARDING or ACTIVE) → canConnectSystems]
-  → handler  services/ai/src/routes/connectors-admin.ts:778
+  → handler  services/ai/src/routes/connectors-admin.ts:782
       → (responds directly; no downstream calls detected)
 ```
 
 ### `GET /api/connectors/airtable/oauth/init`
 
 - **Purpose:** Airtable mandates PKCE (S256). Our other OAuth flows are plain auth-code; here we generate a code_verifier, send its S256 challenge on init, and carry the verifier inside the signed, short-lived state JWT so the callback can complete the token exchange. Confidential client → also HTTP Basic with the client secret. Reachable during onboarding (requireOnboardingOrActiveTenant).
-- **Handler:** `services/ai/src/routes/connectors-admin.ts` line 664
+- **Handler:** `services/ai/src/routes/connectors-admin.ts` line 668
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 - **Authorization:** Gate: `canConnectSystems`
 - **Input validation:** No body schema. Path and query parameters are read directly by the handler.
@@ -14931,7 +14931,7 @@ GET /api/connectors/airtable/oauth/fields
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/connectors` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/connectors-admin.ts`.
-2. **Handler.** `services/ai/src/routes/connectors-admin.ts:664` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/connectors-admin.ts:668` - inline `async (req, res)` handler.
 3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 5. **Authorization.** Gate: `canConnectSystems`
@@ -14946,14 +14946,14 @@ GET /api/connectors/airtable/oauth/fields
 ```text
 GET /api/connectors/airtable/oauth/init
   → [authenticate → resolveTenant → requireTenantState(PENDING_ONBOARDING or ACTIVE) → canConnectSystems]
-  → handler  services/ai/src/routes/connectors-admin.ts:664
+  → handler  services/ai/src/routes/connectors-admin.ts:668
       → (responds directly; no downstream calls detected)
 ```
 
 ### `GET /api/connectors/airtable/oauth/tables`
 
 - **Purpose:** Lists tables. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/ai/src/routes/connectors-admin.ts` line 765
+- **Handler:** `services/ai/src/routes/connectors-admin.ts` line 769
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 - **Authorization:** Gate: `canConnectSystems`
 - **Input validation:** No body schema. Path and query parameters are read directly by the handler.
@@ -14963,7 +14963,7 @@ GET /api/connectors/airtable/oauth/init
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/connectors` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/connectors-admin.ts`.
-2. **Handler.** `services/ai/src/routes/connectors-admin.ts:765` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/connectors-admin.ts:769` - inline `async (req, res)` handler.
 3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 5. **Authorization.** Gate: `canConnectSystems`
@@ -14978,14 +14978,14 @@ GET /api/connectors/airtable/oauth/init
 ```text
 GET /api/connectors/airtable/oauth/tables
   → [authenticate → resolveTenant → requireTenantState(PENDING_ONBOARDING or ACTIVE) → canConnectSystems]
-  → handler  services/ai/src/routes/connectors-admin.ts:765
+  → handler  services/ai/src/routes/connectors-admin.ts:769
       → (responds directly; no downstream calls detected)
 ```
 
 ### `POST /api/connectors/aws_rds/meta/tables`
 
 - **Purpose:** Creates a table. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/ai/src/routes/connectors-admin.ts` line 1351
+- **Handler:** `services/ai/src/routes/connectors-admin.ts` line 1355
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 - **Authorization:** Gate: `canConnectSystems`
 - **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
@@ -14995,7 +14995,7 @@ GET /api/connectors/airtable/oauth/tables
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/connectors` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/connectors-admin.ts`.
-2. **Handler.** `services/ai/src/routes/connectors-admin.ts:1351` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/connectors-admin.ts:1355` - inline `async (req, res)` handler.
 3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 5. **Authorization.** Gate: `canConnectSystems`
@@ -15010,7 +15010,7 @@ GET /api/connectors/airtable/oauth/tables
 ```text
 POST /api/connectors/aws_rds/meta/tables
   → [authenticate → resolveTenant → requireTenantState(ACTIVE) → canConnectSystems]
-  → handler  services/ai/src/routes/connectors-admin.ts:1351
+  → handler  services/ai/src/routes/connectors-admin.ts:1355
       → (responds directly; no downstream calls detected)
 ```
 
@@ -15080,7 +15080,7 @@ GET /api/connectors/hubspot/oauth/init
 ### `GET /api/connectors/monday/meta/boards`
 
 - **Purpose:** Lists boards. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/ai/src/routes/connectors-admin.ts` line 1201
+- **Handler:** `services/ai/src/routes/connectors-admin.ts` line 1205
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 - **Authorization:** Gate: `canConnectSystems`
 - **Input validation:** No input.
@@ -15090,7 +15090,7 @@ GET /api/connectors/hubspot/oauth/init
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/connectors` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/connectors-admin.ts`.
-2. **Handler.** `services/ai/src/routes/connectors-admin.ts:1201` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/connectors-admin.ts:1205` - inline `async (req, res)` handler.
 3. **Validation.** No input.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 5. **Authorization.** Gate: `canConnectSystems`
@@ -15105,14 +15105,14 @@ GET /api/connectors/hubspot/oauth/init
 ```text
 GET /api/connectors/monday/meta/boards
   → [authenticate → resolveTenant → requireTenantState(ACTIVE) → canConnectSystems]
-  → handler  services/ai/src/routes/connectors-admin.ts:1201
+  → handler  services/ai/src/routes/connectors-admin.ts:1205
       → (responds directly; no downstream calls detected)
 ```
 
 ### `GET /api/connectors/monday/oauth/callback`
 
 - **Purpose:** Lists callback. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/ai/src/routes/connectors-admin.ts` line 1137
+- **Handler:** `services/ai/src/routes/connectors-admin.ts` line 1141
 - **Authentication / tenant resolution:** **No authentication middleware.** This route is reachable without a token.
 - **Authorization:** None.
 - **Input validation:** No input.
@@ -15122,7 +15122,7 @@ GET /api/connectors/monday/meta/boards
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/connectors` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/connectors-admin.ts`.
-2. **Handler.** `services/ai/src/routes/connectors-admin.ts:1137` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/connectors-admin.ts:1141` - inline `async (req, res)` handler.
 3. **Validation.** No input.
 4. **Authentication / tenant resolution.** **No authentication middleware.** This route is reachable without a token.
 5. **Authorization.** None.
@@ -15136,14 +15136,14 @@ GET /api/connectors/monday/meta/boards
 
 ```text
 GET /api/connectors/monday/oauth/callback
-  → handler  services/ai/src/routes/connectors-admin.ts:1137
+  → handler  services/ai/src/routes/connectors-admin.ts:1141
       → (responds directly; no downstream calls detected)
 ```
 
 ### `GET /api/connectors/monday/oauth/init`
 
 - **Purpose:** Lists init. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/ai/src/routes/connectors-admin.ts` line 1109
+- **Handler:** `services/ai/src/routes/connectors-admin.ts` line 1113
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 - **Authorization:** Gate: `canConnectSystems`
 - **Input validation:** No body schema. Path and query parameters are read directly by the handler.
@@ -15153,7 +15153,7 @@ GET /api/connectors/monday/oauth/callback
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/connectors` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/connectors-admin.ts`.
-2. **Handler.** `services/ai/src/routes/connectors-admin.ts:1109` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/connectors-admin.ts:1113` - inline `async (req, res)` handler.
 3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 5. **Authorization.** Gate: `canConnectSystems`
@@ -15168,14 +15168,14 @@ GET /api/connectors/monday/oauth/callback
 ```text
 GET /api/connectors/monday/oauth/init
   → [authenticate → resolveTenant → requireTenantState(PENDING_ONBOARDING or ACTIVE) → canConnectSystems]
-  → handler  services/ai/src/routes/connectors-admin.ts:1109
+  → handler  services/ai/src/routes/connectors-admin.ts:1113
       → (responds directly; no downstream calls detected)
 ```
 
 ### `POST /api/connectors/mongodb/meta/collections`
 
 - **Purpose:** Creates a collection. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/ai/src/routes/connectors-admin.ts` line 1290
+- **Handler:** `services/ai/src/routes/connectors-admin.ts` line 1294
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 - **Authorization:** Gate: `canConnectSystems`
 - **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
@@ -15185,7 +15185,7 @@ GET /api/connectors/monday/oauth/init
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/connectors` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/connectors-admin.ts`.
-2. **Handler.** `services/ai/src/routes/connectors-admin.ts:1290` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/connectors-admin.ts:1294` - inline `async (req, res)` handler.
 3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 5. **Authorization.** Gate: `canConnectSystems`
@@ -15200,14 +15200,14 @@ GET /api/connectors/monday/oauth/init
 ```text
 POST /api/connectors/mongodb/meta/collections
   → [authenticate → resolveTenant → requireTenantState(ACTIVE) → canConnectSystems]
-  → handler  services/ai/src/routes/connectors-admin.ts:1290
+  → handler  services/ai/src/routes/connectors-admin.ts:1294
       → (responds directly; no downstream calls detected)
 ```
 
 ### `POST /api/connectors/mongodb/meta/databases`
 
 - **Purpose:** Creates a database. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/ai/src/routes/connectors-admin.ts` line 1320
+- **Handler:** `services/ai/src/routes/connectors-admin.ts` line 1324
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 - **Authorization:** Gate: `canConnectSystems`
 - **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
@@ -15217,7 +15217,7 @@ POST /api/connectors/mongodb/meta/collections
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/connectors` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/connectors-admin.ts`.
-2. **Handler.** `services/ai/src/routes/connectors-admin.ts:1320` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/connectors-admin.ts:1324` - inline `async (req, res)` handler.
 3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 5. **Authorization.** Gate: `canConnectSystems`
@@ -15232,14 +15232,14 @@ POST /api/connectors/mongodb/meta/collections
 ```text
 POST /api/connectors/mongodb/meta/databases
   → [authenticate → resolveTenant → requireTenantState(ACTIVE) → canConnectSystems]
-  → handler  services/ai/src/routes/connectors-admin.ts:1320
+  → handler  services/ai/src/routes/connectors-admin.ts:1324
       → (responds directly; no downstream calls detected)
 ```
 
 ### `POST /api/connectors/postgres/meta/tables`
 
 - **Purpose:** Creates a table. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/ai/src/routes/connectors-admin.ts` line 1248
+- **Handler:** `services/ai/src/routes/connectors-admin.ts` line 1252
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 - **Authorization:** Gate: `canConnectSystems`
 - **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
@@ -15249,7 +15249,7 @@ POST /api/connectors/mongodb/meta/databases
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/connectors` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/connectors-admin.ts`.
-2. **Handler.** `services/ai/src/routes/connectors-admin.ts:1248` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/connectors-admin.ts:1252` - inline `async (req, res)` handler.
 3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 5. **Authorization.** Gate: `canConnectSystems`
@@ -15264,14 +15264,14 @@ POST /api/connectors/mongodb/meta/databases
 ```text
 POST /api/connectors/postgres/meta/tables
   → [authenticate → resolveTenant → requireTenantState(ACTIVE) → canConnectSystems]
-  → handler  services/ai/src/routes/connectors-admin.ts:1248
+  → handler  services/ai/src/routes/connectors-admin.ts:1252
       → (responds directly; no downstream calls detected)
 ```
 
 ### `GET /api/connectors/salesforce/oauth/callback`
 
 - **Purpose:** Lists callback. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/ai/src/routes/connectors-admin.ts` line 1057
+- **Handler:** `services/ai/src/routes/connectors-admin.ts` line 1061
 - **Authentication / tenant resolution:** **No authentication middleware.** This route is reachable without a token.
 - **Authorization:** None.
 - **Input validation:** No input.
@@ -15281,7 +15281,7 @@ POST /api/connectors/postgres/meta/tables
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/connectors` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/connectors-admin.ts`.
-2. **Handler.** `services/ai/src/routes/connectors-admin.ts:1057` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/connectors-admin.ts:1061` - inline `async (req, res)` handler.
 3. **Validation.** No input.
 4. **Authentication / tenant resolution.** **No authentication middleware.** This route is reachable without a token.
 5. **Authorization.** None.
@@ -15295,14 +15295,14 @@ POST /api/connectors/postgres/meta/tables
 
 ```text
 GET /api/connectors/salesforce/oauth/callback
-  → handler  services/ai/src/routes/connectors-admin.ts:1057
+  → handler  services/ai/src/routes/connectors-admin.ts:1061
       → (responds directly; no downstream calls detected)
 ```
 
 ### `GET /api/connectors/salesforce/oauth/init`
 
 - **Purpose:** Lists init. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/ai/src/routes/connectors-admin.ts` line 1032
+- **Handler:** `services/ai/src/routes/connectors-admin.ts` line 1036
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 - **Authorization:** Gate: `canConnectSystems`
 - **Input validation:** No body schema. Path and query parameters are read directly by the handler.
@@ -15312,7 +15312,7 @@ GET /api/connectors/salesforce/oauth/callback
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/connectors` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/connectors-admin.ts`.
-2. **Handler.** `services/ai/src/routes/connectors-admin.ts:1032` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/connectors-admin.ts:1036` - inline `async (req, res)` handler.
 3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 5. **Authorization.** Gate: `canConnectSystems`
@@ -15327,14 +15327,14 @@ GET /api/connectors/salesforce/oauth/callback
 ```text
 GET /api/connectors/salesforce/oauth/init
   → [authenticate → resolveTenant → requireTenantState(PENDING_ONBOARDING or ACTIVE) → canConnectSystems]
-  → handler  services/ai/src/routes/connectors-admin.ts:1032
+  → handler  services/ai/src/routes/connectors-admin.ts:1036
       → (responds directly; no downstream calls detected)
 ```
 
 ### `GET /api/connectors/shopify/install`
 
 - **Purpose:** Shopify's signed app-entry request. PUBLIC by requirement.
-- **Handler:** `services/ai/src/routes/shopify-install.ts` line 180
+- **Handler:** `services/ai/src/routes/shopify-install.ts` line 199
 - **Authentication / tenant resolution:** **No authentication middleware.** This route is reachable without a token.
 - **Authorization:** None.
 - **Input validation:** No input.
@@ -15344,7 +15344,7 @@ GET /api/connectors/salesforce/oauth/init
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/connectors` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/shopify-install.ts`.
-2. **Handler.** `services/ai/src/routes/shopify-install.ts:180` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/shopify-install.ts:199` - inline `async (req, res)` handler.
 3. **Validation.** No input.
 4. **Authentication / tenant resolution.** **No authentication middleware.** This route is reachable without a token.
 5. **Authorization.** None.
@@ -15358,14 +15358,14 @@ GET /api/connectors/salesforce/oauth/init
 
 ```text
 GET /api/connectors/shopify/install
-  → handler  services/ai/src/routes/shopify-install.ts:180
+  → handler  services/ai/src/routes/shopify-install.ts:199
       → (responds directly; no downstream calls detected)
 ```
 
 ### `POST /api/connectors/shopify/install/cancel`
 
 - **Purpose:** Abandon an intent without installing.
-- **Handler:** `services/ai/src/routes/shopify-install.ts` line 342
+- **Handler:** `services/ai/src/routes/shopify-install.ts` line 361
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 - **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
 - **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
@@ -15375,7 +15375,7 @@ GET /api/connectors/shopify/install
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/connectors` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/shopify-install.ts`.
-2. **Handler.** `services/ai/src/routes/shopify-install.ts:342` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/shopify-install.ts:361` - inline `async (req, res)` handler.
 3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
@@ -15390,14 +15390,14 @@ GET /api/connectors/shopify/install
 ```text
 POST /api/connectors/shopify/install/cancel
   → [authenticate → resolveTenant → requireTenantState(PENDING_ONBOARDING or ACTIVE)]
-  → handler  services/ai/src/routes/shopify-install.ts:342
+  → handler  services/ai/src/routes/shopify-install.ts:361
       → (responds directly; no downstream calls detected)
 ```
 
 ### `POST /api/connectors/shopify/install/claim`
 
 - **Purpose:** Bind a verified-but-unclaimed installation to the caller's workspace.
-- **Handler:** `services/ai/src/routes/shopify-install.ts` line 280
+- **Handler:** `services/ai/src/routes/shopify-install.ts` line 299
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 - **Authorization:** Gate: `canConnectSystems`
 - **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
@@ -15407,7 +15407,7 @@ POST /api/connectors/shopify/install/cancel
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/connectors` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/shopify-install.ts`.
-2. **Handler.** `services/ai/src/routes/shopify-install.ts:280` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/shopify-install.ts:299` - inline `async (req, res)` handler.
 3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 5. **Authorization.** Gate: `canConnectSystems`
@@ -15422,14 +15422,14 @@ POST /api/connectors/shopify/install/cancel
 ```text
 POST /api/connectors/shopify/install/claim
   → [authenticate → resolveTenant → requireTenantState(ACTIVE) → canConnectSystems]
-  → handler  services/ai/src/routes/shopify-install.ts:280
+  → handler  services/ai/src/routes/shopify-install.ts:299
       → (responds directly; no downstream calls detected)
 ```
 
 ### `GET /api/connectors/shopify/install/pending`
 
 - **Purpose:** What is waiting for this browser to claim, if anything.
-- **Handler:** `services/ai/src/routes/shopify-install.ts` line 254
+- **Handler:** `services/ai/src/routes/shopify-install.ts` line 273
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 - **Authorization:** Gate: `canConnectSystems`
 - **Input validation:** No body schema. Path and query parameters are read directly by the handler.
@@ -15439,7 +15439,7 @@ POST /api/connectors/shopify/install/claim
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/connectors` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/shopify-install.ts`.
-2. **Handler.** `services/ai/src/routes/shopify-install.ts:254` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/shopify-install.ts:273` - inline `async (req, res)` handler.
 3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 5. **Authorization.** Gate: `canConnectSystems`
@@ -15454,14 +15454,14 @@ POST /api/connectors/shopify/install/claim
 ```text
 GET /api/connectors/shopify/install/pending
   → [authenticate → resolveTenant → requireTenantState(PENDING_ONBOARDING or ACTIVE) → canConnectSystems]
-  → handler  services/ai/src/routes/shopify-install.ts:254
+  → handler  services/ai/src/routes/shopify-install.ts:273
       → (responds directly; no downstream calls detected)
 ```
 
 ### `GET /api/connectors/shopify/install/start`
 
 - **Purpose:** "Connect Shopify", pressed by a signed-in user.
-- **Handler:** `services/ai/src/routes/shopify-install.ts` line 124
+- **Handler:** `services/ai/src/routes/shopify-install.ts` line 133
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 - **Authorization:** Gate: `canConnectSystems`
 - **Input validation:** No body schema. Path and query parameters are read directly by the handler.
@@ -15471,7 +15471,7 @@ GET /api/connectors/shopify/install/pending
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/connectors` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/shopify-install.ts`.
-2. **Handler.** `services/ai/src/routes/shopify-install.ts:124` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/shopify-install.ts:133` - inline `async (req, res)` handler.
 3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 5. **Authorization.** Gate: `canConnectSystems`
@@ -15486,7 +15486,7 @@ GET /api/connectors/shopify/install/pending
 ```text
 GET /api/connectors/shopify/install/start
   → [authenticate → resolveTenant → requireTenantState(PENDING_ONBOARDING or ACTIVE) → canConnectSystems]
-  → handler  services/ai/src/routes/shopify-install.ts:124
+  → handler  services/ai/src/routes/shopify-install.ts:133
       → (responds directly; no downstream calls detected)
 ```
 
@@ -15556,7 +15556,7 @@ GET /api/connectors/shopify/oauth/init
 ### `GET /api/connectors/square/oauth/callback`
 
 - **Purpose:** Lists callback. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/ai/src/routes/connectors-admin.ts` line 981
+- **Handler:** `services/ai/src/routes/connectors-admin.ts` line 985
 - **Authentication / tenant resolution:** **No authentication middleware.** This route is reachable without a token.
 - **Authorization:** None.
 - **Input validation:** No input.
@@ -15566,7 +15566,7 @@ GET /api/connectors/shopify/oauth/init
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/connectors` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/connectors-admin.ts`.
-2. **Handler.** `services/ai/src/routes/connectors-admin.ts:981` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/connectors-admin.ts:985` - inline `async (req, res)` handler.
 3. **Validation.** No input.
 4. **Authentication / tenant resolution.** **No authentication middleware.** This route is reachable without a token.
 5. **Authorization.** None.
@@ -15580,14 +15580,14 @@ GET /api/connectors/shopify/oauth/init
 
 ```text
 GET /api/connectors/square/oauth/callback
-  → handler  services/ai/src/routes/connectors-admin.ts:981
+  → handler  services/ai/src/routes/connectors-admin.ts:985
       → (responds directly; no downstream calls detected)
 ```
 
 ### `GET /api/connectors/square/oauth/init`
 
 - **Purpose:** Lists init. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/ai/src/routes/connectors-admin.ts` line 957
+- **Handler:** `services/ai/src/routes/connectors-admin.ts` line 961
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 - **Authorization:** Gate: `canConnectSystems`
 - **Input validation:** No body schema. Path and query parameters are read directly by the handler.
@@ -15597,7 +15597,7 @@ GET /api/connectors/square/oauth/callback
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/connectors` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/connectors-admin.ts`.
-2. **Handler.** `services/ai/src/routes/connectors-admin.ts:957` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/connectors-admin.ts:961` - inline `async (req, res)` handler.
 3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 5. **Authorization.** Gate: `canConnectSystems`
@@ -15612,7 +15612,7 @@ GET /api/connectors/square/oauth/callback
 ```text
 GET /api/connectors/square/oauth/init
   → [authenticate → resolveTenant → requireTenantState(PENDING_ONBOARDING or ACTIVE) → canConnectSystems]
-  → handler  services/ai/src/routes/connectors-admin.ts:957
+  → handler  services/ai/src/routes/connectors-admin.ts:961
       → (responds directly; no downstream calls detected)
 ```
 
@@ -15682,7 +15682,7 @@ GET /api/connectors/stripe/oauth/init
 ### `GET /api/connectors/wix/oauth/callback`
 
 - **Purpose:** Lists callback. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/ai/src/routes/connectors-admin.ts` line 905
+- **Handler:** `services/ai/src/routes/connectors-admin.ts` line 909
 - **Authentication / tenant resolution:** **No authentication middleware.** This route is reachable without a token.
 - **Authorization:** None.
 - **Input validation:** No input.
@@ -15692,7 +15692,7 @@ GET /api/connectors/stripe/oauth/init
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/connectors` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/connectors-admin.ts`.
-2. **Handler.** `services/ai/src/routes/connectors-admin.ts:905` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/connectors-admin.ts:909` - inline `async (req, res)` handler.
 3. **Validation.** No input.
 4. **Authentication / tenant resolution.** **No authentication middleware.** This route is reachable without a token.
 5. **Authorization.** None.
@@ -15706,14 +15706,14 @@ GET /api/connectors/stripe/oauth/init
 
 ```text
 GET /api/connectors/wix/oauth/callback
-  → handler  services/ai/src/routes/connectors-admin.ts:905
+  → handler  services/ai/src/routes/connectors-admin.ts:909
       → (responds directly; no downstream calls detected)
 ```
 
 ### `GET /api/connectors/wix/oauth/init`
 
 - **Purpose:** CORRECT flow for "any Wix store owner connects their store to us":   1. We send the user to https://www.wix.com/installer/install?appId=…      &redirectUrl=…&state=… - Wix shows them a "Add to site" picker.   2. After they pick a site + approve permissions, Wix redirects back to      our callback with `?code=…&instanceId=<site-instance>&state=…`.   3. We POST that code to https://www.wixapis.com/oauth/access      (grant_type=authorization_code) for an access_token + refresh_token      scoped to that instanceId.
-- **Handler:** `services/ai/src/routes/connectors-admin.ts` line 885
+- **Handler:** `services/ai/src/routes/connectors-admin.ts` line 889
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 - **Authorization:** Gate: `canConnectSystems`
 - **Input validation:** No input.
@@ -15723,7 +15723,7 @@ GET /api/connectors/wix/oauth/callback
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/connectors` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/connectors-admin.ts`.
-2. **Handler.** `services/ai/src/routes/connectors-admin.ts:885` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/connectors-admin.ts:889` - inline `async (req, res)` handler.
 3. **Validation.** No input.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 5. **Authorization.** Gate: `canConnectSystems`
@@ -15738,7 +15738,7 @@ GET /api/connectors/wix/oauth/callback
 ```text
 GET /api/connectors/wix/oauth/init
   → [authenticate → resolveTenant → requireTenantState(PENDING_ONBOARDING or ACTIVE) → canConnectSystems]
-  → handler  services/ai/src/routes/connectors-admin.ts:885
+  → handler  services/ai/src/routes/connectors-admin.ts:889
       → (responds directly; no downstream calls detected)
 ```
 

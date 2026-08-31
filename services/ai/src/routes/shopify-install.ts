@@ -139,13 +139,23 @@ router.get(
   async (req: Request, res: Response) => {
     const identity = getShopifyAppIdentity();
     if (!identity.installUrl) {
-      // A safe, specific configuration error. Guessing a listing URL from the
-      // app name sends every merchant to a 404 with no way to tell why.
+      // The App Store listing is not published yet, so there is no
+      // Shopify-owned page to send this merchant to.
+      //
+      // This route ONLY is unavailable. Installation from the Partner
+      // Dashboard, the public install handler, OAuth, the callback, existing
+      // connections and reauthorization are all unaffected - none of them
+      // reads installUrl.
+      //
+      // Deliberately NOT a fallback to a shop-domain prompt. That is the
+      // thing App Store requirement 2.3.1 forbids, and re-adding it "just
+      // until the listing is live" is how it would come back permanently.
       res.status(503).json({
-        error: "shopify_install_url_not_configured",
+        error: "shopify_install_not_available",
         detail:
-          "Set SHOPIFY_APP_INSTALL_URL (limited-visibility install link) or " +
-          "SHOPIFY_APP_HANDLE (public App Store listing) to enable Shopify installs.",
+          "New Shopify connections are not available yet. The GOTCHA app is " +
+          "pending its Shopify App Store listing; once it is published this " +
+          "button will take you to Shopify to choose your store.",
       });
       return;
     }

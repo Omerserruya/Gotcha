@@ -231,43 +231,38 @@ export function buildShopifyAuthorizeUrl(input: {
 }
 
 /**
- * Where "Connect Shopify" sends the merchant.
+ * Where the merchant-facing "Connect Shopify" button sends a merchant.
  *
- * This must be a SHOPIFY-owned page - the App Store listing, or the
- * limited-visibility install link for an app that is not publicly listed -
- * because that page is what identifies the store. GOTCHA never asks.
+ * PUBLIC DISTRIBUTION ONLY. For a public app there is exactly one
+ * Shopify-owned install surface, the App Store listing, and this derives it
+ * from a handle read off the Partner Dashboard. There is deliberately no
+ * second source:
  *
- * Configured, never guessed: an app handle we assumed produced a listing URL
- * that 404s, and a hard-coded development store would send every merchant to
- * somebody else's shop. `SHOPIFY_APP_INSTALL_URL` wins when set (it is the
- * only way to express a limited-visibility link); otherwise the public
- * listing is derived from a handle that was actually read from the Partner
- * Dashboard.
+ *   • A custom-distribution install link is generated per STORE (the
+ *     dashboard asks for the shop's domain before it will produce one), so
+ *     configuring one would hard-code a single merchant's shop into the
+ *     button every other merchant presses. It also forecloses Shopify
+ *     billing and App Store review, and the distribution choice is
+ *     irreversible.
+ *   • A guessed handle produces a listing URL that 404s, which is worse for
+ *     the merchant than an honest "not available yet".
+ *
+ * SCOPE OF THIS FUNCTION - important. It powers ONE thing: the button. It is
+ * NOT part of the install path. A merchant arriving from Shopify (Partner
+ * Dashboard "Test your app", or the listing once it is live) reaches
+ * `application_url` directly, and the public install handler verifies that
+ * request and starts OAuth without ever calling this. So a null here means
+ * "no in-app button yet", never "installation is broken" - see the tests in
+ * shopify-install-route.test.ts that pin exactly that.
+ *
+ * Returns null when unset or malformed. Null is a real, expected state
+ * before the listing publishes, and callers must render it as such.
  */
 export function resolveShopifyInstallUrl(env: NodeJS.ProcessEnv = process.env): string | null {
-  const explicit = (env.SHOPIFY_APP_INSTALL_URL || "").trim();
-  if (explicit) {
-    let parsed: URL;
-    try {
-      parsed = new URL(explicit);
-    } catch {
-      return null;
-    }
-    // Only https, and only a Shopify-owned host. A misconfiguration that
-    // pointed this at an arbitrary origin would turn the Connect button into
-    // an open redirect with our name on it.
-    if (parsed.protocol !== "https:") return null;
-    const host = parsed.hostname.toLowerCase();
-    const shopifyOwned =
-      host === "apps.shopify.com" ||
-      host === "admin.shopify.com" ||
-      host === "accounts.shopify.com" ||
-      host.endsWith(".myshopify.com");
-    if (!shopifyOwned) return null;
-    return parsed.toString();
-  }
-
   const handle = (env.SHOPIFY_APP_HANDLE || "").trim();
+  // Shopify listing handles are lowercase alphanumeric with hyphens. Anything
+  // else was not copied from the dashboard, and building a URL from it would
+  // send merchants to a 404 with no way to tell why.
   if (!handle || !/^[a-z0-9][a-z0-9-]*$/.test(handle)) return null;
   return `https://apps.shopify.com/${handle}`;
 }

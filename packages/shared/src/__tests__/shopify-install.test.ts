@@ -262,7 +262,7 @@ describe("buildShopifyAuthorizeUrl", () => {
 });
 
 describe("resolveShopifyInstallUrl", () => {
-  it("is null when nothing is configured - a real state, not a guess", () => {
+  it("is null when the handle is unset - a real pre-listing state, not a guess", () => {
     expect(resolveShopifyInstallUrl({} as NodeJS.ProcessEnv)).toBeNull();
   });
 
@@ -272,37 +272,65 @@ describe("resolveShopifyInstallUrl", () => {
     );
   });
 
-  it("prefers an explicit install URL - the only way to express a limited-visibility link", () => {
+  it("reads ONLY the handle - there is no custom-distribution escape hatch", () => {
+    // A custom-distribution install link is generated per STORE, so honouring
+    // one here would hard-code a single merchant's shop into the button every
+    // other merchant presses. Public distribution has exactly one install
+    // surface, and this function knows about exactly one variable.
     const env = {
-      SHOPIFY_APP_HANDLE: "gotcha",
       SHOPIFY_APP_INSTALL_URL: "https://admin.shopify.com/oauth/install_custom_app?client_id=abc",
-    } as NodeJS.ProcessEnv;
-    expect(resolveShopifyInstallUrl(env)).toContain("admin.shopify.com");
-  });
-
-  it("refuses an install URL that is not Shopify-owned", () => {
-    // A misconfiguration here would turn the Connect button into an open
-    // redirect carrying GOTCHA's name.
-    for (const bad of [
-      "https://evil.com/install",
-      "http://apps.shopify.com/gotcha",
-      "https://apps.shopify.com.evil.com/gotcha",
-      "javascript:alert(1)",
-      "not a url",
-    ]) {
-      expect(
-        resolveShopifyInstallUrl({ SHOPIFY_APP_INSTALL_URL: bad } as NodeJS.ProcessEnv),
-        bad,
-      ).toBeNull();
-    }
+      SHOPIFY_DEV_STORE: "urban-supply-dev.myshopify.com",
+    } as unknown as NodeJS.ProcessEnv;
+    expect(resolveShopifyInstallUrl(env)).toBeNull();
   });
 
   it("refuses a malformed handle rather than building a 404", () => {
-    for (const bad of ["", "  ", "Has Spaces", "-leading", "UPPER"]) {
+    for (const bad of ["", "  ", "Has Spaces", "-leading", "UPPER", "has/slash", "a.b"]) {
       expect(
         resolveShopifyInstallUrl({ SHOPIFY_APP_HANDLE: bad } as NodeJS.ProcessEnv),
         bad,
       ).toBeNull();
     }
+  });
+
+  it("always lands on apps.shopify.com and cannot be pointed elsewhere", () => {
+    // The handle is a path segment, never a host. Even a hostile value cannot
+    // move the origin, which is what keeps the Connect button from becoming an
+    // open redirect carrying GOTCHA's name.
+    const url = resolveShopifyInstallUrl({ SHOPIFY_APP_HANDLE: "gotcha" } as NodeJS.ProcessEnv)!;
+    expect(new URL(url).origin).toBe("https://apps.shopify.com");
+  });
+});
+
+describe("a missing handle does not disable installation", () => {
+  it("app-entry verification is independent of the handle", () => {
+    // The property the whole pre-listing dev-store test depends on: Shopify
+    // calls `application_url` directly, and nothing on that path consults the
+    // listing handle. If this ever regresses, dev-store installs break with a
+    // configuration error that looks nothing like its cause.
+    const now = new Date();
+    const base: Record<string, string> = {
+      shop: SHOP,
+      timestamp: String(Math.floor(now.getTime() / 1000)),
+    };
+    const q = { ...base, hmac: sign(base) };
+    expect(verifyAppEntryHmac(q, SECRET)).toEqual({ ok: true, shop: SHOP });
+  });
+
+  it("the authorize URL builder is independent of the handle", () => {
+    const url = buildShopifyAuthorizeUrl({
+      shop: SHOP,
+      clientId: "b1ce3aa50d8d2e67b978918629bc5f76",
+      scopes: "read_orders",
+      redirectUri: "https://app.gotcha.co.il/api/connectors/shopify/oauth/callback",
+      state: "s",
+    });
+    expect(url).toContain(`https://${SHOP}/admin/oauth/authorize`);
+  });
+
+  it("callback verification is independent of the handle", () => {
+    const base = { shop: SHOP, code: "c", state: "s" };
+    const q = { ...base, hmac: sign(base) };
+    expect(verifyOAuthCallbackHmac(q, SECRET)).toEqual({ ok: true, shop: SHOP });
   });
 });

@@ -151,7 +151,6 @@ beforeEach(() => {
   H.linkCalls.length = 0;
   H.linkResult.current = { ok: true, connectionId: "conn-1", reconnected: false };
   process.env.SHOPIFY_APP_HANDLE = "gotcha";
-  delete process.env.SHOPIFY_APP_INSTALL_URL;
 });
 
 // ─── The button ──────────────────────────────────────────────
@@ -185,13 +184,42 @@ describe("GET /connectors/shopify/install/start", () => {
     expect(H.intents.get(INTENT).flow).toBeUndefined();
   });
 
-  it("reports a safe configuration error when no install URL is set", async () => {
+  it("says installs are not available yet when the listing is unpublished", async () => {
     delete process.env.SHOPIFY_APP_HANDLE;
     const res = await request(app()).get("/api/connectors/shopify/install/start");
     expect(res.status).toBe(503);
-    expect(res.body.error).toBe("shopify_install_url_not_configured");
+    expect(res.body.error).toBe("shopify_install_not_available");
     // No intent is minted for a flow that cannot start.
     expect(H.intents.size).toBe(0);
+  });
+
+  it("never offers a shop-domain fallback when the listing is unpublished", async () => {
+    // The failure mode this guards: someone "temporarily" restores a domain
+    // prompt so merchants can still connect before the listing is live. That
+    // is the exact flow App Store requirement 2.3.1 rejects, and a temporary
+    // one is never removed.
+    delete process.env.SHOPIFY_APP_HANDLE;
+    const res = await request(app()).get("/api/connectors/shopify/install/start");
+    const body = JSON.stringify(res.body);
+    expect(body).not.toContain("myshopify.com");
+    expect(body).not.toMatch(/enter|type|paste/i);
+    expect(res.body.url).toBeUndefined();
+  });
+
+  it("ignores a custom-distribution install URL if one is ever put in the env", async () => {
+    // Public distribution has ONE install surface. A per-store custom link
+    // must not be honoured here - it would pin every merchant's button to one
+    // merchant's shop.
+    delete process.env.SHOPIFY_APP_HANDLE;
+    process.env.SHOPIFY_APP_INSTALL_URL =
+      "https://admin.shopify.com/oauth/install_custom_app?client_id=abc";
+    try {
+      const res = await request(app()).get("/api/connectors/shopify/install/start");
+      expect(res.status).toBe(503);
+      expect(res.body.error).toBe("shopify_install_not_available");
+    } finally {
+      delete process.env.SHOPIFY_APP_INSTALL_URL;
+    }
   });
 
   it("requires authentication and the connect permission", async () => {
@@ -308,6 +336,52 @@ describe("GET /connectors/shopify/install (public)", () => {
       expect(res.status, cookie).toBe(302);
       expect(res.headers.location).toContain("/admin/oauth/authorize");
     }
+  });
+});
+
+// ─── A missing listing handle blocks ONLY the button ─────────
+
+describe("installation works with no SHOPIFY_APP_HANDLE configured", () => {
+  // This is the property the whole pre-listing development-store test rests
+  // on. A developer installing from the Partner Dashboard reaches
+  // `application_url` directly; nothing on that path reads the listing
+  // handle. If this regresses, dev-store installs start failing with a "not
+  // available" error that looks nothing like its cause.
+
+  it("the PUBLIC install handler still verifies and starts OAuth", async () => {
+    delete process.env.SHOPIFY_APP_HANDLE;
+    const res = await request(app()).get(`/api/connectors/shopify/install?${entryQuery()}`);
+    expect(res.status).toBe(302);
+    const loc = new URL(res.headers.location);
+    expect(loc.origin).toBe(`https://${SHOP}`);
+    expect(loc.pathname).toBe("/admin/oauth/authorize");
+  });
+
+  it("...and still rejects an unsigned request", async () => {
+    delete process.env.SHOPIFY_APP_HANDLE;
+    const q = new URLSearchParams(entryQuery());
+    q.set("hmac", "0".repeat(64));
+    const res = await request(app()).get(`/api/connectors/shopify/install?${q}`);
+    expect(res.headers.location).toContain("shopify_install_error=invalid_request");
+  });
+
+  it("...and still works with no GOTCHA session at all", async () => {
+    delete process.env.SHOPIFY_APP_HANDLE;
+    H.authed.yes = false;
+    const res = await request(app()).get(`/api/connectors/shopify/install?${entryQuery()}`);
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toContain("/admin/oauth/authorize");
+  });
+
+  it("...and a pending install can still be claimed after sign-in", async () => {
+    delete process.env.SHOPIFY_APP_HANDLE;
+    const handle = "p".repeat(64);
+    H.pendings.set(handle, { shopDomain: SHOP, credentials: { accessToken: "t" } });
+    const res = await request(app())
+      .post("/api/connectors/shopify/install/claim")
+      .send({ handle });
+    expect(res.status).toBe(200);
+    expect(H.linkCalls[0]).toMatchObject({ shopDomain: SHOP });
   });
 });
 

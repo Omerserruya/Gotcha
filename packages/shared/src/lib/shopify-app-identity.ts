@@ -54,13 +54,21 @@ export interface ShopifyAppIdentity {
   extensionHandle: string;
   blockHandle: string;
   /**
-   * Shopify-owned page the "Connect Shopify" button sends the merchant to,
-   * where Shopify identifies or lets them pick the store.
+   * The App Store listing the "Connect Shopify" button sends a merchant to,
+   * where Shopify identifies or lets them pick the store. Derived from
+   * `SHOPIFY_APP_HANDLE` alone.
    *
-   * Null when neither SHOPIFY_APP_INSTALL_URL nor SHOPIFY_APP_HANDLE is set.
-   * Null is a real state the UI must render as a configuration error - the
-   * alternative, guessing a listing URL from the app name, is how a merchant
-   * ends up on a 404 with no way to connect and no explanation.
+   * Null until the listing publishes and the handle is configured, and null
+   * is an ORDINARY state, not a broken one:
+   *
+   *   • installation from the Partner Dashboard still works - Shopify calls
+   *     `application_url` directly and the public install handler takes it
+   *     from there;
+   *   • OAuth, the callback, existing connections and reauthorization are all
+   *     unaffected, because none of them reads this field.
+   *
+   * Only the in-app button depends on it, and it must say so plainly rather
+   * than fall back to asking the merchant for their domain.
    */
   installUrl: string | null;
 }
