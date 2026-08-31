@@ -2927,6 +2927,10 @@ enum EntitlementSource {
   // Added by the pricing round.
   VOLUME_OPTION // granted by the selected chat/voice volume option
   COMPLIANCE_DENY // security/compliance kill switch - always wins, always denies
+  // Granted because a provider-owned subscription is confirmed ACTIVE. Kept
+  // distinct from PLAN_DEFAULT so that a Shopify subscription lapsing revokes
+  // exactly what Shopify paid for, and leaves externally funded access alone.
+  SHOPIFY_SUBSCRIPTION
 }
 
 // ─── Billable Entity (the payer abstraction) ───────────────
@@ -3168,6 +3172,15 @@ model TenantEntitlement {
   valueType      EntitlementValueType @map("value_type")
   value          Json
   source         EntitlementSource
+  // WHAT PAID FOR THIS. Null means the pre-existing answer: GOTCHA's own
+  // billing, which is where every row came from before Shopify existed here.
+  //
+  // Without this, revoking access when a Shopify subscription lapses is a
+  // guess - the resolver can see that a capability is granted but not which
+  // money stopped arriving, so it either revokes too much (cutting off
+  // WhatsApp because a Shopify charge failed) or too little.
+  fundedByBillingSource          BillingSource? @map("funded_by_billing_source")
+  fundedByProviderSubscriptionId String?        @map("funded_by_provider_subscription_id")
   expiresAt      DateTime?            @map("expires_at") // temporary features (beta/promo/trial)
   reason         String?
   createdBy      String?              @map("created_by")
@@ -3331,6 +3344,16 @@ model Subscription {
   planKey                 String             @map("plan_key")
   planVersion             Int                @default(1) @map("plan_version")
   status                  SubscriptionStatus @default(PENDING)
+  // Who collects for THIS subscription. Every existing row is GOTCHA_EXTERNAL
+  // and the default keeps it that way, so the column is descriptive on day one
+  // rather than something to backfill by guesswork.
+  //
+  // A Shopify-billed arrangement does NOT live here - see ProviderSubscription
+  // for why a subscription we cannot charge, prorate or cancel is a different
+  // kind of thing. This column exists so the two can be told apart without
+  // inferring it from BillingProfile.provider, which answers a different
+  // question (who holds the card).
+  billingSource           BillingSource      @default(GOTCHA_EXTERNAL) @map("billing_source")
   // When false (GRANDFATHERED), the AI runtime gate is skipped and no billing
   // runs. NOT an infinite-units balance - financial state stays deterministic.
   enforcementEnabled      Boolean            @default(true) @map("enforcement_enabled")
@@ -7041,4 +7064,363 @@ model KnowledgeCandidateEvidence {
   @@index([candidateId, representative])
   @@index([tenantId])
   @@map("knowledge_candidate_evidence")
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// BILLING SOURCE · COMMERCE CONNECTION · POLICY · USAGE LEDGER
+//
+// A workspace can be billed by more than one party. GOTCHA Core might be
+// billed externally (iCount) while a Shopify connector is billed by Shopify,
+// and a third-party channel cost is neither. So "who is responsible for
+// collecting this money" is a property of a SUBSCRIPTION, not of a workspace
+// and not of a payer.
+//
+// The existing money model is left exactly as it is:
+//   * `Subscription.billableEntityId` keeps its @unique. Relaxing it would
+//     break 22 findUnique call sites across 11 files on the path that takes
+//     real money today, in service of a policy Shopify has not confirmed.
+//   * `BillingProfile.provider` still names the PAYMENT provider - the thing
+//     that holds a card. That is a different question from billing source.
+//
+// Instead `ProviderSubscription` records a subscription a provider OWNS and
+// GOTCHA only OBSERVES. The distinction is real rather than a workaround: we
+// cannot charge, prorate or cancel a Shopify subscription. We mirror it, and
+// the mirror is never the authority - see fetchSubscription().
+//
+// Tenant columns here carry no foreign key, matching ProviderCustomer and
+// ProviderBillingEvent. Billing records outlive the thing they describe, and
+// an append-only decision or usage row that vanishes with a cascade is worse
+// than a dangling id.
+// ════════════════════════════════════════════════════════════════════════
+
+/// Who is responsible for collecting the money for one subscription.
+enum BillingSource {
+  /// GOTCHA's own billing - today iCount, via the PaymentProvider registry.
+  GOTCHA_EXTERNAL
+  /// Shopify collects. We never hold a card and never submit a charge.
+  SHOPIFY
+  /// Deliberately not charged (internal, partner, staff).
+  EXEMPT
+  /// A real commercial zero, distinct from EXEMPT: a free tier someone chose.
+  FREE
+}
+
+/// The commercial arrangement a workspace is under once Shopify is involved.
+///
+/// UNRESOLVED is the default and it is not a failure state - it is the honest
+/// answer before Shopify has told us whether split billing is permitted. It
+/// must resolve to a non-charging BILLING_PENDING screen, never to access.
+enum BillingPolicy {
+  FULL_SHOPIFY
+  SHOPIFY_CONNECTOR_ADDON
+  GRANDFATHERED_EXTERNAL
+  EXTERNAL_ONLY
+  FREE
+  UNRESOLVED
+}
+
+/// How good the evidence behind a policy decision actually was.
+///
+/// A customer saying they are grandfathered is not evidence. REVIEW_REQUIRED
+/// exists so that "we do not know" is representable, because the alternative
+/// is a confident wrong answer that hands someone free access forever.
+enum PolicyEvidenceQuality {
+  CONFIRMED
+  INFERRED
+  UNKNOWN
+  REVIEW_REQUIRED
+}
+
+/// Internal lifecycle for a provider-owned subscription.
+///
+/// A superset of Shopify's AppSubscriptionStatus, because ours also has to
+/// express states Shopify has no word for. The provider's own string is kept
+/// alongside in `providerStatusRaw` - mapping is lossy and the raw value is
+/// what a support conversation actually needs.
+enum ProviderSubscriptionStatus {
+  PENDING
+  TRIALING
+  ACTIVE
+  /// Shopify: on hold for non-payment, and Shopify reactivates it ITSELF when
+  /// the merchant pays. Deliberately not SUSPENDED, which in our own model
+  /// means dunning was exhausted and a human has to act.
+  FROZEN
+  PAST_DUE
+  CANCELLED
+  DECLINED
+  /// Shopify: not approved within two days of creation. Terminal.
+  EXPIRED
+  REQUIRES_ACTION
+}
+
+enum CommercePlatform {
+  SHOPIFY
+  WOOCOMMERCE
+  OTHER
+}
+
+enum CommerceConnectionStatus {
+  PENDING
+  CONNECTED
+  /// Installed and verified, but nothing is entitled yet because billing has
+  /// not been resolved. The safe landing place for every ambiguous case.
+  BILLING_PENDING
+  DISCONNECTED
+}
+
+enum UsageDispatchStatus {
+  /// Written to our ledger. True regardless of who bills for it.
+  RECORDED
+  PENDING
+  DISPATCHED
+  ACKED
+  FAILED
+  /// Deliberately not sent - this metric is not billed by this source, or a
+  /// cap was reached. A first-class outcome, not an error.
+  SKIPPED
+  REVERSED
+}
+
+/// A commerce integration, recorded separately from how it is paid for.
+///
+/// A workspace may hold several, including more than one Shopify store. The
+/// unique on (platform, externalShopId) is the constraint that makes
+/// cross-tenant capture impossible: a shop already claimed cannot be attached
+/// to a second workspace by anything a user is able to type.
+model CommerceConnection {
+  id       String           @id @default(cuid())
+  tenantId String           @map("tenant_id")
+  platform CommercePlatform
+
+  /// The platform's own immutable id for the store. For Shopify this is the
+  /// numeric shop id, NEVER the domain - a myshopify domain can be changed by
+  /// the merchant, so keying on it would let a rename orphan the connection.
+  externalShopId String  @map("external_shop_id")
+  /// Display/routing only. Never an identity, never an authorization input.
+  shopDomain     String? @map("shop_domain")
+
+  status CommerceConnectionStatus @default(PENDING)
+
+  /// How this connection arrived - "app_store", "in_app_connect", "admin".
+  /// Recorded at install because it cannot be reconstructed afterwards, and
+  /// the billing policy resolver needs it.
+  acquisitionSource String? @map("acquisition_source")
+
+  /// The Chat installation this connection corresponds to, when it came in
+  /// through that app. Plain id: the two models are owned by different
+  /// services and a cascade across that boundary would be a surprise.
+  shopifyChatInstallationId String? @map("shopify_chat_installation_id")
+
+  installedAt    DateTime  @default(now()) @map("installed_at")
+  uninstalledAt  DateTime? @map("uninstalled_at")
+  lastVerifiedAt DateTime? @map("last_verified_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  /// One store belongs to at most one workspace, forever.
+  @@unique([platform, externalShopId])
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([shopDomain])
+  @@map("commerce_connections")
+}
+
+/// A subscription owned by an external provider and mirrored here.
+///
+/// `productKey` is what makes split billing expressible without touching the
+/// existing Subscription table: "gotcha_core" billed externally and
+/// "shopify_connector" billed by Shopify are two rows, not one row with a
+/// contested provider.
+model ProviderSubscription {
+  id               String        @id @default(cuid())
+  tenantId         String        @map("tenant_id")
+  billableEntityId String        @map("billable_entity_id")
+  billingSource    BillingSource @map("billing_source")
+
+  /// "mock" | "test" | "live". A test subscription id means nothing in
+  /// production, so the environment is part of the identity - same reasoning
+  /// as ProviderCustomer.
+  environment String @default("mock")
+
+  /// Which internal product this pays for. See the model comment.
+  productKey String @map("product_key")
+
+  providerSubscriptionId String? @map("provider_subscription_id")
+  providerCustomerId     String? @map("provider_customer_id")
+  /// The Shopify plan handle, or the equivalent elsewhere. Configuration, not
+  /// a credential, and never a price.
+  providerPlanHandle     String? @map("provider_plan_handle")
+
+  planKey     String? @map("plan_key")
+  planVersion Int?    @map("plan_version")
+
+  status            ProviderSubscriptionStatus @default(PENDING)
+  /// The provider's own status string, unmapped. Mapping loses information
+  /// and this is the column support actually reads.
+  providerStatusRaw String?                    @map("provider_status_raw")
+
+  trialEndsAt        DateTime? @map("trial_ends_at")
+  currentPeriodStart DateTime? @map("current_period_start")
+  currentPeriodEnd   DateTime? @map("current_period_end")
+  cancelAtPeriodEnd  Boolean   @default(false) @map("cancel_at_period_end")
+  cancelledAt        DateTime? @map("cancelled_at")
+
+  /// Last time this was confirmed against the provider, not against a
+  /// callback. Reconciliation reads it to find mirrors that have gone stale.
+  lastVerifiedAt DateTime? @map("last_verified_at")
+
+  commerceConnectionId String? @map("commerce_connection_id")
+
+  /// Provider payload, redacted. Never a token, never a secret.
+  metadata Json @default("{}")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  /// A provider's subscription id may not be claimed twice.
+  @@unique([billingSource, environment, providerSubscriptionId], map: "provider_subscriptions_source_env_provider_id_key")
+  /// One live arrangement per payer, per source, per product.
+  @@unique([billableEntityId, billingSource, productKey], map: "provider_subscriptions_entity_source_product_key")
+  @@index([tenantId])
+  @@index([status])
+  @@index([currentPeriodEnd])
+  @@index([commerceConnectionId])
+  @@map("provider_subscriptions")
+}
+
+/// Append-only record of every billing policy decision and what it rested on.
+///
+/// Exists because grandfathering is the one decision nobody can reconstruct
+/// later: it turns on facts about the past, and the code and configuration
+/// that read those facts both change. Storing the answer without the evidence
+/// and the version that produced it makes an audit impossible.
+model BillingPolicyDecision {
+  id       String @id @default(cuid())
+  tenantId String @map("tenant_id")
+
+  policy BillingPolicy
+  /// Machine-readable, e.g. "no_prior_subscription", "flag_disabled".
+  reason String
+
+  acquisitionSource String?   @map("acquisition_source")
+  accountCreatedAt  DateTime? @map("account_created_at")
+  /// Publication cohort, when it is known. Null is the honest common case.
+  cohort            String?
+
+  grandfathered   Boolean               @default(false)
+  evidence        Json                  @default("{}")
+  evidenceQuality PolicyEvidenceQuality @default(UNKNOWN) @map("evidence_quality")
+
+  commerceConnectionId String? @map("commerce_connection_id")
+
+  /// What decided it. A policy is a function of code AND configuration, so
+  /// both are recorded - a decision that cannot be attributed to a version
+  /// cannot be defended.
+  codeVersion   String? @map("code_version")
+  configVersion String? @map("config_version")
+
+  decidedAt DateTime @default(now()) @map("decided_at")
+  decidedBy String?  @map("decided_by")
+
+  @@index([tenantId, decidedAt])
+  @@index([policy])
+  @@index([evidenceQuality], map: "billing_policy_decisions_evidence_quality_idx")
+  @@map("billing_policy_decisions")
+}
+
+/// Canonical, append-only usage. One row per billable unit, whoever bills it.
+///
+/// Usage is recorded HERE FIRST and routed afterwards. That order is what
+/// makes "the same unit was charged by two providers" a violable invariant
+/// rather than a hope: `billingSource` is decided once, on this row, and the
+/// dispatcher only ever sends a row to the source the row already names.
+model UsageLedgerEntry {
+  id       String @id @default(cuid())
+  tenantId String @map("tenant_id")
+
+  billableEntityId       String? @map("billable_entity_id")
+  providerSubscriptionId String? @map("provider_subscription_id")
+  subscriptionId         String? @map("subscription_id")
+  /// The capability this usage was served under, so a lapse can be traced to
+  /// what stops being billable.
+  entitlementKey         String? @map("entitlement_key")
+
+  /// "ai_answer", "conversation_handled", "shopify_action", ...
+  metric   String
+  quantity Decimal @db.Decimal(18, 6)
+
+  /// When the usage HAPPENED, which is not when it was written and not when
+  /// it was dispatched. Shopify refuses events outside the current billing
+  /// cycle, so the difference is load-bearing.
+  occurredAt DateTime @map("occurred_at")
+
+  /// The one key that makes this safe to retry, and the same value sent to
+  /// the provider. Shopify enforces its idempotency key permanently and caps
+  /// it at 64 characters, so this must stay within that budget.
+  idempotencyKey String @unique @map("idempotency_key")
+
+  billingSource BillingSource       @map("billing_source")
+  status        UsageDispatchStatus @default(RECORDED)
+
+  /// The provider's own id for the accepted event.
+  providerEventId String?   @map("provider_event_id")
+  dispatchedAt    DateTime? @map("dispatched_at")
+  acknowledgedAt  DateTime? @map("acknowledged_at")
+
+  attempts      Int       @default(0)
+  nextAttemptAt DateTime? @map("next_attempt_at")
+  failureCode   String?   @map("failure_code")
+  failureReason String?   @map("failure_reason")
+
+  /// Set on a correcting entry, pointing at what it reverses. Shopify wants a
+  /// negative value under a NEW idempotency key, so a reversal is genuinely a
+  /// new row rather than an edit - which suits an append-only ledger.
+  reversalOfId String? @map("reversal_of_id")
+
+  /// Why nothing was sent, for SKIPPED. e.g. "cap_reached",
+  /// "source_does_not_bill_metric", "usage_billing_disabled".
+  skipReason String? @map("skip_reason")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([tenantId, metric, occurredAt])
+  @@index([status, nextAttemptAt])
+  @@index([billingSource, status], map: "usage_ledger_entries_billing_source_status_idx")
+  @@index([providerSubscriptionId])
+  @@index([reversalOfId])
+  @@map("usage_ledger_entries")
+}
+
+/// Transactional outbox for billable provider calls.
+///
+/// A provider call inside a database transaction is either a long lock or a
+/// lie - the transaction can roll back after the money moved. Intent is
+/// committed here with the business write, and delivery happens after.
+model BillingOutboxEntry {
+  id            String        @id @default(cuid())
+  billingSource BillingSource @map("billing_source")
+  /// "usage.dispatch", "subscription.verify", "subscription.cancel".
+  operation     String
+  /// Deterministic. Two writers producing the same intent collide here rather
+  /// than both calling the provider.
+  dedupeKey     String        @unique @map("dedupe_key")
+
+  tenantId String? @map("tenant_id")
+  payload  Json    @default("{}")
+
+  status        UsageDispatchStatus @default(PENDING)
+  attempts      Int                 @default(0)
+  nextAttemptAt DateTime?           @map("next_attempt_at")
+  lastError     String?             @map("last_error")
+
+  /// Set when retries are exhausted. A dead letter is visible on purpose.
+  deadLetteredAt DateTime? @map("dead_lettered_at")
+  processedAt    DateTime? @map("processed_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  @@index([status, nextAttemptAt])
+  @@index([tenantId])
+  @@map("billing_outbox_entries")
 }

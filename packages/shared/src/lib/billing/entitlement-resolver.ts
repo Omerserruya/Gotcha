@@ -55,15 +55,30 @@ export interface EntitlementSet {
   unsubscribed: boolean;
 }
 
-/** Precedence rank. Higher wins. COMPLIANCE_DENY sits above everything. */
+/**
+ * Precedence rank. Higher wins. COMPLIANCE_DENY sits above everything.
+ *
+ * The numbers are internal and never persisted, so they are renumbered when
+ * something is inserted rather than wedged in with a tie. A tie would be
+ * resolved by whichever TenantEntitlement row happened to be read first, and
+ * "which of your capabilities you have depends on row order" is not a rule
+ * anyone can reason about.
+ *
+ * SHOPIFY_SUBSCRIPTION sits just below ADDON: it grants what a confirmed,
+ * currently-active Shopify subscription pays for, so it must beat PLAN_DEFAULT
+ * - otherwise a plan default would mask the fact that Shopify has stopped
+ * paying - while an ADDON the customer bought from GOTCHA directly, and any
+ * OVERRIDE a human deliberately set, both still win over it.
+ */
 const SOURCE_RANK: Record<EntitlementSource, number> = {
   PLAN_DEFAULT: 0,
   VOLUME_OPTION: 1,
-  ADDON: 2,
-  PROMO: 3,
-  TRIAL: 4,
-  BETA: 5,
-  OVERRIDE: 6,
+  SHOPIFY_SUBSCRIPTION: 2,
+  ADDON: 3,
+  PROMO: 4,
+  TRIAL: 5,
+  BETA: 6,
+  OVERRIDE: 7,
   COMPLIANCE_DENY: 100,
 };
 
