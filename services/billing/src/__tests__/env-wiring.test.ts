@@ -38,11 +38,27 @@ function tsFilesUnder(dir: string): string[] {
   return out;
 }
 
+/**
+ * Strip comments before scanning.
+ *
+ * Only a read in CODE is a read. A variable NAMED in a comment - and this file
+ * is exactly the sort of thing code comments explain, so they do name them -
+ * is not configuration the service needs, and counting it demands that compose
+ * declare a variable that does not exist. The check then fails for a reason
+ * that has nothing to do with the wiring it is guarding.
+ *
+ * The `//` case guards against a preceding `:` so a `https://` inside a string
+ * literal does not swallow the rest of its line and hide a real read.
+ */
+function stripComments(src: string): string {
+  return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+}
+
 /** Env vars a service's own source reads. */
 function varsReadBy(service: string): Set<string> {
   const found = new Set<string>();
   for (const file of tsFilesUnder(join(REPO, "services", service, "src"))) {
-    const text = readFileSync(file, "utf8");
+    const text = stripComments(readFileSync(file, "utf8"));
     for (const m of text.matchAll(/process\.env\.([A-Z][A-Z0-9_]+)/g)) found.add(m[1]);
     for (const m of text.matchAll(/process\.env\[["']([A-Z][A-Z0-9_]+)["']\]/g)) found.add(m[1]);
   }

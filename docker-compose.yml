@@ -628,6 +628,48 @@ services:
       # Whether a customer may open their own checkout. Off: every checkout is
       # opened by a human through Sysadmin paid provisioning.
       SELF_SERVE_CHECKOUT_ENABLED: ${SELF_SERVE_CHECKOUT_ENABLED:-false}
+      # ── Shopify Billing. ALL OFF BY DEFAULT: with SHOPIFY_BILLING_ENABLED
+      # false the billing source refuses every operation and grants nothing, so
+      # a stack that has not been deliberately configured behaves exactly as it
+      # does today. Declared here even while unused because an undeclared
+      # variable is silently `undefined` - the failure this file's env-wiring
+      # test exists to catch. ──
+      SHOPIFY_BILLING_ENABLED: ${SHOPIFY_BILLING_ENABLED:-false}
+      # "app_pricing" (Shopify hosts plan selection) or "manual" (the GraphQL
+      # Billing API). Unset means disabled - there is no default way to charge.
+      SHOPIFY_BILLING_MODE: ${SHOPIFY_BILLING_MODE:-}
+      # mock (no network, cannot charge) | test (dev stores, Shopify prices at
+      # $0) | live. Anything unrecognised degrades to mock.
+      SHOPIFY_BILLING_ENV: ${SHOPIFY_BILLING_ENV:-mock}
+      # Second, separate acknowledgement before real money can move.
+      SHOPIFY_ALLOW_LIVE_BILLING: ${SHOPIFY_ALLOW_LIVE_BILLING:-false}
+      # full | connector_addon | grandfathered_only. Unset means the policy
+      # resolver answers UNRESOLVED and the merchant lands on a non-charging
+      # billing-pending screen, which is the correct answer until Shopify tells
+      # us which arrangement is permitted.
+      SHOPIFY_BILLING_POLICY_MODE: ${SHOPIFY_BILLING_POLICY_MODE:-}
+      # Whether one workspace may be billed by Shopify AND by GOTCHA at once.
+      # Stays false until Shopify confirms split billing is allowed: wrong in
+      # this direction shows a pending screen, wrong the other way bills a
+      # merchant twice for one capability.
+      SHOPIFY_ALLOW_SPLIT_BILLING: ${SHOPIFY_ALLOW_SPLIT_BILLING:-false}
+      # Whether an existing customer may keep external billing after connecting
+      # Shopify. Off: nobody is grandfathered by default or by claim.
+      SHOPIFY_ALLOW_GRANDFATHERED: ${SHOPIFY_ALLOW_GRANDFATHERED:-false}
+      # Metered usage dispatch to Shopify's App Events API.
+      SHOPIFY_USAGE_BILLING_ENABLED: ${SHOPIFY_USAGE_BILLING_ENABLED:-false}
+      # App handle used to build Shopify's hosted plan-selection URL. Without it
+      # app_pricing refuses to start rather than redirect to a broken admin URL.
+      SHOPIFY_APP_HANDLE: ${SHOPIFY_APP_HANDLE:-}
+      # JSON maps. Plan handles and meter handles are CONFIGURATION and live in
+      # the Partner Dashboard; prices are never defined in this repo.
+      SHOPIFY_BILLING_PLAN_HANDLES: ${SHOPIFY_BILLING_PLAN_HANDLES:-}
+      SHOPIFY_USAGE_METER_HANDLES: ${SHOPIFY_USAGE_METER_HANDLES:-}
+      # SECRET. App Pricing sends no subscription webhooks, so the Partner API
+      # is the only way to learn that a merchant paid.
+      SHOPIFY_PARTNER_API_TOKEN: ${SHOPIFY_PARTNER_API_TOKEN:-}
+      # SECRET. client_credentials identity for the App Events usage endpoint.
+      SHOPIFY_APP_EVENTS_CLIENT_ID: ${SHOPIFY_APP_EVENTS_CLIENT_ID:-}
       # Drops Secure from the checkout continuation cookie, for plaintext local
       # work only. Not inferred from the request: TLS terminates at the edge, so
       # X-Forwarded-Proto reports the internal hop and trusting it would drop
