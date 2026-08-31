@@ -50,7 +50,10 @@ async function subscriber(opts: { token?: string; status?: any } = {}) {
   entityIds.push(entity.id);
 
   const profile = await prisma.billingProfile.create({
-    data: { billableEntityId: entity.id, provider: "ICOUNT", providerCustomerId: "cli_multi" },
+    // Declared country is mandatory before any charge (taxForProfile fails
+    // closed). "US" has no TaxRate row, so tax is 0% and the amounts this file
+    // asserts stay about renewal idempotency rather than VAT.
+    data: { billableEntityId: entity.id, provider: "ICOUNT", providerCustomerId: "cli_multi", billingCountry: "US" },
   });
   const sealed = encryptPaymentToken(`${opts.token ?? SIM.OK}_${n}`);
   await prisma.paymentMethod.create({

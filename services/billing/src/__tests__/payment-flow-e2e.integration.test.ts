@@ -68,6 +68,14 @@ async function newTenantWithCheckout(amount = 499) {
   tenantIds.push(tenant.id);
   const entity = await prisma.billableEntity.create({ data: { displayName: n } });
   await prisma.billableEntityTenant.create({ data: { billableEntityId: entity.id, tenantId: tenant.id } });
+  // The profile tokenization would otherwise create lazily, but with a country
+  // DECLARED. executeCharge refuses to price tax against a profile that has
+  // none (taxForProfile fails closed), and the real flow collects billing
+  // details before charging. "US" has no TaxRate row, so tax is 0% and the
+  // 1821.35 figures below remain the FX arithmetic this file is testing.
+  await prisma.billingProfile.create({
+    data: { billableEntityId: entity.id, provider: "ICOUNT", billingCountry: "US" },
+  });
   const checkout = await prisma.pendingCheckout.create({
     data: {
       reference: `chk_${n}`,
