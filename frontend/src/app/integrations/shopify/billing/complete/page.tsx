@@ -111,6 +111,11 @@ function describe(state: ShopifyBillingState, declined: boolean): { title: strin
         title: "Shopify billing is not active yet",
         body: "There is nothing to approve for this workspace right now.",
       };
+    case "UNKNOWN_PLAN":
+      return {
+        title: "Almost there",
+        body: "Shopify has confirmed your subscription. We are finishing the setup on our side and will email you when it is ready - you will not be charged again.",
+      };
     case "ERROR":
     default:
       return {

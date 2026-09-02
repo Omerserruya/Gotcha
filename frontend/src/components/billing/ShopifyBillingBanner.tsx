@@ -132,6 +132,18 @@ function present(s: ShopifyBillingSnapshot): Presentation | null {
         action: !!s.planSelectionUrl,
       };
 
+    case "UNKNOWN_PLAN":
+      // OUR configuration is wrong, not theirs. The merchant is paying
+      // Shopify; we cannot yet say what that plan includes, and they keep
+      // whatever was already verified while we sort it out. Saying "choose a
+      // plan" here would ask somebody to pay twice.
+      return {
+        tone: "info",
+        title: "We are finishing your plan setup",
+        body: "Shopify has confirmed your subscription. We are completing the setup on our side and will email you when it is done - there is nothing for you to do, and you will not be charged again.",
+        action: false,
+      };
+
     case "ERROR":
     default:
       return {

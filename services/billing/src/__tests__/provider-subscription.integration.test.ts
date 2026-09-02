@@ -70,6 +70,19 @@ async function newTenant() {
 beforeEach(() => {
   vi.restoreAllMocks();
   for (const k of Object.keys(process.env)) if (k.startsWith("SHOPIFY_")) delete process.env[k];
+
+  // The fake reports `planHandle: "connector-monthly"`, and since the
+  // unknown-plan hardening a handle the catalog cannot identify grants
+  // NOTHING - Shopify saying somebody pays is not enough on its own, we also
+  // have to know what they bought.
+  //
+  // These suites are about the entitlement LIFECYCLE (active grants, cancelled
+  // revokes, an outage revokes nothing), so they declare the minimal catalog
+  // that makes that handle resolvable. The unknown-handle behaviour has its own
+  // file: shopify-unknown-plan-and-boot.integration.test.ts.
+  process.env.SHOPIFY_BILLING_PLAN_HANDLES = JSON.stringify({
+    shopify_connector: "connector-monthly",
+  });
 });
 
 afterEach(async () => {

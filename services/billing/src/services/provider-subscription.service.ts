@@ -133,7 +133,12 @@ export async function linkCommerceConnection(input: LinkConnectionInput) {
 export interface SyncResult {
   status: ProviderSubscriptionStatus | "NONE";
   rawStatus: string | null;
+  /** Shopify says they are paying AND we know what that funds. */
   entitled: boolean;
+  /** Shopify says they are paying and the catalog cannot identify the plan. */
+  planUnknown: boolean;
+  /** The handle an operator has to add. Configuration, never a credential. */
+  unknownPlanHandle: string | null;
   changed: boolean;
 }
 
@@ -221,19 +226,68 @@ export async function syncProviderSubscription(input: {
 
   const changed = existing?.status !== status;
 
-  // The plan is resolved from what Shopify SAID (handle first, name as a last
-  // resort), never from what we hoped it would be.
-  // `planHandle` is what both Shopify sources populate - the manual source
-  // maps Shopify's `name` into it, so there is one field to read rather than
-  // two spellings of the same fact.
+  // The plan is resolved from what Shopify SAID - the observed `planHandle`,
+  // which both sources populate - and never from what we hoped it would be.
   const plan = findPlanForSubscription({ handle: observed?.planHandle ?? null });
-  if (entitled) await grantShopifyEntitlements(input.tenantId, row.id, plan?.key ?? null);
-  else await revokeShopifyEntitlements(input.tenantId);
+
+  // ── The unknown plan ──
+  //
+  // Shopify says somebody is paying, and the local catalog cannot say what
+  // they bought. That is a CONFIGURATION fault on our side, not a fact about
+  // the merchant, and the two mistakes available here are both bad:
+  //
+  //   • granting the full set would hand out every Shopify capability on the
+  //     strength of a handle nobody configured - an unreviewed env var, or a
+  //     plan created in the Partner Dashboard and never wired up, would become
+  //     a way to widen access;
+  //   • revoking would cut off a merchant who is demonstrably paying, because
+  //     OUR catalog is wrong. During a bad deploy that is an outage for every
+  //     paying store at once.
+  //
+  // So: grant nothing new, revoke nothing already verified, and make the
+  // misconfiguration loud and addressable. `syncProviderSubscription` runs on
+  // every reconciliation tick, so correcting the catalog repairs this on the
+  // next pass with no operator action beyond the fix itself.
+  const planUnknown = entitled && !plan;
+
+  if (planUnknown) {
+    const handle = observed?.planHandle ?? null;
+    await prisma.providerSubscription.update({
+      where: { id: row.id },
+      data: {
+        metadata: {
+          ...((observed?.metadata ?? {}) as Record<string, unknown>),
+          configurationError: "unknown_plan",
+          // The handle is configuration, not a credential - it is the one
+          // thing an operator needs in order to fix this, and it is safe to
+          // store and to log.
+          unknownPlanHandle: handle,
+          unknownPlanObservedAt: new Date().toISOString(),
+        } as any,
+      },
+    });
+    console.error(
+      `[billing][provider-sub] CONFIGURATION ERROR: shopify reports an active subscription for ` +
+        `tenant=${input.tenantId} product=${input.productKey} on plan handle="${handle ?? "<none>"}" ` +
+        `which is absent from SHOPIFY_BILLING_PLAN_CATALOG. No entitlement was granted and none was ` +
+        `revoked. Add the handle to the catalog; the next reconciliation pass will settle it.`,
+    );
+  } else if (entitled) {
+    await grantShopifyEntitlements(input.tenantId, row.id, plan!.key);
+  } else {
+    await revokeShopifyEntitlements(input.tenantId);
+  }
 
   if (input.commerceConnectionId) {
     await prisma.commerceConnection.update({
       where: { id: input.commerceConnectionId },
-      data: { status: entitled ? "CONNECTED" : "BILLING_PENDING", lastVerifiedAt: new Date() },
+      data: {
+        // An unknown plan is not a connected, paid store: nothing was granted,
+        // so BILLING_PENDING is the honest description until the catalog is
+        // corrected.
+        status: entitled && !planUnknown ? "CONNECTED" : "BILLING_PENDING",
+        lastVerifiedAt: new Date(),
+      },
     });
   }
 
@@ -244,7 +298,17 @@ export async function syncProviderSubscription(input: {
     );
   }
 
-  return { status: observed ? status : "NONE", rawStatus: observed?.rawStatus ?? null, entitled, changed };
+  return {
+    status: observed ? status : "NONE",
+    rawStatus: observed?.rawStatus ?? null,
+    // `entitled` describes what SHOPIFY said. `planUnknown` is why we did not
+    // act on it. Keeping them separate stops a caller reading "not entitled"
+    // and concluding the merchant stopped paying.
+    entitled: entitled && !planUnknown,
+    planUnknown,
+    unknownPlanHandle: planUnknown ? observed?.planHandle ?? null : null,
+    changed,
+  };
 }
 
 /**

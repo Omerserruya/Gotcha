@@ -65,6 +65,15 @@ export type ShopifyBillingState =
   | "PAST_DUE"
   | "CANCELLED"
   | "FROZEN"
+  /**
+   * Shopify confirmed an active subscription and the local catalog cannot say
+   * what it funds. A CONFIGURATION fault on our side, not a fact about the
+   * merchant - which is why it is its own state rather than ERROR: an operator
+   * seeing this has a specific, actionable fix (add the handle to
+   * SHOPIFY_BILLING_PLAN_CATALOG), and the merchant keeps whatever was
+   * previously verified in the meantime.
+   */
+  | "UNKNOWN_PLAN"
   | "ERROR";
 
 /** States in which Shopify-funded capability is switched ON. */
@@ -112,6 +121,12 @@ export interface ShopifyAccessSnapshot {
     cancelAtPeriodEnd: boolean;
     /** True when the merchant reached the plan page and said no. */
     declined: boolean;
+    /**
+     * The handle Shopify reported that the catalog does not contain. Non-null
+     * only in UNKNOWN_PLAN, and safe to show an operator: a plan handle is
+     * configuration, never a credential.
+     */
+    unknownPlanHandle: string | null;
     lastVerifiedAt: Date | null;
   };
 
@@ -250,6 +265,14 @@ export async function getShopifyAccessSnapshot(tenantId: string): Promise<Shopif
     // what tells the two apart.
     state = "PLAN_SELECTION_REQUIRED";
     reason = "no_shopify_subscription";
+  } else if (
+    (providerSub.status === "ACTIVE" || providerSub.status === "TRIALING") &&
+    !findPlanForSubscription({ handle: providerSub.providerPlanHandle })
+  ) {
+    // Derived, not stored, so correcting the catalog repairs this the moment
+    // the config lands - no migration, no backfill, no stale row to chase.
+    state = "UNKNOWN_PLAN";
+    reason = "plan_handle_not_in_catalog";
   } else {
     const mapped = mapProviderStatus(providerSub.status);
     state = mapped.state;
@@ -303,6 +326,7 @@ export async function getShopifyAccessSnapshot(tenantId: string): Promise<Shopif
       currentPeriodEnd: providerSub?.currentPeriodEnd ?? null,
       cancelAtPeriodEnd: providerSub?.cancelAtPeriodEnd ?? false,
       declined,
+      unknownPlanHandle: state === "UNKNOWN_PLAN" ? providerSub?.providerPlanHandle ?? null : null,
       lastVerifiedAt: providerSub?.lastVerifiedAt ?? null,
     },
     grandfathered: activeGrant

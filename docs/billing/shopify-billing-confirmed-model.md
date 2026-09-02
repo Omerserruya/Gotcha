@@ -86,7 +86,19 @@ writer, so there is no column to go stale.
 | `PAST_DUE` | Shopify reports a failed charge | off |
 | `FROZEN` | Shopify froze the store | off |
 | `CANCELLED` | Subscription ended | off |
+| `UNKNOWN_PLAN` | Shopify confirmed a subscription; the catalog cannot identify the plan | **no new grant, no revoke** |
 | `ERROR` | A status we cannot interpret | off (fail-closed) |
+
+**`UNKNOWN_PLAN` is our fault, not the merchant's.** Shopify says somebody is
+paying and the local catalog cannot say what they bought. Both obvious
+responses are wrong: granting the full set turns an unconfigured handle into a
+way to widen access without review, and revoking cuts off a demonstrably paying
+merchant because *our* config is wrong — during a bad deploy, that is an outage
+for every paying store at once. So nothing new is granted, nothing already
+verified is revoked, the handle is recorded on the row
+(`metadata.configurationError = "unknown_plan"`, `metadata.unknownPlanHandle`)
+and logged for an operator, and the next reconciliation pass repairs it once the
+catalog is corrected. The connection stays `BILLING_PENDING`, never `CONNECTED`.
 
 **Never-subscribed is not `CANCELLED`.** A verified read that finds nothing
 stores `CANCELLED` with a null provider id — that is the honest storage shape,
@@ -141,6 +153,29 @@ Grandfathered capability is stamped `EntitlementSource.SHOPIFY_GRANDFATHERED`
 and funded by `EXEMPT`, **not** `SHOPIFY_SUBSCRIPTION`.
 `revokeShopifyEntitlements` deletes by the latter, so one shared value would let
 a lapsed charge cut off the people who were promised they would never pay.
+
+---
+
+## 5a. Startup validation
+
+`assertShopifyBillingConfig()` runs before the service accepts traffic and
+**accumulates** every problem into one error. First-problem-wins turns
+configuring a deployment into a guessing game played one restart at a time.
+
+| Condition | Required |
+|---|---|
+| Billing disabled | nothing |
+| `app_pricing`, any env **including mock** | `SHOPIFY_APP_HANDLE`, at least one sellable plan in `SHOPIFY_BILLING_PLAN_CATALOG` |
+| `app_pricing`, `test` or `live` | additionally **all three** of `SHOPIFY_PARTNER_API_TOKEN`, `SHOPIFY_PARTNER_ORGANIZATION_ID`, `SHOPIFY_PARTNER_APP_ID` |
+| `manual`, any env | none of the above |
+
+Mock is exempt from Partner API credentials **only** because it performs no
+network call and can neither create nor verify a real subscription —
+`isShopifyBillingMock()` short-circuits every client. It is **not** exempt from
+the catalog: without one, a merchant can approve a charge this deployment
+cannot interpret and would be billed without receiving access.
+
+Errors name variables, never values.
 
 ---
 

@@ -263,6 +263,13 @@ describe("boot-time configuration checks", () => {
     process.env.SHOPIFY_BILLING_ENABLED = "true";
     process.env.SHOPIFY_BILLING_MODE = "app_pricing";
     process.env.SHOPIFY_APP_HANDLE = "gotcha-chat";
+    // A catalog is not a CREDENTIAL, and app_pricing now requires one in every
+    // environment - without it a merchant can approve a charge the deployment
+    // cannot interpret. The claim under test is unchanged: no Partner API
+    // token, org id or app id is needed to boot a mock stack.
+    process.env.SHOPIFY_BILLING_PLAN_CATALOG = JSON.stringify([
+      { key: "SHOPIFY_CONNECTOR", handle: "gotcha-connector" },
+    ]);
     expect(() => assertShopifyBillingConfig()).not.toThrow();
   });
 

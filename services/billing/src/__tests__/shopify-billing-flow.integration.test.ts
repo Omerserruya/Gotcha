@@ -534,7 +534,13 @@ describe("a plan funds what the catalog says it funds", () => {
     expect(await grantFor(tenant.id, "BARE")).toHaveLength(4);
   });
 
-  it("grants the full set for a plan it cannot identify", async () => {
+  it("defaults to the full set for an unresolvable key - but sync never gets here", async () => {
+    // This is the LOW-LEVEL default, and it is deliberately not the production
+    // behaviour for an unknown plan. `syncProviderSubscription` now refuses to
+    // call this at all when Shopify names a handle the catalog does not
+    // contain - see shopify-unknown-plan-and-boot.integration.test.ts. The
+    // fallback survives for the case that IS legitimate: a plan that resolves
+    // but declares no entitlements.
     process.env.SHOPIFY_BILLING_PLAN_CATALOG = JSON.stringify([{ key: "A", handle: "a" }]);
     const { tenant } = await newTenant({ coreStatus: "ACTIVE" });
     expect(await grantFor(tenant.id, "SOMETHING_SHOPIFY_NAMED")).toHaveLength(4);

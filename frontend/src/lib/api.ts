@@ -2463,6 +2463,7 @@ export type ShopifyBillingState =
   | "PAST_DUE"
   | "CANCELLED"
   | "FROZEN"
+  | "UNKNOWN_PLAN"
   | "ERROR";
 
 export interface ShopifyBillingSnapshot {
@@ -2486,6 +2487,8 @@ export interface ShopifyBillingSnapshot {
     currentPeriodEnd: string | null;
     cancelAtPeriodEnd: boolean;
     declined: boolean;
+    /** Set only in UNKNOWN_PLAN. A plan handle is config, never a credential. */
+    unknownPlanHandle: string | null;
     lastVerifiedAt: string | null;
   };
   grandfathered: { grantedAt: string | null; source: string; reason: string; paidSince: string | null } | null;

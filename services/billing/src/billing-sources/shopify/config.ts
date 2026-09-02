@@ -21,8 +21,14 @@
  *   SHOPIFY_APP_HANDLE             app handle used to build the plan-select URL
  *   SHOPIFY_BILLING_PLAN_HANDLES   JSON map productKey -> plan handle
  *   SHOPIFY_USAGE_METER_HANDLES    JSON map metric -> meter handle
- *   SHOPIFY_PARTNER_API_TOKEN      SECRET. App Pricing verification only.
+ *   SHOPIFY_BILLING_PLAN_CATALOG   JSON plan catalog. REQUIRED for app_pricing
+ *                                  in every environment - see the assertion.
+ *   SHOPIFY_APP_PUBLICATION_CUTOFF ISO 8601. The grandfathering line.
+ *   SHOPIFY_GRANDFATHER_DEV_STORES "false" - dev stores are not auto-granted
+ *   SHOPIFY_PARTNER_API_TOKEN      SECRET. App Pricing verification.
  *   SHOPIFY_PARTNER_ORGANIZATION_ID
+ *   SHOPIFY_PARTNER_APP_ID         All THREE are required together whenever
+ *                                  app_pricing runs in test or live.
  *   SHOPIFY_APP_EVENTS_CLIENT_ID / SHOPIFY_APP_EVENTS_CLIENT_SECRET
  *                                  SECRET. client_credentials for App Events.
  *
@@ -32,9 +38,9 @@
  * disagrees with the one the merchant was actually shown.
  */
 
-/** Which Shopify billing mechanism this deployment uses. */
-import { validatePlanCatalog } from "./plan-catalog";
+import { sellablePlans, validatePlanCatalog } from "./plan-catalog";
 
+/** Which Shopify billing mechanism this deployment uses. */
 export type ShopifyBillingMode = "app_pricing" | "manual" | "disabled";
 
 /**
@@ -260,11 +266,22 @@ export function assertShopifyBillingConfig(): void {
 
   const mode = shopifyBillingMode();
   if (mode === "disabled") {
+    // A hard early throw: nothing below is meaningful without a mode, and
+    // reporting "your catalog is empty" to somebody who has not chosen a
+    // billing mechanism would be noise on top of the real problem.
     throw new ShopifyBillingConfigError(
       `SHOPIFY_BILLING_ENABLED is true but SHOPIFY_BILLING_MODE is "${process.env.SHOPIFY_BILLING_MODE ?? ""}". ` +
         `Expected "app_pricing" or "manual". Refusing to start rather than picking one.`,
     );
   }
+
+  // Everything after this point ACCUMULATES.
+  //
+  // First-problem-wins turns configuring a deployment into a guessing game
+  // played one restart at a time: fix the token, restart, learn the org id is
+  // also missing, restart, learn the app id is missing. An operator should see
+  // the whole list once.
+  const problems: string[] = [];
 
   for (const [name, raw] of [
     ["SHOPIFY_BILLING_PLAN_HANDLES", process.env.SHOPIFY_BILLING_PLAN_HANDLES],
@@ -274,42 +291,76 @@ export function assertShopifyBillingConfig(): void {
       try {
         JSON.parse(raw);
       } catch {
-        throw new ShopifyBillingConfigError(`${name} is not valid JSON.`);
+        problems.push(`${name} is not valid JSON.`);
       }
     }
   }
 
-  // The catalog is validated even when empty-but-declared, because a malformed
-  // catalog and an absent one produce the same empty list at runtime and only
-  // one of them is intentional.
-  const catalogProblems = validatePlanCatalog();
-  if (catalogProblems.length > 0) {
-    throw new ShopifyBillingConfigError(catalogProblems.join(" "));
-  }
+  problems.push(...validatePlanCatalog());
 
-  if (mode === "app_pricing" && !shopifyAppHandle()) {
-    throw new ShopifyBillingConfigError(
-      "SHOPIFY_APP_HANDLE is required for app_pricing: without it there is no plan-selection URL to send a merchant to.",
-    );
+  if (mode === "app_pricing") {
+    if (!shopifyAppHandle()) {
+      problems.push(
+        "SHOPIFY_APP_HANDLE is required for app_pricing: without it there is no plan-selection URL to send a merchant to.",
+      );
+    }
+
+    // Required in EVERY environment, mock included. Without a catalog a
+    // merchant can approve a charge this deployment cannot interpret, and
+    // would then be billed without receiving access - the UNKNOWN_PLAN path.
+    // Refusing to boot is a much better place for that to surface than a
+    // support ticket from somebody already charged.
+    if (sellablePlans().length === 0) {
+      problems.push(
+        "SHOPIFY_BILLING_PLAN_CATALOG defines no sellable plan (an entry needs a `key` AND a `handle`, and must " +
+          "not be disabled), but SHOPIFY_BILLING_MODE=app_pricing. A merchant could approve a charge this " +
+          "deployment cannot identify, and would be billed without receiving access.",
+      );
+    }
   }
 
   if (isShopifyNetworkMode()) {
     // Only checked in a networked environment. A mock stack legitimately has
     // no credentials, and demanding them would make local development need
-    // production secrets to boot.
-    if (mode === "app_pricing" && !process.env.SHOPIFY_PARTNER_API_TOKEN) {
-      throw new ShopifyBillingConfigError(
-        "app_pricing verifies subscriptions through the Partner API, so SHOPIFY_PARTNER_API_TOKEN is required " +
-          `in env="${shopifyBillingEnv()}". Shopify App Pricing sends no subscription webhooks, so without this ` +
-          "there is no way to learn that anybody paid.",
-      );
+    // production secrets to boot. That exemption is safe ONLY because mock
+    // performs no network call and can neither create nor verify a real
+    // subscription - `isShopifyBillingMock()` short-circuits every client.
+    if (mode === "app_pricing") {
+      // All three together. Checking only the token would let a deployment
+      // boot happily and fail at the first verification, which is the moment
+      // least convenient to discover it.
+      const missing = (
+        [
+          ["SHOPIFY_PARTNER_API_TOKEN", process.env.SHOPIFY_PARTNER_API_TOKEN],
+          ["SHOPIFY_PARTNER_ORGANIZATION_ID", process.env.SHOPIFY_PARTNER_ORGANIZATION_ID],
+          ["SHOPIFY_PARTNER_APP_ID", process.env.SHOPIFY_PARTNER_APP_ID],
+        ] as const
+      )
+        .filter(([, v]) => !v || !String(v).trim())
+        .map(([name]) => name);
+
+      if (missing.length > 0) {
+        // Names only, never a value. The token is exactly the thing a boot log
+        // would be a bad place to leak.
+        problems.push(
+          `app_pricing verifies subscriptions through the Partner API, so ${missing.join(", ")} ` +
+            `${missing.length === 1 ? "is" : "are"} required in env="${shopifyBillingEnv()}". ` +
+            "Shopify App Pricing sends no subscription webhooks, so without these there is no way to learn " +
+            "that anybody paid.",
+        );
+      }
     }
+
     if (shopifyUsageBillingEnabled() && !process.env.SHOPIFY_APP_EVENTS_CLIENT_ID) {
-      throw new ShopifyBillingConfigError(
+      problems.push(
         "SHOPIFY_USAGE_BILLING_ENABLED is true but SHOPIFY_APP_EVENTS_CLIENT_ID is unset - usage could be " +
           "recorded and never billed, silently.",
       );
     }
+  }
+
+  if (problems.length > 0) {
+    throw new ShopifyBillingConfigError(problems.join(" "));
   }
 }
 
