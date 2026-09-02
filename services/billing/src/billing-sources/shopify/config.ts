@@ -33,6 +33,8 @@
  */
 
 /** Which Shopify billing mechanism this deployment uses. */
+import { validatePlanCatalog } from "./plan-catalog";
+
 export type ShopifyBillingMode = "app_pricing" | "manual" | "disabled";
 
 /**
@@ -156,6 +158,40 @@ export function shopifyAppHandle(): string | null {
   return process.env.SHOPIFY_APP_HANDLE?.trim() || null;
 }
 
+/**
+ * The moment the App Store listing went live.
+ *
+ * This is the line grandfathering is measured against: a workspace that was
+ * already paying GOTCHA before it may keep paying only GOTCHA. It is
+ * CONFIGURATION rather than a constant because the publication date is not
+ * known while this is being built, and a placeholder compiled into the binary
+ * would be a wrong answer that looks like a right one.
+ *
+ * Null - unset, or unparseable - means no cutoff has been declared, and
+ * therefore that NOBODY is automatically eligible. That is the fail-closed
+ * direction: the failure mode of a missing cutoff must be "nobody is
+ * grandfathered by accident", never "everybody is".
+ */
+export function shopifyPublicationCutoff(): Date | null {
+  const raw = process.env.SHOPIFY_APP_PUBLICATION_CUTOFF?.trim();
+  if (!raw) return null;
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+/**
+ * Whether a development or test store may be grandfathered automatically.
+ *
+ * Off by default. A development store has no commercial history to be
+ * grandfathered ON, so an automatic grant there is always an artefact of
+ * testing rather than a real entitlement - and one that would then look
+ * identical to a real one in the grants table. Switching this on is how a
+ * test environment opts in deliberately.
+ */
+export function shopifyGrandfatherDevStores(): boolean {
+  return flag(process.env.SHOPIFY_GRANDFATHER_DEV_STORES, false);
+}
+
 /** Same reasoning as `flag`: the caller passes the value so the name stays literal. */
 function jsonMap(raw: string | undefined): Record<string, string> {
   if (!raw || !raw.trim()) return {};
@@ -241,6 +277,14 @@ export function assertShopifyBillingConfig(): void {
         throw new ShopifyBillingConfigError(`${name} is not valid JSON.`);
       }
     }
+  }
+
+  // The catalog is validated even when empty-but-declared, because a malformed
+  // catalog and an absent one produce the same empty list at runtime and only
+  // one of them is intentional.
+  const catalogProblems = validatePlanCatalog();
+  if (catalogProblems.length > 0) {
+    throw new ShopifyBillingConfigError(catalogProblems.join(" "));
   }
 
   if (mode === "app_pricing" && !shopifyAppHandle()) {

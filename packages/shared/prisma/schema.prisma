@@ -2931,6 +2931,14 @@ enum EntitlementSource {
   // distinct from PLAN_DEFAULT so that a Shopify subscription lapsing revokes
   // exactly what Shopify paid for, and leaves externally funded access alone.
   SHOPIFY_SUBSCRIPTION
+  // Granted because the workspace was paying GOTCHA before the App Store
+  // listing published, so Shopify never bills it. Distinct from
+  // SHOPIFY_SUBSCRIPTION because the two end for DIFFERENT reasons: a
+  // subscription ends when Shopify stops charging, a grandfathered grant ends
+  // only when the store is uninstalled or an admin revokes it. One enum value
+  // covering both would make "revoke what Shopify paid for" also revoke access
+  // from the people who were promised they would never have to pay.
+  SHOPIFY_GRANDFATHERED
 }
 
 // ─── Billable Entity (the payer abstraction) ───────────────
@@ -7326,6 +7334,78 @@ model BillingPolicyDecision {
   @@index([policy])
   @@index([evidenceQuality], map: "billing_policy_decisions_evidence_quality_idx")
   @@map("billing_policy_decisions")
+}
+
+/// How a workspace came to be grandfathered.
+enum ShopifyGrandfatherSource {
+  /// Earned by evidence: a paid subscription that started before the cutoff.
+  AUTOMATIC
+  /// Granted by a named internal admin who accepted responsibility for it.
+  ADMIN_OVERRIDE
+}
+
+enum ShopifyGrandfatherStatus {
+  ACTIVE
+  REVOKED
+}
+
+/// A durable, idempotent record that one workspace does not need to pay
+/// Shopify.
+///
+/// Separate from `BillingPolicyDecision`, which is an append-only log of what
+/// was decided each time the resolver ran. This is the STANDING FACT, and the
+/// distinction matters: the log answers "what did we decide on the 3rd?", this
+/// answers "is this workspace grandfathered right now?". Deriving the second
+/// from the last row of the first would make eligibility depend on whatever
+/// flags happened to be set the last time somebody reconnected a store.
+///
+/// `tenantId` is UNIQUE, which is what makes granting idempotent: running the
+/// eligibility check ten times produces one grant, and the second run through
+/// finds the first rather than re-deciding. That matters because a merchant
+/// can reinstall repeatedly, and eligibility rests on evidence about the past
+/// that must not be re-litigated every time.
+model ShopifyGrandfatherGrant {
+  id       String @id @default(cuid())
+  tenantId String @unique @map("tenant_id")
+
+  status ShopifyGrandfatherStatus @default(ACTIVE)
+  source ShopifyGrandfatherSource
+
+  /// Machine-readable, e.g. "paid_before_publication_cutoff".
+  reason String
+
+  /// The date the workspace actually started PAYING - not when the account was
+  /// created. Null only on an admin override, where a human is the evidence.
+  paidSince DateTime? @map("paid_since")
+
+  /// Which evidence produced `paidSince`: "invoice_paid_at",
+  /// "subscription_activated_event" or "subscription_created_at". Recorded
+  /// because the three are not equally strong and a reviewer must be able to
+  /// tell which one carried the decision.
+  paidSinceEvidence String? @map("paid_since_evidence")
+
+  /// The publication cutoff in force when this was decided. Stored rather than
+  /// re-read: the configured cutoff can change, and a grant must remain
+  /// explainable against the rule that actually produced it.
+  cutoffAt DateTime? @map("cutoff_at")
+
+  evidence        Json                  @default("{}")
+  evidenceQuality PolicyEvidenceQuality @default(UNKNOWN) @map("evidence_quality")
+
+  /// The internal admin who approved an override. Never a tenant user.
+  approvedBy String? @map("approved_by")
+
+  grantedAt     DateTime  @default(now()) @map("granted_at")
+  revokedAt     DateTime? @map("revoked_at")
+  revokedBy     String?   @map("revoked_by")
+  revokedReason String?   @map("revoked_reason")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([source])
+  @@map("shopify_grandfather_grants")
 }
 
 /// Canonical, append-only usage. One row per billable unit, whoever bills it.

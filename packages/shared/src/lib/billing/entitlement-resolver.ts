@@ -69,16 +69,25 @@ export interface EntitlementSet {
  * - otherwise a plan default would mask the fact that Shopify has stopped
  * paying - while an ADDON the customer bought from GOTCHA directly, and any
  * OVERRIDE a human deliberately set, both still win over it.
+ *
+ * SHOPIFY_GRANDFATHERED sits immediately ABOVE SHOPIFY_SUBSCRIPTION, and the
+ * one case that ordering decides is worth stating. A grandfathered workspace
+ * that also, for whatever reason, ends up with an inactive Shopify subscription
+ * row must keep its access: the grant was a promise made on the strength of
+ * what they were already paying, and a lapsed Shopify charge is not a reason to
+ * withdraw it. Ranking it below would let the subscription's absence mask the
+ * grant, which is precisely the promise being broken.
  */
 const SOURCE_RANK: Record<EntitlementSource, number> = {
   PLAN_DEFAULT: 0,
   VOLUME_OPTION: 1,
   SHOPIFY_SUBSCRIPTION: 2,
-  ADDON: 3,
-  PROMO: 4,
-  TRIAL: 5,
-  BETA: 6,
-  OVERRIDE: 7,
+  SHOPIFY_GRANDFATHERED: 3,
+  ADDON: 4,
+  PROMO: 5,
+  TRIAL: 6,
+  BETA: 7,
+  OVERRIDE: 8,
   COMPLIANCE_DENY: 100,
 };
 
