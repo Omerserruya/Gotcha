@@ -40,6 +40,7 @@ import {
   findLatestInstallation,
   disableChatForUninstalledShop,
 } from "../services/shopify-chat-install.service";
+import { notifyShopifyUninstalled } from "../services/shopify-billing-bridge.service";
 
 const router = Router();
 
@@ -328,6 +329,20 @@ core.post("/app-uninstalled", async (req: Request, res: Response) => {
         },
       }),
     );
+
+    // Billing: stop what Shopify was paying for, and only that. The commerce
+    // connection is disconnected and Shopify-funded entitlements are revoked;
+    // the workspace, the Core subscription and every non-Shopify channel are
+    // deliberately untouched. Uninstalling the app says something about
+    // Shopify and nothing about the merchant's WhatsApp number.
+    //
+    // The shop id comes from the verified payload; the domain is the fallback,
+    // because the token is already revoked and there is no way to look the id
+    // up afterwards.
+    await notifyShopifyUninstalled({
+      externalShopId: (hook.body as any)?.id ? String((hook.body as any).id) : null,
+      shopDomain: shop,
+    });
     // The extension left with the app, so the storefront chat goes too.
     // Best-effort and ordered second: a chat-side failure must not leave the
     // commerce connection wrongly marked CONNECTED with a revoked token.

@@ -756,6 +756,20 @@ services:
       # the Partner Dashboard; prices are never defined in this repo.
       SHOPIFY_BILLING_PLAN_HANDLES: ${SHOPIFY_BILLING_PLAN_HANDLES:-}
       SHOPIFY_USAGE_METER_HANDLES: ${SHOPIFY_USAGE_METER_HANDLES:-}
+      # The full plan catalog: keys, Shopify handles, visibility, which
+      # entitlements each plan funds, and which stores a private plan is
+      # offered to. JSON array. Empty means NO plan is sellable, which is the
+      # fail-closed state - a merchant is told billing is not available rather
+      # than being charged against a plan nobody defined.
+      SHOPIFY_BILLING_PLAN_CATALOG: ${SHOPIFY_BILLING_PLAN_CATALOG:-}
+      # The App Store publication moment, ISO 8601. Grandfathering is measured
+      # against this: a workspace that started PAYING before it keeps GOTCHA
+      # billing. Unset means nobody is automatically eligible - never everybody.
+      SHOPIFY_APP_PUBLICATION_CUTOFF: ${SHOPIFY_APP_PUBLICATION_CUTOFF:-}
+      # Whether a Shopify development store may be grandfathered automatically.
+      # Off by default: a dev store has no commercial history, so a grant there
+      # is a testing artefact that would be indistinguishable from a real one.
+      SHOPIFY_GRANDFATHER_DEV_STORES: ${SHOPIFY_GRANDFATHER_DEV_STORES:-false}
       # SECRET. App Pricing sends no subscription webhooks, so the Partner API
       # is the only way to learn that a merchant paid.
       SHOPIFY_PARTNER_API_TOKEN: ${SHOPIFY_PARTNER_API_TOKEN:-}

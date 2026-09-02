@@ -42,6 +42,7 @@ import {
   requirePermission,
   mintOAuthState,
   getShopifyAppIdentity,
+  shopifyApiVersion,
   resolveAppPublicUrl,
   verifyAppEntryHmac,
   buildShopifyAuthorizeUrl,
@@ -61,6 +62,7 @@ import {
   SHOPIFY_OAUTH_SCOPES,
   linkShopifyShopToTenant,
 } from "../services/shopify-connection-link.service";
+import { resolveShopifyBillingOutcome } from "../services/shopify-billing-bridge.service";
 
 const router = Router();
 
@@ -342,11 +344,29 @@ router.post(
       return;
     }
 
+    // ── Billing ──
+    //
+    // An App Store install claimed into a workspace reaches billing here
+    // instead of in the OAuth callback, because until this moment there was no
+    // workspace to decide anything about. Same call, same rules: it runs after
+    // the link and can only decide what to SHOW next.
+    const outcome = await resolveShopifyBillingOutcome({
+      tenantId: req.tenantId!,
+      shopDomain: pending.shopDomain,
+      accessToken: (pending.credentials as any)?.accessToken ?? "",
+      apiVersion: shopifyApiVersion(),
+      acquisitionSource: "app_store",
+    }).catch(() => null);
+
     res.json({
       data: {
         shopDomain: pending.shopDomain,
         reconnected: linked.reconnected,
         flow: pending.flow ?? null,
+        // The page navigates here when a plan is owed. Null for a grandfathered
+        // merchant, for one already paying, and whenever billing is off.
+        billingState: outcome?.state ?? null,
+        planSelectionUrl: outcome?.requiresPlanSelection ? outcome.planSelectionUrl : null,
       },
     });
   },

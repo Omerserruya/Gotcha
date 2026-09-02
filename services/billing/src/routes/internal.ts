@@ -24,6 +24,12 @@ import {
 import { issueContinuationLink, revokeLinksForCheckout } from "../services/continuation-link.service";
 import { activateManualContract, manualContractsForTenant, ManualContractRefused } from "../services/manual-contract.service";
 import { emitBillingEvent } from "../lib/events";
+import { onShopifyConnected } from "../services/shopify-post-install.service";
+import { handleCommerceUninstall } from "../services/provider-subscription.service";
+import {
+  getShopifyAccessSnapshot,
+  serializeSnapshot,
+} from "../services/shopify-billing-state.service";
 
 const router = Router();
 router.use("/internal/billing", requireInternalKey);
@@ -400,4 +406,89 @@ router.get("/internal/billing/manual-contracts/:tenantId", async (req, res) => {
       createdAt: r.createdAt,
     })),
   });
+});
+
+// ─── Shopify commerce lifecycle ───────────────────────────────────────────
+//
+// Called by services/ai, which owns the Shopify OAuth callback and the verified
+// webhook handlers. The split is deliberate: services/ai decides WHO the store
+// and workspace are (it holds the HMAC verification and the session), and
+// billing decides what that means COMMERCIALLY. Neither reaches into the
+// other's tables to answer the other's question.
+
+/**
+ * A Shopify store finished OAuth and was linked to a workspace.
+ *
+ * Returns what should happen next, and never an error the caller must act on:
+ * OAuth has already succeeded by the time this is called, so a billing problem
+ * here can change what the merchant is SHOWN and must never retract the
+ * installation. The one exception is a cross-tenant claim, which is a 409 the
+ * caller genuinely has to surface.
+ */
+router.post("/internal/billing/shopify/connected", async (req, res) => {
+  const { tenantId, externalShopId, shopDomain, acquisitionSource, isDevelopmentStore } = req.body ?? {};
+  if (!tenantId || !externalShopId) {
+    return res.status(400).json({ error: "tenantId and externalShopId required" });
+  }
+  try {
+    const result = await onShopifyConnected({
+      tenantId: String(tenantId),
+      externalShopId: String(externalShopId),
+      shopDomain: shopDomain ? String(shopDomain) : null,
+      acquisitionSource: acquisitionSource ? String(acquisitionSource) : null,
+      isDevelopmentStore: isDevelopmentStore === true,
+    });
+    return res.json({ data: result });
+  } catch (err: any) {
+    if (err?.code === "COMMERCE_CONNECTION_CLAIMED_BY_ANOTHER_TENANT") {
+      return res.status(409).json({ error: err.code, message: err.message });
+    }
+    // Anything else is ours, not the merchant's. Report it and let the caller
+    // fall through to the ordinary connected screen.
+    console.error(`[billing][shopify] connected hook failed: ${err?.message}`);
+    return res.status(500).json({ error: "shopify_connected_hook_failed" });
+  }
+});
+
+/**
+ * A verified `app/uninstalled` for a Shopify store.
+ *
+ * Idempotent: an unknown or already-disconnected shop answers 200 with
+ * `revoked: 0`. Shopify retries webhooks, and a retry must not be an error.
+ */
+router.post("/internal/billing/shopify/uninstalled", async (req, res) => {
+  const { externalShopId, shopDomain } = req.body ?? {};
+  if (!externalShopId && !shopDomain) {
+    return res.status(400).json({ error: "externalShopId or shopDomain required" });
+  }
+
+  // The id is preferred and the domain is the fallback, for one practical
+  // reason: by the time this fires the access token is revoked, so there is no
+  // way to look the id up from Shopify any more. The uninstall payload carries
+  // it, but a redelivery of an older webhook may not, and a store that cannot
+  // be identified would keep its entitlements forever.
+  let shopId: string | null = externalShopId ? String(externalShopId) : null;
+  if (!shopId && shopDomain) {
+    const conn = await prisma.commerceConnection.findFirst({
+      where: { platform: "SHOPIFY", shopDomain: String(shopDomain) },
+      orderBy: { installedAt: "desc" },
+      select: { externalShopId: true },
+    });
+    shopId = conn?.externalShopId ?? null;
+  }
+  if (!shopId) {
+    // Nothing known about this store. Idempotent success, not an error:
+    // Shopify retries, and a 4xx here would produce a retry storm over a store
+    // that was never connected in the first place.
+    return res.json({ data: { tenantId: null, revoked: 0 } });
+  }
+
+  const result = await handleCommerceUninstall({ platform: "SHOPIFY", externalShopId: shopId });
+  return res.json({ data: result });
+});
+
+/** Current Shopify billing state for a workspace. Read-only. */
+router.get("/internal/billing/shopify/state/:tenantId", async (req, res) => {
+  const snapshot = await getShopifyAccessSnapshot(String(req.params.tenantId));
+  return res.json({ data: serializeSnapshot(snapshot) });
 });

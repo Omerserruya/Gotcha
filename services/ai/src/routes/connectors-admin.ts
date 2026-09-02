@@ -62,6 +62,8 @@ import {
   consumeInstallIntent,
   INSTALL_INTENT_COOKIE,
 } from "../services/shopify-install-intent.service";
+import { resolveShopifyBillingOutcome } from "../services/shopify-billing-bridge.service";
+import { shopifyApiVersion } from "@chatcenter/shared";
 
 const router = Router();
 // OAuth `state` signing only - not user auth. See getOAuthStateSecret().
@@ -613,6 +615,30 @@ router.get("/connectors/shopify/oauth/callback", async (req: Request, res: Respo
         return;
       }
       res.status(500).send(`shopify_link_failed:${linked.reason}`);
+      return;
+    }
+
+    // ── Billing ──
+    //
+    // Runs only AFTER the store is linked, and cannot undo that. The three
+    // acquisition paths converge here: the confirmed model says billing does
+    // not depend on where the merchant came from, so `acquisitionSource` is
+    // recorded for later analysis and reads on nothing.
+    //
+    // A merchant who owes Shopify a plan is sent to Shopify's own hosted plan
+    // page. One who is grandfathered, already paying, or on a deployment with
+    // billing switched off goes straight to the connected screen exactly as
+    // before.
+    const outcome = await resolveShopifyBillingOutcome({
+      tenantId,
+      shopDomain: shop,
+      accessToken: creds.accessToken,
+      apiVersion: shopifyApiVersion(),
+      acquisitionSource: payload.hasIntent ? "in_app_connect" : "app_store",
+    }).catch(() => null);
+
+    if (outcome?.requiresPlanSelection && outcome.planSelectionUrl) {
+      res.redirect(outcome.planSelectionUrl);
       return;
     }
 

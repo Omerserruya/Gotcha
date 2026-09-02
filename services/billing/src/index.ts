@@ -24,6 +24,7 @@ import { assertPublicUrlConfigured } from "./lib/public-url";
 import checkoutRoutes from "./routes/checkout";
 import checkoutSessionRoutes from "./routes/checkout-session";
 import internalRoutes from "./routes/internal";
+import shopifyBillingRoutes from "./routes/shopify-billing";
 import { assertIcountConfig } from "./providers/icount-config";
 import { assertShopifyBillingConfig, reportShopifyBillingConfig } from "./billing-sources/shopify/config";
 import { runSchedulerTick, tickWasEventful } from "./services/scheduler.service";
@@ -67,6 +68,11 @@ app.use("/api", webhookRoutes);
 // design - see the route for why a signature would add nothing.
 app.use("/api", icountIpnRoutes);
 app.use("/api", internalRoutes);
+// Shopify billing: state, plan selection, the verified return, and the
+// SYSTEM_ADMIN grandfathering surface. Inert while SHOPIFY_BILLING_ENABLED
+// is false - every route either reports "disabled" or reads state that is
+// empty on a deployment that never installed Shopify.
+app.use("/api", shopifyBillingRoutes);
 
 // Scheduler: trials → activate, period end → renew, pending changes → apply,
 // failed renewals → dunning ladder.
