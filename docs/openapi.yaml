@@ -2105,11 +2105,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/billing/src/routes/shopify-billing.ts:350` (billing service).
+        Implemented at `services/billing/src/routes/shopify-billing.ts:372` (billing service).
       security:
       - bearerAuth: []
       x-service: billing
-      x-source: services/billing/src/routes/shopify-billing.ts:350
+      x-source: services/billing/src/routes/shopify-billing.ts:372
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
@@ -2162,11 +2162,11 @@ paths:
 
         Requires a valid Authentik access token.
 
-        Implemented at `services/billing/src/routes/shopify-billing.ts:311` (billing service).
+        Implemented at `services/billing/src/routes/shopify-billing.ts:333` (billing service).
       security:
       - bearerAuth: []
       x-service: billing
-      x-source: services/billing/src/routes/shopify-billing.ts:311
+      x-source: services/billing/src/routes/shopify-billing.ts:333
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -2215,11 +2215,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/billing/src/routes/shopify-billing.ts:332` (billing service).
+        Implemented at `services/billing/src/routes/shopify-billing.ts:354` (billing service).
       security:
       - bearerAuth: []
       x-service: billing
-      x-source: services/billing/src/routes/shopify-billing.ts:332
+      x-source: services/billing/src/routes/shopify-billing.ts:354
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
@@ -12719,11 +12719,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/billing/src/routes/shopify-billing.ts:204` (billing service).
+        Implemented at `services/billing/src/routes/shopify-billing.ts:215` (billing service).
       security:
       - bearerAuth: []
       x-service: billing
-      x-source: services/billing/src/routes/shopify-billing.ts:204
+      x-source: services/billing/src/routes/shopify-billing.ts:215
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
@@ -12795,11 +12795,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/billing/src/routes/shopify-billing.ts:285` (billing service).
+        Implemented at `services/billing/src/routes/shopify-billing.ts:307` (billing service).
       security:
       - bearerAuth: []
       x-service: billing
-      x-source: services/billing/src/routes/shopify-billing.ts:285
+      x-source: services/billing/src/routes/shopify-billing.ts:307
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
@@ -12851,11 +12851,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/billing/src/routes/shopify-billing.ts:128` (billing service).
+        Implemented at `services/billing/src/routes/shopify-billing.ts:129` (billing service).
       security:
       - bearerAuth: []
       x-service: billing
-      x-source: services/billing/src/routes/shopify-billing.ts:128
+      x-source: services/billing/src/routes/shopify-billing.ts:129
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
@@ -12917,11 +12917,11 @@ paths:
 
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body.
 
-        Implemented at `services/billing/src/routes/shopify-billing.ts:106` (billing service).
+        Implemented at `services/billing/src/routes/shopify-billing.ts:107` (billing service).
       security:
       - bearerAuth: []
       x-service: billing
-      x-source: services/billing/src/routes/shopify-billing.ts:106
+      x-source: services/billing/src/routes/shopify-billing.ts:107
       x-operation-type: read
       x-publicly-exposed: true
       responses:
@@ -12954,11 +12954,11 @@ paths:
 
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body.
 
-        Implemented at `services/billing/src/routes/shopify-billing.ts:94` (billing service).
+        Implemented at `services/billing/src/routes/shopify-billing.ts:95` (billing service).
       security:
       - bearerAuth: []
       x-service: billing
-      x-source: services/billing/src/routes/shopify-billing.ts:94
+      x-source: services/billing/src/routes/shopify-billing.ts:95
       x-operation-type: read
       x-publicly-exposed: true
       responses:

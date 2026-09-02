@@ -7906,7 +7906,7 @@ POST /api/admin/billing/reconciliations/sweep
 ### `DELETE /api/admin/billing/shopify/grandfather/:tenantId`
 
 - **Purpose:** Withdraw a grant. SYSTEM_ADMIN only, attributable, and never silent.
-- **Handler:** `services/billing/src/routes/shopify-billing.ts` line 350
+- **Handler:** `services/billing/src/routes/shopify-billing.ts` line 372
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. No `resolveTenant`: this route is not tenant-scoped by middleware.
 - **Authorization:** Platform staff gate: `requireSystemAdmin`
 - **Input validation:** No body schema. Path and query parameters are read directly by the handler.
@@ -7916,7 +7916,7 @@ POST /api/admin/billing/reconciliations/sweep
 #### Execution flow
 
 1. **Route registration.** `billing` service mounts this router at `/api/admin` in `services/billing/src/index.ts`; the route is declared in `services/billing/src/routes/shopify-billing.ts`.
-2. **Handler.** `services/billing/src/routes/shopify-billing.ts:350` - inline `async (req, res)` handler.
+2. **Handler.** `services/billing/src/routes/shopify-billing.ts:372` - inline `async (req, res)` handler.
 3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. No `resolveTenant`: this route is not tenant-scoped by middleware.
 5. **Authorization.** Platform staff gate: `requireSystemAdmin`
@@ -7931,14 +7931,14 @@ POST /api/admin/billing/reconciliations/sweep
 ```text
 DELETE /api/admin/billing/shopify/grandfather/:tenantId
   → [authenticate → requireSystemAdmin]
-  → handler  services/billing/src/routes/shopify-billing.ts:350
+  → handler  services/billing/src/routes/shopify-billing.ts:372
       → (responds directly; no downstream calls detected)
 ```
 
 ### `GET /api/admin/billing/shopify/grandfather/:tenantId`
 
 - **Purpose:** What the rules say, without acting on it.
-- **Handler:** `services/billing/src/routes/shopify-billing.ts` line 311
+- **Handler:** `services/billing/src/routes/shopify-billing.ts` line 333
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. No `resolveTenant`: this route is not tenant-scoped by middleware.
 - **Authorization:** Platform staff gate: `requireSystemAdmin`
 - **Input validation:** No body schema. Path and query parameters are read directly by the handler.
@@ -7948,7 +7948,7 @@ DELETE /api/admin/billing/shopify/grandfather/:tenantId
 #### Execution flow
 
 1. **Route registration.** `billing` service mounts this router at `/api/admin` in `services/billing/src/index.ts`; the route is declared in `services/billing/src/routes/shopify-billing.ts`.
-2. **Handler.** `services/billing/src/routes/shopify-billing.ts:311` - inline `async (req, res)` handler.
+2. **Handler.** `services/billing/src/routes/shopify-billing.ts:333` - inline `async (req, res)` handler.
 3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. No `resolveTenant`: this route is not tenant-scoped by middleware.
 5. **Authorization.** Platform staff gate: `requireSystemAdmin`
@@ -7963,14 +7963,14 @@ DELETE /api/admin/billing/shopify/grandfather/:tenantId
 ```text
 GET /api/admin/billing/shopify/grandfather/:tenantId
   → [authenticate → requireSystemAdmin]
-  → handler  services/billing/src/routes/shopify-billing.ts:311
+  → handler  services/billing/src/routes/shopify-billing.ts:333
       → (responds directly; no downstream calls detected)
 ```
 
 ### `POST /api/admin/billing/shopify/grandfather/:tenantId`
 
 - **Purpose:** Grant grandfathering on an admin's authority.
-- **Handler:** `services/billing/src/routes/shopify-billing.ts` line 332
+- **Handler:** `services/billing/src/routes/shopify-billing.ts` line 354
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. No `resolveTenant`: this route is not tenant-scoped by middleware.
 - **Authorization:** Platform staff gate: `requireSystemAdmin`
 - **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
@@ -7980,7 +7980,7 @@ GET /api/admin/billing/shopify/grandfather/:tenantId
 #### Execution flow
 
 1. **Route registration.** `billing` service mounts this router at `/api/admin` in `services/billing/src/index.ts`; the route is declared in `services/billing/src/routes/shopify-billing.ts`.
-2. **Handler.** `services/billing/src/routes/shopify-billing.ts:332` - inline `async (req, res)` handler.
+2. **Handler.** `services/billing/src/routes/shopify-billing.ts:354` - inline `async (req, res)` handler.
 3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. No `resolveTenant`: this route is not tenant-scoped by middleware.
 5. **Authorization.** Platform staff gate: `requireSystemAdmin`
@@ -7995,7 +7995,7 @@ GET /api/admin/billing/shopify/grandfather/:tenantId
 ```text
 POST /api/admin/billing/shopify/grandfather/:tenantId
   → [authenticate → requireSystemAdmin]
-  → handler  services/billing/src/routes/shopify-billing.ts:332
+  → handler  services/billing/src/routes/shopify-billing.ts:354
       → (responds directly; no downstream calls detected)
 ```
 
@@ -9964,7 +9964,7 @@ POST /api/billing/providers/icount/ipn
 ### `POST /api/billing/shopify/complete`
 
 - **Purpose:** Called by `/integrations/shopify/billing/complete` after Shopify sends the merchant back.
-- **Handler:** `services/billing/src/routes/shopify-billing.ts` line 204
+- **Handler:** `services/billing/src/routes/shopify-billing.ts` line 215
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
 - **Authorization:** Permission: `settings:billing:manage`
 - **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
@@ -9974,7 +9974,7 @@ POST /api/billing/providers/icount/ipn
 #### Execution flow
 
 1. **Route registration.** `billing` service mounts this router at `/api/billing` in `services/billing/src/index.ts`; the route is declared in `services/billing/src/routes/shopify-billing.ts`.
-2. **Handler.** `services/billing/src/routes/shopify-billing.ts:204` - inline `async (req, res)` handler.
+2. **Handler.** `services/billing/src/routes/shopify-billing.ts:215` - inline `async (req, res)` handler.
 3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
 5. **Authorization.** Permission: `settings:billing:manage`
@@ -9989,14 +9989,14 @@ POST /api/billing/providers/icount/ipn
 ```text
 POST /api/billing/shopify/complete
   → [authenticate → resolveTenant → requirePermission(settings:billing:manage)]
-  → handler  services/billing/src/routes/shopify-billing.ts:204
+  → handler  services/billing/src/routes/shopify-billing.ts:215
       → (responds directly; no downstream calls detected)
 ```
 
 ### `POST /api/billing/shopify/grandfather/evaluate`
 
 - **Purpose:** Evaluate and, if earned, record grandfathered eligibility.
-- **Handler:** `services/billing/src/routes/shopify-billing.ts` line 285
+- **Handler:** `services/billing/src/routes/shopify-billing.ts` line 307
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
 - **Authorization:** Permission: `settings:billing:manage`
 - **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
@@ -10006,7 +10006,7 @@ POST /api/billing/shopify/complete
 #### Execution flow
 
 1. **Route registration.** `billing` service mounts this router at `/api/billing` in `services/billing/src/index.ts`; the route is declared in `services/billing/src/routes/shopify-billing.ts`.
-2. **Handler.** `services/billing/src/routes/shopify-billing.ts:285` - inline `async (req, res)` handler.
+2. **Handler.** `services/billing/src/routes/shopify-billing.ts:307` - inline `async (req, res)` handler.
 3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
 5. **Authorization.** Permission: `settings:billing:manage`
@@ -10021,14 +10021,14 @@ POST /api/billing/shopify/complete
 ```text
 POST /api/billing/shopify/grandfather/evaluate
   → [authenticate → resolveTenant → requirePermission(settings:billing:manage)]
-  → handler  services/billing/src/routes/shopify-billing.ts:285
+  → handler  services/billing/src/routes/shopify-billing.ts:307
       → (responds directly; no downstream calls detected)
 ```
 
 ### `POST /api/billing/shopify/plan-selection`
 
 - **Purpose:** Where to send the merchant to choose and approve a plan.
-- **Handler:** `services/billing/src/routes/shopify-billing.ts` line 128
+- **Handler:** `services/billing/src/routes/shopify-billing.ts` line 129
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
 - **Authorization:** Permission: `settings:billing:manage`
 - **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
@@ -10038,7 +10038,7 @@ POST /api/billing/shopify/grandfather/evaluate
 #### Execution flow
 
 1. **Route registration.** `billing` service mounts this router at `/api/billing` in `services/billing/src/index.ts`; the route is declared in `services/billing/src/routes/shopify-billing.ts`.
-2. **Handler.** `services/billing/src/routes/shopify-billing.ts:128` - inline `async (req, res)` handler.
+2. **Handler.** `services/billing/src/routes/shopify-billing.ts:129` - inline `async (req, res)` handler.
 3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
 5. **Authorization.** Permission: `settings:billing:manage`
@@ -10053,14 +10053,14 @@ POST /api/billing/shopify/grandfather/evaluate
 ```text
 POST /api/billing/shopify/plan-selection
   → [authenticate → resolveTenant → requirePermission(settings:billing:manage)]
-  → handler  services/billing/src/routes/shopify-billing.ts:128
+  → handler  services/billing/src/routes/shopify-billing.ts:129
       → (responds directly; no downstream calls detected)
 ```
 
 ### `GET /api/billing/shopify/plans`
 
 - **Purpose:** The plans this store could be offered.
-- **Handler:** `services/billing/src/routes/shopify-billing.ts` line 106
+- **Handler:** `services/billing/src/routes/shopify-billing.ts` line 107
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
 - **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
 - **Input validation:** No input.
@@ -10070,7 +10070,7 @@ POST /api/billing/shopify/plan-selection
 #### Execution flow
 
 1. **Route registration.** `billing` service mounts this router at `/api/billing` in `services/billing/src/index.ts`; the route is declared in `services/billing/src/routes/shopify-billing.ts`.
-2. **Handler.** `services/billing/src/routes/shopify-billing.ts:106` - inline `async (req, res)` handler.
+2. **Handler.** `services/billing/src/routes/shopify-billing.ts:107` - inline `async (req, res)` handler.
 3. **Validation.** No input.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
 5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
@@ -10085,14 +10085,14 @@ POST /api/billing/shopify/plan-selection
 ```text
 GET /api/billing/shopify/plans
   → [authenticate → resolveTenant]
-  → handler  services/billing/src/routes/shopify-billing.ts:106
+  → handler  services/billing/src/routes/shopify-billing.ts:107
       → (responds directly; no downstream calls detected)
 ```
 
 ### `GET /api/billing/shopify/state`
 
 - **Purpose:** Everything the UI needs to render a Shopify billing state.
-- **Handler:** `services/billing/src/routes/shopify-billing.ts` line 94
+- **Handler:** `services/billing/src/routes/shopify-billing.ts` line 95
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
 - **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
 - **Input validation:** No input.
@@ -10102,7 +10102,7 @@ GET /api/billing/shopify/plans
 #### Execution flow
 
 1. **Route registration.** `billing` service mounts this router at `/api/billing` in `services/billing/src/index.ts`; the route is declared in `services/billing/src/routes/shopify-billing.ts`.
-2. **Handler.** `services/billing/src/routes/shopify-billing.ts:94` - inline `async (req, res)` handler.
+2. **Handler.** `services/billing/src/routes/shopify-billing.ts:95` - inline `async (req, res)` handler.
 3. **Validation.** No input.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
 5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
@@ -10117,7 +10117,7 @@ GET /api/billing/shopify/plans
 ```text
 GET /api/billing/shopify/state
   → [authenticate → resolveTenant]
-  → handler  services/billing/src/routes/shopify-billing.ts:94
+  → handler  services/billing/src/routes/shopify-billing.ts:95
       → (responds directly; no downstream calls detected)
 ```
 
