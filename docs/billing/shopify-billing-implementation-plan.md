@@ -207,7 +207,25 @@ SHOPIFY_ALLOW_LIVE_BILLING=false               # explicit acknowledgement
 11. **Tests** for the 23 listed scenarios.
 12. **Docs**: developer guide, rollout/rollback, Partner Dashboard steps.
 
-## Open questions — not to be answered in code
+## Open questions — RESOLUTION STATUS (updated 2026-09-02)
+
+See [shopify-billing-confirmed-model.md](./shopify-billing-confirmed-model.md).
+
+| # | Question | Status |
+|---|---|---|
+| 1 | Split billing permitted? | **ANSWERED — yes.** Confirmed by Shopify App Review. Core stays external, Shopify bills the connector. `SHOPIFY_BILLING_POLICY_MODE=connector_addon` is the model; both flags still default off. |
+| 2 | Non-embedded + App Pricing | **Still open.** Both adapters exist precisely for this; `manual` is the fallback. |
+| 3 | Partner API credential | **Still open.** Needed only for `app_pricing`. |
+| 4 | Chat app has `scopes = ""` and no token | **MOOT.** The unified-app cutover shipped; there is one app with a real Admin token. The assessment §3 table is stale and now carries a correction. |
+| 5 | Which app is billed | **MOOT.** One app. |
+| 6 | Commercial metric for PAYG | **Deferred.** Usage billing is explicitly out of scope this round. |
+
+Two commercial inputs are still outstanding and are configuration, not code:
+the **publication cutoff** (`SHOPIFY_APP_PUBLICATION_CUTOFF`) and the **plan
+catalog** (`SHOPIFY_BILLING_PLAN_CATALOG`). Neither has a default, and the
+absence of each fails closed.
+
+## Open questions — original text
 
 1. **Split billing**: permitted? Drives `SHOPIFY_ALLOW_SPLIT_BILLING`.
 2. **Non-embedded + App Pricing**: undocumented (assessment §4.1). If

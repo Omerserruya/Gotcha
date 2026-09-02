@@ -2092,6 +2092,175 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
       x-documentation-gap: request-body-unschematized
+  /api/admin/billing/shopify/grandfather/{tenantId}:
+    delete:
+      operationId: deleteAdminBillingShopifyGrandfatherTenantId
+      tags:
+      - Billing
+      summary: Delete Grandfather
+      description: |-
+        Withdraw a grant. SYSTEM_ADMIN only, attributable, and never silent.
+
+        Requires a valid Authentik access token.
+
+        This is a write operation.
+
+        Implemented at `services/billing/src/routes/shopify-billing.ts:350` (billing service).
+      security:
+      - bearerAuth: []
+      x-service: billing
+      x-source: services/billing/src/routes/shopify-billing.ts:350
+      x-operation-type: write
+      x-publicly-exposed: true
+      x-authorization:
+        platformAdmin:
+        - requireSystemAdmin
+      parameters:
+      - name: tenantId
+        in: path
+        required: true
+        schema:
+          type: string
+        description: "`tenantId` path segment."
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeUnknown"
+          x-inferred: Status inferred from Express defaults; the handler calls no explicit res.status() for success.
+        "401":
+          description: Missing, invalid or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Authenticated, but not permitted to perform this operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Not found, or not visible to this tenant
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    get:
+      operationId: getAdminBillingShopifyGrandfatherTenantId
+      tags:
+      - Billing
+      summary: Get Grandfather
+      description: |-
+        What the rules say, without acting on it.
+
+        SYSTEM_ADMIN only - it exposes the evidence blob, which names subscription
+        and payment dates that a tenant user has no reason to inspect through this
+        surface.
+
+        Requires a valid Authentik access token.
+
+        Implemented at `services/billing/src/routes/shopify-billing.ts:311` (billing service).
+      security:
+      - bearerAuth: []
+      x-service: billing
+      x-source: services/billing/src/routes/shopify-billing.ts:311
+      x-operation-type: read
+      x-publicly-exposed: true
+      x-authorization:
+        platformAdmin:
+        - requireSystemAdmin
+      parameters:
+      - name: tenantId
+        in: path
+        required: true
+        schema:
+          type: string
+        description: "`tenantId` path segment."
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeUnknown"
+          x-inferred: Status inferred from Express defaults; the handler calls no explicit res.status() for success.
+        "401":
+          description: Missing, invalid or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Authenticated, but not permitted to perform this operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      operationId: postAdminBillingShopifyGrandfatherTenantId
+      tags:
+      - Billing
+      summary: TenantId action
+      description: |-
+        Grant grandfathering on an admin's authority.
+
+        SYSTEM_ADMIN only, and `approvedBy` is taken from the AUTHENTICATED USER
+        rather than the body. An override whose approver could be typed by the caller
+        would be an audit trail that records whatever the caller wanted it to.
+
+        Requires a valid Authentik access token.
+
+        This is a write operation.
+
+        Implemented at `services/billing/src/routes/shopify-billing.ts:332` (billing service).
+      security:
+      - bearerAuth: []
+      x-service: billing
+      x-source: services/billing/src/routes/shopify-billing.ts:332
+      x-operation-type: write
+      x-publicly-exposed: true
+      x-authorization:
+        platformAdmin:
+        - requireSystemAdmin
+      parameters:
+      - name: tenantId
+        in: path
+        required: true
+        schema:
+          type: string
+        description: "`tenantId` path segment."
+      requestBody:
+        required: false
+        description: No Zod schema is declared for this route; the handler reads `req.body` directly. Shape is not verifiable from source.
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeUnknown"
+          x-inferred: Status inferred from Express defaults; the handler calls no explicit res.status() for success.
+        "401":
+          description: Missing, invalid or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Authenticated, but not permitted to perform this operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+      x-documentation-gap: request-body-unschematized
   /api/admin/coupons:
     get:
       operationId: getAdminCoupons
@@ -12522,6 +12691,290 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
       x-documentation-gap: request-body-unschematized
+  /api/billing/shopify/complete:
+    post:
+      operationId: postBillingShopifyComplete
+      tags:
+      - Billing
+      summary: Create Complete
+      description: |-
+        Called by `/integrations/shopify/billing/complete` after Shopify sends the
+        merchant back.
+
+        Everything that matters happens server-side:
+
+          1. the store is taken from the connection this SESSION owns, not from the
+             `shop` parameter Shopify appended;
+          2. `syncProviderSubscription` asks Shopify what the subscription actually
+             is, and writes down what it says;
+          3. entitlements move to match, inside that same function;
+          4. the answer returned is the freshly computed state, so the page renders
+             what was verified rather than what was hoped.
+
+        A merchant who declined gets `PLAN_SELECTION_REQUIRED` back and no
+        entitlements - the same answer as never having visited, which is correct,
+        because declining and never arriving are commercially identical.
+
+        Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body.
+
+        This is a write operation.
+
+        Implemented at `services/billing/src/routes/shopify-billing.ts:204` (billing service).
+      security:
+      - bearerAuth: []
+      x-service: billing
+      x-source: services/billing/src/routes/shopify-billing.ts:204
+      x-operation-type: write
+      x-publicly-exposed: true
+      x-authorization:
+        permissions:
+        - settings:billing:manage
+      parameters:
+      - name: shop
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Read from `req.query` by the handler; type is not declared in source.
+      requestBody:
+        required: false
+        description: No Zod schema is declared for this route; the handler reads `req.body` directly. Shape is not verifiable from source.
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeUnknown"
+          x-inferred: Status inferred from Express defaults; the handler calls no explicit res.status() for success.
+        "401":
+          description: Missing, invalid or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Authenticated, but not permitted to perform this operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Conflict with current state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: Upstream provider error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+      x-documentation-gap: request-body-unschematized
+  /api/billing/shopify/grandfather/evaluate:
+    post:
+      operationId: postBillingShopifyGrandfatherEvaluate
+      tags:
+      - Billing
+      summary: Create Evaluate
+      description: |-
+        Evaluate and, if earned, record grandfathered eligibility.
+
+        Idempotent: the underlying service returns a standing grant rather than
+        deciding again. Exposed to the tenant's own billing manager because it takes
+        NO input - eligibility is computed entirely from our own records, so there is
+        nothing here for a caller to influence.
+
+        Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body.
+
+        This is a write operation.
+
+        Implemented at `services/billing/src/routes/shopify-billing.ts:285` (billing service).
+      security:
+      - bearerAuth: []
+      x-service: billing
+      x-source: services/billing/src/routes/shopify-billing.ts:285
+      x-operation-type: write
+      x-publicly-exposed: true
+      x-authorization:
+        permissions:
+        - settings:billing:manage
+      requestBody:
+        required: false
+        description: No Zod schema is declared for this route; the handler reads `req.body` directly. Shape is not verifiable from source.
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeUnknown"
+          x-inferred: Status inferred from Express defaults; the handler calls no explicit res.status() for success.
+        "401":
+          description: Missing, invalid or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Authenticated, but not permitted to perform this operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+      x-documentation-gap: request-body-unschematized
+  /api/billing/shopify/plan-selection:
+    post:
+      operationId: postBillingShopifyPlanSelection
+      tags:
+      - Billing
+      summary: Create Plan Selection
+      description: |-
+        Where to send the merchant to choose and approve a plan.
+
+        Returns a URL rather than redirecting so the caller can decide how to
+        navigate, and so a merchant who is already grandfathered gets a refusal with
+        a reason instead of a trip to a plan page they must never see.
+
+        Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body.
+
+        This is a write operation.
+
+        Implemented at `services/billing/src/routes/shopify-billing.ts:128` (billing service).
+      security:
+      - bearerAuth: []
+      x-service: billing
+      x-source: services/billing/src/routes/shopify-billing.ts:128
+      x-operation-type: write
+      x-publicly-exposed: true
+      x-authorization:
+        permissions:
+        - settings:billing:manage
+      requestBody:
+        required: false
+        description: No Zod schema is declared for this route; the handler reads `req.body` directly. Shape is not verifiable from source.
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeUnknown"
+          x-inferred: Status inferred from Express defaults; the handler calls no explicit res.status() for success.
+        "401":
+          description: Missing, invalid or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Authenticated, but not permitted to perform this operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Conflict with current state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Temporarily unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+      x-documentation-gap: request-body-unschematized
+  /api/billing/shopify/plans:
+    get:
+      operationId: getBillingShopifyPlans
+      tags:
+      - Billing
+      summary: List Plans
+      description: |-
+        The plans this store could be offered.
+
+        Returns identifiers and our own metadata only - no price, no currency, no
+        trial length. Those belong to Shopify and are shown on Shopify's page. A
+        price rendered here would be a second copy of a number we do not own.
+
+        Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body.
+
+        Implemented at `services/billing/src/routes/shopify-billing.ts:106` (billing service).
+      security:
+      - bearerAuth: []
+      x-service: billing
+      x-source: services/billing/src/routes/shopify-billing.ts:106
+      x-operation-type: read
+      x-publicly-exposed: true
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeUnknown"
+          x-inferred: Status inferred from Express defaults; the handler calls no explicit res.status() for success.
+        "401":
+          description: Missing, invalid or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/billing/shopify/state:
+    get:
+      operationId: getBillingShopifyState
+      tags:
+      - Billing
+      summary: List State
+      description: |-
+        Everything the UI needs to render a Shopify billing state.
+
+        Readable by any authenticated member, like `/billing/subscription`: knowing
+        whether your own workspace owes Shopify money is not privileged information,
+        and hiding it behind the manage permission would leave most users staring at
+        a disabled feature with no explanation.
+
+        Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body.
+
+        Implemented at `services/billing/src/routes/shopify-billing.ts:94` (billing service).
+      security:
+      - bearerAuth: []
+      x-service: billing
+      x-source: services/billing/src/routes/shopify-billing.ts:94
+      x-operation-type: read
+      x-publicly-exposed: true
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeUnknown"
+          x-inferred: Status inferred from Express defaults; the handler calls no explicit res.status() for success.
+        "401":
+          description: Missing, invalid or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /api/billing/subscription:
     get:
       operationId: getBillingSubscription
@@ -16533,11 +16986,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:159` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:161` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:159
+      x-source: services/ai/src/routes/connectors-admin.ts:161
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
@@ -16596,11 +17049,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:224` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:226` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:224
+      x-source: services/ai/src/routes/connectors-admin.ts:226
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
@@ -16665,11 +17118,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:145` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:147` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:145
+      x-source: services/ai/src/routes/connectors-admin.ts:147
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
@@ -16726,11 +17179,11 @@ paths:
       description: |-
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be ACTIVE.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:131` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:133` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:131
+      x-source: services/ai/src/routes/connectors-admin.ts:133
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -16783,11 +17236,11 @@ paths:
 
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:800` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:826` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:800
+      x-source: services/ai/src/routes/connectors-admin.ts:826
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -16839,11 +17292,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:827` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:853` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:827
+      x-source: services/ai/src/routes/connectors-admin.ts:853
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
@@ -16899,11 +17352,11 @@ paths:
       description: |-
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be ACTIVE.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:630` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:656` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:630
+      x-source: services/ai/src/routes/connectors-admin.ts:656
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -16951,11 +17404,11 @@ paths:
       description: |-
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be ACTIVE.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:645` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:671` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:645
+      x-source: services/ai/src/routes/connectors-admin.ts:671
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -17009,11 +17462,11 @@ paths:
       description: |-
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:758` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:784` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:758
+      x-source: services/ai/src/routes/connectors-admin.ts:784
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -17054,10 +17507,10 @@ paths:
       description: |-
         No authentication middleware is applied to this route.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:693` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:719` (ai service).
       security: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:693
+      x-source: services/ai/src/routes/connectors-admin.ts:719
       x-operation-type: read
       x-publicly-exposed: true
       responses:
@@ -17089,11 +17542,11 @@ paths:
       description: |-
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:782` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:808` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:782
+      x-source: services/ai/src/routes/connectors-admin.ts:808
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -17153,11 +17606,11 @@ paths:
 
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:668` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:694` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:668
+      x-source: services/ai/src/routes/connectors-admin.ts:694
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -17205,11 +17658,11 @@ paths:
       description: |-
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:769` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:795` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:769
+      x-source: services/ai/src/routes/connectors-admin.ts:795
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -17259,11 +17712,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:1355` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:1381` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:1355
+      x-source: services/ai/src/routes/connectors-admin.ts:1381
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
@@ -17313,10 +17766,10 @@ paths:
       description: |-
         No authentication middleware is applied to this route.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:389` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:391` (ai service).
       security: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:389
+      x-source: services/ai/src/routes/connectors-admin.ts:391
       x-operation-type: read
       x-publicly-exposed: true
       responses:
@@ -17348,11 +17801,11 @@ paths:
       description: |-
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:330` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:332` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:330
+      x-source: services/ai/src/routes/connectors-admin.ts:332
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -17400,11 +17853,11 @@ paths:
       description: |-
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be ACTIVE.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:1205` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:1231` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:1205
+      x-source: services/ai/src/routes/connectors-admin.ts:1231
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -17451,10 +17904,10 @@ paths:
       description: |-
         No authentication middleware is applied to this route.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:1141` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:1167` (ai service).
       security: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:1141
+      x-source: services/ai/src/routes/connectors-admin.ts:1167
       x-operation-type: read
       x-publicly-exposed: true
       responses:
@@ -17486,11 +17939,11 @@ paths:
       description: |-
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:1113` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:1139` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:1113
+      x-source: services/ai/src/routes/connectors-admin.ts:1139
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -17540,11 +17993,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:1294` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:1320` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:1294
+      x-source: services/ai/src/routes/connectors-admin.ts:1320
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
@@ -17596,11 +18049,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:1324` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:1350` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:1324
+      x-source: services/ai/src/routes/connectors-admin.ts:1350
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
@@ -17652,11 +18105,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:1252` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:1278` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:1252
+      x-source: services/ai/src/routes/connectors-admin.ts:1278
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
@@ -17706,10 +18159,10 @@ paths:
       description: |-
         No authentication middleware is applied to this route.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:1061` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:1087` (ai service).
       security: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:1061
+      x-source: services/ai/src/routes/connectors-admin.ts:1087
       x-operation-type: read
       x-publicly-exposed: true
       responses:
@@ -17741,11 +18194,11 @@ paths:
       description: |-
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:1036` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:1062` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:1036
+      x-source: services/ai/src/routes/connectors-admin.ts:1062
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -17816,10 +18269,10 @@ paths:
 
         No authentication middleware is applied to this route.
 
-        Implemented at `services/ai/src/routes/shopify-install.ts:199` (ai service).
+        Implemented at `services/ai/src/routes/shopify-install.ts:201` (ai service).
       security: []
       x-service: ai
-      x-source: services/ai/src/routes/shopify-install.ts:199
+      x-source: services/ai/src/routes/shopify-install.ts:201
       x-operation-type: read
       x-publicly-exposed: true
       responses:
@@ -17846,11 +18299,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/ai/src/routes/shopify-install.ts:361` (ai service).
+        Implemented at `services/ai/src/routes/shopify-install.ts:381` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/shopify-install.ts:361
+      x-source: services/ai/src/routes/shopify-install.ts:381
       x-operation-type: write
       x-publicly-exposed: true
       requestBody:
@@ -17896,11 +18349,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/ai/src/routes/shopify-install.ts:299` (ai service).
+        Implemented at `services/ai/src/routes/shopify-install.ts:301` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/shopify-install.ts:299
+      x-source: services/ai/src/routes/shopify-install.ts:301
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
@@ -17971,11 +18424,11 @@ paths:
 
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
 
-        Implemented at `services/ai/src/routes/shopify-install.ts:273` (ai service).
+        Implemented at `services/ai/src/routes/shopify-install.ts:275` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/shopify-install.ts:273
+      x-source: services/ai/src/routes/shopify-install.ts:275
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -18032,11 +18485,11 @@ paths:
 
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
 
-        Implemented at `services/ai/src/routes/shopify-install.ts:133` (ai service).
+        Implemented at `services/ai/src/routes/shopify-install.ts:135` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/shopify-install.ts:133
+      x-source: services/ai/src/routes/shopify-install.ts:135
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -18102,10 +18555,10 @@ paths:
 
         No authentication middleware is applied to this route.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:521` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:523` (ai service).
       security: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:521
+      x-source: services/ai/src/routes/connectors-admin.ts:523
       x-operation-type: read
       x-publicly-exposed: true
       parameters:
@@ -18168,11 +18621,11 @@ paths:
 
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:457` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:459` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:457
+      x-source: services/ai/src/routes/connectors-admin.ts:459
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -18226,10 +18679,10 @@ paths:
       description: |-
         No authentication middleware is applied to this route.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:985` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:1011` (ai service).
       security: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:985
+      x-source: services/ai/src/routes/connectors-admin.ts:1011
       x-operation-type: read
       x-publicly-exposed: true
       responses:
@@ -18261,11 +18714,11 @@ paths:
       description: |-
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:961` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:987` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:961
+      x-source: services/ai/src/routes/connectors-admin.ts:987
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -18313,10 +18766,10 @@ paths:
       description: |-
         No authentication middleware is applied to this route.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:279` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:281` (ai service).
       security: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:279
+      x-source: services/ai/src/routes/connectors-admin.ts:281
       x-operation-type: read
       x-publicly-exposed: true
       responses:
@@ -18348,11 +18801,11 @@ paths:
       description: |-
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:258` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:260` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:258
+      x-source: services/ai/src/routes/connectors-admin.ts:260
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -18393,10 +18846,10 @@ paths:
       description: |-
         No authentication middleware is applied to this route.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:909` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:935` (ai service).
       security: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:909
+      x-source: services/ai/src/routes/connectors-admin.ts:935
       x-operation-type: read
       x-publicly-exposed: true
       responses:
@@ -18442,11 +18895,11 @@ paths:
 
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:889` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:915` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:889
+      x-source: services/ai/src/routes/connectors-admin.ts:915
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -27388,11 +27841,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/billing/src/routes/internal.ts:367` (billing service).
+        Implemented at `services/billing/src/routes/internal.ts:373` (billing service).
       security:
       - internalServiceToken: []
       x-service: billing
-      x-source: services/billing/src/routes/internal.ts:367
+      x-source: services/billing/src/routes/internal.ts:373
       x-operation-type: write
       x-publicly-exposed: false
       requestBody:
@@ -27431,11 +27884,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/billing/src/routes/internal.ts:51` (billing service).
+        Implemented at `services/billing/src/routes/internal.ts:57` (billing service).
       security:
       - internalServiceToken: []
       x-service: billing
-      x-source: services/billing/src/routes/internal.ts:51
+      x-source: services/billing/src/routes/internal.ts:57
       x-operation-type: write
       x-publicly-exposed: false
       requestBody:
@@ -27483,11 +27936,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/billing/src/routes/internal.ts:123` (billing service).
+        Implemented at `services/billing/src/routes/internal.ts:129` (billing service).
       security:
       - internalServiceToken: []
       x-service: billing
-      x-source: services/billing/src/routes/internal.ts:123
+      x-source: services/billing/src/routes/internal.ts:129
       x-operation-type: write
       x-publicly-exposed: false
       requestBody:
@@ -27524,11 +27977,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/billing/src/routes/internal.ts:31` (billing service).
+        Implemented at `services/billing/src/routes/internal.ts:37` (billing service).
       security:
       - internalServiceToken: []
       x-service: billing
-      x-source: services/billing/src/routes/internal.ts:31
+      x-source: services/billing/src/routes/internal.ts:37
       x-operation-type: write
       x-publicly-exposed: false
       requestBody:
@@ -27565,11 +28018,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/billing/src/routes/internal.ts:91` (billing service).
+        Implemented at `services/billing/src/routes/internal.ts:97` (billing service).
       security:
       - internalServiceToken: []
       x-service: billing
-      x-source: services/billing/src/routes/internal.ts:91
+      x-source: services/billing/src/routes/internal.ts:97
       x-operation-type: write
       x-publicly-exposed: false
       requestBody:
@@ -27602,11 +28055,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/billing/src/routes/internal.ts:200` (billing service).
+        Implemented at `services/billing/src/routes/internal.ts:206` (billing service).
       security:
       - internalServiceToken: []
       x-service: billing
-      x-source: services/billing/src/routes/internal.ts:200
+      x-source: services/billing/src/routes/internal.ts:206
       x-operation-type: write
       x-publicly-exposed: false
       requestBody:
@@ -27643,11 +28096,11 @@ paths:
 
         Service-to-service only, authenticated by the internal shared secret.
 
-        Implemented at `services/billing/src/routes/internal.ts:389` (billing service).
+        Implemented at `services/billing/src/routes/internal.ts:395` (billing service).
       security:
       - internalServiceToken: []
       x-service: billing
-      x-source: services/billing/src/routes/internal.ts:389
+      x-source: services/billing/src/routes/internal.ts:395
       x-operation-type: read
       x-publicly-exposed: false
       parameters:
@@ -27683,11 +28136,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/billing/src/routes/internal.ts:82` (billing service).
+        Implemented at `services/billing/src/routes/internal.ts:88` (billing service).
       security:
       - internalServiceToken: []
       x-service: billing
-      x-source: services/billing/src/routes/internal.ts:82
+      x-source: services/billing/src/routes/internal.ts:88
       x-operation-type: write
       x-publicly-exposed: false
       requestBody:
@@ -27724,11 +28177,11 @@ paths:
 
         Service-to-service only, authenticated by the internal shared secret.
 
-        Implemented at `services/billing/src/routes/internal.ts:185` (billing service).
+        Implemented at `services/billing/src/routes/internal.ts:191` (billing service).
       security:
       - internalServiceToken: []
       x-service: billing
-      x-source: services/billing/src/routes/internal.ts:185
+      x-source: services/billing/src/routes/internal.ts:191
       x-operation-type: read
       x-publicly-exposed: false
       responses:
@@ -27755,11 +28208,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/billing/src/routes/internal.ts:258` (billing service).
+        Implemented at `services/billing/src/routes/internal.ts:264` (billing service).
       security:
       - internalServiceToken: []
       x-service: billing
-      x-source: services/billing/src/routes/internal.ts:258
+      x-source: services/billing/src/routes/internal.ts:264
       x-operation-type: write
       x-publicly-exposed: false
       requestBody:
@@ -27798,11 +28251,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/billing/src/routes/internal.ts:102` (billing service).
+        Implemented at `services/billing/src/routes/internal.ts:108` (billing service).
       security:
       - internalServiceToken: []
       x-service: billing
-      x-source: services/billing/src/routes/internal.ts:102
+      x-source: services/billing/src/routes/internal.ts:108
       x-operation-type: write
       x-publicly-exposed: false
       requestBody:
@@ -27844,11 +28297,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/billing/src/routes/internal.ts:138` (billing service).
+        Implemented at `services/billing/src/routes/internal.ts:144` (billing service).
       security:
       - internalServiceToken: []
       x-service: billing
-      x-source: services/billing/src/routes/internal.ts:138
+      x-source: services/billing/src/routes/internal.ts:144
       x-operation-type: write
       x-publicly-exposed: false
       requestBody:
@@ -27891,11 +28344,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/billing/src/routes/internal.ts:290` (billing service).
+        Implemented at `services/billing/src/routes/internal.ts:296` (billing service).
       security:
       - internalServiceToken: []
       x-service: billing
-      x-source: services/billing/src/routes/internal.ts:290
+      x-source: services/billing/src/routes/internal.ts:296
       x-operation-type: write
       x-publicly-exposed: false
       x-database:
@@ -27949,11 +28402,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/billing/src/routes/internal.ts:347` (billing service).
+        Implemented at `services/billing/src/routes/internal.ts:353` (billing service).
       security:
       - internalServiceToken: []
       x-service: billing
-      x-source: services/billing/src/routes/internal.ts:347
+      x-source: services/billing/src/routes/internal.ts:353
       x-operation-type: write
       x-publicly-exposed: false
       x-database:
@@ -28000,11 +28453,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/billing/src/routes/internal.ts:146` (billing service).
+        Implemented at `services/billing/src/routes/internal.ts:152` (billing service).
       security:
       - internalServiceToken: []
       x-service: billing
-      x-source: services/billing/src/routes/internal.ts:146
+      x-source: services/billing/src/routes/internal.ts:152
       x-operation-type: write
       x-publicly-exposed: false
       requestBody:
@@ -28045,13 +28498,162 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/billing/src/routes/internal.ts:163` (billing service).
+        Implemented at `services/billing/src/routes/internal.ts:169` (billing service).
       security:
       - internalServiceToken: []
       x-service: billing
-      x-source: services/billing/src/routes/internal.ts:163
+      x-source: services/billing/src/routes/internal.ts:169
       x-operation-type: write
       x-publicly-exposed: false
+      requestBody:
+        required: false
+        description: No Zod schema is declared for this route; the handler reads `req.body` directly. Shape is not verifiable from source.
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeUnknown"
+          x-inferred: Status inferred from Express defaults; the handler calls no explicit res.status() for success.
+        "400":
+          description: Validation failed or the request was malformed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+      x-documentation-gap: request-body-unschematized
+  /api/internal/billing/shopify/connected:
+    post:
+      operationId: postInternalBillingShopifyConnected
+      tags:
+      - Internal
+      summary: Create Connected
+      description: |-
+        Called by services/ai, which owns the Shopify OAuth callback and the verified
+        webhook handlers. The split is deliberate: services/ai decides WHO the store
+        and workspace are (it holds the HMAC verification and the session), and
+        billing decides what that means COMMERCIALLY. Neither reaches into the
+        other's tables to answer the other's question.
+
+
+        A Shopify store finished OAuth and was linked to a workspace.
+
+        Returns what should happen next, and never an error the caller must act on:
+        OAuth has already succeeded by the time this is called, so a billing problem
+        here can change what the merchant is SHOWN and must never retract the
+        installation. The one exception is a cross-tenant claim, which is a 409 the
+        caller genuinely has to surface.
+
+        Service-to-service only, authenticated by the internal shared secret.
+
+        This is a write operation.
+
+        Implemented at `services/billing/src/routes/internal.ts:428` (billing service).
+      security:
+      - internalServiceToken: []
+      x-service: billing
+      x-source: services/billing/src/routes/internal.ts:428
+      x-operation-type: write
+      x-publicly-exposed: false
+      requestBody:
+        required: false
+        description: No Zod schema is declared for this route; the handler reads `req.body` directly. Shape is not verifiable from source.
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeUnknown"
+          x-inferred: Status inferred from Express defaults; the handler calls no explicit res.status() for success.
+        "400":
+          description: Validation failed or the request was malformed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Conflict with current state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Unexpected server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+      x-documentation-gap: request-body-unschematized
+  /api/internal/billing/shopify/state/{tenantId}:
+    get:
+      operationId: getInternalBillingShopifyStateTenantId
+      tags:
+      - Internal
+      summary: Get State
+      description: |-
+        Current Shopify billing state for a workspace. Read-only.
+
+        Service-to-service only, authenticated by the internal shared secret.
+
+        Implemented at `services/billing/src/routes/internal.ts:491` (billing service).
+      security:
+      - internalServiceToken: []
+      x-service: billing
+      x-source: services/billing/src/routes/internal.ts:491
+      x-operation-type: read
+      x-publicly-exposed: false
+      parameters:
+      - name: tenantId
+        in: path
+        required: true
+        schema:
+          type: string
+        description: "`tenantId` path segment."
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeUnknown"
+          x-inferred: Status inferred from Express defaults; the handler calls no explicit res.status() for success.
+  /api/internal/billing/shopify/uninstalled:
+    post:
+      operationId: postInternalBillingShopifyUninstalled
+      tags:
+      - Internal
+      summary: Create Uninstalled
+      description: |-
+        A verified `app/uninstalled` for a Shopify store.
+
+        Idempotent: an unknown or already-disconnected shop answers 200 with
+        `revoked: 0`. Shopify retries webhooks, and a retry must not be an error.
+
+        Service-to-service only, authenticated by the internal shared secret.
+
+        This is a write operation.
+
+        Implemented at `services/billing/src/routes/internal.ts:459` (billing service).
+      security:
+      - internalServiceToken: []
+      x-service: billing
+      x-source: services/billing/src/routes/internal.ts:459
+      x-operation-type: write
+      x-publicly-exposed: false
+      x-database:
+      - commerceConnection.findFirst
       requestBody:
         required: false
         description: No Zod schema is declared for this route; the handler reads `req.body` directly. Shape is not verifiable from source.
@@ -28088,11 +28690,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/billing/src/routes/internal.ts:39` (billing service).
+        Implemented at `services/billing/src/routes/internal.ts:45` (billing service).
       security:
       - internalServiceToken: []
       x-service: billing
-      x-source: services/billing/src/routes/internal.ts:39
+      x-source: services/billing/src/routes/internal.ts:45
       x-operation-type: write
       x-publicly-exposed: false
       requestBody:
@@ -28129,11 +28731,11 @@ paths:
 
         Service-to-service only, authenticated by the internal shared secret.
 
-        Implemented at `services/billing/src/routes/internal.ts:210` (billing service).
+        Implemented at `services/billing/src/routes/internal.ts:216` (billing service).
       security:
       - internalServiceToken: []
       x-service: billing
-      x-source: services/billing/src/routes/internal.ts:210
+      x-source: services/billing/src/routes/internal.ts:216
       x-operation-type: read
       x-publicly-exposed: false
       x-database:
@@ -28172,11 +28774,11 @@ paths:
 
         Service-to-service only, authenticated by the internal shared secret.
 
-        Implemented at `services/billing/src/routes/internal.ts:194` (billing service).
+        Implemented at `services/billing/src/routes/internal.ts:200` (billing service).
       security:
       - internalServiceToken: []
       x-service: billing
-      x-source: services/billing/src/routes/internal.ts:194
+      x-source: services/billing/src/routes/internal.ts:200
       x-operation-type: read
       x-publicly-exposed: false
       responses:
@@ -28202,11 +28804,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/billing/src/routes/internal.ts:63` (billing service).
+        Implemented at `services/billing/src/routes/internal.ts:69` (billing service).
       security:
       - internalServiceToken: []
       x-service: billing
-      x-source: services/billing/src/routes/internal.ts:63
+      x-source: services/billing/src/routes/internal.ts:69
       x-operation-type: write
       x-publicly-exposed: false
       requestBody:
@@ -28249,11 +28851,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/billing/src/routes/internal.ts:235` (billing service).
+        Implemented at `services/billing/src/routes/internal.ts:241` (billing service).
       security:
       - internalServiceToken: []
       x-service: billing
-      x-source: services/billing/src/routes/internal.ts:235
+      x-source: services/billing/src/routes/internal.ts:241
       x-operation-type: write
       x-publicly-exposed: false
       requestBody:

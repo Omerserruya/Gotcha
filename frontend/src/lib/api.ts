@@ -2443,6 +2443,87 @@ export function claimShopifyInstall(token: string, handle: string) {
   );
 }
 
+// ─── Shopify billing ───────────────────────────────────────────────────────
+//
+// Separate from the install calls above on purpose. Installation and payment
+// are two independent facts about a workspace: a store can be connected and
+// unpaid, paid and later disconnected, or connected and grandfathered so that
+// payment never applies. Collapsing them into one call would force the UI to
+// invent a combined status, which is exactly the conflation the billing model
+// forbids.
+
+/** Billing status shown to a viewer. Domain states, never a boolean. */
+export type ShopifyBillingState =
+  | "UNRESOLVED"
+  | "NOT_REQUIRED_GRANDFATHERED"
+  | "PLAN_SELECTION_REQUIRED"
+  | "APPROVAL_PENDING"
+  | "ACTIVE"
+  | "TRIALING"
+  | "PAST_DUE"
+  | "CANCELLED"
+  | "FROZEN"
+  | "ERROR";
+
+export interface ShopifyBillingSnapshot {
+  core: { subscriptionStatus: string | null; planKey: string | null; billingSource: string | null };
+  installation: {
+    status: string;
+    shopDomain: string | null;
+    externalShopId: string | null;
+    connectionId: string | null;
+    installedAt: string | null;
+    uninstalledAt: string | null;
+  };
+  shopify: {
+    state: ShopifyBillingState;
+    reason: string;
+    planKey: string | null;
+    planHandle: string | null;
+    providerSubscriptionId: string | null;
+    rawStatus: string | null;
+    trialEndsAt: string | null;
+    currentPeriodEnd: string | null;
+    cancelAtPeriodEnd: boolean;
+    declined: boolean;
+    lastVerifiedAt: string | null;
+  };
+  grandfathered: { grantedAt: string | null; source: string; reason: string; paidSince: string | null } | null;
+  entitlements: string[];
+  planSelectionUrl: string | null;
+  availablePlanCount: number;
+  requiresPlanSelection: boolean;
+  grantsAccess: boolean;
+}
+
+export function getShopifyBillingState(token: string) {
+  return apiFetch<{ data: ShopifyBillingSnapshot }>("/api/billing/shopify/state", { token });
+}
+
+/** Ask where to send the merchant. The server refuses if they need not pay. */
+export function startShopifyPlanSelection(token: string) {
+  return apiFetch<{ data: { url: string; state: ShopifyBillingState } }>(
+    "/api/billing/shopify/plan-selection",
+    { token, method: "POST" },
+  );
+}
+
+/**
+ * Verify the subscription after Shopify returns the merchant to us.
+ *
+ * `shop` is forwarded ONLY so the server can reject a return that belongs to a
+ * different store than the one this workspace connected. It is not evidence of
+ * payment and the server does not treat it as any: it re-reads the
+ * subscription from Shopify before changing anything.
+ */
+export function completeShopifyBilling(token: string, shop?: string | null) {
+  const qs = shop ? `?shop=${encodeURIComponent(shop)}` : "";
+  return apiFetch<{ data: ShopifyBillingSnapshot }>(`/api/billing/shopify/complete${qs}`, {
+    token,
+    method: "POST",
+  });
+}
+
 export function initIntegrationOAuth(token: string, slug: string, extraParams?: Record<string, string>) {
   const LEGACY_SLUGS = new Set(["zoho_crm", "google_calendar", "calendly"]);
   const path = LEGACY_SLUGS.has(slug)

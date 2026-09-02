@@ -12,6 +12,7 @@ import Link from "next/link";
 import IntegrationsExplorer from "@/components/IntegrationsExplorer";
 import { RequirePermission } from "@/components/RequirePermission";
 import CustomerSystemOfRecordCard from "@/components/CustomerSystemOfRecordCard";
+import ShopifyBillingBanner from "@/components/billing/ShopifyBillingBanner";
 import { useI18n } from "@/context/I18nContext";
 import { useAuth } from "@/context/AuthContext";
 import { getSourceOfTruthStatus, getMarketplaceIntegrations } from "@/lib/api";
@@ -115,6 +116,11 @@ export default function BusinessSystemsPage() {
       // AI Studio marketplace (which only exposes operational tools).
       beforeContent={
         <>
+          {/* Whether the Shopify store is PAID FOR, which is independent of
+              whether it is connected. Renders nothing when there is no store,
+              or when Shopify billing is off for this deployment - so this is
+              invisible for every existing customer today. */}
+          <ShopifyBillingBanner />
           <SourceOfTruthStatusPanel />
           <CustomerSystemOfRecordCard />
         </>

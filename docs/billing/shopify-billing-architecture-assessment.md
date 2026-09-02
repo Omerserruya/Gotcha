@@ -151,8 +151,27 @@ asked for.
 
 ## 3. The Shopify estate as it stands
 
-There are **two distinct Shopify apps**, and confusing them is the main way this
-work could break production.
+> **CORRECTION (2026-09-02).** This section was written from a stale reading and
+> the table below describes the estate **before** the unified-app cutover. There
+> is now **ONE** Partner app.
+>
+> `packages/shared/src/lib/shopify-app-identity.ts` is the single identity;
+> `getShopifyChatAppConfig()` survives only as a legacy shim with **no runtime
+> callers**, and `services/ai/src/__tests__/shopify-unified-cutover.test.ts`
+> asserts that no runtime source calls it. App-proxy signatures, webhook HMACs
+> and the Theme Editor deep link are all derived from the Core client id and
+> secret.
+>
+> Two open questions in the implementation plan depended on this being wrong:
+> **Q4** ("the Chat app requests `scopes = ""` and stores no token") and **Q5**
+> ("which app is billed — Chat or Core?"). Both are resolved by there being one
+> app: a plan belongs to it, and it holds a real Admin token.
+>
+> The table is kept for history because the migration reasoning references it.
+> Do not plan against it.
+
+There were **two distinct Shopify apps**, and confusing them was the main way
+this work could break production.
 
 | | **Core integration** | **Chat app** |
 |---|---|---|
