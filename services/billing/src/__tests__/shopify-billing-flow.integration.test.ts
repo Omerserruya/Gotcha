@@ -52,7 +52,10 @@ import request from "supertest";
 import { prisma } from "@chatcenter/shared";
 import shopifyBillingRouter from "../routes/shopify-billing";
 import { onShopifyConnected } from "../services/shopify-post-install.service";
-import { getShopifyAccessSnapshot } from "../services/shopify-billing-state.service";
+import {
+  getShopifyAccessSnapshot,
+  stateGrantsShopifyAccess,
+} from "../services/shopify-billing-state.service";
 
 const RUN = `sbf-${Date.now().toString(36)}`;
 const ORIGINAL = { ...process.env };
@@ -297,7 +300,7 @@ describe("scenarios 15/16: Core and Shopify are independent", () => {
     });
     const snap = await getShopifyAccessSnapshot(tenant.id);
     expect(snap.core.subscriptionStatus).toBe("ACTIVE");
-    expect(snap.grantsAccess ?? snap.shopify.state === "ACTIVE").toBe(false);
+    expect(stateGrantsShopifyAccess(snap.shopify.state)).toBe(false);
     expect(snap.entitlements).toEqual([]);
   });
 
@@ -498,5 +501,207 @@ describe("the state endpoint", () => {
     expect(serialized).not.toMatch(/"price"/);
     expect(serialized).not.toMatch(/"currency"/);
     expect(serialized).not.toMatch(/"trialDays"/);
+  });
+});
+
+// ─── The catalog has to actually control what is granted ─────────────────
+
+describe("a plan funds what the catalog says it funds", () => {
+  /** Drive the grant directly: sync's mock source reports no subscription. */
+  async function grantFor(tenantId: string, planKey: string | null) {
+    const { grantShopifyEntitlements } = await import("../services/provider-subscription.service");
+    await grantShopifyEntitlements(tenantId, "psub-test", planKey);
+    const rows = await prisma.tenantEntitlement.findMany({
+      where: { tenantId, source: "SHOPIFY_SUBSCRIPTION" },
+      select: { entitlementKey: true },
+    });
+    return rows.map((r) => r.entitlementKey).sort();
+  }
+
+  it("grants exactly the declared entitlements, not the full set", async () => {
+    process.env.SHOPIFY_BILLING_PLAN_CATALOG = JSON.stringify([
+      { key: "SMALL", handle: "small", entitlements: ["shopify_catalog_sync"] },
+    ]);
+    const { tenant } = await newTenant({ coreStatus: "ACTIVE" });
+    expect(await grantFor(tenant.id, "SMALL")).toEqual(["shopify_catalog_sync"]);
+  });
+
+  it("grants the full set when a plan declares nothing", async () => {
+    // The minimal handle-map form. A verifiably paying merchant must not lose
+    // capability because an operator has not finished writing the catalog.
+    process.env.SHOPIFY_BILLING_PLAN_CATALOG = JSON.stringify([{ key: "BARE", handle: "bare" }]);
+    const { tenant } = await newTenant({ coreStatus: "ACTIVE" });
+    expect(await grantFor(tenant.id, "BARE")).toHaveLength(4);
+  });
+
+  it("grants the full set for a plan it cannot identify", async () => {
+    process.env.SHOPIFY_BILLING_PLAN_CATALOG = JSON.stringify([{ key: "A", handle: "a" }]);
+    const { tenant } = await newTenant({ coreStatus: "ACTIVE" });
+    expect(await grantFor(tenant.id, "SOMETHING_SHOPIFY_NAMED")).toHaveLength(4);
+  });
+
+  it("cannot invent an entitlement that is not Shopify-funded", async () => {
+    // Configuration may NARROW what a plan funds. It may not hand out arbitrary
+    // capability - otherwise an env var edit is a way past code review.
+    process.env.SHOPIFY_BILLING_PLAN_CATALOG = JSON.stringify([
+      {
+        key: "SNEAKY",
+        handle: "s",
+        entitlements: ["shopify_catalog_sync", "voice.unlimited_minutes", "commerce.auto_buy"],
+      },
+    ]);
+    const { tenant } = await newTenant({ coreStatus: "ACTIVE" });
+    expect(await grantFor(tenant.id, "SNEAKY")).toEqual(["shopify_catalog_sync"]);
+  });
+
+  it("a downgrade NARROWS, it does not merely stop widening", async () => {
+    process.env.SHOPIFY_BILLING_PLAN_CATALOG = JSON.stringify([
+      { key: "BIG", handle: "big", rank: 2 },
+      { key: "SMALL", handle: "small", rank: 1, entitlements: ["shopify_catalog_sync"] },
+    ]);
+    const { tenant } = await newTenant({ coreStatus: "ACTIVE" });
+
+    expect(await grantFor(tenant.id, "BIG")).toHaveLength(4);
+    // Without the cleanup, BIG's rows would survive forever: they were granted
+    // by a real subscription, so nothing else would ever remove them.
+    expect(await grantFor(tenant.id, "SMALL")).toEqual(["shopify_catalog_sync"]);
+  });
+
+  it("the confirmed gotcha-connector catalog grants all four", async () => {
+    process.env.SHOPIFY_BILLING_PLAN_CATALOG = JSON.stringify([
+      {
+        key: "SHOPIFY_CONNECTOR",
+        productKey: "shopify_connector",
+        handle: "gotcha-connector",
+        visibility: "public",
+        enabled: true,
+        rank: 1,
+        entitlements: [
+          "shopify_catalog_sync",
+          "shopify_order_read",
+          "shopify_order_actions",
+          "shopify_storefront_widget",
+        ],
+        restrictedToShops: [],
+      },
+    ]);
+    const { tenant } = await newTenant({ coreStatus: "ACTIVE" });
+    expect(await grantFor(tenant.id, "SHOPIFY_CONNECTOR")).toEqual([
+      "shopify_catalog_sync",
+      "shopify_order_actions",
+      "shopify_order_read",
+      "shopify_storefront_widget",
+    ]);
+  });
+});
+
+// ─── The five states that must never grant ───────────────────────────────
+
+describe("states that must never grant Shopify entitlements", () => {
+  async function shopifyEntitlements(tenantId: string) {
+    const rows = await prisma.tenantEntitlement.findMany({
+      where: { tenantId, source: { in: ["SHOPIFY_SUBSCRIPTION", "SHOPIFY_GRANDFATHERED"] } },
+    });
+    return rows.map((r) => r.entitlementKey);
+  }
+
+  it("BILLING_PENDING grants nothing", async () => {
+    enableBilling();
+    const { tenant } = await newTenant({ coreStatus: "ACTIVE" });
+    const r = await onShopifyConnected({
+      tenantId: tenant.id,
+      externalShopId: shopId(),
+      shopDomain: "x.myshopify.com",
+    });
+    const conn = await prisma.commerceConnection.findUnique({ where: { id: r.connectionId } });
+    expect(conn?.status).toBe("BILLING_PENDING");
+    expect(await shopifyEntitlements(tenant.id)).toEqual([]);
+  });
+
+  it("missing Partner API credentials cannot grant, and cannot revoke either", async () => {
+    // The distinction is the point: "we could not ask" must not be recorded as
+    // "they are not paying", which would revoke a paying merchant mid-outage.
+    enableBilling();
+    process.env.SHOPIFY_BILLING_MODE = "app_pricing";
+    process.env.SHOPIFY_BILLING_ENV = "test"; // networked, so credentials matter
+    delete process.env.SHOPIFY_PARTNER_API_TOKEN;
+    delete process.env.SHOPIFY_PARTNER_ORGANIZATION_ID;
+    delete process.env.SHOPIFY_PARTNER_APP_ID;
+
+    const { tenant } = await newTenant({ coreStatus: "ACTIVE" });
+    const link = await prisma.billableEntityTenant.findUnique({
+      where: { tenantId: tenant.id },
+      select: { billableEntityId: true },
+    });
+    const { syncProviderSubscription } = await import("../services/provider-subscription.service");
+
+    await expect(
+      syncProviderSubscription({
+        tenantId: tenant.id,
+        billableEntityId: link!.billableEntityId,
+        productKey: "shopify_connector",
+        billingSource: "SHOPIFY",
+        externalShopId: "999",
+        environment: "test",
+      }),
+    ).rejects.toThrow();
+
+    expect(await shopifyEntitlements(tenant.id)).toEqual([]);
+  });
+
+  it("a failed verification leaves the install intact and grants nothing", async () => {
+    enableBilling();
+    process.env.SHOPIFY_BILLING_MODE = "app_pricing";
+    process.env.SHOPIFY_BILLING_ENV = "test";
+    delete process.env.SHOPIFY_PARTNER_API_TOKEN;
+
+    const { tenant } = await newTenant({ coreStatus: "ACTIVE" });
+    // onShopifyConnected swallows the verification failure by design - the
+    // store is already linked and nothing here may retract that.
+    const r = await onShopifyConnected({
+      tenantId: tenant.id,
+      externalShopId: shopId(),
+      shopDomain: "x.myshopify.com",
+    });
+    expect(r.connectionId).toBeTruthy();
+    expect(await shopifyEntitlements(tenant.id)).toEqual([]);
+  });
+
+  it("a cancelled subscription revokes what Shopify was funding", async () => {
+    enableBilling();
+    const { tenant } = await newTenant({ coreStatus: "ACTIVE" });
+    const { grantShopifyEntitlements, revokeShopifyEntitlements } = await import(
+      "../services/provider-subscription.service"
+    );
+    await grantShopifyEntitlements(tenant.id, "psub-x", null);
+    expect((await shopifyEntitlements(tenant.id)).length).toBe(4);
+
+    await revokeShopifyEntitlements(tenant.id);
+    expect(await shopifyEntitlements(tenant.id)).toEqual([]);
+  });
+
+  it("an empty plan catalog sells nothing, so no plan selection is offered", async () => {
+    enableBilling();
+    delete process.env.SHOPIFY_BILLING_PLAN_CATALOG;
+    const { tenant } = await newTenant({ coreStatus: "ACTIVE" });
+    await onShopifyConnected({
+      tenantId: tenant.id,
+      externalShopId: shopId(),
+      shopDomain: "x.myshopify.com",
+    });
+    const snap = await getShopifyAccessSnapshot(tenant.id);
+    expect(snap.availablePlanCount).toBe(0);
+    expect(await shopifyEntitlements(tenant.id)).toEqual([]);
+  });
+
+  it("Core alone never grants Shopify capability, however healthy it is", async () => {
+    enableBilling();
+    const { tenant } = await newTenant({ coreStatus: "ACTIVE", paidAt: AFTER });
+    await onShopifyConnected({
+      tenantId: tenant.id,
+      externalShopId: shopId(),
+      shopDomain: "x.myshopify.com",
+    });
+    expect(await shopifyEntitlements(tenant.id)).toEqual([]);
   });
 });

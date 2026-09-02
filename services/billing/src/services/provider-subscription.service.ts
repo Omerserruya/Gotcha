@@ -22,6 +22,10 @@ import { prisma, setTenantEntitlement } from "@chatcenter/shared";
 import type { CommercePlatform, ProviderSubscriptionStatus } from "@prisma/client";
 import { getBillingSource } from "../billing-sources";
 import { grantsAccess, isTerminalShopifyStatus } from "../billing-sources/shopify/status-map";
+import {
+  findPlanForSubscription,
+  planEntitlements,
+} from "../billing-sources/shopify/plan-catalog";
 
 /**
  * Capabilities a Shopify subscription pays for.
@@ -217,7 +221,13 @@ export async function syncProviderSubscription(input: {
 
   const changed = existing?.status !== status;
 
-  if (entitled) await grantShopifyEntitlements(input.tenantId, row.id);
+  // The plan is resolved from what Shopify SAID (handle first, name as a last
+  // resort), never from what we hoped it would be.
+  // `planHandle` is what both Shopify sources populate - the manual source
+  // maps Shopify's `name` into it, so there is one field to read rather than
+  // two spellings of the same fact.
+  const plan = findPlanForSubscription({ handle: observed?.planHandle ?? null });
+  if (entitled) await grantShopifyEntitlements(input.tenantId, row.id, plan?.key ?? null);
   else await revokeShopifyEntitlements(input.tenantId);
 
   if (input.commerceConnectionId) {
@@ -237,9 +247,42 @@ export async function syncProviderSubscription(input: {
   return { status: observed ? status : "NONE", rawStatus: observed?.rawStatus ?? null, entitled, changed };
 }
 
-/** Turn on exactly what Shopify pays for, stamped with what funded it. */
-export async function grantShopifyEntitlements(tenantId: string, providerSubscriptionId: string): Promise<void> {
-  for (const key of SHOPIFY_FUNDED_ENTITLEMENTS) {
+/**
+ * Turn on exactly what THIS PLAN pays for, stamped with what funded it.
+ *
+ * `planKey` is what makes a multi-plan catalog mean anything. Without it every
+ * plan granted the same four capabilities, so a cheaper tier and an expensive
+ * one were indistinguishable in effect - the catalog's `entitlements` array
+ * would have been decorative, and nobody would have noticed until the second
+ * plan launched and granted the first plan's access.
+ *
+ * Two rules, and the second is the safety one:
+ *
+ *   • A plan that DECLARES entitlements funds exactly those.
+ *   • A plan that declares none - the minimal handle-map form, or a plan
+ *     Shopify named that this catalog cannot identify - funds the full set.
+ *     That is today's behaviour, preserved, and it is the right default: a
+ *     merchant who is verifiably paying should not lose capability because an
+ *     operator has not finished writing the catalog.
+ *
+ * Declared keys are INTERSECTED with `SHOPIFY_FUNDED_ENTITLEMENTS`. Configuration
+ * may narrow what a plan funds; it may not invent a capability. Otherwise a
+ * typo - or an edit to an env var - would be a way to hand out arbitrary
+ * entitlements without touching code or review.
+ */
+export async function grantShopifyEntitlements(
+  tenantId: string,
+  providerSubscriptionId: string,
+  planKey?: string | null,
+): Promise<void> {
+  const declared = planEntitlements(planKey);
+  const allowed = new Set<string>(SHOPIFY_FUNDED_ENTITLEMENTS as readonly string[]);
+  const keys =
+    declared.length > 0
+      ? declared.filter((k) => allowed.has(k))
+      : [...SHOPIFY_FUNDED_ENTITLEMENTS];
+
+  for (const key of keys) {
     await setTenantEntitlement({
       tenantId,
       key,
@@ -250,6 +293,25 @@ export async function grantShopifyEntitlements(tenantId: string, providerSubscri
       createdBy: "billing:shopify-sync",
     });
   }
+
+  // A DOWNGRADE has to narrow, not merely stop widening. Without this, moving
+  // from a larger plan to a smaller one would leave the larger plan's rows in
+  // place forever: they were granted by a real subscription, so nothing else
+  // would ever clean them up.
+  const stale = await prisma.tenantEntitlement.deleteMany({
+    where: {
+      tenantId,
+      source: "SHOPIFY_SUBSCRIPTION",
+      entitlementKey: { notIn: keys },
+    },
+  });
+  if (stale.count > 0) {
+    console.log(
+      `[billing][provider-sub] tenant=${tenantId} plan=${planKey ?? "unknown"} ` +
+        `revoked ${stale.count} entitlement(s) this plan does not fund`,
+    );
+  }
+
   await prisma.tenantEntitlement.updateMany({
     where: { tenantId, source: "SHOPIFY_SUBSCRIPTION" },
     data: { fundedByBillingSource: "SHOPIFY", fundedByProviderSubscriptionId: providerSubscriptionId },
