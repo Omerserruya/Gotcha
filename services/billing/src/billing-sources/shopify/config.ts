@@ -38,6 +38,8 @@
  * disagrees with the one the merchant was actually shown.
  */
 
+import { strictShopDomain } from "@chatcenter/shared";
+
 import { sellablePlans, validatePlanCatalog } from "./plan-catalog";
 
 /** Which Shopify billing mechanism this deployment uses. */
@@ -196,6 +198,108 @@ export function shopifyPublicationCutoff(): Date | null {
  */
 export function shopifyGrandfatherDevStores(): boolean {
   return flag(process.env.SHOPIFY_GRANDFATHER_DEV_STORES, false);
+}
+
+// ─── Test-shop allowlist ──────────────────────────────────────────────────
+
+/**
+ * The stores permitted to enter the Shopify App Pricing flow while
+ * `SHOPIFY_BILLING_ENV=test`.
+ *
+ * WHY THIS EXISTS
+ * ---------------
+ * Testing happens against the PRODUCTION Partner app, on the production host,
+ * beside real merchants. `test` is not an isolated environment - it is the same
+ * deployment with a flag flipped, and Shopify's $0-on-development-stores rule is
+ * the only thing separating a test charge from a real one.
+ *
+ * Without an allowlist, flipping that flag would put every connected store into
+ * the plan-selection flow at once: real merchants redirected to a Shopify
+ * pricing page they never asked for, during a window meant to exercise one dev
+ * store. That is not a billing bug so much as an incident.
+ *
+ * So in test mode the flow is opt-IN, per store, from server configuration.
+ *
+ * FAIL-CLOSED, IN THE ONLY DIRECTION THAT IS SAFE
+ * -----------------------------------------------
+ * An empty or missing list allows NOBODY. The failure mode of a forgotten
+ * variable has to be "the test does not start", never "every merchant is
+ * enrolled".
+ *
+ * NOT CONSULTED IN LIVE
+ * ---------------------
+ * `live` is the state where everyone is meant to participate. Letting an
+ * allowlist survive into it would mean a stale test list silently excluding
+ * paying merchants from billing - the same class of bug, pointing the other
+ * way. `shopifyBillingAppliesToShop` returns true for every shop in `live` and
+ * in `mock` without reading this at all.
+ */
+function normalizeAllowlistEntry(raw: string): string | null {
+  let v = raw.trim().toLowerCase();
+  if (!v) return null;
+
+  // Operators paste what they have: a bare handle, a domain, sometimes a URL
+  // copied out of the browser. Scheme and path are stripped; nothing else is
+  // repaired.
+  v = v.replace(/^https?:\/\//, "");
+  v = v.split("/")[0];
+  v = v.replace(/\.$/, "");
+  if (!v) return null;
+
+  // A bare handle is completed. A DOTTED host is not: completing `evil.com`
+  // into `evil.com.myshopify.com` would turn a rejected entry into an
+  // accepted-looking one, which is exactly the hazard the strict validator
+  // exists to remove.
+  const candidate = v.includes(".") ? v : `${v}.myshopify.com`;
+  return strictShopDomain(candidate);
+}
+
+/**
+ * The parsed allowlist. Separated by comma, whitespace or newline.
+ *
+ * Invalid entries are dropped rather than throwing, and reported separately at
+ * boot: one typo must not take the whole list - and therefore the whole test -
+ * with it, and a silently shorter list is safer than a silently longer one.
+ */
+export function shopifyBillingTestShops(): string[] {
+  const raw = process.env.SHOPIFY_BILLING_TEST_SHOPS;
+  if (!raw || !raw.trim()) return [];
+  const out = new Set<string>();
+  for (const part of raw.split(/[\s,]+/)) {
+    const shop = normalizeAllowlistEntry(part);
+    if (shop) out.add(shop);
+  }
+  return [...out];
+}
+
+/** Entries that could not be parsed. Names the input so a typo is findable. */
+export function invalidTestShopEntries(): string[] {
+  const raw = process.env.SHOPIFY_BILLING_TEST_SHOPS;
+  if (!raw || !raw.trim()) return [];
+  return raw
+    .split(/[\s,]+/)
+    .filter((p) => p.trim() && !normalizeAllowlistEntry(p));
+}
+
+/**
+ * May this store enter the Shopify billing flow?
+ *
+ * The shop MUST already have been established by a verified path - the HMAC on
+ * a Shopify request, or a stored `CommerceConnection`. This function is a
+ * filter over an identity somebody else proved; it does not establish one, and
+ * a caller passing a value that came from a query parameter or a request body
+ * would be defeating the allowlist rather than using it.
+ */
+export function shopifyBillingAppliesToShop(shopDomain: string | null | undefined): boolean {
+  // Only `test` is gated. `live` means everybody, and `mock` reaches nothing.
+  if (shopifyBillingEnv() !== "test") return true;
+
+  const shop = strictShopDomain(shopDomain);
+  // An unparseable domain is not on any list. A malicious suffix
+  // (`acme.myshopify.com.evil.com`) dies here rather than in the comparison.
+  if (!shop) return false;
+
+  return shopifyBillingTestShops().includes(shop);
 }
 
 /** Same reasoning as `flag`: the caller passes the value so the name stays literal. */
@@ -375,6 +479,30 @@ export function reportShopifyBillingConfig(): void {
   console.log(
     `[shopify-billing] mode=${shopifyBillingMode()} env=${shopifyBillingEnv()} ` +
       `policy=${shopifyPolicyMode() ?? "unresolved"} split=${shopifyAllowSplitBilling()} ` +
-      `grandfathered=${shopifyAllowGrandfathered()} usage=${shopifyUsageBillingEnabled()}`,
+      `grandfathered=${shopifyAllowGrandfathered()} usage=${shopifyUsageBillingEnabled()} ` +
+      // COUNT, never the domains. A shop domain identifies a customer, and this
+      // line sits in the same boot log as configuration that is adjacent to
+      // secrets. The list itself is readable from the environment by anyone who
+      // needs it.
+      `testShops=${shopifyBillingEnv() === "test" ? shopifyBillingTestShops().length : "n/a"}`,
   );
+
+  if (shopifyBillingEnv() === "test" && shopifyBillingMode() === "app_pricing") {
+    const allowed = shopifyBillingTestShops().length;
+    if (allowed === 0) {
+      console.warn(
+        "[shopify-billing] env=test with an EMPTY SHOPIFY_BILLING_TEST_SHOPS: no store may enter the " +
+          "App Pricing flow. This is the safe default, not a failure - set the variable to opt a " +
+          "development store in.",
+      );
+    }
+    const bad = invalidTestShopEntries();
+    if (bad.length > 0) {
+      console.warn(
+        `[shopify-billing] SHOPIFY_BILLING_TEST_SHOPS has ${bad.length} unparseable entr` +
+          `${bad.length === 1 ? "y" : "ies"} which will be ignored: ${bad.join(", ")}. ` +
+          "Expected a myshopify handle or domain.",
+      );
+    }
+  }
 }

@@ -711,3 +711,121 @@ describe("states that must never grant Shopify entitlements", () => {
     expect(await shopifyEntitlements(tenant.id)).toEqual([]);
   });
 });
+
+// ─── The test-shop allowlist, end to end ─────────────────────────────────
+
+describe("in test mode, only allowlisted shops enter the flow", () => {
+  function testMode(shops: string) {
+    enableBilling();
+    process.env.SHOPIFY_BILLING_ENV = "test";
+    process.env.SHOPIFY_BILLING_TEST_SHOPS = shops;
+  }
+
+  it("a NON-allowlisted shop connects and is never sent to plan selection", async () => {
+    // The property that matters: a real merchant during a test window behaves
+    // exactly as they do today. Connected, no plan page, nothing granted.
+    testMode("acme-dev.myshopify.com");
+    const { tenant } = await newTenant({ coreStatus: "ACTIVE" });
+
+    const r = await onShopifyConnected({
+      tenantId: tenant.id,
+      externalShopId: shopId(),
+      shopDomain: "real-merchant.myshopify.com",
+    });
+
+    expect(r.requiresPlanSelection).toBe(false);
+    expect(r.planSelectionUrl).toBeNull();
+    expect(r.state).toBe("UNRESOLVED");
+
+    const conn = await prisma.commerceConnection.findUnique({ where: { id: r.connectionId } });
+    expect(conn?.status).toBe("CONNECTED");
+
+    const ents = await prisma.tenantEntitlement.findMany({ where: { tenantId: tenant.id } });
+    expect(ents).toEqual([]);
+  });
+
+  it("an allowlisted shop DOES enter the flow", async () => {
+    testMode("acme-dev.myshopify.com");
+    const { tenant } = await newTenant({ coreStatus: "ACTIVE" });
+    const r = await onShopifyConnected({
+      tenantId: tenant.id,
+      externalShopId: shopId(),
+      shopDomain: "acme-dev.myshopify.com",
+    });
+    expect(r.requiresPlanSelection).toBe(true);
+    expect(r.state).toBe("PLAN_SELECTION_REQUIRED");
+  });
+
+  it("an EMPTY allowlist admits nobody, including a dev store", async () => {
+    testMode("");
+    const { tenant } = await newTenant({ coreStatus: "ACTIVE" });
+    const r = await onShopifyConnected({
+      tenantId: tenant.id,
+      externalShopId: shopId(),
+      shopDomain: "acme-dev.myshopify.com",
+    });
+    expect(r.requiresPlanSelection).toBe(false);
+    expect(r.state).toBe("UNRESOLVED");
+  });
+
+  it("the plan-selection route refuses a non-allowlisted shop", async () => {
+    testMode("acme-dev.myshopify.com");
+    const { tenant } = await newTenant({ coreStatus: "ACTIVE" });
+    await onShopifyConnected({
+      tenantId: tenant.id,
+      externalShopId: shopId(),
+      shopDomain: "real-merchant.myshopify.com",
+    });
+
+    const res = await request(app())
+      .post("/api/billing/shopify/plan-selection")
+      .set("x-test-tenant", tenant.id);
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toBe("shopify_billing_not_enabled_for_shop");
+  });
+
+  it("the verified-return route refuses a non-allowlisted shop", async () => {
+    // Belt and braces: even if a shop somehow reached a Shopify plan page, the
+    // return path must not verify a subscription or grant anything.
+    testMode("acme-dev.myshopify.com");
+    const { tenant } = await newTenant({ coreStatus: "ACTIVE" });
+    await onShopifyConnected({
+      tenantId: tenant.id,
+      externalShopId: shopId(),
+      shopDomain: "real-merchant.myshopify.com",
+    });
+
+    const res = await request(app())
+      .post("/api/billing/shopify/complete?shop=real-merchant.myshopify.com")
+      .set("x-test-tenant", tenant.id);
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toBe("shopify_billing_not_enabled_for_shop");
+  });
+
+  it("the allowlist is read from the CONNECTION, never from the request", async () => {
+    // A query parameter naming an allowlisted shop must not let a
+    // non-allowlisted workspace through.
+    testMode("acme-dev.myshopify.com");
+    const { tenant } = await newTenant({ coreStatus: "ACTIVE" });
+    await onShopifyConnected({
+      tenantId: tenant.id,
+      externalShopId: shopId(),
+      shopDomain: "real-merchant.myshopify.com",
+    });
+
+    const res = await request(app())
+      .post("/api/billing/shopify/complete?shop=acme-dev.myshopify.com")
+      .set("x-test-tenant", tenant.id);
+
+    // Rejected on the shop MISMATCH before the allowlist is even consulted -
+    // two independent guards, either of which is sufficient.
+    expect(res.status).toBe(409);
+    expect(["shopify_shop_mismatch", "shopify_billing_not_enabled_for_shop"]).toContain(
+      res.body.error,
+    );
+    const ents = await prisma.tenantEntitlement.findMany({ where: { tenantId: tenant.id } });
+    expect(ents).toEqual([]);
+  });
+});

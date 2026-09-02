@@ -255,6 +255,38 @@ naming a store the session does not own. It is a guard, never a credential.
 
 ---
 
+## 7a. The test-shop allowlist
+
+Testing runs against the **production Partner app**, on the production host,
+beside real merchants. `test` is not an isolated environment — it is the same
+deployment with a flag flipped, and Shopify's $0-on-development-stores rule is
+the only thing between a test charge and a real one.
+
+So while `SHOPIFY_BILLING_ENV=test`, only stores named in
+`SHOPIFY_BILLING_TEST_SHOPS` may enter the App Pricing flow. Everyone else
+behaves exactly as they do today: connected, no plan page, nothing granted on
+Shopify's account, connection `CONNECTED`, state `UNRESOLVED`.
+
+- **Empty or missing admits nobody.** A forgotten variable must mean "the test
+  does not start", never "every merchant is enrolled".
+- **`live` never reads it.** A stale test list surviving into live would
+  silently exclude paying merchants — the same class of bug, pointing the other
+  way. `mock` reaches nothing and is ungated.
+- **Enforced in three places**: the post-install decision, plan selection, and
+  the verified return. The shop is read from the stored `CommerceConnection` or
+  a Shopify-signed request, **never** from a query parameter or request body.
+- **Rejects malicious suffixes.** `acme.myshopify.com.evil.com`, `evil.com`,
+  `myshopify.com` and `a.b.myshopify.com` are all refused, and a dotted host is
+  never auto-completed with the suffix.
+- **Boot logs the count, never the domains** — a shop domain identifies a
+  customer, and that line sits beside configuration adjacent to secrets.
+
+Accepts a bare handle or a full domain, comma/whitespace/newline separated.
+Unparseable entries are dropped and warned about at boot rather than taking the
+whole list down.
+
+---
+
 ## 8. Testing on a development store
 
 ### 8.1 Configure

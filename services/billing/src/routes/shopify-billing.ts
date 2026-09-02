@@ -47,6 +47,7 @@ import {
   getActiveGrandfatherGrant,
 } from "../services/shopify-grandfather.service";
 import {
+  shopifyBillingAppliesToShop,
   shopifyBillingEnabled,
   shopifyBillingEnv,
   shopifyPlanSelectionUrl,
@@ -162,6 +163,16 @@ router.post(
       return;
     }
 
+    // The allowlist, read from the CONNECTION rather than the request. A shop
+    // this deployment has not opted in must never be sent to a plan page.
+    if (!shopifyBillingAppliesToShop(connection.shopDomain)) {
+      res.status(409).json({
+        error: "shopify_billing_not_enabled_for_shop",
+        detail: "Shopify billing is not enabled for this store on this deployment.",
+      });
+      return;
+    }
+
     const url = shopifyPlanSelectionUrl(connection.shopDomain ?? "");
     if (!url) {
       res.status(503).json({
@@ -229,6 +240,17 @@ router.post(
       res.status(409).json({
         error: "shopify_shop_mismatch",
         detail: "This billing return does not belong to the store connected to this workspace.",
+      });
+      return;
+    }
+
+    // Same gate on the return path. Without it, a shop outside the allowlist
+    // that somehow reached a Shopify plan page could still have a subscription
+    // verified and entitlements granted here.
+    if (!shopifyBillingAppliesToShop(connection.shopDomain)) {
+      res.status(409).json({
+        error: "shopify_billing_not_enabled_for_shop",
+        detail: "Shopify billing is not enabled for this store on this deployment.",
       });
       return;
     }

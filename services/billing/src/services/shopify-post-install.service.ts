@@ -42,7 +42,11 @@ import {
   type ShopifyBillingState,
 } from "./shopify-billing-state.service";
 import { resolveAndRecordBillingPolicy } from "./billing-policy-resolver.service";
-import { shopifyBillingEnabled, shopifyBillingEnv } from "../billing-sources/shopify/config";
+import {
+  shopifyBillingAppliesToShop,
+  shopifyBillingEnabled,
+  shopifyBillingEnv,
+} from "../billing-sources/shopify/config";
 import { SHOPIFY_CONNECTOR_PRODUCT } from "../billing-sources/shopify/plan-catalog";
 
 export interface ShopifyConnectedInput {
@@ -121,6 +125,34 @@ export async function onShopifyConnected(
       where: { id: connection.id },
       data: { status: "CONNECTED" },
     });
+    return {
+      connectionId: connection.id,
+      state: "UNRESOLVED",
+      grandfathered: false,
+      requiresPlanSelection: false,
+      planSelectionUrl: null,
+    };
+  }
+
+  // 2b. The test-shop allowlist.
+  //
+  // `test` is not an isolated environment - it is production with a flag
+  // flipped, beside real merchants. A store that was not explicitly opted in
+  // must behave exactly as it does today: connected, no plan page, no
+  // entitlement moved on Shopify's account.
+  //
+  // The shop domain here came from `linkCommerceConnection`, which got it from
+  // a Shopify-signed install or a stored connection. It is never a value the
+  // browser supplied.
+  if (!shopifyBillingAppliesToShop(input.shopDomain ?? null)) {
+    await prisma.commerceConnection.update({
+      where: { id: connection.id },
+      data: { status: "CONNECTED" },
+    });
+    console.log(
+      `[billing][shopify] connected tenant=${input.tenantId} connection=${connection.id} ` +
+        `billing=skipped (shop not in SHOPIFY_BILLING_TEST_SHOPS while env=test)`,
+    );
     return {
       connectionId: connection.id,
       state: "UNRESOLVED",

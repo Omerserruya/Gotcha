@@ -695,6 +695,16 @@ services:
       # Off by default: a dev store has no commercial history, so a grant there
       # is a testing artefact that would be indistinguishable from a real one.
       SHOPIFY_GRANDFATHER_DEV_STORES: ${SHOPIFY_GRANDFATHER_DEV_STORES:-false}
+      # Stores permitted into the Shopify App Pricing flow while
+      # SHOPIFY_BILLING_ENV=test. Comma or whitespace separated myshopify
+      # handles or domains.
+      #
+      # `test` is not an isolated environment - it is production with a flag
+      # flipped, beside real merchants. Without this, flipping that flag would
+      # redirect every connected store to a Shopify pricing page they never
+      # asked for. Empty allows NOBODY, which is the safe default, and `live`
+      # ignores it entirely.
+      SHOPIFY_BILLING_TEST_SHOPS: ${SHOPIFY_BILLING_TEST_SHOPS:-}
       # SECRET. App Pricing sends no subscription webhooks, so the Partner API
       # is the only way to learn that a merchant paid.
       SHOPIFY_PARTNER_API_TOKEN: ${SHOPIFY_PARTNER_API_TOKEN:-}
