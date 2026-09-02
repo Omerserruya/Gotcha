@@ -9,6 +9,16 @@
  * hold a legacy non-expiring token are migrated in place through the one-way
  * token-exchange grant on their first failing call - no re-connect needed.
  *
+ * TRANSPORT: Admin GraphQL, everywhere. App Store requirement 2.2.4 forbids
+ * core Admin REST, and the sixty REST calls this file used to make now live in
+ * six focused modules - shopify-gql-{shop,products,customers,orders,fulfillment,
+ * discounts,refunds}.ts - behind mappers that keep the REST-era shapes their
+ * callers already read. There is no REST fallback anywhere: a GraphQL failure
+ * surfaces as a failure rather than degrading into a second, quieter code path
+ * with different behaviour. The only Shopify call left outside GraphQL is the
+ * OAuth `access_scopes.json` probe in validate(), which is not an Admin API
+ * resource - see the note there.
+ *
  * Two roles:
  *   1. ECOMMERCE integration - the rich tool surface below (customer, orders,
  *      fulfillment, discounts, products, returns) the AI employee can call.
@@ -45,6 +55,43 @@ import {
   verifyShippingAddress,
 } from "./shopify-order-mutability";
 import { quoteExchange, verifyExchange } from "./shopify-exchange";
+import { getShop } from "./shopify-gql-shop";
+import { escapeSearchValue } from "./shopify-graphql";
+import {
+  getOrderById,
+  getOrderByName,
+  searchOrders,
+  updateOrder,
+  // Aliased: the adapter has its own same-named handler wrapping validation,
+  // approval and read-back around this one mutation.
+  updateOrderShippingAddress as writeOrderShippingAddress,
+} from "./shopify-gql-orders";
+import {
+  getDiscountByCode,
+  listDiscounts,
+  createDiscount as createGqlDiscount,
+  deactivateDiscount,
+} from "./shopify-gql-discounts";
+import { suggestRefund, createRefund, listOrderRefunds } from "./shopify-gql-refunds";
+import { getFulfillmentOrders, getFulfillmentEvents, listLocations, getFulfillmentLocations } from "./shopify-gql-fulfillment";
+import {
+  getCustomerById,
+  searchCustomers,
+  findCustomerByField,
+  getCustomerMetafields,
+  createCustomer,
+  updateCustomer,
+  mutateTags,
+  writeCustomerAddress,
+  setCustomerMetafield,
+} from "./shopify-gql-customers";
+import {
+  getProductById,
+  getProductByHandle,
+  getProductImages,
+  getVariantById,
+  findProductByTitle,
+} from "./shopify-gql-products";
 
 /**
  * Resolved from the ONE shared declaration, not pinned here. This used to be a
@@ -845,6 +892,14 @@ const ShopifyAdapter: ProviderAdapter = {
    * whose write scopes are missing fails the test with a message naming the
    * scopes to re-grant, instead of read tools working while every write
    * quietly dies.
+   *
+   * The ONE Shopify call in this integration that is not Admin GraphQL, and
+   * deliberately so: `/admin/oauth/access_scopes.json` is an OAuth endpoint,
+   * not a REST Admin API resource. App Store requirement 2.2.4 is about the
+   * Admin API (`/admin/api/<version>/*.json`), which this integration no
+   * longer touches at all. There is no GraphQL equivalent - `currentAppInstallation
+   * { accessScopes }` reports what the APP asks for, not what this shop granted,
+   * which is the entire question being asked here.
    */
   async validate({ credentials, config }) {
     const token = credentials.accessToken;
@@ -957,14 +1012,15 @@ const ShopifyAdapter: ProviderAdapter = {
       }
       case "search_customers": {
         const limit = clampLimit(args.limit, 10, 250);
-        const r: any = await sreq(ctx, "GET", `/customers/search.json?query=${encodeURIComponent(String(args.query || ""))}&limit=${limit}`);
-        return r.customers || [];
+        // The query is Shopify's search grammar and is passed through as
+        // written, exactly as it was to REST's search.json.
+        return await searchCustomers(ctx, String(args.query || ""), limit);
       }
       case "get_customer_by_email": {
-        return await customerByQuery(ctx, `email:${String(args.email || "")}`);
+        return await findCustomerByField(ctx, "email", String(args.email || ""));
       }
       case "get_customer_by_phone": {
-        return await customerByQuery(ctx, `phone:${String(args.phone || "")}`);
+        return await findCustomerByField(ctx, "phone", String(args.phone || ""));
       }
       case "get_customer_orders": {
         const limit = clampLimit(args.limit, 10, 100);
@@ -973,8 +1029,9 @@ const ShopifyAdapter: ProviderAdapter = {
       case "get_customer_addresses": {
         const c = await resolveCustomer(ctx, args);
         if (!c) throw new Error("customer_not_found");
-        const r: any = await sreq(ctx, "GET", `/customers/${c.id}/addresses.json`);
-        return r.addresses || c.addresses || [];
+        // The customer read already carries the address book, so the separate
+        // REST address call has no GraphQL counterpart worth making.
+        return c.addresses || [];
       }
       case "get_customer_tags": {
         const c = await resolveCustomer(ctx, args);
@@ -984,32 +1041,31 @@ const ShopifyAdapter: ProviderAdapter = {
       case "get_customer_metafields": {
         const c = await resolveCustomer(ctx, args);
         if (!c) throw new Error("customer_not_found");
-        const r: any = await sreq(ctx, "GET", `/customers/${c.id}/metafields.json`);
-        return r.metafields || [];
+        return await getCustomerMetafields(ctx, String(c.id));
       }
 
       // ── Customer write ──
       case "create_customer": {
-        const body: any = { customer: {} };
-        if (args.email) body.customer.email = String(args.email);
-        if (args.phone) body.customer.phone = String(args.phone);
-        if (args.first_name) body.customer.first_name = String(args.first_name);
-        if (args.last_name) body.customer.last_name = String(args.last_name);
-        if (Array.isArray(args.tags) && args.tags.length) body.customer.tags = (args.tags as string[]).join(", ");
-        const r: any = await sreq(ctx, "POST", `/customers.json`, body);
-        return r.customer;
+        const fields: any = {};
+        if (args.email) fields.email = String(args.email);
+        if (args.phone) fields.phone = String(args.phone);
+        if (args.first_name) fields.first_name = String(args.first_name);
+        if (args.last_name) fields.last_name = String(args.last_name);
+        if (Array.isArray(args.tags) && args.tags.length) fields.tags = (args.tags as string[]).map(String);
+        return await createCustomer(ctx, fields);
       }
       case "update_customer": {
         const c = await resolveCustomer(ctx, args);
         if (!c) throw new Error("customer_not_found");
         const f = (args.fields && typeof args.fields === "object" ? args.fields : args) as any;
-        const patch: any = { id: c.id };
+        const patch: any = {};
         for (const k of ["first_name", "last_name", "email", "phone", "note"]) {
           if (f[k] != null && f[k] !== "") patch[k] = String(f[k]);
         }
-        if (f.tags != null) patch.tags = Array.isArray(f.tags) ? f.tags.join(", ") : String(f.tags);
-        const r: any = await sreq(ctx, "PUT", `/customers/${c.id}.json`, { customer: patch });
-        return r.customer;
+        // REST took a comma string; CustomerInput takes a list, and this is a
+        // REPLACE either way - add_tag / remove_tag are the additive path.
+        if (f.tags != null) patch.tags = Array.isArray(f.tags) ? f.tags.map(String) : splitTags(f.tags);
+        return await updateCustomer(ctx, String(c.id), patch);
       }
       case "update_my_profile": {
         return await updateOwnProfile(ctx, args);
@@ -1023,15 +1079,12 @@ const ShopifyAdapter: ProviderAdapter = {
       case "update_metafield": {
         const c = await resolveCustomer(ctx, args);
         if (!c) throw new Error("customer_not_found");
-        const r: any = await sreq(ctx, "POST", `/customers/${c.id}/metafields.json`, {
-          metafield: {
-            namespace: String(args.namespace),
-            key: String(args.key),
-            value: String(args.value),
-            type: String(args.type || "single_line_text_field"),
-          },
+        return await setCustomerMetafield(ctx, String(c.id), {
+          namespace: String(args.namespace),
+          key: String(args.key),
+          value: String(args.value),
+          type: String(args.type || "single_line_text_field"),
         });
-        return r.metafield;
       }
       case "create_note": {
         const c = await resolveCustomer(ctx, args);
@@ -1055,8 +1108,7 @@ const ShopifyAdapter: ProviderAdapter = {
         }
 
         const note = existing ? `${existing}\n\n${incoming}` : incoming;
-        const r: any = await sreq(ctx, "PUT", `/customers/${c.id}.json`, { customer: { id: c.id, note } });
-        return r.customer;
+        return await updateCustomer(ctx, String(c.id), { note });
       }
 
       // Notes on the ORDER, which is a different object from the customer.
@@ -1076,23 +1128,23 @@ const ShopifyAdapter: ProviderAdapter = {
         // an unbounded field is an injection surface.
         if (text.length > 900) throw new Error("note_too_long");
 
-        const body: any = { order: { id: o.id } };
+        const patch: { note?: string; tags?: string[] } = {};
         if (text) {
           const existing = String(o.note || "").trim();
-          body.order.note = existing ? `${existing}\n\n${text}` : text;
+          patch.note = existing ? `${existing}\n\n${text}` : text;
         }
         if (addTags) {
           const have = String(o.tags || "").split(",").map((s) => s.trim()).filter(Boolean);
           const want = addTags.split(",").map((s) => s.trim()).filter(Boolean);
-          body.order.tags = Array.from(new Set([...have, ...want])).join(", ");
+          patch.tags = Array.from(new Set([...have, ...want]));
         }
-        await sreq(ctx, "PUT", `/orders/${o.id}.json`, body);
+        await updateOrder(ctx, String(o.id), patch);
 
         // Read back. "Shopify accepted the write" and "the note is on the
         // order" are different claims, and only the second one may reach a
-        // customer.
-        const check: any = await sreq(ctx, "GET", `/orders/${o.id}.json`);
-        const after = check?.order ?? {};
+        // customer - which is why this is a SEPARATE read and not the
+        // mutation's own echo of what it thinks it saved.
+        const after = (await getOrderById(ctx, String(o.id))) ?? {};
         const noteApplied = !text || String(after.note || "").includes(text);
         const tagsApplied =
           !addTags ||
@@ -1123,12 +1175,13 @@ const ShopifyAdapter: ProviderAdapter = {
 
       // ── Orders read ──
       case "get_orders": {
-        const params = new URLSearchParams();
-        params.set("status", String(args.status || "open"));
-        params.set("limit", String(clampLimit(args.limit, 10, 250)));
-        if (args.email) params.set("email", String(args.email));
-        const r: any = await sreq(ctx, "GET", `/orders.json?${params}`);
-        return (r.orders || []).map(projectOrderForAgent);
+        const orders = await searchOrders(ctx, {
+          limit: clampLimit(args.limit, 10, 250),
+          status: String(args.status || "open"),
+          email: args.email ? String(args.email) : undefined,
+          full: true,
+        });
+        return orders.map(projectOrderForAgent);
       }
       case "get_order":
       case "order_lookup": {
@@ -1137,15 +1190,15 @@ const ShopifyAdapter: ProviderAdapter = {
         return projectOrderForAgent(o);
       }
       case "search_orders": {
-        const params = new URLSearchParams();
-        params.set("status", String(args.status || "any"));
-        params.set("limit", String(clampLimit(args.limit, 10, 100)));
-        if (args.email) params.set("email", String(args.email));
-        if (args.name) params.set("name", String(args.name).replace(/^#/, ""));
-        if (args.financial_status) params.set("financial_status", String(args.financial_status));
-        if (args.fulfillment_status) params.set("fulfillment_status", String(args.fulfillment_status));
-        const r: any = await sreq(ctx, "GET", `/orders.json?${params}`);
-        return r.orders || [];
+        return await searchOrders(ctx, {
+          limit: clampLimit(args.limit, 10, 100),
+          status: String(args.status || "any"),
+          email: args.email ? String(args.email) : undefined,
+          name: args.name ? String(args.name) : undefined,
+          financialStatus: args.financial_status ? String(args.financial_status) : undefined,
+          fulfillmentStatus: args.fulfillment_status ? String(args.fulfillment_status) : undefined,
+          full: true,
+        });
       }
       case "get_order_items": {
         const o = await resolveOrder(ctx, args);
@@ -1309,9 +1362,9 @@ const ShopifyAdapter: ProviderAdapter = {
         let cancelled: any = null;
         for (let attempt = 0; attempt < 6; attempt++) {
           await new Promise((r) => setTimeout(r, attempt === 0 ? 400 : 800));
-          const check: any = await sreq(ctx, "GET", `/orders/${o.id}.json`);
-          if (check?.order?.cancelled_at) {
-            cancelled = check.order;
+          const check: any = await getOrderById(ctx, String(o.id));
+          if (check?.cancelled_at) {
+            cancelled = check;
             break;
           }
         }
@@ -1408,13 +1461,8 @@ const ShopifyAdapter: ProviderAdapter = {
       case "get_fulfillment_events": {
         const o = await resolveOrder(ctx, args);
         if (!o) throw new Error("order_not_found");
-        const out: any[] = [];
-        for (const f of o.fulfillments || []) {
-          try {
-            const r: any = await sreq(ctx, "GET", `/orders/${o.id}/fulfillments/${f.id}/events.json`);
-            out.push({ fulfillment_id: f.id, events: r.fulfillment_events || [] });
-          } catch { /* skip */ }
-        }
+        // One call for the whole order now: REST needed one per fulfillment.
+        const out = await getFulfillmentEvents(ctx, String(o.id)).catch(() => []);
         return { order_id: o.id, fulfillments: out };
       }
       case "check_delivery_eta": {
@@ -1436,20 +1484,21 @@ const ShopifyAdapter: ProviderAdapter = {
       // ── Discounts ──
       case "list_discounts": {
         const limit = clampLimit(args.limit, 20, 250);
-        const r: any = await sreq(ctx, "GET", `/price_rules.json?limit=${limit}`);
-        return r.price_rules || [];
+        return await listDiscounts(ctx, limit);
       }
       case "validate_discount": {
         try {
-          const r: any = await sreq(ctx, "GET", `/discount_codes/lookup.json?code=${encodeURIComponent(String(args.code || ""))}`);
-          const dc = r.discount_code;
-          if (!dc) return { code: args.code, valid: false };
-          const pr: any = await sreq(ctx, "GET", `/price_rules/${dc.price_rule_id}.json`);
-          const rule = pr.price_rule || {};
+          // ONE call: the code and its terms are the same object in GraphQL,
+          // where REST needed the code lookup and then the price rule behind it.
+          const d = await getDiscountByCode(ctx, String(args.code || ""));
+          if (!d) return { code: args.code, valid: false };
           const now = Date.now();
-          const valid = (!rule.ends_at || new Date(rule.ends_at).getTime() > now)
-            && (!rule.starts_at || new Date(rule.starts_at).getTime() <= now);
-          return { code: dc.code, valid, value: rule.value, value_type: rule.value_type, starts_at: rule.starts_at, ends_at: rule.ends_at, usage_count: dc.usage_count };
+          const valid = (!d.ends_at || new Date(d.ends_at).getTime() > now)
+            && (!d.starts_at || new Date(d.starts_at).getTime() <= now)
+            // Shopify's own verdict, which REST's date arithmetic could not see:
+            // a deactivated code is not active however its dates read.
+            && d.status !== "expired";
+          return { code: d.code, valid, value: d.value, value_type: d.value_type, starts_at: d.starts_at, ends_at: d.ends_at, usage_count: d.usage_count };
         } catch (e: any) {
           if (/404/.test(e?.message || "")) return { code: args.code, valid: false };
           throw e;
@@ -1458,11 +1507,10 @@ const ShopifyAdapter: ProviderAdapter = {
       case "get_customer_discounts": {
         const c = await resolveCustomer(ctx, args);
         if (!c) throw new Error("customer_not_found");
-        const r: any = await sreq(ctx, "GET", `/price_rules.json?limit=250`);
-        const mine = (r.price_rules || []).filter((pr: any) =>
-          pr.customer_selection === "prerequisite"
-          && Array.isArray(pr.prerequisite_customer_ids)
-          && pr.prerequisite_customer_ids.map(String).includes(String(c.id)));
+        const all = await listDiscounts(ctx, 250);
+        const mine = all.filter((d) =>
+          d.customer_selection === "prerequisite"
+          && d.prerequisite_customer_ids.map(String).includes(String(c.id)));
         return { customer_id: c.id, price_rules: mine };
       }
       case "create_discount_code":
@@ -1483,13 +1531,12 @@ const ShopifyAdapter: ProviderAdapter = {
         });
       }
       case "disable_coupon": {
-        const r: any = await sreq(ctx, "GET", `/discount_codes/lookup.json?code=${encodeURIComponent(String(args.code || ""))}`);
-        const dc = r.discount_code;
+        const dc = await getDiscountByCode(ctx, String(args.code || ""));
         if (!dc) throw new Error("coupon_not_found");
-        const upd: any = await sreq(ctx, "PUT", `/price_rules/${dc.price_rule_id}.json`, {
-          price_rule: { id: dc.price_rule_id, ends_at: new Date().toISOString() },
-        });
-        return { code: dc.code, disabled: true, price_rule: upd.price_rule };
+        // The supported operation, rather than back-dating the expiry. Same
+        // outcome for the customer; a clearer one in the merchant's admin.
+        const after = await deactivateDiscount(ctx, String(dc.price_rule_id));
+        return { code: dc.code, disabled: true, price_rule: after };
       }
 
       // ── Segments (graceful, tag-based proxy for membership) ──
@@ -1513,28 +1560,22 @@ const ShopifyAdapter: ProviderAdapter = {
 
       // ── Products ──
       case "get_product": {
-        if (args.product_id) {
-          const r: any = await sreq(ctx, "GET", `/products/${encodeURIComponent(String(args.product_id))}.json`);
-          return r.product;
-        }
-        if (args.handle) {
-          const r: any = await sreq(ctx, "GET", `/products.json?handle=${encodeURIComponent(String(args.handle))}&limit=1`);
-          return r.products?.[0] ?? null;
-        }
+        // Admin GraphQL; the return shape is unchanged - see mapProduct.
+        if (args.product_id) return await getProductById(ctx, String(args.product_id));
+        // REST filtered `/products.json?handle=` and took the first row;
+        // `productByIdentifier` is a direct lookup, so an unknown handle is null
+        // rather than the first product of the catalogue.
+        if (args.handle) return await getProductByHandle(ctx, String(args.handle));
         throw new Error("product_id_or_handle_required");
       }
       case "get_product_images": {
         // Batch featured-image lookup: order line items carry product_id but no
-        // image, so the agent panel enriches images here in ONE REST call.
+        // image, so the agent panel enriches images here in ONE call.
         const ids = Array.isArray(args.product_ids) ? args.product_ids.map(String).filter(Boolean) : [];
         if (!ids.length) return {};
-        const r: any = await sreq(ctx, "GET", `/products.json?ids=${encodeURIComponent(ids.slice(0, 50).join(","))}&fields=id,image,images`);
-        const map: Record<string, string> = {};
-        for (const p of r.products || []) {
-          const src = p.image?.src || (Array.isArray(p.images) && p.images[0]?.src) || null;
-          if (src) map[String(p.id)] = src;
-        }
-        return map;
+        // Still ONE call: `nodes(ids:)` is GraphQL's batch read, and asks for
+        // the thumbnail alone rather than the whole product.
+        return await getProductImages(ctx, ids);
       }
       case "search_products": {
         const limit = clampLimit(args.limit, 20, 250);
@@ -1558,49 +1599,23 @@ const ShopifyAdapter: ProviderAdapter = {
         // slice would keep throwing away the very products the shopper asked
         // for. Over-fetch first, narrow second, slice last.
         const wide = bounds || inStockOnly || option ? Math.max(limit, 50) : limit;
-        // GraphQL first: REST /products.json cannot search - it pages the
-        // whole catalog and we filter client-side, which silently misses
-        // anything past the first page. Shopify's `products(query:)` does a
-        // real full-text search over title/vendor/type/tag/sku. REST stays
-        // as the fallback so a store without GraphQL access still works.
-        try {
-          const data = await shopifyGraphQL(ctx, PRODUCT_SEARCH_QUERY, {
-            q: [q, facets, activeOnly ? "status:active" : ""].filter(Boolean).join(" ").trim(),
-            n: Math.min(wide, 50),
-            // RELEVANCE is only meaningful WITH a search term; without one
-            // Shopify rejects it, so an empty query keeps the default order.
-            // Its absence is why "the first three rows of the catalogue" was
-            // the answer to every question.
-            sort: q ? "RELEVANCE" : null,
-          });
-          const nodes = data?.products?.nodes;
-          if (Array.isArray(nodes)) {
-            const narrowed = narrowProducts(nodes.map(mapGraphQLProduct), bounds, inStockOnly);
-            return sortProducts(filterByOption(narrowed, option), args.sort, inStockOnly).slice(0, limit);
-          }
-        } catch (err: any) {
-          console.warn("[shopify] GraphQL product search unavailable, falling back to REST:", err?.message);
-        }
-        const r: any = await sreq(ctx, "GET", `/products.json?limit=${Math.min(wide, 250)}`);
-        const lower = q.toLowerCase();
-        const products = (r.products || []).filter((p: any) =>
-          (!activeOnly || String(p.status || "active").toLowerCase() === "active")
-          && (!lower
-            || String(p.title || "").toLowerCase().includes(lower)
-            || String(p.handle || "").toLowerCase().includes(lower)
-            || String(p.vendor || "").toLowerCase().includes(lower)
-            || String(p.product_type || "").toLowerCase().includes(lower)
-            || String(p.tags || "").toLowerCase().includes(lower)));
-        // REST has no search grammar, so the facets are applied here too.
-        const faceted = products.filter((p: any) =>
-          matchesTerm(p?.product_type, args.product_type)
-          && matchesTerm(p?.vendor, args.vendor)
-          && (!args.tag || splitTags(p?.tags).some((t: string) => matchesTerm(t, args.tag))));
-        return sortProducts(
-          filterByOption(narrowProducts(faceted, bounds, inStockOnly), option),
-          args.sort,
-          inStockOnly,
-        ).slice(0, limit);
+        // `products(query:)` is a real full-text search over
+        // title/vendor/type/tag/sku. The REST fallback that used to sit under
+        // this is gone: it could not search at all - it paged the catalogue and
+        // filtered client-side, silently missing anything past the first page -
+        // so falling back to it turned a transient GraphQL error into confident
+        // wrong answers. A failure now surfaces as a failure.
+        const data = await shopifyGraphQL(ctx, PRODUCT_SEARCH_QUERY, {
+          q: [q, facets, activeOnly ? "status:active" : ""].filter(Boolean).join(" ").trim(),
+          n: Math.min(wide, 50),
+          // RELEVANCE is only meaningful WITH a search term; without one
+          // Shopify rejects it, so an empty query keeps the default order.
+          // Its absence is why "the first three rows of the catalogue" was
+          // the answer to every question.
+          sort: q ? "RELEVANCE" : null,
+        });
+        const narrowed = narrowProducts((data?.products?.nodes || []).map(mapGraphQLProduct), bounds, inStockOnly);
+        return sortProducts(filterByOption(narrowed, option), args.sort, inStockOnly).slice(0, limit);
       }
       case "complementary_products": {
         const anchorId = String(args.product_id || "").trim();
@@ -1717,33 +1732,24 @@ const ShopifyAdapter: ProviderAdapter = {
         return inferred.slice(0, want);
       }
       case "get_shop": {
-        const r: any = await sreq(ctx, "GET", `/shop.json`);
-        const s = r.shop || {};
-        return {
-          name: s.name ?? null,
-          currency: s.currency ?? s.money_format ?? null,
-          myshopify_domain: s.myshopify_domain ?? shop,
-          primary_domain: s.domain ?? null,
-          iana_timezone: s.iana_timezone ?? null,
-          country_code: s.country_code ?? null,
-        };
+        // Admin GraphQL (App Store requirement 2.2.4 forbids core Admin REST).
+        // The return shape is unchanged - see mapShop.
+        return await getShop(ctx, shop);
       }
       case "inventory_status": {
         if (args.variant_id) {
-          const r: any = await sreq(ctx, "GET", `/variants/${encodeURIComponent(String(args.variant_id))}.json`);
-          const v = r.variant || {};
+          const v = (await getVariantById(ctx, String(args.variant_id))) || ({} as any);
           return { variant_id: v.id, sku: v.sku, inventory_quantity: v.inventory_quantity, inventory_management: v.inventory_management };
         }
         if (args.product_id) {
-          const r: any = await sreq(ctx, "GET", `/products/${encodeURIComponent(String(args.product_id))}.json`);
-          return (r.product?.variants || []).map((v: any) => ({ variant_id: v.id, title: v.title, sku: v.sku, inventory_quantity: v.inventory_quantity }));
+          const p = await getProductById(ctx, String(args.product_id), true);
+          return (p?.variants || []).map((v) => ({ variant_id: v.id, title: v.title, sku: v.sku, inventory_quantity: v.inventory_quantity }));
         }
         throw new Error("product_id_or_variant_id_required");
       }
       case "variant_information": {
         if (args.variant_id) {
-          const r: any = await sreq(ctx, "GET", `/variants/${encodeURIComponent(String(args.variant_id))}.json`);
-          return r.variant;
+          return await getVariantById(ctx, String(args.variant_id));
         }
         // Accept a product NAME, not just an id.
         //
@@ -1753,10 +1759,12 @@ const ShopifyAdapter: ProviderAdapter = {
         // store whose products have a single `Default Title` variant that
         // question has no answer, so the customer was interrogated about
         // options that do not exist.
+        // `true` asks for the inventory field too - this tool declares
+        // read_inventory, and the stock answer is the point of the call.
         const product = args.product_id
-          ? (await sreq(ctx, "GET", `/products/${encodeURIComponent(String(args.product_id))}.json`)).product
+          ? await getProductById(ctx, String(args.product_id), true)
           : args.product_name || args.title || args.query
-            ? await findProductByName(ctx, String(args.product_name ?? args.title ?? args.query))
+            ? await findProductByTitle(ctx, String(args.product_name ?? args.title ?? args.query), true)
             : null;
         if (!product) throw new Error("variant_id_or_product_id_or_product_name_required");
 
@@ -1794,8 +1802,7 @@ const ShopifyAdapter: ProviderAdapter = {
       case "check_refund": {
         const o = await resolveOrder(ctx, args);
         if (!o) throw new Error("order_not_found");
-        const r: any = await sreq(ctx, "GET", `/orders/${o.id}/refunds.json`);
-        const refunds = (r.refunds || []).map((rf: any) => ({
+        const refunds = (await listOrderRefunds(ctx, String(o.id))).map((rf: any) => ({
           id: rf.id, created_at: rf.created_at, note: rf.note,
           amount: (rf.transactions || []).reduce((s: number, tx: any) => s + (Number(tx.amount) || 0), 0),
           restocked: (rf.refund_line_items || []).some((li: any) => li.restock_type && li.restock_type !== "no_restock"),
@@ -1807,10 +1814,10 @@ const ShopifyAdapter: ProviderAdapter = {
         // objects need GraphQL/ReturnGO.
         const o = await resolveOrder(ctx, args);
         if (!o) throw new Error("order_not_found");
-        const r: any = await sreq(ctx, "GET", `/orders/${o.id}/refunds.json`);
+        const refunds = await listOrderRefunds(ctx, String(o.id));
         return {
           order_id: o.id, name: o.name, fulfillment_status: o.fulfillment_status,
-          refunds_count: (r.refunds || []).length,
+          refunds_count: refunds.length,
           note: "Refund records shown. Full Shopify Returns (RMA) objects require the GraphQL Admin API or ReturnGO; not available via REST tools.",
         };
       }
@@ -1927,13 +1934,13 @@ const ShopifyAdapter: ProviderAdapter = {
         const note = args.note ? String(args.note) : "";
         const tag = args.tag ? String(args.tag) : "";
         if (!note && !tag) throw new Error("note_or_tag_required");
-        const upd: any = { id: o.id };
+        const upd: { note?: string; tags?: string[] } = {};
         if (note) upd.note = o.note ? `${o.note}\n${note}` : note;
         if (tag) {
           const cur = splitTags(o.tags);
-          upd.tags = (cur.includes(tag) ? cur : [...cur, tag]).join(", ");
+          upd.tags = cur.includes(tag) ? cur : [...cur, tag];
         }
-        const r: any = await sreq(ctx, "PUT", `/orders/${o.id}.json`, { order: upd });
+        const r: any = await updateOrder(ctx, String(o.id), upd);
         // Explicit negatives, not just the positive result.
         //
         // The model previously saw `{order_id, name, note, tags}` - a success
@@ -1951,8 +1958,8 @@ const ShopifyAdapter: ProviderAdapter = {
           assignmentCreated: false,
           followUpScheduled: false,
           recordedOnOrderOnly: true,
-          note: r.order?.note ?? null,
-          tags: splitTags(r.order?.tags),
+          note: r?.note ?? null,
+          tags: splitTags(r?.tags),
         };
       }
 
@@ -2020,10 +2027,10 @@ interface Ctx { token: string; base: string; }
  */
 async function executeRefund(ctx: Ctx, o: any, args: Record<string, any>): Promise<any> {
   // Prior refunds → remaining refundable quantities and amount.
-  const prior: any = await sreq(ctx, "GET", `/orders/${o.id}/refunds.json`);
+  const prior = await listOrderRefunds(ctx, String(o.id));
   const refundedQty: Record<string, number> = {};
   let refundedAmount = 0;
-  for (const rf of prior.refunds || []) {
+  for (const rf of prior) {
     for (const rli of rf.refund_line_items || []) {
       refundedQty[String(rli.line_item_id)] = (refundedQty[String(rli.line_item_id)] || 0) + Number(rli.quantity || 0);
     }
@@ -2045,25 +2052,22 @@ async function executeRefund(ctx: Ctx, o: any, args: Record<string, any>): Promi
    * The fulfillment that shipped a line item is the correct source: that is
    * where the stock left from, and it is on the order we already have.
    */
-  const locationByLineItem = new Map<string, number>();
-  let fallbackLocationId: number | undefined;
-  for (const f of o.fulfillments || []) {
-    const loc = Number(f?.location_id);
-    if (!Number.isFinite(loc)) continue;
-    if (fallbackLocationId === undefined) fallbackLocationId = loc;
-    for (const li of f?.line_items || []) {
-      if (li?.id != null) locationByLineItem.set(String(li.id), loc);
-    }
-  }
+  //
+  // A SEPARATE read, because `Fulfillment.location` costs a `read_locations`
+  // grant and GraphQL applies scopes to the whole document - asking for it on
+  // the order query would break every order read on a shop without it. It
+  // degrades to an empty map, and the lines that wanted restocking are reported
+  // as skipped rather than silently dropped.
+  const { byLineItem: locationByLineItem, fallback: fulfillmentLocationId } =
+    await getFulfillmentLocations(ctx, String(o.id));
+  let fallbackLocationId: number | undefined = fulfillmentLocationId;
   if (fallbackLocationId === undefined) {
     // Unfulfilled orders have no fulfillment to learn from. This needs
     // read_locations; when the scope is absent Shopify returns an empty list
     // rather than an error, so treat "no locations" as "cannot restock".
-    try {
-      const locs: any = await sreq(ctx, "GET", "/locations.json");
-      const active = (locs?.locations || []).find((l: any) => l?.active) ?? (locs?.locations || [])[0];
-      if (active?.id != null) fallbackLocationId = Number(active.id);
-    } catch { /* no read_locations - handled below by degrading to no_restock */ }
+    const locs = await listLocations(ctx);
+    const active = locs.find((l) => l.active) ?? locs[0];
+    if (active?.id != null) fallbackLocationId = Number(active.id);
   }
 
   /** Line items we were asked to restock but could not place. */
@@ -2147,18 +2151,20 @@ async function executeRefund(ctx: Ctx, o: any, args: Record<string, any>): Promi
           .filter((li: { quantity: number }) => li.quantity > 0)
       : [];
 
-  const calcBody: any = { refund: { currency: o.currency } };
-  if (refundLineItems.length) calcBody.refund.refund_line_items = refundLineItems;
-  else if (ceilingLineItems.length) calcBody.refund.refund_line_items = ceilingLineItems;
-  if (wantShipping || ceilingLineItems.length) calcBody.refund.shipping = { full_refund: true };
-  const calc: any = await sreq(ctx, "POST", `/orders/${o.id}/refunds/calculate.json`, calcBody);
-  const suggested = calc.refund;
+  // `suggestedRefund` is a QUERY: it prices the refund and creates nothing, so
+  // unlike REST's calculate endpoint there is no version of this call that can
+  // move money by accident.
+  const pricingLines = refundLineItems.length ? refundLineItems : ceilingLineItems;
+  const suggested = await suggestRefund(
+    ctx,
+    String(o.id),
+    pricingLines,
+    wantShipping || ceilingLineItems.length > 0,
+  );
   if (!suggested) throw new Error("refund_calculate_empty: Shopify returned no suggested refund");
 
-  let transactions: Array<{ parent_id: number; amount: string; kind: string; gateway?: string }> =
-    (suggested.transactions || []).map((tx: any) => ({
-      parent_id: tx.parent_id, amount: tx.amount, kind: "refund", gateway: tx.gateway,
-    }));
+  let transactions: Array<{ parent_id: string | null; amount: string; gateway?: string | null }> =
+    suggested.transactions.map((tx) => ({ parent_id: tx.parent_id, amount: tx.amount, gateway: tx.gateway }));
   const maxRefundable = transactions.reduce((s, t) => s + Number(t.amount || 0), 0);
   if (isPartialAmount) {
     const requested = Number(args.amount);
@@ -2179,26 +2185,27 @@ async function executeRefund(ctx: Ctx, o: any, args: Record<string, any>): Promi
   }
   if (!transactions.length) throw new Error("nothing_to_refund");
 
-  const createBody: any = {
-    refund: {
-      currency: suggested.currency || o.currency,
-      notify: args.notify != null ? !!args.notify : true,
-      note: args.note ? String(args.note) : `GOTCHA refund${args.reason ? `: ${String(args.reason)}` : ""}`,
-      transactions,
-    },
+  const createInput = {
+    currency: suggested.currency || o.currency,
+    notify: args.notify != null ? !!args.notify : true,
+    note: args.note ? String(args.note) : `GOTCHA refund${args.reason ? `: ${String(args.reason)}` : ""}`,
+    transactions,
+    ...(refundLineItems.length ? { refund_line_items: refundLineItems } : {}),
+    ...(wantShipping && suggested.shipping?.amount && Number(suggested.shipping.amount) > 0
+      ? { shipping: { amount: suggested.shipping.amount } }
+      : {}),
   };
-  if (refundLineItems.length) createBody.refund.refund_line_items = refundLineItems;
-  if (wantShipping && suggested.shipping?.amount && Number(suggested.shipping.amount) > 0) {
-    createBody.refund.shipping = { amount: suggested.shipping.amount };
-  }
-  const created: any = await sreq(ctx, "POST", `/orders/${o.id}/refunds.json`, createBody);
-  const refund = created.refund;
+  // Keyed by the refund's own contents, so a redelivered job or a retried
+  // approval gets back the refund that already exists instead of creating a
+  // second one - see refundIdempotencyKey.
+  const refund = await createRefund(ctx, String(o.id), createInput);
   if (!refund?.id) throw new Error("refund_not_created: Shopify returned no refund object");
 
   // Verify the business state actually changed before anyone tells a
   // customer their money is on the way.
-  const verify: any = await sreq(ctx, "GET", `/orders/${o.id}.json`);
+  const verify: any = await getOrderById(ctx, String(o.id));
   const txStatuses = (refund.transactions || []).map((tx: any) => ({ id: tx.id, status: tx.status, amount: tx.amount, gateway: tx.gateway }));
+
   const allProcessed = txStatuses.length > 0 && txStatuses.every((t: any) => t.status === "success");
   return {
     order_id: o.id,
@@ -2209,16 +2216,12 @@ async function executeRefund(ctx: Ctx, o: any, args: Record<string, any>): Promi
     transactions: txStatuses,
     // "processed" = gateway confirmed; "pending" = accepted but money not moved yet.
     refund_status: allProcessed ? "processed" : "pending",
-    financial_status: verify.order?.financial_status ?? null,
+    financial_status: verify?.financial_status ?? null,
     processed_at: refund.processed_at ?? null,
     // Reported, never silent: the agent asked for a restock and did not get
     // one on these lines because no location could be resolved.
     ...(restockSkipped.length ? { restock_skipped: restockSkipped } : {}),
   };
-}
-
-async function sreq(ctx: Ctx, method: string, path: string, body?: unknown): Promise<any> {
-  return shopifyRequest(ctx.token, method, `${ctx.base}${path}`, body);
 }
 
 function clampLimit(v: unknown, def: number, max: number): number {
@@ -2233,18 +2236,10 @@ function splitTags(tags: unknown): string[] {
 
 /** Resolve a customer record from { customer_id | email | phone }. */
 async function resolveCustomer(ctx: Ctx, args: Record<string, any>): Promise<any | null> {
-  if (args.customer_id) {
-    const r = await sreq(ctx, "GET", `/customers/${encodeURIComponent(String(args.customer_id))}.json`);
-    return r.customer ?? null;
-  }
-  if (args.email) return customerByQuery(ctx, `email:${String(args.email)}`);
-  if (args.phone) return customerByQuery(ctx, `phone:${String(args.phone)}`);
+  if (args.customer_id) return await getCustomerById(ctx, String(args.customer_id));
+  if (args.email) return await findCustomerByField(ctx, "email", String(args.email));
+  if (args.phone) return await findCustomerByField(ctx, "phone", String(args.phone));
   throw new Error("customer_id_email_or_phone_required");
-}
-
-async function customerByQuery(ctx: Ctx, query: string): Promise<any | null> {
-  const r = await sreq(ctx, "GET", `/customers/search.json?query=${encodeURIComponent(query)}&limit=1`);
-  return r.customers?.[0] ?? null;
 }
 
 async function customerOrders(ctx: Ctx, args: Record<string, any>, opts: { limit: number; status: string }): Promise<any[]> {
@@ -2256,20 +2251,16 @@ async function customerOrders(ctx: Ctx, args: Record<string, any>, opts: { limit
     email = c?.email ?? null;
   }
   if (!email) return [];
-  const params = new URLSearchParams();
-  params.set("email", email);
-  params.set("status", opts.status);
-  params.set("limit", String(opts.limit));
-  const r = await sreq(ctx, "GET", `/orders.json?${params}`);
-  return r.orders || [];
+  // `full` because callers read line items off these rows (find_delayed_order
+  // reasons about them, and the commerce panel renders them).
+  return await searchOrders(ctx, { limit: opts.limit, status: opts.status, email, full: true });
 }
 
 /** Resolve an order from { order_id | order_name }. */
 /** Look an order up by its internal id. Returns null on 404 rather than throwing. */
 async function orderById(ctx: Ctx, id: string): Promise<any | null> {
   try {
-    const r = await sreq(ctx, "GET", `/orders/${encodeURIComponent(id)}.json`);
-    return r.order ?? null;
+    return await getOrderById(ctx, id);
   } catch (err: any) {
     // A wrong-namespace guess must be recoverable, not fatal: 404 means "not
     // this id", and 400 means Shopify rejected the value as an id at all -
@@ -2285,12 +2276,9 @@ async function orderById(ctx: Ctx, id: string): Promise<any | null> {
 async function orderByName(ctx: Ctx, name: string): Promise<{ order: any | null; ambiguous: boolean }> {
   const clean = name.replace(/^#/, "").trim();
   try {
-    // limit=2 so a duplicate name is DETECTED rather than silently taking the
-    // first match. Acting on the wrong order is worse than refusing.
-    const r = await sreq(ctx, "GET", `/orders.json?name=${encodeURIComponent(clean)}&status=any&limit=2`);
-    const orders: any[] = Array.isArray(r.orders) ? r.orders : [];
-    if (orders.length > 1) return { order: null, ambiguous: true };
-    return { order: orders[0] ?? null, ambiguous: false };
+    // Two are asked for so a duplicate name is DETECTED rather than silently
+    // taking the first match. Acting on the wrong order is worse than refusing.
+    return await getOrderByName(ctx, clean);
   } catch (err: any) {
     // Same reasoning as orderById: "no order by that name" must be a miss the
     // other namespace can still answer, not a hard failure. Shopify normally
@@ -2363,20 +2351,18 @@ async function resolveOrder(ctx: Ctx, args: Record<string, any>): Promise<any | 
 async function mutateCustomerTags(ctx: Ctx, args: Record<string, any>, tag: string, op: "add" | "remove"): Promise<any> {
   const c = await resolveCustomer(ctx, args);
   if (!c) throw new Error("customer_not_found");
-  const cur = splitTags(c.tags);
-  let next: string[];
-  if (op === "add") next = cur.includes(tag) ? cur : [...cur, tag];
-  else next = cur.filter((x) => x.toLowerCase() !== tag.toLowerCase());
-  const r = await sreq(ctx, "PUT", `/customers/${c.id}.json`, { customer: { id: c.id, tags: next.join(", ") } });
-  return { customer_id: c.id, tags: splitTags(r.customer?.tags) };
+  // Atomic. The read-modify-write this replaces wrote the WHOLE tag field
+  // back, so a tag added by anything else between the read and the write was
+  // erased - and the post-chat pipeline tags the same customer from a queue.
+  const tags = await mutateTags(ctx, String(c.id), [tag], op);
+  return { customer_id: c.id, tags };
 }
 
 /** Look up an existing discount code; null when it doesn't exist (404). */
 async function lookupDiscountCode(ctx: Ctx, code: string): Promise<{ code: string; price_rule_id: number } | null> {
   try {
-    const r: any = await sreq(ctx, "GET", `/discount_codes/lookup.json?code=${encodeURIComponent(code)}`);
-    const dc = r.discount_code;
-    return dc ? { code: dc.code, price_rule_id: dc.price_rule_id } : null;
+    const d = await getDiscountByCode(ctx, code);
+    return d?.code ? { code: d.code, price_rule_id: Number(d.price_rule_id ?? 0) } : null;
   } catch (err: any) {
     if (/404/.test(err?.message || "")) return null;
     throw err;
@@ -2384,26 +2370,10 @@ async function lookupDiscountCode(ctx: Ctx, code: string): Promise<{ code: strin
 }
 
 async function createDiscount(ctx: Ctx, opts: { code: string; percentage: number; usage_limit?: number; ends_at_iso?: string; customer_id?: string; title?: string }): Promise<any> {
-  const priceRule: any = {
-    title: opts.title || `Bot ${opts.code}`,
-    target_type: "line_item",
-    target_selection: "all",
-    allocation_method: "across",
-    value_type: "percentage",
-    value: String(-Math.abs(Number(opts.percentage))),
-    customer_selection: "all",
-    usage_limit: opts.usage_limit != null ? opts.usage_limit : 1,
-    starts_at: new Date().toISOString(),
-    ...(opts.ends_at_iso ? { ends_at: opts.ends_at_iso } : {}),
-  };
-  if (opts.customer_id) {
-    priceRule.customer_selection = "prerequisite";
-    priceRule.prerequisite_customer_ids = [Number(opts.customer_id)];
-  }
-  const pr = await sreq(ctx, "POST", `/price_rules.json`, { price_rule: priceRule });
-  const priceRuleId = pr.price_rule.id;
-  const code = await sreq(ctx, "POST", `/price_rules/${priceRuleId}/discount_codes.json`, { discount_code: { code: opts.code } });
-  return { code: code.discount_code.code, price_rule_id: priceRuleId, percentage: Math.abs(Number(opts.percentage)) };
+  // ONE mutation where REST needed two calls - a price rule, then a code hung
+  // off it - so the half-created state REST could leave behind (a rule with no
+  // code, invisible to every lookup) no longer exists.
+  return await createGqlDiscount(ctx, opts);
 }
 
 // ─── GraphQL (Returns / RMA) ────────────────────────────────
@@ -2435,22 +2405,12 @@ async function fetchFulfillmentOrders(
   ctx: Ctx,
   orderId: string | number,
 ): Promise<{ orders: any[]; readable: boolean; error?: string }> {
-  try {
-    const r: any = await sreq(ctx, "GET", `/orders/${orderId}/fulfillment_orders.json`);
-    return {
-      orders: Array.isArray(r?.fulfillment_orders) ? r.fulfillment_orders : [],
-      readable: true,
-    };
-  } catch (err: any) {
-    // NOT the same as "there are none". This shop's token carries no
-    // fulfillment scope, and collapsing a denial into an empty array would
-    // report `has_outstanding_fulfillments: false` for an order Shopify
-    // refuses to cancel for exactly that reason - a confident false negative,
-    // which is the one failure mode this integration must never have.
-    const msg = String(err?.message ?? "unknown");
-    console.warn(`[shopify] fulfillment_orders unreadable for order ${orderId}: ${msg}`);
-    return { orders: [], readable: false, error: msg.slice(0, 200) };
-  }
+  // The denial-vs-empty distinction lives in the GraphQL module: collapsing a
+  // missing scope into an empty array would report
+  // `has_outstanding_fulfillments: false` for an order Shopify refuses to
+  // cancel for exactly that reason - a confident false negative, which is the
+  // one failure mode this integration must never have.
+  return await getFulfillmentOrders(ctx, orderId);
 }
 
 /**
@@ -2501,27 +2461,6 @@ async function shipmentVisibility(
     };
   }
   return { tracking_state: "none", fulfillment_visibility: "readable" };
-}
-
-/**
- * Find ONE product by title, so a variant question can be answered in a single
- * call instead of search-then-read. Exact title wins over a prefix match, which
- * matters on a catalogue full of near-identical names ("The Collection
- * Snowboard: Liquid" vs "...: Oxygen"). Returns null rather than guessing when
- * nothing matches well.
- */
-async function findProductByName(ctx: Ctx, name: string): Promise<any | null> {
-  const needle = String(name ?? "").trim().toLowerCase();
-  if (!needle) return null;
-  const r: any = await sreq(ctx, "GET", `/products.json?limit=250`);
-  const products: any[] = Array.isArray(r?.products) ? r.products : [];
-  const byTitle = (p: any) => String(p?.title ?? "").trim().toLowerCase();
-  return (
-    products.find((p) => byTitle(p) === needle) ??
-    products.find((p) => byTitle(p).includes(needle)) ??
-    products.find((p) => needle.includes(byTitle(p))) ??
-    null
-  );
 }
 
 /**
@@ -2663,13 +2602,13 @@ async function updateOwnProfile(ctx: Ctx, args: Record<string, any>): Promise<Re
   // new email already sits on another account needs to hear that, not "the
   // update failed".
   if (patch.customer.email || patch.customer.phone) {
-    const query = patch.customer.email
-      ? `email:${patch.customer.email}`
-      : `phone:${patch.customer.phone}`;
+    const field = patch.customer.email ? "email" : "phone";
+    const value = patch.customer.email ?? patch.customer.phone ?? "";
     let candidates: any[] = [];
     try {
-      const r: any = await sreq(ctx, "GET", `/customers/search.json?query=${encodeURIComponent(query)}&limit=5`);
-      candidates = r.customers ?? [];
+      // Escaped, unlike the REST call this replaces: an apostrophe in what the
+      // customer typed used to end the term and have the rest read as syntax.
+      candidates = await searchCustomers(ctx, `${field}:${escapeSearchValue(value)}`, 5);
     } catch {
       // A search failure must not block a legitimate change; Shopify still
       // enforces uniqueness on the write itself.
@@ -2688,28 +2627,20 @@ async function updateOwnProfile(ctx: Ctx, args: Record<string, any>): Promise<Re
   }
 
   if (Object.keys(patch.customer).length) {
-    await sreq(ctx, "PUT", `/customers/${c.id}.json`, { customer: { id: c.id, ...patch.customer } });
+    await updateCustomer(ctx, String(c.id), patch.customer);
   }
 
   if (Object.keys(patch.address).length) {
     const existing = c.default_address ?? (c.addresses ?? [])[0] ?? null;
-    if (existing?.id) {
-      await sreq(ctx, "PUT", `/customers/${c.id}/addresses/${existing.id}.json`, {
-        address: { ...patch.address },
-      });
-    } else {
-      // No saved address at all - create one and make it the default, which is
-      // what "my address" means to a customer who has never had one.
-      const created: any = await sreq(ctx, "POST", `/customers/${c.id}/addresses.json`, {
-        address: { ...patch.address },
-      });
-      const newId = created?.customer_address?.id;
-      if (newId) await sreq(ctx, "PUT", `/customers/${c.id}/addresses/${newId}/default.json`, {});
-    }
+    // An address is addressed by its gid, which the mapper keeps beside the
+    // numeric id. Creating one sets it as the default in the SAME call, so the
+    // first-address case can no longer half-land as an address that exists and
+    // is not the customer's.
+    await writeCustomerAddress(ctx, String(c.id), patch.address, existing?.admin_graphql_api_id ?? null);
   }
 
-  const after: any = await sreq(ctx, "GET", `/customers/${c.id}.json`);
-  const verdict = verifyReadBack(patch, after?.customer ?? null);
+  const after = await getCustomerById(ctx, String(c.id));
+  const verdict = verifyReadBack(patch, after);
   const changed = [
     ...Object.keys(patch.customer),
     ...Object.keys(patch.address).map((k) => `address.${k}`),
@@ -3076,11 +3007,10 @@ async function exchangeOrderItem(
   let productTitle = "";
   if (args.new_variant_id) {
     try {
-      const vr: any = await sreq(ctx, "GET", `/variants/${encodeURIComponent(String(args.new_variant_id))}.json`);
-      variant = vr?.variant ?? null;
+      variant = await getVariantById(ctx, String(args.new_variant_id));
       if (variant?.product_id) {
-        const pr: any = await sreq(ctx, "GET", `/products/${variant.product_id}.json`);
-        productTitle = pr?.product?.title ?? "";
+        const pr = await getProductById(ctx, variant.product_id);
+        productTitle = pr?.title ?? "";
       }
     } catch {
       variant = null;
@@ -3092,8 +3022,9 @@ async function exchangeOrderItem(
   // happens to be called that.
   if (!variant && args.new_variant_name && lineItem?.product_id) {
     try {
-      const pr: any = await sreq(ctx, "GET", `/products/${lineItem.product_id}.json`);
-      const product = pr?.product;
+      // With inventory: the quote refuses an exchange for a variant that is out
+      // of stock, and `inventory_management` is how it tells tracked from not.
+      const product = await getProductById(ctx, String(lineItem.product_id), true);
       productTitle = product?.title ?? "";
       const want = String(args.new_variant_name).trim().toLowerCase();
       variant =
@@ -3203,8 +3134,8 @@ async function exchangeOrderItem(
   if (commitErr) throw new Error(`shopify_order_edit_commit: ${commitErr}`);
 
   // 4. Read the order back independently and check BOTH sides of the swap.
-  const after: any = await sreq(ctx, "GET", `/orders/${order.id}.json`);
-  const verdict = verifyExchange(quote, after?.order ?? null);
+  const after: any = await getOrderById(ctx, String(order.id));
+  const verdict = verifyExchange(quote, after ?? null);
 
   return {
     order_id: String(order.id),
@@ -3213,7 +3144,7 @@ async function exchangeOrderItem(
     verified: verdict.verified,
     problems: verdict.problems,
     quote,
-    order_total: after?.order?.total_price ?? null,
+    order_total: after?.total_price ?? null,
     ...(verdict.verified ? { externalRef: { type: "shopify_order", id: String(order.id) } } : {}),
     model_instruction: verdict.verified
       ? `The exchange is confirmed by an independent read of the order: ${quote.current_variant ?? quote.current_title} was replaced with ${quote.requested_variant ?? quote.requested_title}. Tell the customer exactly that. There is nothing further to pay.`
@@ -3326,12 +3257,12 @@ async function updateOrderShippingAddress(
   }
 
   const before = order.shipping_address ?? {};
-  await sreq(ctx, "PUT", `/orders/${order.id}.json`, {
-    order: { id: order.id, shipping_address: { ...before, ...patch.fields } },
-  });
+  await writeOrderShippingAddress(ctx, String(order.id), { ...before, ...patch.fields });
 
-  const after: any = await sreq(ctx, "GET", `/orders/${order.id}.json`);
-  const verdict = verifyShippingAddress(patch, after?.order ?? null);
+  // A SEPARATE read, not the mutation's echo: "Shopify accepted it" and "the
+  // parcel is going there" are different claims.
+  const after: any = await getOrderById(ctx, String(order.id));
+  const verdict = verifyShippingAddress(patch, after ?? null);
 
   return {
     order_id: String(order.id),
@@ -3825,29 +3756,6 @@ async function shopifyGraphQL(ctx: Ctx, query: string, variables: Record<string,
     throw new Error(`shopify_graphql_error: ${msg.slice(0, 200)}`);
   }
   return j.data;
-}
-
-async function shopifyRequest(token: string, method: string, url: string, body?: unknown): Promise<any> {
-  // SSRF guard: url derives from config.shopDomain (per-tenant, stored).
-  await assertPublicUrl(url);
-  const init: RequestInit = {
-    method,
-    headers: {
-      "X-Shopify-Access-Token": token,
-      "Content-Type": "application/json",
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  };
-  const res = await fetch(url, init);
-  // Check BEFORE the ok/throw branch: a 4xx still carries the header, and a
-  // drifted version is a plausible cause of that 4xx. Discovering the drift
-  // only on success would hide it in exactly the case worth investigating.
-  reportVersionDrift(res, url, "REST");
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`shopify_${res.status}: ${shopifyErrorSummary(text)}`);
-  }
-  return await res.json();
 }
 
 /**

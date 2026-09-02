@@ -767,6 +767,23 @@ export {
 } from "./lib/shopify-app-identity";
 export type { ShopifyAppIdentity, AppIdentityProblem } from "./lib/shopify-app-identity";
 
+// Shopify-owned INSTALLATION. Verifies the signed app-entry request Shopify
+// sends before OAuth begins, and builds the two outbound URLs (the install
+// page and the authorize redirect) from validated values only. See
+// lib/shopify-install.ts for why the shop is checked strictly here and
+// forgivingly everywhere else.
+export {
+  APP_ENTRY_MAX_AGE_SECONDS,
+  strictShopDomain,
+  singleValue,
+  isFreshAppEntryTimestamp,
+  verifyAppEntryHmac,
+  verifyOAuthCallbackHmac,
+  buildShopifyAuthorizeUrl,
+  resolveShopifyInstallUrl,
+} from "./lib/shopify-install";
+export type { AppEntryResult, AppEntryRejection } from "./lib/shopify-install";
+
 // GOTCHA Shopify CHAT app - its own identity, verification and lifecycle.
 // Deliberately a separate module from the live-chat channel config above:
 // one describes the merchant's widget, the other the Shopify app that

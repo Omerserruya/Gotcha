@@ -13,7 +13,12 @@
  * Concrete OAuth flows:
  *   - stripe   (Stripe Connect)
  *   - hubspot
- *   - shopify  (per-shop - `shop` query param required on init)
+ *   - shopify  (per-shop). INSTALLATION starts in routes/shopify-install.ts on
+ *              a Shopify-owned surface; `oauth/init` here is REAUTHORIZATION
+ *              only and reads the shop from the stored connection. It no
+ *              longer accepts a `shop` query parameter - that was the typed
+ *              `.myshopify.com` domain App Store review rejects, and an
+ *              unauthenticated claim we then redirected to.
  * API-key style:
  *   - airtable (PAT)
  *   - postgres / mongodb / aws_rds (connection string)
@@ -24,7 +29,7 @@
 
 import { Router, type Request, type Response } from "express";
 import * as crypto from "crypto";
-import { provisionIntegrationTools } from "../services/integration-provisioning.service";
+import { findCatalog, upsertConnection } from "../services/connector-connection.service";
 import {
   prisma,
   authenticate,
@@ -37,11 +42,26 @@ import {
   encryptCredentials,
   getOAuthStateSecret,
   resolveAppPublicUrl,
+  getShopifyAppIdentity,
+  normalizeShopifyShopDomain,
+  verifyOAuthCallbackHmac,
+  buildShopifyAuthorizeUrl,
+  singleValue,
 } from "@chatcenter/shared";
 import { airtableListBases, airtableListTables, airtableListFields, airtableCreateField } from "../services/connectors/airtable.adapter";
 import { mondayListBoards } from "../services/connectors/monday.adapter";
 import { loadConnection, refreshCapabilityState } from "../services/connectors/integration-framework";
 import { reconcileAgentToolPermissions } from "../services/tool-permission-reconcile.service";
+import {
+  SHOPIFY_OAUTH_SCOPES,
+  linkShopifyShopToTenant,
+  exchangeShopifyCode,
+} from "../services/shopify-connection-link.service";
+import {
+  createPendingConnection,
+  consumeInstallIntent,
+  INSTALL_INTENT_COOKIE,
+} from "../services/shopify-install-intent.service";
 
 const router = Router();
 // OAuth `state` signing only - not user auth. See getOAuthStateSecret().
@@ -59,106 +79,10 @@ const canManageSystems = requirePermission("integrations:connections:disconnect"
 
 // ─── Helpers ────────────────────────────────────────────────
 
-async function findCatalog(slug: string | string[] | undefined) {
-  const s = Array.isArray(slug) ? slug[0] : slug;
-  if (!s) return null;
-  return await (prisma as any).integrationCatalog.findUnique({ where: { slug: String(s) } });
-}
-
-async function upsertConnection(opts: {
-  tenantId: string;
-  catalogId: string;
-  status: "CONNECTED" | "ERROR";
-  credentialsBlob?: string;
-  config?: Record<string, any>;
-  connectedBy?: string;
-  /** Why the connection is not usable. Persisted so the UI can show an
-   *  actionable reason instead of a bare ERROR chip. Cleared on success. */
-  lastError?: string;
-}) {
-  const data: any = {
-    status: opts.status,
-    connectedAt: new Date(),
-    lastTestedAt: new Date(),
-    lastTestResult: opts.status === "CONNECTED",
-    lastError: opts.status === "CONNECTED" ? null : (opts.lastError ?? null),
-  };
-  if (opts.credentialsBlob !== undefined) data.credentials = opts.credentialsBlob;
-  if (opts.connectedBy !== undefined) data.connectedBy = opts.connectedBy;
-  // MERGE config on re-connect, never replace: config carries settings set
-  // OUTSIDE the OAuth flow (useAsCrm, sync toggles) - a re-connect passing
-  // only { shopDomain } used to wipe them (this is how Urban Supply lost
-  // useAsCrm and CRM writeback silently stopped resolving).
-  if (opts.config !== undefined) {
-    const existing = await (prisma as any).tenantIntegration.findUnique({
-      where: { tenantId_integrationId: { tenantId: opts.tenantId, integrationId: opts.catalogId } },
-      select: { config: true },
-    });
-    data.config = { ...(existing?.config ?? {}), ...opts.config };
-  }
-
-  const create: any = {
-    tenantId: opts.tenantId,
-    integrationId: opts.catalogId,
-    status: opts.status,
-    connectedAt: data.connectedAt,
-    lastTestedAt: data.lastTestedAt,
-    lastTestResult: data.lastTestResult,
-    credentials: opts.credentialsBlob ?? "",
-    config: opts.config ?? {},
-    connectedBy: opts.connectedBy ?? null,
-  };
-  const row = await (prisma as any).tenantIntegration.upsert({
-    where: { tenantId_integrationId: { tenantId: opts.tenantId, integrationId: opts.catalogId } },
-    update: data,
-    create,
-  });
-
-  // A CONNECTED integration whose tools nobody granted is a connection that
-  // does nothing. The AI's tool surface is built from AgentToolPermission
-  // rows, and those were only ever created by one UI toggle - so Urban Supply
-  // Dev reconnected to grant fulfillment scopes and silently lost every
-  // Shopify tool. The connection stayed CONNECTED, the capability probe stayed
-  // green, and the assistant answered a size question by asking which colour
-  // and escalated a cancellation saying the tooling was unavailable. It was
-  // right, and nothing anywhere said so.
-  //
-  // The FULL surface, not reads only.
-  //
-  // "Writes stay an explicit decision" is a reasonable sentence about a first
-  // connect and a false one about a reconnect: disconnect deletes tenant tools
-  // by cascade, so nobody decided anything - a cascade did. Part 6 caught this
-  // live, on the day it mattered: an operator reconnected to grant the scopes
-  // this round needed, and the reconnect left 42 of 68 tools present with every
-  // single missing one a WRITE or an ACTION. Healthy store, green probe, and an
-  // assistant that could look up any order and act on none.
-  //
-  // That is worse than having no tools, because the reads answer every
-  // diagnostic anyone thinks to run - and reconnecting is the ONLY way to grant
-  // a scope, so the operation that makes an assistant more capable is the one
-  // that quietly disarms it.
-  //
-  // What keeps writes safe is where it always was: hitl_policy holds every
-  // money-moving tool behind a human. Never a downgrade either - a row an
-  // operator switched off is skipped, not re-enabled.
-  //
-  // Best-effort - a provisioning hiccup must not fail an otherwise good
-  // connection, and the next connect retries it.
-  if (opts.status === "CONNECTED") {
-    try {
-      const r = await provisionIntegrationTools(opts.tenantId, row.id, opts.catalogId, { reason: "connect" });
-      if (r.granted > 0 || r.preserved > 0) {
-        console.log(
-          `[connectors] provisioned ${r.granted} tool permission(s) on connect for tenant=${opts.tenantId} ` +
-            `(${JSON.stringify(r.byCategory)}, ${r.preserved} left as the operator set them)`,
-        );
-      }
-    } catch (err: any) {
-      console.error("[connectors] tool provisioning failed on connect:", err?.message);
-    }
-  }
-  return row;
-}
+// `findCatalog` and `upsertConnection` moved to
+// services/connector-connection.service.ts so the Shopify deferred-claim
+// path can create an identical connection. Imported above; behaviour
+// unchanged.
 
 function dashboardRedirect(slug: string, query: Record<string, string> = {}) {
   const params = new URLSearchParams({ status: "connected", ...query });
@@ -510,149 +434,194 @@ router.get("/connectors/hubspot/oauth/callback", async (req: Request, res: Respo
   }
 });
 
-// ─── Shopify OAuth (per-shop) ────────────────────────────────
+// ─── Shopify OAuth ───────────────────────────────────────────
+//
+// Installation NO LONGER STARTS HERE. The merchant-facing entry point is
+// `/connectors/shopify/install/start` (routes/shopify-install.ts), which sends
+// them to a Shopify-owned page; Shopify then calls our public install handler
+// with a signed request and OAuth begins there.
+//
+// What remains here is the two halves that must stay:
+//
+//   init      REAUTHORIZATION only. A workspace that already holds a Shopify
+//             connection re-granting scopes, or replacing a revoked token.
+//             The shop is read from the STORED connection, never from the
+//             request - which is what lets this route keep existing without
+//             reintroducing the typed-domain hole it used to be.
+//
+//   callback  The single OAuth callback for every path. Shopify posts back
+//             here for a fresh install, a reinstall and a reauthorization
+//             alike, so the branching on "did we know the workspace?" lives
+//             here rather than in three places.
 
 router.get(
   "/connectors/shopify/oauth/init",
   authenticate, resolveTenant, requireOnboardingOrActiveTenant(), canConnectSystems,
-  (req: Request, res: Response) => {
-    const clientId = process.env.SHOPIFY_API_KEY;
-    const redirect = process.env.SHOPIFY_REDIRECT_URI;
-    if (!clientId || !redirect) { res.status(500).json({ error: "shopify_oauth_not_configured" }); return; }
-    // Forgiving normalization: users paste anything from "my-store" to
-    // "https://my-store.myshopify.com/admin/" - strip protocol, path, and
-    // whitespace, then auto-append .myshopify.com if they only typed a slug.
-    const raw = String(req.query.shop || "").trim().toLowerCase();
-    const stripped = raw
-      .replace(/^https?:\/\//, "")
-      .replace(/\/.*$/, "")
-      .replace(/\.myshopify\.com$/, "");
-    const shop = stripped ? `${stripped}.myshopify.com` : "";
-    if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(shop)) {
-      res.status(400).json({ error: "shop_required (e.g. my-store or my-store.myshopify.com)" });
+  async (req: Request, res: Response) => {
+    const identity = getShopifyAppIdentity();
+    if (!identity.clientId || !identity.redirectUri) {
+      res.status(500).json({ error: "shopify_oauth_not_configured" });
       return;
     }
-    const flow = parseFlow(req.query.flow);
-    const { state } = mintOAuthState({ tenantId: req.tenantId!, provider: "shopify", shop, flow, userId: (req as any).user?.userId });
-    // Discount tools talk to the REST PriceRule/DiscountCode resources
-    // (/price_rules.json, /discount_codes/lookup.json), which are gated on
-    // read_price_rules / write_price_rules. `write_discounts` covers the newer
-    // GraphQL Discounts API instead, so every discount tool - list_discounts,
-    // validate_discount, get_customer_discounts, the coupon writers - 403'd with
-    // "requires merchant approval for read_price_rules scope" no matter what.
-    // Existing connections keep their old grant: re-connect to pick these up.
-    // FULFILLMENT ORDERS, INVENTORY and CUSTOMER WRITES were all missing here.
-    // Urban Supply Dev only had them because they were added by hand in the
-    // Partner dashboard; a merchant connecting through this flow got a
-    // connection that read every order as unfulfilled, answered "nothing has
-    // shipped" for orders in fulfillment, and offered to cancel orders Shopify
-    // would refuse. The list below is what the tool surface actually calls.
-    //
-    // `write_returns` and `write_order_edits` were on the not-requested list
-    // with the note "no tool creates an RMA / edits an order". Both tools now
-    // exist, and the note outliving the fact is how the exchange reached a
-    // live store and failed at orderEditBegin with "Requires
-    // `write_order_edits` access scope" - after eligibility passed, after the
-    // price was quoted, after a human approved it. A scope list that is a
-    // comment about the past rather than a statement about the surface fails
-    // exactly this way: silently, and only at the last step.
-    //
-    // Deliberately NOT requested: write_fulfillments (no tool creates a
-    // fulfillment), write_draft_orders and read_draft_orders (no draft-order
-    // tool exists), and the third-party fulfillment-order scopes (only
-    // meaningful for merchants using a 3PL - read_assigned_fulfillment_orders
-    // is requested for that case, and a merchant without one loses nothing by
-    // granting it).
-    const scopes = [
-      "read_orders", "write_orders",
-      // Orders older than 60 days are invisible to read_orders alone, and a
-      // customer asking about last season's order is an ordinary request.
-      "read_all_orders",
-      "read_customers", "write_customers",
-      "read_merchant_managed_fulfillment_orders",
-      "read_assigned_fulfillment_orders",
-      "read_inventory",
-      "read_price_rules", "write_price_rules",
-      "write_discounts",
-      "read_products",
-      "read_returns", "write_returns",
-      "write_order_edits",
-    ].join(",");
-    const params = new URLSearchParams({
-      client_id: clientId,
-      scope: scopes,
-      redirect_uri: redirect,
+
+    // The shop comes from what this tenant already connected. A tenant with no
+    // Shopify connection has nothing to reauthorize, and is told to install
+    // rather than being offered a box to type a domain into - the whole point
+    // of this change.
+    const conn = await loadConnection({ tenantId: req.tenantId!, slug: "shopify" }).catch(() => null);
+    const shop = normalizeShopifyShopDomain((conn?.config as any)?.shopDomain);
+    if (!shop) {
+      res.status(409).json({
+        error: "shopify_not_connected",
+        detail: "Start a new installation from Shopify - use Connect Shopify.",
+      });
+      return;
+    }
+
+    const { state } = mintOAuthState({
+      tenantId: req.tenantId!,
+      provider: "shopify",
+      shop,
+      flow: parseFlow(req.query.flow),
+      userId: (req as any).user?.userId,
+      hasIntent: true,
+    });
+
+    const url = buildShopifyAuthorizeUrl({
+      shop,
+      clientId: identity.clientId,
+      scopes: SHOPIFY_OAUTH_SCOPES,
+      redirectUri: identity.redirectUri,
       state,
     });
-    res.json({ url: `https://${shop}/admin/oauth/authorize?${params.toString()}` });
+    if (!url) { res.status(500).json({ error: "shopify_oauth_not_configured" }); return; }
+    res.json({ url });
   },
 );
 
+/**
+ * The OAuth callback. Public by necessity - Shopify calls it, not a browser
+ * we authenticated.
+ *
+ * Four checks, in this order, before anything is written:
+ *
+ *   1. HMAC over the callback query. This was MISSING before: the callback
+ *      trusted `shop` and `code` from an unsigned request, so anything that
+ *      could guess a live `state` could have driven a token exchange against
+ *      a host of its choosing.
+ *   2. Single-use `state`, consumed exactly once (Redis SET NX, fail-closed).
+ *   3. The shop Shopify returned must equal the shop bound INTO the state at
+ *      install time. A mismatch means the state was moved to another store.
+ *   4. Only then, the code exchange.
+ *
+ * After that the workspace question: an intent means we already knew it, no
+ * intent means the install started on Shopify and the merchant must sign in
+ * before anything is bound to a tenant.
+ */
 router.get("/connectors/shopify/oauth/callback", async (req: Request, res: Response) => {
   try {
-    const { code, state, shop } = req.query;
-    if (!code || !state || !shop) { res.status(400).send("missing_code_or_state_or_shop"); return; }
-    const consumed = await consumeOAuthState<any>(state as string, "shopify");
+    const identity = getShopifyAppIdentity();
+
+    // 1. Signature. A forged callback dies here, before `state` is even read.
+    const signed = verifyOAuthCallbackHmac(req.query as Record<string, unknown>, identity.clientSecret);
+    if (!signed.ok) {
+      console.warn(`[shopify oauth] callback rejected: ${signed.reason}`);
+      res.status(400).send("invalid_request");
+      return;
+    }
+    const shop = signed.shop;
+
+    const code = singleValue(req.query.code);
+    const rawState = singleValue(req.query.state);
+    if (!code || !rawState) { res.status(400).send("invalid_request"); return; }
+
+    // 2. Single use. Expired, reused and forged are distinguished in the log
+    //    and identical to the caller.
+    const consumed = await consumeOAuthState<any>(rawState, "shopify");
     if (!consumed.ok) {
-      // Replay and forgery look identical to the caller; only our logs distinguish them.
       console.warn(`[shopify oauth] state rejected: ${consumed.reason}`);
       res.status(400).send(consumed.reason === "replayed" ? "state_already_used" : "bad_state");
       return;
     }
     const payload = consumed.claims;
-    if (payload.shop !== shop) { res.status(400).send("bad_state"); return; }
 
-    const clientId = process.env.SHOPIFY_API_KEY!;
-    const clientSecret = process.env.SHOPIFY_API_SECRET!;
+    // 3. The state was minted for ONE store.
+    if (normalizeShopifyShopDomain(payload.shop) !== shop) {
+      console.warn("[shopify oauth] callback shop does not match the shop bound into state");
+      res.status(400).send("bad_state");
+      return;
+    }
 
-    // `expiring: "1"` requests Shopify's expiring offline token (access token
-    // + refresh token). Non-expiring tokens are rejected by the Admin API now;
-    // the adapter's refreshTokens() keeps the pair rotated.
-    const tokenRes = await fetch(`https://${shop}/admin/oauth/access_token`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ client_id: clientId, client_secret: clientSecret, code, expiring: "1" }),
+    // 4. Exchange. The token never leaves this function except into
+    //    encryptCredentials - not into a log line, not into a redirect.
+    const creds = await exchangeShopifyCode({
+      shop,
+      code,
+      clientId: identity.clientId,
+      clientSecret: identity.clientSecret,
     });
-    if (!tokenRes.ok) { res.status(400).send("token_exchange_failed"); return; }
-    const j: any = await tokenRes.json();
-    const cat = await findCatalog("shopify");
-    if (!cat) { res.status(500).send("shopify_catalog_missing"); return; }
-    await upsertConnection({
-      tenantId: payload.tenantId,
-      catalogId: cat.id,
-      status: "CONNECTED",
-      credentialsBlob: encryptCredentials({
-        accessToken: j.access_token,
-        refreshToken: j.refresh_token,
-        expiresAt: j.expires_in ? new Date(Date.now() + Number(j.expires_in) * 1000).toISOString() : undefined,
-        scope: j.scope,
+    if (!creds) { res.status(400).send("token_exchange_failed"); return; }
+
+    // ── Workspace ──
+    //
+    // `hasIntent` is the ONLY thing that authorizes a direct link, and it was
+    // written into the state by an authenticated route. A blank tenantId with
+    // hasIntent set would be a bug, so it is treated as no intent rather than
+    // as "some tenant".
+    const tenantId = payload.hasIntent && typeof payload.tenantId === "string" && payload.tenantId
+      ? payload.tenantId
+      : null;
+
+    if (!tenantId) {
+      // Install began on Shopify. Park the verified installation and ask the
+      // merchant to sign in; the workspace is decided by THAT session.
+      const handle = await createPendingConnection({
         shopDomain: shop,
-      }),
-      config: { shopDomain: shop },
+        credentials: creds,
+        scope: creds.scope,
+        flow: payload.flow,
+      });
+      // Same fail-soft as the install entry point: a missing FRONTEND_URL must
+      // not turn a SUCCESSFUL authorization into a 500 that loses the token.
+      let base = "";
+      try { base = resolveAppPublicUrl(process.env); } catch { base = ""; }
+      res.redirect(`${base}/settings/business-systems/shopify/finish?handle=${encodeURIComponent(handle)}`);
+      return;
+    }
+
+    const linked = await linkShopifyShopToTenant({
+      tenantId,
+      shopDomain: shop,
+      credentials: creds,
+      connectedBy: typeof payload.userId === "string" ? payload.userId : undefined,
     });
-    // Proactive capability discovery: enumerate granted scopes NOW, so a
-    // store connected with missing merchant approvals never exposes an
-    // unusable write tool for even one turn before the first failure.
-    // Fire-and-forget - the redirect must not wait on a Shopify roundtrip.
-    void refreshCapabilityState({ tenantId: payload.tenantId, slug: "shopify" }).then((r) => {
-      if (r.missingScopes.length) {
-        console.warn(`[shopify oauth] connected with missing scopes: ${r.missingScopes.join(",")}`);
+
+    // The intent has served its purpose either way - a failed link must not
+    // leave a handle that a later, unrelated install could pick up.
+    if (typeof payload.intentHandle === "string") {
+      await consumeInstallIntent(payload.intentHandle);
+    }
+    res.clearCookie(INSTALL_INTENT_COOKIE, { path: "/" });
+
+    if (!linked.ok) {
+      if (linked.reason === "shop_taken") {
+        // Never silently moved. The merchant is told, and resolves it by
+        // disconnecting in the workspace that holds it.
+        let base = "";
+        try { base = resolveAppPublicUrl(process.env); } catch { base = ""; }
+        res.redirect(`${base}/settings/business-systems?shopify_install_error=shop_connected_elsewhere`);
+        return;
       }
-    }).catch((e: any) => console.warn("[shopify oauth] capability probe failed:", e?.message));
-    // Reconcile existing AI employees' desired tool permissions: employees
-    // hired BEFORE Shopify was connected were frozen with a partial tool set
-    // and never re-granted this integration's READ tools. Additive/idempotent,
-    // READ-only. Fire-and-forget - must not block the redirect.
-    void reconcileAgentToolPermissions({ tenantId: payload.tenantId, integrationSlug: "shopify" })
-      .then((r) => {
-        if (r.added.length) {
-          console.log(`[shopify oauth] reconciled ${r.added.length} agent tool grant(s)`);
-        }
-      })
-      .catch((e: any) => console.warn("[shopify oauth] tool-permission reconcile failed:", e?.message));
+      res.status(500).send(`shopify_link_failed:${linked.reason}`);
+      return;
+    }
+
     res.redirect(postOAuthRedirect("shopify", payload.flow));
   } catch (err: any) {
-    res.status(500).send(`shopify_callback_error:${err?.message || ""}`);
+    // The message may carry request detail; the token cannot reach it (the
+    // exchange returns null rather than throwing with a body).
+    console.error("[shopify oauth] callback failed:", err?.message);
+    res.status(500).send("shopify_callback_error");
   }
 });
 

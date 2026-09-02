@@ -502,6 +502,22 @@ services:
       SHOPIFY_API_KEY: ${SHOPIFY_API_KEY:-}
       SHOPIFY_API_SECRET: ${SHOPIFY_API_SECRET:-}
       SHOPIFY_REDIRECT_URI: ${SHOPIFY_REDIRECT_URI:-}
+      # OPTIONAL. The Shopify App Store listing handle, read FROM the Partner
+      # Dashboard once the listing is published. Derives the one Shopify-owned
+      # page the merchant-facing "Connect Shopify" button can send someone to
+      # (https://apps.shopify.com/<handle>), because GOTCHA never asks for a
+      # .myshopify.com domain (App Store requirement 2.3.1).
+      #
+      # Empty is a NORMAL pre-listing state and blocks only that button. It
+      # does NOT affect installation from the Partner Dashboard, the public
+      # install handler, OAuth, the callback, existing connections, or
+      # reauthorization - none of those read it.
+      #
+      # Never guessed: a wrong handle is a 404 the merchant cannot get past.
+      # There is deliberately no SHOPIFY_APP_INSTALL_URL twin - a custom
+      # distribution link is generated per store and would hard-code one
+      # merchant's shop into everyone's button.
+      SHOPIFY_APP_HANDLE: ${SHOPIFY_APP_HANDLE:-}
       # ── GOTCHA Shopify CHAT app ───────────────────────────────────
       # RETIRED at the Core/Chat unification. There is ONE Shopify app now,
       # so app-proxy signatures, webhook HMACs and the Theme Editor deep

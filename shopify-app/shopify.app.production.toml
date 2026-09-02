@@ -55,11 +55,26 @@ name = "GOTCHA"
 # which is why the authorization-code flow is the correct install path.
 embedded = false
 
-# CHANGED by this rollout: was https://gotcha.co.il (the marketing apex).
-# The application now lives at app.gotcha.co.il, which is where every OAuth,
-# proxy and webhook endpoint in this file resolves. The apex callback stays in
-# the redirect allowlist below regardless.
-application_url = "https://app.gotcha.co.il"
+# The INSTALL ENTRY POINT, not the dashboard root.
+#
+# ⚠️  PARTNER DASHBOARD CHANGE REQUIRED. See §"Shopify Partner Dashboard" in
+#     docs/setup/shopify-install-flow.md - this value only takes effect on
+#     `shopify app deploy`, and the live app must be updated to match.
+#
+# This was `https://app.gotcha.co.il`, GOTCHA's application root. A merchant
+# who installed from Shopify landed on a LOGIN screen, which fails App Store
+# requirement 2.3.2 ("authenticate immediately after install", before any app
+# UI). It also meant Shopify's signed app-entry request - the one carrying
+# `shop`, `hmac` and `timestamp` - arrived at a Next.js page that read none of
+# it, so the only way to start OAuth was a GOTCHA form where the merchant
+# typed their own domain (which requirement 2.3.1 forbids).
+#
+# It now points at the public install handler, which verifies the signature
+# and 302s straight to `/admin/oauth/authorize`. Nothing of GOTCHA renders in
+# between.
+#
+# Route: services/ai/src/routes/shopify-install.ts
+application_url = "https://app.gotcha.co.il/api/connectors/shopify/install"
 
 [access_scopes]
 # The approved 26. Written in FULL, never in the collapsed form Shopify
@@ -85,6 +100,10 @@ scopes = "read_all_orders,read_assigned_fulfillment_orders,read_customers,write_
 # neither is dropped by this rollout even though the application_url moves to
 # app.gotcha.co.il. Removing either would break OAuth for anything still
 # pointed at it, and a redirect costs nothing to keep.
+# These match `router.get("/connectors/shopify/oauth/callback")` in
+# services/ai/src/routes/connectors-admin.ts exactly, mounted under `/api`.
+# UNCHANGED by the install-flow rollout: the callback route kept its path, so
+# no merchant's OAuth breaks. Only what happens BEFORE the callback moved.
 redirect_urls = [
   "https://app.gotcha.co.il/api/connectors/shopify/oauth/callback",
   "https://gotcha.co.il/api/connectors/shopify/oauth/callback",

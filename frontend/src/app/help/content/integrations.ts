@@ -146,9 +146,11 @@ In Fireberry: **Settings → Integration → API Forms → My Token**. Copy the 
       body: [
         `## Connect
 
-1. Pick **Shopify** in setup (or Settings → Integrations).
-2. Enter your store's **myshopify domain** - e.g. \`my-store.myshopify.com\` (find it in Shopify Admin → Settings → Domains).
-3. Approve the app install in the Shopify screen that opens.
+1. Pick **Shopify** in setup (or Settings → Integrations) and click **Connect Shopify**.
+2. Shopify opens and asks which store to install on - pick it there. You never need your myshopify domain.
+3. Review the permissions and approve the install. You land back in GOTCHA with the store connected.
+
+You can also install GOTCHA directly from Shopify. If you do that while signed out, GOTCHA asks you to sign in once and then attaches the store to your workspace.
 
 ## What it unlocks
 
@@ -160,9 +162,11 @@ In Fireberry: **Settings → Integration → API Forms → My Token**. Copy the 
 > After connecting, GOTCHA adds store-specific recommendations (like automating order-status replies) to your recommendations list.`,
         `## חיבור
 
-1. בחרו **Shopify** בהגדרה (או בהגדרות → אינטגרציות).
-2. הזינו את דומיין ה-**myshopify** של החנות - למשל \`my-store.myshopify.com\` (נמצא ב-Shopify Admin ← Settings ← Domains).
-3. אשרו את התקנת האפליקציה במסך Shopify שנפתח.
+1. בחרו **Shopify** בהגדרה (או בהגדרות ← אינטגרציות) ולחצו **חיבור Shopify**.
+2. Shopify נפתח ושואל על איזו חנות להתקין - בחרו אותה שם. אין צורך בדומיין myshopify.
+3. אשרו את ההרשאות. תחזרו ל-GOTCHA עם החנות מחוברת.
+
+אפשר גם להתקין את GOTCHA ישירות מ-Shopify. אם עשיתם זאת בלי להיות מחוברים, GOTCHA תבקש התחברות פעם אחת ואז תשייך את החנות למרחב העבודה שלכם.
 
 ## מה זה פותח
 

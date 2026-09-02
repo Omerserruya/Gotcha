@@ -21,6 +21,8 @@
  *   • the Theme Editor deep link is built from the Core client id
  */
 
+import { resolveShopifyInstallUrl } from "./shopify-install";
+
 /** Theme App Extension directory handle. Not the block handle. */
 const DEFAULT_EXTENSION_HANDLE = "gotcha-chat";
 /**
@@ -51,6 +53,24 @@ export interface ShopifyAppIdentity {
   appHandle: string;
   extensionHandle: string;
   blockHandle: string;
+  /**
+   * The App Store listing the "Connect Shopify" button sends a merchant to,
+   * where Shopify identifies or lets them pick the store. Derived from
+   * `SHOPIFY_APP_HANDLE` alone.
+   *
+   * Null until the listing publishes and the handle is configured, and null
+   * is an ORDINARY state, not a broken one:
+   *
+   *   • installation from the Partner Dashboard still works - Shopify calls
+   *     `application_url` directly and the public install handler takes it
+   *     from there;
+   *   • OAuth, the callback, existing connections and reauthorization are all
+   *     unaffected, because none of them reads this field.
+   *
+   * Only the in-app button depends on it, and it must say so plainly rather
+   * than fall back to asking the merchant for their domain.
+   */
+  installUrl: string | null;
 }
 
 export function getShopifyAppIdentity(): ShopifyAppIdentity {
@@ -73,6 +93,7 @@ export function getShopifyAppIdentity(): ShopifyAppIdentity {
     appHandle: process.env.SHOPIFY_APP_HANDLE || "",
     extensionHandle: process.env.SHOPIFY_CHAT_EXTENSION_HANDLE || DEFAULT_EXTENSION_HANDLE,
     blockHandle: process.env.SHOPIFY_CHAT_BLOCK_HANDLE || DEFAULT_BLOCK_HANDLE,
+    installUrl: resolveShopifyInstallUrl(process.env),
   };
 }
 

@@ -9,6 +9,7 @@
  * could never run.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { orderNode } from "./helpers/shopify-graphql-fixtures";
 
 const prismaMock = vi.hoisted(() => ({
   tenantIntegration: {
@@ -197,7 +198,8 @@ describe("executeAdapterTool pre-flight short-circuit", () => {
     );
     (globalThis as any).fetch = vi.fn(async () => ({
       ok: true, status: 200,
-      json: async () => ({ order: { id: 9, name: "#9" } }),
+      // The order read is Admin GraphQL now.
+      json: async () => ({ data: { order: orderNode({ id: 9, name: "#9" }) } }),
       text: async () => "{}",
     }));
     const r = await executeAdapterTool({
