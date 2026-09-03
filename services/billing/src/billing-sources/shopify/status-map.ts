@@ -35,6 +35,13 @@ import type { ProviderSubscriptionStatus } from "@prisma/client";
 const MAP: Record<string, ProviderSubscriptionStatus> = {
   PENDING: "PENDING",
   ACTIVE: "ACTIVE",
+  // App Pricing has no status field at all, so `deriveStatus` in
+  // partner-api.client.ts infers ACTIVE or TRIALING from `trialEndsAt` and
+  // feeds it through here. TRIALING therefore has to be a KNOWN key: without
+  // it the value fell through to REQUIRES_ACTION, and a merchant on a live
+  // trial was shown "waiting for approval" while holding a subscription
+  // Shopify had already confirmed.
+  TRIALING: "TRIALING",
   DECLINED: "DECLINED",
   EXPIRED: "EXPIRED",
   FROZEN: "FROZEN",

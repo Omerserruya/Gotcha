@@ -74,3 +74,25 @@ describe("Shopify AppSubscriptionStatus mapping", () => {
     }
   });
 });
+
+describe("the derived App Pricing statuses are recognised", () => {
+  it("TRIALING maps to TRIALING, not REQUIRES_ACTION", async () => {
+    // `deriveStatus` produces this for a subscription whose trial has not
+    // ended. It fell through to REQUIRES_ACTION once, which showed a merchant
+    // on a live trial "waiting for approval".
+    const { mapShopifyStatus } = await import("../billing-sources/shopify/status-map");
+    expect(mapShopifyStatus("TRIALING")).toBe("TRIALING");
+  });
+
+  it("every value deriveStatus can return is a known key", async () => {
+    const { deriveStatus } = await import("../billing-sources/shopify/partner-api.client");
+    const { mapShopifyStatus, grantsAccess } = await import("../billing-sources/shopify/status-map");
+    const now = new Date("2026-09-03T12:00:00Z");
+    for (const trial of [null, new Date("2026-09-17T00:00:00Z"), new Date("2026-08-01T00:00:00Z")]) {
+      const derived = deriveStatus(trial, now);
+      const mapped = mapShopifyStatus(derived);
+      expect(mapped).toBe(derived);          // survives the round trip
+      expect(grantsAccess(mapped)).toBe(true); // and grants access
+    }
+  });
+});
