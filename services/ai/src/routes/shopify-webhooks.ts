@@ -312,7 +312,33 @@ core.post("/app-uninstalled", async (req: Request, res: Response) => {
     const match = connections.find(
       (c: any) => normalizeShopifyShopDomain((c.config as any)?.shopDomain) === shop,
     );
+
+    // Billing FIRST, and deliberately before the `!match` early return below.
+    //
+    // This used to sit after it. The legacy `tenant_integrations` lookup only
+    // considers CONNECTED/ERROR rows, so a store whose legacy row was already
+    // DISCONNECTED - or that only ever had a `CommerceConnection` - produced
+    // `no_connection`, returned, and never told billing anything. The commerce
+    // connection stayed CONNECTED and the Shopify-funded entitlements survived
+    // an uninstall indefinitely, which is the exact opposite of the scoped
+    // revocation this handler exists to perform.
+    //
+    // The two records have different lifecycles, so one being absent must not
+    // suppress the other. Billing's handler is idempotent and answers
+    // `revoked: 0` for a shop it does not know, so calling it unconditionally
+    // is safe and is the only ordering that cannot silently skip revocation.
+    //
+    // The shop id comes from the verified payload; the domain is the fallback,
+    // because the token is already revoked and there is no way to look the id
+    // up afterwards.
+    await notifyShopifyUninstalled({
+      externalShopId: (hook.body as any)?.id ? String((hook.body as any).id) : null,
+      shopDomain: shop,
+    });
+
     if (!match) {
+      // No legacy row. Billing has already been told, so this is only a note
+      // that there was nothing on the legacy side to disconnect.
       await recordDelivery({ app: "core", hook, outcome: "no_connection" });
       return;
     }
@@ -329,20 +355,6 @@ core.post("/app-uninstalled", async (req: Request, res: Response) => {
         },
       }),
     );
-
-    // Billing: stop what Shopify was paying for, and only that. The commerce
-    // connection is disconnected and Shopify-funded entitlements are revoked;
-    // the workspace, the Core subscription and every non-Shopify channel are
-    // deliberately untouched. Uninstalling the app says something about
-    // Shopify and nothing about the merchant's WhatsApp number.
-    //
-    // The shop id comes from the verified payload; the domain is the fallback,
-    // because the token is already revoked and there is no way to look the id
-    // up afterwards.
-    await notifyShopifyUninstalled({
-      externalShopId: (hook.body as any)?.id ? String((hook.body as any).id) : null,
-      shopDomain: shop,
-    });
     // The extension left with the app, so the storefront chat goes too.
     // Best-effort and ordered second: a chat-side failure must not leave the
     // commerce connection wrongly marked CONNECTED with a revoked token.
