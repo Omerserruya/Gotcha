@@ -108,8 +108,13 @@ export const shopifyAppPricingSource: BillingSourceProvider = {
 
     return {
       externalId: active.id ?? null,
+      // The client derives this: `activeSubscription` has no status field, and
+      // its mere presence is the fact. `mapShopifyStatus` still runs so an
+      // unrecognised value could never slip through as ACTIVE.
       status: mapShopifyStatus(active.status),
-      rawStatus: active.status ?? null,
+      // Prefixed so nobody reads this column as something Shopify sent. It is
+      // our inference, and support needs to be able to tell the difference.
+      rawStatus: active.status ? `derived:${active.status}` : null,
       planHandle: active.planHandle ?? null,
       trialEndsAt: active.trialEndsAt ?? null,
       currentPeriodStart: active.currentPeriodStart ?? null,

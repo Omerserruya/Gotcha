@@ -47,19 +47,64 @@ export class PartnerApiError extends Error {
  * and a copy in our database would eventually disagree with what the merchant
  * was actually shown.
  */
+/**
+ * The fields `ActiveSubscription` ACTUALLY has.
+ *
+ * Verified by introspecting the live Partner API, not from documentation. The
+ * previous version of this query asked for `id` and `status`; neither exists,
+ * so every verification failed with "Field 'id' doesn't exist on type
+ * 'ActiveSubscription'" the first time a merchant approved a plan. It had
+ * never been executed against the real API - which is exactly why the
+ * capability table marked App Pricing `verifySubscription: "unverified"`.
+ *
+ * THERE IS NO `status` FIELD, and that is not an omission on Shopify's part.
+ * `activeSubscription` returns a subscription ONLY while one is active; the
+ * absence of a result IS "not subscribed". Modelling a status here would be
+ * inventing a value the API never sends - see `deriveStatus` below.
+ *
+ * The full field set, for anyone tempted to add one:
+ *   app, billingPeriod, cancelAtEndOfCycle, currentBillingCycle,
+ *   items, legacySubscriptionId, pendingUpdate, shop, trialEndsAt
+ */
 const ACTIVE_SUBSCRIPTION_QUERY = `
   query ActiveSubscription($appId: ID!, $shopId: ID!) {
     activeSubscription(appId: $appId, shopId: $shopId) {
-      id
-      status
+      legacySubscriptionId
       billingPeriod
       cancelAtEndOfCycle
       trialEndsAt
       currentBillingCycle { startTime endTime }
-      items { handle }
+      items { handle description }
     }
   }
 `;
+
+/**
+ * Every field this query selects, so a test can assert we ask for nothing the
+ * schema does not have. Kept beside the query deliberately: the failure mode
+ * being defended against is the two drifting apart.
+ */
+export const ACTIVE_SUBSCRIPTION_FIELDS = [
+  "legacySubscriptionId",
+  "billingPeriod",
+  "cancelAtEndOfCycle",
+  "trialEndsAt",
+  "currentBillingCycle",
+  "items",
+] as const;
+
+/**
+ * Turn "a subscription exists" into a status, since the API sends none.
+ *
+ * TRIALING when Shopify reports a trial end in the future, ACTIVE otherwise.
+ * Both grant access, so a wrong choice between them costs a label rather than
+ * a capability - but the merchant sees "trial until…" instead of "active",
+ * and being wrong about that is the kind of small lie that erodes trust in
+ * every other number on the page.
+ */
+export function deriveStatus(trialEndsAt: Date | null, now: Date = new Date()): "ACTIVE" | "TRIALING" {
+  return trialEndsAt && trialEndsAt.getTime() > now.getTime() ? "TRIALING" : "ACTIVE";
+}
 
 function apiUrl(organizationId: string): string {
   const base = (process.env.SHOPIFY_PARTNER_API_BASE_URL || DEFAULT_BASE).replace(/\/+$/, "");
@@ -136,11 +181,19 @@ export async function queryActiveSubscription(shopId: string): Promise<ActiveSub
   const sub = body.data?.activeSubscription;
   if (!sub) return null;
 
+  const trialEndsAt = toDate(sub.trialEndsAt);
   return {
-    id: sub.id ?? null,
-    status: sub.status ?? null,
+    // `legacySubscriptionId` comes back as a GID
+    // (`gid://shopify/AppSubscription/40080539962`). Stored verbatim: it is
+    // what Shopify calls the subscription, and normalising it to the numeric
+    // tail would leave us holding an identifier Shopify does not use.
+    id: sub.legacySubscriptionId ?? null,
+    // Derived, because the API has no status field. Recorded as the raw value
+    // too, so `providerStatusRaw` still says where it came from rather than
+    // implying Shopify sent it.
+    status: deriveStatus(trialEndsAt),
     planHandle: Array.isArray(sub.items) && sub.items[0]?.handle ? String(sub.items[0].handle) : null,
-    trialEndsAt: toDate(sub.trialEndsAt),
+    trialEndsAt,
     currentPeriodStart: toDate(sub.currentBillingCycle?.startTime),
     currentPeriodEnd: toDate(sub.currentBillingCycle?.endTime),
     cancelAtEndOfCycle: Boolean(sub.cancelAtEndOfCycle),
