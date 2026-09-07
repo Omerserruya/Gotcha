@@ -1,8 +1,9 @@
 /**
  * WebSocket gateway for in-app notifications.
  *
- *   Frontend opens  wss://host/ws?token=<jwt>
- *   Server validates JWT → records (userId, tenantId) for the socket
+ *   Frontend opens  wss://host/ws?ticket=<single-use handshake ticket>
+ *   Server redeems the ticket → records (userId, tenantId) for the socket
+ *   (legacy: ?token=<jwt>, still accepted, still verified against JWKS)
  *   Server subscribes to the shared Redis bus for `notification:created`
  *   On match (tenantId + userId) → push `{type:"notification.new",data:...}`
  *
@@ -14,7 +15,12 @@
 import type { Server as HttpServer, IncomingMessage } from "http";
 import type { Duplex } from "stream";
 import { WebSocketServer, WebSocket } from "ws";
-import { resolvePrincipal, subscribeToEvents, type ServiceEvent } from "@chatcenter/shared";
+import {
+  resolvePrincipal,
+  redeemRealtimeTicket,
+  subscribeToEvents,
+  type ServiceEvent,
+} from "@chatcenter/shared";
 
 interface Client {
   ws: WebSocket;
@@ -43,12 +49,36 @@ export function startNotificationWsServer(httpServer: HttpServer): void {
     let tenantId: string;
     try {
       const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
-      const token = url.searchParams.get("token");
-      if (!token) throw new Error("missing token");
-      // Active-tenant hint (validated against memberships, never trusted raw).
-      const payload = await resolvePrincipal(token, url.searchParams.get("tenant"));
-      userId = payload.userId;
-      tenantId = payload.tenantId;
+
+      // ── Handshake ticket (preferred) ──────────────────────
+      //
+      // A browser cannot set headers on a WebSocket upgrade, so whatever
+      // authenticates this connection ends up in the URL. `?token=` put the
+      // Authentik ACCESS TOKEN there - into the gateway access log, into any
+      // intermediary's, and into browser history - where it stayed valid for
+      // its full lifetime. A ticket is minted by an authenticated HTTP request,
+      // lives 60 seconds, and is consumed by this redemption, so the copy that
+      // reaches a log is already spent.
+      //
+      // It is also what makes this socket reachable at all under the cookie
+      // session model: there is no bearer for client-side JavaScript to read.
+      const ticket = url.searchParams.get("ticket");
+      if (ticket) {
+        const principal = await redeemRealtimeTicket(ticket);
+        // No fall-through to `?token=`: a replayed ticket must fail, not
+        // quietly become a token-authenticated socket.
+        if (!principal) throw new Error("invalid ticket");
+        userId = principal.userId;
+        tenantId = principal.tenantId;
+      } else {
+        // ── Access token (legacy) ───────────────────────────
+        const token = url.searchParams.get("token");
+        if (!token) throw new Error("missing credential");
+        // Active-tenant hint (validated against memberships, never trusted raw).
+        const payload = await resolvePrincipal(token, url.searchParams.get("tenant"));
+        userId = payload.userId;
+        tenantId = payload.tenantId;
+      }
     } catch (err: any) {
       socket.write("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n");
       socket.destroy();

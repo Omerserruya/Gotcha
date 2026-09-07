@@ -946,6 +946,20 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
+        # Short-lived single-use WebSocket handshake tickets. A browser cannot
+        # set headers on an upgrade, so this is what lets a cookie-only session
+        # open the inbox socket and the notifications stream without handing
+        # long-lived credentials to client-side JavaScript.
+        location /api/realtime {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://auth_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
         # Human-review queue for uncertain or conflicting extracted intelligence
         # (Customer Intelligence V2, Phase 2). The handler, approve and reject
         # have existed since that phase shipped; there was never a location for

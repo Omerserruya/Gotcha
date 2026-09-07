@@ -16,6 +16,7 @@ import tenantSecurityRoutes from "./routes/tenant-security";
 import gdprRoutes from "./routes/gdpr";
 import internalRoutes from "./routes/internal";
 import setupLinkRoutes from "./routes/setup-link";
+import realtimeRoutes from "./routes/realtime";
 import { startNudgeWorker } from "./services/nudge-engine.service";
 import rateLimit from "express-rate-limit";
 
@@ -48,6 +49,7 @@ app.use("/api/auth", sessionAuthRoutes);
 app.use("/api/auth/setup", setupLinkRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/agents", agentRoutes);
+app.use("/api/realtime", realtimeRoutes);
 app.use("/api/departments", departmentRoutes);
 // Per-number WhatsApp management. Mounted BEFORE the generic channel routes so
 // /api/channels/whatsapp/... resolves here rather than falling into

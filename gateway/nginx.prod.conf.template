@@ -1016,6 +1016,19 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
+        # Short-lived single-use WebSocket handshake tickets (§A9). Lets a
+        # cookie-only session open the inbox socket and the notifications
+        # stream without exposing a long-lived credential to page JavaScript.
+        location /api/realtime {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://auth_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
         # Human-review queue for uncertain or conflicting extracted intelligence
         # (Customer Intelligence V2, Phase 2). Handler, approve and reject all
         # exist; there was never a location for them, so every call 404'd at
@@ -1408,6 +1421,15 @@ http {
 
         location ~ ^/t/([^/]+)/api/industry-packs(.*)$ {
             proxy_pass http://ai_service/api/industry-packs$2$is_args$args;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location ~ ^/t/([^/]+)/api/realtime(.*)$ {
+            proxy_pass http://auth_service/api/realtime$2$is_args$args;
             proxy_set_header Host $host;
             proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;

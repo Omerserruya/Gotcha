@@ -1,6 +1,6 @@
 import { Server as HttpServer } from "http";
 import { Server, Socket } from "socket.io";
-import { prisma, resolvePrincipal, verifyVisitorSession } from "@chatcenter/shared";
+import { prisma, resolvePrincipal, verifyVisitorSession, redeemRealtimeTicket } from "@chatcenter/shared";
 
 let io: Server;
 
@@ -22,7 +22,26 @@ export function initSocket(httpServer: HttpServer): Server {
   io.use(async (socket: Socket, next) => {
     const auth = socket.handshake.auth ?? {};
 
-    // ── Staff ──────────────────────────────────────────────
+    // ── Staff, by handshake ticket ─────────────────────────
+    //
+    // Preferred over `auth.token` and checked first. The ticket was minted by
+    // an authenticated HTTP request (POST /api/realtime/ticket), lives 60
+    // seconds, and is destroyed by this redemption - so a browser holding only
+    // an HttpOnly cookie can still open a socket, and nothing long-lived is
+    // handed to client-side JavaScript to do it.
+    const ticket = auth.ticket as string | undefined;
+    if (ticket) {
+      const principal = await redeemRealtimeTicket(ticket);
+      // A ticket that does not redeem is a hard failure. Falling back to
+      // `auth.token` here would mean a replayed ticket silently becomes a
+      // token-authenticated socket, which is the opposite of single-use.
+      if (!principal) return next(new Error("Invalid or expired ticket"));
+      (socket as any).user = principal;
+      (socket as any).kind = "staff";
+      return next();
+    }
+
+    // ── Staff, by access token (legacy) ────────────────────
     const token = auth.token as string | undefined;
     if (token) {
       try {

@@ -518,6 +518,13 @@ export {
   readSessionCookie,
   resolvePrincipalFromSessionToken,
 } from "./lib/session-principal";
+export {
+  issueRealtimeTicket,
+  redeemRealtimeTicket,
+  isWellFormedRealtimeTicket,
+  REALTIME_TICKET_TTL_SECONDS,
+  type RealtimeTicketPrincipal,
+} from "./lib/realtime-ticket";
 export { redact, safeLogger } from "./lib/log-redact";
 export * from "./lib/tenant-access-policy";
 export {
