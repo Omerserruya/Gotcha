@@ -27607,7 +27607,7 @@ paths:
       x-service: ai
       x-source: services/ai/src/routes/intelligence-reviews.ts:30
       x-operation-type: read
-      x-publicly-exposed: false
+      x-publicly-exposed: true
       x-authorization:
         roles:
         - ADMIN
@@ -27654,7 +27654,7 @@ paths:
       x-service: ai
       x-source: services/ai/src/routes/intelligence-reviews.ts:40
       x-operation-type: write
-      x-publicly-exposed: false
+      x-publicly-exposed: true
       x-authorization:
         roles:
         - ADMIN
@@ -27723,7 +27723,7 @@ paths:
       x-service: ai
       x-source: services/ai/src/routes/intelligence-reviews.ts:48
       x-operation-type: write
-      x-publicly-exposed: false
+      x-publicly-exposed: true
       x-authorization:
         roles:
         - ADMIN

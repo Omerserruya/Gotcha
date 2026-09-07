@@ -4608,7 +4608,7 @@ POST /api/industry-packs/apply
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 - **Authorization:** Role: `ADMIN`
 - **Input validation:** No input.
-- **Exposure:** **Not** routed by the gateway; internal traffic only.
+- **Exposure:** Routed by the gateway (reachable from the internet).
 - **Operation type:** read
 
 #### Execution flow
@@ -4640,7 +4640,7 @@ GET /api/intelligence-reviews
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 - **Authorization:** Role: `ADMIN`
 - **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
-- **Exposure:** **Not** routed by the gateway; internal traffic only.
+- **Exposure:** Routed by the gateway (reachable from the internet).
 - **Operation type:** write
 
 #### Execution flow
@@ -4672,7 +4672,7 @@ POST /api/intelligence-reviews/:id/approve
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 - **Authorization:** Role: `ADMIN`
 - **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
-- **Exposure:** **Not** routed by the gateway; internal traffic only.
+- **Exposure:** Routed by the gateway (reachable from the internet).
 - **Operation type:** write
 
 #### Execution flow
