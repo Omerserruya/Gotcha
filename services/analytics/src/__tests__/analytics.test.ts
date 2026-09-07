@@ -21,6 +21,13 @@ vi.mock("@chatcenter/shared", () => {
     user: {
       findMany: vi.fn().mockResolvedValue([]),
     },
+    message: {
+      count: vi.fn().mockResolvedValue(11),
+      findMany: vi.fn().mockResolvedValue([]),
+    },
+    approvalRequest: {
+      count: vi.fn().mockResolvedValue(3),
+    },
   };
 
   return {
@@ -47,7 +54,13 @@ vi.mock("@chatcenter/shared", () => {
   };
 });
 
+import * as shared from "@chatcenter/shared";
 import analyticsRoutes from "../routes/analytics";
+
+/** The mocked prisma.approvalRequest.count, reached through the module mock. */
+function prismaCount() {
+  return (shared as any).prisma.approvalRequest.count;
+}
 
 function createTestApp() {
   const app = express();
@@ -102,6 +115,40 @@ describe("Analytics Service", () => {
       expect(res.status).toBe(200);
       expect(res.body.data).toBeDefined();
       expect(res.body.data.waiting).toBeDefined();
+    });
+  });
+
+  describe("GET /api/analytics/overview", () => {
+    it("carries pendingApprovalCount, the metric strip's fourth figure", async () => {
+      const app = createTestApp();
+      const res = await request(app).get("/api/analytics/overview");
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.pendingApprovalCount).toBe(3);
+    });
+
+    it("counts only approvals a human can still act on", async () => {
+      // status alone would include rows the expiry sweeper has not reached
+      // yet, and the strip would send the operator to a list that disagrees
+      // with the number they just clicked.
+      const app = createTestApp();
+      await request(app).get("/api/analytics/overview");
+
+      const where = (prismaCount() as any).mock.calls[0][0].where;
+      expect(where.status).toBe("PENDING");
+      expect(where.expiresAt.gt).toBeInstanceOf(Date);
+      expect(where.tenantId).toBe("tenant-1");
+    });
+
+    it("does not date-range the pending count", async () => {
+      // Every other figure describes the window; this one answers "what is
+      // waiting on a human right now", and an approval raised before `from`
+      // is still waiting.
+      const app = createTestApp();
+      await request(app).get("/api/analytics/overview?from=2026-09-01&to=2026-09-07");
+
+      const where = (prismaCount() as any).mock.calls[0][0].where;
+      expect(where.createdAt).toBeUndefined();
     });
   });
 });

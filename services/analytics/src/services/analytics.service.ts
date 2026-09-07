@@ -122,6 +122,7 @@ export async function getOverview(tenantId: string, from?: string, to?: string) 
     priorTotal,
     priorResolved,
     priorMessages,
+    pendingApprovalCount,
   ] = await Promise.all([
     prisma.conversation.count({ where: { tenantId, createdAt: dateFilter } }),
     prisma.conversation.count({ where: { tenantId, status: "CLOSED", createdAt: dateFilter } }),
@@ -133,6 +134,17 @@ export async function getOverview(tenantId: string, from?: string, to?: string) 
     prisma.conversation.count({ where: { tenantId, createdAt: priorFilter } }),
     prisma.conversation.count({ where: { tenantId, status: "CLOSED", createdAt: priorFilter } }),
     prisma.message.count({ where: { tenantId, createdAt: priorFilter } }),
+    // Deliberately NOT filtered by the date range. Every other figure here
+    // describes a period; this one answers "how many actions are waiting on a
+    // human right now", and an approval raised before `from` is still waiting.
+    //
+    // `expiresAt > now` matches how approval-requests.ts decides an approval is
+    // still actionable: the sweeper that flips PENDING to EXPIRED runs on its
+    // own schedule, so status alone would count approvals nobody can act on and
+    // the strip would disagree with the list it sends the operator to.
+    prisma.approvalRequest.count({
+      where: { tenantId, status: "PENDING", expiresAt: { gt: new Date() } },
+    }),
   ]);
 
   const resolutionTimes = closedConvs
@@ -199,6 +211,7 @@ export async function getOverview(tenantId: string, from?: string, to?: string) 
     humanHandledCount,
     aiHandledPct,
     totalMessages,
+    pendingApprovalCount,
     deltas: { totalConversationsPct: totalDelta, resolvedConversationsPct: resolvedDelta, totalMessagesPct: messagesDelta },
     period: { from: fromDate.toISOString(), to: toDate.toISOString() },
   };
