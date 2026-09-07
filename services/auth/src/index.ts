@@ -17,6 +17,7 @@ import gdprRoutes from "./routes/gdpr";
 import internalRoutes from "./routes/internal";
 import setupLinkRoutes from "./routes/setup-link";
 import realtimeRoutes from "./routes/realtime";
+import agentPresenceRoutes from "./routes/agent-presence";
 import { startNudgeWorker } from "./services/nudge-engine.service";
 import rateLimit from "express-rate-limit";
 
@@ -48,6 +49,9 @@ app.use("/api/auth", sessionAuthRoutes);
 // the whole reason they are here. The token in the URL is the identification.
 app.use("/api/auth/setup", setupLinkRoutes);
 app.use("/api/auth", authRoutes);
+// BEFORE agentRoutes: that router owns "/:id", and mounting presence after it
+// would make /api/agents/presence a lookup for an agent whose id is "presence".
+app.use("/api/agents/presence", agentPresenceRoutes);
 app.use("/api/agents", agentRoutes);
 app.use("/api/realtime", realtimeRoutes);
 app.use("/api/departments", departmentRoutes);

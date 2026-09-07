@@ -975,7 +975,12 @@ export {
   markBusy,
   markOnline,
   heartbeat,
+  declarePresence,
+  effectivePresence,
+  PRESENCE_STALE_AFTER_MS,
   type AgentPresenceStatus,
+  type StoredPresence,
+  type EffectivePresence,
 } from "./lib/agent-presence";
 export {
   resolveEffectiveLocale,

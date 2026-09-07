@@ -5686,6 +5686,11 @@ enum CallState {
 enum PresenceStatus {
   ONLINE
   BUSY
+  /// Stepped out, deliberately and with an end in mind. Distinct from OFFLINE:
+  /// OFFLINE is what we INFER when an agent stops sending heartbeats, AWAY is
+  /// what an agent SAYS. Routing can wait for an agent who will be back at
+  /// 11:00; it cannot wait for one who closed their laptop without a word.
+  AWAY
   OFFLINE
 }
 
@@ -5854,6 +5859,10 @@ model AgentPresence {
   tenantId             String         @map("tenant_id")
   status               PresenceStatus @default(OFFLINE)
   activeVoiceSessionId String?        @map("active_voice_session_id")
+  /// When an AWAY agent said they would be back. Null for every other status.
+  /// Nothing sweeps this: reads treat an elapsed window as ONLINE, so an agent
+  /// who never came back is not left AWAY forever by a job that failed to run.
+  awayUntil            DateTime?      @map("away_until")
   lastSeenAt           DateTime       @default(now()) @map("last_seen_at")
   updatedAt            DateTime       @updatedAt @map("updated_at")
 
