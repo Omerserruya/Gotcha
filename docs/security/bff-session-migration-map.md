@@ -674,3 +674,96 @@ wired in later commits.
 
 Rule: authorization is ALWAYS resolved from current GOTCHA Membership state, never
 from permissions embedded in an Authentik access token.
+
+---
+
+## A17. Stage 2 implemented: `SESSION_COOKIE_ACCEPT` is now honored
+
+Until this commit `SESSION_COOKIE_ACCEPT` was declared and read by nothing.
+`readSessionFlags` had exactly two consumers - the startup assert in
+`session-store.ts` and the `cookieCreate` 404 gate in `session-auth.ts` - and
+`authenticate()` had no cookie path at all. Login minted a session cookie that
+no API request could spend, and `prisma.userSession` was only ever written,
+never read. Stage 1 of A15 was live; stage 2 was not.
+
+### What resolves a cookie
+
+`packages/shared/src/lib/session-principal.ts`. Cookie value → SHA-256 →
+`UserSession.sessionTokenHash` → the row's own `identityId` +
+`activeMembershipId` → the same `JwtPayload` the Bearer path produces. Routes
+cannot tell which door a caller used, and must not care.
+
+**It does not unseal `encryptedAccessToken`.** The only thing `resolvePrincipal`
+takes from an access token is `sub`, which it maps back to an Identity - and the
+session row already names both the identity and the membership. Decrypting to
+rediscover a foreign key we are holding would buy nothing, and would cost the
+thing that matters: unsealing needs `SESSION_ENCRYPTION_KEY`, which lives in
+`services/auth` alone. Reading a session in nine services would have meant
+copying that key into all nine, so a bug in any one could surrender every user's
+provider tokens. Per A3, the sealed tokens exist to call Authentik on the user's
+behalf; they are not the evidence for our own authentication.
+
+Consequently `assertSessionInfraReady` now requires the encryption key only when
+`cookieCreate` is on. Accept-only services need the cookie NAME contract
+(`SESSION_COOKIE_SECURE` / `SESSION_COOKIE_NAME`) and nothing secret.
+
+### Precedence in `authenticate()`
+
+1. **Internal service secret** - unchanged, and deliberately checked first. The
+   flags below govern BROWSER credentials; `COOKIE_ONLY_ENFORCE` must never
+   sever service-to-service calls, which carry a shared secret and no cookie jar.
+2. **Session cookie**, when `SESSION_COOKIE_ACCEPT` is on.
+3. **Browser Bearer**, unless `COOKIE_ONLY_ENFORCE` is on or
+   `LEGACY_BEARER_ACCEPT` is off - then 401 `code: "cookie_required"`.
+
+The cookie is tried before the Bearer so the revocable credential wins over the
+one the server cannot withdraw. A presented-but-invalid session is a hard 401
+and never falls through to Bearer: if a revoked session could be rescued by a
+token still sitting in the same tab, revocation would not mean anything.
+
+All three invalidation mechanisms from A10 gate every request, via the
+already-written `isSessionUsable`: `revokedAt`, `expiresAt`, and a
+`sessionVersion` below the identity's current one (global re-auth). Idle
+timeout is kept honest by a throttled `lastActivityAt` stamp - fire-and-forget,
+so instrumentation can never turn a database blip into a logout.
+
+Workspace selection follows A8: a validated `X-Tenant-Id` hint wins, else the
+session's own `activeMembershipId` (re-checked for `isActive`, since SetNull
+only covers a DELETED membership and not a deactivated one), else a sole active
+membership. A multi-workspace identity that has selected nothing is REFUSED
+rather than assigned one - picking for someone shows them another customer's
+inbox.
+
+### Local development
+
+The cookie carries **no `Domain`, in any environment**: on HTTPS the name is
+`__Host-gotcha_session`, and that prefix forbids Domain (`serializeSessionCookie`
+throws `host_prefix_forbids_domain`). So a `.gotcha.co.il` cookie shared with
+`local.gotcha.co.il:3000` is not available without abandoning `__Host-`, which
+A1 already ruled out. `safeReturnTo` likewise refuses an absolute cross-host
+return.
+
+Neither is needed. `redirect_uri` is not fixed - `oidcConfig()` computes it as
+`OIDC_SERVER_REDIRECT_URI || APP_ORIGIN + "/api/auth/callback"`, so
+`dev.gotcha.co.il` is only what `APP_ORIGIN` happens to be set to. Serving the
+app on `localhost` needs:
+
+```
+APP_ORIGIN=http://localhost:3000
+AUTH_ALLOWED_ORIGINS=http://localhost:3000
+SESSION_COOKIE_SECURE=false      # -> gotcha_session_dev, no __Host-, no Secure
+SESSION_COOKIE_CREATE=true
+SESSION_COOKIE_ACCEPT=true
+```
+
+plus `http://localhost:3000/api/auth/callback` registered on the `gotcha-app`
+client. `AUTHENTIK_REDIRECT_URIS` already lists `http://localhost:3000/auth/callback`
+- the SPA page - which is a DIFFERENT URI from the BFF's backend `/api` callback.
+
+Cookies ignore port, so a host-only cookie on `localhost` is shared between the
+frontend on `:3000` and the gateway on `:80`.
+
+### Still open
+
+Stages 4-8 of A15 (removing browser token storage) and the periodic socket
+revalidation in A9 are untouched here.

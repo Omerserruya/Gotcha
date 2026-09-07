@@ -514,6 +514,10 @@ export {
   type SafeSessionView,
   type SessionTtl,
 } from "./lib/session-store";
+export {
+  readSessionCookie,
+  resolvePrincipalFromSessionToken,
+} from "./lib/session-principal";
 export { redact, safeLogger } from "./lib/log-redact";
 export * from "./lib/tenant-access-policy";
 export {
