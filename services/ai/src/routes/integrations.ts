@@ -2,7 +2,7 @@ import { reportOperationalFailure, ERROR_CODES } from "@chatcenter/shared";
 import { Router, Request, Response } from "express";
 import { enableReadToolsForIntegration } from "../services/integration-provisioning.service";
 import { prisma, authenticate, resolveTenant, requireOnboardingOrActiveTenant, requirePermission, requirePermissionOrRole, encryptCredentials, decryptCredentials, searchLeads as crmSearchLeads, searchContacts as crmSearchContacts } from "@chatcenter/shared";
-import { executeAdapterTool, getAdapter, clearMissingScopes } from "../services/connectors/integration-framework";
+import { executeAdapterTool, getAdapter, clearMissingScopes, capabilityStateFromConfig } from "../services/connectors/integration-framework";
 import { invalidateCrmAdapterCache, getCrmAdapter, resolveCrmVendor } from "../services/connectors/crm-adapter-resolver";
 import { maskPhone, maskEmail } from "../lib/mask";
 import { getSourceOfTruth, type SourceOfTruthCapability } from "../services/connectors/source-of-truth";
@@ -75,6 +75,76 @@ router.get("/", async (req: Request, res: Response) => {
   } catch (err) {
     console.error("List catalog integrations error:", err);
     res.status(500).json({ error: "Failed to list integrations" });
+  }
+});
+
+/**
+ * GET /commerce/capabilities — can this WORKSPACE act on orders at all?
+ *
+ * The same flags already exist on /api/commerce-context/:conversationId, but
+ * that endpoint is scoped to one conversation, so there was no way to ask the
+ * question Go live actually turns on: not "may this agent refund this order"
+ * but "has this store granted us refunds in the first place". Registered
+ * BEFORE /:slug so the literal path wins.
+ *
+ * These are the STORE's grants, not the reader's permissions. A viewer with no
+ * refund permission still needs a truthful answer about whether the workspace
+ * could refund, because that is what the setup screen is reporting on.
+ *
+ * `probed: false` means no successful probe has ever run for this store. It is
+ * NOT "the store granted nothing" and must never be rendered as a capability
+ * of no - the honest reading is that we do not know yet, and the screen shows
+ * a reconnect prompt rather than a red cross.
+ */
+const COMMERCE_SCOPE_FOR: Record<string, string[]> = {
+  readOrders: ["read_orders"],
+  refund: ["write_orders"],
+  cancel: ["write_orders"],
+  track: ["read_fulfillments"],
+};
+
+router.get("/commerce/capabilities", async (req: Request, res: Response) => {
+  try {
+    const connection = await prisma.tenantIntegration.findFirst({
+      where: {
+        tenantId: req.tenantId!,
+        status: "CONNECTED",
+        integration: { category: "ECOMMERCE" },
+      },
+      select: { config: true, integration: { select: { slug: true, name: true } } },
+      orderBy: { createdAt: "desc" },
+    });
+
+    if (!connection) {
+      // No commerce system is a real, common state - not an error, and not a
+      // set of capabilities that are all false, which would read as "connected
+      // but forbidden".
+      res.json({ data: { connected: false, provider: null, probed: false, can: null } });
+      return;
+    }
+
+    const state = capabilityStateFromConfig(connection.config as Record<string, unknown> | null);
+    const granted = new Set(state.grantedScopes);
+    const probed = state.grantedScopes.length > 0 || state.lastCheckedAt !== null;
+
+    const can: Record<string, boolean> = {};
+    for (const [capability, scopes] of Object.entries(COMMERCE_SCOPE_FOR)) {
+      can[capability] = scopes.every((sc) => granted.has(sc));
+    }
+
+    res.json({
+      data: {
+        connected: true,
+        provider: connection.integration.slug,
+        probed,
+        lastCheckedAt: state.lastCheckedAt,
+        grantedScopes: state.grantedScopes,
+        can,
+      },
+    });
+  } catch (err) {
+    console.error("Commerce capabilities error:", err);
+    res.status(500).json({ error: "Failed to resolve commerce capabilities" });
   }
 });
 

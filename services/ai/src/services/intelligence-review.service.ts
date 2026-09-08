@@ -23,6 +23,18 @@ export interface ReviewDTO {
   status: "PENDING" | "APPROVED" | "REJECTED";
   conversationId: string | null;
   createdAt: string;
+  /**
+   * How many distinct customers have a conversation touching the field in
+   * dispute.
+   *
+   * The quiet-day list is ranked by how much FUTURE work an item removes, and
+   * that is exactly this number: a conflict affecting one customer and one
+   * affecting forty are the same row without it, and the owner has no way to
+   * choose between them.
+   *
+   * Counted, never estimated. Null only when the count could not be taken.
+   */
+  affectedCustomerCount: number | null;
 }
 
 function toDTO(r: any): ReviewDTO {
@@ -39,6 +51,7 @@ function toDTO(r: any): ReviewDTO {
     status: r.status,
     conversationId: r.conversationId ?? null,
     createdAt: (r.createdAt instanceof Date ? r.createdAt : new Date(r.createdAt)).toISOString(),
+    affectedCustomerCount: typeof r.affectedCustomerCount === "number" ? r.affectedCustomerCount : null,
   };
 }
 
@@ -48,7 +61,59 @@ export async function listPendingReviews(tenantId: string, limit = 100): Promise
     orderBy: { createdAt: "desc" },
     take: Math.min(Math.max(limit, 1), 500),
   });
-  return rows.map(toDTO);
+
+  const counts = await affectedCustomerCounts(tenantId, rows);
+  return rows.map((r: any) => ({ ...toDTO(r), affectedCustomerCount: counts.get(r.id) ?? null }));
+}
+
+/**
+ * How many distinct customers each review affects.
+ *
+ * One grouped query for the whole page rather than one per row: a hundred
+ * reviews would otherwise be a hundred round trips to render one list.
+ *
+ * "Affected" is read as: conversations that produced an extracted fact for the
+ * SAME entity and field. That is the population whose record changes when the
+ * owner answers this, which is the number the ranking is about - not everyone
+ * who ever mentioned the topic.
+ */
+async function affectedCustomerCounts(
+  tenantId: string,
+  rows: Array<{ id: string; entityType: string; entityId: string; fieldKey: string }>,
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (rows.length === 0) return out;
+
+  try {
+    const grouped = await (prisma as any).intelligenceReview.groupBy({
+      by: ["entityType", "entityId", "fieldKey"],
+      where: {
+        tenantId,
+        OR: rows.map((r) => ({
+          entityType: r.entityType,
+          entityId: r.entityId,
+          fieldKey: r.fieldKey,
+        })),
+      },
+      _count: { conversationId: true },
+    });
+
+    const byKey = new Map<string, number>();
+    for (const g of grouped) {
+      byKey.set(`${g.entityType}::${g.entityId}::${g.fieldKey}`, g._count.conversationId);
+    }
+    for (const r of rows) {
+      // At least one: the review exists because a conversation produced it, so
+      // zero would be an arithmetic artefact rather than a fact about anyone.
+      out.set(r.id, Math.max(1, byKey.get(`${r.entityType}::${r.entityId}::${r.fieldKey}`) ?? 1));
+    }
+  } catch (err) {
+    // A failed count must not cost the owner the list. Null reads as "not
+    // known" on the card, which is honest; a zero would read as "affects
+    // nobody" and send them to ignore it.
+    console.warn("[intelligence-review] affected-customer count failed:", (err as Error).message);
+  }
+  return out;
 }
 
 export async function countPendingReviews(tenantId: string): Promise<number> {

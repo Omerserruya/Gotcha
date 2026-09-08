@@ -179,6 +179,83 @@ router.get("/", authenticate, resolveTenant, requirePermission("channels:manage:
 // channel connected" vs "channel broken" vs "no conversations yet"), and
 // agents see those pages too - the full listing above is ADMIN-only. This
 // returns health COUNTS only: no tokens, external ids, or error details.
+/**
+ * GET /channels/state — one row per channel, not four counts.
+ *
+ * `/summary` answers "how many are connected". Day one has to say WHICH:
+ * "WhatsApp connected, Instagram awaiting verification". A count cannot name a
+ * channel and cannot distinguish connected-but-unverified from connected, and
+ * those are the two states the setup screen exists to tell apart.
+ *
+ * Any tenant member. It carries no credentials and no customer data - the
+ * channel's own identifier and its state, which is what the screen renders.
+ */
+router.get("/state", authenticate, resolveTenant, async (req: Request, res: Response) => {
+  try {
+    const rows = await prisma.channelAccount.findMany({
+      where: { tenantId: req.tenantId! },
+      select: {
+        id: true,
+        channel: true,
+        displayName: true,
+        externalId: true,
+        connectionStatus: true,
+        isActive: true,
+        platformMeta: true,
+        lastError: true,
+      },
+      orderBy: [{ channel: "asc" }, { createdAt: "asc" }],
+    });
+
+    res.json({
+      data: rows.map((r) => {
+        const meta = (r.platformMeta ?? {}) as Record<string, unknown>;
+        return {
+          id: r.id,
+          // The platform's ChannelType, uppercase, as everywhere else.
+          channel: r.channel,
+          // What the owner calls it - a page name or a number - so the screen
+          // can say WHICH WhatsApp when there are three.
+          displayName: r.displayName ?? null,
+          identifier: r.externalId ?? null,
+          connectionStatus: r.connectionStatus,
+          isActive: r.isActive,
+          // Verification is a SEPARATE axis from connection: Meta hands back a
+          // connected number whose display name is still under review, and a
+          // screen that collapses the two tells the owner they are live when
+          // they cannot send.
+          verification: readVerification(meta),
+          lastError: r.lastError ?? null,
+        };
+      }),
+    });
+  } catch (err) {
+    console.error("Channel state error:", err);
+    res.status(500).json({ error: "Failed to get channel state" });
+  }
+});
+
+/**
+ * The provider's verification state, normalised to codes the client
+ * translates. Unknown rather than a guess when the provider has not said:
+ * a channel we have not heard about is not a channel that failed.
+ */
+function readVerification(meta: Record<string, unknown>): string {
+  const raw = [
+    meta.verificationStatus,
+    meta.verified_name_status,
+    meta.name_status,
+    meta.quality_rating ? "APPROVED" : undefined,
+  ].find((v) => typeof v === "string") as string | undefined;
+
+  if (!raw) return "UNKNOWN";
+  const v = raw.toUpperCase();
+  if (["APPROVED", "VERIFIED"].includes(v)) return "VERIFIED";
+  if (["PENDING", "PENDING_REVIEW", "IN_REVIEW", "SUBMITTED"].includes(v)) return "PENDING";
+  if (["DECLINED", "REJECTED", "FAILED"].includes(v)) return "REJECTED";
+  return "UNKNOWN";
+}
+
 router.get("/summary", authenticate, resolveTenant, async (req: Request, res: Response) => {
   try {
     const rows = await prisma.channelAccount.findMany({

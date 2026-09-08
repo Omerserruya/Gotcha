@@ -10,6 +10,7 @@ import { createServiceApp, startService, settleDueConversations } from "@chatcen
 import subscriptionRoutes from "./routes/subscription";
 import paymentMethodRoutes from "./routes/payment-methods";
 import creditsRoutes from "./routes/credits";
+import usageAllowanceRoutes from "./routes/usage-allowance";
 import pricingRoutes from "./routes/pricing";
 import publicPricingRoutes from "./routes/public-pricing";
 import adminPricingRoutes from "./routes/admin-pricing";
@@ -49,6 +50,7 @@ const app = createServiceApp(config);
 app.use("/api", subscriptionRoutes);
 app.use("/api", paymentMethodRoutes);
 app.use("/api", creditsRoutes);
+app.use("/api", usageAllowanceRoutes);
 app.use("/api", pricingRoutes);
 // Unauthenticated, cacheable marketing catalog. Gated by PUBLIC_PRICING_ENABLED.
 app.use("/api", publicPricingRoutes);
