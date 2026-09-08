@@ -1,4 +1,13 @@
-import { prisma, getRedis } from "@chatcenter/shared";
+import {
+  prisma,
+  getRedis,
+  normalizeConversationIntent,
+  isFrustrated,
+  scoreQueueItem,
+  rankQueueItems,
+  toActivityEvent,
+  approvalToActivityEvent,
+} from "@chatcenter/shared";
 
 // ─── Helpers ─────────────────────────────────────────────────
 
@@ -630,4 +639,250 @@ export async function getAIInsights(tenantId: string) {
   }
 
   return insights;
+}
+
+// ─── Home: "needs you now" ────────────────────────────────────
+
+/**
+ * The ranked queue.
+ *
+ * `getQueueDepth` above answers "how many", which is a number on a card.
+ * This answers "which ones, and why that one first", which is what an
+ * operator acts on.
+ *
+ * WHICH CONVERSATIONS COUNT
+ * The same predicate the inbox uses for its default view: unassigned, not
+ * closed, and not currently being driven by automation. A conversation the AI
+ * is handling is not waiting for a human, and putting it in a list titled
+ * "needs you now" would be false. `isHandedOver` brings back the ones the AI
+ * gave up on, which are exactly the ones that do need somebody.
+ *
+ * WHY THE WHOLE SET IS SCORED BEFORE PAGING
+ * Rank is computed, not stored, so the database cannot order by it. The
+ * candidate set is the tenant's unassigned open conversations - tens, not
+ * millions - and it is capped anyway. Ordering a page at a time would rank
+ * within the page and produce a "top" row that is only top of its slice.
+ */
+const QUEUE_CANDIDATE_CAP = 500;
+
+export async function getQueueItems(
+  tenantId: string,
+  opts: { limit?: number; cursor?: string } = {},
+) {
+  const limit = Math.min(Math.max(opts.limit ?? 20, 1), 100);
+  // The cursor is an offset into a deterministic ordering, not a row id: the
+  // sort key is derived, so there is no column to seek on. rankQueueItems
+  // imposes a total order (score, then age, then id) precisely so that this
+  // offset means the same thing across two requests.
+  const offset = (() => {
+    const n = opts.cursor ? Number.parseInt(opts.cursor, 10) : 0;
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  })();
+
+  const where = {
+    tenantId,
+    status: { in: ["OPEN", "WAITING"] as ("OPEN" | "WAITING")[] },
+    assignedAgentId: null,
+    OR: [{ handledBy: null }, { handledBy: "human" }, { isHandedOver: true }],
+  };
+
+  const [candidates, totalWaiting] = await Promise.all([
+    prisma.conversation.findMany({
+      where,
+      select: {
+        id: true,
+        createdAt: true,
+        channel: true,
+        customerName: true,
+        customerExternalId: true,
+        // Newest first, then walked backwards below: we need the last inbound
+        // and how many inbounds have gone unanswered, and both live at the end
+        // of the thread.
+        messages: {
+          orderBy: { createdAt: "desc" },
+          take: 20,
+          select: { direction: true, body: true, createdAt: true },
+        },
+      },
+      orderBy: { lastMessageAt: { sort: "desc", nulls: "last" } },
+      take: QUEUE_CANDIDATE_CAP,
+    }),
+    prisma.conversation.count({ where }),
+  ]);
+
+  if (candidates.length === 0) {
+    return { data: [], nextCursor: null, totalWaiting };
+  }
+
+  const intel = await prisma.conversationIntelligence.findMany({
+    where: { tenantId, conversationId: { in: candidates.map((c) => c.id) } },
+    select: {
+      conversationId: true,
+      detectedIntent: true,
+      sentiment: true,
+      sentimentScore: true,
+      customerEffort: true,
+    },
+  });
+  const intelByConversation = new Map(intel.map((i) => [i.conversationId, i]));
+
+  const now = new Date();
+  const scored = candidates.map((c) => {
+    // Walk newest-first and stop at our reply: everything before it is a
+    // message the customer sent that nobody has answered.
+    let unansweredInbound = 0;
+    let lastInboundAt: Date | null = null;
+    let preview = "";
+    for (const m of c.messages) {
+      if (m.direction === "OUTBOUND") break;
+      unansweredInbound += 1;
+      if (!lastInboundAt) {
+        lastInboundAt = m.createdAt;
+        preview = (m.body ?? "").trim();
+      }
+    }
+
+    // Falling back to createdAt rather than lastMessageAt: an outbound reply
+    // is not the customer waiting, and using it would restart the clock every
+    // time we said something without resolving anything.
+    const waitingSince = lastInboundAt ?? c.createdAt;
+
+    const i = intelByConversation.get(c.id);
+    const intent = normalizeConversationIntent(i?.detectedIntent, {
+      sentiment: i?.sentiment,
+      sentimentScore: i?.sentimentScore,
+      customerEffort: i?.customerEffort,
+    });
+    const { score, urgency } = scoreQueueItem(
+      {
+        waitingSince,
+        intent,
+        unansweredInbound: Math.max(1, unansweredInbound),
+        // Reported alongside, not folded into, `intent`: the chip shows what to
+        // act on, the score reflects how hot it is.
+        frustrated: isFrustrated(i?.detectedIntent, {
+          sentiment: i?.sentiment,
+          sentimentScore: i?.sentimentScore,
+          customerEffort: i?.customerEffort,
+        }),
+      },
+      now,
+    );
+
+    return {
+      id: c.id,
+      waitingSince,
+      score,
+      row: {
+        conversationId: c.id,
+        customer: {
+          // The channel identifier is the id here because a conversation is not
+          // guaranteed a Contact row; `name` stays null rather than being
+          // filled with a phone number dressed up as a name.
+          id: c.customerExternalId,
+          name: c.customerName ?? null,
+        },
+        // The platform's ChannelType, uppercase, as every other endpoint
+        // returns it. A second lowercase vocabulary for the same concept would
+        // mean the frontend maintaining two maps for one idea.
+        channel: c.channel,
+        preview: preview.length > 160 ? `${preview.slice(0, 159)}…` : preview,
+        intent,
+        waitingSince: waitingSince.toISOString(),
+        urgency,
+      },
+    };
+  });
+
+  const ranked = rankQueueItems(scored);
+  const page = ranked.slice(offset, offset + limit);
+  const nextOffset = offset + page.length;
+
+  return {
+    data: page.map((r) => ({ ...r.row, rank: r.rank })),
+    nextCursor: nextOffset < ranked.length ? String(nextOffset) : null,
+    totalWaiting,
+  };
+}
+
+// ─── Home: what the AI has been doing ─────────────────────────
+
+/**
+ * The activity stream.
+ *
+ * `getToolUsageStats` answers "how often, how fast, how reliably", which is a
+ * management report. This answers "what happened, in order", which is what the
+ * card on Home shows.
+ *
+ * TWO SOURCES, ONE TIMELINE. ToolExecution records what ran; ApprovalRequest
+ * records what is still waiting for a human to say yes. Merging them is the
+ * point: an operator scanning the card needs the pending refund to appear
+ * beside the completed ones, because that is the only entry they can still
+ * change the outcome of.
+ *
+ * Emits `kind` + `values`, never a rendered sentence - see activity-events.ts.
+ */
+export async function getActivity(
+  tenantId: string,
+  opts: { limit?: number; cursor?: string } = {},
+) {
+  const limit = Math.min(Math.max(opts.limit ?? 20, 1), 100);
+  // The cursor is a timestamp: the merged stream has no single id sequence to
+  // seek on, and both tables are indexed on (tenantId, createdAt).
+  const before = (() => {
+    if (!opts.cursor) return null;
+    const d = new Date(opts.cursor);
+    return Number.isNaN(d.getTime()) ? null : d;
+  })();
+  const timeFilter = before ? { lt: before } : undefined;
+
+  // Over-fetch from each source: the merge keeps only the newest `limit` of the
+  // combined set, and taking exactly `limit` from each would drop older rows
+  // from one source that belong on this page.
+  const [executions, approvals] = await Promise.all([
+    prisma.toolExecution.findMany({
+      where: { tenantId, ...(timeFilter ? { createdAt: timeFilter } : {}) },
+      orderBy: { createdAt: "desc" },
+      take: limit + 1,
+      select: {
+        id: true, toolName: true, input: true, output: true,
+        success: true, createdAt: true, conversationId: true,
+      },
+    }),
+    prisma.approvalRequest.findMany({
+      where: {
+        tenantId,
+        status: "PENDING",
+        // Same actionability rule as the overview's count, so the card and the
+        // metric strip cannot disagree about what is still pending.
+        expiresAt: { gt: new Date() },
+        ...(timeFilter ? { createdAt: timeFilter } : {}),
+      },
+      orderBy: { createdAt: "desc" },
+      take: limit + 1,
+      select: { id: true, tool: true, params: true, createdAt: true, conversationId: true },
+    }),
+  ]);
+
+  const merged = [
+    ...executions.map((e) => ({
+      at: e.createdAt,
+      event: toActivityEvent({ ...e, conversationId: e.conversationId ?? null }),
+    })),
+    ...approvals.map((a) => ({
+      at: a.createdAt,
+      event: approvalToActivityEvent({ ...a, conversationId: a.conversationId ?? null }),
+    })),
+  ].sort((x, y) => y.at.getTime() - x.at.getTime() || x.event.id.localeCompare(y.event.id));
+
+  const page = merged.slice(0, limit);
+  // Only claim another page when a source actually had more to give. Saying so
+  // on a short merge would hand the client a cursor that returns nothing.
+  const hasMore =
+    merged.length > limit || executions.length > limit || approvals.length > limit;
+
+  return {
+    data: page.map((p) => p.event),
+    nextCursor: hasMore && page.length > 0 ? page[page.length - 1]!.at.toISOString() : null,
+  };
 }

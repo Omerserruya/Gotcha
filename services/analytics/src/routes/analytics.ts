@@ -89,6 +89,43 @@ router.get("/queue", requireRole("ADMIN"), async (req: Request, res: Response) =
   }
 });
 
+/**
+ * The ranked queue behind Home's "needs you now".
+ *
+ * NOT requireRole("ADMIN"): this is the list an agent works from, and the
+ * conversations in it are unassigned ones any member could pick up. Every
+ * other route here is a management report, which is why they are admin-gated.
+ */
+router.get("/queue/items", async (req: Request, res: Response) => {
+  try {
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+    const cursor = typeof req.query.cursor === "string" ? req.query.cursor : undefined;
+    const result = await analyticsService.getQueueItems(req.tenantId!, { limit, cursor });
+    res.json(result);
+  } catch (err) {
+    console.error("Queue items error:", err);
+    res.status(500).json({ error: "Failed to get queue items" });
+  }
+});
+
+/**
+ * The time-ordered activity stream behind Home's activity card.
+ *
+ * Open to every tenant member for the same reason as the queue: an agent needs
+ * to see that a refund is awaiting approval before they promise one.
+ */
+router.get("/activity", async (req: Request, res: Response) => {
+  try {
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+    const cursor = typeof req.query.cursor === "string" ? req.query.cursor : undefined;
+    const result = await analyticsService.getActivity(req.tenantId!, { limit, cursor });
+    res.json(result);
+  } catch (err) {
+    console.error("Activity stream error:", err);
+    res.status(500).json({ error: "Failed to get activity" });
+  }
+});
+
 router.get("/overview", requireRole("ADMIN"), async (req: Request, res: Response) => {
   try {
     const from = req.query.from as string | undefined;

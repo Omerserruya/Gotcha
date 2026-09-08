@@ -525,6 +525,28 @@ export {
   REALTIME_TICKET_TTL_SECONDS,
   type RealtimeTicketPrincipal,
 } from "./lib/realtime-ticket";
+export {
+  CONVERSATION_INTENTS,
+  isConversationIntent,
+  normalizeConversationIntent,
+  isFrustrated,
+  type ConversationIntent,
+  type IntentSignals,
+} from "./lib/conversation-intent";
+export {
+  scoreQueueItem,
+  rankQueueItems,
+  type QueueUrgency,
+  type QueueRankInput,
+  type QueueScore,
+} from "./lib/queue-ranking";
+export {
+  toActivityEvent,
+  approvalToActivityEvent,
+  type ActivityEvent,
+  type ActivityOutcome,
+  type ActivitySubject,
+} from "./lib/activity-events";
 export { redact, safeLogger } from "./lib/log-redact";
 export * from "./lib/tenant-access-policy";
 export {
