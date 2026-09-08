@@ -249,4 +249,54 @@ router.post("/insights/:id/dismiss", requireRole("ADMIN"), async (req: Request, 
   }
 });
 
+/**
+ * Questions GOTCHA could not answer. Any tenant member: the point of the card
+ * is that whoever sees it can go and write the missing answer.
+ */
+router.get("/unanswered-questions", async (req: Request, res: Response) => {
+  try {
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+    const includeResolved = req.query.includeResolved === "true";
+    const result = await analyticsService.getUnansweredQuestions(req.tenantId!, { limit, includeResolved });
+    res.json(result);
+  } catch (err) {
+    console.error("Unanswered questions error:", err);
+    res.status(500).json({ error: "Failed to get unanswered questions" });
+  }
+});
+
+/** What shoppers asked the catalogue for, by ISO week. */
+router.get("/product-demand", async (req: Request, res: Response) => {
+  try {
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+    const weekKey = typeof req.query.week === "string" ? req.query.week : undefined;
+    const includeStocked = req.query.includeStocked === "true";
+    const result = await analyticsService.getProductDemand(req.tenantId!, { limit, weekKey, includeStocked });
+    res.json(result);
+  } catch (err) {
+    console.error("Product demand error:", err);
+    res.status(500).json({ error: "Failed to get product demand" });
+  }
+});
+
+/**
+ * Customers who have gone quiet. ADMIN: this is a list of named customers with
+ * their phone numbers, which is a different thing from a queue of conversations
+ * already assigned to nobody, and it is the input to an outreach decision.
+ */
+router.get("/dormant-customers", requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+    const days = req.query.days ? parseInt(req.query.days as string, 10) : undefined;
+    const minConversations = req.query.minConversations
+      ? parseInt(req.query.minConversations as string, 10)
+      : undefined;
+    const result = await analyticsService.getDormantCustomers(req.tenantId!, { limit, days, minConversations });
+    res.json(result);
+  } catch (err) {
+    console.error("Dormant customers error:", err);
+    res.status(500).json({ error: "Failed to get dormant customers" });
+  }
+});
+
 export default router;

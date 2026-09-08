@@ -554,6 +554,15 @@ export {
   type ConversationHandler,
   type HandoverReason,
 } from "./lib/conversation-handover";
+export {
+  recordUnansweredQuestion,
+  recordProductDemand,
+  clusterKeyFor,
+  isoWeekKey,
+  UNANSWERED_REASONS,
+  LOW_CONFIDENCE_SCORE,
+  type UnansweredReason,
+} from "./lib/knowledge-gaps";
 export { redact, safeLogger } from "./lib/log-redact";
 export * from "./lib/tenant-access-policy";
 export {

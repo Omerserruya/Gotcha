@@ -1,4 +1,4 @@
-import { prisma } from "@chatcenter/shared";
+import { prisma, recordUnansweredQuestion, LOW_CONFIDENCE_SCORE } from "@chatcenter/shared";
 import { generateEmbedding } from "./embedding.service";
 import { searchSimilar, SearchResult } from "./qdrant.service";
 
@@ -73,14 +73,49 @@ export async function retrieveRelevantChunks(
    * before.
    */
   aiAgentId?: string | null,
+  /**
+   * Record a miss as a knowledge gap.
+   *
+   * Opt-in, because not every caller is answering a customer. A readiness test,
+   * an admin probe or a KB preview that finds nothing is not a gap in the
+   * business's knowledge, and recording those would fill the owner's list with
+   * questions no customer ever asked.
+   */
+  gap: { record?: boolean; askerKey?: string | null } = {},
 ): Promise<SearchResult[]> {
   try {
     const queryEmbedding = await generateEmbedding(query, { tenantId });
 
     const activeKBIds = await readableKnowledgeBaseIds(tenantId, aiAgentId);
-    if (activeKBIds.length === 0) return [];
+    if (activeKBIds.length === 0) {
+      // No readable knowledge base at all is the purest "no_knowledge" there is.
+      if (gap.record) {
+        void recordUnansweredQuestion({
+          tenantId, question: query, reason: "no_knowledge", askerKey: gap.askerKey,
+        });
+      }
+      return [];
+    }
 
-    return await searchSimilar(tenantId, queryEmbedding, limit, activeKBIds);
+    const results = await searchSimilar(tenantId, queryEmbedding, limit, activeKBIds);
+
+    // Recorded HERE, where the scores are, and never inferred later from a
+    // conversation that happened to escalate. By the time anything downstream
+    // can see the outcome, the reason why is gone.
+    if (gap.record) {
+      const topScore = results.length > 0 ? (results[0]!.score ?? 0) : 0;
+      if (results.length === 0) {
+        void recordUnansweredQuestion({
+          tenantId, question: query, reason: "no_knowledge", askerKey: gap.askerKey,
+        });
+      } else if (topScore < LOW_CONFIDENCE_SCORE) {
+        void recordUnansweredQuestion({
+          tenantId, question: query, reason: "low_confidence", askerKey: gap.askerKey,
+        });
+      }
+    }
+
+    return results;
   } catch (err: any) {
     console.error("[Knowledge] Retrieval error:", err.message);
     return [];

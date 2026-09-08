@@ -7,6 +7,7 @@ import {
   rankQueueItems,
   toActivityEvent,
   approvalToActivityEvent,
+  isoWeekKey,
 } from "@chatcenter/shared";
 
 // ─── Helpers ─────────────────────────────────────────────────
@@ -1041,5 +1042,168 @@ export async function getTimeSaved(tenantId: string, from?: string, to?: string)
           : "median_span_first_inbound_to_last_outbound",
       period: { from: fromDate.toISOString(), to: toDate.toISOString() },
     },
+  };
+}
+
+// ─── The quiet-day sources ────────────────────────────────────
+
+/**
+ * Questions GOTCHA could not answer.
+ *
+ * NOT getTopQuestions with a filter. That ranks intent slugs by frequency and
+ * has no concept of a miss, so a question asked thirty times and answered badly
+ * thirty times is indistinguishable there from a popular one. These rows were
+ * written at the moment retrieval failed, with the reason it failed.
+ *
+ * Resolved gaps are excluded by default: the list is a to-do, and something the
+ * owner has already written an article about does not belong on it. It is
+ * excluded, not deleted, so the record that it was once a gap survives.
+ */
+export async function getUnansweredQuestions(
+  tenantId: string,
+  opts: { limit?: number; includeResolved?: boolean } = {},
+) {
+  const limit = Math.min(Math.max(opts.limit ?? 10, 1), 50);
+  const rows = await prisma.unansweredQuestion.findMany({
+    where: { tenantId, ...(opts.includeResolved ? {} : { resolvedAt: null }) },
+    // By how badly it is missing, then by how recently - a gap asked forty
+    // times last month outranks one asked twice this morning.
+    orderBy: [{ askCount: "desc" }, { lastAskedAt: "desc" }],
+    take: limit,
+    select: {
+      id: true, question: true, reason: true, askCount: true, askedBy: true,
+      firstAskedAt: true, lastAskedAt: true, resolvedAt: true,
+    },
+  });
+
+  return {
+    data: rows.map((r) => ({
+      id: r.id,
+      question: r.question,
+      reason: r.reason,
+      askCount: r.askCount,
+      askedBy: r.askedBy,
+      firstAskedAt: r.firstAskedAt.toISOString(),
+      lastAskedAt: r.lastAskedAt.toISOString(),
+      resolvedAt: r.resolvedAt?.toISOString() ?? null,
+    })),
+  };
+}
+
+/**
+ * What people asked the catalogue for.
+ *
+ * Defaults to the CURRENT ISO week, because the card's claim is "this week" and
+ * a running total since launch cannot answer "is this getting worse". Defaults
+ * to misses, because a term the shop already stocks is not a finding.
+ */
+export async function getProductDemand(
+  tenantId: string,
+  opts: { limit?: number; weekKey?: string; includeStocked?: boolean } = {},
+) {
+  const limit = Math.min(Math.max(opts.limit ?? 10, 1), 50);
+  const weekKey = opts.weekKey || isoWeekKey();
+
+  const rows = await prisma.productDemandTerm.findMany({
+    where: {
+      tenantId,
+      weekKey,
+      ...(opts.includeStocked ? {} : { inCatalogue: false }),
+    },
+    orderBy: [{ askCount: "desc" }, { lastSeenAt: "desc" }],
+    take: limit,
+    select: {
+      id: true, term: true, askCount: true, askedBy: true,
+      inCatalogue: true, firstSeenAt: true, lastSeenAt: true,
+    },
+  });
+
+  return {
+    // Echoed back, never left implicit: a card that says "this week" beside a
+    // number is making a claim about which week, and the reader cannot check it
+    // against a default they cannot see.
+    weekKey,
+    data: rows.map((r) => ({
+      id: r.id,
+      term: r.term,
+      askCount: r.askCount,
+      askedBy: r.askedBy,
+      inCatalogue: r.inCatalogue,
+      firstSeenAt: r.firstSeenAt.toISOString(),
+      lastSeenAt: r.lastSeenAt.toISOString(),
+    })),
+  };
+}
+
+/**
+ * Customers who used to talk to this business and have stopped.
+ *
+ * "Dormant" is a JUDGEMENT, not a fact, so the endpoint returns the definition
+ * it used alongside the rows. Without it the number is unfalsifiable: nobody
+ * reading "47 dormant customers" can tell whether that means silent for a month
+ * or for a year, and the two would lead to completely different decisions.
+ *
+ * The floor matters as much as the ceiling. Somebody who wrote once, four
+ * months ago, is not a lapsed customer - they are a stranger who asked a
+ * question. Requiring a minimum number of conversations is what separates the
+ * two, and without it this is a list of one-time enquirers.
+ */
+const DORMANT_DEFAULT_DAYS = 60;
+const DORMANT_MIN_CONVERSATIONS = 2;
+
+export async function getDormantCustomers(
+  tenantId: string,
+  opts: { limit?: number; days?: number; minConversations?: number } = {},
+) {
+  const limit = Math.min(Math.max(opts.limit ?? 20, 1), 100);
+  const days = Math.min(Math.max(opts.days ?? DORMANT_DEFAULT_DAYS, 7), 730);
+  const minConversations = Math.min(
+    Math.max(opts.minConversations ?? DORMANT_MIN_CONVERSATIONS, 1),
+    50,
+  );
+  const cutoff = new Date(Date.now() - days * 86_400_000);
+
+  // Grouped on the identity a conversation actually carries. There is no
+  // contactId on Conversation - the customer is `customerExternalId` (a phone
+  // number on WhatsApp, a PSID on Messenger) scoped by channel, because the
+  // same string on two channels is not the same person.
+  const grouped = await prisma.conversation.groupBy({
+    by: ["customerExternalId", "channel"],
+    where: { tenantId },
+    _count: { _all: true },
+    _max: { lastMessageAt: true, customerName: true },
+  });
+
+  const dormant = grouped
+    .filter((g) => {
+      if (g._count._all < minConversations) return false;
+      const last = g._max.lastMessageAt;
+      // A customer with conversations but no message timestamp cannot be SHOWN
+      // to have gone quiet, so they are left out rather than assumed dormant.
+      return last !== null && last < cutoff;
+    })
+    // Quietest first: the longest silence is the one most worth breaking.
+    .sort((a, b) => a._max.lastMessageAt!.getTime() - b._max.lastMessageAt!.getTime())
+    .slice(0, limit);
+
+  return {
+    // The definition travels WITH the rows. It is the difference between a
+    // number a reader can act on and one they have to take on trust.
+    definition: {
+      quietForDays: days,
+      minConversations,
+      quietSince: cutoff.toISOString(),
+    },
+    data: dormant.map((d) => ({
+      // The channel identifier IS the id here, because there is no guaranteed
+      // Contact row behind it. `name` stays null rather than being filled with
+      // a phone number dressed up as a name.
+      customerId: d.customerExternalId,
+      channel: d.channel,
+      name: d._max.customerName ?? null,
+      conversationCount: d._count._all,
+      lastSeenAt: d._max.lastMessageAt!.toISOString(),
+      quietDays: Math.floor((Date.now() - d._max.lastMessageAt!.getTime()) / 86_400_000),
+    })),
   };
 }

@@ -1518,7 +1518,12 @@ async function generateAIBotReplyInner(
   if (shouldRetrieveKB(behaviorState, opts.incomingMessage)) {
     try {
       // Scoped to what THIS employee may read - see readableKnowledgeBaseIds.
-      const chunks = await retrieveRelevantChunks(opts.tenantId, opts.incomingMessage, 5, opts.aiAgentId);
+      // The live customer path, and the only caller that records gaps: a miss
+      // here is a real question this business could not answer.
+      const chunks = await retrieveRelevantChunks(
+        opts.tenantId, opts.incomingMessage, 5, opts.aiAgentId,
+        { record: true, askerKey: opts.conversationId ?? null },
+      );
       kbBlock = buildKnowledgeContext(chunks) || undefined;
       for (const c of chunks as any[]) {
         const title = String(c?.documentTitle ?? c?.title ?? "").trim();
