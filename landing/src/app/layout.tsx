@@ -5,6 +5,9 @@ export const metadata: Metadata = {
   title: 'GOTCHA - Manage every customer interaction, end to end.',
   description:
     'From WhatsApp messages to phone calls, GOTCHA manages every customer interaction in one place, with AI employees tailored to your business, working alongside your team.',
+  // Served from public/ rather than app/favicon.ico: the root optional
+  // catch-all route answers /favicon.ico before the metadata route can.
+  icons: { icon: '/assets/favicon.ico', shortcut: '/assets/favicon.ico' },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
