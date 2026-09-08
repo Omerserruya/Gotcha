@@ -43,6 +43,9 @@ vi.mock("@chatcenter/shared", () => {
       next();
     },
     requireRole: (..._roles: string[]) => (_req: any, _res: any, next: any) => next(),
+    // The routes moved off role ranks onto permissions; the gate itself is
+    // covered by the permission-gate tests, so it is waved through here.
+    requirePermission: (..._keys: string[]) => (_req: any, _res: any, next: any) => next(),
     createWorker: vi.fn(() => ({ on: vi.fn() })),
     createServiceApp: (config: any) => {
       const app = express();
