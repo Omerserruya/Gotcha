@@ -212,4 +212,17 @@ export function approvalToActivityEvent(row: ApprovalRequestLike): ActivityEvent
   };
 }
 
+/**
+ * What a tool acts ON, for callers that need the noun without the event.
+ *
+ * Exported so the "right now" line groups by the SAME table the activity
+ * stream files events under. Two tables would drift, and then the card would
+ * say "checking 4 orders" while the stream below it called the same executions
+ * something else.
+ */
+export function toolSubject(toolName: string): ActivitySubject["type"] {
+  const bare = toolName.includes(".") ? toolName.slice(toolName.lastIndexOf(".") + 1) : toolName;
+  return TOOL_EVENTS[bare]?.subject ?? "none";
+}
+
 export const __ACTIVITY_INTERNALS__ = { TOOL_EVENTS, VALUE_KEYS };

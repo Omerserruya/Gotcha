@@ -250,6 +250,22 @@ router.post("/insights/:id/dismiss", requirePermission("analytics:dashboard:read
 });
 
 /**
+ * What the AI is doing at this instant - the dark card's opening line.
+ *
+ * Part of the shared operational picture, so it rides the same permission as
+ * the queue rather than the reporting one.
+ */
+router.get("/in-flight", requirePermission("analytics:workspace:read"), async (req: Request, res: Response) => {
+  try {
+    const data = await analyticsService.getInFlight(req.tenantId!);
+    res.json({ data });
+  } catch (err) {
+    console.error("In-flight error:", err);
+    res.status(500).json({ error: "Failed to get in-flight summary" });
+  }
+});
+
+/**
  * Questions GOTCHA could not answer. Any tenant member: the point of the card
  * is that whoever sees it can go and write the missing answer.
  */

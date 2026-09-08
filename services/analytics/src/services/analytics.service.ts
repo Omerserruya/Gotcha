@@ -7,6 +7,7 @@ import {
   rankQueueItems,
   toActivityEvent,
   approvalToActivityEvent,
+  toolSubject,
   isoWeekKey,
 } from "@chatcenter/shared";
 
@@ -31,8 +32,8 @@ export async function getDashboardStats(tenantId: string) {
   const redis = getRedis();
   const today = new Date().toISOString().slice(0, 10);
   const [activeConversations, waitingConversations, dailyData, responseTimes, resolutionTimes] = await Promise.all([
-    prisma.conversation.count({ where: { tenantId, status: "OPEN" } }),
-    prisma.conversation.count({ where: { tenantId, status: "WAITING" } }),
+    prisma.conversation.count({ where: { tenantId, isTest: false, status: "OPEN" } }),
+    prisma.conversation.count({ where: { tenantId, isTest: false, status: "WAITING" } }),
     redis.hgetall(`analytics:${tenantId}:${today}`),
     redis.lrange(`analytics:${tenantId}:response_times:${today}`, 0, -1),
     redis.lrange(`analytics:${tenantId}:resolution_times:${today}`, 0, -1),
@@ -103,7 +104,7 @@ export async function getDailyVolume(tenantId: string, days = 30) {
 
 export async function getQueueDepth(tenantId: string) {
   const waitingConversations = await prisma.conversation.findMany({
-    where: { tenantId, status: { in: ["OPEN", "WAITING"] }, assignedAgentId: null },
+    where: { tenantId, isTest: false, status: { in: ["OPEN", "WAITING"] }, assignedAgentId: null },
     select: { createdAt: true, lastMessageAt: true },
   });
   const now = Date.now();
@@ -134,16 +135,16 @@ export async function getOverview(tenantId: string, from?: string, to?: string) 
     priorMessages,
     pendingApprovalCount,
   ] = await Promise.all([
-    prisma.conversation.count({ where: { tenantId, createdAt: dateFilter } }),
-    prisma.conversation.count({ where: { tenantId, status: "CLOSED", createdAt: dateFilter } }),
-    prisma.message.count({ where: { tenantId, createdAt: dateFilter } }),
+    prisma.conversation.count({ where: { tenantId, isTest: false, createdAt: dateFilter } }),
+    prisma.conversation.count({ where: { tenantId, isTest: false, status: "CLOSED", createdAt: dateFilter } }),
+    prisma.message.count({ where: { tenantId, conversation: { isTest: false }, createdAt: dateFilter } }),
     prisma.conversation.findMany({
       where: { tenantId, status: "CLOSED", closedAt: dateFilter },
       select: { createdAt: true, closedAt: true, assignedAgentId: true, messages: { select: { metadata: true }, take: 1, where: { direction: "OUTBOUND" } } },
     }),
-    prisma.conversation.count({ where: { tenantId, createdAt: priorFilter } }),
-    prisma.conversation.count({ where: { tenantId, status: "CLOSED", createdAt: priorFilter } }),
-    prisma.message.count({ where: { tenantId, createdAt: priorFilter } }),
+    prisma.conversation.count({ where: { tenantId, isTest: false, createdAt: priorFilter } }),
+    prisma.conversation.count({ where: { tenantId, isTest: false, status: "CLOSED", createdAt: priorFilter } }),
+    prisma.message.count({ where: { tenantId, conversation: { isTest: false }, createdAt: priorFilter } }),
     // Deliberately NOT filtered by the date range. Every other figure here
     // describes a period; this one answers "how many actions are waiting on a
     // human right now", and an approval raised before `from` is still waiting.
@@ -177,6 +178,7 @@ export async function getOverview(tenantId: string, from?: string, to?: string) 
     const aiConvs = await prisma.message.findMany({
       where: {
         tenantId,
+        conversation: { isTest: false },
         conversationId: { in: convIds },
         direction: "OUTBOUND",
         metadata: { path: ["source"], equals: "ai_bot" },
@@ -251,7 +253,7 @@ export async function getTopQuestions(tenantId: string, from?: string, to?: stri
 
   // Fallback: analyze inbound message bodies
   const messages = await prisma.message.findMany({
-    where: { tenantId, direction: "INBOUND", createdAt: dateFilter },
+    where: { tenantId, direction: "INBOUND", createdAt: dateFilter, conversation: { isTest: false } },
     select: { body: true },
     take: 1000,
   });
@@ -315,7 +317,7 @@ export async function getChannelPerformance(tenantId: string, from?: string, to?
   const dateFilter = { gte: fromDate, lte: toDate };
 
   const conversations = await prisma.conversation.findMany({
-    where: { tenantId, createdAt: dateFilter },
+    where: { tenantId, isTest: false, createdAt: dateFilter },
     select: { id: true, channel: true, status: true, createdAt: true, closedAt: true },
   });
 
@@ -323,6 +325,8 @@ export async function getChannelPerformance(tenantId: string, from?: string, to?
   const messages = convIds.length > 0
     ? await prisma.message.groupBy({
         by: ["conversationId"],
+        // convIds came from a query that already excludes test conversations,
+        // so this inherits the exclusion rather than repeating it.
         where: { tenantId, conversationId: { in: convIds } },
         _count: { id: true },
       })
@@ -379,7 +383,7 @@ export async function getDepartmentPerformance(tenantId: string, from?: string, 
       select: { id: true, name: true, members: { select: { userId: true } } },
     }),
     prisma.conversation.findMany({
-      where: { tenantId, createdAt: dateFilter, departmentId: { not: null } },
+      where: { tenantId, isTest: false, createdAt: dateFilter, departmentId: { not: null } },
       select: { departmentId: true, status: true, assignedAgentId: true, createdAt: true, lastMessageAt: true },
     }),
   ]);
@@ -436,7 +440,7 @@ export async function getAIPerformance(tenantId: string, from?: string, to?: str
     prisma.message.count({
       where: { tenantId, direction: "OUTBOUND", createdAt: dateFilter, metadata: { path: ["source"], equals: "ai_bot" } },
     }),
-    prisma.message.count({ where: { tenantId, direction: "OUTBOUND", createdAt: dateFilter } }),
+    prisma.message.count({ where: { tenantId, conversation: { isTest: false }, direction: "OUTBOUND", createdAt: dateFilter } }),
     prisma.conversationIntelligence.findMany({
       where: { tenantId, analyzedAt: dateFilter },
       select: { aiConfidence: true, resolutionOutcome: true },
@@ -523,14 +527,14 @@ export async function getAIInsights(tenantId: string) {
     }),
     prisma.conversation.groupBy({
       by: ["departmentId"],
-      where: { tenantId, createdAt: dateFilter, departmentId: { not: null } },
+      where: { tenantId, isTest: false, createdAt: dateFilter, departmentId: { not: null } },
       _count: { id: true },
       orderBy: { _count: { id: "desc" } },
       take: 3,
     }),
     prisma.conversation.groupBy({
       by: ["channel"],
-      where: { tenantId, createdAt: dateFilter },
+      where: { tenantId, isTest: false, createdAt: dateFilter },
       _count: { id: true },
       orderBy: { _count: { id: "desc" } },
       take: 1,
@@ -547,16 +551,42 @@ export async function getAIInsights(tenantId: string) {
     where: { tenantId, analyzedAt: dateFilter },
   });
 
-  const insights: Array<{ id: string; type: string; title: string; description: string; impact: string; actionable: boolean }> = [];
+  /**
+   * Insights carry a CODE and the numbers that go in the blanks - never a
+   * sentence.
+   *
+   * This block used to compose English prose with the figures interpolated
+   * ("The intent X appeared 43 times in the last 30 days"). On a Hebrew screen
+   * that renders English, it cannot be translated, and a translation table
+   * keyed on the English breaks the first time someone rewords it.
+   *
+   * The activity stream already solved this - see activity-events.ts - and this
+   * is the same treatment: `<noun>.<observation>` plus `values`. The client
+   * owns the wording, the clause order and the direction of the text.
+   *
+   * `id` is deliberately unchanged: dismissals are keyed on it, and rewriting
+   * them would silently un-dismiss every card a tenant has already put away.
+   */
+  const insights: Array<{
+    id: string;
+    kind: string;
+    values: Record<string, unknown>;
+    impact: string;
+    actionable: boolean;
+  }> = [];
 
   // Insight 1: Top automatable intent
   if (topIntents.length > 0) {
     const top = topIntents[0] as { detectedIntent: string | null; _count: { detectedIntent: number } };
     insights.push({
       id: "top-intent-automation",
-      type: "automation",
-      title: `Automate "${top.detectedIntent}" responses`,
-      description: `The intent "${top.detectedIntent}" appeared ${top._count.detectedIntent} times in the last 30 days. Creating an automated flow could reduce agent workload significantly.`,
+      kind: "intent.automatable",
+      // Normalized, so this and the queue chip name the intent the same way.
+      values: {
+        intent: normalizeConversationIntent(top.detectedIntent),
+        count: top._count.detectedIntent,
+        days: 30,
+      },
       impact: "high",
       actionable: true,
     });
@@ -568,9 +598,8 @@ export async function getAIInsights(tenantId: string) {
     if (escalationRate > 20) {
       insights.push({
         id: "high-escalation-rate",
-        type: "performance",
-        title: "High escalation rate detected",
-        description: `${escalationRate}% of AI-handled conversations were escalated to human agents. Review AI confidence thresholds and knowledge base coverage.`,
+        kind: "escalation.rate_high",
+        values: { percent: escalationRate, escalated, analyzed: totalAnalyzed, days: 30 },
         impact: escalationRate > 40 ? "high" : "medium",
         actionable: true,
       });
@@ -582,9 +611,8 @@ export async function getAIInsights(tenantId: string) {
     const lowPct = Math.round((lowConfidence / totalAnalyzed) * 100);
     insights.push({
       id: "low-ai-confidence",
-      type: "quality",
-      title: "AI confidence below threshold",
-      description: `${lowPct}% of conversations had AI confidence below 50%. Expanding your knowledge base or refining prompts could improve accuracy.`,
+      kind: "confidence.below_threshold",
+      values: { percent: lowPct, count: lowConfidence, analyzed: totalAnalyzed, threshold: 50, days: 30 },
       impact: "medium",
       actionable: true,
     });
@@ -595,9 +623,9 @@ export async function getAIInsights(tenantId: string) {
     const topChannel = channelConvs[0] as { channel: string; _count: { id: number } };
     insights.push({
       id: "top-volume-channel",
-      type: "volume",
-      title: `${topChannel.channel} is your highest-volume channel`,
-      description: `${topChannel._count.id} conversations came through ${topChannel.channel} in the last 30 days. Ensure dedicated automation and staffing for this channel.`,
+      kind: "channel.highest_volume",
+      // The platform's ChannelType, as every other endpoint returns it.
+      values: { channel: topChannel.channel, count: topChannel._count.id, days: 30 },
       impact: "medium",
       actionable: false,
     });
@@ -606,14 +634,13 @@ export async function getAIInsights(tenantId: string) {
   // Insight 5: Multiple frequent intents
   if (topIntents.length > 2) {
     const automatable = (topIntents as Array<{ detectedIntent: string | null; _count: { detectedIntent: number } }>)
-      .filter(i => i._count.detectedIntent > 5)
+      .filter((i) => i._count.detectedIntent > 5)
       .length;
     if (automatable > 1) {
       insights.push({
         id: "multi-intent-automation",
-        type: "automation",
-        title: `${automatable} intents are candidates for automation`,
-        description: `${automatable} recurring intents each appeared more than 5 times. Building chatbot flows for these could reduce repetitive agent work.`,
+        kind: "intent.multiple_automatable",
+        values: { count: automatable, minOccurrences: 5, days: 30 },
         impact: "high",
         actionable: true,
       });
@@ -630,9 +657,16 @@ export async function getAIInsights(tenantId: string) {
         : null;
       insights.push({
         id: "department-load-imbalance",
-        type: "staffing",
-        title: `${dept?.name || "One department"} is handling disproportionate volume`,
-        description: `This department received ${top._count.id} conversations vs ${second._count.id} for the next busiest. Consider rebalancing routing rules or adding agents.`,
+        kind: "department.load_imbalance",
+        // A department NAME is tenant data, not display copy: the same string
+        // in every language, so it travels as a value.
+        values: {
+          department: dept?.name ?? null,
+          departmentId: top.departmentId,
+          count: top._count.id,
+          nextCount: second._count.id,
+          days: 30,
+        },
         impact: "medium",
         actionable: true,
       });
@@ -706,6 +740,8 @@ export async function getQueueItems(
 
   const where = {
     tenantId,
+    // A rehearsal from setup is not somebody waiting for an answer.
+    isTest: false,
     status: { in: ["OPEN", "WAITING"] as ("OPEN" | "WAITING")[] },
     assignedAgentId: null,
     OR: [{ handledBy: null }, { handledBy: "human" }, { isHandedOver: true }],
@@ -981,6 +1017,7 @@ export async function getTimeSaved(tenantId: string, from?: string, to?: string)
   const aiConversations = await prisma.message.findMany({
     where: {
       tenantId,
+      conversation: { isTest: false },
       direction: "OUTBOUND",
       metadata: { path: ["source"], equals: "ai_bot" },
       createdAt: dateFilter,
@@ -996,6 +1033,7 @@ export async function getTimeSaved(tenantId: string, from?: string, to?: string)
   const humanHandled = await prisma.conversation.findMany({
     where: {
       tenantId,
+      isTest: false,
       createdAt: dateFilter,
       assignedAgentId: { not: null },
       OR: [{ handledBy: "human" }, { isHandedOver: true }],
@@ -1169,7 +1207,7 @@ export async function getDormantCustomers(
   // same string on two channels is not the same person.
   const grouped = await prisma.conversation.groupBy({
     by: ["customerExternalId", "channel"],
-    where: { tenantId },
+    where: { tenantId, isTest: false },
     _count: { _all: true },
     _max: { lastMessageAt: true, customerName: true },
   });
@@ -1205,5 +1243,68 @@ export async function getDormantCustomers(
       lastSeenAt: d._max.lastMessageAt!.toISOString(),
       quietDays: Math.floor((Date.now() - d._max.lastMessageAt!.getTime()) / 86_400_000),
     })),
+  };
+}
+
+// ─── Home: what is happening right now ────────────────────────
+
+/**
+ * The "right now" line on the dark card.
+ *
+ * Neither existing endpoint answers this. `getActivity` is PAST tense - what
+ * happened, in order. `getQueueDepth` counts customers WAITING, which is the
+ * opposite of work in flight. This is the present continuous: what the AI is
+ * doing at this instant.
+ *
+ * `toolsRunning` groups by SUBJECT rather than tool name, because the sentence
+ * the card renders is "checking 4 orders" - not "4 executions of get_order".
+ * Three different order-lookup tools are one fact to the person reading it.
+ */
+const IN_FLIGHT_WINDOW_MS = 2 * 60_000;
+
+export async function getInFlight(tenantId: string) {
+  const since = new Date(Date.now() - IN_FLIGHT_WINDOW_MS);
+  const now = new Date();
+
+  const [conversationsHandling, recentExecutions, awaitingApproval] = await Promise.all([
+    // Driven by automation, not closed, and spoken in inside the window. A
+    // conversation the AI opened yesterday and has said nothing in since is
+    // not something it is doing "right now".
+    prisma.conversation.count({
+      where: {
+        tenantId,
+        isTest: false,
+        status: { in: ["OPEN", "WAITING"] as ("OPEN" | "WAITING")[] },
+        handledBy: { in: ["ai_agent", "flow"] },
+        isHandedOver: false,
+        lastMessageAt: { gte: since },
+      },
+    }),
+    prisma.toolExecution.findMany({
+      where: { tenantId, createdAt: { gte: since } },
+      select: { toolName: true },
+    }),
+    // The SAME predicate getOverview uses for pendingApprovalCount, so the
+    // sentence and the metric strip cannot disagree about what is waiting.
+    prisma.approvalRequest.count({
+      where: { tenantId, status: "PENDING", expiresAt: { gt: now } },
+    }),
+  ]);
+
+  const bySubject = new Map<string, number>();
+  for (const e of recentExecutions) {
+    const subject = toolSubject(e.toolName);
+    // An unmapped tool has no honest noun, and inventing one would put
+    // "checking 4 orders" on the card for something that touched no order.
+    if (subject === "none") continue;
+    bySubject.set(subject, (bySubject.get(subject) ?? 0) + 1);
+  }
+
+  return {
+    conversationsHandling,
+    toolsRunning: [...bySubject.entries()]
+      .map(([subject, count]) => ({ subject, count }))
+      .sort((a, b) => b.count - a.count || a.subject.localeCompare(b.subject)),
+    awaitingApproval,
   };
 }

@@ -955,6 +955,15 @@ model Conversation {
   tenantId           String             @map("tenant_id")
   channel            ChannelType        @default(WHATSAPP)
   channelAccountId   String?            @map("channel_account_id")
+  /// A conversation the team had with GOTCHA during setup, from their own
+  /// numbers, before going live.
+  ///
+  /// EXCLUDED from every analytics aggregate. Day one ends with the team
+  /// talking to itself to check the thing works; if those land in the figures,
+  /// the next morning's metric strip reports the rehearsal as business.
+  /// A flag rather than a deletion, because the conversations are still worth
+  /// reading back - they are just not evidence about customers.
+  isTest             Boolean            @default(false) @map("is_test")
   customerExternalId String             @map("customer_external_id") // Phone (WA) or PSID (Messenger)
   customerName       String?            @map("customer_name")
   customerAvatarUrl  String?            @map("customer_avatar_url")

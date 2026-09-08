@@ -543,6 +543,7 @@ export {
 export {
   toActivityEvent,
   approvalToActivityEvent,
+  toolSubject,
   type ActivityEvent,
   type ActivityOutcome,
   type ActivitySubject,
