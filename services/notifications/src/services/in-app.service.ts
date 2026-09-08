@@ -15,7 +15,7 @@
  * plumbing.
  */
 
-import { prisma, publishEvent } from "@chatcenter/shared";
+import { prisma, publishEvent, notificationTarget, notificationCategory } from "@chatcenter/shared";
 import type { SystemEventType } from "./event-emitter.service";
 
 export type Priority = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
@@ -28,6 +28,13 @@ export interface CreateInAppNotificationInput {
   body: string;
   link?: string;
   priority?: Priority;
+  /**
+   * The event's metadata, used to resolve the typed target.
+   *
+   * Resolved at WRITE time because this is when it exists: the ids that name
+   * what a notification points at are on the event, and are not kept on the row.
+   */
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface InAppNotificationRow {
@@ -39,6 +46,8 @@ export interface InAppNotificationRow {
   title: string;
   body: string;
   link: string | null;
+  targetType: string | null;
+  targetId: string | null;
   read: boolean;
   createdAt: Date;
 }
@@ -46,6 +55,8 @@ export interface InAppNotificationRow {
 export async function createInAppNotification(
   input: CreateInAppNotificationInput,
 ): Promise<InAppNotificationRow> {
+  const { targetType, targetId } = notificationTarget(input.eventType, input.metadata);
+
   const row: InAppNotificationRow = await (prisma as any).inAppNotification.create({
     data: {
       tenantId: input.tenantId,
@@ -54,6 +65,11 @@ export async function createInAppNotification(
       title: input.title,
       body: input.body,
       link: input.link ?? null,
+      // A typed target beside the free-text link, not instead of it: existing
+      // clients keep reading `link`, and the interface gets something it can
+      // branch on without parsing a path.
+      targetType,
+      targetId,
       priority: input.priority ?? "MEDIUM",
     },
   });
@@ -69,6 +85,11 @@ export async function createInAppNotification(
       id: row.id,
       userId: row.userId,
       eventType: row.eventType,
+      // The bell branches on the derived category; the raw event stays so the
+      // row can still answer what actually happened.
+      category: notificationCategory(row.eventType),
+      targetType: row.targetType,
+      targetId: row.targetId,
       priority: row.priority,
       title: row.title,
       body: row.body,

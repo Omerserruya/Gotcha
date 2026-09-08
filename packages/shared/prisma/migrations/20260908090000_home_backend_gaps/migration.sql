@@ -138,11 +138,11 @@ UPDATE "in_app_notifications"
    SET "target_type" = 'none'
  WHERE "target_type" IS NULL;
 
--- The approval event is the one existing type that maps cleanly onto the six.
-UPDATE "in_app_notifications"
-   SET "event_type" = 'APPROVAL_REQUIRED'
- WHERE "event_type" IN ('tool.approval_required', 'approval_required');
-
-UPDATE "in_app_notifications"
-   SET "event_type" = 'ACTION_FAILED'
- WHERE "event_type" IN ('payment.failed', 'system.error.critical', 'credit.auto_purchase_failed');
+-- `event_type` is deliberately NOT rewritten.
+--
+-- An earlier draft of this migration collapsed it into the interface's enum.
+-- That destroys information the row is the only record of: payment.failed,
+-- system.error.critical and credit.auto_purchase_failed would all become
+-- ACTION_FAILED, and nothing could tell them apart again. The category is
+-- DERIVED instead - see notification-category.ts - which costs nothing, keeps
+-- the specific event, and re-classifies history whenever the mapping changes.

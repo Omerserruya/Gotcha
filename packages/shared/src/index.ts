@@ -563,6 +563,13 @@ export {
   LOW_CONFIDENCE_SCORE,
   type UnansweredReason,
 } from "./lib/knowledge-gaps";
+export {
+  notificationCategory,
+  notificationTarget,
+  NOTIFICATION_CATEGORIES,
+  type NotificationCategory,
+  type NotificationTargetType,
+} from "./lib/notification-category";
 export { redact, safeLogger } from "./lib/log-redact";
 export * from "./lib/tenant-access-policy";
 export {
