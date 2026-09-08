@@ -185,7 +185,23 @@ export const PERMISSIONS: readonly PermissionDef[] = [
   p("outbound:calls:view", "channels", "runtime", true, "View Outbound Calls", "View outbound call activity and live call sessions."),
 
   // ── Analytics ───────────────────────────────────────────────
-  p("analytics:dashboard:read", "analytics", "runtime", true, "View Analytics Dashboard", "View analytics dashboards and metrics."),
+  //
+  // TWO permissions, because the screens ask two different questions.
+  //
+  // `workspace:read` is the shared operational picture: how many people are
+  // waiting, who is on, what the AI is holding for approval. Home is built on
+  // it, and Home is the first screen every member sees. Gating it behind the
+  // management-reporting permission is what made Home return 403 on four of
+  // its six regions for anyone who was not an owner - not a degraded screen,
+  // a broken one, because hiding those regions tells an agent their queue is
+  // empty when it is not.
+  //
+  // `dashboard:read` stays what it was: management reporting - per-agent
+  // performance, tool economics, department comparisons. An agent needing to
+  // see the queue is not a reason to show them how they rank against their
+  // colleagues.
+  p("analytics:workspace:read", "analytics", "runtime", true, "View Workspace Overview", "View the shared operational picture: queue, presence, approvals waiting, and today's figures."),
+  p("analytics:dashboard:read", "analytics", "runtime", true, "View Analytics Dashboard", "View analytics dashboards and management reports."),
   p("analytics:reports:export", "analytics", "runtime", true, "Export Reports", "Export analytics reports."),
 
   // ── Settings / Administration (configuration) ───────────────
@@ -384,6 +400,7 @@ export const BUILTIN_ROLES: Record<BuiltinRoleKey, BuiltinRoleDef> = {
       "approvals:requests:reject",
       "outbound:calls:create",
       "outbound:calls:view",
+      "analytics:workspace:read",
       "analytics:dashboard:read",
       "analytics:reports:export",
     ],
@@ -393,10 +410,16 @@ export const BUILTIN_ROLES: Record<BuiltinRoleKey, BuiltinRoleDef> = {
     name: "Agent",
     description: "Front-line agent: handles their own conversations and views customer/CRM context.",
     defaultScope: "own",
-    // Kept intentionally narrow so nav/page visibility matches today's
-    // agent experience (conversations + customer/CRM context only).
-    // Approvals/analytics are department-manager-and-up.
+    // Kept narrow: conversations + customer/CRM context. Approvals and
+    // MANAGEMENT reporting stay department-manager-and-up.
+    //
+    // The workspace overview is the exception, and it is deliberate. Home is
+    // the first screen an agent opens and it is built on that data; without it
+    // they get a greeting, a command box, and four empty regions. This is a
+    // reversal of the earlier "analytics is manager-and-up" line, and it is
+    // narrow on purpose - it grants the queue and who is on, not the reports.
     permissions: [
+      "analytics:workspace:read",
       "conversation:messages:read",
       "conversation:messages:reply",
       "conversation:messages:takeover",

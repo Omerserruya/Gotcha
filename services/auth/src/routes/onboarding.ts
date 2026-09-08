@@ -1,7 +1,7 @@
 import { getInternalServiceKey, safeFetch,
   resolveAppPublicUrl,
   canvasHasRunnableProcess,
-} from "@chatcenter/shared";
+  requirePermission } from "@chatcenter/shared";
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import * as crypto from "crypto";
@@ -458,7 +458,7 @@ function fallbackReplyHebrew(
 
 // ─── Get Onboarding Status ──────────────────────────────────
 
-router.get("/status", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
+router.get("/status", requirePermission("analytics:workspace:read"), async (req: Request, res: Response): Promise<void> => {
   try {
     const tenant = await prisma.tenant.findUnique({
       where: { id: req.tenantId! },
@@ -1472,7 +1472,7 @@ router.post("/core-system", requireRole("ADMIN"), validate(coreSystemSchema), as
 // real product signals (no manual check-offs). Tiles tagged stage:"later"
 // (Channels, extra Integrations) are shown but excluded from the headline
 // progress count.
-router.get("/setup-map", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
+router.get("/setup-map", requirePermission("analytics:workspace:read"), async (req: Request, res: Response): Promise<void> => {
   try {
     const tenantId = req.tenantId!;
     const [coreSlug, kbCount, aiAgent, canvas, flowCount, userCount, channel, connectedIntegrations, profile] = await Promise.all([

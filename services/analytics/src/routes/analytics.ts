@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { authenticate, resolveTenant, requireRole } from "@chatcenter/shared";
+import { authenticate, resolveTenant, requireRole, requirePermission } from "@chatcenter/shared";
 import * as analyticsService from "../services/analytics.service";
 
 const router = Router();
@@ -37,7 +37,7 @@ router.post("/events", async (req: Request, res: Response) => {
   res.json({ data: { ok: true } });
 });
 
-router.get("/dashboard", requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.get("/dashboard", requirePermission("analytics:dashboard:read"), async (req: Request, res: Response) => {
   try {
     const stats = await analyticsService.getDashboardStats(req.tenantId!);
     res.json({ data: stats });
@@ -47,7 +47,7 @@ router.get("/dashboard", requireRole("ADMIN"), async (req: Request, res: Respons
   }
 });
 
-router.get("/agents", requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.get("/agents", requirePermission("analytics:workspace:read"), async (req: Request, res: Response) => {
   try {
     const stats = await analyticsService.getAgentStats(req.tenantId!);
     res.json({ data: stats });
@@ -57,7 +57,7 @@ router.get("/agents", requireRole("ADMIN"), async (req: Request, res: Response) 
   }
 });
 
-router.get("/hourly", requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.get("/hourly", requirePermission("analytics:dashboard:read"), async (req: Request, res: Response) => {
   try {
     const date = req.query.date as string | undefined;
     const data = await analyticsService.getHourlyVolume(req.tenantId!, date);
@@ -68,7 +68,7 @@ router.get("/hourly", requireRole("ADMIN"), async (req: Request, res: Response) 
   }
 });
 
-router.get("/daily", requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.get("/daily", requirePermission("analytics:dashboard:read"), async (req: Request, res: Response) => {
   try {
     const days = req.query.days ? parseInt(req.query.days as string, 10) : 30;
     const data = await analyticsService.getDailyVolume(req.tenantId!, days);
@@ -79,7 +79,7 @@ router.get("/daily", requireRole("ADMIN"), async (req: Request, res: Response) =
   }
 });
 
-router.get("/queue", requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.get("/queue", requirePermission("analytics:workspace:read"), async (req: Request, res: Response) => {
   try {
     const data = await analyticsService.getQueueDepth(req.tenantId!);
     res.json({ data });
@@ -142,7 +142,7 @@ router.get("/time-saved", async (req: Request, res: Response) => {
   }
 });
 
-router.get("/overview", requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.get("/overview", requirePermission("analytics:workspace:read"), async (req: Request, res: Response) => {
   try {
     const from = req.query.from as string | undefined;
     const to = req.query.to as string | undefined;
@@ -154,7 +154,7 @@ router.get("/overview", requireRole("ADMIN"), async (req: Request, res: Response
   }
 });
 
-router.get("/top-questions", requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.get("/top-questions", requirePermission("analytics:dashboard:read"), async (req: Request, res: Response) => {
   try {
     const from = req.query.from as string | undefined;
     const to = req.query.to as string | undefined;
@@ -167,7 +167,7 @@ router.get("/top-questions", requireRole("ADMIN"), async (req: Request, res: Res
   }
 });
 
-router.get("/tool-usage", requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.get("/tool-usage", requirePermission("analytics:dashboard:read"), async (req: Request, res: Response) => {
   try {
     const from = req.query.from as string | undefined;
     const to = req.query.to as string | undefined;
@@ -179,7 +179,7 @@ router.get("/tool-usage", requireRole("ADMIN"), async (req: Request, res: Respon
   }
 });
 
-router.get("/channel-performance", requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.get("/channel-performance", requirePermission("analytics:workspace:read"), async (req: Request, res: Response) => {
   try {
     const from = req.query.from as string | undefined;
     const to = req.query.to as string | undefined;
@@ -191,7 +191,7 @@ router.get("/channel-performance", requireRole("ADMIN"), async (req: Request, re
   }
 });
 
-router.get("/department-performance", requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.get("/department-performance", requirePermission("analytics:dashboard:read"), async (req: Request, res: Response) => {
   try {
     const from = req.query.from as string | undefined;
     const to = req.query.to as string | undefined;
@@ -203,7 +203,7 @@ router.get("/department-performance", requireRole("ADMIN"), async (req: Request,
   }
 });
 
-router.get("/ai-performance", requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.get("/ai-performance", requirePermission("analytics:dashboard:read"), async (req: Request, res: Response) => {
   try {
     const from = req.query.from as string | undefined;
     const to = req.query.to as string | undefined;
@@ -215,7 +215,7 @@ router.get("/ai-performance", requireRole("ADMIN"), async (req: Request, res: Re
   }
 });
 
-router.get("/insights", requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.get("/insights", requirePermission("analytics:workspace:read"), async (req: Request, res: Response) => {
   try {
     const data = await analyticsService.getAIInsights(req.tenantId!);
     res.json({ data });
@@ -234,7 +234,7 @@ router.get("/insights", requireRole("ADMIN"), async (req: Request, res: Response
  * ADMIN, unlike the queue and the activity stream: dismissing hides the card
  * for everyone in the tenant, so it is not one agent's call.
  */
-router.post("/insights/:id/dismiss", requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.post("/insights/:id/dismiss", requirePermission("analytics:dashboard:read"), async (req: Request, res: Response) => {
   try {
     const insightId = String(req.params.id ?? "").trim();
     if (!insightId || insightId.length > 128) {
@@ -284,7 +284,7 @@ router.get("/product-demand", async (req: Request, res: Response) => {
  * their phone numbers, which is a different thing from a queue of conversations
  * already assigned to nobody, and it is the input to an outreach decision.
  */
-router.get("/dormant-customers", requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.get("/dormant-customers", requirePermission("analytics:workspace:read"), async (req: Request, res: Response) => {
   try {
     const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
     const days = req.query.days ? parseInt(req.query.days as string, 10) : undefined;
