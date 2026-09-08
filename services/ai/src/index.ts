@@ -1,6 +1,7 @@
 import { createServiceApp, startService } from "@chatcenter/shared";
 import aiAssistRoutes from "./routes/ai-assist";
 import knowledgeRoutes from "./routes/knowledge";
+import knowledgeIngestRoutes from "./routes/knowledge-ingest";
 import knowledgeOauthRoutes from "./routes/knowledge-oauth";
 import systemChatRoutes from "./routes/system-chat";
 import toolRoutes from "./routes/tools";
@@ -102,6 +103,7 @@ const app = createServiceApp(config);
 
 app.use("/api/ai-assist", aiAssistRoutes);
 app.use("/api/knowledge-bases", knowledgeRoutes);
+app.use("/api", knowledgeIngestRoutes);
 app.use("/api/knowledge", knowledgeOauthRoutes);
 app.use("/api/system-chat", systemChatRoutes);
 app.use("/api/tools", toolRoutes);

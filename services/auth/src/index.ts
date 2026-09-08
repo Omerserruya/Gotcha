@@ -1,5 +1,6 @@
 import { createServiceApp, startService, seedAllTenantsRbac } from "@chatcenter/shared";
 import authRoutes from "./routes/auth";
+import setupStateRoutes from "./routes/setup-state";
 import sessionAuthRoutes from "./routes/session-auth";
 import agentRoutes from "./routes/agents";
 import departmentRoutes from "./routes/departments";
@@ -43,6 +44,7 @@ app.use("/api/waitlist", authLimiter);
 // BFF server-side login/callback/logout (migration §A5). Mounted before the
 // legacy auth routes; every route 404s unless SESSION_COOKIE_CREATE is on, so
 // this is inert by default.
+app.use("/api", setupStateRoutes);
 app.use("/api/auth", sessionAuthRoutes);
 // Password-setup links. PUBLIC and mounted before the authenticated auth
 // routes: the caller is someone who does not have a credential yet, which is

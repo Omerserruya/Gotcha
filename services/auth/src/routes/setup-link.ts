@@ -12,7 +12,7 @@
  */
 import { Router, Request, Response } from "express";
 import rateLimit from "express-rate-limit";
-import { resolveAppPublicUrl, writeAudit, AuditAction } from "@chatcenter/shared";
+import { resolveAppPublicUrl, writeAudit, AuditAction, prisma, withCrossTenantAccess } from "@chatcenter/shared";
 import {
   resolveSetupLink,
   redeemForRecoveryUrl,
@@ -52,6 +52,65 @@ function expiredPage(reason: string, token?: string): string {
  * browser straight from an email, and the only useful response is the next
  * screen.
  */
+/**
+ * GET /:token/state — the invitation as DATA.
+ *
+ * `GET /:token` answers with a 302 in every branch, which is right for an
+ * emailed link and useless to a frontend that has to render an acceptance
+ * screen: a redirect cannot say who invited whom, or why the link is dead.
+ *
+ * Declared BEFORE "/:token", which would otherwise match "state" as a token.
+ *
+ * DELIBERATELY NOT REDEEMED. Reading the state must never consume the link -
+ * the screen would then break on a refresh, and a preview fetch would burn an
+ * invitation before the recipient ever clicked accept. Redemption stays on the
+ * redirect route, which is the one an actual click goes through.
+ *
+ * Deliberately thin on identity, too. An invalid token gets the same shape as
+ * a valid one with nothing filled in, so this cannot be used to probe which
+ * addresses are registered - the same reasoning the resend path already
+ * follows.
+ */
+router.get("/:token/state", redeemLimiter, async (req: Request, res: Response): Promise<void> => {
+  const resolution = await resolveSetupLink(String(req.params.token ?? ""));
+
+  if (!resolution.ok) {
+    res.json({
+      data: {
+        // invalid | expired | revoked - a code, translated by the client.
+        state: resolution.reason,
+        email: null,
+        name: null,
+        workspace: null,
+        expiresAt: null,
+      },
+    });
+    return;
+  }
+
+  const { link } = resolution;
+  const [tenant, alreadyUsed] = await Promise.all([
+    withCrossTenantAccess(() =>
+      prisma.tenant.findUnique({ where: { id: link.tenantId }, select: { name: true } }),
+    ),
+    withCrossTenantAccess(() =>
+      prisma.setupLink.findUnique({ where: { id: link.id }, select: { usedAt: true, expiresAt: true } }),
+    ),
+  ]);
+
+  res.json({
+    data: {
+      // "used" is a real, separate outcome: the person already set a password
+      // and the honest next screen is the ordinary way in, not an error.
+      state: alreadyUsed?.usedAt ? "used" : "valid",
+      email: link.email,
+      name: link.name,
+      workspace: tenant?.name ?? null,
+      expiresAt: alreadyUsed?.expiresAt?.toISOString() ?? null,
+    },
+  });
+});
+
 router.get("/:token", redeemLimiter, async (req: Request, res: Response): Promise<void> => {
   const raw = String(req.params.token ?? "");
   const resolution = await resolveSetupLink(raw);

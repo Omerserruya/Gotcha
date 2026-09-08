@@ -571,6 +571,14 @@ export {
   type NotificationCategory,
   type NotificationTargetType,
 } from "./lib/notification-category";
+export {
+  computeSetupState,
+  SETUP_STEPS,
+  type SetupState,
+  type SetupStep,
+  type SetupStepState,
+  type SetupFacts,
+} from "./lib/setup-state";
 export { redact, safeLogger } from "./lib/log-redact";
 export * from "./lib/tenant-access-policy";
 export {
