@@ -547,6 +547,13 @@ export {
   type ActivityOutcome,
   type ActivitySubject,
 } from "./lib/activity-events";
+export {
+  recordHandover,
+  latestHandover,
+  CONVERSATION_HANDLERS,
+  type ConversationHandler,
+  type HandoverReason,
+} from "./lib/conversation-handover";
 export { redact, safeLogger } from "./lib/log-redact";
 export * from "./lib/tenant-access-policy";
 export {

@@ -126,6 +126,22 @@ router.get("/activity", async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * Seconds the AI saved, with the arithmetic attached. Any tenant member: it is
+ * a headline on Home, not a management report.
+ */
+router.get("/time-saved", async (req: Request, res: Response) => {
+  try {
+    const from = req.query.from as string | undefined;
+    const to = req.query.to as string | undefined;
+    const data = await analyticsService.getTimeSaved(req.tenantId!, from, to);
+    res.json({ data });
+  } catch (err) {
+    console.error("Time saved error:", err);
+    res.status(500).json({ error: "Failed to get time saved" });
+  }
+});
+
 router.get("/overview", requireRole("ADMIN"), async (req: Request, res: Response) => {
   try {
     const from = req.query.from as string | undefined;
@@ -206,6 +222,30 @@ router.get("/insights", requireRole("ADMIN"), async (req: Request, res: Response
   } catch (err) {
     console.error("AI insights error:", err);
     res.status(500).json({ error: "Failed to get AI insights" });
+  }
+});
+
+/**
+ * Hide an insight. The "Worth knowing" card is informational - a trend and a
+ * Dismiss - and this is the whole of its interaction. Anything that ACTS on an
+ * insight belongs in Outreach, behind broadcast validation, template approval
+ * and audience preview, not behind a second send path with none of them.
+ *
+ * ADMIN, unlike the queue and the activity stream: dismissing hides the card
+ * for everyone in the tenant, so it is not one agent's call.
+ */
+router.post("/insights/:id/dismiss", requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const insightId = String(req.params.id ?? "").trim();
+    if (!insightId || insightId.length > 128) {
+      res.status(400).json({ error: "Invalid insight id" });
+      return;
+    }
+    await analyticsService.dismissInsight(req.tenantId!, insightId, (req as any).user?.userId);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("Dismiss insight error:", err);
+    res.status(500).json({ error: "Failed to dismiss insight" });
   }
 });
 

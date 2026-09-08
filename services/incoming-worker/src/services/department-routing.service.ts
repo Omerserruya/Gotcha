@@ -15,7 +15,7 @@
  * and fails soft: if no matching-role employee exists we leave the assignment
  * untouched and log a warning rather than crash or force a wrong agent.
  */
-import { prisma } from "@chatcenter/shared";
+import { prisma, recordHandover } from "@chatcenter/shared";
 
 interface Selection {
   role: string;           // AIAgent.role to match (customer_support, sales, ...)
@@ -135,12 +135,14 @@ export async function applyDepartmentPickerReply(args: {
   // Assign + pin. Clearing chatbotNodeId drops any paused quick-reply node so a
   // mis-wired flow can't resume and re-route this conversation on a later
   // inbound. handledBy="ai_agent" keeps the AI employee driving thereafter.
-  await prisma.conversation.update({
-    where: { id: conversationId },
+  await recordHandover({
+    tenantId,
+    conversationId,
+    to: "ai_agent",
+    reason: "routing",
     data: {
       departmentId: department.id,
       assignedAiAgentId: agent.id,
-      handledBy: "ai_agent",
       chatbotNodeId: null,
     },
   });

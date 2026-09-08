@@ -169,6 +169,10 @@ model Tenant {
   toolExecutionRequests   ToolExecutionRequest[]
   communicationChannels   CommunicationChannel[]
   agentPresences          AgentPresence[]
+  userNotificationPrefs   UserNotificationPreference[]
+  insightDismissals       InsightDismissal[]
+  unansweredQuestions     UnansweredQuestion[]
+  productDemandTerms      ProductDemandTerm[]
   tenantFeatures          TenantFeature[]
   tenantRoles             TenantRole[]
   invites                 TenantInvite[]
@@ -906,6 +910,7 @@ model User {
   // requests, throttled). Drives the tenant picker's "last used" ordering and
   // the default-tenant resolution for hint-less API calls.
   lastActiveAt             DateTime? @map("last_active_at")
+  notificationPreference UserNotificationPreference?
   createdAt                DateTime  @default(now()) @map("created_at")
   updatedAt                DateTime  @updatedAt @map("updated_at")
 
@@ -982,6 +987,7 @@ model Conversation {
   reminderSentAt     DateTime?          @map("reminder_sent_at")
   closedAt           DateTime?          @map("closed_at")
   aiSummary          String?            @map("ai_summary")
+  handovers          ConversationHandover[]
 
   // ── Where this conversation came from ──
   //
@@ -2468,7 +2474,14 @@ model InAppNotification {
   priority  String   @default("MEDIUM")
   title     String
   body      String
+  /// Free-text path, kept for the clients that still read it. Superseded by
+  /// the typed target below: a string cannot be validated, and the interface
+  /// cannot tell from it which affordance to render.
   link      String?
+  /// conversation | approval | integration | campaign | none
+  targetType String? @map("target_type")
+  /// The id within targetType. Null when targetType is "none".
+  targetId   String? @map("target_id")
   read      Boolean  @default(false)
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -7512,4 +7525,169 @@ model BillingOutboxEntry {
   @@index([status, nextAttemptAt])
   @@index([tenantId])
   @@map("billing_outbox_entries")
+}
+
+
+// ─── Conversation handover history ─────────────────────────
+//
+// `Conversation.handledBy` is a single string with no timestamp: it says who
+// is driving NOW and nothing about when that changed or what it changed from.
+// "Last handover 3 hours ago" was therefore underivable, and so was any
+// question about how often the AI gives up.
+//
+// Append-only. A conversation that bounced between the bot and a human four
+// times has four rows, and overwriting them to keep only the latest would
+// discard the pattern that makes the count worth reading.
+model ConversationHandover {
+  id             String   @id @default(cuid())
+  tenantId       String   @map("tenant_id")
+  conversationId String   @map("conversation_id")
+  /// Who was driving before. Null for the first assignment of a conversation
+  /// that had no handler at all - which is a real state, not a missing value.
+  fromHandler    String?  @map("from_handler")
+  /// Who is driving now: "ai_agent" | "flow" | "human".
+  toHandler      String   @map("to_handler")
+  /// The membership that took over, when a person did.
+  actorUserId    String?  @map("actor_user_id")
+  /// Why, as a stable code: "escalation" | "takeover" | "assignment" | "routing".
+  reason         String?
+  at             DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, at])
+  @@index([conversationId, at])
+  @@map("conversation_handovers")
+}
+
+// ─── Per-user notification preferences ─────────────────────
+//
+// NotificationPreference is TENANT-ADMIN routing: which events go to whom. It
+// cannot answer "do not email me after 22:00", because it is not the user's to
+// set. This is, and the two are deliberately separate rows: an admin removing
+// a routing rule must not silently erase someone's quiet hours.
+model UserNotificationPreference {
+  id       String @id @default(cuid())
+  tenantId String @map("tenant_id")
+  userId   String @unique @map("user_id")
+
+  inApp     Boolean @default(true) @map("in_app")
+  email     Boolean @default(true)
+  /// Not among the tenant-admin channels. A WhatsApp notification costs money
+  /// and reaches a personal phone, so it is off unless the person says yes.
+  whatsapp  Boolean @default(false)
+  /// Approvals are opt-OUT: an action waiting on you is the one notification
+  /// whose default cannot be silence.
+  approvals Boolean @default(true)
+
+  /// "HH:MM" in the tenant's timezone, both null when quiet hours are off.
+  /// Stored as text rather than minutes so what the user typed is what is
+  /// stored, and a window that wraps midnight needs no special encoding.
+  quietHoursFrom String? @map("quiet_hours_from")
+  quietHoursTo   String? @map("quiet_hours_to")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("user_notification_preferences")
+}
+
+// ─── Dismissed insights ────────────────────────────────────
+//
+// Insights are DERIVED on every request - they have no rows of their own, only
+// stable ids like "high-escalation-rate". So a dismissal cannot be a flag on
+// the insight; it has to be a record that this tenant said no to that id.
+model InsightDismissal {
+  id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
+  /// The insight's stable id, e.g. "top-intent-automation".
+  insightId   String   @map("insight_id")
+  dismissedBy String?  @map("dismissed_by")
+  dismissedAt DateTime @default(now()) @map("dismissed_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  /// One dismissal per insight per tenant. Dismissing twice is not two events.
+  @@unique([tenantId, insightId])
+  @@index([tenantId])
+  @@map("insight_dismissals")
+}
+
+// ─── Questions GOTCHA could not answer ─────────────────────
+//
+// /api/analytics/top-questions cannot serve this: it ranks intent slugs by
+// frequency and has no concept of failure. This records the failure itself, at
+// the moment retrieval decides it has nothing good enough to say.
+//
+// One row per question CLUSTER per tenant, counted up - not one row per ask,
+// which would make "asked by 33 people" a GROUP BY over an unbounded table.
+model UnansweredQuestion {
+  id       String @id @default(cuid())
+  tenantId String @map("tenant_id")
+
+  /// The canonical phrasing, from the first ask in the cluster.
+  question   String
+  /// Stable key for the cluster, so repeats increment instead of inserting.
+  clusterKey String @map("cluster_key")
+
+  /// no_knowledge | low_confidence | conflicting. RECORDED at the point of
+  /// failure, never inferred later - "we found nothing" and "we found two
+  /// answers that disagree" need different fixes from the owner.
+  reason String
+
+  /// Times asked, and by how many distinct people. Both counts of real events.
+  askCount     Int @default(1) @map("ask_count")
+  askedBy      Int @default(1) @map("asked_by")
+
+  firstAskedAt DateTime @default(now()) @map("first_asked_at")
+  lastAskedAt  DateTime @default(now()) @map("last_asked_at")
+  /// Set when the owner adds knowledge that answers it, so it stops surfacing
+  /// without losing the record that it was once a gap.
+  resolvedAt   DateTime? @map("resolved_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, clusterKey])
+  @@index([tenantId, lastAskedAt])
+  @@index([tenantId, resolvedAt])
+  @@map("unanswered_questions")
+}
+
+// ─── Demand for things not in the catalogue ────────────────
+//
+// "22 people asked for navy towels this week. You do not stock them."
+// Recorded when a product search runs and the catalogue returns nothing for
+// the term the customer used.
+//
+// Bucketed by ISO week: the card's claim is "this week", and a running total
+// since launch cannot answer "is this getting worse".
+model ProductDemandTerm {
+  id       String @id @default(cuid())
+  tenantId String @map("tenant_id")
+
+  /// Normalised search term, lowercased and trimmed.
+  term    String
+  /// ISO-8601 week, "2026-W36". Sorts lexically, which is why it is text.
+  weekKey String @map("week_key")
+
+  askCount Int @default(1) @map("ask_count")
+  askedBy  Int @default(1) @map("asked_by")
+
+  /// Whether the catalogue had a match at the time of asking. False is the
+  /// interesting case; true rows are kept so a term that STOPS matching after
+  /// a product is delisted is visible as a change rather than as a new term.
+  inCatalogue Boolean @default(false) @map("in_catalogue")
+
+  firstSeenAt DateTime @default(now()) @map("first_seen_at")
+  lastSeenAt  DateTime @default(now()) @map("last_seen_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, term, weekKey])
+  @@index([tenantId, weekKey])
+  @@map("product_demand_terms")
 }

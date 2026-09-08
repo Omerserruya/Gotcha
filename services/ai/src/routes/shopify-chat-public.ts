@@ -42,7 +42,7 @@ import {
   MAX_VISITOR_MESSAGE_CHARS,
   type VisitorSessionPayload,
   type StorefrontContext,
-} from "@chatcenter/shared";
+  recordHandover } from "@chatcenter/shared";
 import { sanitizeUntrusted } from "../services/prompt-sanitizer.service";
 import {
   resolveForBootstrap,
@@ -742,9 +742,12 @@ router.post("/handoff", conversationLimiter, async (req: Request, res: Response)
       return;
     }
     const conversation = await findOrCreateConversation(session, channel);
-    await prisma.conversation.update({
-      where: { id: conversation.id },
-      data: { isHandedOver: true, status: "WAITING", handledBy: "human" },
+    await recordHandover({
+      tenantId: session.tenantId,
+      conversationId: conversation.id,
+      to: "human",
+      reason: "takeover",
+      data: { isHandedOver: true, status: "WAITING" },
     });
     await prisma.message.create({
       data: {

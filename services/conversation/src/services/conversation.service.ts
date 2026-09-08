@@ -1,4 +1,4 @@
-import { getInternalServiceKey, readDurableSetting } from "@chatcenter/shared";
+import { getInternalServiceKey, readDurableSetting, recordHandover } from "@chatcenter/shared";
 import { prisma, publishEvent, outgoingMessageQueue, withHistoricalRecords } from "@chatcenter/shared";
 import { getIO } from "../lib/socket";
 import * as messageService from "./message.service";
@@ -240,9 +240,15 @@ export async function returnToAi(tenantId: string, conversationId: string) {
     throw Object.assign(new Error("No AI employee is bound to this conversation"), { status: 409 });
   }
 
-  const updated = await prisma.conversation.update({
+  await recordHandover({
+    tenantId,
+    conversationId,
+    to: "ai_agent",
+    reason: "return_to_ai",
+    data: { assignedAgentId: null, isHandedOver: false, status: "OPEN" },
+  });
+  const updated = await prisma.conversation.findUniqueOrThrow({
     where: { id: conversationId },
-    data: { assignedAgentId: null, isHandedOver: false, handledBy: "ai_agent", status: "OPEN" },
     include: { assignedAgent: { select: { id: true, name: true, email: true } } },
   });
 

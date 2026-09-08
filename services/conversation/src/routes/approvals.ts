@@ -1,4 +1,4 @@
-import { getInternalServiceKey, reportOperationalFailure, recordExpectedOutcome, ERROR_CODES } from "@chatcenter/shared";
+import { getInternalServiceKey, reportOperationalFailure, recordExpectedOutcome, ERROR_CODES, recordHandover } from "@chatcenter/shared";
 /**
  * Approval request REST surface.
  *
@@ -624,9 +624,12 @@ async function recordFailureAndMaybeEscalate(args: {
     escalated = reason !== "already_done" && attempts >= MAX_AUTONOMOUS_EXECUTION_ATTEMPTS;
 
     if (escalated) {
-      await prisma.conversation.update({
-        where: { id: conversationId },
-        data: { handledBy: "human", isHandedOver: true, status: "WAITING" },
+      await recordHandover({
+        tenantId,
+        conversationId,
+        to: "human",
+        reason: "escalation",
+        data: { isHandedOver: true, status: "WAITING" },
       });
     }
 

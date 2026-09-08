@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { authenticate, resolveTenant, requireRole, requireActiveTenant, prisma } from "@chatcenter/shared";
+import { authenticate, resolveTenant, requireRole, requireActiveTenant, prisma, latestHandover } from "@chatcenter/shared";
 import * as conversationService from "../services/conversation.service";
 
 async function generateAndSaveSummary(tenantId: string, conversationId: string, authHeader?: string) {
@@ -33,6 +33,28 @@ async function generateAndSaveSummary(tenantId: string, conversationId: string, 
 
 const router = Router();
 router.use(authenticate, resolveTenant, requireActiveTenant());
+
+/**
+ * The tenant's most recent change of handler.
+ *
+ * `null` when nothing has been recorded, and the card must render that as
+ * absence rather than as zero: a tenant deployed this morning and a tenant
+ * whose AI has never needed help both have no handovers, and they do not mean
+ * the same thing.
+ *
+ * Any tenant member. Whether the AI recently gave up is exactly what an agent
+ * wants to know before picking the next conversation. Declared before "/:id",
+ * which would otherwise read "handovers" as a conversation id.
+ */
+router.get("/handovers/latest", async (req: Request, res: Response) => {
+  try {
+    const data = await latestHandover(req.tenantId!);
+    res.json({ data });
+  } catch (err) {
+    console.error("Latest handover error:", err);
+    res.status(500).json({ error: "Failed to get latest handover" });
+  }
+});
 
 router.get("/stats/workload", requireRole("ADMIN"), async (req: Request, res: Response) => {
   try {

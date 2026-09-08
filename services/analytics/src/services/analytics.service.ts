@@ -638,7 +638,31 @@ export async function getAIInsights(tenantId: string) {
     }
   }
 
-  return insights;
+  // Insights are DERIVED on every request, so a dismissal cannot be a flag on
+  // one - it is a record that this tenant said no to that id. Filtering here
+  // rather than in the route means every caller of getAIInsights honours it.
+  const dismissed = await prisma.insightDismissal.findMany({
+    where: { tenantId, insightId: { in: insights.map((i) => i.id) } },
+    select: { insightId: true },
+  });
+  if (dismissed.length === 0) return insights;
+  const hidden = new Set(dismissed.map((d) => d.insightId));
+  return insights.filter((i) => !hidden.has(i.id));
+}
+
+/**
+ * Hide an insight for this tenant.
+ *
+ * Idempotent by construction: dismissing twice is not two events, and the
+ * unique index says so. Recorded rather than deleted, because "nobody wants to
+ * hear about the escalation rate" is itself worth knowing.
+ */
+export async function dismissInsight(tenantId: string, insightId: string, userId?: string) {
+  await prisma.insightDismissal.upsert({
+    where: { tenantId_insightId: { tenantId, insightId } },
+    create: { tenantId, insightId, dismissedBy: userId ?? null },
+    update: {},
+  });
 }
 
 // ─── Home: "needs you now" ────────────────────────────────────
@@ -884,5 +908,138 @@ export async function getActivity(
   return {
     data: page.map((p) => p.event),
     nextCursor: hasMore && page.length > 0 ? page[page.length - 1]!.at.toISOString() : null,
+  };
+}
+
+// ─── Home: time saved ─────────────────────────────────────────
+
+/**
+ * Seconds the AI saved, and the arithmetic behind it.
+ *
+ * `basis` is not decoration. This figure sits on the product's first screen and
+ * is the single easiest number in the product to inflate, so it ships with
+ * everything needed to reconstruct it: how many conversations, how many seconds
+ * each, where that per-conversation figure came from and how big its sample was.
+ * A number nobody can derive is a number nobody believes twice.
+ *
+ * HOW LONG A CONVERSATION COSTS A HUMAN
+ * Measured from the tenant's own history where there is enough of it, because a
+ * platform average is a statement about somebody else's business. The measure is
+ * the median span from the customer's first message to the agent's last reply,
+ * over conversations a human actually handled.
+ *
+ * The median rather than the mean: one conversation left open over a weekend
+ * would drag a mean into fiction. The cap below does the same job for the
+ * middle of the distribution.
+ */
+
+/**
+ * Nothing above this counts as one conversation's worth of agent time.
+ *
+ * A thread the customer returned to the next morning spans sixteen hours and
+ * cost nobody sixteen hours. Without a ceiling those rows do not just skew the
+ * average, they decide it.
+ */
+const HANDLING_SPAN_CAP_SECONDS = 60 * 60;
+
+/**
+ * Fewer measured conversations than this and the tenant's own median is noise,
+ * so the platform figure is used and `basis.source` says so.
+ */
+const MIN_MEASURED_SAMPLE = 20;
+
+/**
+ * The platform's assumption when a tenant has no history of its own.
+ *
+ * Deliberately conservative. Overstating what the product saved is the one
+ * error that costs the number its credibility permanently, and understating it
+ * costs nothing but a smaller headline. Override per deployment with
+ * SECONDS_PER_CONVERSATION.
+ */
+const PLATFORM_SECONDS_PER_CONVERSATION = 62;
+
+function platformSecondsPerConversation(): number {
+  const raw = Number(process.env.SECONDS_PER_CONVERSATION);
+  return Number.isFinite(raw) && raw > 0 ? Math.round(raw) : PLATFORM_SECONDS_PER_CONVERSATION;
+}
+
+function median(values: number[]): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1 ? sorted[mid]! : Math.round((sorted[mid - 1]! + sorted[mid]!) / 2);
+}
+
+export async function getTimeSaved(tenantId: string, from?: string, to?: string) {
+  const { fromDate, toDate } = parseDateRange(from, to);
+  const dateFilter = { gte: fromDate, lte: toDate };
+
+  // The conversations the AI answered - the ones where the saving happened.
+  // Same definition getOverview uses (first outbound tagged source=ai_bot), so
+  // the two cards cannot report different amounts of AI involvement.
+  const aiConversations = await prisma.message.findMany({
+    where: {
+      tenantId,
+      direction: "OUTBOUND",
+      metadata: { path: ["source"], equals: "ai_bot" },
+      createdAt: dateFilter,
+    },
+    select: { conversationId: true },
+    distinct: ["conversationId"],
+  });
+  const conversationsHandled = aiConversations.length;
+
+  // The comparison set: conversations a human drove. `handledBy: "human"` or a
+  // takeover, and an assigned agent - a conversation nobody was assigned to is
+  // not evidence of what an agent's time costs.
+  const humanHandled = await prisma.conversation.findMany({
+    where: {
+      tenantId,
+      createdAt: dateFilter,
+      assignedAgentId: { not: null },
+      OR: [{ handledBy: "human" }, { isHandedOver: true }],
+    },
+    select: {
+      id: true,
+      messages: {
+        orderBy: { createdAt: "asc" },
+        select: { direction: true, createdAt: true },
+      },
+    },
+    take: 500,
+  });
+
+  const spans: number[] = [];
+  for (const c of humanHandled) {
+    const firstInbound = c.messages.find((m) => m.direction === "INBOUND");
+    const lastOutbound = [...c.messages].reverse().find((m) => m.direction === "OUTBOUND");
+    if (!firstInbound || !lastOutbound) continue;
+    const seconds = (lastOutbound.createdAt.getTime() - firstInbound.createdAt.getTime()) / 1000;
+    // A negative span means the only outbound preceded the only inbound - an
+    // outreach, not a handled request. It is not a zero-cost conversation, it
+    // is not this kind of conversation at all.
+    if (seconds <= 0) continue;
+    spans.push(Math.min(seconds, HANDLING_SPAN_CAP_SECONDS));
+  }
+
+  const measured = spans.length >= MIN_MEASURED_SAMPLE ? median(spans) : null;
+  const secondsPerConversation = measured ?? platformSecondsPerConversation();
+
+  return {
+    secondsSaved: Math.round(conversationsHandled * secondsPerConversation),
+    basis: {
+      conversationsHandled,
+      secondsPerConversation: Math.round(secondsPerConversation),
+      // Which of the two answers above produced the figure, so the screen can
+      // say "based on your own conversations" rather than implying a precision
+      // the platform default does not have.
+      source: measured === null ? "platform_default" : "measured",
+      sampleSize: spans.length,
+      method:
+        measured === null
+          ? "platform_default"
+          : "median_span_first_inbound_to_last_outbound",
+      period: { from: fromDate.toISOString(), to: toDate.toISOString() },
+    },
   };
 }
