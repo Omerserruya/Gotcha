@@ -317,6 +317,20 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
+        # ─── Day-one setup state (auth) ──────────────────
+        #
+        # Separate from /api/onboarding, which describes a wizard's progress.
+        # This is the workspace's readiness state machine.
+        location /api/setup {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://auth_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
         # ─── Onboarding Service ──────────────────────────
         location /api/onboarding {
             limit_req zone=api burst=20 nodelay;
@@ -813,6 +827,19 @@ http {
         location /api/flow-canvas {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # The conversation allowance is BILLING's answer, not the AI
+        # service's. A longer prefix wins in nginx, so this takes precedence
+        # over /api/usage below without disturbing it.
+        location /api/usage/allowance {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://billing_service;
             proxy_set_header Host $host;
             proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
