@@ -37,9 +37,9 @@ export const SYSTEMS: Array<{
 
 export type SystemDef = (typeof SYSTEMS)[number];
 
-export function SystemTile({ he, s, large, picked, setPicked, shopDomain, setShopDomain, fireberryToken, setFireberryToken, airtableToken, setAirtableToken, connecting, onConnect, recommended }: {
+export function SystemTile({ he, s, large, picked, setPicked, fireberryToken, setFireberryToken, airtableToken, setAirtableToken, connecting, onConnect, recommended }: {
   he: boolean; s: SystemDef; large?: boolean; picked: CoreSystemSlug | null; setPicked: (v: CoreSystemSlug | null) => void;
-  shopDomain: string; setShopDomain: (v: string) => void; fireberryToken: string; setFireberryToken: (v: string) => void;
+  fireberryToken: string; setFireberryToken: (v: string) => void;
   airtableToken: string; setAirtableToken: (v: string) => void;
   connecting: boolean; onConnect: (slug: CoreSystemSlug) => void; recommended?: boolean;
 }) {
@@ -59,8 +59,13 @@ export function SystemTile({ he, s, large, picked, setPicked, shopDomain, setSho
         </div>
         <p className={"text-gray-600 " + (large ? "text-[15px]" : "text-sm")}>{he ? "חברו " : "Connect "}{s.name} {s.value[he ? 1 : 0]}</p>
       </button>
+      {/* No shop-domain box. Shopify identifies the store on its own install
+          page, and asking the merchant to type it is forbidden by App Store
+          requirement 2.3.1 - see lib/shopify-connect.ts. */}
       {active && s.slug === "shopify" && (
-        <input value={shopDomain} onChange={(e) => setShopDomain(e.target.value)} placeholder="my-store.myshopify.com" className="mt-2 w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-200 outline-none" />
+        <p className="mt-2 text-[11px] text-gray-400">
+          {he ? "תבחרו ותאשרו את החנות שלכם ב-Shopify." : "You'll select and authorize your store on Shopify."}
+        </p>
       )}
       {active && s.slug === "fireberry" && (
         <div className="mt-2">
@@ -75,7 +80,7 @@ export function SystemTile({ he, s, large, picked, setPicked, shopDomain, setSho
         </div>
       )}
       {active && (
-        <button type="button" onClick={() => onConnect(s.slug)} disabled={connecting || (s.slug === "shopify" && !shopDomain.trim()) || (s.slug === "fireberry" && !fireberryToken.trim()) || (s.slug === "airtable" && !airtableToken.trim())} className="mt-2 w-full py-2.5 bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium rounded-xl transition disabled:opacity-50">
+        <button type="button" onClick={() => onConnect(s.slug)} disabled={connecting || (s.slug === "fireberry" && !fireberryToken.trim()) || (s.slug === "airtable" && !airtableToken.trim())} className="mt-2 w-full py-2.5 bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium rounded-xl transition disabled:opacity-50">
           {connecting ? (he ? "מתחבר…" : "Connecting…") : `${he ? "התחבר ל" : "Connect "}${s.name} →`}
         </button>
       )}
@@ -86,13 +91,13 @@ export function SystemTile({ he, s, large, picked, setPicked, shopDomain, setSho
 export function ConnectScreen(props: {
   he: boolean; systemQuery: string; setSystemQuery: (v: string) => void;
   picked: CoreSystemSlug | null; setPicked: (v: CoreSystemSlug | null) => void;
-  shopDomain: string; setShopDomain: (v: string) => void; fireberryToken: string; setFireberryToken: (v: string) => void;
+  fireberryToken: string; setFireberryToken: (v: string) => void;
   airtableToken: string; setAirtableToken: (v: string) => void;
   connecting: boolean; skipping: boolean; onConnect: (slug: CoreSystemSlug) => void; onBack: () => void; onSkip: () => void;
   onRequestCrm: (name: string) => Promise<void>; justConnected: string | null; onContinueConnected: () => void;
   rec: DiscoveryRecommendation | null; disc: BusinessDiscoveryRecord | null;
 }) {
-  const { he, systemQuery, setSystemQuery, picked, setPicked, shopDomain, setShopDomain, fireberryToken, setFireberryToken, airtableToken, setAirtableToken, connecting, skipping, onConnect, onBack, onSkip, onRequestCrm, justConnected, onContinueConnected, rec, disc } = props;
+  const { he, systemQuery, setSystemQuery, picked, setPicked, fireberryToken, setFireberryToken, airtableToken, setAirtableToken, connecting, skipping, onConnect, onBack, onSkip, onRequestCrm, justConnected, onContinueConnected, rec, disc } = props;
   const recommendedSlugs = new Set((rec?.systems || []).map((s) => s.slug));
 
   // CRM-request ("couldn't find yours") mini-form state.
@@ -148,7 +153,7 @@ export function ConnectScreen(props: {
     return s.name.toLowerCase().includes(q) || s.group.toLowerCase().includes(q) || s.slug.toLowerCase().includes(q);
   }).sort((a, b) => Number(recommendedSlugs.has(b.slug)) - Number(recommendedSlugs.has(a.slug)));
 
-  const tileProps = { he, picked, setPicked, shopDomain, setShopDomain, fireberryToken, setFireberryToken, airtableToken, setAirtableToken, connecting, onConnect };
+  const tileProps = { he, picked, setPicked, fireberryToken, setFireberryToken, airtableToken, setAirtableToken, connecting, onConnect };
 
   return (
     <div dir={he ? "rtl" : "ltr"}>

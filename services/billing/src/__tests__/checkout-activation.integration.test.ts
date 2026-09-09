@@ -98,7 +98,7 @@ async function fixture(opts: {
       paymentQuoteId: quote?.id ?? null,
       chargeAmount: quote ? 499 : null,
       chargeCurrency: quote ? "ILS" : null,
-      providerCurrencyId: quote ? 1 : null,
+      providerCurrencyId: quote ? 5 : null,
     },
   });
   attemptIds.push(attempt.id);

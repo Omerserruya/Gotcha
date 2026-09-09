@@ -42,6 +42,23 @@ function repoRoot(): string {
 }
 const ROOT = repoRoot();
 
+/**
+ * Strip comments before scanning.
+ *
+ * Next.js inlines a NEXT_PUBLIC_* only where the literal expression appears in
+ * CODE, so a mention inside a comment is not a read - and treating it as one
+ * fails this guard for a variable that does not exist. That is not theoretical:
+ * `frontend/src/lib/sentry-client.ts` documents the inlining rule by quoting
+ * `process.env.NEXT_PUBLIC_FOO` as an example, and this scanner counted the
+ * example, demanding that docker-publish.sh bake a variable named FOO.
+ *
+ * The `//` case guards against `:` so a `https://` inside a string literal does
+ * not swallow the rest of its line, which could hide a real read.
+ */
+function stripComments(src: string): string {
+  return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+}
+
 /** Every NEXT_PUBLIC_* the frontend source actually reads. */
 function readByFrontend(): Set<string> {
   const found = new Set<string>();
@@ -50,7 +67,8 @@ function readByFrontend(): Set<string> {
       const p = path.join(dir, e.name);
       if (e.isDirectory()) { walk(p); continue; }
       if (!/\.tsx?$/.test(e.name) || p.includes("__tests__")) continue;
-      for (const m of fs.readFileSync(p, "utf8").matchAll(/process\.env\.(NEXT_PUBLIC_[A-Z0-9_]+)/g)) {
+      const code = stripComments(fs.readFileSync(p, "utf8"));
+      for (const m of code.matchAll(/process\.env\.(NEXT_PUBLIC_[A-Z0-9_]+)/g)) {
         found.add(m[1]);
       }
     }

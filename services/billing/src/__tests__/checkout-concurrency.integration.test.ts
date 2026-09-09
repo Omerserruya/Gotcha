@@ -49,6 +49,15 @@ async function readyToCharge(tokenPrefix: string = SIM.OK) {
   tenantIds.push(tenant.id);
   entityIds.push(entity.id);
 
+  // The profile tokenization would otherwise create lazily, but with a country
+  // DECLARED. executeCharge refuses to price tax against a profile that has
+  // none (taxForProfile fails closed), which is the real flow's order too: the
+  // customer gives billing details before paying. "US" has no TaxRate row, so
+  // tax is 0% and this file stays about charge-once concurrency, not VAT.
+  await prisma.billingProfile.create({
+    data: { billableEntityId: entity.id, provider: "ICOUNT", billingCountry: "US" },
+  });
+
   const checkout = await prisma.pendingCheckout.create({
     data: {
       reference: `chk_${n}`, tenantId: tenant.id,

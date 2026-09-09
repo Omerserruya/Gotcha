@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { prisma } from "@chatcenter/shared";
+import { prisma, shopifyApiVersion } from "@chatcenter/shared";
 import {
   executeAdapterTool,
   idempotencyKey,
@@ -156,30 +156,45 @@ describe("Shopify adapter", () => {
     ),
   );
 
-  it("READ get_orders builds the right URL + status filter", async () => {
-    const calls = mockFetch(async () => ok({ orders: [{ id: 1 }] }));
+  // Orders are Admin GraphQL now (App Store requirement 2.2.4), so the
+  // assertion moved from the URL's query string to the operation's search
+  // query - the filter still has to be SENT TO SHOPIFY rather than applied to
+  // whatever came back.
+  it("READ get_orders sends the status + email filter to Shopify, not a client-side filter", async () => {
+    const calls = mockFetch(async () =>
+      ok({ data: { orders: { nodes: [{ legacyResourceId: "1" }], pageInfo: { hasNextPage: false, endCursor: null } } } }),
+    );
     await executeAdapterTool({ tenantId: "t1", toolFunctionName: "shopify.get_orders", args: { status: "open", email: "a@b.com", limit: 5 } });
     const u = new URL(calls[0].url);
     expect(u.host).toBe("demo-store.myshopify.com");
-    expect(u.pathname).toBe("/admin/api/2024-04/orders.json");
-    expect(u.searchParams.get("status")).toBe("open");
-    expect(u.searchParams.get("email")).toBe("a@b.com");
+    // Against the PINNED version rather than a literal: this assertion was
+    // still expecting 2024-04 long after the pin moved, and a stale version
+    // expectation fails for a reason that has nothing to do with the URL.
+    expect(u.pathname).toBe(`/admin/api/${shopifyApiVersion()}/graphql.json`);
+    expect(calls[0].init.method).toBe("POST");
     expect((calls[0].init.headers as any)["X-Shopify-Access-Token"]).toBe("shpat_xyz");
+    const sent = JSON.parse(String(calls[0].init.body));
+    expect(sent.query).toContain("orders(");
+    expect(sent.variables.query).toContain("status:open");
+    expect(sent.variables.query).toContain('email:"a@b.com"');
   });
 
   it("WRITE update_order_fulfillment merges existing tags (does NOT clobber)", async () => {
     const calls: CapturedCall[] = mockFetch(async (c) => {
-      if (c.init.method === "GET") return ok({ order: { tags: "vip, beta", note: "old" } });
-      return ok({ order: { id: "1", tags: "vip, beta, ai-flagged", note: "new note" } });
+      const body = JSON.parse(String(c.init.body ?? "{}"));
+      if (String(body.query).includes("GotchaOrderUpdate")) {
+        return ok({ data: { orderUpdate: { order: { legacyResourceId: "1", tags: ["vip", "beta", "ai-flagged"], note: "new note" }, userErrors: [] } } });
+      }
+      return ok({ data: { order: { legacyResourceId: "1", tags: ["vip", "beta"], note: "old" } } });
     });
     await executeAdapterTool({
       tenantId: "t1",
       toolFunctionName: "shopify.update_order_fulfillment",
       args: { order_id: "1", note: "new note", tag: "ai-flagged" },
     });
-    const put = calls[1];
-    const body = JSON.parse(String(put.init.body));
-    expect(body.order.tags).toBe("vip, beta, ai-flagged");
+    const write = calls.find((c) => String(JSON.parse(String(c.init.body ?? "{}")).query).includes("GotchaOrderUpdate"));
+    const sent = JSON.parse(String(write!.init.body));
+    expect(sent.variables.input.tags).toEqual(["vip", "beta", "ai-flagged"]);
   });
 });
 

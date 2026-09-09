@@ -98,6 +98,18 @@ const PROD_HOST = "app.gotcha.co.il";
 const PROD_APP_URL = `https://${PROD_HOST}`;
 const PROD_CALLBACK = `${PROD_APP_URL}/api/connectors/shopify/oauth/callback`;
 /**
+ * The INSTALL ENTRY POINT `application_url` must equal.
+ *
+ * Shopify sends its signed app-entry request (shop + hmac + timestamp) to
+ * `application_url`. Pointing it at the application ROOT - which is what it
+ * used to be - meant a merchant installing from Shopify hit a login screen,
+ * failing App Store requirement 2.3.2, and left no way to start OAuth except
+ * a GOTCHA form asking for the shop domain (which 2.3.1 forbids).
+ *
+ * Must stay in step with routes/shopify-install.ts.
+ */
+const PROD_INSTALL_URL = `${PROD_APP_URL}/api/connectors/shopify/install`;
+/**
  * Every callback currently released on the live app, confirmed by the app
  * owner. The manifest REPLACES the live allowlist on deploy, so all three
  * must survive - dropping one silently breaks OAuth for anything still
@@ -262,9 +274,13 @@ if (declared.length !== new Set(declared).size) {
   fail("Scope list contains duplicates.");
 }
 
-// 6. Application URL.
-if (manifest.applicationUrl !== PROD_APP_URL) {
-  fail(`application_url is "${manifest.applicationUrl}", expected "${PROD_APP_URL}".`);
+// 6. Application URL - the install entry point.
+if (manifest.applicationUrl !== PROD_INSTALL_URL) {
+  fail(
+    `application_url is "${manifest.applicationUrl}", expected "${PROD_INSTALL_URL}". ` +
+      `Shopify posts its SIGNED install request here; the application root (${PROD_APP_URL}) ` +
+      `renders a login screen instead of starting OAuth.`,
+  );
 }
 
 // 7. Redirect allowlist. Every URL the live app needs must be present, because
