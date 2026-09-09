@@ -216,12 +216,12 @@ export const LEGAL_CONTENT: Record<string, Record<LegalLocale, LegalDocText>> = 
   "cookie-policy": {
     "en": {
       "title": "GOTCHA Cookie Policy",
-      "effectiveDate": "July 18, 2026",
+      "effectiveDate": "September 9, 2026",
       "placeholders": [],
       "blocks": [
         {
           "kind": "markdown",
-          "text": "> This English text is a translation provided for convenience. The Hebrew version of this document is the authoritative one, and in case of any conflict or inconsistency between the versions, the Hebrew version prevails.\n\nEffective date: July 18, 2026\n\nThis policy explains how GOTCHA by Omer Serruya, the operator of gotcha.co.il, uses cookies and similar technologies. The short version: the GOTCHA application sets no cookies of its own, our self-hosted sign-in service sets only strictly necessary cookies, and we use no analytics, marketing, or tracking technologies at all.\n\n## 1. Cookies set by GOTCHA\n\nNone. The GOTCHA application and website set no cookies. There are no advertising cookies, no analytics cookies, no social media pixels, and no third-party tracking scripts anywhere in the product.\n\n## 2. Cookies set by our sign-in service\n\nSign-in to GOTCHA is handled by a self-hosted identity service that runs on our own infrastructure, on the sign-in subdomain of gotcha.co.il. When you sign in, that service sets two kinds of strictly necessary cookies:"
+          "text": "> This English text is a translation provided for convenience. The Hebrew version of this document is the authoritative one, and in case of any conflict or inconsistency between the versions, the Hebrew version prevails.\n\nEffective date: September 9, 2026\n\nThis policy explains how GOTCHA by Omer Serruya, the operator of gotcha.co.il, uses cookies and similar technologies. The short version: the GOTCHA application sets no cookies of its own, our self-hosted sign-in service sets only strictly necessary cookies, we use no marketing or tracking technologies at all, and no analytics runs unless you choose to allow it.\n\n## 1. Cookies set by GOTCHA\n\nNone. The GOTCHA application and website set no cookies. There are no advertising cookies, no analytics cookies, no social media pixels, and no third-party tracking scripts anywhere in the product.\n\n## 2. Cookies set by our sign-in service\n\nSign-in to GOTCHA is handled by a self-hosted identity service that runs on our own infrastructure, on the sign-in subdomain of gotcha.co.il. When you sign in, that service sets two kinds of strictly necessary cookies:"
         },
         {
           "kind": "table",
@@ -248,7 +248,7 @@ export const LEGAL_CONTENT: Record<string, Record<LegalLocale, LegalDocText>> = 
         },
         {
           "kind": "markdown",
-          "text": "These cookies are essential for authentication and security. They are not used for analytics, advertising, or tracking, and they are not shared with any third party: the identity service is self-hosted, so the cookies never leave our infrastructure.\n\n## 3. Why there is no cookie consent banner\n\nBecause the only cookies in use are strictly necessary for signing in securely, and we use no analytics or marketing cookies, applicable cookie rules do not require prior consent for them. That is why you do not see a cookie consent banner on GOTCHA. If we ever introduce non-essential cookies, we will update this policy and ask for consent first.\n\n## 4. Similar technologies: browser storage\n\nInstead of cookies, the GOTCHA application keeps a small number of items in your browser's localStorage and sessionStorage. These stay on your device and are read by the application in your browser; they are not tracking technologies."
+          "text": "These cookies are essential for authentication and security. They are not used for analytics, advertising, or tracking, and they are not shared with any third party: the identity service is self-hosted, so the cookies never leave our infrastructure.\n\n## 3. The choice we ask you to make\n\nOn your first visit to our website you are asked one question, with two categories.\n\n**Strictly necessary** covers the sign-in cookies described above. They cannot be switched off, and applicable cookie rules do not require prior consent for them, because without them signing in securely does not work.\n\n**Analytics** is optional and off unless you turn it on. No analytics provider is in use today; we ask first so that measuring which pages are useful can never begin without a decision from you. There are no advertising cookies, no social media pixels and no third-party tracking scripts, and no category above asks for consent to any.\n\nYour answer is stored on your own device, not on our servers, and you can change it at any time by clearing your browser storage for this site, which makes the question appear again. If we ever introduce a category beyond these two, we will update this policy and ask again rather than treat an earlier answer as covering it.\n\n## 4. Similar technologies: browser storage\n\nInstead of cookies, the GOTCHA application keeps a small number of items in your browser's localStorage and sessionStorage. These stay on your device and are read by the application in your browser; they are not tracking technologies."
         },
         {
           "kind": "table",
@@ -302,23 +302,28 @@ export const LEGAL_CONTENT: Record<string, Record<LegalLocale, LegalDocText>> = 
               "Assistant calibration preference",
               "localStorage",
               "Remembers a per-device assistant setting"
+            ],
+            [
+              "Cookie choice",
+              "localStorage",
+              "Remembers the answer you gave to the cookie question, so you are not asked on every visit"
             ]
           ]
         },
         {
           "kind": "markdown",
-          "text": "None of these items are sent to advertisers or analytics providers. The sign-in tokens are credentials for your own session; keep your device secure and sign out on shared computers.\n\n## 5. How to clear cookies and browser storage\n\n- Signing out of GOTCHA ends your application session and invalidates your sign-in session with the identity service.\n- You can clear cookies and site data for gotcha.co.il and its subdomains in your browser settings (usually under Privacy or Site Settings, then \"Cookies and site data\"). This removes the sign-in cookies and all localStorage items listed above.\n- Blocking all cookies for the sign-in subdomain will prevent you from signing in, because the session and CSRF cookies are required for authentication to work.\n\nClearing storage signs you out and resets local preferences such as language and tour progress; it does not delete any data stored on GOTCHA's servers.\n\n## 6. Changes to this policy\n\nIf our use of cookies or browser storage changes, we will update this page and its effective date. Material changes will be announced through the platform or by email.\n\n## 7. Contact\n\nQuestions about this policy: privacy@gotcha.co.il. General support: support@gotcha.co.il.\n\nRelated documents: /legal/privacy-policy\n\nContact: privacy@gotcha.co.il\n\nEffective date: July 18, 2026"
+          "text": "None of these items are sent to advertisers or analytics providers. The sign-in tokens are credentials for your own session; keep your device secure and sign out on shared computers.\n\n## 5. How to clear cookies and browser storage\n\n- Signing out of GOTCHA ends your application session and invalidates your sign-in session with the identity service.\n- You can clear cookies and site data for gotcha.co.il and its subdomains in your browser settings (usually under Privacy or Site Settings, then \"Cookies and site data\"). This removes the sign-in cookies and all localStorage items listed above.\n- Blocking all cookies for the sign-in subdomain will prevent you from signing in, because the session and CSRF cookies are required for authentication to work.\n\nClearing storage signs you out and resets local preferences such as language and tour progress; it does not delete any data stored on GOTCHA's servers.\n\n## 6. Changes to this policy\n\nIf our use of cookies or browser storage changes, we will update this page and its effective date. Material changes will be announced through the platform or by email.\n\n## 7. Contact\n\nQuestions about this policy: privacy@gotcha.co.il. General support: support@gotcha.co.il.\n\nRelated documents: /legal/privacy-policy\n\nContact: privacy@gotcha.co.il\n\nEffective date: September 9, 2026"
         }
       ]
     },
     "he": {
       "title": "מדיניות העוגיות של GOTCHA",
-      "effectiveDate": "18 ביולי 2026",
+      "effectiveDate": "9 בספטמבר 2026",
       "placeholders": [],
       "blocks": [
         {
           "kind": "markdown",
-          "text": "תאריך תחולה: 18 ביולי 2026\n\nמדיניות זו מסבירה כיצד GOTCHA ע״י עומר צרויה, מפעילת האתר gotcha.co.il, משתמשת בעוגיות (cookies) ובטכנולוגיות דומות. בקצרה: אפליקציית GOTCHA אינה מציבה עוגיות משלה, שירות ההתחברות שאנו מארחים בעצמנו מציב עוגיות חיוניות בהחלט בלבד, ואיננו משתמשים כלל בטכנולוגיות אנליטיקה, שיווק או מעקב.\n\n## 1. עוגיות המוצבות על ידי GOTCHA\n\nאין. אפליקציית GOTCHA והאתר אינם מציבים עוגיות. אין עוגיות פרסום, אין עוגיות אנליטיקה, אין פיקסלים של רשתות חברתיות, ואין סקריפטי מעקב של צד שלישי בשום מקום במוצר.\n\n## 2. עוגיות המוצבות על ידי שירות ההתחברות שלנו\n\nההתחברות ל-GOTCHA מנוהלת על ידי שירות זהויות בהפעלה עצמית (self-hosted) הפועל על התשתית שלנו, בתת-הדומיין של ההתחברות של gotcha.co.il. כאשר אתם מתחברים, שירות זה מציב שני סוגים של עוגיות חיוניות בהחלט:"
+          "text": "תאריך תחולה: 9 בספטמבר 2026\n\nמדיניות זו מסבירה כיצד GOTCHA ע״י עומר צרויה, מפעילת האתר gotcha.co.il, משתמשת בעוגיות (cookies) ובטכנולוגיות דומות. בקצרה: אפליקציית GOTCHA אינה מציבה עוגיות משלה, שירות ההתחברות שאנו מארחים בעצמנו מציב עוגיות חיוניות בהחלט בלבד, איננו משתמשים כלל בטכנולוגיות שיווק או מעקב, ואנליטיקה אינה פועלת אלא אם בחרתם לאפשר אותה.\n\n## 1. עוגיות המוצבות על ידי GOTCHA\n\nאין. אפליקציית GOTCHA והאתר אינם מציבים עוגיות. אין עוגיות פרסום, אין עוגיות אנליטיקה, אין פיקסלים של רשתות חברתיות, ואין סקריפטי מעקב של צד שלישי בשום מקום במוצר.\n\n## 2. עוגיות המוצבות על ידי שירות ההתחברות שלנו\n\nההתחברות ל-GOTCHA מנוהלת על ידי שירות זהויות בהפעלה עצמית (self-hosted) הפועל על התשתית שלנו, בתת-הדומיין של ההתחברות של gotcha.co.il. כאשר אתם מתחברים, שירות זה מציב שני סוגים של עוגיות חיוניות בהחלט:"
         },
         {
           "kind": "table",
@@ -345,7 +350,7 @@ export const LEGAL_CONTENT: Record<string, Record<LegalLocale, LegalDocText>> = 
         },
         {
           "kind": "markdown",
-          "text": "עוגיות אלה חיוניות לאימות ולאבטחה. הן אינן משמשות לאנליטיקה, לפרסום או למעקב, ואינן משותפות עם שום צד שלישי: שירות הזהויות מאוחסן בהפעלה עצמית, ולכן העוגיות לעולם אינן יוצאות מהתשתית שלנו.\n\n## 3. מדוע אין באנר הסכמה לעוגיות\n\nמכיוון שהעוגיות היחידות שבשימוש חיוניות בהחלט להתחברות מאובטחת, ואיננו משתמשים בעוגיות אנליטיקה או שיווק, כללי העוגיות החלים אינם דורשים הסכמה מוקדמת עבורן. זו הסיבה שאינכם רואים באנר הסכמה לעוגיות ב-GOTCHA. אם אי פעם נכניס עוגיות שאינן חיוניות, נעדכן מדיניות זו ונבקש הסכמה תחילה.\n\n## 4. טכנולוגיות דומות: אחסון דפדפן\n\nבמקום עוגיות, אפליקציית GOTCHA שומרת מספר קטן של פריטים ב-localStorage וב-sessionStorage של הדפדפן שלכם. פריטים אלה נשארים במכשיר שלכם ונקראים על ידי האפליקציה בדפדפן; הם אינם טכנולוגיות מעקב."
+          "text": "עוגיות אלה חיוניות לאימות ולאבטחה. הן אינן משמשות לאנליטיקה, לפרסום או למעקב, ואינן משותפות עם שום צד שלישי: שירות הזהויות מאוחסן בהפעלה עצמית, ולכן העוגיות לעולם אינן יוצאות מהתשתית שלנו.\n\n## 3. הבחירה שאנחנו מבקשים מכם\n\nבכניסה הראשונה לאתר שלנו תישאלו שאלה אחת, עם שתי קטגוריות.\n\n**חיוניות בהחלט** כוללת את עוגיות ההתחברות שתוארו למעלה. לא ניתן לכבות אותן, וכללי העוגיות החלים אינם דורשים הסכמה מוקדמת עבורן, משום שבלעדיהן התחברות מאובטחת פשוט אינה עובדת.\n\n**אנליטיקה** היא רשות, והיא כבויה אלא אם תפעילו אותה. כיום איננו משתמשים בשום ספק אנליטיקה; אנחנו שואלים מראש כדי שמדידה של אילו עמודים מועילים לעולם לא תתחיל בלי החלטה שלכם. אין עוגיות פרסום, אין פיקסלים של רשתות חברתיות ואין סקריפטי מעקב של צד שלישי, ואף קטגוריה לעיל אינה מבקשת הסכמה לכאלה.\n\nהתשובה שלכם נשמרת במכשיר שלכם ולא בשרתים שלנו, ותוכלו לשנות אותה בכל עת על ידי ניקוי אחסון הדפדפן עבור האתר הזה, מה שיגרום לשאלה להופיע שוב. אם אי פעם נוסיף קטגוריה מעבר לשתיים האלה, נעדכן מדיניות זו ונשאל מחדש, ולא נתייחס לתשובה קודמת ככזו שמכסה אותה.\n\n## 4. טכנולוגיות דומות: אחסון דפדפן\n\nבמקום עוגיות, אפליקציית GOTCHA שומרת מספר קטן של פריטים ב-localStorage וב-sessionStorage של הדפדפן שלכם. פריטים אלה נשארים במכשיר שלכם ונקראים על ידי האפליקציה בדפדפן; הם אינם טכנולוגיות מעקב."
         },
         {
           "kind": "table",
@@ -399,12 +404,17 @@ export const LEGAL_CONTENT: Record<string, Record<LegalLocale, LegalDocText>> = 
               "העדפת כיול עוזר",
               "localStorage",
               "זוכר הגדרת עוזר ברמת המכשיר"
+            ],
+            [
+              "בחירת העוגיות",
+              "localStorage",
+              "זוכר את התשובה שנתתם לשאלת העוגיות, כדי שלא תישאלו בכל כניסה"
             ]
           ]
         },
         {
           "kind": "markdown",
-          "text": "אף אחד מפריטים אלה אינו נשלח למפרסמים או לספקי אנליטיקה. אסימוני ההתחברות הם פרטי גישה להפעלה שלכם עצמכם; שמרו על אבטחת המכשיר והתנתקו במחשבים משותפים.\n\n## 5. כיצד למחוק עוגיות ואחסון דפדפן\n\n- התנתקות מ-GOTCHA מסיימת את הפעלת האפליקציה שלכם ומבטלת את הפעלת ההתחברות שלכם מול שירות הזהויות.\n- אתם יכולים למחוק עוגיות ונתוני אתר עבור gotcha.co.il ותת-הדומיינים שלו בהגדרות הדפדפן (בדרך כלל תחת \"פרטיות\" או \"הגדרות אתר\", ואז \"עוגיות ונתוני אתרים\"). פעולה זו מסירה את עוגיות ההתחברות ואת כל פריטי ה-localStorage המפורטים לעיל.\n- חסימת כל העוגיות עבור תת-הדומיין של ההתחברות תמנע מכם להתחבר, מכיוון שעוגיות ההפעלה וה-CSRF נדרשות לפעולת האימות.\n\nמחיקת האחסון מנתקת אתכם ומאפסת העדפות מקומיות כגון שפה והתקדמות בסיור; היא אינה מוחקת נתונים כלשהם המאוחסנים בשרתי GOTCHA.\n\n## 6. שינויים במדיניות זו\n\nאם השימוש שלנו בעוגיות או באחסון דפדפן ישתנה, נעדכן עמוד זה ואת תאריך התחולה שלו. על שינויים מהותיים נודיע דרך הפלטפורמה או באימייל.\n\n## 7. יצירת קשר\n\nשאלות על מדיניות זו: privacy@gotcha.co.il. תמיכה כללית: support@gotcha.co.il.\n\nמסמכים קשורים: /legal/privacy-policy\n\nיצירת קשר: privacy@gotcha.co.il\n\nתאריך תחולה: 18 ביולי 2026"
+          "text": "אף אחד מפריטים אלה אינו נשלח למפרסמים או לספקי אנליטיקה. אסימוני ההתחברות הם פרטי גישה להפעלה שלכם עצמכם; שמרו על אבטחת המכשיר והתנתקו במחשבים משותפים.\n\n## 5. כיצד למחוק עוגיות ואחסון דפדפן\n\n- התנתקות מ-GOTCHA מסיימת את הפעלת האפליקציה שלכם ומבטלת את הפעלת ההתחברות שלכם מול שירות הזהויות.\n- אתם יכולים למחוק עוגיות ונתוני אתר עבור gotcha.co.il ותת-הדומיינים שלו בהגדרות הדפדפן (בדרך כלל תחת \"פרטיות\" או \"הגדרות אתר\", ואז \"עוגיות ונתוני אתרים\"). פעולה זו מסירה את עוגיות ההתחברות ואת כל פריטי ה-localStorage המפורטים לעיל.\n- חסימת כל העוגיות עבור תת-הדומיין של ההתחברות תמנע מכם להתחבר, מכיוון שעוגיות ההפעלה וה-CSRF נדרשות לפעולת האימות.\n\nמחיקת האחסון מנתקת אתכם ומאפסת העדפות מקומיות כגון שפה והתקדמות בסיור; היא אינה מוחקת נתונים כלשהם המאוחסנים בשרתי GOTCHA.\n\n## 6. שינויים במדיניות זו\n\nאם השימוש שלנו בעוגיות או באחסון דפדפן ישתנה, נעדכן עמוד זה ואת תאריך התחולה שלו. על שינויים מהותיים נודיע דרך הפלטפורמה או באימייל.\n\n## 7. יצירת קשר\n\nשאלות על מדיניות זו: privacy@gotcha.co.il. תמיכה כללית: support@gotcha.co.il.\n\nמסמכים קשורים: /legal/privacy-policy\n\nיצירת קשר: privacy@gotcha.co.il\n\nתאריך תחולה: 9 בספטמבר 2026"
         }
       ]
     }
