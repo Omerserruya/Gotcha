@@ -14,13 +14,18 @@ import {
   prisma,
   authenticate,
   resolveTenant,
-  requireActiveTenant,
+  requireOnboardingOrActiveTenant,
   computeSetupState,
   type SetupFacts,
 } from "@chatcenter/shared";
 
 const router = Router();
-router.use("/setup/state", authenticate, resolveTenant, requireActiveTenant());
+// requireOnboardingOrActiveTenant, NOT requireActiveTenant. This is the screen
+// a workspace sees on day one, and a day-one workspace is PENDING_ONBOARDING
+// with no plan yet - so the full-application gate refuses the endpoint that
+// exists to tell it what to do next. Same chicken-and-egg the middleware's own
+// comment describes for connecting the core system.
+router.use("/setup/state", authenticate, resolveTenant, requireOnboardingOrActiveTenant());
 
 router.get("/setup/state", async (req: Request, res: Response) => {
   try {

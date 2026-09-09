@@ -9,6 +9,7 @@ import {
   approvalToActivityEvent,
   toolSubject,
   isoWeekKey,
+  buildQuietDayList,
 } from "@chatcenter/shared";
 
 // ─── Helpers ─────────────────────────────────────────────────
@@ -1097,13 +1098,34 @@ export async function getTimeSaved(tenantId: string, from?: string, to?: string)
  * owner has already written an article about does not belong on it. It is
  * excluded, not deleted, so the record that it was once a gap survives.
  */
+
+/**
+ * An optional date window. Null when neither end was given, which means "all
+ * of history" - distinct from a window that happens to be empty.
+ */
+function parseOptionalRange(from?: string, to?: string): { fromDate: Date; toDate: Date } | null {
+  if (!from && !to) return null;
+  return parseDateRange(from, to);
+}
+
 export async function getUnansweredQuestions(
   tenantId: string,
-  opts: { limit?: number; includeResolved?: boolean } = {},
+  opts: { limit?: number; includeResolved?: boolean; from?: string; to?: string } = {},
 ) {
   const limit = Math.min(Math.max(opts.limit ?? 10, 1), 50);
+
+  // The card says "four questions it could not answer THIS WEEK", so the
+  // window has to be a parameter rather than the whole of history. Filtered on
+  // lastAskedAt, not firstAskedAt: a gap opened in March and asked again this
+  // morning is a question it could not answer this week.
+  const window = parseOptionalRange(opts.from, opts.to);
+
   const rows = await prisma.unansweredQuestion.findMany({
-    where: { tenantId, ...(opts.includeResolved ? {} : { resolvedAt: null }) },
+    where: {
+      tenantId,
+      ...(opts.includeResolved ? {} : { resolvedAt: null }),
+      ...(window ? { lastAskedAt: { gte: window.fromDate, lte: window.toDate } } : {}),
+    },
     // By how badly it is missing, then by how recently - a gap asked forty
     // times last month outranks one asked twice this morning.
     orderBy: [{ askCount: "desc" }, { lastAskedAt: "desc" }],
@@ -1115,6 +1137,11 @@ export async function getUnansweredQuestions(
   });
 
   return {
+    // Echoed back so the card's "this week" is checkable against the window it
+    // actually used, rather than a default the reader cannot see.
+    period: window
+      ? { from: window.fromDate.toISOString(), to: window.toDate.toISOString() }
+      : null,
     data: rows.map((r) => ({
       id: r.id,
       question: r.question,
@@ -1156,6 +1183,8 @@ export async function getProductDemand(
     },
   });
 
+  const weeksRunning = await consecutiveWeeks(tenantId, rows.map((r) => r.term), weekKey);
+
   return {
     // Echoed back, never left implicit: a card that says "this week" beside a
     // number is making a claim about which week, and the reader cannot check it
@@ -1169,8 +1198,66 @@ export async function getProductDemand(
       inCatalogue: r.inCatalogue,
       firstSeenAt: r.firstSeenAt.toISOString(),
       lastSeenAt: r.lastSeenAt.toISOString(),
+      // "Second week running" - the line that turns a number into a trend.
+      weeksRunning: weeksRunning.get(r.term) ?? 1,
     })),
   };
+}
+
+/**
+ * How many weeks in an unbroken run, ending at `weekKey`, each term has been
+ * asked for.
+ *
+ * CONSECUTIVE, not total. A term asked in March and again this week is not on
+ * a two-week run, and reporting it as one would tell the owner a dead question
+ * is a growing trend. The run stops at the first missing week.
+ *
+ * One query for the whole page, walked backwards in memory: the alternative is
+ * a query per term per week, which is a card that gets slower the more useful
+ * it becomes.
+ */
+const WEEKS_RUNNING_LOOKBACK = 12;
+
+async function consecutiveWeeks(
+  tenantId: string,
+  terms: string[],
+  currentWeek: string,
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (terms.length === 0) return out;
+
+  // The window to look back over, oldest first.
+  const weeks: string[] = [];
+  const cursor = new Date();
+  for (let i = 0; i < WEEKS_RUNNING_LOOKBACK; i++) {
+    weeks.push(isoWeekKey(cursor));
+    cursor.setUTCDate(cursor.getUTCDate() - 7);
+  }
+
+  const rows = await prisma.productDemandTerm.findMany({
+    where: { tenantId, term: { in: terms }, weekKey: { in: weeks } },
+    select: { term: true, weekKey: true },
+  });
+
+  const seen = new Map<string, Set<string>>();
+  for (const r of rows) {
+    if (!seen.has(r.term)) seen.set(r.term, new Set());
+    seen.get(r.term)!.add(r.weekKey);
+  }
+
+  for (const term of terms) {
+    const present = seen.get(term) ?? new Set<string>();
+    let run = 0;
+    // weeks[0] is the current week; walk back until a gap.
+    for (const w of weeks) {
+      if (!present.has(w)) break;
+      run++;
+    }
+    // A term on this page was asked this week by construction, so a run of
+    // zero would be an artefact of the lookback rather than a fact.
+    out.set(term, Math.max(1, run));
+  }
+  return out;
 }
 
 /**
@@ -1306,5 +1393,86 @@ export async function getInFlight(tenantId: string) {
       .map(([subject, count]) => ({ subject, count }))
       .sort((a, b) => b.count - a.count || a.subject.localeCompare(b.subject)),
     awaitingApproval,
+  };
+}
+
+// ─── Home: "worth an hour, while it is quiet" ─────────────────
+
+/**
+ * The four quiet-day sources, merged and ranked by how much future work each
+ * removes.
+ *
+ * Ranked HERE for the same reason the queue is: four sources in four different
+ * units cannot be ordered by a client without it inventing weights, and two
+ * clients inventing their own weights disagree the moment either changes.
+ *
+ * The reasoning lives in shared (quiet-day-ranking.ts); this function's job is
+ * only to find out what is true. Note that the conflicts source lives in
+ * services/ai, so it is left out here rather than reached for across a service
+ * boundary - the endpoint says so in `sources`, instead of quietly ranking a
+ * shorter list and looking complete.
+ */
+export async function getQuietDayList(
+  tenantId: string,
+  opts: { limit?: number } = {},
+) {
+  const limit = Math.min(Math.max(opts.limit ?? 10, 1), 50);
+  const weekKey = isoWeekKey();
+
+  const [unansweredRows, demandRows, dormant] = await Promise.all([
+    prisma.unansweredQuestion.findMany({
+      where: { tenantId, resolvedAt: null },
+      orderBy: [{ askCount: "desc" }, { lastAskedAt: "desc" }],
+      take: 25,
+      select: { id: true, question: true, reason: true, askCount: true, askedBy: true,
+                firstAskedAt: true, lastAskedAt: true },
+    }),
+    getProductDemand(tenantId, { limit: 25, weekKey }),
+    getDormantCustomers(tenantId, { limit: 1 }),
+  ]);
+
+  const now = Date.now();
+  const items = buildQuietDayList({
+    unanswered: unansweredRows.map((r) => ({
+      id: r.id,
+      question: r.question,
+      reason: r.reason,
+      askCount: r.askCount,
+      askedBy: r.askedBy,
+      // How long it has been observed, so a gap asked 30 times in a week is
+      // not rated the same as one asked 30 times over six months.
+      weeksObserved: Math.max(
+        1,
+        Math.round((now - r.firstAskedAt.getTime()) / (7 * 86_400_000)),
+      ),
+    })),
+    // Conflicts are owned by services/ai; see the note above.
+    conflicts: [],
+    demand: demandRows.data
+      .filter((d) => !d.inCatalogue)
+      .map((d) => ({
+        id: d.id,
+        term: d.term,
+        askCount: d.askCount,
+        askedBy: d.askedBy,
+        weeksRunning: d.weeksRunning,
+      })),
+    dormant:
+      dormant.data.length > 0
+        ? { count: dormant.data.length, quietForDays: dormant.definition.quietForDays }
+        : null,
+  });
+
+  return {
+    weekKey,
+    // Which sources this ranking actually saw. A card that silently omits one
+    // reads as "there is nothing there", which is a different claim.
+    sources: {
+      unanswered_question: true,
+      product_demand: true,
+      dormant_customers: true,
+      knowledge_conflict: false,
+    },
+    data: items.slice(0, limit),
   };
 }

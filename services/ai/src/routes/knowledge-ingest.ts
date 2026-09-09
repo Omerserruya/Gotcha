@@ -12,10 +12,13 @@
  * percentage of a total nobody knows.
  */
 import { Router, type Request, type Response } from "express";
-import { prisma, authenticate, resolveTenant, requireActiveTenant } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireOnboardingOrActiveTenant } from "@chatcenter/shared";
 
 const router = Router();
-router.use("/knowledge/ingest/latest", authenticate, resolveTenant, requireActiveTenant());
+// Reachable during onboarding: pointing GOTCHA at a website is something a
+// workspace does BEFORE it is active, and the result of that scan is the
+// feedback that tells it the scan worked.
+router.use("/knowledge/ingest/latest", authenticate, resolveTenant, requireOnboardingOrActiveTenant());
 
 /** What the onboarding website scan writes its pages as. */
 const SCAN_SOURCE_TYPES = ["onboarding_scan", "url", "website", "web"];
@@ -36,6 +39,21 @@ router.get("/knowledge/ingest/latest", async (req: Request, res: Response) => {
       prisma.knowledgeCandidate.count({ where: { tenantId } }),
       prisma.knowledgeCandidate.count({ where: { tenantId, status: "PENDING" } }),
     ]);
+
+    // The step reads "12 need your word - returns window, wholesale pricing,
+    // and delivery to the north". Three numbers cannot write that line, so the
+    // SUBJECTS travel too: the topic as the scan recorded it, plus the id, so
+    // the client can both name them and link to them.
+    //
+    // Topics rather than the questions themselves: a question is a sentence in
+    // whatever language the page was written in, and the line has to render in
+    // Hebrew. A topic is short enough for the client to show as-is or map.
+    const pending = await prisma.knowledgeCandidate.findMany({
+      where: { tenantId, status: "PENDING" },
+      select: { id: true, topic: true, category: true },
+      orderBy: { confidence: "asc" },
+      take: 12,
+    });
 
     if (!latest) {
       // No scan has ever run. Null rather than a row of zeros: "we read nothing"
@@ -60,6 +78,14 @@ router.get("/knowledge/ingest/latest", async (req: Request, res: Response) => {
         pagesRead: pages,
         answersDrafted: drafted,
         answersNeedingConfirmation: needingConfirmation,
+        // A sample, not the whole set: the line names three, and shipping
+        // hundreds so the client can pick three is the card paying for text
+        // nobody reads. `answersNeedingConfirmation` remains the true total.
+        pendingTopics: pending.map((c) => ({
+          id: c.id,
+          topic: c.topic,
+          category: c.category ?? null,
+        })),
         finishedAt: stillWorking > 0 ? null : latest.createdAt.toISOString(),
       },
     });

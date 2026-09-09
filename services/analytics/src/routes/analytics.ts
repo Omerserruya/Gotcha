@@ -250,6 +250,23 @@ router.post("/insights/:id/dismiss", requirePermission("analytics:dashboard:read
 });
 
 /**
+ * "Worth an hour, while it is quiet" - the four sources in one ranked list.
+ *
+ * Ranked server-side so Home and any other surface showing this list cannot
+ * order it differently.
+ */
+router.get("/quiet-day", requirePermission("analytics:workspace:read"), async (req: Request, res: Response) => {
+  try {
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+    const result = await analyticsService.getQuietDayList(req.tenantId!, { limit });
+    res.json(result);
+  } catch (err) {
+    console.error("Quiet-day list error:", err);
+    res.status(500).json({ error: "Failed to build quiet-day list" });
+  }
+});
+
+/**
  * What the AI is doing at this instant - the dark card's opening line.
  *
  * Part of the shared operational picture, so it rides the same permission as
@@ -273,7 +290,11 @@ router.get("/unanswered-questions", async (req: Request, res: Response) => {
   try {
     const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
     const includeResolved = req.query.includeResolved === "true";
-    const result = await analyticsService.getUnansweredQuestions(req.tenantId!, { limit, includeResolved });
+    const from = typeof req.query.from === "string" ? req.query.from : undefined;
+    const to = typeof req.query.to === "string" ? req.query.to : undefined;
+    const result = await analyticsService.getUnansweredQuestions(req.tenantId!, {
+      limit, includeResolved, from, to,
+    });
     res.json(result);
   } catch (err) {
     console.error("Unanswered questions error:", err);

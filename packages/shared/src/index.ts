@@ -579,6 +579,13 @@ export {
   type SetupStepState,
   type SetupFacts,
 } from "./lib/setup-state";
+export {
+  buildQuietDayList,
+  HORIZON_WEEKS,
+  type QuietDayItem,
+  type QuietDayEffect,
+  type QuietDaySource,
+} from "./lib/quiet-day-ranking";
 export { redact, safeLogger } from "./lib/log-redact";
 export * from "./lib/tenant-access-policy";
 export {
