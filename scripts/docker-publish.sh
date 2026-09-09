@@ -26,6 +26,7 @@
 #
 # Opt-outs:
 #   SKIP_FRONTEND_BUILD=1   reuse an existing frontend/out (e.g. CI artifact)
+#   SKIP_LANDING_BUILD=1    reuse an existing landing/out
 #
 # Usage:
 #   ./scripts/docker-publish.sh                 # build + push everything
@@ -224,6 +225,29 @@ if [ -z "${SERVICES:-}" ] || [[ ",$SERVICES," == *,gateway,* ]] || [[ ",$SERVICE
     echo "       If you set SKIP_FRONTEND_BUILD=1, supply a prebuilt frontend/out."
     exit 1
   fi
+
+  # The marketing site is the gateway's second static root: gotcha.co.il,
+  # trust. and help. are served from it. Built on the host for the same reason
+  # the application is - static files are arch-independent, and cross-arch
+  # buildx cannot reach Google Fonts under QEMU.
+  #
+  # It takes no NEXT_PUBLIC_* URLs. Every cross-section link resolves to a plain
+  # path unless a hostname is configured, and in production all three names are
+  # served by this one image, so a path is already the right answer.
+  if [ "${SKIP_LANDING_BUILD:-0}" != "1" ]; then
+    echo "── marketing static export (host build) ─────────"
+    (
+      cd landing
+      [ -d node_modules ] || npm ci
+      NEXT_TELEMETRY_DISABLED=1 NEXT_OUTPUT=export npm run build
+    )
+  fi
+  if [ ! -d landing/out ]; then
+    echo "ERROR: landing/out is missing after build step."
+    echo "       If you set SKIP_LANDING_BUILD=1, supply a prebuilt landing/out."
+    exit 1
+  fi
+
   push_image gateway gateway/Dockerfile.prod .
 fi
 
