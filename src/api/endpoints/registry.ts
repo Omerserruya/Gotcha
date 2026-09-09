@@ -1,0 +1,140 @@
+/**
+ * The only place in the frontend that knows what a GOTCHA URL looks like.
+ *
+ * UI components, hooks and services refer to endpoints through this registry,
+ * never as string literals. That keeps route changes to one file, makes the
+ * surface we depend on auditable at a glance, and lets the transport layer
+ * report a stable `route` (parameters still templated) for grouping errors and
+ * telemetry without leaking identifiers.
+ */
+
+/** A resolved endpoint: a concrete path plus the template it came from. */
+export interface Endpoint {
+  /** Path with parameters substituted, e.g. `/api/permissions/users/42`. */
+  readonly path: string;
+  /** Template, e.g. `/api/permissions/users/{userId}`. Safe for telemetry. */
+  readonly route: string;
+}
+
+function endpoint(route: string, params: Record<string, string | number> = {}): Endpoint {
+  const path = route.replace(/\{(\w+)\}/g, (_match, key: string) => {
+    const value = params[key];
+    if (value === undefined) {
+      throw new Error(`Missing path parameter "${key}" for route ${route}`);
+    }
+    return encodeURIComponent(String(value));
+  });
+  return { path, route };
+}
+
+/**
+ * Auth & identity.
+ *
+ * Note: the platform documents a server-side session flow at
+ * `/api/auth/login` and `/api/auth/callback`, but those routes are not
+ * currently reachable through the gateway. This app therefore drives the
+ * Authorization Code + PKCE flow against Authentik itself; see `src/auth`.
+ */
+export const authEndpoints = {
+  me: () => endpoint('/api/auth/me'),
+  memberships: () => endpoint('/api/auth/me/memberships'),
+  switchTenant: () => endpoint('/api/auth/me/switch-tenant'),
+} as const;
+
+/** The tenant-local permission model. */
+export const permissionEndpoints = {
+  /** Effective permissions and scope for the current principal + tenant. */
+  mine: () => endpoint('/api/permissions/me'),
+  /** The full hierarchical permission catalogue, for admin surfaces. */
+  catalog: () => endpoint('/api/permissions/catalog'),
+  features: () => endpoint('/api/permissions/features'),
+} as const;
+
+/**
+ * Analytics.
+ *
+ * `from`/`to` are accepted by `overview` and `channelPerformance`; `queue` is
+ * fixed to today and takes no parameters.
+ */
+export const analyticsEndpoints = {
+  overview: () => endpoint('/api/analytics/overview'),
+  channelPerformance: () => endpoint('/api/analytics/channel-performance'),
+  /** Two scalars: `{ waiting, avgWaitTimeMs }`. Not the list. */
+  queue: () => endpoint('/api/analytics/queue'),
+  /** The ranked list itself. `{ data, nextCursor, totalWaiting }` — use `raw`. */
+  queueItems: () => endpoint('/api/analytics/queue/items'),
+  /** Completed AI actions merged with pending approvals. `raw`. */
+  activity: () => endpoint('/api/analytics/activity'),
+  /** Seconds saved, with the arithmetic behind it. */
+  timeSaved: () => endpoint('/api/analytics/time-saved'),
+  /** What GOTCHA is doing right now, as opposed to what it has done. */
+  inFlight: () => endpoint('/api/analytics/in-flight'),
+  /** "Worth knowing" — `kind` + `values`, translated by us. */
+  insights: () => endpoint('/api/analytics/insights'),
+  dismissInsight: (id: string) => endpoint('/api/analytics/insights/{id}/dismiss', { id }),
+  /** Per-agent open counts and reply times. Carries no presence. */
+  agents: () => endpoint('/api/analytics/agents'),
+} as const;
+
+/**
+ * Things GOTCHA learned about the business that need a person to settle.
+ *
+ * Answers `{ ok, pending, reviews }` — a third envelope shape, so requests
+ * against it are made with `raw`.
+ */
+/** Conversation headroom for the period. Served by billing, not analytics. */
+export const usageEndpoints = {
+  allowance: () => endpoint('/api/usage/allowance'),
+} as const;
+
+export const intelligenceReviewEndpoints = {
+  list: () => endpoint('/api/intelligence-reviews'),
+  approve: (id: string) => endpoint('/api/intelligence-reviews/{id}/approve', { id }),
+  reject: (id: string) => endpoint('/api/intelligence-reviews/{id}/reject', { id }),
+} as const;
+
+/**
+ * Notifications. Cursor-paginated, and the page is `{ data, nextCursor }` —
+ * `data` sits beside the cursor rather than wrapping it, so `raw` is required.
+ */
+export const notificationEndpoints = {
+  list: () => endpoint('/api/notifications'),
+  unreadCount: () => endpoint('/api/notifications/unread-count'),
+  markRead: (id: string) => endpoint('/api/notifications/{id}/mark-read', { id }),
+  markAllRead: () => endpoint('/api/notifications/mark-all-read'),
+} as const;
+
+/**
+ * The agent runtime behind Home's command surface.
+ *
+ * `run` answers `text/event-stream`, so it is read with
+ * `streamServerSentEvents` rather than through `HttpClient`. It is listed here
+ * anyway: the registry is the only place a URL may live.
+ *
+ * `clear` wipes the caller's agent memory across EVERY session, not just the
+ * current one, so any control for it has to say so before it runs.
+ */
+/** Per-agent presence, and the heartbeat that keeps it fresh. */
+export const presenceEndpoints = {
+  roster: () => endpoint('/api/agents/presence'),
+  heartbeat: () => endpoint('/api/agents/presence/heartbeat'),
+  mine: () => endpoint('/api/agents/presence/me'),
+} as const;
+
+/**
+ * The socket handshake credential.
+ *
+ * Minted per connection and spent immediately. See `realtimeTicketSchema` for
+ * why the bearer token cannot be used directly.
+ */
+export const realtimeEndpoints = {
+  ticket: () => endpoint('/api/realtime/ticket'),
+} as const;
+
+export const agentEndpoints = {
+  run: () => endpoint('/api/agent/run'),
+  clear: () => endpoint('/api/agent/clear'),
+} as const;
+
+export type { Endpoint as ApiEndpoint };
+export { endpoint as defineEndpoint };
