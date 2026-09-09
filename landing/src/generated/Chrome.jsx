@@ -11,9 +11,9 @@ export default function Chrome({ v: $v, children }) {
         {"\n\n  "}
         <div style={$st(`height:${$A($v?.bars?.headTop)};flex:none`)}></div>
         {"\n\n  "}
-        <div className="mo0" style={$st(`display:${$A($v?.bars?.offerBar)};position:fixed;top:0;left:0;right:0;z-index:92;background:#8E3418;color:#FFFFFF;height:38px;align-items:center;justify-content:center;gap:16px;padding:0 46px 0 24px;flex-wrap:nowrap;overflow:hidden`)}>
+        <div style={$st(`display:${$A($v?.bars?.offerBar)};position:fixed;top:0;left:0;right:0;z-index:92;background:#8E3418;color:#FFFFFF;height:38px;align-items:center;justify-content:center;gap:16px;padding:0 46px 0 24px;flex-wrap:nowrap;overflow:hidden`)}>
           {"\n    "}
-          <span className="mo1" style={$st("font:500 9.5px 'IBM Plex Mono',monospace;letter-spacing:.18em;text-transform:uppercase;background:rgba(22,21,15,.24);border-radius:5px;padding:4px 8px;white-space:nowrap")}>
+          <span className="m-hide" style={$st("font:500 9.5px 'IBM Plex Mono',monospace;letter-spacing:.18em;text-transform:uppercase;background:rgba(22,21,15,.24);border-radius:5px;padding:4px 8px;white-space:nowrap")}>
             {$I($v?.offer?.badge)}
           </span>
           {"\n    "}
@@ -25,19 +25,19 @@ export default function Chrome({ v: $v, children }) {
             {$I($v?.offer?.seeMore)}
           </div>
           {"\n    \n    "}
-          <span className="mo2 scp1" onClick={$v?.offer?.hideBar} title="Close" style={$st("position:absolute;right:14px;color:#FFFFFF;opacity:.75;display:flex;cursor:pointer;padding:4px;transition:opacity .2s ease")}>
+          <span className="scp1" onClick={$v?.offer?.hideBar} title="Close" style={$st("position:absolute;right:14px;color:#FFFFFF;opacity:.75;display:flex;cursor:pointer;padding:4px;transition:opacity .2s ease")}>
             <i data-lucide="x" width="14" height="14" stroke-width="2.4"></i>
           </span>
           {"\n  "}
         </div>
         {"\n\n  "}
-        <div onClick={$v?.offer?.toggle} style={$st(`display:${$A($v?.offer?.tabDisplay)};position:fixed;top:50%;right:0;transform:translateY(-50%);z-index:89;width:38px;box-sizing:border-box;background:#8E3418;color:#FFFFFF;border-radius:12px 0 0 12px;padding:16px 0;cursor:pointer;box-shadow:-6px 0 22px rgba(22,21,15,.22);flex-direction:column;align-items:center;gap:9px`)}>
+        <div className="offer-tab" onClick={$v?.offer?.toggle} style={$st(`display:${$A($v?.offer?.tabDisplay)};position:fixed;top:50%;right:0;transform:translateY(-50%);z-index:89;width:38px;box-sizing:border-box;background:#8E3418;color:#FFFFFF;border-radius:12px 0 0 12px;padding:16px 0;cursor:pointer;box-shadow:-6px 0 22px rgba(22,21,15,.22);flex-direction:column;align-items:center;gap:9px`)}>
           {"\n    "}
-          <span className="mo2" style={$st("display:flex")}>
+          <span style={$st("display:flex")}>
             <i data-lucide="gift" width="16" height="16" stroke-width="2.2"></i>
           </span>
           {"\n    "}
-          <span className="mo1" style={$st("font:600 11px 'IBM Plex Mono',monospace;letter-spacing:.18em;writing-mode:vertical-rl;text-orientation:mixed;white-space:nowrap")}>
+          <span style={$st("font:600 11px 'IBM Plex Mono',monospace;letter-spacing:.18em;writing-mode:vertical-rl;text-orientation:mixed;white-space:nowrap")}>
             {$I($v?.offer?.tabLabel)}
           </span>
           {"\n  "}
@@ -46,17 +46,17 @@ export default function Chrome({ v: $v, children }) {
         {$v?.offerShown ? (
           <>
           {"\n    "}
-          <div className="mo3" style={$st("position:fixed;top:50%;right:0;transform:translateY(-50%);z-index:95;width:798px;max-width:100vw")}>
+          <div className="offer-drawer" style={$st("position:fixed;top:50%;right:0;transform:translateY(-50%);z-index:95;width:798px;max-width:100vw")}>
             {"\n      "}
-            <div className="mo2" style={$st("display:flex;align-items:stretch;background:#FFFFFF;border:1px solid #E4DFD4;border-inline-end:0;border-radius:12px 0 0 12px;box-shadow:-16px 22px 60px rgba(22,21,15,.26);overflow:hidden;animation:gpull .5s cubic-bezier(.22,.85,.2,1) both")}>
+            <div style={$st("display:flex;align-items:stretch;background:#FFFFFF;border:1px solid #E4DFD4;border-inline-end:0;border-radius:12px 0 0 12px;box-shadow:-16px 22px 60px rgba(22,21,15,.26);overflow:hidden;animation:gpull .5s cubic-bezier(.22,.85,.2,1) both")}>
               {"\n        "}
               <div onClick={$v?.offer?.close} style={$st("flex:0 0 38px;background:#8E3418;color:#FFFFFF;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;padding:16px 0")}>
                 {"\n          "}
-                <span className="mo2" style={$st("display:flex")}>
+                <span style={$st("display:flex")}>
                   <i data-lucide="gift" width="16" height="16" stroke-width="2.2"></i>
                 </span>
                 {"\n          "}
-                <span className="mo1" style={$st("font:600 11px 'IBM Plex Mono',monospace;letter-spacing:.18em;writing-mode:vertical-rl;text-orientation:mixed;white-space:nowrap")}>
+                <span style={$st("font:600 11px 'IBM Plex Mono',monospace;letter-spacing:.18em;writing-mode:vertical-rl;text-orientation:mixed;white-space:nowrap")}>
                   {$I($v?.offer?.tabLabel)}
                 </span>
                 {"\n        "}
@@ -64,9 +64,9 @@ export default function Chrome({ v: $v, children }) {
               {"\n        "}
               <div style={$st("flex:0 0 246px;background:#16150F;color:#F7F5F1;padding:22px 24px;display:flex;flex-direction:column;gap:10px")}>
                 {"\n          "}
-                <div className="mo2" style={$st("display:flex;align-items:center;gap:9px")}>
+                <div style={$st("display:flex;align-items:center;gap:9px")}>
                   {"\n            "}
-                  <span className="mo2" style={$st("width:26px;height:26px;border-radius:8px;background:#8E3418;display:flex;align-items:center;justify-content:center;flex:none")}>
+                  <span style={$st("width:26px;height:26px;border-radius:8px;background:#8E3418;display:flex;align-items:center;justify-content:center;flex:none")}>
                     <i data-lucide="gift" width="14" height="14" stroke-width="2.2"></i>
                   </span>
                   {"\n            "}
@@ -80,9 +80,9 @@ export default function Chrome({ v: $v, children }) {
                   {$I($v?.offer?.title)}
                 </div>
                 {"\n          "}
-                <div className="mo2" style={$st("margin-top:auto;display:flex;align-items:baseline;gap:7px")}>
+                <div style={$st("margin-top:auto;display:flex;align-items:baseline;gap:7px")}>
                   {"\n            "}
-                  <span className="mo4" style={$st("font-size:44px;font-weight:600;letter-spacing:-0.042em;line-height:1")}>
+                  <span style={$st("font-size:44px;font-weight:600;letter-spacing:-0.042em;line-height:1")}>
                     {$I($v?.offer?.price)}
                   </span>
                   {"\n          "}
@@ -96,16 +96,16 @@ export default function Chrome({ v: $v, children }) {
               {"\n\n        "}
               <div style={$st("flex:1;min-width:0;padding:22px 24px;display:flex;flex-direction:column")}>
                 {"\n          "}
-                <div className="mo2" style={$st("display:flex;align-items:flex-start;gap:14px")}>
+                <div style={$st("display:flex;align-items:flex-start;gap:14px")}>
                   {"\n            "}
-                  <div className="mo5" style={$st("flex:1;min-width:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 18px")}>
+                  <div style={$st("flex:1;min-width:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 18px")}>
                     {"\n              "}
                     {$L($v?.offer?.items).map((oi, $index) => (
                       <React.Fragment key={$index}>
                         {"\n                "}
-                        <div className="mo2" style={$st("display:flex;align-items:flex-start;gap:9px")}>
+                        <div style={$st("display:flex;align-items:flex-start;gap:9px")}>
                           {"\n                  "}
-                          <span className="mo2" style={$st("color:#2E7D5B;display:flex;flex:none;margin-top:2px")}>
+                          <span style={$st("color:#2E7D5B;display:flex;flex:none;margin-top:2px")}>
                             <i data-lucide="check" width="13" height="13" stroke-width="2.6"></i>
                           </span>
                           {"\n                  "}
@@ -120,15 +120,15 @@ export default function Chrome({ v: $v, children }) {
                     {"\n            "}
                   </div>
                   {"\n            "}
-                  <span className="mo2 scp2" onClick={$v?.offer?.close} title="Close" style={$st("color:#8E887C;background:#F5F2EC;border-radius:8px;padding:5px;display:flex;cursor:pointer;flex:none;transition:color .2s ease,background .2s ease")}>
+                  <span className="offer-x scp2" onClick={$v?.offer?.close} title="Close" style={$st("color:#8E887C;background:#F5F2EC;border-radius:8px;padding:5px;display:flex;cursor:pointer;flex:none;transition:color .2s ease,background .2s ease")}>
                     <i data-lucide="x" width="15" height="15" stroke-width="2.4"></i>
                   </span>
                   {"\n          "}
                 </div>
                 {"\n          "}
-                <div className="mo2" style={$st("display:flex;align-items:center;gap:14px;margin-top:16px;padding-top:14px;border-top:1px solid #F0EDE7;flex-wrap:wrap")}>
+                <div style={$st("display:flex;align-items:center;gap:14px;margin-top:16px;padding-top:14px;border-top:1px solid #F0EDE7;flex-wrap:wrap")}>
                   {"\n            "}
-                  <div className="mo1 scp3" onClick={$v?.goOffer} style={$st("font-size:14px;font-weight:500;background:#16150F;color:#FAF8F4;border-radius:11px;padding:12px 22px;white-space:nowrap;cursor:pointer;transition:background .2s ease")}>
+                  <div className="scp3" onClick={$v?.goOffer} style={$st("font-size:14px;font-weight:500;background:#16150F;color:#FAF8F4;border-radius:11px;padding:12px 22px;white-space:nowrap;cursor:pointer;transition:background .2s ease")}>
                     {$I($v?.offer?.seeMore)}
                   </div>
                   {"\n            "}
@@ -147,28 +147,86 @@ export default function Chrome({ v: $v, children }) {
           </>
         ) : null}
         {"\n\n  \n  "}
+        {$v?.mnavOpen ? (
+          <>
+          {"\n    "}
+          <div style={$st("position:fixed;inset:0;z-index:94;background:#FAF8F4;overflow-y:auto;padding:88px 18px 40px;display:flex;flex-direction:column;gap:8px")}>
+            {"\n      "}
+            <div onClick={$v?.mnavToggle} style={$st("position:fixed;top:22px;right:18px;width:42px;height:42px;border-radius:12px;border:1px solid rgba(22,21,15,.12);background:#FFFFFF;color:#16150F;display:flex;align-items:center;justify-content:center;cursor:pointer")}>
+              <i data-lucide="x" width="19" height="19" stroke-width="2.2"></i>
+            </div>
+            {"\n      "}
+            {$L($v?.mnav).map((g, $index) => (
+              <React.Fragment key={$index}>
+                {"\n        "}
+                <div style={$st("border-top:1px solid #E4DFD4;padding:16px 0 8px")}>
+                  {"\n          "}
+                  <div onClick={g?.go} style={$st("font-size:17px;font-weight:600;letter-spacing:-0.018em;color:#16150F;padding:4px 0;cursor:pointer")}>
+                    {$I(g?.t)}
+                  </div>
+                  {"\n          "}
+                  <div style={$st("display:flex;flex-direction:column;gap:2px;margin-top:8px")}>
+                    {"\n            "}
+                    {$L(g?.items).map((it, $index) => (
+                      <React.Fragment key={$index}>
+                        {"\n              "}
+                        <div className="scp4" onClick={it?.go} style={$st("display:flex;align-items:center;gap:12px;padding:12px 10px;margin:0 -10px;border-radius:11px;min-height:44px;cursor:pointer")}>
+                          {"\n                "}
+                          <span style={$st("width:18px;flex:none;color:#A29B8E;display:flex")}>
+                            <i data-lucide={it?.icon} width="16" height="16" stroke-width="1.9"></i>
+                          </span>
+                          {"\n                "}
+                          <span style={$st("font-size:15px;font-weight:500;color:#16150F")}>
+                            {$I(it?.t)}
+                          </span>
+                          {"\n                "}
+                          <span style={$st("margin-inline-start:auto;font-size:12px;color:#A29B8E")}>
+                            {$I(it?.n)}
+                          </span>
+                          {"\n              "}
+                        </div>
+                        {"\n            "}
+                      </React.Fragment>
+                    ))}
+                    {"\n          "}
+                  </div>
+                  {"\n        "}
+                </div>
+                {"\n      "}
+              </React.Fragment>
+            ))}
+            {"\n      "}
+            <a href="#cta" onClick={$v?.mnavToggle} style={$st("margin-top:18px;text-align:center;font-size:15px;font-weight:500;background:#16150F;color:#FAF8F4;border-radius:13px;padding:15px;text-decoration:none")}>
+              {"Book a demo"}
+            </a>
+            {"\n    "}
+          </div>
+          {"\n  "}
+          </>
+        ) : null}
+        {"\n\n  "}
         <div style={$st(`position:fixed;top:${$A($v?.bars?.headTop)};left:0;right:0;z-index:90;padding:14px 0`)}>
           {"\n    "}
-          <div className="mo6" style={$st("max-width:1240px;margin:0 auto;padding:0 24px;position:relative")}>
+          <div style={$st("max-width:1240px;margin:0 auto;padding:0 24px;position:relative")}>
             {"\n      "}
             <div onMouseLeave={$v?.closeMenu} style={$st("padding-bottom:10px;margin-bottom:-10px")}>
               {"\n      "}
-              <div className="mo2" style={$st("background:rgba(253,251,247,.7);backdrop-filter:blur(20px) saturate(1.7);-webkit-backdrop-filter:blur(20px) saturate(1.7);border:1px solid rgba(22,21,15,.08);border-radius:20px;box-shadow:0 8px 30px rgba(22,21,15,.1);padding:0 14px 0 22px;height:62px;display:flex;align-items:center;gap:4px")}>
+              <div style={$st("background:rgba(253,251,247,.7);backdrop-filter:blur(20px) saturate(1.7);-webkit-backdrop-filter:blur(20px) saturate(1.7);border:1px solid rgba(22,21,15,.08);border-radius:20px;box-shadow:0 8px 30px rgba(22,21,15,.1);padding:0 14px 0 22px;height:62px;display:flex;align-items:center;gap:4px")}>
                 {"\n        "}
-                <div className="mo2" onClick={$v?.goHome} style={$st("display:flex;align-items:center;margin-right:20px;flex:none;cursor:pointer")}>
+                <div onClick={$v?.goHome} style={$st("display:flex;align-items:center;margin-right:20px;flex:none;cursor:pointer")}>
                   {"\n          "}
                   <img src="/assets/logo/line-horizontal-dark.png" alt="GOTCHA" style={$st("width:126px;height:auto;display:block")} />
                   {"\n        "}
                 </div>
                 {"\n        "}
-                <div className="mo2" style={$st("display:flex;align-items:center;gap:2px;min-width:0;overflow:hidden;flex:0 1 auto")}>
+                <div className="nav-desktop" style={$st("display:flex;align-items:center;gap:2px;min-width:0;overflow:hidden;flex:0 1 auto")}>
                   {"\n        "}
                   {$L($v?.navItems).map((n, $index) => (
                     <React.Fragment key={$index}>
                       {"\n          "}
-                      <div className="mo2 scp4" onClick={n?.click} onMouseEnter={n?.enter} data-nav-item="" style={$st(`display:flex;flex-direction:${$A($v?.navDir)};align-items:center;gap:6px;padding:8px 13px;border-radius:11px;cursor:pointer;flex:none;background:${$A(n?.bg)};color:${$A(n?.fg)}`)}>
+                      <div className="scp4" onClick={n?.click} onMouseEnter={n?.enter} data-nav-item="" style={$st(`display:flex;flex-direction:${$A($v?.navDir)};align-items:center;gap:6px;padding:8px 13px;border-radius:11px;cursor:pointer;flex:none;background:${$A(n?.bg)};color:${$A(n?.fg)}`)}>
                         {"\n            "}
-                        <span className="mo1" data-nav-label="" style={$st("font-size:14px;font-weight:500;white-space:nowrap")}>
+                        <span data-nav-label="" style={$st("font-size:14px;font-weight:500;white-space:nowrap")}>
                           {$I(n?.t)}
                         </span>
                         {"\n            "}
@@ -187,13 +245,17 @@ export default function Chrome({ v: $v, children }) {
                   {"\n        "}
                 </div>
                 {"\n        "}
-                <div className="mo2" style={$st(`margin-left:${$A($v?.navML)};margin-right:${$A($v?.navMR)};padding-inline-start:12px;display:flex;align-items:center;gap:10px;flex:none`)}>
+                <div style={$st(`margin-left:${$A($v?.navML)};margin-right:${$A($v?.navMR)};padding-inline-start:12px;display:flex;align-items:center;gap:10px;flex:none`)}>
                   {"\n          "}
-                  <a className="mo1" href="#cta" data-nav-secondary="" style={$st("font-size:13.5px;border-bottom:1px solid #C8C2B6;padding-bottom:1px;white-space:nowrap")}>
+                  <a className="m-hide" href="#cta" data-nav-secondary="" style={$st("font-size:13.5px;border-bottom:1px solid #C8C2B6;padding-bottom:1px;white-space:nowrap")}>
                     {"Login"}
                   </a>
                   {"\n          "}
-                  <a className="mo1 scp5" href="#cta" data-nav-secondary="" style={$st("font-size:13.5px;font-weight:500;background:#16150F;color:#FAF8F4;border:1px solid #16150F;border-radius:11px;padding:10px 16px;white-space:nowrap;transition:background .2s ease,border-color .2s ease")}>
+                  <div className="nav-burger" onClick={$v?.mnavToggle} style={$st("align-items:center;justify-content:center;width:42px;height:42px;border-radius:12px;border:1px solid rgba(22,21,15,.12);background:#FFFFFF;color:#16150F;cursor:pointer;flex:none")}>
+                    <i data-lucide={$v?.mnavIcon} width="19" height="19" stroke-width="2.2"></i>
+                  </div>
+                  {"\n          "}
+                  <a className="nav-cta scp5" href="#cta" data-nav-secondary="" style={$st("font-size:13.5px;font-weight:500;background:#16150F;color:#FAF8F4;border:1px solid #16150F;border-radius:11px;padding:10px 16px;white-space:nowrap;transition:background .2s ease,border-color .2s ease")}>
                     {"Book a demo"}
                   </a>
                   {"\n          \n        "}
@@ -204,22 +266,22 @@ export default function Chrome({ v: $v, children }) {
               {$v?.menuData ? (
                 <>
                 {"\n        "}
-                <div className="mo2" style={$st("position:absolute;left:24px;right:24px;top:70px;background:rgba(253,251,247,.93);backdrop-filter:blur(26px) saturate(1.5);-webkit-backdrop-filter:blur(26px) saturate(1.5);border:1px solid rgba(22,21,15,.08);border-radius:20px;box-shadow:0 20px 60px rgba(22,21,15,.14);overflow:hidden;display:flex")}>
+                <div style={$st("position:absolute;left:24px;right:24px;top:70px;background:rgba(253,251,247,.93);backdrop-filter:blur(26px) saturate(1.5);-webkit-backdrop-filter:blur(26px) saturate(1.5);border:1px solid rgba(22,21,15,.08);border-radius:20px;box-shadow:0 20px 60px rgba(22,21,15,.14);overflow:hidden;display:flex")}>
                   {"\n          "}
-                  <div className="mo7" style={$st("flex:1;min-width:0;padding:26px 30px;display:grid;grid-template-columns:repeat(auto-fit,minmax(186px,1fr));gap:26px 28px;align-content:start")}>
+                  <div style={$st("flex:1;min-width:0;padding:26px 30px;display:grid;grid-template-columns:repeat(auto-fit,minmax(186px,1fr));gap:26px 28px;align-content:start")}>
                     {"\n            "}
                     {$L($v?.menuData?.cols).map((col, $index) => (
                       <React.Fragment key={$index}>
                         {"\n              "}
                         <div style={$st("min-width:0")}>
                           {"\n                "}
-                          <div className="mo2" style={$st("display:flex;align-items:center;gap:10px")}>
+                          <div style={$st("display:flex;align-items:center;gap:10px")}>
                             {"\n                  "}
-                            <span className="mo2" style={$st(`width:30px;height:30px;border-radius:9px;background:${$A(col?.bg)};display:flex;align-items:center;justify-content:center;color:${$A(col?.ic)}`)}>
+                            <span style={$st(`width:30px;height:30px;border-radius:9px;background:${$A(col?.bg)};display:flex;align-items:center;justify-content:center;color:${$A(col?.ic)}`)}>
                               <i data-lucide={col?.icon} width="15" height="15" stroke-width="2"></i>
                             </span>
                             {"\n                  "}
-                            <span className="mo1" style={$st("font-size:15px;font-weight:600;white-space:nowrap")}>
+                            <span style={$st("font-size:15px;font-weight:600;white-space:nowrap")}>
                               {$I(col?.t)}
                             </span>
                             {"\n                "}
@@ -234,13 +296,13 @@ export default function Chrome({ v: $v, children }) {
                             {$L(col?.items).map((it, $index) => (
                               <React.Fragment key={$index}>
                                 {"\n                    "}
-                                <div className="mo2 scp6" onClick={it?.go} style={$st("display:flex;align-items:center;gap:10px;padding:8px 9px;margin:0 -9px;border-radius:9px;min-height:32px;cursor:pointer;overflow:hidden")}>
+                                <div className="scp6" onClick={it?.go} style={$st("display:flex;align-items:center;gap:10px;padding:8px 9px;margin:0 -9px;border-radius:9px;min-height:32px;cursor:pointer;overflow:hidden")}>
                                   {"\n                      "}
-                                  <span className="mo2" style={$st("width:17px;flex:none;color:#A29B8E;display:flex")}>
+                                  <span style={$st("width:17px;flex:none;color:#A29B8E;display:flex")}>
                                     <i data-lucide={it?.icon} width="15" height="15" stroke-width="1.9"></i>
                                   </span>
                                   {"\n                      "}
-                                  <span className="mo1" style={$st("font-size:13.5px;font-weight:500;line-height:1.3;flex:0 0 auto;white-space:nowrap")}>
+                                  <span style={$st("font-size:13.5px;font-weight:500;line-height:1.3;flex:0 0 auto;white-space:nowrap")}>
                                     {$I(it?.t)}
                                   </span>
                                   {"\n                      "}
@@ -288,7 +350,7 @@ export default function Chrome({ v: $v, children }) {
                       {"\n            "}
                     </div>
                     {"\n            "}
-                    <a className="mo2" href="#top" style={$st("font-size:13px;font-weight:500;color:#8E3418;display:flex;align-items:center;gap:7px")}>
+                    <a href="#top" style={$st("font-size:13px;font-weight:500;color:#8E3418;display:flex;align-items:center;gap:7px")}>
                       {$I($v?.menuData?.railLink)}{" "}
                       <span dir="ltr" style={$st("display:inline-block")}>
                         {$I($v?.arrowFwd)}
@@ -311,9 +373,9 @@ export default function Chrome({ v: $v, children }) {
       {children}
         <div style={$st("margin-top:104px;background:#16150F;color:#F7F5F1;border-radius:36px 36px 0 0;overflow:hidden")}>
           {"\n    "}
-          <div className="mo6" style={$st("max-width:1240px;margin:0 auto;padding:52px 24px 0")}>
+          <div style={$st("max-width:1240px;margin:0 auto;padding:52px 24px 0")}>
             {"\n      "}
-            <div className="mo2" style={$st("display:flex;gap:40px;align-items:flex-end;padding-bottom:34px;border-bottom:1px solid #262521")}>
+            <div style={$st("display:flex;gap:40px;align-items:flex-end;padding-bottom:34px;border-bottom:1px solid #262521")}>
               {"\n        "}
               <div style={$st("flex:1")}>
                 {"\n          "}
@@ -321,15 +383,15 @@ export default function Chrome({ v: $v, children }) {
                   {"Somewhere in this list"}
                 </div>
                 {"\n          "}
-                <div className="moi" style={$st("font-size:38px;font-weight:600;letter-spacing:-0.038em;line-height:1.06;margin-top:8px;max-width:560px")}>
+                <div style={$st("font-size:38px;font-weight:600;letter-spacing:-0.038em;line-height:1.06;margin-top:8px;max-width:560px")}>
                   {"is the thing you were about to do yourself."}
                 </div>
                 {"\n        "}
               </div>
               {"\n        "}
-              <div className="mo2" style={$st("display:flex;gap:10px;flex:none")}>
+              <div style={$st("display:flex;gap:10px;flex:none")}>
                 {"\n          "}
-                <a className="mo1 scpq" href="#cta" style={$st("font-size:14px;font-weight:500;background:#F7F5F1;color:#16150F;border-radius:12px;padding:13px 22px;white-space:nowrap")}>
+                <a className="scpq" href="#cta" style={$st("font-size:14px;font-weight:500;background:#F7F5F1;color:#16150F;border-radius:12px;padding:13px 22px;white-space:nowrap")}>
                   {"Start free"}
                 </a>
                 {"\n        "}
@@ -337,9 +399,9 @@ export default function Chrome({ v: $v, children }) {
               {"\n      "}
             </div>
             {"\n\n      "}
-            <div className="mo2" style={$st("display:flex;gap:56px;padding:34px 0")}>
+            <div style={$st("display:flex;gap:56px;padding:34px 0")}>
               {"\n        "}
-              <div style={$st("width:280px;flex:none;display:flex;flex-direction:column;gap:16px")}>
+              <div className="m-foot-brand" style={$st("width:280px;flex:none;display:flex;flex-direction:column;gap:16px")}>
                 {"\n          "}
                 <img onClick={$v?.goHome} src="/assets/logo/line-horizontal-light.png" alt="GOTCHA" style={$st("width:140px;height:auto;display:block;cursor:pointer")} />
                 {"\n          "}
@@ -347,7 +409,7 @@ export default function Chrome({ v: $v, children }) {
                   {"The place a business runs everything its customers ask for, across every channel, inside its own systems."}
                 </div>
                 {"\n          "}
-                <div className="mo2" style={$st("display:flex;align-items:center;gap:8px;border:1px solid #262521;border-radius:9px;padding:7px 11px;width:max-content")}>
+                <div style={$st("display:flex;align-items:center;gap:8px;border:1px solid #262521;border-radius:9px;padding:7px 11px;width:max-content")}>
                   {"\n            "}
                   <span style={$st("width:6px;height:6px;border-radius:50%;background:#A8C57A;animation:gpulse 2.6s ease-in-out infinite")}></span>
                   {"\n            "}
@@ -357,12 +419,12 @@ export default function Chrome({ v: $v, children }) {
                   {"\n          "}
                 </div>
                 {"\n          "}
-                <div className="mo2" style={$st("display:flex;gap:8px")}>
+                <div style={$st("display:flex;gap:8px")}>
                   {"\n            "}
                   {$L($v?.social).map((so, $index) => (
                     <React.Fragment key={$index}>
                       {"\n              "}
-                      <a className="mo2 scpr" href={so?.href} target="_blank" rel="noopener" title={so?.t} style={$st("width:36px;height:36px;border:1px solid #262521;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#B9B4AC;transition:background .2s ease,color .2s ease,border-color .2s ease")}>
+                      <a className="scpr" href={so?.href} target="_blank" rel="noopener" title={so?.t} style={$st("width:36px;height:36px;border:1px solid #262521;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#B9B4AC;transition:background .2s ease,color .2s ease,border-color .2s ease")}>
                         <i data-lucide={so?.icon} width="17" height="17" stroke-width="2"></i>
                       </a>
                       {"\n            "}
@@ -371,7 +433,7 @@ export default function Chrome({ v: $v, children }) {
                   {"\n          "}
                 </div>
                 {"\n          "}
-                <div className="mo2" style={$st("display:flex;gap:6px")}>
+                <div style={$st("display:flex;gap:6px")}>
                   {"\n            "}
                   <span onClick={$v?.setEn} style={$st(`font:500 11px 'IBM Plex Mono',monospace;background:${$A($v?.enBg)};color:${$A($v?.enFg)};border-radius:7px;padding:6px 11px;cursor:pointer`)}>
                     {"EN"}
@@ -385,7 +447,7 @@ export default function Chrome({ v: $v, children }) {
                 {"\n        "}
               </div>
               {"\n        "}
-              <div className="mo5" style={$st("flex:1;display:grid;grid-template-columns:repeat(5,1fr);gap:24px")}>
+              <div className="m-foot-grid" style={$st("flex:1;display:grid;grid-template-columns:repeat(5,1fr);gap:24px")}>
                 {"\n          "}
                 {$L($v?.footer).map((col, $index) => (
                   <React.Fragment key={$index}>
@@ -419,15 +481,15 @@ export default function Chrome({ v: $v, children }) {
               {"\n      "}
             </div>
             {"\n\n      "}
-            <div className="mo2" onClick={$v?.goChat} style={$st("padding:0 0 34px;display:flex;align-items:center;justify-content:flex-end;gap:18px;cursor:pointer;flex-wrap:wrap")}>
+            <div className="m-foot-talk" onClick={$v?.goChat} style={$st("padding:0 0 34px;display:flex;align-items:center;justify-content:flex-end;gap:18px;cursor:pointer;flex-wrap:wrap")}>
               {"\n        "}
-              <div className="mo1q scpt" style={$st("display:flex;align-items:center;justify-content:center;gap:14px;background:#F7F5F1;color:#16150F;border-radius:16px;padding:20px 36px;font-size:26px;font-weight:600;letter-spacing:-0.028em;transition:background .2s ease,color .2s ease,transform .2s cubic-bezier(.2,.75,.2,1)")}>
+              <div className="scpt" style={$st("display:flex;align-items:center;justify-content:center;gap:14px;background:#F7F5F1;color:#16150F;border-radius:16px;padding:20px 36px;font-size:26px;font-weight:600;letter-spacing:-0.028em;transition:background .2s ease,color .2s ease,transform .2s cubic-bezier(.2,.75,.2,1)")}>
                 {"\n          "}
                 <span>
                   {"Let's talk"}
                 </span>
                 {"\n          "}
-                <span className="mo2" style={$st("display:flex")}>
+                <span style={$st("display:flex")}>
                   <i data-lucide={$v?.arrowIcon} width="23" height="23" stroke-width="2.2"></i>
                 </span>
                 {"\n        "}
@@ -435,18 +497,18 @@ export default function Chrome({ v: $v, children }) {
               {"\n      "}
             </div>
             {"\n\n      "}
-            <div className="mo2" style={$st("padding:22px 0;border-top:1px solid #262521;display:flex;align-items:center;gap:22px;flex-wrap:wrap")}>
+            <div style={$st("padding:22px 0;border-top:1px solid #262521;display:flex;align-items:center;gap:22px;flex-wrap:wrap")}>
               {"\n        "}
               {$L($v?.badges).map((b, $index) => (
                 <React.Fragment key={$index}>
                   {"\n          "}
-                  <div className="mo2" style={$st("display:flex;align-items:center;gap:8px")}>
+                  <div style={$st("display:flex;align-items:center;gap:8px")}>
                     {"\n            "}
-                    <span className="mo2" style={$st("color:#8E8A83;display:flex")}>
+                    <span style={$st("color:#8E8A83;display:flex")}>
                       <i data-lucide={b?.icon} width="14" height="14" stroke-width="2"></i>
                     </span>
                     {"\n            "}
-                    <span className="mo1" style={$st("font:400 11.5px 'IBM Plex Mono',monospace;color:#B9B4AC;white-space:nowrap")}>
+                    <span style={$st("font:400 11.5px 'IBM Plex Mono',monospace;color:#B9B4AC;white-space:nowrap")}>
                       {$I(b?.t)}
                     </span>
                     {"\n          "}
@@ -461,7 +523,7 @@ export default function Chrome({ v: $v, children }) {
               {"\n      "}
             </div>
             {"\n\n      "}
-            <div className="mo2" style={$st("padding:20px 0 26px;border-top:1px solid #262521;display:flex;align-items:center;gap:22px;flex-wrap:wrap")}>
+            <div style={$st("padding:20px 0 26px;border-top:1px solid #262521;display:flex;align-items:center;gap:22px;flex-wrap:wrap")}>
               {"\n        "}
               <span style={$st("font-size:12px;color:#9A958D")}>
                 {"© 2026 GOTCHA"}
@@ -487,7 +549,7 @@ export default function Chrome({ v: $v, children }) {
                 {"DPA"}
               </a>
               {"\n        "}
-              <div className="mo2" style={$st(`margin-left:${$A($v?.mlAuto)};margin-right:${$A($v?.mrAuto)};display:flex;align-items:center;gap:9px`)}>
+              <div style={$st(`margin-left:${$A($v?.mlAuto)};margin-right:${$A($v?.mrAuto)};display:flex;align-items:center;gap:9px`)}>
                 {"\n          "}
                 <span style={$st("width:5px;height:5px;border-radius:50%;background:#A8C57A;animation:gpulse 2.2s ease-in-out infinite")}></span>
                 {"\n          "}

@@ -39,6 +39,109 @@
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; } }
   @media (max-width: 1149px) { .menu-rail { display: none !important; } }
   @media (max-width: 1100px) { .mock-aside { display: none !important; } }
+  .nav-burger { display: none; }
+  @media (max-width: 820px) {
+    html, body { overflow-x: hidden; }
+    .nav-desktop { display: none !important; }
+    .nav-burger { display: flex !important; }
+    .m-hide { display: none !important; }
+
+    /* page gutters */
+    [style*="max-width: 1240px"] { padding-left: 16px !important; padding-right: 16px !important; }
+
+    /* section rhythm */
+    [style*="padding: 184px 24px"], [style*="padding: 172px 48px"] { padding: 52px 16px 0 !important; }
+    [style*="padding: 112px 0px 88px"] { padding: 86px 0px 40px !important; }
+    [style*="padding: 104px 24px"], [style*="padding: 96px 24px"], [style*="padding: 88px 24px"],
+    [style*="padding: 84px 24px"], [style*="padding: 76px 24px"], [style*="padding: 64px 24px"],
+    [style*="padding: 56px 24px"], [style*="padding: 52px 24px"], [style*="padding: 44px 24px"] { padding-top: 46px !important; padding-bottom: 46px !important; }
+    [style*="padding: 98px 0px"] { padding-top: 50px !important; padding-bottom: 50px !important; }
+    [style*="padding: 74px 0px"] { padding-top: 42px !important; padding-bottom: 42px !important; }
+
+    /* roomy cards get phone padding */
+    [style*="padding: 52px;"], [style*="padding: 48px;"], [style*="padding: 44px;"],
+    [style*="padding: 40px 44px"], [style*="padding: 46px 44px"], [style*="padding: 48px 44px"],
+    [style*="padding: 48px 52px"], [style*="padding: 56px 52px"], [style*="padding: 34px 36px"],
+    [style*="padding: 36px 38px"], [style*="padding: 44px 48px"] { padding: 22px !important; }
+
+    /* type scale */
+    [style*="font-size: 132px"] { font-size: 54px !important; }
+    [style*="font-size: 104px"] { font-size: 46px !important; }
+    [style*="font-size: 76px"] { font-size: 40px !important; }
+    [style*="font-size: 66px"], [style*="font-size: 64px"] { font-size: 37px !important; }
+    [style*="font-size: 60px"], [style*="font-size: 58px"] { font-size: 35px !important; }
+    [style*="font-size: 52px"], [style*="font-size: 50px"] { font-size: 33px !important; }
+    [style*="font-size: 46px"], [style*="font-size: 44px"] { font-size: 30px !important; }
+    [style*="font-size: 42px"], [style*="font-size: 40px"] { font-size: 28px !important; }
+    [style*="font-size: 38px"] { font-size: 26px !important; }
+    [style*="font-size: 34px"] { font-size: 24px !important; }
+    [style*="font-size: 32px"], [style*="font-size: 30px"] { font-size: 22px !important; }
+    [style*="letter-spacing: -0.05em"], [style*="letter-spacing: -0.046em"], [style*="letter-spacing: -0.045em"] { letter-spacing: -0.03em !important; }
+
+    /* one column everywhere */
+    [style*="grid-template-columns"] { grid-template-columns: minmax(0, 1fr) !important; }
+    [style*="display: grid"] { gap: 12px !important; }
+
+    /* rows become stacks */
+    [style*="display: flex"][style*="gap: 52px"], [style*="display: flex"][style*="gap: 56px"],
+    [style*="display: flex"][style*="gap: 48px"], [style*="display: flex"][style*="gap: 46px"],
+    [style*="display: flex"][style*="gap: 44px"], [style*="display: flex"][style*="gap: 40px"],
+    [style*="display: flex"][style*="gap: 38px"], [style*="display: flex"][style*="gap: 36px"],
+    [style*="display: flex"][style*="gap: 34px"], [style*="display: flex"][style*="gap: 32px"],
+    [style*="display: flex"][style*="gap: 28px"], [style*="display: flex"][style*="gap: 26px"] { flex-wrap: wrap !important; gap: 20px !important; }
+    [style*="flex: 1 1 520px"], [style*="flex: 1 1 460px"], [style*="flex: 1 1 420px"],
+    [style*="flex: 1 1 380px"], [style*="flex: 1 1 360px"], [style*="flex: 1 1 340px"],
+    [style*="flex: 1 1 320px"], [style*="flex: 1 1 300px"], [style*="flex: 1 1 260px"],
+    [style*="flex: 0 0 380px"], [style*="flex: 0 0 340px"], [style*="flex: 0 0 320px"],
+    [style*="flex: 0 0 300px"], [style*="flex: 0 0 246px"], [style*="flex: 0 0 236px"] { flex: 1 1 100% !important; max-width: 100% !important; }
+    [style*="min-width: 520px"], [style*="min-width: 460px"], [style*="min-width: 420px"],
+    [style*="min-width: 380px"], [style*="min-width: 340px"], [style*="min-width: 320px"],
+    [style*="min-width: 300px"], [style*="min-width: 280px"], [style*="min-width: 260px"],
+    [style*="min-width: 240px"], [style*="min-width: 220px"] { min-width: 0 !important; }
+
+    /* nothing pins itself on a phone */
+    [style*="position: sticky"] { position: static !important; top: auto !important; width: auto !important; }
+    [style*="width: 798px"] { width: 100vw !important; }
+    [style*="width: 400px"], [style*="width: 380px"], [style*="width: 340px"], [style*="width: 330px"], [style*="width: 236px"] { width: 100% !important; max-width: 100% !important; }
+    img[style*="width: 250px"], img[style*="width: 148px"] { max-width: 60% !important; }
+
+    /* fluid headings: the clamp minimums are desktop minimums */
+    [style*="clamp(64px"] { font-size: 40px !important; }
+    [style*="clamp(46px"] { font-size: 33px !important; }
+    [style*="clamp(38px"] { font-size: 27px !important; }
+    [style*="clamp(34px"] { font-size: 25px !important; }
+    [style*="clamp(32px"], [style*="clamp(30px"] { font-size: 24px !important; }
+    h1, h2, h3 { overflow-wrap: break-word; }
+    /* clipped is worse than wrapped */
+    [style*="white-space: nowrap"] { white-space: normal !important; }
+    /* gapless two-up rows: reset the fixed basis and let the row stack */
+    [style*="width: 400px"], [style*="width: 380px"] { flex: 1 1 100% !important; width: 100% !important; }
+    [style*="display: flex"]:has(> [style*="width: 400px"]),
+    [style*="display: flex"]:has(> [style*="flex: 0 0 246px"]) { flex-wrap: wrap !important; }
+    /* JS-measured boxes must not cage text once the column narrows */
+    [style*="width: 338px"] { width: auto !important; height: auto !important; }
+    /* zero-basis flex children share one row with fixed siblings — give them their own row */
+    [style*="display: flex"]:not([style*="flex-direction: column"]):has(> [style*="flex: 1 1 0"]) { flex-wrap: wrap !important; }
+    [style*="flex: 1 1 0"] { flex-basis: 100% !important; }
+    /* header on a phone: logo, one-line CTA, burger */
+    [style*="height: 62px"] { padding: 0 10px 0 14px !important; gap: 8px !important; }
+    [style*="height: 62px"] > [style*="margin-right: 20px"] { margin-right: 0 !important; margin-inline-end: 0 !important; }
+    [style*="height: 62px"] img { width: 104px !important; }
+    .nav-cta { white-space: nowrap !important; font-size: 13px !important; padding: 9px 13px !important; }
+
+    /* footer: brand full width, links two-up, the big CTA edge to edge */
+    .m-foot-brand { width: 100% !important; }
+    .m-foot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 26px 14px !important; }
+    .m-foot-talk { justify-content: stretch !important; padding-bottom: 26px !important; }
+    .m-foot-talk > div { width: 100% !important; padding: 18px 22px !important; font-size: 21px !important; }
+    /* the offer panel becomes a bottom sheet instead of a side drawer */
+    .offer-drawer { top: auto !important; bottom: 0 !important; left: 0 !important; right: 0 !important; transform: none !important; width: 100% !important; max-height: 86vh !important; overflow-y: auto !important; }
+    .offer-drawer > div { flex-wrap: wrap !important; border-radius: 16px 16px 0 0 !important; animation: none !important; }
+    .offer-drawer > div > [style*="flex: 0 0 38px"] { flex: 1 1 100% !important; flex-direction: row !important; justify-content: flex-start !important; gap: 10px !important; padding: 10px 16px !important; }
+    .offer-drawer [style*="writing-mode: vertical-rl"] { writing-mode: horizontal-tb !important; }
+    .offer-drawer > div { position: relative !important; padding-top: 46px !important; }
+    .offer-x { position: absolute !important; top: 10px !important; left: 10px !important; z-index: 3 !important; width: 34px !important; height: 34px !important; padding: 0 !important; align-items: center !important; justify-content: center !important; background: #FFFFFF !important; border: 1px solid rgba(22,21,15,.12) !important; }
+  }
   [dir="rtl"] { font-family: 'Heebo', Archivo, sans-serif; }
   [dir="rtl"] [style*="Instrument Serif"] { font-family: 'Heebo', sans-serif !important; font-style: normal !important; font-weight: 500 !important; letter-spacing: -0.02em !important; }
   [dir="rtl"] h1, [dir="rtl"] h2, [dir="rtl"] h3 { letter-spacing: -0.01em !important; }
@@ -53,7 +156,7 @@
   [dir="rtl"] img, [dir="rtl"] video { direction: ltr; }
 </style>
 <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
-<script src="he.js?v=11"></script>
+<script src="he.js?v=16"></script>
 </helmet>
 
 <div dir="{{ dir }}" lang="{{ lang }}" style="min-height:100vh;background:#FAF8F4;position:relative">
@@ -61,20 +164,20 @@
   <div style="height:{{ bars.headTop }};flex:none"></div>
 
   <div style="display:{{ bars.offerBar }};position:fixed;top:0;left:0;right:0;z-index:92;background:#8E3418;color:#FFFFFF;height:38px;align-items:center;justify-content:center;gap:16px;padding:0 46px 0 24px;flex-wrap:nowrap;overflow:hidden">
-    <span style="font:500 9.5px 'IBM Plex Mono',monospace;letter-spacing:.18em;text-transform:uppercase;background:rgba(22,21,15,.24);border-radius:5px;padding:4px 8px;white-space:nowrap">{{ offer.badge }}</span>
+    <span class="m-hide" style="font:500 9.5px 'IBM Plex Mono',monospace;letter-spacing:.18em;text-transform:uppercase;background:rgba(22,21,15,.24);border-radius:5px;padding:4px 8px;white-space:nowrap">{{ offer.badge }}</span>
     <span style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ offer.barText }}</span>
     <div onClick="{{ goOffer }}" style="font-size:12.5px;font-weight:600;color:#FFFFFF;background:rgba(22,21,15,.3);border:1px solid rgba(255,255,255,.42);border-radius:8px;padding:5px 12px;white-space:nowrap;flex:none;cursor:pointer;transition:background .2s ease" style-hover="background:rgba(22,21,15,.5);color:#FFFFFF">{{ offer.seeMore }}</div>
     
     <span onClick="{{ offer.hideBar }}" title="Close" style="position:absolute;right:14px;color:#FFFFFF;opacity:.75;display:flex;cursor:pointer;padding:4px;transition:opacity .2s ease" style-hover="opacity:1"><i data-lucide="x" width="14" height="14" stroke-width="2.4"></i></span>
   </div>
 
-  <div onClick="{{ offer.toggle }}" style="display:{{ offer.tabDisplay }};position:fixed;top:50%;right:0;transform:translateY(-50%);z-index:89;width:38px;box-sizing:border-box;background:#8E3418;color:#FFFFFF;border-radius:12px 0 0 12px;padding:16px 0;cursor:pointer;box-shadow:-6px 0 22px rgba(22,21,15,.22);flex-direction:column;align-items:center;gap:9px">
+  <div onClick="{{ offer.toggle }}" class="offer-tab" style="display:{{ offer.tabDisplay }};position:fixed;top:50%;right:0;transform:translateY(-50%);z-index:89;width:38px;box-sizing:border-box;background:#8E3418;color:#FFFFFF;border-radius:12px 0 0 12px;padding:16px 0;cursor:pointer;box-shadow:-6px 0 22px rgba(22,21,15,.22);flex-direction:column;align-items:center;gap:9px">
     <span style="display:flex"><i data-lucide="gift" width="16" height="16" stroke-width="2.2"></i></span>
     <span style="font:600 11px 'IBM Plex Mono',monospace;letter-spacing:.18em;writing-mode:vertical-rl;text-orientation:mixed;white-space:nowrap">{{ offer.tabLabel }}</span>
   </div>
 
   <sc-if value="{{ offerShown }}" hint-placeholder-val="{{ false }}">
-    <div style="position:fixed;top:50%;right:0;transform:translateY(-50%);z-index:95;width:798px;max-width:100vw">
+    <div class="offer-drawer" style="position:fixed;top:50%;right:0;transform:translateY(-50%);z-index:95;width:798px;max-width:100vw">
       <div style="display:flex;align-items:stretch;background:#FFFFFF;border:1px solid #E4DFD4;border-inline-end:0;border-radius:12px 0 0 12px;box-shadow:-16px 22px 60px rgba(22,21,15,.26);overflow:hidden;animation:gpull .5s cubic-bezier(.22,.85,.2,1) both">
         <div onClick="{{ offer.close }}" style="flex:0 0 38px;background:#8E3418;color:#FFFFFF;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;padding:16px 0">
           <span style="display:flex"><i data-lucide="gift" width="16" height="16" stroke-width="2.2"></i></span>
@@ -102,7 +205,7 @@
                 </div>
               </sc-for>
             </div>
-            <span onClick="{{ offer.close }}" title="Close" style="color:#8E887C;background:#F5F2EC;border-radius:8px;padding:5px;display:flex;cursor:pointer;flex:none;transition:color .2s ease,background .2s ease" style-hover="color:#16150F;background:#EFEAE1"><i data-lucide="x" width="15" height="15" stroke-width="2.4"></i></span>
+            <span onClick="{{ offer.close }}" title="Close" class="offer-x" style="color:#8E887C;background:#F5F2EC;border-radius:8px;padding:5px;display:flex;cursor:pointer;flex:none;transition:color .2s ease,background .2s ease" style-hover="color:#16150F;background:#EFEAE1"><i data-lucide="x" width="15" height="15" stroke-width="2.4"></i></span>
           </div>
           <div style="display:flex;align-items:center;gap:14px;margin-top:16px;padding-top:14px;border-top:1px solid #F0EDE7;flex-wrap:wrap">
             <div onClick="{{ goOffer }}" style="font-size:14px;font-weight:500;background:#16150F;color:#FAF8F4;border-radius:11px;padding:12px 22px;white-space:nowrap;cursor:pointer;transition:background .2s ease" style-hover="background:#8E3418;color:#FAF8F4">{{ offer.seeMore }}</div>
@@ -114,6 +217,27 @@
   </sc-if>
 
   
+  <sc-if value="{{ mnavOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;z-index:94;background:#FAF8F4;overflow-y:auto;padding:88px 18px 40px;display:flex;flex-direction:column;gap:8px">
+      <div onClick="{{ mnavToggle }}" style="position:fixed;top:22px;right:18px;width:42px;height:42px;border-radius:12px;border:1px solid rgba(22,21,15,.12);background:#FFFFFF;color:#16150F;display:flex;align-items:center;justify-content:center;cursor:pointer"><i data-lucide="x" width="19" height="19" stroke-width="2.2"></i></div>
+      <sc-for list="{{ mnav }}" as="g" hint-placeholder-count="4">
+        <div style="border-top:1px solid #E4DFD4;padding:16px 0 8px">
+          <div onClick="{{ g.go }}" style="font-size:17px;font-weight:600;letter-spacing:-0.018em;color:#16150F;padding:4px 0;cursor:pointer">{{ g.t }}</div>
+          <div style="display:flex;flex-direction:column;gap:2px;margin-top:8px">
+            <sc-for list="{{ g.items }}" as="it" hint-placeholder-count="0">
+              <div onClick="{{ it.go }}" style="display:flex;align-items:center;gap:12px;padding:12px 10px;margin:0 -10px;border-radius:11px;min-height:44px;cursor:pointer" style-hover="background:#F5F2EC">
+                <span style="width:18px;flex:none;color:#A29B8E;display:flex"><i data-lucide="{{ it.icon }}" width="16" height="16" stroke-width="1.9"></i></span>
+                <span style="font-size:15px;font-weight:500;color:#16150F">{{ it.t }}</span>
+                <span style="margin-inline-start:auto;font-size:12px;color:#A29B8E">{{ it.n }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-for>
+      <a href="#cta" onClick="{{ mnavToggle }}" style="margin-top:18px;text-align:center;font-size:15px;font-weight:500;background:#16150F;color:#FAF8F4;border-radius:13px;padding:15px;text-decoration:none">Book a demo</a>
+    </div>
+  </sc-if>
+
   <div style="position:fixed;top:{{ bars.headTop }};left:0;right:0;z-index:90;padding:14px 0">
     <div style="max-width:1240px;margin:0 auto;padding:0 24px;position:relative">
       <div onMouseLeave="{{ closeMenu }}" style="padding-bottom:10px;margin-bottom:-10px">
@@ -121,7 +245,7 @@
         <div onClick="{{ goHome }}" style="display:flex;align-items:center;margin-right:20px;flex:none;cursor:pointer">
           <img src="assets/logo/line-horizontal-dark.png" alt="GOTCHA" style="width:126px;height:auto;display:block">
         </div>
-        <div style="display:flex;align-items:center;gap:2px;min-width:0;overflow:hidden;flex:0 1 auto">
+        <div class="nav-desktop" style="display:flex;align-items:center;gap:2px;min-width:0;overflow:hidden;flex:0 1 auto">
         <sc-for list="{{ navItems }}" as="n" hint-placeholder-count="5">
           <div onClick="{{ n.click }}" onMouseEnter="{{ n.enter }}" data-nav-item="" style="display:flex;flex-direction:{{ navDir }};align-items:center;gap:6px;padding:8px 13px;border-radius:11px;cursor:pointer;flex:none;background:{{ n.bg }};color:{{ n.fg }}" style-hover="background:#F5F2EC">
             <span data-nav-label="" style="font-size:14px;font-weight:500;white-space:nowrap">{{ n.t }}</span>
@@ -130,8 +254,9 @@
         </sc-for>
         </div>
         <div style="margin-left:{{ navML }};margin-right:{{ navMR }};padding-inline-start:12px;display:flex;align-items:center;gap:10px;flex:none">
-          <a href="#cta" data-nav-secondary="" style="font-size:13.5px;border-bottom:1px solid #C8C2B6;padding-bottom:1px;white-space:nowrap">Login</a>
-          <a href="#cta" data-nav-secondary="" style="font-size:13.5px;font-weight:500;background:#16150F;color:#FAF8F4;border:1px solid #16150F;border-radius:11px;padding:10px 16px;white-space:nowrap;transition:background .2s ease,border-color .2s ease" style-hover="background:#2A2823;border-color:#2A2823;color:#FAF8F4">Book a demo</a>
+          <a href="#cta" data-nav-secondary="" class="m-hide" style="font-size:13.5px;border-bottom:1px solid #C8C2B6;padding-bottom:1px;white-space:nowrap">Login</a>
+          <div onClick="{{ mnavToggle }}" class="nav-burger" style="align-items:center;justify-content:center;width:42px;height:42px;border-radius:12px;border:1px solid rgba(22,21,15,.12);background:#FFFFFF;color:#16150F;cursor:pointer;flex:none"><i data-lucide="{{ mnavIcon }}" width="19" height="19" stroke-width="2.2"></i></div>
+          <a href="#cta" data-nav-secondary="" class="nav-cta" style="font-size:13.5px;font-weight:500;background:#16150F;color:#FAF8F4;border:1px solid #16150F;border-radius:11px;padding:10px 16px;white-space:nowrap;transition:background .2s ease,border-color .2s ease" style-hover="background:#2A2823;border-color:#2A2823;color:#FAF8F4">Book a demo</a>
           
         </div>
       </div>
@@ -2854,7 +2979,7 @@
       </div>
 
       <div style="display:flex;gap:56px;padding:34px 0">
-        <div style="width:280px;flex:none;display:flex;flex-direction:column;gap:16px">
+        <div class="m-foot-brand" style="width:280px;flex:none;display:flex;flex-direction:column;gap:16px">
           <img onClick="{{ goHome }}" src="assets/logo/line-horizontal-light.png" alt="GOTCHA" style="width:140px;height:auto;display:block;cursor:pointer">
           <div style="font-size:13px;color:#8E8A83;line-height:1.6">The place a business runs everything its customers ask for, across every channel, inside its own systems.</div>
           <div style="display:flex;align-items:center;gap:8px;border:1px solid #262521;border-radius:9px;padding:7px 11px;width:max-content">
@@ -2871,7 +2996,7 @@
             <span onClick="{{ setHe }}" style="font:500 11px 'IBM Plex Mono',monospace;background:{{ heBg }};color:{{ heFg }};border-radius:7px;padding:6px 11px;cursor:pointer">עברית</span>
           </div>
         </div>
-        <div style="flex:1;display:grid;grid-template-columns:repeat(5,1fr);gap:24px">
+        <div class="m-foot-grid" style="flex:1;display:grid;grid-template-columns:repeat(5,1fr);gap:24px">
           <sc-for list="{{ footer }}" as="col" hint-placeholder-count="5">
             <div style="min-width:0">
               <div style="font:500 9px 'IBM Plex Mono',monospace;letter-spacing:.2em;text-transform:uppercase;color:#9A958D">{{ col.t }}</div>
@@ -2885,7 +3010,7 @@
         </div>
       </div>
 
-      <div onClick="{{ goChat }}" style="padding:0 0 34px;display:flex;align-items:center;justify-content:flex-end;gap:18px;cursor:pointer;flex-wrap:wrap">
+      <div onClick="{{ goChat }}" class="m-foot-talk" style="padding:0 0 34px;display:flex;align-items:center;justify-content:flex-end;gap:18px;cursor:pointer;flex-wrap:wrap">
         <div style="display:flex;align-items:center;justify-content:center;gap:14px;background:#F7F5F1;color:#16150F;border-radius:16px;padding:20px 36px;font-size:26px;font-weight:600;letter-spacing:-0.028em;transition:background .2s ease,color .2s ease,transform .2s cubic-bezier(.2,.75,.2,1)" style-hover="background:#C4552F;color:#FFFFFF;transform:translateY(-2px)">
           <span>Let's talk</span>
           <span style="display:flex"><i data-lucide="{{ arrowIcon }}" width="23" height="23" stroke-width="2.2"></i></span>
@@ -2921,7 +3046,7 @@
 <script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:900}}">
 const HE_DICT = (window.GOTCHA_HE || {});
 class Component extends DCLogic {
-  state = { menu: null, step: 0, uc: 0, faq: 0, shot: 0, page: 'home', vol: 2, yearly: false, pfaq: 0, biz: 'retail', trade: 0, post: null, lang: 'en', trace: 0, dirCat: 'All integrations', dirQ: '', pcp: 0, pai: 0, ccp: 0, cai: 0, offerOpen: false, barOffer: true, barAnn: true, widget: { q: null, typing: false, acted: false } };
+  state = { mnav: false, menu: null, step: 0, uc: 0, faq: 0, shot: 0, page: 'home', vol: 2, yearly: false, pfaq: 0, biz: 'retail', trade: 0, post: null, lang: 'en', trace: 0, dirCat: 'All integrations', dirQ: '', pcp: 0, pai: 0, ccp: 0, cai: 0, offerOpen: false, barOffer: true, barAnn: true, widget: { q: null, typing: false, acted: false } };
 
   // The timeline spine is a grey track that fills orange as it passes the reading line,
   // so the colour arrives with the scroll rather than all at once on reveal.
@@ -3666,7 +3791,8 @@ class Component extends DCLogic {
               { t: 'Omnichannel', n: '6 channels', icon: 'inbox', page: 'feat-omnichannel' },
               { t: 'Customers', n: 'one record', icon: 'contact', page: 'feat-customers' },
               { t: 'Social engagement', n: 'comments   & DMד\n', icon: 'at-sign', page: 'feat-social' },
-              { t: 'Store widget', n: 'sells', icon: 'shopping-cart', page: 'feat-widget' }
+              { t: 'Store widget', n: 'sells', icon: 'shopping-cart', page: 'feat-widget' },
+              { t: 'WhatsApp broadcast', n: 'campaigns that reply', icon: 'megaphone', page: 'feat-broadcast' }
             ] },
           { t: 'Beside your team', d: 'It does the reading, you decide', icon: 'square-pen', bg: '#EAE4FB', ic: '#4B3E8E',
             items: [
@@ -3795,6 +3921,25 @@ class Component extends DCLogic {
           if (page) { this.setState({ menu: null, page }); window.scrollTo(0, 0); return; }
           this.setState(s => ({ menu: s.menu === key ? null : key }));
         }
+      };
+    });
+
+    // the phone menu: the same NAV spine, with every mega-menu link flattened under its section
+    const mnav = NAV.map(([t, key, page]) => {
+      const m = key && MENUS[key];
+      return {
+        t,
+        go: () => {
+          if (page) { this.setState({ mnav: false, menu: null, page }); window.scrollTo(0, 0); }
+        },
+        items: m
+          ? m.cols.reduce((acc, c) => acc.concat(c.items.map(it => ({
+              t: it.t, n: it.n, icon: it.icon,
+              go: () => {
+                if (it.page) { this.setState({ mnav: false, menu: null, page: it.page, post: null }); window.scrollTo(0, 0); }
+              }
+            }))), [])
+          : []
       };
     });
 
@@ -5085,6 +5230,23 @@ class Component extends DCLogic {
         ctaBody: 'Connect Instagram, Facebook and TikTok and it covers comments, story replies and mentions from the first afternoon, with public replies held for your approval until you are ready.'
       },
 
+      'feat-broadcast': {
+        name: 'WhatsApp broadcast', kicker: 'Product · WhatsApp broadcast', icon: 'megaphone', bg: '#EDF4E7', ic: '#2E7D5B',
+        h1a: 'Send to thousands.', h1b: 'Answer every reply that comes back.',
+        sub: 'Restocks, launches, price lists and reminders sent from your own WhatsApp number on the official Business Platform. The difference is what happens next: every reply lands in the inbox, and your AI employees answer, check stock and take the order without you opening the phone.',
+        shot: 'assets/shots/outreach.png',
+        shotTitle: 'Every campaign, and who is answering it.', shotMeta: 'outreach · 2 in flight',
+        shotCaption: 'One screen for what is sending, what is waiting for your approval and what finished, with the audience, the exact message and the reply rules on the right.',
+        callouts: [
+          { n: '01', t: 'Sending, scheduled, waiting on you or finished, on one list.' },
+          { n: '02', t: 'The audience built from your own orders and past conversations.' },
+          { n: '03', t: 'The exact message you are sending, before it goes out.' },
+          { n: '04', t: 'Who answers the replies, and when it hands over to a person.' }
+        ],
+        ctaTitle: 'Send the campaign. Let it answer the replies.',
+        ctaBody: 'Connect your WhatsApp number and your store, and the first campaign can go out this week: your segment, your approved template, and your AI employees handling everything that comes back.'
+      },
+
       'feat-widget': {
         name: 'Store widget', kicker: 'Product · Store widget', icon: 'shopping-cart', bg: '#FBEEE8', ic: '#C4552F',
         h1a: 'The widget on your store', h1b: 'that actually sells',
@@ -5625,6 +5787,10 @@ class Component extends DCLogic {
 
     return {
       navItems,
+      mnav,
+      mnavOpen: !!st.mnav,
+      mnavIcon: st.mnav ? 'x' : 'menu',
+      mnavToggle: () => this.setState(s => ({ mnav: !s.mnav, menu: null })),
       menuData: st.menu ? (() => {
         const m = MENUS[st.menu];
         return Object.assign({}, m, {
@@ -5797,7 +5963,7 @@ class Component extends DCLogic {
           dm,
           marquee: b.marquee ? b.marquee.concat(b.marquee) : null,   // doubled so the -50% loop is seamless
           shotImg: b.shot ? React.createElement('img', { src: b.shot, alt: b.shotTitle || '', style: { display: 'block', width: '100%' } }) : null,
-          shotShown: (b.shot && ['feat-omnichannel', 'feat-customers', 'feat-studio', 'feat-callpilot', 'feat-analytics', 'feat-approvals'].indexOf(key) >= 0) ? true : null,
+          shotShown: (b.shot && ['feat-omnichannel', 'feat-customers', 'feat-studio', 'feat-callpilot', 'feat-analytics', 'feat-approvals', 'feat-broadcast'].indexOf(key) >= 0) ? true : null,
           showCaps: !b.marquee,
           tw: key === 'feat-widget' ? this.tryWidget() : null,
           saveDisplay: b.save ? 'block' : 'none',
@@ -5822,7 +5988,7 @@ class Component extends DCLogic {
             sys: b.save.sys.map(s => Object.assign({}, s, { noLogo: !s.logo }))
           }) : null,
           hasFlow: b.flow ? true : null,   // null unmounts the branch; false leaves the shell
-          flowKicker: b.flow ? 'One comment, end to end' : '', flowDisplay: b.flow ? 'block' : 'none',
+          flowKicker: b.flow ? (b.flowKicker || 'One comment, end to end') : '', flowDisplay: b.flow ? 'block' : 'none',
           flowTitle: b.flowTitle || '', flowNote: b.flowNote || '',
           flow: b.flow ? b.flow.map((s, i) => {
             const last = i === b.flow.length - 1;
@@ -5846,7 +6012,7 @@ class Component extends DCLogic {
                 heart: x.side === 'in' ? '#C7C7C7' : '#ED4956',
                 align: x.side === 'in' ? 'flex-start' : 'flex-end',
                 radius: x.side === 'in' ? '18px 18px 18px 5px' : '18px 18px 5px 18px',
-                bg: x.side === 'in' ? '#EFEFEF' : (x.side === 'agent' ? '#C4552F' : '#0095F6'),
+                bg: x.side === 'in' ? '#EFEFEF' : (x.side === 'agent' ? '#C4552F' : (/whatsapp/i.test(s.logo || '') ? '#1E8E5A' : '#0095F6')),
                 fg: x.side === 'in' ? '#262626' : '#FFFFFF'
               }))
             });
@@ -6600,7 +6766,7 @@ class Component extends DCLogic {
           'Omnichannel': 'feat-omnichannel', 'Social engagement': 'feat-social', 'Your new employee': 'feat-employee',
           'Copilot': 'feat-copilot', 'Call pilot (beta)': 'feat-callpilot', 'Knowledge base': 'feat-knowledge',
           'Approvals': 'feat-approvals', 'Customers': 'feat-customers', 'AI Studio': 'feat-studio',
-          'Analytics': 'feat-analytics', 'Store widget': 'feat-widget', 'Channels': 'feat-channels',
+          'Analytics': 'feat-analytics', 'Store widget': 'feat-widget', 'Channels': 'feat-channels', 'WhatsApp broadcast': 'feat-broadcast',
           'Cosmetics & skincare': 'sol-cosmetics', 'Fashion & clothing': 'sol-fashion', 'Home & furniture': 'sol-home',
           'Clinics & aesthetics': 'sol-clinics', 'Restaurants & local': 'sol-food', 'Electronics': 'sol-electronics',
           'Jewellery & gifting': 'sol-jewellery', 'Ecommerce': 'sol-ecommerce', 'Lead handling': 'sol-leads',
@@ -6612,7 +6778,7 @@ class Component extends DCLogic {
           'About us': 'co-about', 'Blog': 'co-blog', 'Help center': 'co-help', 'Careers': 'co-careers'
         };
         const COLS = [
-          { t: 'Product', items: ['Omnichannel', 'Social engagement', 'Your new employee', 'Copilot', 'Call pilot (beta)', 'Knowledge base', 'Approvals', 'Customers', 'AI Studio', 'Analytics', 'Store widget', 'Channels'] },
+          { t: 'Product', items: ['Omnichannel', 'Social engagement', 'WhatsApp broadcast', 'Your new employee', 'Copilot', 'Call pilot (beta)', 'Knowledge base', 'Approvals', 'Customers', 'AI Studio', 'Analytics', 'Store widget', 'Channels'] },
           { t: 'Solutions', items: ['Cosmetics & skincare', 'Fashion & clothing', 'Home & furniture', 'Clinics & aesthetics', 'Restaurants & local', 'Electronics', 'Jewellery & gifting', 'Ecommerce', 'Lead handling', 'Running it alone', 'On the front line'] },
           { t: 'Integrations', items: ['Shopify', 'WooCommerce', 'Zoho', 'Monday', 'Browse all'] },
           { t: 'Why us', items: ['Why GOTCHA', 'It acts, not just answers', 'Your limits, per action', 'Priced per conversation', 'Security'] },
@@ -6622,7 +6788,8 @@ class Component extends DCLogic {
       })(),
       social: [
         { t: 'Instagram', icon: 'instagram', href: 'https://www.instagram.com/gotcha.co.il/' },
-        { t: 'Facebook', icon: 'facebook', href: 'https://www.facebook.com/gotchainbox' }
+        { t: 'Facebook', icon: 'facebook', href: 'https://www.facebook.com/gotchainbox' },
+        { t: 'YouTube', icon: 'youtube', href: 'https://www.youtube.com/channel/UCBaxp7m0y5tIjdwkNezrdgA' }
       ]
     };
   }

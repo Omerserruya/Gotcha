@@ -71,7 +71,9 @@ export default function CookieNotice() {
         position: 'fixed',
         insetInlineStart: 20,
         bottom: 20,
-        zIndex: 95,
+        // Above the launch bar (92) and the header (90), below the design's
+        // mobile menu (94) - an open menu should cover this, not fight it.
+        zIndex: 93,
         width: 'min(430px, calc(100vw - 40px))',
         background: C.card,
         border: `1px solid ${C.line}`,

@@ -52,11 +52,11 @@ article a {
 /*
  * Phone layout for the hand-written sections.
  *
- * The landing's mobile rules are derived from the design's inline styles by
- * tools/mobile-rules.mjs; these components are written here, so their phone
- * behaviour is written here too. Same breakpoint as the generated sheet.
+ * The landing's phone layout is the design's own, shipped in its <helmet>
+ * block at 820px. These components are written here rather than drawn there,
+ * so their phone behaviour is written here too, at the same breakpoint.
  */
-@media (max-width: 1023px) {
+@media (max-width: 820px) {
   /* A document and its contents list stop being side by side. The list moves
      above the text and stops sticking - on a phone it is a table of contents,
      not a rail that follows you down a 40-page contract. */

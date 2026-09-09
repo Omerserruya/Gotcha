@@ -11,7 +11,7 @@ import { getLucide } from '@/lib/lucide';
 import UrlSync from '@/components/UrlSync';
 
 class LandingLogic extends React.Component {
-  state = { menu: null, step: 0, uc: 0, faq: 0, shot: 0, page: (this.props && this.props.initialPage) || 'home', vol: 2, yearly: false, pfaq: 0, biz: 'retail', trade: 0, post: null, lang: (this.props && this.props.initialLang) || 'en', trace: 0, dirCat: 'All integrations', dirQ: '', pcp: 0, pai: 0, ccp: 0, cai: 0, offerOpen: false, barOffer: true, barAnn: true, widget: { q: null, typing: false, acted: false } };
+  state = { mnav: false, menu: null, step: 0, uc: 0, faq: 0, shot: 0, page: (this.props && this.props.initialPage) || 'home', vol: 2, yearly: false, pfaq: 0, biz: 'retail', trade: 0, post: null, lang: (this.props && this.props.initialLang) || 'en', trace: 0, dirCat: 'All integrations', dirQ: '', pcp: 0, pai: 0, ccp: 0, cai: 0, offerOpen: false, barOffer: true, barAnn: true, widget: { q: null, typing: false, acted: false } };
 
   // The timeline spine is a grey track that fills orange as it passes the reading line,
   // so the colour arrives with the scroll rather than all at once on reveal.
@@ -756,7 +756,8 @@ class LandingLogic extends React.Component {
               { t: 'Omnichannel', n: '6 channels', icon: 'inbox', page: 'feat-omnichannel' },
               { t: 'Customers', n: 'one record', icon: 'contact', page: 'feat-customers' },
               { t: 'Social engagement', n: 'comments   & DMד\n', icon: 'at-sign', page: 'feat-social' },
-              { t: 'Store widget', n: 'sells', icon: 'shopping-cart', page: 'feat-widget' }
+              { t: 'Store widget', n: 'sells', icon: 'shopping-cart', page: 'feat-widget' },
+              { t: 'WhatsApp broadcast', n: 'campaigns that reply', icon: 'megaphone', page: 'feat-broadcast' }
             ] },
           { t: 'Beside your team', d: 'It does the reading, you decide', icon: 'square-pen', bg: '#EAE4FB', ic: '#4B3E8E',
             items: [
@@ -885,6 +886,25 @@ class LandingLogic extends React.Component {
           if (page) { this.setState({ menu: null, page }); window.scrollTo(0, 0); return; }
           this.setState(s => ({ menu: s.menu === key ? null : key }));
         }
+      };
+    });
+
+    // the phone menu: the same NAV spine, with every mega-menu link flattened under its section
+    const mnav = NAV.map(([t, key, page]) => {
+      const m = key && MENUS[key];
+      return {
+        t,
+        go: () => {
+          if (page) { this.setState({ mnav: false, menu: null, page }); window.scrollTo(0, 0); }
+        },
+        items: m
+          ? m.cols.reduce((acc, c) => acc.concat(c.items.map(it => ({
+              t: it.t, n: it.n, icon: it.icon,
+              go: () => {
+                if (it.page) { this.setState({ mnav: false, menu: null, page: it.page, post: null }); window.scrollTo(0, 0); }
+              }
+            }))), [])
+          : []
       };
     });
 
@@ -2175,6 +2195,23 @@ class LandingLogic extends React.Component {
         ctaBody: 'Connect Instagram, Facebook and TikTok and it covers comments, story replies and mentions from the first afternoon, with public replies held for your approval until you are ready.'
       },
 
+      'feat-broadcast': {
+        name: 'WhatsApp broadcast', kicker: 'Product · WhatsApp broadcast', icon: 'megaphone', bg: '#EDF4E7', ic: '#2E7D5B',
+        h1a: 'Send to thousands.', h1b: 'Answer every reply that comes back.',
+        sub: 'Restocks, launches, price lists and reminders sent from your own WhatsApp number on the official Business Platform. The difference is what happens next: every reply lands in the inbox, and your AI employees answer, check stock and take the order without you opening the phone.',
+        shot: '/assets/shots/outreach.png',
+        shotTitle: 'Every campaign, and who is answering it.', shotMeta: 'outreach · 2 in flight',
+        shotCaption: 'One screen for what is sending, what is waiting for your approval and what finished, with the audience, the exact message and the reply rules on the right.',
+        callouts: [
+          { n: '01', t: 'Sending, scheduled, waiting on you or finished, on one list.' },
+          { n: '02', t: 'The audience built from your own orders and past conversations.' },
+          { n: '03', t: 'The exact message you are sending, before it goes out.' },
+          { n: '04', t: 'Who answers the replies, and when it hands over to a person.' }
+        ],
+        ctaTitle: 'Send the campaign. Let it answer the replies.',
+        ctaBody: 'Connect your WhatsApp number and your store, and the first campaign can go out this week: your segment, your approved template, and your AI employees handling everything that comes back.'
+      },
+
       'feat-widget': {
         name: 'Store widget', kicker: 'Product · Store widget', icon: 'shopping-cart', bg: '#FBEEE8', ic: '#C4552F',
         h1a: 'The widget on your store', h1b: 'that actually sells',
@@ -2715,6 +2752,10 @@ class LandingLogic extends React.Component {
 
     return {
       navItems,
+      mnav,
+      mnavOpen: !!st.mnav,
+      mnavIcon: st.mnav ? 'x' : 'menu',
+      mnavToggle: () => this.setState(s => ({ mnav: !s.mnav, menu: null })),
       menuData: st.menu ? (() => {
         const m = MENUS[st.menu];
         return Object.assign({}, m, {
@@ -2887,7 +2928,7 @@ class LandingLogic extends React.Component {
           dm,
           marquee: b.marquee ? b.marquee.concat(b.marquee) : null,   // doubled so the -50% loop is seamless
           shotImg: b.shot ? React.createElement('img', { src: b.shot, alt: b.shotTitle || '', style: { display: 'block', width: '100%' } }) : null,
-          shotShown: (b.shot && ['feat-omnichannel', 'feat-customers', 'feat-studio', 'feat-callpilot', 'feat-analytics', 'feat-approvals'].indexOf(key) >= 0) ? true : null,
+          shotShown: (b.shot && ['feat-omnichannel', 'feat-customers', 'feat-studio', 'feat-callpilot', 'feat-analytics', 'feat-approvals', 'feat-broadcast'].indexOf(key) >= 0) ? true : null,
           showCaps: !b.marquee,
           tw: key === 'feat-widget' ? this.tryWidget() : null,
           saveDisplay: b.save ? 'block' : 'none',
@@ -2912,7 +2953,7 @@ class LandingLogic extends React.Component {
             sys: b.save.sys.map(s => Object.assign({}, s, { noLogo: !s.logo }))
           }) : null,
           hasFlow: b.flow ? true : null,   // null unmounts the branch; false leaves the shell
-          flowKicker: b.flow ? 'One comment, end to end' : '', flowDisplay: b.flow ? 'block' : 'none',
+          flowKicker: b.flow ? (b.flowKicker || 'One comment, end to end') : '', flowDisplay: b.flow ? 'block' : 'none',
           flowTitle: b.flowTitle || '', flowNote: b.flowNote || '',
           flow: b.flow ? b.flow.map((s, i) => {
             const last = i === b.flow.length - 1;
@@ -2936,7 +2977,7 @@ class LandingLogic extends React.Component {
                 heart: x.side === 'in' ? '#C7C7C7' : '#ED4956',
                 align: x.side === 'in' ? 'flex-start' : 'flex-end',
                 radius: x.side === 'in' ? '18px 18px 18px 5px' : '18px 18px 5px 18px',
-                bg: x.side === 'in' ? '#EFEFEF' : (x.side === 'agent' ? '#C4552F' : '#0095F6'),
+                bg: x.side === 'in' ? '#EFEFEF' : (x.side === 'agent' ? '#C4552F' : (/whatsapp/i.test(s.logo || '') ? '#1E8E5A' : '#0095F6')),
                 fg: x.side === 'in' ? '#262626' : '#FFFFFF'
               }))
             });
@@ -3690,7 +3731,7 @@ class LandingLogic extends React.Component {
           'Omnichannel': 'feat-omnichannel', 'Social engagement': 'feat-social', 'Your new employee': 'feat-employee',
           'Copilot': 'feat-copilot', 'Call pilot (beta)': 'feat-callpilot', 'Knowledge base': 'feat-knowledge',
           'Approvals': 'feat-approvals', 'Customers': 'feat-customers', 'AI Studio': 'feat-studio',
-          'Analytics': 'feat-analytics', 'Store widget': 'feat-widget', 'Channels': 'feat-channels',
+          'Analytics': 'feat-analytics', 'Store widget': 'feat-widget', 'Channels': 'feat-channels', 'WhatsApp broadcast': 'feat-broadcast',
           'Cosmetics & skincare': 'sol-cosmetics', 'Fashion & clothing': 'sol-fashion', 'Home & furniture': 'sol-home',
           'Clinics & aesthetics': 'sol-clinics', 'Restaurants & local': 'sol-food', 'Electronics': 'sol-electronics',
           'Jewellery & gifting': 'sol-jewellery', 'Ecommerce': 'sol-ecommerce', 'Lead handling': 'sol-leads',
@@ -3702,7 +3743,7 @@ class LandingLogic extends React.Component {
           'About us': 'co-about', 'Blog': 'co-blog', 'Help center': 'co-help', 'Careers': 'co-careers'
         };
         const COLS = [
-          { t: 'Product', items: ['Omnichannel', 'Social engagement', 'Your new employee', 'Copilot', 'Call pilot (beta)', 'Knowledge base', 'Approvals', 'Customers', 'AI Studio', 'Analytics', 'Store widget', 'Channels'] },
+          { t: 'Product', items: ['Omnichannel', 'Social engagement', 'WhatsApp broadcast', 'Your new employee', 'Copilot', 'Call pilot (beta)', 'Knowledge base', 'Approvals', 'Customers', 'AI Studio', 'Analytics', 'Store widget', 'Channels'] },
           { t: 'Solutions', items: ['Cosmetics & skincare', 'Fashion & clothing', 'Home & furniture', 'Clinics & aesthetics', 'Restaurants & local', 'Electronics', 'Jewellery & gifting', 'Ecommerce', 'Lead handling', 'Running it alone', 'On the front line'] },
           { t: 'Integrations', items: ['Shopify', 'WooCommerce', 'Zoho', 'Monday', 'Browse all'] },
           { t: 'Why us', items: ['Why GOTCHA', 'It acts, not just answers', 'Your limits, per action', 'Priced per conversation', 'Security'] },
@@ -3712,7 +3753,8 @@ class LandingLogic extends React.Component {
       })(),
       social: [
         { t: 'Instagram', icon: 'instagram', href: 'https://www.instagram.com/gotcha.co.il/' },
-        { t: 'Facebook', icon: 'facebook', href: 'https://www.facebook.com/gotchainbox' }
+        { t: 'Facebook', icon: 'facebook', href: 'https://www.facebook.com/gotchainbox' },
+        { t: 'YouTube', icon: 'youtube', href: 'https://www.youtube.com/channel/UCBaxp7m0y5tIjdwkNezrdgA' }
       ]
     };
   }
