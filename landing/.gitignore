@@ -1,7 +1,9 @@
 /node_modules
 /.next
-/out
 /build
 *.tsbuildinfo
 next-env.d.ts
 .env*.local
+
+# The static export, built on the host and copied into the gateway image.
+/out

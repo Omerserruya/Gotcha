@@ -1,10 +1,17 @@
-# Production gateway = API reverse-proxy + static frontend in one nginx image.
+# Production gateway = API reverse-proxy + two static sites in one nginx image.
+#
+#   frontend/out  the application, served on app.gotcha.co.il
+#   landing/out   the marketing site, served on gotcha.co.il, trust. and help.
 #
 # Build context MUST be the repo root so this Dockerfile can COPY from
-# frontend/ AND gateway/.
+# frontend/, landing/ AND gateway/.
 #
-# IMPORTANT: this Dockerfile assumes `frontend/out/` already exists. Generate
-# it on the HOST before building:
+# IMPORTANT: this Dockerfile assumes both `out/` directories already exist.
+# Generate them on the HOST before building:
+#
+#   cd landing && NEXT_TELEMETRY_DISABLED=1 NEXT_OUTPUT=export npm run build
+#
+# and, for the application:
 #
 #   cd frontend && NEXT_TELEMETRY_DISABLED=1 NEXT_OUTPUT=export \
 #     NEXT_PUBLIC_API_URL=… NEXT_PUBLIC_WS_URL=… \
@@ -27,8 +34,14 @@
 
 FROM nginx:alpine
 
-# Pre-built Next.js static export (run `npm run build` on the host first).
+# Pre-built Next.js static exports (run the builds on the host first).
 COPY frontend/out /usr/share/nginx/html
+
+# The marketing site is a second export with its own root. Kept separate rather
+# than merged under one tree: both are Next.js builds with their own /_next
+# chunks, and copying one over the other would have them overwrite each other's
+# assets with matching names but different contents.
+COPY landing/out /usr/share/nginx/landing
 
 # Proxy config template. Rendered at container start by the entrypoint
 # script (envsubst over the variables listed in CMD, same as the dev gateway).
