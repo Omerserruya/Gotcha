@@ -2,85 +2,65 @@
 
 import React, { useState } from 'react';
 import { useConsent } from '@/lib/consent';
-import { useLocale } from '@/lib/use-locale';
+import { usePageLocale } from '@/lib/use-page-locale';
 import { C, F, isHe, links } from '@/lib/site';
 
 /**
  * The consent card shown on a first visit.
  *
- * Written to be answerable rather than dismissed: both buttons are real
- * choices, neither is styled to look like the only one, and refusing takes the
- * same single click as accepting. There is no "manage preferences" maze,
- * because there are only two categories and one of them is not optional.
+ * The first version drew two checkbox-shaped squares that were not controls.
+ * They looked tickable and did nothing, which is worse than not drawing them:
+ * a consent form that ignores the thing you clicked is exactly the pattern
+ * these rules exist to stop. There is one switch here now, it is a real
+ * <button role="switch">, and it works with a keyboard.
  *
- * It does not cover the page. Consent rules require that non-essential cookies
- * do not run before a decision - which is enforced in code, by nothing reading
- * `consent.analytics` until it is true - not that the site be held hostage
- * until someone clicks.
+ * The copy says what analytics would actually do in plain words. "Analytics"
+ * on its own is a category name, not an explanation, and nobody should have to
+ * guess what they are agreeing to.
+ *
+ * It does not cover the page. The rules require that non-essential cookies do
+ * not run before a decision - enforced by nothing reading `consent.analytics`
+ * until it is true - not that the site be held hostage until someone clicks.
  */
 
 const COPY = {
-  title: ['Cookies on this site', 'עוגיות באתר הזה'],
+  title: ['Before you read on', 'לפני שתמשיכו'],
   body: [
-    'We use cookies that are strictly necessary for signing in securely. We would also like to measure which pages are useful, and that part is up to you.',
-    'אנחנו משתמשים בעוגיות חיוניות להתחברות מאובטחת. נשמח גם למדוד אילו עמודים מועילים, והחלק הזה נתון להחלטתכם.',
+    'Signing in needs a couple of cookies, and those cannot be turned off. Everything else is your call.',
+    'התחברות דורשת כמה עוגיות, ואותן אי אפשר לכבות. כל השאר נתון לבחירתכם.',
   ],
-  necessary: ['Strictly necessary', 'חיוניות בהחלט'],
-  necessaryNote: ['Sign-in and security. Always on.', 'התחברות ואבטחה. תמיד פעילות.'],
-  analytics: ['Analytics', 'אנליטיקה'],
+  necessary: ['Sign-in and security', 'התחברות ואבטחה'],
+  necessaryNote: [
+    'Keeps you signed in and protects the login form. Without these the site cannot sign anyone in.',
+    'שומר אתכם מחוברים ומגן על טופס ההתחברות. בלעדיהן האתר לא יכול לחבר אף אחד.',
+  ],
+  always: ['Always on', 'תמיד פעיל'],
+  analytics: ['Counting page views', 'ספירת צפיות בעמודים'],
   analyticsNote: [
-    'Which pages get read, in aggregate. No advertising, no profiles, no third-party trackers.',
-    'אילו עמודים נקראים, במצטבר. בלי פרסום, בלי פרופילים, בלי גורמי מעקב חיצוניים.',
+    'Counts how many people opened each page, so we know which ones to write more of. No name, no email, no profile, and nothing is sent to an advertiser.',
+    'סופר כמה אנשים פתחו כל עמוד, כדי שנדע על מה כדאי לכתוב עוד. בלי שם, בלי אימייל, בלי פרופיל, ושום דבר לא נשלח למפרסם.',
   ],
-  accept: ['Accept analytics', 'אישור אנליטיקה'],
-  reject: ['Necessary only', 'חיוניות בלבד'],
-  policy: ['Cookie Policy', 'מדיניות העוגיות'],
+  on: ['On', 'פעיל'],
+  off: ['Off', 'כבוי'],
+  save: ['Save', 'שמירה'],
+  policy: ['Read the Cookie Policy', 'למדיניות העוגיות'],
 } as const;
 
 export default function CookieNotice() {
   const { pending, decide } = useConsent();
-  const [locale] = useLocale();
+  const locale = usePageLocale();
+  const [analytics, setAnalytics] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const i = isHe(locale) ? 1 : 0;
   const p = (k: keyof typeof COPY) => COPY[k][i];
 
   if (!pending) return null;
 
-  const choose = (analytics: boolean) => {
+  const save = () => {
     setLeaving(true);
-    // Let the card fade before it goes, so a decision reads as acknowledged.
+    // Let the card fade before it goes, so the choice reads as acknowledged.
     window.setTimeout(() => decide(analytics), 160);
   };
-
-  const Row = ({ label, note, on }: { label: string; note: string; on: boolean }) => (
-    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-      <span
-        aria-hidden
-        style={{
-          marginTop: 3,
-          width: 15,
-          height: 15,
-          borderRadius: 5,
-          flex: 'none',
-          background: on ? C.accent : 'transparent',
-          border: `1.5px solid ${on ? C.accent : C.faint}`,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        {on && (
-          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#FFF" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M4 12l6 6L20 6" />
-          </svg>
-        )}
-      </span>
-      <span style={{ minWidth: 0 }}>
-        <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600 }}>{label}</span>
-        <span style={{ display: 'block', marginTop: 2, fontSize: 12.5, lineHeight: 1.55, color: C.body }}>{note}</span>
-      </span>
-    </div>
-  );
 
   return (
     <div
@@ -92,7 +72,7 @@ export default function CookieNotice() {
         insetInlineStart: 20,
         bottom: 20,
         zIndex: 95,
-        width: 'min(420px, calc(100vw - 40px))',
+        width: 'min(430px, calc(100vw - 40px))',
         background: C.card,
         border: `1px solid ${C.line}`,
         borderRadius: 20,
@@ -109,43 +89,111 @@ export default function CookieNotice() {
 
       <p style={{ margin: '11px 0 0', fontSize: 13.5, lineHeight: 1.65, color: C.body }}>{p('body')}</p>
 
-      <div style={{ margin: '15px 0 0', display: 'grid', gap: 11 }}>
-        <Row label={p('necessary')} note={p('necessaryNote')} on />
-        <Row label={p('analytics')} note={p('analyticsNote')} on={false} />
+      {/* Locked: shown as a statement, not as a control that ignores you. */}
+      <div style={{ marginTop: 16, padding: '12px 14px', background: C.surface, borderRadius: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 13.5, fontWeight: 600 }}>{p('necessary')}</span>
+          <span
+            style={{
+              marginInlineStart: 'auto',
+              font: `500 10px ${F.mono}`,
+              letterSpacing: '.1em',
+              textTransform: 'uppercase',
+              color: C.muted,
+              background: C.sand,
+              borderRadius: 6,
+              padding: '4px 8px',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {p('always')}
+          </span>
+        </div>
+        <p style={{ margin: '6px 0 0', fontSize: 12.5, lineHeight: 1.55, color: C.body }}>{p('necessaryNote')}</p>
       </div>
 
-      <div style={{ margin: '17px 0 0', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+      {/* Optional: a real switch. */}
+      <div
+        style={{
+          marginTop: 10,
+          padding: '12px 14px',
+          background: analytics ? C.accentWash : C.surface,
+          borderRadius: 12,
+          transition: 'background .18s ease',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 13.5, fontWeight: 600 }}>{p('analytics')}</span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={analytics}
+            aria-label={p('analytics')}
+            onClick={() => setAnalytics((v) => !v)}
+            style={{
+              marginInlineStart: 'auto',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              border: 0,
+              background: 'transparent',
+              padding: 0,
+              cursor: 'pointer',
+              font: `500 11px ${F.mono}`,
+              color: analytics ? C.accent : C.muted,
+            }}
+          >
+            {analytics ? p('on') : p('off')}
+            <span
+              aria-hidden
+              style={{
+                width: 38,
+                height: 22,
+                borderRadius: 999,
+                background: analytics ? C.accent : C.line,
+                position: 'relative',
+                transition: 'background .18s ease',
+                flex: 'none',
+                display: 'block',
+              }}
+            >
+              <span
+                style={{
+                  position: 'absolute',
+                  top: 3,
+                  insetInlineStart: analytics ? 19 : 3,
+                  width: 16,
+                  height: 16,
+                  borderRadius: '50%',
+                  background: C.card,
+                  transition: 'inset-inline-start .18s ease',
+                  display: 'block',
+                }}
+              />
+            </span>
+          </button>
+        </div>
+        <p style={{ margin: '6px 0 0', fontSize: 12.5, lineHeight: 1.55, color: C.body }}>{p('analyticsNote')}</p>
+      </div>
+
+      <div style={{ margin: '16px 0 0', display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         <button
-          onClick={() => choose(true)}
+          onClick={save}
           style={{
             border: 0,
             borderRadius: 11,
-            padding: '10px 15px',
+            padding: '10px 20px',
             cursor: 'pointer',
             background: C.ink,
             color: C.bg,
             font: `600 13.5px ${F.sans}`,
           }}
         >
-          {p('accept')}
-        </button>
-        <button
-          onClick={() => choose(false)}
-          style={{
-            border: `1px solid ${C.line}`,
-            borderRadius: 11,
-            padding: '10px 15px',
-            cursor: 'pointer',
-            background: C.card,
-            color: C.ink,
-            font: `600 13.5px ${F.sans}`,
-          }}
-        >
-          {p('reject')}
+          {p('save')}
         </button>
         <a
           href={links.trust('cookie-policy')}
-          style={{ marginInlineStart: 'auto', fontSize: 12.5, color: C.faint, textDecoration: 'underline' }}
+          style={{ fontSize: 12.5, color: C.faint, textDecoration: 'underline' }}
         >
           {p('policy')}
         </a>
