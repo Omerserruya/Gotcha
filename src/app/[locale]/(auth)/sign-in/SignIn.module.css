@@ -1,0 +1,202 @@
+@layer shell {
+  /*
+   * Screen 00a. The frame holds two halves: an editorial dark panel carrying
+   * the product's voice, and the light work surface where the actual act
+   * happens. Same frame as the app, so signing in already looks like the
+   * product rather than like a door in front of it.
+   */
+  .frame {
+    display: flex;
+    block-size: 100dvh;
+    background-color: var(--frame-base);
+    padding: var(--size-frame-inset);
+    font-family: var(--font-sans);
+    overflow: hidden;
+  }
+
+  .editorial {
+    inline-size: 460px;
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    padding-block: var(--space-32);
+    padding-inline: var(--space-32);
+    color: var(--frame-text);
+  }
+
+  /*
+   * Sign-in carries the brand at a larger size than the rail does.
+   *
+   * The rail's mark is wayfinding and sits at 26px beside seven destinations;
+   * here it is the first thing on the screen and has a whole panel to itself.
+   * The wordmark scales with it so the lockup keeps its proportions rather
+   * than growing a large mark next to small type.
+   */
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: var(--space-14);
+    font-size: var(--font-size-lead);
+    font-weight: var(--font-weight-bold);
+    letter-spacing: var(--letter-spacing-brand);
+  }
+
+  /*
+   * The rotating panel.
+   *
+   * Three statements share one 250px box, each fading up and out on a 15s
+   * cycle offset by 5s — so one is always settled and the change is a roll
+   * rather than a flicker. Absolutely positioned so the box does not resize
+   * as the lines change length.
+   */
+  .editorialStage {
+    margin-block-start: auto;
+    position: relative;
+    block-size: 250px;
+  }
+
+  .editorialSlide {
+    position: absolute;
+    inset-inline: 0;
+    inset-block-end: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+    max-inline-size: 390px;
+    opacity: 0;
+    animation: editorial-roll 15s ease-in-out infinite;
+  }
+
+  .editorialSlide:nth-child(1) {
+    animation-delay: 0s;
+  }
+
+  .editorialSlide:nth-child(2) {
+    animation-delay: 5s;
+  }
+
+  .editorialSlide:nth-child(3) {
+    animation-delay: 10s;
+  }
+
+  @keyframes editorial-roll {
+    0% {
+      opacity: 0;
+      transform: translateY(16px);
+    }
+
+    4% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    30% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    34% {
+      opacity: 0;
+      transform: translateY(-16px);
+    }
+
+    100% {
+      opacity: 0;
+      transform: translateY(-16px);
+    }
+  }
+
+  /*
+   * Reduced motion: no travel, no fade, no cycle. Someone who asked their
+   * system to stop animating gets the first statement and nothing moving —
+   * cycling text they cannot stop is worse than a single line.
+   */
+  @media (prefers-reduced-motion: reduce) {
+    .editorialSlide {
+      animation: none;
+    }
+
+    .editorialSlide:nth-child(1) {
+      opacity: 1;
+    }
+
+    .editorialSlide:not(:nth-child(1)) {
+      display: none;
+    }
+  }
+
+  .editorialSupport {
+    color: var(--frame-text-secondary);
+    max-inline-size: 340px;
+  }
+
+  .systemStatus {
+    margin-block-start: auto;
+    padding-block-start: var(--space-32);
+    display: flex;
+    align-items: center;
+    gap: var(--space-14);
+    font-size: var(--font-size-label);
+    color: var(--frame-text-muted);
+  }
+
+  .statusDot {
+    inline-size: var(--size-dot);
+    block-size: var(--size-dot);
+    border-radius: var(--radius-round);
+    background-color: var(--signal-done);
+    flex: none;
+  }
+
+  .surface {
+    flex: 1;
+    min-inline-size: 0;
+    background-color: var(--panel-base);
+    border-radius: var(--radius-panel);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-40);
+    overflow-y: auto;
+  }
+
+  .form {
+    inline-size: 400px;
+    max-inline-size: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-20);
+  }
+
+  .intro {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-7);
+  }
+
+  .notice {
+    background-color: var(--panel-sunken);
+    border: var(--border-width-thin) solid var(--border-muted);
+    border-radius: var(--radius-control);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-14);
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-normal);
+    color: var(--text-secondary);
+  }
+
+  .footnote {
+    padding-block-start: var(--space-18);
+    border-block-start: var(--border-width-thin) solid var(--border-subtle);
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-normal);
+    color: var(--text-subtle);
+  }
+
+  /* The editorial panel stacks away before it squeezes the form. */
+  @media (width <= 900px) {
+    .editorial {
+      display: none;
+    }
+  }
+}

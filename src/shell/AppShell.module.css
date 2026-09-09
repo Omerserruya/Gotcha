@@ -1,0 +1,359 @@
+@layer shell {
+  /*
+   * "A black rounded shell holds everything, and the work happens on warm
+   * off-white panels floating inside it. The frame is the operating system;
+   * the panels are the layout."
+   *
+   * The frame fills the viewport rather than sitting at the design's fixed
+   * 1440×900, so the proportions hold on a real monitor. Its inset is
+   * asymmetric on purpose: the rail sits flush against the frame's edge, and
+   * only the work surface is inset.
+   */
+  .frame {
+    display: flex;
+    block-size: 100dvh;
+    background-color: var(--frame-base);
+    padding-block: var(--size-frame-inset);
+    padding-inline-end: var(--size-frame-inset);
+    padding-inline-start: 0;
+    font-family: var(--font-sans);
+    overflow: hidden;
+  }
+
+  /* ── Rail ──────────────────────────────────────────────────────────── */
+  .rail {
+    inline-size: var(--size-rail);
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding-block: var(--space-14) var(--space-12);
+    padding-inline: var(--space-18) var(--space-24);
+    color: var(--frame-text);
+  }
+
+  /*
+   * Logical padding means the rail's tighter edge is the one against the
+   * frame in both directions: 24px outside, 18px inside, mirrored in Hebrew
+   * with no second rule.
+   */
+
+  .railTop {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-18);
+    min-block-size: 0;
+    overflow-y: auto;
+    /*
+     * Settings has eight sections; on a laptop the rail runs out of room and
+     * has to scroll. A default scrollbar puts a bright bar down the middle of
+     * the dark frame, so it is thinned and tinted to the frame's own rule
+     * colour - present when needed, invisible otherwise.
+     */
+    scrollbar-width: thin;
+    scrollbar-color: var(--frame-selected) transparent;
+    /* Keeps the last row clear of the block below when scrolled to the end. */
+    padding-block-end: var(--space-7);
+  }
+
+  .railTop::-webkit-scrollbar {
+    inline-size: 6px;
+  }
+
+  .railTop::-webkit-scrollbar-thumb {
+    background-color: var(--frame-selected);
+    border-radius: var(--radius-key);
+  }
+
+  .railTop::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .railBottom {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-14);
+    /* Never collides with the scrolling block above it. */
+    padding-block-start: var(--space-12);
+    flex: none;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    font-size: var(--font-size-control);
+    font-weight: var(--font-weight-bold);
+    letter-spacing: var(--letter-spacing-brand);
+    color: var(--frame-text);
+    text-decoration: none;
+  }
+
+  .navList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .navLink {
+    display: flex;
+    align-items: center;
+    gap: var(--space-9);
+    padding-block: var(--space-9);
+    padding-inline: var(--space-12);
+    border-radius: var(--radius-item);
+    color: var(--frame-text-muted);
+    /*
+     * The design sets 13.5px on a 210px rail at 1440. The rail now scales with
+     * the frame, so the type takes one step up the design's own scale to keep
+     * pace - 14px is the size the design already uses for controls, not a new
+     * value invented for this.
+     */
+    font-size: var(--font-size-control);
+    text-decoration: none;
+    transition: background-color var(--duration-fast) var(--easing-standard);
+  }
+
+  .navLink:hover {
+    background-color: var(--frame-selected);
+    color: var(--frame-text);
+  }
+
+  /*
+   * The current destination is marked three ways at once - background, weight,
+   * and a lavender dot - so it survives both a monochrome screen and a viewer
+   * who cannot distinguish the dot's colour.
+   */
+  .navLink[aria-current='page'] {
+    background-color: var(--frame-selected);
+    color: var(--frame-text);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .navDot {
+    inline-size: var(--size-dot);
+    block-size: var(--size-dot);
+    border-radius: var(--radius-round);
+    background-color: var(--frame-dot-idle);
+    flex: none;
+  }
+
+  .navLink[aria-current='page'] .navDot {
+    background-color: var(--signal-ai);
+  }
+
+  /* Counts sit at the inline end, in mono, in the "waiting" amber. */
+  .navCount {
+    margin-inline-start: auto;
+    font-family: var(--font-mono);
+    font-size: var(--font-size-counter);
+    font-weight: var(--font-weight-medium);
+    color: var(--signal-waiting);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /*
+   * Sub-navigation.
+   *
+   * It sits AFTER the destination list, as its own group under a rule and a
+   * label - the seven destinations are never re-ordered, indented, or
+   * interrupted. The rail's first block always looks the same, whichever
+   * destination you are in, so its shape stays memorable and the eye can go
+   * straight to a known position.
+   */
+  .subNavGroup {
+    border-block-start: var(--border-width-thin) solid var(--frame-selected);
+    padding-block-start: var(--space-14);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .subNavLabel {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-eyebrow);
+    font-weight: var(--font-weight-medium);
+    letter-spacing: var(--letter-spacing-eyebrow-rail);
+    text-transform: uppercase;
+    color: var(--frame-text-eyebrow);
+    padding-inline: var(--space-12);
+    padding-block-end: var(--space-4);
+  }
+
+  .subNavList {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .subNavLink {
+    display: flex;
+    align-items: center;
+    /*
+     * Tighter than a destination row. These are a filtered list read as a
+     * group, not seven separate places, and at eight entries the looser rhythm
+     * pushed the rail into scrolling on any normal laptop.
+     */
+    padding-block: 5px;
+    padding-inline: var(--space-12);
+    border-radius: var(--radius-chip);
+    color: var(--frame-text-muted);
+    /* One step up from the design's 12.5px, staying inside its scale. */
+    font-size: var(--font-size-body-sm);
+    text-decoration: none;
+    transition: background-color var(--duration-fast) var(--easing-standard);
+  }
+
+  .subNavLink:hover {
+    background-color: var(--frame-subtle);
+    color: var(--frame-text);
+  }
+
+  .subNavLink[aria-current='page'] {
+    background-color: var(--frame-subtle);
+    color: var(--frame-text);
+  }
+
+  .subNavCount {
+    margin-inline-start: auto;
+    font-family: var(--font-mono);
+    font-size: var(--font-size-counter);
+    font-variant-numeric: tabular-nums;
+    color: var(--frame-text-muted);
+  }
+
+  .commandHint {
+    display: flex;
+    align-items: center;
+    gap: var(--space-9);
+    padding-inline: var(--space-12);
+    font-size: var(--font-size-caption);
+    color: var(--frame-text-faint);
+    background: none;
+    border: none;
+    inline-size: 100%;
+    text-align: start;
+    /* The rail is 210px; the hint is one line or it is noise. */
+    white-space: nowrap;
+    overflow: hidden;
+  }
+
+  .commandHintLabel {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .commandKey {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-micro);
+    border: var(--border-width-thin) solid var(--frame-line);
+    border-radius: var(--radius-key);
+    padding-block: 3px;
+    padding-inline: var(--space-7);
+    flex: none;
+    white-space: nowrap;
+  }
+
+  .account {
+    display: flex;
+    align-items: center;
+    gap: var(--space-9);
+    padding-inline: var(--space-12);
+    background: none;
+    border: none;
+    inline-size: 100%;
+    text-align: start;
+    color: inherit;
+    min-inline-size: 0;
+  }
+
+  /* Name over workspace, each truncating on its own. */
+  .accountText {
+    display: flex;
+    flex-direction: column;
+    min-inline-size: 0;
+  }
+
+  .avatar {
+    inline-size: var(--size-avatar);
+    block-size: var(--size-avatar);
+    border-radius: var(--radius-round);
+    background-color: var(--signal-ai);
+    color: var(--text-primary);
+    font-size: 10px;
+    font-weight: var(--font-weight-semibold);
+    display: grid;
+    place-items: center;
+    flex: none;
+  }
+
+  .accountName {
+    font-size: var(--font-size-meta);
+    color: var(--frame-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .accountWorkspace {
+    font-size: var(--font-size-counter);
+    color: var(--frame-text-faint);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* ── Work surface ──────────────────────────────────────────────────── */
+  .surface {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    background-color: var(--panel-base);
+    border-radius: var(--radius-panel);
+    overflow: hidden;
+  }
+
+  .main {
+    flex: 1;
+    min-block-size: 0;
+    overflow-y: auto;
+  }
+
+  /*
+   * Below this width the rail would crowd the work surface. The frame stays -
+   * it is the product's identity - and the rail becomes a drawer.
+   */
+  @media (width <= 900px) {
+    .rail {
+      display: none;
+    }
+
+    .frame {
+      padding-inline: var(--size-frame-inset);
+    }
+  }
+
+  /*
+   * Skip link. Hidden until focused, then pinned to the inline-start corner -
+   * top-left in English, top-right in Hebrew: where each reader's eye is.
+   */
+  .skipLink {
+    position: absolute;
+    inset-block-start: var(--space-12);
+    inset-inline-start: var(--space-12);
+    z-index: var(--z-toast);
+    padding-block: var(--space-9);
+    padding-inline: var(--space-12);
+    background-color: var(--panel-field);
+    color: var(--text-primary);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-control);
+    font-size: var(--font-size-meta);
+    transform: translateY(-250%);
+  }
+
+  .skipLink:focus-visible {
+    transform: none;
+  }
+}
