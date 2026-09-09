@@ -20,8 +20,9 @@ tools/                      the compiler (see "Regenerating")
 src/generated/              compiler output - do not edit
   Template.jsx                the design's template as JSX
   he.js                       the Hebrew dictionary as a module
-  pseudo.css                  the style-hover rules as real CSS classes
   image-slots.json            slot id -> extracted photo + crop
+src/app/globals.css         also generated: the design's <helmet> CSS plus the
+                            style-<pseudo> rules as real classes
 src/components/Landing.jsx  the design's own logic class, wrapped as a React component
 src/lib/dc.tsx              four dc-runtime behaviours, reimplemented exactly
 src/lib/pages.ts            page key -> URL
@@ -35,9 +36,13 @@ Re-export the design project over `design/`, then:
 npm run design:sync
 ```
 
-That rewrites everything under `src/generated/` and `src/components/Landing.jsx`.
-Do not hand-edit those files: the next sync overwrites them. Fix the design, or
-fix the compiler.
+That rewrites everything under `src/generated/`, plus
+`src/components/Landing.jsx` and `src/app/globals.css`. Do not hand-edit those
+files: the next sync overwrites them. Fix the design, or fix the compiler.
+
+`globals.css` is generated for a reason worth remembering. It was hand-copied
+once, and a stale copy fails silently - the page still renders, just with the
+previous export's rules, and nothing in the build complains.
 
 `design:sync` needs `parse5`, which today resolves through the shared
 `node_modules`. It is a maintenance script, not part of `npm run build`, and its

@@ -46,25 +46,25 @@
   [dir="rtl"] [style*="105deg"] { background: linear-gradient(255deg, rgba(14,12,9,.82) 0%, rgba(14,12,9,.56) 46%, rgba(14,12,9,.2) 100%) !important; }
   /* Hebrew is longer than the English it replaces, so boxes sized to the English text release their fixed height in RTL */
   #top h1 { height: auto !important; }
-  [dir="rtl"] #top h1 { width: auto !important; max-width: 760px; margin-bottom: 16px !important; font-size: 76px !important; line-height: 1.0 !important; }
+  [dir="rtl"] #top h1 { width: auto !important; max-width: 900px; margin-inline: auto; margin-bottom: 16px !important; font-size: 76px !important; line-height: 1.0 !important; }
   [dir="rtl"] [style*="height: 47px"], [dir="rtl"] [style*="height:47px"] { height: auto !important; }
-  [dir="rtl"] [style*="text-align:right"] { text-align: left !important; }
+  [dir="rtl"] [style*="text-align:end"] { text-align: left !important; }
   [dir="rtl"] [style*="text-align: right"] { text-align: left !important; }
-  [dir="rtl"] [style*="margin-left:auto"] { margin-left: 0 !important; margin-right: auto !important; }
-  [dir="rtl"] [style*="margin-left: auto"] { margin-left: 0 !important; margin-right: auto !important; }
   [dir="rtl"] img, [dir="rtl"] video { direction: ltr; }
 </style>
 <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
-<script src="he.js"></script>
+<script src="he.js?v=11"></script>
 </helmet>
 
 <div dir="{{ dir }}" lang="{{ lang }}" style="min-height:100vh;background:#FAF8F4;position:relative">
+
+  <div style="height:{{ bars.headTop }};flex:none"></div>
 
   <div style="display:{{ bars.offerBar }};position:fixed;top:0;left:0;right:0;z-index:92;background:#8E3418;color:#FFFFFF;height:38px;align-items:center;justify-content:center;gap:16px;padding:0 46px 0 24px;flex-wrap:nowrap;overflow:hidden">
     <span style="font:500 9.5px 'IBM Plex Mono',monospace;letter-spacing:.18em;text-transform:uppercase;background:rgba(22,21,15,.24);border-radius:5px;padding:4px 8px;white-space:nowrap">{{ offer.badge }}</span>
     <span style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ offer.barText }}</span>
     <div onClick="{{ goOffer }}" style="font-size:12.5px;font-weight:600;color:#FFFFFF;background:rgba(22,21,15,.3);border:1px solid rgba(255,255,255,.42);border-radius:8px;padding:5px 12px;white-space:nowrap;flex:none;cursor:pointer;transition:background .2s ease" style-hover="background:rgba(22,21,15,.5);color:#FFFFFF">{{ offer.seeMore }}</div>
-    <span onClick="{{ offer.open }}" style="font-size:12.5px;color:#FFFFFF;text-decoration:underline;cursor:pointer;white-space:nowrap;flex:none">{{ offer.termsLabel }}</span>
+    
     <span onClick="{{ offer.hideBar }}" title="Close" style="position:absolute;right:14px;color:#FFFFFF;opacity:.75;display:flex;cursor:pointer;padding:4px;transition:opacity .2s ease" style-hover="opacity:1"><i data-lucide="x" width="14" height="14" stroke-width="2.4"></i></span>
   </div>
 
@@ -75,7 +75,7 @@
 
   <sc-if value="{{ offerShown }}" hint-placeholder-val="{{ false }}">
     <div style="position:fixed;top:50%;right:0;transform:translateY(-50%);z-index:95;width:798px;max-width:100vw">
-      <div style="display:flex;align-items:stretch;background:#FFFFFF;border:1px solid #E4DFD4;border-right:0;border-radius:12px 0 0 12px;box-shadow:-16px 22px 60px rgba(22,21,15,.26);overflow:hidden;animation:gpull .5s cubic-bezier(.22,.85,.2,1) both">
+      <div style="display:flex;align-items:stretch;background:#FFFFFF;border:1px solid #E4DFD4;border-inline-end:0;border-radius:12px 0 0 12px;box-shadow:-16px 22px 60px rgba(22,21,15,.26);overflow:hidden;animation:gpull .5s cubic-bezier(.22,.85,.2,1) both">
         <div onClick="{{ offer.close }}" style="flex:0 0 38px;background:#8E3418;color:#FFFFFF;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;padding:16px 0">
           <span style="display:flex"><i data-lucide="gift" width="16" height="16" stroke-width="2.2"></i></span>
           <span style="font:600 11px 'IBM Plex Mono',monospace;letter-spacing:.18em;writing-mode:vertical-rl;text-orientation:mixed;white-space:nowrap">{{ offer.tabLabel }}</span>
@@ -121,15 +121,15 @@
         <div onClick="{{ goHome }}" style="display:flex;align-items:center;margin-right:20px;flex:none;cursor:pointer">
           <img src="assets/logo/line-horizontal-dark.png" alt="GOTCHA" style="width:126px;height:auto;display:block">
         </div>
-        <div style="display:flex;align-items:center;gap:2px;min-width:0;overflow:hidden;flex-shrink:1">
+        <div style="display:flex;align-items:center;gap:2px;min-width:0;overflow:hidden;flex:0 1 auto">
         <sc-for list="{{ navItems }}" as="n" hint-placeholder-count="5">
-          <div onClick="{{ n.click }}" onMouseEnter="{{ n.enter }}" data-nav-item="" style="display:flex;align-items:center;gap:6px;padding:8px 13px;border-radius:11px;cursor:pointer;flex:none;background:{{ n.bg }};color:{{ n.fg }}" style-hover="background:#F5F2EC">
+          <div onClick="{{ n.click }}" onMouseEnter="{{ n.enter }}" data-nav-item="" style="display:flex;flex-direction:{{ navDir }};align-items:center;gap:6px;padding:8px 13px;border-radius:11px;cursor:pointer;flex:none;background:{{ n.bg }};color:{{ n.fg }}" style-hover="background:#F5F2EC">
             <span data-nav-label="" style="font-size:14px;font-weight:500;white-space:nowrap">{{ n.t }}</span>
             <sc-if value="{{ n.hasMenu }}" hint-placeholder-val="{{ true }}"><span data-nav-caret="" style="font-size:9px;transform:{{ n.rot }};transition:transform .22s ease;display:inline-block">▾</span></sc-if>
           </div>
         </sc-for>
         </div>
-        <div style="margin-left:auto;padding-left:12px;display:flex;align-items:center;gap:10px;flex:none">
+        <div style="margin-left:{{ navML }};margin-right:{{ navMR }};padding-inline-start:12px;display:flex;align-items:center;gap:10px;flex:none">
           <a href="#cta" data-nav-secondary="" style="font-size:13.5px;border-bottom:1px solid #C8C2B6;padding-bottom:1px;white-space:nowrap">Login</a>
           <a href="#cta" data-nav-secondary="" style="font-size:13.5px;font-weight:500;background:#16150F;color:#FAF8F4;border:1px solid #16150F;border-radius:11px;padding:10px 16px;white-space:nowrap;transition:background .2s ease,border-color .2s ease" style-hover="background:#2A2823;border-color:#2A2823;color:#FAF8F4">Book a demo</a>
           
@@ -151,7 +151,7 @@
                     <div onClick="{{ it.go }}" style="display:flex;align-items:center;gap:10px;padding:8px 9px;margin:0 -9px;border-radius:9px;min-height:32px;cursor:pointer;overflow:hidden" style-hover="background:#F7F4EE">
                       <span style="width:17px;flex:none;color:#A29B8E;display:flex"><i data-lucide="{{ it.icon }}" width="15" height="15" stroke-width="1.9"></i></span>
                       <span style="font-size:13.5px;font-weight:500;line-height:1.3;flex:0 0 auto;white-space:nowrap">{{ it.t }}</span>
-                      <span style="font-size:11px;color:#A29B8E;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto;min-width:0;margin-left:auto;padding-left:8px">{{ it.n }}</span>
+                      <span style="font-size:11px;color:#A29B8E;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto;min-width:0;margin-left:{{ mlAuto }};margin-right:{{ mrAuto }};padding-inline-start:8px">{{ it.n }}</span>
                     </div>
                   </sc-for>
                 </div>
@@ -176,7 +176,7 @@
   </div>
 
   <sc-if value="{{ isSolution }}" hint-placeholder-val="{{ false }}">
-    <div id="top" style="padding:136px 0 0">
+    <div id="top" style="padding:98px 0 0">
       <div style="max-width:1240px;margin:0 auto;padding:0 24px">
         <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:48px">
           <div style="flex:1">
@@ -218,11 +218,11 @@
                 <div style="padding:16px 20px;border-bottom:1px solid #F0EDE7;display:flex;align-items:center;gap:10px">
                   <span style="width:24px;height:24px;border-radius:7px;background:{{ c.chBg }};color:{{ c.chIc }};display:flex;align-items:center;justify-content:center">{{ c.glyph }}</span>
                   <span style="font-size:12px;color:#8E887C">{{ c.when }}</span>
-                  <span style="margin-left:auto;font-size:10.5px;color:{{ c.tagFg }};background:{{ c.tagBg }};border-radius:6px;padding:3px 8px;white-space:nowrap">{{ c.tag }}</span>
+                  <span style="margin-left:{{ mlAuto }};margin-right:{{ mrAuto }};font-size:10.5px;color:{{ c.tagFg }};background:{{ c.tagBg }};border-radius:6px;padding:3px 8px;white-space:nowrap">{{ c.tag }}</span>
                 </div>
                 <div style="padding:18px 20px;display:flex;flex-direction:column;gap:12px;flex:1">
-                  <div style="background:#F5F2EC;border-left:3px solid {{ c.edge }};border-radius:12px 12px 12px 4px;padding:12px 14px;font-size:13.5px;line-height:1.5">{{ c.msg }}</div>
-                  <div style="display:flex;flex-direction:column;gap:7px;padding-left:2px">
+                  <div style="background:#F5F2EC;border-inline-start:3px solid {{ c.edge }};border-radius:12px 12px 12px 4px;padding:12px 14px;font-size:13.5px;line-height:1.5">{{ c.msg }}</div>
+                  <div style="display:flex;flex-direction:column;gap:7px;padding-inline-start:2px">
                     <sc-for list="{{ c.steps }}" as="stp" hint-placeholder-count="3">
                       <div style="display:flex;gap:10px;align-items:baseline"><span style="width:4px;height:4px;border-radius:50%;background:#4F7A2E;flex:none;margin-top:7px"></span><span style="font-size:12.5px;color:#5B564D;line-height:1.5">{{ stp }}</span></div>
                     </sc-for>
@@ -300,7 +300,7 @@
             <input type="text" placeholder="Email (optional)" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
             <div style="text-align:center;font-size:14px;font-weight:500;background:#16150F;color:#F7F5F1;border-radius:11px;padding:13px;cursor:pointer;transition:background .2s ease" style-hover="background:#C4552F">Leave your details</div>
             <a href="https://calendar.app.google/Fv9DCtUycjqSV3a77" target="_blank" rel="noopener" style="text-align:center;font-size:13.5px;font-weight:500;color:#16150F;border:1px solid #D8D2C6;border-radius:11px;padding:12px;transition:border-color .2s ease" style-hover="border-color:#C4552F;color:#8E3418">Or book a demo call</a>
-            <div style="font-size:11.5px;color:#8E887C;line-height:1.55">A founder calls you back, usually the same day. No card, no commitment.</div>
+            <div style="font-size:11.5px;color:#8E887C;line-height:1.55">{{ chat.formFoot }}</div>
           </div>
         </div>
       </div>
@@ -308,7 +308,7 @@
   </sc-if>
 
   <sc-if value="{{ isFeature }}" hint-placeholder-val="{{ false }}">
-  <div id="top" style="padding:112px 0 0;background:{{ feat.band }}">
+  <div id="top" style="padding:74px 0 0;background:{{ feat.band }}">
       <div style="max-width:1240px;margin:0 auto;padding:44px 24px 60px;display:grid;grid-template-columns:{{ feat.heroCols }};gap:52px;align-items:center">
         <div data-reveal="" style="order:{{ feat.textOrder }};text-align:{{ feat.heroAlign }};max-width:{{ feat.textMax }};margin:{{ feat.textMargin }};color:{{ feat.heroFg }};transition:opacity .8s ease,transform .8s ease">
           <div style="display:flex;align-items:center;gap:12px;justify-content:{{ feat.heroJustify }}">
@@ -390,7 +390,7 @@
                       <sc-if value="{{ s.noLogo }}" hint-placeholder-val="{{ false }}"><span style="color:{{ s.iconFg }};display:flex"><i data-lucide="{{ s.icon }}" width="14" height="14" stroke-width="2"></i></span></sc-if>
                     </span>
                     <span style="font-size:13px;font-weight:600;letter-spacing:-0.01em;color:{{ s.fg }}">{{ s.where }}</span>
-                    <span style="margin-left:auto;font:500 9px 'IBM Plex Mono',monospace;letter-spacing:.14em;text-transform:uppercase;background:{{ s.tagBg }};color:{{ s.tagFg }};border-radius:6px;padding:4px 7px;white-space:nowrap">{{ s.tag }}</span>
+                    <span style="margin-left:{{ mlAuto }};margin-right:{{ mrAuto }};font:500 9px 'IBM Plex Mono',monospace;letter-spacing:.14em;text-transform:uppercase;background:{{ s.tagBg }};color:{{ s.tagFg }};border-radius:6px;padding:4px 7px;white-space:nowrap">{{ s.tag }}</span>
                   </div>
                   <div style="background:#FFFFFF;border:1px solid #E6E6E6;border-radius:16px;overflow:hidden">
                     <div style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-bottom:1px solid #F0F0F0">
@@ -401,7 +401,7 @@
                         <div style="font-size:12.5px;font-weight:600;color:#262626;letter-spacing:-0.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ s.handle }}</div>
                         <div style="font-size:10.5px;color:#8E8E8E;margin-top:1px">{{ s.status }}</div>
                       </div>
-                      <span style="margin-left:auto;display:flex;gap:3px;flex:none">
+                      <span style="margin-left:{{ mlAuto }};margin-right:{{ mrAuto }};display:flex;gap:3px;flex:none">
                         <span style="width:3px;height:3px;border-radius:50%;background:#C7C7C7"></span>
                         <span style="width:3px;height:3px;border-radius:50%;background:#C7C7C7"></span>
                         <span style="width:3px;height:3px;border-radius:50%;background:#C7C7C7"></span>
@@ -418,7 +418,7 @@
                       </div>
                       <div style="padding:12px 12px 13px;display:flex;flex-direction:column;gap:12px">
                         <sc-for list="{{ s.bubbles }}" as="b" hint-placeholder-count="2">
-                          <div style="display:flex;gap:9px;padding-left:{{ b.indent }}">
+                          <div style="display:flex;gap:9px;padding-inline-start:{{ b.indent }}">
                             <span style="width:22px;height:22px;border-radius:50%;background:{{ b.avaBg }};color:{{ b.avaFg }};font-size:8.5px;font-weight:600;display:flex;align-items:center;justify-content:center;flex:none;margin-top:1px">{{ b.ini }}</span>
                             <div style="min-width:0;flex:1">
                               <div style="font-size:12.5px;line-height:1.5;color:#262626"><span style="font-weight:600">{{ b.who }}</span> {{ b.t }}</div>
@@ -445,7 +445,7 @@
                         </sc-for>
                         <div style="display:flex;align-items:center;gap:8px;margin-top:5px;border:1px solid #EFEFEF;border-radius:99px;padding:7px 12px">
                           <span style="font-size:11.5px;color:#A8A8A8">Message…</span>
-                          <span style="margin-left:auto;font-size:11.5px;font-weight:600;color:#0095F6">Send</span>
+                          <span style="margin-left:{{ mlAuto }};margin-right:{{ mrAuto }};font-size:11.5px;font-weight:600;color:#0095F6">Send</span>
                         </div>
                       </div>
                     </sc-if>
@@ -473,7 +473,7 @@
                   <div style="font-size:13px;font-weight:600;letter-spacing:-0.01em">{{ feat.tr.who }}</div>
                   <div style="font-size:10.5px;color:#8E887C;margin-top:1px">{{ feat.tr.whoMeta }}</div>
                 </div>
-                <span style="margin-left:auto;font:500 9px 'IBM Plex Mono',monospace;letter-spacing:.14em;text-transform:uppercase;background:#FBEEE8;color:#8E3418;border-radius:6px;padding:4px 7px;white-space:nowrap">{{ feat.tr.threadTag }}</span>
+                <span style="margin-left:{{ mlAuto }};margin-right:{{ mrAuto }};font:500 9px 'IBM Plex Mono',monospace;letter-spacing:.14em;text-transform:uppercase;background:#FBEEE8;color:#8E3418;border-radius:6px;padding:4px 7px;white-space:nowrap">{{ feat.tr.threadTag }}</span>
               </div>
               <div style="padding:14px 15px;display:flex;flex-direction:column;gap:8px">
                 <sc-for list="{{ feat.tr.msgs }}" as="m" hint-placeholder-count="2">
@@ -522,7 +522,7 @@
                   <div style="font-size:13px;font-weight:600;letter-spacing:-0.01em">{{ feat.tr.panelT }}</div>
                   <div style="font-size:10.5px;color:#A8A39A;margin-top:1px">{{ feat.tr.panelSub }}</div>
                 </div>
-                <span style="margin-left:auto;width:7px;height:7px;border-radius:50%;background:#A8C57A;animation:gpulse 2.2s ease-in-out infinite"></span>
+                <span style="margin-left:{{ mlAuto }};margin-right:{{ mrAuto }};width:7px;height:7px;border-radius:50%;background:#A8C57A;animation:gpulse 2.2s ease-in-out infinite"></span>
               </div>
 
               <div style="padding:14px 15px;display:flex;flex-direction:column">
@@ -591,7 +591,7 @@
                 </div>
                 <div style="display:flex;align-items:center;gap:14px;padding:12px 16px;border-bottom:1px solid #F0EDE7">
                   <span style="font-size:12.5px;font-weight:700;letter-spacing:.1em">{{ feat.tw.store }}</span>
-                  <div style="display:flex;gap:12px;margin-left:auto;align-items:center">
+                  <div style="display:flex;gap:12px;margin-left:{{ mlAuto }};margin-right:{{ mrAuto }};align-items:center">
                     <sc-for list="{{ feat.tw.navItems }}" as="nv" hint-placeholder-count="4">
                       <span style="font-size:11px;color:#8E887C;white-space:nowrap">{{ nv }}</span>
                     </sc-for>
@@ -651,7 +651,7 @@
                     <div style="font-size:13px;font-weight:600;letter-spacing:-0.01em">{{ feat.tw.widgetName }}</div>
                     <div style="font-size:10.5px;color:#A8A39A;margin-top:1px">{{ feat.tw.widgetSub }}</div>
                   </div>
-                  <span style="margin-left:auto;width:7px;height:7px;border-radius:50%;background:#A8C57A;animation:gpulse 2.2s ease-in-out infinite"></span>
+                  <span style="margin-left:{{ mlAuto }};margin-right:{{ mrAuto }};width:7px;height:7px;border-radius:50%;background:#A8C57A;animation:gpulse 2.2s ease-in-out infinite"></span>
                 </div>
 
                 <div style="padding:14px 15px;display:flex;flex-direction:column;gap:8px;min-height:246px">
@@ -697,7 +697,7 @@
                   </sc-for>
                   <div style="display:flex;align-items:center;gap:8px;border:1px solid #EFEAE1;border-radius:99px;padding:9px 13px;margin-top:2px">
                     <span style="font-size:11.5px;color:#A8A8A8">{{ feat.tw.composer }}</span>
-                    <span style="margin-left:auto;color:#C4552F;display:flex"><i data-lucide="send" width="13" height="13" stroke-width="2"></i></span>
+                    <span style="margin-left:{{ mlAuto }};margin-right:{{ mrAuto }};color:#C4552F;display:flex"><i data-lucide="send" width="13" height="13" stroke-width="2"></i></span>
                   </div>
                 </div>
               </div>
@@ -727,7 +727,7 @@
               <div style="display:flex;align-items:center;gap:10px">
                 <span style="width:26px;height:26px;border-radius:8px;background:#F0EDE7;color:#8E887C;display:flex;align-items:center;justify-content:center;flex:none"><i data-lucide="user-round" width="14" height="14" stroke-width="2"></i></span>
                 <span style="font-size:15px;font-weight:600;letter-spacing:-0.014em">{{ feat.save.manualT }}</span>
-                <span style="margin-left:auto;font:500 9px 'IBM Plex Mono',monospace;letter-spacing:.14em;text-transform:uppercase;background:#F0EDE7;color:#6B6660;border-radius:6px;padding:4px 7px;white-space:nowrap">{{ feat.save.manualTag }}</span>
+                <span style="margin-left:{{ mlAuto }};margin-right:{{ mrAuto }};font:500 9px 'IBM Plex Mono',monospace;letter-spacing:.14em;text-transform:uppercase;background:#F0EDE7;color:#6B6660;border-radius:6px;padding:4px 7px;white-space:nowrap">{{ feat.save.manualTag }}</span>
               </div>
               <div style="display:flex;flex-direction:column;margin-top:14px">
                 <sc-for list="{{ feat.save.manual }}" as="m" hint-placeholder-count="6">
@@ -745,7 +745,7 @@
               <div style="display:flex;align-items:center;gap:10px">
                 <span style="width:26px;height:26px;border-radius:8px;background:#2A2823;color:#F7F5F1;display:flex;align-items:center;justify-content:center;flex:none"><i data-lucide="user-round-check" width="14" height="14" stroke-width="2"></i></span>
                 <span style="font-size:15px;font-weight:600;letter-spacing:-0.014em">{{ feat.save.autoT }}</span>
-                <span style="margin-left:auto;font:500 9px 'IBM Plex Mono',monospace;letter-spacing:.14em;text-transform:uppercase;background:#2A2823;color:#D8D3CA;border-radius:6px;padding:4px 7px;white-space:nowrap">{{ feat.save.autoTag }}</span>
+                <span style="margin-left:{{ mlAuto }};margin-right:{{ mrAuto }};font:500 9px 'IBM Plex Mono',monospace;letter-spacing:.14em;text-transform:uppercase;background:#2A2823;color:#D8D3CA;border-radius:6px;padding:4px 7px;white-space:nowrap">{{ feat.save.autoTag }}</span>
               </div>
               <div style="display:flex;flex-direction:column;margin-top:14px">
                 <sc-for list="{{ feat.save.auto }}" as="a" hint-placeholder-count="4">
@@ -811,32 +811,32 @@
         <div style="position:absolute;left:2.600%;top:5.532%;width:20.000%;height:9.362%;background:#FFFFFF;border:1px solid #E4DFD4;border-radius:12px;display:flex;align-items:center;gap:9px;padding:0 12px;box-shadow:0 4px 14px rgba(22,21,15,.04)">
           <img src="https://cdn.simpleicons.org/whatsapp/25D366" alt="WhatsApp" width="16" height="16" style="display:block;flex:none" loading="lazy" onError="{{ logoFail }}">
           <span style="font-size:13px;font-weight:600;letter-spacing:-0.01em;white-space:nowrap">WhatsApp</span>
-          <span style="margin-left:auto;width:6px;height:6px;border-radius:50%;background:#A8C57A;flex:none"></span>
+          <span style="margin-left:{{ mlAuto }};margin-right:{{ mrAuto }};width:6px;height:6px;border-radius:50%;background:#A8C57A;flex:none"></span>
         </div>
         <div style="position:absolute;left:2.600%;top:21.277%;width:20.000%;height:9.362%;background:#FFFFFF;border:1px solid #E4DFD4;border-radius:12px;display:flex;align-items:center;gap:9px;padding:0 12px;box-shadow:0 4px 14px rgba(22,21,15,.04)">
           <img src="https://cdn.simpleicons.org/instagram/E4405F" alt="Instagram" width="16" height="16" style="display:block;flex:none" loading="lazy" onError="{{ logoFail }}">
           <span style="font-size:13px;font-weight:600;letter-spacing:-0.01em;white-space:nowrap">Instagram</span>
-          <span style="margin-left:auto;width:6px;height:6px;border-radius:50%;background:#A8C57A;flex:none"></span>
+          <span style="margin-left:{{ mlAuto }};margin-right:{{ mrAuto }};width:6px;height:6px;border-radius:50%;background:#A8C57A;flex:none"></span>
         </div>
         <div style="position:absolute;left:2.600%;top:37.021%;width:20.000%;height:9.362%;background:#FFFFFF;border:1px solid #E4DFD4;border-radius:12px;display:flex;align-items:center;gap:9px;padding:0 12px;box-shadow:0 4px 14px rgba(22,21,15,.04)">
           <img src="https://cdn.simpleicons.org/messenger/0084FF" alt="Messenger" width="16" height="16" style="display:block;flex:none" loading="lazy" onError="{{ logoFail }}">
           <span style="font-size:13px;font-weight:600;letter-spacing:-0.01em;white-space:nowrap">Messenger</span>
-          <span style="margin-left:auto;width:6px;height:6px;border-radius:50%;background:#A8C57A;flex:none"></span>
+          <span style="margin-left:{{ mlAuto }};margin-right:{{ mrAuto }};width:6px;height:6px;border-radius:50%;background:#A8C57A;flex:none"></span>
         </div>
         <div style="position:absolute;left:2.600%;top:52.766%;width:20.000%;height:9.362%;background:#FFFFFF;border:1px solid #E4DFD4;border-radius:12px;display:flex;align-items:center;gap:9px;padding:0 12px;box-shadow:0 4px 14px rgba(22,21,15,.04)">
           <img src="https://cdn.simpleicons.org/gmail/EA4335" alt="Email" width="16" height="16" style="display:block;flex:none" loading="lazy" onError="{{ logoFail }}">
           <span style="font-size:13px;font-weight:600;letter-spacing:-0.01em;white-space:nowrap">Email</span>
-          <span style="margin-left:auto;width:6px;height:6px;border-radius:50%;background:#A8C57A;flex:none"></span>
+          <span style="margin-left:{{ mlAuto }};margin-right:{{ mrAuto }};width:6px;height:6px;border-radius:50%;background:#A8C57A;flex:none"></span>
         </div>
         <div style="position:absolute;left:2.600%;top:68.511%;width:20.000%;height:9.362%;background:#FFFFFF;border:1px solid #E4DFD4;border-radius:12px;display:flex;align-items:center;gap:9px;padding:0 12px;box-shadow:0 4px 14px rgba(22,21,15,.04)">
           <span style="color:#55524C;display:flex;flex:none"><i data-lucide="globe" width="15" height="15" stroke-width="2"></i></span>
           <span style="font-size:13px;font-weight:600;letter-spacing:-0.01em;white-space:nowrap">Web chat</span>
-          <span style="margin-left:auto;width:6px;height:6px;border-radius:50%;background:#A8C57A;flex:none"></span>
+          <span style="margin-left:{{ mlAuto }};margin-right:{{ mrAuto }};width:6px;height:6px;border-radius:50%;background:#A8C57A;flex:none"></span>
         </div>
         <div style="position:absolute;left:2.600%;top:84.255%;width:20.000%;height:9.362%;background:#FFFFFF;border:1px solid #E4DFD4;border-radius:12px;display:flex;align-items:center;gap:9px;padding:0 12px;box-shadow:0 4px 14px rgba(22,21,15,.04)">
           <span style="color:#55524C;display:flex;flex:none"><i data-lucide="phone" width="15" height="15" stroke-width="2"></i></span>
           <span style="font-size:13px;font-weight:600;letter-spacing:-0.01em;white-space:nowrap">Phone</span>
-          <span style="margin-left:auto;width:6px;height:6px;border-radius:50%;background:#A8C57A;flex:none"></span>
+          <span style="margin-left:{{ mlAuto }};margin-right:{{ mrAuto }};width:6px;height:6px;border-radius:50%;background:#A8C57A;flex:none"></span>
         </div>
 
             <div style="position:absolute;left:55.600%;top:37.234%;width:12.000%;aspect-ratio:1;background:#16150F;border-radius:28px;display:flex;align-items:center;justify-content:center;box-shadow:0 24px 54px rgba(22,21,15,.3)">
@@ -899,7 +899,7 @@
                       <div style="display:flex;align-items:center;gap:9px;padding:11px 14px;border-bottom:1px solid #F0EDE7;background:#FAF8F4">
                         <span style="color:{{ k.ic }};display:flex;flex:none"><i data-lucide="{{ k.icon }}" width="14" height="14" stroke-width="2"></i></span>
                         <span style="font-size:12px;font-weight:600;letter-spacing:-0.01em">{{ k.cardT }}</span>
-                        <span style="margin-left:auto;font:400 10.5px 'IBM Plex Mono',monospace;color:#A29B8E">{{ k.cardMeta }}</span>
+                        <span style="margin-left:{{ mlAuto }};margin-right:{{ mrAuto }};font:400 10.5px 'IBM Plex Mono',monospace;color:#A29B8E">{{ k.cardMeta }}</span>
                       </div>
                       <div style="padding:12px 14px;display:flex;flex-direction:column;gap:8px">
                         <sc-for list="{{ k.rows }}" as="rw" hint-placeholder-count="3">
@@ -925,7 +925,7 @@
                       <div style="display:flex;align-items:center;gap:9px;padding:11px 14px;border-bottom:1px solid #F0EDE7;background:#FAF8F4">
                         <span style="color:{{ k.ic }};display:flex;flex:none"><i data-lucide="{{ k.icon }}" width="14" height="14" stroke-width="2"></i></span>
                         <span style="font-size:12px;font-weight:600;letter-spacing:-0.01em">{{ k.cardT }}</span>
-                        <span style="margin-left:auto;font:400 10.5px 'IBM Plex Mono',monospace;color:#A29B8E">{{ k.cardMeta }}</span>
+                        <span style="margin-left:{{ mlAuto }};margin-right:{{ mrAuto }};font:400 10.5px 'IBM Plex Mono',monospace;color:#A29B8E">{{ k.cardMeta }}</span>
                       </div>
                       <div style="padding:12px 14px;display:flex;flex-direction:column;gap:8px">
                         <sc-for list="{{ k.rows }}" as="rw" hint-placeholder-count="3">
@@ -979,7 +979,7 @@
                   <div onClick="{{ ct.pick }}" style="display:flex;align-items:center;gap:11px;cursor:pointer;border-radius:9px;padding:8px 10px;background:{{ ct.bg }};transition:background .18s ease" style-hover="background:#F5F2EC">
                     <span style="color:{{ ct.ic }};display:flex;flex:none"><i data-lucide="{{ ct.icon }}" width="15" height="15" stroke-width="2"></i></span>
                     <span style="font-size:13.5px;font-weight:{{ ct.weight }};color:{{ ct.fg }};line-height:1.3">{{ ct.t }}</span>
-                    <span style="margin-left:auto;font:400 11px 'IBM Plex Mono',monospace;color:#A29B8E">{{ ct.n }}</span>
+                    <span style="margin-left:{{ mlAuto }};margin-right:{{ mrAuto }};font:400 11px 'IBM Plex Mono',monospace;color:#A29B8E">{{ ct.n }}</span>
                   </div>
                 </sc-for>
               </div>
@@ -997,7 +997,7 @@
               </div>
               <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(268px,1fr));gap:12px">
                 <sc-for list="{{ feat.dir.apps }}" as="ap" hint-placeholder-count="6">
-                  <div style="background:#FFFFFF;border:1px solid #E8E3D9;border-radius:16px;padding:20px 22px;display:flex;flex-direction:column;gap:12px;transition:border-color .2s ease,box-shadow .2s ease,transform .2s cubic-bezier(.2,.75,.2,1)" style-hover="border-color:#D8D2C6;transform:translateY(-2px);box-shadow:0 12px 28px rgba(22,21,15,.06)">
+                  <div style="position:relative;overflow:hidden;background:#FFFFFF;border:1px solid #E8E3D9;border-radius:16px;padding:20px 22px;display:flex;flex-direction:column;gap:12px;transition:border-color .2s ease,box-shadow .2s ease,transform .2s cubic-bezier(.2,.75,.2,1),background .3s ease" style-hover="border-color:#CFC8BA;transform:translateY(-3px);box-shadow:0 20px 40px rgba(22,21,15,.14),inset 0 1px 0 rgba(255,255,255,.95),inset 0 -26px 34px -22px rgba(22,21,15,.10);background:linear-gradient(158deg,#FFFFFF 0%,#FFFCF7 38%,#F1EBE1 100%)">
                     <div style="display:flex;align-items:center;gap:12px">
                       <span style="width:34px;height:34px;border-radius:10px;background:{{ ap.bg }};display:flex;align-items:center;justify-content:center;flex:none">
                         <sc-if value="{{ ap.logo }}" hint-placeholder-val="{{ true }}"><img src="{{ ap.logo }}" alt="{{ ap.t }}" width="18" height="18" style="display:block" loading="lazy" onError="{{ logoFail }}"></sc-if>
@@ -1017,7 +1017,7 @@
               <sc-if value="{{ feat.dir.empty }}" hint-placeholder-val="{{ false }}">
                 <div style="background:#FFFFFF;border:1px dashed #DCD6CA;border-radius:16px;padding:34px;text-align:center">
                   <div style="font-size:15px;font-weight:600;letter-spacing:-0.014em">{{ feat.dir.emptyT }}</div>
-                  <div style="font-size:13.5px;color:#5B564D;line-height:1.55;margin-top:7px;max-width:400px;margin-left:auto;margin-right:auto">{{ feat.dir.emptyD }}</div>
+                  <div style="font-size:13.5px;color:#5B564D;line-height:1.55;margin-top:7px;max-width:400px;margin-left:{{ mlAuto }};margin-right:{{ mrAuto }}">{{ feat.dir.emptyD }}</div>
                 </div>
               </sc-if>
             </div>
@@ -1032,10 +1032,10 @@
         </div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));column-gap:38px;margin-top:14px;border-top:1px solid #E8E3D9">
           <sc-for list="{{ feat.others }}" as="o" hint-placeholder-count="8">
-            <div onClick="{{ o.go }}" style="border-bottom:1px solid #E8E3D9;padding:15px 2px;display:flex;align-items:center;gap:13px;cursor:pointer;transition:padding .22s cubic-bezier(.2,.75,.2,1)" style-hover="padding-left:8px">
+            <div onClick="{{ o.go }}" style="border-bottom:1px solid #E8E3D9;padding:15px 2px;display:flex;align-items:center;gap:13px;cursor:pointer;transition:padding .22s cubic-bezier(.2,.75,.2,1)" style-hover="padding-inline-start:8px">
               <span style="color:{{ o.ic }};display:flex;flex:none"><i data-lucide="{{ o.icon }}" width="17" height="17" stroke-width="1.9"></i></span>
               <span style="font-size:15.5px;font-weight:500;letter-spacing:-0.014em;line-height:1.2">{{ o.t }}</span>
-              <span style="margin-left:auto;color:#B5AFA4;display:flex;flex:none;transition:transform .22s cubic-bezier(.2,.75,.2,1),color .22s ease" style-hover="color:#C4552F;transform:translate(2px,-2px)"><i data-lucide="arrow-up-right" width="16" height="16" stroke-width="2"></i></span>
+              <span style="margin-left:{{ mlAuto }};margin-right:{{ mrAuto }};color:#B5AFA4;display:flex;flex:none;transition:transform .22s cubic-bezier(.2,.75,.2,1),color .22s ease" style-hover="color:#C4552F;transform:translate(2px,-2px)"><i data-lucide="arrow-up-right" width="16" height="16" stroke-width="2"></i></span>
             </div>
           </sc-for>
         </div>
@@ -1056,7 +1056,7 @@
             <input type="text" placeholder="Email (optional)" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
             <div style="text-align:center;font-size:14px;font-weight:500;background:#16150F;color:#F7F5F1;border-radius:11px;padding:13px;cursor:pointer;transition:background .2s ease" style-hover="background:#C4552F">Leave your details</div>
             <a href="https://calendar.app.google/Fv9DCtUycjqSV3a77" target="_blank" rel="noopener" style="text-align:center;font-size:13.5px;font-weight:500;color:#16150F;border:1px solid #D8D2C6;border-radius:11px;padding:12px;transition:border-color .2s ease" style-hover="border-color:#C4552F;color:#8E3418">Or book a demo call</a>
-            <div style="font-size:11.5px;color:#8E887C;line-height:1.55">A founder calls you back, usually the same day. No card, no commitment.</div>
+            <div style="font-size:11.5px;color:#8E887C;line-height:1.55">{{ chat.formFoot }}</div>
           </div>
         </div>
       </div>
@@ -1064,14 +1064,14 @@
   </sc-if>
 
   <sc-if value="{{ isWhy }}" hint-placeholder-val="{{ false }}">
-    <div id="top" style="padding:112px 0 0">
+    <div id="top" style="padding:74px 0 0">
 
       <div style="background:#F5F2EC;border-bottom:1px solid #E8E3D9">
         <div style="max-width:1240px;margin:0 auto;padding:56px 24px 64px">
           <div data-reveal="" style="text-align:center;max-width:900px;margin:0 auto;transition:opacity .8s ease,transform .8s ease">
             <div style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.22em;text-transform:uppercase;color:#C4552F">{{ why.kicker }}</div>
-            <h1 style="margin:18px 0 0;font-size:clamp(48px,6.4vw,84px);font-weight:600;letter-spacing:-0.048em;line-height:.98">{{ why.h1a }}<br><span style="font-family:'Instrument Serif',serif;font-style:italic;font-weight:400;letter-spacing:-0.02em">{{ why.h1b }}</span></h1>
-            <div style="font-size:19px;line-height:1.55;color:#5B564D;margin:22px auto 0;max-width:680px">{{ why.sub }}</div>
+            
+            <h1 style="margin: 18px 0 0; font-size: clamp(48px,6.4vw,84px); font-weight: 600; letter-spacing: -0.048em; line-height: .98; text-align: center">{{ why.h1a }}<br><span style="font-family:'Instrument Serif',serif;font-style:italic;font-weight:400;letter-spacing:-0.02em">{{ why.h1b }}</span></h1><div style="font-size:19px;line-height:1.55;color:#5B564D;margin:22px auto 0;max-width:680px">{{ why.sub }}</div>
             <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-top:30px">
               <a href="#cta" style="font-size:15px;font-weight:500;background:#16150F;color:#FAF8F4;border-radius:12px;padding:15px 26px;transition:transform .2s cubic-bezier(.2,.7,.2,1)" style-hover="transform:translateY(-2px)">Replay my last month</a>
               <a href="#compare" style="font-size:15px;font-weight:500;color:#16150F;border:1px solid #D8D2C6;border-radius:12px;padding:15px 22px;transition:transform .2s cubic-bezier(.2,.7,.2,1)" style-hover="transform:translateY(-2px)">See the comparison</a>
@@ -1096,7 +1096,7 @@
                   <div style="display:flex;align-items:center;gap:9px">
                     <span style="width:26px;height:26px;border-radius:8px;background:{{ d.iconBg }};color:{{ d.iconFg }};display:flex;align-items:center;justify-content:center"><i data-lucide="{{ d.icon }}" width="14" height="14" stroke-width="2.1"></i></span>
                     <span style="font-size:13px;font-weight:600;white-space:nowrap">{{ d.t }}</span>
-                    <span style="margin-left:auto;font:400 10.5px 'IBM Plex Mono',monospace;color:{{ d.muted }};white-space:nowrap">{{ d.time }}</span>
+                    <span style="margin-left:{{ mlAuto }};margin-right:{{ mrAuto }};font:400 10.5px 'IBM Plex Mono',monospace;color:{{ d.muted }};white-space:nowrap">{{ d.time }}</span>
                   </div>
                   <sc-if value="{{ d.trace }}" hint-placeholder-val="{{ false }}"><div style="font:400 11px 'IBM Plex Mono',monospace;color:{{ d.muted }};line-height:1.6">{{ d.trace }}</div></sc-if>
                   <div style="background:{{ d.bubbleBg }};border-radius:14px 14px 4px 14px;padding:12px 14px;font-size:14px;line-height:1.5">{{ d.reply }}</div>
@@ -1111,7 +1111,7 @@
       <div style="max-width:1240px;margin:0 auto;padding:64px 24px 0">
         <div data-reveal="" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;transition:opacity .8s ease,transform .8s ease">
           <sc-for list="{{ why.numbers }}" as="n" hint-placeholder-count="4">
-            <div style="padding:6px 22px 0;border-left:1px solid #E8E3D9">
+            <div style="padding:6px 22px 0;border-inline-start:1px solid #E8E3D9">
               <div style="font-size:52px;font-weight:600;letter-spacing:-0.045em;line-height:1;font-variant-numeric:tabular-nums" data-count="{{ n.v }}" data-suffix="{{ n.sfx }}">{{ n.sfx }}</div>
               <div style="font-size:14px;line-height:1.45;margin-top:10px;color:#16150F">{{ n.l }}</div>
               <div style="font:400 11px 'IBM Plex Mono',monospace;color:#A29B8E;margin-top:6px">{{ n.src }}</div>
@@ -1215,7 +1215,7 @@
           <div style="display:grid;grid-template-columns:1.6fr repeat(4,1fr);border-bottom:1px solid #E8E3D9">
             <div style="padding:22px 26px;font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.2em;text-transform:uppercase;color:#A29B8E;align-self:end">At a typical growing business</div>
             <sc-for list="{{ why.alts }}" as="a" hint-placeholder-count="4">
-              <div style="padding:22px 20px;background:{{ a.bg }};color:{{ a.fg }};border-left:1px solid #F0EDE7">
+              <div style="padding:22px 20px;background:{{ a.bg }};color:{{ a.fg }};border-inline-start:1px solid #F0EDE7">
                 <div style="font-size:12.5px;color:{{ a.muted }}">{{ a.t }}</div>
                 <div style="font-size:24px;font-weight:600;letter-spacing:-0.03em;margin-top:6px">{{ a.v }}</div>
                 <div style="font:400 11px 'IBM Plex Mono',monospace;color:{{ a.muted }};margin-top:6px">{{ a.n }}</div>
@@ -1226,7 +1226,7 @@
             <div style="display:grid;grid-template-columns:1.6fr repeat(4,1fr);border-bottom:1px solid #F7F5F1">
               <div style="padding:15px 26px;font-size:14px;line-height:1.4;display:flex;align-items:center">{{ row.k }}</div>
               <sc-for list="{{ row.cells }}" as="c" hint-placeholder-count="4">
-                <div style="padding:13px 20px;border-left:1px solid #F0EDE7;background:{{ c.bg }};display:flex;align-items:center;gap:9px">
+                <div style="padding:13px 20px;border-inline-start:1px solid #F0EDE7;background:{{ c.bg }};display:flex;align-items:center;gap:9px">
                   <span style="width:22px;height:22px;border-radius:50%;background:{{ c.markBg }};color:{{ c.markFg }};display:flex;align-items:center;justify-content:center;flex:none"><i data-lucide="{{ c.icon }}" width="12" height="12" stroke-width="2.6"></i></span>
                   <span style="font-size:12px;line-height:1.35;color:{{ c.fg }}">{{ c.note }}</span>
                 </div>
@@ -1325,7 +1325,7 @@
             <input type="text" placeholder="Email (optional)" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
             <div style="text-align:center;font-size:14px;font-weight:500;background:#16150F;color:#F7F5F1;border-radius:11px;padding:13px;cursor:pointer;transition:background .2s ease" style-hover="background:#C4552F">Leave your details</div>
             <a href="https://calendar.app.google/Fv9DCtUycjqSV3a77" target="_blank" rel="noopener" style="text-align:center;font-size:13.5px;font-weight:500;color:#16150F;border:1px solid #D8D2C6;border-radius:11px;padding:12px;transition:border-color .2s ease" style-hover="border-color:#C4552F;color:#8E3418">Or book a demo call</a>
-            <div style="font-size:11.5px;color:#8E887C;line-height:1.55">A founder calls you back, usually the same day. No card, no commitment.</div>
+            <div style="font-size:11.5px;color:#8E887C;line-height:1.55">{{ chat.formFoot }}</div>
           </div>
         </div>
       </div>
@@ -1333,7 +1333,7 @@
   </sc-if>
 
   <sc-if value="{{ isHelp }}" hint-placeholder-val="{{ false }}">
-    <div id="top" style="padding:136px 0 0">
+    <div id="top" style="padding:98px 0 0">
       <div style="max-width:1240px;margin:0 auto;padding:0 24px">
         <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:48px">
           <div style="flex:1">
@@ -1359,7 +1359,7 @@
                 <div style="display:flex;align-items:center;gap:11px">
                   <span style="width:30px;height:30px;border-radius:9px;background:{{ c.bg }};color:{{ c.ic }};display:flex;align-items:center;justify-content:center;flex:none"><i data-lucide="{{ c.icon }}" width="15" height="15" stroke-width="2"></i></span>
                   <span style="font-size:16px;font-weight:600;letter-spacing:-0.014em">{{ c.t }}</span>
-                  <span style="margin-left:auto;font:400 11px 'IBM Plex Mono',monospace;color:#A29B8E;white-space:nowrap">{{ c.n }}</span>
+                  <span style="margin-left:{{ mlAuto }};margin-right:{{ mrAuto }};font:400 11px 'IBM Plex Mono',monospace;color:#A29B8E;white-space:nowrap">{{ c.n }}</span>
                 </div>
                 <div style="font-size:13.5px;line-height:1.55;color:#5B564D;text-wrap:pretty">{{ c.d }}</div>
                 <div style="display:flex;flex-direction:column;gap:1px;margin-top:4px">
@@ -1426,7 +1426,7 @@
   </sc-if>
 
   <sc-if value="{{ isBlog }}" hint-placeholder-val="{{ false }}">
-    <div id="top" style="padding:136px 0 0">
+    <div id="top" style="padding:98px 0 0">
       <div style="max-width:1240px;margin:0 auto;padding:0 24px">
         <sc-if value="{{ postOpen }}" hint-placeholder-val="{{ false }}">
           <div onClick="{{ post.back }}" style="font-size:13px;font-weight:500;color:#8E3418;cursor:pointer;display:flex;align-items:center;gap:8px;width:max-content"><span dir="ltr" style="display:inline-block">{{ arrowBack }}</span> Back to the journal</div>
@@ -1443,7 +1443,7 @@
             </sc-for>
             <div style="display:flex;align-items:center;justify-content:space-between;gap:24px;margin-top:36px;padding-top:22px;border-top:1px solid #E8E3D9;flex-wrap:wrap">
               <div onClick="{{ post.back }}" style="font-size:13.5px;font-weight:500;color:#5B564D;cursor:pointer">← All articles</div>
-              <div onClick="{{ post.next }}" style="text-align:right;cursor:pointer;max-width:420px">
+              <div onClick="{{ post.next }}" style="text-align:end;cursor:pointer;max-width:420px">
                 <div style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.2em;text-transform:uppercase;color:#A29B8E">Next</div>
                 <div style="font-size:17px;font-weight:600;letter-spacing:-0.018em;margin-top:6px;color:#16150F">{{ post.nextT }} <span style="color:#8E3418">→</span></div>
               </div>
@@ -1506,7 +1506,7 @@
   </sc-if>
 
   <sc-if value="{{ isAbout }}" hint-placeholder-val="{{ false }}">
-  <div id="top" style="padding:136px 0 0">
+  <div id="top" style="padding:98px 0 0">
       <div style="max-width:1240px;margin:0 auto;padding:0 24px">
         <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:48px">
           <div style="flex:1">
@@ -1635,7 +1635,7 @@
             <input type="text" placeholder="Email (optional)" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
             <div style="text-align:center;font-size:14px;font-weight:500;background:#16150F;color:#F7F5F1;border-radius:11px;padding:13px;cursor:pointer;transition:background .2s ease" style-hover="background:#C4552F">Leave your details</div>
             <a href="https://calendar.app.google/Fv9DCtUycjqSV3a77" target="_blank" rel="noopener" style="text-align:center;font-size:13.5px;font-weight:500;color:#16150F;border:1px solid #D8D2C6;border-radius:11px;padding:12px;transition:border-color .2s ease" style-hover="border-color:#C4552F;color:#8E3418">Or book a demo call</a>
-            <div style="font-size:11.5px;color:#8E887C;line-height:1.55">A founder calls you back, usually the same day. No card, no commitment.</div>
+            <div style="font-size:11.5px;color:#8E887C;line-height:1.55">{{ chat.formFoot }}</div>
           </div>
         </div>
       </div>
@@ -1643,7 +1643,7 @@
   </sc-if>
 
   <sc-if value="{{ isCareers }}" hint-placeholder-val="{{ false }}">
-    <div id="top" style="padding:136px 0 0">
+    <div id="top" style="padding:98px 0 0">
       <div style="max-width:1240px;margin:0 auto;padding:0 24px">
         <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:48px">
           <div style="flex:1">
@@ -1725,7 +1725,7 @@
   </sc-if>
 
   <sc-if value="{{ isSecurity }}" hint-placeholder-val="{{ false }}">
-    <div id="top" style="padding:136px 0 0">
+    <div id="top" style="padding:98px 0 0">
       <div style="max-width:1240px;margin:0 auto;padding:0 24px">
         <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:48px">
           <div style="flex:1">
@@ -1779,7 +1779,7 @@
             <sc-for list="{{ security.facts }}" as="f" hint-placeholder-count="8">
               <div style="padding:14px 26px;border-bottom:1px solid #F7F5F1;display:flex;align-items:center;gap:16px">
                 <span style="font-size:13.5px;flex:1;line-height:1.4">{{ f.t }}</span>
-                <span style="font:500 11.5px 'IBM Plex Mono',monospace;color:#5B564D;text-align:right">{{ f.n }}</span>
+                <span style="font:500 11.5px 'IBM Plex Mono',monospace;color:#5B564D;text-align:end">{{ f.n }}</span>
               </div>
             </sc-for>
           </div>
@@ -1820,91 +1820,90 @@
 
   <sc-if value="{{ isOffer }}" hint-placeholder-val="{{ false }}">
     <div id="top" style="padding:0">
-      <div style="background:#8E3418;color:#FFFFFF;padding:136px 0 62px">
+      <div style="background:#8E3418;color:#FFFFFF;padding:112px 0 88px">
       <div style="max-width:1240px;margin:0 auto;padding:0 24px">
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
           <span style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.22em;text-transform:uppercase;background:rgba(22,21,15,.28);color:#FFFFFF;border-radius:6px;padding:6px 10px">{{ op.badge }}</span>
           <span style="font-size:13px;color:#FFFFFF;font-weight:500">{{ op.scarcity }}</span>
         </div>
         <h1 style="margin:22px 0 0;font-size:clamp(46px,6vw,80px);font-weight:600;letter-spacing:-0.046em;line-height:0.98;max-width:900px">{{ op.h1a }}<br><span style="font-family:'Instrument Serif',serif;font-style:italic;font-weight:400;letter-spacing:-0.022em">{{ op.h1b }}</span></h1>
-        <div style="font-size:19px;line-height:1.55;color:#FFEDE6;margin-top:22px;max-width:640px;text-wrap:pretty">{{ op.sub }}</div>
+        <div style="font-size:19px;line-height:1.55;color:#FFEDE6;margin-top:26px;max-width:640px;text-wrap:pretty">{{ op.sub }}</div>
 
-        <div style="display:flex;gap:12px;margin-top:30px;flex-wrap:wrap;align-items:stretch">
-          <div style="flex:0 0 300px;max-width:100%;background:#16150F;color:#F7F5F1;border-radius:22px;padding:26px 28px;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(22,21,15,.28)">
-            <div style="font:500 9.5px 'IBM Plex Mono',monospace;letter-spacing:.18em;text-transform:uppercase;color:#E8B9A4">{{ op.priceLabel }}</div>
-            <div style="display:flex;align-items:baseline;gap:8px;margin-top:12px">
-              <span style="font-size:76px;font-weight:600;letter-spacing:-0.05em;line-height:0.9">{{ op.price }}</span>
+        <div style="display:flex;margin-top:44px">
+          <div style="flex:1 1 auto;max-width:940px;background:#FFFFFF;color:#16150F;border-radius:22px;overflow:hidden;box-shadow:0 26px 64px rgba(22,21,15,.26);display:flex;flex-wrap:wrap">
+            <div style="flex:1 1 380px;min-width:0;padding:34px 36px 36px;display:flex;flex-direction:column;gap:13px">
+              <div style="font-size:17px;font-weight:600;letter-spacing:-0.018em">{{ op.formTitle }}</div>
+              <div style="font-size:13px;line-height:1.55;color:#5B564D;margin-bottom:2px">{{ op.formLead }}</div>
+              <input type="text" placeholder="Your name *" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
+              <input type="text" placeholder="Phone *" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
+              <input type="text" placeholder="Website address *" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
+              <input type="text" placeholder="Email (optional)" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
+              <div style="text-align:center;font-size:15px;font-weight:600;background:#C4552F;color:#FFFFFF;border-radius:11px;padding:14px;cursor:pointer;transition:background .2s ease" style-hover="background:#8E3418">{{ op.submit }}</div>
+              <div style="font-size:11.5px;color:#8E887C;line-height:1.55">{{ op.formFoot }}</div>
             </div>
-            <div style="font-size:14px;color:#C9C4BC;line-height:1.55;margin-top:12px">{{ op.priceNote }}</div>
-            <div style="margin-top:auto;padding-top:22px;display:flex;flex-direction:column;gap:10px">
-              <a href="#offer-cta" style="text-align:center;font-size:15px;font-weight:500;background:#F7F5F1;color:#16150F;border-radius:12px;padding:15px;transition:background .2s ease" style-hover="background:#FFFFFF;color:#16150F">{{ op.cta }}</a>
-              <div style="font-size:11.5px;color:#8E8A83;text-align:center">{{ op.ctaNote }}</div>
-            </div>
-          </div>
-
-          <div style="flex:1 1 420px;min-width:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
-            <sc-for list="{{ op.cards }}" as="oc" hint-placeholder-count="4">
-              <div style="background:#FFFFFF;color:#16150F;border:1px solid #E8E3D9;border-radius:18px;padding:22px 24px;display:flex;flex-direction:column;gap:10px">
-                <span style="width:32px;height:32px;border-radius:10px;background:{{ oc.bg }};color:{{ oc.ic }};display:flex;align-items:center;justify-content:center"><i data-lucide="{{ oc.icon }}" width="16" height="16" stroke-width="2"></i></span>
-                <div style="font-size:16px;font-weight:600;letter-spacing:-0.016em;line-height:1.25">{{ oc.t }}</div>
-                <div style="font-size:13.5px;line-height:1.55;color:#5B564D;text-wrap:pretty">{{ oc.d }}</div>
+            <div style="flex:1 1 320px;min-width:0;background:#16150F;color:#F7F5F1;padding:36px 38px;display:flex;flex-direction:column;gap:16px">
+              <div style="font:500 9.5px 'IBM Plex Mono',monospace;letter-spacing:.18em;text-transform:uppercase;color:#E8B9A4">{{ op.priceLabel }}</div>
+              <div style="font-size:76px;font-weight:600;letter-spacing:-0.05em;line-height:0.86">{{ op.price }}</div>
+              <div style="font-size:13.5px;line-height:1.6;color:#A29D95">{{ op.priceNote }}</div>
+              <div style="margin-top:6px;display:flex;flex-direction:column;gap:1px">
+                <sc-for list="{{ op.items }}" as="pi" hint-placeholder-count="4">
+                  <div style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-top:1px solid #262521">
+                    <span style="color:#A8C57A;display:flex;flex:none;margin-top:2px"><i data-lucide="check" width="14" height="14" stroke-width="2.6"></i></span>
+                    <div style="font-size:13.5px;line-height:1.5;color:#E8E4DD">{{ pi }}</div>
+                  </div>
+                </sc-for>
               </div>
-            </sc-for>
+              <div style="margin-top:auto;padding-top:14px;font-size:11.5px;line-height:1.55;color:#8E8A83">{{ op.ctaNote }}</div>
+            </div>
           </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(224px,1fr));gap:14px;margin-top:20px">
+          <sc-for list="{{ op.cards }}" as="oc" hint-placeholder-count="4">
+            <div style="background:#FFFFFF;color:#16150F;border:1px solid #E8E3D9;border-radius:18px;padding:22px 24px;display:flex;flex-direction:column;gap:10px">
+              <span style="width:32px;height:32px;border-radius:10px;background:{{ oc.bg }};color:{{ oc.ic }};display:flex;align-items:center;justify-content:center"><i data-lucide="{{ oc.icon }}" width="16" height="16" stroke-width="2"></i></span>
+              <div style="font-size:16px;font-weight:600;letter-spacing:-0.016em;line-height:1.25">{{ oc.t }}</div>
+              <div style="font-size:13.5px;line-height:1.55;color:#5B564D;text-wrap:pretty">{{ oc.d }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="margin-top:72px;max-width:760px">
+          <h2 style="margin:0;font-size:34px;font-weight:600;letter-spacing:-0.032em;line-height:1.12;text-wrap:pretty">{{ op.shotHead }}</h2>
+          
+        </div>
+        <div style="margin-top:22px;background:#16150F;border-radius:22px;padding:10px;box-shadow:0 30px 70px rgba(22,21,15,.34)">
+          <div style="display:flex;align-items:center;gap:7px;padding:6px 8px 10px">
+            <span style="width:8px;height:8px;border-radius:50%;background:#3A3833"></span>
+            <span style="width:8px;height:8px;border-radius:50%;background:#3A3833"></span>
+            <span style="width:8px;height:8px;border-radius:50%;background:#3A3833"></span>
+            <span style="margin-left:10px;font:400 10.5px 'IBM Plex Mono',monospace;color:#8E8A83">{{ op.shotMeta }}</span>
+          </div>
+          <div style="border-radius:14px;overflow:hidden;background:#0E0D0A">
+            <img src="assets/shots/home-clean.png" alt="{{ op.shotAlt }}" style="display:block;width:100%" loading="lazy">
+          </div>
+        </div>
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:36px;margin-top:16px;flex-wrap:wrap">
+          
+          
+        </div>
+
+        <div style="display:flex;align-items:center;gap:26px;margin-top:28px;flex-wrap:wrap">
+          <sc-for list="{{ op.trust }}" as="tr" hint-placeholder-count="4">
+            <span style="display:flex;align-items:center;gap:8px">
+              <span style="color:#FFD9C8;display:flex"></span>
+              
+            </span>
+          </sc-for>
         </div>
       </div>
       </div>
 
       <div style="background:#FBEEE8;border-bottom:1px solid #F0D6C9">
-        <div style="max-width:1240px;margin:0 auto;padding:56px 24px 60px">
-          <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:40px;flex-wrap:wrap">
-            <div>
-              <div style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.22em;text-transform:uppercase;color:#A29B8E">{{ op.whyKicker }}</div>
-              <h2 style="margin:14px 0 0;font-size:40px;font-weight:600;letter-spacing:-0.036em;line-height:1.06;max-width:660px">{{ op.whyTitle }}</h2>
-            </div>
-            <div style="max-width:400px;font-size:14px;line-height:1.6;color:#5B564D">{{ op.whyNote }}</div>
-          </div>
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-top:26px">
-            <sc-for list="{{ op.why }}" as="wy" hint-placeholder-count="3">
-              <div style="background:#FFFFFF;border:1px solid #F0D6C9;border-radius:18px;padding:24px;display:flex;flex-direction:column;gap:11px">
-                <div style="font:500 11px 'IBM Plex Mono',monospace;color:#8E3418">{{ wy.n }}</div>
-                <div style="font-size:17px;font-weight:600;letter-spacing:-0.018em;line-height:1.25">{{ wy.t }}</div>
-                <div style="font-size:13.5px;line-height:1.55;color:#5B564D;text-wrap:pretty">{{ wy.d }}</div>
-              </div>
-            </sc-for>
-          </div>
-        </div>
+        
       </div>
 
-      <div style="max-width:1240px;margin:0 auto;padding:76px 24px 0">
-        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:40px;flex-wrap:wrap">
-          <div>
-            <div style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.22em;text-transform:uppercase;color:#C4552F">{{ op.pickKicker }}</div>
-            <h2 style="margin:14px 0 0;font-size:40px;font-weight:600;letter-spacing:-0.036em;line-height:1.06;max-width:680px">{{ op.pickTitle }}</h2>
-          </div>
-          <div style="max-width:400px;font-size:14px;line-height:1.6;color:#5B564D">{{ op.pickNote }}</div>
-        </div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-top:26px">
-          <sc-for list="{{ op.pick }}" as="pk" hint-placeholder-count="3">
-            <div style="background:{{ pk.bg }};border:1px solid {{ pk.bd }};border-radius:20px;padding:26px 28px;display:flex;flex-direction:column;gap:12px;color:{{ pk.fg }}">
-              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-                <div style="font-size:18px;font-weight:600;letter-spacing:-0.02em">{{ pk.name }}</div>
-                <span style="font:500 9.5px 'IBM Plex Mono',monospace;letter-spacing:.16em;text-transform:uppercase;background:{{ pk.badgeBg }};color:{{ pk.badgeFg }};border-radius:5px;padding:4px 8px">{{ pk.badge }}</span>
-              </div>
-              <div style="font-size:13.5px;line-height:1.6;color:{{ pk.muted }};text-wrap:pretty">{{ pk.who }}</div>
-              <div style="margin-top:auto;padding-top:14px;border-top:1px solid {{ pk.rule }};display:flex;flex-direction:column;gap:4px">
-                <div style="font-size:13px;font-weight:600">{{ pk.offerLine }}</div>
-                <div style="font-size:12.5px;line-height:1.55;color:{{ pk.muted }}">{{ pk.after }}</div>
-              </div>
-            </div>
-          </sc-for>
-        </div>
-        <div style="display:flex;align-items:center;gap:16px;margin-top:18px;flex-wrap:wrap">
-          <a href="#offer-cta" style="font-size:14.5px;font-weight:500;background:#8E3418;color:#FFFFFF;border-radius:12px;padding:14px 24px;white-space:nowrap" style-hover="background:#C4552F">{{ op.pickCta }}</a>
-          <div onClick="{{ op.goPricing }}" style="font-size:14px;font-weight:500;color:#8E3418;border-bottom:1px solid #E3B7A4;padding-bottom:2px;cursor:pointer;white-space:nowrap">{{ op.pickCompare }}</div>
-          <div style="flex:1;min-width:240px;font-size:12.5px;line-height:1.55;color:#8E887C">{{ op.pickFoot }}</div>
-        </div>
-      </div>
+      
 
       <div style="max-width:1240px;margin:0 auto;padding:76px 24px 0">
         <div style="display:flex;gap:44px;flex-wrap:wrap;align-items:flex-start">
@@ -1959,15 +1958,33 @@
   </sc-if>
 
   <sc-if value="{{ isChat }}" hint-placeholder-val="{{ false }}">
-    <div id="top" style="padding:136px 0 0">
+    <div id="top" style="padding:98px 0 0">
       <div style="max-width:1240px;margin:0 auto;padding:0 24px">
         <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:48px">
           <div style="flex:1">
             <div style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.22em;text-transform:uppercase;color:#A29B8E">{{ chat.kicker }}</div>
             <h1 style="margin:18px 0 0;font-size:64px;font-weight:600;letter-spacing:-0.044em;line-height:1.02;max-width:820px">{{ chat.h1a }}<br><span style="font-family:'Instrument Serif',serif;font-style:italic;font-weight:400;letter-spacing:-0.02em">{{ chat.h1b }}</span></h1>
             <div style="font-size:18px;line-height:1.55;color:#5B564D;margin-top:20px;max-width:620px">{{ chat.sub }}</div>
+            <div style="display:flex;align-items:center;gap:26px;margin-top:26px;flex-wrap:wrap">
+              <sc-for list="{{ chat.stats }}" as="stt" hint-placeholder-count="3">
+                <div>
+                  <div style="font-size:22px;font-weight:600;letter-spacing:-0.024em">{{ stt.v }}</div>
+                  <div style="font-size:12.5px;color:#8E887C;margin-top:3px">{{ stt.l }}</div>
+                </div>
+              </sc-for>
+            </div>
           </div>
-          
+          <div style="width:400px;flex:none;background:#FFFFFF;border:1px solid #E8E3D9;border-radius:20px;padding:28px 30px 30px;display:flex;flex-direction:column;gap:12px;box-shadow:0 22px 50px rgba(22,21,15,.09)">
+            <div style="font-size:17px;font-weight:600;letter-spacing:-0.018em">{{ chat.formTitle }}</div>
+            <div style="font-size:13px;line-height:1.55;color:#5B564D;margin-bottom:2px">{{ chat.formNote }}</div>
+            <input type="text" placeholder="Your name *" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
+            <input type="text" placeholder="Phone *" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
+            <input type="text" placeholder="Website address *" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
+            <input type="text" placeholder="Email (optional)" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
+            <div style="text-align:center;font-size:15px;font-weight:600;background:#C4552F;color:#FFFFFF;border-radius:11px;padding:14px;cursor:pointer;transition:background .2s ease" style-hover="background:#8E3418">{{ chat.submit }}</div>
+            <a href="https://calendar.app.google/Fv9DCtUycjqSV3a77" target="_blank" rel="noopener" style="text-align:center;font-size:13.5px;font-weight:500;color:#16150F;border:1px solid #D8D2C6;border-radius:11px;padding:12px;transition:border-color .2s ease" style-hover="border-color:#C4552F;color:#8E3418">Or book a demo call</a>
+            <div style="font-size:11.5px;color:#8E887C;line-height:1.55">{{ chat.formFoot }}</div>
+          </div>
         </div>
       </div>
 
@@ -1981,7 +1998,7 @@
                 <div style="font-size:17px;font-weight:600;letter-spacing:-0.016em;line-height:1.25">{{ w.t }}</div>
                 <div style="font-size:13.5px;line-height:1.55;color:#5B564D;text-wrap:pretty">{{ w.d }}</div>
                 <div style="font:400 11.5px 'IBM Plex Mono',monospace;color:#8E887C">{{ w.n }}</div>
-                <div style="margin-top:8px;text-align:center;font-size:14px;font-weight:500;background:#16150F;color:#F7F5F1;border-radius:11px;padding:12px;cursor:pointer" style-hover="background:#C4552F">{{ w.cta }}</div>
+                <a href="{{ w.href }}" target="_blank" rel="noopener" style="margin-top:8px;text-align:center;font-size:14px;font-weight:500;background:#16150F;color:#F7F5F1;border-radius:11px;padding:12px;cursor:pointer;transition:background .2s ease" style-hover="background:#C4552F">{{ w.cta }}</a>
               </div>
             </sc-for>
           </div>
@@ -1995,13 +2012,12 @@
               <div style="font-size:20px;font-weight:600;letter-spacing:-0.02em">{{ chat.formTitle }}</div>
               <div style="font-size:13px;color:#8E887C;margin-top:5px">{{ chat.formNote }}</div>
             </div>
-            <sc-for list="{{ chat.fields }}" as="fd" hint-placeholder-count="4">
-              <div style="display:flex;flex-direction:column;gap:6px">
-                <span style="font-size:12.5px;color:#5B564D">{{ fd.l }}</span>
-                <input type="text" placeholder="{{ fd.p }}" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%">
-              </div>
-            </sc-for>
-            <div style="text-align:center;font-size:14.5px;font-weight:500;background:#16150F;color:#F7F5F1;border-radius:11px;padding:14px;cursor:pointer" style-hover="background:#C4552F">{{ chat.submit }}</div>
+            <input type="text" placeholder="Your name *" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
+            <input type="text" placeholder="Phone *" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
+            <input type="text" placeholder="Website address *" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
+            <input type="text" placeholder="Email (optional)" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
+            <div style="text-align:center;font-size:15px;font-weight:600;background:#C4552F;color:#FFFFFF;border-radius:11px;padding:14px;cursor:pointer;transition:background .2s ease" style-hover="background:#8E3418">{{ chat.submit }}</div>
+            <a href="https://calendar.app.google/Fv9DCtUycjqSV3a77" target="_blank" rel="noopener" style="text-align:center;font-size:13.5px;font-weight:500;color:#16150F;border:1px solid #D8D2C6;border-radius:11px;padding:12px;transition:border-color .2s ease" style-hover="border-color:#C4552F;color:#8E3418">Or book a demo call</a>
             <div style="font-size:11.5px;color:#8E887C;line-height:1.55">{{ chat.formFoot }}</div>
           </div>
           <div style="flex:1;background:#16150F;color:#F7F5F1;border-radius:20px;overflow:hidden">
@@ -2048,7 +2064,7 @@
             <input type="text" placeholder="Email (optional)" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
             <div style="text-align:center;font-size:14px;font-weight:500;background:#16150F;color:#F7F5F1;border-radius:11px;padding:13px;cursor:pointer;transition:background .2s ease" style-hover="background:#C4552F">Leave your details</div>
             <a href="https://calendar.app.google/Fv9DCtUycjqSV3a77" target="_blank" rel="noopener" style="text-align:center;font-size:13.5px;font-weight:500;color:#16150F;border:1px solid #D8D2C6;border-radius:11px;padding:12px;transition:border-color .2s ease" style-hover="border-color:#C4552F;color:#8E3418">Or book a demo call</a>
-            <div style="font-size:11.5px;color:#8E887C;line-height:1.55">A founder calls you back, usually the same day. No card, no commitment.</div>
+            <div style="font-size:11.5px;color:#8E887C;line-height:1.55">{{ chat.formFoot }}</div>
           </div>
         </div>
       </div>
@@ -2056,7 +2072,7 @@
   </sc-if>
 
   <sc-if value="{{ isPricing }}" hint-placeholder-val="{{ false }}">
-    <div id="top" style="padding:136px 0 0">
+    <div id="top" style="padding:98px 0 0">
       <div style="max-width:1240px;margin:0 auto;padding:0 24px">
         <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:48px">
           <div>
@@ -2128,7 +2144,7 @@
               <span style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.2em;text-transform:uppercase;color:#A29B8E">{{ cycleNote }}</span>
             </div>
             <sc-for list="{{ cmpPlans }}" as="p" hint-placeholder-count="3">
-              <div style="padding:14px 20px 16px;border-left:1px solid #F0EDE7;background:{{ p.bg }};display:flex;flex-direction:column;gap:3px">
+              <div style="padding:14px 20px 16px;border-inline-start:1px solid #F0EDE7;background:{{ p.bg }};display:flex;flex-direction:column;gap:3px">
                 <div style="display:flex;align-items:center;gap:8px">
                   <span style="font-size:14.5px;font-weight:600;letter-spacing:-0.012em">{{ p.name }}</span>
                   <span style="font-size:10px;color:{{ p.badgeFg }};background:{{ p.badgeBg }};border-radius:5px;padding:2px 6px;white-space:nowrap">{{ p.badge }}</span>
@@ -2149,7 +2165,7 @@
                 <div style="display:grid;grid-template-columns:1.7fr 1fr 1fr 1fr;border-bottom:1px solid #F7F5F1">
                   <div style="padding:13px 24px;font-size:13.5px;line-height:1.45;color:#3A3833">{{ r.t }}</div>
                   <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="3">
-                    <div style="padding:13px 20px;border-left:1px solid #F7F5F1;background:{{ c.bg }};font-size:13px;font-weight:{{ c.w }};color:{{ c.c }};display:flex;align-items:center">{{ c.v }}</div>
+                    <div style="padding:13px 20px;border-inline-start:1px solid #F7F5F1;background:{{ c.bg }};font-size:13px;font-weight:{{ c.w }};color:{{ c.c }};display:flex;align-items:center">{{ c.v }}</div>
                   </sc-for>
                 </div>
               </sc-for>
@@ -2159,7 +2175,7 @@
           <div style="display:grid;grid-template-columns:1.7fr 1fr 1fr 1fr">
             <div style="padding:18px 24px;font-size:12.5px;color:#8E887C">Every plan includes your whole team, with no per-seat charge.</div>
             <sc-for list="{{ cmpPlans }}" as="p" hint-placeholder-count="3">
-              <div style="padding:14px 20px;border-left:1px solid #F7F5F1;background:{{ p.bg }}">
+              <div style="padding:14px 20px;border-inline-start:1px solid #F7F5F1;background:{{ p.bg }}">
                 <div style="text-align:center;font-size:13px;font-weight:500;background:{{ p.btnBg }};color:{{ p.btnFg }};border:1px solid {{ p.btnBd }};border-radius:10px;padding:11px;cursor:pointer">{{ p.cta }}</div>
               </div>
             </sc-for>
@@ -2244,7 +2260,7 @@
             <input type="text" placeholder="Email (optional)" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
             <div style="text-align:center;font-size:14px;font-weight:500;background:#16150F;color:#F7F5F1;border-radius:11px;padding:13px;cursor:pointer;transition:background .2s ease" style-hover="background:#C4552F">Leave your details</div>
             <a href="https://calendar.app.google/Fv9DCtUycjqSV3a77" target="_blank" rel="noopener" style="text-align:center;font-size:13.5px;font-weight:500;color:#16150F;border:1px solid #D8D2C6;border-radius:11px;padding:12px;transition:border-color .2s ease" style-hover="border-color:#C4552F;color:#8E3418">Or book a demo call</a>
-            <div style="font-size:11.5px;color:#8E887C;line-height:1.55">A founder calls you back, usually the same day. No card, no commitment.</div>
+            <div style="font-size:11.5px;color:#8E887C;line-height:1.55">{{ chat.formFoot }}</div>
           </div>
         </div>
       </div>
@@ -2262,7 +2278,7 @@
       <div style="max-width:1240px;margin:0 auto;padding:172px 48px 0;height:100%;display:flex;flex-direction:column;justify-content:flex-start">
         <div data-hero-in="" style="max-width:660px">
           
-          <h1 style="margin: 22px 0 0; font-size: 76px; font-weight: 600; letter-spacing: -0.045em; line-height: .98; color: #FFFFFF; width: 818px; height: 154px">Manage every customer interaction,&nbsp;end to&nbsp;end.</h1>
+          <h1 style="margin: 22px 0 0; font-size: 76px; font-weight: 600; letter-spacing: -0.045em; line-height: .98; color: #FFFFFF; max-width: 860px">Every customer interaction,&nbsp;end&nbsp;to&nbsp;end</h1>
           <div style="font-size:19px;line-height:1.5;color:rgba(255,255,255,.86);margin-top:22px;max-width:540px"><p>From WhatsApp messages to phone calls, GOTCHA manages every customer interaction in one place,&nbsp; with AI employees tailored to your business, working alongside your team.</p></div>
           <div style="display:flex;align-items:center;gap:12px;margin-top:30px;pointer-events:auto">
             <a href="#cta" style="font-size:15px;font-weight:500;background:#FFFFFF;color:#16150F;border-radius:12px;padding:15px 26px;white-space:nowrap;transition:transform .2s cubic-bezier(.2,.7,.2,1),background .2s ease,box-shadow .2s ease" style-hover="background:#EFD9CD;transform:translateY(-2px);box-shadow:0 10px 24px rgba(0,0,0,.28)">Start free</a>
@@ -2285,24 +2301,24 @@
         <span style="width:26px;height:26px;border-radius:8px;background:#EDF4E7;color:#2E7D5B;display:flex;align-items:center;justify-content:center"><i data-lucide="message-circle" width="14" height="14" stroke-width="2.1"></i></span>
         <span style="font-size:13px;font-weight:500">WhatsApp · 02:14</span>
         <span style="font-size:12.5px;color:#8E887C">nobody on your team was awake</span>
-        <span style="margin-left:auto;font:500 10.5px 'IBM Plex Mono',monospace;color:#A29B8E">replay ↻</span>
+        <span style="margin-left:{{ mlAuto }};margin-right:{{ mrAuto }};font:500 10.5px 'IBM Plex Mono',monospace;color:#A29B8E">replay ↻</span>
       </div>
       <div style="display:flex">
-        <div style="flex:1;min-width:0;padding:26px 30px;display:flex;flex-direction:column;gap:13px;border-right:1px solid #F0EDE7">
-          <div style="max-width:460px;background:#F5F2EC;border-radius:14px 14px 14px 4px;padding:13px 16px;font-size:14.5px;line-height:1.5;border-left:3px solid #C4552F;color:#26241C">My package still hasn't arrived and I've been waiting two weeks. This was a gift.</div>
-          <div style="display:flex;gap:7px;padding-left:3px">
+        <div style="flex:1;min-width:0;padding:26px 30px;display:flex;flex-direction:column;gap:13px;border-inline-end:1px solid #F0EDE7">
+          <div style="max-width:460px;background:#F5F2EC;border-radius:14px 14px 14px 4px;padding:13px 16px;font-size:14.5px;line-height:1.5;border-inline-start:3px solid #C4552F;color:#26241C">My package still hasn't arrived and I've been waiting two weeks. This was a gift.</div>
+          <div style="display:flex;gap:7px;padding-inline-start:3px">
             <span style="font-size:10.5px;color:#8E3418;background:#FBEEE8;border-radius:6px;padding:3px 8px">Shipping issue</span>
             <span style="font-size:10.5px;color:#8E3418;background:#FBEEE8;border-radius:6px;padding:3px 8px">Frustrated</span>
             <span style="font-size:10.5px;color:#6B6660;background:#F0EDE7;border-radius:6px;padding:3px 8px">Gift · date passed</span>
           </div>
           <sc-if value="{{ replyStarted }}" hint-placeholder-val="{{ true }}">
-            <div style="max-width:490px;margin-left:auto;background:#16150F;color:#F7F5F1;border-radius:14px 14px 4px 14px;padding:13px 16px;font-size:14.5px;line-height:1.5;min-height:44px">
+            <div style="max-width:490px;margin-left:{{ mlAuto }};margin-right:{{ mrAuto }};background:#16150F;color:#F7F5F1;border-radius:14px 14px 4px 14px;padding:13px 16px;font-size:14.5px;line-height:1.5;min-height:44px">
               <sc-if value="{{ replyDone }}" hint-placeholder-val="{{ true }}"><span>I'm sorry: order #1842 has been stuck with the carrier since Tuesday, which isn't good enough. I've refunded the full ₪179 to your card, it'll show within three days. If you'd still like it, I can hold one from tomorrow's batch.</span></sc-if>
               <sc-if value="{{ replyTyping }}" hint-placeholder-val="{{ false }}"><span style="color:#8E887C">writing<span style="animation:gblink 1s steps(1) infinite">…</span></span></sc-if>
             </div>
           </sc-if>
           <sc-if value="{{ replyDone }}" hint-placeholder-val="{{ true }}">
-            <div style="margin-left:auto;font-size:11.5px;color:#A29B8E">Sent 02:14 · 31 seconds after she wrote · refund already processed</div>
+            <div style="margin-left:{{ mlAuto }};margin-right:{{ mrAuto }};font-size:11.5px;color:#A29B8E">Sent 02:14 · 31 seconds after she wrote · refund already processed</div>
           </sc-if>
         </div>
         <div style="width:400px;flex:none;padding:22px 24px;display:flex;flex-direction:column;gap:14px;background:#FCFBF8">
@@ -2315,7 +2331,7 @@
               <div style="display:flex;gap:11px;align-items:baseline;opacity:{{ step.o }};transition:opacity .45s ease">
                 <span style="width:5px;height:5px;border-radius:50%;background:{{ step.c }};flex:none"></span>
                 <span style="font-size:12.5px;color:#3A3833">{{ step.t }}</span>
-                <span style="margin-left:auto;font:400 11px 'IBM Plex Mono',monospace;color:#A29B8E;white-space:nowrap">{{ step.r }}</span>
+                <span style="margin-left:{{ mlAuto }};margin-right:{{ mrAuto }};font:400 11px 'IBM Plex Mono',monospace;color:#A29B8E;white-space:nowrap">{{ step.r }}</span>
               </div>
             </sc-for>
           </div>
@@ -2356,7 +2372,7 @@
   <div style="max-width:1240px;margin:0 auto;padding:56px 24px 0">
     <div data-reveal="" style="display:grid;grid-template-columns:repeat(5,1fr);background:#FFFFFF;border:1px solid #E8E3D9;border-radius:18px;overflow:hidden;transition:opacity .8s ease">
       <sc-for list="{{ heroStats }}" as="s" hint-placeholder-count="5">
-        <div style="padding:22px 24px;border-left:1px solid #F0EDE7">
+        <div style="padding:22px 24px;border-inline-start:1px solid #F0EDE7">
           <div style="font-size:30px;font-weight:600;letter-spacing:-0.02em;line-height:1">{{ s.w }}</div>
           <div style="font-size:12.5px;color:#8E887C;margin-top:7px;line-height:1.4">{{ s.l }}</div>
         </div>
@@ -2419,7 +2435,7 @@
                         <div style="display:flex;align-items:center;gap:9px">
                           <span style="width:22px;height:22px;border-radius:7px;background:{{ mo.accent }};color:#16150F;display:flex;align-items:center;justify-content:center"><i data-lucide="{{ mo.icon }}" width="12" height="12" stroke-width="2.4"></i></span>
                           <span style="font-size:12.5px;font-weight:600">{{ mo.screen }}</span>
-                          <span style="margin-left:auto;font:400 11px 'IBM Plex Mono',monospace;color:{{ mo.panelMuted }}">{{ mo.time }}</span>
+                          <span style="margin-left:{{ mlAuto }};margin-right:{{ mrAuto }};font:400 11px 'IBM Plex Mono',monospace;color:{{ mo.panelMuted }}">{{ mo.time }}</span>
                         </div>
                         <sc-if value="{{ mo.wave }}" hint-placeholder-val="{{ false }}">
                           <div style="display:flex;align-items:center;gap:3px;height:26px">
@@ -2433,7 +2449,7 @@
                           <div data-step="" style="font-size:22px;font-weight:600;letter-spacing:-0.026em;line-height:1.15;display:flex;align-items:center;gap:2px">{{ mo.titleText }}<sc-if value="{{ mo.cursor }}" hint-placeholder-val="{{ false }}"><span style="display:inline-block;width:2px;height:22px;background:#C9BCF7;animation:gblink 1s steps(1) infinite"></span></sc-if></div>
                         </sc-if>
                         <sc-if value="{{ mo.quote }}" hint-placeholder-val="{{ false }}">
-                          <div data-step="" style="font-family:'Instrument Serif',serif;font-style:italic;font-size:21px;line-height:1.3;padding:14px 16px;border-radius:12px;background:{{ mo.quoteBg }};border-left:3px solid {{ mo.accent }}">{{ mo.quote }}</div>
+                          <div data-step="" style="font-family:'Instrument Serif',serif;font-style:italic;font-size:21px;line-height:1.3;padding:14px 16px;border-radius:12px;background:{{ mo.quoteBg }};border-inline-start:3px solid {{ mo.accent }}">{{ mo.quote }}</div>
                         </sc-if>
                         <div style="display:flex;flex-direction:column">
                           <sc-for list="{{ mo.prows }}" as="pr" hint-placeholder-count="4">
@@ -2459,7 +2475,7 @@
                         <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
                           <span style="width:22px;height:22px;border-radius:7px;background:{{ mo.accent }};color:#16150F;display:flex;align-items:center;justify-content:center"><i data-lucide="{{ mo.icon }}" width="12" height="12" stroke-width="2.4"></i></span>
                           <span style="font-size:12.5px;font-weight:600;color:#F7F5F1">{{ mo.screen }}</span>
-                          <span style="margin-left:auto;font:400 11px 'IBM Plex Mono',monospace;color:#8E8A83">{{ mo.time }}</span>
+                          <span style="margin-left:{{ mlAuto }};margin-right:{{ mrAuto }};font:400 11px 'IBM Plex Mono',monospace;color:#8E8A83">{{ mo.time }}</span>
                         </div>
                         <sc-for list="{{ mo.msgs }}" as="mg" hint-placeholder-count="3">
                           <div data-step="" style="display:flex;flex-direction:column;gap:3px;align-items:{{ mg.align }}">
@@ -2501,7 +2517,7 @@
                         <div style="display:flex;align-items:center;gap:9px">
                           <span style="width:22px;height:22px;border-radius:7px;background:{{ mo.accent }};color:#16150F;display:flex;align-items:center;justify-content:center"><i data-lucide="{{ mo.icon }}" width="12" height="12" stroke-width="2.4"></i></span>
                           <span style="font-size:12.5px;font-weight:600">{{ mo.screen }}</span>
-                          <span style="margin-left:auto;font:400 11px 'IBM Plex Mono',monospace;color:{{ mo.panelMuted }}">{{ mo.time }}</span>
+                          <span style="margin-left:{{ mlAuto }};margin-right:{{ mrAuto }};font:400 11px 'IBM Plex Mono',monospace;color:{{ mo.panelMuted }}">{{ mo.time }}</span>
                         </div>
                         <sc-if value="{{ mo.wave }}" hint-placeholder-val="{{ false }}">
                           <div style="display:flex;align-items:center;gap:3px;height:26px">
@@ -2515,7 +2531,7 @@
                           <div data-step="" style="font-size:22px;font-weight:600;letter-spacing:-0.026em;line-height:1.15;display:flex;align-items:center;gap:2px">{{ mo.titleText }}<sc-if value="{{ mo.cursor }}" hint-placeholder-val="{{ false }}"><span style="display:inline-block;width:2px;height:22px;background:#C9BCF7;animation:gblink 1s steps(1) infinite"></span></sc-if></div>
                         </sc-if>
                         <sc-if value="{{ mo.quote }}" hint-placeholder-val="{{ false }}">
-                          <div data-step="" style="font-family:'Instrument Serif',serif;font-style:italic;font-size:21px;line-height:1.3;padding:14px 16px;border-radius:12px;background:{{ mo.quoteBg }};border-left:3px solid {{ mo.accent }}">{{ mo.quote }}</div>
+                          <div data-step="" style="font-family:'Instrument Serif',serif;font-style:italic;font-size:21px;line-height:1.3;padding:14px 16px;border-radius:12px;background:{{ mo.quoteBg }};border-inline-start:3px solid {{ mo.accent }}">{{ mo.quote }}</div>
                         </sc-if>
                         <div style="display:flex;flex-direction:column">
                           <sc-for list="{{ mo.prows }}" as="pr" hint-placeholder-count="4">
@@ -2541,7 +2557,7 @@
                         <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
                           <span style="width:22px;height:22px;border-radius:7px;background:{{ mo.accent }};color:#16150F;display:flex;align-items:center;justify-content:center"><i data-lucide="{{ mo.icon }}" width="12" height="12" stroke-width="2.4"></i></span>
                           <span style="font-size:12.5px;font-weight:600;color:#F7F5F1">{{ mo.screen }}</span>
-                          <span style="margin-left:auto;font:400 11px 'IBM Plex Mono',monospace;color:#8E8A83">{{ mo.time }}</span>
+                          <span style="margin-left:{{ mlAuto }};margin-right:{{ mrAuto }};font:400 11px 'IBM Plex Mono',monospace;color:#8E8A83">{{ mo.time }}</span>
                         </div>
                         <sc-for list="{{ mo.msgs }}" as="mg" hint-placeholder-count="3">
                           <div data-step="" style="display:flex;flex-direction:column;gap:3px;align-items:{{ mg.align }}">
@@ -2626,9 +2642,9 @@
         <div style="flex:1.32;min-width:420px;background:#FAF8F4;border:1px solid #E8E3D9;border-radius:22px;padding:28px 30px;display:flex;flex-direction:column">
           <div style="font:500 9px 'IBM Plex Mono',monospace;letter-spacing:.2em;text-transform:uppercase;color:#A29B8E">A message it handled alone</div>
           <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px">
-            <div style="background:#FFFFFF;border:1px solid #E8E3D9;border-radius:14px 14px 14px 4px;padding:14px 16px;font-size:14.5px;line-height:1.55;border-left:3px solid {{ uc.edge }};max-width:88%">{{ uc.msg }}</div>
-            <div style="font-size:11px;color:#A29B8E;padding-left:3px">{{ uc.tag }}</div>
-            <div style="background:#16150F;color:#F7F5F1;border-radius:14px 14px 4px 14px;padding:14px 16px;font-size:14.5px;line-height:1.55;margin-left:auto;max-width:88%">{{ uc.answer }}</div>
+            <div style="background:#FFFFFF;border:1px solid #E8E3D9;border-radius:14px 14px 14px 4px;padding:14px 16px;font-size:14.5px;line-height:1.55;border-inline-start:3px solid {{ uc.edge }};max-width:88%">{{ uc.msg }}</div>
+            <div style="font-size:11px;color:#A29B8E;padding-inline-start:3px">{{ uc.tag }}</div>
+            <div style="background:#16150F;color:#F7F5F1;border-radius:14px 14px 4px 14px;padding:14px 16px;font-size:14.5px;line-height:1.55;margin-left:{{ mlAuto }};margin-right:{{ mrAuto }};max-width:88%">{{ uc.answer }}</div>
           </div>
           <div style="font-size:12.5px;color:#6B6660;line-height:1.6;margin-top:16px;padding-top:16px;border-top:1px solid #EDE9E1">{{ uc.foot }}</div>
           <div style="margin-top:auto;padding-top:24px;display:flex;align-items:flex-end;gap:30px;flex-wrap:wrap">
@@ -2666,7 +2682,7 @@
           <h2 style="margin:15px 0 0;font-size:40px;font-weight:600;letter-spacing:-0.035em;line-height:1.08">You decide what it may do alone.</h2>
           <div style="font-size:15px;color:#A29D95;margin-top:12px;max-width:560px;line-height:1.6">Three settings per thing it can do. No scopes, no permission matrices, no API keys. Change one and every channel obeys within a minute.</div>
         </div>
-        <div style="text-align:right">
+        <div style="text-align:end">
           <div style="font-size:44px;font-weight:600;letter-spacing:-0.038em;font-variant-numeric:tabular-nums" data-count="1840">0</div>
           <div style="font-size:12px;color:#8E8A83;margin-top:4px;line-height:1.4">actions run this week<br>without asking anyone</div>
         </div>
@@ -2684,7 +2700,7 @@
             </div>
           </sc-for>
         </div>
-        <div style="width:380px;flex:none;background:#100F16;border-left:1px solid #1E1E1E;padding:26px 28px;display:flex;flex-direction:column;gap:16px">
+        <div style="width:380px;flex:none;background:#100F16;border-inline-start:1px solid #1E1E1E;padding:26px 28px;display:flex;flex-direction:column;gap:16px">
           <div style="font:500 9px 'IBM Plex Mono',monospace;letter-spacing:.2em;text-transform:uppercase;color:#7A766F">When it asks</div>
           <div style="background:#17161F;border:1px solid #2E2A45;border-radius:14px;padding:16px 18px">
             <div style="font-size:19px;font-weight:600;letter-spacing:-0.02em">Refund ₪420</div>
@@ -2834,7 +2850,6 @@
         </div>
         <div style="display:flex;gap:10px;flex:none">
           <a href="#cta" style="font-size:14px;font-weight:500;background:#F7F5F1;color:#16150F;border-radius:12px;padding:13px 22px;white-space:nowrap" style-hover="background:#C4552F;color:#FFFFFF">Start free</a>
-          <div onClick="{{ goChat }}" style="font-size:14px;font-weight:500;color:#F7F5F1;border:1px solid #3A3833;border-radius:12px;padding:13px 20px;white-space:nowrap;cursor:pointer" style-hover="border-color:#8E8A83">Talk to a person</div>
         </div>
       </div>
 
@@ -2845,6 +2860,11 @@
           <div style="display:flex;align-items:center;gap:8px;border:1px solid #262521;border-radius:9px;padding:7px 11px;width:max-content">
             <span style="width:6px;height:6px;border-radius:50%;background:#A8C57A;animation:gpulse 2.6s ease-in-out infinite"></span>
             <span style="font-size:11.5px;color:#B9B4AC">All systems operational</span>
+          </div>
+          <div style="display:flex;gap:8px">
+            <sc-for list="{{ social }}" as="so" hint-placeholder-count="2">
+              <a href="{{ so.href }}" target="_blank" rel="noopener" title="{{ so.t }}" style="width:36px;height:36px;border:1px solid #262521;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#B9B4AC;transition:background .2s ease,color .2s ease,border-color .2s ease" style-hover="background:#F7F5F1;color:#16150F;border-color:#F7F5F1"><i data-lucide="{{ so.icon }}" width="17" height="17" stroke-width="2"></i></a>
+            </sc-for>
           </div>
           <div style="display:flex;gap:6px">
             <span onClick="{{ setEn }}" style="font:500 11px 'IBM Plex Mono',monospace;background:{{ enBg }};color:{{ enFg }};border-radius:7px;padding:6px 11px;cursor:pointer">EN</span>
@@ -2857,11 +2877,18 @@
               <div style="font:500 9px 'IBM Plex Mono',monospace;letter-spacing:.2em;text-transform:uppercase;color:#9A958D">{{ col.t }}</div>
               <div style="display:flex;flex-direction:column;gap:10px;margin-top:16px">
                 <sc-for list="{{ col.items }}" as="li" hint-placeholder-count="5">
-                  <a href="#top" style="font-size:13px;color:#B9B4AC;line-height:1.35" style-hover="color:#FFFFFF">{{ li }}</a>
+                  <div onClick="{{ li.click }}" style="font-size:13px;color:#B9B4AC;line-height:1.35;cursor:pointer;transition:color .2s ease" style-hover="color:#FFFFFF">{{ li.t }}</div>
                 </sc-for>
               </div>
             </div>
           </sc-for>
+        </div>
+      </div>
+
+      <div onClick="{{ goChat }}" style="padding:0 0 34px;display:flex;align-items:center;justify-content:flex-end;gap:18px;cursor:pointer;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;justify-content:center;gap:14px;background:#F7F5F1;color:#16150F;border-radius:16px;padding:20px 36px;font-size:26px;font-weight:600;letter-spacing:-0.028em;transition:background .2s ease,color .2s ease,transform .2s cubic-bezier(.2,.75,.2,1)" style-hover="background:#C4552F;color:#FFFFFF;transform:translateY(-2px)">
+          <span>Let's talk</span>
+          <span style="display:flex"><i data-lucide="{{ arrowIcon }}" width="23" height="23" stroke-width="2.2"></i></span>
         </div>
       </div>
 
@@ -2872,7 +2899,7 @@
             <span style="font:400 11.5px 'IBM Plex Mono',monospace;color:#B9B4AC;white-space:nowrap">{{ b.t }}</span>
           </div>
         </sc-for>
-        <span style="font-size:12px;color:#9A958D;margin-left:auto">Your customers' conversations stay yours. We never train on them.</span>
+        <span style="font-size:12px;color:#9A958D;margin-left:{{ mlAuto }};margin-right:{{ mrAuto }}">Your customers' conversations stay yours. We never train on them.</span>
       </div>
 
       <div style="padding:20px 0 26px;border-top:1px solid #262521;display:flex;align-items:center;gap:22px;flex-wrap:wrap">
@@ -2881,7 +2908,7 @@
         <a href="#top" style="font-size:12px;color:#9A958D" style-hover="color:#B9B4AC">Privacy</a>
         <a href="#top" style="font-size:12px;color:#9A958D" style-hover="color:#B9B4AC">Terms</a>
         <a href="#top" style="font-size:12px;color:#9A958D" style-hover="color:#B9B4AC">DPA</a>
-        <div style="margin-left:auto;display:flex;align-items:center;gap:9px">
+        <div style="margin-left:{{ mlAuto }};margin-right:{{ mrAuto }};display:flex;align-items:center;gap:9px">
           <span style="width:5px;height:5px;border-radius:50%;background:#A8C57A;animation:gpulse 2.2s ease-in-out infinite"></span>
           <span style="font:400 11px 'IBM Plex Mono',monospace;color:#9A958D">Answering around the clock</span>
         </div>
@@ -3244,12 +3271,23 @@ class Component extends DCLogic {
 
     this.fitNav = () => {
       const w = window.innerWidth;
-      document.querySelectorAll('[data-nav-secondary]').forEach(el => { el.style.display = w < 1120 ? 'none' : ''; });
       // six nav items no longer fit at every width; compress rather than let the last one get sliced
       const compact = w < 1320, tight = w < 1160;
       document.querySelectorAll('[data-nav-item]').forEach(el => { el.style.padding = tight ? '8px 7px' : (compact ? '8px 10px' : '8px 13px'); el.style.gap = tight ? '4px' : '6px'; });
       document.querySelectorAll('[data-nav-label]').forEach(el => { el.style.fontSize = tight ? '13px' : '14px'; });
       document.querySelectorAll('[data-nav-caret]').forEach(el => { el.style.display = tight ? 'none' : 'inline-block'; });
+      // the CTAs hide only when they genuinely stop fitting, measured after the compression above
+      const secs = [...document.querySelectorAll('[data-nav-secondary]')];
+      if (secs.length) {
+        const group = secs[0].parentElement, row = group && group.parentElement;
+        if (row) {
+          secs.forEach(el => { el.style.display = ''; });
+          const kids = [...row.children];
+          const used = kids.reduce((n, el) => n + (el === group ? 0 : el.getBoundingClientRect().width), 0);
+          const need = kids.filter(el => el !== group).length * 10 + 24 + secs.reduce((n2, el) => n2 + el.scrollWidth, 0);
+          if (used + need > row.clientWidth) secs.forEach(el => { el.style.display = 'none'; });
+        }
+      }
     };
     this.fitNav();
     window.addEventListener('resize', this.fitNav);
@@ -5318,20 +5356,19 @@ class Component extends DCLogic {
       stats: [{ v: '20 min', l: 'the whole conversation' }, { v: 'Same day', l: 'we usually reply within two hours' }, { v: 'No deck', l: 'we open the product instead' }],
       waysTitle: 'Pick whichever suits you',
       ways: [
-        { icon: 'message-circle', bg: '#EDF4E7', ic: '#2E7D5B', t: 'Message us on WhatsApp', d: 'The fastest route, and a fair test. You are messaging a business that runs on GOTCHA.', n: 'answered in minutes', cta: 'Open WhatsApp' },
-        { icon: 'calendar', bg: '#FBEEE8', ic: '#C4552F', t: 'Book twenty minutes', d: 'Screen shared, your channels open, your real questions. A founder joins for anything over 5,000 conversations a month.', n: 'this week', cta: 'Pick a time' },
-        { icon: 'mail', bg: '#EDF1F7', ic: '#3E5C99', t: 'Email us', d: 'hello@gotcha.co.il, for security questionnaires, partnerships and anything that needs writing down.', n: 'within 2 hours', cta: 'Write to us' }
+        { icon: 'calendar', bg: '#FBEEE8', ic: '#C4552F', t: 'Book twenty minutes', d: 'Screen shared, your channels open, your real questions. A founder joins for anything over 5,000 conversations a month.', n: 'this week', cta: 'Pick a time', href: 'https://calendar.app.google/Fv9DCtUycjqSV3a77' },
+        { icon: 'mail', bg: '#EDF1F7', ic: '#3E5C99', t: 'Email us', d: 'support@gotcha.co.il, for security questionnaires, partnerships and anything that needs writing down.', n: 'within 2 hours', cta: 'Write to us', href: 'mailto:support@gotcha.co.il' }
       ],
-      formTitle: 'Or leave your details',
-      formNote: 'Four fields. We reply with a real answer, not a sequence of nurture emails.',
+      formTitle: 'Leave your details',
+      formNote: 'Four fields, and we get back to you today or tomorrow with a real answer.',
       fields: [
         { l: 'Your name', p: 'Dana Cohen' },
         { l: 'Business name or website', p: 'aviv-textiles.co.il' },
         { l: 'Where do your customers write to you?', p: 'WhatsApp, Instagram, email' },
         { l: 'What would you want it to handle first?', p: 'Delivery questions and returns' }
       ],
-      submit: 'Send it',
-      formFoot: 'We do not add you to a list, and one reply from you stops all of it.',
+      submit: 'Leave your details',
+      formFoot: 'We do not add you to a list, and nothing is charged or installed until you say so.',
       answersTitle: 'Before you ask', answersNote: 'The four things people want to know before booking.',
       answers: [
         { t: 'Will a salesperson call me twice a week after this?', n: 'no' },
@@ -5548,14 +5585,14 @@ class Component extends DCLogic {
             bg: '#FFFFFF', bd: '#E8E3D9', fg: '#16150F', muted: '#8E887C', dot: '#C8C2B6', rule: '#F0EDE7', accent: '#C4552F', sliderBoxH: '188px',
             sliders: [slider('chat conversations a business day', 'Co-Pilot users', cp, (v) => this.setState({ pcp: v }), false)],
             featHead: 'Includes', feats: ['Multichannel unified inbox and broadcasts', 'Automations, AI routing and the command centre', 'Copilot drafting every reply for your agents', 'Conversation summaries into your CRM', 'Knowledge base and the full customer picture', 'Your whole team, no per-seat surprises'],
-            cta: 'Get early access', btnBg: '#FFFFFF', btnFg: '#16150F', btnBd: '#D8D2C6' },
+            cta: 'Start free', btnBg: '#FFFFFF', btnFg: '#16150F', btnBd: '#D8D2C6' },
           { name: 'AI Team', badge: 'Most businesses', badgeBg: '#EFD9CD', badgeFg: '#5C2410',
             who: 'AI employees that handle service, copilot work and tasks for your team, end to end.',
             price: money(AI[ai]), per, sub: TIERS[ai] + ' AI employees' + vat,
             bg: '#16150F', bd: '#16150F', fg: '#F7F5F1', muted: '#A29D95', dot: '#4A4740', rule: '#262521', accent: '#E0A458', sliderBoxH: '188px',
             sliders: [slider('chat conversations a business day', 'AI employees', ai, (v) => this.setState({ pai: v }), true)],
             featHead: 'Everything in Co-Pilot, plus', feats: ['AI employees answering and acting on their own', 'Autonomy set per action: suggest, ask, or do it', 'Back office work done for you, not just replies', 'Actions inside Shopify, your CRM and your tools', 'Analytics that name the cause, not just the volume'],
-            cta: 'Get early access', btnBg: '#F7F5F1', btnFg: '#16150F', btnBd: '#F7F5F1' },
+            cta: 'Start free', btnBg: '#F7F5F1', btnFg: '#16150F', btnBd: '#F7F5F1' },
           { name: 'Call Pilot', badge: null, who: 'Both together, with the phone included: pick your chat volume and your voice volume.',
             price: money(CALL[ccp][cai]), per, sub: TIERS[ccp] + ' users · ' + TIERS[cai] + ' AI employees' + vat,
             bg: '#FFFFFF', bd: '#E8E3D9', fg: '#16150F', muted: '#8E887C', dot: '#C8C2B6', rule: '#F0EDE7', accent: '#C4552F', sliderBoxH: '188px',
@@ -5686,7 +5723,7 @@ class Component extends DCLogic {
         const L = {
           heroCols: stage ? '1fr' : 'repeat(auto-fit,minmax(460px,1fr))',
           textOrder: lay === 'flip' ? 2 : 1, demoOrder: lay === 'flip' ? 1 : 2,
-          heroAlign: stage ? 'center' : 'left', heroJustify: stage ? 'center' : 'flex-start',
+          heroAlign: stage ? 'center' : 'start', heroJustify: stage ? 'center' : 'flex-start',
           textMax: stage ? '860px' : 'none', textMargin: stage ? '0 auto' : '0', textMargin2: stage ? 'auto' : '0',
           demoMax: stage ? '1040px' : 'none', h1Size: stage ? '76px' : '58px',
           band: dark ? '#16150F' : (stage ? b.bg : 'transparent'),
@@ -5851,12 +5888,33 @@ class Component extends DCLogic {
       bars: { offerBar: st.barOffer ? 'flex' : 'none', headTop: (st.barOffer ? 38 : 0) + 'px' },
       op: {
         badge: 'Launch offer', scarcity: 'For the first 50 businesses only',
-        h1a: 'Three months of GOTCHA', h1b: 'for one dollar.',
-        sub: 'We are opening the system to the first 50 businesses, and we would rather earn you than charge you. One dollar in total for three months, with us setting it up beside you.',
-        priceLabel: 'The whole offer', price: '$1',
-        priceNote: 'In total, for three months, in one payment. Then you continue on the plan and the usage you choose. Regular pricing starts at $39 a month.',
-        cta: 'Claim a place', ctaNote: 'Two minutes, no card',
+        h1a: '3 months of GOTCHA', h1b: 'for $1!',
+        sub: 'We are opening the system to the first 50 businesses, and we would rather earn you than charge you. $1 in total for three months, on the plan you choose, with us setting it up beside you.',
+        priceLabel: '3 months for', price: '$1',
+        priceNote: 'in total, one payment, for the plan you choose. After that, regular pricing from $39 a month.',
+        cta: 'Claim a place', ctaNote: 'Two minutes to leave your details.',
+        formLead: 'Leave your details and we get back to you today or tomorrow.',
+        shotHead: 'Every conversation, every channel, every customer, in one calm, organised place.',
+        shotSub: 'WhatsApp, Instagram, email, phone and web chat arrive in the same queue, threaded by customer instead of by app. Nothing sits in someone\'s private phone, and nothing gets answered twice.',
+        shotMeta: 'GOTCHA · your morning view',
+        shotAlt: 'The GOTCHA home screen on a Monday morning',
+        shotTitle: 'This is what you open on Monday morning.',
+        shotNote: 'Everything handled overnight, closed and filed. What is left is the one thing that needed you, with the answer already drafted.',
+        items: [
+          '1,000 credits every month of the offer',
+          'Co-Pilot or AI Team, your choice',
+          'Connection, onboarding and personal guidance',
+          'Billing starts only once you are connected'
+        ],
+        trust: [
+          { icon: 'layers', t: 'Co-Pilot or AI Team, your choice' },
+          { icon: 'clock', t: 'Live the same day, usually' },
+          { icon: 'x-circle', t: 'Cancel whenever you like' }
+        ],
+        bandTitle: 'Three months of the full system, for the price of a coffee you would not order.',
+        bandNote: 'Fifty places, and the offer closes when they are taken. Two minutes now, and you know by tomorrow whether this is for you.',
         cards: [
+          { icon: 'layers', bg: '#EFD9CD', ic: '#8E3418', t: 'Choose Co-Pilot or AI Team', d: 'The offer covers either of the first two plans. Take Co-Pilot if your team answers, or AI Team if you want AI employees handling it end to end. Switch between them during the three months.' },
           { icon: 'coins', bg: '#F7F0E2', ic: '#8A6A16', t: '1,000 credits every month', d: 'Enough for a real month of conversations, not a demo. Unused credits reset with each month of the offer.' },
           { icon: 'plug', bg: '#EDF4E7', ic: '#2E7D5B', t: 'We connect it with you', d: 'Your channels, your store or site and your systems. You are not handed a login and left to work it out.' },
           { icon: 'user-round-check', bg: '#EAE4FB', ic: '#4B3E8E', t: 'Onboarding and personal guidance', d: 'We build the first knowledge base with you, set the autonomy limits, and stay reachable while you settle in.' },
@@ -5879,9 +5937,8 @@ class Component extends DCLogic {
           { name: 'Call Pilot', badge: 'With voice', badgeBg: '#EDF1F7', badgeFg: '#2F4670', who: 'Everything in AI Team with the phone included: chat volume and voice volume chosen separately.', offerLine: 'Three months for $1', after: 'Then a combined chat and voice plan, agreed on the call.', bg: '#FFFFFF', bd: '#E8E3D9', fg: '#16150F', muted: '#5B564D', rule: '#F0EDE7' }
         ],
         pickCta: 'Claim a place and choose on the call',
-        pickCompare: 'See what each plan includes',
+        pickCompare: 'Compare the two plans',
         pickFoot: 'You can switch plan during the three months, and you are not asked to decide before the call.',
-        goPricing: () => { this.setState({ menu: null, page: 'pricing' }); window.scrollTo(0, 0); },
         howKicker: 'How it works',
         howTitle: 'From this page to answering, usually the same day.',
         steps: [
@@ -5910,11 +5967,11 @@ class Component extends DCLogic {
       },
       offer: {
         badge: 'Launch offer',
-        barText: 'First three months for $1 in total. For the first 50 businesses.',
+        barText: 'First 3 months for $1 in total! For the first 50 businesses.',
         tabLabel: '$1 for 3 months',
         tabDisplay: st.offerOpen ? 'none' : 'flex',   // the drawer carries its own handle when open
-        title: 'Your first three months for $1.',
-        price: '$1', priceNote: 'in total, for three months, one payment',
+        title: 'Your first 3 months for $1!',
+        price: '$1', priceNote: 'in total, for 3 months, one payment',
         items: [
           '1,000 credits every month',
           'Connection, onboarding and personal guidance from us',
@@ -5953,8 +6010,8 @@ class Component extends DCLogic {
       ],
 
       cmpPlans: [
-        { name: 'Co-Pilot', badge: '', badgeBg: 'transparent', badgeFg: 'transparent', price: PRICE.prices[0], per: yr ? '/ yr' : '/ mo', sub: PRICE.subs[0], bg: 'transparent', cta: 'Get early access', btnBg: '#FFFFFF', btnFg: '#16150F', btnBd: '#D8D2C6' },
-        { name: 'AI Team', badge: 'Most businesses', badgeBg: '#EFD9CD', badgeFg: '#5C2410', price: PRICE.prices[1], per: yr ? '/ yr' : '/ mo', sub: PRICE.subs[1], bg: '#FBF9F5', cta: 'Get early access', btnBg: '#16150F', btnFg: '#F7F5F1', btnBd: '#16150F' },
+        { name: 'Co-Pilot', badge: '', badgeBg: 'transparent', badgeFg: 'transparent', price: PRICE.prices[0], per: yr ? '/ yr' : '/ mo', sub: PRICE.subs[0], bg: 'transparent', cta: 'Start free', btnBg: '#FFFFFF', btnFg: '#16150F', btnBd: '#D8D2C6' },
+        { name: 'AI Team', badge: 'Most businesses', badgeBg: '#EFD9CD', badgeFg: '#5C2410', price: PRICE.prices[1], per: yr ? '/ yr' : '/ mo', sub: PRICE.subs[1], bg: '#FBF9F5', cta: 'Start free', btnBg: '#16150F', btnFg: '#F7F5F1', btnBd: '#16150F' },
         { name: 'Call Pilot', badge: '', badgeBg: 'transparent', badgeFg: 'transparent', price: PRICE.prices[2], per: yr ? '/ yr' : '/ mo', sub: PRICE.subs[2], bg: 'transparent', cta: 'Talk to us', btnBg: '#FFFFFF', btnFg: '#16150F', btnBd: '#D8D2C6' }
       ],
 
@@ -6031,7 +6088,11 @@ class Component extends DCLogic {
       })),
       closeMenu: () => this.setState({ menu: null }),
       dir: st.lang === 'he' ? 'rtl' : 'ltr', lang: st.lang,
+      navDir: st.lang === 'he' ? 'row-reverse' : 'row',
+      navML: st.lang === 'he' ? '0' : 'auto', navMR: st.lang === 'he' ? 'auto' : '0',
+      mlAuto: st.lang === 'he' ? '0' : 'auto', mrAuto: st.lang === 'he' ? 'auto' : '0',
       arrowFwd: st.lang === 'he' ? '←' : '→', arrowBack: st.lang === 'he' ? '→' : '←',
+      arrowIcon: st.lang === 'he' ? 'arrow-left' : 'arrow-right',
       isHe: st.lang === 'he',
       setEn: () => { try { localStorage.setItem('gotcha-lang', 'en'); } catch (e) {} this.setState({ lang: 'en' }); },
       setHe: () => { try { localStorage.setItem('gotcha-lang', 'he'); } catch (e) {} this.setState({ lang: 'he' }); },
@@ -6533,12 +6594,35 @@ class Component extends DCLogic {
         { t: 'Role-based access', icon: 'shield-check', ic: '#2E7D5B' }
       ],
 
-      footer: [
-        { t: 'Product', items: ['Omnichannel', 'Social engagement', 'Your new employee', 'Copilot', 'Call pilot (beta)', 'Knowledge base', 'Approvals', 'Customers', 'AI Studio', 'Analytics', 'Store widget'] },
-        { t: 'Solutions', items: ['Cosmetics & skincare', 'Fashion & clothing', 'Home & furniture', 'Clinics & aesthetics', 'Restaurants & local', 'Electronics', 'Jewellery & gifting', 'Ecommerce', 'Lead handling'] },
-        { t: 'Integrations', items: ['Shopify', 'WooCommerce', 'Zoho', 'Monday', 'Browse all'] },
-        { t: 'Why us', items: ['Why GOTCHA', 'It acts, not just answers', 'Your limits, per action', 'Priced per conversation', 'Security'] },
-        { t: 'Our Company', items: ['About us', 'Blog', 'Help center', 'Careers', 'Security', "Let's Chat!"] }
+      footer: (() => {
+        const go = (p) => () => { this.setState({ menu: null, page: p }); window.scrollTo(0, 0); };
+        const M = {
+          'Omnichannel': 'feat-omnichannel', 'Social engagement': 'feat-social', 'Your new employee': 'feat-employee',
+          'Copilot': 'feat-copilot', 'Call pilot (beta)': 'feat-callpilot', 'Knowledge base': 'feat-knowledge',
+          'Approvals': 'feat-approvals', 'Customers': 'feat-customers', 'AI Studio': 'feat-studio',
+          'Analytics': 'feat-analytics', 'Store widget': 'feat-widget', 'Channels': 'feat-channels',
+          'Cosmetics & skincare': 'sol-cosmetics', 'Fashion & clothing': 'sol-fashion', 'Home & furniture': 'sol-home',
+          'Clinics & aesthetics': 'sol-clinics', 'Restaurants & local': 'sol-food', 'Electronics': 'sol-electronics',
+          'Jewellery & gifting': 'sol-jewellery', 'Ecommerce': 'sol-ecommerce', 'Lead handling': 'sol-leads',
+          'Running it alone': 'sol-owner', 'On the front line': 'sol-agent',
+          'Shopify': 'feat-integrations', 'WooCommerce': 'feat-integrations', 'Zoho': 'feat-integrations',
+          'Monday': 'feat-integrations', 'Browse all': 'feat-integrations',
+          'Why GOTCHA': 'why', 'It acts, not just answers': 'why', 'Your limits, per action': 'why',
+          'Priced per conversation': 'pricing', 'Security': 'co-security',
+          'About us': 'co-about', 'Blog': 'co-blog', 'Help center': 'co-help', 'Careers': 'co-careers'
+        };
+        const COLS = [
+          { t: 'Product', items: ['Omnichannel', 'Social engagement', 'Your new employee', 'Copilot', 'Call pilot (beta)', 'Knowledge base', 'Approvals', 'Customers', 'AI Studio', 'Analytics', 'Store widget', 'Channels'] },
+          { t: 'Solutions', items: ['Cosmetics & skincare', 'Fashion & clothing', 'Home & furniture', 'Clinics & aesthetics', 'Restaurants & local', 'Electronics', 'Jewellery & gifting', 'Ecommerce', 'Lead handling', 'Running it alone', 'On the front line'] },
+          { t: 'Integrations', items: ['Shopify', 'WooCommerce', 'Zoho', 'Monday', 'Browse all'] },
+          { t: 'Why us', items: ['Why GOTCHA', 'It acts, not just answers', 'Your limits, per action', 'Priced per conversation', 'Security'] },
+          { t: 'Our Company', items: ['About us', 'Blog', 'Help center', 'Careers', 'Security'] }
+        ];
+        return COLS.map(c => ({ t: c.t, items: c.items.map(t => ({ t: t, click: go(M[t] || 'home') })) }));
+      })(),
+      social: [
+        { t: 'Instagram', icon: 'instagram', href: 'https://www.instagram.com/gotcha.co.il/' },
+        { t: 'Facebook', icon: 'facebook', href: 'https://www.facebook.com/gotchainbox' }
       ]
     };
   }

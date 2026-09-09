@@ -359,12 +359,23 @@ class Landing extends React.Component {
 
     this.fitNav = () => {
       const w = window.innerWidth;
-      document.querySelectorAll('[data-nav-secondary]').forEach(el => { el.style.display = w < 1120 ? 'none' : ''; });
       // six nav items no longer fit at every width; compress rather than let the last one get sliced
       const compact = w < 1320, tight = w < 1160;
       document.querySelectorAll('[data-nav-item]').forEach(el => { el.style.padding = tight ? '8px 7px' : (compact ? '8px 10px' : '8px 13px'); el.style.gap = tight ? '4px' : '6px'; });
       document.querySelectorAll('[data-nav-label]').forEach(el => { el.style.fontSize = tight ? '13px' : '14px'; });
       document.querySelectorAll('[data-nav-caret]').forEach(el => { el.style.display = tight ? 'none' : 'inline-block'; });
+      // the CTAs hide only when they genuinely stop fitting, measured after the compression above
+      const secs = [...document.querySelectorAll('[data-nav-secondary]')];
+      if (secs.length) {
+        const group = secs[0].parentElement, row = group && group.parentElement;
+        if (row) {
+          secs.forEach(el => { el.style.display = ''; });
+          const kids = [...row.children];
+          const used = kids.reduce((n, el) => n + (el === group ? 0 : el.getBoundingClientRect().width), 0);
+          const need = kids.filter(el => el !== group).length * 10 + 24 + secs.reduce((n2, el) => n2 + el.scrollWidth, 0);
+          if (used + need > row.clientWidth) secs.forEach(el => { el.style.display = 'none'; });
+        }
+      }
     };
     this.fitNav();
     window.addEventListener('resize', this.fitNav);
@@ -2433,20 +2444,19 @@ class Landing extends React.Component {
       stats: [{ v: '20 min', l: 'the whole conversation' }, { v: 'Same day', l: 'we usually reply within two hours' }, { v: 'No deck', l: 'we open the product instead' }],
       waysTitle: 'Pick whichever suits you',
       ways: [
-        { icon: 'message-circle', bg: '#EDF4E7', ic: '#2E7D5B', t: 'Message us on WhatsApp', d: 'The fastest route, and a fair test. You are messaging a business that runs on GOTCHA.', n: 'answered in minutes', cta: 'Open WhatsApp' },
-        { icon: 'calendar', bg: '#FBEEE8', ic: '#C4552F', t: 'Book twenty minutes', d: 'Screen shared, your channels open, your real questions. A founder joins for anything over 5,000 conversations a month.', n: 'this week', cta: 'Pick a time' },
-        { icon: 'mail', bg: '#EDF1F7', ic: '#3E5C99', t: 'Email us', d: 'hello@gotcha.co.il, for security questionnaires, partnerships and anything that needs writing down.', n: 'within 2 hours', cta: 'Write to us' }
+        { icon: 'calendar', bg: '#FBEEE8', ic: '#C4552F', t: 'Book twenty minutes', d: 'Screen shared, your channels open, your real questions. A founder joins for anything over 5,000 conversations a month.', n: 'this week', cta: 'Pick a time', href: 'https://calendar.app.google/Fv9DCtUycjqSV3a77' },
+        { icon: 'mail', bg: '#EDF1F7', ic: '#3E5C99', t: 'Email us', d: 'support@gotcha.co.il, for security questionnaires, partnerships and anything that needs writing down.', n: 'within 2 hours', cta: 'Write to us', href: 'mailto:support@gotcha.co.il' }
       ],
-      formTitle: 'Or leave your details',
-      formNote: 'Four fields. We reply with a real answer, not a sequence of nurture emails.',
+      formTitle: 'Leave your details',
+      formNote: 'Four fields, and we get back to you today or tomorrow with a real answer.',
       fields: [
         { l: 'Your name', p: 'Dana Cohen' },
         { l: 'Business name or website', p: 'aviv-textiles.co.il' },
         { l: 'Where do your customers write to you?', p: 'WhatsApp, Instagram, email' },
         { l: 'What would you want it to handle first?', p: 'Delivery questions and returns' }
       ],
-      submit: 'Send it',
-      formFoot: 'We do not add you to a list, and one reply from you stops all of it.',
+      submit: 'Leave your details',
+      formFoot: 'We do not add you to a list, and nothing is charged or installed until you say so.',
       answersTitle: 'Before you ask', answersNote: 'The four things people want to know before booking.',
       answers: [
         { t: 'Will a salesperson call me twice a week after this?', n: 'no' },
@@ -2663,14 +2673,14 @@ class Landing extends React.Component {
             bg: '#FFFFFF', bd: '#E8E3D9', fg: '#16150F', muted: '#8E887C', dot: '#C8C2B6', rule: '#F0EDE7', accent: '#C4552F', sliderBoxH: '188px',
             sliders: [slider('chat conversations a business day', 'Co-Pilot users', cp, (v) => this.setState({ pcp: v }), false)],
             featHead: 'Includes', feats: ['Multichannel unified inbox and broadcasts', 'Automations, AI routing and the command centre', 'Copilot drafting every reply for your agents', 'Conversation summaries into your CRM', 'Knowledge base and the full customer picture', 'Your whole team, no per-seat surprises'],
-            cta: 'Get early access', btnBg: '#FFFFFF', btnFg: '#16150F', btnBd: '#D8D2C6' },
+            cta: 'Start free', btnBg: '#FFFFFF', btnFg: '#16150F', btnBd: '#D8D2C6' },
           { name: 'AI Team', badge: 'Most businesses', badgeBg: '#EFD9CD', badgeFg: '#5C2410',
             who: 'AI employees that handle service, copilot work and tasks for your team, end to end.',
             price: money(AI[ai]), per, sub: TIERS[ai] + ' AI employees' + vat,
             bg: '#16150F', bd: '#16150F', fg: '#F7F5F1', muted: '#A29D95', dot: '#4A4740', rule: '#262521', accent: '#E0A458', sliderBoxH: '188px',
             sliders: [slider('chat conversations a business day', 'AI employees', ai, (v) => this.setState({ pai: v }), true)],
             featHead: 'Everything in Co-Pilot, plus', feats: ['AI employees answering and acting on their own', 'Autonomy set per action: suggest, ask, or do it', 'Back office work done for you, not just replies', 'Actions inside Shopify, your CRM and your tools', 'Analytics that name the cause, not just the volume'],
-            cta: 'Get early access', btnBg: '#F7F5F1', btnFg: '#16150F', btnBd: '#F7F5F1' },
+            cta: 'Start free', btnBg: '#F7F5F1', btnFg: '#16150F', btnBd: '#F7F5F1' },
           { name: 'Call Pilot', badge: null, who: 'Both together, with the phone included: pick your chat volume and your voice volume.',
             price: money(CALL[ccp][cai]), per, sub: TIERS[ccp] + ' users · ' + TIERS[cai] + ' AI employees' + vat,
             bg: '#FFFFFF', bd: '#E8E3D9', fg: '#16150F', muted: '#8E887C', dot: '#C8C2B6', rule: '#F0EDE7', accent: '#C4552F', sliderBoxH: '188px',
@@ -2801,7 +2811,7 @@ class Landing extends React.Component {
         const L = {
           heroCols: stage ? '1fr' : 'repeat(auto-fit,minmax(460px,1fr))',
           textOrder: lay === 'flip' ? 2 : 1, demoOrder: lay === 'flip' ? 1 : 2,
-          heroAlign: stage ? 'center' : 'left', heroJustify: stage ? 'center' : 'flex-start',
+          heroAlign: stage ? 'center' : 'start', heroJustify: stage ? 'center' : 'flex-start',
           textMax: stage ? '860px' : 'none', textMargin: stage ? '0 auto' : '0', textMargin2: stage ? 'auto' : '0',
           demoMax: stage ? '1040px' : 'none', h1Size: stage ? '76px' : '58px',
           band: dark ? '#16150F' : (stage ? b.bg : 'transparent'),
@@ -2966,12 +2976,33 @@ class Landing extends React.Component {
       bars: { offerBar: st.barOffer ? 'flex' : 'none', headTop: (st.barOffer ? 38 : 0) + 'px' },
       op: {
         badge: 'Launch offer', scarcity: 'For the first 50 businesses only',
-        h1a: 'Three months of GOTCHA', h1b: 'for one dollar.',
-        sub: 'We are opening the system to the first 50 businesses, and we would rather earn you than charge you. One dollar in total for three months, with us setting it up beside you.',
-        priceLabel: 'The whole offer', price: '$1',
-        priceNote: 'In total, for three months, in one payment. Then you continue on the plan and the usage you choose. Regular pricing starts at $39 a month.',
-        cta: 'Claim a place', ctaNote: 'Two minutes, no card',
+        h1a: '3 months of GOTCHA', h1b: 'for $1!',
+        sub: 'We are opening the system to the first 50 businesses, and we would rather earn you than charge you. $1 in total for three months, on the plan you choose, with us setting it up beside you.',
+        priceLabel: '3 months for', price: '$1',
+        priceNote: 'in total, one payment, for the plan you choose. After that, regular pricing from $39 a month.',
+        cta: 'Claim a place', ctaNote: 'Two minutes to leave your details.',
+        formLead: 'Leave your details and we get back to you today or tomorrow.',
+        shotHead: 'Every conversation, every channel, every customer, in one calm, organised place.',
+        shotSub: 'WhatsApp, Instagram, email, phone and web chat arrive in the same queue, threaded by customer instead of by app. Nothing sits in someone\'s private phone, and nothing gets answered twice.',
+        shotMeta: 'GOTCHA · your morning view',
+        shotAlt: 'The GOTCHA home screen on a Monday morning',
+        shotTitle: 'This is what you open on Monday morning.',
+        shotNote: 'Everything handled overnight, closed and filed. What is left is the one thing that needed you, with the answer already drafted.',
+        items: [
+          '1,000 credits every month of the offer',
+          'Co-Pilot or AI Team, your choice',
+          'Connection, onboarding and personal guidance',
+          'Billing starts only once you are connected'
+        ],
+        trust: [
+          { icon: 'layers', t: 'Co-Pilot or AI Team, your choice' },
+          { icon: 'clock', t: 'Live the same day, usually' },
+          { icon: 'x-circle', t: 'Cancel whenever you like' }
+        ],
+        bandTitle: 'Three months of the full system, for the price of a coffee you would not order.',
+        bandNote: 'Fifty places, and the offer closes when they are taken. Two minutes now, and you know by tomorrow whether this is for you.',
         cards: [
+          { icon: 'layers', bg: '#EFD9CD', ic: '#8E3418', t: 'Choose Co-Pilot or AI Team', d: 'The offer covers either of the first two plans. Take Co-Pilot if your team answers, or AI Team if you want AI employees handling it end to end. Switch between them during the three months.' },
           { icon: 'coins', bg: '#F7F0E2', ic: '#8A6A16', t: '1,000 credits every month', d: 'Enough for a real month of conversations, not a demo. Unused credits reset with each month of the offer.' },
           { icon: 'plug', bg: '#EDF4E7', ic: '#2E7D5B', t: 'We connect it with you', d: 'Your channels, your store or site and your systems. You are not handed a login and left to work it out.' },
           { icon: 'user-round-check', bg: '#EAE4FB', ic: '#4B3E8E', t: 'Onboarding and personal guidance', d: 'We build the first knowledge base with you, set the autonomy limits, and stay reachable while you settle in.' },
@@ -2994,9 +3025,8 @@ class Landing extends React.Component {
           { name: 'Call Pilot', badge: 'With voice', badgeBg: '#EDF1F7', badgeFg: '#2F4670', who: 'Everything in AI Team with the phone included: chat volume and voice volume chosen separately.', offerLine: 'Three months for $1', after: 'Then a combined chat and voice plan, agreed on the call.', bg: '#FFFFFF', bd: '#E8E3D9', fg: '#16150F', muted: '#5B564D', rule: '#F0EDE7' }
         ],
         pickCta: 'Claim a place and choose on the call',
-        pickCompare: 'See what each plan includes',
+        pickCompare: 'Compare the two plans',
         pickFoot: 'You can switch plan during the three months, and you are not asked to decide before the call.',
-        goPricing: () => { this.setState({ menu: null, page: 'pricing' }); window.scrollTo(0, 0); },
         howKicker: 'How it works',
         howTitle: 'From this page to answering, usually the same day.',
         steps: [
@@ -3025,11 +3055,11 @@ class Landing extends React.Component {
       },
       offer: {
         badge: 'Launch offer',
-        barText: 'First three months for $1 in total. For the first 50 businesses.',
+        barText: 'First 3 months for $1 in total! For the first 50 businesses.',
         tabLabel: '$1 for 3 months',
         tabDisplay: st.offerOpen ? 'none' : 'flex',   // the drawer carries its own handle when open
-        title: 'Your first three months for $1.',
-        price: '$1', priceNote: 'in total, for three months, one payment',
+        title: 'Your first 3 months for $1!',
+        price: '$1', priceNote: 'in total, for 3 months, one payment',
         items: [
           '1,000 credits every month',
           'Connection, onboarding and personal guidance from us',
@@ -3068,8 +3098,8 @@ class Landing extends React.Component {
       ],
 
       cmpPlans: [
-        { name: 'Co-Pilot', badge: '', badgeBg: 'transparent', badgeFg: 'transparent', price: PRICE.prices[0], per: yr ? '/ yr' : '/ mo', sub: PRICE.subs[0], bg: 'transparent', cta: 'Get early access', btnBg: '#FFFFFF', btnFg: '#16150F', btnBd: '#D8D2C6' },
-        { name: 'AI Team', badge: 'Most businesses', badgeBg: '#EFD9CD', badgeFg: '#5C2410', price: PRICE.prices[1], per: yr ? '/ yr' : '/ mo', sub: PRICE.subs[1], bg: '#FBF9F5', cta: 'Get early access', btnBg: '#16150F', btnFg: '#F7F5F1', btnBd: '#16150F' },
+        { name: 'Co-Pilot', badge: '', badgeBg: 'transparent', badgeFg: 'transparent', price: PRICE.prices[0], per: yr ? '/ yr' : '/ mo', sub: PRICE.subs[0], bg: 'transparent', cta: 'Start free', btnBg: '#FFFFFF', btnFg: '#16150F', btnBd: '#D8D2C6' },
+        { name: 'AI Team', badge: 'Most businesses', badgeBg: '#EFD9CD', badgeFg: '#5C2410', price: PRICE.prices[1], per: yr ? '/ yr' : '/ mo', sub: PRICE.subs[1], bg: '#FBF9F5', cta: 'Start free', btnBg: '#16150F', btnFg: '#F7F5F1', btnBd: '#16150F' },
         { name: 'Call Pilot', badge: '', badgeBg: 'transparent', badgeFg: 'transparent', price: PRICE.prices[2], per: yr ? '/ yr' : '/ mo', sub: PRICE.subs[2], bg: 'transparent', cta: 'Talk to us', btnBg: '#FFFFFF', btnFg: '#16150F', btnBd: '#D8D2C6' }
       ],
 
@@ -3146,7 +3176,11 @@ class Landing extends React.Component {
       })),
       closeMenu: () => this.setState({ menu: null }),
       dir: st.lang === 'he' ? 'rtl' : 'ltr', lang: st.lang,
+      navDir: st.lang === 'he' ? 'row-reverse' : 'row',
+      navML: st.lang === 'he' ? '0' : 'auto', navMR: st.lang === 'he' ? 'auto' : '0',
+      mlAuto: st.lang === 'he' ? '0' : 'auto', mrAuto: st.lang === 'he' ? 'auto' : '0',
       arrowFwd: st.lang === 'he' ? '←' : '→', arrowBack: st.lang === 'he' ? '→' : '←',
+      arrowIcon: st.lang === 'he' ? 'arrow-left' : 'arrow-right',
       isHe: st.lang === 'he',
       setEn: () => { try { localStorage.setItem('gotcha-lang', 'en'); } catch (e) {} this.setState({ lang: 'en' }); },
       setHe: () => { try { localStorage.setItem('gotcha-lang', 'he'); } catch (e) {} this.setState({ lang: 'he' }); },
@@ -3648,12 +3682,35 @@ class Landing extends React.Component {
         { t: 'Role-based access', icon: 'shield-check', ic: '#2E7D5B' }
       ],
 
-      footer: [
-        { t: 'Product', items: ['Omnichannel', 'Social engagement', 'Your new employee', 'Copilot', 'Call pilot (beta)', 'Knowledge base', 'Approvals', 'Customers', 'AI Studio', 'Analytics', 'Store widget'] },
-        { t: 'Solutions', items: ['Cosmetics & skincare', 'Fashion & clothing', 'Home & furniture', 'Clinics & aesthetics', 'Restaurants & local', 'Electronics', 'Jewellery & gifting', 'Ecommerce', 'Lead handling'] },
-        { t: 'Integrations', items: ['Shopify', 'WooCommerce', 'Zoho', 'Monday', 'Browse all'] },
-        { t: 'Why us', items: ['Why GOTCHA', 'It acts, not just answers', 'Your limits, per action', 'Priced per conversation', 'Security'] },
-        { t: 'Our Company', items: ['About us', 'Blog', 'Help center', 'Careers', 'Security', "Let's Chat!"] }
+      footer: (() => {
+        const go = (p) => () => { this.setState({ menu: null, page: p }); window.scrollTo(0, 0); };
+        const M = {
+          'Omnichannel': 'feat-omnichannel', 'Social engagement': 'feat-social', 'Your new employee': 'feat-employee',
+          'Copilot': 'feat-copilot', 'Call pilot (beta)': 'feat-callpilot', 'Knowledge base': 'feat-knowledge',
+          'Approvals': 'feat-approvals', 'Customers': 'feat-customers', 'AI Studio': 'feat-studio',
+          'Analytics': 'feat-analytics', 'Store widget': 'feat-widget', 'Channels': 'feat-channels',
+          'Cosmetics & skincare': 'sol-cosmetics', 'Fashion & clothing': 'sol-fashion', 'Home & furniture': 'sol-home',
+          'Clinics & aesthetics': 'sol-clinics', 'Restaurants & local': 'sol-food', 'Electronics': 'sol-electronics',
+          'Jewellery & gifting': 'sol-jewellery', 'Ecommerce': 'sol-ecommerce', 'Lead handling': 'sol-leads',
+          'Running it alone': 'sol-owner', 'On the front line': 'sol-agent',
+          'Shopify': 'feat-integrations', 'WooCommerce': 'feat-integrations', 'Zoho': 'feat-integrations',
+          'Monday': 'feat-integrations', 'Browse all': 'feat-integrations',
+          'Why GOTCHA': 'why', 'It acts, not just answers': 'why', 'Your limits, per action': 'why',
+          'Priced per conversation': 'pricing', 'Security': 'co-security',
+          'About us': 'co-about', 'Blog': 'co-blog', 'Help center': 'co-help', 'Careers': 'co-careers'
+        };
+        const COLS = [
+          { t: 'Product', items: ['Omnichannel', 'Social engagement', 'Your new employee', 'Copilot', 'Call pilot (beta)', 'Knowledge base', 'Approvals', 'Customers', 'AI Studio', 'Analytics', 'Store widget', 'Channels'] },
+          { t: 'Solutions', items: ['Cosmetics & skincare', 'Fashion & clothing', 'Home & furniture', 'Clinics & aesthetics', 'Restaurants & local', 'Electronics', 'Jewellery & gifting', 'Ecommerce', 'Lead handling', 'Running it alone', 'On the front line'] },
+          { t: 'Integrations', items: ['Shopify', 'WooCommerce', 'Zoho', 'Monday', 'Browse all'] },
+          { t: 'Why us', items: ['Why GOTCHA', 'It acts, not just answers', 'Your limits, per action', 'Priced per conversation', 'Security'] },
+          { t: 'Our Company', items: ['About us', 'Blog', 'Help center', 'Careers', 'Security'] }
+        ];
+        return COLS.map(c => ({ t: c.t, items: c.items.map(t => ({ t: t, click: go(M[t] || 'home') })) }));
+      })(),
+      social: [
+        { t: 'Instagram', icon: 'instagram', href: 'https://www.instagram.com/gotcha.co.il/' },
+        { t: 'Facebook', icon: 'facebook', href: 'https://www.facebook.com/gotchainbox' }
       ]
     };
   }
