@@ -53,6 +53,31 @@ const ORDER = {
 interface Call { method: string; url: string; body: any }
 
 /**
+ * The REST order fixture as Admin GraphQL returns it.
+ *
+ * The fixture above still describes the order the way REST did, because that
+ * shape is what the adapter must keep handing to its callers; only the
+ * transport moved.
+ */
+function orderNode(o: any) {
+  return {
+    legacyResourceId: String(o.id),
+    name: o.name ?? null,
+    note: o.note ?? null,
+    tags: o.tags ? String(o.tags).split(",").map((t: string) => t.trim()).filter(Boolean) : [],
+    cancelledAt: o.cancelled_at ?? null,
+    displayFinancialStatus: o.financial_status ? String(o.financial_status).toUpperCase() : null,
+    displayFulfillmentStatus: "UNFULFILLED",
+    fulfillments: [],
+    lineItems: { nodes: [] },
+    refunds: [],
+    discountApplications: { nodes: [] },
+  };
+}
+
+
+
+/**
  * A Shopify that keeps its two namespaces separate, like the real one.
  *
  * `/orders/{x}.json` answers ONLY for the internal id - anything else gets the
@@ -70,32 +95,50 @@ function stubShopify(opts: { duplicateName?: boolean; missing?: boolean } = {}):
     const err = (status: number, payload: any) =>
       ({ ok: false, status, json: async () => payload, text: async () => JSON.stringify(payload) }) as any;
 
-    // Name lookup.
-    const nameQ = u.match(/\/orders\.json\?name=([^&]+)/);
-    if (method === "GET" && nameQ) {
-      const asked = decodeURIComponent(nameQ[1]);
-      if (opts.missing) return ok({ orders: [] });
-      if (asked !== "1006") return ok({ orders: [] });
-      if (opts.duplicateName) return ok({ orders: [ORDER, { ...ORDER, id: 9999999999999 }] });
-      return ok({ orders: [ORDER] });
-    }
+    // Everything is Admin GraphQL now, so the two namespaces are told apart by
+    // the OPERATION rather than by the URL.
+    if (method === "POST" && /\/graphql\.json$/.test(u)) {
+      const query = String(body?.query ?? "");
+      const vars = body?.variables ?? {};
 
-    // Direct id lookup - ONLY the internal id resolves.
-    const idQ = u.match(/\/orders\/([^/.]+)\.json$/);
-    if (method === "GET" && idQ) {
-      const asked = decodeURIComponent(idQ[1]);
-      if (asked === String(INTERNAL_ID) && !opts.missing) return ok({ order: ORDER });
-      // What production actually returned for "%231006".
-      if (!/^\d+$/.test(asked)) return err(400, { errors: { id: "expected String to be a id" } });
-      return err(404, { errors: "Not Found" });
-    }
+      // Name lookup, via the order search.
+      if (query.includes("GotchaOrderSearch")) {
+        const asked = String(vars.query ?? "").match(/name:"([^"]*)"/)?.[1] ?? "";
+        if (opts.missing) return ok({ data: { orders: { nodes: [], pageInfo: {} } } });
+        if (asked !== "1006") return ok({ data: { orders: { nodes: [], pageInfo: {} } } });
+        const nodes = opts.duplicateName
+          ? [orderNode(ORDER), orderNode({ ...ORDER, id: 9999999999999 })]
+          : [orderNode(ORDER)];
+        return ok({ data: { orders: { nodes, pageInfo: { hasNextPage: false, endCursor: null } } } });
+      }
 
-    // The write.
-    if (method === "PUT" && idQ) {
-      const asked = decodeURIComponent(idQ[1]);
-      if (asked !== String(INTERNAL_ID)) return err(400, { errors: { id: "expected String to be a id" } });
-      const upd = body?.order ?? {};
-      return ok({ order: { ...ORDER, note: upd.note ?? null, tags: upd.tags ?? "" } });
+      // Direct id lookup - ONLY the internal id resolves.
+      if (query.includes("GotchaOrderById")) {
+        const asked = String(vars.id ?? "").split("/").pop() ?? "";
+        if (asked === String(INTERNAL_ID) && !opts.missing) return ok({ data: { order: orderNode(ORDER) } });
+        // A gid that is well formed but unknown is a null order, not an error -
+        // the GraphQL equivalent of the REST 404.
+        if (/^\d+$/.test(asked)) return ok({ data: { order: null } });
+        // And a value that is not an id at all is what "#1006" produced: on
+        // REST a 400, here a top-level error. Neither may reach the caller as a
+        // failure - the name lookup still has to run.
+        return ok({ errors: [{ message: "Variable $id of type ID! was provided invalid value" }] });
+      }
+
+      // The write.
+      if (query.includes("GotchaOrderUpdate")) {
+        const asked = String(vars.input?.id ?? "").split("/").pop() ?? "";
+        if (asked !== String(INTERNAL_ID)) return ok({ errors: [{ message: "invalid id" }] });
+        const upd = vars.input ?? {};
+        return ok({
+          data: {
+            orderUpdate: {
+              order: { legacyResourceId: String(INTERNAL_ID), name: ORDER_NAME, note: upd.note ?? null, tags: upd.tags ?? [] },
+              userErrors: [],
+            },
+          },
+        });
+      }
     }
 
     return err(404, {});
@@ -176,10 +219,15 @@ describe("every order tool resolves the same order from the same input", () => {
       // Only post-resolution domain errors are acceptable here.
       if (!/no_eta|no_tracking|not_fulfilled|no_pickup/.test(String(err?.message))) throw err;
     }
+    // The lookups are GraphQL operations now, so what was asked for lives in
+    // the request BODY rather than in the URL.
+    const sent = calls.map((c) => ({ query: String(c.body?.query ?? ""), vars: c.body?.variables ?? {} }));
     return {
-      foundByName: calls.some((c) => /\/orders\.json\?name=1006/.test(c.url)),
-      foundById: calls.some((c) => new RegExp(`/orders/${INTERNAL_ID}\\.json`).test(c.url)),
-      malformed: calls.some((c) => /%231006/.test(c.url)),
+      foundByName: sent.some((c) => c.query.includes("GotchaOrderSearch") && /name:"1006"/.test(String(c.vars.query ?? ""))),
+      foundById: sent.some((c) => c.query.includes("GotchaOrderById") && String(c.vars.id ?? "").endsWith(`/${INTERNAL_ID}`)),
+      // The bug this file exists for: '#' must never be sent AS an id, in a URL
+      // or in a variable.
+      malformed: calls.some((c) => /%231006|#1006/.test(c.url)) || sent.some((c) => /%231006|#1006/.test(String(c.vars.id ?? ""))),
     };
   }
 

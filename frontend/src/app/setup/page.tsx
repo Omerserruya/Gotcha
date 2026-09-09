@@ -72,6 +72,7 @@ import { renderableTech } from "./discovery-shape";
 import { SYSTEMS, ConnectScreen } from "./connect-screen";
 import { useRevealOnOpen } from "@/lib/useRevealOnOpen";
 import AgentBuilder from "@/components/aiEmployee/AgentBuilder";
+import { beginConnect, connectErrorMessage } from "@/lib/shopify-connect";
 
 // After setup completes, land in the inbox - onboarding continues via the
 // sidebar mission panel, not a dedicated home page.
@@ -290,7 +291,6 @@ function SetupContent() {
 
   // Connect (Movement 6) - unchanged source-of-truth logic
   const [picked, setPicked] = useState<CoreSystemSlug | null>(null);
-  const [shopDomain, setShopDomain] = useState("");
   const [fireberryToken, setFireberryToken] = useState("");
   const [airtableToken, setAirtableToken] = useState(""); // Airtable Personal Access Token (PAT)
   const [connecting, setConnecting] = useState(false);
@@ -638,16 +638,18 @@ function SetupContent() {
     if (!token) return;
     if (slug === "fireberry") { connectFireberry(); return; }
     if (slug === "airtable") { connectAirtable(); return; }
-    if (slug === "shopify" && !shopDomain.trim()) { setPicked("shopify"); return; }
     setConnecting(true);
     setError("");
     try {
       try { localStorage.setItem("onboarding.coreSystem", slug); } catch { /* */ }
-      const extra = { flow: "onboarding", ...(slug === "shopify" ? { shop: shopDomain.trim() } : {}) };
-      const { url } = await initIntegrationOAuth(token, slug, extra);
+      // Shopify has no pre-flight field to gather any more: `beginConnect`
+      // sends the merchant to Shopify's own install page and Shopify picks the
+      // store. The `shop` parameter this used to build from a text box is gone
+      // (App Store requirement 2.3.1).
+      const url = await beginConnect({ token, slug, flow: "onboarding" });
       window.location.href = url; // full OAuth redirect; we resume on /setup return
     } catch (err: any) {
-      setError(err?.message || "Couldn't start the connection. Check the system and try again.");
+      setError(connectErrorMessage(slug, err));
       setConnecting(false);
     }
   }
@@ -889,7 +891,7 @@ function SetupContent() {
         {shown === "connect" && (
           <ConnectScreen
             he={he} systemQuery={systemQuery} setSystemQuery={setSystemQuery}
-            picked={picked} setPicked={setPicked} shopDomain={shopDomain} setShopDomain={setShopDomain}
+            picked={picked} setPicked={setPicked}
             fireberryToken={fireberryToken} setFireberryToken={setFireberryToken}
             airtableToken={airtableToken} setAirtableToken={setAirtableToken}
             connecting={connecting} skipping={skipping} onConnect={connect}

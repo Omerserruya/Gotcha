@@ -38,12 +38,18 @@ vi.mock("@chatcenter/shared", () => ({
 }));
 
 import ShopifyAdapter from "../services/connectors/shopify.adapter";
+import {
+  orderNode,
+  suggestedRefundNode,
+  refundNode,
+  orderRefundsNode,
+} from "./helpers/shopify-graphql-fixtures";
 
 const CTX = { tenantId: "t1", tenantIntegrationId: "ti1" } as any;
 const CREDS = { accessToken: "shpat_test" };
 const CONFIG = { shopDomain: "test-shop.myshopify.com" };
 
-type Route = { match: (method: string, url: string) => boolean; reply: (method: string, url: string, body: any) => any };
+type Route = { match: (method: string, url: string, body?: any) => boolean; reply: (method: string, url: string, body: any) => any };
 
 /** Install a fetch stub built from ordered route matchers. Records calls. */
 function stubShopify(routes: Route[]) {
@@ -53,7 +59,7 @@ function stubShopify(routes: Route[]) {
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
     calls.push({ method, url: String(url), body });
     for (const r of routes) {
-      if (r.match(method, String(url))) {
+      if (r.match(method, String(url), body)) {
         const data = r.reply(method, String(url), body);
         if (data && data.__status && data.__status >= 400) {
           return { ok: false, status: data.__status, text: async () => JSON.stringify(data.body ?? {}), json: async () => data.body ?? {} } as any;
@@ -64,6 +70,31 @@ function stubShopify(routes: Route[]) {
     return { ok: false, status: 404, text: async () => "{}", json: async () => ({}) } as any;
   });
   return calls;
+}
+
+
+
+/** Did this call write anything? A GraphQL read and a GraphQL write are both POSTs. */
+function isMutation(c: { method: string; url: string; body: any }): boolean {
+  if (c.method !== "POST") return false;
+  if (!/\/graphql\.json$/.test(c.url)) return true;
+  return /^\s*mutation\b/m.test(String(c.body?.query ?? ""));
+}
+
+/** Route one named GraphQL operation to a reply. */
+function gqlRoute(operation: string, reply: () => any): Route {
+  return {
+    match: (m, u, body) => m === "POST" && /\/graphql\.json$/.test(u) && String(body?.query).includes(operation),
+    reply,
+  };
+}
+
+/** Route the `GotchaOrderById` read to a REST-shaped fixture. */
+function orderRoute(order: () => any): Route {
+  return {
+    match: (m, u, body) => m === "POST" && /\/graphql\.json$/.test(u) && String(body?.query).includes("GotchaOrderById"),
+    reply: () => ({ data: { order: orderNode(order()) } }),
+  };
 }
 
 function run(toolName: string, args: Record<string, unknown>) {
@@ -79,10 +110,7 @@ describe("shopify.cancel_order", () => {
   it("cancels via GraphQL, then VERIFIES cancelled_at before reporting success", async () => {
     let cancelled = false;
     const calls = stubShopify([
-      {
-        match: (m, u) => m === "GET" && /\/orders\/1001\.json$/.test(u),
-        reply: () => ({ order: { id: 1001, name: "#1004", cancelled_at: cancelled ? "2026-07-20T10:00:00Z" : null, financial_status: "paid" } }),
-      },
+      orderRoute(() => ({ id: 1001, name: "#1004", cancelled_at: cancelled ? "2026-07-20T10:00:00Z" : null, financial_status: "paid" })),
       {
         match: (m, u) => m === "POST" && /\/graphql\.json$/.test(u),
         reply: () => { cancelled = true; return { data: { orderCancel: { job: { id: "gid://shopify/Job/1", done: true }, orderCancelUserErrors: [] } } }; },
@@ -100,7 +128,7 @@ describe("shopify.cancel_order", () => {
     // real obstacle ("outstanding fulfillments") where REST claimed the order
     // was "paid and fulfilled" - a state it was demonstrably not in.
     stubShopify([
-      { match: (m, u) => m === "GET" && /\/orders\/1001\.json$/.test(u), reply: () => ({ order: { id: 1001, cancelled_at: null, financial_status: "paid" } }) },
+      orderRoute(() => ({ id: 1001, cancelled_at: null, financial_status: "paid" })),
       {
         match: (m, u) => m === "POST" && /\/graphql\.json$/.test(u),
         reply: () => ({ data: { orderCancel: { job: null, orderCancelUserErrors: [{ field: null, message: "Cannot cancel an order that has outstanding fulfillments", code: "INVALID" }] } } }),
@@ -111,11 +139,13 @@ describe("shopify.cancel_order", () => {
 
   it("is idempotent: an already-cancelled order returns already_cancelled and never re-POSTs", async () => {
     const calls = stubShopify([
-      { match: (m, u) => m === "GET" && /\/orders\/1001\.json$/.test(u), reply: () => ({ order: { id: 1001, name: "#1004", cancelled_at: "2026-07-19T13:00:00Z", financial_status: "refunded" } }) },
+      orderRoute(() => ({ id: 1001, name: "#1004", cancelled_at: "2026-07-19T13:00:00Z", financial_status: "refunded" })),
     ]);
     const out: any = await run("cancel_order", { order_id: "1001" });
     expect(out.already_cancelled).toBe(true);
-    expect(calls.filter((c) => c.method === "POST").length).toBe(0);
+    // Reads are POSTs to graphql.json now, so "nothing was written" is asserted
+    // against the MUTATIONS rather than against the HTTP verb.
+    expect(calls.filter((c) => isMutation(c)).length).toBe(0);
   });
 
   it("FAILS when the mutation is accepted but the order stays uncancelled", async () => {
@@ -124,7 +154,7 @@ describe("shopify.cancel_order", () => {
     // request" is not a claim a customer can be told.
     let getCount = 0;
     stubShopify([
-      { match: (m, u) => m === "GET" && /\/orders\/1001\.json$/.test(u), reply: () => { getCount++; return { order: { id: 1001, cancelled_at: null, financial_status: "paid" } }; } },
+      orderRoute(() => { getCount++; return { id: 1001, cancelled_at: null, financial_status: "paid" }; }),
       { match: (m, u) => m === "POST" && /\/graphql\.json$/.test(u), reply: () => ({ data: { orderCancel: { job: { id: "gid://shopify/Job/1", done: false }, orderCancelUserErrors: [] } } }) },
     ]);
     await expect(run("cancel_order", { order_id: "1001" })).rejects.toThrow(/cancel_not_applied/);
@@ -150,28 +180,49 @@ describe("shopify.process_refund", () => {
     // verification re-fetch sees "refunded" - mirrors real Shopify.
     let refundCreated = false;
     const calls = stubShopify([
-      { match: (m, u) => m === "GET" && /\/orders\/2001\/refunds\.json$/.test(u), reply: () => ({ refunds: [] }) },
-      { match: (m, u) => m === "POST" && /\/refunds\/calculate\.json$/.test(u), reply: () => ({ refund: { currency: "ILS", transactions: [{ parent_id: 7, amount: "150.00", gateway: "manual" }], shipping: { amount: "0.00" } } }) },
-      { match: (m, u) => m === "POST" && /\/orders\/2001\/refunds\.json$/.test(u), reply: () => { refundCreated = true; return { refund: { id: 555, processed_at: "2026-07-20T10:00:00Z", transactions: [{ id: 9, status: "success", amount: "150.00", gateway: "manual" }] } }; } },
-      { match: (m, u) => m === "GET" && /\/orders\/2001\.json$/.test(u), reply: () => ({ order: { ...ORDER, financial_status: refundCreated ? "refunded" : "paid" } }) },
+      gqlRoute("GotchaOrderRefunds", () => ({ data: { order: { refunds: orderRefundsNode([]) } } })),
+      gqlRoute("GotchaSuggestedRefund", () => ({
+        data: { order: { suggestedRefund: suggestedRefundNode({ transactions: [{ parent_id: 7, amount: "150.00", gateway: "manual" }], shipping: { amount: "0.00" } }) } },
+      })),
+      gqlRoute("GotchaRefundCreate", () => {
+        refundCreated = true;
+        return {
+          data: {
+            refundCreate: {
+              refund: refundNode({ id: 555, created_at: "2026-07-20T10:00:00Z", transactions: [{ id: 9, status: "success", amount: "150.00", gateway: "manual" }] }),
+              userErrors: [],
+            },
+          },
+        };
+      }),
+      orderRoute(() => ({ ...ORDER, financial_status: refundCreated ? "refunded" : "paid" })),
     ]);
     const out: any = await run("process_refund", { order_id: "2001" });
     expect(out.refund_id).toBe(555);
     expect(out.refund_status).toBe("processed");
     expect(out.financial_status).toBe("refunded");
     // calculate ran before create
-    const idxCalc = calls.findIndex((c) => c.url.includes("/refunds/calculate.json"));
-    const idxCreate = calls.findIndex((c) => c.method === "POST" && /\/orders\/2001\/refunds\.json$/.test(c.url));
+    const idxCalc = calls.findIndex((c) => String(c.body?.query ?? "").includes("GotchaSuggestedRefund"));
+    const idxCreate = calls.findIndex((c) => String(c.body?.query ?? "").includes("GotchaRefundCreate"));
     expect(idxCalc).toBeGreaterThanOrEqual(0);
     expect(idxCreate).toBeGreaterThan(idxCalc);
   });
 
   it("reports pending (NOT processed) when the gateway transaction is still pending", async () => {
     stubShopify([
-      { match: (m, u) => m === "GET" && /\/orders\/2001\/refunds\.json$/.test(u), reply: () => ({ refunds: [] }) },
-      { match: (m, u) => m === "POST" && /\/refunds\/calculate\.json$/.test(u), reply: () => ({ refund: { currency: "ILS", transactions: [{ parent_id: 7, amount: "150.00" }] } }) },
-      { match: (m, u) => m === "POST" && /\/orders\/2001\/refunds\.json$/.test(u), reply: () => ({ refund: { id: 556, transactions: [{ id: 9, status: "pending", amount: "150.00" }] } }) },
-      { match: (m, u) => m === "GET" && /\/orders\/2001\.json$/.test(u), reply: () => ({ order: ORDER }) },
+      gqlRoute("GotchaOrderRefunds", () => ({ data: { order: { refunds: orderRefundsNode([]) } } })),
+      gqlRoute("GotchaSuggestedRefund", () => ({
+        data: { order: { suggestedRefund: suggestedRefundNode({ transactions: [{ parent_id: 7, amount: "150.00" }] }) } },
+      })),
+      gqlRoute("GotchaRefundCreate", () => ({
+        data: {
+          refundCreate: {
+            refund: refundNode({ id: 556, transactions: [{ id: 9, status: "pending", amount: "150.00" }] }),
+            userErrors: [],
+          },
+        },
+      })),
+      orderRoute(() => ORDER),
     ]);
     const out: any = await run("process_refund", { order_id: "2001" });
     expect(out.refund_status).toBe("pending");
@@ -179,44 +230,72 @@ describe("shopify.process_refund", () => {
 
   it("partial refund beyond the refundable maximum is rejected BEFORE any money moves", async () => {
     const calls = stubShopify([
-      { match: (m, u) => m === "GET" && /\/orders\/2001\/refunds\.json$/.test(u), reply: () => ({ refunds: [] }) },
-      { match: (m, u) => m === "POST" && /\/refunds\/calculate\.json$/.test(u), reply: () => ({ refund: { currency: "ILS", transactions: [{ parent_id: 7, amount: "100.00" }] } }) },
-      { match: (m, u) => m === "GET" && /\/orders\/2001\.json$/.test(u), reply: () => ({ order: ORDER }) },
+      gqlRoute("GotchaOrderRefunds", () => ({ data: { order: { refunds: orderRefundsNode([]) } } })),
+      gqlRoute("GotchaSuggestedRefund", () => ({
+        data: { order: { suggestedRefund: suggestedRefundNode({ transactions: [{ parent_id: 7, amount: "100.00" }] }) } },
+      })),
+      orderRoute(() => ORDER),
     ]);
     await expect(run("process_refund", { order_id: "2001", amount: 500 })).rejects.toThrow(/refund_exceeds_refundable/);
-    expect(calls.some((c) => c.method === "POST" && /\/orders\/2001\/refunds\.json$/.test(c.url))).toBe(false);
+    // No money moved: the refusal happened before the mutation.
+    expect(calls.some((c) => String(c.body?.query ?? "").includes("GotchaRefundCreate"))).toBe(false);
   });
 
   it("is idempotent: an already fully-refunded order short-circuits without creating another refund", async () => {
     const calls = stubShopify([
-      { match: (m, u) => m === "GET" && /\/orders\/2001\.json$/.test(u), reply: () => ({ order: { ...ORDER, financial_status: "refunded" } }) },
+      orderRoute(() => ({ ...ORDER, financial_status: "refunded" })),
     ]);
     const out: any = await run("process_refund", { order_id: "2001" });
     expect(out.already_refunded).toBe(true);
-    expect(calls.filter((c) => c.method === "POST").length).toBe(0);
+    // Reads are POSTs to graphql.json now, so "nothing was written" is asserted
+    // against the MUTATIONS rather than against the HTTP verb.
+    expect(calls.filter((c) => isMutation(c)).length).toBe(0);
   });
 
   it("re-run after a lost result: prior refunds consume remaining quantities → already_refunded, no double refund", async () => {
     const calls = stubShopify([
-      { match: (m, u) => m === "GET" && /\/orders\/2001\.json$/.test(u), reply: () => ({ order: { ...ORDER, financial_status: "partially_refunded" } }) },
-      { match: (m, u) => m === "GET" && /\/orders\/2001\/refunds\.json$/.test(u), reply: () => ({ refunds: [{ refund_line_items: [{ line_item_id: 31, quantity: 2 }], transactions: [{ kind: "refund", status: "success", amount: "150.00" }] }] }) },
+      orderRoute(() => ({ ...ORDER, financial_status: "partially_refunded" })),
+      gqlRoute("GotchaOrderRefunds", () => ({
+        data: {
+          order: {
+            refunds: orderRefundsNode([
+              { refund_line_items: [{ line_item_id: 31, quantity: 2 }], transactions: [{ kind: "refund", status: "success", amount: "150.00" }] },
+            ]),
+          },
+        },
+      })),
     ]);
     const out: any = await run("process_refund", { order_id: "2001" });
     expect(out.already_refunded).toBe(true);
-    expect(calls.filter((c) => c.method === "POST").length).toBe(0);
+    // Reads are POSTs to graphql.json now, so "nothing was written" is asserted
+    // against the MUTATIONS rather than against the HTTP verb.
+    expect(calls.filter((c) => isMutation(c)).length).toBe(0);
   });
 });
 
 describe("shopify.issue_compensation_coupon", () => {
   it("returns the existing code instead of double-creating on retry", async () => {
     const calls = stubShopify([
-      { match: (m, u) => m === "GET" && /\/customers\/search\.json/.test(u), reply: () => ({ customers: [{ id: 42, tags: "" }] }) },
-      { match: (m, u) => m === "GET" && /\/discount_codes\/lookup\.json/.test(u), reply: () => ({ discount_code: { code: "GOTCHA-MATAN-1004", price_rule_id: 77 } }) },
+      {
+        // The customer lookup and the coupon lookup are both GraphQL now, so
+        // one reply carries both - each operation reads its own field.
+        match: (m, u) => m === "POST" && /\/graphql\.json$/.test(u),
+        reply: () => ({
+          data: {
+            customers: { nodes: [{ legacyResourceId: "42", tags: [] }], pageInfo: { hasNextPage: false, endCursor: null } },
+            codeDiscountNodeByCode: {
+              id: "gid://shopify/DiscountCodeNode/77",
+              codeDiscount: { title: "GOTCHA-MATAN-1004", status: "ACTIVE", codes: { nodes: [{ code: "GOTCHA-MATAN-1004" }] }, customerGets: { value: { percentage: 1 } } },
+            },
+          },
+        }),
+      },
     ]);
     const out: any = await run("issue_compensation_coupon", { email: "matanam0012@gmail.com", code: "GOTCHA-MATAN-1004", percentage: 100 });
     expect(out.already_existed).toBe(true);
     expect(out.price_rule_id).toBe(77);
-    expect(calls.some((c) => c.method === "POST" && c.url.includes("/price_rules"))).toBe(false);
+    // Nothing was created: the coupon already existed.
+    expect(calls.some((c) => String(c.body?.query ?? "").includes("GotchaDiscountCreate"))).toBe(false);
   });
 });
 
@@ -228,7 +307,7 @@ describe("failure honesty", () => {
 
   it("GraphQL top-level errors fail the call (get_returns)", async () => {
     stubShopify([
-      { match: (m, u) => m === "GET" && /\/orders\/3001\.json$/.test(u), reply: () => ({ order: { id: 3001, name: "#3001" } }) },
+      orderRoute(() => ({ id: 3001, name: "#3001" })),
       { match: (m, u) => m === "POST" && /\/graphql\.json$/.test(u), reply: () => ({ errors: [{ message: "something exploded" }] }) },
     ]);
     await expect(run("get_returns", { order_id: "3001" })).rejects.toThrow(/shopify_graphql_error/);
@@ -253,21 +332,25 @@ describe("failure honesty", () => {
 });
 
 describe("shopify.create_note", () => {
-  /** A customer whose `note` field starts at `note` and records every PUT. */
+  /**
+   * A customer whose `note` field starts at `note` and records every write.
+   *
+   * Read and write are the same POST to graphql.json now, so the routes
+   * discriminate on the operation in the body rather than on the URL.
+   */
   function customerWithNote(note: string) {
     let current = note;
     const puts: string[] = [];
     const calls = stubShopify([
       {
-        match: (m, u) => m === "GET" && /\/customers\/77\.json$/.test(u),
-        reply: () => ({ customer: { id: 77, note: current } }),
-      },
-      {
-        match: (m, u) => m === "PUT" && /\/customers\/77\.json$/.test(u),
+        match: (m, u) => m === "POST" && /\/graphql\.json$/.test(u),
         reply: (_m, _u, body) => {
-          current = body?.customer?.note ?? current;
-          puts.push(current);
-          return { customer: { id: 77, note: current } };
+          if (String(body?.query).includes("GotchaCustomerUpdate")) {
+            current = body?.variables?.input?.note ?? current;
+            puts.push(current);
+            return { data: { customerUpdate: { customer: { legacyResourceId: "77", note: current }, userErrors: [] } } };
+          }
+          return { data: { customer: { legacyResourceId: "77", note: current } } };
         },
       },
     ]);

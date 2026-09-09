@@ -55,7 +55,12 @@ async function tenantWithCard(tokenPrefix: string = SIM.OK) {
   entityIds.push(entity.id);
 
   const profile = await prisma.billingProfile.create({
-    data: { billableEntityId: entity.id, provider: "ICOUNT", providerCustomerId: "cli_rn" },
+    // A country must be DECLARED or executeCharge refuses outright - see
+    // taxForProfile, which fails closed rather than charging 0% by guess.
+    // "US" and not "IL" on purpose: no TaxRate row exists for it, so tax is 0%
+    // and the shekel figures below stay the ones this file is actually about.
+    // VAT itself is tax.test.ts's subject.
+    data: { billableEntityId: entity.id, provider: "ICOUNT", providerCustomerId: "cli_rn", billingCountry: "US" },
   });
   const sealed = encryptPaymentToken(`${tokenPrefix}_${n}`);
   await prisma.paymentMethod.create({
@@ -143,7 +148,7 @@ describe("a renewal is converted at the rate in force when it runs", () => {
     expect(charge!.currency).toBe("USD");
     expect(new Prisma.Decimal(charge!.chargeAmount!).toFixed(2)).toBe("1821.35");
     expect(charge!.chargeCurrency).toBe("ILS");
-    expect(charge!.providerCurrencyId).toBe(1);
+    expect(charge!.providerCurrencyId).toBe(5);
     expect(new Prisma.Decimal(charge!.fxRate!).toFixed(2)).toBe("3.65");
     expect(charge!.fxRateVersion).toBeGreaterThan(0);
   });

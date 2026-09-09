@@ -30,6 +30,15 @@ vi.mock("@chatcenter/shared", () => ({
   assertPublicUrl: vi.fn().mockResolvedValue(undefined),
 }));
 
+import {
+  orderNode,
+  customerNode,
+  productNode,
+  variantNode,
+  suggestedRefundNode,
+  refundNode,
+  orderRefundsNode,
+} from "./helpers/shopify-graphql-fixtures";
 import ShopifyAdapter from "../services/connectors/shopify.adapter";
 
 const CREDS = { accessToken: "tok" };
@@ -52,16 +61,28 @@ function stubShopify(overrides: Record<string, (url: string, init: any) => any> 
     const method = init?.method ?? "GET";
     const body = init?.body ? JSON.parse(init.body) : undefined;
     calls.push({ url: u, method, body });
-    for (const [match, handler] of Object.entries(overrides)) {
-      if (u.includes(match)) {
-        const out = handler(u, init);
-        return { ok: out?.__status ? out.__status < 400 : true, status: out?.__status ?? 200, json: async () => out, text: async () => JSON.stringify(out) } as any;
-      }
+    // Operation-name overrides are checked FIRST: every read and write is a
+    // POST to /graphql.json now, so a URL key like "/graphql.json" would
+    // swallow the specific one listed after it.
+    const query = String(body?.query ?? "");
+    const entries = Object.entries(overrides);
+    const match = entries.find(([k]) => !k.startsWith("/") && query.includes(k))
+      ?? entries.find(([k]) => k.startsWith("/") && u.includes(k));
+    if (match) {
+      const out = match[1](u, init);
+      return { ok: out?.__status ? out.__status < 400 : true, status: out?.__status ?? 200, json: async () => out, text: async () => JSON.stringify(out) } as any;
     }
+    const customer = { id: 31, first_name: "M", last_name: "A", email: "c@x.com", tags: "", note: "", orders_count: 1, total_spent: "10" };
+    const product = { id: 41, title: "Widget", variants: [] };
+    const variant = { id: 55, price: "10", inventory_quantity: 3, inventory_management: "shopify", product_id: 41 };
+    const page = (nodes: any[]) => ({ nodes, pageInfo: { hasNextPage: false, endCursor: null } });
+
+    // Everything reachable in ONE `data` object: the handlers each read their
+    // own field off it, and a permissive stub is the point of this file - a
+    // tool must fail on its own validation, never on routing.
     const payload: any = {
-      customer: { id: 31, first_name: "M", last_name: "A", email: "c@x.com", tags: "", note: "", orders_count: 1, total_spent: "10" },
-      customers: [{ id: 31, first_name: "M", email: "c@x.com", tags: "" }],
-      orders: [order], order,
+      // Still REST-shaped, for the paths that have not moved yet (refunds,
+      // price rules, fulfillment orders, invoices).
       refunds: [],
       refund: {
         id: 91, processed_at: "2026-07-20T00:00:00Z", currency: "ILS",
@@ -71,19 +92,60 @@ function stubShopify(overrides: Record<string, (url: string, init: any) => any> 
       price_rule: { id: 51, value: "-10.0", value_type: "percentage" },
       price_rules: [],
       discount_code: { code: "C1", price_rule_id: 51, usage_count: 0 },
-      metafields: [], addresses: [],
-      products: [{ id: 41, title: "Widget", variants: [] }],
-      product: { id: 41, title: "Widget", variants: [] },
-      variants: [], variant: { id: 55, price: "10", inventory_quantity: 3 },
-      fulfillments: [], events: [],
+      fulfillment_orders: [], fulfillments: [], events: [],
+      locations: [{ id: 61, active: true }],
       order_invoice: { to: "c@x.com" },
-      data: { order: { id: "gid://shopify/Order/11", name: "#1001", returns: { nodes: [] } } },
+      data: {
+        order: {
+          ...orderNode(order),
+          returns: { nodes: [] },
+          refunds: orderRefundsNode([]),
+          suggestedRefund: suggestedRefundNode({
+            transactions: [{ parent_id: 61, amount: "100.00", gateway: "manual" }],
+            shipping: { amount: "0.00" },
+          }),
+        },
+        refundCreate: {
+          refund: refundNode({
+            id: 91,
+            created_at: "2026-07-20T00:00:00Z",
+            transactions: [{ id: 71, amount: "100.00", status: "success", gateway: "manual" }],
+          }),
+          userErrors: [],
+        },
+        orders: page([orderNode(order)]),
+        customer: { ...customerNode(customer), metafields: page([]) },
+        customers: page([customerNode(customer)]),
+        product: productNode(product),
+        productByIdentifier: productNode(product),
+        products: page([productNode(product)]),
+        productVariant: variantNode(variant),
+        nodes: [productNode(product)],
+        shop: { name: "Test", myshopifyDomain: "test-shop.myshopify.com", currencyCode: "ILS", primaryDomain: { host: "test-shop.com" }, shopAddress: { countryCodeV2: "IL" } },
+        customerUpdate: { customer: customerNode(customer), userErrors: [] },
+        customerCreate: { customer: customerNode(customer), userErrors: [] },
+        orderUpdate: { order: orderNode(order), userErrors: [] },
+        tagsAdd: { node: { legacyResourceId: "31", tags: ["t"] }, userErrors: [] },
+        tagsRemove: { node: { legacyResourceId: "31", tags: [] }, userErrors: [] },
+        customerAddressCreate: { address: { id: "gid://shopify/MailingAddress/1" }, userErrors: [] },
+        customerAddressUpdate: { address: { id: "gid://shopify/MailingAddress/1" }, userErrors: [] },
+        metafieldsSet: { metafields: [{ legacyResourceId: "1", namespace: "n", key: "k", value: "v", type: "single_line_text_field" }], userErrors: [] },
+      },
     };
     return { ok: true, status: 200, json: async () => payload, text: async () => "{}" } as any;
   });
   vi.stubGlobal("fetch", fn);
   return { calls, fn };
 }
+
+
+/** The refund pricing query (`Order.suggestedRefund`) that a run issued. */
+const pricingCall = (calls: Array<{ body?: any }>) =>
+  calls.find((c) => String(c.body?.query ?? "").includes("GotchaSuggestedRefund"));
+
+/** The `refundCreate` mutation that a run issued - the one that moves money. */
+const refundCall = (calls: Array<{ body?: any }>) =>
+  calls.find((c) => String(c.body?.query ?? "").includes("GotchaRefundCreate"));
 
 function run(toolName: string, args: Record<string, unknown>) {
   return ShopifyAdapter.execute({ ctx: CTX, toolName, args, credentials: CREDS, config: CONFIG } as any);
@@ -116,7 +178,7 @@ describe("declared-tool ↔ handler parity", () => {
 describe("cancel_order", () => {
   it("short-circuits idempotently when the order is already cancelled - no cancel POST", async () => {
     const { calls } = stubShopify({
-      "/orders/11.json": () => ({ order: { id: 11, name: "#1001", cancelled_at: "2026-07-19T00:00:00Z", financial_status: "refunded" } }),
+      GotchaOrderById: () => ({ data: { order: orderNode({ id: 11, name: "#1001", cancelled_at: "2026-07-19T00:00:00Z", financial_status: "refunded" }) } }),
     });
     const out: any = await run("cancel_order", { order_id: "11" });
     expect(out.already_cancelled).toBe(true);
@@ -125,8 +187,8 @@ describe("cancel_order", () => {
 
   it("fails when the mutation is accepted but the order stays uncancelled", async () => {
     stubShopify({
-      "/graphql.json": () => ({ data: { orderCancel: { job: { id: "j1", done: false }, orderCancelUserErrors: [] } } }),
-      "/orders/11.json": () => ({ order: { id: 11, cancelled_at: null } }),
+      orderCancel: () => ({ data: { orderCancel: { job: { id: "j1", done: false }, orderCancelUserErrors: [] } } }),
+      GotchaOrderById: () => ({ data: { order: orderNode({ id: 11, cancelled_at: null }) } }),
     });
     await expect(run("cancel_order", { order_id: "11" })).rejects.toThrow(/cancel_not_applied/);
   });
@@ -137,16 +199,12 @@ describe("cancel_order", () => {
     // second call in place would refund an order Shopify had already refunded.
     let cancelled = false;
     const { calls } = stubShopify({
-      "/graphql.json": (_u, init) => {
-        if (String(init?.body ?? "").includes("orderCancel")) cancelled = true;
+      orderCancel: () => {
+        cancelled = true;
         return { data: { orderCancel: { job: { id: "j1", done: true }, orderCancelUserErrors: [] } } };
       },
-      "/orders/11.json": () => ({
-        order: {
-          id: 11, name: "#1001",
-          cancelled_at: cancelled ? "2026-07-20T00:00:00Z" : null,
-          financial_status: cancelled ? "refunded" : "paid",
-        },
+      GotchaOrderById: () => ({
+        data: { order: orderNode({ id: 11, name: "#1001", cancelled_at: cancelled ? "2026-07-20T00:00:00Z" : null, financial_status: cancelled ? "refunded" : "paid" }) },
       }),
     });
     const out: any = await run("cancel_order", { order_id: "11", refund: true, reason: "customer" });
@@ -154,20 +212,20 @@ describe("cancel_order", () => {
     expect(out.refund_status).toBe("refunded");
     expect(out.refund_verified).toBe(true);
     // No second money movement.
-    expect(calls.some((c) => c.url.includes("/refunds.json") && c.method === "POST")).toBe(false);
-    expect(calls.some((c) => c.url.includes("/refunds/calculate.json"))).toBe(false);
+    expect(refundCall(calls)).toBeUndefined();
+    expect(pricingCall(calls)).toBeUndefined();
   });
 
   it("a cancel whose refund did not land is reported as not_refunded, never as refunded", async () => {
     let cancelled = false;
     stubShopify({
-      "/graphql.json": (_u, init) => {
-        if (String(init?.body ?? "").includes("orderCancel")) cancelled = true;
+      orderCancel: () => {
+        cancelled = true;
         return { data: { orderCancel: { job: { id: "j1", done: true }, orderCancelUserErrors: [] } } };
       },
       // Cancelled, but the money never moved.
-      "/orders/11.json": () => ({
-        order: { id: 11, name: "#1001", cancelled_at: cancelled ? "2026-07-20T00:00:00Z" : null, financial_status: "paid" },
+      GotchaOrderById: () => ({
+        data: { order: orderNode({ id: 11, name: "#1001", cancelled_at: cancelled ? "2026-07-20T00:00:00Z" : null, financial_status: "paid" }) },
       }),
     });
     const out: any = await run("cancel_order", { order_id: "11", refund: true });
@@ -178,7 +236,8 @@ describe("cancel_order", () => {
 
   it("surfaces Shopify's structured refusal, not a bare status code", async () => {
     stubShopify({
-      "/graphql.json": () => ({ data: { orderCancel: { job: null, orderCancelUserErrors: [{ message: "Cannot cancel an order that has outstanding fulfillments", code: "INVALID" }] } } }),
+      // Keyed on the MUTATION, so the order read still gets the default stub.
+      orderCancel: () => ({ data: { orderCancel: { job: null, orderCancelUserErrors: [{ message: "Cannot cancel an order that has outstanding fulfillments", code: "INVALID" }] } } }),
     });
     await expect(run("cancel_order", { order_id: "11" })).rejects.toThrow(/outstanding fulfillments/);
   });
@@ -197,20 +256,22 @@ describe("amount-only partial refund", () => {
     const { calls } = stubShopify();
     const out: any = await run("process_refund", { order_id: "11", amount: 50 });
     expect(out.refund_id).toBe(91);
-    const calc = calls.find((c) => c.url.includes("/refunds/calculate.json"))!;
-    // The ceiling call must describe something refundable, not an empty refund.
-    expect(calc.body.refund.refund_line_items?.length).toBeGreaterThan(0);
-    expect(calc.body.refund.shipping).toBeTruthy();
+    const calc = pricingCall(calls)!;
+    // The ceiling call must describe something refundable, not an empty refund:
+    // pricing a refund of NOTHING is what made every partial refund die on
+    // "only 0.00 is refundable" against a fully paid order.
+    expect(calc.body.variables.refundLineItems?.length).toBeGreaterThan(0);
+    expect(calc.body.variables.refundShipping).toBe(true);
     // Nothing is physically coming back on an arbitrary amount refund.
-    expect(calc.body.refund.refund_line_items[0].restock_type).toBe("no_restock");
+    expect(calc.body.variables.refundLineItems[0].restockType).toBe("NO_RESTOCK");
   });
 
   it("creates the refund as amount-only, not tied to line items", async () => {
     const { calls } = stubShopify();
     await run("process_refund", { order_id: "11", amount: 50 });
-    const create = calls.find((c) => c.url.includes("/refunds.json") && c.method === "POST" && !c.url.includes("calculate"))!;
-    expect(create.body.refund.transactions[0].amount).toBe("50.00");
-    expect(create.body.refund.refund_line_items).toBeUndefined();
+    const create = refundCall(calls)!;
+    expect(create.body.variables.input.transactions[0].amount).toBe("50.00");
+    expect(create.body.variables.input.refundLineItems).toBeUndefined();
   });
 
   it("still refuses an amount above the real ceiling", async () => {
@@ -228,8 +289,8 @@ describe("amount-only partial refund", () => {
   it("accepts a decimal amount exactly", async () => {
     const { calls } = stubShopify();
     await run("process_refund", { order_id: "11", amount: 12.34 });
-    const create = calls.find((c) => c.url.includes("/refunds.json") && c.method === "POST" && !c.url.includes("calculate"))!;
-    expect(create.body.refund.transactions[0].amount).toBe("12.34");
+    const create = refundCall(calls)!;
+    expect(create.body.variables.input.transactions[0].amount).toBe("12.34");
   });
 
   it("refuses a currency that is not the order's", async () => {
@@ -246,11 +307,18 @@ describe("process_refund", () => {
     const out: any = await run("process_refund", { order_id: "11" });
     expect(out.refund_id).toBe(91);
     expect(out.refund_status).toBe("processed");
-    expect(calls.some((c) => c.url.includes("/refunds/calculate.json"))).toBe(true);
-    const create = calls.find((c) => c.url.includes("/refunds.json") && c.method === "POST" && !c.url.includes("calculate"))!;
-    expect(create.body.refund.transactions[0]).toMatchObject({ kind: "refund", parent_id: 61 });
+    expect(pricingCall(calls)).toBeDefined();
+    const create = refundCall(calls)!;
+    expect(create.body.variables.input.transactions[0]).toMatchObject({
+      kind: "REFUND",
+      // The gid, straight from what the pricing query suggested.
+      parentId: "gid://shopify/OrderTransaction/61",
+    });
     // full refund includes the remaining line items
-    expect(create.body.refund.refund_line_items[0]).toMatchObject({ line_item_id: 21, quantity: 2 });
+    expect(create.body.variables.input.refundLineItems[0]).toMatchObject({
+      lineItemId: "gid://shopify/LineItem/21",
+      quantity: 2,
+    });
   });
 
   it("rejects a partial amount above the refundable maximum", async () => {
@@ -262,14 +330,14 @@ describe("process_refund", () => {
     const { calls } = stubShopify();
     const out: any = await run("process_refund", { order_id: "11", amount: 40 });
     expect(out.amount).toBe(100); // reported from the stub's created refund
-    const create = calls.find((c) => c.url.includes("/refunds.json") && c.method === "POST" && !c.url.includes("calculate"))!;
-    expect(create.body.refund.transactions).toHaveLength(1);
-    expect(create.body.refund.transactions[0].amount).toBe("40.00");
+    const create = refundCall(calls)!;
+    expect(create.body.variables.input.transactions).toHaveLength(1);
+    expect(create.body.variables.input.transactions[0].amount).toBe("40.00");
   });
 
   it("is idempotent for an already fully-refunded order", async () => {
     stubShopify({
-      "/orders/11.json": () => ({ order: { id: 11, name: "#1001", cancelled_at: null, financial_status: "refunded" } }),
+      GotchaOrderById: () => ({ data: { order: orderNode({ id: 11, name: "#1001", cancelled_at: null, financial_status: "refunded" }) } }),
     });
     const out: any = await run("process_refund", { order_id: "11" });
     expect(out.already_refunded).toBe(true);
@@ -277,9 +345,18 @@ describe("process_refund", () => {
 
   it("reports pending (not processed) when the gateway hasn't settled", async () => {
     stubShopify({
-      "/refunds.json": (u: string) => u.includes("calculate")
-        ? { refund: { transactions: [{ parent_id: 61, amount: "100.00", kind: "suggested_refund", gateway: "manual" }], currency: "ILS", shipping: { amount: "0.00" } } }
-        : { refund: { id: 92, processed_at: null, transactions: [{ id: 72, parent_id: 61, amount: "100.00", status: "pending", gateway: "manual" }] } },
+      GotchaRefundCreate: () => ({
+        data: {
+          refundCreate: {
+            refund: refundNode({
+              id: 92,
+              created_at: null,
+              transactions: [{ id: 72, amount: "100.00", status: "pending", gateway: "manual" }],
+            }),
+            userErrors: [],
+          },
+        },
+      }),
     });
     const out: any = await run("process_refund", { order_id: "11" });
     expect(out.refund_status).toBe("pending");
@@ -289,11 +366,19 @@ describe("process_refund", () => {
 describe("issue_compensation_coupon", () => {
   it("returns the existing code instead of failing on a duplicate", async () => {
     const { calls } = stubShopify({
-      "/discount_codes/lookup.json": () => ({ discount_code: { code: "GOTCHA-1", price_rule_id: 51 } }),
+      GotchaDiscountByCode: () => ({
+        data: {
+          codeDiscountNodeByCode: {
+            id: "gid://shopify/DiscountCodeNode/51",
+            codeDiscount: { title: "GOTCHA-1", status: "ACTIVE", codes: { nodes: [{ code: "GOTCHA-1" }] }, customerGets: { value: { percentage: 1 } } },
+          },
+        },
+      }),
     });
     const out: any = await run("issue_compensation_coupon", { code: "GOTCHA-1", percentage: 100, phone: "+972500000000" });
     expect(out.already_existed).toBe(true);
-    expect(calls.some((c) => c.url.includes("/price_rules.json") && c.method === "POST")).toBe(false);
+    // Nothing was created: the coupon already existed.
+    expect(calls.some((c) => String(c.body?.query ?? "").includes("GotchaDiscountCreate"))).toBe(false);
   });
 });
 
@@ -302,8 +387,10 @@ describe("update_order_fulfillment (previously a dead tool)", () => {
     const { calls } = stubShopify();
     const out: any = await run("update_order_fulfillment", { order_id: "11", note: "call customer", tag: "ops" });
     expect(out.order_id).toBe(11);
-    const put = calls.find((c) => c.method === "PUT" && c.url.includes("/orders/11.json"))!;
-    expect(put.body.order.note).toContain("call customer");
-    expect(put.body.order.tags).toContain("ops");
+    // The write is an `orderUpdate` mutation now; what it sends is in the
+    // variables rather than in a REST body.
+    const write = calls.find((c) => String(c.body?.query ?? "").includes("GotchaOrderUpdate"))!;
+    expect(write.body.variables.input.note).toContain("call customer");
+    expect(write.body.variables.input.tags).toContain("ops");
   });
 });

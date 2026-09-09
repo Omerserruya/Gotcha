@@ -36,9 +36,13 @@ vi.mock("../../../../packages/shared/src/lib/prisma", () => ({
     taxRate: { findFirst: async () => taxRow },
   },
   // The shared barrel re-exports these from the same module, so a partial mock
-  // would break every import of "@chatcenter/shared".
+  // would break every import of "@chatcenter/shared". The list must stay in
+  // step with the `export { ... } from "./lib/prisma"` line in
+  // packages/shared/src/index.ts - a name added there and not here fails the
+  // whole file at COLLECTION time, before a single test runs.
   withCrossTenantAccess: (fn: any) => fn(),
   crossTenantMiddleware: {},
+  withHistoricalRecords: (fn: any) => fn(),
 }));
 
 vi.mock("@chatcenter/shared", async () => {

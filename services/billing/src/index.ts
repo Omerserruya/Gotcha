@@ -24,7 +24,9 @@ import { assertPublicUrlConfigured } from "./lib/public-url";
 import checkoutRoutes from "./routes/checkout";
 import checkoutSessionRoutes from "./routes/checkout-session";
 import internalRoutes from "./routes/internal";
+import shopifyBillingRoutes from "./routes/shopify-billing";
 import { assertIcountConfig } from "./providers/icount-config";
+import { assertShopifyBillingConfig, reportShopifyBillingConfig } from "./billing-sources/shopify/config";
 import { runSchedulerTick, tickWasEventful } from "./services/scheduler.service";
 
 // Fail closed before the first request. A billing service configured to talk to
@@ -32,6 +34,14 @@ import { runSchedulerTick, tickWasEventful } from "./services/scheduler.service"
 // charge; refusing to boot surfaces the misconfiguration at deploy time
 // instead of at the customer's renewal.
 assertIcountConfig();
+
+// Same contract, for the second billing source. Silent when Shopify billing is
+// switched off (which is every deployment today); refuses to boot when it is
+// switched ON with something missing - an enabled Shopify path that cannot
+// verify a subscription would accept merchants and then be unable to tell
+// whether any of them had paid.
+assertShopifyBillingConfig();
+reportShopifyBillingConfig();
 
 const config = { name: "billing-service", port: parseInt(process.env.PORT || "4009", 10) };
 const app = createServiceApp(config);
@@ -58,6 +68,11 @@ app.use("/api", webhookRoutes);
 // design - see the route for why a signature would add nothing.
 app.use("/api", icountIpnRoutes);
 app.use("/api", internalRoutes);
+// Shopify billing: state, plan selection, the verified return, and the
+// SYSTEM_ADMIN grandfathering surface. Inert while SHOPIFY_BILLING_ENABLED
+// is false - every route either reports "disabled" or reads state that is
+// empty on a deployment that never installed Shopify.
+app.use("/api", shopifyBillingRoutes);
 
 // Scheduler: trials → activate, period end → renew, pending changes → apply,
 // failed renewals → dunning ladder.

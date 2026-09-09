@@ -31,12 +31,24 @@ import { expireStaleSessions } from "./tokenization.service";
 import { purgeSpentCheckoutArtifacts } from "./billing-retention.service";
 import { settleDuePaygAccruals } from "./payg.service";
 
+import { reconcileProviderSubscriptions } from "./provider-subscription.service";
+import { dispatchPendingUsage } from "./usage-ledger.service";
+
 export interface TickResult {
   cycle: Awaited<ReturnType<typeof runBillingCycle>>;
   dunning: { retried: number; suspended: number };
   usage: { settled: number; discovered: number };
   payg: { settled: number; amount: number };
   reconciled: { examined: number; resolvedPaid: number; resolvedUnpaid: number; escalated: number };
+  /**
+   * Shopify subscription state, re-read from the provider.
+   *
+   * Not a repair mechanism for missed webhooks - Shopify App Pricing sends
+   * none - so this stage's cadence IS how quickly a cancellation, a freeze or
+   * a reactivation is noticed.
+   */
+  shopify: { checked: number; changed: number; failed: number };
+  usageDispatch: { considered: number; dispatched: number; skipped: number; failed: number; deadLettered: number };
   purged: { tokenizationSessions: number; continuationLinks: number; unusedQuotes: number };
   /** Stages that threw. Empty on a clean tick. */
   failed: string[];
@@ -96,6 +108,26 @@ export async function runSchedulerTick(): Promise<TickResult> {
     failed,
   );
 
+  // Shopify's own view of every mirrored subscription. Guarded like the rest:
+  // a Shopify outage must not take the billing cycle down with it, and it must
+  // not revoke anybody either - see reconcileProviderSubscriptions.
+  const shopify = await stage(
+    "shopify",
+    () => reconcileProviderSubscriptions(),
+    { checked: 0, changed: 0, failed: 0 },
+    failed,
+  );
+
+  // Metered usage waiting to reach a provider. Runs here rather than inline
+  // with the usage that produced it, so a provider call never happens inside
+  // the transaction that recorded the unit.
+  const usageDispatch = await stage(
+    "usage-dispatch",
+    () => dispatchPendingUsage(),
+    { considered: 0, dispatched: 0, skipped: 0, failed: 0, deadLettered: 0 },
+    failed,
+  );
+
   // Housekeeping: leases whose holder died, quotes nobody used, sessions nobody
   // finished. Individually guarded too - none of them is worth losing a tick to.
   await stage("leases", () => expireStaleLeases(), undefined as any, failed);
@@ -111,7 +143,7 @@ export async function runSchedulerTick(): Promise<TickResult> {
     failed,
   );
 
-  return { cycle, dunning, usage, payg, reconciled, purged, failed };
+  return { cycle, dunning, usage, payg, reconciled, shopify, usageDispatch, purged, failed };
 }
 
 /** True when the tick did anything worth a log line. */
@@ -122,6 +154,8 @@ export function tickWasEventful(r: TickResult): boolean {
     r.usage.settled || r.usage.discovered ||
     r.payg.settled ||
     r.reconciled.examined ||
+    r.shopify.changed || r.shopify.failed ||
+    r.usageDispatch.dispatched || r.usageDispatch.failed || r.usageDispatch.deadLettered ||
     r.purged.tokenizationSessions || r.purged.continuationLinks || r.purged.unusedQuotes ||
     // A failure is always worth saying out loud, even on an otherwise idle tick.
     r.failed.length,

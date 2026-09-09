@@ -263,7 +263,7 @@ describe("a quote freezes what will be charged", () => {
     expect(quote.commercialCurrency).toBe("USD");
     expect(new Prisma.Decimal(quote.chargeAmount).toFixed(2)).toBe("1821.35");
     expect(quote.chargeCurrency).toBe("ILS");
-    expect(quote.providerCurrencyId).toBe(1);
+    expect(quote.providerCurrencyId).toBe(5);
     expect(quote.fxRateId).toBe(rate.id);
     expect(quote.fxRateVersion).toBe(rate.version);
     expect(quote.roundingMode).toBe("HALF_UP");
@@ -372,10 +372,10 @@ describe("a quote freezes what will be charged", () => {
 });
 
 describe("every charge is submitted in ILS", () => {
-  it("pins the provider currency id to 1", () => {
+  it("pins the provider currency id to 5", () => {
     expect(CHARGE_CURRENCY).toBe("ILS");
-    expect(CHARGE_CURRENCY_ID).toBe(1);
-    expect(ICOUNT_CURRENCY_ID.ILS).toBe(1);
+    expect(CHARGE_CURRENCY_ID).toBe(5);
+    expect(ICOUNT_CURRENCY_ID.ILS).toBe(5);
     expect(ICOUNT_CURRENCY_ID.USD).toBe(2);
   });
 

@@ -1,3 +1,21 @@
+# ⚠️⚠️  RETIRED. NOT THE PRODUCTION MANIFEST. DO NOT DEPLOY THIS FILE. ⚠️⚠️
+#
+# The production source of truth is `shopify.app.production.toml` (the ONE
+# unified GOTCHA app, client_id b1ce3aa5…5f76). This Chat-app manifest
+# describes a second Partner app that production no longer uses:
+#
+#   • its `application_url` below points at
+#     `/api/connectors/shopify-chat/oauth/init`, a route that was DELETED with
+#     the two-app split (see services/ai/src/routes/shopify-chat-install.ts).
+#     Deploying this file would publish an install entry point that 404s.
+#   • the Theme App Extension now ships inside the unified app.
+#   • `scopes = ""` here, so a deploy against the wrong client_id would strip
+#     all 26 scopes from every connected merchant.
+#
+# It is kept only as the record of what the Chat app was. If you are looking
+# for the install flow, it is `/api/connectors/shopify/install` on the unified
+# app - see docs/setup/shopify-install-flow.md.
+#
 # GOTCHA Chat - Shopify app manifest.
 #
 # ⚠️  THIS FILE CONFIGURES THE **GOTCHA SHOPIFY CHAT APP** ONLY.

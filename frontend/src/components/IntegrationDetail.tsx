@@ -24,6 +24,7 @@ import CustomApiToolsSection from "@/components/CustomApiToolsSection";
 import CustomDbToolsSection from "@/components/CustomDbToolsSection";
 import { AirtableMappingCard } from "@/components/integrations/AirtableMappingCard";
 import clsx from "clsx";
+import { beginConnect, connectHelpText, connectButtonLabel, connectErrorMessage } from "@/lib/shopify-connect";
 
 const RISK_BADGE: Record<string, string> = {
   LOW: "bg-green-100 text-green-700",
@@ -200,11 +201,15 @@ export function IntegrationDetail({
   const authSchema = integration?.authSchema || {};
   let credFields: Array<{ key: string; label: string; type: string; required: boolean; placeholder?: string; helpText?: string }> =
     authSchema.fields || (integration?.authType === "API_KEY" ? [{ key: "apiKey", label: t("marketplace.apiKey"), type: "password", required: true }] : []);
-  if (slug === "shopify" && !credFields.some((f) => f.key === "shop")) {
-    credFields = [
-      { key: "shop", label: "Shop domain", type: "text", required: true, placeholder: "my-store.myshopify.com", helpText: "Your store's myshopify subdomain - e.g. my-store or my-store.myshopify.com." },
-      ...credFields.filter((f) => f.key !== "apiKey"),
-    ];
+  // Shopify takes NO pre-OAuth fields. It used to inject a "Shop domain" text
+  // box here (and the catalog's authSchema may still carry one), because the
+  // old init endpoint required a `shop` query parameter. Installation now
+  // begins on a Shopify-owned page that identifies the store, so asking is
+  // both unnecessary and forbidden by App Store requirement 2.3.1. The filter
+  // is deliberately defensive: a stale catalog row must not be able to put the
+  // field back.
+  if (slug === "shopify") {
+    credFields = credFields.filter((f) => f.key !== "shop" && f.key !== "apiKey");
   }
   // Shopify is OAuth-only - force the OAuth branch even if the catalog
   // still has the legacy API_KEY auth_type (older base migration).
@@ -507,9 +512,7 @@ export function IntegrationDetail({
               {effectiveAuthType === "OAUTH2" ? (
                 <div className="space-y-3">
                   <p className="text-sm text-gray-500">
-                    {editingCreds
-                      ? "Re-authorize this integration via OAuth. Required fields below are sent to the provider's authorize URL."
-                      : "This integration uses OAuth 2.0. Click below to authorize access."}
+                    {connectHelpText(slug, Boolean(editingCreds) || isConnected)}
                   </p>
                   {/* Pre-OAuth fields - e.g. Shopify shop domain, Salesforce loginHost, Square environment */}
                   {credFields.length > 0 && (
@@ -560,13 +563,19 @@ export function IntegrationDetail({
                       try {
                         // Carry the host's OAuth flow so the callback returns to
                         // the right place (e.g. Settings, not the marketplace).
-                        const { url } = await initIntegrationOAuth(token, slug, {
-                          ...credentials,
-                          ...(oauthFlow ? { flow: oauthFlow } : {}),
+                        // `beginConnect` decides install-vs-authorize; Shopify's
+                        // first connect goes to Shopify, not to an authorize URL
+                        // we built from a domain the merchant typed.
+                        const url = await beginConnect({
+                          token,
+                          slug,
+                          reauthorize: Boolean(editingCreds) || isConnected,
+                          flow: oauthFlow || undefined,
+                          params: credentials,
                         });
                         window.location.href = url;
                       } catch (err: any) {
-                        setTestResult({ ok: false, msg: err?.message || "OAuth init failed - check provider client ID/secret/redirect on the server." });
+                        setTestResult({ ok: false, msg: connectErrorMessage(slug, err) });
                       }
                     }}
                     className="inline-flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-sm font-medium transition shadow-sm"
@@ -574,7 +583,7 @@ export function IntegrationDetail({
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
                     </svg>
-                    {editingCreds ? "Re-authorize with OAuth" : "Connect with OAuth"}
+                    {connectButtonLabel(slug, Boolean(editingCreds) || isConnected)}
                   </button>
                   {testResult && (
                     <p className={clsx("text-xs font-medium", testResult.ok ? "text-green-600" : "text-amber-600")}>

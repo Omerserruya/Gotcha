@@ -2390,6 +2390,143 @@ export function listRdsTables(token: string, opts: { engine: "postgres" | "mysql
   });
 }
 
+// ─── Shopify installation ────────────────────────────────────
+//
+// Shopify is the one integration GOTCHA does NOT start OAuth for. The App
+// Store requires the install to begin on a Shopify-owned surface, and asking
+// the merchant to type their `.myshopify.com` domain is explicitly forbidden
+// (requirement 2.3.1) - so there is no shop parameter anywhere below.
+//
+// `startShopifyInstall` returns the Shopify page to navigate to and, as a side
+// effect on the server, records which workspace is installing. That record is
+// an HttpOnly cookie handle, which is why every call here must send
+// credentials and why the caller navigates rather than opening a new tab: a
+// cookie set on this response has to be present on Shopify's redirect back.
+
+/**
+ * The Shopify-owned install page. Throws with `shopify_install_url_not_configured`.
+ *
+ * `credentials: "include"` is load-bearing, not boilerplate. The response sets
+ * the HttpOnly intent cookie that carries "which workspace is installing"
+ * across the Shopify round trip. In production the API and the app share an
+ * origin and the default would do; in a dev stack the API is a different
+ * origin, the browser would drop the Set-Cookie, and every dev install would
+ * silently land in the anonymous claim path instead of the workspace the
+ * developer was signed into. That failure looks like a bug in the linking
+ * logic, which is the expensive place to go looking for it.
+ */
+export function startShopifyInstall(token: string, flow?: string) {
+  const qs = flow ? `?flow=${encodeURIComponent(flow)}` : "";
+  return apiFetch<{ url: string }>(`/api/connectors/shopify/install/start${qs}`, {
+    token,
+    credentials: "include",
+  });
+}
+
+/**
+ * The store waiting to be attached to a workspace, after an install that began
+ * on Shopify with no GOTCHA session. Shop name only - the access token never
+ * reaches the browser.
+ */
+export function getPendingShopifyInstall(token: string, handle: string) {
+  return apiFetch<{ data: { shopDomain: string } }>(
+    `/api/connectors/shopify/install/pending?handle=${encodeURIComponent(handle)}`,
+    { token },
+  );
+}
+
+/** Attach the pending install to the signed-in user's current workspace. */
+export function claimShopifyInstall(token: string, handle: string) {
+  return apiFetch<{ data: { shopDomain: string; reconnected: boolean; flow: string | null } }>(
+    "/api/connectors/shopify/install/claim",
+    { token, method: "POST", body: JSON.stringify({ handle }) },
+  );
+}
+
+// ─── Shopify billing ───────────────────────────────────────────────────────
+//
+// Separate from the install calls above on purpose. Installation and payment
+// are two independent facts about a workspace: a store can be connected and
+// unpaid, paid and later disconnected, or connected and grandfathered so that
+// payment never applies. Collapsing them into one call would force the UI to
+// invent a combined status, which is exactly the conflation the billing model
+// forbids.
+
+/** Billing status shown to a viewer. Domain states, never a boolean. */
+export type ShopifyBillingState =
+  | "UNRESOLVED"
+  | "NOT_REQUIRED_GRANDFATHERED"
+  | "PLAN_SELECTION_REQUIRED"
+  | "APPROVAL_PENDING"
+  | "ACTIVE"
+  | "TRIALING"
+  | "PAST_DUE"
+  | "CANCELLED"
+  | "FROZEN"
+  | "UNKNOWN_PLAN"
+  | "ERROR";
+
+export interface ShopifyBillingSnapshot {
+  core: { subscriptionStatus: string | null; planKey: string | null; billingSource: string | null };
+  installation: {
+    status: string;
+    shopDomain: string | null;
+    externalShopId: string | null;
+    connectionId: string | null;
+    installedAt: string | null;
+    uninstalledAt: string | null;
+  };
+  shopify: {
+    state: ShopifyBillingState;
+    reason: string;
+    planKey: string | null;
+    planHandle: string | null;
+    providerSubscriptionId: string | null;
+    rawStatus: string | null;
+    trialEndsAt: string | null;
+    currentPeriodEnd: string | null;
+    cancelAtPeriodEnd: boolean;
+    declined: boolean;
+    /** Set only in UNKNOWN_PLAN. A plan handle is config, never a credential. */
+    unknownPlanHandle: string | null;
+    lastVerifiedAt: string | null;
+  };
+  grandfathered: { grantedAt: string | null; source: string; reason: string; paidSince: string | null } | null;
+  entitlements: string[];
+  planSelectionUrl: string | null;
+  availablePlanCount: number;
+  requiresPlanSelection: boolean;
+  grantsAccess: boolean;
+}
+
+export function getShopifyBillingState(token: string) {
+  return apiFetch<{ data: ShopifyBillingSnapshot }>("/api/billing/shopify/state", { token });
+}
+
+/** Ask where to send the merchant. The server refuses if they need not pay. */
+export function startShopifyPlanSelection(token: string) {
+  return apiFetch<{ data: { url: string; state: ShopifyBillingState } }>(
+    "/api/billing/shopify/plan-selection",
+    { token, method: "POST" },
+  );
+}
+
+/**
+ * Verify the subscription after Shopify returns the merchant to us.
+ *
+ * `shop` is forwarded ONLY so the server can reject a return that belongs to a
+ * different store than the one this workspace connected. It is not evidence of
+ * payment and the server does not treat it as any: it re-reads the
+ * subscription from Shopify before changing anything.
+ */
+export function completeShopifyBilling(token: string, shop?: string | null) {
+  const qs = shop ? `?shop=${encodeURIComponent(shop)}` : "";
+  return apiFetch<{ data: ShopifyBillingSnapshot }>(`/api/billing/shopify/complete${qs}`, {
+    token,
+    method: "POST",
+  });
+}
+
 export function initIntegrationOAuth(token: string, slug: string, extraParams?: Record<string, string>) {
   const LEGACY_SLUGS = new Set(["zoho_crm", "google_calendar", "calendly"]);
   const path = LEGACY_SLUGS.has(slug)
