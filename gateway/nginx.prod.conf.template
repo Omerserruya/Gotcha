@@ -1680,13 +1680,13 @@ http {
         location = /pricing {
             absolute_redirect off;
             if ($public_pricing_enabled != "true") { return 302 /early-access; }
-            try_files $uri $uri/index.html $uri.html /index.html;
+            try_files $uri $uri/index.html $uri.html /404.html;
         }
 
         location = /pricing/ {
             absolute_redirect off;
             if ($public_pricing_enabled != "true") { return 302 /early-access; }
-            try_files $uri $uri/index.html $uri.html /index.html;
+            try_files $uri $uri/index.html $uri.html /404.html;
         }
 
         location / {
@@ -1723,7 +1723,10 @@ http {
         server_name gotcha.co.il;
 
         client_max_body_size 1m;
-        root /usr/share/nginx/html;
+        # The marketing site is its own build with its own /_next chunks, so it
+        # gets its own root. The application export stays at /usr/share/nginx/html
+        # and is still reachable from the few locations below that need it.
+        root /usr/share/nginx/landing;
 
         add_header X-Content-Type-Options "nosniff" always;
         add_header Referrer-Policy "strict-origin-when-cross-origin" always;
@@ -1797,7 +1800,9 @@ http {
         # the catch-all redirect below turned both into a CROSS-ORIGIN 301 that
         # the browser then refused. Serving them here keeps the widget
         # same-origin, so no CORS is involved at all.
+        # The embeddable widget ships with the application build, not this one.
         location /widget/ {
+            root /usr/share/nginx/html;
             try_files $uri =404;
         }
 
@@ -1819,8 +1824,12 @@ http {
             try_files /index.html =404;
         }
 
-        location ~ ^/(early-access|legal|privacy-policy|terms|en|he)(/|$) {
-            try_files $uri $uri/index.html $uri.html /index.html;
+        # The public surface, named explicitly. A route the marketing build does
+        # not have falls through to the redirect below rather than answering
+        # with the wrong page, and a new application route cannot appear here
+        # by accident.
+        location ~ ^/(about|blog|careers|contact|help|legal|offer|product|security|solutions|why-gotcha|early-access|privacy-policy|terms|en|he)(/|$) {
+            try_files $uri $uri/index.html $uri.html /404.html;
         }
 
         # Pricing honours the same kill switch as the app host, so a disabled
@@ -1828,7 +1837,7 @@ http {
         location ~ ^/pricing(/|$) {
             absolute_redirect off;
             if ($public_pricing_enabled != "true") { return 302 /early-access; }
-            try_files $uri $uri/index.html $uri.html /index.html;
+            try_files $uri $uri/index.html $uri.html /404.html;
         }
 
         # Everything else is the application: send it to the application host.
@@ -2038,10 +2047,10 @@ http {
         }
     }
 
-    # ── Help Center: help.gotcha.co.il → the exported /help pages ──
-    # The public knowledge base is part of the same static export; this vhost
-    # maps the subdomain root onto /help. TLS terminates upstream of this
-    # container exactly like the main host.
+    # ── Help Center: help.gotcha.co.il → the marketing export's /help ──
+    # The knowledge base moved to the marketing build, which is the single
+    # source for it; this vhost maps the subdomain root onto /help. TLS
+    # terminates upstream of this container exactly like the main host.
     server {
         listen 80;
         server_name help.gotcha.co.il;
@@ -2055,7 +2064,7 @@ http {
         # The app vhost declares its own root and there is none at http scope,
         # so this block inherited nothing. help.gotcha.co.il never served a page
         # in production.
-        root /usr/share/nginx/html;
+        root /usr/share/nginx/landing;
 
         # ── Security headers (H-5) ──────────────────────────────
         # Emitted at server scope; repeated inside any location that declares
@@ -2076,19 +2085,55 @@ http {
             try_files $uri =404;
         }
 
-        # In-page links already carry the /help prefix.
+        # In-page links already carry the /help prefix. The export writes
+        # /help.html rather than /help/index.html - trailingSlash is off, so a
+        # section index is a sibling file, not a directory index.
         location /help {
-            try_files $uri $uri/index.html $uri.html /help/index.html;
+            try_files $uri $uri.html $uri/index.html /help.html;
         }
 
         # The bare root serves the help index directly.
         location = / {
-            try_files /help/index.html =404;
+            try_files /help.html =404;
         }
 
         # Unprefixed paths land on the help section.
         location / {
-            try_files /help$uri /help$uri/index.html /help$uri.html /help/index.html;
+            try_files /help$uri /help$uri.html /help$uri/index.html /help.html;
+        }
+    }
+
+    # ── Trust Center: trust.gotcha.co.il → the marketing export's /legal ──
+    # Same shape as the Help Center above: one build, one section, the subdomain
+    # root rewritten onto that section's path.
+    server {
+        listen 80;
+        server_name trust.gotcha.co.il;
+
+        root /usr/share/nginx/landing;
+
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header Permissions-Policy "camera=(), geolocation=(), payment=()" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https:; media-src 'self' blob:; object-src 'none'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'" always;
+
+        # Build output and images, passed through untouched.
+        location ~ ^/(_next|assets)/ {
+            try_files $uri =404;
+        }
+
+        location /legal {
+            try_files $uri $uri.html $uri/index.html /legal.html;
+        }
+
+        location = / {
+            try_files /legal.html =404;
+        }
+
+        location / {
+            try_files /legal$uri /legal$uri.html /legal$uri/index.html /legal.html;
         }
     }
 }

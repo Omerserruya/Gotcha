@@ -1,0 +1,26 @@
+{
+  "name": "@chatcenter/landing",
+  "version": "0.1.0",
+  "private": true,
+  "description": "GOTCHA marketing site (/) - separate from the application frontend.",
+  "scripts": {
+    "dev": "next dev -p 3100",
+    "build": "next build",
+    "start": "next start -p 3100",
+    "lint": "next lint",
+    "design:sync": "node tools/dc2jsx.mjs && node tools/build-logic.mjs && node tools/build-he.mjs && node tools/extract-slots.mjs",
+    "legal:sync": "node tools/build-legal.mjs",
+    "legal:check": "node tools/build-legal.mjs --check"
+  },
+  "dependencies": {
+    "next": "^14.2.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "typescript": "^5.6.0"
+  }
+}

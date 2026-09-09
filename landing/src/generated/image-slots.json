@@ -1,0 +1,32 @@
+{
+  "social-founders": {
+    "src": "/assets/slots/social-founders.webp",
+    "scale": 1,
+    "x": 0,
+    "y": 0
+  },
+  "founder-matan": {
+    "src": "/assets/slots/founder-matan.webp",
+    "scale": 1,
+    "x": 0,
+    "y": 0
+  },
+  "founder-omer": {
+    "src": "/assets/slots/founder-omer.webp",
+    "scale": 1.3394625098792234,
+    "x": -2.054847613010894,
+    "y": 8.397514265028946
+  },
+  "hero-photo": {
+    "src": "/assets/slots/hero-photo.webp",
+    "scale": 1.1617036742727436,
+    "x": -2.3513370232446564,
+    "y": -10.881933630510835
+  },
+  "shot-order": {
+    "src": "/assets/slots/shot-order.webp",
+    "scale": 1,
+    "x": -1.1102230246251565e-14,
+    "y": 423.24332171893144
+  }
+}
