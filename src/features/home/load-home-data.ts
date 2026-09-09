@@ -10,6 +10,7 @@ import {
   insightsSchema,
   channelPerformanceSchema,
   queueItemsSchema,
+  quietDaySchema,
   timeSavedSchema,
   usageAllowanceSchema,
   type AnalyticsOverview,
@@ -19,6 +20,7 @@ import {
   type InFlight,
   type Insight,
   type QueueItems,
+  type QuietDay,
   type TimeSaved,
   type UsageAllowance,
 } from '@/api/contracts/analytics';
@@ -80,6 +82,11 @@ export interface HomeData {
    * the screen keeps, because "nothing to report" is a real and good state.
    */
   readonly insights: readonly Insight[] | null;
+  /**
+   * The quiet day's ranked list. Null when the call failed; empty `data` means
+   * nothing stands out, which is a good morning rather than a failure.
+   */
+  readonly quietDay: QuietDay | null;
   readonly team: Team | null;
   /**
    * Presence, keyed by agent id.
@@ -152,6 +159,7 @@ export async function loadHomeData(): Promise<HomeData> {
     inFlight,
     allowance,
     insights,
+    quietDay,
     team,
     conflicts,
     signals,
@@ -212,6 +220,16 @@ export async function loadHomeData(): Promise<HomeData> {
       .get({ endpoint: analyticsEndpoints.insights(), payload: insightsSchema })
       .catch(degrade<readonly Insight[] | null>('home.insights_failed', null)),
     api
+      .get({
+        endpoint: analyticsEndpoints.quietDay(),
+        // The design's card shows four rows.
+        query: { limit: 4 },
+        payload: quietDaySchema,
+        // `data` is a sibling of `sources` and `weekKey`, not the payload.
+        raw: true,
+      })
+      .catch(degrade('home.quiet_day_failed', null)),
+    api
       .get({ endpoint: analyticsEndpoints.agents(), payload: teamSchema })
       .catch(degrade('home.team_failed', null)),
     api
@@ -246,6 +264,7 @@ export async function loadHomeData(): Promise<HomeData> {
     inFlight,
     allowance,
     insights,
+    quietDay,
     team,
     conflicts,
     // Unknown counts as busy: showing the calm screen when we cannot tell

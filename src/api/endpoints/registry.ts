@@ -71,6 +71,8 @@ export const analyticsEndpoints = {
   inFlight: () => endpoint('/api/analytics/in-flight'),
   /** "Worth knowing" — `kind` + `values`, translated by us. */
   insights: () => endpoint('/api/analytics/insights'),
+  /** The quiet day's ranked list, merged from four sources server-side. */
+  quietDay: () => endpoint('/api/analytics/quiet-day'),
   dismissInsight: (id: string) => endpoint('/api/analytics/insights/{id}/dismiss', { id }),
   /** Per-agent open counts and reply times. Carries no presence. */
   agents: () => endpoint('/api/analytics/agents'),

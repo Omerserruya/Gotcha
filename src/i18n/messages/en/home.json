@@ -205,8 +205,37 @@
   "quietWork": {
     "title": "Worth an hour, while it is quiet",
     "subtitle": "GOTCHA picked these",
-    "remainingBlocked": "Three more cards belong here — questions GOTCHA could not answer, customers who have gone quiet, and demand for products you do not stock. Each now has a backend source; the cards are not built yet.",
-    "allBlocked": "Nothing to work on right now. Four cards belong here — knowledge conflicts, unanswered questions, dormant customers and unmet demand — and only conflicts is built so far."
+    "footnote": "None of this is urgent. It is simply what would make next week easier.",
+    "empty": "Nothing to work on right now.",
+    "unavailable": "This list could not be loaded just now.",
+    "missingSource": "Knowledge conflicts are not in this ranking yet.",
+    "item": {
+      "knowledge_gap": {
+        "title": "{askedBy, plural, one {A question} other {Questions}} GOTCHA could not answer",
+        "body": "“{question}” — asked {askCount, plural, one {once} other {# times}} by {askedBy, plural, one {# person} other {# people}}.",
+        "action": "Answer it"
+      },
+      "knowledge_conflict": {
+        "title": "Two sources still disagree about {field}",
+        "body": "Until you pick one, GOTCHA passes every question touching it to a person.",
+        "action": "Resolve it"
+      },
+      "product_demand": {
+        "title": "{askedBy, plural, one {# person} other {# people}} asked for {term}",
+        "body": "You do not stock it. {weeksRunning, plural, =1 {First week.} other {# weeks running.}}",
+        "action": "See who"
+      },
+      "dormant_customers": {
+        "title": "{count, plural, one {# customer has} other {# customers have}} gone quiet",
+        "body": "No contact for {quietForDays, plural, one {# day} other {# days}}. Reaching them starts conversations rather than ending them.",
+        "action": "Start a campaign"
+      },
+      "fallback": {
+        "title": "Something worth an hour",
+        "body": "GOTCHA flagged this but the wording for it is not written yet.",
+        "action": "Take a look"
+      }
+    }
   },
   "conflicts": {
     "title": "Two sources still disagree",

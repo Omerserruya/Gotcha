@@ -309,3 +309,48 @@ export const insightSchema = z.looseObject({
 export type Insight = z.infer<typeof insightSchema>;
 
 export const insightsSchema = z.array(insightSchema);
+
+/**
+ * `GET /api/analytics/quiet-day?limit` — "Worth an hour, while it is quiet".
+ *
+ * Merged and ranked server-side, for the same reason the queue is: two
+ * surfaces ordering the same list disagree the moment either changes.
+ *
+ * `effect` is the important field. Three sources REMOVE future work — answer
+ * the question, resolve the conflict, stock the product, and those
+ * conversations stop arriving. Dormant customers are the opposite: acting on
+ * them creates conversations, which is the entire point of them. Ranking an
+ * opportunity by how much work it removes would put the most valuable item
+ * last for being valuable, so the two are not ordered against each other and
+ * `wouldRemoveConversations` is null on an opportunity rather than a number
+ * meaning something else.
+ *
+ * `sources` says which inputs the ranking actually saw. A list that silently
+ * omits one reads as "there is nothing there", which is a different claim.
+ */
+export const QUIET_DAY_EFFECTS = ['removes_work', 'creates_opportunity'] as const;
+export type QuietDayEffect = (typeof QUIET_DAY_EFFECTS)[number];
+
+export const quietDayItemSchema = z.looseObject({
+  id: z.string(),
+  source: z.string(),
+  effect: z.enum(QUIET_DAY_EFFECTS).catch('removes_work'),
+  /** Null on an opportunity. Absent is not zero. */
+  wouldRemoveConversations: z.number().nullable().optional(),
+  /** The counts the estimate was built from, so it can be argued with. */
+  basis: z.record(z.string(), z.number()).default({}),
+  /** `<source>.<detail>`. Codes and figures only; the sentence is ours. */
+  kind: z.string(),
+  values: z.record(z.string(), z.unknown()).default({}),
+  rank: z.number(),
+});
+
+export type QuietDayItem = z.infer<typeof quietDayItemSchema>;
+
+export const quietDaySchema = z.looseObject({
+  weekKey: z.string().optional(),
+  sources: z.record(z.string(), z.boolean()).default({}),
+  data: z.array(quietDayItemSchema).default([]),
+});
+
+export type QuietDay = z.infer<typeof quietDaySchema>;

@@ -43,6 +43,7 @@ export async function HomeScreen() {
     inFlight,
     allowance,
     insights,
+    quietDay,
     team,
     conflicts,
     isQuiet,
@@ -108,7 +109,7 @@ export async function HomeScreen() {
       <div className={styles.columns}>
         <section className={styles.queueColumn}>
           {isQuiet ? (
-            <QuietWork conflicts={conflicts} />
+            <QuietWork quietDay={quietDay} conflicts={conflicts} />
           ) : (
             <>
               <div className={styles.sectionHeader}>
