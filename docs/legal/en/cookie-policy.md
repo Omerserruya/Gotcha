@@ -2,9 +2,9 @@
 
 > This English text is a translation provided for convenience. The Hebrew version of this document is the authoritative one, and in case of any conflict or inconsistency between the versions, the Hebrew version prevails.
 
-Effective date: July 18, 2026
+Effective date: September 9, 2026
 
-This policy explains how GOTCHA by Omer Serruya, the operator of gotcha.co.il, uses cookies and similar technologies. The short version: the GOTCHA application sets no cookies of its own, our self-hosted sign-in service sets only strictly necessary cookies, and we use no analytics, marketing, or tracking technologies at all.
+This policy explains how GOTCHA by Omer Serruya, the operator of gotcha.co.il, uses cookies and similar technologies. The short version: the GOTCHA application sets no cookies of its own, our self-hosted sign-in service sets only strictly necessary cookies, we use no marketing or tracking technologies at all, and no analytics runs unless you choose to allow it.
 
 ## 1. Cookies set by GOTCHA
 
@@ -21,9 +21,15 @@ Sign-in to GOTCHA is handled by a self-hosted identity service that runs on our 
 
 These cookies are essential for authentication and security. They are not used for analytics, advertising, or tracking, and they are not shared with any third party: the identity service is self-hosted, so the cookies never leave our infrastructure.
 
-## 3. Why there is no cookie consent banner
+## 3. The choice we ask you to make
 
-Because the only cookies in use are strictly necessary for signing in securely, and we use no analytics or marketing cookies, applicable cookie rules do not require prior consent for them. That is why you do not see a cookie consent banner on GOTCHA. If we ever introduce non-essential cookies, we will update this policy and ask for consent first.
+On your first visit to our website you are asked one question, with two categories.
+
+**Strictly necessary** covers the sign-in cookies described above. They cannot be switched off, and applicable cookie rules do not require prior consent for them, because without them signing in securely does not work.
+
+**Analytics** is optional and off unless you turn it on. No analytics provider is in use today; we ask first so that measuring which pages are useful can never begin without a decision from you. There are no advertising cookies, no social media pixels and no third-party tracking scripts, and no category above asks for consent to any.
+
+Your answer is stored on your own device, not on our servers, and you can change it at any time by clearing your browser storage for this site, which makes the question appear again. If we ever introduce a category beyond these two, we will update this policy and ask again rather than treat an earlier answer as covering it.
 
 ## 4. Similar technologies: browser storage
 
@@ -40,6 +46,7 @@ Instead of cookies, the GOTCHA application keeps a small number of items in your
 | Notification and sound preferences | localStorage | Remembers your notification sound settings |
 | Voice call preferences and callback state | localStorage and sessionStorage | Remembers per-device voice settings and in-progress call state |
 | Assistant calibration preference | localStorage | Remembers a per-device assistant setting |
+| Cookie choice | localStorage | Remembers the answer you gave to the cookie question, so you are not asked on every visit |
 
 None of these items are sent to advertisers or analytics providers. The sign-in tokens are credentials for your own session; keep your device secure and sign out on shared computers.
 
@@ -63,4 +70,4 @@ Related documents: ./privacy-policy.md
 
 Contact: privacy@gotcha.co.il
 
-Effective date: July 18, 2026
+Effective date: September 9, 2026

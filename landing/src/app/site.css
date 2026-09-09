@@ -1,0 +1,50 @@
+/*
+ * Styles for the sections written by hand - the Trust Center, the help
+ * articles, the cookie notice.
+ *
+ * Kept apart from globals.css, which is generated from the design's <helmet>
+ * block and overwritten on every `npm run design:sync`. Anything added there
+ * would disappear at the next export.
+ */
+
+.chrome-nav {
+  transition: background .18s ease, color .18s ease;
+}
+.chrome-nav:hover {
+  background: #EFEAE1;
+  color: #16150F;
+}
+
+.chrome-foot {
+  transition: color .18s ease;
+}
+.chrome-foot:hover {
+  color: #F7F5F1;
+}
+
+.trust-card {
+  transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+.trust-card:hover {
+  border-color: rgba(196, 85, 47, .45);
+  box-shadow: 0 10px 30px rgba(22, 21, 15, .07);
+  transform: translateY(-2px);
+}
+
+.trust-toc {
+  transition: color .18s ease;
+}
+.trust-toc:hover {
+  color: #C4552F;
+}
+
+/* A long contract is read, not scanned: give the prose a comfortable measure. */
+article p,
+article li {
+  max-width: 68ch;
+}
+
+/* The document body is the one place a link should look like a link. */
+article a {
+  text-underline-offset: 2px;
+}

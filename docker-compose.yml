@@ -848,6 +848,25 @@ services:
       - /app/node_modules
       - /app/.next
 
+  # The marketing site: gotcha.co.il, trust.gotcha.co.il and help.gotcha.co.il.
+  # A separate app from `frontend` on purpose - different audience, different
+  # release cadence, no shared code.
+  landing:
+    build:
+      context: ./landing
+      dockerfile: Dockerfile.dev
+    environment:
+      # Each section is its own hostname in front of this one app. Unset means
+      # "same origin", which is what makes the site work on localhost.
+      NEXT_PUBLIC_MARKETING_URL: ${MARKETING_URL:-}
+      NEXT_PUBLIC_TRUST_URL: ${TRUST_URL:-}
+      NEXT_PUBLIC_HELP_URL: ${HELP_URL:-}
+      NEXT_PUBLIC_APP_URL: ${APP_URL:-}
+    volumes:
+      - ./landing:/app
+      - /app/node_modules
+      - /app/.next
+
 volumes:
   redis_data:
   pgdata:

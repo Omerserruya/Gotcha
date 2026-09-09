@@ -1,8 +1,9 @@
 # GOTCHA marketing site
 
-The public site at `/`. Separate from `frontend/`, which is the application at
-`app.` - different audience, different release cadence, different build. Nothing
-is shared between them.
+Everything the public sees: the landing site at `/`, the Trust Center at
+`trust.`, and the Help Center at `help.`. Separate from `frontend/`, which is
+the application at `app.` - different audience, different release cadence,
+different build. Nothing is shared between them.
 
 It is a **clone of the Claude Design project** "Redesigning GOTCHA landing from
 scratch", not a reinterpretation of it. Every pixel, string and image comes from
@@ -26,7 +27,60 @@ src/app/globals.css         also generated: the design's <helmet> CSS plus the
 src/components/Landing.jsx  the design's own logic class, wrapped as a React component
 src/lib/dc.tsx              four dc-runtime behaviours, reimplemented exactly
 src/lib/pages.ts            page key -> URL
+src/lib/site.ts             the design's palette and type, named, plus the
+                            cross-section links
+src/content/                content this app owns: the legal registry and the
+                            help articles
+src/app/legal/              Trust Center: hub and one page per document
+src/app/help/               Help Center: hub, categories, articles
+src/components/SiteChrome   header and footer for the hand-written sections
+src/components/Markdown     the markdown subset the documents actually use
+src/components/CookieNotice the consent card
 ```
+
+## Three hostnames, one app
+
+Production puts each section on its own hostname and rewrites the subdomain
+root onto that section's path, which is how `help.gotcha.co.il` already worked
+before this app existed. `nginx/nginx.conf.template` carries the vhosts:
+
+| hostname | section |
+|---|---|
+| `gotcha.co.il` | `/` - the landing, compiled from the design |
+| `trust.gotcha.co.il` | `/legal` |
+| `help.gotcha.co.il` | `/help` |
+
+`NEXT_PUBLIC_TRUST_URL` and `NEXT_PUBLIC_HELP_URL` tell the app where the other
+sections live so cross-links are absolute. Leave them unset and every link
+stays a plain path, which is why the whole site works on localhost with no
+hostnames at all.
+
+## The Trust Center
+
+`docs/legal/{en,he}/*.md` at the repository root is the source of truth.
+`npm run legal:sync` compiles it into `src/generated/legal.js`;
+`npm run legal:check` fails if the two have drifted.
+
+Which documents are published is decided in one place,
+`src/content/legal-registry.mjs`. Three of the nine are internal records - the
+Art. 30 register and two engineering gap registers - and the build tool refuses
+to emit a public document that still reads like one, so publishing one means
+editing it rather than flipping a flag.
+
+## The Help Center
+
+The articles live in `src/content/help/`, copied here because this app is now
+the single source for them. The hub is written rather than taken from the
+design: the designed one advertises 148 articles across six categories with
+invented titles, and there are 23 across seven. The layout and the language are
+the design's; the numbers are counted from the content.
+
+## Cookies
+
+Two categories, and only two. Strictly necessary cannot be turned off; analytics
+is off until someone turns it on, and nothing reads `consent.analytics` until it
+is true. The Cookie Policy was updated in both languages at the same time - it
+used to carry a section explaining why there was no banner.
 
 ## Regenerating after a design change
 

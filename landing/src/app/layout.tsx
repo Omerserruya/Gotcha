@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
+import CookieNotice from '@/components/CookieNotice';
 import './globals.css';
+import './site.css';
 
 export const metadata: Metadata = {
   title: 'GOTCHA - Manage every customer interaction, end to end.',
@@ -25,7 +27,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        {/* Sits above every page, including the compiled landing, because the
+            first visit is what it is asking about. */}
+        <CookieNotice />
+      </body>
     </html>
   );
 }

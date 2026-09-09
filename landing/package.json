@@ -8,7 +8,9 @@
     "build": "next build",
     "start": "next start -p 3100",
     "lint": "next lint",
-    "design:sync": "node tools/dc2jsx.mjs && node tools/build-logic.mjs && node tools/build-he.mjs && node tools/extract-slots.mjs"
+    "design:sync": "node tools/dc2jsx.mjs && node tools/build-logic.mjs && node tools/build-he.mjs && node tools/extract-slots.mjs",
+    "legal:sync": "node tools/build-legal.mjs",
+    "legal:check": "node tools/build-legal.mjs --check"
   },
   "dependencies": {
     "next": "^14.2.0",

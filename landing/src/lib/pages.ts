@@ -14,8 +14,11 @@ export const PAGE_BY_PATH: Record<string, string> = {
   'blog': 'co-blog',
   'careers': 'co-careers',
   'security': 'co-security',
-  'help': 'co-help',
   'contact': 'co-chat',
+
+  // 'help' is deliberately absent. The Help Center is a real section with
+  // category and article pages under src/app/help, not the design's single
+  // placeholder hub, so /help is owned by that route rather than this map.
 
   'product/omnichannel': 'feat-omnichannel',
   'product/copilot': 'feat-copilot',

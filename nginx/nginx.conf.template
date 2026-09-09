@@ -5,6 +5,12 @@ events {
 }
 
 http {
+    # The marketing site (gotcha.co.il, trust., help.). Its own app, not the
+    # application frontend.
+    upstream landing_site {
+        server landing:3100;
+    }
+
     upstream auth_service {
         server auth:${AUTH_PORT};
     }
@@ -1700,10 +1706,10 @@ http {
         }
     }
 
-    # ── Help Center: help.gotcha.co.il → the frontend's /help section ──
-    # The public knowledge base rides the main Next.js app (no extra service);
-    # this vhost maps the subdomain root onto /help while passing Next.js
-    # assets straight through.
+    # ── Help Center: help.gotcha.co.il → the marketing site's /help section ──
+    # The public knowledge base moved to the marketing app, which is now the
+    # single source for it; this vhost maps the subdomain root onto /help while
+    # passing Next.js assets straight through.
     server {
         listen 80;
         server_name help.gotcha.co.il help.dev.gotcha.co.il;
@@ -1724,8 +1730,8 @@ http {
 
         # Next.js internals + shared static assets - no rewrite (regex wins
         # over the prefix locations below).
-        location ~ ^/(_next|favicon\.ico|logo[^/]*\.png|apple-touch-icon\.png|icons/|images/) {
-            proxy_pass http://frontend;
+        location ~ ^/(_next|favicon\.ico|assets/) {
+            proxy_pass http://landing_site;
             proxy_http_version 1.1;
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection "upgrade";
@@ -1738,7 +1744,7 @@ http {
 
         # In-page links already carry the /help prefix - pass through as-is.
         location /help {
-            proxy_pass http://frontend;
+            proxy_pass http://landing_site;
             proxy_http_version 1.1;
             proxy_set_header Host $host;
             proxy_set_header X-Internal-Key "";
@@ -1751,7 +1757,7 @@ http {
         # serves it directly instead of 308-redirecting /help/ → /help).
         location = / {
             rewrite ^ /help break;
-            proxy_pass http://frontend;
+            proxy_pass http://landing_site;
             proxy_http_version 1.1;
             proxy_set_header Host $host;
             proxy_set_header X-Internal-Key "";
@@ -1763,7 +1769,7 @@ http {
         # Everything else lands on the help section.
         location / {
             rewrite ^/(.*)$ /help/$1 break;
-            proxy_pass http://frontend;
+            proxy_pass http://landing_site;
             proxy_http_version 1.1;
             proxy_set_header Host $host;
             proxy_set_header X-Internal-Key "";
@@ -1772,4 +1778,61 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
     }
+
+    # ── Trust Center: trust.gotcha.co.il -> the marketing site's /legal section ──
+    # Same shape as the Help Center vhost above: one app, one section, the
+    # subdomain root rewritten onto that section's path. Next.js internals are
+    # passed through untouched so the regex wins over the prefix locations.
+    server {
+        listen 80;
+        server_name trust.gotcha.co.il trust.dev.gotcha.co.il;
+
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header Permissions-Policy "camera=(), geolocation=(), payment=()" always;
+
+        location ~ ^/(_next|assets/|favicon\.ico) {
+            proxy_pass http://landing_site;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # In-page links already carry the prefix - pass through as-is.
+        location /legal {
+            proxy_pass http://landing_site;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # The bare root maps to the section exactly, with no trailing slash, so
+        # Next serves it instead of 308-redirecting /legal/ to /legal.
+        location = / {
+            rewrite ^ /legal break;
+            proxy_pass http://landing_site;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location / {
+            rewrite ^/(.*)$ /legal/$1 break;
+            proxy_pass http://landing_site;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+    }
+
 }

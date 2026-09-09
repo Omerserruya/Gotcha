@@ -1,5 +1,8 @@
 {
   "compilerOptions": {
+    // es2018 for the `u` regex flag: the Hebrew legal headings need a
+    // Unicode-aware slug, and [^a-z0-9] would flatten every one of them to "".
+    "target": "es2018",
     "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
     "checkJs": false,
