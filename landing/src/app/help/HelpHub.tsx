@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import SiteChrome from '@/components/SiteChrome';
+import { LandingChrome } from '@/components/Landing';
 import { useLocale } from '@/lib/use-locale';
 import { C, F, MAXW, isHe } from '@/lib/site';
 import { HELP_CATEGORIES, popularArticles } from '@/content/help';
@@ -86,8 +86,9 @@ export default function HelpHub() {
   );
 
   return (
-    <SiteChrome locale={locale} onLocale={setLocale}>
-      <div style={{ maxWidth: MAXW, margin: '0 auto', padding: '56px 24px 0' }}>
+    <LandingChrome initialLang={locale} onLang={(l: string) => setLocale(l === 'he' ? 'he' : 'en')}>
+      <div data-no-translate style={{ padding: '98px 0 0' }}>
+      <div style={{ maxWidth: MAXW, margin: '0 auto', padding: '8px 24px 0' }}>
         <div style={{ font: `500 11px ${F.mono}`, letterSpacing: '.18em', textTransform: 'uppercase', color: C.accent }}>
           {p('kicker')}
         </div>
@@ -179,6 +180,7 @@ export default function HelpHub() {
           <p style={{ margin: '10px 0 0', maxWidth: 620, fontSize: 15, lineHeight: 1.7, color: C.body }}>{p('ask')}</p>
         </div>
       </div>
-    </SiteChrome>
+    </div>
+    </LandingChrome>
   );
 }

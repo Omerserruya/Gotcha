@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import SiteChrome from '@/components/SiteChrome';
+import { LandingChrome } from '@/components/Landing';
 import { useLocale } from '@/lib/use-locale';
 import { C, F, MAXW, isHe } from '@/lib/site';
 
@@ -65,8 +65,9 @@ export default function TrustHub({ cards }: { cards: Card[] }) {
   const p = (k: keyof typeof COPY) => (COPY[k] as readonly string[])[i];
 
   return (
-    <SiteChrome locale={locale} onLocale={setLocale}>
-      <div style={{ maxWidth: MAXW, margin: '0 auto', padding: '56px 24px 0' }}>
+    <LandingChrome initialLang={locale} onLang={(l: string) => setLocale(l === 'he' ? 'he' : 'en')}>
+      <div data-no-translate style={{ padding: '98px 0 0' }}>
+      <div style={{ maxWidth: MAXW, margin: '0 auto', padding: '8px 24px 0' }}>
         <div style={{ font: `500 11px ${F.mono}`, letterSpacing: '.18em', textTransform: 'uppercase', color: C.accent }}>
           {p('kicker')}
         </div>
@@ -164,6 +165,7 @@ export default function TrustHub({ cards }: { cards: Card[] }) {
           </p>
         </div>
       </div>
-    </SiteChrome>
+    </div>
+    </LandingChrome>
   );
 }

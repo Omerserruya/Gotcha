@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import SiteChrome from '@/components/SiteChrome';
+import { LandingChrome } from '@/components/Landing';
 import Markdown, { anchorFor } from '@/components/Markdown';
 import { useLocale } from '@/lib/use-locale';
 import { C, F, isHe } from '@/lib/site';
@@ -11,7 +11,6 @@ type Doc = { title: string; effectiveDate: string; placeholders: string[]; block
 const COPY = {
   back: ['Trust Center', 'מרכז האמון'],
   effective: ['In effect from', 'בתוקף מיום'],
-  other: ['Read in Hebrew', 'Read in English'],
   contents: ['On this page', 'בעמוד הזה'],
 } as const;
 
@@ -36,8 +35,9 @@ export default function DocView({ en, he, slug }: { en: Doc; he: Doc; slug: stri
   const headings = outline(doc.blocks);
 
   return (
-    <SiteChrome locale={locale} onLocale={setLocale}>
-      <div style={{ maxWidth: 1080, margin: '0 auto', padding: '44px 24px 0' }}>
+    <LandingChrome initialLang={locale} onLang={(l: string) => setLocale(l === 'he' ? 'he' : 'en')}>
+      <div data-no-translate style={{ padding: '98px 0 0' }}>
+      <div style={{ maxWidth: 1080, margin: '0 auto', padding: '8px 24px 0' }}>
         <a href="/legal" style={{ font: `500 11px ${F.mono}`, letterSpacing: '.16em', textTransform: 'uppercase', color: C.accent }}>
           {isHe(locale) ? '→' : '←'} {p('back')}
         </a>
@@ -52,20 +52,6 @@ export default function DocView({ en, he, slug }: { en: Doc; he: Doc; slug: stri
               {p('effective')} {doc.effectiveDate}
             </span>
           )}
-          <button
-            onClick={() => setLocale(isHe(locale) ? 'en' : 'he')}
-            style={{
-              border: `1px solid ${C.line}`,
-              background: C.card,
-              borderRadius: 9,
-              padding: '6px 12px',
-              cursor: 'pointer',
-              font: `500 12px ${F.sans}`,
-              color: C.ink,
-            }}
-          >
-            {p('other')}
-          </button>
         </div>
 
         <div
@@ -111,6 +97,7 @@ export default function DocView({ en, he, slug }: { en: Doc; he: Doc; slug: stri
           )}
         </div>
       </div>
-    </SiteChrome>
+    </div>
+    </LandingChrome>
   );
 }

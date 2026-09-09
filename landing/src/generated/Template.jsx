@@ -7437,6 +7437,10 @@ export default function Template({ v: $v }) {
               {"Ramat Gan"}
             </span>
             {"\n        "}
+            <a className="scpu" href="/legal" style={$st("font-size:12px;color:#9A958D")}>
+              {"Trust Center"}
+            </a>
+            {"\n        "}
             <a className="scpu" href="/legal/privacy-policy" style={$st("font-size:12px;color:#9A958D")}>
               {"Privacy"}
             </a>

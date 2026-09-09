@@ -5,12 +5,13 @@
 
 import React from 'react';
 import Template from '@/generated/Template';
+import Chrome from '@/generated/Chrome';
 import { HE_DICT } from '@/generated/he';
 import { getLucide } from '@/lib/lucide';
 import UrlSync from '@/components/UrlSync';
 
-class Landing extends React.Component {
-  state = { menu: null, step: 0, uc: 0, faq: 0, shot: 0, page: (this.props && this.props.initialPage) || 'home', vol: 2, yearly: false, pfaq: 0, biz: 'retail', trade: 0, post: null, lang: 'en', trace: 0, dirCat: 'All integrations', dirQ: '', pcp: 0, pai: 0, ccp: 0, cai: 0, offerOpen: false, barOffer: true, barAnn: true, widget: { q: null, typing: false, acted: false } };
+class LandingLogic extends React.Component {
+  state = { menu: null, step: 0, uc: 0, faq: 0, shot: 0, page: (this.props && this.props.initialPage) || 'home', vol: 2, yearly: false, pfaq: 0, biz: 'retail', trade: 0, post: null, lang: (this.props && this.props.initialLang) || 'en', trace: 0, dirCat: 'All integrations', dirQ: '', pcp: 0, pai: 0, ccp: 0, cai: 0, offerOpen: false, barOffer: true, barAnn: true, widget: { q: null, typing: false, acted: false } };
 
   // The timeline spine is a grey track that fills orange as it passes the reading line,
   // so the colour arrives with the scroll rather than all at once on reveal.
@@ -658,7 +659,7 @@ class Landing extends React.Component {
     const nodes = [];
     while (walker.nextNode()) nodes.push(walker.currentNode);
     nodes.forEach(n => {
-      const p = n.parentElement; if (!p || p.closest('script,style')) return;
+      const p = n.parentElement; if (!p || p.closest('script,style,[data-no-translate]')) return;
       const raw = n.nodeValue, t = raw.trim(); if (!t) return;
       if (he) {
         const h = HE_DICT[t] || HE_DICT[t.replace(/\s+/g, ' ')];
@@ -3717,26 +3718,52 @@ class Landing extends React.Component {
   }
 
   // dc-runtime: vals = { ...userProps, ...logic.renderVals() }
-  render() {
+  __vals() {
+    return { ...this.props, ...(this.renderVals() || {}) };
+  }
+
+  // UrlSync gives state.page a real address. The design never touched the URL,
+  // so without it every one of these pages is unlinkable.
+  __render(view, extra) {
     let vals;
     try {
-      vals = { ...this.props, ...(this.renderVals() || {}) };
+      vals = this.__vals();
     } catch (e) {
       console.error('renderVals():', e);
       return React.createElement('pre', { style: { padding: 24, color: '#8E3418' } }, String(e && e.stack || e));
     }
-    // UrlSync gives state.page a real address. The design never touched the
-    // URL, so without it every one of these pages is unlinkable.
     return React.createElement(
       React.Fragment,
       null,
       React.createElement(UrlSync, {
         page: this.state.page,
+        alwaysNavigate: !!extra,
         onNavigate: (page) => this.setState({ page, menu: null }),
+        lang: this.state.lang,
+        onLang: this.props.onLang,
       }),
-      React.createElement(Template, { v: vals }),
+      React.createElement(view, { v: vals, children: extra }),
     );
   }
 }
 
-export default Landing;
+/** The landing page: the design's chrome around the design's pages. */
+export default class Landing extends LandingLogic {
+  render() {
+    return this.__render(Template, null);
+  }
+}
+
+/**
+ * The same chrome around something else - the Trust Center, a help article.
+ *
+ * Those sections are written by hand, but they are still the same website, so
+ * they carry the real header and footer rather than a lookalike. A nav click
+ * here is a real navigation: the landing's pages are separate documents from
+ * where the reader is standing.
+ */
+export class LandingChrome extends LandingLogic {
+  render() {
+    return this.__render(Chrome, this.props.children);
+  }
+}

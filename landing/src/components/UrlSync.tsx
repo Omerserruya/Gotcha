@@ -29,9 +29,22 @@ import { PATH_BY_PAGE, PAGE_BY_PATH, EXTERNAL_PAGE } from '@/lib/pages';
 export default function UrlSync({
   page,
   onNavigate,
+  alwaysNavigate = false,
+  lang,
+  onLang,
 }: {
   page: string;
   onNavigate: (page: string) => void;
+  /** The language the chrome is in, so a section can follow its toggle. */
+  lang?: string;
+  onLang?: (lang: string) => void;
+  /**
+   * True when the chrome is wrapping a hand-written section. From a legal
+   * document, picking "Pricing" in the header is a different document, not a
+   * view swap, so it has to be a real navigation - the landing's pages are not
+   * mounted here to swap to.
+   */
+  alwaysNavigate?: boolean;
 }) {
   // What the address already reflects. Starts as the page the route rendered,
   // so the first effect does not push a duplicate entry for it.
@@ -41,19 +54,28 @@ export default function UrlSync({
     if (page === shown.current) return;
 
     const external = EXTERNAL_PAGE[page];
-    if (external) {
-      window.location.assign(external);
+    const path = PATH_BY_PAGE[page];
+
+    if (external || alwaysNavigate) {
+      const to = external ?? path;
+      if (to) window.location.assign(to);
       return;
     }
 
-    const path = PATH_BY_PAGE[page];
     shown.current = page;
     if (path && window.location.pathname !== path) {
       window.history.pushState({ page }, '', path);
       // The design scrolls to the top itself on every page change; doing it
       // here as well would fight it.
     }
-  }, [page]);
+  }, [page, alwaysNavigate]);
+
+  // The design's footer carries the only language switch on the site. A
+  // hand-written section picks its own document by language, so it has to hear
+  // about that rather than grow a second toggle beside it.
+  useEffect(() => {
+    if (lang && onLang) onLang(lang);
+  }, [lang, onLang]);
 
   useEffect(() => {
     const onPop = () => {

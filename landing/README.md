@@ -33,7 +33,9 @@ src/content/                content this app owns: the legal registry and the
                             help articles
 src/app/legal/              Trust Center: hub and one page per document
 src/app/help/               Help Center: hub, categories, articles
-src/components/SiteChrome   header and footer for the hand-written sections
+src/generated/Chrome.jsx    the design's own header, bars and footer, with the
+                            page swapped for a hole - what the hand-written
+                            sections render inside
 src/components/Markdown     the markdown subset the documents actually use
 src/components/CookieNotice the consent card
 ```
