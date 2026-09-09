@@ -84,6 +84,15 @@ export const analyticsEndpoints = {
  * Answers `{ ok, pending, reviews }` — a third envelope shape, so requests
  * against it are made with `raw`.
  */
+/**
+ * Day one. Reachable while the workspace is still onboarding — these are the
+ * endpoints for a workspace that is not live yet, so they must not require it.
+ */
+export const setupEndpoints = {
+  state: () => endpoint('/api/setup/state'),
+  knowledgeIngest: () => endpoint('/api/knowledge/ingest/latest'),
+} as const;
+
 /** Conversation headroom for the period. Served by billing, not analytics. */
 export const usageEndpoints = {
   allowance: () => endpoint('/api/usage/allowance'),

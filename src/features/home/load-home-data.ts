@@ -29,11 +29,18 @@ import {
   type IntelligenceReview,
 } from '@/api/contracts/intelligence-reviews';
 import { presenceRosterSchema, type AgentPresence } from '@/api/contracts/presence';
+import {
+  knowledgeIngestSchema,
+  setupStatusSchema,
+  type KnowledgeIngest,
+  type SetupStatus,
+} from '@/api/contracts/setup';
 import { teamSchema, type Team } from '@/api/contracts/team';
 import { unreadCountSchema } from '@/api/contracts/notifications';
 import {
   analyticsEndpoints,
   intelligenceReviewEndpoints,
+  setupEndpoints,
   usageEndpoints,
   notificationEndpoints,
   presenceEndpoints,
@@ -87,6 +94,14 @@ export interface HomeData {
    * nothing stands out, which is a good morning rather than a failure.
    */
   readonly quietDay: QuietDay | null;
+  /**
+   * Setup progress. Null when the call failed — which is NOT the same as a
+   * workspace being live, so the day-one block is withheld rather than the
+   * screen claiming the workspace is ready.
+   */
+  readonly setup: SetupStatus | null;
+  /** The site scan's result. Null when no scan has ever run. */
+  readonly ingest: KnowledgeIngest;
   readonly team: Team | null;
   /**
    * Presence, keyed by agent id.
@@ -160,6 +175,8 @@ export async function loadHomeData(): Promise<HomeData> {
     allowance,
     insights,
     quietDay,
+    setup,
+    ingest,
     team,
     conflicts,
     signals,
@@ -230,6 +247,12 @@ export async function loadHomeData(): Promise<HomeData> {
       })
       .catch(degrade('home.quiet_day_failed', null)),
     api
+      .get({ endpoint: setupEndpoints.state(), payload: setupStatusSchema })
+      .catch(degrade('home.setup_failed', null)),
+    api
+      .get({ endpoint: setupEndpoints.knowledgeIngest(), payload: knowledgeIngestSchema })
+      .catch(degrade<KnowledgeIngest>('home.ingest_failed', null)),
+    api
       .get({ endpoint: analyticsEndpoints.agents(), payload: teamSchema })
       .catch(degrade('home.team_failed', null)),
     api
@@ -265,6 +288,8 @@ export async function loadHomeData(): Promise<HomeData> {
     allowance,
     insights,
     quietDay,
+    setup,
+    ingest,
     team,
     conflicts,
     // Unknown counts as busy: showing the calm screen when we cannot tell

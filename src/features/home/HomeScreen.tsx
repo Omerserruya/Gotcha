@@ -5,6 +5,7 @@ import { TenantGateNotice } from '@/features/tenant-gate/TenantGateNotice';
 
 import { ActivityCard } from './ActivityCard';
 import { CommandSurface } from './CommandSurface';
+import { FirstSteps } from './FirstSteps';
 import { QueueList } from './QueueList';
 import { QuietWork } from './QuietWork';
 import styles from './Home.module.css';
@@ -44,6 +45,8 @@ export async function HomeScreen() {
     allowance,
     insights,
     quietDay,
+    setup,
+    ingest,
     team,
     conflicts,
     isQuiet,
@@ -65,6 +68,9 @@ export async function HomeScreen() {
       </div>
     );
   }
+
+  // `setup` null means the call failed, which is not the same as being live.
+  const isDayOne = setup !== null && !setup.isLive;
 
   const now = new Date();
   // From the viewer's clock: "good morning" at 9pm is worse than no greeting.
@@ -97,7 +103,18 @@ export async function HomeScreen() {
           to do the work nobody schedules. */}
       <CommandSurface tone={isQuiet ? 'quiet' : 'busy'} />
 
-      {overview ? (
+      {/*
+        Day one. The design is explicit that this is not a separate onboarding
+        page: same shell, same command box, one block beneath it. A snapshot of
+        zero and an empty queue say nothing, so first steps take their place
+        until the workspace goes live.
+
+        A failed call is NOT a live workspace — `setup` null falls through to
+        the ordinary screen rather than claiming either state.
+      */}
+      {isDayOne ? <FirstSteps setup={setup} ingest={ingest} /> : null}
+
+      {!isDayOne && overview ? (
         <MetricStrip
           overview={overview}
           channels={channels}
@@ -106,54 +123,56 @@ export async function HomeScreen() {
         />
       ) : null}
 
-      <div className={styles.columns}>
-        <section className={styles.queueColumn}>
-          {isQuiet ? (
-            <QuietWork quietDay={quietDay} conflicts={conflicts} />
-          ) : (
-            <>
-              <div className={styles.sectionHeader}>
-                <Text role="label" as="h2">
-                  {t('needsYou.title')}
-                </Text>
-                <Text role="caption" tone="subtle" as="span">
-                  {t('needsYou.sortedBy')}
-                </Text>
-              </div>
-              {queueItems && queueItems.data.length > 0 ? (
-                <QueueList
-                  items={queueItems.data}
-                  totalWaiting={queueItems.totalWaiting}
-                  now={now}
-                />
-              ) : (
-                <div className={styles.queueCard}>
-                  <p className={styles.emptyNote} style={{ paddingInline: 16 }}>
-                    {/* Null is "we could not find out"; empty is "nobody is
+      {isDayOne ? null : (
+        <div className={styles.columns}>
+          <section className={styles.queueColumn}>
+            {isQuiet ? (
+              <QuietWork quietDay={quietDay} conflicts={conflicts} />
+            ) : (
+              <>
+                <div className={styles.sectionHeader}>
+                  <Text role="label" as="h2">
+                    {t('needsYou.title')}
+                  </Text>
+                  <Text role="caption" tone="subtle" as="span">
+                    {t('needsYou.sortedBy')}
+                  </Text>
+                </div>
+                {queueItems && queueItems.data.length > 0 ? (
+                  <QueueList
+                    items={queueItems.data}
+                    totalWaiting={queueItems.totalWaiting}
+                    now={now}
+                  />
+                ) : (
+                  <div className={styles.queueCard}>
+                    <p className={styles.emptyNote} style={{ paddingInline: 16 }}>
+                      {/* Null is "we could not find out"; empty is "nobody is
                         waiting". Saying the second when we mean the first would
                         tell an operator their queue is clear when it may not be. */}
-                    {queueItems ? t('needsYou.empty') : t('needsYou.unavailable')}
-                  </p>
-                </div>
-              )}
-            </>
-          )}
-        </section>
+                      {queueItems ? t('needsYou.empty') : t('needsYou.unavailable')}
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
+          </section>
 
-        <aside className={styles.asideColumn}>
-          <ActivityCard
-            events={activity}
-            timeSaved={timeSaved}
-            inFlight={inFlight}
-            allowance={allowance}
-            now={now}
-          />
+          <aside className={styles.asideColumn}>
+            <ActivityCard
+              events={activity}
+              timeSaved={timeSaved}
+              inFlight={inFlight}
+              allowance={allowance}
+              now={now}
+            />
 
-          <WorthKnowing insights={insights} />
+            <WorthKnowing insights={insights} />
 
-          {team && team.length > 0 ? <TeamPanel team={team} presence={presence} /> : null}
-        </aside>
-      </div>
+            {team && team.length > 0 ? <TeamPanel team={team} presence={presence} /> : null}
+          </aside>
+        </div>
+      )}
     </div>
   );
 }

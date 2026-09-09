@@ -83,6 +83,8 @@
     /* ── Radii: one family, as the design requires ────────────────────── */
     --radius-panel: 18px;
     --radius-card: 14px;
+    /* The raised "do this next" step on day one. */
+    --radius-step: 12px;
     --radius-control: 11px;
     --radius-item: 9px;
     --radius-chip: 8px;
@@ -148,6 +150,8 @@
     --size-dot-sm: 5px;
     /* The allowance meter's bar height. */
     --size-meter: 4px;
+    /* The numbered circle on a setup step. */
+    --size-step-badge: 20px;
     --size-bullet: 4px;
     --size-icon-sm: 11px;
     --size-icon-md: 15px;
@@ -245,6 +249,8 @@
     --signal-done-surface-soft: #edf4e7;
     --signal-waiting: #e8d9a8;
     --signal-info-surface: #edf1f7;
+    /* Ink that stays legible on --signal-done. */
+    --signal-done-contrast: #22331a;
     --signal-info-text: #3e5c99;
 
     /*
@@ -269,6 +275,19 @@
     /* The calm pill: a quieter green than the "done" signal. */
     --intent-calm-surface: #f1f5ec;
     --intent-calm-text: #2f4a18;
+
+    /*
+     * Day one's "next step" accent.
+     *
+     * A lighter violet than --signal-ai-strong: this marks the one step to do
+     * now, and it sits beside AI lavender rather than competing with it.
+     */
+    --step-next: #8b76e8;
+    --step-next-surface: #f6f3ec;
+    --step-next-chip-surface: #ede7f8;
+    --step-next-chip-text: #4a3e7a;
+    /* The unfilled segments of the day-one progress strip. */
+    --step-track: #eae6de;
 
     /*
      * Channel tones, for the distribution bar.

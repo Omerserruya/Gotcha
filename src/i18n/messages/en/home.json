@@ -273,5 +273,62 @@
       "department.load_imbalance": "<b>{count}</b> conversations went to one department in the last {days} days, well ahead of the rest.",
       "fallback": "GOTCHA noticed something worth a look."
     }
+  },
+  "firstSteps": {
+    "title": "First steps",
+    "progress": "{done, plural, one {One done} other {# done}} · about {minutes, plural, one {# minute} other {# minutes}} left",
+    "allDone": "All done",
+    "hide": "Hide — finish later in Settings",
+    "next": "DO THIS NEXT",
+    "estimate": "{minutes} min",
+    "blocked": "Needs {step} first",
+    "unavailable": "Setup progress could not be loaded just now.",
+    "goLiveBlocked": "Go live opens once the steps that decide whether GOTCHA can act are done.",
+    "goLiveReady": "Everything that gates go-live is done.",
+    "trial": "{days, plural, one {# day} other {# days}} left on your trial",
+    "ingest": "{pages, plural, one {# page} other {# pages}} read, {drafted, plural, one {# answer} other {# answers}} drafted",
+    "ingestPending": "{count, plural, one {# needs your word} other {# need your word}} — {topics}",
+    "step": {
+      "connect_channel": {
+        "title": "Connect a channel",
+        "body": "WhatsApp, Instagram or email — wherever your customers already write to you.",
+        "action": "Connect"
+      },
+      "connect_store": {
+        "title": "Connect your store",
+        "body": "Until this is done GOTCHA can answer about orders, but not refund, cancel or track them.",
+        "action": "Connect store"
+      },
+      "add_knowledge": {
+        "title": "Add what GOTCHA should know",
+        "body": "Point it at your site and it reads the pages itself.",
+        "action": "Add knowledge"
+      },
+      "hire_employee": {
+        "title": "Confirm what GOTCHA learned",
+        "body": "Answers are drafted and waiting on your word before anyone sees them.",
+        "action": "Review answers"
+      },
+      "handover_rules": {
+        "title": "Set the handover rules",
+        "body": "When a person takes over — anger, money, wholesale — and what happens outside working hours.",
+        "action": "Set rules"
+      },
+      "approval_limits": {
+        "title": "Choose what needs your approval",
+        "body": "Refunds above an amount you set, cancellations, discounts.",
+        "action": "Set limits"
+      },
+      "test_conversation": {
+        "title": "Send yourself a test",
+        "body": "In setup mode GOTCHA answers only your team's own numbers. Nothing reaches a customer.",
+        "action": "Send a test"
+      },
+      "invite_team": {
+        "title": "Invite your team",
+        "body": "The people who will take over when GOTCHA hands a conversation across.",
+        "action": "Invite"
+      }
+    }
   }
 }

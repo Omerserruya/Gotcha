@@ -1,0 +1,232 @@
+@layer features {
+  /*
+   * "First steps" — screen 01c.
+   *
+   * Not a separate onboarding page. It is Home in its first state: same shell,
+   * same command box, one extra block beneath it. Exactly one step is ever
+   * "next", and that one is raised out of the list; the rest stay quiet until
+   * their turn.
+   */
+  .block {
+    margin-block-start: var(--space-20);
+  }
+
+  .header {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-12);
+  }
+
+  .title {
+    font-size: var(--font-size-control);
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .progressText {
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+  }
+
+  .hide {
+    margin-inline-start: auto;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+  }
+
+  .hide:hover {
+    color: var(--text-body);
+  }
+
+  /* One segment per step, so progress is countable rather than a percentage. */
+  .strip {
+    display: flex;
+    gap: var(--space-4);
+    margin-block-start: var(--space-9);
+  }
+
+  .segment {
+    flex: 1;
+    block-size: var(--size-meter);
+    border-radius: var(--radius-mark);
+    background-color: var(--step-track);
+  }
+
+  .segmentDone {
+    background-color: var(--signal-done);
+  }
+
+  .segmentNext {
+    background-color: var(--signal-ai);
+  }
+
+  .list {
+    display: flex;
+    flex-direction: column;
+    margin-block-start: var(--space-11);
+    border-block-start: var(--border-width-thin) solid var(--panel-well);
+  }
+
+  .row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-13);
+    padding-block: var(--space-8);
+    padding-inline: var(--space-2);
+    border-block-end: var(--border-width-thin) solid var(--panel-well);
+  }
+
+  .rowDone {
+    padding-block: var(--space-10);
+  }
+
+  /* The one step to do now, lifted out of the list. */
+  .rowNext {
+    align-items: flex-start;
+    padding-block: var(--space-11);
+    padding-inline-start: var(--space-12);
+    padding-inline-end: var(--space-14);
+    margin-block: var(--space-6);
+    background-color: var(--step-next-surface);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-inline-start: var(--space-3) solid var(--step-next);
+    border-radius: var(--radius-step);
+  }
+
+  .badge {
+    inline-size: var(--size-step-badge);
+    block-size: var(--size-step-badge);
+    border-radius: var(--radius-round);
+    border: var(--border-width-thin) solid var(--border-strong);
+    color: var(--text-subtle);
+    font-size: var(--font-size-counter);
+    font-weight: var(--font-weight-medium);
+    display: grid;
+    place-items: center;
+    flex: none;
+  }
+
+  .badgeDone {
+    background-color: var(--signal-done);
+    border-color: var(--signal-done);
+    color: var(--signal-done-contrast);
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .badgeNext {
+    background-color: var(--step-next);
+    border-color: var(--step-next);
+    color: var(--panel-field);
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .rowText {
+    flex: 1;
+    min-inline-size: 0;
+  }
+
+  /* A finished step is one quiet line: it is history, not an instruction. */
+  .doneText {
+    font-size: var(--font-size-body-sm);
+    color: var(--text-subtle);
+  }
+
+  .doneTime {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-micro);
+    color: var(--text-faint);
+    flex: none;
+  }
+
+  .rowTitle {
+    font-size: var(--font-size-body-sm);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .rowTitleNext {
+    font-size: var(--font-size-item);
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .nextHeading {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-9);
+  }
+
+  .nextChip {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-tag);
+    font-weight: var(--font-weight-medium);
+    color: var(--step-next-chip-text);
+    background-color: var(--step-next-chip-surface);
+    border-radius: var(--radius-key);
+    padding-block: var(--space-3);
+    padding-inline: var(--space-6);
+    flex: none;
+  }
+
+  .rowBody {
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+    margin-block-start: var(--space-2);
+  }
+
+  .rowBodyNext {
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-snug);
+    color: var(--text-body);
+    margin-block-start: var(--space-4);
+  }
+
+  .rowActions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    flex: none;
+  }
+
+  .actionPrimary {
+    font-size: var(--font-size-label);
+    background-color: var(--frame-base);
+    color: var(--frame-text);
+    border-radius: var(--radius-item);
+    padding-block: var(--space-8);
+    padding-inline: var(--space-14);
+    text-decoration: none;
+  }
+
+  .actionSecondary {
+    font-size: var(--font-size-label);
+    color: var(--text-body);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-item);
+    padding-block: var(--space-7);
+    padding-inline: var(--space-13);
+    text-decoration: none;
+    flex: none;
+  }
+
+  .estimate {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
+  }
+
+  /*
+   * A blocked step is dimmed but still readable, and says what is in the way.
+   * Hiding it would lose the shape of what setup involves.
+   */
+  .rowBlocked {
+    opacity: 0.55;
+  }
+
+  .footnote {
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+    margin-block-start: var(--space-11);
+  }
+}
