@@ -1,0 +1,60 @@
+@layer primitives {
+  .indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-7);
+    padding-block: 3px;
+    padding-inline: var(--space-7);
+    border-radius: var(--radius-badge);
+    font-size: var(--font-size-caption);
+    white-space: nowrap;
+  }
+
+  .dot {
+    inline-size: var(--size-dot);
+    block-size: var(--size-dot);
+    border-radius: var(--radius-round);
+    flex: none;
+  }
+
+  /*
+   * The design's three signals, and nothing else: "lavender for AI, green for
+   * done, amber for waiting". Adding a fourth colour would be inventing
+   * vocabulary the product does not have.
+   */
+  .neutral {
+    background-color: var(--panel-sunken);
+    color: var(--text-muted);
+  }
+
+  .neutral .dot {
+    background-color: var(--text-disabled);
+  }
+
+  .done {
+    background-color: var(--signal-done-surface);
+    color: var(--signal-done-text);
+  }
+
+  .done .dot {
+    background-color: var(--signal-done);
+  }
+
+  .waiting {
+    background-color: var(--panel-sunken);
+    color: var(--text-muted);
+  }
+
+  .waiting .dot {
+    background-color: var(--signal-waiting);
+  }
+
+  .ai {
+    background-color: var(--panel-sunken);
+    color: var(--signal-ai-strong);
+  }
+
+  .ai .dot {
+    background-color: var(--signal-ai);
+  }
+}

@@ -1,0 +1,143 @@
+@layer primitives {
+  .text {
+    margin: 0;
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+  }
+
+  .hero {
+    font-size: var(--font-size-hero);
+    line-height: var(--line-height-hero);
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: var(--letter-spacing-hero);
+  }
+
+  .display {
+    font-size: var(--font-size-display);
+    line-height: var(--line-height-display);
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: var(--letter-spacing-display);
+  }
+
+  .title {
+    font-size: var(--font-size-title);
+    line-height: var(--line-height-display);
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: var(--letter-spacing-hero);
+  }
+
+  .heading {
+    font-size: var(--font-size-lead);
+    line-height: var(--line-height-snug);
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .body {
+    font-size: var(--font-size-body);
+    line-height: var(--line-height-loose);
+  }
+
+  .bodySm {
+    font-size: var(--font-size-body-sm);
+    line-height: var(--line-height-relaxed);
+  }
+
+  .label {
+    font-size: var(--font-size-label);
+    line-height: var(--line-height-normal);
+  }
+
+  .caption {
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-normal);
+  }
+
+  /* The 12.5px row text used through the queue and team lists. */
+  .meta {
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-normal);
+  }
+
+  /* The 11px label above a figure. Its own role because it is everywhere. */
+  .micro {
+    font-size: var(--font-size-micro);
+    line-height: var(--line-height-normal);
+  }
+
+  /*
+   * The display serif, used italic. It carries the product's voice - a date
+   * above a greeting, one line of scale on the sign-in panel - and must never
+   * end up on body copy, which is why it is a role of its own rather than a
+   * font option on the others.
+   */
+  .serif {
+    font-family: var(--font-serif);
+    font-style: var(--font-serif-style);
+    font-size: var(--font-size-serif-display);
+    line-height: var(--line-height-serif);
+    letter-spacing: var(--letter-spacing-serif);
+    font-weight: var(--font-weight-regular);
+  }
+
+  .serifInline {
+    font-family: var(--font-serif);
+    font-style: var(--font-serif-style);
+    font-size: var(--font-size-serif-inline);
+    line-height: var(--line-height-snug);
+    font-weight: var(--font-weight-regular);
+  }
+
+  /*
+   * The tracked uppercase mono eyebrow. It labels a region without competing
+   * with the heading under it, and it is everywhere in this design.
+   */
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-eyebrow);
+    font-weight: var(--font-weight-medium);
+    letter-spacing: var(--letter-spacing-eyebrow);
+    text-transform: uppercase;
+    line-height: 1;
+    color: var(--text-subtle);
+  }
+
+  .secondary {
+    color: var(--text-secondary);
+  }
+
+  .toneBody {
+    color: var(--text-body);
+  }
+
+  .muted {
+    color: var(--text-muted);
+  }
+
+  .subtle {
+    color: var(--text-subtle);
+  }
+
+  /*
+   * Inherits from its container instead of asserting a colour.
+   *
+   * The frame is dark and the panel is light, and `--text-primary` is the
+   * panel's ink. Text placed on the frame must take the frame's colour, or it
+   * renders black on black - which is exactly what happened before this
+   * existed.
+   */
+  .toneInherit {
+    color: inherit;
+  }
+
+  /* Truncation is inline-axis aware, so Hebrew ellipsises on the correct end. */
+  .truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-inline-size: 0;
+  }
+
+  .numeric {
+    font-variant-numeric: tabular-nums;
+  }
+}

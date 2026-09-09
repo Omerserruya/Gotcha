@@ -1,0 +1,28 @@
+@layer primitives {
+  .stack {
+    display: flex;
+    min-inline-size: 0;
+  }
+
+  .vertical {
+    flex-direction: column;
+  }
+
+  /*
+   * `row` follows the writing direction on its own: flexbox's main axis is
+   * defined by `direction`, so an RTL locale reverses this without a single
+   * conditional anywhere in the product.
+   */
+  .horizontal {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .wrap {
+    flex-wrap: wrap;
+  }
+
+  .grow {
+    flex: 1 1 auto;
+  }
+}

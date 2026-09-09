@@ -1,0 +1,339 @@
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ * THE TOKEN CONTRACT
+ *
+ * Every value here is taken from `GOTCHA Directions.dc.html`. Nothing is
+ * invented, and nothing is "close enough" - where the design says 13.5px, the
+ * token says 13.5px.
+ *
+ * The design states its own rules, and they are load-bearing:
+ *
+ *   "Dark shell, light work surface, soft pastel signal colors - lavender for
+ *    AI, green for done, amber for waiting. Rounded but restrained: one radius
+ *    family, NO SHADOWS, NO GRADIENTS."
+ *
+ * So there is no elevation scale in this file. Depth is expressed by surface
+ * colour and radius, never by a shadow. A component that adds one is not
+ * styling - it is contradicting the design.
+ *
+ * Tokens are named for their ROLE. `--frame-*` is the dark chrome, `--panel-*`
+ * is the light work surface floating inside it. That split is the whole
+ * design: "The frame is the operating system; the panels are the layout."
+ * ═══════════════════════════════════════════════════════════════════════════
+ */
+
+@layer tokens {
+  :root {
+    /* ── Typefaces ────────────────────────────────────────────────────── */
+    --font-sans: var(--font-archivo), system-ui, sans-serif;
+    --font-serif: var(--font-instrument-serif), georgia, serif;
+    --font-mono: var(--font-ibm-plex-mono), ui-monospace, monospace;
+
+    /* ── Type scale ───────────────────────────────────────────────────────
+       Taken from the screens rather than from a formula, which is why the
+       half-pixels are here: the design uses 13.5 and 15.5 deliberately. */
+    --font-size-hero: 40px;
+    --font-size-display: 36px;
+    --font-size-title: 30px;
+    --font-size-serif-display: 32px;
+    --font-size-serif-inline: 16px;
+    --font-size-lead: 16px;
+    --font-size-body-lg: 15.5px;
+    --font-size-body: 14.5px;
+    --font-size-control: 14px;
+    --font-size-item: 13.5px;
+    --font-size-body-sm: 13px;
+    --font-size-meta: 12.5px;
+    --font-size-label: 12px;
+    --font-size-caption: 11.5px;
+    --font-size-micro: 11px;
+    --font-size-counter: 10.5px;
+    --font-size-eyebrow: 9px;
+    /* Clock times in the activity stream. */
+    --font-size-timestamp: 10px;
+    /* Initials inside a small avatar. */
+    --font-size-initials: 9.5px;
+    /* The uppercase mono channel tag beside a customer's name. */
+    --font-size-tag: 9.5px;
+
+    --line-height-hero: 1.1;
+    --line-height-display: 1.12;
+    --line-height-serif: 1.24;
+    --line-height-snug: 1.5;
+    --line-height-normal: 1.55;
+    --line-height-relaxed: 1.6;
+    --line-height-loose: 1.65;
+
+    --font-weight-regular: 400;
+    --font-weight-medium: 500;
+    --font-weight-semibold: 600;
+    --font-weight-bold: 700;
+
+    /* Negative tracking on large type, wide tracking on mono eyebrows. */
+    --letter-spacing-hero: -0.03em;
+    --letter-spacing-display: -0.025em;
+    --letter-spacing-serif: -0.01em;
+    --letter-spacing-normal: 0;
+    --letter-spacing-eyebrow: 0.2em;
+    /* The rail's group label runs marginally tighter than a page eyebrow. */
+    --letter-spacing-eyebrow-rail: 0.18em;
+    --letter-spacing-eyebrow-wide: 0.24em;
+    --letter-spacing-brand: 0.22em;
+
+    /* ── Radii: one family, as the design requires ────────────────────── */
+    --radius-panel: 18px;
+    --radius-card: 14px;
+    --radius-control: 11px;
+    --radius-item: 9px;
+    --radius-chip: 8px;
+    --radius-badge: 6px;
+    --radius-key: 5px;
+    --radius-mark: 2px;
+    --radius-round: 50%;
+
+    /* ── Spacing ──────────────────────────────────────────────────────────
+       The token number IS the pixel value. Not a formula — the design is
+       hand-tuned per composition and uses 8, 10 and 22 as readily as 24, so a
+       geometric scale would mean rounding every one of them. Naming by value
+       makes matching the source mechanical: the design says 24px, the token
+       says 24. */
+    --space-2: 2px;
+    --space-3: 3px;
+    --space-4: 4px;
+    --space-6: 6px;
+    --space-7: 7px;
+    --space-8: 8px;
+    --space-9: 9px;
+    --space-10: 10px;
+    --space-11: 11px;
+    --space-12: 12px;
+    --space-13: 13px;
+    --space-14: 14px;
+    --space-16: 16px;
+    --space-18: 18px;
+    --space-20: 20px;
+    --space-22: 22px;
+    --space-24: 24px;
+    --space-26: 26px;
+    --space-28: 28px;
+    --space-30: 30px;
+    --space-32: 32px;
+    --space-40: 40px;
+    --space-56: 56px;
+
+    /* ── Sizing ───────────────────────────────────────────────────────── */
+    /*
+     * The rail holds the design's proportion, not its pixel count.
+     *
+     * The design draws 210px on a 1440px frame - 14.6%. Pinning 210px would
+     * honour that at exactly 1440 and nowhere else: on a 1920 monitor the rail
+     * would fall to 10.9% of the frame and on a 2560 to 8.2%, reading as a
+     * sliver against a content area that kept growing.
+     *
+     * So: 14.6% of the frame, floored at 210px so it never gets tighter than
+     * the design, and capped at 300px because past that the rail is just
+     * empty - its longest label is "Waiting in queue".
+     */
+    --size-rail: clamp(210px, 14.6%, 300px);
+    --size-frame-inset: 12px;
+    --size-control: 44px;
+    --size-control-sm: 34px;
+    --size-avatar: 26px;
+    /* The queue row's avatar. Larger than the team list's, per screen 01. */
+    --size-avatar-lg: 30px;
+    /* Fixed, so the queue's wait times form a column instead of ragging. */
+    --size-wait-column: 38px;
+    --size-dot: 6px;
+    /* The activity stream's status dot, smaller than a presence dot. */
+    --size-dot-sm: 5px;
+    /* The allowance meter's bar height. */
+    --size-meter: 4px;
+    --size-bullet: 4px;
+    --size-icon-sm: 11px;
+    --size-icon-md: 15px;
+    --size-icon-lg: 18px;
+
+    --border-width-thin: 1px;
+    --border-width-thick: 1.5px;
+
+    /* ── Motion ───────────────────────────────────────────────────────────
+       "Detail slides in as a third panel and slides back out." Short: this is
+       a tool people use all day, and charm becomes friction by repetition. */
+    --duration-instant: 80ms;
+    --duration-fast: 140ms;
+    --duration-panel: 220ms;
+    --easing-standard: cubic-bezier(0.2, 0, 0, 1);
+    --easing-decelerate: cubic-bezier(0, 0, 0, 1);
+
+    /* ── Z-index ──────────────────────────────────────────────────────── */
+    --z-base: 0;
+    --z-sticky: 100;
+    --z-panel: 200;
+    --z-overlay: 300;
+    --z-dialog: 400;
+    --z-popover: 500;
+    --z-toast: 600;
+
+    --focus-ring-width: 2px;
+    --focus-ring-offset: 2px;
+
+    /* ─────────────────────────────────────────────────────────────────────
+     * THE FRAME - the dark chrome that holds the product
+     * ───────────────────────────────────────────────────────────────────── */
+    --frame-base: #121212;
+    --frame-raised: #171717;
+    --frame-chip: #242424;
+    /* The selected sub-navigation row: a shade quieter than a chip. */
+    --frame-subtle: #1e1e1e;
+    --frame-selected: #262626;
+    --frame-line: #333;
+    /*
+     * The rule inside a raised dark card. Quieter than --frame-line, which
+     * separates regions of the chrome; this one separates sections within one
+     * card and must not compete with the content above it.
+     */
+    --frame-rule: #292929;
+    /* The unfilled part of a meter on the dark card. */
+    --frame-track: #2c2c2c;
+    --frame-dot-idle: #3a3a3a;
+
+    --frame-text: #f7f5f1;
+    /* Body text on the dark card - a step down from --frame-text's headline. */
+    --frame-text-body: #dcd8d0;
+    --frame-text-secondary: #a29d95;
+    --frame-text-muted: #9a968e;
+    --frame-text-faint: #7a766f;
+    --frame-text-eyebrow: #6e6a63;
+
+    /* ─────────────────────────────────────────────────────────────────────
+     * THE PANEL - the light work surface floating inside the frame
+     * ───────────────────────────────────────────────────────────────────── */
+    --panel-base: #faf8f4;
+    --panel-inset: #f3f0ea;
+    --panel-sunken: #f1efe9;
+    --panel-well: #f0ede7;
+    --panel-field: #fff;
+
+    --text-primary: #121212;
+    --text-secondary: #3a3833;
+    --text-body: #55524c;
+    --text-muted: #6b6660;
+    --text-subtle: #8c887f;
+    --text-faint: #a8a39a;
+    --text-disabled: #b4afa5;
+
+    --border-subtle: #ede9e1;
+    --border-default: #e6e2da;
+    --border-muted: #e2ded5;
+    --border-strong: #dcd8d0;
+    --border-emphasis: #d8d3c9;
+    --border-heavy: #c6c1b7;
+    /* A focused field takes the ink colour, not a tint. */
+    --border-focus: #121212;
+
+    /* ─────────────────────────────────────────────────────────────────────
+     * SIGNAL - "soft pastel signal colors: lavender for AI, green for done,
+     * amber for waiting". These carry meaning; they are not decoration, and
+     * they are never the only carrier of it.
+     * ───────────────────────────────────────────────────────────────────── */
+    --signal-ai: #c9bcf7;
+    --signal-ai-strong: #6b5bd2;
+    --signal-done: #a8c57a;
+    --signal-done-text: #4f7a2e;
+    --signal-done-text-soft: #5e8b3f;
+    --signal-done-surface: #e7f0d4;
+    --signal-done-surface-soft: #edf4e7;
+    --signal-waiting: #e8d9a8;
+    --signal-info-surface: #edf1f7;
+    --signal-info-text: #3e5c99;
+
+    /*
+     * Intent tones.
+     *
+     * The design gives each detected intent its own pair — a frustrated
+     * customer and a high-intent buyer are not the same signal, and the
+     * neutral/done/waiting trio cannot say so. Read from screen 01's queue
+     * rows; these are the design's values, not a palette extension.
+     */
+    --intent-urgent-surface: #f6e3dc;
+    --intent-urgent-text: #b0472a;
+    --intent-urgent-edge: #c96a4b;
+    --intent-opportunity-surface: #e7f0d4;
+    --intent-opportunity-text: #4f7a2e;
+    --intent-opportunity-edge: #a8c57a;
+    --intent-blocked-surface: #f6efd8;
+    --intent-blocked-text: #8a6a16;
+    --intent-blocked-edge: #e0b341;
+    --intent-neutral-surface: #f0ede7;
+    --intent-neutral-text: #55524c;
+    /* The calm pill: a quieter green than the "done" signal. */
+    --intent-calm-surface: #f1f5ec;
+    --intent-calm-text: #2f4a18;
+
+    /*
+     * Channel tones, for the distribution bar.
+     *
+     * Fixed per channel so the same colour means the same channel on every
+     * surface. Assigned by the design in the order the channels appear.
+     */
+    --channel-1: #121212;
+    --channel-2: #8b76e8;
+    --channel-3: #a8c57a;
+    --channel-4: #d8d3c9;
+    --channel-5: #c6c1b7;
+    --channel-6: #a8a39a;
+
+    /* An avatar with no image falls back to initials on this. */
+    --avatar-surface: #efe9df;
+
+    /*
+     * Setup, on day one.
+     *
+     * The "next" step gets its own treatment — a warm inset, a violet edge and
+     * a violet numeral — because exactly one step is ever next, and it has to
+     * be findable without reading the list.
+     */
+    --setup-next-surface: #f6f3ec;
+    --setup-next-edge: #8b76e8;
+    --setup-badge-surface: #ede7f8;
+    --setup-badge-text: #4a3e7a;
+    --setup-done: #a8c57a;
+    --setup-done-text: #22331a;
+    --setup-track: #eae6de;
+    --setup-timestamp: #a8a49c;
+
+    /* Ink-on-ink: the primary action inverts the frame. */
+    --action-base: #121212;
+    --action-text: #f7f5f1;
+
+    --skeleton-base: #ede9e1;
+
+    /*
+     * The design is a single committed light-on-warm direction with a dark
+     * frame - not a light theme awaiting a dark twin. Declaring the scheme
+     * stops the browser inverting form controls and scrollbars for a viewer
+     * whose OS is set to dark, which would put grey Chrome widgets on a warm
+     * cream panel.
+     */
+    color-scheme: light;
+  }
+
+  /*
+   * Hebrew swaps the sans for its companion face.
+   *
+   * Archivo, which the design specifies, carries no Hebrew glyphs at all. One
+   * token switch here is the entire mechanism - no component branches on
+   * language, and adding a third script later is another line in this block.
+   */
+  :root:lang(he) {
+    --font-sans: var(--font-heebo), system-ui, sans-serif;
+    --font-serif: var(--font-frank-ruhl-libre), serif;
+    /*
+     * Upright, not italic. Hebrew has no italic tradition, so a browser asked
+     * for one shears the letterforms - it reads as a rendering fault rather
+     * than as emphasis. The serif/sans contrast carries the distinction
+     * instead, which is how it is actually made in Hebrew typography.
+     */
+    --font-serif-style: normal;
+  }
+}

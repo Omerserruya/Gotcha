@@ -1,0 +1,117 @@
+@layer primitives {
+  .button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-9);
+    padding-inline: var(--space-18);
+    border: var(--border-width-thin) solid transparent;
+    border-radius: var(--radius-control);
+    font-family: var(--font-sans);
+    font-size: var(--font-size-control);
+    font-weight: var(--font-weight-medium);
+    line-height: 1;
+    white-space: nowrap;
+    /* `asChild` often renders an <a>; a button is never underlined. */
+    text-decoration: none;
+    cursor: pointer;
+    transition:
+      background-color var(--duration-fast) var(--easing-standard),
+      border-color var(--duration-fast) var(--easing-standard),
+      color var(--duration-fast) var(--easing-standard);
+  }
+
+  .button:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  /*
+   * A button disabled because the user lacks permission still needs to be
+   * reachable by keyboard, so its tooltip can explain why. `aria-disabled`
+   * does that; `disabled` would remove it from the tab order and leave a dead
+   * control with no explanation.
+   */
+  .button[aria-disabled='true'] {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  /* ── Sizes ─────────────────────────────────────────────────────────── */
+  .sm {
+    block-size: var(--size-control-sm);
+    padding-inline: var(--space-12);
+    font-size: var(--font-size-body-sm);
+  }
+
+  .md {
+    block-size: var(--size-control);
+  }
+
+  .lg {
+    block-size: 48px;
+  }
+
+  /* ── Variants ──────────────────────────────────────────────────────────
+     The primary action inverts the frame: ink surface, warm-white label. */
+  .primary {
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  .primary:hover:not(:disabled, [aria-disabled='true']) {
+    background-color: var(--text-secondary);
+  }
+
+  .secondary {
+    background-color: var(--panel-field);
+    border-color: var(--border-default);
+    color: var(--text-primary);
+  }
+
+  .secondary:hover:not(:disabled, [aria-disabled='true']) {
+    border-color: var(--border-heavy);
+  }
+
+  .ghost {
+    background-color: transparent;
+    color: var(--text-muted);
+  }
+
+  .ghost:hover:not(:disabled, [aria-disabled='true']) {
+    background-color: var(--panel-sunken);
+    color: var(--text-primary);
+  }
+
+  /*
+   * Destructive actions borrow the lavender accent rather than a red the
+   * design does not contain. Confirmation, not colour, carries the weight -
+   * and a red here would be the one saturated thing on the screen.
+   */
+  .danger {
+    background-color: var(--panel-field);
+    border-color: var(--border-default);
+    color: var(--signal-ai-strong);
+  }
+
+  .danger:hover:not(:disabled, [aria-disabled='true']) {
+    border-color: var(--signal-ai);
+  }
+
+  .fullWidth {
+    inline-size: 100%;
+  }
+
+  .iconOnly {
+    padding-inline: 0;
+    inline-size: var(--size-control);
+  }
+
+  .iconOnly.sm {
+    inline-size: var(--size-control-sm);
+  }
+
+  .iconOnly.lg {
+    inline-size: 48px;
+  }
+}

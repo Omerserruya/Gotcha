@@ -1,0 +1,14 @@
+{
+  "reason": {
+    "missing_permission": "אין לכם הרשאה לפעולה זו.",
+    "requires_approval": "הפעולה דורשת אישור לפני ביצוע.",
+    "integration_disconnected": "{integration} אינו מחובר.",
+    "integration_unsupported": "{channel} אינו תומך בפעולה זו.",
+    "invalid_state": "לא ניתן לבצע במצב הנוכחי.",
+    "plan_limit_reached": "הגעתם למגבלת התוכנית שלכם.",
+    "read_only_mode": "סביבת עבודה זו היא לקריאה בלבד.",
+    "not_assigned": "שייכו את הפריט לעצמכם תחילה.",
+    "unknown": "הפעולה אינה זמינה כרגע."
+  },
+  "approvalBadge": "דורש אישור"
+}

@@ -1,0 +1,59 @@
+{
+  "primary": {
+    "home": "Home",
+    "inbox": "Inbox",
+    "approvals": "Approvals",
+    "customers": "Customers",
+    "outreach": "Outreach",
+    "studio": "Studio",
+    "analytics": "Analytics",
+    "settings": "Settings"
+  },
+  "workspace": {
+    "label": "Workspace",
+    "switch": "Switch workspace",
+    "noneSelected": "Choose a workspace"
+  },
+  "account": {
+    "label": "Account",
+    "signOut": "Sign out"
+  },
+  "skipToContent": "Skip to main content",
+  "toggleSidebar": "Toggle navigation",
+  "commandPalette": "Search or do anything",
+  "mainNavigation": "Main navigation",
+  "inbox": {
+    "queue": "Waiting in queue",
+    "mine": "Assigned to me",
+    "active": "Active",
+    "ai": "AI managed",
+    "flow": "Flow managed",
+    "resolved": "Resolved"
+  },
+  "studio": {
+    "employees": "Employees",
+    "knowledge": "Knowledge",
+    "automations": "Automations",
+    "capabilities": "Capabilities"
+  },
+  "analytics": {
+    "overview": "Overview",
+    "ai": "AI",
+    "humans": "People",
+    "sales": "Sales",
+    "topics": "Topics"
+  },
+  "settings": {
+    "workspace": "Workspace",
+    "people": "People & teams",
+    "channels": "Channels",
+    "systems": "Business systems",
+    "notifications": "Notifications",
+    "security": "Security",
+    "billing": "Usage & billing",
+    "developer": "Developer"
+  },
+  "groups": {
+    "views": "Views"
+  }
+}

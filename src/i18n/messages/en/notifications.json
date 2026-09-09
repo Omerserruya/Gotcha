@@ -1,0 +1,14 @@
+{
+  "title": "Notifications",
+  "unread": "{count, plural, one {# unread} other {# unread}}",
+  "allRead": "Nothing unread.",
+  "markAllRead": "Mark all read",
+  "empty": {
+    "title": "Nothing to tell you",
+    "body": "Notifications appear here when something needs a decision, or when something failed."
+  },
+  "failed": {
+    "title": "Notifications couldn't load",
+    "body": "The rest of the app is working. Reload to try again."
+  }
+}

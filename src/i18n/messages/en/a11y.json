@@ -1,0 +1,12 @@
+{
+  "closeDialog": "Close dialog",
+  "openMenu": "Open menu",
+  "loading": "Loading content",
+  "required": "required",
+  "errorForField": "Error for {field}",
+  "sortAscending": "Sort ascending",
+  "sortDescending": "Sort descending",
+  "breadcrumb": "Breadcrumb",
+  "mainNavigation": "Main navigation",
+  "pagination": "Pagination"
+}

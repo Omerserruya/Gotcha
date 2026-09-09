@@ -1,0 +1,88 @@
+/*
+ * Reset.
+ *
+ * Only what an application actually needs. Every rule uses logical properties,
+ * so nothing here assumes text runs left to right.
+ */
+@layer reset {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  * {
+    margin: 0;
+  }
+
+  html {
+    text-size-adjust: 100%;
+    /* An operational tool is a full-height app, not a document. */
+    block-size: 100%;
+  }
+
+  body {
+    block-size: 100%;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizelegibility;
+  }
+
+  img,
+  picture,
+  video,
+  canvas,
+  svg {
+    display: block;
+    max-inline-size: 100%;
+  }
+
+  input,
+  button,
+  textarea,
+  select {
+    font: inherit;
+    color: inherit;
+  }
+
+  button {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+  }
+
+  p,
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    overflow-wrap: break-word;
+  }
+
+  ul[role='list'],
+  ol[role='list'] {
+    list-style: none;
+    padding-inline-start: 0;
+  }
+
+  /*
+   * Respect the operating system's reduced-motion setting.
+   *
+   * Not cosmetic: for people with vestibular disorders, animation is a
+   * physical symptom. Transitions collapse to effectively instant rather than
+   * to zero, so that transition-end handlers still fire and no component
+   * silently stops working.
+   */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}

@@ -1,0 +1,9 @@
+/*
+ * Cascade layer order. Declared once, before anything else is loaded.
+ *
+ * Layers replace specificity arms races: a component's own rule always beats
+ * the reset, regardless of selector weight, and a utility always beats a
+ * component. Nothing in this codebase needs `!important` to win, and nothing
+ * should use it.
+ */
+@layer reset, tokens, base, primitives, patterns, shell, features, utilities;

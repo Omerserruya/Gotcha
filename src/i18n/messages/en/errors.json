@@ -1,0 +1,102 @@
+{
+  "kind": {
+    "network": {
+      "title": "You appear to be offline",
+      "body": "We couldn't reach GOTCHA. Check your connection and try again."
+    },
+    "timeout": {
+      "title": "That took too long",
+      "body": "The request timed out before it finished."
+    },
+    "cancelled": {
+      "title": "Request cancelled",
+      "body": "The request was stopped before it completed."
+    },
+    "authentication": {
+      "title": "Your session ended",
+      "body": "Sign in again to continue."
+    },
+    "authorization": {
+      "title": "You don't have access",
+      "body": "Ask a workspace admin if you need this."
+    },
+    "tenant_inactive": {
+      "title": "This workspace is on hold",
+      "body": "GOTCHA is paused for this workspace. An admin can restore access from billing."
+    },
+    "validation": {
+      "title": "Check the highlighted fields",
+      "body": "Some values need correcting before this can be saved."
+    },
+    "not_found": {
+      "title": "Not found",
+      "body": "This no longer exists, or it isn't visible in this workspace."
+    },
+    "conflict": {
+      "title": "This changed while you were working",
+      "body": "Reload to see the current version."
+    },
+    "rate_limited": {
+      "title": "Too many requests",
+      "body": "Wait a moment before trying again."
+    },
+    "integration": {
+      "title": "A connected service failed",
+      "body": "The problem is outside GOTCHA. Try again shortly."
+    },
+    "server": {
+      "title": "Something went wrong on our side",
+      "body": "We've been notified. Try again in a moment."
+    },
+    "contract": {
+      "title": "Unexpected response",
+      "body": "We've been notified and are looking into it."
+    },
+    "unknown": {
+      "title": "Something went wrong",
+      "body": "Try again, or contact support if it keeps happening."
+    }
+  },
+  "page": {
+    "title": "This page couldn't load",
+    "reload": "Reload page"
+  },
+  "boundary": {
+    "title": "Something broke here",
+    "body": "The rest of the app is still working.",
+    "recover": "Try again"
+  },
+  "notFound": {
+    "title": "Page not found",
+    "body": "The page you're looking for doesn't exist.",
+    "home": "Go to Home"
+  },
+  "referenceId": "Reference: {requestId}",
+  "tenantGate": {
+    "TENANT_PLAN_REQUIRED": {
+      "title": "This workspace has no active plan",
+      "body": "Nothing is wrong on your side. Ask your GOTCHA contact to provision a plan for this organization."
+    },
+    "TENANT_PAYMENT_REQUIRED": {
+      "title": "Waiting on payment",
+      "body": "Your plan activates as soon as the first payment is confirmed."
+    },
+    "TENANT_SUSPENDED": {
+      "title": "This workspace is suspended",
+      "body": "Access is paused for the whole organization. Your GOTCHA contact can restore it."
+    },
+    "TENANT_ADMIN_SETUP_REQUIRED": {
+      "title": "Setup isn't finished",
+      "body": "An admin needs to complete first-time setup before anyone can use GOTCHA."
+    },
+    "TENANT_ONBOARDING_REQUIRED": {
+      "title": "Onboarding isn't finished",
+      "body": "Connect your source-of-truth system to finish setting up this organization."
+    },
+    "fallback": {
+      "title": "This workspace is on hold",
+      "body": "GOTCHA is paused for this organization."
+    },
+    "action": "Continue setup"
+  }
+}

@@ -1,0 +1,33 @@
+@layer primitives {
+  .list {
+    display: flex;
+    gap: var(--space-2);
+    border-block-end: var(--border-width-thin) solid var(--border-subtle);
+  }
+
+  .trigger {
+    padding-inline: var(--space-7);
+    padding-block: var(--space-4);
+    border-block-end: var(--border-width-thick) solid transparent;
+    /* Pulls the underline onto the list's own border rather than beside it. */
+    margin-block-end: calc(var(--border-width-thin) * -1);
+    color: var(--text-secondary);
+    font-size: var(--font-size-label);
+    font-weight: var(--font-weight-medium);
+    background: none;
+    cursor: pointer;
+  }
+
+  .trigger:hover {
+    color: var(--text-primary);
+  }
+
+  .trigger[data-state='active'] {
+    color: var(--text-primary);
+    border-block-end-color: var(--accent-default);
+  }
+
+  .content {
+    padding-block-start: var(--space-9);
+  }
+}

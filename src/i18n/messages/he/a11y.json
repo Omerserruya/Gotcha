@@ -1,0 +1,12 @@
+{
+  "closeDialog": "סגירת החלון",
+  "openMenu": "פתיחת התפריט",
+  "loading": "טוען תוכן",
+  "required": "חובה",
+  "errorForField": "שגיאה בשדה {field}",
+  "sortAscending": "מיון בסדר עולה",
+  "sortDescending": "מיון בסדר יורד",
+  "breadcrumb": "מסלול ניווט",
+  "mainNavigation": "ניווט ראשי",
+  "pagination": "עימוד"
+}
