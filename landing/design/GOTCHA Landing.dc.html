@@ -293,10 +293,14 @@
             <div style="font-size:15.5px;color:#A29D95;line-height:1.6;margin-top:16px;max-width:520px">{{ sol.ctaBody }}</div>
           </div>
           <div style="width:380px;flex:none;background:#FFFFFF;color:#16150F;border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:11px">
-            <div style="font-size:13px;font-weight:600">See it on your own conversations</div>
-            <div style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;color:#A8A39A">your website address</div>
-            <div style="text-align:center;font-size:14px;font-weight:500;background:#16150F;color:#F7F5F1;border-radius:11px;padding:13px">Show me</div>
-            <div style="font-size:11.5px;color:#8E887C;line-height:1.55">Four minutes, no card. It replays what you were actually asked last month.</div>
+            <div style="font-size:13px;font-weight:600">Get a demo on your own business</div>
+            <input type="text" placeholder="Your name *" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
+            <input type="text" placeholder="Phone *" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
+            <input type="text" placeholder="Website address *" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
+            <input type="text" placeholder="Email (optional)" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
+            <div style="text-align:center;font-size:14px;font-weight:500;background:#16150F;color:#F7F5F1;border-radius:11px;padding:13px;cursor:pointer;transition:background .2s ease" style-hover="background:#C4552F">Leave your details</div>
+            <a href="https://calendar.app.google/Fv9DCtUycjqSV3a77" target="_blank" rel="noopener" style="text-align:center;font-size:13.5px;font-weight:500;color:#16150F;border:1px solid #D8D2C6;border-radius:11px;padding:12px;transition:border-color .2s ease" style-hover="border-color:#C4552F;color:#8E3418">Or book a demo call</a>
+            <div style="font-size:11.5px;color:#8E887C;line-height:1.55">A founder calls you back, usually the same day. No card, no commitment.</div>
           </div>
         </div>
       </div>
@@ -304,7 +308,7 @@
   </sc-if>
 
   <sc-if value="{{ isFeature }}" hint-placeholder-val="{{ false }}">
-    <div id="top" style="padding:112px 0 0;background:{{ feat.band }}">
+  <div id="top" style="padding:112px 0 0;background:{{ feat.band }}">
       <div style="max-width:1240px;margin:0 auto;padding:44px 24px 60px;display:grid;grid-template-columns:{{ feat.heroCols }};gap:52px;align-items:center">
         <div data-reveal="" style="order:{{ feat.textOrder }};text-align:{{ feat.heroAlign }};max-width:{{ feat.textMax }};margin:{{ feat.textMargin }};color:{{ feat.heroFg }};transition:opacity .8s ease,transform .8s ease">
           <div style="display:flex;align-items:center;gap:12px;justify-content:{{ feat.heroJustify }}">
@@ -315,7 +319,7 @@
           <h1 style="margin:20px 0 0;font-size:{{ feat.h1Size }};font-weight:600;letter-spacing:-0.044em;line-height:1.0">{{ feat.h1a }}<br><span style="font-family:'Instrument Serif',serif;font-style:italic;font-weight:400;letter-spacing:-0.02em">{{ feat.h1b }}</span></h1>
           <div style="font-size:18px;line-height:1.55;color:{{ feat.heroMuted }};margin-top:20px;max-width:640px;margin-left:{{ feat.textMargin2 }};margin-right:{{ feat.textMargin2 }}">{{ feat.sub }}</div>
           <div style="display:flex;align-items:center;gap:12px;margin-top:28px;justify-content:{{ feat.heroJustify }}">
-            
+            <a href="#cta" style="font-size:15px;font-weight:500;background:{{ feat.ctaBg }};color:{{ feat.ctaFg }};border:1px solid {{ feat.ctaBg }};border-radius:12px;padding:14px 22px;transition:transform .2s cubic-bezier(.2,.7,.2,1)" style-hover="transform:translateY(-2px)">Start free</a>
             <a href="#cta" style="font-size:15px;font-weight:500;color:{{ feat.heroFg }};border:1px solid {{ feat.cta2Bd }};border-radius:12px;padding:14px 22px;transition:transform .2s cubic-bezier(.2,.7,.2,1)" style-hover="transform:translateY(-2px)">Book a demo</a>
           </div>
           
@@ -324,11 +328,42 @@
         
       </div>
 
-      <sc-if value="{{ feat.shot }}" hint-placeholder-val="{{ false }}">
+
+      <sc-if value="{{ feat.shotShown }}" hint-placeholder-val="{{ false }}">
         <div style="max-width:1240px;margin:0 auto;padding:24px 24px 0">
-          
+          <div data-reveal="" style="max-width:{{ feat.demoMax }};margin:0 auto;transition:opacity .8s ease,transform .8s ease">
+            <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:36px;flex-wrap:wrap">
+              <div style="min-width:0">
+                <div style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.22em;text-transform:uppercase;color:{{ feat.heroMuted }}">{{ feat.shotMeta }}</div>
+                <h2 style="margin:12px 0 0;font-size:30px;font-weight:600;letter-spacing:-0.03em;line-height:1.14;max-width:620px;color:{{ feat.heroFg }};text-wrap:pretty">{{ feat.shotTitle }}</h2>
+              </div>
+              <div style="flex:1 1 360px;max-width:440px;font-size:14px;line-height:1.6;color:{{ feat.heroMuted }};text-wrap:pretty">{{ feat.shotCaption }}</div>
+            </div>
+
+            <div style="margin-top:22px;background:#16150F;border-radius:22px;padding:10px;box-shadow:0 30px 70px rgba(22,21,15,.24),0 8px 18px rgba(22,21,15,.14)">
+              <div style="display:flex;align-items:center;gap:7px;padding:6px 8px 10px">
+                <span style="width:8px;height:8px;border-radius:50%;background:#3A3833"></span>
+                <span style="width:8px;height:8px;border-radius:50%;background:#3A3833"></span>
+                <span style="width:8px;height:8px;border-radius:50%;background:#3A3833"></span>
+                <span style="margin-left:10px;font:400 10.5px 'IBM Plex Mono',monospace;color:#8E8A83;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ feat.shotMeta }}</span>
+              </div>
+              <div style="position:relative;border-radius:14px;overflow:hidden;background:#0E0D0A">
+                {{ feat.shotImg }}
+              </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:1px 26px;margin-top:26px">
+              <sc-for list="{{ feat.callouts }}" as="cl" hint-placeholder-count="4">
+                <div style="display:flex;align-items:flex-start;gap:12px;padding:14px 0;border-top:1px solid {{ feat.heroLine }}">
+                  <span style="font:500 10px 'IBM Plex Mono',monospace;color:#C4552F;flex:none;margin-top:3px">{{ cl.n }}</span>
+                  <div style="font-size:13.5px;line-height:1.55;color:{{ feat.heroMuted }};text-wrap:pretty">{{ cl.t }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
         </div>
       </sc-if>
+
 
       <div style="max-width:1240px;margin:0 auto;padding:76px 24px 0;display:{{ feat.flowDisplay }}">
           <div data-reveal="" style="transition:opacity .8s ease,transform .8s ease">
@@ -1014,10 +1049,14 @@
             <div style="font-size:15.5px;color:#A29D95;line-height:1.6;margin-top:16px;max-width:520px">{{ feat.ctaBody }}</div>
           </div>
           <div style="width:380px;flex:none;background:#FFFFFF;color:#16150F;border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:11px">
-            <div style="font-size:13px;font-weight:600">See it on your own conversations</div>
-            <div style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;color:#A8A39A">your website address</div>
-            <div style="text-align:center;font-size:14px;font-weight:500;background:#16150F;color:#F7F5F1;border-radius:11px;padding:13px">Show me</div>
-            <div style="font-size:11.5px;color:#8E887C;line-height:1.55">Four minutes, no card. It replays what you were actually asked last month.</div>
+            <div style="font-size:13px;font-weight:600">Get a demo on your own business</div>
+            <input type="text" placeholder="Your name *" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
+            <input type="text" placeholder="Phone *" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
+            <input type="text" placeholder="Website address *" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
+            <input type="text" placeholder="Email (optional)" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
+            <div style="text-align:center;font-size:14px;font-weight:500;background:#16150F;color:#F7F5F1;border-radius:11px;padding:13px;cursor:pointer;transition:background .2s ease" style-hover="background:#C4552F">Leave your details</div>
+            <a href="https://calendar.app.google/Fv9DCtUycjqSV3a77" target="_blank" rel="noopener" style="text-align:center;font-size:13.5px;font-weight:500;color:#16150F;border:1px solid #D8D2C6;border-radius:11px;padding:12px;transition:border-color .2s ease" style-hover="border-color:#C4552F;color:#8E3418">Or book a demo call</a>
+            <div style="font-size:11.5px;color:#8E887C;line-height:1.55">A founder calls you back, usually the same day. No card, no commitment.</div>
           </div>
         </div>
       </div>
@@ -1279,10 +1318,14 @@
             <div style="font-size:15.5px;color:#A29D95;line-height:1.6;margin-top:16px;max-width:520px">{{ why.ctaBody }}</div>
           </div>
           <div style="width:380px;flex:none;background:#FFFFFF;color:#16150F;border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:11px">
-            <div style="font-size:13px;font-weight:600">See it on your own conversations</div>
-            <div style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;color:#A8A39A">your website address</div>
-            <div style="text-align:center;font-size:14px;font-weight:500;background:#16150F;color:#F7F5F1;border-radius:11px;padding:13px">Show me</div>
-            <div style="font-size:11.5px;color:#8E887C;line-height:1.55">Four minutes, no card. It replays what you were actually asked last month.</div>
+            <div style="font-size:13px;font-weight:600">Get a demo on your own business</div>
+            <input type="text" placeholder="Your name *" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
+            <input type="text" placeholder="Phone *" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
+            <input type="text" placeholder="Website address *" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
+            <input type="text" placeholder="Email (optional)" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
+            <div style="text-align:center;font-size:14px;font-weight:500;background:#16150F;color:#F7F5F1;border-radius:11px;padding:13px;cursor:pointer;transition:background .2s ease" style-hover="background:#C4552F">Leave your details</div>
+            <a href="https://calendar.app.google/Fv9DCtUycjqSV3a77" target="_blank" rel="noopener" style="text-align:center;font-size:13.5px;font-weight:500;color:#16150F;border:1px solid #D8D2C6;border-radius:11px;padding:12px;transition:border-color .2s ease" style-hover="border-color:#C4552F;color:#8E3418">Or book a demo call</a>
+            <div style="font-size:11.5px;color:#8E887C;line-height:1.55">A founder calls you back, usually the same day. No card, no commitment.</div>
           </div>
         </div>
       </div>
@@ -1463,7 +1506,140 @@
   </sc-if>
 
   <sc-if value="{{ isAbout }}" hint-placeholder-val="{{ false }}">
-    
+  <div id="top" style="padding:136px 0 0">
+      <div style="max-width:1240px;margin:0 auto;padding:0 24px">
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:48px">
+          <div style="flex:1">
+            <div style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.22em;text-transform:uppercase;color:#A29B8E">{{ about.kicker }}</div>
+            
+            
+          </div>
+          
+        </div>
+      </div>
+
+      <div style="margin-top:76px;background:#F5F2EC;border-top:1px solid #E8E3D9;border-bottom:1px solid #E8E3D9">
+        <div style="max-width:1240px;margin:0 auto;padding:84px 24px 0">
+        <div data-reveal="" style="transition:opacity .8s ease,transform .8s ease">
+          <div data-step="" style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.22em;text-transform:uppercase;color:#C4552F">{{ about.qKicker }}</div>
+          <h2 data-step="" style="margin:18px 0 0;font-size:clamp(38px,4.6vw,66px);font-weight:600;letter-spacing:-0.042em;line-height:1.02;max-width:900px">{{ about.qTitle }}</h2>
+          <div style="display:flex;gap:44px;margin-top:26px;flex-wrap:wrap">
+            <div data-step="" style="flex:1 1 460px;min-width:0;font-size:19px;line-height:1.6;color:#3A3833;text-wrap:pretty">{{ about.qAnswer }}</div>
+            <div data-step="" style="flex:1 1 300px;min-width:0;display:flex;flex-direction:column;gap:1px">
+              <sc-for list="{{ about.qPoints }}" as="qp" hint-placeholder-count="4">
+                <div style="display:flex;align-items:flex-start;gap:12px;padding:13px 0;border-top:1px solid #E8E3D9">
+                  <span style="color:#C4552F;display:flex;flex:none;margin-top:2px"><i data-lucide="{{ qp.icon }}" width="16" height="16" stroke-width="2"></i></span>
+                  <div>
+                    <div style="font-size:14.5px;font-weight:600;letter-spacing:-0.012em">{{ qp.t }}</div>
+                    <div style="font-size:13px;color:#5B564D;line-height:1.5;margin-top:3px">{{ qp.d }}</div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      
+      </div>
+
+      <div style="margin-top:84px;background:#16150F;color:#F7F5F1">
+        
+      <div style="max-width:1240px;margin:0 auto;padding:64px 24px 68px">
+          <div data-reveal="" style="transition:opacity .8s ease,transform .8s ease">
+            <div data-step="" style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.22em;text-transform:uppercase;color:#A8A39A">{{ about.visionKicker }}</div>
+            <div style="display:flex;gap:52px;margin-top:20px;flex-wrap:wrap;align-items:flex-start">
+              <h2 data-step="" style="margin:0;flex:1 1 520px;min-width:0;font-size:clamp(30px,3.4vw,46px);font-weight:600;letter-spacing:-0.036em;line-height:1.1;text-wrap:pretty">{{ about.visionTitle }}</h2>
+              <div data-step="" style="flex:1 1 340px;min-width:0;display:flex;flex-direction:column;gap:16px">
+                <sc-for list="{{ about.vision }}" as="vs" hint-placeholder-count="3">
+                  <div style="font-size:15px;line-height:1.65;color:#C9C4BC;text-wrap:pretty">{{ vs }}</div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </div></div>
+
+      <div style="max-width:1240px;margin:0 auto;padding:84px 24px 0">
+        <div data-reveal="" style="transition:opacity .8s ease,transform .8s ease">
+          <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:40px;flex-wrap:wrap">
+            <div>
+              <div data-step="" style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.22em;text-transform:uppercase;color:#A29B8E">{{ about.painsKicker }}</div>
+              <h2 data-step="" style="margin:14px 0 0;font-size:40px;font-weight:600;letter-spacing:-0.036em;line-height:1.06;max-width:660px">{{ about.painsTitle }}</h2>
+            </div>
+            <div data-step="" style="max-width:400px;font-size:14px;line-height:1.6;color:#5B564D">{{ about.painsNote }}</div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(248px,1fr));gap:12px;margin-top:24px">
+            <sc-for list="{{ about.pains }}" as="pn" hint-placeholder-count="3">
+              <div data-step="" style="background:#FFFFFF;border:1px solid #E8E3D9;border-radius:20px;padding:24px 26px;display:flex;flex-direction:column;gap:14px">
+                <div style="display:flex;align-items:center;gap:11px">
+                  <span style="width:32px;height:32px;border-radius:10px;background:{{ pn.bg }};color:{{ pn.ic }};display:flex;align-items:center;justify-content:center;flex:none"><i data-lucide="{{ pn.icon }}" width="16" height="16" stroke-width="2"></i></span>
+                  <div>
+                    <div style="font-size:17px;font-weight:600;letter-spacing:-0.018em;line-height:1.2">{{ pn.t }}</div>
+                    <div style="font:400 11px 'IBM Plex Mono',monospace;color:#A29B8E;margin-top:3px">{{ pn.who }}</div>
+                  </div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:1px">
+                  <sc-for list="{{ pn.items }}" as="pi" hint-placeholder-count="4">
+                    <div style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-top:1px solid #F0EDE7">
+                      <span style="color:#C4552F;display:flex;flex:none;margin-top:3px"><i data-lucide="minus" width="12" height="12" stroke-width="3"></i></span>
+                      <div style="font-size:13.5px;line-height:1.55;color:#3A3833;text-wrap:pretty">{{ pi }}</div>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="margin-top:auto;padding-top:13px;border-top:1px solid #EDE9E1;font-size:13px;line-height:1.55;color:#8E3418">{{ pn.fix }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+
+      <div style="max-width:1240px;margin:0 auto;padding:76px 24px 0">
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:40px">
+          <h2 style="margin:0;font-size:34px;font-weight:600;letter-spacing:-0.032em">{{ about.foundersTitle }}</h2>
+          <div style="max-width:380px;font-size:14px;line-height:1.6;color:#5B564D">{{ about.foundersNote }}</div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px;margin-top:22px">
+          <div style="background:#FFFFFF;border:1px solid #E8E3D9;border-radius:18px;padding:24px;display:flex;gap:20px;align-items:flex-start">
+            <img src="assets/team/founder-1.png" alt="Matan Amran" style="width:168px;height:206px;border-radius:16px;object-fit:cover;object-position:center top;flex:none;display:block;background:#EFEAE1">
+            <div style="display:flex;flex-direction:column;gap:6px;padding-top:4px">
+              <div style="font-size:17px;font-weight:600;letter-spacing:-0.016em">Matan Amran</div>
+              <div style="font:400 11.5px 'IBM Plex Mono',monospace;color:#A29B8E">Co-founder · VP marketing &amp; sales</div>
+              <div style="font-size:13.5px;line-height:1.55;color:#5B564D;margin-top:2px">Ran the family business for the last five years, mostly marketing, service and sales, so he has answered the messages this product answers. BA in business administration.</div>
+            </div>
+          </div>
+          <div style="background:#FFFFFF;border:1px solid #E8E3D9;border-radius:18px;padding:24px;display:flex;gap:20px;align-items:flex-start">
+            <img src="assets/team/founder-2.jpg" alt="Omer Serruya" style="width:168px;height:206px;border-radius:16px;object-fit:cover;object-position:center top;flex:none;display:block;background:#EFEAE1">
+            <div style="display:flex;flex-direction:column;gap:6px;padding-top:4px">
+              <div style="font-size:17px;font-weight:600;letter-spacing:-0.016em">Omer Serruya</div>
+              <div style="font:400 11.5px 'IBM Plex Mono',monospace;color:#A29B8E">Co-founder &amp; CEO · technology</div>
+              <div style="font-size:13.5px;line-height:1.55;color:#5B564D;margin-top:2px">A graduate of a classified military unit with a BSc in computer science. Owns the engineering and the AI layer, and the rule that the system stops rather than guesses.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      
+
+      <div id="cta" style="max-width:1240px;margin:0 auto;padding:76px 24px 0">
+        <div style="background:#16150F;color:#F7F5F1;border-radius:26px;padding:52px;display:flex;gap:52px;align-items:center">
+          <div style="flex:1">
+            <img src="assets/logo/line-horizontal-light.png" alt="GOTCHA" style="width:148px;height:auto;display:block;margin-bottom:24px">
+            <h2 style="margin:0;font-size:44px;font-weight:600;letter-spacing:-0.04em;line-height:1.04;max-width:560px">{{ about.ctaTitle }}</h2>
+            <div style="font-size:15.5px;color:#A29D95;line-height:1.6;margin-top:16px;max-width:520px">{{ about.ctaBody }}</div>
+          </div>
+          <div style="width:380px;flex:none;background:#FFFFFF;color:#16150F;border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:11px">
+            <div style="font-size:13px;font-weight:600">Get a demo on your own business</div>
+            <input type="text" placeholder="Your name *" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
+            <input type="text" placeholder="Phone *" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
+            <input type="text" placeholder="Website address *" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
+            <input type="text" placeholder="Email (optional)" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
+            <div style="text-align:center;font-size:14px;font-weight:500;background:#16150F;color:#F7F5F1;border-radius:11px;padding:13px;cursor:pointer;transition:background .2s ease" style-hover="background:#C4552F">Leave your details</div>
+            <a href="https://calendar.app.google/Fv9DCtUycjqSV3a77" target="_blank" rel="noopener" style="text-align:center;font-size:13.5px;font-weight:500;color:#16150F;border:1px solid #D8D2C6;border-radius:11px;padding:12px;transition:border-color .2s ease" style-hover="border-color:#C4552F;color:#8E3418">Or book a demo call</a>
+            <div style="font-size:11.5px;color:#8E887C;line-height:1.55">A founder calls you back, usually the same day. No card, no commitment.</div>
+          </div>
+        </div>
+      </div>
+    </div>
   </sc-if>
 
   <sc-if value="{{ isCareers }}" hint-placeholder-val="{{ false }}">
@@ -1535,8 +1711,12 @@
           </div>
           <div style="width:380px;flex:none;background:#FFFFFF;color:#16150F;border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:11px">
             <div style="font-size:13px;font-weight:600">Send it to careers@gotcha.co.il</div>
-            <input type="email" placeholder="your email" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%">
-            <div style="text-align:center;font-size:14px;font-weight:500;background:#16150F;color:#F7F5F1;border-radius:11px;padding:13px;cursor:pointer">Start a conversation</div>
+            <input type="text" placeholder="Your name *" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
+            <input type="text" placeholder="Phone *" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
+            <input type="text" placeholder="Website address *" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
+            <input type="text" placeholder="Email (optional)" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
+            <div style="text-align:center;font-size:14px;font-weight:500;background:#16150F;color:#F7F5F1;border-radius:11px;padding:13px;cursor:pointer;transition:background .2s ease" style-hover="background:#C4552F">Leave your details</div>
+            <a href="https://calendar.app.google/Fv9DCtUycjqSV3a77" target="_blank" rel="noopener" style="text-align:center;font-size:13.5px;font-weight:500;color:#16150F;border:1px solid #D8D2C6;border-radius:11px;padding:12px;transition:border-color .2s ease" style-hover="border-color:#C4552F;color:#8E3418">Or book a demo call</a>
             <div style="font-size:11.5px;color:#8E887C;line-height:1.55">A founder reads every one, and you get an answer either way.</div>
           </div>
         </div>
@@ -1697,6 +1877,36 @@
       </div>
 
       <div style="max-width:1240px;margin:0 auto;padding:76px 24px 0">
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:40px;flex-wrap:wrap">
+          <div>
+            <div style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.22em;text-transform:uppercase;color:#C4552F">{{ op.pickKicker }}</div>
+            <h2 style="margin:14px 0 0;font-size:40px;font-weight:600;letter-spacing:-0.036em;line-height:1.06;max-width:680px">{{ op.pickTitle }}</h2>
+          </div>
+          <div style="max-width:400px;font-size:14px;line-height:1.6;color:#5B564D">{{ op.pickNote }}</div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-top:26px">
+          <sc-for list="{{ op.pick }}" as="pk" hint-placeholder-count="3">
+            <div style="background:{{ pk.bg }};border:1px solid {{ pk.bd }};border-radius:20px;padding:26px 28px;display:flex;flex-direction:column;gap:12px;color:{{ pk.fg }}">
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                <div style="font-size:18px;font-weight:600;letter-spacing:-0.02em">{{ pk.name }}</div>
+                <span style="font:500 9.5px 'IBM Plex Mono',monospace;letter-spacing:.16em;text-transform:uppercase;background:{{ pk.badgeBg }};color:{{ pk.badgeFg }};border-radius:5px;padding:4px 8px">{{ pk.badge }}</span>
+              </div>
+              <div style="font-size:13.5px;line-height:1.6;color:{{ pk.muted }};text-wrap:pretty">{{ pk.who }}</div>
+              <div style="margin-top:auto;padding-top:14px;border-top:1px solid {{ pk.rule }};display:flex;flex-direction:column;gap:4px">
+                <div style="font-size:13px;font-weight:600">{{ pk.offerLine }}</div>
+                <div style="font-size:12.5px;line-height:1.55;color:{{ pk.muted }}">{{ pk.after }}</div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex;align-items:center;gap:16px;margin-top:18px;flex-wrap:wrap">
+          <a href="#offer-cta" style="font-size:14.5px;font-weight:500;background:#8E3418;color:#FFFFFF;border-radius:12px;padding:14px 24px;white-space:nowrap" style-hover="background:#C4552F">{{ op.pickCta }}</a>
+          <div onClick="{{ op.goPricing }}" style="font-size:14px;font-weight:500;color:#8E3418;border-bottom:1px solid #E3B7A4;padding-bottom:2px;cursor:pointer;white-space:nowrap">{{ op.pickCompare }}</div>
+          <div style="flex:1;min-width:240px;font-size:12.5px;line-height:1.55;color:#8E887C">{{ op.pickFoot }}</div>
+        </div>
+      </div>
+
+      <div style="max-width:1240px;margin:0 auto;padding:76px 24px 0">
         <div style="display:flex;gap:44px;flex-wrap:wrap;align-items:flex-start">
           <div style="flex:1 1 380px;min-width:0">
             <div style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.22em;text-transform:uppercase;color:#A29B8E">{{ op.howKicker }}</div>
@@ -1740,6 +1950,7 @@
               <input type="text" placeholder="{{ fd }}" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box">
             </sc-for>
             <div style="text-align:center;font-size:14.5px;font-weight:500;background:#16150F;color:#F7F5F1;border-radius:11px;padding:14px;cursor:pointer;transition:background .2s ease" style-hover="background:#8E3418">{{ op.submit }}</div>
+            <a href="https://calendar.app.google/Fv9DCtUycjqSV3a77" target="_blank" rel="noopener" style="text-align:center;font-size:13.5px;font-weight:500;color:#16150F;border:1px solid #D8D2C6;border-radius:11px;padding:12px;transition:border-color .2s ease" style-hover="border-color:#C4552F;color:#8E3418">Or book a demo call</a>
             <div style="font-size:11.5px;color:#8E887C;line-height:1.55">{{ op.formFoot }}</div>
           </div>
         </div>
@@ -1830,10 +2041,14 @@
             <div style="font-size:15.5px;color:#A29D95;line-height:1.6;margin-top:16px;max-width:520px">{{ chat.ctaBody }}</div>
           </div>
           <div style="width:380px;flex:none;background:#FFFFFF;color:#16150F;border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:11px">
-            <div style="font-size:13px;font-weight:600">See it on your own conversations</div>
-            <div style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;color:#A8A39A">your website address</div>
-            <div style="text-align:center;font-size:14px;font-weight:500;background:#16150F;color:#F7F5F1;border-radius:11px;padding:13px">Show me</div>
-            <div style="font-size:11.5px;color:#8E887C;line-height:1.55">Four minutes, no card. It replays what you were actually asked last month.</div>
+            <div style="font-size:13px;font-weight:600">Get a demo on your own business</div>
+            <input type="text" placeholder="Your name *" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
+            <input type="text" placeholder="Phone *" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
+            <input type="text" placeholder="Website address *" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
+            <input type="text" placeholder="Email (optional)" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
+            <div style="text-align:center;font-size:14px;font-weight:500;background:#16150F;color:#F7F5F1;border-radius:11px;padding:13px;cursor:pointer;transition:background .2s ease" style-hover="background:#C4552F">Leave your details</div>
+            <a href="https://calendar.app.google/Fv9DCtUycjqSV3a77" target="_blank" rel="noopener" style="text-align:center;font-size:13.5px;font-weight:500;color:#16150F;border:1px solid #D8D2C6;border-radius:11px;padding:12px;transition:border-color .2s ease" style-hover="border-color:#C4552F;color:#8E3418">Or book a demo call</a>
+            <div style="font-size:11.5px;color:#8E887C;line-height:1.55">A founder calls you back, usually the same day. No card, no commitment.</div>
           </div>
         </div>
       </div>
@@ -1956,10 +2171,10 @@
         <div style="max-width:1240px;margin:0 auto;padding:56px 24px 60px">
           <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:40px">
             <div>
-              <div style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.22em;text-transform:uppercase;color:#A29B8E">What it replaces</div>
-              <h2 style="margin:14px 0 0;font-size:38px;font-weight:600;letter-spacing:-0.034em;line-height:1.1">The question is not what it costs.</h2>
+              <div style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.22em;text-transform:uppercase;color:#A29B8E">How the price is set</div>
+              <h2 style="margin:14px 0 0;font-size:38px;font-weight:600;letter-spacing:-0.034em;line-height:1.1">You pay for the value<br>you actually use.</h2>
             </div>
-            <div style="max-width:420px;font-size:14px;line-height:1.6;color:#5B564D">A part-time person answering evenings and weekends costs more than the AI Team plan, and cannot look up an order in four seconds.</div>
+            <div style="max-width:420px;font-size:14px;line-height:1.6;color:#5B564D">The more capabilities you switch on and the more conversations they handle, the more it costs. Use less, or turn a capability off, and it goes down again the same month.</div>
           </div>
           <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:28px">
             <sc-for list="{{ compare }}" as="c" hint-placeholder-count="4">
@@ -2022,10 +2237,14 @@
             <div style="font-size:15.5px;color:#A29D95;line-height:1.6;margin-top:16px;max-width:520px">Connect your site and your store and GOTCHA replays your own past conversations. You judge it on your business, not on a demo, and only then choose a plan.</div>
           </div>
           <div style="width:380px;flex:none;background:#FFFFFF;color:#16150F;border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:11px">
-            <div style="font-size:13px;font-weight:600">Try it on your own conversations</div>
-            <div style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;color:#A8A39A">your website address</div>
-            <div style="text-align:center;font-size:14px;font-weight:500;background:#16150F;color:#F7F5F1;border-radius:11px;padding:13px">Show me</div>
-            <div style="font-size:11.5px;color:#8E887C;line-height:1.55">Four minutes, no card. If it does not convince you on your own questions, nothing else matters.</div>
+            <div style="font-size:13px;font-weight:600">Get a demo on your own business</div>
+            <input type="text" placeholder="Your name *" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
+            <input type="text" placeholder="Phone *" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
+            <input type="text" placeholder="Website address *" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
+            <input type="text" placeholder="Email (optional)" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
+            <div style="text-align:center;font-size:14px;font-weight:500;background:#16150F;color:#F7F5F1;border-radius:11px;padding:13px;cursor:pointer;transition:background .2s ease" style-hover="background:#C4552F">Leave your details</div>
+            <a href="https://calendar.app.google/Fv9DCtUycjqSV3a77" target="_blank" rel="noopener" style="text-align:center;font-size:13.5px;font-weight:500;color:#16150F;border:1px solid #D8D2C6;border-radius:11px;padding:12px;transition:border-color .2s ease" style-hover="border-color:#C4552F;color:#8E3418">Or book a demo call</a>
+            <div style="font-size:11.5px;color:#8E887C;line-height:1.55">A founder calls you back, usually the same day. No card, no commitment.</div>
           </div>
         </div>
       </div>
@@ -2556,7 +2775,7 @@
   </div>
   
 
-  <div style="max-width:1240px;margin:0 auto;padding:96px 24px 0">
+  <div style="max-width:1240px;margin:0 auto;padding:184px 24px 0">
     <div data-reveal="" style="display:flex;gap:56px;align-items:flex-start;transition:opacity .8s ease,transform .8s ease">
       <div style="width:340px;flex:none;position:sticky;top:128px">
         <h2 style="margin:0;font-size:40px;font-weight:600;letter-spacing:-0.036em;line-height:1.08">The things people actually ask us.</h2>
@@ -2582,15 +2801,19 @@
     <div data-reveal="" style="background:#16150F;color:#F7F5F1;border-radius:26px;padding:56px 52px;display:flex;gap:52px;align-items:center;transition:opacity .85s ease,transform .85s ease">
       <div style="flex:1">
         <img src="assets/logo/line-horizontal-light.png" alt="GOTCHA" style="width:148px;height:auto;display:block;margin-bottom:26px">
-        <div style="font-family:'Instrument Serif',serif;font-style:italic;font-size:21px;color:#A29D95">Tonight, someone will write to you at 2am.</div>
-        <h2 style="margin:14px 0 0;font-size:52px;font-weight:600;letter-spacing:-0.042em;line-height:1.02;max-width:560px">Let them wake up<br>to an answer.</h2>
-        <div style="font-size:16px;color:#A29D95;line-height:1.6;margin-top:18px;max-width:500px">Connect WhatsApp and your store, and GOTCHA reads your site, your products and your past conversations. It starts by watching. You decide when it starts answering.</div>
+        <div style="font-family:'Instrument Serif',serif;font-style:italic;font-size:21px;color:#A29D95">Every message answered. Every customer followed up.</div>
+        <h2 style="margin:14px 0 0;font-size:52px;font-weight:600;letter-spacing:-0.042em;line-height:1.02;max-width:560px">Take your business<br>to the next level.</h2>
+        <div style="font-size:16px;color:#A29D95;line-height:1.6;margin-top:18px;max-width:500px">Connect your channels and your systems, and GOTCHA runs the whole conversation: it answers, it acts, it follows up. You keep the customers, the hours and the calm. It starts by watching, and you decide when it starts answering.</div>
       </div>
       <div style="width:400px;flex:none;background:#FFFFFF;color:#16150F;border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:11px">
-        <div style="font-size:13px;font-weight:600">See what it would do with your business</div>
-        <div style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;color:#A8A39A">your website address</div>
-        <div style="text-align:center;font-size:14px;font-weight:500;background:#16150F;color:#F7F5F1;border-radius:11px;padding:13px">Show me</div>
-        <div style="font-size:11.5px;color:#8E887C;line-height:1.55">About four minutes. You'll see real answers to your own past questions before you sign anything.</div>
+        <div style="font-size:13px;font-weight:600">Get a demo on your own business</div>
+        <input type="text" placeholder="Your name *" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
+        <input type="text" placeholder="Phone *" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
+        <input type="text" placeholder="Website address *" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
+        <input type="text" placeholder="Email" style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box" style-focus="border-color:#C4552F">
+        <div style="text-align:center;font-size:14px;font-weight:500;background:#16150F;color:#F7F5F1;border-radius:11px;padding:13px;cursor:pointer;transition:background .2s ease" style-hover="background:#C4552F">Leave your details</div>
+        <a href="https://calendar.app.google/Fv9DCtUycjqSV3a77" target="_blank" rel="noopener" style="text-align:center;font-size:13.5px;font-weight:500;color:#16150F;border:1px solid #D8D2C6;border-radius:11px;padding:12px;transition:border-color .2s ease" style-hover="border-color:#C4552F;color:#8E3418">Or book a demo call</a>
+        
         <div style="display:flex;gap:16px;padding-top:6px;border-top:1px solid #F0EDE7;margin-top:4px">
           <span style="font-size:11.5px;color:#8E887C">No card</span>
           <span style="font-size:11.5px;color:#8E887C">Keeps your number</span>
@@ -2602,136 +2825,7 @@
 
   </sc-if>
 
-  <div id="top" style="padding:136px 0 0">
-      <div style="max-width:1240px;margin:0 auto;padding:0 24px">
-        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:48px">
-          <div style="flex:1">
-            <div style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.22em;text-transform:uppercase;color:#A29B8E">{{ about.kicker }}</div>
-            
-            
-          </div>
-          
-        </div>
-      </div>
-
-      <div style="margin-top:76px;background:#F5F2EC;border-top:1px solid #E8E3D9;border-bottom:1px solid #E8E3D9">
-        <div style="max-width:1240px;margin:0 auto;padding:84px 24px 0">
-        <div data-reveal="" style="transition:opacity .8s ease,transform .8s ease">
-          <div data-step="" style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.22em;text-transform:uppercase;color:#C4552F">{{ about.qKicker }}</div>
-          <h2 data-step="" style="margin:18px 0 0;font-size:clamp(38px,4.6vw,66px);font-weight:600;letter-spacing:-0.042em;line-height:1.02;max-width:900px">{{ about.qTitle }}</h2>
-          <div style="display:flex;gap:44px;margin-top:26px;flex-wrap:wrap">
-            <div data-step="" style="flex:1 1 460px;min-width:0;font-size:19px;line-height:1.6;color:#3A3833;text-wrap:pretty">{{ about.qAnswer }}</div>
-            <div data-step="" style="flex:1 1 300px;min-width:0;display:flex;flex-direction:column;gap:1px">
-              <sc-for list="{{ about.qPoints }}" as="qp" hint-placeholder-count="4">
-                <div style="display:flex;align-items:flex-start;gap:12px;padding:13px 0;border-top:1px solid #E8E3D9">
-                  <span style="color:#C4552F;display:flex;flex:none;margin-top:2px"><i data-lucide="{{ qp.icon }}" width="16" height="16" stroke-width="2"></i></span>
-                  <div>
-                    <div style="font-size:14.5px;font-weight:600;letter-spacing:-0.012em">{{ qp.t }}</div>
-                    <div style="font-size:13px;color:#5B564D;line-height:1.5;margin-top:3px">{{ qp.d }}</div>
-                  </div>
-                </div>
-              </sc-for>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      
-      </div>
-
-      <div style="margin-top:84px;background:#16150F;color:#F7F5F1">
-        
-      <div style="max-width:1240px;margin:0 auto;padding:64px 24px 68px">
-          <div data-reveal="" style="transition:opacity .8s ease,transform .8s ease">
-            <div data-step="" style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.22em;text-transform:uppercase;color:#A8A39A">{{ about.visionKicker }}</div>
-            <div style="display:flex;gap:52px;margin-top:20px;flex-wrap:wrap;align-items:flex-start">
-              <h2 data-step="" style="margin:0;flex:1 1 520px;min-width:0;font-size:clamp(30px,3.4vw,46px);font-weight:600;letter-spacing:-0.036em;line-height:1.1;text-wrap:pretty">{{ about.visionTitle }}</h2>
-              <div data-step="" style="flex:1 1 340px;min-width:0;display:flex;flex-direction:column;gap:16px">
-                <sc-for list="{{ about.vision }}" as="vs" hint-placeholder-count="3">
-                  <div style="font-size:15px;line-height:1.65;color:#C9C4BC;text-wrap:pretty">{{ vs }}</div>
-                </sc-for>
-              </div>
-            </div>
-          </div>
-        </div></div>
-
-      <div style="max-width:1240px;margin:0 auto;padding:84px 24px 0">
-        <div data-reveal="" style="transition:opacity .8s ease,transform .8s ease">
-          <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:40px;flex-wrap:wrap">
-            <div>
-              <div data-step="" style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.22em;text-transform:uppercase;color:#A29B8E">{{ about.painsKicker }}</div>
-              <h2 data-step="" style="margin:14px 0 0;font-size:40px;font-weight:600;letter-spacing:-0.036em;line-height:1.06;max-width:660px">{{ about.painsTitle }}</h2>
-            </div>
-            <div data-step="" style="max-width:400px;font-size:14px;line-height:1.6;color:#5B564D">{{ about.painsNote }}</div>
-          </div>
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(248px,1fr));gap:12px;margin-top:24px">
-            <sc-for list="{{ about.pains }}" as="pn" hint-placeholder-count="3">
-              <div data-step="" style="background:#FFFFFF;border:1px solid #E8E3D9;border-radius:20px;padding:24px 26px;display:flex;flex-direction:column;gap:14px">
-                <div style="display:flex;align-items:center;gap:11px">
-                  <span style="width:32px;height:32px;border-radius:10px;background:{{ pn.bg }};color:{{ pn.ic }};display:flex;align-items:center;justify-content:center;flex:none"><i data-lucide="{{ pn.icon }}" width="16" height="16" stroke-width="2"></i></span>
-                  <div>
-                    <div style="font-size:17px;font-weight:600;letter-spacing:-0.018em;line-height:1.2">{{ pn.t }}</div>
-                    <div style="font:400 11px 'IBM Plex Mono',monospace;color:#A29B8E;margin-top:3px">{{ pn.who }}</div>
-                  </div>
-                </div>
-                <div style="display:flex;flex-direction:column;gap:1px">
-                  <sc-for list="{{ pn.items }}" as="pi" hint-placeholder-count="4">
-                    <div style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-top:1px solid #F0EDE7">
-                      <span style="color:#C4552F;display:flex;flex:none;margin-top:3px"><i data-lucide="minus" width="12" height="12" stroke-width="3"></i></span>
-                      <div style="font-size:13.5px;line-height:1.55;color:#3A3833;text-wrap:pretty">{{ pi }}</div>
-                    </div>
-                  </sc-for>
-                </div>
-                <div style="margin-top:auto;padding-top:13px;border-top:1px solid #EDE9E1;font-size:13px;line-height:1.55;color:#8E3418">{{ pn.fix }}</div>
-              </div>
-            </sc-for>
-          </div>
-        </div>
-      </div>
-
-      <div style="max-width:1240px;margin:0 auto;padding:76px 24px 0">
-        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:40px">
-          <h2 style="margin:0;font-size:34px;font-weight:600;letter-spacing:-0.032em">{{ about.foundersTitle }}</h2>
-          <div style="max-width:380px;font-size:14px;line-height:1.6;color:#5B564D">{{ about.foundersNote }}</div>
-        </div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px;margin-top:22px">
-          <div style="background:#FFFFFF;border:1px solid #E8E3D9;border-radius:18px;padding:24px;display:flex;gap:20px;align-items:flex-start">
-            <img src="assets/team/founder-1.png" alt="Matan Amran" style="width:168px;height:206px;border-radius:16px;object-fit:cover;object-position:center top;flex:none;display:block;background:#EFEAE1">
-            <div style="display:flex;flex-direction:column;gap:6px;padding-top:4px">
-              <div style="font-size:17px;font-weight:600;letter-spacing:-0.016em">Matan Amran</div>
-              <div style="font:400 11.5px 'IBM Plex Mono',monospace;color:#A29B8E">Co-founder · VP marketing &amp; sales</div>
-              <div style="font-size:13.5px;line-height:1.55;color:#5B564D;margin-top:2px">Ran the family business for the last five years, mostly marketing, service and sales, so he has answered the messages this product answers. BA in business administration.</div>
-            </div>
-          </div>
-          <div style="background:#FFFFFF;border:1px solid #E8E3D9;border-radius:18px;padding:24px;display:flex;gap:20px;align-items:flex-start">
-            <img src="assets/team/founder-2.jpg" alt="Omer Serruya" style="width:168px;height:206px;border-radius:16px;object-fit:cover;object-position:center top;flex:none;display:block;background:#EFEAE1">
-            <div style="display:flex;flex-direction:column;gap:6px;padding-top:4px">
-              <div style="font-size:17px;font-weight:600;letter-spacing:-0.016em">Omer Serruya</div>
-              <div style="font:400 11.5px 'IBM Plex Mono',monospace;color:#A29B8E">Co-founder &amp; CEO · technology</div>
-              <div style="font-size:13.5px;line-height:1.55;color:#5B564D;margin-top:2px">A graduate of a classified military unit with a BSc in computer science. Owns the engineering and the AI layer, and the rule that the system stops rather than guesses.</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      
-
-      <div id="cta" style="max-width:1240px;margin:0 auto;padding:76px 24px 0">
-        <div style="background:#16150F;color:#F7F5F1;border-radius:26px;padding:52px;display:flex;gap:52px;align-items:center">
-          <div style="flex:1">
-            <img src="assets/logo/line-horizontal-light.png" alt="GOTCHA" style="width:148px;height:auto;display:block;margin-bottom:24px">
-            <h2 style="margin:0;font-size:44px;font-weight:600;letter-spacing:-0.04em;line-height:1.04;max-width:560px">{{ about.ctaTitle }}</h2>
-            <div style="font-size:15.5px;color:#A29D95;line-height:1.6;margin-top:16px;max-width:520px">{{ about.ctaBody }}</div>
-          </div>
-          <div style="width:380px;flex:none;background:#FFFFFF;color:#16150F;border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:11px">
-            <div style="font-size:13px;font-weight:600">See it on your own conversations</div>
-            <div style="background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;color:#A8A39A">your website address</div>
-            <div style="text-align:center;font-size:14px;font-weight:500;background:#16150F;color:#F7F5F1;border-radius:11px;padding:13px">Show me</div>
-            <div style="font-size:11.5px;color:#8E887C;line-height:1.55">Four minutes, no card. It replays what you were actually asked last month.</div>
-          </div>
-        </div>
-      </div>
-    </div><div style="margin-top:104px;background:#16150F;color:#F7F5F1;border-radius:36px 36px 0 0;overflow:hidden">
+<div style="margin-top:104px;background:#16150F;color:#F7F5F1;border-radius:36px 36px 0 0;overflow:hidden">
     <div style="max-width:1240px;margin:0 auto;padding:52px 24px 0">
       <div style="display:flex;gap:40px;align-items:flex-end;padding-bottom:34px;border-bottom:1px solid #262521">
         <div style="flex:1">
@@ -3656,8 +3750,8 @@ class Component extends DCLogic {
       return {
         t, hasMenu: !!key,
         rot: st.menu === key && key ? 'rotate(180deg)' : 'rotate(0deg)',
-        bg: on ? '#FBEEE8' : 'transparent',
-        fg: on ? '#8E3418' : '#16150F',
+        bg: page === 'offer' ? '#C4552F' : (on ? '#FBEEE8' : 'transparent'),
+        fg: page === 'offer' ? '#FFFFFF' : (on ? '#8E3418' : '#16150F'),
         enter: () => { if (key) this.setState({ menu: key }); else this.setState({ menu: null }); },
         click: () => {
           if (page) { this.setState({ menu: null, page }); window.scrollTo(0, 0); return; }
@@ -5666,6 +5760,7 @@ class Component extends DCLogic {
           dm,
           marquee: b.marquee ? b.marquee.concat(b.marquee) : null,   // doubled so the -50% loop is seamless
           shotImg: b.shot ? React.createElement('img', { src: b.shot, alt: b.shotTitle || '', style: { display: 'block', width: '100%' } }) : null,
+          shotShown: (b.shot && ['feat-omnichannel', 'feat-customers', 'feat-studio', 'feat-callpilot', 'feat-analytics', 'feat-approvals'].indexOf(key) >= 0) ? true : null,
           showCaps: !b.marquee,
           tw: key === 'feat-widget' ? this.tryWidget() : null,
           saveDisplay: b.save ? 'block' : 'none',
@@ -5755,17 +5850,17 @@ class Component extends DCLogic {
       offerShown: st.offerOpen ? true : null,
       bars: { offerBar: st.barOffer ? 'flex' : 'none', headTop: (st.barOffer ? 38 : 0) + 'px' },
       op: {
-        badge: 'Launch offer', scarcity: 'For the first 50 Shopify stores only',
+        badge: 'Launch offer', scarcity: 'For the first 50 businesses only',
         h1a: 'Three months of GOTCHA', h1b: 'for one dollar.',
-        sub: 'We are opening the system to the first 50 Shopify stores, and we would rather earn you than charge you. One dollar in total for three months, with us setting it up beside you.',
+        sub: 'We are opening the system to the first 50 businesses, and we would rather earn you than charge you. One dollar in total for three months, with us setting it up beside you.',
         priceLabel: 'The whole offer', price: '$1',
         priceNote: 'In total, for three months, in one payment. Then you continue on the plan and the usage you choose. Regular pricing starts at $39 a month.',
         cta: 'Claim a place', ctaNote: 'Two minutes, no card',
         cards: [
           { icon: 'coins', bg: '#F7F0E2', ic: '#8A6A16', t: '1,000 credits every month', d: 'Enough for a real month of conversations, not a demo. Unused credits reset with each month of the offer.' },
-          { icon: 'plug', bg: '#EDF4E7', ic: '#2E7D5B', t: 'We connect it with you', d: 'Your channels, your Shopify store and your systems. You are not handed a login and left to work it out.' },
+          { icon: 'plug', bg: '#EDF4E7', ic: '#2E7D5B', t: 'We connect it with you', d: 'Your channels, your store or site and your systems. You are not handed a login and left to work it out.' },
           { icon: 'user-round-check', bg: '#EAE4FB', ic: '#4B3E8E', t: 'Onboarding and personal guidance', d: 'We build the first knowledge base with you, set the autonomy limits, and stay reachable while you settle in.' },
-          { icon: 'users-round', bg: '#FBEEE8', ic: '#C4552F', t: 'Only 50 stores', d: 'So that each one gets our attention. When the fiftieth store joins, the offer closes.' }
+          { icon: 'users-round', bg: '#FBEEE8', ic: '#C4552F', t: 'Only 50 businesses', d: 'So that each one gets our attention. When the fiftieth business joins, the offer closes.' }
         ],
         whyKicker: 'Why we are doing this',
         whyTitle: 'We want fifty businesses that will tell us the truth.',
@@ -5775,6 +5870,18 @@ class Component extends DCLogic {
           { n: '02', t: 'We get to build it around you', d: 'The roadmap comes from the fifty stores in this group. What you ask for in these three months is what we build next.' },
           { n: '03', t: 'Nobody is buying blind', d: 'By the time the offer ends you already know what it handled, what it escalated and what it saved you. Then you choose a plan on evidence.' }
         ],
+        pickKicker: 'Your plan, your choice',
+        pickTitle: 'Pick the plan that fits your business. The dollar covers any of them.',
+        pickNote: 'The offer is not tied to one package. Choose the one that matches how you work, and three months of it cost $1 in total.',
+        pick: [
+          { name: 'Co-Pilot', badge: 'Team-led', badgeBg: '#EFEAE1', badgeFg: '#5C4A2A', who: 'AI beside your team: it prepares every reply and does the lookups, your people send and decide.', offerLine: 'Three months for $1', after: 'Then from $39 a month, on the volume you pick.', bg: '#FFFFFF', bd: '#E8E3D9', fg: '#16150F', muted: '#5B564D', rule: '#F0EDE7' },
+          { name: 'AI Team', badge: 'Most businesses', badgeBg: '#EFD9CD', badgeFg: '#5C2410', who: 'AI employees that handle service and back-office work end to end, up to the limits you set.', offerLine: 'Three months for $1', after: 'Then from $97 a month, on the volume you pick.', bg: '#16150F', bd: '#16150F', fg: '#F7F5F1', muted: '#A29D95', rule: '#262521' },
+          { name: 'Call Pilot', badge: 'With voice', badgeBg: '#EDF1F7', badgeFg: '#2F4670', who: 'Everything in AI Team with the phone included: chat volume and voice volume chosen separately.', offerLine: 'Three months for $1', after: 'Then a combined chat and voice plan, agreed on the call.', bg: '#FFFFFF', bd: '#E8E3D9', fg: '#16150F', muted: '#5B564D', rule: '#F0EDE7' }
+        ],
+        pickCta: 'Claim a place and choose on the call',
+        pickCompare: 'See what each plan includes',
+        pickFoot: 'You can switch plan during the three months, and you are not asked to decide before the call.',
+        goPricing: () => { this.setState({ menu: null, page: 'pricing' }); window.scrollTo(0, 0); },
         howKicker: 'How it works',
         howTitle: 'From this page to answering, usually the same day.',
         steps: [
@@ -5788,8 +5895,8 @@ class Component extends DCLogic {
           '$1 in total for three months, charged once.',
           '1,000 credits included every month of the offer.',
           'Connection, onboarding and personal guidance included.',
-          'For the first 50 Shopify stores.',
-          'The offer ends on 31 October 2026 or when 50 stores have joined, whichever comes first.',
+          'For the first 50 businesses.',
+          'The offer ends on 31 October 2026 or when 50 businesses have joined, whichever comes first.',
           'After three months the price follows the plan and usage you choose. Regular pricing starts at $39 a month.',
           'Billing and the three month period start after connection.',
           'Prices are in USD and exclude 18% VAT.'
@@ -5797,13 +5904,13 @@ class Component extends DCLogic {
         ctaTitle: 'One of fifty. Then it closes.',
         ctaBody: 'Leave your details and one of us will call you today or tomorrow. If GOTCHA is not right for your store, we will say so on that call.',
         formTitle: 'Claim your place',
-        fields: ['Your name', 'Your store or domain', 'WhatsApp or email'],
-        submit: 'Claim a place',
+        fields: ['Your name *', 'Phone *', 'Website address *', 'Email (optional)'],
+        submit: 'Leave your details',
         formFoot: 'Answered by Matan or Omer, not a queue. No card, and nothing charged until you are connected.'
       },
       offer: {
         badge: 'Launch offer',
-        barText: 'First three months for $1 in total. For the first 50 Shopify stores.',
+        barText: 'First three months for $1 in total. For the first 50 businesses.',
         tabLabel: '$1 for 3 months',
         tabDisplay: st.offerOpen ? 'none' : 'flex',   // the drawer carries its own handle when open
         title: 'Your first three months for $1.',
@@ -5811,12 +5918,12 @@ class Component extends DCLogic {
         items: [
           '1,000 credits every month',
           'Connection, onboarding and personal guidance from us',
-          'For the first 50 Shopify stores',
+          'For the first 50 businesses',
           'Billing and the three months start once you are connected'
         ],
         bookLabel: 'Book a call', seeMore: 'See more',
         termsLabel: 'Offer terms',
-        terms: 'Offer ends 31 October 2026 or when 50 stores have joined, whichever comes first. After three months you continue on the plan and usage you choose. Regular pricing starts at $39 a month, excluding 18% VAT.',
+        terms: 'Offer ends 31 October 2026 or when 50 businesses have joined, whichever comes first. After three months you continue on the plan and usage you choose. Regular pricing starts at $39 a month, excluding 18% VAT.',
         hideBar: () => this.setState({ barOffer: false }),
         hideAnn: () => this.setState({ barAnn: false }),
         open: () => this.setState({ offerOpen: true }),
@@ -5900,10 +6007,10 @@ class Component extends DCLogic {
       pplans: PRICE.plans,
 
       compare: [
-        { t: 'Included every month', v: 'Allowance', d: 'Each plan includes a monthly credit allowance. It resets on your renewal date and does not roll over.', bg: '#FFFFFF', bd: '#E8E3D9', fg: '#16150F', muted: '#8E887C' },
-        { t: 'Buy more at any time', v: 'Prepaid', d: 'Credit packages are added to your balance and stay there until you use them. Plan credits are consumed first.', bg: '#FFFFFF', bd: '#E8E3D9', fg: '#16150F', muted: '#8E887C' },
-        { t: 'Automatic top-up, on your terms', v: 'Your limit', d: 'You choose when it triggers, how much it buys, and a monthly spending limit. Nothing is charged beyond it.', bg: '#16150F', bd: '#16150F', fg: '#F7F5F1', muted: '#A29D95' },
-        { t: 'When credits run out', v: 'Nothing lost', d: 'AI actions stop until credits are added. Your inbox, history and human agents keep working, and nothing is deleted.', bg: '#FFFFFF', bd: '#E8E3D9', fg: '#16150F', muted: '#8E887C' }
+        { t: 'What you switch on', v: 'Capabilities', d: 'Start with the shared inbox and add voice, autonomous replies, back-office actions or social engagement when you want them. Each one you turn on is priced; each one you turn off stops being charged.', bg: '#FFFFFF', bd: '#E8E3D9', fg: '#16150F', muted: '#8E887C' },
+        { t: 'How much you handle', v: 'Volume', d: 'Conversations, calls and AI actions are metered. A quiet month costs less than a launch month, without renegotiating anything.', bg: '#FFFFFF', bd: '#E8E3D9', fg: '#16150F', muted: '#8E887C' },
+        { t: 'It moves both ways', v: 'Up and down', d: 'Growth raises the bill in proportion to the work done for you. A slower season, or fewer capabilities, lowers it the same month.', bg: '#16150F', bd: '#16150F', fg: '#F7F5F1', muted: '#A29D95' },
+        { t: 'You set the ceiling', v: 'Your limit', d: 'A monthly spending limit you choose. Usage is visible as it happens and nothing is charged beyond the limit you set.', bg: '#FFFFFF', bd: '#E8E3D9', fg: '#16150F', muted: '#8E887C' }
       ],
 
       included: [

@@ -6,25 +6,27 @@
 .scp4:hover{background:#F5F2EC !important}
 .scp5:hover{background:#2A2823 !important;border-color:#2A2823 !important;color:#FAF8F4 !important}
 .scp6:hover{background:#F7F4EE !important}
-.scp7:hover{transform:translateY(-2px) !important}
-.scp8:hover{border-color:#6E6A63 !important;color:#F7F5F1 !important}
-.scp9:hover{border-color:#16150F !important}
-.scpa:hover{border-color:#D8D2C6 !important;transform:translateY(-2px) !important;box-shadow:0 12px 28px rgba(22,21,15,.06) !important}
-.scpb:hover{padding-left:8px !important}
-.scpc:hover{color:#C4552F !important;transform:translate(2px,-2px) !important}
-.scpd:hover{background:#FFFDF9 !important}
-.scpe:hover{border-color:#16150F !important;box-shadow:0 18px 44px rgba(22,21,15,.10) !important}
-.scpf:hover{border-color:#16150F !important;transform:translateY(-3px) !important;box-shadow:0 14px 34px rgba(22,21,15,.08) !important}
-.scpg:hover{background:#C4552F !important;transform:translateY(-1px) !important}
-.scph:hover{background:#FFFFFF !important;color:#16150F !important}
-.scpi:hover{background:#8E3418 !important}
-.scpj:hover{background:#C4552F !important}
-.scpk:hover{background:#EFD9CD !important;transform:translateY(-2px) !important;box-shadow:0 10px 24px rgba(0,0,0,.28) !important}
-.scpl:hover{background:rgba(255,255,255,.14) !important;transform:translateY(-2px) !important}
-.scpm:hover{color:#16150F !important}
-.scpn:hover{transform:translateY(-2px) !important;box-shadow:0 14px 30px rgba(22,21,15,.18) !important}
-.scpo:hover{background:#C4552F !important;transform:translateY(-2px) !important}
-.scpp:hover{background:#C4552F !important;color:#FFFFFF !important}
-.scpq:hover{border-color:#8E8A83 !important}
-.scpr:hover{color:#FFFFFF !important}
-.scps:hover{color:#B9B4AC !important}
+.scp7:focus{border-color:#C4552F !important}
+.scp8:hover{background:#C4552F !important}
+.scp9:hover{border-color:#C4552F !important;color:#8E3418 !important}
+.scpa:hover{transform:translateY(-2px) !important}
+.scpb:hover{border-color:#6E6A63 !important;color:#F7F5F1 !important}
+.scpc:hover{border-color:#16150F !important}
+.scpd:hover{border-color:#D8D2C6 !important;transform:translateY(-2px) !important;box-shadow:0 12px 28px rgba(22,21,15,.06) !important}
+.scpe:hover{padding-left:8px !important}
+.scpf:hover{color:#C4552F !important;transform:translate(2px,-2px) !important}
+.scpg:hover{background:#FFFDF9 !important}
+.scph:hover{border-color:#16150F !important;box-shadow:0 18px 44px rgba(22,21,15,.10) !important}
+.scpi:hover{border-color:#16150F !important;transform:translateY(-3px) !important;box-shadow:0 14px 34px rgba(22,21,15,.08) !important}
+.scpj:hover{background:#C4552F !important;transform:translateY(-1px) !important}
+.scpk:hover{background:#FFFFFF !important;color:#16150F !important}
+.scpl:hover{background:#8E3418 !important}
+.scpm:hover{background:#EFD9CD !important;transform:translateY(-2px) !important;box-shadow:0 10px 24px rgba(0,0,0,.28) !important}
+.scpn:hover{background:rgba(255,255,255,.14) !important;transform:translateY(-2px) !important}
+.scpo:hover{color:#16150F !important}
+.scpp:hover{transform:translateY(-2px) !important;box-shadow:0 14px 30px rgba(22,21,15,.18) !important}
+.scpq:hover{background:#C4552F !important;transform:translateY(-2px) !important}
+.scpr:hover{background:#C4552F !important;color:#FFFFFF !important}
+.scps:hover{border-color:#8E8A83 !important}
+.scpt:hover{color:#FFFFFF !important}
+.scpu:hover{color:#B9B4AC !important}

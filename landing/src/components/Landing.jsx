@@ -865,8 +865,8 @@ class Landing extends React.Component {
       return {
         t, hasMenu: !!key,
         rot: st.menu === key && key ? 'rotate(180deg)' : 'rotate(0deg)',
-        bg: on ? '#FBEEE8' : 'transparent',
-        fg: on ? '#8E3418' : '#16150F',
+        bg: page === 'offer' ? '#C4552F' : (on ? '#FBEEE8' : 'transparent'),
+        fg: page === 'offer' ? '#FFFFFF' : (on ? '#8E3418' : '#16150F'),
         enter: () => { if (key) this.setState({ menu: key }); else this.setState({ menu: null }); },
         click: () => {
           if (page) { this.setState({ menu: null, page }); window.scrollTo(0, 0); return; }
@@ -2875,6 +2875,7 @@ class Landing extends React.Component {
           dm,
           marquee: b.marquee ? b.marquee.concat(b.marquee) : null,   // doubled so the -50% loop is seamless
           shotImg: b.shot ? React.createElement('img', { src: b.shot, alt: b.shotTitle || '', style: { display: 'block', width: '100%' } }) : null,
+          shotShown: (b.shot && ['feat-omnichannel', 'feat-customers', 'feat-studio', 'feat-callpilot', 'feat-analytics', 'feat-approvals'].indexOf(key) >= 0) ? true : null,
           showCaps: !b.marquee,
           tw: key === 'feat-widget' ? this.tryWidget() : null,
           saveDisplay: b.save ? 'block' : 'none',
@@ -2964,17 +2965,17 @@ class Landing extends React.Component {
       offerShown: st.offerOpen ? true : null,
       bars: { offerBar: st.barOffer ? 'flex' : 'none', headTop: (st.barOffer ? 38 : 0) + 'px' },
       op: {
-        badge: 'Launch offer', scarcity: 'For the first 50 Shopify stores only',
+        badge: 'Launch offer', scarcity: 'For the first 50 businesses only',
         h1a: 'Three months of GOTCHA', h1b: 'for one dollar.',
-        sub: 'We are opening the system to the first 50 Shopify stores, and we would rather earn you than charge you. One dollar in total for three months, with us setting it up beside you.',
+        sub: 'We are opening the system to the first 50 businesses, and we would rather earn you than charge you. One dollar in total for three months, with us setting it up beside you.',
         priceLabel: 'The whole offer', price: '$1',
         priceNote: 'In total, for three months, in one payment. Then you continue on the plan and the usage you choose. Regular pricing starts at $39 a month.',
         cta: 'Claim a place', ctaNote: 'Two minutes, no card',
         cards: [
           { icon: 'coins', bg: '#F7F0E2', ic: '#8A6A16', t: '1,000 credits every month', d: 'Enough for a real month of conversations, not a demo. Unused credits reset with each month of the offer.' },
-          { icon: 'plug', bg: '#EDF4E7', ic: '#2E7D5B', t: 'We connect it with you', d: 'Your channels, your Shopify store and your systems. You are not handed a login and left to work it out.' },
+          { icon: 'plug', bg: '#EDF4E7', ic: '#2E7D5B', t: 'We connect it with you', d: 'Your channels, your store or site and your systems. You are not handed a login and left to work it out.' },
           { icon: 'user-round-check', bg: '#EAE4FB', ic: '#4B3E8E', t: 'Onboarding and personal guidance', d: 'We build the first knowledge base with you, set the autonomy limits, and stay reachable while you settle in.' },
-          { icon: 'users-round', bg: '#FBEEE8', ic: '#C4552F', t: 'Only 50 stores', d: 'So that each one gets our attention. When the fiftieth store joins, the offer closes.' }
+          { icon: 'users-round', bg: '#FBEEE8', ic: '#C4552F', t: 'Only 50 businesses', d: 'So that each one gets our attention. When the fiftieth business joins, the offer closes.' }
         ],
         whyKicker: 'Why we are doing this',
         whyTitle: 'We want fifty businesses that will tell us the truth.',
@@ -2984,6 +2985,18 @@ class Landing extends React.Component {
           { n: '02', t: 'We get to build it around you', d: 'The roadmap comes from the fifty stores in this group. What you ask for in these three months is what we build next.' },
           { n: '03', t: 'Nobody is buying blind', d: 'By the time the offer ends you already know what it handled, what it escalated and what it saved you. Then you choose a plan on evidence.' }
         ],
+        pickKicker: 'Your plan, your choice',
+        pickTitle: 'Pick the plan that fits your business. The dollar covers any of them.',
+        pickNote: 'The offer is not tied to one package. Choose the one that matches how you work, and three months of it cost $1 in total.',
+        pick: [
+          { name: 'Co-Pilot', badge: 'Team-led', badgeBg: '#EFEAE1', badgeFg: '#5C4A2A', who: 'AI beside your team: it prepares every reply and does the lookups, your people send and decide.', offerLine: 'Three months for $1', after: 'Then from $39 a month, on the volume you pick.', bg: '#FFFFFF', bd: '#E8E3D9', fg: '#16150F', muted: '#5B564D', rule: '#F0EDE7' },
+          { name: 'AI Team', badge: 'Most businesses', badgeBg: '#EFD9CD', badgeFg: '#5C2410', who: 'AI employees that handle service and back-office work end to end, up to the limits you set.', offerLine: 'Three months for $1', after: 'Then from $97 a month, on the volume you pick.', bg: '#16150F', bd: '#16150F', fg: '#F7F5F1', muted: '#A29D95', rule: '#262521' },
+          { name: 'Call Pilot', badge: 'With voice', badgeBg: '#EDF1F7', badgeFg: '#2F4670', who: 'Everything in AI Team with the phone included: chat volume and voice volume chosen separately.', offerLine: 'Three months for $1', after: 'Then a combined chat and voice plan, agreed on the call.', bg: '#FFFFFF', bd: '#E8E3D9', fg: '#16150F', muted: '#5B564D', rule: '#F0EDE7' }
+        ],
+        pickCta: 'Claim a place and choose on the call',
+        pickCompare: 'See what each plan includes',
+        pickFoot: 'You can switch plan during the three months, and you are not asked to decide before the call.',
+        goPricing: () => { this.setState({ menu: null, page: 'pricing' }); window.scrollTo(0, 0); },
         howKicker: 'How it works',
         howTitle: 'From this page to answering, usually the same day.',
         steps: [
@@ -2997,8 +3010,8 @@ class Landing extends React.Component {
           '$1 in total for three months, charged once.',
           '1,000 credits included every month of the offer.',
           'Connection, onboarding and personal guidance included.',
-          'For the first 50 Shopify stores.',
-          'The offer ends on 31 October 2026 or when 50 stores have joined, whichever comes first.',
+          'For the first 50 businesses.',
+          'The offer ends on 31 October 2026 or when 50 businesses have joined, whichever comes first.',
           'After three months the price follows the plan and usage you choose. Regular pricing starts at $39 a month.',
           'Billing and the three month period start after connection.',
           'Prices are in USD and exclude 18% VAT.'
@@ -3006,13 +3019,13 @@ class Landing extends React.Component {
         ctaTitle: 'One of fifty. Then it closes.',
         ctaBody: 'Leave your details and one of us will call you today or tomorrow. If GOTCHA is not right for your store, we will say so on that call.',
         formTitle: 'Claim your place',
-        fields: ['Your name', 'Your store or domain', 'WhatsApp or email'],
-        submit: 'Claim a place',
+        fields: ['Your name *', 'Phone *', 'Website address *', 'Email (optional)'],
+        submit: 'Leave your details',
         formFoot: 'Answered by Matan or Omer, not a queue. No card, and nothing charged until you are connected.'
       },
       offer: {
         badge: 'Launch offer',
-        barText: 'First three months for $1 in total. For the first 50 Shopify stores.',
+        barText: 'First three months for $1 in total. For the first 50 businesses.',
         tabLabel: '$1 for 3 months',
         tabDisplay: st.offerOpen ? 'none' : 'flex',   // the drawer carries its own handle when open
         title: 'Your first three months for $1.',
@@ -3020,12 +3033,12 @@ class Landing extends React.Component {
         items: [
           '1,000 credits every month',
           'Connection, onboarding and personal guidance from us',
-          'For the first 50 Shopify stores',
+          'For the first 50 businesses',
           'Billing and the three months start once you are connected'
         ],
         bookLabel: 'Book a call', seeMore: 'See more',
         termsLabel: 'Offer terms',
-        terms: 'Offer ends 31 October 2026 or when 50 stores have joined, whichever comes first. After three months you continue on the plan and usage you choose. Regular pricing starts at $39 a month, excluding 18% VAT.',
+        terms: 'Offer ends 31 October 2026 or when 50 businesses have joined, whichever comes first. After three months you continue on the plan and usage you choose. Regular pricing starts at $39 a month, excluding 18% VAT.',
         hideBar: () => this.setState({ barOffer: false }),
         hideAnn: () => this.setState({ barAnn: false }),
         open: () => this.setState({ offerOpen: true }),
@@ -3109,10 +3122,10 @@ class Landing extends React.Component {
       pplans: PRICE.plans,
 
       compare: [
-        { t: 'Included every month', v: 'Allowance', d: 'Each plan includes a monthly credit allowance. It resets on your renewal date and does not roll over.', bg: '#FFFFFF', bd: '#E8E3D9', fg: '#16150F', muted: '#8E887C' },
-        { t: 'Buy more at any time', v: 'Prepaid', d: 'Credit packages are added to your balance and stay there until you use them. Plan credits are consumed first.', bg: '#FFFFFF', bd: '#E8E3D9', fg: '#16150F', muted: '#8E887C' },
-        { t: 'Automatic top-up, on your terms', v: 'Your limit', d: 'You choose when it triggers, how much it buys, and a monthly spending limit. Nothing is charged beyond it.', bg: '#16150F', bd: '#16150F', fg: '#F7F5F1', muted: '#A29D95' },
-        { t: 'When credits run out', v: 'Nothing lost', d: 'AI actions stop until credits are added. Your inbox, history and human agents keep working, and nothing is deleted.', bg: '#FFFFFF', bd: '#E8E3D9', fg: '#16150F', muted: '#8E887C' }
+        { t: 'What you switch on', v: 'Capabilities', d: 'Start with the shared inbox and add voice, autonomous replies, back-office actions or social engagement when you want them. Each one you turn on is priced; each one you turn off stops being charged.', bg: '#FFFFFF', bd: '#E8E3D9', fg: '#16150F', muted: '#8E887C' },
+        { t: 'How much you handle', v: 'Volume', d: 'Conversations, calls and AI actions are metered. A quiet month costs less than a launch month, without renegotiating anything.', bg: '#FFFFFF', bd: '#E8E3D9', fg: '#16150F', muted: '#8E887C' },
+        { t: 'It moves both ways', v: 'Up and down', d: 'Growth raises the bill in proportion to the work done for you. A slower season, or fewer capabilities, lowers it the same month.', bg: '#16150F', bd: '#16150F', fg: '#F7F5F1', muted: '#A29D95' },
+        { t: 'You set the ceiling', v: 'Your limit', d: 'A monthly spending limit you choose. Usage is visible as it happens and nothing is charged beyond the limit you set.', bg: '#FFFFFF', bd: '#E8E3D9', fg: '#16150F', muted: '#8E887C' }
       ],
 
       included: [
