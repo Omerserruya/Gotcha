@@ -47,6 +47,17 @@ export const PAGE_BY_PATH: Record<string, string> = {
   'solutions/front-line': 'sol-agent',
 };
 
+/**
+ * Pages the design knows about that this app serves as a separate section
+ * rather than as one of the landing's in-page views. Clicking one of these is
+ * a real navigation, not a state change.
+ */
+export const EXTERNAL_PAGE: Record<string, string> = {
+  // The design's help hub is a mockup - invented titles, invented counts. The
+  // Help Center is a real section with categories and articles.
+  'co-help': '/help',
+};
+
 export const PATH_BY_PAGE: Record<string, string> = Object.fromEntries(
   Object.entries(PAGE_BY_PATH).map(([path, page]) => [page, '/' + path]),
 );

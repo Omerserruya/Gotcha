@@ -58,7 +58,17 @@ const RENDER = `
       console.error('renderVals():', e);
       return React.createElement('pre', { style: { padding: 24, color: '#8E3418' } }, String(e && e.stack || e));
     }
-    return React.createElement(Template, { v: vals });
+    // UrlSync gives state.page a real address. The design never touched the
+    // URL, so without it every one of these pages is unlinkable.
+    return React.createElement(
+      React.Fragment,
+      null,
+      React.createElement(UrlSync, {
+        page: this.state.page,
+        onNavigate: (page) => this.setState({ page, menu: null }),
+      }),
+      React.createElement(Template, { v: vals }),
+    );
   }
 `;
 
@@ -75,6 +85,7 @@ import React from 'react';
 import Template from '@/generated/Template';
 import { HE_DICT } from '@/generated/he';
 import { getLucide } from '@/lib/lucide';
+import UrlSync from '@/components/UrlSync';
 
 `;
 
