@@ -71,3 +71,92 @@
 .scps:hover{color:#FFFFFF !important}
 .scpt:hover{background:#C4552F !important;color:#FFFFFF !important;transform:translateY(-2px) !important}
 .scpu:hover{color:#B9B4AC !important}
+
+/* Mobile overrides, derived from the inline styles they correct. Every rule
+   is inside this query, so above 1023px the design renders untouched. */
+@media (max-width:1023px){
+  /* The design has no header layout below its 1100px breakpoint; MobileNav
+     replaces it and reads these hidden elements for its labels. */
+  [data-nav-item],[data-nav-secondary]{display:none !important}
+
+  /* The launch bar keeps its single 38px row: the design already truncates
+     its copy with an ellipsis, and the header below is positioned against
+     that exact height. Letting it wrap pushed the header down onto the page.
+     The badge and the terms link go instead - the sentence and its button are
+     what the bar is for. */
+  [style*="z-index:92"]{padding:0 34px 0 14px !important;gap:10px !important}
+  [style*="z-index:92"] > span:first-child{display:none !important}
+  [style*="z-index:92"] > span[style*="text-decoration:underline"]{display:none !important}
+
+  /* The offer rail runs down the right edge of a 1440 canvas. On a phone it
+     sits on top of the content, and the same offer is already in the bar. */
+  [style*="z-index:89"]{display:none !important}
+
+  /* Wide demonstration blocks - transcripts, comparison rows - are built from
+     nowrap columns that cannot reflow. Let them scroll in place rather than
+     carrying the whole page sideways with them. */
+  .mo-scroll-x{overflow-x:auto !important;-webkit-overflow-scrolling:touch}
+  .mo0{padding:0px 20px 0px 24px !important}
+  .mo1{white-space:normal !important}
+  .mo2{flex-wrap:wrap !important}
+  .mo3{width:100% !important;max-width:100% !important}
+  .mo4{font-size:28px !important;overflow-wrap:break-word !important}
+  .mo5{grid-template-columns:1fr !important}
+  .mo6{max-width:100% !important}
+  .mo7{padding:26px 20px !important}
+  .mo8{font-size:34px !important;overflow-wrap:break-word !important;max-width:100% !important}
+  .mo9{width:100% !important;max-width:100% !important;padding:22px 20px !important}
+  .moa{font-size:26px !important;overflow-wrap:break-word !important}
+  .mob{padding:22px 20px !important}
+  .moc{flex-wrap:wrap !important;padding:14px 20px !important}
+  .mod{padding:18px 20px !important}
+  .moe{flex-wrap:wrap !important;padding:40px 20px !important}
+  .mof{flex-wrap:wrap !important;padding:20px !important}
+  .mog{font-size:28px !important;overflow-wrap:break-word !important;max-width:100% !important}
+  .moh{grid-template-columns:1fr !important;max-width:100% !important}
+  .moi{font-size:26px !important;overflow-wrap:break-word !important;max-width:100% !important}
+  .moj{padding:20px !important}
+  .mok{padding:15px 20px !important}
+  .mol{font-size:30px !important;overflow-wrap:break-word !important}
+  .mom{padding:38px 20px !important}
+  .mon{padding:48px 20px !important}
+  .moo{grid-template-columns:1fr !important;padding:30px 20px !important}
+  .mop{flex-wrap:wrap !important;padding:15px 20px !important}
+  .moq{padding:16px 20px !important}
+  .mor{grid-template-columns:1fr !important;padding:48px 20px !important}
+  .mos{padding:28px 20px 24px !important}
+  .mot{font-size:24px !important;overflow-wrap:break-word !important}
+  .mou{padding:30px 20px !important}
+  .mov{padding:26px 20px 18px !important}
+  .mow{padding:18px 20px 24px !important}
+  .mox{font-size:32px !important;overflow-wrap:break-word !important;max-width:100% !important}
+  .moy{flex-wrap:wrap !important;max-width:100% !important}
+  .moz{padding:34px 20px !important}
+  .mo10{font-size:24px !important;overflow-wrap:break-word !important;max-width:100% !important}
+  .mo11{padding:24px 20px !important}
+  .mo12{min-width:0 !important;padding:26px 20px !important}
+  .mo13{font-size:33px !important;overflow-wrap:break-word !important;max-width:100% !important}
+  .mo14{padding:34px 20px 36px !important}
+  .mo15{padding:36px 20px !important}
+  .mo16{font-size:38px !important;overflow-wrap:break-word !important}
+  .mo17{width:100% !important;max-width:100% !important;padding:28px 20px 30px !important}
+  .mo18{font-size:35px !important;overflow-wrap:break-word !important}
+  .mo19{padding:28px 20px 30px !important}
+  .mo1a{font-size:27px !important;overflow-wrap:break-word !important}
+  .mo1b{flex-wrap:wrap !important;padding:46px 20px !important}
+  .mo1c{min-width:0 !important}
+  .mo1d{max-width:100% !important;padding:172px 20px 0px !important}
+  .mo1e{font-size:38px !important;overflow-wrap:break-word !important;max-width:100% !important}
+  .mo1f{white-space:normal !important;padding:15px 20px !important}
+  .mo1g{flex-wrap:wrap !important;white-space:normal !important}
+  .mo1h{padding:34px 20px 30px !important}
+  .mo1i{min-width:0 !important;padding:28px 20px !important}
+  .mo1j{min-width:0 !important;padding:34px 20px !important}
+  .mo1k{flex-wrap:wrap !important;padding:34px 20px 28px !important}
+  .mo1l{width:100% !important;max-width:100% !important;padding:26px 20px !important}
+  .mo1m{flex-wrap:wrap !important;min-width:0 !important;padding:26px 20px !important}
+  .mo1n{min-width:0 !important;padding:22px 20px !important}
+  .mo1o{flex-wrap:wrap !important;padding:56px 20px !important}
+  .mo1p{font-size:30px !important;overflow-wrap:break-word !important;max-width:100% !important}
+  .mo1q{flex-wrap:wrap !important;padding:20px 20px !important}
+}

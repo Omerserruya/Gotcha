@@ -20,6 +20,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DESIGN = path.join(ROOT, 'design');
 import { createRequire } from 'node:module';
+import { mobileOverride } from './mobile-rules.mjs';
 
 const require = createRequire(path.join(ROOT, 'package.json'));
 const parse5 = require('parse5');
@@ -61,6 +62,67 @@ function importantify(css) {
   decls.push(css.slice(start));
   return decls.map((d) => d.trim()).filter(Boolean)
     .map((d) => (/!\s*important$/i.test(d) ? d : d + ' !important')).join(';');
+}
+
+/* ─────────── mobile overrides ─────────── */
+
+/**
+ * The phone breakpoint. Above it none of these rules match, which is what keeps
+ * the desktop rendering a byte-faithful clone of the design.
+ */
+const MOBILE_MAX = 1023;
+
+/**
+ * Structural mobile rules that do not come from a single inline style.
+ *
+ * The header is the one part of the design with no arrangement that fits a
+ * phone: a 62px pill holding a logo, six nav items and two buttons. Its items
+ * are hidden here and MobileNav takes over, reading its labels back out of them.
+ */
+const MOBILE_STRUCTURAL = [
+  '/* The design has no header layout below its 1100px breakpoint; MobileNav',
+  '   replaces it and reads these hidden elements for its labels. */',
+  '[data-nav-item],[data-nav-secondary]{display:none !important}',
+  '',
+  "/* The launch bar keeps its single 38px row: the design already truncates",
+  "   its copy with an ellipsis, and the header below is positioned against",
+  "   that exact height. Letting it wrap pushed the header down onto the page.",
+  "   The badge and the terms link go instead - the sentence and its button are",
+  "   what the bar is for. */",
+  '[style*="z-index:92"]{padding:0 34px 0 14px !important;gap:10px !important}',
+  '[style*="z-index:92"] > span:first-child{display:none !important}',
+  '[style*="z-index:92"] > span[style*="text-decoration:underline"]{display:none !important}',
+  '',
+  "/* The offer rail runs down the right edge of a 1440 canvas. On a phone it",
+  "   sits on top of the content, and the same offer is already in the bar. */",
+  '[style*="z-index:89"]{display:none !important}',
+  '',
+  '/* Wide demonstration blocks - transcripts, comparison rows - are built from',
+  '   nowrap columns that cannot reflow. Let them scroll in place rather than',
+  '   carrying the whole page sideways with them. */',
+  '.mo-scroll-x{overflow-x:auto !important;-webkit-overflow-scrolling:touch}',
+];
+
+const mobileRules = [];
+const mobileCache = new Map();
+
+/** A class carrying one element's mobile override, deduped by the override. */
+function mobileClass(css) {
+  const override = mobileOverride(css);
+  if (!override) return null;
+  const hit = mobileCache.get(override);
+  if (hit) return hit;
+  const cls = 'mo' + mobileCache.size.toString(36);
+  // !important because the declaration it corrects is an inline style.
+  const body = override
+    .split(';')
+    .map((d) => d.trim())
+    .filter(Boolean)
+    .map((d) => d + ' !important')
+    .join(';');
+  mobileRules.push(`.${cls}{${body}}`);
+  mobileCache.set(override, cls);
+  return cls;
 }
 
 function pseudoClass(pseudo, css) {
@@ -222,7 +284,16 @@ function emitNode(node, scope, indent) {
   for (const [name, value] of Object.entries(attrs)) {
     if (DROP.has(name)) continue;
 
-    if (name === 'style') { props.push(`style=${styleValue(value, scope)}`); continue; }
+    if (name === 'style') {
+      props.push(`style=${styleValue(value, scope)}`);
+      // The raw value, interpolations included: a declaration whose value is
+      // computed still has to be constrained on a phone, and stripping it first
+      // hid exactly the ones that were hurting - `max-width:{{ feat.textMax }}`
+      // resolves to `none` on every product page.
+      const cls = mobileClass(value);
+      if (cls) classes.push(cls);
+      continue;
+    }
 
     if (name.startsWith('style-')) {
       const pseudo = name.slice(6);
@@ -397,11 +468,18 @@ fs.writeFileSync(path.join(ROOT, 'src/app/globals.css'),
   '   inline style attributes. Re-run `npm run design:sync`. */\n' +
   helmetCss.trim() + '\n\n' +
   '/* style-<pseudo> attributes, as real classes. */\n' +
-  pseudoRules.join('\n') + '\n');
+  pseudoRules.join('\n') + '\n\n' +
+  `/* Mobile overrides, derived from the inline styles they correct. Every rule\n` +
+  `   is inside this query, so above ${MOBILE_MAX}px the design renders untouched. */\n` +
+  `@media (max-width:${MOBILE_MAX}px){\n` +
+  MOBILE_STRUCTURAL.map((r) => (r ? '  ' + r : '')).join('\n') + '\n' +
+  mobileRules.map((r) => '  ' + r).join('\n') +
+  '\n}\n');
 
 console.log('Template.jsx :', tsx.split('\n').length, 'lines');
 console.log('Chrome.jsx   :', chromeSrc.split('\n').length, 'lines (chrome + a hole for the page)');
 console.log('globals.css  :', pseudoRules.length, 'pseudo rules +', helmetCss.trim().split(String.fromCharCode(10)).length, 'lines of design CSS');
+console.log('mobile       :', mobileRules.length, 'derived rules under', MOBILE_MAX + 'px');
 if (warnings.length) {
   console.log('\nwarnings:');
   warnings.forEach((w) => console.log('  -', w));

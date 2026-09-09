@@ -55,6 +55,7 @@ export default function DocView({ en, he, slug }: { en: Doc; he: Doc; slug: stri
         </div>
 
         <div
+          className="doc-grid"
           style={{
             display: 'grid',
             gap: 44,
@@ -69,6 +70,7 @@ export default function DocView({ en, he, slug }: { en: Doc; he: Doc; slug: stri
 
           {headings.length > 2 && (
             <nav
+              className="doc-toc"
               style={{
                 position: 'sticky',
                 top: 92,

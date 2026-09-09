@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import CookieNotice from '@/components/CookieNotice';
+import MobileNav from '@/components/MobileNav';
 import './globals.css';
 import './site.css';
 
@@ -31,6 +32,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {children}
         {/* Sits above every page, including the compiled landing, because the
             first visit is what it is asking about. */}
+        {/* Takes over the header below the design's breakpoint. */}
+        <MobileNav />
         <CookieNotice />
       </body>
     </html>

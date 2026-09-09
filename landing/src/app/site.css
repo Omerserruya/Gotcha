@@ -48,3 +48,35 @@ article li {
 article a {
   text-underline-offset: 2px;
 }
+
+/*
+ * Phone layout for the hand-written sections.
+ *
+ * The landing's mobile rules are derived from the design's inline styles by
+ * tools/mobile-rules.mjs; these components are written here, so their phone
+ * behaviour is written here too. Same breakpoint as the generated sheet.
+ */
+@media (max-width: 1023px) {
+  /* A document and its contents list stop being side by side. The list moves
+     above the text and stops sticking - on a phone it is a table of contents,
+     not a rail that follows you down a 40-page contract. */
+  .doc-grid {
+    grid-template-columns: 1fr !important;
+    gap: 26px !important;
+  }
+  .doc-toc {
+    position: static !important;
+    order: -1;
+  }
+
+  /* Prose sets its measure in characters, which is wider than the screen. */
+  article p,
+  article li {
+    max-width: 100%;
+  }
+
+  /* A long URL or an email address in a contract must not push the page out. */
+  article {
+    overflow-wrap: break-word;
+  }
+}
