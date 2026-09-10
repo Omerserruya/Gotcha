@@ -297,6 +297,74 @@ describe("public widget CORS is emitted exactly once", () => {
 });
 
 /**
+ * Each public section has ONE address.
+ *
+ * The Help Center and the Trust Center are sections of the marketing build, and
+ * the apex served them as well as their own hostnames did - so every article
+ * and every legal document had two working URLs, and the one people reached by
+ * clicking through the site was gotcha.co.il/help rather than
+ * help.gotcha.co.il. The reverse held too: the marketing header and footer wrap
+ * the help articles, and their links resolved against the help host, where
+ * `location /` maps an unprefixed path onto /help$uri - so /about quietly
+ * rendered the help index instead of the About page.
+ */
+describe("section hostnames own their sections", () => {
+  const mkt = () => find("gotcha.co.il")!;
+  const help = () => find("help.gotcha.co.il")!;
+  const trust = () => find("trust.gotcha.co.il")!;
+
+  it("sends /help from the apex to the Help Center, without the prefix", () => {
+    expect(mkt().body).toMatch(
+      /rewrite\s+\^\/help\/\?\(\.\*\)\$\s+https:\/\/help\.gotcha\.co\.il\/\$1\s+redirect/,
+    );
+  });
+
+  it("does not also serve those two sections from the apex allowlist", () => {
+    const allow = /location\s+~\s+\^\/\(([^)]+)\)\(\/\|\$\)/.exec(mkt().body);
+    expect(allow, "the marketing allowlist must still exist").not.toBeNull();
+    const routes = allow![1].split("|");
+    expect(routes, "help has its own hostname").not.toContain("help");
+    expect(routes, "legal has its own hostname").not.toContain("legal");
+  });
+
+  it("keeps serving the legal documents until the Trust Center has DNS", () => {
+    // An unresolvable redirect would take them offline, so the redirect is
+    // guarded and the try_files that serves them stays underneath it.
+    const legal = /location\s+\^~\s+\/legal\s*\{([\s\S]*?)\n {8}\}/.exec(mkt().body);
+    expect(legal, "the apex must handle /legal explicitly").not.toBeNull();
+    expect(legal![1]).toMatch(/if\s+\(\$trust_public_url\s*!=\s*""\)/);
+    expect(legal![1], "the documents must still be served when it is unset").toMatch(/try_files/);
+    expect(CONF, "the host must come from the environment").toMatch(
+      /map\s+\$host\s+\$trust_public_url\s*\{[\s\S]*?\$\{TRUST_PUBLIC_URL\}/,
+    );
+  });
+
+  it("passes TRUST_PUBLIC_URL through envsubst", () => {
+    // Same trap as PUBLIC_PRICING_ENABLED: a variable the allowlist omits is
+    // left as the literal ${NAME}, which is never empty - so the guard above
+    // would read as "set" and redirect at a hostname that does not resolve.
+    const dockerfile = fs.readFileSync(path.join(ROOT, "gateway/Dockerfile.prod"), "utf8");
+    expect(dockerfile).toContain("$TRUST_PUBLIC_URL");
+  });
+
+  it("sends the shared chrome's links from the section hosts back to the apex", () => {
+    for (const [name, block] of [["help", help()], ["trust", trust()]] as const) {
+      expect(block.body, `${name} must return marketing paths to the apex`).toMatch(
+        /location\s+~\s+\^\/\([^)]*about[^)]*\)\(\/\|\$\)\s*\{\s*\n\s*return\s+302\s+https:\/\/gotcha\.co\.il\$request_uri/,
+      );
+    }
+  });
+
+  it("keeps /privacy-policy on the Trust Center, where it is a document", () => {
+    // It is a marketing route on the apex and a legal slug here. Sending it
+    // away would make the Trust Center's most-read page the one it cannot serve.
+    const away = /location\s+~\s+\^\/\(([^)]+)\)\(\/\|\$\)\s*\{\s*\n\s*return\s+302/.exec(trust().body);
+    expect(away).not.toBeNull();
+    expect(away![1].split("|")).not.toContain("privacy-policy");
+  });
+});
+
+/**
  * The typefaces the design is drawn in must be allowed to load.
  *
  * style-src was 'self' 'unsafe-inline', which blocked the Google Fonts

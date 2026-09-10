@@ -66,4 +66,4 @@ COPY gateway/nginx.prod.conf.template /etc/nginx/nginx.conf.template
 #
 # FRONTEND_PORT is deliberately absent: prod has no frontend upstream, it
 # serves the static export baked in above.
-CMD ["sh", "-c", "envsubst '$AUTH_PORT $CONVERSATION_PORT $WEBHOOK_PORT $ANALYTICS_PORT $CHATBOT_PORT $AI_PORT $VOICE_COPILOT_PORT $NOTIFICATIONS_PORT $BILLING_PORT $AUTHENTIK_PORT $PUBLIC_PRICING_ENABLED' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf && nginx -g 'daemon off;'"]
+CMD ["sh", "-c", "envsubst '$AUTH_PORT $CONVERSATION_PORT $WEBHOOK_PORT $ANALYTICS_PORT $CHATBOT_PORT $AI_PORT $VOICE_COPILOT_PORT $NOTIFICATIONS_PORT $BILLING_PORT $AUTHENTIK_PORT $PUBLIC_PRICING_ENABLED $TRUST_PUBLIC_URL' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf && nginx -g 'daemon off;'"]
