@@ -40,8 +40,16 @@ export const metadata: Metadata = {
     "customer service automation software",
     "ai-powered helpdesk",
   ],
+  // Same two files as the marketing build, for the same reason: the SVG carries
+  // both colourways in one file, so a dark-mode tab does not depend on Chrome
+  // honouring `media` on a favicon link, which it does not. The .ico is the
+  // fallback for anything that cannot read an SVG icon.
   icons: {
-    icon: "/favicon.ico",
+    icon: [
+      { url: "/favicon.ico", sizes: "16x16 32x32 48x48" },
+      { url: "/favicon.svg", type: "image/svg+xml" },
+    ],
+    shortcut: "/favicon.ico",
     apple: "/apple-touch-icon.png",
   },
   openGraph: {

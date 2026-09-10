@@ -1,15 +1,27 @@
 /**
- * Builds the tab icons from the design's own logo marks.
+ * Builds the tab icons from the design's own logo mark.
  *
- * The design ships the mark at ~800-1250px in two colourways. Pointing a
- * <link rel="icon"> straight at one of those would send 380KB for a 32px slot,
- * so they are downsampled here.
+ * ONE icon decides the colour, and it is the SVG.
  *
- * Both are emitted, and the layout serves them by `prefers-color-scheme`. The
- * light mark is white - measured mean luminance 250/255 - so on its own it is
- * invisible against a light tab strip, which is where most people would be
- * looking for it. The dark mark covers that case and the white one is used
- * where it was designed to work.
+ * The obvious arrangement - a black PNG at `media="(prefers-color-scheme:
+ * light)"` and a white one at `dark` - is correct markup that Chrome does not
+ * implement: it ignores the `media` attribute on a favicon link entirely, then
+ * picks by size and type. So a dark-mode visitor got whichever file Chrome
+ * happened to prefer, which was the black one, on a dark tab strip. Firefox and
+ * Safari honoured the query and looked right, which is what made it read as a
+ * cache problem rather than a browser difference.
+ *
+ * An SVG favicon carries both colourways INSIDE the file, as a `@media` rule on
+ * a fill, so the browser never has to choose between two files. Chrome, Firefox
+ * and Safari 15+ all support that, and all three prefer an SVG icon when one is
+ * offered. The .ico stays as the fallback for anything older, in the mark's
+ * dark colourway, because a fallback cannot know the theme and a tab strip is
+ * light far more often than not.
+ *
+ * The mark is a flat silhouette - measured: one RGB value over an alpha channel
+ * - so the SVG carries the alpha as a mask and fills it with a colour, rather
+ * than embedding two bitmaps and hiding one. One image, one fill rule, and the
+ * anti-aliased edges survive intact.
  *
  * No image library: there is none in this repo and adding one for a resize is
  * not worth a dependency. PNG is a filter byte per row over zlib, and a box
@@ -215,28 +227,86 @@ function encodeIco(frames) {
   return Buffer.concat([header, ...frames.map((f) => f.bytes)]);
 }
 
-const JOBS = [
-  ['solid-icon-light.png', 'favicon-light', [32, 180]],
-  ['solid-icon-dark.png', 'favicon-dark', [32, 180]],
-];
-
-for (const [src, name, sizes] of JOBS) {
-  const img = decodePng(readFileSync(join(SRC, src)));
-  for (const size of sizes) {
-    const file = join(OUT, `${name}-${size}.png`);
-    const bytes = encodePng(resize(img, size));
-    writeFileSync(file, bytes);
-    console.log(`${src} -> ${name}-${size}.png  ${img.width}x${img.height} to ${size}x${size}, ${(bytes.length / 1024).toFixed(1)} KB`);
+/**
+ * Turn the mark's alpha channel into an opaque greyscale image.
+ *
+ * An SVG `<mask>` is a luminance mask by default, so a pixel's contribution is
+ * its brightness times its alpha. Feeding it the mark directly would work only
+ * because that mark happens to be white; the black one would mask everything
+ * away. Moving alpha into the colour channels and making the image opaque says
+ * what is meant - this is coverage, not a picture - and works from either
+ * colourway.
+ */
+function alphaToLuminance(img) {
+  const out = Buffer.alloc(img.rgba.length);
+  for (let i = 0; i < img.rgba.length; i += 4) {
+    const a = img.rgba[i + 3];
+    out[i] = out[i + 1] = out[i + 2] = a;
+    out[i + 3] = 255;
   }
+  return { width: img.width, height: img.height, rgba: out };
 }
 
-// The dark mark, because a browser that falls back to the .ico is not telling
-// us which theme its tab strip is in, and the tab strip is light for most
-// people. The white mark stays available through the media-scoped PNG links.
+/** Composite over an opaque ground, for the icons that may not be transparent. */
+function flatten(img, [r, g, b]) {
+  const out = Buffer.alloc(img.rgba.length);
+  for (let i = 0; i < img.rgba.length; i += 4) {
+    const a = img.rgba[i + 3] / 255;
+    out[i] = Math.round(img.rgba[i] * a + r * (1 - a));
+    out[i + 1] = Math.round(img.rgba[i + 1] * a + g * (1 - a));
+    out[i + 2] = Math.round(img.rgba[i + 2] * a + b * (1 - a));
+    out[i + 3] = 255;
+  }
+  return { width: img.width, height: img.height, rgba: out };
+}
+
+/** The design's ink and its page ground. Both appear in "GOTCHA Landing.dc.html". */
+const INK = '#16150F';
+const PAPER = [0xfa, 0xf8, 0xf4];
+
+const mark = decodePng(readFileSync(join(SRC, 'solid-icon-dark.png')));
+
+// ── favicon.svg - the one that decides the colour ────────────────────────────
+//
+// 128px of coverage data: an SVG favicon is drawn at 16 to 64px in practice, and
+// past 128 the extra bytes buy nothing a tab will ever show. The mask is the
+// mark's own alpha, so the shape is exact rather than traced.
 {
-  const img = decodePng(readFileSync(join(SRC, 'solid-icon-dark.png')));
-  const frames = [16, 32, 48].map((size) => ({ size, bytes: encodePng(resize(img, size)) }));
+  const coverage = encodePng(alphaToLuminance(resize(mark, 128)));
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <title>GOTCHA</title>
+  <style>
+    .mark { fill: ${INK} }
+    @media (prefers-color-scheme: dark) { .mark { fill: #FFFFFF } }
+  </style>
+  <mask id="m">
+    <image width="128" height="128" href="data:image/png;base64,${coverage.toString('base64')}"/>
+  </mask>
+  <rect class="mark" width="128" height="128" mask="url(#m)"/>
+</svg>
+`;
+  writeFileSync(join(OUT, 'favicon.svg'), svg);
+  console.log(`solid-icon-dark.png -> favicon.svg   128px mask, ${(Buffer.byteLength(svg) / 1024).toFixed(1)} KB`);
+}
+
+// ── favicon.ico - the fallback, for anything that cannot read the SVG ────────
+//
+// The dark colourway: a fallback is not told which theme the tab strip is in,
+// and a light strip is the common case.
+{
+  const frames = [16, 32, 48].map((size) => ({ size, bytes: encodePng(resize(mark, size)) }));
   const ico = encodeIco(frames);
   writeFileSync(join(OUT, 'favicon.ico'), ico);
-  console.log(`solid-icon-dark.png -> favicon.ico  ${frames.map((f) => f.size).join('/')}px, ${(ico.length / 1024).toFixed(1)} KB`);
+  console.log(`solid-icon-dark.png -> favicon.ico   ${frames.map((f) => f.size).join('/')}px, ${(ico.length / 1024).toFixed(1)} KB`);
+}
+
+// ── apple-touch-icon.png - flattened onto the brand ground ───────────────────
+//
+// iOS does not honour transparency here: it composites a home-screen icon onto
+// an opaque tile, historically black. A black mark on transparent therefore
+// arrives as a black mark on black. On the design's paper it is the logo.
+{
+  const bytes = encodePng(flatten(resize(mark, 180), PAPER));
+  writeFileSync(join(OUT, 'apple-touch-icon.png'), bytes);
+  console.log(`solid-icon-dark.png -> apple-touch-icon.png  180px on paper, ${(bytes.length / 1024).toFixed(1)} KB`);
 }
