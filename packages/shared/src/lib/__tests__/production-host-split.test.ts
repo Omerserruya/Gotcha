@@ -295,3 +295,36 @@ describe("public widget CORS is emitted exactly once", () => {
     });
   }
 });
+
+/**
+ * The typefaces the design is drawn in must be allowed to load.
+ *
+ * style-src was 'self' 'unsafe-inline', which blocked the Google Fonts
+ * stylesheets every page links - so Archivo, Instrument Serif, IBM Plex Mono
+ * and Heebo were all refused and the site fell back to a system font. Nothing
+ * failed server-side; it showed only as the wrong typography and a console
+ * message.
+ */
+describe("content security policy allows what the pages actually load", () => {
+  const policies = CONF.match(/add_header\s+Content-Security-Policy\s+"[^"]+"/g) ?? [];
+
+  it("finds the policies", () => {
+    expect(policies.length).toBeGreaterThan(10);
+  });
+
+  it("allows the Google Fonts stylesheet wherever a style-src is declared", () => {
+    const offenders = policies.filter(
+      (p) => /style-src/.test(p) && !/style-src[^;]*fonts\.googleapis\.com/.test(p),
+    );
+    expect(offenders, "a style-src that omits it blocks the design's typefaces").toEqual([]);
+  });
+
+  it("allows Cloudflare's analytics beacon wherever scripts are allowed at all", () => {
+    // Cloudflare injects it at the edge on every proxied response, so a
+    // script-src that omits it logs a violation on every single page view.
+    const offenders = policies.filter(
+      (p) => /script-src\s+'self'/.test(p) && !/script-src[^;]*static\.cloudflareinsights\.com/.test(p),
+    );
+    expect(offenders).toEqual([]);
+  });
+});
