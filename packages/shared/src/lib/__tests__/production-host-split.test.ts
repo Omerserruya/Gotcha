@@ -396,3 +396,29 @@ describe("content security policy allows what the pages actually load", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+/**
+ * A section host must serve the files its pages ask for.
+ *
+ * Both section vhosts end in a catch-all that maps an unprefixed path onto
+ * their own section - /x becomes /help/x - which is right for a page and wrong
+ * for an asset: a missing asset does not 404, it comes back as the section
+ * index. /assets/favicon.svg on help.gotcha.co.il returned 43KB of HTML where
+ * the browser asked for an icon, so the Help Center had no tab icon and
+ * nothing in any log said so.
+ */
+describe("section hosts serve their assets before the catch-all", () => {
+  for (const name of ["help.gotcha.co.il", "trust.gotcha.co.il"]) {
+    it(`${name}: passes /assets/ through untouched`, () => {
+      // The location line of every block whose body is a bare pass-through.
+      const passthrough = [...find(name)!.body.matchAll(
+        /^(\s*location\s+[^\n{]+)\{\s*\n\s*try_files\s+\$uri\s+=404;\s*\n\s*\}/gm,
+      )].map((m) => m[1]);
+      expect(passthrough.length, `${name} must serve some files as-is`).toBeGreaterThan(0);
+      expect(
+        passthrough.join('\n'),
+        "the marketing build puts every referenced file under assets/, tab icons included",
+      ).toMatch(/assets/);
+    });
+  }
+});
