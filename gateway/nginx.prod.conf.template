@@ -83,6 +83,16 @@ http {
         default "${PUBLIC_PRICING_ENABLED}";
     }
 
+    # Where the Trust Center lives, when it has a hostname of its own.
+    #
+    # Empty is the honest default: trust.gotcha.co.il has no DNS record yet, and
+    # redirecting /legal at a name that does not resolve would take every legal
+    # document offline. While it is empty the apex serves them itself. Set it to
+    # https://trust.gotcha.co.il once the record exists.
+    map $host $trust_public_url {
+        default "${TRUST_PUBLIC_URL}";
+    }
+
     # Which origins may read the UNAUTHENTICATED public API.
     #
     # One static bundle is served under two hostnames, and NEXT_PUBLIC_API_URL
@@ -162,7 +172,7 @@ http {
         # /api/embedded-chat or marketing-vhost policies below: those serve
         # untrusted storefronts and public pages and have no reason to reach
         # Facebook.
-        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://connect.facebook.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il https://www.facebook.com https://web.facebook.com; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://connect.facebook.net https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il https://www.facebook.com https://web.facebook.com; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
 
         # Health check for the gateway itself
         location /health {
@@ -175,7 +185,7 @@ http {
             add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
             add_header X-Frame-Options "SAMEORIGIN" always;
             add_header Permissions-Policy "camera=(), geolocation=(), payment=()" always;
-            add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
+            add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
         }
 
         # ─── Auth Service ─────────────────────────────────
@@ -333,7 +343,7 @@ http {
             add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
             add_header X-Frame-Options "SAMEORIGIN" always;
             add_header Permissions-Policy "camera=(), geolocation=(), payment=()" always;
-            add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
+            add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
 
             proxy_pass http://auth_service;
             proxy_set_header Host $host;
@@ -545,7 +555,7 @@ http {
             add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
             add_header X-Frame-Options "SAMEORIGIN" always;
             add_header Permissions-Policy "camera=(), geolocation=(), payment=()" always;
-            add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
+            add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
 
             proxy_pass http://billing_service;
             proxy_set_header Host $host;
@@ -1079,7 +1089,7 @@ http {
             add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
             add_header X-Frame-Options "SAMEORIGIN" always;
             add_header Permissions-Policy "camera=(), geolocation=(), payment=()" always;
-            add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
+            add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
 
             if ($request_method = OPTIONS) {
                 return 204;
@@ -1137,7 +1147,7 @@ http {
             add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
             add_header X-Frame-Options "SAMEORIGIN" always;
             add_header Permissions-Policy "camera=(), geolocation=(), payment=()" always;
-            add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
+            add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
         }
 
         location /widget/ {
@@ -1164,7 +1174,7 @@ http {
             add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
             add_header X-Frame-Options "SAMEORIGIN" always;
             add_header Permissions-Policy "camera=(), geolocation=(), payment=()" always;
-            add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
+            add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
         }
 
         # ─── Shopify Live Chat (public storefront surface) ───
@@ -1630,7 +1640,7 @@ http {
             add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
             add_header X-Frame-Options "SAMEORIGIN" always;
             add_header Permissions-Policy "camera=(), geolocation=(), payment=()" always;
-            add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
+            add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
         }
 
         # Next.js static-export dynamic [id] routes are emitted ONLY as a "_"
@@ -1740,7 +1750,7 @@ http {
         # silently never appeared on the marketing site. /widget/ and
         # /api/embedded-chat answer with wildcard CORS on that host, so the
         # fetches it makes are already allowed by connect-src https:.
-        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://app.gotcha.co.il; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://app.gotcha.co.il https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
 
         location /health {
             return 200 '{"status":"ok","service":"gateway","vhost":"marketing"}';
@@ -1828,7 +1838,31 @@ http {
         # not have falls through to the redirect below rather than answering
         # with the wrong page, and a new application route cannot appear here
         # by accident.
-        location ~ ^/(about|blog|careers|contact|help|legal|offer|product|security|solutions|why-gotcha|early-access|privacy-policy|terms|en|he)(/|$) {
+        #
+        # `help` and `legal` are deliberately NOT in this list: each has its own
+        # hostname, and the two locations below send them there. Serving them
+        # here as well gave every article and every legal document two working
+        # addresses, and the one people arrived at was the apex one.
+        location ~ ^/(about|blog|careers|contact|offer|product|security|solutions|why-gotcha|early-access|privacy-policy|terms|en|he)(/|$) {
+            try_files $uri $uri/index.html $uri.html /404.html;
+        }
+
+        # The Help Center is help.gotcha.co.il. The prefix is dropped on the way
+        # because that host mounts the section at its root, so /help/x/y here
+        # becomes help.gotcha.co.il/x/y rather than a doubled path.
+        location ^~ /help {
+            rewrite ^/help/?(.*)$ https://help.gotcha.co.il/$1 redirect;
+        }
+
+        # The Trust Center is trust.gotcha.co.il, on the same shape - but only
+        # once that hostname resolves. TRUST_PUBLIC_URL unset means "not yet",
+        # and the documents keep being served from here: a legal document is the
+        # last thing that may become unreachable because a DNS record is
+        # missing. Set it to https://trust.gotcha.co.il to move them.
+        location ^~ /legal {
+            if ($trust_public_url != "") {
+                rewrite ^/legal/?(.*)$ $trust_public_url/$1 redirect;
+            }
             try_files $uri $uri/index.html $uri.html /404.html;
         }
 
@@ -2078,11 +2112,22 @@ http {
         # Next.js static export today; tightening to nonces is a follow-up.
         # frame-ancestors 'self' (embedded chat is a script widget, not an
         # iframe of this origin, so it is unaffected).
-        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
 
         # Next.js assets + shared statics resolve as-is from the export.
         location ~ ^/(_next|favicon\.ico|logo[^/]*\.png|apple-touch-icon\.png|icons/|images/) {
             try_files $uri =404;
+        }
+
+        # The header and footer around the help articles are the marketing
+        # site's, so they link to the marketing site's pages - and every one of
+        # those arrived here as /about, /legal/privacy-policy and so on. The
+        # `location /` below maps an unprefixed path onto /help$uri, so they
+        # each resolved to a help article that does not exist and quietly
+        # rendered the help index instead. They belong to the apex; send them
+        # there, and let it decide where /legal itself lives.
+        location ~ ^/(about|blog|careers|contact|legal|offer|product|security|solutions|why-gotcha|early-access|pricing|privacy-policy|terms|en|he)(/|$) {
+            return 302 https://gotcha.co.il$request_uri;
         }
 
         # In-page links already carry the /help prefix. The export writes
@@ -2117,11 +2162,25 @@ http {
         add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
         add_header X-Frame-Options "SAMEORIGIN" always;
         add_header Permissions-Policy "camera=(), geolocation=(), payment=()" always;
-        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https:; media-src 'self' blob:; object-src 'none'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https:; media-src 'self' blob:; object-src 'none'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'" always;
 
         # Build output and images, passed through untouched.
         location ~ ^/(_next|assets)/ {
             try_files $uri =404;
+        }
+
+        # Same as on the Help Center: the shared marketing chrome links to pages
+        # that do not live in this section, and the catch-all below would map
+        # each of them onto /legal$uri and serve the Trust Center index. They go
+        # back to the apex, which owns them.
+        #
+        # `privacy-policy` is NOT in this list, though it is a marketing route on
+        # the apex. Here the unprefixed form is how this host addresses a legal
+        # document - trust.gotcha.co.il/privacy-policy is the Privacy Policy -
+        # and sending it away would have made the Trust Center's own most-read
+        # page the one page it could not serve.
+        location ~ ^/(about|blog|careers|contact|help|offer|product|security|solutions|why-gotcha|early-access|pricing|terms)(/|$) {
+            return 302 https://gotcha.co.il$request_uri;
         }
 
         location /legal {

@@ -280,6 +280,9 @@ services:
       # did, and nothing reads a gateway env var except the gateway, so nothing
       # else noticed.
       PUBLIC_PRICING_ENABLED: ${PUBLIC_PRICING_ENABLED:-false}
+      # Empty until trust.gotcha.co.il has a DNS record; the apex keeps serving
+      # /legal itself while it is. See the map in nginx.prod.conf.template.
+      TRUST_PUBLIC_URL: ${TRUST_PUBLIC_URL:-}
     depends_on:
       - auth
       - conversation

@@ -183,6 +183,38 @@ function encodePng(img) {
   ]);
 }
 
+/**
+ * An ICO wrapping PNG frames.
+ *
+ * The .ico is the icon every browser understands and the one several of them
+ * reach for regardless of the `media` on the PNG links, so it cannot be left
+ * as whatever shipped before - it decides what most tabs actually show. PNG
+ * frames inside an ICO have been read correctly since IE11, so the frames are
+ * the same encoder as above rather than a second BMP path.
+ */
+function encodeIco(frames) {
+  const header = Buffer.alloc(6 + 16 * frames.length);
+  header.writeUInt16LE(0, 0);
+  header.writeUInt16LE(1, 2); // type: icon
+  header.writeUInt16LE(frames.length, 4);
+
+  let offset = header.length;
+  for (const [i, f] of frames.entries()) {
+    const e = 6 + 16 * i;
+    header[e] = f.size >= 256 ? 0 : f.size; // 0 means 256
+    header[e + 1] = f.size >= 256 ? 0 : f.size;
+    header[e + 2] = 0; // palette size: none, it is truecolour
+    header[e + 3] = 0;
+    header.writeUInt16LE(1, e + 4); // colour planes
+    header.writeUInt16LE(32, e + 6); // bits per pixel
+    header.writeUInt32LE(f.bytes.length, e + 8);
+    header.writeUInt32LE(offset, e + 12);
+    offset += f.bytes.length;
+  }
+
+  return Buffer.concat([header, ...frames.map((f) => f.bytes)]);
+}
+
 const JOBS = [
   ['solid-icon-light.png', 'favicon-light', [32, 180]],
   ['solid-icon-dark.png', 'favicon-dark', [32, 180]],
@@ -196,4 +228,15 @@ for (const [src, name, sizes] of JOBS) {
     writeFileSync(file, bytes);
     console.log(`${src} -> ${name}-${size}.png  ${img.width}x${img.height} to ${size}x${size}, ${(bytes.length / 1024).toFixed(1)} KB`);
   }
+}
+
+// The dark mark, because a browser that falls back to the .ico is not telling
+// us which theme its tab strip is in, and the tab strip is light for most
+// people. The white mark stays available through the media-scoped PNG links.
+{
+  const img = decodePng(readFileSync(join(SRC, 'solid-icon-dark.png')));
+  const frames = [16, 32, 48].map((size) => ({ size, bytes: encodePng(resize(img, size)) }));
+  const ico = encodeIco(frames);
+  writeFileSync(join(OUT, 'favicon.ico'), ico);
+  console.log(`solid-icon-dark.png -> favicon.ico  ${frames.map((f) => f.size).join('/')}px, ${(ico.length / 1024).toFixed(1)} KB`);
 }
