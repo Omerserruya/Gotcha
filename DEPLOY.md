@@ -472,10 +472,20 @@ OAUTH_REDIRECT_URI=https://app.yourdomain.com/api/channels/oauth/callback
 
 ## Step 7 - Wire up Cloudflare Tunnel
 
+The gateway serves **six** hostnames, and each one needs BOTH a DNS route and an
+ingress rule. Miss the ingress rule and the name resolves but the tunnel answers
+404 for it; miss the DNS route and it does not resolve at all. Both halves are
+easy to forget one at a time - `trust.yourdomain.com` shipped with a working
+nginx vhost and neither half for weeks, and simply did not exist.
+
 ```bash
 cloudflared tunnel login                                  # opens browser auth URL - open it
 cloudflared tunnel create prod
-cloudflared tunnel route dns prod app.yourdomain.com
+
+for h in yourdomain.com www.yourdomain.com app.yourdomain.com \
+         auth.yourdomain.com help.yourdomain.com trust.yourdomain.com; do
+  cloudflared tunnel route dns prod "$h"
+done
 cloudflared tunnel route dns prod voice.yourdomain.com    # for Twilio Media Streams
 
 TUNNEL_ID=$(cloudflared tunnel list -o json | jq -r '.[] | select(.name=="prod") | .id')
@@ -485,22 +495,55 @@ sudo tee /etc/cloudflared/config.yml >/dev/null <<YAML
 tunnel: prod
 credentials-file: /root/.cloudflared/$TUNNEL_ID.json
 ingress:
+  # Voice first: it is the one rule that does NOT go through nginx.
   - hostname: voice.yourdomain.com
     service: http://localhost:4007
     originRequest:
       noTLSVerify: true
       connectTimeout: 10s
+  # Everything else is the gateway, which picks the vhost off the Host header.
+  - hostname: yourdomain.com
+    service: http://localhost:80
+  - hostname: www.yourdomain.com
+    service: http://localhost:80
   - hostname: app.yourdomain.com
+    service: http://localhost:80
+  - hostname: auth.yourdomain.com
+    service: http://localhost:80
+  - hostname: help.yourdomain.com
+    service: http://localhost:80
+  - hostname: trust.yourdomain.com
     service: http://localhost:80
   - service: http_status:404
 YAML
 
+cloudflared --config /etc/cloudflared/config.yml tunnel ingress validate
 sudo cloudflared service install
 sudo systemctl start cloudflared
 sudo systemctl status cloudflared       # should be "active (running)"
 ```
 
+Rules are matched **in order** and `http_status:404` matches everything, so a new
+hostname goes above it, never below.
+
+> ⚠️ **Do not SIGHUP cloudflared to pick up a config change.** It does not
+> reload - it exits, and systemd does not bring it back, so every hostname goes
+> dark until someone notices. Use `sudo systemctl restart cloudflared`, which
+> costs a few seconds of downtime and actually comes back. Validate the config
+> first, with the command above; `--config` is a global flag and has to come
+> before `tunnel`, or cloudflared silently prints its help text instead of
+> checking anything.
+
 Why a dedicated `voice.` subdomain → skips nginx, lower WSS latency for Twilio Media Streams.
+
+Adding a hostname later is the same two halves, in this order:
+
+```bash
+sudo vi /etc/cloudflared/config.yml                       # new rule ABOVE the 404
+cloudflared --config /etc/cloudflared/config.yml tunnel ingress validate
+sudo systemctl restart cloudflared
+cloudflared tunnel route dns prod new.yourdomain.com      # needs ~/.cloudflared/cert.pem
+```
 
 ---
 
