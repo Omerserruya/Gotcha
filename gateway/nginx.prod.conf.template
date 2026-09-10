@@ -2115,7 +2115,15 @@ http {
         add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
 
         # Next.js assets + shared statics resolve as-is from the export.
-        location ~ ^/(_next|favicon\.ico|logo[^/]*\.png|apple-touch-icon\.png|icons/|images/) {
+        #
+        # `assets/` is where the marketing build puts everything the pages
+        # reference, the tab icons included, and it was missing from this list -
+        # so /assets/favicon.svg fell through to the catch-all below, resolved
+        # as /help/assets/favicon.svg, missed, and was answered with the help
+        # index. The browser got 43KB of HTML where it asked for an icon, and
+        # the Help Center had no tab icon at all. It never 404'd, so nothing
+        # looked broken from the server's side.
+        location ~ ^/(_next|assets/|favicon\.(ico|svg)|logo[^/]*\.png|apple-touch-icon\.png|icons/|images/) {
             try_files $uri =404;
         }
 
