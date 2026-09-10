@@ -75,3 +75,45 @@ describe("the tab icon decides its own colour", () => {
   });
 });
 
+describe("one answer to the cookie question, across every hostname", () => {
+  const consent = () => read("landing/src/lib/consent.ts");
+
+  it("stores the decision in a cookie with an explicit domain", () => {
+    expect(consent(), "localStorage is keyed by origin and this site is four of them")
+      .toMatch(/document\.cookie\s*=\s*[^\n]*domain=/);
+  });
+
+  it("finds that domain by probing, not by slicing the hostname", () => {
+    // `gotcha.co.il` has a two-label public suffix. Deriving the parent domain
+    // by string surgery yields `.co.il`, browsers refuse it, and the cookie is
+    // silently never set - which looks exactly like the bug being fixed.
+    const src = consent();
+    expect(src).toMatch(/document\.cookie\s*=\s*`[^`]*probe/i);
+    expect(src, "a comment is not enough - the reason has to be in the code")
+      .toMatch(/document\.cookie\.includes\(/);
+  });
+
+  it("prefers the cookie over the legacy localStorage record", () => {
+    // Inside readConsent specifically. Comparing positions across the whole
+    // file would only be comparing where the constants are declared.
+    const body = /export function readConsent\(\)[\s\S]*?\n\}/.exec(consent());
+    expect(body, "readConsent must exist").not.toBeNull();
+    const cookieRead = body![0].indexOf("readCookie(NAME)");
+    const legacyRead = body![0].indexOf("LEGACY_KEY");
+    expect(cookieRead, "the cookie must be read").toBeGreaterThan(-1);
+    expect(legacyRead, "the old record must still be honoured, once").toBeGreaterThan(-1);
+    expect(cookieRead, "an old same-origin record must not shadow the shared one")
+      .toBeLessThan(legacyRead);
+  });
+
+  it("names the cookie in both language versions of the Cookie Policy", () => {
+    // The policy said the answer was kept in localStorage. It is a published
+    // legal document, so the code moving is only half of the change.
+    const name = /const NAME = '([^']+)'/.exec(consent());
+    expect(name, "the consent cookie must have one name in one place").not.toBeNull();
+    for (const lang of ["en", "he"]) {
+      expect(read(`docs/legal/${lang}/cookie-policy.md`), `${lang} policy must name the cookie`)
+        .toContain(name![1]);
+    }
+  });
+});
