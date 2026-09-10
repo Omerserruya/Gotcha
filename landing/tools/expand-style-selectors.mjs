@@ -28,6 +28,29 @@ const ATTR = /\[style\*="([^"]*)"\]/g;
 const MAX_TERMS = 4;
 
 /**
+ * `flex: <grow>` and its longhand serialisation `<grow> 1 0%` are the same
+ * declaration, so a rule written on one has to find the other.
+ *
+ * It cannot be matched with `*=` alone. `[style*="flex:1"]` is a substring
+ * test, and it also hits `flex:1 1 420px` and `flex:1.35`, which the design's
+ * rule does not touch - the runtime spells those out in full, so its own
+ * selector never sees them. The declaration therefore has to be anchored: `;`
+ * when something follows it, and a `$=` suffix match when it is last, which on
+ * the home page is 34 of the 54 occurrences.
+ */
+function flexShorthand(value) {
+  const m = /^\s*flex:\s*([\d.]+)\s+1\s+0(px|%)?\s*$/i.exec(value);
+  if (!m) return [];
+  const decl = `flex: ${m[1]}`;
+  return [
+    { op: '*', v: `${decl};` },
+    { op: '*', v: `${decl.replace(': ', ':')};` },
+    { op: '$', v: decl },
+    { op: '$', v: decl.replace(': ', ':') },
+  ];
+}
+
+/**
  * Every way the same declaration can be written in a style attribute.
  *
  * Two normalisations separate the design's rendering from this one, and the
@@ -41,7 +64,10 @@ const MAX_TERMS = 4;
  * The second is why the section rhythm rules - all keyed on paddings such as
  * "padding: 98px 0px" - were silently missing, leaving the phone layout about
  * 1,300px taller than the design's.
+ *
+ * A third difference is a shorthand rather than a spelling; see flexShorthand.
  */
+
 function spellings(value) {
   const colon = [...new Set([value.replace(/:\s*/g, ': '), value.replace(/:\s*/g, ':')])];
   const out = new Set();
@@ -52,7 +78,7 @@ function spellings(value) {
     if (/(?<![\w.#-])0px(?![\w-])/.test(v)) out.add(v.replace(/(?<![\w.#-])0px(?![\w-])/g, '0'));
     if (/(?<![\w.#-])0(?![\w.%-])/.test(v)) out.add(v.replace(/(?<![\w.#-])0(?![\w.%-])/g, '0px'));
   }
-  return [...out];
+  return [...[...out].map((v) => ({ op: '*', v })), ...flexShorthand(value)];
 }
 
 /** One comma-free selector, in every spelling combination its terms allow. */
@@ -65,7 +91,7 @@ function expandOne(selector) {
   for (const m of terms) {
     const before = selector.slice(last, m.index);
     const options = spellings(m[1]);
-    out = out.flatMap((prefix) => options.map((v) => `${prefix}${before}[style*="${v}"]`));
+    out = out.flatMap((prefix) => options.map(({ op, v }) => `${prefix}${before}[style${op}="${v}"]`));
     last = m.index + m[0].length;
   }
   const tail = selector.slice(last);
