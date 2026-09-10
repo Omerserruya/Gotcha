@@ -7,11 +7,11 @@ import { st as $st, I as $I, L as $L, A as $A } from '@/lib/dc';
 
 export default function Chrome({ v: $v, children }) {
   return (
-    <div dir={$v?.dir} lang={$v?.lang} style={$st("min-height:100vh;background:#FAF8F4;position:relative")}>
+    <div id="dc-root" dir={$v?.dir} lang={$v?.lang} style={$st("min-height:100vh;background:#FAF8F4;position:relative")}>
         {"\n\n  "}
-        <div style={$st(`height:${$A($v?.bars?.headTop)};flex:none`)}></div>
+        <div style={$st(`height:${$A($v?.bars?.padTop)};flex:none`)}></div>
         {"\n\n  "}
-        <div style={$st(`display:${$A($v?.bars?.offerBar)};position:fixed;top:0;left:0;right:0;z-index:92;background:#8E3418;color:#FFFFFF;height:38px;align-items:center;justify-content:center;gap:16px;padding:0 46px 0 24px;flex-wrap:nowrap;overflow:hidden`)}>
+        <div style={$st(`display:${$A($v?.bars?.offerBar)};position:fixed;top:0;left:0;right:0;z-index:92;background:#8E3418;color:#FFFFFF;height:38px;box-sizing:content-box;padding-top:var(--safe-top);align-items:center;justify-content:center;gap:16px;padding-inline:24px 46px;flex-wrap:nowrap;overflow:hidden`)}>
           {"\n    "}
           <span className="m-hide" style={$st("font:500 9.5px 'IBM Plex Mono',monospace;letter-spacing:.18em;text-transform:uppercase;background:rgba(22,21,15,.24);border-radius:5px;padding:4px 8px;white-space:nowrap")}>
             {$I($v?.offer?.badge)}
@@ -46,9 +46,35 @@ export default function Chrome({ v: $v, children }) {
         {$v?.offerShown ? (
           <>
           {"\n    "}
+          <div className="m-only" onClick={$v?.offer?.close} style={$st("position:fixed;top:0;left:0;right:0;bottom:0;z-index:94;background:rgba(22,21,15,.55)")}></div>
+          {"\n    "}
           <div className="offer-drawer" style={$st("position:fixed;top:50%;right:0;transform:translateY(-50%);z-index:95;width:798px;max-width:100vw")}>
             {"\n      "}
             <div style={$st("display:flex;align-items:stretch;background:#FFFFFF;border:1px solid #E4DFD4;border-inline-end:0;border-radius:12px 0 0 12px;box-shadow:-16px 22px 60px rgba(22,21,15,.26);overflow:hidden;animation:gpull .5s cubic-bezier(.22,.85,.2,1) both")}>
+              {"\n        "}
+              <div className="m-only" style={$st("flex:1 1 100%;background:#8E3418;color:#FFFFFF;align-items:center;gap:10px;padding:13px 14px 13px 18px")}>
+                {"\n          "}
+                <span style={$st("display:flex;flex:none")}>
+                  <i data-lucide="gift" width="16" height="16" stroke-width="2.2"></i>
+                </span>
+                {"\n          "}
+                <span style={$st("font:600 11px 'IBM Plex Mono',monospace;letter-spacing:.16em;text-transform:uppercase;white-space:nowrap")}>
+                  {$I($v?.offer?.tabLabel)}
+                </span>
+                {"\n          "}
+                <span onClick={$v?.offer?.close} style={$st("margin-inline-start:auto;display:flex;align-items:center;justify-content:center;gap:7px;background:rgba(255,255,255,.16);border-radius:11px;padding:0 14px;min-height:44px;min-width:44px;cursor:pointer;flex:none")}>
+                  {"\n            "}
+                  <span style={$st("font-size:12.5px;font-weight:600;white-space:nowrap")}>
+                    {$I($v?.offer?.closeLabel)}
+                  </span>
+                  {"\n            "}
+                  <span style={$st("display:flex")}>
+                    <i data-lucide="x" width="14" height="14" stroke-width="2.6"></i>
+                  </span>
+                  {"\n          "}
+                </span>
+                {"\n        "}
+              </div>
               {"\n        "}
               <div onClick={$v?.offer?.close} style={$st("flex:0 0 38px;background:#8E3418;color:#FFFFFF;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;padding:16px 0")}>
                 {"\n          "}
@@ -159,13 +185,21 @@ export default function Chrome({ v: $v, children }) {
             {$L($v?.mnav).map((g, $index) => (
               <React.Fragment key={$index}>
                 {"\n        "}
-                <div style={$st("border-top:1px solid #E4DFD4;padding:16px 0 8px")}>
+                <div style={$st("border-top:1px solid #E4DFD4;padding:6px 0")}>
                   {"\n          "}
-                  <div onClick={g?.go} style={$st("font-size:17px;font-weight:600;letter-spacing:-0.018em;color:#16150F;padding:4px 0;cursor:pointer")}>
-                    {$I(g?.t)}
+                  <div onClick={g?.go} style={$st("display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:17px;font-weight:600;letter-spacing:-0.018em;color:#16150F;padding:14px 0;min-height:44px;cursor:pointer")}>
+                    {"\n            "}
+                    <span>
+                      {$I(g?.t)}
+                    </span>
+                    {"\n            "}
+                    <span style={$st(`color:#A29B8E;display:flex;transform:rotate(${$A(g?.rot)});transition:transform .2s ease`)}>
+                      <i data-lucide={g?.caret} width="18" height="18" stroke-width="2"></i>
+                    </span>
+                    {"\n          "}
                   </div>
                   {"\n          "}
-                  <div style={$st("display:flex;flex-direction:column;gap:2px;margin-top:8px")}>
+                  <div style={$st(`display:${$A(g?.itemsDisplay)};flex-direction:column;gap:2px;padding-bottom:10px`)}>
                     {"\n            "}
                     {$L(g?.items).map((it, $index) => (
                       <React.Fragment key={$index}>

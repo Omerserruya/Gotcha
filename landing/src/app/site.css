@@ -80,3 +80,25 @@ article a {
     overflow-wrap: break-word;
   }
 }
+
+/*
+ * The desktop freeze.
+ *
+ * The mobile design export also finished four product-page sections and
+ * recropped the home hero, and all five show on desktop as well as on the
+ * phone. The desktop is signed off as it stands, so those five are admitted
+ * below the design's own breakpoint and held off above it. `m-added` is put on
+ * them by tools/dc2jsx.mjs, which asserts it found each one.
+ *
+ * 821px, not 820px, because the design's mobile block is `max-width: 820px` -
+ * one pixel out and there would be a width where both the frozen desktop and
+ * the phone layout apply, or neither does.
+ *
+ * Below the breakpoint there is deliberately NO rule here: the phone renders
+ * what the design renders, with the design's own inline styles untouched.
+ */
+@media (min-width: 821px) {
+  .m-added {
+    display: none !important;
+  }
+}

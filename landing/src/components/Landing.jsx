@@ -11,7 +11,7 @@ import { getLucide } from '@/lib/lucide';
 import UrlSync from '@/components/UrlSync';
 
 class LandingLogic extends React.Component {
-  state = { mnav: false, menu: null, step: 0, uc: 0, faq: 0, shot: 0, page: (this.props && this.props.initialPage) || 'home', vol: 2, yearly: false, pfaq: 0, biz: 'retail', trade: 0, post: null, lang: (this.props && this.props.initialLang) || 'en', trace: 0, dirCat: 'All integrations', dirQ: '', pcp: 0, pai: 0, ccp: 0, cai: 0, offerOpen: false, barOffer: true, barAnn: true, widget: { q: null, typing: false, acted: false } };
+  state = { mnav: false, mgrp: null, menu: null, step: 0, uc: 0, faq: 0, shot: 0, page: (this.props && this.props.initialPage) || 'home', vol: 2, yearly: false, pfaq: 0, biz: 'retail', trade: 0, post: null, lang: (this.props && this.props.initialLang) || 'en', trace: 0, dirCat: 'All integrations', dirQ: '', pcp: 0, pai: 0, ccp: 0, cai: 0, offerOpen: false, barOffer: true, barAnn: true, widget: { q: null, typing: false, acted: false } };
 
   // The timeline spine is a grey track that fills orange as it passes the reading line,
   // so the colour arrives with the scroll rather than all at once on reveal.
@@ -221,7 +221,10 @@ class LandingLogic extends React.Component {
   }
 
   componentDidMount() {
-    try { const l = localStorage.getItem('gotcha-lang'); if (l === 'he' || l === 'en') this.setState({ lang: l }); } catch (e) {}
+    let pinned = null;
+    try { pinned = new URLSearchParams(location.search).get('lang'); } catch (e) {}
+    if (pinned === 'he' || pinned === 'en') { this.langPinned = true; this.setState({ lang: pinned }); }
+    else { try { const l = localStorage.getItem('gotcha-lang'); if (l === 'he' || l === 'en') this.setState({ lang: l }); } catch (e) {} }
     this.translateTimer = setInterval(() => this.translate(), 400);
     setTimeout(() => this.setupStage(), 60);
     this.setupSpines();
@@ -240,7 +243,10 @@ class LandingLogic extends React.Component {
     if (!root.querySelectorAll('[data-reveal]').length) root = document;
     const hide = (el) => {
       el.style.opacity = '0';
-      el.style.transform = el.dataset.side === 'left' ? 'translateX(-36px)' : el.dataset.side === 'right' ? 'translateX(36px)' : 'translateY(18px)';
+      const narrow = window.innerWidth < 820;
+      el.style.transform = (el.dataset.side && !narrow)
+        ? (el.dataset.side === 'left' ? 'translateX(-36px)' : 'translateX(36px)')
+        : 'translateY(18px)';
       ownSteps(el).forEach(s => { s.style.opacity = '0'; s.style.transform = 'translateY(10px)'; s.style.transition = 'opacity .55s ease, transform .55s cubic-bezier(.2,.75,.2,1)'; });
     };
     // steps belong to the nearest reveal wrapper, so a parent revealing doesn't fire a nested row early
@@ -262,14 +268,15 @@ class LandingLogic extends React.Component {
         el.dataset.revwatch = '1';
         hide(el);
         if (this.io) this.io.observe(el);
-        setTimeout(() => { if (el.style.opacity === '0') reveal(el); }, 2600);
+        setTimeout(() => { if (el.style.opacity === '0' && el.getBoundingClientRect().top < window.innerHeight + 300) reveal(el); }, 2600);
       });
     };
     this.io = new IntersectionObserver((es) => {
       es.forEach(e => { if (e.isIntersecting) { reveal(e.target); this.io.unobserve(e.target); } });
     }, { threshold: 0.06, rootMargin: '200px 0px 0px 0px' });
     targets.forEach(el => this.io.observe(el));
-    this.failsafe = setTimeout(() => targets.forEach(reveal), 1800);
+    const near = (el) => el.getBoundingClientRect().top < window.innerHeight + 300;
+    this.failsafe = setTimeout(() => targets.forEach(el => { if (near(el)) reveal(el); }), 1800);
 
     const calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -379,8 +386,78 @@ class LandingLogic extends React.Component {
         }
       }
     };
+
+    // desktop columns are sized in px; below tablet width they stack instead of squeezing
+    this.fitMobile = () => {
+      const mob = window.innerWidth < 780;
+      // the hero photo is 16:9; an 804px-tall box at phone width crops it to a sliver
+      const hero = document.querySelector('#top');
+      if (hero && (hero.style.height === '804px' || hero.hasAttribute('data-mobhero'))) {
+        if (mob) { hero.setAttribute('data-mobhero', ''); hero.style.height = '620px'; }
+        else if (hero.hasAttribute('data-mobhero')) { hero.removeAttribute('data-mobhero'); hero.style.height = '804px'; }
+      }
+      // Copilot must be readable beside the conversation, so on a phone the long
+      // context block is relocated below it rather than removed
+      const ctx = (this.host || document).querySelector('.m-trace-ctx');
+      const side = (this.host || document).querySelector('.m-trace-side');
+      if (ctx && side && side.parentElement) {
+        if (mob && ctx.parentElement !== side.parentElement) {
+          ctx.dataset.homeParent = '1';
+          this.ctxHome = ctx.previousElementSibling || null;
+          this.ctxHomeParent = ctx.parentElement;
+          side.parentElement.appendChild(ctx);
+        } else if (!mob && ctx.dataset.homeParent && this.ctxHomeParent) {
+          this.ctxHomeParent.appendChild(ctx);
+          delete ctx.dataset.homeParent;
+        }
+      }
+      document.querySelectorAll('#dc-root *').forEach(el => {
+        const st = el.style;
+        if (!st) return;
+        if (mob) {
+          const w = parseFloat(st.width || '');
+          const basis = parseFloat(st.flexBasis || '');
+          const minw = parseFloat(st.minWidth || '');
+          const wide = (st.width || '').endsWith('px') && w >= 300;
+          const wideBasis = (st.flexBasis || '').endsWith('px') && basis >= 300;
+          const wideMin = (st.minWidth || '').endsWith('px') && minw >= 300;
+          if ((wide || wideBasis || wideMin) && !el.hasAttribute('data-mob')) {
+            el.setAttribute('data-mob', JSON.stringify({ w: st.width, f: st.flex, fb: st.flexBasis, mw: st.maxWidth, mn: st.minWidth }));
+            if (wideMin) st.minWidth = '0';
+            if (wide || wideBasis) { st.width = '100%'; st.maxWidth = '100%'; }
+            if (wideBasis || (st.flex && !wideMin)) st.flex = '1 1 100%';
+            const p = el.parentElement;
+            if (p && getComputedStyle(p).display === 'flex') p.style.flexWrap = 'wrap';
+          }
+          // 10px label type is fine on a monitor and unreadable on a phone
+          if (!el.hasAttribute('data-mobfs') && el.children.length === 0 && (el.textContent || '').trim().length > 6) {
+            const fs = parseFloat(getComputedStyle(el).fontSize);
+            if (fs && fs < 11.5) { el.setAttribute('data-mobfs', st.fontSize || ''); st.fontSize = '11.5px'; }
+          }
+          // a two-column row stacks only when it is genuinely squeezed: it overflows,
+          // or one of its columns is crushed under 200px with real copy in it
+          if (getComputedStyle(el).display === 'flex' && !st.flexWrap && el.children.length > 1 && !el.hasAttribute('data-mobwrap')) {
+            const squeezed = el.scrollWidth > el.clientWidth + 4
+              || Array.from(el.children).some(k => (k.textContent || '').trim().length > 40 && k.getBoundingClientRect().width < 200);
+            if (squeezed) { el.setAttribute('data-mobwrap', '1'); st.flexWrap = 'wrap'; }
+          }
+        } else {
+          if (el.hasAttribute('data-mob')) {
+            const o = JSON.parse(el.getAttribute('data-mob'));
+            st.width = o.w || ''; st.flex = o.f || ''; st.flexBasis = o.fb || ''; st.maxWidth = o.mw || ''; st.minWidth = o.mn || '';
+            el.removeAttribute('data-mob');
+          }
+          if (el.hasAttribute('data-mobwrap')) { st.flexWrap = ''; el.removeAttribute('data-mobwrap'); }
+          if (el.hasAttribute('data-mobfs')) { st.fontSize = el.getAttribute('data-mobfs'); el.removeAttribute('data-mobfs'); }
+        }
+      });
+    };
+
     this.fitNav();
+    this.fitMobile();
+    this.mobTimer = setInterval(() => this.fitMobile(), 700);
     window.addEventListener('resize', this.fitNav);
+    window.addEventListener('resize', this.fitMobile);
     this.logoSweeps = [600, 1800, 4000].map(ms => setTimeout(() => this.sweepLogos(), ms));
   }
 
@@ -755,7 +832,7 @@ class LandingLogic extends React.Component {
             items: [
               { t: 'Omnichannel', n: '6 channels', icon: 'inbox', page: 'feat-omnichannel' },
               { t: 'Customers', n: 'one record', icon: 'contact', page: 'feat-customers' },
-              { t: 'Social engagement', n: 'comments   & DMד\n', icon: 'at-sign', page: 'feat-social' },
+              { t: 'Social engagement', n: 'comments & DMs', icon: 'at-sign', page: 'feat-social' },
               { t: 'Store widget', n: 'sells', icon: 'shopping-cart', page: 'feat-widget' },
               { t: 'WhatsApp broadcast', n: 'campaigns that reply', icon: 'megaphone', page: 'feat-broadcast' }
             ] },
@@ -890,11 +967,16 @@ class LandingLogic extends React.Component {
     });
 
     // the phone menu: the same NAV spine, with every mega-menu link flattened under its section
-    const mnav = NAV.map(([t, key, page]) => {
+    const mnav = NAV.map(([t, key, page], gi) => {
       const m = key && MENUS[key];
+      const open = st.mgrp === gi;
       return {
         t,
+        caret: m ? 'chevron-down' : 'arrow-right',
+        rot: (m && open) ? '180deg' : '0deg',
+        itemsDisplay: open ? 'flex' : 'none',
         go: () => {
+          if (m) { this.setState(s => ({ mgrp: s.mgrp === gi ? null : gi })); return; }
           if (page) { this.setState({ mnav: false, menu: null, page }); window.scrollTo(0, 0); }
         },
         items: m
@@ -1691,7 +1773,6 @@ class LandingLogic extends React.Component {
         ],
         shotTitle: 'Knowledge', shotMeta: 'knowledge · 2 conflicts open',
         shotCaption: 'Sources on the left, what it learned in the middle, and the questions it could not answer waiting for one line from you.',
-        slot: 'feat-knowledge-shot', slotHint: 'product screenshot: knowledge sources, conflicts and gap list',
         callouts: [
           { n: '01', t: 'Every answer traceable to the page or reply it came from.' },
           { n: '02', t: 'Conflicts held rather than guessed, with both sources side by side.' },
@@ -2027,7 +2108,6 @@ class LandingLogic extends React.Component {
         ],
         shotTitle: 'Channels', shotMeta: 'channels · 6 connected',
         shotCaption: 'What is connected, what it is allowed to answer, and the hours a person covers instead. One row per channel.',
-        slot: 'feat-channels-shot', slotHint: 'product screenshot: connected channels list with permissions',
         callouts: [
           { n: '01', t: 'Connect, verify, done, with a test message before it goes live.' },
           { n: '02', t: 'Per-channel rules: what the AI may answer and when a person takes over.' },
@@ -2165,7 +2245,6 @@ class LandingLogic extends React.Component {
         ],
         shotTitle: 'Social in the inbox', shotMeta: 'social · 46 open',
         shotCaption: 'The post on one side, the comment thread on the other, and the same customer record you see on every other channel.',
-        slot: 'feat-social-shot', slotHint: 'product screenshot: social comments and story replies in the inbox',
         callouts: [
           { n: '01', t: 'The post or story the message came from, attached to the conversation.' },
           { n: '02', t: 'Whether the reply goes out in public or into her DMs, decided per message.' },
@@ -2230,7 +2309,6 @@ class LandingLogic extends React.Component {
         ],
         shotTitle: 'The widget on a product page', shotMeta: 'widget · product page',
         shotCaption: 'Your fonts, your colours, your language, with the product, the variant and the stock already in the conversation.',
-        slot: 'feat-widget-shot', slotHint: 'product screenshot: store page with the chat widget open on a product',
         callouts: [
           { n: '01', t: 'The product she is on, attached to the conversation without her saying so.' },
           { n: '02', t: 'A real delivery date for her address, not "3-5 business days".' },
@@ -2522,7 +2600,8 @@ class LandingLogic extends React.Component {
         us: { icon: 'check', markBg: '#A8C57A', markFg: '#16150F', fg: '#16150F', bg: '#F5F7EF' }
       };
       const cell = (m, note) => Object.assign({ note }, M[m]);
-      const row = (k, a, b, c, d) => ({ k, cells: [cell(a[0], a[1]), cell(b[0], b[1]), cell(c[0], c[1]), cell(d[0] === 'yes' ? 'us' : d[0], d[1])] });
+      const WHO = ['An evening shift', 'A website chatbot', 'Helpdesk with AI', 'GOTCHA · AI Team'];
+      const row = (k, a, b, c, d) => ({ k, cells: [cell(a[0], a[1]), cell(b[0], b[1]), cell(c[0], c[1]), cell(d[0] === 'yes' ? 'us' : d[0], d[1])].map((x, i) => Object.assign(x, { who: WHO[i] })) });
       return {
         kicker: 'Why us', h1a: 'Most tools reply.', h1b: 'We take the whole thing, end to end.',
         sub: 'From the first message a customer sends to the action that closes it: GOTCHA merges every channel, looks up the order, reads your policy, carries out the action inside your systems and writes it back, then stops exactly where you told it to. Built for small and growing businesses, from a one-man show to a team of agents under load, not for enterprise contact centres.',
@@ -2698,30 +2777,36 @@ class LandingLogic extends React.Component {
         set: (ev) => setter(parseInt(ev.target.value, 10))
       });
       const per = yr ? '/ year' : '/ month';
-      const vat = ' · excluding 18% VAT';
+      // these lines are composed from a chosen tier, so they carry their own Hebrew
+      const HE = st.lang === 'he';
+      const vat = HE ? ' · ללא מע״מ 18%' : ' · excluding 18% VAT';
+      const L = {
+        chatsUsers: (n) => HE ? (n + ' שיחות ביום · ' + n + ' משתמשים') : (n + ' chats a day · ' + n + ' users'),
+        chatsAi: (n) => HE ? (n + ' שיחות ביום · ' + n + ' עובדי AI') : (n + ' chats a day · ' + n + ' AI employees'),
+        chatsCalls: (a, b) => HE ? (a + ' שיחות צ׳אט · ' + b + ' שיחות טלפון ביום') : (a + ' chats · ' + b + ' calls a day'),
+        cpUsers: (n) => HE ? (n + ' משתמשי Co-Pilot') : (n + ' Co-Pilot users'),
+        aiEmp: (n) => HE ? (n + ' עובדי AI') : (n + ' AI employees'),
+        usersAi: (a, b) => HE ? (a + ' משתמשים · ' + b + ' עובדי AI') : (a + ' users · ' + b + ' AI employees')
+      };
       return {
         prices: [money(CP[cp]), money(AI[ai]), money(CALL[ccp][cai])],
-        subs: [
-          TIERS[cp] + ' chats a day · ' + TIERS[cp] + ' users',
-          TIERS[ai] + ' chats a day · ' + TIERS[ai] + ' AI employees',
-          TIERS[ccp] + ' chats · ' + TIERS[cai] + ' calls a day'
-        ],
+        subs: [L.chatsUsers(TIERS[cp]), L.chatsAi(TIERS[ai]), L.chatsCalls(TIERS[ccp], TIERS[cai])],
         plans: [
           { name: 'Co-Pilot', badge: null, who: 'AI beside your team: it prepares every reply, and your agents run the service and the sales.',
-            price: money(CP[cp]), per, sub: TIERS[cp] + ' Co-Pilot users' + vat,
+            price: money(CP[cp]), per, sub: L.cpUsers(TIERS[cp]) + vat,
             bg: '#FFFFFF', bd: '#E8E3D9', fg: '#16150F', muted: '#8E887C', dot: '#C8C2B6', rule: '#F0EDE7', accent: '#C4552F', sliderBoxH: '188px',
             sliders: [slider('chat conversations a business day', 'Co-Pilot users', cp, (v) => this.setState({ pcp: v }), false)],
             featHead: 'Includes', feats: ['Multichannel unified inbox and broadcasts', 'Automations, AI routing and the command centre', 'Copilot drafting every reply for your agents', 'Conversation summaries into your CRM', 'Knowledge base and the full customer picture', 'Your whole team, no per-seat surprises'],
             cta: 'Start free', btnBg: '#FFFFFF', btnFg: '#16150F', btnBd: '#D8D2C6' },
           { name: 'AI Team', badge: 'Most businesses', badgeBg: '#EFD9CD', badgeFg: '#5C2410',
             who: 'AI employees that handle service, copilot work and tasks for your team, end to end.',
-            price: money(AI[ai]), per, sub: TIERS[ai] + ' AI employees' + vat,
+            price: money(AI[ai]), per, sub: L.aiEmp(TIERS[ai]) + vat,
             bg: '#16150F', bd: '#16150F', fg: '#F7F5F1', muted: '#A29D95', dot: '#4A4740', rule: '#262521', accent: '#E0A458', sliderBoxH: '188px',
             sliders: [slider('chat conversations a business day', 'AI employees', ai, (v) => this.setState({ pai: v }), true)],
             featHead: 'Everything in Co-Pilot, plus', feats: ['AI employees answering and acting on their own', 'Autonomy set per action: suggest, ask, or do it', 'Back office work done for you, not just replies', 'Actions inside Shopify, your CRM and your tools', 'Analytics that name the cause, not just the volume'],
             cta: 'Start free', btnBg: '#F7F5F1', btnFg: '#16150F', btnBd: '#F7F5F1' },
           { name: 'Call Pilot', badge: null, who: 'Both together, with the phone included: pick your chat volume and your voice volume.',
-            price: money(CALL[ccp][cai]), per, sub: TIERS[ccp] + ' users · ' + TIERS[cai] + ' AI employees' + vat,
+            price: money(CALL[ccp][cai]), per, sub: L.usersAi(TIERS[ccp], TIERS[cai]) + vat,
             bg: '#FFFFFF', bd: '#E8E3D9', fg: '#16150F', muted: '#8E887C', dot: '#C8C2B6', rule: '#F0EDE7', accent: '#C4552F', sliderBoxH: '188px',
             sliders: [
               slider('chat conversations a business day', 'Co-Pilot users', ccp, (v) => this.setState({ ccp: v }), false),
@@ -2755,7 +2840,7 @@ class LandingLogic extends React.Component {
       mnav,
       mnavOpen: !!st.mnav,
       mnavIcon: st.mnav ? 'x' : 'menu',
-      mnavToggle: () => this.setState(s => ({ mnav: !s.mnav, menu: null })),
+      mnavToggle: () => this.setState(s => ({ mnav: !s.mnav, mgrp: null, menu: null })),
       menuData: st.menu ? (() => {
         const m = MENUS[st.menu];
         return Object.assign({}, m, {
@@ -2930,6 +3015,11 @@ class LandingLogic extends React.Component {
           shotImg: b.shot ? React.createElement('img', { src: b.shot, alt: b.shotTitle || '', style: { display: 'block', width: '100%' } }) : null,
           shotShown: (b.shot && ['feat-omnichannel', 'feat-customers', 'feat-studio', 'feat-callpilot', 'feat-analytics', 'feat-approvals', 'feat-broadcast'].indexOf(key) >= 0) ? true : null,
           showCaps: !b.marquee,
+          cardBg: dark ? '#1C1B17' : '#FFFFFF', cardBd: dark ? '#2A2823' : '#E8E3D9',
+          statsShown: (b.stats && b.stats.length && b.aside) ? true : null,
+          capsShown: (b.caps && b.caps.length && !b.marquee) ? true : null,
+          doesShown: (b.does && b.does.length && b.limits && b.limits.length) ? true : null,
+          quoteShown: (b.quote && b.proof && b.proof.length) ? true : null,
           tw: key === 'feat-widget' ? this.tryWidget() : null,
           saveDisplay: b.save ? 'block' : 'none',
           traceDisplay: key === 'feat-copilot' ? 'block' : 'none',
@@ -3016,7 +3106,12 @@ class LandingLogic extends React.Component {
       },
 
       offerShown: st.offerOpen ? true : null,
-      bars: { offerBar: st.barOffer ? 'flex' : 'none', headTop: (st.barOffer ? 38 : 0) + 'px' },
+      bars: {
+        offerBar: st.barOffer ? 'flex' : 'none',
+        // with the bar up the page sits below it; closed, everything rises and only the header keeps notch clearance
+        headTop: st.barOffer ? 'calc(38px + var(--safe-top))' : 'var(--safe-top)',
+        padTop: st.barOffer ? 'calc(38px + var(--safe-top))' : '0px'
+      },
       op: {
         badge: 'Launch offer', scarcity: 'For the first 50 businesses only',
         h1a: '3 months of GOTCHA', h1b: 'for $1!',
@@ -3109,7 +3204,7 @@ class LandingLogic extends React.Component {
           'For the first 50 businesses',
           'Billing and the three months start once you are connected'
         ],
-        bookLabel: 'Book a call', seeMore: 'See more',
+        bookLabel: 'Book a call', seeMore: 'See more', closeLabel: 'Close',
         termsLabel: 'Offer terms',
         terms: 'Offer ends 31 October 2026 or when 50 businesses have joined, whichever comes first. After three months you continue on the plan and usage you choose. Regular pricing starts at $39 a month, excluding 18% VAT.',
         hideBar: () => this.setState({ barOffer: false }),
@@ -3184,10 +3279,12 @@ class LandingLogic extends React.Component {
             ['Price a month, excluding 18% VAT', PRICE.prices[0], PRICE.prices[1], PRICE.prices[2]]
           ]]
         ];
+        const PLAN_NAMES = ['Co-Pilot', 'AI Team', 'Call Pilot'];
         const cell = (x, i) => {
           const bg = i === 1 ? '#FBF9F5' : 'transparent';
-          if (typeof x === 'number') return x ? { v: '✓', c: '#4F7A2E', w: '600', bg } : { v: '—', c: '#C8C2B6', w: '400', bg };
-          return { v: x, c: '#3A3833', w: '500', bg };
+          const plan = PLAN_NAMES[i];
+          if (typeof x === 'number') return x ? { v: '✓', c: '#4F7A2E', w: '600', bg, plan } : { v: '—', c: '#C8C2B6', w: '400', bg, plan };
+          return { v: x, c: '#3A3833', w: '500', bg, plan };
         };
         return CMP.map(g => ({ t: g[0], rows: g[1].map(r => ({ t: r[0], cells: [cell(r[1], 0), cell(r[2], 1), cell(r[3], 2)] })) }));
       })(),
@@ -3222,11 +3319,20 @@ class LandingLogic extends React.Component {
       navDir: st.lang === 'he' ? 'row-reverse' : 'row',
       navML: st.lang === 'he' ? '0' : 'auto', navMR: st.lang === 'he' ? 'auto' : '0',
       mlAuto: st.lang === 'he' ? '0' : 'auto', mrAuto: st.lang === 'he' ? 'auto' : '0',
+      chFlow: [
+        { t: 'WhatsApp', logo: 'https://cdn.simpleicons.org/whatsapp/25D366' },
+        { t: 'Instagram', logo: 'https://cdn.simpleicons.org/instagram/E4405F' },
+        { t: 'Messenger', logo: 'https://cdn.simpleicons.org/messenger/0084FF' },
+        { t: 'Email', logo: 'https://cdn.simpleicons.org/gmail/EA4335' },
+        { t: 'Web chat', icon: 'globe', noLogo: true },
+        { t: 'Phone', icon: 'phone', noLogo: true }
+      ],
       arrowFwd: st.lang === 'he' ? '←' : '→', arrowBack: st.lang === 'he' ? '→' : '←',
       arrowIcon: st.lang === 'he' ? 'arrow-left' : 'arrow-right',
       isHe: st.lang === 'he',
-      setEn: () => { try { localStorage.setItem('gotcha-lang', 'en'); } catch (e) {} this.setState({ lang: 'en' }); },
-      setHe: () => { try { localStorage.setItem('gotcha-lang', 'he'); } catch (e) {} this.setState({ lang: 'he' }); },
+      isEn: st.lang === 'he' ? null : true,
+      setEn: () => { if (!this.langPinned) { try { localStorage.setItem('gotcha-lang', 'en'); } catch (e) {} } this.setState({ lang: 'en' }); },
+      setHe: () => { if (!this.langPinned) { try { localStorage.setItem('gotcha-lang', 'he'); } catch (e) {} } this.setState({ lang: 'he' }); },
       enBg: st.lang === 'he' ? 'transparent' : '#262521', enFg: st.lang === 'he' ? '#8E8A83' : '#F7F5F1',
       heBg: st.lang === 'he' ? '#262521' : 'transparent', heFg: st.lang === 'he' ? '#F7F5F1' : '#8E8A83',
       trace, replyStarted: step >= 8, replyTyping: step === 8, replyDone: step >= 9,

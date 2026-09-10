@@ -261,6 +261,122 @@ function emitNode(node, scope, indent) {
 /* ─────────── run ─────────── */
 
 const frag = parse5.parseFragment(template, { sourceCodeLocationInfo: false });
+
+/* ─────────── desktop freeze ─────────── */
+
+/**
+ * The one place this port is deliberately NOT the design.
+ *
+ * The mobile export also finished four product-page sections whose copy had
+ * been sitting in the design file for months with no markup to render it, and
+ * it replaced the home hero's image-slot with a differently cropped photo. All
+ * five show on desktop as well as on the phone. The desktop is signed off as it
+ * stands and is not to move, so each one is admitted below the design's own
+ * mobile breakpoint and held off above it.
+ *
+ * That is the whole deviation: nothing is dropped, nothing is rewritten, and
+ * the phone still renders exactly what the design renders. Deleting the two
+ * entries below and re-running restores the design in full on both.
+ *
+ * Everything here is asserted. If the design renames a flag or moves the hero,
+ * the build stops rather than silently letting the desktop drift.
+ */
+const MOBILE_ONLY_CLASS = 'm-added';
+
+/** sc-if flags whose sections are new on the desktop, and so are held to phones. */
+const FROZEN_SECTIONS = ['feat.statsShown', 'feat.capsShown', 'feat.doesShown', 'feat.quoteShown'];
+
+/** The hero the desktop keeps: the slot the new export removed, restored verbatim. */
+const HERO_SLOT_ATTRS = [
+  { name: 'id', value: 'hero-photo' },
+  { name: 'shape', value: 'rect' },
+  { name: 'placeholder', value: 'hero photograph: a real shop owner at work, warm daylight' },
+  { name: 'style', value: 'animation:gken 30s ease-in-out infinite alternate;transform-origin:60% 50%' },
+];
+
+function addClass(node, name) {
+  const cls = node.attrs.find((a) => a.name === 'class');
+  if (cls) cls.value = `${cls.value} ${name}`.trim();
+  else node.attrs.unshift({ name: 'class', value: name });
+}
+
+function walk(node, visit) {
+  visit(node);
+  // A snapshot: the hero restores a sibling node, and splicing into the array
+  // being iterated makes the for-of hand back the node it was just given.
+  for (const child of [...(node.childNodes ?? [])]) walk(child, visit);
+}
+
+function freezeDesktop(root) {
+  const hits = new Map(FROZEN_SECTIONS.map((f) => [f, 0]));
+  const inserts = [];
+  let heroes = 0;
+
+  walk(root, (node) => {
+    if (node.tagName !== 'sc-if') return;
+    const raw = node.attrs?.find((a) => a.name === 'value')?.value ?? '';
+    const flag = /^\s*\{\{\s*([\s\S]+?)\s*\}\}\s*$/.exec(raw)?.[1];
+
+    if (hits.has(flag)) {
+      // sc-if compiles to a fragment, which has nothing to hang a class on, so
+      // the class goes on each element the block renders.
+      for (const child of node.childNodes ?? []) {
+        if (child.tagName) addClass(child, MOBILE_ONLY_CLASS);
+      }
+      hits.set(flag, hits.get(flag) + 1);
+      return;
+    }
+
+    if (flag !== 'isEn') return;
+    const img = (node.childNodes ?? []).find((c) => c.tagName === 'img');
+    if (!img) return;
+    addClass(img, MOBILE_ONLY_CLASS);
+
+    // The slot goes back in front of it, unconditional as it was. On a phone the
+    // design's photo covers it; above the breakpoint the photo is gone and the
+    // slot is what the desktop has always shown. Held until the walk is over so
+    // the tree is not edited underneath it.
+    inserts.push({ parent: node.parentNode, before: node });
+    heroes++;
+  });
+
+  for (const { parent, before } of inserts) {
+    parent.childNodes.splice(parent.childNodes.indexOf(before), 0, {
+      nodeName: 'image-slot',
+      tagName: 'image-slot',
+      attrs: HERO_SLOT_ATTRS.map((a) => ({ ...a })),
+      namespaceURI: 'http://www.w3.org/1999/xhtml',
+      childNodes: [],
+      parentNode: parent,
+    });
+  }
+
+  for (const [flag, n] of hits) {
+    if (n !== 1) throw new Error(`desktop freeze: expected exactly one <sc-if value="{{ ${flag} }}">, found ${n}`);
+  }
+  if (heroes !== 1) throw new Error(`desktop freeze: expected exactly one English hero, found ${heroes}`);
+  return hits.size + heroes;
+}
+
+const frozen = freezeDesktop(frag);
+
+/**
+ * The host element carries `id="dc-root"`, because dc-runtime gives it one.
+ *
+ * support.js does `hostEl.id = "dc-root"` when it mounts, and the design's own
+ * script reaches for it: fitMobile() walks `#dc-root *` to stack the columns
+ * that are sized in pixels, unwrap rows that are too tight, and lift 10px
+ * labels to something readable on a phone. Without the id that selector matched
+ * nothing here, so none of it ran - the phone laid out from the CSS alone and
+ * came out around a thousand pixels shorter than the design.
+ *
+ * Not a deviation: the one piece of the runtime's mount this port had missed.
+ */
+const hostNode = frag.childNodes.find((n) => n.tagName === 'div');
+if (!hostNode) throw new Error('no host element to mark as #dc-root');
+if (hostNode.attrs.some((a) => a.name === 'id')) throw new Error('the host element already has an id');
+hostNode.attrs.unshift({ name: 'id', value: 'dc-root' });
+
 const body = frag.childNodes.map((n) => emitNode(n, new Set(), 2)).filter(Boolean).join('\n');
 
 /**
@@ -413,6 +529,7 @@ console.log('Template.jsx :', tsx.split('\n').length, 'lines');
 console.log('Chrome.jsx   :', chromeSrc.split('\n').length, 'lines (chrome + a hole for the page)');
 console.log('globals.css  :', pseudoRules.length, 'pseudo rules +', designCss.split(String.fromCharCode(10)).length, 'lines of design CSS');
 console.log('mobile       :', expanded, 'design selectors expanded to match server-rendered styles');
+console.log('desktop     :', frozen, 'design additions admitted on phones only, so the desktop does not move');
 if (warnings.length) {
   console.log('\nwarnings:');
   warnings.forEach((w) => console.log('  -', w));

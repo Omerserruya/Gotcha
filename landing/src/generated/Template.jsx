@@ -8,11 +8,11 @@ import ImageSlot from '@/components/ImageSlot';
 export default function Template({ v: $v }) {
   return (
     <>
-    <div dir={$v?.dir} lang={$v?.lang} style={$st("min-height:100vh;background:#FAF8F4;position:relative")}>
+    <div id="dc-root" dir={$v?.dir} lang={$v?.lang} style={$st("min-height:100vh;background:#FAF8F4;position:relative")}>
       {"\n\n  "}
-      <div style={$st(`height:${$A($v?.bars?.headTop)};flex:none`)}></div>
+      <div style={$st(`height:${$A($v?.bars?.padTop)};flex:none`)}></div>
       {"\n\n  "}
-      <div style={$st(`display:${$A($v?.bars?.offerBar)};position:fixed;top:0;left:0;right:0;z-index:92;background:#8E3418;color:#FFFFFF;height:38px;align-items:center;justify-content:center;gap:16px;padding:0 46px 0 24px;flex-wrap:nowrap;overflow:hidden`)}>
+      <div style={$st(`display:${$A($v?.bars?.offerBar)};position:fixed;top:0;left:0;right:0;z-index:92;background:#8E3418;color:#FFFFFF;height:38px;box-sizing:content-box;padding-top:var(--safe-top);align-items:center;justify-content:center;gap:16px;padding-inline:24px 46px;flex-wrap:nowrap;overflow:hidden`)}>
         {"\n    "}
         <span className="m-hide" style={$st("font:500 9.5px 'IBM Plex Mono',monospace;letter-spacing:.18em;text-transform:uppercase;background:rgba(22,21,15,.24);border-radius:5px;padding:4px 8px;white-space:nowrap")}>
           {$I($v?.offer?.badge)}
@@ -47,9 +47,35 @@ export default function Template({ v: $v }) {
       {$v?.offerShown ? (
         <>
         {"\n    "}
+        <div className="m-only" onClick={$v?.offer?.close} style={$st("position:fixed;top:0;left:0;right:0;bottom:0;z-index:94;background:rgba(22,21,15,.55)")}></div>
+        {"\n    "}
         <div className="offer-drawer" style={$st("position:fixed;top:50%;right:0;transform:translateY(-50%);z-index:95;width:798px;max-width:100vw")}>
           {"\n      "}
           <div style={$st("display:flex;align-items:stretch;background:#FFFFFF;border:1px solid #E4DFD4;border-inline-end:0;border-radius:12px 0 0 12px;box-shadow:-16px 22px 60px rgba(22,21,15,.26);overflow:hidden;animation:gpull .5s cubic-bezier(.22,.85,.2,1) both")}>
+            {"\n        "}
+            <div className="m-only" style={$st("flex:1 1 100%;background:#8E3418;color:#FFFFFF;align-items:center;gap:10px;padding:13px 14px 13px 18px")}>
+              {"\n          "}
+              <span style={$st("display:flex;flex:none")}>
+                <i data-lucide="gift" width="16" height="16" stroke-width="2.2"></i>
+              </span>
+              {"\n          "}
+              <span style={$st("font:600 11px 'IBM Plex Mono',monospace;letter-spacing:.16em;text-transform:uppercase;white-space:nowrap")}>
+                {$I($v?.offer?.tabLabel)}
+              </span>
+              {"\n          "}
+              <span onClick={$v?.offer?.close} style={$st("margin-inline-start:auto;display:flex;align-items:center;justify-content:center;gap:7px;background:rgba(255,255,255,.16);border-radius:11px;padding:0 14px;min-height:44px;min-width:44px;cursor:pointer;flex:none")}>
+                {"\n            "}
+                <span style={$st("font-size:12.5px;font-weight:600;white-space:nowrap")}>
+                  {$I($v?.offer?.closeLabel)}
+                </span>
+                {"\n            "}
+                <span style={$st("display:flex")}>
+                  <i data-lucide="x" width="14" height="14" stroke-width="2.6"></i>
+                </span>
+                {"\n          "}
+              </span>
+              {"\n        "}
+            </div>
             {"\n        "}
             <div onClick={$v?.offer?.close} style={$st("flex:0 0 38px;background:#8E3418;color:#FFFFFF;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;padding:16px 0")}>
               {"\n          "}
@@ -160,13 +186,21 @@ export default function Template({ v: $v }) {
           {$L($v?.mnav).map((g, $index) => (
             <React.Fragment key={$index}>
               {"\n        "}
-              <div style={$st("border-top:1px solid #E4DFD4;padding:16px 0 8px")}>
+              <div style={$st("border-top:1px solid #E4DFD4;padding:6px 0")}>
                 {"\n          "}
-                <div onClick={g?.go} style={$st("font-size:17px;font-weight:600;letter-spacing:-0.018em;color:#16150F;padding:4px 0;cursor:pointer")}>
-                  {$I(g?.t)}
+                <div onClick={g?.go} style={$st("display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:17px;font-weight:600;letter-spacing:-0.018em;color:#16150F;padding:14px 0;min-height:44px;cursor:pointer")}>
+                  {"\n            "}
+                  <span>
+                    {$I(g?.t)}
+                  </span>
+                  {"\n            "}
+                  <span style={$st(`color:#A29B8E;display:flex;transform:rotate(${$A(g?.rot)});transition:transform .2s ease`)}>
+                    <i data-lucide={g?.caret} width="18" height="18" stroke-width="2"></i>
+                  </span>
+                  {"\n          "}
                 </div>
                 {"\n          "}
-                <div style={$st("display:flex;flex-direction:column;gap:2px;margin-top:8px")}>
+                <div style={$st(`display:${$A(g?.itemsDisplay)};flex-direction:column;gap:2px;padding-bottom:10px`)}>
                   {"\n            "}
                   {$L(g?.items).map((it, $index) => (
                     <React.Fragment key={$index}>
@@ -794,6 +828,361 @@ export default function Template({ v: $v }) {
             {"\n\n        \n      "}
           </div>
           {"\n\n\n      "}
+          {$v?.feat?.tw ? (
+            <>
+            {"\n        "}
+            <div style={$st("max-width:1240px;margin:0 auto;padding:76px 24px 0")}>
+              {"\n          "}
+              <div data-reveal="" style={$st("transition:opacity .8s ease,transform .8s ease")}>
+                {"\n            "}
+                <div style={$st("display:flex;align-items:flex-end;justify-content:space-between;gap:40px;flex-wrap:wrap")}>
+                  {"\n              "}
+                  <div>
+                    {"\n                "}
+                    <div data-step="" style={$st("font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.22em;text-transform:uppercase;color:#C4552F")}>
+                      {"Try it yourself"}
+                    </div>
+                    {"\n                "}
+                    <h2 data-step="" style={$st("margin:14px 0 0;font-size:38px;font-weight:600;letter-spacing:-0.034em;line-height:1.1;max-width:660px")}>
+                      {$I($v?.feat?.tw?.title)}
+                    </h2>
+                    {"\n              "}
+                  </div>
+                  {"\n              "}
+                  <div data-step="" style={$st("max-width:400px;font-size:14px;line-height:1.6;color:#5B564D")}>
+                    {$I($v?.feat?.tw?.note)}
+                  </div>
+                  {"\n            "}
+                </div>
+                {"\n\n            "}
+                <div data-step="" style={$st("margin-top:24px;background:#EFEAE1;border:1px solid #E4DFD4;border-radius:24px;padding:14px;display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap")}>
+                  {"\n              "}
+                  <div style={$st("flex:1 1 320px;min-width:0;background:#FFFFFF;border:1px solid #E8E3D9;border-radius:16px;overflow:hidden")}>
+                    {"\n                "}
+                    <div style={$st("display:flex;align-items:center;gap:8px;padding:8px 12px;background:#F7F5F1;border-bottom:1px solid #EDE9E1")}>
+                      {"\n                  "}
+                      <span style={$st("display:flex;gap:4px")}>
+                        {"\n                    "}
+                        <span style={$st("width:7px;height:7px;border-radius:50%;background:#DDD8CE")}></span>
+                        {"\n                    "}
+                        <span style={$st("width:7px;height:7px;border-radius:50%;background:#DDD8CE")}></span>
+                        {"\n                    "}
+                        <span style={$st("width:7px;height:7px;border-radius:50%;background:#DDD8CE")}></span>
+                        {"\n                  "}
+                      </span>
+                      {"\n                  "}
+                      <span style={$st("flex:1;background:#FFFFFF;border:1px solid #E8E3D9;border-radius:99px;padding:4px 10px;font-size:10.5px;color:#A29B8E;white-space:nowrap;overflow:hidden;text-overflow:ellipsis")}>
+                        {$I($v?.feat?.tw?.url)}
+                      </span>
+                      {"\n                "}
+                    </div>
+                    {"\n                "}
+                    <div style={$st("display:flex;align-items:center;gap:14px;padding:12px 16px;border-bottom:1px solid #F0EDE7")}>
+                      {"\n                  "}
+                      <span style={$st("font-size:12.5px;font-weight:700;letter-spacing:.1em")}>
+                        {$I($v?.feat?.tw?.store)}
+                      </span>
+                      {"\n                  "}
+                      <div style={$st(`display:flex;gap:12px;margin-left:${$A($v?.mlAuto)};margin-right:${$A($v?.mrAuto)};align-items:center`)}>
+                        {"\n                    "}
+                        {$L($v?.feat?.tw?.navItems).map((nv, $index) => (
+                          <React.Fragment key={$index}>
+                            {"\n                      "}
+                            <span style={$st("font-size:11px;color:#8E887C;white-space:nowrap")}>
+                              {$I(nv)}
+                            </span>
+                            {"\n                    "}
+                          </React.Fragment>
+                        ))}
+                        {"\n                    "}
+                        <span style={$st("color:#8E887C;display:flex")}>
+                          <i data-lucide="shopping-bag" width="13" height="13" stroke-width="2"></i>
+                        </span>
+                        {"\n                  "}
+                      </div>
+                      {"\n                "}
+                    </div>
+                    {"\n                "}
+                    <div style={$st("position:relative;height:74px;background:linear-gradient(120deg,#E4DACB 0%,#EFE9DF 52%,#DED3C2 100%);display:flex;align-items:center;padding:0 16px")}>
+                      {"\n                  "}
+                      <div>
+                        {"\n                    "}
+                        <div style={$st("font-family:'Instrument Serif',serif;font-style:italic;font-size:19px;color:#3A342A;line-height:1.1")}>
+                          {$I($v?.feat?.tw?.heroA)}
+                        </div>
+                        {"\n                    "}
+                        <div style={$st("font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:#6E6656;margin-top:5px")}>
+                          {$I($v?.feat?.tw?.heroB)}
+                        </div>
+                        {"\n                  "}
+                      </div>
+                      {"\n                "}
+                    </div>
+                    {"\n                "}
+                    <div style={$st("display:flex;gap:14px;padding:16px")}>
+                      {"\n                  "}
+                      <span style={$st("width:104px;height:126px;border-radius:10px;background:linear-gradient(140deg,#EDE6DA,#D9CEBC);flex:none;position:relative;overflow:hidden")}>
+                        {"\n                    "}
+                        <span style={$st("position:absolute;left:14px;right:14px;top:26px;height:5px;border-radius:3px;background:rgba(255,255,255,.5)")}></span>
+                        {"\n                    "}
+                        <span style={$st("position:absolute;left:14px;right:24px;top:38px;height:5px;border-radius:3px;background:rgba(255,255,255,.35)")}></span>
+                        {"\n                    "}
+                        <span style={$st("position:absolute;left:0;right:0;bottom:0;height:44px;background:linear-gradient(180deg,rgba(0,0,0,0),rgba(120,104,80,.16))")}></span>
+                        {"\n                  "}
+                      </span>
+                      {"\n                  "}
+                      <div style={$st("min-width:0")}>
+                        {"\n                    "}
+                        <div style={$st("font-size:16px;font-weight:600;letter-spacing:-0.016em")}>
+                          {$I($v?.feat?.tw?.product)}
+                        </div>
+                        {"\n                    "}
+                        <div style={$st("font-size:13px;color:#6B6660;margin-top:4px")}>
+                          {$I($v?.feat?.tw?.price)}
+                        </div>
+                        {"\n                    "}
+                        <div style={$st("display:flex;gap:6px;margin-top:12px;flex-wrap:wrap")}>
+                          {"\n                      "}
+                          {$L($v?.feat?.tw?.sizes).map((sz, $index) => (
+                            <React.Fragment key={$index}>
+                              {"\n                        "}
+                              <span style={$st(`font-size:11.5px;border:1px solid ${$A(sz?.bd)};background:${$A(sz?.bg)};color:${$A(sz?.fg)};border-radius:8px;padding:5px 9px`)}>
+                                {$I(sz?.t)}
+                              </span>
+                              {"\n                      "}
+                            </React.Fragment>
+                          ))}
+                          {"\n                    "}
+                        </div>
+                        {"\n                    "}
+                        <div style={$st("margin-top:12px;font-size:12.5px;color:#8E887C;line-height:1.5")}>
+                          {$I($v?.feat?.tw?.blurb)}
+                        </div>
+                        {"\n                    "}
+                        <div style={$st("display:flex;align-items:center;gap:8px;margin-top:14px;flex-wrap:wrap")}>
+                          {"\n                      "}
+                          <span style={$st("font-size:12px;font-weight:500;background:#16150F;color:#FAF8F4;border-radius:9px;padding:9px 16px")}>
+                            {$I($v?.feat?.tw?.buy)}
+                          </span>
+                          {"\n                      "}
+                          <span style={$st("font-size:12px;color:#2E7D5B;display:flex;align-items:center;gap:6px")}>
+                            <i data-lucide="check" width="12" height="12" stroke-width="2.6"></i>
+                            {$I($v?.feat?.tw?.stock)}
+                          </span>
+                          {"\n                    "}
+                        </div>
+                        {"\n                  "}
+                      </div>
+                      {"\n                "}
+                    </div>
+                    {"\n                "}
+                    <div style={$st("padding:2px 16px 16px")}>
+                      {"\n                  "}
+                      <div style={$st("font:500 9px 'IBM Plex Mono',monospace;letter-spacing:.18em;text-transform:uppercase;color:#A29B8E;margin-bottom:9px")}>
+                        {$I($v?.feat?.tw?.alsoLabel)}
+                      </div>
+                      {"\n                  "}
+                      <div style={$st("display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px")}>
+                        {"\n                    "}
+                        {$L($v?.feat?.tw?.also).map((al, $index) => (
+                          <React.Fragment key={$index}>
+                            {"\n                      "}
+                            <div style={$st("min-width:0")}>
+                              {"\n                        "}
+                              <span style={$st(`display:block;height:66px;border-radius:9px;background:${$A(al?.swatch)}`)}></span>
+                              {"\n                        "}
+                              <div style={$st("font-size:11.5px;font-weight:500;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis")}>
+                                {$I(al?.t)}
+                              </div>
+                              {"\n                        "}
+                              <div style={$st("font-size:11px;color:#8E887C;margin-top:1px")}>
+                                {$I(al?.p)}
+                              </div>
+                              {"\n                      "}
+                            </div>
+                            {"\n                    "}
+                          </React.Fragment>
+                        ))}
+                        {"\n                  "}
+                      </div>
+                      {"\n                "}
+                    </div>
+                    {"\n                "}
+                    <div style={$st("display:flex;align-items:center;gap:18px;padding:11px 16px;border-top:1px solid #F0EDE7;flex-wrap:wrap")}>
+                      {"\n                  "}
+                      {$L($v?.feat?.tw?.trust).map((tr, $index) => (
+                        <React.Fragment key={$index}>
+                          {"\n                    "}
+                          <span style={$st("font-size:11.5px;color:#8E887C;white-space:nowrap")}>
+                            {$I(tr)}
+                          </span>
+                          {"\n                  "}
+                        </React.Fragment>
+                      ))}
+                      {"\n                "}
+                    </div>
+                    {"\n              "}
+                  </div>
+                  {"\n\n              "}
+                  <div style={$st("flex:0 0 344px;max-width:100%;background:#FFFFFF;border:1px solid #E4DFD4;border-radius:18px;box-shadow:0 22px 50px rgba(22,21,15,.12);overflow:hidden;display:flex;flex-direction:column")}>
+                    {"\n                "}
+                    <div style={$st("display:flex;align-items:center;gap:10px;padding:13px 15px;background:#16150F;color:#F7F5F1")}>
+                      {"\n                  "}
+                      <span style={$st("width:26px;height:26px;border-radius:8px;background:#2A2823;display:flex;align-items:center;justify-content:center;flex:none")}>
+                        <i data-lucide="message-circle" width="14" height="14" stroke-width="2"></i>
+                      </span>
+                      {"\n                  "}
+                      <div>
+                        {"\n                    "}
+                        <div style={$st("font-size:13px;font-weight:600;letter-spacing:-0.01em")}>
+                          {$I($v?.feat?.tw?.widgetName)}
+                        </div>
+                        {"\n                    "}
+                        <div style={$st("font-size:10.5px;color:#A8A39A;margin-top:1px")}>
+                          {$I($v?.feat?.tw?.widgetSub)}
+                        </div>
+                        {"\n                  "}
+                      </div>
+                      {"\n                  "}
+                      <span style={$st(`margin-left:${$A($v?.mlAuto)};margin-right:${$A($v?.mrAuto)};width:7px;height:7px;border-radius:50%;background:#A8C57A;animation:gpulse 2.2s ease-in-out infinite`)}></span>
+                      {"\n                "}
+                    </div>
+                    {"\n\n                "}
+                    <div style={$st("padding:14px 15px;display:flex;flex-direction:column;gap:8px;min-height:246px")}>
+                      {"\n                  "}
+                      <div style={$st("align-self:flex-start;max-width:88%;background:#F5F2EC;border-radius:14px 14px 14px 4px;padding:10px 13px;font-size:13px;line-height:1.5")}>
+                        {$I($v?.feat?.tw?.greeting)}
+                      </div>
+                      {"\n                  "}
+                      {$v?.feat?.tw?.asked ? (
+                        <>
+                        {"\n                    "}
+                        <div style={$st("align-self:flex-end;max-width:88%;background:#16150F;color:#FFFFFF;border-radius:14px 14px 4px 14px;padding:10px 13px;font-size:13px;line-height:1.5")}>
+                          {$I($v?.feat?.tw?.asked)}
+                        </div>
+                        {"\n                  "}
+                        </>
+                      ) : null}
+                      {"\n                  "}
+                      {$v?.feat?.tw?.typing ? (
+                        <>
+                        {"\n                    "}
+                        <div style={$st("align-self:flex-start;background:#F5F2EC;border-radius:14px;padding:11px 14px;display:flex;gap:4px")}>
+                          {"\n                      "}
+                          <span style={$st("width:5px;height:5px;border-radius:50%;background:#A29B8E;animation:gpulse 1s ease-in-out infinite")}></span>
+                          {"\n                      "}
+                          <span style={$st("width:5px;height:5px;border-radius:50%;background:#A29B8E;animation:gpulse 1s ease-in-out .2s infinite")}></span>
+                          {"\n                      "}
+                          <span style={$st("width:5px;height:5px;border-radius:50%;background:#A29B8E;animation:gpulse 1s ease-in-out .4s infinite")}></span>
+                          {"\n                    "}
+                        </div>
+                        {"\n                  "}
+                        </>
+                      ) : null}
+                      {"\n                  "}
+                      {$v?.feat?.tw?.answer ? (
+                        <>
+                        {"\n                    "}
+                        <div style={$st("align-self:flex-start;max-width:92%;background:#F5F2EC;border-radius:14px 14px 14px 4px;padding:10px 13px;font-size:13px;line-height:1.5")}>
+                          {$I($v?.feat?.tw?.answer)}
+                        </div>
+                        {"\n                  "}
+                        </>
+                      ) : null}
+                      {"\n                  "}
+                      {$v?.feat?.tw?.recs ? (
+                        <>
+                        {"\n                    "}
+                        <div style={$st("display:flex;gap:8px;margin-top:2px;overflow:hidden")}>
+                          {"\n                      "}
+                          {$L($v?.feat?.tw?.recs).map((rc, $index) => (
+                            <React.Fragment key={$index}>
+                              {"\n                        "}
+                              <div style={$st("flex:1;min-width:0;border:1px solid #E8E3D9;border-radius:12px;overflow:hidden")}>
+                                {"\n                          "}
+                                <span style={$st(`display:block;height:56px;background:${$A(rc?.swatch)}`)}></span>
+                                {"\n                          "}
+                                <div style={$st("padding:8px 9px")}>
+                                  {"\n                            "}
+                                  <div style={$st("font-size:11.5px;font-weight:600;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis")}>
+                                    {$I(rc?.t)}
+                                  </div>
+                                  {"\n                            "}
+                                  <div style={$st("font-size:11px;color:#6B6660;margin-top:2px")}>
+                                    {$I(rc?.p)}
+                                  </div>
+                                  {"\n                            "}
+                                  <div style={$st("margin-top:7px;font-size:11px;font-weight:500;background:#16150F;color:#FAF8F4;border-radius:7px;padding:6px 0;text-align:center")}>
+                                    {$I($v?.feat?.tw?.addLabel)}
+                                  </div>
+                                  {"\n                          "}
+                                </div>
+                                {"\n                        "}
+                              </div>
+                              {"\n                      "}
+                            </React.Fragment>
+                          ))}
+                          {"\n                    "}
+                        </div>
+                        {"\n                  "}
+                        </>
+                      ) : null}
+                      {"\n                  "}
+                      {$v?.feat?.tw?.acted ? (
+                        <>
+                        {"\n                    "}
+                        <div style={$st("display:flex;align-items:center;gap:8px;margin-top:2px;background:#EDF4E7;border:1px solid #D8E7C9;border-radius:11px;padding:9px 11px;font-size:12px;color:#2E7D5B")}>
+                          {"\n                      "}
+                          <i data-lucide="check" width="13" height="13" stroke-width="2.6"></i>
+                          {$I($v?.feat?.tw?.acted)}{"\n                    "}
+                        </div>
+                        {"\n                  "}
+                        </>
+                      ) : null}
+                      {"\n                "}
+                    </div>
+                    {"\n\n                "}
+                    <div style={$st("padding:0 15px 14px;display:flex;flex-direction:column;gap:7px")}>
+                      {"\n                  "}
+                      <div style={$st("font:500 9px 'IBM Plex Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:#A29B8E")}>
+                        {$I($v?.feat?.tw?.tryLabel)}
+                      </div>
+                      {"\n                  "}
+                      {$L($v?.feat?.tw?.qs).map((q, $index) => (
+                        <React.Fragment key={$index}>
+                          {"\n                    "}
+                          <div className="scpb" onClick={q?.pick} style={$st(`cursor:pointer;font-size:12.5px;line-height:1.4;background:${$A(q?.bg)};border:1px solid ${$A(q?.bd)};color:${$A(q?.fg)};border-radius:10px;padding:9px 11px;transition:border-color .2s ease,background .2s ease`)}>
+                            {$I(q?.t)}
+                          </div>
+                          {"\n                  "}
+                        </React.Fragment>
+                      ))}
+                      {"\n                  "}
+                      <div style={$st("display:flex;align-items:center;gap:8px;border:1px solid #EFEAE1;border-radius:99px;padding:9px 13px;margin-top:2px")}>
+                        {"\n                    "}
+                        <span style={$st("font-size:11.5px;color:#A8A8A8")}>
+                          {$I($v?.feat?.tw?.composer)}
+                        </span>
+                        {"\n                    "}
+                        <span style={$st(`margin-left:${$A($v?.mlAuto)};margin-right:${$A($v?.mrAuto)};color:#C4552F;display:flex`)}>
+                          <i data-lucide="send" width="13" height="13" stroke-width="2"></i>
+                        </span>
+                        {"\n                  "}
+                      </div>
+                      {"\n                "}
+                    </div>
+                    {"\n              "}
+                  </div>
+                  {"\n            "}
+                </div>
+                {"\n          "}
+              </div>
+              {"\n        "}
+            </div>
+            {"\n      "}
+            </>
+          ) : null}
+          {"\n\n\n      "}
           {$v?.feat?.shotShown ? (
             <>
             {"\n        "}
@@ -856,6 +1245,256 @@ export default function Template({ v: $v }) {
                         {"\n                  "}
                         <div style={$st(`font-size:13.5px;line-height:1.55;color:${$A($v?.feat?.heroMuted)};text-wrap:pretty`)}>
                           {$I(cl?.t)}
+                        </div>
+                        {"\n                "}
+                      </div>
+                      {"\n              "}
+                    </React.Fragment>
+                  ))}
+                  {"\n            "}
+                </div>
+                {"\n          "}
+              </div>
+              {"\n        "}
+            </div>
+            {"\n      "}
+            </>
+          ) : null}
+          {"\n\n      "}
+          {$v?.feat?.statsShown ? (
+            <>
+            {"\n        "}
+            <div className="m-added" style={$st("max-width:1240px;margin:0 auto;padding:56px 24px 0")}>
+              {"\n          "}
+              <div data-reveal="" style={$st("display:flex;gap:32px;align-items:flex-start;flex-wrap:wrap;transition:opacity .8s ease,transform .8s ease")}>
+                {"\n            "}
+                <div style={$st("flex:1 1 520px;min-width:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1px 26px")}>
+                  {"\n              "}
+                  {$L($v?.feat?.stats).map((sv, $index) => (
+                    <React.Fragment key={$index}>
+                      {"\n                "}
+                      <div style={$st(`padding:18px 0;border-top:1px solid ${$A($v?.feat?.heroLine)}`)}>
+                        {"\n                  "}
+                        <div style={$st(`font-size:38px;font-weight:600;letter-spacing:-0.042em;line-height:1;color:${$A($v?.feat?.heroFg)}`)}>
+                          {$I(sv?.v)}
+                        </div>
+                        {"\n                  "}
+                        <div style={$st(`font-size:13.5px;line-height:1.5;color:${$A($v?.feat?.heroMuted)};margin-top:9px;text-wrap:pretty`)}>
+                          {$I(sv?.l)}
+                        </div>
+                        {"\n                "}
+                      </div>
+                      {"\n              "}
+                    </React.Fragment>
+                  ))}
+                  {"\n            "}
+                </div>
+                {"\n            "}
+                <div style={$st(`flex:1 1 320px;max-width:420px;background:${$A($v?.feat?.cardBg)};border:1px solid ${$A($v?.feat?.cardBd)};border-radius:18px;padding:22px 24px`)}>
+                  {"\n              "}
+                  <div style={$st(`font-size:15.5px;font-weight:600;letter-spacing:-0.016em;color:${$A($v?.feat?.heroFg)}`)}>
+                    {$I($v?.feat?.asideHead)}
+                  </div>
+                  {"\n              "}
+                  <div style={$st(`font-size:13.5px;line-height:1.6;color:${$A($v?.feat?.heroMuted)};margin-top:9px;text-wrap:pretty`)}>
+                    {$I($v?.feat?.aside)}
+                  </div>
+                  {"\n            "}
+                </div>
+                {"\n          "}
+              </div>
+              {"\n        "}
+            </div>
+            {"\n      "}
+            </>
+          ) : null}
+          {"\n\n      "}
+          {$v?.feat?.capsShown ? (
+            <>
+            {"\n        "}
+            <div className="m-added" style={$st("max-width:1240px;margin:0 auto;padding:76px 24px 0")}>
+              {"\n          "}
+              <div data-reveal="" style={$st("transition:opacity .8s ease,transform .8s ease")}>
+                {"\n            "}
+                <div style={$st("display:flex;align-items:flex-end;justify-content:space-between;gap:40px;flex-wrap:wrap")}>
+                  {"\n              "}
+                  <h2 data-step="" style={$st(`margin:0;font-size:38px;font-weight:600;letter-spacing:-0.034em;line-height:1.1;max-width:660px;color:${$A($v?.feat?.heroFg)};text-wrap:pretty`)}>
+                    {$I($v?.feat?.capsTitle)}
+                  </h2>
+                  {"\n              "}
+                  <div data-step="" style={$st(`flex:1 1 340px;max-width:400px;font-size:14px;line-height:1.6;color:${$A($v?.feat?.heroMuted)};text-wrap:pretty`)}>
+                    {$I($v?.feat?.capsNote)}
+                  </div>
+                  {"\n            "}
+                </div>
+                {"\n            "}
+                <div style={$st("display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-top:26px")}>
+                  {"\n              "}
+                  {$L($v?.feat?.caps).map((cp, $index) => (
+                    <React.Fragment key={$index}>
+                      {"\n                "}
+                      <div style={$st(`background:${$A($v?.feat?.cardBg)};border:1px solid ${$A($v?.feat?.cardBd)};border-radius:18px;padding:24px 26px;display:flex;flex-direction:column;gap:11px`)}>
+                        {"\n                  "}
+                        <div style={$st("display:flex;align-items:center;gap:10px")}>
+                          {"\n                    "}
+                          <span style={$st(`width:32px;height:32px;border-radius:10px;background:${$A(cp?.bg)};color:${$A(cp?.ic)};display:flex;align-items:center;justify-content:center;flex:none`)}>
+                            <i data-lucide={cp?.icon} width="16" height="16" stroke-width="2"></i>
+                          </span>
+                          {"\n                    "}
+                          <span style={$st(`font:500 9.5px 'IBM Plex Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:${$A($v?.feat?.heroMuted)}`)}>
+                            {$I(cp?.n)}
+                          </span>
+                          {"\n                  "}
+                        </div>
+                        {"\n                  "}
+                        <div style={$st(`font-size:16.5px;font-weight:600;letter-spacing:-0.018em;line-height:1.25;color:${$A($v?.feat?.heroFg)};text-wrap:pretty`)}>
+                          {$I(cp?.t)}
+                        </div>
+                        {"\n                  "}
+                        <div style={$st(`font-size:13.5px;line-height:1.6;color:${$A($v?.feat?.heroMuted)};text-wrap:pretty`)}>
+                          {$I(cp?.d)}
+                        </div>
+                        {"\n                "}
+                      </div>
+                      {"\n              "}
+                    </React.Fragment>
+                  ))}
+                  {"\n            "}
+                </div>
+                {"\n          "}
+              </div>
+              {"\n        "}
+            </div>
+            {"\n      "}
+            </>
+          ) : null}
+          {"\n\n      "}
+          {$v?.feat?.doesShown ? (
+            <>
+            {"\n        "}
+            <div className="m-added" style={$st("max-width:1240px;margin:0 auto;padding:76px 24px 0")}>
+              {"\n          "}
+              <div data-reveal="" style={$st("display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px;transition:opacity .8s ease,transform .8s ease")}>
+                {"\n            "}
+                <div style={$st(`background:${$A($v?.feat?.cardBg)};border:1px solid ${$A($v?.feat?.cardBd)};border-radius:20px;padding:26px 28px`)}>
+                  {"\n              "}
+                  <div style={$st(`font-size:20px;font-weight:600;letter-spacing:-0.022em;color:${$A($v?.feat?.heroFg)}`)}>
+                    {$I($v?.feat?.doesTitle)}
+                  </div>
+                  {"\n              "}
+                  <div style={$st(`font-size:13px;line-height:1.6;color:${$A($v?.feat?.heroMuted)};margin-top:8px`)}>
+                    {$I($v?.feat?.doesNote)}
+                  </div>
+                  {"\n              "}
+                  <div style={$st("display:flex;flex-direction:column;margin-top:16px")}>
+                    {"\n                "}
+                    {$L($v?.feat?.does).map((dv, $index) => (
+                      <React.Fragment key={$index}>
+                        {"\n                  "}
+                        <div className="m-norow" style={$st(`display:flex;align-items:baseline;gap:16px;padding:11px 0;border-top:1px solid ${$A($v?.feat?.heroLine)}`)}>
+                          {"\n                    "}
+                          <span style={$st(`flex:1;font-size:13.5px;line-height:1.5;color:${$A($v?.feat?.heroFg)}`)}>
+                            {$I(dv?.t)}
+                          </span>
+                          {"\n                    "}
+                          <span style={$st("flex:none;font:500 13px 'IBM Plex Mono',monospace;color:#2E7D5B")}>
+                            {$I(dv?.n)}
+                          </span>
+                          {"\n                  "}
+                        </div>
+                        {"\n                "}
+                      </React.Fragment>
+                    ))}
+                    {"\n              "}
+                  </div>
+                  {"\n            "}
+                </div>
+                {"\n            "}
+                <div style={$st("background:#16150F;border:1px solid #16150F;border-radius:20px;padding:26px 28px;color:#F7F5F1")}>
+                  {"\n              "}
+                  <div style={$st("font-size:20px;font-weight:600;letter-spacing:-0.022em")}>
+                    {$I($v?.feat?.limitTitle)}
+                  </div>
+                  {"\n              "}
+                  <div style={$st("font-size:13px;line-height:1.6;color:#A8A39A;margin-top:8px")}>
+                    {$I($v?.feat?.limitNote)}
+                  </div>
+                  {"\n              "}
+                  <div style={$st("display:flex;flex-direction:column;margin-top:16px")}>
+                    {"\n                "}
+                    {$L($v?.feat?.limits).map((lv, $index) => (
+                      <React.Fragment key={$index}>
+                        {"\n                  "}
+                        <div className="m-norow" style={$st("display:flex;align-items:baseline;gap:16px;padding:11px 0;border-top:1px solid #2A2823")}>
+                          {"\n                    "}
+                          <span style={$st("flex:1;font-size:13.5px;line-height:1.5")}>
+                            {$I(lv?.t)}
+                          </span>
+                          {"\n                    "}
+                          <span style={$st("flex:none;font:500 11.5px 'IBM Plex Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:#E0A458")}>
+                            {$I(lv?.n)}
+                          </span>
+                          {"\n                  "}
+                        </div>
+                        {"\n                "}
+                      </React.Fragment>
+                    ))}
+                    {"\n              "}
+                  </div>
+                  {"\n              "}
+                  <div style={$st("font-size:12.5px;line-height:1.6;color:#8E8A83;margin-top:16px;padding-top:14px;border-top:1px solid #2A2823;text-wrap:pretty")}>
+                    {$I($v?.feat?.limitFoot)}
+                  </div>
+                  {"\n            "}
+                </div>
+                {"\n          "}
+              </div>
+              {"\n        "}
+            </div>
+            {"\n      "}
+            </>
+          ) : null}
+          {"\n\n      "}
+          {$v?.feat?.quoteShown ? (
+            <>
+            {"\n        "}
+            <div className="m-added" style={$st("max-width:1240px;margin:0 auto;padding:76px 24px 0")}>
+              {"\n          "}
+              <div data-reveal="" style={$st("display:flex;gap:32px;align-items:stretch;flex-wrap:wrap;transition:opacity .8s ease,transform .8s ease")}>
+                {"\n            "}
+                <div style={$st("flex:1 1 460px;min-width:0;background:#FBEEE8;border:1px solid #F0D6C9;border-radius:20px;padding:30px 32px;display:flex;flex-direction:column;gap:18px")}>
+                  {"\n              "}
+                  <div style={$st("font-family:'Instrument Serif',serif;font-style:italic;font-size:24px;line-height:1.3;color:#5C2410;text-wrap:pretty")}>
+                    {$I($v?.feat?.quote)}
+                  </div>
+                  {"\n              "}
+                  <div style={$st("margin-top:auto;display:flex;align-items:baseline;gap:10px")}>
+                    {"\n                "}
+                    <span style={$st("font-size:14px;font-weight:600;color:#5C2410")}>
+                      {$I($v?.feat?.quoteName)}
+                    </span>
+                    {"\n                "}
+                    <span style={$st("font-size:12.5px;color:#8E3418")}>
+                      {$I($v?.feat?.quoteRole)}
+                    </span>
+                    {"\n              "}
+                  </div>
+                  {"\n            "}
+                </div>
+                {"\n            "}
+                <div style={$st("flex:1 1 300px;min-width:0;display:flex;flex-direction:column;gap:12px")}>
+                  {"\n              "}
+                  {$L($v?.feat?.proof).map((pv, $index) => (
+                    <React.Fragment key={$index}>
+                      {"\n                "}
+                      <div style={$st(`flex:1;background:${$A($v?.feat?.cardBg)};border:1px solid ${$A($v?.feat?.cardBd)};border-radius:18px;padding:24px 26px`)}>
+                        {"\n                  "}
+                        <div style={$st(`font-size:40px;font-weight:600;letter-spacing:-0.044em;line-height:1;color:${$A($v?.feat?.heroFg)}`)}>
+                          {$I(pv?.v)}
+                        </div>
+                        {"\n                  "}
+                        <div style={$st(`font-size:13.5px;line-height:1.55;color:${$A($v?.feat?.heroMuted)};margin-top:10px;text-wrap:pretty`)}>
+                          {$I(pv?.l)}
                         </div>
                         {"\n                "}
                       </div>
@@ -1214,7 +1853,7 @@ export default function Template({ v: $v }) {
                     {"\n              "}
                   </div>
                   {"\n\n              "}
-                  <div style={$st("padding:0 15px 15px")}>
+                  <div className="m-trace-ctx" style={$st("padding:0 15px 15px")}>
                     {"\n                "}
                     <div style={$st("font:500 9px 'IBM Plex Mono',monospace;letter-spacing:.18em;text-transform:uppercase;color:#A29B8E;padding-top:13px;border-top:1px solid #F0EDE7")}>
                       {$I($v?.feat?.tr?.ctxLabel)}
@@ -1286,7 +1925,7 @@ export default function Template({ v: $v }) {
                   {"\n            "}
                 </div>
                 {"\n\n            "}
-                <div style={$st("flex:0 0 356px;max-width:100%;background:#16150F;color:#F7F5F1;border-radius:18px;box-shadow:0 22px 50px rgba(22,21,15,.18);overflow:hidden;display:flex;flex-direction:column")}>
+                <div className="m-trace-side" style={$st("flex:0 0 356px;max-width:100%;background:#16150F;color:#F7F5F1;border-radius:18px;box-shadow:0 22px 50px rgba(22,21,15,.18);overflow:hidden;display:flex;flex-direction:column")}>
                   {"\n              "}
                   <div style={$st("display:flex;align-items:center;gap:10px;padding:13px 15px;border-bottom:1px solid #2A2823")}>
                     {"\n                "}
@@ -1396,7 +2035,7 @@ export default function Template({ v: $v }) {
                   {"\n\n              "}
                   <div style={$st("margin-top:auto;padding:0 15px 14px")}>
                     {"\n                "}
-                    <span className="scpb" onClick={$v?.feat?.tr?.replay} style={$st("display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;font-size:12px;font-weight:500;color:#D8D3CA;border:1px solid #2F2D28;border-radius:10px;padding:10px 0;transition:border-color .2s ease,color .2s ease")}>
+                    <span className="scpc" onClick={$v?.feat?.tr?.replay} style={$st("display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;font-size:12px;font-weight:500;color:#D8D3CA;border:1px solid #2F2D28;border-radius:10px;padding:10px 0;transition:border-color .2s ease,color .2s ease")}>
                       <i data-lucide="rotate-ccw" width="13" height="13" stroke-width="2"></i>
                       {$I($v?.feat?.tr?.replayLabel)}
                     </span>
@@ -1410,362 +2049,7 @@ export default function Template({ v: $v }) {
             </div>
             {"\n      "}
           </div>
-          {"\n\n\n\n      \n\n      "}
-          {$v?.feat?.tw ? (
-            <>
-            {"\n        "}
-            <div style={$st("max-width:1240px;margin:0 auto;padding:76px 24px 0")}>
-              {"\n          "}
-              <div data-reveal="" style={$st("transition:opacity .8s ease,transform .8s ease")}>
-                {"\n            "}
-                <div style={$st("display:flex;align-items:flex-end;justify-content:space-between;gap:40px;flex-wrap:wrap")}>
-                  {"\n              "}
-                  <div>
-                    {"\n                "}
-                    <div data-step="" style={$st("font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.22em;text-transform:uppercase;color:#C4552F")}>
-                      {"Try it yourself"}
-                    </div>
-                    {"\n                "}
-                    <h2 data-step="" style={$st("margin:14px 0 0;font-size:38px;font-weight:600;letter-spacing:-0.034em;line-height:1.1;max-width:660px")}>
-                      {$I($v?.feat?.tw?.title)}
-                    </h2>
-                    {"\n              "}
-                  </div>
-                  {"\n              "}
-                  <div data-step="" style={$st("max-width:400px;font-size:14px;line-height:1.6;color:#5B564D")}>
-                    {$I($v?.feat?.tw?.note)}
-                  </div>
-                  {"\n            "}
-                </div>
-                {"\n\n            "}
-                <div data-step="" style={$st("margin-top:24px;background:#EFEAE1;border:1px solid #E4DFD4;border-radius:24px;padding:14px;display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap")}>
-                  {"\n              "}
-                  <div style={$st("flex:1 1 320px;min-width:0;background:#FFFFFF;border:1px solid #E8E3D9;border-radius:16px;overflow:hidden")}>
-                    {"\n                "}
-                    <div style={$st("display:flex;align-items:center;gap:8px;padding:8px 12px;background:#F7F5F1;border-bottom:1px solid #EDE9E1")}>
-                      {"\n                  "}
-                      <span style={$st("display:flex;gap:4px")}>
-                        {"\n                    "}
-                        <span style={$st("width:7px;height:7px;border-radius:50%;background:#DDD8CE")}></span>
-                        {"\n                    "}
-                        <span style={$st("width:7px;height:7px;border-radius:50%;background:#DDD8CE")}></span>
-                        {"\n                    "}
-                        <span style={$st("width:7px;height:7px;border-radius:50%;background:#DDD8CE")}></span>
-                        {"\n                  "}
-                      </span>
-                      {"\n                  "}
-                      <span style={$st("flex:1;background:#FFFFFF;border:1px solid #E8E3D9;border-radius:99px;padding:4px 10px;font-size:10.5px;color:#A29B8E;white-space:nowrap;overflow:hidden;text-overflow:ellipsis")}>
-                        {$I($v?.feat?.tw?.url)}
-                      </span>
-                      {"\n                "}
-                    </div>
-                    {"\n                "}
-                    <div style={$st("display:flex;align-items:center;gap:14px;padding:12px 16px;border-bottom:1px solid #F0EDE7")}>
-                      {"\n                  "}
-                      <span style={$st("font-size:12.5px;font-weight:700;letter-spacing:.1em")}>
-                        {$I($v?.feat?.tw?.store)}
-                      </span>
-                      {"\n                  "}
-                      <div style={$st(`display:flex;gap:12px;margin-left:${$A($v?.mlAuto)};margin-right:${$A($v?.mrAuto)};align-items:center`)}>
-                        {"\n                    "}
-                        {$L($v?.feat?.tw?.navItems).map((nv, $index) => (
-                          <React.Fragment key={$index}>
-                            {"\n                      "}
-                            <span style={$st("font-size:11px;color:#8E887C;white-space:nowrap")}>
-                              {$I(nv)}
-                            </span>
-                            {"\n                    "}
-                          </React.Fragment>
-                        ))}
-                        {"\n                    "}
-                        <span style={$st("color:#8E887C;display:flex")}>
-                          <i data-lucide="shopping-bag" width="13" height="13" stroke-width="2"></i>
-                        </span>
-                        {"\n                  "}
-                      </div>
-                      {"\n                "}
-                    </div>
-                    {"\n                "}
-                    <div style={$st("position:relative;height:74px;background:linear-gradient(120deg,#E4DACB 0%,#EFE9DF 52%,#DED3C2 100%);display:flex;align-items:center;padding:0 16px")}>
-                      {"\n                  "}
-                      <div>
-                        {"\n                    "}
-                        <div style={$st("font-family:'Instrument Serif',serif;font-style:italic;font-size:19px;color:#3A342A;line-height:1.1")}>
-                          {$I($v?.feat?.tw?.heroA)}
-                        </div>
-                        {"\n                    "}
-                        <div style={$st("font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:#6E6656;margin-top:5px")}>
-                          {$I($v?.feat?.tw?.heroB)}
-                        </div>
-                        {"\n                  "}
-                      </div>
-                      {"\n                "}
-                    </div>
-                    {"\n                "}
-                    <div style={$st("display:flex;gap:14px;padding:16px")}>
-                      {"\n                  "}
-                      <span style={$st("width:104px;height:126px;border-radius:10px;background:linear-gradient(140deg,#EDE6DA,#D9CEBC);flex:none;position:relative;overflow:hidden")}>
-                        {"\n                    "}
-                        <span style={$st("position:absolute;left:14px;right:14px;top:26px;height:5px;border-radius:3px;background:rgba(255,255,255,.5)")}></span>
-                        {"\n                    "}
-                        <span style={$st("position:absolute;left:14px;right:24px;top:38px;height:5px;border-radius:3px;background:rgba(255,255,255,.35)")}></span>
-                        {"\n                    "}
-                        <span style={$st("position:absolute;left:0;right:0;bottom:0;height:44px;background:linear-gradient(180deg,rgba(0,0,0,0),rgba(120,104,80,.16))")}></span>
-                        {"\n                  "}
-                      </span>
-                      {"\n                  "}
-                      <div style={$st("min-width:0")}>
-                        {"\n                    "}
-                        <div style={$st("font-size:16px;font-weight:600;letter-spacing:-0.016em")}>
-                          {$I($v?.feat?.tw?.product)}
-                        </div>
-                        {"\n                    "}
-                        <div style={$st("font-size:13px;color:#6B6660;margin-top:4px")}>
-                          {$I($v?.feat?.tw?.price)}
-                        </div>
-                        {"\n                    "}
-                        <div style={$st("display:flex;gap:6px;margin-top:12px;flex-wrap:wrap")}>
-                          {"\n                      "}
-                          {$L($v?.feat?.tw?.sizes).map((sz, $index) => (
-                            <React.Fragment key={$index}>
-                              {"\n                        "}
-                              <span style={$st(`font-size:11.5px;border:1px solid ${$A(sz?.bd)};background:${$A(sz?.bg)};color:${$A(sz?.fg)};border-radius:8px;padding:5px 9px`)}>
-                                {$I(sz?.t)}
-                              </span>
-                              {"\n                      "}
-                            </React.Fragment>
-                          ))}
-                          {"\n                    "}
-                        </div>
-                        {"\n                    "}
-                        <div style={$st("margin-top:12px;font-size:12.5px;color:#8E887C;line-height:1.5")}>
-                          {$I($v?.feat?.tw?.blurb)}
-                        </div>
-                        {"\n                    "}
-                        <div style={$st("display:flex;align-items:center;gap:8px;margin-top:14px;flex-wrap:wrap")}>
-                          {"\n                      "}
-                          <span style={$st("font-size:12px;font-weight:500;background:#16150F;color:#FAF8F4;border-radius:9px;padding:9px 16px")}>
-                            {$I($v?.feat?.tw?.buy)}
-                          </span>
-                          {"\n                      "}
-                          <span style={$st("font-size:12px;color:#2E7D5B;display:flex;align-items:center;gap:6px")}>
-                            <i data-lucide="check" width="12" height="12" stroke-width="2.6"></i>
-                            {$I($v?.feat?.tw?.stock)}
-                          </span>
-                          {"\n                    "}
-                        </div>
-                        {"\n                  "}
-                      </div>
-                      {"\n                "}
-                    </div>
-                    {"\n                "}
-                    <div style={$st("padding:2px 16px 16px")}>
-                      {"\n                  "}
-                      <div style={$st("font:500 9px 'IBM Plex Mono',monospace;letter-spacing:.18em;text-transform:uppercase;color:#A29B8E;margin-bottom:9px")}>
-                        {$I($v?.feat?.tw?.alsoLabel)}
-                      </div>
-                      {"\n                  "}
-                      <div style={$st("display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px")}>
-                        {"\n                    "}
-                        {$L($v?.feat?.tw?.also).map((al, $index) => (
-                          <React.Fragment key={$index}>
-                            {"\n                      "}
-                            <div style={$st("min-width:0")}>
-                              {"\n                        "}
-                              <span style={$st(`display:block;height:66px;border-radius:9px;background:${$A(al?.swatch)}`)}></span>
-                              {"\n                        "}
-                              <div style={$st("font-size:11.5px;font-weight:500;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis")}>
-                                {$I(al?.t)}
-                              </div>
-                              {"\n                        "}
-                              <div style={$st("font-size:11px;color:#8E887C;margin-top:1px")}>
-                                {$I(al?.p)}
-                              </div>
-                              {"\n                      "}
-                            </div>
-                            {"\n                    "}
-                          </React.Fragment>
-                        ))}
-                        {"\n                  "}
-                      </div>
-                      {"\n                "}
-                    </div>
-                    {"\n                "}
-                    <div style={$st("display:flex;align-items:center;gap:18px;padding:11px 16px;border-top:1px solid #F0EDE7;flex-wrap:wrap")}>
-                      {"\n                  "}
-                      {$L($v?.feat?.tw?.trust).map((tr, $index) => (
-                        <React.Fragment key={$index}>
-                          {"\n                    "}
-                          <span style={$st("font-size:11.5px;color:#8E887C;white-space:nowrap")}>
-                            {$I(tr)}
-                          </span>
-                          {"\n                  "}
-                        </React.Fragment>
-                      ))}
-                      {"\n                "}
-                    </div>
-                    {"\n              "}
-                  </div>
-                  {"\n\n              "}
-                  <div style={$st("flex:0 0 344px;max-width:100%;background:#FFFFFF;border:1px solid #E4DFD4;border-radius:18px;box-shadow:0 22px 50px rgba(22,21,15,.12);overflow:hidden;display:flex;flex-direction:column")}>
-                    {"\n                "}
-                    <div style={$st("display:flex;align-items:center;gap:10px;padding:13px 15px;background:#16150F;color:#F7F5F1")}>
-                      {"\n                  "}
-                      <span style={$st("width:26px;height:26px;border-radius:8px;background:#2A2823;display:flex;align-items:center;justify-content:center;flex:none")}>
-                        <i data-lucide="message-circle" width="14" height="14" stroke-width="2"></i>
-                      </span>
-                      {"\n                  "}
-                      <div>
-                        {"\n                    "}
-                        <div style={$st("font-size:13px;font-weight:600;letter-spacing:-0.01em")}>
-                          {$I($v?.feat?.tw?.widgetName)}
-                        </div>
-                        {"\n                    "}
-                        <div style={$st("font-size:10.5px;color:#A8A39A;margin-top:1px")}>
-                          {$I($v?.feat?.tw?.widgetSub)}
-                        </div>
-                        {"\n                  "}
-                      </div>
-                      {"\n                  "}
-                      <span style={$st(`margin-left:${$A($v?.mlAuto)};margin-right:${$A($v?.mrAuto)};width:7px;height:7px;border-radius:50%;background:#A8C57A;animation:gpulse 2.2s ease-in-out infinite`)}></span>
-                      {"\n                "}
-                    </div>
-                    {"\n\n                "}
-                    <div style={$st("padding:14px 15px;display:flex;flex-direction:column;gap:8px;min-height:246px")}>
-                      {"\n                  "}
-                      <div style={$st("align-self:flex-start;max-width:88%;background:#F5F2EC;border-radius:14px 14px 14px 4px;padding:10px 13px;font-size:13px;line-height:1.5")}>
-                        {$I($v?.feat?.tw?.greeting)}
-                      </div>
-                      {"\n                  "}
-                      {$v?.feat?.tw?.asked ? (
-                        <>
-                        {"\n                    "}
-                        <div style={$st("align-self:flex-end;max-width:88%;background:#16150F;color:#FFFFFF;border-radius:14px 14px 4px 14px;padding:10px 13px;font-size:13px;line-height:1.5")}>
-                          {$I($v?.feat?.tw?.asked)}
-                        </div>
-                        {"\n                  "}
-                        </>
-                      ) : null}
-                      {"\n                  "}
-                      {$v?.feat?.tw?.typing ? (
-                        <>
-                        {"\n                    "}
-                        <div style={$st("align-self:flex-start;background:#F5F2EC;border-radius:14px;padding:11px 14px;display:flex;gap:4px")}>
-                          {"\n                      "}
-                          <span style={$st("width:5px;height:5px;border-radius:50%;background:#A29B8E;animation:gpulse 1s ease-in-out infinite")}></span>
-                          {"\n                      "}
-                          <span style={$st("width:5px;height:5px;border-radius:50%;background:#A29B8E;animation:gpulse 1s ease-in-out .2s infinite")}></span>
-                          {"\n                      "}
-                          <span style={$st("width:5px;height:5px;border-radius:50%;background:#A29B8E;animation:gpulse 1s ease-in-out .4s infinite")}></span>
-                          {"\n                    "}
-                        </div>
-                        {"\n                  "}
-                        </>
-                      ) : null}
-                      {"\n                  "}
-                      {$v?.feat?.tw?.answer ? (
-                        <>
-                        {"\n                    "}
-                        <div style={$st("align-self:flex-start;max-width:92%;background:#F5F2EC;border-radius:14px 14px 14px 4px;padding:10px 13px;font-size:13px;line-height:1.5")}>
-                          {$I($v?.feat?.tw?.answer)}
-                        </div>
-                        {"\n                  "}
-                        </>
-                      ) : null}
-                      {"\n                  "}
-                      {$v?.feat?.tw?.recs ? (
-                        <>
-                        {"\n                    "}
-                        <div style={$st("display:flex;gap:8px;margin-top:2px;overflow:hidden")}>
-                          {"\n                      "}
-                          {$L($v?.feat?.tw?.recs).map((rc, $index) => (
-                            <React.Fragment key={$index}>
-                              {"\n                        "}
-                              <div style={$st("flex:1;min-width:0;border:1px solid #E8E3D9;border-radius:12px;overflow:hidden")}>
-                                {"\n                          "}
-                                <span style={$st(`display:block;height:56px;background:${$A(rc?.swatch)}`)}></span>
-                                {"\n                          "}
-                                <div style={$st("padding:8px 9px")}>
-                                  {"\n                            "}
-                                  <div style={$st("font-size:11.5px;font-weight:600;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis")}>
-                                    {$I(rc?.t)}
-                                  </div>
-                                  {"\n                            "}
-                                  <div style={$st("font-size:11px;color:#6B6660;margin-top:2px")}>
-                                    {$I(rc?.p)}
-                                  </div>
-                                  {"\n                            "}
-                                  <div style={$st("margin-top:7px;font-size:11px;font-weight:500;background:#16150F;color:#FAF8F4;border-radius:7px;padding:6px 0;text-align:center")}>
-                                    {$I($v?.feat?.tw?.addLabel)}
-                                  </div>
-                                  {"\n                          "}
-                                </div>
-                                {"\n                        "}
-                              </div>
-                              {"\n                      "}
-                            </React.Fragment>
-                          ))}
-                          {"\n                    "}
-                        </div>
-                        {"\n                  "}
-                        </>
-                      ) : null}
-                      {"\n                  "}
-                      {$v?.feat?.tw?.acted ? (
-                        <>
-                        {"\n                    "}
-                        <div style={$st("display:flex;align-items:center;gap:8px;margin-top:2px;background:#EDF4E7;border:1px solid #D8E7C9;border-radius:11px;padding:9px 11px;font-size:12px;color:#2E7D5B")}>
-                          {"\n                      "}
-                          <i data-lucide="check" width="13" height="13" stroke-width="2.6"></i>
-                          {$I($v?.feat?.tw?.acted)}{"\n                    "}
-                        </div>
-                        {"\n                  "}
-                        </>
-                      ) : null}
-                      {"\n                "}
-                    </div>
-                    {"\n\n                "}
-                    <div style={$st("padding:0 15px 14px;display:flex;flex-direction:column;gap:7px")}>
-                      {"\n                  "}
-                      <div style={$st("font:500 9px 'IBM Plex Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:#A29B8E")}>
-                        {$I($v?.feat?.tw?.tryLabel)}
-                      </div>
-                      {"\n                  "}
-                      {$L($v?.feat?.tw?.qs).map((q, $index) => (
-                        <React.Fragment key={$index}>
-                          {"\n                    "}
-                          <div className="scpc" onClick={q?.pick} style={$st(`cursor:pointer;font-size:12.5px;line-height:1.4;background:${$A(q?.bg)};border:1px solid ${$A(q?.bd)};color:${$A(q?.fg)};border-radius:10px;padding:9px 11px;transition:border-color .2s ease,background .2s ease`)}>
-                            {$I(q?.t)}
-                          </div>
-                          {"\n                  "}
-                        </React.Fragment>
-                      ))}
-                      {"\n                  "}
-                      <div style={$st("display:flex;align-items:center;gap:8px;border:1px solid #EFEAE1;border-radius:99px;padding:9px 13px;margin-top:2px")}>
-                        {"\n                    "}
-                        <span style={$st("font-size:11.5px;color:#A8A8A8")}>
-                          {$I($v?.feat?.tw?.composer)}
-                        </span>
-                        {"\n                    "}
-                        <span style={$st(`margin-left:${$A($v?.mlAuto)};margin-right:${$A($v?.mrAuto)};color:#C4552F;display:flex`)}>
-                          <i data-lucide="send" width="13" height="13" stroke-width="2"></i>
-                        </span>
-                        {"\n                  "}
-                      </div>
-                      {"\n                "}
-                    </div>
-                    {"\n              "}
-                  </div>
-                  {"\n            "}
-                </div>
-                {"\n          "}
-              </div>
-              {"\n        "}
-            </div>
-            {"\n      "}
-            </>
-          ) : null}
-          {"\n\n      "}
+          {"\n\n\n\n      \n\n\n      "}
           <div style={$st(`max-width:1240px;margin:0 auto;padding:76px 24px 0;display:${$A($v?.feat?.saveDisplay)}`)}>
             {"\n        "}
             <div data-reveal="" style={$st("transition:opacity .8s ease,transform .8s ease")}>
@@ -1986,7 +2270,81 @@ export default function Template({ v: $v }) {
                 {"\n          "}
               </div>
               {"\n\n          "}
-              <div data-step="" style={$st("position:relative;width:100%;max-width:1000px;margin:26px auto 0;aspect-ratio:1000 / 470")}>
+              <div className="m-only" style={$st("flex-direction:column;align-items:stretch;gap:8px;margin-top:22px")}>
+                {"\n            "}
+                <div style={$st("display:flex;flex-direction:column;gap:8px")}>
+                  {"\n              "}
+                  {$L($v?.chFlow).map((cf, $index) => (
+                    <React.Fragment key={$index}>
+                      {"\n                "}
+                      <div style={$st("background:#FFFFFF;border:1px solid #E4DFD4;border-radius:12px;display:flex;align-items:center;gap:10px;padding:12px 14px;box-shadow:0 4px 14px rgba(22,21,15,.04)")}>
+                        {"\n                  "}
+                        {cf?.logo ? (
+                          <>
+                          <img src={cf?.logo} alt={cf?.t} width="17" height="17" style={$st("display:block;flex:none")} loading="lazy" onError={$v?.logoFail} />
+                          </>
+                        ) : null}
+                        {"\n                  "}
+                        {cf?.noLogo ? (
+                          <>
+                          <span style={$st("color:#55524C;display:flex;flex:none")}>
+                            <i data-lucide={cf?.icon} width="16" height="16" stroke-width="2"></i>
+                          </span>
+                          </>
+                        ) : null}
+                        {"\n                  "}
+                        <span style={$st("font-size:14px;font-weight:600;letter-spacing:-0.01em")}>
+                          {$I(cf?.t)}
+                        </span>
+                        {"\n                  "}
+                        <span style={$st("margin-inline-start:auto;width:6px;height:6px;border-radius:50%;background:#A8C57A;flex:none")}></span>
+                        {"\n                "}
+                      </div>
+                      {"\n              "}
+                    </React.Fragment>
+                  ))}
+                  {"\n            "}
+                </div>
+                {"\n            "}
+                <div style={$st("display:flex;flex-direction:column;align-items:center;gap:0;padding:2px 0")}>
+                  {"\n              "}
+                  <span style={$st("width:2px;height:20px;background:#E2DCD0")}></span>
+                  {"\n              "}
+                  <span style={$st("color:#C4552F;font-size:15px;line-height:1;animation:gfloat 2.6s ease-in-out infinite")}>
+                    {"↓"}
+                  </span>
+                  {"\n              "}
+                  <span style={$st("width:2px;height:12px;background:#E2DCD0")}></span>
+                  {"\n            "}
+                </div>
+                {"\n            "}
+                <div style={$st("display:flex;align-items:center;gap:14px;background:#16150F;border-radius:18px;padding:16px 18px;box-shadow:0 18px 40px rgba(22,21,15,.24)")}>
+                  {"\n              "}
+                  <span style={$st("width:44px;height:44px;border-radius:14px;background:#262521;display:flex;align-items:center;justify-content:center;flex:none")}>
+                    <img src="/assets/logo/solid-icon-light.png" alt="GOTCHA" style={$st("width:24px;height:auto;display:block")} />
+                  </span>
+                  {"\n              "}
+                  <div style={$st("min-width:0")}>
+                    {"\n                "}
+                    <div style={$st("font:500 9px 'IBM Plex Mono',monospace;letter-spacing:.18em;text-transform:uppercase;color:#A8A39A")}>
+                      {"Out the other side"}
+                    </div>
+                    {"\n                "}
+                    <div style={$st("font-size:17px;font-weight:600;letter-spacing:-0.018em;color:#F7F5F1;margin-top:5px")}>
+                      {"One inbox"}
+                    </div>
+                    {"\n                "}
+                    <div style={$st("font-size:12.5px;color:#A8A39A;line-height:1.5;margin-top:4px")}>
+                      {"One queue, one customer record, one history per person."}
+                    </div>
+                    {"\n              "}
+                  </div>
+                  {"\n            "}
+                </div>
+                {"\n          "}
+              </div>
+              {"\n\n          "}
+              <div className="m-hide" data-step="" style={$st("position:relative;width:100%;max-width:1000px;margin:26px auto 0;aspect-ratio:1000 / 470")}>
                 {"\n            "}
                 <svg viewBox="0 0 1000 470" width="100%" height="100%" style={$st("position:absolute;inset:0")} aria-hidden="true">
                   {"\n          "}
@@ -3088,7 +3446,7 @@ export default function Template({ v: $v }) {
             {"\n        "}
             <div data-reveal="" style={$st("margin-top:30px;background:#FFFFFF;border:1px solid #E8E3D9;border-radius:22px;overflow:hidden;transition:opacity .8s ease,transform .8s ease")}>
               {"\n          "}
-              <div style={$st("display:grid;grid-template-columns:1.6fr repeat(4,1fr);border-bottom:1px solid #E8E3D9")}>
+              <div className="m-alts" style={$st("display:grid;grid-template-columns:1.6fr repeat(4,1fr);border-bottom:1px solid #E8E3D9")}>
                 {"\n            "}
                 <div style={$st("padding:22px 26px;font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.2em;text-transform:uppercase;color:#A29B8E;align-self:end")}>
                   {"At a typical growing business"}
@@ -3121,7 +3479,7 @@ export default function Template({ v: $v }) {
               {$L($v?.why?.matrix).map((row, $index) => (
                 <React.Fragment key={$index}>
                   {"\n            "}
-                  <div style={$st("display:grid;grid-template-columns:1.6fr repeat(4,1fr);border-bottom:1px solid #F7F5F1")}>
+                  <div className="m-cmp-row" style={$st("display:grid;grid-template-columns:1.6fr repeat(4,1fr);border-bottom:1px solid #F7F5F1")}>
                     {"\n              "}
                     <div style={$st("padding:15px 26px;font-size:14px;line-height:1.4;display:flex;align-items:center")}>
                       {$I(row?.k)}
@@ -3134,6 +3492,10 @@ export default function Template({ v: $v }) {
                           {"\n                  "}
                           <span style={$st(`width:22px;height:22px;border-radius:50%;background:${$A(c?.markBg)};color:${$A(c?.markFg)};display:flex;align-items:center;justify-content:center;flex:none`)}>
                             <i data-lucide={c?.icon} width="12" height="12" stroke-width="2.6"></i>
+                          </span>
+                          {"\n                  "}
+                          <span className="m-only m-cell-label">
+                            {$I(c?.who)}
                           </span>
                           {"\n                  "}
                           <span style={$st(`font-size:12px;line-height:1.35;color:${$A(c?.fg)}`)}>
@@ -4125,7 +4487,7 @@ export default function Template({ v: $v }) {
                 {"\n          "}
               </div>
               {"\n          "}
-              <div style={$st("background:#FFFFFF;border:1px solid #E8E3D9;border-radius:18px;padding:24px;display:flex;gap:20px;align-items:flex-start")}>
+              <div className="m-founder-omer" style={$st("background:#FFFFFF;border:1px solid #E8E3D9;border-radius:18px;padding:24px;display:flex;gap:20px;align-items:flex-start")}>
                 {"\n            "}
                 <img src="/assets/team/founder-2.jpg" alt="Omer Serruya" style={$st("width:168px;height:206px;border-radius:16px;object-fit:cover;object-position:center top;flex:none;display:block;background:#EFEAE1")} />
                 {"\n            "}
@@ -5488,7 +5850,7 @@ export default function Template({ v: $v }) {
             {"\n\n        "}
             <div style={$st("margin-top:24px;border:1px solid #E8E3D9;border-radius:20px;background:#FFFFFF")}>
               {"\n          "}
-              <div style={$st("position:sticky;top:112px;z-index:40;background:rgba(253,251,247,.94);backdrop-filter:blur(20px) saturate(1.5);-webkit-backdrop-filter:blur(20px) saturate(1.5);border-bottom:1px solid #E8E3D9;border-radius:20px 20px 0 0;display:grid;grid-template-columns:1.7fr 1fr 1fr 1fr")}>
+              <div className="m-cmp-head" style={$st("position:sticky;top:112px;z-index:40;background:rgba(253,251,247,.94);backdrop-filter:blur(20px) saturate(1.5);-webkit-backdrop-filter:blur(20px) saturate(1.5);border-bottom:1px solid #E8E3D9;border-radius:20px 20px 0 0;display:grid;grid-template-columns:1.7fr 1fr 1fr 1fr")}>
                 {"\n            "}
                 <div style={$st("padding:16px 24px;display:flex;align-items:flex-end")}>
                   {"\n              "}
@@ -5550,7 +5912,7 @@ export default function Template({ v: $v }) {
                     {$L(g?.rows).map((r, $index) => (
                       <React.Fragment key={$index}>
                         {"\n                "}
-                        <div style={$st("display:grid;grid-template-columns:1.7fr 1fr 1fr 1fr;border-bottom:1px solid #F7F5F1")}>
+                        <div className="m-cmp-row" style={$st("display:grid;grid-template-columns:1.7fr 1fr 1fr 1fr;border-bottom:1px solid #F7F5F1")}>
                           {"\n                  "}
                           <div style={$st("padding:13px 24px;font-size:13.5px;line-height:1.45;color:#3A3833")}>
                             {$I(r?.t)}
@@ -5559,7 +5921,10 @@ export default function Template({ v: $v }) {
                           {$L(r?.cells).map((c, $index) => (
                             <React.Fragment key={$index}>
                               {"\n                    "}
-                              <div style={$st(`padding:13px 20px;border-inline-start:1px solid #F7F5F1;background:${$A(c?.bg)};font-size:13px;font-weight:${$A(c?.w)};color:${$A(c?.c)};display:flex;align-items:center`)}>
+                              <div style={$st(`padding:13px 20px;border-inline-start:1px solid #F7F5F1;background:${$A(c?.bg)};font-size:13px;font-weight:${$A(c?.w)};color:${$A(c?.c)};display:flex;align-items:center;gap:12px`)}>
+                                <span className="m-only m-cell-label">
+                                  {$I(c?.plan)}
+                                </span>
                                 {$I(c?.v)}
                               </div>
                               {"\n                  "}
@@ -5576,7 +5941,7 @@ export default function Template({ v: $v }) {
                 </React.Fragment>
               ))}
               {"\n\n          "}
-              <div style={$st("display:grid;grid-template-columns:1.7fr 1fr 1fr 1fr")}>
+              <div className="m-cmp-foot" style={$st("display:grid;grid-template-columns:1.7fr 1fr 1fr 1fr")}>
                 {"\n            "}
                 <div style={$st("padding:18px 24px;font-size:12.5px;color:#8E887C")}>
                   {"Every plan includes your whole team, with no per-seat charge."}
@@ -5723,13 +6088,13 @@ export default function Template({ v: $v }) {
                     {"\n              "}
                     <div onClick={f?.toggle} style={$st("border-bottom:1px solid #E8E3D9;padding:20px 4px;cursor:pointer")}>
                       {"\n                "}
-                      <div style={$st("display:flex;align-items:baseline;gap:20px")}>
+                      <div className="m-norow" style={$st("display:flex;align-items:baseline;gap:20px")}>
                         {"\n                  "}
                         <span style={$st("font-size:17px;font-weight:500;flex:1;line-height:1.35")}>
                           {$I(f?.q)}
                         </span>
                         {"\n                  "}
-                        <span style={$st("font-size:19px;color:#A29B8E;line-height:1")}>
+                        <span style={$st("font-size:19px;color:#A29B8E;line-height:1;flex:none")}>
                           {$I(f?.sign)}
                         </span>
                         {"\n                "}
@@ -5819,6 +6184,11 @@ export default function Template({ v: $v }) {
         <div id="top" style={$st("position:relative;height:804px;overflow:hidden;background:#221F1B")}>
           {"\n    "}
           <ImageSlot id="hero-photo" style={$st("animation:gken 30s ease-in-out infinite alternate;transform-origin:60% 50%")} />
+          {$v?.isEn ? (
+            <>
+            <img className="m-added" src="/assets/hero-en.png" alt="" style={$st("position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:72% 50%;animation:gken 30s ease-in-out infinite alternate;transform-origin:60% 50%")} />
+            </>
+          ) : null}
           {"\n    "}
           {$v?.isHe ? (
             <>
@@ -6162,7 +6532,7 @@ export default function Template({ v: $v }) {
               {$L($v?.bizCards).map((bc, $index) => (
                 <React.Fragment key={$index}>
                   {"\n          "}
-                  <div className="scpc" onClick={bc?.pick} role="button" tabIndex="0" style={$st(`position:relative;cursor:pointer;background:${$A(bc?.bg)};border:1px solid ${$A(bc?.bd)};border-radius:16px;padding:22px 24px;display:flex;gap:16px;align-items:flex-start;box-shadow:${$A(bc?.shadow)};transition:background .25s ease,border-color .2s ease,box-shadow .25s ease`)}>
+                  <div className="scpb" onClick={bc?.pick} role="button" tabIndex="0" style={$st(`position:relative;cursor:pointer;background:${$A(bc?.bg)};border:1px solid ${$A(bc?.bd)};border-radius:16px;padding:22px 24px;display:flex;gap:16px;align-items:flex-start;box-shadow:${$A(bc?.shadow)};transition:background .25s ease,border-color .2s ease,box-shadow .25s ease`)}>
                     {"\n            "}
                     <span style={$st(`width:18px;height:18px;border-radius:50%;border:1.5px solid ${$A(bc?.radioBd)};background:${$A(bc?.radioBg)};display:flex;align-items:center;justify-content:center;flex:none;margin-top:3px;transition:background .2s ease,border-color .2s ease`)}>
                       {"\n              "}
@@ -7236,13 +7606,13 @@ export default function Template({ v: $v }) {
                   {"\n          "}
                   <div onClick={f?.toggle} style={$st("border-bottom:1px solid #E8E3D9;padding:21px 4px;cursor:pointer")}>
                     {"\n            "}
-                    <div style={$st("display:flex;align-items:baseline;gap:20px")}>
+                    <div className="m-norow" style={$st("display:flex;align-items:baseline;gap:20px")}>
                       {"\n              "}
                       <span style={$st("font-size:18px;font-weight:500;flex:1;line-height:1.35")}>
                         {$I(f?.q)}
                       </span>
                       {"\n              "}
-                      <span style={$st("font-size:19px;color:#A29B8E;line-height:1")}>
+                      <span style={$st("font-size:19px;color:#A29B8E;line-height:1;flex:none")}>
                         {$I(f?.sign)}
                       </span>
                       {"\n            "}

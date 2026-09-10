@@ -16,6 +16,8 @@
 <style>
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; }
+  :root { --safe-top: env(safe-area-inset-top, 0px); }
+  @media (max-width: 780px) { :root { --safe-top: max(env(safe-area-inset-top, 0px), 26px); } }
   body { margin: 0; background: #FAF8F4; color: #16150F; font-family: Archivo, sans-serif; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
   a { color: inherit; text-decoration: none; }
   a:hover { color: #C4552F; }
@@ -35,6 +37,8 @@
   @keyframes gpull { from { clip-path: inset(0 0 0 100%); transform: translateX(26px); } to { clip-path: inset(0 0 0 0); transform: translateX(0); } }
   @keyframes gopen { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
   @keyframes gwave { from { transform: scaleY(.35); } to { transform: scaleY(1); } }
+  @keyframes gsheet { from { transform: translateY(26px); opacity: .4; } to { transform: none; opacity: 1; } }
+  .m-only { display: none; }
   @keyframes gkey { 0%, 100% { box-shadow: 0 0 0 0 rgba(168,197,122,0); } 50% { box-shadow: 0 0 0 5px rgba(168,197,122,.35); } }
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; } }
   @media (max-width: 1149px) { .menu-rail { display: none !important; } }
@@ -50,7 +54,9 @@
     [style*="max-width: 1240px"] { padding-left: 16px !important; padding-right: 16px !important; }
 
     /* section rhythm */
-    [style*="padding: 184px 24px"], [style*="padding: 172px 48px"] { padding: 52px 16px 0 !important; }
+    [style*="padding: 184px 24px"] { padding: 52px 16px 0 !important; }
+    /* the home hero sits under the floating header, so its top padding clears it */
+    [style*="padding: 172px 48px"] { padding: 112px 18px 0 !important; }
     [style*="padding: 112px 0px 88px"] { padding: 86px 0px 40px !important; }
     [style*="padding: 104px 24px"], [style*="padding: 96px 24px"], [style*="padding: 88px 24px"],
     [style*="padding: 84px 24px"], [style*="padding: 76px 24px"], [style*="padding: 64px 24px"],
@@ -120,6 +126,32 @@
     [style*="display: flex"]:has(> [style*="flex: 0 0 246px"]) { flex-wrap: wrap !important; }
     /* JS-measured boxes must not cage text once the column narrows */
     [style*="width: 338px"] { width: auto !important; height: auto !important; }
+    /* Copilot sits on the same screen as the conversation it answers: the supporting
+       context is moved (by fitMobile) to after it, never dropped */
+    .m-trace-side { margin-top: 2px !important; }
+    .m-trace-ctx { background: #FFFFFF; border: 1px solid #E8E3D9; border-radius: 16px; padding-top: 4px !important; }
+    /* comparison tables: one card per line, every value carrying its column name */
+    .m-cmp-head { display: block !important; position: static !important; background: transparent !important; border-bottom: 0 !important; padding-bottom: 4px; }
+    .m-cmp-head > div:first-child { padding: 14px 14px 6px !important; }
+    .m-cmp-head > div:not(:first-child) { border-inline-start: 0 !important; border-radius: 12px; margin: 0 0 8px; padding: 14px 16px !important; background: #FFFFFF !important; border: 1px solid #E8E3D9; }
+    /* the alternatives header carries the four prices, so it stacks instead of hiding */
+    .m-alts { display: block !important; border-bottom: 0 !important; }
+    .m-alts > div:first-child { padding: 14px 14px 6px !important; }
+    .m-alts > div:not(:first-child) { display: flex !important; align-items: baseline !important; justify-content: space-between !important; gap: 12px; flex-wrap: wrap; border-inline-start: 0 !important; border-radius: 12px; margin: 0 0 8px; padding: 14px 16px !important; }
+    .m-alts > div:not(:first-child) > div:first-child { font-size: 14px !important; font-weight: 600 !important; }
+    .m-alts > div:not(:first-child) > div:nth-child(2) { margin: 0 !important; font-size: 20px !important; }
+    .m-alts > div:not(:first-child) > div:nth-child(3) { flex: 1 1 100%; margin-top: 2px !important; }
+    .m-cmp-row { display: block !important; border: 1px solid #E8E3D9 !important; border-radius: 14px; margin: 10px 0 0; overflow: hidden; background: #FFFFFF; }
+    .m-cmp-row > div:first-child { background: #F5F2EC !important; font-weight: 600 !important; padding: 12px 14px !important; }
+    .m-cmp-row > div:not(:first-child) { display: flex !important; align-items: center !important; justify-content: space-between !important; gap: 12px !important; border-inline-start: 0 !important; border-top: 1px solid #F0EDE7 !important; padding: 11px 14px !important; background: transparent !important; }
+    .m-cell-label { display: inline !important; font: 500 11.5px 'IBM Plex Mono', monospace; color: #8E887C; margin-inline-end: auto; }
+    .m-cmp-foot { display: block !important; }
+    .m-cmp-foot > div:not(:first-child) { border-inline-start: 0 !important; padding: 6px 14px !important; }
+    /* the CEO card leads on a phone */
+    .m-founder-omer { order: -1; }
+    /* a question and its +/− stay on one line */
+    .m-norow { flex-wrap: nowrap !important; }
+    .m-norow > [style*="flex: 1"] { flex-basis: 0 !important; }
     /* zero-basis flex children share one row with fixed siblings — give them their own row */
     [style*="display: flex"]:not([style*="flex-direction: column"]):has(> [style*="flex: 1 1 0"]) { flex-wrap: wrap !important; }
     [style*="flex: 1 1 0"] { flex-basis: 100% !important; }
@@ -134,13 +166,31 @@
     .m-foot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 26px 14px !important; }
     .m-foot-talk { justify-content: stretch !important; padding-bottom: 26px !important; }
     .m-foot-talk > div { width: 100% !important; padding: 18px 22px !important; font-size: 21px !important; }
+    /* hero clearance: the header is 62px of floating glass, so nothing starts under it */
+    [style*="padding: 98px 0px"] { padding-top: 106px !important; padding-bottom: 40px !important; }
+    [style*="padding: 74px 0px"] { padding-top: 72px !important; padding-bottom: 34px !important; }
+    [style*="padding: 112px 0px 88px"] { padding: 106px 0px 34px !important; }
+    #top h1 { font-size: 33px !important; line-height: 1.1 !important; letter-spacing: -0.024em !important; max-width: 100% !important; }
+    #top h1 br { display: inline; }
+
+    /* the sell timeline reads card, then its text, on every step */
+    [data-side] { grid-template-columns: minmax(0, 1fr) !important; gap: 0 !important; }
+    [data-side] > div:nth-child(2) { display: none !important; }
+    [data-side] > div:nth-child(1) { padding: 0 0 14px !important; }
+    [data-side] > div:nth-child(3) { padding: 0 0 44px !important; }
+    [data-side="right"] > div:nth-child(1) { order: 2; }
+    [data-side="right"] > div:nth-child(3) { order: 1; padding: 0 0 14px !important; }
+    [data-side="right"] > div:nth-child(1) { padding: 0 0 44px !important; }
+    [data-side] [style*="max-width: 380px"] { max-width: 100% !important; }
+
     /* the offer panel becomes a bottom sheet instead of a side drawer */
-    .offer-drawer { top: auto !important; bottom: 0 !important; left: 0 !important; right: 0 !important; transform: none !important; width: 100% !important; max-height: 86vh !important; overflow-y: auto !important; }
-    .offer-drawer > div { flex-wrap: wrap !important; border-radius: 16px 16px 0 0 !important; animation: none !important; }
-    .offer-drawer > div > [style*="flex: 0 0 38px"] { flex: 1 1 100% !important; flex-direction: row !important; justify-content: flex-start !important; gap: 10px !important; padding: 10px 16px !important; }
-    .offer-drawer [style*="writing-mode: vertical-rl"] { writing-mode: horizontal-tb !important; }
-    .offer-drawer > div { position: relative !important; padding-top: 46px !important; }
-    .offer-x { position: absolute !important; top: 10px !important; left: 10px !important; z-index: 3 !important; width: 34px !important; height: 34px !important; padding: 0 !important; align-items: center !important; justify-content: center !important; background: #FFFFFF !important; border: 1px solid rgba(22,21,15,.12) !important; }
+    .m-only { display: flex !important; }
+    .offer-drawer { top: auto !important; bottom: 0 !important; left: 0 !important; right: 0 !important; transform: none !important; width: 100% !important; max-height: 88vh !important; overflow-y: auto !important; }
+    .offer-drawer > div { flex-wrap: wrap !important; border-radius: 18px 18px 0 0 !important; border-inline-end: 1px solid #E4DFD4 !important; animation: gsheet .32s cubic-bezier(.2,.8,.2,1) both !important; }
+    .offer-drawer > div > [style*="flex: 0 0 38px"] { display: none !important; }
+    .offer-drawer > div > [style*="flex: 0 0 246px"] { flex: 1 1 100% !important; }
+    .offer-drawer [style*="grid-template-columns: repeat(2"] { grid-template-columns: minmax(0, 1fr) !important; }
+    .offer-x { display: none !important; }
   }
   [dir="rtl"] { font-family: 'Heebo', Archivo, sans-serif; }
   [dir="rtl"] [style*="Instrument Serif"] { font-family: 'Heebo', sans-serif !important; font-style: normal !important; font-weight: 500 !important; letter-spacing: -0.02em !important; }
@@ -150,20 +200,21 @@
   /* Hebrew is longer than the English it replaces, so boxes sized to the English text release their fixed height in RTL */
   #top h1 { height: auto !important; }
   [dir="rtl"] #top h1 { width: auto !important; max-width: 900px; margin-inline: auto; margin-bottom: 16px !important; font-size: 76px !important; line-height: 1.0 !important; }
+  @media (max-width: 820px) { [dir="rtl"] #top h1 { font-size: 33px !important; line-height: 1.12 !important; margin-bottom: 8px !important; } }
   [dir="rtl"] [style*="height: 47px"], [dir="rtl"] [style*="height:47px"] { height: auto !important; }
   [dir="rtl"] [style*="text-align:end"] { text-align: left !important; }
   [dir="rtl"] [style*="text-align: right"] { text-align: left !important; }
   [dir="rtl"] img, [dir="rtl"] video { direction: ltr; }
 </style>
 <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
-<script src="he.js?v=16"></script>
+<script src="he.js?v=20"></script>
 </helmet>
 
 <div dir="{{ dir }}" lang="{{ lang }}" style="min-height:100vh;background:#FAF8F4;position:relative">
 
-  <div style="height:{{ bars.headTop }};flex:none"></div>
+  <div style="height:{{ bars.padTop }};flex:none"></div>
 
-  <div style="display:{{ bars.offerBar }};position:fixed;top:0;left:0;right:0;z-index:92;background:#8E3418;color:#FFFFFF;height:38px;align-items:center;justify-content:center;gap:16px;padding:0 46px 0 24px;flex-wrap:nowrap;overflow:hidden">
+  <div style="display:{{ bars.offerBar }};position:fixed;top:0;left:0;right:0;z-index:92;background:#8E3418;color:#FFFFFF;height:38px;box-sizing:content-box;padding-top:var(--safe-top);align-items:center;justify-content:center;gap:16px;padding-inline:24px 46px;flex-wrap:nowrap;overflow:hidden">
     <span class="m-hide" style="font:500 9.5px 'IBM Plex Mono',monospace;letter-spacing:.18em;text-transform:uppercase;background:rgba(22,21,15,.24);border-radius:5px;padding:4px 8px;white-space:nowrap">{{ offer.badge }}</span>
     <span style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ offer.barText }}</span>
     <div onClick="{{ goOffer }}" style="font-size:12.5px;font-weight:600;color:#FFFFFF;background:rgba(22,21,15,.3);border:1px solid rgba(255,255,255,.42);border-radius:8px;padding:5px 12px;white-space:nowrap;flex:none;cursor:pointer;transition:background .2s ease" style-hover="background:rgba(22,21,15,.5);color:#FFFFFF">{{ offer.seeMore }}</div>
@@ -177,8 +228,17 @@
   </div>
 
   <sc-if value="{{ offerShown }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ offer.close }}" class="m-only" style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:94;background:rgba(22,21,15,.55)"></div>
     <div class="offer-drawer" style="position:fixed;top:50%;right:0;transform:translateY(-50%);z-index:95;width:798px;max-width:100vw">
       <div style="display:flex;align-items:stretch;background:#FFFFFF;border:1px solid #E4DFD4;border-inline-end:0;border-radius:12px 0 0 12px;box-shadow:-16px 22px 60px rgba(22,21,15,.26);overflow:hidden;animation:gpull .5s cubic-bezier(.22,.85,.2,1) both">
+        <div class="m-only" style="flex:1 1 100%;background:#8E3418;color:#FFFFFF;align-items:center;gap:10px;padding:13px 14px 13px 18px">
+          <span style="display:flex;flex:none"><i data-lucide="gift" width="16" height="16" stroke-width="2.2"></i></span>
+          <span style="font:600 11px 'IBM Plex Mono',monospace;letter-spacing:.16em;text-transform:uppercase;white-space:nowrap">{{ offer.tabLabel }}</span>
+          <span onClick="{{ offer.close }}" style="margin-inline-start:auto;display:flex;align-items:center;justify-content:center;gap:7px;background:rgba(255,255,255,.16);border-radius:11px;padding:0 14px;min-height:44px;min-width:44px;cursor:pointer;flex:none">
+            <span style="font-size:12.5px;font-weight:600;white-space:nowrap">{{ offer.closeLabel }}</span>
+            <span style="display:flex"><i data-lucide="x" width="14" height="14" stroke-width="2.6"></i></span>
+          </span>
+        </div>
         <div onClick="{{ offer.close }}" style="flex:0 0 38px;background:#8E3418;color:#FFFFFF;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;padding:16px 0">
           <span style="display:flex"><i data-lucide="gift" width="16" height="16" stroke-width="2.2"></i></span>
           <span style="font:600 11px 'IBM Plex Mono',monospace;letter-spacing:.18em;writing-mode:vertical-rl;text-orientation:mixed;white-space:nowrap">{{ offer.tabLabel }}</span>
@@ -221,9 +281,12 @@
     <div style="position:fixed;inset:0;z-index:94;background:#FAF8F4;overflow-y:auto;padding:88px 18px 40px;display:flex;flex-direction:column;gap:8px">
       <div onClick="{{ mnavToggle }}" style="position:fixed;top:22px;right:18px;width:42px;height:42px;border-radius:12px;border:1px solid rgba(22,21,15,.12);background:#FFFFFF;color:#16150F;display:flex;align-items:center;justify-content:center;cursor:pointer"><i data-lucide="x" width="19" height="19" stroke-width="2.2"></i></div>
       <sc-for list="{{ mnav }}" as="g" hint-placeholder-count="4">
-        <div style="border-top:1px solid #E4DFD4;padding:16px 0 8px">
-          <div onClick="{{ g.go }}" style="font-size:17px;font-weight:600;letter-spacing:-0.018em;color:#16150F;padding:4px 0;cursor:pointer">{{ g.t }}</div>
-          <div style="display:flex;flex-direction:column;gap:2px;margin-top:8px">
+        <div style="border-top:1px solid #E4DFD4;padding:6px 0">
+          <div onClick="{{ g.go }}" style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:17px;font-weight:600;letter-spacing:-0.018em;color:#16150F;padding:14px 0;min-height:44px;cursor:pointer">
+            <span>{{ g.t }}</span>
+            <span style="color:#A29B8E;display:flex;transform:rotate({{ g.rot }});transition:transform .2s ease"><i data-lucide="{{ g.caret }}" width="18" height="18" stroke-width="2"></i></span>
+          </div>
+          <div style="display:{{ g.itemsDisplay }};flex-direction:column;gap:2px;padding-bottom:10px">
             <sc-for list="{{ g.items }}" as="it" hint-placeholder-count="0">
               <div onClick="{{ it.go }}" style="display:flex;align-items:center;gap:12px;padding:12px 10px;margin:0 -10px;border-radius:11px;min-height:44px;cursor:pointer" style-hover="background:#F5F2EC">
                 <span style="width:18px;flex:none;color:#A29B8E;display:flex"><i data-lucide="{{ it.icon }}" width="16" height="16" stroke-width="1.9"></i></span>
@@ -454,245 +517,6 @@
       </div>
 
 
-      <sc-if value="{{ feat.shotShown }}" hint-placeholder-val="{{ false }}">
-        <div style="max-width:1240px;margin:0 auto;padding:24px 24px 0">
-          <div data-reveal="" style="max-width:{{ feat.demoMax }};margin:0 auto;transition:opacity .8s ease,transform .8s ease">
-            <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:36px;flex-wrap:wrap">
-              <div style="min-width:0">
-                <div style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.22em;text-transform:uppercase;color:{{ feat.heroMuted }}">{{ feat.shotMeta }}</div>
-                <h2 style="margin:12px 0 0;font-size:30px;font-weight:600;letter-spacing:-0.03em;line-height:1.14;max-width:620px;color:{{ feat.heroFg }};text-wrap:pretty">{{ feat.shotTitle }}</h2>
-              </div>
-              <div style="flex:1 1 360px;max-width:440px;font-size:14px;line-height:1.6;color:{{ feat.heroMuted }};text-wrap:pretty">{{ feat.shotCaption }}</div>
-            </div>
-
-            <div style="margin-top:22px;background:#16150F;border-radius:22px;padding:10px;box-shadow:0 30px 70px rgba(22,21,15,.24),0 8px 18px rgba(22,21,15,.14)">
-              <div style="display:flex;align-items:center;gap:7px;padding:6px 8px 10px">
-                <span style="width:8px;height:8px;border-radius:50%;background:#3A3833"></span>
-                <span style="width:8px;height:8px;border-radius:50%;background:#3A3833"></span>
-                <span style="width:8px;height:8px;border-radius:50%;background:#3A3833"></span>
-                <span style="margin-left:10px;font:400 10.5px 'IBM Plex Mono',monospace;color:#8E8A83;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ feat.shotMeta }}</span>
-              </div>
-              <div style="position:relative;border-radius:14px;overflow:hidden;background:#0E0D0A">
-                {{ feat.shotImg }}
-              </div>
-            </div>
-
-            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:1px 26px;margin-top:26px">
-              <sc-for list="{{ feat.callouts }}" as="cl" hint-placeholder-count="4">
-                <div style="display:flex;align-items:flex-start;gap:12px;padding:14px 0;border-top:1px solid {{ feat.heroLine }}">
-                  <span style="font:500 10px 'IBM Plex Mono',monospace;color:#C4552F;flex:none;margin-top:3px">{{ cl.n }}</span>
-                  <div style="font-size:13.5px;line-height:1.55;color:{{ feat.heroMuted }};text-wrap:pretty">{{ cl.t }}</div>
-                </div>
-              </sc-for>
-            </div>
-          </div>
-        </div>
-      </sc-if>
-
-
-      <div style="max-width:1240px;margin:0 auto;padding:76px 24px 0;display:{{ feat.flowDisplay }}">
-          <div data-reveal="" style="transition:opacity .8s ease,transform .8s ease">
-            <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:40px;flex-wrap:wrap">
-              <div>
-                <div data-step="" style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.22em;text-transform:uppercase;color:#A29B8E">{{ feat.flowKicker }}</div>
-                <h2 data-step="" style="margin:14px 0 0;font-size:38px;font-weight:600;letter-spacing:-0.034em;line-height:1.1;max-width:660px">{{ feat.flowTitle }}</h2>
-              </div>
-              <div data-step="" style="max-width:400px;font-size:14px;line-height:1.6;color:#5B564D">{{ feat.flowNote }}</div>
-            </div>
-
-            <div style="display:flex;align-items:stretch;gap:12px;margin-top:26px;flex-wrap:wrap">
-              <sc-for list="{{ feat.flow }}" as="s" hint-placeholder-count="3">
-                <div data-step="" style="flex:1 1 260px;min-width:0;background:{{ s.bg }};border:1px solid {{ s.bd }};border-radius:20px;padding:20px 22px 22px;display:flex;flex-direction:column;gap:14px">
-                  <sc-if value="{{ s.hasArrow }}" hint-placeholder-val="{{ false }}">
-                    <div style="align-self:flex-start;display:flex;align-items:center;gap:8px;background:{{ s.pillBg }};border:1px solid {{ s.pillBd }};border-radius:99px;padding:5px 11px 5px 8px">
-                      <span style="font-size:12px;color:#C4552F;line-height:1">{{ arrowFwd }}</span>
-                      <span style="font:500 9px 'IBM Plex Mono',monospace;letter-spacing:.12em;text-transform:uppercase;color:{{ s.pillFg }};white-space:nowrap">{{ s.arrowLabel }}</span>
-                    </div>
-                  </sc-if>
-                  <div style="display:flex;align-items:center;gap:10px">
-                    <span style="width:26px;height:26px;border-radius:8px;background:{{ s.iconBg }};display:flex;align-items:center;justify-content:center;flex:none">
-                      <sc-if value="{{ s.logo }}" hint-placeholder-val="{{ true }}"><img src="{{ s.logo }}" alt="{{ s.where }}" width="15" height="15" style="display:block" loading="lazy" onError="{{ logoFail }}"></sc-if>
-                      <sc-if value="{{ s.noLogo }}" hint-placeholder-val="{{ false }}"><span style="color:{{ s.iconFg }};display:flex"><i data-lucide="{{ s.icon }}" width="14" height="14" stroke-width="2"></i></span></sc-if>
-                    </span>
-                    <span style="font-size:13px;font-weight:600;letter-spacing:-0.01em;color:{{ s.fg }}">{{ s.where }}</span>
-                    <span style="margin-left:{{ mlAuto }};margin-right:{{ mrAuto }};font:500 9px 'IBM Plex Mono',monospace;letter-spacing:.14em;text-transform:uppercase;background:{{ s.tagBg }};color:{{ s.tagFg }};border-radius:6px;padding:4px 7px;white-space:nowrap">{{ s.tag }}</span>
-                  </div>
-                  <div style="background:#FFFFFF;border:1px solid #E6E6E6;border-radius:16px;overflow:hidden">
-                    <div style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-bottom:1px solid #F0F0F0">
-                      <span style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#F7CE68 0%,#E4405F 48%,#8A3AB9 100%);display:flex;align-items:center;justify-content:center;flex:none">
-                        <span style="width:22px;height:22px;border-radius:50%;background:#FFFFFF;color:#262626;font-size:9.5px;font-weight:600;display:flex;align-items:center;justify-content:center">{{ s.ini }}</span>
-                      </span>
-                      <div style="min-width:0">
-                        <div style="font-size:12.5px;font-weight:600;color:#262626;letter-spacing:-0.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ s.handle }}</div>
-                        <div style="font-size:10.5px;color:#8E8E8E;margin-top:1px">{{ s.status }}</div>
-                      </div>
-                      <span style="margin-left:{{ mlAuto }};margin-right:{{ mrAuto }};display:flex;gap:3px;flex:none">
-                        <span style="width:3px;height:3px;border-radius:50%;background:#C7C7C7"></span>
-                        <span style="width:3px;height:3px;border-radius:50%;background:#C7C7C7"></span>
-                        <span style="width:3px;height:3px;border-radius:50%;background:#C7C7C7"></span>
-                      </span>
-                    </div>
-
-                    <sc-if value="{{ s.isComment }}" hint-placeholder-val="{{ false }}">
-                      <div style="display:flex;align-items:center;gap:10px;padding:11px 12px;background:#FAFAFA;border-bottom:1px solid #F0F0F0">
-                        <span style="width:40px;height:40px;border-radius:6px;background:linear-gradient(140deg,#EDE6DA,#DCD2C2);flex:none"></span>
-                        <div style="min-width:0">
-                          <div style="font-size:11.5px;color:#262626;line-height:1.35">{{ s.postCaption }}</div>
-                          <div style="font-size:10.5px;color:#8E8E8E;margin-top:2px">{{ s.postMeta }}</div>
-                        </div>
-                      </div>
-                      <div style="padding:12px 12px 13px;display:flex;flex-direction:column;gap:12px">
-                        <sc-for list="{{ s.bubbles }}" as="b" hint-placeholder-count="2">
-                          <div style="display:flex;gap:9px;padding-inline-start:{{ b.indent }}">
-                            <span style="width:22px;height:22px;border-radius:50%;background:{{ b.avaBg }};color:{{ b.avaFg }};font-size:8.5px;font-weight:600;display:flex;align-items:center;justify-content:center;flex:none;margin-top:1px">{{ b.ini }}</span>
-                            <div style="min-width:0;flex:1">
-                              <div style="font-size:12.5px;line-height:1.5;color:#262626"><span style="font-weight:600">{{ b.who }}</span> {{ b.t }}</div>
-                              <div style="display:flex;align-items:center;gap:12px;margin-top:4px;font-size:10.5px;color:#8E8E8E">
-                                <span>{{ b.when }}</span>
-                                <span style="font-weight:600">Reply</span>
-                              </div>
-                            </div>
-                            <span style="color:{{ b.heart }};display:flex;flex:none;margin-top:2px"><i data-lucide="heart" width="12" height="12" stroke-width="2"></i></span>
-                          </div>
-                        </sc-for>
-                      </div>
-                    </sc-if>
-
-                    <sc-if value="{{ s.isDm }}" hint-placeholder-val="{{ true }}">
-                      <div style="padding:13px 12px;display:flex;flex-direction:column;gap:7px;background:#FFFFFF">
-                        <sc-for list="{{ s.bubbles }}" as="b" hint-placeholder-count="3">
-                          <div style="align-self:{{ b.align }};max-width:86%;display:flex;flex-direction:column;align-items:{{ b.align }}">
-                            <sc-if value="{{ b.who }}" hint-placeholder-val="{{ false }}">
-                              <span style="font:500 8.5px 'IBM Plex Mono',monospace;letter-spacing:.14em;text-transform:uppercase;color:#A0A0A0;margin-bottom:4px">{{ b.who }}</span>
-                            </sc-if>
-                            <div style="background:{{ b.bg }};color:{{ b.fg }};border-radius:{{ b.radius }};padding:9px 13px;font-size:12.5px;line-height:1.45">{{ b.t }}</div>
-                          </div>
-                        </sc-for>
-                        <div style="display:flex;align-items:center;gap:8px;margin-top:5px;border:1px solid #EFEFEF;border-radius:99px;padding:7px 12px">
-                          <span style="font-size:11.5px;color:#A8A8A8">Message…</span>
-                          <span style="margin-left:{{ mlAuto }};margin-right:{{ mrAuto }};font-size:11.5px;font-weight:600;color:#0095F6">Send</span>
-                        </div>
-                      </div>
-                    </sc-if>
-                  </div>
-                  <div style="margin-top:auto;padding-top:12px;border-top:1px solid {{ s.line }};font-size:12.5px;line-height:1.55;color:{{ s.muted }}">{{ s.foot }}</div>
-                </div>
-              </sc-for>
-            </div>
-          </div>
-        </div><div style="max-width:1240px;margin:0 auto;padding:76px 24px 0;display:{{ feat.traceDisplay }}">
-        <div data-reveal="" style="transition:opacity .8s ease,transform .8s ease">
-          <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:40px;flex-wrap:wrap">
-            <div>
-              <div data-step="" style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.22em;text-transform:uppercase;color:#4B3E8E">{{ feat.tr.kicker }}</div>
-              <h2 data-step="" style="margin:14px 0 0;font-size:38px;font-weight:600;letter-spacing:-0.034em;line-height:1.1;max-width:660px">{{ feat.tr.title }}</h2>
-            </div>
-            <div data-step="" style="max-width:400px;font-size:14px;line-height:1.6;color:#5B564D">{{ feat.tr.note }}</div>
-          </div>
-
-          <div data-step="" style="margin-top:24px;background:#EFEAE1;border:1px solid #E4DFD4;border-radius:24px;padding:14px;display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap">
-            <div style="flex:1 1 320px;min-width:0;background:#FFFFFF;border:1px solid #E8E3D9;border-radius:16px;overflow:hidden">
-              <div style="display:flex;align-items:center;gap:10px;padding:12px 15px;border-bottom:1px solid #F0EDE7">
-                <span style="width:28px;height:28px;border-radius:50%;background:#EFEAE1;color:#16150F;font:600 10px Archivo,sans-serif;display:flex;align-items:center;justify-content:center;flex:none">{{ feat.tr.ini }}</span>
-                <div>
-                  <div style="font-size:13px;font-weight:600;letter-spacing:-0.01em">{{ feat.tr.who }}</div>
-                  <div style="font-size:10.5px;color:#8E887C;margin-top:1px">{{ feat.tr.whoMeta }}</div>
-                </div>
-                <span style="margin-left:{{ mlAuto }};margin-right:{{ mrAuto }};font:500 9px 'IBM Plex Mono',monospace;letter-spacing:.14em;text-transform:uppercase;background:#FBEEE8;color:#8E3418;border-radius:6px;padding:4px 7px;white-space:nowrap">{{ feat.tr.threadTag }}</span>
-              </div>
-              <div style="padding:14px 15px;display:flex;flex-direction:column;gap:8px">
-                <sc-for list="{{ feat.tr.msgs }}" as="m" hint-placeholder-count="2">
-                  <div style="align-self:{{ m.align }};max-width:88%;background:{{ m.bg }};color:{{ m.fg }};border:1px solid {{ m.bd }};border-radius:{{ m.radius }};padding:11px 13px;font-size:13.5px;line-height:1.5">{{ m.t }}</div>
-                </sc-for>
-                <sc-if value="{{ feat.tr.replyShown }}" hint-placeholder-val="{{ false }}">
-                  <div style="margin-top:4px;border:1px dashed #D8CFF0;background:#FBFAFF;border-radius:12px;padding:12px 13px">
-                    <div style="font:500 9px 'IBM Plex Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:#4B3E8E">{{ feat.tr.draftLabel }}</div>
-                    <div style="font-size:13.5px;line-height:1.55;color:#3A3833;margin-top:7px">{{ feat.tr.draft }}</div>
-                    <div style="display:flex;gap:7px;margin-top:11px;flex-wrap:wrap">
-                      <span style="font-size:11.5px;font-weight:500;background:#16150F;color:#FAF8F4;border-radius:8px;padding:7px 13px">{{ feat.tr.sendLabel }}</span>
-                      <span style="font-size:11.5px;color:#6B6660;border:1px solid #E4DFD4;border-radius:8px;padding:7px 13px">{{ feat.tr.editLabel }}</span>
-                    </div>
-                  </div>
-                </sc-if>
-              </div>
-
-              <div style="padding:0 15px 15px">
-                <div style="font:500 9px 'IBM Plex Mono',monospace;letter-spacing:.18em;text-transform:uppercase;color:#A29B8E;padding-top:13px;border-top:1px solid #F0EDE7">{{ feat.tr.ctxLabel }}</div>
-                <div style="display:flex;gap:8px;margin-top:11px;flex-wrap:wrap">
-                  <sc-for list="{{ feat.tr.facts }}" as="fc" hint-placeholder-count="4">
-                    <div style="flex:1 1 108px;min-width:0;background:#FAF8F4;border:1px solid #EFEAE1;border-radius:11px;padding:9px 11px">
-                      <div style="font-size:10.5px;color:#8E887C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ fc.k }}</div>
-                      <div style="font-size:13px;font-weight:600;letter-spacing:-0.012em;margin-top:3px">{{ fc.v }}</div>
-                    </div>
-                  </sc-for>
-                </div>
-                <div style="font:500 9px 'IBM Plex Mono',monospace;letter-spacing:.18em;text-transform:uppercase;color:#A29B8E;margin-top:15px">{{ feat.tr.histLabel }}</div>
-                <div style="display:flex;flex-direction:column;margin-top:7px">
-                  <sc-for list="{{ feat.tr.history }}" as="hs" hint-placeholder-count="4">
-                    <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #F5F2EC">
-                      <sc-if value="{{ hs.logo }}" hint-placeholder-val="{{ true }}"><img src="{{ hs.logo }}" alt="{{ hs.ch }}" width="14" height="14" style="display:block;flex:none" loading="lazy" onError="{{ logoFail }}"></sc-if>
-                      <sc-if value="{{ hs.noLogo }}" hint-placeholder-val="{{ false }}"><span style="color:#8E887C;display:flex;flex:none"><i data-lucide="{{ hs.icon }}" width="13" height="13" stroke-width="2"></i></span></sc-if>
-                      <span style="font-size:12.5px;color:#3A3833;flex:1;min-width:0;line-height:1.4">{{ hs.t }}</span>
-                      <span style="font-size:11px;color:#A29B8E;white-space:nowrap;flex:none">{{ hs.when }}</span>
-                    </div>
-                  </sc-for>
-                </div>
-              </div>
-            </div>
-
-            <div style="flex:0 0 356px;max-width:100%;background:#16150F;color:#F7F5F1;border-radius:18px;box-shadow:0 22px 50px rgba(22,21,15,.18);overflow:hidden;display:flex;flex-direction:column">
-              <div style="display:flex;align-items:center;gap:10px;padding:13px 15px;border-bottom:1px solid #2A2823">
-                <span style="width:26px;height:26px;border-radius:8px;background:#2A2823;display:flex;align-items:center;justify-content:center;flex:none"><i data-lucide="square-pen" width="14" height="14" stroke-width="2"></i></span>
-                <div>
-                  <div style="font-size:13px;font-weight:600;letter-spacing:-0.01em">{{ feat.tr.panelT }}</div>
-                  <div style="font-size:10.5px;color:#A8A39A;margin-top:1px">{{ feat.tr.panelSub }}</div>
-                </div>
-                <span style="margin-left:{{ mlAuto }};margin-right:{{ mrAuto }};width:7px;height:7px;border-radius:50%;background:#A8C57A;animation:gpulse 2.2s ease-in-out infinite"></span>
-              </div>
-
-              <div style="padding:14px 15px;display:flex;flex-direction:column">
-                <sc-for list="{{ feat.tr.steps }}" as="tp" hint-placeholder-count="5">
-                  <div style="display:flex;align-items:flex-start;gap:11px;padding:10px 0;border-bottom:1px solid #221F1B;opacity:{{ tp.op }};transition:opacity .45s ease">
-                    <span style="width:20px;height:20px;border-radius:50%;background:{{ tp.dotBg }};color:{{ tp.dotFg }};display:flex;align-items:center;justify-content:center;flex:none;margin-top:1px;animation:{{ tp.anim }}"><i data-lucide="{{ tp.icon }}" width="11" height="11" stroke-width="2.6"></i></span>
-                    <div style="min-width:0;flex:1">
-                      <div style="font-size:13px;font-weight:500;color:{{ tp.fg }};line-height:1.35">{{ tp.t }}</div>
-                      <div style="font-size:11.5px;color:#8E8A83;margin-top:3px;line-height:1.45">{{ tp.d }}</div>
-                    </div>
-                    <span style="font:400 10.5px 'IBM Plex Mono',monospace;color:#A8A39A;white-space:nowrap;flex:none;margin-top:2px">{{ tp.ms }}</span>
-                  </div>
-                </sc-for>
-                <sc-if value="{{ feat.tr.needApproval }}" hint-placeholder-val="{{ false }}">
-                  <div style="margin-top:12px;background:#211F1B;border:1px solid #3A362F;border-radius:12px;padding:12px 13px">
-                    <div style="display:flex;align-items:center;gap:8px">
-                      <span style="color:#E0A458;display:flex"><i data-lucide="hand" width="14" height="14" stroke-width="2.2"></i></span>
-                      <span style="font-size:12.5px;font-weight:600;color:#EFE3CF">{{ feat.tr.approveT }}</span>
-                    </div>
-                    <div style="font-size:11.5px;color:#A8A39A;line-height:1.5;margin-top:6px">{{ feat.tr.approveD }}</div>
-                    <div style="display:flex;gap:7px;margin-top:11px;flex-wrap:wrap">
-                      <span onClick="{{ feat.tr.approve }}" style="cursor:pointer;font-size:11.5px;font-weight:500;background:#F7F5F1;color:#16150F;border-radius:8px;padding:7px 13px">{{ feat.tr.approveLabel }}</span>
-                      <span style="font-size:11.5px;color:#A8A39A;border:1px solid #3A362F;border-radius:8px;padding:7px 13px">{{ feat.tr.declineLabel }}</span>
-                    </div>
-                  </div>
-                </sc-if>
-                <sc-if value="{{ feat.tr.done }}" hint-placeholder-val="{{ false }}">
-                  <div style="margin-top:12px;display:flex;align-items:center;gap:8px;background:#1B2A20;border:1px solid #2C4433;border-radius:12px;padding:11px 13px;font-size:12px;color:#A8C57A">
-                    <i data-lucide="check" width="13" height="13" stroke-width="2.6"></i>{{ feat.tr.doneT }}
-                  </div>
-                </sc-if>
-              </div>
-
-              <div style="margin-top:auto;padding:0 15px 14px">
-                <span onClick="{{ feat.tr.replay }}" style="display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;font-size:12px;font-weight:500;color:#D8D3CA;border:1px solid #2F2D28;border-radius:10px;padding:10px 0;transition:border-color .2s ease,color .2s ease" style-hover="border-color:#6E6A63;color:#F7F5F1"><i data-lucide="rotate-ccw" width="13" height="13" stroke-width="2"></i>{{ feat.tr.replayLabel }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-
-
-      
-
       <sc-if value="{{ feat.tw }}" hint-placeholder-val="{{ false }}">
         <div style="max-width:1240px;margin:0 auto;padding:76px 24px 0">
           <div data-reveal="" style="transition:opacity .8s ease,transform .8s ease">
@@ -831,6 +655,343 @@
         </div>
       </sc-if>
 
+
+      <sc-if value="{{ feat.shotShown }}" hint-placeholder-val="{{ false }}">
+        <div style="max-width:1240px;margin:0 auto;padding:24px 24px 0">
+          <div data-reveal="" style="max-width:{{ feat.demoMax }};margin:0 auto;transition:opacity .8s ease,transform .8s ease">
+            <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:36px;flex-wrap:wrap">
+              <div style="min-width:0">
+                <div style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.22em;text-transform:uppercase;color:{{ feat.heroMuted }}">{{ feat.shotMeta }}</div>
+                <h2 style="margin:12px 0 0;font-size:30px;font-weight:600;letter-spacing:-0.03em;line-height:1.14;max-width:620px;color:{{ feat.heroFg }};text-wrap:pretty">{{ feat.shotTitle }}</h2>
+              </div>
+              <div style="flex:1 1 360px;max-width:440px;font-size:14px;line-height:1.6;color:{{ feat.heroMuted }};text-wrap:pretty">{{ feat.shotCaption }}</div>
+            </div>
+
+            <div style="margin-top:22px;background:#16150F;border-radius:22px;padding:10px;box-shadow:0 30px 70px rgba(22,21,15,.24),0 8px 18px rgba(22,21,15,.14)">
+              <div style="display:flex;align-items:center;gap:7px;padding:6px 8px 10px">
+                <span style="width:8px;height:8px;border-radius:50%;background:#3A3833"></span>
+                <span style="width:8px;height:8px;border-radius:50%;background:#3A3833"></span>
+                <span style="width:8px;height:8px;border-radius:50%;background:#3A3833"></span>
+                <span style="margin-left:10px;font:400 10.5px 'IBM Plex Mono',monospace;color:#8E8A83;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ feat.shotMeta }}</span>
+              </div>
+              <div style="position:relative;border-radius:14px;overflow:hidden;background:#0E0D0A">
+                {{ feat.shotImg }}
+              </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:1px 26px;margin-top:26px">
+              <sc-for list="{{ feat.callouts }}" as="cl" hint-placeholder-count="4">
+                <div style="display:flex;align-items:flex-start;gap:12px;padding:14px 0;border-top:1px solid {{ feat.heroLine }}">
+                  <span style="font:500 10px 'IBM Plex Mono',monospace;color:#C4552F;flex:none;margin-top:3px">{{ cl.n }}</span>
+                  <div style="font-size:13.5px;line-height:1.55;color:{{ feat.heroMuted }};text-wrap:pretty">{{ cl.t }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ feat.statsShown }}" hint-placeholder-val="{{ false }}">
+        <div style="max-width:1240px;margin:0 auto;padding:56px 24px 0">
+          <div data-reveal="" style="display:flex;gap:32px;align-items:flex-start;flex-wrap:wrap;transition:opacity .8s ease,transform .8s ease">
+            <div style="flex:1 1 520px;min-width:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1px 26px">
+              <sc-for list="{{ feat.stats }}" as="sv" hint-placeholder-count="3">
+                <div style="padding:18px 0;border-top:1px solid {{ feat.heroLine }}">
+                  <div style="font-size:38px;font-weight:600;letter-spacing:-0.042em;line-height:1;color:{{ feat.heroFg }}">{{ sv.v }}</div>
+                  <div style="font-size:13.5px;line-height:1.5;color:{{ feat.heroMuted }};margin-top:9px;text-wrap:pretty">{{ sv.l }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="flex:1 1 320px;max-width:420px;background:{{ feat.cardBg }};border:1px solid {{ feat.cardBd }};border-radius:18px;padding:22px 24px">
+              <div style="font-size:15.5px;font-weight:600;letter-spacing:-0.016em;color:{{ feat.heroFg }}">{{ feat.asideHead }}</div>
+              <div style="font-size:13.5px;line-height:1.6;color:{{ feat.heroMuted }};margin-top:9px;text-wrap:pretty">{{ feat.aside }}</div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ feat.capsShown }}" hint-placeholder-val="{{ false }}">
+        <div style="max-width:1240px;margin:0 auto;padding:76px 24px 0">
+          <div data-reveal="" style="transition:opacity .8s ease,transform .8s ease">
+            <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:40px;flex-wrap:wrap">
+              <h2 data-step="" style="margin:0;font-size:38px;font-weight:600;letter-spacing:-0.034em;line-height:1.1;max-width:660px;color:{{ feat.heroFg }};text-wrap:pretty">{{ feat.capsTitle }}</h2>
+              <div data-step="" style="flex:1 1 340px;max-width:400px;font-size:14px;line-height:1.6;color:{{ feat.heroMuted }};text-wrap:pretty">{{ feat.capsNote }}</div>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-top:26px">
+              <sc-for list="{{ feat.caps }}" as="cp" hint-placeholder-count="4">
+                <div style="background:{{ feat.cardBg }};border:1px solid {{ feat.cardBd }};border-radius:18px;padding:24px 26px;display:flex;flex-direction:column;gap:11px">
+                  <div style="display:flex;align-items:center;gap:10px">
+                    <span style="width:32px;height:32px;border-radius:10px;background:{{ cp.bg }};color:{{ cp.ic }};display:flex;align-items:center;justify-content:center;flex:none"><i data-lucide="{{ cp.icon }}" width="16" height="16" stroke-width="2"></i></span>
+                    <span style="font:500 9.5px 'IBM Plex Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:{{ feat.heroMuted }}">{{ cp.n }}</span>
+                  </div>
+                  <div style="font-size:16.5px;font-weight:600;letter-spacing:-0.018em;line-height:1.25;color:{{ feat.heroFg }};text-wrap:pretty">{{ cp.t }}</div>
+                  <div style="font-size:13.5px;line-height:1.6;color:{{ feat.heroMuted }};text-wrap:pretty">{{ cp.d }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ feat.doesShown }}" hint-placeholder-val="{{ false }}">
+        <div style="max-width:1240px;margin:0 auto;padding:76px 24px 0">
+          <div data-reveal="" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px;transition:opacity .8s ease,transform .8s ease">
+            <div style="background:{{ feat.cardBg }};border:1px solid {{ feat.cardBd }};border-radius:20px;padding:26px 28px">
+              <div style="font-size:20px;font-weight:600;letter-spacing:-0.022em;color:{{ feat.heroFg }}">{{ feat.doesTitle }}</div>
+              <div style="font-size:13px;line-height:1.6;color:{{ feat.heroMuted }};margin-top:8px">{{ feat.doesNote }}</div>
+              <div style="display:flex;flex-direction:column;margin-top:16px">
+                <sc-for list="{{ feat.does }}" as="dv" hint-placeholder-count="6">
+                  <div class="m-norow" style="display:flex;align-items:baseline;gap:16px;padding:11px 0;border-top:1px solid {{ feat.heroLine }}">
+                    <span style="flex:1;font-size:13.5px;line-height:1.5;color:{{ feat.heroFg }}">{{ dv.t }}</span>
+                    <span style="flex:none;font:500 13px 'IBM Plex Mono',monospace;color:#2E7D5B">{{ dv.n }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+            <div style="background:#16150F;border:1px solid #16150F;border-radius:20px;padding:26px 28px;color:#F7F5F1">
+              <div style="font-size:20px;font-weight:600;letter-spacing:-0.022em">{{ feat.limitTitle }}</div>
+              <div style="font-size:13px;line-height:1.6;color:#A8A39A;margin-top:8px">{{ feat.limitNote }}</div>
+              <div style="display:flex;flex-direction:column;margin-top:16px">
+                <sc-for list="{{ feat.limits }}" as="lv" hint-placeholder-count="4">
+                  <div class="m-norow" style="display:flex;align-items:baseline;gap:16px;padding:11px 0;border-top:1px solid #2A2823">
+                    <span style="flex:1;font-size:13.5px;line-height:1.5">{{ lv.t }}</span>
+                    <span style="flex:none;font:500 11.5px 'IBM Plex Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:#E0A458">{{ lv.n }}</span>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="font-size:12.5px;line-height:1.6;color:#8E8A83;margin-top:16px;padding-top:14px;border-top:1px solid #2A2823;text-wrap:pretty">{{ feat.limitFoot }}</div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ feat.quoteShown }}" hint-placeholder-val="{{ false }}">
+        <div style="max-width:1240px;margin:0 auto;padding:76px 24px 0">
+          <div data-reveal="" style="display:flex;gap:32px;align-items:stretch;flex-wrap:wrap;transition:opacity .8s ease,transform .8s ease">
+            <div style="flex:1 1 460px;min-width:0;background:#FBEEE8;border:1px solid #F0D6C9;border-radius:20px;padding:30px 32px;display:flex;flex-direction:column;gap:18px">
+              <div style="font-family:'Instrument Serif',serif;font-style:italic;font-size:24px;line-height:1.3;color:#5C2410;text-wrap:pretty">{{ feat.quote }}</div>
+              <div style="margin-top:auto;display:flex;align-items:baseline;gap:10px">
+                <span style="font-size:14px;font-weight:600;color:#5C2410">{{ feat.quoteName }}</span>
+                <span style="font-size:12.5px;color:#8E3418">{{ feat.quoteRole }}</span>
+              </div>
+            </div>
+            <div style="flex:1 1 300px;min-width:0;display:flex;flex-direction:column;gap:12px">
+              <sc-for list="{{ feat.proof }}" as="pv" hint-placeholder-count="2">
+                <div style="flex:1;background:{{ feat.cardBg }};border:1px solid {{ feat.cardBd }};border-radius:18px;padding:24px 26px">
+                  <div style="font-size:40px;font-weight:600;letter-spacing:-0.044em;line-height:1;color:{{ feat.heroFg }}">{{ pv.v }}</div>
+                  <div style="font-size:13.5px;line-height:1.55;color:{{ feat.heroMuted }};margin-top:10px;text-wrap:pretty">{{ pv.l }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+
+      <div style="max-width:1240px;margin:0 auto;padding:76px 24px 0;display:{{ feat.flowDisplay }}">
+          <div data-reveal="" style="transition:opacity .8s ease,transform .8s ease">
+            <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:40px;flex-wrap:wrap">
+              <div>
+                <div data-step="" style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.22em;text-transform:uppercase;color:#A29B8E">{{ feat.flowKicker }}</div>
+                <h2 data-step="" style="margin:14px 0 0;font-size:38px;font-weight:600;letter-spacing:-0.034em;line-height:1.1;max-width:660px">{{ feat.flowTitle }}</h2>
+              </div>
+              <div data-step="" style="max-width:400px;font-size:14px;line-height:1.6;color:#5B564D">{{ feat.flowNote }}</div>
+            </div>
+
+            <div style="display:flex;align-items:stretch;gap:12px;margin-top:26px;flex-wrap:wrap">
+              <sc-for list="{{ feat.flow }}" as="s" hint-placeholder-count="3">
+                <div data-step="" style="flex:1 1 260px;min-width:0;background:{{ s.bg }};border:1px solid {{ s.bd }};border-radius:20px;padding:20px 22px 22px;display:flex;flex-direction:column;gap:14px">
+                  <sc-if value="{{ s.hasArrow }}" hint-placeholder-val="{{ false }}">
+                    <div style="align-self:flex-start;display:flex;align-items:center;gap:8px;background:{{ s.pillBg }};border:1px solid {{ s.pillBd }};border-radius:99px;padding:5px 11px 5px 8px">
+                      <span style="font-size:12px;color:#C4552F;line-height:1">{{ arrowFwd }}</span>
+                      <span style="font:500 9px 'IBM Plex Mono',monospace;letter-spacing:.12em;text-transform:uppercase;color:{{ s.pillFg }};white-space:nowrap">{{ s.arrowLabel }}</span>
+                    </div>
+                  </sc-if>
+                  <div style="display:flex;align-items:center;gap:10px">
+                    <span style="width:26px;height:26px;border-radius:8px;background:{{ s.iconBg }};display:flex;align-items:center;justify-content:center;flex:none">
+                      <sc-if value="{{ s.logo }}" hint-placeholder-val="{{ true }}"><img src="{{ s.logo }}" alt="{{ s.where }}" width="15" height="15" style="display:block" loading="lazy" onError="{{ logoFail }}"></sc-if>
+                      <sc-if value="{{ s.noLogo }}" hint-placeholder-val="{{ false }}"><span style="color:{{ s.iconFg }};display:flex"><i data-lucide="{{ s.icon }}" width="14" height="14" stroke-width="2"></i></span></sc-if>
+                    </span>
+                    <span style="font-size:13px;font-weight:600;letter-spacing:-0.01em;color:{{ s.fg }}">{{ s.where }}</span>
+                    <span style="margin-left:{{ mlAuto }};margin-right:{{ mrAuto }};font:500 9px 'IBM Plex Mono',monospace;letter-spacing:.14em;text-transform:uppercase;background:{{ s.tagBg }};color:{{ s.tagFg }};border-radius:6px;padding:4px 7px;white-space:nowrap">{{ s.tag }}</span>
+                  </div>
+                  <div style="background:#FFFFFF;border:1px solid #E6E6E6;border-radius:16px;overflow:hidden">
+                    <div style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-bottom:1px solid #F0F0F0">
+                      <span style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#F7CE68 0%,#E4405F 48%,#8A3AB9 100%);display:flex;align-items:center;justify-content:center;flex:none">
+                        <span style="width:22px;height:22px;border-radius:50%;background:#FFFFFF;color:#262626;font-size:9.5px;font-weight:600;display:flex;align-items:center;justify-content:center">{{ s.ini }}</span>
+                      </span>
+                      <div style="min-width:0">
+                        <div style="font-size:12.5px;font-weight:600;color:#262626;letter-spacing:-0.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ s.handle }}</div>
+                        <div style="font-size:10.5px;color:#8E8E8E;margin-top:1px">{{ s.status }}</div>
+                      </div>
+                      <span style="margin-left:{{ mlAuto }};margin-right:{{ mrAuto }};display:flex;gap:3px;flex:none">
+                        <span style="width:3px;height:3px;border-radius:50%;background:#C7C7C7"></span>
+                        <span style="width:3px;height:3px;border-radius:50%;background:#C7C7C7"></span>
+                        <span style="width:3px;height:3px;border-radius:50%;background:#C7C7C7"></span>
+                      </span>
+                    </div>
+
+                    <sc-if value="{{ s.isComment }}" hint-placeholder-val="{{ false }}">
+                      <div style="display:flex;align-items:center;gap:10px;padding:11px 12px;background:#FAFAFA;border-bottom:1px solid #F0F0F0">
+                        <span style="width:40px;height:40px;border-radius:6px;background:linear-gradient(140deg,#EDE6DA,#DCD2C2);flex:none"></span>
+                        <div style="min-width:0">
+                          <div style="font-size:11.5px;color:#262626;line-height:1.35">{{ s.postCaption }}</div>
+                          <div style="font-size:10.5px;color:#8E8E8E;margin-top:2px">{{ s.postMeta }}</div>
+                        </div>
+                      </div>
+                      <div style="padding:12px 12px 13px;display:flex;flex-direction:column;gap:12px">
+                        <sc-for list="{{ s.bubbles }}" as="b" hint-placeholder-count="2">
+                          <div style="display:flex;gap:9px;padding-inline-start:{{ b.indent }}">
+                            <span style="width:22px;height:22px;border-radius:50%;background:{{ b.avaBg }};color:{{ b.avaFg }};font-size:8.5px;font-weight:600;display:flex;align-items:center;justify-content:center;flex:none;margin-top:1px">{{ b.ini }}</span>
+                            <div style="min-width:0;flex:1">
+                              <div style="font-size:12.5px;line-height:1.5;color:#262626"><span style="font-weight:600">{{ b.who }}</span> {{ b.t }}</div>
+                              <div style="display:flex;align-items:center;gap:12px;margin-top:4px;font-size:10.5px;color:#8E8E8E">
+                                <span>{{ b.when }}</span>
+                                <span style="font-weight:600">Reply</span>
+                              </div>
+                            </div>
+                            <span style="color:{{ b.heart }};display:flex;flex:none;margin-top:2px"><i data-lucide="heart" width="12" height="12" stroke-width="2"></i></span>
+                          </div>
+                        </sc-for>
+                      </div>
+                    </sc-if>
+
+                    <sc-if value="{{ s.isDm }}" hint-placeholder-val="{{ true }}">
+                      <div style="padding:13px 12px;display:flex;flex-direction:column;gap:7px;background:#FFFFFF">
+                        <sc-for list="{{ s.bubbles }}" as="b" hint-placeholder-count="3">
+                          <div style="align-self:{{ b.align }};max-width:86%;display:flex;flex-direction:column;align-items:{{ b.align }}">
+                            <sc-if value="{{ b.who }}" hint-placeholder-val="{{ false }}">
+                              <span style="font:500 8.5px 'IBM Plex Mono',monospace;letter-spacing:.14em;text-transform:uppercase;color:#A0A0A0;margin-bottom:4px">{{ b.who }}</span>
+                            </sc-if>
+                            <div style="background:{{ b.bg }};color:{{ b.fg }};border-radius:{{ b.radius }};padding:9px 13px;font-size:12.5px;line-height:1.45">{{ b.t }}</div>
+                          </div>
+                        </sc-for>
+                        <div style="display:flex;align-items:center;gap:8px;margin-top:5px;border:1px solid #EFEFEF;border-radius:99px;padding:7px 12px">
+                          <span style="font-size:11.5px;color:#A8A8A8">Message…</span>
+                          <span style="margin-left:{{ mlAuto }};margin-right:{{ mrAuto }};font-size:11.5px;font-weight:600;color:#0095F6">Send</span>
+                        </div>
+                      </div>
+                    </sc-if>
+                  </div>
+                  <div style="margin-top:auto;padding-top:12px;border-top:1px solid {{ s.line }};font-size:12.5px;line-height:1.55;color:{{ s.muted }}">{{ s.foot }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div><div style="max-width:1240px;margin:0 auto;padding:76px 24px 0;display:{{ feat.traceDisplay }}">
+        <div data-reveal="" style="transition:opacity .8s ease,transform .8s ease">
+          <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:40px;flex-wrap:wrap">
+            <div>
+              <div data-step="" style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.22em;text-transform:uppercase;color:#4B3E8E">{{ feat.tr.kicker }}</div>
+              <h2 data-step="" style="margin:14px 0 0;font-size:38px;font-weight:600;letter-spacing:-0.034em;line-height:1.1;max-width:660px">{{ feat.tr.title }}</h2>
+            </div>
+            <div data-step="" style="max-width:400px;font-size:14px;line-height:1.6;color:#5B564D">{{ feat.tr.note }}</div>
+          </div>
+
+          <div data-step="" style="margin-top:24px;background:#EFEAE1;border:1px solid #E4DFD4;border-radius:24px;padding:14px;display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap">
+            <div style="flex:1 1 320px;min-width:0;background:#FFFFFF;border:1px solid #E8E3D9;border-radius:16px;overflow:hidden">
+              <div style="display:flex;align-items:center;gap:10px;padding:12px 15px;border-bottom:1px solid #F0EDE7">
+                <span style="width:28px;height:28px;border-radius:50%;background:#EFEAE1;color:#16150F;font:600 10px Archivo,sans-serif;display:flex;align-items:center;justify-content:center;flex:none">{{ feat.tr.ini }}</span>
+                <div>
+                  <div style="font-size:13px;font-weight:600;letter-spacing:-0.01em">{{ feat.tr.who }}</div>
+                  <div style="font-size:10.5px;color:#8E887C;margin-top:1px">{{ feat.tr.whoMeta }}</div>
+                </div>
+                <span style="margin-left:{{ mlAuto }};margin-right:{{ mrAuto }};font:500 9px 'IBM Plex Mono',monospace;letter-spacing:.14em;text-transform:uppercase;background:#FBEEE8;color:#8E3418;border-radius:6px;padding:4px 7px;white-space:nowrap">{{ feat.tr.threadTag }}</span>
+              </div>
+              <div style="padding:14px 15px;display:flex;flex-direction:column;gap:8px">
+                <sc-for list="{{ feat.tr.msgs }}" as="m" hint-placeholder-count="2">
+                  <div style="align-self:{{ m.align }};max-width:88%;background:{{ m.bg }};color:{{ m.fg }};border:1px solid {{ m.bd }};border-radius:{{ m.radius }};padding:11px 13px;font-size:13.5px;line-height:1.5">{{ m.t }}</div>
+                </sc-for>
+                <sc-if value="{{ feat.tr.replyShown }}" hint-placeholder-val="{{ false }}">
+                  <div style="margin-top:4px;border:1px dashed #D8CFF0;background:#FBFAFF;border-radius:12px;padding:12px 13px">
+                    <div style="font:500 9px 'IBM Plex Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:#4B3E8E">{{ feat.tr.draftLabel }}</div>
+                    <div style="font-size:13.5px;line-height:1.55;color:#3A3833;margin-top:7px">{{ feat.tr.draft }}</div>
+                    <div style="display:flex;gap:7px;margin-top:11px;flex-wrap:wrap">
+                      <span style="font-size:11.5px;font-weight:500;background:#16150F;color:#FAF8F4;border-radius:8px;padding:7px 13px">{{ feat.tr.sendLabel }}</span>
+                      <span style="font-size:11.5px;color:#6B6660;border:1px solid #E4DFD4;border-radius:8px;padding:7px 13px">{{ feat.tr.editLabel }}</span>
+                    </div>
+                  </div>
+                </sc-if>
+              </div>
+
+              <div class="m-trace-ctx" style="padding:0 15px 15px">
+                <div style="font:500 9px 'IBM Plex Mono',monospace;letter-spacing:.18em;text-transform:uppercase;color:#A29B8E;padding-top:13px;border-top:1px solid #F0EDE7">{{ feat.tr.ctxLabel }}</div>
+                <div style="display:flex;gap:8px;margin-top:11px;flex-wrap:wrap">
+                  <sc-for list="{{ feat.tr.facts }}" as="fc" hint-placeholder-count="4">
+                    <div style="flex:1 1 108px;min-width:0;background:#FAF8F4;border:1px solid #EFEAE1;border-radius:11px;padding:9px 11px">
+                      <div style="font-size:10.5px;color:#8E887C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ fc.k }}</div>
+                      <div style="font-size:13px;font-weight:600;letter-spacing:-0.012em;margin-top:3px">{{ fc.v }}</div>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="font:500 9px 'IBM Plex Mono',monospace;letter-spacing:.18em;text-transform:uppercase;color:#A29B8E;margin-top:15px">{{ feat.tr.histLabel }}</div>
+                <div style="display:flex;flex-direction:column;margin-top:7px">
+                  <sc-for list="{{ feat.tr.history }}" as="hs" hint-placeholder-count="4">
+                    <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #F5F2EC">
+                      <sc-if value="{{ hs.logo }}" hint-placeholder-val="{{ true }}"><img src="{{ hs.logo }}" alt="{{ hs.ch }}" width="14" height="14" style="display:block;flex:none" loading="lazy" onError="{{ logoFail }}"></sc-if>
+                      <sc-if value="{{ hs.noLogo }}" hint-placeholder-val="{{ false }}"><span style="color:#8E887C;display:flex;flex:none"><i data-lucide="{{ hs.icon }}" width="13" height="13" stroke-width="2"></i></span></sc-if>
+                      <span style="font-size:12.5px;color:#3A3833;flex:1;min-width:0;line-height:1.4">{{ hs.t }}</span>
+                      <span style="font-size:11px;color:#A29B8E;white-space:nowrap;flex:none">{{ hs.when }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+
+            <div class="m-trace-side" style="flex:0 0 356px;max-width:100%;background:#16150F;color:#F7F5F1;border-radius:18px;box-shadow:0 22px 50px rgba(22,21,15,.18);overflow:hidden;display:flex;flex-direction:column">
+              <div style="display:flex;align-items:center;gap:10px;padding:13px 15px;border-bottom:1px solid #2A2823">
+                <span style="width:26px;height:26px;border-radius:8px;background:#2A2823;display:flex;align-items:center;justify-content:center;flex:none"><i data-lucide="square-pen" width="14" height="14" stroke-width="2"></i></span>
+                <div>
+                  <div style="font-size:13px;font-weight:600;letter-spacing:-0.01em">{{ feat.tr.panelT }}</div>
+                  <div style="font-size:10.5px;color:#A8A39A;margin-top:1px">{{ feat.tr.panelSub }}</div>
+                </div>
+                <span style="margin-left:{{ mlAuto }};margin-right:{{ mrAuto }};width:7px;height:7px;border-radius:50%;background:#A8C57A;animation:gpulse 2.2s ease-in-out infinite"></span>
+              </div>
+
+              <div style="padding:14px 15px;display:flex;flex-direction:column">
+                <sc-for list="{{ feat.tr.steps }}" as="tp" hint-placeholder-count="5">
+                  <div style="display:flex;align-items:flex-start;gap:11px;padding:10px 0;border-bottom:1px solid #221F1B;opacity:{{ tp.op }};transition:opacity .45s ease">
+                    <span style="width:20px;height:20px;border-radius:50%;background:{{ tp.dotBg }};color:{{ tp.dotFg }};display:flex;align-items:center;justify-content:center;flex:none;margin-top:1px;animation:{{ tp.anim }}"><i data-lucide="{{ tp.icon }}" width="11" height="11" stroke-width="2.6"></i></span>
+                    <div style="min-width:0;flex:1">
+                      <div style="font-size:13px;font-weight:500;color:{{ tp.fg }};line-height:1.35">{{ tp.t }}</div>
+                      <div style="font-size:11.5px;color:#8E8A83;margin-top:3px;line-height:1.45">{{ tp.d }}</div>
+                    </div>
+                    <span style="font:400 10.5px 'IBM Plex Mono',monospace;color:#A8A39A;white-space:nowrap;flex:none;margin-top:2px">{{ tp.ms }}</span>
+                  </div>
+                </sc-for>
+                <sc-if value="{{ feat.tr.needApproval }}" hint-placeholder-val="{{ false }}">
+                  <div style="margin-top:12px;background:#211F1B;border:1px solid #3A362F;border-radius:12px;padding:12px 13px">
+                    <div style="display:flex;align-items:center;gap:8px">
+                      <span style="color:#E0A458;display:flex"><i data-lucide="hand" width="14" height="14" stroke-width="2.2"></i></span>
+                      <span style="font-size:12.5px;font-weight:600;color:#EFE3CF">{{ feat.tr.approveT }}</span>
+                    </div>
+                    <div style="font-size:11.5px;color:#A8A39A;line-height:1.5;margin-top:6px">{{ feat.tr.approveD }}</div>
+                    <div style="display:flex;gap:7px;margin-top:11px;flex-wrap:wrap">
+                      <span onClick="{{ feat.tr.approve }}" style="cursor:pointer;font-size:11.5px;font-weight:500;background:#F7F5F1;color:#16150F;border-radius:8px;padding:7px 13px">{{ feat.tr.approveLabel }}</span>
+                      <span style="font-size:11.5px;color:#A8A39A;border:1px solid #3A362F;border-radius:8px;padding:7px 13px">{{ feat.tr.declineLabel }}</span>
+                    </div>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ feat.tr.done }}" hint-placeholder-val="{{ false }}">
+                  <div style="margin-top:12px;display:flex;align-items:center;gap:8px;background:#1B2A20;border:1px solid #2C4433;border-radius:12px;padding:11px 13px;font-size:12px;color:#A8C57A">
+                    <i data-lucide="check" width="13" height="13" stroke-width="2.6"></i>{{ feat.tr.doneT }}
+                  </div>
+                </sc-if>
+              </div>
+
+              <div style="margin-top:auto;padding:0 15px 14px">
+                <span onClick="{{ feat.tr.replay }}" style="display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;font-size:12px;font-weight:500;color:#D8D3CA;border:1px solid #2F2D28;border-radius:10px;padding:10px 0;transition:border-color .2s ease,color .2s ease" style-hover="border-color:#6E6A63;color:#F7F5F1"><i data-lucide="rotate-ccw" width="13" height="13" stroke-width="2"></i>{{ feat.tr.replayLabel }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+
+
+      
+
+
       <div style="max-width:1240px;margin:0 auto;padding:76px 24px 0;display:{{ feat.saveDisplay }}">
         <div data-reveal="" style="transition:opacity .8s ease,transform .8s ease">
           <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:40px;flex-wrap:wrap">
@@ -915,7 +1076,33 @@
             <div data-step="" style="max-width:400px;font-size:14px;line-height:1.6;color:#5B564D">Connect a channel once and it joins the same queue, the same customer record and the same history as everything else.</div>
           </div>
 
-          <div data-step="" style="position:relative;width:100%;max-width:1000px;margin:26px auto 0;aspect-ratio:1000 / 470">
+          <div class="m-only" style="flex-direction:column;align-items:stretch;gap:8px;margin-top:22px">
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <sc-for list="{{ chFlow }}" as="cf" hint-placeholder-count="6">
+                <div style="background:#FFFFFF;border:1px solid #E4DFD4;border-radius:12px;display:flex;align-items:center;gap:10px;padding:12px 14px;box-shadow:0 4px 14px rgba(22,21,15,.04)">
+                  <sc-if value="{{ cf.logo }}" hint-placeholder-val="{{ true }}"><img src="{{ cf.logo }}" alt="{{ cf.t }}" width="17" height="17" style="display:block;flex:none" loading="lazy" onError="{{ logoFail }}"></sc-if>
+                  <sc-if value="{{ cf.noLogo }}" hint-placeholder-val="{{ false }}"><span style="color:#55524C;display:flex;flex:none"><i data-lucide="{{ cf.icon }}" width="16" height="16" stroke-width="2"></i></span></sc-if>
+                  <span style="font-size:14px;font-weight:600;letter-spacing:-0.01em">{{ cf.t }}</span>
+                  <span style="margin-inline-start:auto;width:6px;height:6px;border-radius:50%;background:#A8C57A;flex:none"></span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:0;padding:2px 0">
+              <span style="width:2px;height:20px;background:#E2DCD0"></span>
+              <span style="color:#C4552F;font-size:15px;line-height:1;animation:gfloat 2.6s ease-in-out infinite">↓</span>
+              <span style="width:2px;height:12px;background:#E2DCD0"></span>
+            </div>
+            <div style="display:flex;align-items:center;gap:14px;background:#16150F;border-radius:18px;padding:16px 18px;box-shadow:0 18px 40px rgba(22,21,15,.24)">
+              <span style="width:44px;height:44px;border-radius:14px;background:#262521;display:flex;align-items:center;justify-content:center;flex:none"><img src="assets/logo/solid-icon-light.png" alt="GOTCHA" style="width:24px;height:auto;display:block"></span>
+              <div style="min-width:0">
+                <div style="font:500 9px 'IBM Plex Mono',monospace;letter-spacing:.18em;text-transform:uppercase;color:#A8A39A">Out the other side</div>
+                <div style="font-size:17px;font-weight:600;letter-spacing:-0.018em;color:#F7F5F1;margin-top:5px">One inbox</div>
+                <div style="font-size:12.5px;color:#A8A39A;line-height:1.5;margin-top:4px">One queue, one customer record, one history per person.</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="m-hide" data-step="" style="position:relative;width:100%;max-width:1000px;margin:26px auto 0;aspect-ratio:1000 / 470">
             <svg viewBox="0 0 1000 470" width="100%" height="100%" style="position:absolute;inset:0" aria-hidden="true">
           <path d="M226 48 C 360 48, 420 235, 554 235" fill="none" stroke="#E2DCD0" stroke-width="2"></path>
           <path d="M226 48 C 360 48, 420 235, 554 235" fill="none" stroke="#C4552F" stroke-width="2" stroke-dasharray="5 23" stroke-linecap="round" style="animation:gflow 1.5s linear 0.00s infinite"></path>
@@ -1337,7 +1524,7 @@
           <div style="max-width:400px;font-size:14.5px;line-height:1.6;color:#5B564D">{{ why.altNote }}</div>
         </div>
         <div data-reveal="" style="margin-top:30px;background:#FFFFFF;border:1px solid #E8E3D9;border-radius:22px;overflow:hidden;transition:opacity .8s ease,transform .8s ease">
-          <div style="display:grid;grid-template-columns:1.6fr repeat(4,1fr);border-bottom:1px solid #E8E3D9">
+          <div class="m-alts" style="display:grid;grid-template-columns:1.6fr repeat(4,1fr);border-bottom:1px solid #E8E3D9">
             <div style="padding:22px 26px;font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.2em;text-transform:uppercase;color:#A29B8E;align-self:end">At a typical growing business</div>
             <sc-for list="{{ why.alts }}" as="a" hint-placeholder-count="4">
               <div style="padding:22px 20px;background:{{ a.bg }};color:{{ a.fg }};border-inline-start:1px solid #F0EDE7">
@@ -1348,11 +1535,12 @@
             </sc-for>
           </div>
           <sc-for list="{{ why.matrix }}" as="row" hint-placeholder-count="8">
-            <div style="display:grid;grid-template-columns:1.6fr repeat(4,1fr);border-bottom:1px solid #F7F5F1">
+            <div class="m-cmp-row" style="display:grid;grid-template-columns:1.6fr repeat(4,1fr);border-bottom:1px solid #F7F5F1">
               <div style="padding:15px 26px;font-size:14px;line-height:1.4;display:flex;align-items:center">{{ row.k }}</div>
               <sc-for list="{{ row.cells }}" as="c" hint-placeholder-count="4">
                 <div style="padding:13px 20px;border-inline-start:1px solid #F0EDE7;background:{{ c.bg }};display:flex;align-items:center;gap:9px">
                   <span style="width:22px;height:22px;border-radius:50%;background:{{ c.markBg }};color:{{ c.markFg }};display:flex;align-items:center;justify-content:center;flex:none"><i data-lucide="{{ c.icon }}" width="12" height="12" stroke-width="2.6"></i></span>
+                  <span class="m-only m-cell-label">{{ c.who }}</span>
                   <span style="font-size:12px;line-height:1.35;color:{{ c.fg }}">{{ c.note }}</span>
                 </div>
               </sc-for>
@@ -1732,7 +1920,7 @@
               <div style="font-size:13.5px;line-height:1.55;color:#5B564D;margin-top:2px">Ran the family business for the last five years, mostly marketing, service and sales, so he has answered the messages this product answers. BA in business administration.</div>
             </div>
           </div>
-          <div style="background:#FFFFFF;border:1px solid #E8E3D9;border-radius:18px;padding:24px;display:flex;gap:20px;align-items:flex-start">
+          <div class="m-founder-omer" style="background:#FFFFFF;border:1px solid #E8E3D9;border-radius:18px;padding:24px;display:flex;gap:20px;align-items:flex-start">
             <img src="assets/team/founder-2.jpg" alt="Omer Serruya" style="width:168px;height:206px;border-radius:16px;object-fit:cover;object-position:center top;flex:none;display:block;background:#EFEAE1">
             <div style="display:flex;flex-direction:column;gap:6px;padding-top:4px">
               <div style="font-size:17px;font-weight:600;letter-spacing:-0.016em">Omer Serruya</div>
@@ -2264,7 +2452,7 @@
         </div>
 
         <div style="margin-top:24px;border:1px solid #E8E3D9;border-radius:20px;background:#FFFFFF">
-          <div style="position:sticky;top:112px;z-index:40;background:rgba(253,251,247,.94);backdrop-filter:blur(20px) saturate(1.5);-webkit-backdrop-filter:blur(20px) saturate(1.5);border-bottom:1px solid #E8E3D9;border-radius:20px 20px 0 0;display:grid;grid-template-columns:1.7fr 1fr 1fr 1fr">
+          <div class="m-cmp-head" style="position:sticky;top:112px;z-index:40;background:rgba(253,251,247,.94);backdrop-filter:blur(20px) saturate(1.5);-webkit-backdrop-filter:blur(20px) saturate(1.5);border-bottom:1px solid #E8E3D9;border-radius:20px 20px 0 0;display:grid;grid-template-columns:1.7fr 1fr 1fr 1fr">
             <div style="padding:16px 24px;display:flex;align-items:flex-end">
               <span style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.2em;text-transform:uppercase;color:#A29B8E">{{ cycleNote }}</span>
             </div>
@@ -2287,17 +2475,17 @@
             <div>
               <div style="padding:13px 24px;background:#F5F2EC;border-bottom:1px solid #EDE9E1;font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.2em;text-transform:uppercase;color:#8E887C">{{ g.t }}</div>
               <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="5">
-                <div style="display:grid;grid-template-columns:1.7fr 1fr 1fr 1fr;border-bottom:1px solid #F7F5F1">
+                <div class="m-cmp-row" style="display:grid;grid-template-columns:1.7fr 1fr 1fr 1fr;border-bottom:1px solid #F7F5F1">
                   <div style="padding:13px 24px;font-size:13.5px;line-height:1.45;color:#3A3833">{{ r.t }}</div>
                   <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="3">
-                    <div style="padding:13px 20px;border-inline-start:1px solid #F7F5F1;background:{{ c.bg }};font-size:13px;font-weight:{{ c.w }};color:{{ c.c }};display:flex;align-items:center">{{ c.v }}</div>
+                    <div style="padding:13px 20px;border-inline-start:1px solid #F7F5F1;background:{{ c.bg }};font-size:13px;font-weight:{{ c.w }};color:{{ c.c }};display:flex;align-items:center;gap:12px"><span class="m-only m-cell-label">{{ c.plan }}</span>{{ c.v }}</div>
                   </sc-for>
                 </div>
               </sc-for>
             </div>
           </sc-for>
 
-          <div style="display:grid;grid-template-columns:1.7fr 1fr 1fr 1fr">
+          <div class="m-cmp-foot" style="display:grid;grid-template-columns:1.7fr 1fr 1fr 1fr">
             <div style="padding:18px 24px;font-size:12.5px;color:#8E887C">Every plan includes your whole team, with no per-seat charge.</div>
             <sc-for list="{{ cmpPlans }}" as="p" hint-placeholder-count="3">
               <div style="padding:14px 20px;border-inline-start:1px solid #F7F5F1;background:{{ p.bg }}">
@@ -2356,9 +2544,9 @@
           <div style="flex:1;border-top:1px solid #E8E3D9">
             <sc-for list="{{ pfaqs }}" as="f" hint-placeholder-count="6">
               <div onClick="{{ f.toggle }}" style="border-bottom:1px solid #E8E3D9;padding:20px 4px;cursor:pointer">
-                <div style="display:flex;align-items:baseline;gap:20px">
+                <div class="m-norow" style="display:flex;align-items:baseline;gap:20px">
                   <span style="font-size:17px;font-weight:500;flex:1;line-height:1.35">{{ f.q }}</span>
-                  <span style="font-size:19px;color:#A29B8E;line-height:1">{{ f.sign }}</span>
+                  <span style="font-size:19px;color:#A29B8E;line-height:1;flex:none">{{ f.sign }}</span>
                 </div>
                 <div style="max-height:{{ f.h }};overflow:hidden;transition:max-height .45s ease,opacity .35s ease;opacity:{{ f.o }}">
                   <div style="font-size:14.5px;line-height:1.7;color:#5B564D;padding-top:13px;max-width:660px">{{ f.a }}</div>
@@ -2394,7 +2582,7 @@
 
   <sc-if value="{{ isHomePage }}" hint-placeholder-val="{{ true }}">
   <div id="top" style="position:relative;height:804px;overflow:hidden;background:#221F1B">
-    <image-slot id="hero-photo" shape="rect" placeholder="hero photograph: a real shop owner at work, warm daylight" style="animation:gken 30s ease-in-out infinite alternate;transform-origin:60% 50%"></image-slot>
+    <sc-if value="{{ isEn }}" hint-placeholder-val="{{ true }}"><img src="assets/hero-en.png" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:72% 50%;animation:gken 30s ease-in-out infinite alternate;transform-origin:60% 50%"></sc-if>
     <sc-if value="{{ isHe }}" hint-placeholder-val="{{ false }}"><img src="assets/hero-he.png" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:30% 50%;animation:gken 30s ease-in-out infinite alternate;transform-origin:40% 50%"></sc-if>
     <div style="position:absolute;inset:0;background:linear-gradient(105deg,rgba(14,12,9,.82) 0%,rgba(14,12,9,.56) 46%,rgba(14,12,9,.2) 100%);pointer-events:none"></div>
     <div style="position:absolute;left:0;right:0;bottom:0;height:150px;background:linear-gradient(to bottom,rgba(250,248,244,0),#FAF8F4 88%);pointer-events:none"></div>
@@ -2925,9 +3113,9 @@
       <div style="flex:1;border-top:1px solid #E8E3D9">
         <sc-for list="{{ faqs }}" as="f" hint-placeholder-count="7">
           <div onClick="{{ f.toggle }}" style="border-bottom:1px solid #E8E3D9;padding:21px 4px;cursor:pointer">
-            <div style="display:flex;align-items:baseline;gap:20px">
+            <div class="m-norow" style="display:flex;align-items:baseline;gap:20px">
               <span style="font-size:18px;font-weight:500;flex:1;line-height:1.35">{{ f.q }}</span>
-              <span style="font-size:19px;color:#A29B8E;line-height:1">{{ f.sign }}</span>
+              <span style="font-size:19px;color:#A29B8E;line-height:1;flex:none">{{ f.sign }}</span>
             </div>
             <div style="max-height:{{ f.h }};overflow:hidden;transition:max-height .45s ease,opacity .35s ease;opacity:{{ f.o }}">
               <div style="font-size:14.5px;line-height:1.7;color:#5B564D;padding-top:14px;max-width:640px">{{ f.a }}</div>
@@ -3046,7 +3234,7 @@
 <script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:900}}">
 const HE_DICT = (window.GOTCHA_HE || {});
 class Component extends DCLogic {
-  state = { mnav: false, menu: null, step: 0, uc: 0, faq: 0, shot: 0, page: 'home', vol: 2, yearly: false, pfaq: 0, biz: 'retail', trade: 0, post: null, lang: 'en', trace: 0, dirCat: 'All integrations', dirQ: '', pcp: 0, pai: 0, ccp: 0, cai: 0, offerOpen: false, barOffer: true, barAnn: true, widget: { q: null, typing: false, acted: false } };
+  state = { mnav: false, mgrp: null, menu: null, step: 0, uc: 0, faq: 0, shot: 0, page: 'home', vol: 2, yearly: false, pfaq: 0, biz: 'retail', trade: 0, post: null, lang: 'en', trace: 0, dirCat: 'All integrations', dirQ: '', pcp: 0, pai: 0, ccp: 0, cai: 0, offerOpen: false, barOffer: true, barAnn: true, widget: { q: null, typing: false, acted: false } };
 
   // The timeline spine is a grey track that fills orange as it passes the reading line,
   // so the colour arrives with the scroll rather than all at once on reveal.
@@ -3256,7 +3444,10 @@ class Component extends DCLogic {
   }
 
   componentDidMount() {
-    try { const l = localStorage.getItem('gotcha-lang'); if (l === 'he' || l === 'en') this.setState({ lang: l }); } catch (e) {}
+    let pinned = null;
+    try { pinned = new URLSearchParams(location.search).get('lang'); } catch (e) {}
+    if (pinned === 'he' || pinned === 'en') { this.langPinned = true; this.setState({ lang: pinned }); }
+    else { try { const l = localStorage.getItem('gotcha-lang'); if (l === 'he' || l === 'en') this.setState({ lang: l }); } catch (e) {} }
     this.translateTimer = setInterval(() => this.translate(), 400);
     setTimeout(() => this.setupStage(), 60);
     this.setupSpines();
@@ -3275,7 +3466,10 @@ class Component extends DCLogic {
     if (!root.querySelectorAll('[data-reveal]').length) root = document;
     const hide = (el) => {
       el.style.opacity = '0';
-      el.style.transform = el.dataset.side === 'left' ? 'translateX(-36px)' : el.dataset.side === 'right' ? 'translateX(36px)' : 'translateY(18px)';
+      const narrow = window.innerWidth < 820;
+      el.style.transform = (el.dataset.side && !narrow)
+        ? (el.dataset.side === 'left' ? 'translateX(-36px)' : 'translateX(36px)')
+        : 'translateY(18px)';
       ownSteps(el).forEach(s => { s.style.opacity = '0'; s.style.transform = 'translateY(10px)'; s.style.transition = 'opacity .55s ease, transform .55s cubic-bezier(.2,.75,.2,1)'; });
     };
     // steps belong to the nearest reveal wrapper, so a parent revealing doesn't fire a nested row early
@@ -3297,14 +3491,15 @@ class Component extends DCLogic {
         el.dataset.revwatch = '1';
         hide(el);
         if (this.io) this.io.observe(el);
-        setTimeout(() => { if (el.style.opacity === '0') reveal(el); }, 2600);
+        setTimeout(() => { if (el.style.opacity === '0' && el.getBoundingClientRect().top < window.innerHeight + 300) reveal(el); }, 2600);
       });
     };
     this.io = new IntersectionObserver((es) => {
       es.forEach(e => { if (e.isIntersecting) { reveal(e.target); this.io.unobserve(e.target); } });
     }, { threshold: 0.06, rootMargin: '200px 0px 0px 0px' });
     targets.forEach(el => this.io.observe(el));
-    this.failsafe = setTimeout(() => targets.forEach(reveal), 1800);
+    const near = (el) => el.getBoundingClientRect().top < window.innerHeight + 300;
+    this.failsafe = setTimeout(() => targets.forEach(el => { if (near(el)) reveal(el); }), 1800);
 
     const calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -3414,8 +3609,78 @@ class Component extends DCLogic {
         }
       }
     };
+
+    // desktop columns are sized in px; below tablet width they stack instead of squeezing
+    this.fitMobile = () => {
+      const mob = window.innerWidth < 780;
+      // the hero photo is 16:9; an 804px-tall box at phone width crops it to a sliver
+      const hero = document.querySelector('#top');
+      if (hero && (hero.style.height === '804px' || hero.hasAttribute('data-mobhero'))) {
+        if (mob) { hero.setAttribute('data-mobhero', ''); hero.style.height = '620px'; }
+        else if (hero.hasAttribute('data-mobhero')) { hero.removeAttribute('data-mobhero'); hero.style.height = '804px'; }
+      }
+      // Copilot must be readable beside the conversation, so on a phone the long
+      // context block is relocated below it rather than removed
+      const ctx = (this.host || document).querySelector('.m-trace-ctx');
+      const side = (this.host || document).querySelector('.m-trace-side');
+      if (ctx && side && side.parentElement) {
+        if (mob && ctx.parentElement !== side.parentElement) {
+          ctx.dataset.homeParent = '1';
+          this.ctxHome = ctx.previousElementSibling || null;
+          this.ctxHomeParent = ctx.parentElement;
+          side.parentElement.appendChild(ctx);
+        } else if (!mob && ctx.dataset.homeParent && this.ctxHomeParent) {
+          this.ctxHomeParent.appendChild(ctx);
+          delete ctx.dataset.homeParent;
+        }
+      }
+      document.querySelectorAll('#dc-root *').forEach(el => {
+        const st = el.style;
+        if (!st) return;
+        if (mob) {
+          const w = parseFloat(st.width || '');
+          const basis = parseFloat(st.flexBasis || '');
+          const minw = parseFloat(st.minWidth || '');
+          const wide = (st.width || '').endsWith('px') && w >= 300;
+          const wideBasis = (st.flexBasis || '').endsWith('px') && basis >= 300;
+          const wideMin = (st.minWidth || '').endsWith('px') && minw >= 300;
+          if ((wide || wideBasis || wideMin) && !el.hasAttribute('data-mob')) {
+            el.setAttribute('data-mob', JSON.stringify({ w: st.width, f: st.flex, fb: st.flexBasis, mw: st.maxWidth, mn: st.minWidth }));
+            if (wideMin) st.minWidth = '0';
+            if (wide || wideBasis) { st.width = '100%'; st.maxWidth = '100%'; }
+            if (wideBasis || (st.flex && !wideMin)) st.flex = '1 1 100%';
+            const p = el.parentElement;
+            if (p && getComputedStyle(p).display === 'flex') p.style.flexWrap = 'wrap';
+          }
+          // 10px label type is fine on a monitor and unreadable on a phone
+          if (!el.hasAttribute('data-mobfs') && el.children.length === 0 && (el.textContent || '').trim().length > 6) {
+            const fs = parseFloat(getComputedStyle(el).fontSize);
+            if (fs && fs < 11.5) { el.setAttribute('data-mobfs', st.fontSize || ''); st.fontSize = '11.5px'; }
+          }
+          // a two-column row stacks only when it is genuinely squeezed: it overflows,
+          // or one of its columns is crushed under 200px with real copy in it
+          if (getComputedStyle(el).display === 'flex' && !st.flexWrap && el.children.length > 1 && !el.hasAttribute('data-mobwrap')) {
+            const squeezed = el.scrollWidth > el.clientWidth + 4
+              || Array.from(el.children).some(k => (k.textContent || '').trim().length > 40 && k.getBoundingClientRect().width < 200);
+            if (squeezed) { el.setAttribute('data-mobwrap', '1'); st.flexWrap = 'wrap'; }
+          }
+        } else {
+          if (el.hasAttribute('data-mob')) {
+            const o = JSON.parse(el.getAttribute('data-mob'));
+            st.width = o.w || ''; st.flex = o.f || ''; st.flexBasis = o.fb || ''; st.maxWidth = o.mw || ''; st.minWidth = o.mn || '';
+            el.removeAttribute('data-mob');
+          }
+          if (el.hasAttribute('data-mobwrap')) { st.flexWrap = ''; el.removeAttribute('data-mobwrap'); }
+          if (el.hasAttribute('data-mobfs')) { st.fontSize = el.getAttribute('data-mobfs'); el.removeAttribute('data-mobfs'); }
+        }
+      });
+    };
+
     this.fitNav();
+    this.fitMobile();
+    this.mobTimer = setInterval(() => this.fitMobile(), 700);
     window.addEventListener('resize', this.fitNav);
+    window.addEventListener('resize', this.fitMobile);
     this.logoSweeps = [600, 1800, 4000].map(ms => setTimeout(() => this.sweepLogos(), ms));
   }
 
@@ -3790,7 +4055,7 @@ class Component extends DCLogic {
             items: [
               { t: 'Omnichannel', n: '6 channels', icon: 'inbox', page: 'feat-omnichannel' },
               { t: 'Customers', n: 'one record', icon: 'contact', page: 'feat-customers' },
-              { t: 'Social engagement', n: 'comments   & DMד\n', icon: 'at-sign', page: 'feat-social' },
+              { t: 'Social engagement', n: 'comments & DMs', icon: 'at-sign', page: 'feat-social' },
               { t: 'Store widget', n: 'sells', icon: 'shopping-cart', page: 'feat-widget' },
               { t: 'WhatsApp broadcast', n: 'campaigns that reply', icon: 'megaphone', page: 'feat-broadcast' }
             ] },
@@ -3925,11 +4190,16 @@ class Component extends DCLogic {
     });
 
     // the phone menu: the same NAV spine, with every mega-menu link flattened under its section
-    const mnav = NAV.map(([t, key, page]) => {
+    const mnav = NAV.map(([t, key, page], gi) => {
       const m = key && MENUS[key];
+      const open = st.mgrp === gi;
       return {
         t,
+        caret: m ? 'chevron-down' : 'arrow-right',
+        rot: (m && open) ? '180deg' : '0deg',
+        itemsDisplay: open ? 'flex' : 'none',
         go: () => {
+          if (m) { this.setState(s => ({ mgrp: s.mgrp === gi ? null : gi })); return; }
           if (page) { this.setState({ mnav: false, menu: null, page }); window.scrollTo(0, 0); }
         },
         items: m
@@ -4726,7 +4996,6 @@ class Component extends DCLogic {
         ],
         shotTitle: 'Knowledge', shotMeta: 'knowledge · 2 conflicts open',
         shotCaption: 'Sources on the left, what it learned in the middle, and the questions it could not answer waiting for one line from you.',
-        slot: 'feat-knowledge-shot', slotHint: 'product screenshot: knowledge sources, conflicts and gap list',
         callouts: [
           { n: '01', t: 'Every answer traceable to the page or reply it came from.' },
           { n: '02', t: 'Conflicts held rather than guessed, with both sources side by side.' },
@@ -5062,7 +5331,6 @@ class Component extends DCLogic {
         ],
         shotTitle: 'Channels', shotMeta: 'channels · 6 connected',
         shotCaption: 'What is connected, what it is allowed to answer, and the hours a person covers instead. One row per channel.',
-        slot: 'feat-channels-shot', slotHint: 'product screenshot: connected channels list with permissions',
         callouts: [
           { n: '01', t: 'Connect, verify, done, with a test message before it goes live.' },
           { n: '02', t: 'Per-channel rules: what the AI may answer and when a person takes over.' },
@@ -5200,7 +5468,6 @@ class Component extends DCLogic {
         ],
         shotTitle: 'Social in the inbox', shotMeta: 'social · 46 open',
         shotCaption: 'The post on one side, the comment thread on the other, and the same customer record you see on every other channel.',
-        slot: 'feat-social-shot', slotHint: 'product screenshot: social comments and story replies in the inbox',
         callouts: [
           { n: '01', t: 'The post or story the message came from, attached to the conversation.' },
           { n: '02', t: 'Whether the reply goes out in public or into her DMs, decided per message.' },
@@ -5265,7 +5532,6 @@ class Component extends DCLogic {
         ],
         shotTitle: 'The widget on a product page', shotMeta: 'widget · product page',
         shotCaption: 'Your fonts, your colours, your language, with the product, the variant and the stock already in the conversation.',
-        slot: 'feat-widget-shot', slotHint: 'product screenshot: store page with the chat widget open on a product',
         callouts: [
           { n: '01', t: 'The product she is on, attached to the conversation without her saying so.' },
           { n: '02', t: 'A real delivery date for her address, not "3-5 business days".' },
@@ -5557,7 +5823,8 @@ class Component extends DCLogic {
         us: { icon: 'check', markBg: '#A8C57A', markFg: '#16150F', fg: '#16150F', bg: '#F5F7EF' }
       };
       const cell = (m, note) => Object.assign({ note }, M[m]);
-      const row = (k, a, b, c, d) => ({ k, cells: [cell(a[0], a[1]), cell(b[0], b[1]), cell(c[0], c[1]), cell(d[0] === 'yes' ? 'us' : d[0], d[1])] });
+      const WHO = ['An evening shift', 'A website chatbot', 'Helpdesk with AI', 'GOTCHA · AI Team'];
+      const row = (k, a, b, c, d) => ({ k, cells: [cell(a[0], a[1]), cell(b[0], b[1]), cell(c[0], c[1]), cell(d[0] === 'yes' ? 'us' : d[0], d[1])].map((x, i) => Object.assign(x, { who: WHO[i] })) });
       return {
         kicker: 'Why us', h1a: 'Most tools reply.', h1b: 'We take the whole thing, end to end.',
         sub: 'From the first message a customer sends to the action that closes it: GOTCHA merges every channel, looks up the order, reads your policy, carries out the action inside your systems and writes it back, then stops exactly where you told it to. Built for small and growing businesses, from a one-man show to a team of agents under load, not for enterprise contact centres.',
@@ -5733,30 +6000,36 @@ class Component extends DCLogic {
         set: (ev) => setter(parseInt(ev.target.value, 10))
       });
       const per = yr ? '/ year' : '/ month';
-      const vat = ' · excluding 18% VAT';
+      // these lines are composed from a chosen tier, so they carry their own Hebrew
+      const HE = st.lang === 'he';
+      const vat = HE ? ' · ללא מע״מ 18%' : ' · excluding 18% VAT';
+      const L = {
+        chatsUsers: (n) => HE ? (n + ' שיחות ביום · ' + n + ' משתמשים') : (n + ' chats a day · ' + n + ' users'),
+        chatsAi: (n) => HE ? (n + ' שיחות ביום · ' + n + ' עובדי AI') : (n + ' chats a day · ' + n + ' AI employees'),
+        chatsCalls: (a, b) => HE ? (a + ' שיחות צ׳אט · ' + b + ' שיחות טלפון ביום') : (a + ' chats · ' + b + ' calls a day'),
+        cpUsers: (n) => HE ? (n + ' משתמשי Co-Pilot') : (n + ' Co-Pilot users'),
+        aiEmp: (n) => HE ? (n + ' עובדי AI') : (n + ' AI employees'),
+        usersAi: (a, b) => HE ? (a + ' משתמשים · ' + b + ' עובדי AI') : (a + ' users · ' + b + ' AI employees')
+      };
       return {
         prices: [money(CP[cp]), money(AI[ai]), money(CALL[ccp][cai])],
-        subs: [
-          TIERS[cp] + ' chats a day · ' + TIERS[cp] + ' users',
-          TIERS[ai] + ' chats a day · ' + TIERS[ai] + ' AI employees',
-          TIERS[ccp] + ' chats · ' + TIERS[cai] + ' calls a day'
-        ],
+        subs: [L.chatsUsers(TIERS[cp]), L.chatsAi(TIERS[ai]), L.chatsCalls(TIERS[ccp], TIERS[cai])],
         plans: [
           { name: 'Co-Pilot', badge: null, who: 'AI beside your team: it prepares every reply, and your agents run the service and the sales.',
-            price: money(CP[cp]), per, sub: TIERS[cp] + ' Co-Pilot users' + vat,
+            price: money(CP[cp]), per, sub: L.cpUsers(TIERS[cp]) + vat,
             bg: '#FFFFFF', bd: '#E8E3D9', fg: '#16150F', muted: '#8E887C', dot: '#C8C2B6', rule: '#F0EDE7', accent: '#C4552F', sliderBoxH: '188px',
             sliders: [slider('chat conversations a business day', 'Co-Pilot users', cp, (v) => this.setState({ pcp: v }), false)],
             featHead: 'Includes', feats: ['Multichannel unified inbox and broadcasts', 'Automations, AI routing and the command centre', 'Copilot drafting every reply for your agents', 'Conversation summaries into your CRM', 'Knowledge base and the full customer picture', 'Your whole team, no per-seat surprises'],
             cta: 'Start free', btnBg: '#FFFFFF', btnFg: '#16150F', btnBd: '#D8D2C6' },
           { name: 'AI Team', badge: 'Most businesses', badgeBg: '#EFD9CD', badgeFg: '#5C2410',
             who: 'AI employees that handle service, copilot work and tasks for your team, end to end.',
-            price: money(AI[ai]), per, sub: TIERS[ai] + ' AI employees' + vat,
+            price: money(AI[ai]), per, sub: L.aiEmp(TIERS[ai]) + vat,
             bg: '#16150F', bd: '#16150F', fg: '#F7F5F1', muted: '#A29D95', dot: '#4A4740', rule: '#262521', accent: '#E0A458', sliderBoxH: '188px',
             sliders: [slider('chat conversations a business day', 'AI employees', ai, (v) => this.setState({ pai: v }), true)],
             featHead: 'Everything in Co-Pilot, plus', feats: ['AI employees answering and acting on their own', 'Autonomy set per action: suggest, ask, or do it', 'Back office work done for you, not just replies', 'Actions inside Shopify, your CRM and your tools', 'Analytics that name the cause, not just the volume'],
             cta: 'Start free', btnBg: '#F7F5F1', btnFg: '#16150F', btnBd: '#F7F5F1' },
           { name: 'Call Pilot', badge: null, who: 'Both together, with the phone included: pick your chat volume and your voice volume.',
-            price: money(CALL[ccp][cai]), per, sub: TIERS[ccp] + ' users · ' + TIERS[cai] + ' AI employees' + vat,
+            price: money(CALL[ccp][cai]), per, sub: L.usersAi(TIERS[ccp], TIERS[cai]) + vat,
             bg: '#FFFFFF', bd: '#E8E3D9', fg: '#16150F', muted: '#8E887C', dot: '#C8C2B6', rule: '#F0EDE7', accent: '#C4552F', sliderBoxH: '188px',
             sliders: [
               slider('chat conversations a business day', 'Co-Pilot users', ccp, (v) => this.setState({ ccp: v }), false),
@@ -5790,7 +6063,7 @@ class Component extends DCLogic {
       mnav,
       mnavOpen: !!st.mnav,
       mnavIcon: st.mnav ? 'x' : 'menu',
-      mnavToggle: () => this.setState(s => ({ mnav: !s.mnav, menu: null })),
+      mnavToggle: () => this.setState(s => ({ mnav: !s.mnav, mgrp: null, menu: null })),
       menuData: st.menu ? (() => {
         const m = MENUS[st.menu];
         return Object.assign({}, m, {
@@ -5965,6 +6238,11 @@ class Component extends DCLogic {
           shotImg: b.shot ? React.createElement('img', { src: b.shot, alt: b.shotTitle || '', style: { display: 'block', width: '100%' } }) : null,
           shotShown: (b.shot && ['feat-omnichannel', 'feat-customers', 'feat-studio', 'feat-callpilot', 'feat-analytics', 'feat-approvals', 'feat-broadcast'].indexOf(key) >= 0) ? true : null,
           showCaps: !b.marquee,
+          cardBg: dark ? '#1C1B17' : '#FFFFFF', cardBd: dark ? '#2A2823' : '#E8E3D9',
+          statsShown: (b.stats && b.stats.length && b.aside) ? true : null,
+          capsShown: (b.caps && b.caps.length && !b.marquee) ? true : null,
+          doesShown: (b.does && b.does.length && b.limits && b.limits.length) ? true : null,
+          quoteShown: (b.quote && b.proof && b.proof.length) ? true : null,
           tw: key === 'feat-widget' ? this.tryWidget() : null,
           saveDisplay: b.save ? 'block' : 'none',
           traceDisplay: key === 'feat-copilot' ? 'block' : 'none',
@@ -6051,7 +6329,12 @@ class Component extends DCLogic {
       },
 
       offerShown: st.offerOpen ? true : null,
-      bars: { offerBar: st.barOffer ? 'flex' : 'none', headTop: (st.barOffer ? 38 : 0) + 'px' },
+      bars: {
+        offerBar: st.barOffer ? 'flex' : 'none',
+        // with the bar up the page sits below it; closed, everything rises and only the header keeps notch clearance
+        headTop: st.barOffer ? 'calc(38px + var(--safe-top))' : 'var(--safe-top)',
+        padTop: st.barOffer ? 'calc(38px + var(--safe-top))' : '0px'
+      },
       op: {
         badge: 'Launch offer', scarcity: 'For the first 50 businesses only',
         h1a: '3 months of GOTCHA', h1b: 'for $1!',
@@ -6144,7 +6427,7 @@ class Component extends DCLogic {
           'For the first 50 businesses',
           'Billing and the three months start once you are connected'
         ],
-        bookLabel: 'Book a call', seeMore: 'See more',
+        bookLabel: 'Book a call', seeMore: 'See more', closeLabel: 'Close',
         termsLabel: 'Offer terms',
         terms: 'Offer ends 31 October 2026 or when 50 businesses have joined, whichever comes first. After three months you continue on the plan and usage you choose. Regular pricing starts at $39 a month, excluding 18% VAT.',
         hideBar: () => this.setState({ barOffer: false }),
@@ -6219,10 +6502,12 @@ class Component extends DCLogic {
             ['Price a month, excluding 18% VAT', PRICE.prices[0], PRICE.prices[1], PRICE.prices[2]]
           ]]
         ];
+        const PLAN_NAMES = ['Co-Pilot', 'AI Team', 'Call Pilot'];
         const cell = (x, i) => {
           const bg = i === 1 ? '#FBF9F5' : 'transparent';
-          if (typeof x === 'number') return x ? { v: '✓', c: '#4F7A2E', w: '600', bg } : { v: '—', c: '#C8C2B6', w: '400', bg };
-          return { v: x, c: '#3A3833', w: '500', bg };
+          const plan = PLAN_NAMES[i];
+          if (typeof x === 'number') return x ? { v: '✓', c: '#4F7A2E', w: '600', bg, plan } : { v: '—', c: '#C8C2B6', w: '400', bg, plan };
+          return { v: x, c: '#3A3833', w: '500', bg, plan };
         };
         return CMP.map(g => ({ t: g[0], rows: g[1].map(r => ({ t: r[0], cells: [cell(r[1], 0), cell(r[2], 1), cell(r[3], 2)] })) }));
       })(),
@@ -6257,11 +6542,20 @@ class Component extends DCLogic {
       navDir: st.lang === 'he' ? 'row-reverse' : 'row',
       navML: st.lang === 'he' ? '0' : 'auto', navMR: st.lang === 'he' ? 'auto' : '0',
       mlAuto: st.lang === 'he' ? '0' : 'auto', mrAuto: st.lang === 'he' ? 'auto' : '0',
+      chFlow: [
+        { t: 'WhatsApp', logo: 'https://cdn.simpleicons.org/whatsapp/25D366' },
+        { t: 'Instagram', logo: 'https://cdn.simpleicons.org/instagram/E4405F' },
+        { t: 'Messenger', logo: 'https://cdn.simpleicons.org/messenger/0084FF' },
+        { t: 'Email', logo: 'https://cdn.simpleicons.org/gmail/EA4335' },
+        { t: 'Web chat', icon: 'globe', noLogo: true },
+        { t: 'Phone', icon: 'phone', noLogo: true }
+      ],
       arrowFwd: st.lang === 'he' ? '←' : '→', arrowBack: st.lang === 'he' ? '→' : '←',
       arrowIcon: st.lang === 'he' ? 'arrow-left' : 'arrow-right',
       isHe: st.lang === 'he',
-      setEn: () => { try { localStorage.setItem('gotcha-lang', 'en'); } catch (e) {} this.setState({ lang: 'en' }); },
-      setHe: () => { try { localStorage.setItem('gotcha-lang', 'he'); } catch (e) {} this.setState({ lang: 'he' }); },
+      isEn: st.lang === 'he' ? null : true,
+      setEn: () => { if (!this.langPinned) { try { localStorage.setItem('gotcha-lang', 'en'); } catch (e) {} } this.setState({ lang: 'en' }); },
+      setHe: () => { if (!this.langPinned) { try { localStorage.setItem('gotcha-lang', 'he'); } catch (e) {} } this.setState({ lang: 'he' }); },
       enBg: st.lang === 'he' ? 'transparent' : '#262521', enFg: st.lang === 'he' ? '#8E8A83' : '#F7F5F1',
       heBg: st.lang === 'he' ? '#262521' : 'transparent', heFg: st.lang === 'he' ? '#F7F5F1' : '#8E8A83',
       trace, replyStarted: step >= 8, replyTyping: step === 8, replyDone: step >= 9,

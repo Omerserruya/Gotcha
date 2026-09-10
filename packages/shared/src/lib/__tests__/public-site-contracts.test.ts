@@ -117,3 +117,65 @@ describe("one answer to the cookie question, across every hostname", () => {
     }
   });
 });
+
+/**
+ * The phone follows the design; the desktop does not move.
+ *
+ * The mobile export finished four product-page sections and recropped the home
+ * hero, and both show on desktop as well as on the phone. The desktop is signed
+ * off as it stands, so those five are admitted below the design's breakpoint
+ * and held off above it - and nothing else in the port is allowed to differ.
+ *
+ * Measured rather than asserted, in a browser, against the design served from
+ * its own folder: at 393, 375 and 320 the built page is the same height as the
+ * design to the pixel, and every one of the design's 93 mobile rules reaches at
+ * least as many elements in the build as in the design. These assertions keep
+ * the three mechanisms that make that true from being quietly removed.
+ */
+describe("the phone layout is wired to the design", () => {
+  const expander = () => read("landing/tools/expand-style-selectors.mjs");
+  const compiler = () => read("landing/tools/dc2jsx.mjs");
+
+  it("gives the host the id the runtime gives it", () => {
+    // support.js sets hostEl.id = "dc-root", and the design's fitMobile() walks
+    // `#dc-root *` to stack pixel-sized columns and lift 10px labels. Without
+    // the id that selector matched nothing and the phone came out ~700px short.
+    expect(compiler()).toContain('name: \'id\', value: \'dc-root\'');
+    for (const rel of ["landing/src/generated/Template.jsx", "landing/src/generated/Chrome.jsx"]) {
+      expect(read(rel), `${rel} must carry the host id`).toContain('id="dc-root"');
+    }
+  });
+
+  it("matches the flex shorthand the server renders", () => {
+    // CSSOM serialises `flex: 1` as `flex: 1 1 0%`, which is what the design's
+    // selector is written against; the server-rendered attribute still says
+    // `flex:1`. 52 flex children on the home page alone.
+    expect(expander()).toMatch(/function flexShorthand/);
+    const css = read("landing/src/app/globals.css");
+    expect(css, "the anchored suffix form must be emitted").toMatch(/\[style\$="flex:\s?1"\]/);
+  });
+
+  it("anchors that shorthand instead of matching it loosely", async () => {
+    // A bare [style*="flex:1"] also hits flex:1 1 420px and flex:1.35, which
+    // this rule never touches - the design's runtime spells those out in full,
+    // so its own selector never sees them. Tested on the expander rather than
+    // on the sheet, because the design has its OWN loose
+    // `.m-norow > [style*="flex: 1"]`, which is reproduced faithfully and is a
+    // different rule.
+    const { expandStyleSelectors } = await import(
+      path.join(ROOT, "landing/tools/expand-style-selectors.mjs")
+    );
+    const { css } = expandStyleSelectors('[style*="flex: 1 1 0"]{flex-basis:100% !important}');
+    expect(css, "the suffix form catches the declaration when it is last").toContain('[style$="flex:1"]');
+    expect(css, "and the `;` form when something follows it").toContain('[style*="flex:1;"]');
+    const selectors = css.slice(0, css.indexOf("{"));
+    expect(selectors, "never unanchored").not.toMatch(/\[style\*="flex:\s?1"\]/);
+  });
+
+  it("keeps the design's own mobile breakpoint", () => {
+    // 820px in the design, so the freeze starts at 821 and there is no width
+    // where both apply or neither does.
+    expect(read("landing/design/GOTCHA Landing.dc.html")).toContain("@media (max-width: 820px)");
+    expect(read("landing/src/app/site.css")).toContain("@media (min-width: 821px)");
+  });
+});
