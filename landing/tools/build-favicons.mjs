@@ -260,53 +260,107 @@ function flatten(img, [r, g, b]) {
   return { width: img.width, height: img.height, rgba: out };
 }
 
-/** The design's ink and its page ground. Both appear in "GOTCHA Landing.dc.html". */
-const INK = '#16150F';
+/** The design's own palette, all three from "GOTCHA Landing.dc.html". */
+const INK = [0x16, 0x15, 0x0f];
+const ACCENT = [0xc4, 0x55, 0x2f];
 const PAPER = [0xfa, 0xf8, 0xf4];
+const hex = ([r, g, b]) => '#' + [r, g, b].map((n) => n.toString(16).padStart(2, '0')).join('');
+
+/**
+ * Paint the mark in one colour on a rounded tile of another.
+ *
+ * `inset` is the breathing room around the mark, as a fraction of the tile: the
+ * design's mark fills its own frame edge to edge, which is right on a page and
+ * cramped inside a tile.
+ */
+function tile(markImg, size, ground, ink, inset = 0.17, radius = 0.22) {
+  const out = Buffer.alloc(size * size * 4);
+  const pad = Math.round(size * inset);
+  const inner = Math.max(1, size - pad * 2);
+  const m = resize(markImg, inner);
+  const r = size * radius;
+
+  // Coverage of a rounded square, sampled at the pixel centre.
+  const insideTile = (x, y) => {
+    if (r <= 0) return true;
+    const cx = Math.min(Math.max(x + 0.5, r), size - r);
+    const cy = Math.min(Math.max(y + 0.5, r), size - r);
+    const dx = x + 0.5 - cx;
+    const dy = y + 0.5 - cy;
+    return dx * dx + dy * dy <= r * r;
+  };
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const d = (y * size + x) * 4;
+      if (!insideTile(x, y)) { out[d + 3] = 0; continue; }
+
+      let a = 0;
+      const mx = x - pad;
+      const my = y - pad;
+      if (mx >= 0 && my >= 0 && mx < inner && my < inner) a = m.rgba[(my * inner + mx) * 4 + 3] / 255;
+
+      out[d] = Math.round(ink[0] * a + ground[0] * (1 - a));
+      out[d + 1] = Math.round(ink[1] * a + ground[1] * (1 - a));
+      out[d + 2] = Math.round(ink[2] * a + ground[2] * (1 - a));
+      out[d + 3] = 255;
+    }
+  }
+  return { width: size, height: size, rgba: out };
+}
 
 const mark = decodePng(readFileSync(join(SRC, 'solid-icon-dark.png')));
 
-// ── favicon.svg - the one that decides the colour ────────────────────────────
-//
-// 128px of coverage data: an SVG favicon is drawn at 16 to 64px in practice, and
-// past 128 the extra bytes buy nothing a tab will ever show. The mask is the
-// mark's own alpha, so the shape is exact rather than traced.
+/*
+ * Why a tile, and not the mark on its own.
+ *
+ * The mark is a silhouette, so on its own it needs the tab strip to be the
+ * opposite colour, and only the browser knows which that is. The obvious answer
+ * - one SVG carrying both colourways behind `prefers-color-scheme` - is what
+ * shipped, and it is right everywhere except the one place it had to be right:
+ * Chromium rasterises a favicon through a restricted path that does not apply
+ * the browser's colour scheme, so it takes the light branch and draws the ink
+ * mark onto a dark tab strip. Firefox and Safari honour the query, which is
+ * what made it look fixed here. Chromium honours it for an <img> too, so even
+ * testing it that way agreed - and the tab was still black.
+ *
+ * An opaque tile asks the browser nothing. In the accent rather than the ink,
+ * because a dark tile on a dark strip is the same complaint again.
+ */
+const SIZES = [16, 32, 48];
+
+// ── favicon.svg ──────────────────────────────────────────────────────────────
 {
   const coverage = encodePng(alphaToLuminance(resize(mark, 128)));
+  const inset = 0.17 * 128;
+  const inner = 128 - inset * 2;
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
   <title>GOTCHA</title>
-  <style>
-    .mark { fill: ${INK} }
-    @media (prefers-color-scheme: dark) { .mark { fill: #FFFFFF } }
-  </style>
   <mask id="m">
-    <image width="128" height="128" href="data:image/png;base64,${coverage.toString('base64')}"/>
+    <image x="${inset}" y="${inset}" width="${inner}" height="${inner}" href="data:image/png;base64,${coverage.toString('base64')}"/>
   </mask>
-  <rect class="mark" width="128" height="128" mask="url(#m)"/>
+  <rect width="128" height="128" rx="28" fill="${hex(ACCENT)}"/>
+  <rect width="128" height="128" fill="#FFFFFF" mask="url(#m)"/>
 </svg>
 `;
   writeFileSync(join(OUT, 'favicon.svg'), svg);
-  console.log(`solid-icon-dark.png -> favicon.svg   128px mask, ${(Buffer.byteLength(svg) / 1024).toFixed(1)} KB`);
+  console.log(`favicon.svg           128px tile, ${(Buffer.byteLength(svg) / 1024).toFixed(1)} KB`);
 }
 
-// ── favicon.ico - the fallback, for anything that cannot read the SVG ────────
-//
-// The dark colourway: a fallback is not told which theme the tab strip is in,
-// and a light strip is the common case.
+// ── favicon.ico - the same tile, for everything that cannot read an SVG ──────
 {
-  const frames = [16, 32, 48].map((size) => ({ size, bytes: encodePng(resize(mark, size)) }));
+  const frames = SIZES.map((size) => ({ size, bytes: encodePng(tile(mark, size, ACCENT, [255, 255, 255])) }));
   const ico = encodeIco(frames);
   writeFileSync(join(OUT, 'favicon.ico'), ico);
-  console.log(`solid-icon-dark.png -> favicon.ico   ${frames.map((f) => f.size).join('/')}px, ${(ico.length / 1024).toFixed(1)} KB`);
+  console.log(`favicon.ico           ${SIZES.join('/')}px tile, ${(ico.length / 1024).toFixed(1)} KB`);
 }
 
-// ── apple-touch-icon.png - flattened onto the brand ground ───────────────────
+// ── apple-touch-icon.png ─────────────────────────────────────────────────────
 //
-// iOS does not honour transparency here: it composites a home-screen icon onto
-// an opaque tile, historically black. A black mark on transparent therefore
-// arrives as a black mark on black. On the design's paper it is the logo.
+// iOS rounds the corners itself and composites onto an opaque tile, so this one
+// is square and edge to edge.
 {
-  const bytes = encodePng(flatten(resize(mark, 180), PAPER));
+  const bytes = encodePng(tile(mark, 180, ACCENT, [255, 255, 255], 0.17, 0));
   writeFileSync(join(OUT, 'apple-touch-icon.png'), bytes);
-  console.log(`solid-icon-dark.png -> apple-touch-icon.png  180px on paper, ${(bytes.length / 1024).toFixed(1)} KB`);
+  console.log(`apple-touch-icon.png  180px tile, ${(bytes.length / 1024).toFixed(1)} KB`);
 }
