@@ -40,16 +40,22 @@ function repoRoot(): string {
 const ROOT = repoRoot();
 const read = (rel: string) => fs.readFileSync(path.join(ROOT, rel), "utf8");
 
-describe("the tab icon decides its own colour", () => {
+describe("the tab icon is one picture, in every size and every theme", () => {
   const LAYOUTS = [
-    ["marketing", "landing/src/app/layout.tsx"],
-    ["application", "frontend/src/app/layout.tsx"],
+    ["marketing", "landing/src/app/layout.tsx", "/assets"],
+    ["application", "frontend/src/app/layout.tsx", ""],
   ] as const;
+  const SIZES = [16, 32, 48, 96];
 
   for (const [name, rel] of LAYOUTS) {
-    it(`${name}: offers an SVG icon`, () => {
-      expect(read(rel), "the SVG is the icon every current browser prefers")
-        .toMatch(/favicon\.svg[^\n]{0,60}[`"'][\s\S]{0,80}image\/svg\+xml/);
+    it(`${name}: declares PNG icons`, () => {
+      const src = read(rel);
+      expect(src, "the icons are PNG").toMatch(/favicon-\$\{n\}\.png/);
+      expect(src, "declared with their type").toMatch(/type:\s*"?'?image\/png/);
+      expect(src, "and their sizes, so the browser picks rather than scales")
+        .toMatch(/sizes:\s*`\$\{n\}x\$\{n\}`/);
+      expect(src, "at the four sizes a browser asks for")
+        .toContain(`[${SIZES.join(", ")}].map(`);
     });
 
     it(`${name}: versions the icon URLs`, () => {
@@ -58,7 +64,7 @@ describe("the tab icon decides its own colour", () => {
       // visitor keeps the old one - which is most of why this took three goes.
       const src = read(rel);
       expect(src, "the stamp is generated beside the icons").toContain("ICON_VERSION");
-      for (const file of ["favicon.ico", "favicon.svg", "apple-touch-icon.png"]) {
+      for (const file of ["favicon-${n}.png", "favicon.ico", "apple-touch-icon.png"]) {
         expect(src, `${file} must carry the version`).toContain(`${file}?v=\${ICON_VERSION}`);
       }
     });
@@ -74,20 +80,39 @@ describe("the tab icon decides its own colour", () => {
     });
   }
 
-  it("the generated SVG does not ask the browser about the theme", () => {
-    // Chromium rasterises a favicon through a restricted path that applies
-    // neither `media` on the link nor `prefers-color-scheme` inside the file:
-    // it takes the light branch and paints the ink mark onto a dark tab strip.
-    // Both earlier attempts were theme-aware and both came out black there.
-    const svg = read("landing/public/assets/favicon.svg");
-    expect(svg, "a theme-aware favicon is the bug, not the fix")
-      .not.toMatch(/prefers-color-scheme/);
-    expect(svg, "an opaque tile in the accent").toMatch(/fill="#c4552f"/i);
-    expect(svg, "with the mark knocked out in white").toMatch(/fill="#FFFFFF"/i);
+  it("every declared size exists, and is that size", () => {
+    // Declaring 48x48 and shipping a scaled 32 is worse than not declaring it:
+    // the browser trusts the attribute and picks the wrong file for the slot.
+    for (const n of SIZES) {
+      const png = fs.readFileSync(path.join(ROOT, `landing/public/assets/favicon-${n}.png`));
+      expect(png.subarray(0, 8), `favicon-${n}.png must be a PNG`)
+        .toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+      expect([png.readUInt32BE(16), png.readUInt32BE(20)], `favicon-${n}.png must be ${n}x${n}`)
+        .toEqual([n, n]);
+    }
   });
 
-  it("the application serves the same file, not a copy that can drift", () => {
-    expect(read("frontend/public/favicon.svg")).toEqual(read("landing/public/assets/favicon.svg"));
+  it("carries no theme-aware icon at all", () => {
+    // Chromium rasterises a favicon through a restricted path that applies
+    // neither `media` on the link nor `prefers-color-scheme` inside an SVG: it
+    // takes the light branch and paints the ink mark onto a dark tab strip.
+    // Both earlier attempts were theme-aware and both came out black there, so
+    // the SVG that carried the switch is gone rather than corrected.
+    expect(
+      fs.existsSync(path.join(ROOT, "landing/public/assets/favicon.svg")),
+      "the theme-switching SVG was the bug, not the fix",
+    ).toBe(false);
+  });
+
+  it("the application serves the same files, not copies that can drift", () => {
+    // build-favicons.mjs writes both trees, so this cannot fall out of step by
+    // someone forgetting the second copy.
+    for (const n of [...SIZES]) {
+      expect(
+        fs.readFileSync(path.join(ROOT, `frontend/public/favicon-${n}.png`)),
+        `favicon-${n}.png must be identical on both hosts`,
+      ).toEqual(fs.readFileSync(path.join(ROOT, `landing/public/assets/favicon-${n}.png`)));
+    }
   });
 });
 
