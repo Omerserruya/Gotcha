@@ -11,8 +11,8 @@ export const metadata: Metadata = {
   // Served from public/ rather than app/favicon.ico: the root optional
   // catch-all route answers /favicon.ico before the metadata route can.
   //
-  // PNG, at the four sizes a browser asks for: the mark in white on an accent
-  // tile, one picture in every size and every theme.
+  // PNG, at the four sizes a browser asks for: the mark itself, white, on a
+  // transparent ground - the file that was supplied, not a version of it.
   //
   // Two theme-aware attempts came before it and both failed on the same
   // browser. A black PNG at `media="(prefers-color-scheme: light)"` beside a
@@ -24,9 +24,15 @@ export const metadata: Metadata = {
   // the ink mark onto a dark tab strip. Firefox and Safari honoured it both
   // times, which is exactly what made it keep looking fixed.
   //
-  // An opaque tile asks the browser nothing, so the SVG had no job left and is
-  // gone. favicon.ico is not declared here but is still generated: a browser
-  // with no icon in the markup asks for it by path, and so do crawlers and link
+  // A tile in the accent was tried next and solved it, by inventing a
+  // background - which is a design decision, and not one this file gets to
+  // make. So the icon is the white mark, the trade-off stated rather than
+  // designed around: it reads on a dark tab strip and on the dark chrome most
+  // browsers ship with, and it is faint on a light one.
+  //
+  // The SVG is gone either way; with no colourway to choose it had no job left.
+  // favicon.ico is not declared here but is still generated: a browser with no
+  // icon in the markup asks for it by path, and so do crawlers and link
   // unfurlers that never read the page.
   //
   // The `?v=` is a content hash. Cloudflare caches /assets/* at the edge for

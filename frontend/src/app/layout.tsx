@@ -41,11 +41,11 @@ export const metadata: Metadata = {
     "customer service automation software",
     "ai-powered helpdesk",
   ],
-  // The same PNGs as the marketing build, for the same reason: the mark on an
-  // opaque accent tile, identical in every size and every theme. Chromium
-  // rasterises a favicon through a path that applies neither `media` on the
-  // link nor `prefers-color-scheme` inside an SVG, so anything theme-aware came
-  // out as the ink mark on a dark tab strip. A tile asks the browser nothing.
+  // The same PNGs as the marketing build: the mark itself, white, on a
+  // transparent ground. Chromium rasterises a favicon through a path that
+  // applies neither `media` on the link nor `prefers-color-scheme` inside an
+  // SVG, so a theme-aware icon cannot work there - the white mark is the
+  // supplied file, and reads on the dark chrome most browsers ship with.
   //
   // The `?v=` is a content hash: Cloudflare caches these at the edge and keys
   // on the whole URL, so without it a new icon reaches the origin and not the
