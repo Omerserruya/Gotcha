@@ -10,19 +10,20 @@ export const metadata: Metadata = {
   // Served from public/ rather than app/favicon.ico: the root optional
   // catch-all route answers /favicon.ico before the metadata route can.
   //
-  // TWO files, not four, and the SVG is the one that matters.
+  // Two files, both the same picture: the mark in white on an accent tile.
   //
-  // The previous arrangement offered a black PNG at `media="(prefers-color-
-  // scheme: light)"` and a white one at `dark`. That is correct markup and
-  // Chrome does not implement it - it ignores `media` on a favicon link and
-  // picks by size and type instead - so a visitor in dark mode got the black
-  // mark on a dark tab strip. Firefox and Safari honoured the query, which is
-  // what made it look like a caching problem rather than a browser difference.
+  // Two attempts came before it, and both failed on the same browser. A black
+  // PNG at `media="(prefers-color-scheme: light)"` beside a white one at `dark`
+  // is correct markup that Chrome does not implement - it ignores `media` on a
+  // favicon link entirely. Putting both colourways inside one SVG behind a
+  // @media rule looked like the answer, and Chromium honours that rule in a
+  // page and even for an <img>, but NOT in the restricted path it rasterises a
+  // favicon through: it takes the light branch and paints the ink mark onto a
+  // dark tab strip. Firefox and Safari honoured it both times, which is exactly
+  // what made it keep looking fixed.
   //
-  // favicon.svg carries both colourways inside one file, as a @media rule on a
-  // fill, so nothing depends on the browser choosing correctly between files.
-  // It is last because a browser that cannot use it needs to fall through to
-  // the .ico above, which is the same mark in the dark colourway.
+  // An opaque tile asks the browser nothing, so there is nothing left to get
+  // wrong. The .ico is the same tile for anything that cannot read the SVG.
   icons: {
     icon: [
       { url: '/assets/favicon.ico', sizes: '16x16 32x32 48x48' },

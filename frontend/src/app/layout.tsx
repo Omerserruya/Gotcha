@@ -40,10 +40,11 @@ export const metadata: Metadata = {
     "customer service automation software",
     "ai-powered helpdesk",
   ],
-  // Same two files as the marketing build, for the same reason: the SVG carries
-  // both colourways in one file, so a dark-mode tab does not depend on Chrome
-  // honouring `media` on a favicon link, which it does not. The .ico is the
-  // fallback for anything that cannot read an SVG icon.
+  // Same two files as the marketing build, for the same reason: the mark on an
+  // opaque accent tile, identical in both themes. Chromium rasterises a favicon
+  // through a path that applies neither `media` on the link nor
+  // `prefers-color-scheme` inside the SVG, so anything theme-aware came out as
+  // the ink mark on a dark tab strip. A tile asks the browser nothing.
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "16x16 32x32 48x48" },

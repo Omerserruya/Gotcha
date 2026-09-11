@@ -53,8 +53,9 @@ describe("the tab icon decides its own colour", () => {
     });
 
     it(`${name}: offers no media-scoped icon`, () => {
-      // Chrome ignores it, so a media-scoped icon is not a preference - it is
-      // an extra file the browser may pick for reasons of its own.
+      // Chrome ignores `media` on a favicon link, so a media-scoped icon is not
+      // a preference - it is an extra file the browser may pick for reasons of
+      // its own, and one of the two is always wrong for the tab it lands on.
       const icons = /icons:\s*\{[\s\S]*?\n  \},/.exec(read(rel));
       expect(icons, "the layout must still declare icons").not.toBeNull();
       expect(icons![0], "a favicon link's `media` is not honoured by Chrome")
@@ -62,12 +63,16 @@ describe("the tab icon decides its own colour", () => {
     });
   }
 
-  it("the generated SVG switches fill on the browser's theme", () => {
+  it("the generated SVG does not ask the browser about the theme", () => {
+    // Chromium rasterises a favicon through a restricted path that applies
+    // neither `media` on the link nor `prefers-color-scheme` inside the file:
+    // it takes the light branch and paints the ink mark onto a dark tab strip.
+    // Both earlier attempts were theme-aware and both came out black there.
     const svg = read("landing/public/assets/favicon.svg");
-    expect(svg).toMatch(/@media\s*\(prefers-color-scheme:\s*dark\)/);
-    // Both ends of the switch, so a half-written rule cannot pass.
-    expect(svg).toMatch(/fill:\s*#16150F/i);
-    expect(svg).toMatch(/fill:\s*#FFFFFF/i);
+    expect(svg, "a theme-aware favicon is the bug, not the fix")
+      .not.toMatch(/prefers-color-scheme/);
+    expect(svg, "an opaque tile in the accent").toMatch(/fill="#c4552f"/i);
+    expect(svg, "with the mark knocked out in white").toMatch(/fill="#FFFFFF"/i);
   });
 
   it("the application serves the same file, not a copy that can drift", () => {
