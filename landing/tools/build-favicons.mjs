@@ -328,32 +328,35 @@ const mark = decodePng(readFileSync(join(SRC, 'solid-icon-dark.png')));
  * An opaque tile asks the browser nothing. In the accent rather than the ink,
  * because a dark tile on a dark strip is the same complaint again.
  */
-const SIZES = [16, 32, 48];
+/**
+ * The sizes a browser actually asks for.
+ *
+ * 16 and 32 are the tab and the bookmark bar; 48 is what Windows shortcuts and
+ * some readers pick up; 96 covers a 2x 48 and a desktop shortcut. Each is drawn
+ * from the full-resolution mark rather than scaled from one another, so the
+ * 16px tile keeps its corner radius instead of smearing it.
+ */
+const SIZES = [16, 32, 48, 96];
 
-// ── favicon.svg ──────────────────────────────────────────────────────────────
+// ── favicon-<n>.png - the icons the pages declare ────────────────────────────
 {
-  const coverage = encodePng(alphaToLuminance(resize(mark, 128)));
-  const inset = 0.17 * 128;
-  const inner = 128 - inset * 2;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
-  <title>GOTCHA</title>
-  <mask id="m">
-    <image x="${inset}" y="${inset}" width="${inner}" height="${inner}" href="data:image/png;base64,${coverage.toString('base64')}"/>
-  </mask>
-  <rect width="128" height="128" rx="28" fill="${hex(ACCENT)}"/>
-  <rect width="128" height="128" fill="#FFFFFF" mask="url(#m)"/>
-</svg>
-`;
-  writeFileSync(join(OUT, 'favicon.svg'), svg);
-  console.log(`favicon.svg           128px tile, ${(Buffer.byteLength(svg) / 1024).toFixed(1)} KB`);
+  for (const size of SIZES) {
+    const bytes = encodePng(tile(mark, size, ACCENT, [255, 255, 255]));
+    writeFileSync(join(OUT, `favicon-${size}.png`), bytes);
+    console.log(`favicon-${size}.png`.padEnd(22) + `${size}px tile, ${bytes.length} B`);
+  }
 }
 
-// ── favicon.ico - the same tile, for everything that cannot read an SVG ──────
+// ── favicon.ico - not declared, but still fetched ────────────────────────────
+//
+// A browser with no icon in the markup asks for /favicon.ico, and so do
+// crawlers, feed readers and link unfurlers that never parse the page. It costs
+// two kilobytes to answer them with the right picture rather than a 404.
 {
-  const frames = SIZES.map((size) => ({ size, bytes: encodePng(tile(mark, size, ACCENT, [255, 255, 255])) }));
+  const frames = [16, 32, 48].map((size) => ({ size, bytes: encodePng(tile(mark, size, ACCENT, [255, 255, 255])) }));
   const ico = encodeIco(frames);
   writeFileSync(join(OUT, 'favicon.ico'), ico);
-  console.log(`favicon.ico           ${SIZES.join('/')}px tile, ${(ico.length / 1024).toFixed(1)} KB`);
+  console.log(`favicon.ico`.padEnd(22) + `16/32/48px tile, ${(ico.length / 1024).toFixed(1)} KB`);
 }
 
 // ── apple-touch-icon.png ─────────────────────────────────────────────────────
@@ -381,7 +384,7 @@ const SIZES = [16, 32, 48];
  * icon fix is visible as soon as it ships rather than up to four hours later.
  */
 const APP = join(ROOT, '..', 'frontend', 'public');
-const SHARED = ['favicon.svg', 'favicon.ico', 'apple-touch-icon.png'];
+const SHARED = [...SIZES.map((n) => `favicon-${n}.png`), 'favicon.ico', 'apple-touch-icon.png'];
 for (const f of SHARED) copyFileSync(join(OUT, f), join(APP, f));
 
 const stamp = createHash('sha256')

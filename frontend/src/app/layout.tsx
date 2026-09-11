@@ -41,20 +41,21 @@ export const metadata: Metadata = {
     "customer service automation software",
     "ai-powered helpdesk",
   ],
-  // Same two files as the marketing build, for the same reason: the mark on an
-  // opaque accent tile, identical in both themes. Chromium rasterises a favicon
-  // through a path that applies neither `media` on the link nor
-  // `prefers-color-scheme` inside the SVG, so anything theme-aware came out as
-  // the ink mark on a dark tab strip. A tile asks the browser nothing.
+  // The same PNGs as the marketing build, for the same reason: the mark on an
+  // opaque accent tile, identical in every size and every theme. Chromium
+  // rasterises a favicon through a path that applies neither `media` on the
+  // link nor `prefers-color-scheme` inside an SVG, so anything theme-aware came
+  // out as the ink mark on a dark tab strip. A tile asks the browser nothing.
   //
   // The `?v=` is a content hash: Cloudflare caches these at the edge and keys
   // on the whole URL, so without it a new icon reaches the origin and not the
   // visitor for up to four hours.
   icons: {
-    icon: [
-      { url: `/favicon.ico?v=${ICON_VERSION}`, sizes: "16x16 32x32 48x48" },
-      { url: `/favicon.svg?v=${ICON_VERSION}`, type: "image/svg+xml" },
-    ],
+    icon: [16, 32, 48, 96].map((n) => ({
+      url: `/favicon-${n}.png?v=${ICON_VERSION}`,
+      sizes: `${n}x${n}`,
+      type: "image/png",
+    })),
     shortcut: `/favicon.ico?v=${ICON_VERSION}`,
     apple: `/apple-touch-icon.png?v=${ICON_VERSION}`,
   },
