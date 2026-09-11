@@ -23,6 +23,7 @@
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
+import zlib from "node:zlib";
 
 function repoRoot(): string {
   let dir = __dirname;
@@ -39,6 +40,52 @@ function repoRoot(): string {
 }
 const ROOT = repoRoot();
 const read = (rel: string) => fs.readFileSync(path.join(ROOT, rel), "utf8");
+
+/** Flat RGBA from a PNG, enough for the icons: 8-bit truecolour with alpha. */
+function readPng(file: string): Buffer {
+  const buf = fs.readFileSync(file);
+  let pos = 8;
+  let w = 0, h = 0;
+  const idat: Buffer[] = [];
+  while (pos < buf.length) {
+    const len = buf.readUInt32BE(pos);
+    const type = buf.toString("ascii", pos + 4, pos + 8);
+    const data = buf.subarray(pos + 8, pos + 8 + len);
+    if (type === "IHDR") {
+      w = data.readUInt32BE(0);
+      h = data.readUInt32BE(4);
+      if (data[8] !== 8 || data[9] !== 6) throw new Error(`${file}: expected 8-bit RGBA`);
+    } else if (type === "IDAT") idat.push(data);
+    else if (type === "IEND") break;
+    pos += 12 + len;
+  }
+  const raw = zlib.inflateSync(Buffer.concat(idat));
+  const stride = w * 4;
+  const out = Buffer.alloc(stride * h);
+  let prev = Buffer.alloc(stride);
+  let p = 0;
+  for (let y = 0; y < h; y++) {
+    const f = raw[p++];
+    const line = Buffer.from(raw.subarray(p, p + stride));
+    p += stride;
+    for (let x = 0; x < stride; x++) {
+      const a = x >= 4 ? line[x - 4] : 0;
+      const b = prev[x];
+      const c = x >= 4 ? prev[x - 4] : 0;
+      if (f === 1) line[x] = (line[x] + a) & 255;
+      else if (f === 2) line[x] = (line[x] + b) & 255;
+      else if (f === 3) line[x] = (line[x] + ((a + b) >> 1)) & 255;
+      else if (f === 4) {
+        const q = a + b - c;
+        const pa = Math.abs(q - a), pb = Math.abs(q - b), pc = Math.abs(q - c);
+        line[x] = (line[x] + (pa <= pb && pa <= pc ? a : pb <= pc ? b : c)) & 255;
+      }
+    }
+    line.copy(out, y * stride);
+    prev = line;
+  }
+  return out;
+}
 
 describe("the tab icon is one picture, in every size and every theme", () => {
   const LAYOUTS = [
@@ -89,6 +136,24 @@ describe("the tab icon is one picture, in every size and every theme", () => {
         .toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
       expect([png.readUInt32BE(16), png.readUInt32BE(20)], `favicon-${n}.png must be ${n}x${n}`)
         .toEqual([n, n]);
+    }
+  });
+
+  it("is the mark itself, on nothing", () => {
+    // A tile in the accent was tried and was not what was asked for: the icon
+    // is the supplied logo, and a background is a design decision that is not
+    // this file's to make. The trade-off is accepted rather than designed
+    // around - white reads on a dark tab strip and is faint on a light one.
+    for (const n of SIZES) {
+      const rgba = readPng(path.join(ROOT, `landing/public/assets/favicon-${n}.png`));
+      let clear = 0;
+      const inks = new Set<string>();
+      for (let i = 0; i < rgba.length; i += 4) {
+        if (rgba[i + 3] === 0) clear++;
+        else if (rgba[i + 3] > 200) inks.add(`${rgba[i]},${rgba[i + 1]},${rgba[i + 2]}`);
+      }
+      expect(clear, `favicon-${n}.png must keep the mark's transparency`).toBeGreaterThan(0);
+      expect([...inks], `favicon-${n}.png must be one flat colour`).toEqual(["255,255,255"]);
     }
   });
 

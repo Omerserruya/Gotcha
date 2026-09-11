@@ -265,47 +265,25 @@ function flatten(img, [r, g, b]) {
 const INK = [0x16, 0x15, 0x0f];
 const ACCENT = [0xc4, 0x55, 0x2f];
 const PAPER = [0xfa, 0xf8, 0xf4];
+const WHITE = [0xff, 0xff, 0xff];
 const hex = ([r, g, b]) => '#' + [r, g, b].map((n) => n.toString(16).padStart(2, '0')).join('');
 
 /**
- * Paint the mark in one colour on a rounded tile of another.
+ * The mark, in one flat colour, on nothing.
  *
- * `inset` is the breathing room around the mark, as a fraction of the tile: the
- * design's mark fills its own frame edge to edge, which is right on a page and
- * cramped inside a tile.
+ * The design ships it as a silhouette over an alpha channel - measured, one RGB
+ * value - so recolouring it is a matter of keeping the alpha and replacing the
+ * colour. No background, no padding, no rounded corners: the file that was
+ * asked for, at the size the browser wants.
  */
-function tile(markImg, size, ground, ink, inset = 0.17, radius = 0.22) {
+function paint(markImg, size, [r, g, b]) {
+  const m = resize(markImg, size);
   const out = Buffer.alloc(size * size * 4);
-  const pad = Math.round(size * inset);
-  const inner = Math.max(1, size - pad * 2);
-  const m = resize(markImg, inner);
-  const r = size * radius;
-
-  // Coverage of a rounded square, sampled at the pixel centre.
-  const insideTile = (x, y) => {
-    if (r <= 0) return true;
-    const cx = Math.min(Math.max(x + 0.5, r), size - r);
-    const cy = Math.min(Math.max(y + 0.5, r), size - r);
-    const dx = x + 0.5 - cx;
-    const dy = y + 0.5 - cy;
-    return dx * dx + dy * dy <= r * r;
-  };
-
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const d = (y * size + x) * 4;
-      if (!insideTile(x, y)) { out[d + 3] = 0; continue; }
-
-      let a = 0;
-      const mx = x - pad;
-      const my = y - pad;
-      if (mx >= 0 && my >= 0 && mx < inner && my < inner) a = m.rgba[(my * inner + mx) * 4 + 3] / 255;
-
-      out[d] = Math.round(ink[0] * a + ground[0] * (1 - a));
-      out[d + 1] = Math.round(ink[1] * a + ground[1] * (1 - a));
-      out[d + 2] = Math.round(ink[2] * a + ground[2] * (1 - a));
-      out[d + 3] = 255;
-    }
+  for (let i = 0; i < out.length; i += 4) {
+    out[i] = r;
+    out[i + 1] = g;
+    out[i + 2] = b;
+    out[i + 3] = m.rgba[i + 3];
   }
   return { width: size, height: size, rgba: out };
 }
@@ -313,20 +291,18 @@ function tile(markImg, size, ground, ink, inset = 0.17, radius = 0.22) {
 const mark = decodePng(readFileSync(join(SRC, 'solid-icon-dark.png')));
 
 /*
- * Why a tile, and not the mark on its own.
+ * The mark itself, white, on a transparent ground.
  *
- * The mark is a silhouette, so on its own it needs the tab strip to be the
- * opposite colour, and only the browser knows which that is. The obvious answer
- * - one SVG carrying both colourways behind `prefers-color-scheme` - is what
- * shipped, and it is right everywhere except the one place it had to be right:
- * Chromium rasterises a favicon through a restricted path that does not apply
- * the browser's colour scheme, so it takes the light branch and draws the ink
- * mark onto a dark tab strip. Firefox and Safari honour the query, which is
- * what made it look fixed here. Chromium honours it for an <img> too, so even
- * testing it that way agreed - and the tab was still black.
+ * A tile in the accent was tried and is not what was asked for. It solved a
+ * real problem - the mark is a silhouette, so it needs the tab strip to be the
+ * opposite colour, and Chromium rasterises a favicon through a path that
+ * applies neither `media` on the link nor `prefers-color-scheme` inside an SVG,
+ * which means a theme-aware icon cannot work there. But solving it by inventing
+ * a background was a design decision, and not one to take unasked.
  *
- * An opaque tile asks the browser nothing. In the accent rather than the ink,
- * because a dark tile on a dark strip is the same complaint again.
+ * So: white, which is the file that was supplied, and the trade-off is stated
+ * rather than designed around. It reads on a dark tab strip and on the dark
+ * chrome most browsers use, and it is faint on a light one.
  */
 /**
  * The sizes a browser actually asks for.
@@ -341,9 +317,9 @@ const SIZES = [16, 32, 48, 96];
 // ── favicon-<n>.png - the icons the pages declare ────────────────────────────
 {
   for (const size of SIZES) {
-    const bytes = encodePng(tile(mark, size, ACCENT, [255, 255, 255]));
+    const bytes = encodePng(paint(mark, size, WHITE));
     writeFileSync(join(OUT, `favicon-${size}.png`), bytes);
-    console.log(`favicon-${size}.png`.padEnd(22) + `${size}px tile, ${bytes.length} B`);
+    console.log(`favicon-${size}.png`.padEnd(22) + `${size}px, ${bytes.length} B`);
   }
 }
 
@@ -353,10 +329,10 @@ const SIZES = [16, 32, 48, 96];
 // crawlers, feed readers and link unfurlers that never parse the page. It costs
 // two kilobytes to answer them with the right picture rather than a 404.
 {
-  const frames = [16, 32, 48].map((size) => ({ size, bytes: encodePng(tile(mark, size, ACCENT, [255, 255, 255])) }));
+  const frames = [16, 32, 48].map((size) => ({ size, bytes: encodePng(paint(mark, size, WHITE)) }));
   const ico = encodeIco(frames);
   writeFileSync(join(OUT, 'favicon.ico'), ico);
-  console.log(`favicon.ico`.padEnd(22) + `16/32/48px tile, ${(ico.length / 1024).toFixed(1)} KB`);
+  console.log(`favicon.ico`.padEnd(22) + `16/32/48px, ${(ico.length / 1024).toFixed(1)} KB`);
 }
 
 // ── apple-touch-icon.png ─────────────────────────────────────────────────────
@@ -364,9 +340,9 @@ const SIZES = [16, 32, 48, 96];
 // iOS rounds the corners itself and composites onto an opaque tile, so this one
 // is square and edge to edge.
 {
-  const bytes = encodePng(tile(mark, 180, ACCENT, [255, 255, 255], 0.17, 0));
+  const bytes = encodePng(flatten(paint(mark, 180, INK), PAPER));
   writeFileSync(join(OUT, 'apple-touch-icon.png'), bytes);
-  console.log(`apple-touch-icon.png  180px tile, ${(bytes.length / 1024).toFixed(1)} KB`);
+  console.log(`apple-touch-icon.png  180px, ${(bytes.length / 1024).toFixed(1)} KB`);
 }
 
 /*

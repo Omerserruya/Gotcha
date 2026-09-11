@@ -6,4 +6,4 @@
  * Cloudflare caches them at the edge for four hours and keys on the full URL,
  * so without this a new icon reaches the origin and not the visitor.
  */
-export const ICON_VERSION = '5b3da263';
+export const ICON_VERSION = '95103b17';
