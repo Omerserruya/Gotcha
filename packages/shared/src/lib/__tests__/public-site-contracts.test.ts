@@ -48,8 +48,19 @@ describe("the tab icon decides its own colour", () => {
 
   for (const [name, rel] of LAYOUTS) {
     it(`${name}: offers an SVG icon`, () => {
-      expect(read(rel), "the SVG is the only icon that carries both colourways")
-        .toMatch(/favicon\.svg["'][\s\S]{0,80}image\/svg\+xml/);
+      expect(read(rel), "the SVG is the icon every current browser prefers")
+        .toMatch(/favicon\.svg[^\n]{0,60}[`"'][\s\S]{0,80}image\/svg\+xml/);
+    });
+
+    it(`${name}: versions the icon URLs`, () => {
+      // Cloudflare caches them at the edge for four hours and keys on the whole
+      // URL. Without a hash in the query, a new icon reaches the origin and the
+      // visitor keeps the old one - which is most of why this took three goes.
+      const src = read(rel);
+      expect(src, "the stamp is generated beside the icons").toContain("ICON_VERSION");
+      for (const file of ["favicon.ico", "favicon.svg", "apple-touch-icon.png"]) {
+        expect(src, `${file} must carry the version`).toContain(`${file}?v=\${ICON_VERSION}`);
+      }
     });
 
     it(`${name}: offers no media-scoped icon`, () => {
