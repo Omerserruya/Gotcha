@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import CookieNotice from '@/components/CookieNotice';
+import { ICON_VERSION } from '@/generated/icon-version';
 import './globals.css';
 import './site.css';
 
@@ -24,13 +25,18 @@ export const metadata: Metadata = {
   //
   // An opaque tile asks the browser nothing, so there is nothing left to get
   // wrong. The .ico is the same tile for anything that cannot read the SVG.
+  //
+  // The `?v=` is a content hash. Cloudflare caches /assets/* at the edge for
+  // four hours and keys on the whole URL, so the first tile deploy reached the
+  // origin while every visitor still got the old icon - cf-cache-status HIT,
+  // age 1128. The hash changes the key the moment the bytes do.
   icons: {
     icon: [
-      { url: '/assets/favicon.ico', sizes: '16x16 32x32 48x48' },
-      { url: '/assets/favicon.svg', type: 'image/svg+xml' },
+      { url: `/assets/favicon.ico?v=${ICON_VERSION}`, sizes: '16x16 32x32 48x48' },
+      { url: `/assets/favicon.svg?v=${ICON_VERSION}`, type: 'image/svg+xml' },
     ],
-    shortcut: '/assets/favicon.ico',
-    apple: '/assets/apple-touch-icon.png',
+    shortcut: `/assets/favicon.ico?v=${ICON_VERSION}`,
+    apple: `/assets/apple-touch-icon.png?v=${ICON_VERSION}`,
   },
 };
 

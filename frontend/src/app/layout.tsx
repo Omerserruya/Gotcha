@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { ICON_VERSION } from "@/generated/icon-version";
 import { Inter, Assistant } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
@@ -45,13 +46,17 @@ export const metadata: Metadata = {
   // through a path that applies neither `media` on the link nor
   // `prefers-color-scheme` inside the SVG, so anything theme-aware came out as
   // the ink mark on a dark tab strip. A tile asks the browser nothing.
+  //
+  // The `?v=` is a content hash: Cloudflare caches these at the edge and keys
+  // on the whole URL, so without it a new icon reaches the origin and not the
+  // visitor for up to four hours.
   icons: {
     icon: [
-      { url: "/favicon.ico", sizes: "16x16 32x32 48x48" },
-      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: `/favicon.ico?v=${ICON_VERSION}`, sizes: "16x16 32x32 48x48" },
+      { url: `/favicon.svg?v=${ICON_VERSION}`, type: "image/svg+xml" },
     ],
-    shortcut: "/favicon.ico",
-    apple: "/apple-touch-icon.png",
+    shortcut: `/favicon.ico?v=${ICON_VERSION}`,
+    apple: `/apple-touch-icon.png?v=${ICON_VERSION}`,
   },
   openGraph: {
     title: "GOTCHA - AI-Powered Customer Communication",
