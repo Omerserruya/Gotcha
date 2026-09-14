@@ -265,12 +265,22 @@
     "dismiss": "התעלמו",
     "act": "הצצה",
     "kind": {
-      "intent.automatable": "<b>{count}</b> שיחות ב-{days} הימים האחרונים עסקו באותו נושא. תשובה אוטומטית הייתה מורידה אותן מהתור.",
-      "intent.multiple_automatable": "<b>{count}</b> נושאים חוזרים הופיעו לפחות {minOccurrences} פעמים כל אחד ב-{days} הימים האחרונים. כל אחד מהם הוא תהליך שממתין שייכתב.",
-      "escalation.rate_high": "<b>{percent}%</b> מהשיחות שנותחו הועברו לאדם ב-{days} הימים האחרונים — {escalated} מתוך {analyzed}.",
-      "confidence.below_threshold": "GOTCHA לא הייתה בטוחה ב-<b>{percent}%</b> מהשיחות שנותחו ב-{days} הימים האחרונים — {count} מתוך {analyzed}, מתחת ל-{threshold}% ביטחון.",
-      "channel.highest_volume": "<b>{count}</b> שיחות הגיעו דרך {channel} ב-{days} הימים האחרונים, יותר מכל ערוץ אחר.",
-      "department.load_imbalance": "<b>{count}</b> שיחות הגיעו למחלקה אחת ב-{days} הימים האחרונים, הרבה לפני השאר.",
+      "intent": {
+        "automatable": "<b>{count}</b> שיחות ב-{days} הימים האחרונים עסקו באותו נושא. תשובה אוטומטית הייתה מורידה אותן מהתור.",
+        "multiple_automatable": "<b>{count}</b> נושאים חוזרים הופיעו לפחות {minOccurrences} פעמים כל אחד ב-{days} הימים האחרונים. כל אחד מהם הוא תהליך שממתין שייכתב."
+      },
+      "escalation": {
+        "rate_high": "<b>{percent}%</b> מהשיחות שנותחו הועברו לאדם ב-{days} הימים האחרונים — {escalated} מתוך {analyzed}."
+      },
+      "confidence": {
+        "below_threshold": "GOTCHA לא הייתה בטוחה ב-<b>{percent}%</b> מהשיחות שנותחו ב-{days} הימים האחרונים — {count} מתוך {analyzed}, מתחת ל-{threshold}% ביטחון."
+      },
+      "channel": {
+        "highest_volume": "<b>{count}</b> שיחות הגיעו דרך {channel} ב-{days} הימים האחרונים, יותר מכל ערוץ אחר."
+      },
+      "department": {
+        "load_imbalance": "<b>{count}</b> שיחות הגיעו למחלקה אחת ב-{days} הימים האחרונים, הרבה לפני השאר."
+      },
       "fallback": "GOTCHA שמה לב למשהו ששווה מבט."
     }
   },

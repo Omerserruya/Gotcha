@@ -265,12 +265,22 @@
     "dismiss": "Dismiss",
     "act": "Take a look",
     "kind": {
-      "intent.automatable": "<b>{count}</b> conversations in the last {days} days were about the same thing. An automated answer would take them off the queue.",
-      "intent.multiple_automatable": "<b>{count}</b> recurring topics came up at least {minOccurrences} times each in the last {days} days. Each one is a flow waiting to be written.",
-      "escalation.rate_high": "<b>{percent}%</b> of analysed conversations were escalated to a person in the last {days} days — {escalated} of {analyzed}.",
-      "confidence.below_threshold": "GOTCHA was unsure on <b>{percent}%</b> of analysed conversations in the last {days} days — {count} of {analyzed}, below {threshold}% confidence.",
-      "channel.highest_volume": "<b>{count}</b> conversations came through {channel} in the last {days} days, more than any other channel.",
-      "department.load_imbalance": "<b>{count}</b> conversations went to one department in the last {days} days, well ahead of the rest.",
+      "intent": {
+        "automatable": "<b>{count}</b> conversations in the last {days} days were about the same thing. An automated answer would take them off the queue.",
+        "multiple_automatable": "<b>{count}</b> recurring topics came up at least {minOccurrences} times each in the last {days} days. Each one is a flow waiting to be written."
+      },
+      "escalation": {
+        "rate_high": "<b>{percent}%</b> of analysed conversations were escalated to a person in the last {days} days — {escalated} of {analyzed}."
+      },
+      "confidence": {
+        "below_threshold": "GOTCHA was unsure on <b>{percent}%</b> of analysed conversations in the last {days} days — {count} of {analyzed}, below {threshold}% confidence."
+      },
+      "channel": {
+        "highest_volume": "<b>{count}</b> conversations came through {channel} in the last {days} days, more than any other channel."
+      },
+      "department": {
+        "load_imbalance": "<b>{count}</b> conversations went to one department in the last {days} days, well ahead of the rest."
+      },
       "fallback": "GOTCHA noticed something worth a look."
     }
   },
