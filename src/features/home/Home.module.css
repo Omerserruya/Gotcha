@@ -167,15 +167,42 @@
   }
 
   /* ── The two columns ───────────────────────────────────────────────── */
+  /*
+   * The cards absorb whatever is left and scroll inside it; the page itself
+   * never overflows.
+   *
+   * Trimming padding got the design onto a short window, but only for one
+   * window - the next laptop with a toolbar takes it back. This is the same
+   * model the frame already uses: chrome fixed, content scrolls. It also puts
+   * the scroll in the better place, since the command box is the screen's
+   * primary action and should not be the first thing to leave.
+   */
   .columns {
     flex: 1;
     min-block-size: 0;
+    overflow-y: auto;
+    /* As the rail: present when needed, not a bright bar down the panel. */
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-heavy) transparent;
     display: flex;
     gap: var(--space-14);
     /* `padding: 20px 40px 30px` in the source; the foot trimmed to 24 — see
        the note on .statusStrip, the same amount off each end. */
     padding-block: var(--space-20) var(--space-24);
     padding-inline: var(--space-40);
+  }
+
+  .columns::-webkit-scrollbar {
+    inline-size: 6px;
+  }
+
+  .columns::-webkit-scrollbar-thumb {
+    background-color: var(--border-heavy);
+    border-radius: var(--radius-key);
+  }
+
+  .columns::-webkit-scrollbar-track {
+    background: transparent;
   }
 
   /* The queue is the wider of the two: it is what the screen is for. */
