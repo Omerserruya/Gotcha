@@ -19,9 +19,15 @@ const read = (rel: string) => readFileSync(join(SRC, rel), "utf8");
 
 const chrome = read("components/marketing/MarketingChrome.tsx");
 
-/** Every public page, and the file that renders its chrome. */
+/**
+ * Every public page on THIS host, and the file that renders its chrome.
+ *
+ * The landing page is not one of them any more. It was rebuilt as its own
+ * application under landing/, served from the marketing origin, and the copy
+ * that used to live here - along with its /he and /en routes - is deleted:
+ * two designs answering to one name, with the older one winning.
+ */
 const PUBLIC_PAGES: Array<[string, string]> = [
-  ["landing", "components/landing/LandingPage.tsx"],
   ["pricing", "app/pricing/page.tsx"],
   ["trust center", "app/legal/LegalShell.tsx"],
 ];
@@ -103,7 +109,9 @@ describe("chat widget placement", () => {
     expect(read("app/layout.tsx")).toContain("<ChatWidget />");
     // Per-page mounts are what left it on screen after a client-side hop into
     // the form: the loader refuses to run twice and never tears down.
-    for (const page of ["app/page.tsx", "app/en/page.tsx", "app/he/page.tsx"]) {
+    // /en and /he were the old landing page and are deleted, so the root is
+    // the only page left that could mount one of its own.
+    for (const page of ["app/page.tsx"]) {
       expect(read(page), page).not.toContain("<ChatWidget");
     }
   });

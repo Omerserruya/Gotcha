@@ -1,12 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
-import LandingPage from "@/components/landing/LandingPage";
 import { cachedJourneyIncomplete, refreshJourneyIncomplete } from "@/lib/journey-cache";
-import { rendersMarketing } from "@/lib/marketing-origin";
 
 // Server-rendered, always-present description of the app's purpose. It lives in
 // the initial HTML on every render branch so search crawlers and Google's OAuth
@@ -45,24 +43,15 @@ export default function Home() {
   const { user, token, isLoading } = useAuth();
   const { t } = useI18n();
   const router = useRouter();
-  // Suppresses the landing page for the frame between deciding to redirect and
-  // the router actually leaving. Without it the application host flashes
-  // marketing at a logged-out visitor on its way to /login.
-  const [leavingForLogin, setLeavingForLogin] = useState(false);
-
   useEffect(() => {
     if (isLoading) return;
 
-    // On the APPLICATION host the root is not a marketing page. Someone who
-    // opens app.gotcha.co.il while logged out came here to sign in, so send
-    // them to the login screen; the landing page belongs to the marketing
-    // origin and is served there. With no marketing origin configured (dev)
-    // rendersMarketing() is true and this does nothing.
+    // Logged out: this host signs people in. The landing page is a separate
+    // build served from the marketing origin, and the old copy that used to
+    // render here is deleted - one site, one design. There is no longer a
+    // marketing branch to guard, so there is nothing to check the origin for.
     if (!user) {
-      if (typeof window !== "undefined" && !rendersMarketing(window.location.origin)) {
-        setLeavingForLogin(true);
-        router.replace("/login");
-      }
+      router.replace("/login");
       return;
     }
     // Admins with an unfinished first-steps journey land on Getting Started;
@@ -84,32 +73,14 @@ export default function Home() {
     router.replace("/conversations");
   }, [user, token, isLoading, router]);
 
-  if (isLoading) {
-    return (
-      <>
-        <PurposeStatement />
-        <div className="flex items-center justify-center min-h-screen">
-          <div className="animate-pulse text-lg text-gray-500">{t("app.loading")}</div>
-        </div>
-      </>
-    );
-  }
-
-  if (user || leavingForLogin) {
-    return (
-      <>
-        <PurposeStatement />
-        <div className="flex items-center justify-center min-h-screen">
-          <div className="animate-pulse text-lg text-gray-500">{t("app.loading")}</div>
-        </div>
-      </>
-    );
-  }
-
+  // Every branch is the same now: a statement of what GOTCHA is, for crawlers
+  // and for Google's OAuth reviewer, and a shell while the router leaves.
   return (
     <>
       <PurposeStatement />
-      <LandingPage />
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-pulse text-lg text-gray-500">{t("app.loading")}</div>
+      </div>
     </>
   );
 }
