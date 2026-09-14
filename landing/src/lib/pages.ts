@@ -63,3 +63,44 @@ export const PATH_BY_PAGE: Record<string, string> = Object.fromEntries(
 );
 
 export const ALL_PATHS = Object.keys(PAGE_BY_PATH);
+
+/**
+ * The Hebrew half of every address.
+ *
+ * The design carries both languages in one bundle and switches them from the
+ * footer, which is right for a canvas and leaves nothing to send: the whole
+ * site was one address that happened to be in English when it loaded. So every
+ * page has a second path under `/he`, prerendered in Hebrew, and the toggle
+ * moves between the two rather than changing the page underneath an address
+ * that no longer describes it.
+ *
+ * `/en` is deliberately NOT a second spelling of the same page. English is what
+ * the bare path already is, and two URLs for one page is the problem this
+ * solves rather than a feature of it.
+ */
+export const HE = 'he';
+
+export type Lang = 'en' | 'he';
+
+/** The address for a page, in a language. */
+export function pathFor(page: string, lang: Lang): string {
+  const path = PATH_BY_PAGE[page];
+  if (!path) return lang === HE ? `/${HE}` : '/';
+  if (lang !== HE) return path;
+  return path === '/' ? `/${HE}` : `/${HE}${path}`;
+}
+
+/** The page and language an address names, or null when it is not the landing's. */
+export function parsePath(pathname: string): { page: string; lang: Lang } | null {
+  const trimmed = pathname.replace(/^\/+|\/+$/g, '');
+  const he = trimmed === HE || trimmed.startsWith(`${HE}/`);
+  const rest = he ? trimmed.slice(HE.length).replace(/^\/+/, '') : trimmed;
+  const page = PAGE_BY_PATH[rest];
+  return page ? { page, lang: he ? HE : 'en' } : null;
+}
+
+/** Every address the landing serves, in both languages. */
+export const ALL_LOCALISED_PATHS: string[] = [
+  ...ALL_PATHS,
+  ...ALL_PATHS.map((p) => (p === '' ? HE : `${HE}/${p}`)),
+];

@@ -422,3 +422,70 @@ describe("section hosts serve their assets before the catch-all", () => {
     });
   }
 });
+
+/**
+ * Hebrew is an address, and a missing page is a 404.
+ *
+ * The design keeps both languages in one bundle and switches them from the
+ * footer, so the site was one URL that happened to load in English: a link to
+ * the offer page opened in English for whoever received it. Every page now has
+ * a second path under /he, prerendered, so a link opens in the language it was
+ * sent in.
+ *
+ * The second half of this is the reason it looked impossible. `try_files`'
+ * last argument is an internal REDIRECT, so a `/404.html` fallback re-entered
+ * location matching, hit the catch-all and 301'd to app.gotcha.co.il with the
+ * original path - where the OLD landing still answers at /he. So
+ * gotcha.co.il/he did not 404, it silently handed the visitor a different
+ * design on another hostname, and every other missing page did too.
+ */
+describe("the landing answers in both languages", () => {
+  const marketing = () => find("gotcha.co.il")!.body;
+
+  it("serves /he from the marketing host", () => {
+    const allow = /location\s+~\s+\^\/\(([^)]+)\)\(\/\|\$\)/.exec(marketing());
+    expect(allow, "the marketing allowlist must exist").not.toBeNull();
+    expect(allow![1].split("|"), "Hebrew is served here, not redirected away").toContain("he");
+  });
+
+  it("prerenders every page in Hebrew as well as English", () => {
+    const read = (rel: string) => fs.readFileSync(path.join(ROOT, rel), "utf8");
+    const pages = read("landing/src/lib/pages.ts");
+    expect(pages, "both halves come from one list").toContain("ALL_LOCALISED_PATHS");
+    const route = read("landing/src/app/[[...slug]]/page.tsx");
+    expect(route, "the route generates both").toContain("ALL_LOCALISED_PATHS");
+    expect(route, "and the language is server-rendered, not toggled after arrival")
+      .toMatch(/initialLang=\{?\s*found\.lang/);
+  });
+
+  it("keeps a missing page on this host instead of handing it to the application", () => {
+    // `=404`, not a file: try_files' last argument is an internal redirect, and
+    // a filename there re-enters location matching and reaches the catch-all.
+    const block = /location\s+~\s+\^\/\([^)]+\)\(\/\|\$\)\s*\{([\s\S]*?)\n        \}/.exec(marketing());
+    expect(block, "the allowlist block must exist").not.toBeNull();
+    expect(block![1], "a fallback FILE leaks to app.gotcha.co.il").toMatch(/try_files[^\n]*=404;/);
+    expect(block![1], "and a leaked 404 must not be reintroduced as a path")
+      .not.toMatch(/try_files[^\n]*\/404\.html/);
+    expect(marketing(), "the 404 page is served by error_page instead").toMatch(/error_page\s+404\s+\/404\.html;/);
+  });
+
+  it("normalises a trailing slash rather than losing the page", () => {
+    // The export writes /he/offer.html, so /he/offer/ matched nothing and fell
+    // through to the redirect. People type and paste the slash.
+    expect(marketing()).toMatch(/rewrite\s+\^\(\/\.\+\)\/\$\s+\$1\s+permanent;/);
+  });
+
+  it("folds /en onto the page it names", () => {
+    // English is what the bare path already is. /en existed on the old landing
+    // and links to it are out there, so they are folded rather than 404'd.
+    expect(marketing()).toMatch(/rewrite\s+\^\/en\/\?\(\.\*\)\$\s+\/\$1\s+permanent;/);
+  });
+
+  it("retires the old landing still shipped by the application build", () => {
+    // frontend/src/app/{he,en}/page.tsx render the previous design, and their
+    // own metadata declares gotcha.co.il/he as canonical - which is now a
+    // different page. Two designs answering to one name.
+    const app = find("app.gotcha.co.il")!.body;
+    expect(app).toMatch(/location\s+~\s+\^\/\(he\|en\)\(\/\|\$\)\s*\{\s*\n\s*return\s+301\s+https:\/\/gotcha\.co\.il\$request_uri/);
+  });
+});

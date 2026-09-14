@@ -3889,6 +3889,9 @@ class LandingLogic extends React.Component {
         onNavigate: (page) => this.setState({ page, menu: null }),
         lang: this.state.lang,
         onLang: this.props.onLang,
+        // Back and Forward across a language boundary: the address is the
+        // truth, so the landing follows it rather than the other way round.
+        onUrlLang: (lang) => this.setState({ lang }),
       }),
       React.createElement(view, { v: vals, children: extra }),
     );
