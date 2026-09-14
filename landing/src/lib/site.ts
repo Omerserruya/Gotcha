@@ -57,12 +57,6 @@ export const F = {
   mono: "'IBM Plex Mono', ui-monospace, monospace",
 } as const;
 
-/** The pill the design uses for its fixed header. */
-export const HEADER_PILL =
-  'background:rgba(253,251,247,.7);backdrop-filter:blur(20px) saturate(1.7);' +
-  '-webkit-backdrop-filter:blur(20px) saturate(1.7);border:1px solid rgba(22,21,15,.08);' +
-  'border-radius:20px;box-shadow:0 8px 30px rgba(22,21,15,.1)';
-
 export const MAXW = 1240;
 
 export type Locale = 'en' | 'he';
@@ -71,7 +65,6 @@ export type Locale = 'en' | 'he';
 export const DEFAULT_LOCALE: Locale = 'en';
 
 export const isHe = (l: Locale) => l === 'he';
-export const dirOf = (l: Locale) => (isHe(l) ? 'rtl' : 'ltr');
 
 /** Pick the right half of a [en, he] pair. */
 export function t<T>(pair: readonly [T, T], locale: Locale): T {

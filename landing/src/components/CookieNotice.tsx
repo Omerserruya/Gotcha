@@ -47,7 +47,9 @@ const COPY = {
   ],
   on: ['On', 'פעיל'],
   off: ['Off', 'כבוי'],
-  save: ['Save', 'שמירה'],
+  acceptAll: ['Allow all', 'לאפשר הכל'],
+  onlyNeeded: ['Only what is needed', 'רק ההכרחיות'],
+  save: ['Save my choices', 'שמירת הבחירה'],
   policy: ['Read the Cookie Policy', 'למדיניות העוגיות'],
 } as const;
 
@@ -150,10 +152,18 @@ export default function CookieNotice() {
 
   if (!pending) return null;
 
-  const save = () => {
+  /**
+   * Both one-click answers, and the one that reads the switches.
+   *
+   * "Only what is needed" sits beside "Allow all" and looks the same, because
+   * refusing has to be exactly as easy as agreeing. A card where yes is a
+   * button and no is a trip through two toggles is not a free choice, and it
+   * is the pattern these rules exist to stop.
+   */
+  const answer = (a: boolean, m: boolean) => {
     setLeaving(true);
     // Let the card fade before it goes, so the choice reads as acknowledged.
-    window.setTimeout(() => decide(analytics, marketing), 160);
+    window.setTimeout(() => decide(a, m), 160);
   };
 
   return (
@@ -228,17 +238,48 @@ export default function CookieNotice() {
         toggle={() => setMarketing((v) => !v)}
       />
 
-      <div style={{ margin: '16px 0 0', display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+      <div style={{ margin: '16px 0 0', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <button
-          onClick={save}
+          onClick={() => answer(true, true)}
           style={{
-            border: 0,
+            border: `1px solid ${C.ink}`,
             borderRadius: 11,
-            padding: '10px 20px',
+            padding: '10px 18px',
             cursor: 'pointer',
             background: C.ink,
             color: C.bg,
             font: `600 13.5px ${F.sans}`,
+          }}
+        >
+          {p('acceptAll')}
+        </button>
+        <button
+          onClick={() => answer(false, false)}
+          style={{
+            // The same size, the same weight, the same row: only the fill
+            // differs, so neither answer is the one the card is steering to.
+            border: `1px solid ${C.ink}`,
+            borderRadius: 11,
+            padding: '10px 18px',
+            cursor: 'pointer',
+            background: 'transparent',
+            color: C.ink,
+            font: `600 13.5px ${F.sans}`,
+          }}
+        >
+          {p('onlyNeeded')}
+        </button>
+        <button
+          onClick={() => answer(analytics, marketing)}
+          style={{
+            border: 0,
+            borderRadius: 11,
+            padding: '10px 6px',
+            cursor: 'pointer',
+            background: 'transparent',
+            color: C.muted,
+            font: `500 13px ${F.sans}`,
+            textDecoration: 'underline',
           }}
         >
           {p('save')}

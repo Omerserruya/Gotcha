@@ -527,7 +527,20 @@ describe("the Meta pixel is opt-in", () => {
       .toMatch(/writeConsent\(analytics:\s*boolean,\s*marketing:\s*boolean\)/);
     const card = read("landing/src/components/CookieNotice.tsx");
     expect(card, "two switches, not one").toMatch(/setMarketing/);
-    expect(card).toMatch(/decide\(analytics,\s*marketing\)/);
+    // Both values reach the store; the card never records one and assume the other.
+    expect(card).toMatch(/decide\(a,\s*m\)/);
+  });
+
+  it("makes refusing exactly as easy as agreeing", () => {
+    // A card where yes is a button and no is a trip through two toggles is not
+    // a free choice. Both are one click, in the same row, the same size.
+    const card = read("landing/src/components/CookieNotice.tsx");
+    expect(card, "one click accepts everything").toMatch(/answer\(true,\s*true\)/);
+    expect(card, "and one click accepts nothing optional").toMatch(/answer\(false,\s*false\)/);
+    expect(card, "the switches still have their own save").toMatch(/answer\(analytics,\s*marketing\)/);
+    expect(card, "both offered in both languages")
+      .toMatch(/acceptAll: \['Allow all', '[^']+'\]/);
+    expect(card).toMatch(/onlyNeeded: \['Only what is needed', '[^']+'\]/);
   });
 
   it("invalidates decisions taken before the category existed", () => {
