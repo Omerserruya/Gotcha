@@ -7,8 +7,42 @@
    * "next", and that one is raised out of the list; the rest stay quiet until
    * their turn.
    */
+  /*
+   * "One extra block beneath it" - beneath the command box, and on its measure.
+   *
+   * The same 880px centred column the command surface uses, so the two read as
+   * one stack rather than a contained box above a full-width list. Without
+   * this the rows ran the whole width of the panel and the actions sat on the
+   * frame's edge.
+   *
+   * It is also the page's flexible region on day one, the way the two columns
+   * are on every other morning: it takes what is left and scrolls inside it,
+   * so the greeting and the command box stay put.
+   */
   .block {
-    margin-block-start: var(--space-20);
+    inline-size: 880px;
+    max-inline-size: calc(100% - var(--space-40) * 2);
+    margin-inline: auto;
+    margin-block-start: var(--space-24);
+    flex: 1;
+    min-block-size: 0;
+    overflow-y: auto;
+    padding-block-end: var(--space-24);
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-heavy) transparent;
+  }
+
+  .block::-webkit-scrollbar {
+    inline-size: 6px;
+  }
+
+  .block::-webkit-scrollbar-thumb {
+    background-color: var(--border-heavy);
+    border-radius: var(--radius-key);
+  }
+
+  .block::-webkit-scrollbar-track {
+    background: transparent;
   }
 
   .header {
