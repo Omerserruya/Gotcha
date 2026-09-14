@@ -6,6 +6,7 @@ import { TenantGateNotice } from '@/features/tenant-gate/TenantGateNotice';
 import { ActivityCard } from './ActivityCard';
 import { CommandSurface } from './CommandSurface';
 import { FirstSteps } from './FirstSteps';
+import { homeFace } from './first-steps';
 import { QueueList } from './QueueList';
 import { QuietWork } from './QuietWork';
 import styles from './Home.module.css';
@@ -61,16 +62,16 @@ export async function HomeScreen() {
    * would read as "no work waiting" - which is a different, and false,
    * statement. Say what is actually true instead.
    */
-  if (gate) {
+  const face = homeFace({ setup, gate });
+  const isDayOne = face === 'day-one';
+
+  if (face === 'gated' && gate) {
     return (
       <div className={styles.page}>
         <TenantGateNotice gate={gate} />
       </div>
     );
   }
-
-  // `setup` null means the call failed, which is not the same as being live.
-  const isDayOne = setup !== null && !setup.isLive;
 
   const now = new Date();
   // From the viewer's clock: "good morning" at 9pm is worse than no greeting.
@@ -121,7 +122,7 @@ export async function HomeScreen() {
         A failed call is NOT a live workspace — `setup` null falls through to
         the ordinary screen rather than claiming either state.
       */}
-      {isDayOne ? <FirstSteps setup={setup} ingest={ingest} /> : null}
+      {isDayOne && setup ? <FirstSteps setup={setup} ingest={ingest} /> : null}
 
       {!isDayOne && overview ? (
         <MetricStrip

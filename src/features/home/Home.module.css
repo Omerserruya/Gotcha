@@ -15,11 +15,17 @@
   }
 
   /*
-   * `padding: 34px 40px 0` in the source — the strip sits above the greeting
-   * and its own top padding is what gives the screen its opening breath.
+   * `padding: 34px 40px 0` in the source.
+   *
+   * Trimmed to 26px. The design is drawn on a 900px canvas with almost no
+   * vertical slack, so a browser window even slightly shorter scrolls - and
+   * the strip's opening breath is the cheapest place to find the difference,
+   * because nothing below it moves relative to anything else. Taken evenly
+   * with the same amount off the foot of the columns, so the screen stays
+   * centred rather than riding high.
    */
   .statusStrip {
-    padding-block: var(--space-32) 0;
+    padding-block: var(--space-26) 0;
     padding-inline: var(--space-40);
     display: flex;
     align-items: flex-start;
@@ -33,7 +39,7 @@
     gap: var(--space-8);
     background-color: var(--intent-neutral-surface);
     border-radius: var(--radius-item);
-    padding-block: var(--space-7);
+    padding-block: var(--space-6);
     padding-inline: var(--space-12);
     font-size: var(--font-size-label);
     color: var(--intent-neutral-text);
@@ -166,8 +172,9 @@
     min-block-size: 0;
     display: flex;
     gap: var(--space-14);
-    /* `padding: 20px 40px 30px` in the source. */
-    padding-block: var(--space-20) var(--space-30);
+    /* `padding: 20px 40px 30px` in the source; the foot trimmed to 24 — see
+       the note on .statusStrip, the same amount off each end. */
+    padding-block: var(--space-20) var(--space-24);
     padding-inline: var(--space-40);
   }
 

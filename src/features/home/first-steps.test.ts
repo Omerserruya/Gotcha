@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { SetupStatus, SetupStep } from '@/api/contracts/setup';
 
-import { nextStep, setupProgress, stepCopyKey, stepDestination } from './first-steps';
+import { homeFace, nextStep, setupProgress, stepCopyKey, stepDestination } from './first-steps';
 
 const step = (overrides: Partial<SetupStep> & { id: string }): SetupStep => ({
   state: 'waiting',
@@ -90,5 +90,52 @@ describe('step copy', () => {
   it('returns null for an unknown step rather than inventing a key', () => {
     expect(stepCopyKey('verify_domain')).toBeNull();
     expect(stepDestination('verify_domain')).toBe('/settings');
+  });
+});
+
+describe('homeFace', () => {
+  const live: SetupStatus = { steps: [step({ id: 'a', state: 'done' })], isLive: true };
+  const setupPending: SetupStatus = { steps: [step({ id: 'a' })], isLive: false };
+  const gate = {
+    code: 'TENANT_ONBOARDING_REQUIRED',
+    tenantStatus: 'PENDING_ONBOARDING',
+    checkoutPath: null,
+  };
+
+  /*
+   * The regression this exists for. A workspace still onboarding fails every
+   * paid endpoint with a TENANT_ code, so a gate is reported on exactly the
+   * mornings day one is for. Showing the notice there replaces the block that
+   * walks someone through setup with one that tells them setup is unfinished.
+   */
+  it('shows day one even when the tenant gate has fired', () => {
+    expect(homeFace({ setup: setupPending, gate })).toBe('day-one');
+  });
+
+  it('shows the gate when the workspace is live but locked out', () => {
+    expect(
+      homeFace({
+        setup: live,
+        gate: { code: 'TENANT_PLAN_REQUIRED', tenantStatus: 'ACTIVE', checkoutPath: null },
+      }),
+    ).toBe('gated');
+  });
+
+  /*
+   * An admin who has not finished first-time setup cannot read setup state
+   * either, so there is nothing to render a block from and the notice is the
+   * right answer.
+   */
+  it('falls back to the gate when setup state is unreadable', () => {
+    expect(homeFace({ setup: null, gate })).toBe('gated');
+  });
+
+  it('is the ordinary screen for a live workspace with no gate', () => {
+    expect(homeFace({ setup: live, gate: null })).toBe('ordinary');
+  });
+
+  /* A failed setup call is not a live workspace, and not day one either. */
+  it('does not claim day one when setup simply failed to load', () => {
+    expect(homeFace({ setup: null, gate: null })).toBe('ordinary');
   });
 });

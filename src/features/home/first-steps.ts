@@ -1,3 +1,4 @@
+import type { TenantGate } from '@/api/client/tenant-gate';
 import type { SetupStatus, SetupStep } from '@/api/contracts/setup';
 
 /**
@@ -67,4 +68,26 @@ export function setupProgress(status: SetupStatus): SetupProgress {
  */
 export function nextStep(status: SetupStatus): SetupStep | null {
   return status.steps.find((step) => step.state === 'next') ?? null;
+}
+
+/** Which face Home shows. */
+export type HomeFace = 'day-one' | 'gated' | 'ordinary';
+
+/**
+ * Day one outranks the tenant gate, and the order matters.
+ *
+ * A workspace still onboarding fails every paid endpoint with a `TENANT_`
+ * code, so a gate is reported on exactly the mornings the day-one block exists
+ * for. Letting the gate win would replace the block that walks someone through
+ * setup with a notice telling them setup is unfinished — true, useless, and a
+ * dead end on the one screen that could fix it.
+ *
+ * A missing `setup` is the guard rather than a special case: a workspace whose
+ * admin has not finished first-time setup cannot read setup state either, and
+ * falls through to the notice, which is the right answer there.
+ */
+export function homeFace(input: { setup: SetupStatus | null; gate: TenantGate | null }): HomeFace {
+  if (input.setup !== null && !input.setup.isLive) return 'day-one';
+  if (input.gate) return 'gated';
+  return 'ordinary';
 }
