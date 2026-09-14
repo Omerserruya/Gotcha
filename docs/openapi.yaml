@@ -81,6 +81,8 @@ tags:
   description: Notification delivery and per-user preferences.
 - name: Onboarding
   description: The guided setup a new workspace runs once, plus the public invitation and waitlist endpoints that precede it.
+- name: Other
+  description: ""
 - name: Platform Admin
   description: GOTCHA staff surface, not tenant-facing. Gated on platform admin rather than tenant role.
 - name: Shopify
@@ -5185,6 +5187,182 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /api/agents/presence:
+    get:
+      operationId: getAgentsPresence
+      tags:
+      - AI Studio
+      summary: List Presence
+      description: |-
+        The roster.
+
+        Open to every tenant member, not just ADMIN: knowing whether a colleague is
+        available is what an agent needs before handing a conversation over, and
+        routing decisions are made by people who are not administrators.
+
+        Driven from the USER list rather than the presence table, so an agent who has
+        never sent a heartbeat still appears - as OFFLINE, which is true. Listing
+        only rows that exist would quietly hide the whole team on day one and make an
+        empty panel indistinguishable from an empty office.
+
+        Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be ACTIVE.
+
+        Implemented at `services/auth/src/routes/agent-presence.ts:52` (auth service).
+      security:
+      - bearerAuth: []
+      x-service: auth
+      x-source: services/auth/src/routes/agent-presence.ts:52
+      x-operation-type: read
+      x-publicly-exposed: true
+      x-database:
+      - user.findMany
+      - agentPresence.findMany
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeUnknown"
+          x-inferred: Status inferred from Express defaults; the handler calls no explicit res.status() for success.
+        "401":
+          description: Missing, invalid or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Unexpected server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/agents/presence/heartbeat:
+    post:
+      operationId: postAgentsPresenceHeartbeat
+      tags:
+      - AI Studio
+      summary: Create Heartbeat
+      description: |-
+        "I am still here."
+
+        Bumps lastSeenAt and nothing else - notably NOT the status, so a heartbeat
+        arriving while an agent is AWAY or BUSY does not quietly put them back
+        online. The shared helper hydrates a first-ever row as ONLINE, which is the
+        only case where a heartbeat decides a status.
+
+        Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be ACTIVE.
+
+        This is a write operation.
+
+        Implemented at `services/auth/src/routes/agent-presence.ts:112` (auth service).
+      security:
+      - bearerAuth: []
+      x-service: auth
+      x-source: services/auth/src/routes/agent-presence.ts:112
+      x-operation-type: write
+      x-publicly-exposed: true
+      requestBody:
+        required: false
+        description: No Zod schema is declared for this route; the handler reads `req.body` directly. Shape is not verifiable from source.
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeUnknown"
+          x-inferred: Status inferred from Express defaults; the handler calls no explicit res.status() for success.
+        "401":
+          description: Missing, invalid or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Authenticated, but not permitted to perform this operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Unexpected server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+      x-documentation-gap: request-body-unschematized
+  /api/agents/presence/me:
+    patch:
+      operationId: patchAgentsPresenceMe
+      tags:
+      - AI Studio
+      summary: Update Me
+      description: |-
+        "I am busy" / "away until 11:00".
+
+        Deliberately `/me` and never `/:agentId`: presence is a statement a person
+        makes about themselves. An admin setting a colleague to AWAY would put words
+        in their mouth, and every reader downstream would treat it as the agent's own
+        declaration.
+
+        Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be ACTIVE.
+
+        This is a write operation.
+
+        Implemented at `services/auth/src/routes/agent-presence.ts:135` (auth service).
+      security:
+      - bearerAuth: []
+      x-service: auth
+      x-source: services/auth/src/routes/agent-presence.ts:135
+      x-operation-type: write
+      x-publicly-exposed: true
+      requestBody:
+        required: false
+        description: No Zod schema is declared for this route; the handler reads `req.body` directly. Shape is not verifiable from source.
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeUnknown"
+          x-inferred: Status inferred from Express defaults; the handler calls no explicit res.status() for success.
+        "400":
+          description: Validation failed or the request was malformed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Missing, invalid or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Authenticated, but not permitted to perform this operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Unexpected server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+      x-documentation-gap: request-body-unschematized
   /api/agents/settings/approval-recipient:
     get:
       operationId: getAgentsSettingsApprovalRecipient
@@ -5538,8 +5716,8 @@ paths:
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
-        roles:
-        - ADMIN
+        permissions:
+        - settings:workspace:read
         mfa: required
       responses:
         "200":
@@ -5585,8 +5763,8 @@ paths:
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
-        roles:
-        - ADMIN
+        permissions:
+        - settings:workspace:update
         mfa: required
       requestBody:
         required: true
@@ -6412,8 +6590,8 @@ paths:
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
-        roles:
-        - ADMIN
+        permissions:
+        - settings:workspace:update
         mfa: required
       x-database:
       - tenant.update
@@ -8478,11 +8656,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/ai/src/routes/ai-assist.ts:842` (ai service).
+        Implemented at `services/ai/src/routes/ai-assist.ts:851` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/ai-assist.ts:842
+      x-source: services/ai/src/routes/ai-assist.ts:851
       x-operation-type: write
       x-publicly-exposed: true
       parameters:
@@ -9085,11 +9263,11 @@ paths:
 
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be ACTIVE.
 
-        Implemented at `services/ai/src/routes/ai-assist.ts:824` (ai service).
+        Implemented at `services/ai/src/routes/ai-assist.ts:833` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/ai-assist.ts:824
+      x-source: services/ai/src/routes/ai-assist.ts:833
       x-operation-type: read
       x-publicly-exposed: true
       parameters:
@@ -9502,6 +9680,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/EnvelopeUnknown"
           x-inferred: Status inferred from Express defaults; the handler calls no explicit res.status() for success.
+        "400":
+          description: Validation failed or the request was malformed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "401":
           description: Missing, invalid or expired access token
           content:
@@ -9818,6 +10002,62 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /api/analytics/activity:
+    get:
+      operationId: getAnalyticsActivity
+      tags:
+      - Analytics
+      summary: List Activity
+      description: |-
+        The time-ordered activity stream behind Home's activity card.
+
+        Open to every tenant member for the same reason as the queue: an agent needs
+        to see that a refund is awaiting approval before they promise one.
+
+        Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body.
+
+        Implemented at `services/analytics/src/routes/analytics.ts:117` (analytics service).
+      security:
+      - bearerAuth: []
+      x-service: analytics
+      x-source: services/analytics/src/routes/analytics.ts:117
+      x-operation-type: read
+      x-publicly-exposed: true
+      x-service-calls:
+      - analyticsService.getActivity
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Read from `req.query` by the handler; type is not declared in source.
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Read from `req.query` by the handler; type is not declared in source.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeUnknown"
+          x-inferred: Status inferred from Express defaults; the handler calls no explicit res.status() for success.
+        "401":
+          description: Missing, invalid or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Unexpected server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /api/analytics/agents:
     get:
       operationId: getAnalyticsAgents
@@ -9835,8 +10075,8 @@ paths:
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
-        roles:
-        - ADMIN
+        permissions:
+        - analytics:workspace:read
       x-service-calls:
       - analyticsService.getAgentStats
       responses:
@@ -9874,16 +10114,16 @@ paths:
       description: |-
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body.
 
-        Implemented at `services/analytics/src/routes/analytics.ts:153` (analytics service).
+        Implemented at `services/analytics/src/routes/analytics.ts:206` (analytics service).
       security:
       - bearerAuth: []
       x-service: analytics
-      x-source: services/analytics/src/routes/analytics.ts:153
+      x-source: services/analytics/src/routes/analytics.ts:206
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
-        roles:
-        - ADMIN
+        permissions:
+        - analytics:dashboard:read
       x-service-calls:
       - analyticsService.getAIPerformance
       parameters:
@@ -9934,16 +10174,16 @@ paths:
       description: |-
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body.
 
-        Implemented at `services/analytics/src/routes/analytics.ts:129` (analytics service).
+        Implemented at `services/analytics/src/routes/analytics.ts:182` (analytics service).
       security:
       - bearerAuth: []
       x-service: analytics
-      x-source: services/analytics/src/routes/analytics.ts:129
+      x-source: services/analytics/src/routes/analytics.ts:182
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
-        roles:
-        - ADMIN
+        permissions:
+        - analytics:workspace:read
       x-service-calls:
       - analyticsService.getChannelPerformance
       parameters:
@@ -10002,8 +10242,8 @@ paths:
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
-        roles:
-        - ADMIN
+        permissions:
+        - analytics:dashboard:read
       x-service-calls:
       - analyticsService.getDailyVolume
       parameters:
@@ -10056,8 +10296,8 @@ paths:
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
-        roles:
-        - ADMIN
+        permissions:
+        - analytics:dashboard:read
       x-service-calls:
       - analyticsService.getDashboardStats
       responses:
@@ -10095,16 +10335,16 @@ paths:
       description: |-
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body.
 
-        Implemented at `services/analytics/src/routes/analytics.ts:141` (analytics service).
+        Implemented at `services/analytics/src/routes/analytics.ts:194` (analytics service).
       security:
       - bearerAuth: []
       x-service: analytics
-      x-source: services/analytics/src/routes/analytics.ts:141
+      x-source: services/analytics/src/routes/analytics.ts:194
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
-        roles:
-        - ADMIN
+        permissions:
+        - analytics:dashboard:read
       x-service-calls:
       - analyticsService.getDepartmentPerformance
       parameters:
@@ -10115,6 +10355,76 @@ paths:
           type: string
         description: Read from `req.query` by the handler; type is not declared in source.
       - name: to
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Read from `req.query` by the handler; type is not declared in source.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeUnknown"
+          x-inferred: Status inferred from Express defaults; the handler calls no explicit res.status() for success.
+        "401":
+          description: Missing, invalid or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Authenticated, but not permitted to perform this operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Unexpected server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/analytics/dormant-customers:
+    get:
+      operationId: getAnalyticsDormantCustomers
+      tags:
+      - Analytics
+      summary: List Dormant Customers
+      description: |-
+        Customers who have gone quiet. ADMIN: this is a list of named customers with
+        their phone numbers, which is a different thing from a queue of conversations
+        already assigned to nobody, and it is the input to an outreach decision.
+
+        Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body.
+
+        Implemented at `services/analytics/src/routes/analytics.ts:324` (analytics service).
+      security:
+      - bearerAuth: []
+      x-service: analytics
+      x-source: services/analytics/src/routes/analytics.ts:324
+      x-operation-type: read
+      x-publicly-exposed: true
+      x-authorization:
+        permissions:
+        - analytics:workspace:read
+      x-service-calls:
+      - analyticsService.getDormantCustomers
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Read from `req.query` by the handler; type is not declared in source.
+      - name: days
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Read from `req.query` by the handler; type is not declared in source.
+      - name: minConversations
         in: query
         required: false
         schema:
@@ -10210,8 +10520,8 @@ paths:
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
-        roles:
-        - ADMIN
+        permissions:
+        - analytics:dashboard:read
       x-service-calls:
       - analyticsService.getHourlyVolume
       parameters:
@@ -10247,6 +10557,58 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /api/analytics/in-flight:
+    get:
+      operationId: getAnalyticsInFlight
+      tags:
+      - Analytics
+      summary: List In Flight
+      description: |-
+        What the AI is doing at this instant - the dark card's opening line.
+
+        Part of the shared operational picture, so it rides the same permission as
+        the queue rather than the reporting one.
+
+        Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body.
+
+        Implemented at `services/analytics/src/routes/analytics.ts:275` (analytics service).
+      security:
+      - bearerAuth: []
+      x-service: analytics
+      x-source: services/analytics/src/routes/analytics.ts:275
+      x-operation-type: read
+      x-publicly-exposed: true
+      x-authorization:
+        permissions:
+        - analytics:workspace:read
+      x-service-calls:
+      - analyticsService.getInFlight
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeUnknown"
+          x-inferred: Status inferred from Express defaults; the handler calls no explicit res.status() for success.
+        "401":
+          description: Missing, invalid or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Authenticated, but not permitted to perform this operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Unexpected server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /api/analytics/insights:
     get:
       operationId: getAnalyticsInsights
@@ -10256,16 +10618,16 @@ paths:
       description: |-
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body.
 
-        Implemented at `services/analytics/src/routes/analytics.ts:165` (analytics service).
+        Implemented at `services/analytics/src/routes/analytics.ts:218` (analytics service).
       security:
       - bearerAuth: []
       x-service: analytics
-      x-source: services/analytics/src/routes/analytics.ts:165
+      x-source: services/analytics/src/routes/analytics.ts:218
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
-        roles:
-        - ADMIN
+        permissions:
+        - analytics:workspace:read
       x-service-calls:
       - analyticsService.getAIInsights
       responses:
@@ -10294,6 +10656,85 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /api/analytics/insights/{id}/dismiss:
+    post:
+      operationId: postAnalyticsInsightsIdDismiss
+      tags:
+      - Analytics
+      summary: Create Dismiss
+      description: |-
+        Hide an insight. The "Worth knowing" card is informational - a trend and a
+        Dismiss - and this is the whole of its interaction. Anything that ACTS on an
+        insight belongs in Outreach, behind broadcast validation, template approval
+        and audience preview, not behind a second send path with none of them.
+
+        ADMIN, unlike the queue and the activity stream: dismissing hides the card
+        for everyone in the tenant, so it is not one agent's call.
+
+        Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body.
+
+        This is a write operation.
+
+        Implemented at `services/analytics/src/routes/analytics.ts:237` (analytics service).
+      security:
+      - bearerAuth: []
+      x-service: analytics
+      x-source: services/analytics/src/routes/analytics.ts:237
+      x-operation-type: write
+      x-publicly-exposed: true
+      x-authorization:
+        permissions:
+        - analytics:dashboard:read
+      x-service-calls:
+      - analyticsService.dismissInsight
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: "`id` path segment."
+      requestBody:
+        required: false
+        description: No Zod schema is declared for this route; the handler reads `req.body` directly. Shape is not verifiable from source.
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeUnknown"
+          x-inferred: Status inferred from Express defaults; the handler calls no explicit res.status() for success.
+        "400":
+          description: Validation failed or the request was malformed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Missing, invalid or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Authenticated, but not permitted to perform this operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Unexpected server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+      x-documentation-gap: request-body-unschematized
   /api/analytics/overview:
     get:
       operationId: getAnalyticsOverview
@@ -10303,16 +10744,16 @@ paths:
       description: |-
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body.
 
-        Implemented at `services/analytics/src/routes/analytics.ts:92` (analytics service).
+        Implemented at `services/analytics/src/routes/analytics.ts:145` (analytics service).
       security:
       - bearerAuth: []
       x-service: analytics
-      x-source: services/analytics/src/routes/analytics.ts:92
+      x-source: services/analytics/src/routes/analytics.ts:145
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
-        roles:
-        - ADMIN
+        permissions:
+        - analytics:workspace:read
       x-service-calls:
       - analyticsService.getOverview
       parameters:
@@ -10354,6 +10795,65 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /api/analytics/product-demand:
+    get:
+      operationId: getAnalyticsProductDemand
+      tags:
+      - Analytics
+      summary: List Product Demand
+      description: |-
+        What shoppers asked the catalogue for, by ISO week.
+
+        Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body.
+
+        Implemented at `services/analytics/src/routes/analytics.ts:306` (analytics service).
+      security:
+      - bearerAuth: []
+      x-service: analytics
+      x-source: services/analytics/src/routes/analytics.ts:306
+      x-operation-type: read
+      x-publicly-exposed: true
+      x-service-calls:
+      - analyticsService.getProductDemand
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Read from `req.query` by the handler; type is not declared in source.
+      - name: week
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Read from `req.query` by the handler; type is not declared in source.
+      - name: includeStocked
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Read from `req.query` by the handler; type is not declared in source.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeUnknown"
+          x-inferred: Status inferred from Express defaults; the handler calls no explicit res.status() for success.
+        "401":
+          description: Missing, invalid or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Unexpected server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /api/analytics/queue:
     get:
       operationId: getAnalyticsQueue
@@ -10371,8 +10871,8 @@ paths:
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
-        roles:
-        - ADMIN
+        permissions:
+        - analytics:workspace:read
       x-service-calls:
       - analyticsService.getQueueDepth
       responses:
@@ -10401,6 +10901,176 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /api/analytics/queue/items:
+    get:
+      operationId: getAnalyticsQueueItems
+      tags:
+      - Analytics
+      summary: List Items
+      description: |-
+        The ranked queue behind Home's "needs you now".
+
+        NOT requireRole("ADMIN"): this is the list an agent works from, and the
+        conversations in it are unassigned ones any member could pick up. Every
+        other route here is a management report, which is why they are admin-gated.
+
+        Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body.
+
+        Implemented at `services/analytics/src/routes/analytics.ts:99` (analytics service).
+      security:
+      - bearerAuth: []
+      x-service: analytics
+      x-source: services/analytics/src/routes/analytics.ts:99
+      x-operation-type: read
+      x-publicly-exposed: true
+      x-service-calls:
+      - analyticsService.getQueueItems
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Read from `req.query` by the handler; type is not declared in source.
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Read from `req.query` by the handler; type is not declared in source.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeUnknown"
+          x-inferred: Status inferred from Express defaults; the handler calls no explicit res.status() for success.
+        "401":
+          description: Missing, invalid or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Unexpected server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/analytics/quiet-day:
+    get:
+      operationId: getAnalyticsQuietDay
+      tags:
+      - Analytics
+      summary: List Quiet Day
+      description: |-
+        "Worth an hour, while it is quiet" - the four sources in one ranked list.
+
+        Ranked server-side so Home and any other surface showing this list cannot
+        order it differently.
+
+        Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body.
+
+        Implemented at `services/analytics/src/routes/analytics.ts:258` (analytics service).
+      security:
+      - bearerAuth: []
+      x-service: analytics
+      x-source: services/analytics/src/routes/analytics.ts:258
+      x-operation-type: read
+      x-publicly-exposed: true
+      x-authorization:
+        permissions:
+        - analytics:workspace:read
+      x-service-calls:
+      - analyticsService.getQuietDayList
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Read from `req.query` by the handler; type is not declared in source.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeUnknown"
+          x-inferred: Status inferred from Express defaults; the handler calls no explicit res.status() for success.
+        "401":
+          description: Missing, invalid or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Authenticated, but not permitted to perform this operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Unexpected server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/analytics/time-saved:
+    get:
+      operationId: getAnalyticsTimeSaved
+      tags:
+      - Analytics
+      summary: List Time Saved
+      description: |-
+        Seconds the AI saved, with the arithmetic attached. Any tenant member: it is
+        a headline on Home, not a management report.
+
+        Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body.
+
+        Implemented at `services/analytics/src/routes/analytics.ts:133` (analytics service).
+      security:
+      - bearerAuth: []
+      x-service: analytics
+      x-source: services/analytics/src/routes/analytics.ts:133
+      x-operation-type: read
+      x-publicly-exposed: true
+      x-service-calls:
+      - analyticsService.getTimeSaved
+      parameters:
+      - name: from
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Read from `req.query` by the handler; type is not declared in source.
+      - name: to
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Read from `req.query` by the handler; type is not declared in source.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeUnknown"
+          x-inferred: Status inferred from Express defaults; the handler calls no explicit res.status() for success.
+        "401":
+          description: Missing, invalid or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Unexpected server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /api/analytics/tool-usage:
     get:
       operationId: getAnalyticsToolUsage
@@ -10410,16 +11080,16 @@ paths:
       description: |-
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body.
 
-        Implemented at `services/analytics/src/routes/analytics.ts:117` (analytics service).
+        Implemented at `services/analytics/src/routes/analytics.ts:170` (analytics service).
       security:
       - bearerAuth: []
       x-service: analytics
-      x-source: services/analytics/src/routes/analytics.ts:117
+      x-source: services/analytics/src/routes/analytics.ts:170
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
-        roles:
-        - ADMIN
+        permissions:
+        - analytics:dashboard:read
       x-service-calls:
       - analyticsService.getToolUsageStats
       parameters:
@@ -10470,16 +11140,16 @@ paths:
       description: |-
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body.
 
-        Implemented at `services/analytics/src/routes/analytics.ts:104` (analytics service).
+        Implemented at `services/analytics/src/routes/analytics.ts:157` (analytics service).
       security:
       - bearerAuth: []
       x-service: analytics
-      x-source: services/analytics/src/routes/analytics.ts:104
+      x-source: services/analytics/src/routes/analytics.ts:157
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
-        roles:
-        - ADMIN
+        permissions:
+        - analytics:dashboard:read
       x-service-calls:
       - analyticsService.getTopQuestions
       parameters:
@@ -10527,6 +11197,72 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /api/analytics/unanswered-questions:
+    get:
+      operationId: getAnalyticsUnansweredQuestions
+      tags:
+      - Analytics
+      summary: List Unanswered Questions
+      description: |-
+        Questions GOTCHA could not answer. Any tenant member: the point of the card
+        is that whoever sees it can go and write the missing answer.
+
+        Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body.
+
+        Implemented at `services/analytics/src/routes/analytics.ts:289` (analytics service).
+      security:
+      - bearerAuth: []
+      x-service: analytics
+      x-source: services/analytics/src/routes/analytics.ts:289
+      x-operation-type: read
+      x-publicly-exposed: true
+      x-service-calls:
+      - analyticsService.getUnansweredQuestions
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Read from `req.query` by the handler; type is not declared in source.
+      - name: includeResolved
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Read from `req.query` by the handler; type is not declared in source.
+      - name: from
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Read from `req.query` by the handler; type is not declared in source.
+      - name: to
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Read from `req.query` by the handler; type is not declared in source.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeUnknown"
+          x-inferred: Status inferred from Express defaults; the handler calls no explicit res.status() for success.
+        "401":
+          description: Missing, invalid or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Unexpected server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /api/approvals:
     get:
       operationId: getApprovals
@@ -10542,11 +11278,11 @@ paths:
 
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be ACTIVE.
 
-        Implemented at `services/conversation/src/routes/approvals.ts:896` (conversation service).
+        Implemented at `services/conversation/src/routes/approvals.ts:899` (conversation service).
       security:
       - bearerAuth: []
       x-service: conversation
-      x-source: services/conversation/src/routes/approvals.ts:896
+      x-source: services/conversation/src/routes/approvals.ts:899
       x-operation-type: read
       x-publicly-exposed: true
       x-database:
@@ -10604,11 +11340,11 @@ paths:
 
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be ACTIVE.
 
-        Implemented at `services/conversation/src/routes/approvals.ts:951` (conversation service).
+        Implemented at `services/conversation/src/routes/approvals.ts:954` (conversation service).
       security:
       - bearerAuth: []
       x-service: conversation
-      x-source: services/conversation/src/routes/approvals.ts:951
+      x-source: services/conversation/src/routes/approvals.ts:954
       x-operation-type: read
       x-publicly-exposed: true
       x-database:
@@ -10669,11 +11405,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/conversation/src/routes/approvals.ts:1005` (conversation service).
+        Implemented at `services/conversation/src/routes/approvals.ts:1008` (conversation service).
       security:
       - bearerAuth: []
       x-service: conversation
-      x-source: services/conversation/src/routes/approvals.ts:1005
+      x-source: services/conversation/src/routes/approvals.ts:1008
       x-operation-type: write
       x-publicly-exposed: true
       x-database:
@@ -10750,11 +11486,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/conversation/src/routes/approvals.ts:805` (conversation service).
+        Implemented at `services/conversation/src/routes/approvals.ts:808` (conversation service).
       security:
       - internalServiceToken: []
       x-service: conversation
-      x-source: services/conversation/src/routes/approvals.ts:805
+      x-source: services/conversation/src/routes/approvals.ts:808
       x-operation-type: write
       x-publicly-exposed: true
       parameters:
@@ -10826,11 +11562,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/conversation/src/routes/approvals.ts:853` (conversation service).
+        Implemented at `services/conversation/src/routes/approvals.ts:856` (conversation service).
       security:
       - internalServiceToken: []
       x-service: conversation
-      x-source: services/conversation/src/routes/approvals.ts:853
+      x-source: services/conversation/src/routes/approvals.ts:856
       x-operation-type: write
       x-publicly-exposed: true
       parameters:
@@ -10897,11 +11633,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/conversation/src/routes/approvals.ts:1204` (conversation service).
+        Implemented at `services/conversation/src/routes/approvals.ts:1207` (conversation service).
       security:
       - bearerAuth: []
       x-service: conversation
-      x-source: services/conversation/src/routes/approvals.ts:1204
+      x-source: services/conversation/src/routes/approvals.ts:1207
       x-operation-type: write
       x-publicly-exposed: true
       x-database:
@@ -10980,11 +11716,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/conversation/src/routes/approvals.ts:1155` (conversation service).
+        Implemented at `services/conversation/src/routes/approvals.ts:1158` (conversation service).
       security:
       - bearerAuth: []
       x-service: conversation
-      x-source: services/conversation/src/routes/approvals.ts:1155
+      x-source: services/conversation/src/routes/approvals.ts:1158
       x-operation-type: write
       x-publicly-exposed: true
       parameters:
@@ -11512,22 +12248,82 @@ paths:
       - Auth & Identity
       summary: Get Setup
       description: |-
+        No authentication middleware is applied to this route.
+
+        Implemented at `services/auth/src/routes/setup-link.ts:114` (auth service).
+      security: []
+      x-service: auth
+      x-source: services/auth/src/routes/setup-link.ts:114
+      x-operation-type: read
+      x-publicly-exposed: true
+      x-rate-limit:
+      - redeemLimiter
+      parameters:
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+        description: "`token` path segment."
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeUnknown"
+          x-inferred: Status inferred from Express defaults; the handler calls no explicit res.status() for success.
+        "429":
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/auth/setup/{token}/state:
+    get:
+      operationId: getAuthSetupTokenState
+      tags:
+      - Auth & Identity
+      summary: Get State
+      description: |-
         Redeem a setup link.
 
         Always a redirect, never a JSON body: this URL is opened by a human in a
         browser straight from an email, and the only useful response is the next
         screen.
 
+
+        GET /:token/state — the invitation as DATA.
+
+        `GET /:token` answers with a 302 in every branch, which is right for an
+        emailed link and useless to a frontend that has to render an acceptance
+        screen: a redirect cannot say who invited whom, or why the link is dead.
+
+        Declared BEFORE "/:token", which would otherwise match "state" as a token.
+
+        DELIBERATELY NOT REDEEMED. Reading the state must never consume the link -
+        the screen would then break on a refresh, and a preview fetch would burn an
+        invitation before the recipient ever clicked accept. Redemption stays on the
+        redirect route, which is the one an actual click goes through.
+
+        Deliberately thin on identity, too. An invalid token gets the same shape as
+        a valid one with nothing filled in, so this cannot be used to probe which
+        addresses are registered - the same reasoning the resend path already
+        follows.
+
         No authentication middleware is applied to this route.
 
-        Implemented at `services/auth/src/routes/setup-link.ts:55` (auth service).
+        Implemented at `services/auth/src/routes/setup-link.ts:74` (auth service).
       security: []
       x-service: auth
-      x-source: services/auth/src/routes/setup-link.ts:55
+      x-source: services/auth/src/routes/setup-link.ts:74
       x-operation-type: read
       x-publicly-exposed: true
       x-rate-limit:
       - redeemLimiter
+      x-database:
+      - tenant.findUnique
+      - setupLink.findUnique
       parameters:
       - name: token
         in: path
@@ -11567,10 +12363,10 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/auth/src/routes/setup-link.ts:117` (auth service).
+        Implemented at `services/auth/src/routes/setup-link.ts:176` (auth service).
       security: []
       x-service: auth
-      x-source: services/auth/src/routes/setup-link.ts:117
+      x-source: services/auth/src/routes/setup-link.ts:176
       x-operation-type: write
       x-publicly-exposed: true
       x-rate-limit:
@@ -14348,11 +15144,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/auth/src/routes/channels.ts:1757` (auth service).
+        Implemented at `services/auth/src/routes/channels.ts:1834` (auth service).
       security:
       - bearerAuth: []
       x-service: auth
-      x-source: services/auth/src/routes/channels.ts:1757
+      x-source: services/auth/src/routes/channels.ts:1834
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
@@ -14415,11 +15211,11 @@ paths:
 
         Side effects: outbound HTTP (axios.delete); outbound HTTP (axios.post).
 
-        Implemented at `services/auth/src/routes/channels.ts:1667` (auth service).
+        Implemented at `services/auth/src/routes/channels.ts:1744` (auth service).
       security:
       - bearerAuth: []
       x-service: auth
-      x-source: services/auth/src/routes/channels.ts:1667
+      x-source: services/auth/src/routes/channels.ts:1744
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
@@ -14498,11 +15294,11 @@ paths:
 
         Side effects: outbound HTTP (axios.get).
 
-        Implemented at `services/auth/src/routes/channels.ts:207` (auth service).
+        Implemented at `services/auth/src/routes/channels.ts:284` (auth service).
       security:
       - bearerAuth: []
       x-service: auth
-      x-source: services/auth/src/routes/channels.ts:207
+      x-source: services/auth/src/routes/channels.ts:284
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -14580,11 +15376,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/auth/src/routes/channels.ts:1636` (auth service).
+        Implemented at `services/auth/src/routes/channels.ts:1713` (auth service).
       security:
       - bearerAuth: []
       x-service: auth
-      x-source: services/auth/src/routes/channels.ts:1636
+      x-source: services/auth/src/routes/channels.ts:1713
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
@@ -14664,11 +15460,11 @@ paths:
 
         Side effects: outbound HTTP (axios.get); outbound HTTP (axios.post).
 
-        Implemented at `services/auth/src/routes/channels.ts:1800` (auth service).
+        Implemented at `services/auth/src/routes/channels.ts:1877` (auth service).
       security:
       - bearerAuth: []
       x-service: auth
-      x-source: services/auth/src/routes/channels.ts:1800
+      x-source: services/auth/src/routes/channels.ts:1877
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -14728,11 +15524,11 @@ paths:
       description: |-
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body.
 
-        Implemented at `services/auth/src/routes/channels.ts:2044` (auth service).
+        Implemented at `services/auth/src/routes/channels.ts:2121` (auth service).
       security:
       - bearerAuth: []
       x-service: auth
-      x-source: services/auth/src/routes/channels.ts:2044
+      x-source: services/auth/src/routes/channels.ts:2121
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -14769,11 +15565,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/auth/src/routes/channels.ts:1913` (auth service).
+        Implemented at `services/auth/src/routes/channels.ts:1990` (auth service).
       security:
       - bearerAuth: []
       x-service: auth
-      x-source: services/auth/src/routes/channels.ts:1913
+      x-source: services/auth/src/routes/channels.ts:1990
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
@@ -14873,11 +15669,11 @@ paths:
 
         Side effects: outbound HTTP (axios.get); outbound HTTP (axios.post).
 
-        Implemented at `services/auth/src/routes/channels.ts:301` (auth service).
+        Implemented at `services/auth/src/routes/channels.ts:378` (auth service).
       security:
       - bearerAuth: []
       x-service: auth
-      x-source: services/auth/src/routes/channels.ts:301
+      x-source: services/auth/src/routes/channels.ts:378
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
@@ -14953,11 +15749,11 @@ paths:
 
         Side effects: outbound HTTP (axios.post); outbound HTTP (axios.get).
 
-        Implemented at `services/auth/src/routes/channels.ts:536` (auth service).
+        Implemented at `services/auth/src/routes/channels.ts:613` (auth service).
       security:
       - bearerAuth: []
       x-service: auth
-      x-source: services/auth/src/routes/channels.ts:536
+      x-source: services/auth/src/routes/channels.ts:613
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
@@ -15029,10 +15825,10 @@ paths:
 
         Side effects: outbound HTTP (axios.get); outbound HTTP (axios.post).
 
-        Implemented at `services/auth/src/routes/channels.ts:786` (auth service).
+        Implemented at `services/auth/src/routes/channels.ts:863` (auth service).
       security: []
       x-service: auth
-      x-source: services/auth/src/routes/channels.ts:786
+      x-source: services/auth/src/routes/channels.ts:863
       x-operation-type: read
       x-publicly-exposed: true
       x-database:
@@ -15059,10 +15855,10 @@ paths:
       description: |-
         No authentication middleware is applied to this route.
 
-        Implemented at `services/auth/src/routes/channels.ts:625` (auth service).
+        Implemented at `services/auth/src/routes/channels.ts:702` (auth service).
       security: []
       x-service: auth
-      x-source: services/auth/src/routes/channels.ts:625
+      x-source: services/auth/src/routes/channels.ts:702
       x-operation-type: read
       x-publicly-exposed: true
       parameters:
@@ -15122,6 +15918,59 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /api/channels/state:
+    get:
+      operationId: getChannelsState
+      tags:
+      - Channels
+      summary: List State
+      description: |-
+        The Inbox/History empty states need to know WHY a list is empty ("no
+        channel connected" vs "channel broken" vs "no conversations yet"), and
+        agents see those pages too - the full listing above is ADMIN-only. This
+        returns health COUNTS only: no tokens, external ids, or error details.
+
+        GET /channels/state — one row per channel, not four counts.
+
+        `/summary` answers "how many are connected". Day one has to say WHICH:
+        "WhatsApp connected, Instagram awaiting verification". A count cannot name a
+        channel and cannot distinguish connected-but-unverified from connected, and
+        those are the two states the setup screen exists to tell apart.
+
+        Any tenant member. It carries no credentials and no customer data - the
+        channel's own identifier and its state, which is what the screen renders.
+
+        Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body.
+
+        Implemented at `services/auth/src/routes/channels.ts:193` (auth service).
+      security:
+      - bearerAuth: []
+      x-service: auth
+      x-source: services/auth/src/routes/channels.ts:193
+      x-operation-type: read
+      x-publicly-exposed: true
+      x-database:
+      - channelAccount.findMany
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeUnknown"
+          x-inferred: Status inferred from Express defaults; the handler calls no explicit res.status() for success.
+        "401":
+          description: Missing, invalid or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Unexpected server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /api/channels/summary:
     get:
       operationId: getChannelsSummary
@@ -15129,18 +15978,13 @@ paths:
       - Channels
       summary: List Summary
       description: |-
-        The Inbox/History empty states need to know WHY a list is empty ("no
-        channel connected" vs "channel broken" vs "no conversations yet"), and
-        agents see those pages too - the full listing above is ADMIN-only. This
-        returns health COUNTS only: no tokens, external ids, or error details.
-
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body.
 
-        Implemented at `services/auth/src/routes/channels.ts:182` (auth service).
+        Implemented at `services/auth/src/routes/channels.ts:259` (auth service).
       security:
       - bearerAuth: []
       x-service: auth
-      x-source: services/auth/src/routes/channels.ts:182
+      x-source: services/auth/src/routes/channels.ts:259
       x-operation-type: read
       x-publicly-exposed: true
       x-database:
@@ -15174,11 +16018,11 @@ paths:
       description: |-
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body.
 
-        Implemented at `services/auth/src/routes/channels.ts:2026` (auth service).
+        Implemented at `services/auth/src/routes/channels.ts:2103` (auth service).
       security:
       - bearerAuth: []
       x-service: auth
-      x-source: services/auth/src/routes/channels.ts:2026
+      x-source: services/auth/src/routes/channels.ts:2103
       x-operation-type: read
       x-publicly-exposed: true
       x-database:
@@ -15226,11 +16070,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/auth/src/routes/channels.ts:1994` (auth service).
+        Implemented at `services/auth/src/routes/channels.ts:2071` (auth service).
       security:
       - bearerAuth: []
       x-service: auth
-      x-source: services/auth/src/routes/channels.ts:1994
+      x-source: services/auth/src/routes/channels.ts:2071
       x-operation-type: write
       x-publicly-exposed: true
       x-database:
@@ -15289,11 +16133,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/auth/src/routes/channels.ts:1954` (auth service).
+        Implemented at `services/auth/src/routes/channels.ts:2031` (auth service).
       security:
       - bearerAuth: []
       x-service: auth
-      x-source: services/auth/src/routes/channels.ts:1954
+      x-source: services/auth/src/routes/channels.ts:2031
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
@@ -19408,11 +20252,11 @@ paths:
       description: |-
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be ACTIVE.
 
-        Implemented at `services/conversation/src/routes/conversations.ts:47` (conversation service).
+        Implemented at `services/conversation/src/routes/conversations.ts:69` (conversation service).
       security:
       - bearerAuth: []
       x-service: conversation
-      x-source: services/conversation/src/routes/conversations.ts:47
+      x-source: services/conversation/src/routes/conversations.ts:69
       x-operation-type: read
       x-publicly-exposed: true
       x-service-calls:
@@ -19724,11 +20568,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/conversation/src/routes/conversations.ts:189` (conversation service).
+        Implemented at `services/conversation/src/routes/conversations.ts:211` (conversation service).
       security:
       - bearerAuth: []
       x-service: conversation
-      x-source: services/conversation/src/routes/conversations.ts:189
+      x-source: services/conversation/src/routes/conversations.ts:211
       x-operation-type: write
       x-publicly-exposed: true
       x-database:
@@ -19788,11 +20632,11 @@ paths:
       description: |-
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be ACTIVE.
 
-        Implemented at `services/conversation/src/routes/conversations.ts:102` (conversation service).
+        Implemented at `services/conversation/src/routes/conversations.ts:124` (conversation service).
       security:
       - bearerAuth: []
       x-service: conversation
-      x-source: services/conversation/src/routes/conversations.ts:102
+      x-source: services/conversation/src/routes/conversations.ts:124
       x-operation-type: read
       x-publicly-exposed: true
       x-service-calls:
@@ -19841,11 +20685,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/conversation/src/routes/conversations.ts:113` (conversation service).
+        Implemented at `services/conversation/src/routes/conversations.ts:135` (conversation service).
       security:
       - bearerAuth: []
       x-service: conversation
-      x-source: services/conversation/src/routes/conversations.ts:113
+      x-source: services/conversation/src/routes/conversations.ts:135
       x-operation-type: write
       x-publicly-exposed: true
       x-service-calls:
@@ -19891,11 +20735,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/conversation/src/routes/conversations.ts:174` (conversation service).
+        Implemented at `services/conversation/src/routes/conversations.ts:196` (conversation service).
       security:
       - bearerAuth: []
       x-service: conversation
-      x-source: services/conversation/src/routes/conversations.ts:174
+      x-source: services/conversation/src/routes/conversations.ts:196
       x-operation-type: write
       x-publicly-exposed: true
       x-service-calls:
@@ -19939,11 +20783,11 @@ paths:
       description: |-
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be ACTIVE.
 
-        Implemented at `services/conversation/src/routes/conversations.ts:91` (conversation service).
+        Implemented at `services/conversation/src/routes/conversations.ts:113` (conversation service).
       security:
       - bearerAuth: []
       x-service: conversation
-      x-source: services/conversation/src/routes/conversations.ts:91
+      x-source: services/conversation/src/routes/conversations.ts:113
       x-operation-type: read
       x-publicly-exposed: true
       parameters:
@@ -19977,11 +20821,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/conversation/src/routes/conversations.ts:96` (conversation service).
+        Implemented at `services/conversation/src/routes/conversations.ts:118` (conversation service).
       security:
       - bearerAuth: []
       x-service: conversation
-      x-source: services/conversation/src/routes/conversations.ts:96
+      x-source: services/conversation/src/routes/conversations.ts:118
       x-operation-type: write
       x-publicly-exposed: true
       parameters:
@@ -20027,11 +20871,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/conversation/src/routes/conversations.ts:143` (conversation service).
+        Implemented at `services/conversation/src/routes/conversations.ts:165` (conversation service).
       security:
       - bearerAuth: []
       x-service: conversation
-      x-source: services/conversation/src/routes/conversations.ts:143
+      x-source: services/conversation/src/routes/conversations.ts:165
       x-operation-type: write
       x-publicly-exposed: true
       x-service-calls:
@@ -20091,11 +20935,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/conversation/src/routes/conversations.ts:122` (conversation service).
+        Implemented at `services/conversation/src/routes/conversations.ts:144` (conversation service).
       security:
       - bearerAuth: []
       x-service: conversation
-      x-source: services/conversation/src/routes/conversations.ts:122
+      x-source: services/conversation/src/routes/conversations.ts:144
       x-operation-type: write
       x-publicly-exposed: true
       x-service-calls:
@@ -20144,11 +20988,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/conversation/src/routes/conversations.ts:133` (conversation service).
+        Implemented at `services/conversation/src/routes/conversations.ts:155` (conversation service).
       security:
       - bearerAuth: []
       x-service: conversation
-      x-source: services/conversation/src/routes/conversations.ts:133
+      x-source: services/conversation/src/routes/conversations.ts:155
       x-operation-type: write
       x-publicly-exposed: true
       x-service-calls:
@@ -20183,6 +21027,53 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
       x-documentation-gap: request-body-unschematized
+  /api/conversations/handovers/latest:
+    get:
+      operationId: getConversationsHandoversLatest
+      tags:
+      - Conversations
+      summary: List Latest
+      description: |-
+        The tenant's most recent change of handler.
+
+        `null` when nothing has been recorded, and the card must render that as
+        absence rather than as zero: a tenant deployed this morning and a tenant
+        whose AI has never needed help both have no handovers, and they do not mean
+        the same thing.
+
+        Any tenant member. Whether the AI recently gave up is exactly what an agent
+        wants to know before picking the next conversation. Declared before "/:id",
+        which would otherwise read "handovers" as a conversation id.
+
+        Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be ACTIVE.
+
+        Implemented at `services/conversation/src/routes/conversations.ts:49` (conversation service).
+      security:
+      - bearerAuth: []
+      x-service: conversation
+      x-source: services/conversation/src/routes/conversations.ts:49
+      x-operation-type: read
+      x-publicly-exposed: true
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeUnknown"
+          x-inferred: Status inferred from Express defaults; the handler calls no explicit res.status() for success.
+        "401":
+          description: Missing, invalid or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Unexpected server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /api/conversations/history/{customerExternalId}:
     get:
       operationId: getConversationsHistoryCustomerExternalId
@@ -20192,11 +21083,11 @@ paths:
       description: |-
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be ACTIVE.
 
-        Implemented at `services/conversation/src/routes/conversations.ts:71` (conversation service).
+        Implemented at `services/conversation/src/routes/conversations.ts:93` (conversation service).
       security:
       - bearerAuth: []
       x-service: conversation
-      x-source: services/conversation/src/routes/conversations.ts:71
+      x-source: services/conversation/src/routes/conversations.ts:93
       x-operation-type: read
       x-publicly-exposed: true
       x-service-calls:
@@ -20243,11 +21134,11 @@ paths:
       description: |-
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be ACTIVE.
 
-        Implemented at `services/conversation/src/routes/conversations.ts:37` (conversation service).
+        Implemented at `services/conversation/src/routes/conversations.ts:59` (conversation service).
       security:
       - bearerAuth: []
       x-service: conversation
-      x-source: services/conversation/src/routes/conversations.ts:37
+      x-source: services/conversation/src/routes/conversations.ts:59
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -26131,11 +27022,11 @@ paths:
 
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
 
-        Implemented at `services/ai/src/routes/integrations.ts:288` (ai service).
+        Implemented at `services/ai/src/routes/integrations.ts:358` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/integrations.ts:288
+      x-source: services/ai/src/routes/integrations.ts:358
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -26200,11 +27091,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/ai/src/routes/integrations.ts:885` (ai service).
+        Implemented at `services/ai/src/routes/integrations.ts:955` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/integrations.ts:885
+      x-source: services/ai/src/routes/integrations.ts:955
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
@@ -26288,11 +27179,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/ai/src/routes/integrations.ts:333` (ai service).
+        Implemented at `services/ai/src/routes/integrations.ts:403` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/integrations.ts:333
+      x-source: services/ai/src/routes/integrations.ts:403
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
@@ -26370,11 +27261,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/ai/src/routes/integrations.ts:607` (ai service).
+        Implemented at `services/ai/src/routes/integrations.ts:677` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/integrations.ts:607
+      x-source: services/ai/src/routes/integrations.ts:677
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
@@ -26458,11 +27349,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/ai/src/routes/integrations.ts:655` (ai service).
+        Implemented at `services/ai/src/routes/integrations.ts:725` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/integrations.ts:655
+      x-source: services/ai/src/routes/integrations.ts:725
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
@@ -26546,11 +27437,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/ai/src/routes/integrations.ts:559` (ai service).
+        Implemented at `services/ai/src/routes/integrations.ts:629` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/integrations.ts:559
+      x-source: services/ai/src/routes/integrations.ts:629
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
@@ -26626,11 +27517,11 @@ paths:
 
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
 
-        Implemented at `services/ai/src/routes/integrations.ts:856` (ai service).
+        Implemented at `services/ai/src/routes/integrations.ts:926` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/integrations.ts:856
+      x-source: services/ai/src/routes/integrations.ts:926
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -26704,11 +27595,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/ai/src/routes/integrations.ts:411` (ai service).
+        Implemented at `services/ai/src/routes/integrations.ts:481` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/integrations.ts:411
+      x-source: services/ai/src/routes/integrations.ts:481
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
@@ -26789,11 +27680,11 @@ paths:
 
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
 
-        Implemented at `services/ai/src/routes/integrations.ts:712` (ai service).
+        Implemented at `services/ai/src/routes/integrations.ts:782` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/integrations.ts:712
+      x-source: services/ai/src/routes/integrations.ts:782
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -26863,11 +27754,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/ai/src/routes/integrations.ts:780` (ai service).
+        Implemented at `services/ai/src/routes/integrations.ts:850` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/integrations.ts:780
+      x-source: services/ai/src/routes/integrations.ts:850
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
@@ -26997,6 +27888,53 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
       x-documentation-gap: request-body-unschematized
+  /api/integrations/commerce/capabilities:
+    get:
+      operationId: getIntegrationsCommerceCapabilities
+      tags:
+      - Integrations
+      summary: List Capabilities
+      description: |-
+        Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
+
+        Implemented at `services/ai/src/routes/integrations.ts:106` (ai service).
+      security:
+      - bearerAuth: []
+      x-service: ai
+      x-source: services/ai/src/routes/integrations.ts:106
+      x-operation-type: read
+      x-publicly-exposed: true
+      x-authorization:
+        gates:
+        - canReadSystems
+      x-database:
+      - tenantIntegration.findFirst
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeUnknown"
+          x-inferred: Status inferred from Express defaults; the handler calls no explicit res.status() for success.
+        "401":
+          description: Missing, invalid or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Authenticated, but not permitted to perform this operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Unexpected server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /api/integrations/oauth/calendly/callback:
     get:
       operationId: getIntegrationsOauthCalendlyCallback
@@ -27408,11 +28346,11 @@ paths:
 
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
 
-        Implemented at `services/ai/src/routes/integrations.ts:87` (ai service).
+        Implemented at `services/ai/src/routes/integrations.ts:157` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/integrations.ts:87
+      x-source: services/ai/src/routes/integrations.ts:157
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -27470,11 +28408,11 @@ paths:
 
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
 
-        Implemented at `services/ai/src/routes/integrations.ts:130` (ai service).
+        Implemented at `services/ai/src/routes/integrations.ts:200` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/integrations.ts:130
+      x-source: services/ai/src/routes/integrations.ts:200
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -27535,11 +28473,11 @@ paths:
 
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
 
-        Implemented at `services/ai/src/routes/integrations.ts:250` (ai service).
+        Implemented at `services/ai/src/routes/integrations.ts:320` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/integrations.ts:250
+      x-source: services/ai/src/routes/integrations.ts:320
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -28881,6 +29819,53 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
       x-documentation-gap: request-body-unschematized
+  /api/internal/voice-sample:
+    post:
+      operationId: postInternalVoiceSample
+      tags:
+      - Internal
+      summary: Create Voice Sample
+      description: |-
+        Service-to-service only, authenticated by the internal shared secret.
+
+        This is a write operation.
+
+        Implemented at `services/ai/src/routes/internal-voice-sample.ts:24` (ai service).
+      security:
+      - internalServiceToken: []
+      x-service: ai
+      x-source: services/ai/src/routes/internal-voice-sample.ts:24
+      x-operation-type: write
+      x-publicly-exposed: false
+      requestBody:
+        required: false
+        description: No Zod schema is declared for this route; the handler reads `req.body` directly. Shape is not verifiable from source.
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeUnknown"
+          x-inferred: Status inferred from Express defaults; the handler calls no explicit res.status() for success.
+        "400":
+          description: Validation failed or the request was malformed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Temporarily unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+      x-documentation-gap: request-body-unschematized
   /api/knowledge-bases:
     get:
       operationId: getKnowledgeBases
@@ -29542,6 +30527,47 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
       x-documentation-gap: request-body-unschematized
+  /api/knowledge/ingest/latest:
+    get:
+      operationId: getKnowledgeIngestLatest
+      tags:
+      - Knowledge
+      summary: List Latest
+      description: |-
+        Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
+
+        Implemented at `services/ai/src/routes/knowledge-ingest.ts:26` (ai service).
+      security:
+      - bearerAuth: []
+      x-service: ai
+      x-source: services/ai/src/routes/knowledge-ingest.ts:26
+      x-operation-type: read
+      x-publicly-exposed: true
+      x-database:
+      - knowledgeDocument.count
+      - knowledgeDocument.findFirst
+      - knowledgeCandidate.count
+      - knowledgeCandidate.findMany
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeUnknown"
+          x-inferred: Status inferred from Express defaults; the handler calls no explicit res.status() for success.
+        "401":
+          description: Missing, invalid or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Unexpected server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /api/knowledge/integrations/{intId}:
     delete:
       operationId: deleteKnowledgeIntegrationsIntId
@@ -30941,6 +31967,110 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
       x-documentation-gap: request-body-unschematized
+  /api/notification-preferences/me:
+    get:
+      operationId: getNotificationPreferencesMe
+      tags:
+      - Notifications
+      summary: List Me
+      description: |-
+        Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be ACTIVE.
+
+        Implemented at `services/notifications/src/routes/notification-preferences-me.ts:64` (notifications service).
+      security:
+      - bearerAuth: []
+      x-service: notifications
+      x-source: services/notifications/src/routes/notification-preferences-me.ts:64
+      x-operation-type: read
+      x-publicly-exposed: true
+      x-database:
+      - userNotificationPreference.findUnique
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeUnknown"
+          x-inferred: Status inferred from Express defaults; the handler calls no explicit res.status() for success.
+        "401":
+          description: Missing, invalid or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Authenticated, but not permitted to perform this operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Unexpected server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    patch:
+      operationId: patchNotificationPreferencesMe
+      tags:
+      - Notifications
+      summary: Update Me
+      description: |-
+        Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be ACTIVE.
+
+        This is a write operation.
+
+        Implemented at `services/notifications/src/routes/notification-preferences-me.ts:83` (notifications service).
+      security:
+      - bearerAuth: []
+      x-service: notifications
+      x-source: services/notifications/src/routes/notification-preferences-me.ts:83
+      x-operation-type: write
+      x-publicly-exposed: true
+      x-database:
+      - userNotificationPreference.upsert
+      requestBody:
+        required: false
+        description: No Zod schema is declared for this route; the handler reads `req.body` directly. Shape is not verifiable from source.
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeUnknown"
+          x-inferred: Status inferred from Express defaults; the handler calls no explicit res.status() for success.
+        "400":
+          description: Validation failed or the request was malformed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Missing, invalid or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Authenticated, but not permitted to perform this operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Unexpected server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+      x-documentation-gap: request-body-unschematized
   /api/notifications:
     get:
       operationId: getNotifications
@@ -31001,11 +32131,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/notifications/src/routes/notifications.ts:68` (notifications service).
+        Implemented at `services/notifications/src/routes/notifications.ts:78` (notifications service).
       security:
       - bearerAuth: []
       x-service: notifications
-      x-source: services/notifications/src/routes/notifications.ts:68
+      x-source: services/notifications/src/routes/notifications.ts:78
       x-operation-type: write
       x-publicly-exposed: true
       parameters:
@@ -31055,11 +32185,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/notifications/src/routes/notifications.ts:90` (notifications service).
+        Implemented at `services/notifications/src/routes/notifications.ts:100` (notifications service).
       security:
       - bearerAuth: []
       x-service: notifications
-      x-source: services/notifications/src/routes/notifications.ts:90
+      x-source: services/notifications/src/routes/notifications.ts:100
       x-operation-type: write
       x-publicly-exposed: true
       requestBody:
@@ -31094,11 +32224,11 @@ paths:
       description: |-
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be ACTIVE.
 
-        Implemented at `services/notifications/src/routes/notifications.ts:53` (notifications service).
+        Implemented at `services/notifications/src/routes/notifications.ts:63` (notifications service).
       security:
       - bearerAuth: []
       x-service: notifications
-      x-source: services/notifications/src/routes/notifications.ts:53
+      x-source: services/notifications/src/routes/notifications.ts:63
       x-operation-type: read
       x-publicly-exposed: true
       responses:
@@ -31375,8 +32505,8 @@ paths:
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
-        roles:
-        - ADMIN
+        permissions:
+        - settings:workspace:update
       x-database:
       - tenant.findUnique
       - businessProfile.findUnique
@@ -33240,8 +34370,8 @@ paths:
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
-        roles:
-        - ADMIN
+        permissions:
+        - analytics:workspace:read
       x-database:
       - "aIAgent.findFirst({ where: { tenantId }, select: { id: true, status: true } })"
       - "flowCanvas.findUnique({ where: { tenantId }, select: { nodes: true, edges: true } })"
@@ -33294,8 +34424,8 @@ paths:
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
-        roles:
-        - ADMIN
+        permissions:
+        - analytics:workspace:read
       x-database:
       - tenant.findUnique
       - tenantOnboarding.findUnique
@@ -34737,8 +35867,8 @@ paths:
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
-        roles:
-        - ADMIN
+        permissions:
+        - settings:workspace:update
       x-database:
       - tenant.findUnique
       - businessProfile.findUnique
@@ -36602,8 +37732,8 @@ paths:
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
-        roles:
-        - ADMIN
+        permissions:
+        - analytics:workspace:read
       x-database:
       - "aIAgent.findFirst({ where: { tenantId }, select: { id: true, status: true } })"
       - "flowCanvas.findUnique({ where: { tenantId }, select: { nodes: true, edges: true } })"
@@ -36656,8 +37786,8 @@ paths:
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
-        roles:
-        - ADMIN
+        permissions:
+        - analytics:workspace:read
       x-database:
       - tenant.findUnique
       - tenantOnboarding.findUnique
@@ -36832,6 +37962,59 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /api/realtime/ticket:
+    post:
+      operationId: postRealtimeTicket
+      tags:
+      - Other
+      summary: Create Ticket
+      description: |-
+        Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be ACTIVE.
+
+        This is a write operation.
+
+        Implemented at `services/auth/src/routes/realtime.ts:26` (auth service).
+      security:
+      - bearerAuth: []
+      x-service: auth
+      x-source: services/auth/src/routes/realtime.ts:26
+      x-operation-type: write
+      x-publicly-exposed: true
+      requestBody:
+        required: false
+        description: No Zod schema is declared for this route; the handler reads `req.body` directly. Shape is not verifiable from source.
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeUnknown"
+          x-inferred: Status inferred from Express defaults; the handler calls no explicit res.status() for success.
+        "401":
+          description: Missing, invalid or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Authenticated, but not permitted to perform this operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Temporarily unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+      x-documentation-gap: request-body-unschematized
   /api/reasoner-shadow/{id}:
     get:
       operationId: getReasonerShadowId
@@ -38037,6 +39220,51 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
       x-documentation-gap: request-body-unschematized
+  /api/setup/state:
+    get:
+      operationId: getSetupState
+      tags:
+      - Other
+      summary: List State
+      description: |-
+        Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
+
+        Implemented at `services/auth/src/routes/setup-state.ts:30` (auth service).
+      security:
+      - bearerAuth: []
+      x-service: auth
+      x-source: services/auth/src/routes/setup-state.ts:30
+      x-operation-type: read
+      x-publicly-exposed: false
+      x-database:
+      - channelAccount.findFirst
+      - tenantIntegration.findFirst
+      - knowledgeDocument.findFirst
+      - aIAgent.findFirst
+      - businessPolicy.findUnique
+      - conversation.findFirst
+      - user.findMany
+      - tenant.findUnique
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeUnknown"
+          x-inferred: Status inferred from Express defaults; the handler calls no explicit res.status() for success.
+        "401":
+          description: Missing, invalid or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Unexpected server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /api/shopify-chat/bootstrap:
     post:
       operationId: postShopifyChatBootstrap
@@ -38246,10 +39474,10 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/ai/src/routes/shopify-chat-public.ts:860` (ai service).
+        Implemented at `services/ai/src/routes/shopify-chat-public.ts:863` (ai service).
       security: []
       x-service: ai
-      x-source: services/ai/src/routes/shopify-chat-public.ts:860
+      x-source: services/ai/src/routes/shopify-chat-public.ts:863
       x-operation-type: write
       x-publicly-exposed: true
       x-rate-limit:
@@ -38297,7 +39525,6 @@ paths:
       x-rate-limit:
       - conversationLimiter
       x-database:
-      - conversation.update
       - message.create
       requestBody:
         required: false
@@ -38345,10 +39572,10 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/ai/src/routes/shopify-chat-public.ts:779` (ai service).
+        Implemented at `services/ai/src/routes/shopify-chat-public.ts:782` (ai service).
       security: []
       x-service: ai
-      x-source: services/ai/src/routes/shopify-chat-public.ts:779
+      x-source: services/ai/src/routes/shopify-chat-public.ts:782
       x-operation-type: write
       x-publicly-exposed: true
       x-rate-limit:
@@ -43846,6 +45073,47 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
       x-documentation-gap: request-body-unschematized
+  /api/usage/allowance:
+    get:
+      operationId: getUsageAllowance
+      tags:
+      - Analytics
+      summary: List Allowance
+      description: |-
+        Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be ACTIVE.
+
+        Implemented at `services/billing/src/routes/usage-allowance.ts:30` (billing service).
+      security:
+      - bearerAuth: []
+      x-service: billing
+      x-source: services/billing/src/routes/usage-allowance.ts:30
+      x-operation-type: read
+      x-publicly-exposed: true
+      x-database:
+      - billableEntityTenant.findUnique
+      - plan.findUnique
+      - planVolumeOption.findFirst
+      - conversation.count
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeUnknown"
+          x-inferred: Status inferred from Express defaults; the handler calls no explicit res.status() for success.
+        "401":
+          description: Missing, invalid or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Unexpected server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /api/usage/daily:
     get:
       operationId: getUsageDaily
@@ -49473,6 +50741,342 @@ paths:
                 $ref: "#/components/schemas/EnvelopeUnknown"
         "403":
           description: Authenticated, but not permitted to perform this operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+      x-documentation-gap: request-body-unschematized
+  /api/workspace:
+    get:
+      operationId: getWorkspace
+      tags:
+      - Other
+      summary: List Workspace
+      description: |-
+        Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
+
+        Implemented at `services/auth/src/routes/workspace.ts:123` (auth service).
+      security:
+      - bearerAuth: []
+      x-service: auth
+      x-source: services/auth/src/routes/workspace.ts:123
+      x-operation-type: read
+      x-publicly-exposed: false
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeUnknown"
+          x-inferred: Status inferred from Express defaults; the handler calls no explicit res.status() for success.
+        "401":
+          description: Missing, invalid or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Unexpected server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    patch:
+      operationId: patchWorkspace
+      tags:
+      - Other
+      summary: Update Workspace
+      description: |-
+        Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
+
+        This is a write operation.
+
+        Implemented at `services/auth/src/routes/workspace.ts:134` (auth service).
+      security:
+      - bearerAuth: []
+      x-service: auth
+      x-source: services/auth/src/routes/workspace.ts:134
+      x-operation-type: write
+      x-publicly-exposed: false
+      x-database:
+      - businessProfile.findUnique
+      - businessProfile.update
+      requestBody:
+        required: false
+        description: No Zod schema is declared for this route; the handler reads `req.body` directly. Shape is not verifiable from source.
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeUnknown"
+          x-inferred: Status inferred from Express defaults; the handler calls no explicit res.status() for success.
+        "401":
+          description: Missing, invalid or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Conflict with current state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: Semantically invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Unexpected server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+      x-documentation-gap: request-body-unschematized
+  /api/workspace/prohibited-claims:
+    get:
+      operationId: getWorkspaceProhibitedClaims
+      tags:
+      - Other
+      summary: List Prohibited Claims
+      description: |-
+        Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
+
+        Implemented at `services/auth/src/routes/workspace.ts:383` (auth service).
+      security:
+      - bearerAuth: []
+      x-service: auth
+      x-source: services/auth/src/routes/workspace.ts:383
+      x-operation-type: read
+      x-publicly-exposed: false
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeUnknown"
+          x-inferred: Status inferred from Express defaults; the handler calls no explicit res.status() for success.
+        "401":
+          description: Missing, invalid or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Unexpected server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    put:
+      operationId: putWorkspaceProhibitedClaims
+      tags:
+      - Other
+      summary: Replace Prohibited Claims
+      description: |-
+        Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
+
+        This is a write operation.
+
+        Implemented at `services/auth/src/routes/workspace.ts:393` (auth service).
+      security:
+      - bearerAuth: []
+      x-service: auth
+      x-source: services/auth/src/routes/workspace.ts:393
+      x-operation-type: write
+      x-publicly-exposed: false
+      requestBody:
+        required: false
+        description: No Zod schema is declared for this route; the handler reads `req.body` directly. Shape is not verifiable from source.
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeUnknown"
+          x-inferred: Status inferred from Express defaults; the handler calls no explicit res.status() for success.
+        "401":
+          description: Missing, invalid or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: Semantically invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Unexpected server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+      x-documentation-gap: request-body-unschematized
+  /api/workspace/voice:
+    get:
+      operationId: getWorkspaceVoice
+      tags:
+      - Other
+      summary: List Voice
+      description: |-
+        Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
+
+        Implemented at `services/auth/src/routes/workspace.ts:250` (auth service).
+      security:
+      - bearerAuth: []
+      x-service: auth
+      x-source: services/auth/src/routes/workspace.ts:250
+      x-operation-type: read
+      x-publicly-exposed: false
+      x-database:
+      - businessProfile.findUnique
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeUnknown"
+          x-inferred: Status inferred from Express defaults; the handler calls no explicit res.status() for success.
+        "401":
+          description: Missing, invalid or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Unexpected server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    put:
+      operationId: putWorkspaceVoice
+      tags:
+      - Other
+      summary: Replace Voice
+      description: |-
+        Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
+
+        This is a write operation.
+
+        Implemented at `services/auth/src/routes/workspace.ts:274` (auth service).
+      security:
+      - bearerAuth: []
+      x-service: auth
+      x-source: services/auth/src/routes/workspace.ts:274
+      x-operation-type: write
+      x-publicly-exposed: false
+      x-database:
+      - businessProfile.update
+      requestBody:
+        required: false
+        description: No Zod schema is declared for this route; the handler reads `req.body` directly. Shape is not verifiable from source.
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeUnknown"
+          x-inferred: Status inferred from Express defaults; the handler calls no explicit res.status() for success.
+        "401":
+          description: Missing, invalid or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Conflict with current state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: Semantically invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Unexpected server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+      x-documentation-gap: request-body-unschematized
+  /api/workspace/voice/sample:
+    post:
+      operationId: postWorkspaceVoiceSample
+      tags:
+      - Other
+      summary: Create Sample
+      description: |-
+        Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
+
+        This is a write operation.
+
+        Implemented at `services/auth/src/routes/workspace.ts:343` (auth service).
+      security:
+      - bearerAuth: []
+      x-service: auth
+      x-source: services/auth/src/routes/workspace.ts:343
+      x-operation-type: write
+      x-publicly-exposed: false
+      requestBody:
+        required: false
+        description: No Zod schema is declared for this route; the handler reads `req.body` directly. Shape is not verifiable from source.
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeUnknown"
+          x-inferred: Status inferred from Express defaults; the handler calls no explicit res.status() for success.
+        "401":
+          description: Missing, invalid or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: Semantically invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Temporarily unavailable
           content:
             application/json:
               schema:

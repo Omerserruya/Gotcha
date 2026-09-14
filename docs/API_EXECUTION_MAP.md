@@ -31,32 +31,33 @@ The single most important caveat: step 7 lists Prisma calls made **in the handle
 
 | Domain | Endpoints | Read | Write | Unauthenticated |
 |---|---:|---:|---:|---:|
-| [AI Studio](#ai-studio) | 161 | 63 | 98 | 0 |
-| [Analytics](#analytics) | 21 | 18 | 3 | 0 |
-| [Auth & Identity](#auth-identity) | 36 | 17 | 19 | 5 |
+| [AI Studio](#ai-studio) | 164 | 64 | 100 | 0 |
+| [Analytics](#analytics) | 31 | 27 | 4 | 0 |
+| [Auth & Identity](#auth-identity) | 37 | 18 | 19 | 6 |
 | [Billing](#billing) | 88 | 36 | 52 | 7 |
-| [Channels](#channels) | 16 | 8 | 8 | 2 |
+| [Channels](#channels) | 17 | 9 | 8 | 2 |
 | [Contacts & CRM](#contacts-crm) | 19 | 4 | 15 | 0 |
-| [Conversations](#conversations) | 49 | 16 | 33 | 0 |
+| [Conversations](#conversations) | 50 | 17 | 33 | 0 |
 | [Embedded Chat](#embedded-chat) | 4 | 1 | 3 | 4 |
 | [GDPR & Compliance](#gdpr-compliance) | 14 | 6 | 8 | 0 |
 | [Historical Import](#historical-import) | 14 | 9 | 5 | 0 |
-| [Integrations](#integrations) | 71 | 48 | 23 | 13 |
-| [Internal](#internal) | 31 | 6 | 25 | 0 |
-| [Knowledge](#knowledge) | 26 | 11 | 15 | 2 |
-| [Notifications](#notifications) | 8 | 3 | 5 | 0 |
+| [Integrations](#integrations) | 72 | 49 | 23 | 13 |
+| [Internal](#internal) | 32 | 6 | 26 | 0 |
+| [Knowledge](#knowledge) | 27 | 12 | 15 | 2 |
+| [Notifications](#notifications) | 10 | 4 | 6 | 0 |
 | [Onboarding](#onboarding) | 69 | 28 | 41 | 1 |
+| [Other](#other) | 9 | 4 | 5 | 0 |
 | [Platform Admin](#platform-admin) | 37 | 16 | 21 | 1 |
 | [Shopify](#shopify) | 20 | 8 | 12 | 10 |
 | [Tenant Settings](#tenant-settings) | 28 | 11 | 17 | 0 |
 | [Voice](#voice) | 63 | 17 | 46 | 21 |
 | [Webhooks](#webhooks) | 11 | 2 | 9 | 7 |
 | [WhatsApp](#whatsapp) | 11 | 3 | 8 | 0 |
-| **Total** | **797** | **331** | **466** | **73** |
+| **Total** | **827** | **351** | **476** | **74** |
 
 ## AI Studio
 
-161 endpoints.
+164 endpoints.
 
 ### `GET /api/action-contracts`
 
@@ -873,6 +874,106 @@ PUT /api/agents/me/locale
       → db write  prisma.user.update
 ```
 
+### `GET /api/agents/presence`
+
+- **Purpose:** The roster.
+- **Handler:** `services/auth/src/routes/agent-presence.ts` line 52
+- **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
+- **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
+- **Input validation:** No input.
+- **Exposure:** Routed by the gateway (reachable from the internet).
+- **Operation type:** read
+
+#### Execution flow
+
+1. **Route registration.** `auth` service mounts this router at `/api/agents` in `services/auth/src/index.ts`; the route is declared in `services/auth/src/routes/agent-presence.ts`.
+2. **Handler.** `services/auth/src/routes/agent-presence.ts:52` - inline `async (req, res)` handler.
+3. **Validation.** No input.
+4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
+5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
+6. **Service calls.** None; the handler works directly against Prisma and/or the response.
+7. **Database.** Prisma models touched (source order, not guaranteed runtime order - branches may skip some):
+   _Reads:_
+   - `user.findMany`
+   - `agentPresence.findMany`
+8. **External integrations.** None detected in the handler body.
+9. **Background work, events and audit.** None triggered by this endpoint.
+10. **Response and error paths.** Success status not determinable from source. Error paths: `500`, answering `{ error: ... }`. `401` is returned by `authenticate()` before the handler runs.
+
+#### Call graph
+
+```text
+GET /api/agents/presence
+  → [authenticate → resolveTenant → requireTenantState(ACTIVE)]
+  → handler  services/auth/src/routes/agent-presence.ts:52
+      → db read   prisma.user.findMany
+      → db read   prisma.agentPresence.findMany
+```
+
+### `POST /api/agents/presence/heartbeat`
+
+- **Purpose:** "I am still here."
+- **Handler:** `services/auth/src/routes/agent-presence.ts` line 112
+- **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
+- **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
+- **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
+- **Exposure:** Routed by the gateway (reachable from the internet).
+- **Operation type:** write
+
+#### Execution flow
+
+1. **Route registration.** `auth` service mounts this router at `/api/agents` in `services/auth/src/index.ts`; the route is declared in `services/auth/src/routes/agent-presence.ts`.
+2. **Handler.** `services/auth/src/routes/agent-presence.ts:112` - inline `async (req, res)` handler.
+3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
+4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
+5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
+6. **Service calls.** None; the handler works directly against Prisma and/or the response.
+7. **Database.** No direct Prisma access in the handler body. Any persistence happens inside the services listed above.
+8. **External integrations.** None detected in the handler body.
+9. **Background work, events and audit.** None triggered by this endpoint.
+10. **Response and error paths.** Success status not determinable from source. Error paths: `403`, `500`, answering `{ error: ... }`. `401` is returned by `authenticate()` before the handler runs.
+
+#### Call graph
+
+```text
+POST /api/agents/presence/heartbeat
+  → [authenticate → resolveTenant → requireTenantState(ACTIVE)]
+  → handler  services/auth/src/routes/agent-presence.ts:112
+      → (responds directly; no downstream calls detected)
+```
+
+### `PATCH /api/agents/presence/me`
+
+- **Purpose:** "I am busy" / "away until 11:00".
+- **Handler:** `services/auth/src/routes/agent-presence.ts` line 135
+- **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
+- **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
+- **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
+- **Exposure:** Routed by the gateway (reachable from the internet).
+- **Operation type:** write
+
+#### Execution flow
+
+1. **Route registration.** `auth` service mounts this router at `/api/agents` in `services/auth/src/index.ts`; the route is declared in `services/auth/src/routes/agent-presence.ts`.
+2. **Handler.** `services/auth/src/routes/agent-presence.ts:135` - inline `async (req, res)` handler.
+3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
+4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
+5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
+6. **Service calls.** None; the handler works directly against Prisma and/or the response.
+7. **Database.** No direct Prisma access in the handler body. Any persistence happens inside the services listed above.
+8. **External integrations.** None detected in the handler body.
+9. **Background work, events and audit.** None triggered by this endpoint.
+10. **Response and error paths.** Success status not determinable from source. Error paths: `400`, `403`, `500`, answering `{ error: ... }`. `401` is returned by `authenticate()` before the handler runs.
+
+#### Call graph
+
+```text
+PATCH /api/agents/presence/me
+  → [authenticate → resolveTenant → requireTenantState(ACTIVE)]
+  → handler  services/auth/src/routes/agent-presence.ts:135
+      → (responds directly; no downstream calls detected)
+```
+
 ### `GET /api/agents/settings/approval-recipient`
 
 - **Purpose:** Lists approval recipient. _(Derived from the route shape; no descriptive comment in source.)_
@@ -1074,7 +1175,7 @@ GET /api/agents/settings/bot-config
 - **Purpose:** Lists business hours. _(Derived from the route shape; no descriptive comment in source.)_
 - **Handler:** `services/auth/src/routes/agents.ts` line 561
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. `enforceMfaEnrollment` - the caller must have MFA set up.
-- **Authorization:** Role: `ADMIN`
+- **Authorization:** Permission: `settings:workspace:read`
 - **Input validation:** No input.
 - **Exposure:** Routed by the gateway (reachable from the internet).
 - **Operation type:** read
@@ -1085,7 +1186,7 @@ GET /api/agents/settings/bot-config
 2. **Handler.** `services/auth/src/routes/agents.ts:561` - inline `async (req, res)` handler.
 3. **Validation.** No input.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. `enforceMfaEnrollment` - the caller must have MFA set up.
-5. **Authorization.** Role: `ADMIN`
+5. **Authorization.** Permission: `settings:workspace:read`
 6. **Service calls.** None; the handler works directly against Prisma and/or the response.
 7. **Database.** No direct Prisma access in the handler body. Any persistence happens inside the services listed above.
 8. **External integrations.** None detected in the handler body.
@@ -1096,7 +1197,7 @@ GET /api/agents/settings/bot-config
 
 ```text
 GET /api/agents/settings/business-hours
-  → [authenticate → resolveTenant → requireRole(ADMIN)]
+  → [authenticate → resolveTenant → requirePermission(settings:workspace:read)]
   → handler  services/auth/src/routes/agents.ts:561
       → (responds directly; no downstream calls detected)
 ```
@@ -1106,7 +1207,7 @@ GET /api/agents/settings/business-hours
 - **Purpose:** Updates the referenced business hour. _(Derived from the route shape; no descriptive comment in source.)_
 - **Handler:** `services/auth/src/routes/agents.ts` line 590
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. `enforceMfaEnrollment` - the caller must have MFA set up.
-- **Authorization:** Role: `ADMIN`
+- **Authorization:** Permission: `settings:workspace:update`
 - **Input validation:** `validate(businessHoursSchema)` (Zod). Accepts: `enabled`, `timezone`, `autoResponse`, `aiOutsideHours`, `outsideHoursHandoffMessage`, `schedule`. Required: `enabled`, `timezone`, `schedule`. `validate` reassigns `req.body` to the parsed value, so any property not named by the schema is stripped before the handler runs.
 - **Exposure:** Routed by the gateway (reachable from the internet).
 - **Operation type:** write
@@ -1117,7 +1218,7 @@ GET /api/agents/settings/business-hours
 2. **Handler.** `services/auth/src/routes/agents.ts:590` - inline `async (req, res)` handler.
 3. **Validation.** `validate(businessHoursSchema)` (Zod). Accepts: `enabled`, `timezone`, `autoResponse`, `aiOutsideHours`, `outsideHoursHandoffMessage`, `schedule`. Required: `enabled`, `timezone`, `schedule`. `validate` reassigns `req.body` to the parsed value, so any property not named by the schema is stripped before the handler runs.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. `enforceMfaEnrollment` - the caller must have MFA set up.
-5. **Authorization.** Role: `ADMIN`
+5. **Authorization.** Permission: `settings:workspace:update`
 6. **Service calls.** None; the handler works directly against Prisma and/or the response.
 7. **Database.** No direct Prisma access in the handler body. Any persistence happens inside the services listed above.
 8. **External integrations.** None detected in the handler body.
@@ -1128,7 +1229,7 @@ GET /api/agents/settings/business-hours
 
 ```text
 PUT /api/agents/settings/business-hours
-  → [authenticate → resolveTenant → requireRole(ADMIN) → validate(businessHoursSchema)]
+  → [authenticate → resolveTenant → requirePermission(settings:workspace:update) → validate(businessHoursSchema)]
   → handler  services/auth/src/routes/agents.ts:590
       → (responds directly; no downstream calls detected)
 ```
@@ -1543,7 +1644,7 @@ PUT /api/agents/settings/idle-automation
 - **Purpose:** Updates the referenced locale. _(Derived from the route shape; no descriptive comment in source.)_
 - **Handler:** `services/auth/src/routes/agents.ts` line 801
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. `enforceMfaEnrollment` - the caller must have MFA set up.
-- **Authorization:** Role: `ADMIN`
+- **Authorization:** Permission: `settings:workspace:update`
 - **Input validation:** `validate(localeSchema)` (Zod). Accepts: `locale`. `validate` reassigns `req.body` to the parsed value, so any property not named by the schema is stripped before the handler runs.
 - **Exposure:** Routed by the gateway (reachable from the internet).
 - **Operation type:** write
@@ -1554,7 +1655,7 @@ PUT /api/agents/settings/idle-automation
 2. **Handler.** `services/auth/src/routes/agents.ts:801` - inline `async (req, res)` handler.
 3. **Validation.** `validate(localeSchema)` (Zod). Accepts: `locale`. `validate` reassigns `req.body` to the parsed value, so any property not named by the schema is stripped before the handler runs.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. `enforceMfaEnrollment` - the caller must have MFA set up.
-5. **Authorization.** Role: `ADMIN`
+5. **Authorization.** Permission: `settings:workspace:update`
 6. **Service calls.** None; the handler works directly against Prisma and/or the response.
 7. **Database.** Prisma models touched (source order, not guaranteed runtime order - branches may skip some):
    _Writes:_
@@ -1567,7 +1668,7 @@ PUT /api/agents/settings/idle-automation
 
 ```text
 PUT /api/agents/settings/locale
-  → [authenticate → resolveTenant → requireRole(ADMIN) → validate(localeSchema)]
+  → [authenticate → resolveTenant → requirePermission(settings:workspace:update) → validate(localeSchema)]
   → handler  services/auth/src/routes/agents.ts:801
       → db write  prisma.tenant.update
 ```
@@ -2650,7 +2751,7 @@ POST /api/ai-assist/:conversationId/crm/find
 ### `POST /api/ai-assist/:conversationId/followup`
 
 - **Purpose:** F6.3 - generate a contextual follow-up for a stale conversation
-- **Handler:** `services/ai/src/routes/ai-assist.ts` line 842
+- **Handler:** `services/ai/src/routes/ai-assist.ts` line 851
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 - **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
 - **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
@@ -2660,7 +2761,7 @@ POST /api/ai-assist/:conversationId/crm/find
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/ai-assist` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/ai-assist.ts`.
-2. **Handler.** `services/ai/src/routes/ai-assist.ts:842` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/ai-assist.ts:851` - inline `async (req, res)` handler.
 3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
@@ -2675,7 +2776,7 @@ POST /api/ai-assist/:conversationId/crm/find
 ```text
 POST /api/ai-assist/:conversationId/followup
   → [authenticate → resolveTenant → requireTenantState(ACTIVE)]
-  → handler  services/ai/src/routes/ai-assist.ts:842
+  → handler  services/ai/src/routes/ai-assist.ts:851
       → (responds directly; no downstream calls detected)
 ```
 
@@ -3027,7 +3128,7 @@ GET /api/ai-assist/config
 ### `GET /api/ai-assist/customer-state/:contactId`
 
 - **Purpose:** F7.2/F7.5 - compact customer state object (decisions, summaries, tags)
-- **Handler:** `services/ai/src/routes/ai-assist.ts` line 824
+- **Handler:** `services/ai/src/routes/ai-assist.ts` line 833
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 - **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
 - **Input validation:** No body schema. Path and query parameters are read directly by the handler.
@@ -3037,7 +3138,7 @@ GET /api/ai-assist/config
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/ai-assist` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/ai-assist.ts`.
-2. **Handler.** `services/ai/src/routes/ai-assist.ts:824` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/ai-assist.ts:833` - inline `async (req, res)` handler.
 3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
@@ -3052,7 +3153,7 @@ GET /api/ai-assist/config
 ```text
 GET /api/ai-assist/customer-state/:contactId
   → [authenticate → resolveTenant → requireTenantState(ACTIVE)]
-  → handler  services/ai/src/routes/ai-assist.ts:824
+  → handler  services/ai/src/routes/ai-assist.ts:833
       → (responds directly; no downstream calls detected)
 ```
 
@@ -3273,7 +3374,7 @@ GET /api/ai-assist/policy
 7. **Database.** No direct Prisma access in the handler body. Any persistence happens inside the services listed above.
 8. **External integrations.** None detected in the handler body.
 9. **Background work, events and audit.** None triggered by this endpoint.
-10. **Response and error paths.** Success status not determinable from source. Error paths: `500`, answering `{ error: ... }`. `401` is returned by `authenticate()` before the handler runs.
+10. **Response and error paths.** Success status not determinable from source. Error paths: `400`, `500`, answering `{ error: ... }`. `401` is returned by `authenticate()` before the handler runs.
 
 #### Call graph
 
@@ -3384,7 +3485,7 @@ GET /api/ai-skills
 ### `GET /api/approvals`
 
 - **Purpose:** GET /api/approvals List approval requests for this tenant. Supports:   - ?status=PENDING       default   - ?conversationId=xxx   scope to one conversation   - ?contactId=xxx        scope to one contact
-- **Handler:** `services/conversation/src/routes/approvals.ts` line 896
+- **Handler:** `services/conversation/src/routes/approvals.ts` line 899
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 - **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
 - **Input validation:** No body schema. Path and query parameters are read directly by the handler.
@@ -3394,7 +3495,7 @@ GET /api/ai-skills
 #### Execution flow
 
 1. **Route registration.** `conversation` service mounts this router at `/api/approvals` in `services/conversation/src/index.ts`; the route is declared in `services/conversation/src/routes/approvals.ts`.
-2. **Handler.** `services/conversation/src/routes/approvals.ts:896` - inline `async (req, res)` handler.
+2. **Handler.** `services/conversation/src/routes/approvals.ts:899` - inline `async (req, res)` handler.
 3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
@@ -3411,14 +3512,14 @@ GET /api/ai-skills
 ```text
 GET /api/approvals
   → [authenticate → resolveTenant → requireTenantState(ACTIVE)]
-  → handler  services/conversation/src/routes/approvals.ts:896
+  → handler  services/conversation/src/routes/approvals.ts:899
       → db read   prisma.user.findMany
 ```
 
 ### `GET /api/approvals/:id`
 
 - **Purpose:** GET /api/approvals/:id Full record + enrichment for the rich in-conversation approval card:   - conversation + recent messages (last 5)   - contact snapshot
-- **Handler:** `services/conversation/src/routes/approvals.ts` line 951
+- **Handler:** `services/conversation/src/routes/approvals.ts` line 954
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 - **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
 - **Input validation:** No body schema. Path and query parameters are read directly by the handler.
@@ -3428,7 +3529,7 @@ GET /api/approvals
 #### Execution flow
 
 1. **Route registration.** `conversation` service mounts this router at `/api/approvals` in `services/conversation/src/index.ts`; the route is declared in `services/conversation/src/routes/approvals.ts`.
-2. **Handler.** `services/conversation/src/routes/approvals.ts:951` - inline `async (req, res)` handler.
+2. **Handler.** `services/conversation/src/routes/approvals.ts:954` - inline `async (req, res)` handler.
 3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
@@ -3447,7 +3548,7 @@ GET /api/approvals
 ```text
 GET /api/approvals/:id
   → [authenticate → resolveTenant → requireTenantState(ACTIVE)]
-  → handler  services/conversation/src/routes/approvals.ts:951
+  → handler  services/conversation/src/routes/approvals.ts:954
       → db read   prisma.conversation.findFirst
       → db read   prisma.contact.findFirst
       → db read   prisma.message.findMany
@@ -3456,7 +3557,7 @@ GET /api/approvals/:id
 ### `POST /api/approvals/:id/approve`
 
 - **Purpose:** POST /api/approvals/:id/approve Body: { decisionReason?, modifiedParams? }
-- **Handler:** `services/conversation/src/routes/approvals.ts` line 1005
+- **Handler:** `services/conversation/src/routes/approvals.ts` line 1008
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 - **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
 - **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
@@ -3466,7 +3567,7 @@ GET /api/approvals/:id
 #### Execution flow
 
 1. **Route registration.** `conversation` service mounts this router at `/api/approvals` in `services/conversation/src/index.ts`; the route is declared in `services/conversation/src/routes/approvals.ts`.
-2. **Handler.** `services/conversation/src/routes/approvals.ts:1005` - inline `async (req, res)` handler.
+2. **Handler.** `services/conversation/src/routes/approvals.ts:1008` - inline `async (req, res)` handler.
 3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
@@ -3485,7 +3586,7 @@ GET /api/approvals/:id
 ```text
 POST /api/approvals/:id/approve
   → [authenticate → resolveTenant → requireTenantState(ACTIVE)]
-  → handler  services/conversation/src/routes/approvals.ts:1005
+  → handler  services/conversation/src/routes/approvals.ts:1008
       → db read   prisma.conversation.findFirst
       → db write  prisma.conversation.update
 ```
@@ -3493,7 +3594,7 @@ POST /api/approvals/:id/approve
 ### `POST /api/approvals/:id/dispatch-approved`
 
 - **Purpose:** Called by the incoming-worker after a manager approved on WhatsApp. The decision was already recorded there (through the same atomic CAS the UI uses); this endpoint only runs the action, so both channels converge on ONE execution path. Service-to-service auth ONLY - registered above the user auth middleware because there is no user session behind a WhatsApp tap.
-- **Handler:** `services/conversation/src/routes/approvals.ts` line 805
+- **Handler:** `services/conversation/src/routes/approvals.ts` line 808
 - **Authentication / tenant resolution:** **Internal only.** Authenticated by the shared service secret, not a user token. Not routed by the gateway.
 - **Authorization:** None.
 - **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
@@ -3503,7 +3604,7 @@ POST /api/approvals/:id/approve
 #### Execution flow
 
 1. **Route registration.** `conversation` service mounts this router at `/api/approvals` in `services/conversation/src/index.ts`; the route is declared in `services/conversation/src/routes/approvals.ts`.
-2. **Handler.** `services/conversation/src/routes/approvals.ts:805` - inline `async (req, res)` handler.
+2. **Handler.** `services/conversation/src/routes/approvals.ts:808` - inline `async (req, res)` handler.
 3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
 4. **Authentication / tenant resolution.** **Internal only.** Authenticated by the shared service secret, not a user token. Not routed by the gateway.
 5. **Authorization.** None.
@@ -3518,14 +3619,14 @@ POST /api/approvals/:id/approve
 ```text
 POST /api/approvals/:id/dispatch-approved
   → [internalAuth]
-  → handler  services/conversation/src/routes/approvals.ts:805
+  → handler  services/conversation/src/routes/approvals.ts:808
       → (responds directly; no downstream calls detected)
 ```
 
 ### `POST /api/approvals/:id/dispatch-rejected`
 
 - **Purpose:** POST /api/approvals/:id/dispatch-rejected  (internal, no user session)
-- **Handler:** `services/conversation/src/routes/approvals.ts` line 853
+- **Handler:** `services/conversation/src/routes/approvals.ts` line 856
 - **Authentication / tenant resolution:** **Internal only.** Authenticated by the shared service secret, not a user token. Not routed by the gateway.
 - **Authorization:** None.
 - **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
@@ -3535,7 +3636,7 @@ POST /api/approvals/:id/dispatch-approved
 #### Execution flow
 
 1. **Route registration.** `conversation` service mounts this router at `/api/approvals` in `services/conversation/src/index.ts`; the route is declared in `services/conversation/src/routes/approvals.ts`.
-2. **Handler.** `services/conversation/src/routes/approvals.ts:853` - inline `async (req, res)` handler.
+2. **Handler.** `services/conversation/src/routes/approvals.ts:856` - inline `async (req, res)` handler.
 3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
 4. **Authentication / tenant resolution.** **Internal only.** Authenticated by the shared service secret, not a user token. Not routed by the gateway.
 5. **Authorization.** None.
@@ -3550,14 +3651,14 @@ POST /api/approvals/:id/dispatch-approved
 ```text
 POST /api/approvals/:id/dispatch-rejected
   → [internalAuth]
-  → handler  services/conversation/src/routes/approvals.ts:853
+  → handler  services/conversation/src/routes/approvals.ts:856
       → (responds directly; no downstream calls detected)
 ```
 
 ### `POST /api/approvals/:id/reject`
 
 - **Purpose:** POST /api/approvals/:id/reject Body: { decisionReason } Rejection reason is REQUIRED - no silent "just no". The bot resume worker uses it to craft the fallback customer message.
-- **Handler:** `services/conversation/src/routes/approvals.ts` line 1204
+- **Handler:** `services/conversation/src/routes/approvals.ts` line 1207
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 - **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
 - **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
@@ -3567,7 +3668,7 @@ POST /api/approvals/:id/dispatch-rejected
 #### Execution flow
 
 1. **Route registration.** `conversation` service mounts this router at `/api/approvals` in `services/conversation/src/index.ts`; the route is declared in `services/conversation/src/routes/approvals.ts`.
-2. **Handler.** `services/conversation/src/routes/approvals.ts:1204` - inline `async (req, res)` handler.
+2. **Handler.** `services/conversation/src/routes/approvals.ts:1207` - inline `async (req, res)` handler.
 3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
@@ -3586,7 +3687,7 @@ POST /api/approvals/:id/dispatch-rejected
 ```text
 POST /api/approvals/:id/reject
   → [authenticate → resolveTenant → requireTenantState(ACTIVE)]
-  → handler  services/conversation/src/routes/approvals.ts:1204
+  → handler  services/conversation/src/routes/approvals.ts:1207
       → db read   prisma.conversation.findFirst
       → db write  prisma.conversation.update
 ```
@@ -3594,7 +3695,7 @@ POST /api/approvals/:id/reject
 ### `POST /api/approvals/:id/retry-execution`
 
 - **Purpose:** POST /api/approvals/:id/retry-execution
-- **Handler:** `services/conversation/src/routes/approvals.ts` line 1155
+- **Handler:** `services/conversation/src/routes/approvals.ts` line 1158
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 - **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
 - **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
@@ -3604,7 +3705,7 @@ POST /api/approvals/:id/reject
 #### Execution flow
 
 1. **Route registration.** `conversation` service mounts this router at `/api/approvals` in `services/conversation/src/index.ts`; the route is declared in `services/conversation/src/routes/approvals.ts`.
-2. **Handler.** `services/conversation/src/routes/approvals.ts:1155` - inline `async (req, res)` handler.
+2. **Handler.** `services/conversation/src/routes/approvals.ts:1158` - inline `async (req, res)` handler.
 3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
@@ -3619,7 +3720,7 @@ POST /api/approvals/:id/reject
 ```text
 POST /api/approvals/:id/retry-execution
   → [authenticate → resolveTenant → requireTenantState(ACTIVE)]
-  → handler  services/conversation/src/routes/approvals.ts:1155
+  → handler  services/conversation/src/routes/approvals.ts:1158
       → (responds directly; no downstream calls detected)
 ```
 
@@ -5588,7 +5689,7 @@ PUT /api/tools/permissions/:departmentId
 
 ## Analytics
 
-21 endpoints.
+31 endpoints.
 
 ### `POST /api/admin/analytics/backfill`
 
@@ -5756,12 +5857,45 @@ POST /api/admin/analytics/settle
       → (responds directly; no downstream calls detected)
 ```
 
+### `GET /api/analytics/activity`
+
+- **Purpose:** The time-ordered activity stream behind Home's activity card.
+- **Handler:** `services/analytics/src/routes/analytics.ts` line 117
+- **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
+- **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
+- **Input validation:** No body schema. Path and query parameters are read directly by the handler.
+- **Exposure:** Routed by the gateway (reachable from the internet).
+- **Operation type:** read
+
+#### Execution flow
+
+1. **Route registration.** `analytics` service mounts this router at `/api/analytics` in `services/analytics/src/index.ts`; the route is declared in `services/analytics/src/routes/analytics.ts`.
+2. **Handler.** `services/analytics/src/routes/analytics.ts:117` - inline `async (req, res)` handler.
+3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
+4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
+5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
+6. **Service calls**, in source order:
+   - `analyticsService.getActivity()`
+7. **Database.** No direct Prisma access in the handler body. Any persistence happens inside the services listed above.
+8. **External integrations.** None detected in the handler body.
+9. **Background work, events and audit.** None triggered by this endpoint.
+10. **Response and error paths.** Success status not determinable from source. Error paths: `500`, answering `{ error: ... }`. `401` is returned by `authenticate()` before the handler runs.
+
+#### Call graph
+
+```text
+GET /api/analytics/activity
+  → [authenticate → resolveTenant]
+  → handler  services/analytics/src/routes/analytics.ts:117
+      → analyticsService.getActivity()
+```
+
 ### `GET /api/analytics/agents`
 
 - **Purpose:** Lists agents. _(Derived from the route shape; no descriptive comment in source.)_
 - **Handler:** `services/analytics/src/routes/analytics.ts` line 50
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
-- **Authorization:** Role: `ADMIN`
+- **Authorization:** Permission: `analytics:workspace:read`
 - **Input validation:** No input.
 - **Exposure:** Routed by the gateway (reachable from the internet).
 - **Operation type:** read
@@ -5772,7 +5906,7 @@ POST /api/admin/analytics/settle
 2. **Handler.** `services/analytics/src/routes/analytics.ts:50` - inline `async (req, res)` handler.
 3. **Validation.** No input.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
-5. **Authorization.** Role: `ADMIN`
+5. **Authorization.** Permission: `analytics:workspace:read`
 6. **Service calls**, in source order:
    - `analyticsService.getAgentStats()`
 7. **Database.** No direct Prisma access in the handler body. Any persistence happens inside the services listed above.
@@ -5784,7 +5918,7 @@ POST /api/admin/analytics/settle
 
 ```text
 GET /api/analytics/agents
-  → [authenticate → resolveTenant → requireRole(ADMIN)]
+  → [authenticate → resolveTenant → requirePermission(analytics:workspace:read)]
   → handler  services/analytics/src/routes/analytics.ts:50
       → analyticsService.getAgentStats()
 ```
@@ -5792,9 +5926,9 @@ GET /api/analytics/agents
 ### `GET /api/analytics/ai-performance`
 
 - **Purpose:** Lists ai performance. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/analytics/src/routes/analytics.ts` line 153
+- **Handler:** `services/analytics/src/routes/analytics.ts` line 206
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
-- **Authorization:** Role: `ADMIN`
+- **Authorization:** Permission: `analytics:dashboard:read`
 - **Input validation:** No body schema. Path and query parameters are read directly by the handler.
 - **Exposure:** Routed by the gateway (reachable from the internet).
 - **Operation type:** read
@@ -5802,10 +5936,10 @@ GET /api/analytics/agents
 #### Execution flow
 
 1. **Route registration.** `analytics` service mounts this router at `/api/analytics` in `services/analytics/src/index.ts`; the route is declared in `services/analytics/src/routes/analytics.ts`.
-2. **Handler.** `services/analytics/src/routes/analytics.ts:153` - inline `async (req, res)` handler.
+2. **Handler.** `services/analytics/src/routes/analytics.ts:206` - inline `async (req, res)` handler.
 3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
-5. **Authorization.** Role: `ADMIN`
+5. **Authorization.** Permission: `analytics:dashboard:read`
 6. **Service calls**, in source order:
    - `analyticsService.getAIPerformance()`
 7. **Database.** No direct Prisma access in the handler body. Any persistence happens inside the services listed above.
@@ -5817,17 +5951,17 @@ GET /api/analytics/agents
 
 ```text
 GET /api/analytics/ai-performance
-  → [authenticate → resolveTenant → requireRole(ADMIN)]
-  → handler  services/analytics/src/routes/analytics.ts:153
+  → [authenticate → resolveTenant → requirePermission(analytics:dashboard:read)]
+  → handler  services/analytics/src/routes/analytics.ts:206
       → analyticsService.getAIPerformance()
 ```
 
 ### `GET /api/analytics/channel-performance`
 
 - **Purpose:** Lists channel performance. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/analytics/src/routes/analytics.ts` line 129
+- **Handler:** `services/analytics/src/routes/analytics.ts` line 182
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
-- **Authorization:** Role: `ADMIN`
+- **Authorization:** Permission: `analytics:workspace:read`
 - **Input validation:** No body schema. Path and query parameters are read directly by the handler.
 - **Exposure:** Routed by the gateway (reachable from the internet).
 - **Operation type:** read
@@ -5835,10 +5969,10 @@ GET /api/analytics/ai-performance
 #### Execution flow
 
 1. **Route registration.** `analytics` service mounts this router at `/api/analytics` in `services/analytics/src/index.ts`; the route is declared in `services/analytics/src/routes/analytics.ts`.
-2. **Handler.** `services/analytics/src/routes/analytics.ts:129` - inline `async (req, res)` handler.
+2. **Handler.** `services/analytics/src/routes/analytics.ts:182` - inline `async (req, res)` handler.
 3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
-5. **Authorization.** Role: `ADMIN`
+5. **Authorization.** Permission: `analytics:workspace:read`
 6. **Service calls**, in source order:
    - `analyticsService.getChannelPerformance()`
 7. **Database.** No direct Prisma access in the handler body. Any persistence happens inside the services listed above.
@@ -5850,8 +5984,8 @@ GET /api/analytics/ai-performance
 
 ```text
 GET /api/analytics/channel-performance
-  → [authenticate → resolveTenant → requireRole(ADMIN)]
-  → handler  services/analytics/src/routes/analytics.ts:129
+  → [authenticate → resolveTenant → requirePermission(analytics:workspace:read)]
+  → handler  services/analytics/src/routes/analytics.ts:182
       → analyticsService.getChannelPerformance()
 ```
 
@@ -5860,7 +5994,7 @@ GET /api/analytics/channel-performance
 - **Purpose:** Lists daily. _(Derived from the route shape; no descriptive comment in source.)_
 - **Handler:** `services/analytics/src/routes/analytics.ts` line 71
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
-- **Authorization:** Role: `ADMIN`
+- **Authorization:** Permission: `analytics:dashboard:read`
 - **Input validation:** No body schema. Path and query parameters are read directly by the handler.
 - **Exposure:** Routed by the gateway (reachable from the internet).
 - **Operation type:** read
@@ -5871,7 +6005,7 @@ GET /api/analytics/channel-performance
 2. **Handler.** `services/analytics/src/routes/analytics.ts:71` - inline `async (req, res)` handler.
 3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
-5. **Authorization.** Role: `ADMIN`
+5. **Authorization.** Permission: `analytics:dashboard:read`
 6. **Service calls**, in source order:
    - `analyticsService.getDailyVolume()`
 7. **Database.** No direct Prisma access in the handler body. Any persistence happens inside the services listed above.
@@ -5883,7 +6017,7 @@ GET /api/analytics/channel-performance
 
 ```text
 GET /api/analytics/daily
-  → [authenticate → resolveTenant → requireRole(ADMIN)]
+  → [authenticate → resolveTenant → requirePermission(analytics:dashboard:read)]
   → handler  services/analytics/src/routes/analytics.ts:71
       → analyticsService.getDailyVolume()
 ```
@@ -5893,7 +6027,7 @@ GET /api/analytics/daily
 - **Purpose:** Lists dashboard. _(Derived from the route shape; no descriptive comment in source.)_
 - **Handler:** `services/analytics/src/routes/analytics.ts` line 40
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
-- **Authorization:** Role: `ADMIN`
+- **Authorization:** Permission: `analytics:dashboard:read`
 - **Input validation:** No input.
 - **Exposure:** Routed by the gateway (reachable from the internet).
 - **Operation type:** read
@@ -5904,7 +6038,7 @@ GET /api/analytics/daily
 2. **Handler.** `services/analytics/src/routes/analytics.ts:40` - inline `async (req, res)` handler.
 3. **Validation.** No input.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
-5. **Authorization.** Role: `ADMIN`
+5. **Authorization.** Permission: `analytics:dashboard:read`
 6. **Service calls**, in source order:
    - `analyticsService.getDashboardStats()`
 7. **Database.** No direct Prisma access in the handler body. Any persistence happens inside the services listed above.
@@ -5916,7 +6050,7 @@ GET /api/analytics/daily
 
 ```text
 GET /api/analytics/dashboard
-  → [authenticate → resolveTenant → requireRole(ADMIN)]
+  → [authenticate → resolveTenant → requirePermission(analytics:dashboard:read)]
   → handler  services/analytics/src/routes/analytics.ts:40
       → analyticsService.getDashboardStats()
 ```
@@ -5924,9 +6058,9 @@ GET /api/analytics/dashboard
 ### `GET /api/analytics/department-performance`
 
 - **Purpose:** Lists department performance. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/analytics/src/routes/analytics.ts` line 141
+- **Handler:** `services/analytics/src/routes/analytics.ts` line 194
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
-- **Authorization:** Role: `ADMIN`
+- **Authorization:** Permission: `analytics:dashboard:read`
 - **Input validation:** No body schema. Path and query parameters are read directly by the handler.
 - **Exposure:** Routed by the gateway (reachable from the internet).
 - **Operation type:** read
@@ -5934,10 +6068,10 @@ GET /api/analytics/dashboard
 #### Execution flow
 
 1. **Route registration.** `analytics` service mounts this router at `/api/analytics` in `services/analytics/src/index.ts`; the route is declared in `services/analytics/src/routes/analytics.ts`.
-2. **Handler.** `services/analytics/src/routes/analytics.ts:141` - inline `async (req, res)` handler.
+2. **Handler.** `services/analytics/src/routes/analytics.ts:194` - inline `async (req, res)` handler.
 3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
-5. **Authorization.** Role: `ADMIN`
+5. **Authorization.** Permission: `analytics:dashboard:read`
 6. **Service calls**, in source order:
    - `analyticsService.getDepartmentPerformance()`
 7. **Database.** No direct Prisma access in the handler body. Any persistence happens inside the services listed above.
@@ -5949,9 +6083,42 @@ GET /api/analytics/dashboard
 
 ```text
 GET /api/analytics/department-performance
-  → [authenticate → resolveTenant → requireRole(ADMIN)]
-  → handler  services/analytics/src/routes/analytics.ts:141
+  → [authenticate → resolveTenant → requirePermission(analytics:dashboard:read)]
+  → handler  services/analytics/src/routes/analytics.ts:194
       → analyticsService.getDepartmentPerformance()
+```
+
+### `GET /api/analytics/dormant-customers`
+
+- **Purpose:** Customers who have gone quiet. ADMIN: this is a list of named customers with their phone numbers, which is a different thing from a queue of conversations already assigned to nobody, and it is the input to an outreach decision.
+- **Handler:** `services/analytics/src/routes/analytics.ts` line 324
+- **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
+- **Authorization:** Permission: `analytics:workspace:read`
+- **Input validation:** No body schema. Path and query parameters are read directly by the handler.
+- **Exposure:** Routed by the gateway (reachable from the internet).
+- **Operation type:** read
+
+#### Execution flow
+
+1. **Route registration.** `analytics` service mounts this router at `/api/analytics` in `services/analytics/src/index.ts`; the route is declared in `services/analytics/src/routes/analytics.ts`.
+2. **Handler.** `services/analytics/src/routes/analytics.ts:324` - inline `async (req, res)` handler.
+3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
+4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
+5. **Authorization.** Permission: `analytics:workspace:read`
+6. **Service calls**, in source order:
+   - `analyticsService.getDormantCustomers()`
+7. **Database.** No direct Prisma access in the handler body. Any persistence happens inside the services listed above.
+8. **External integrations.** None detected in the handler body.
+9. **Background work, events and audit.** None triggered by this endpoint.
+10. **Response and error paths.** Success status not determinable from source. Error paths: `500`, answering `{ error: ... }`. `401` is returned by `authenticate()` before the handler runs.
+
+#### Call graph
+
+```text
+GET /api/analytics/dormant-customers
+  → [authenticate → resolveTenant → requirePermission(analytics:workspace:read)]
+  → handler  services/analytics/src/routes/analytics.ts:324
+      → analyticsService.getDormantCustomers()
 ```
 
 ### `POST /api/analytics/events`
@@ -5991,7 +6158,7 @@ POST /api/analytics/events
 - **Purpose:** Lists hourly. _(Derived from the route shape; no descriptive comment in source.)_
 - **Handler:** `services/analytics/src/routes/analytics.ts` line 60
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
-- **Authorization:** Role: `ADMIN`
+- **Authorization:** Permission: `analytics:dashboard:read`
 - **Input validation:** No body schema. Path and query parameters are read directly by the handler.
 - **Exposure:** Routed by the gateway (reachable from the internet).
 - **Operation type:** read
@@ -6002,7 +6169,7 @@ POST /api/analytics/events
 2. **Handler.** `services/analytics/src/routes/analytics.ts:60` - inline `async (req, res)` handler.
 3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
-5. **Authorization.** Role: `ADMIN`
+5. **Authorization.** Permission: `analytics:dashboard:read`
 6. **Service calls**, in source order:
    - `analyticsService.getHourlyVolume()`
 7. **Database.** No direct Prisma access in the handler body. Any persistence happens inside the services listed above.
@@ -6014,17 +6181,17 @@ POST /api/analytics/events
 
 ```text
 GET /api/analytics/hourly
-  → [authenticate → resolveTenant → requireRole(ADMIN)]
+  → [authenticate → resolveTenant → requirePermission(analytics:dashboard:read)]
   → handler  services/analytics/src/routes/analytics.ts:60
       → analyticsService.getHourlyVolume()
 ```
 
-### `GET /api/analytics/insights`
+### `GET /api/analytics/in-flight`
 
-- **Purpose:** Lists insights. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/analytics/src/routes/analytics.ts` line 165
+- **Purpose:** What the AI is doing at this instant - the dark card's opening line.
+- **Handler:** `services/analytics/src/routes/analytics.ts` line 275
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
-- **Authorization:** Role: `ADMIN`
+- **Authorization:** Permission: `analytics:workspace:read`
 - **Input validation:** No input.
 - **Exposure:** Routed by the gateway (reachable from the internet).
 - **Operation type:** read
@@ -6032,10 +6199,43 @@ GET /api/analytics/hourly
 #### Execution flow
 
 1. **Route registration.** `analytics` service mounts this router at `/api/analytics` in `services/analytics/src/index.ts`; the route is declared in `services/analytics/src/routes/analytics.ts`.
-2. **Handler.** `services/analytics/src/routes/analytics.ts:165` - inline `async (req, res)` handler.
+2. **Handler.** `services/analytics/src/routes/analytics.ts:275` - inline `async (req, res)` handler.
 3. **Validation.** No input.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
-5. **Authorization.** Role: `ADMIN`
+5. **Authorization.** Permission: `analytics:workspace:read`
+6. **Service calls**, in source order:
+   - `analyticsService.getInFlight()`
+7. **Database.** No direct Prisma access in the handler body. Any persistence happens inside the services listed above.
+8. **External integrations.** None detected in the handler body.
+9. **Background work, events and audit.** None triggered by this endpoint.
+10. **Response and error paths.** Success status not determinable from source. Error paths: `500`, answering `{ error: ... }`. `401` is returned by `authenticate()` before the handler runs.
+
+#### Call graph
+
+```text
+GET /api/analytics/in-flight
+  → [authenticate → resolveTenant → requirePermission(analytics:workspace:read)]
+  → handler  services/analytics/src/routes/analytics.ts:275
+      → analyticsService.getInFlight()
+```
+
+### `GET /api/analytics/insights`
+
+- **Purpose:** Lists insights. _(Derived from the route shape; no descriptive comment in source.)_
+- **Handler:** `services/analytics/src/routes/analytics.ts` line 218
+- **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
+- **Authorization:** Permission: `analytics:workspace:read`
+- **Input validation:** No input.
+- **Exposure:** Routed by the gateway (reachable from the internet).
+- **Operation type:** read
+
+#### Execution flow
+
+1. **Route registration.** `analytics` service mounts this router at `/api/analytics` in `services/analytics/src/index.ts`; the route is declared in `services/analytics/src/routes/analytics.ts`.
+2. **Handler.** `services/analytics/src/routes/analytics.ts:218` - inline `async (req, res)` handler.
+3. **Validation.** No input.
+4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
+5. **Authorization.** Permission: `analytics:workspace:read`
 6. **Service calls**, in source order:
    - `analyticsService.getAIInsights()`
 7. **Database.** No direct Prisma access in the handler body. Any persistence happens inside the services listed above.
@@ -6047,17 +6247,50 @@ GET /api/analytics/hourly
 
 ```text
 GET /api/analytics/insights
-  → [authenticate → resolveTenant → requireRole(ADMIN)]
-  → handler  services/analytics/src/routes/analytics.ts:165
+  → [authenticate → resolveTenant → requirePermission(analytics:workspace:read)]
+  → handler  services/analytics/src/routes/analytics.ts:218
       → analyticsService.getAIInsights()
+```
+
+### `POST /api/analytics/insights/:id/dismiss`
+
+- **Purpose:** Hide an insight. The "Worth knowing" card is informational - a trend and a Dismiss - and this is the whole of its interaction. Anything that ACTS on an insight belongs in Outreach, behind broadcast validation, template approval and audience preview, not behind a second send path with none of them.
+- **Handler:** `services/analytics/src/routes/analytics.ts` line 237
+- **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
+- **Authorization:** Permission: `analytics:dashboard:read`
+- **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
+- **Exposure:** Routed by the gateway (reachable from the internet).
+- **Operation type:** write
+
+#### Execution flow
+
+1. **Route registration.** `analytics` service mounts this router at `/api/analytics` in `services/analytics/src/index.ts`; the route is declared in `services/analytics/src/routes/analytics.ts`.
+2. **Handler.** `services/analytics/src/routes/analytics.ts:237` - inline `async (req, res)` handler.
+3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
+4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
+5. **Authorization.** Permission: `analytics:dashboard:read`
+6. **Service calls**, in source order:
+   - `analyticsService.dismissInsight()`
+7. **Database.** No direct Prisma access in the handler body. Any persistence happens inside the services listed above.
+8. **External integrations.** None detected in the handler body.
+9. **Background work, events and audit.** None triggered by this endpoint.
+10. **Response and error paths.** Success status not determinable from source. Error paths: `400`, `500`, answering `{ error: ... }`. `401` is returned by `authenticate()` before the handler runs.
+
+#### Call graph
+
+```text
+POST /api/analytics/insights/:id/dismiss
+  → [authenticate → resolveTenant → requirePermission(analytics:dashboard:read)]
+  → handler  services/analytics/src/routes/analytics.ts:237
+      → analyticsService.dismissInsight()
 ```
 
 ### `GET /api/analytics/overview`
 
 - **Purpose:** Lists overview. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/analytics/src/routes/analytics.ts` line 92
+- **Handler:** `services/analytics/src/routes/analytics.ts` line 145
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
-- **Authorization:** Role: `ADMIN`
+- **Authorization:** Permission: `analytics:workspace:read`
 - **Input validation:** No body schema. Path and query parameters are read directly by the handler.
 - **Exposure:** Routed by the gateway (reachable from the internet).
 - **Operation type:** read
@@ -6065,10 +6298,10 @@ GET /api/analytics/insights
 #### Execution flow
 
 1. **Route registration.** `analytics` service mounts this router at `/api/analytics` in `services/analytics/src/index.ts`; the route is declared in `services/analytics/src/routes/analytics.ts`.
-2. **Handler.** `services/analytics/src/routes/analytics.ts:92` - inline `async (req, res)` handler.
+2. **Handler.** `services/analytics/src/routes/analytics.ts:145` - inline `async (req, res)` handler.
 3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
-5. **Authorization.** Role: `ADMIN`
+5. **Authorization.** Permission: `analytics:workspace:read`
 6. **Service calls**, in source order:
    - `analyticsService.getOverview()`
 7. **Database.** No direct Prisma access in the handler body. Any persistence happens inside the services listed above.
@@ -6080,9 +6313,42 @@ GET /api/analytics/insights
 
 ```text
 GET /api/analytics/overview
-  → [authenticate → resolveTenant → requireRole(ADMIN)]
-  → handler  services/analytics/src/routes/analytics.ts:92
+  → [authenticate → resolveTenant → requirePermission(analytics:workspace:read)]
+  → handler  services/analytics/src/routes/analytics.ts:145
       → analyticsService.getOverview()
+```
+
+### `GET /api/analytics/product-demand`
+
+- **Purpose:** What shoppers asked the catalogue for, by ISO week.
+- **Handler:** `services/analytics/src/routes/analytics.ts` line 306
+- **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
+- **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
+- **Input validation:** No body schema. Path and query parameters are read directly by the handler.
+- **Exposure:** Routed by the gateway (reachable from the internet).
+- **Operation type:** read
+
+#### Execution flow
+
+1. **Route registration.** `analytics` service mounts this router at `/api/analytics` in `services/analytics/src/index.ts`; the route is declared in `services/analytics/src/routes/analytics.ts`.
+2. **Handler.** `services/analytics/src/routes/analytics.ts:306` - inline `async (req, res)` handler.
+3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
+4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
+5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
+6. **Service calls**, in source order:
+   - `analyticsService.getProductDemand()`
+7. **Database.** No direct Prisma access in the handler body. Any persistence happens inside the services listed above.
+8. **External integrations.** None detected in the handler body.
+9. **Background work, events and audit.** None triggered by this endpoint.
+10. **Response and error paths.** Success status not determinable from source. Error paths: `500`, answering `{ error: ... }`. `401` is returned by `authenticate()` before the handler runs.
+
+#### Call graph
+
+```text
+GET /api/analytics/product-demand
+  → [authenticate → resolveTenant]
+  → handler  services/analytics/src/routes/analytics.ts:306
+      → analyticsService.getProductDemand()
 ```
 
 ### `GET /api/analytics/queue`
@@ -6090,7 +6356,7 @@ GET /api/analytics/overview
 - **Purpose:** Lists queue. _(Derived from the route shape; no descriptive comment in source.)_
 - **Handler:** `services/analytics/src/routes/analytics.ts` line 82
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
-- **Authorization:** Role: `ADMIN`
+- **Authorization:** Permission: `analytics:workspace:read`
 - **Input validation:** No input.
 - **Exposure:** Routed by the gateway (reachable from the internet).
 - **Operation type:** read
@@ -6101,7 +6367,7 @@ GET /api/analytics/overview
 2. **Handler.** `services/analytics/src/routes/analytics.ts:82` - inline `async (req, res)` handler.
 3. **Validation.** No input.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
-5. **Authorization.** Role: `ADMIN`
+5. **Authorization.** Permission: `analytics:workspace:read`
 6. **Service calls**, in source order:
    - `analyticsService.getQueueDepth()`
 7. **Database.** No direct Prisma access in the handler body. Any persistence happens inside the services listed above.
@@ -6113,17 +6379,17 @@ GET /api/analytics/overview
 
 ```text
 GET /api/analytics/queue
-  → [authenticate → resolveTenant → requireRole(ADMIN)]
+  → [authenticate → resolveTenant → requirePermission(analytics:workspace:read)]
   → handler  services/analytics/src/routes/analytics.ts:82
       → analyticsService.getQueueDepth()
 ```
 
-### `GET /api/analytics/tool-usage`
+### `GET /api/analytics/queue/items`
 
-- **Purpose:** Lists tool usage. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/analytics/src/routes/analytics.ts` line 117
+- **Purpose:** The ranked queue behind Home's "needs you now".
+- **Handler:** `services/analytics/src/routes/analytics.ts` line 99
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
-- **Authorization:** Role: `ADMIN`
+- **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
 - **Input validation:** No body schema. Path and query parameters are read directly by the handler.
 - **Exposure:** Routed by the gateway (reachable from the internet).
 - **Operation type:** read
@@ -6131,10 +6397,109 @@ GET /api/analytics/queue
 #### Execution flow
 
 1. **Route registration.** `analytics` service mounts this router at `/api/analytics` in `services/analytics/src/index.ts`; the route is declared in `services/analytics/src/routes/analytics.ts`.
-2. **Handler.** `services/analytics/src/routes/analytics.ts:117` - inline `async (req, res)` handler.
+2. **Handler.** `services/analytics/src/routes/analytics.ts:99` - inline `async (req, res)` handler.
 3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
-5. **Authorization.** Role: `ADMIN`
+5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
+6. **Service calls**, in source order:
+   - `analyticsService.getQueueItems()`
+7. **Database.** No direct Prisma access in the handler body. Any persistence happens inside the services listed above.
+8. **External integrations.** None detected in the handler body.
+9. **Background work, events and audit.** None triggered by this endpoint.
+10. **Response and error paths.** Success status not determinable from source. Error paths: `500`, answering `{ error: ... }`. `401` is returned by `authenticate()` before the handler runs.
+
+#### Call graph
+
+```text
+GET /api/analytics/queue/items
+  → [authenticate → resolveTenant]
+  → handler  services/analytics/src/routes/analytics.ts:99
+      → analyticsService.getQueueItems()
+```
+
+### `GET /api/analytics/quiet-day`
+
+- **Purpose:** "Worth an hour, while it is quiet" - the four sources in one ranked list.
+- **Handler:** `services/analytics/src/routes/analytics.ts` line 258
+- **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
+- **Authorization:** Permission: `analytics:workspace:read`
+- **Input validation:** No body schema. Path and query parameters are read directly by the handler.
+- **Exposure:** Routed by the gateway (reachable from the internet).
+- **Operation type:** read
+
+#### Execution flow
+
+1. **Route registration.** `analytics` service mounts this router at `/api/analytics` in `services/analytics/src/index.ts`; the route is declared in `services/analytics/src/routes/analytics.ts`.
+2. **Handler.** `services/analytics/src/routes/analytics.ts:258` - inline `async (req, res)` handler.
+3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
+4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
+5. **Authorization.** Permission: `analytics:workspace:read`
+6. **Service calls**, in source order:
+   - `analyticsService.getQuietDayList()`
+7. **Database.** No direct Prisma access in the handler body. Any persistence happens inside the services listed above.
+8. **External integrations.** None detected in the handler body.
+9. **Background work, events and audit.** None triggered by this endpoint.
+10. **Response and error paths.** Success status not determinable from source. Error paths: `500`, answering `{ error: ... }`. `401` is returned by `authenticate()` before the handler runs.
+
+#### Call graph
+
+```text
+GET /api/analytics/quiet-day
+  → [authenticate → resolveTenant → requirePermission(analytics:workspace:read)]
+  → handler  services/analytics/src/routes/analytics.ts:258
+      → analyticsService.getQuietDayList()
+```
+
+### `GET /api/analytics/time-saved`
+
+- **Purpose:** Seconds the AI saved, with the arithmetic attached. Any tenant member: it is a headline on Home, not a management report.
+- **Handler:** `services/analytics/src/routes/analytics.ts` line 133
+- **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
+- **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
+- **Input validation:** No body schema. Path and query parameters are read directly by the handler.
+- **Exposure:** Routed by the gateway (reachable from the internet).
+- **Operation type:** read
+
+#### Execution flow
+
+1. **Route registration.** `analytics` service mounts this router at `/api/analytics` in `services/analytics/src/index.ts`; the route is declared in `services/analytics/src/routes/analytics.ts`.
+2. **Handler.** `services/analytics/src/routes/analytics.ts:133` - inline `async (req, res)` handler.
+3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
+4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
+5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
+6. **Service calls**, in source order:
+   - `analyticsService.getTimeSaved()`
+7. **Database.** No direct Prisma access in the handler body. Any persistence happens inside the services listed above.
+8. **External integrations.** None detected in the handler body.
+9. **Background work, events and audit.** None triggered by this endpoint.
+10. **Response and error paths.** Success status not determinable from source. Error paths: `500`, answering `{ error: ... }`. `401` is returned by `authenticate()` before the handler runs.
+
+#### Call graph
+
+```text
+GET /api/analytics/time-saved
+  → [authenticate → resolveTenant]
+  → handler  services/analytics/src/routes/analytics.ts:133
+      → analyticsService.getTimeSaved()
+```
+
+### `GET /api/analytics/tool-usage`
+
+- **Purpose:** Lists tool usage. _(Derived from the route shape; no descriptive comment in source.)_
+- **Handler:** `services/analytics/src/routes/analytics.ts` line 170
+- **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
+- **Authorization:** Permission: `analytics:dashboard:read`
+- **Input validation:** No body schema. Path and query parameters are read directly by the handler.
+- **Exposure:** Routed by the gateway (reachable from the internet).
+- **Operation type:** read
+
+#### Execution flow
+
+1. **Route registration.** `analytics` service mounts this router at `/api/analytics` in `services/analytics/src/index.ts`; the route is declared in `services/analytics/src/routes/analytics.ts`.
+2. **Handler.** `services/analytics/src/routes/analytics.ts:170` - inline `async (req, res)` handler.
+3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
+4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
+5. **Authorization.** Permission: `analytics:dashboard:read`
 6. **Service calls**, in source order:
    - `analyticsService.getToolUsageStats()`
 7. **Database.** No direct Prisma access in the handler body. Any persistence happens inside the services listed above.
@@ -6146,17 +6511,17 @@ GET /api/analytics/queue
 
 ```text
 GET /api/analytics/tool-usage
-  → [authenticate → resolveTenant → requireRole(ADMIN)]
-  → handler  services/analytics/src/routes/analytics.ts:117
+  → [authenticate → resolveTenant → requirePermission(analytics:dashboard:read)]
+  → handler  services/analytics/src/routes/analytics.ts:170
       → analyticsService.getToolUsageStats()
 ```
 
 ### `GET /api/analytics/top-questions`
 
 - **Purpose:** Lists top questions. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/analytics/src/routes/analytics.ts` line 104
+- **Handler:** `services/analytics/src/routes/analytics.ts` line 157
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
-- **Authorization:** Role: `ADMIN`
+- **Authorization:** Permission: `analytics:dashboard:read`
 - **Input validation:** No body schema. Path and query parameters are read directly by the handler.
 - **Exposure:** Routed by the gateway (reachable from the internet).
 - **Operation type:** read
@@ -6164,10 +6529,10 @@ GET /api/analytics/tool-usage
 #### Execution flow
 
 1. **Route registration.** `analytics` service mounts this router at `/api/analytics` in `services/analytics/src/index.ts`; the route is declared in `services/analytics/src/routes/analytics.ts`.
-2. **Handler.** `services/analytics/src/routes/analytics.ts:104` - inline `async (req, res)` handler.
+2. **Handler.** `services/analytics/src/routes/analytics.ts:157` - inline `async (req, res)` handler.
 3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
-5. **Authorization.** Role: `ADMIN`
+5. **Authorization.** Permission: `analytics:dashboard:read`
 6. **Service calls**, in source order:
    - `analyticsService.getTopQuestions()`
 7. **Database.** No direct Prisma access in the handler body. Any persistence happens inside the services listed above.
@@ -6179,9 +6544,82 @@ GET /api/analytics/tool-usage
 
 ```text
 GET /api/analytics/top-questions
-  → [authenticate → resolveTenant → requireRole(ADMIN)]
-  → handler  services/analytics/src/routes/analytics.ts:104
+  → [authenticate → resolveTenant → requirePermission(analytics:dashboard:read)]
+  → handler  services/analytics/src/routes/analytics.ts:157
       → analyticsService.getTopQuestions()
+```
+
+### `GET /api/analytics/unanswered-questions`
+
+- **Purpose:** Questions GOTCHA could not answer. Any tenant member: the point of the card is that whoever sees it can go and write the missing answer.
+- **Handler:** `services/analytics/src/routes/analytics.ts` line 289
+- **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
+- **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
+- **Input validation:** No body schema. Path and query parameters are read directly by the handler.
+- **Exposure:** Routed by the gateway (reachable from the internet).
+- **Operation type:** read
+
+#### Execution flow
+
+1. **Route registration.** `analytics` service mounts this router at `/api/analytics` in `services/analytics/src/index.ts`; the route is declared in `services/analytics/src/routes/analytics.ts`.
+2. **Handler.** `services/analytics/src/routes/analytics.ts:289` - inline `async (req, res)` handler.
+3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
+4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
+5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
+6. **Service calls**, in source order:
+   - `analyticsService.getUnansweredQuestions()`
+7. **Database.** No direct Prisma access in the handler body. Any persistence happens inside the services listed above.
+8. **External integrations.** None detected in the handler body.
+9. **Background work, events and audit.** None triggered by this endpoint.
+10. **Response and error paths.** Success status not determinable from source. Error paths: `500`, answering `{ error: ... }`. `401` is returned by `authenticate()` before the handler runs.
+
+#### Call graph
+
+```text
+GET /api/analytics/unanswered-questions
+  → [authenticate → resolveTenant]
+  → handler  services/analytics/src/routes/analytics.ts:289
+      → analyticsService.getUnansweredQuestions()
+```
+
+### `GET /api/usage/allowance`
+
+- **Purpose:** Lists allowance. _(Derived from the route shape; no descriptive comment in source.)_
+- **Handler:** `services/billing/src/routes/usage-allowance.ts` line 30
+- **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
+- **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
+- **Input validation:** No input.
+- **Exposure:** Routed by the gateway (reachable from the internet).
+- **Operation type:** read
+
+#### Execution flow
+
+1. **Route registration.** `billing` service mounts this router at `/api/usage` in `services/billing/src/index.ts`; the route is declared in `services/billing/src/routes/usage-allowance.ts`.
+2. **Handler.** `services/billing/src/routes/usage-allowance.ts:30` - inline `async (req, res)` handler.
+3. **Validation.** No input.
+4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
+5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
+6. **Service calls.** None; the handler works directly against Prisma and/or the response.
+7. **Database.** Prisma models touched (source order, not guaranteed runtime order - branches may skip some):
+   _Reads:_
+   - `billableEntityTenant.findUnique`
+   - `plan.findUnique`
+   - `planVolumeOption.findFirst`
+   - `conversation.count`
+8. **External integrations.** None detected in the handler body.
+9. **Background work, events and audit.** None triggered by this endpoint.
+10. **Response and error paths.** Success status not determinable from source. Error paths: `500`, answering `{ error: ... }`. `401` is returned by `authenticate()` before the handler runs.
+
+#### Call graph
+
+```text
+GET /api/usage/allowance
+  → [authenticate → resolveTenant → requireTenantState(ACTIVE)]
+  → handler  services/billing/src/routes/usage-allowance.ts:30
+      → db read   prisma.billableEntityTenant.findUnique
+      → db read   prisma.plan.findUnique
+      → db read   prisma.planVolumeOption.findFirst
+      → db read   prisma.conversation.count
 ```
 
 ### `GET /api/usage/daily`
@@ -6288,7 +6726,7 @@ GET /api/usage/stats
 
 ## Auth & Identity
 
-36 endpoints.
+37 endpoints.
 
 ### `GET /api/account`
 
@@ -6939,8 +7377,8 @@ POST /api/auth/me/switch-tenant
 
 ### `GET /api/auth/setup/:token`
 
-- **Purpose:** Redeem a setup link.
-- **Handler:** `services/auth/src/routes/setup-link.ts` line 55
+- **Purpose:** Reads a single setup. _(Derived from the route shape; no descriptive comment in source.)_
+- **Handler:** `services/auth/src/routes/setup-link.ts` line 114
 - **Authentication / tenant resolution:** **No authentication middleware.** This route is reachable without a token.
 - **Authorization:** None.
 - **Input validation:** No body schema. Path and query parameters are read directly by the handler.
@@ -6950,7 +7388,7 @@ POST /api/auth/me/switch-tenant
 #### Execution flow
 
 1. **Route registration.** `auth` service mounts this router at `/api/auth` in `services/auth/src/index.ts`; the route is declared in `services/auth/src/routes/setup-link.ts`.
-2. **Handler.** `services/auth/src/routes/setup-link.ts:55` - inline `async (req, res)` handler.
+2. **Handler.** `services/auth/src/routes/setup-link.ts:114` - inline `async (req, res)` handler.
 3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
 4. **Authentication / tenant resolution.** **No authentication middleware.** This route is reachable without a token.
 5. **Authorization.** None.
@@ -6964,14 +7402,49 @@ POST /api/auth/me/switch-tenant
 
 ```text
 GET /api/auth/setup/:token
-  → handler  services/auth/src/routes/setup-link.ts:55
+  → handler  services/auth/src/routes/setup-link.ts:114
       → (responds directly; no downstream calls detected)
+```
+
+### `GET /api/auth/setup/:token/state`
+
+- **Purpose:** Redeem a setup link.
+- **Handler:** `services/auth/src/routes/setup-link.ts` line 74
+- **Authentication / tenant resolution:** **No authentication middleware.** This route is reachable without a token.
+- **Authorization:** None.
+- **Input validation:** No body schema. Path and query parameters are read directly by the handler.
+- **Exposure:** Routed by the gateway (reachable from the internet).
+- **Operation type:** read
+
+#### Execution flow
+
+1. **Route registration.** `auth` service mounts this router at `/api/auth` in `services/auth/src/index.ts`; the route is declared in `services/auth/src/routes/setup-link.ts`.
+2. **Handler.** `services/auth/src/routes/setup-link.ts:74` - inline `async (req, res)` handler.
+3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
+4. **Authentication / tenant resolution.** **No authentication middleware.** This route is reachable without a token.
+5. **Authorization.** None.
+6. **Service calls.** None; the handler works directly against Prisma and/or the response.
+7. **Database.** Prisma models touched (source order, not guaranteed runtime order - branches may skip some):
+   _Reads:_
+   - `tenant.findUnique`
+   - `setupLink.findUnique`
+8. **External integrations.** None detected in the handler body.
+9. **Background work, events and audit.** None triggered by this endpoint.
+10. **Response and error paths.** Success: `200` _(inferred - the handler sets no explicit success status; Express defaults to 200)_, answering the `{ data: ... }` envelope. No explicit error statuses in the handler. `429` from `redeemLimiter`.
+
+#### Call graph
+
+```text
+GET /api/auth/setup/:token/state
+  → handler  services/auth/src/routes/setup-link.ts:74
+      → db read   prisma.tenant.findUnique
+      → db read   prisma.setupLink.findUnique
 ```
 
 ### `POST /api/auth/setup/resend`
 
 - **Purpose:** Ask for a replacement link.
-- **Handler:** `services/auth/src/routes/setup-link.ts` line 117
+- **Handler:** `services/auth/src/routes/setup-link.ts` line 176
 - **Authentication / tenant resolution:** **No authentication middleware.** This route is reachable without a token.
 - **Authorization:** None.
 - **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
@@ -6981,7 +7454,7 @@ GET /api/auth/setup/:token
 #### Execution flow
 
 1. **Route registration.** `auth` service mounts this router at `/api/auth` in `services/auth/src/index.ts`; the route is declared in `services/auth/src/routes/setup-link.ts`.
-2. **Handler.** `services/auth/src/routes/setup-link.ts:117` - inline `async (req, res)` handler.
+2. **Handler.** `services/auth/src/routes/setup-link.ts:176` - inline `async (req, res)` handler.
 3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
 4. **Authentication / tenant resolution.** **No authentication middleware.** This route is reachable without a token.
 5. **Authorization.** None.
@@ -6995,7 +7468,7 @@ GET /api/auth/setup/:token
 
 ```text
 POST /api/auth/setup/resend
-  → handler  services/auth/src/routes/setup-link.ts:117
+  → handler  services/auth/src/routes/setup-link.ts:176
       → (responds directly; no downstream calls detected)
 ```
 
@@ -10551,7 +11024,7 @@ GET /api/public/pricing
 
 ## Channels
 
-16 endpoints.
+17 endpoints.
 
 ### `GET /api/channels`
 
@@ -10590,7 +11063,7 @@ GET /api/channels
 ### `DELETE /api/channels/:id`
 
 - **Purpose:** Deletes the referenced channel. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/auth/src/routes/channels.ts` line 1757
+- **Handler:** `services/auth/src/routes/channels.ts` line 1834
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
 - **Authorization:** Permission: `channels:manage:update`
 - **Input validation:** No body schema. Path and query parameters are read directly by the handler.
@@ -10600,7 +11073,7 @@ GET /api/channels
 #### Execution flow
 
 1. **Route registration.** `auth` service mounts this router at `/api/channels` in `services/auth/src/index.ts`; the route is declared in `services/auth/src/routes/channels.ts`.
-2. **Handler.** `services/auth/src/routes/channels.ts:1757` - inline `async (req, res)` handler.
+2. **Handler.** `services/auth/src/routes/channels.ts:1834` - inline `async (req, res)` handler.
 3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
 5. **Authorization.** Permission: `channels:manage:update`
@@ -10621,7 +11094,7 @@ GET /api/channels
 ```text
 DELETE /api/channels/:id
   → [authenticate → resolveTenant → requirePermission(channels:manage:update)]
-  → handler  services/auth/src/routes/channels.ts:1757
+  → handler  services/auth/src/routes/channels.ts:1834
       → db read   prisma.channelAccount.findFirst
       → db write  prisma.message.deleteMany
       → db write  prisma.conversation.deleteMany
@@ -10631,7 +11104,7 @@ DELETE /api/channels/:id
 ### `POST /api/channels/:id/disconnect`
 
 - **Purpose:** Performs the `disconnect` action on the referenced channel. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/auth/src/routes/channels.ts` line 1667
+- **Handler:** `services/auth/src/routes/channels.ts` line 1744
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
 - **Authorization:** Permission: `channels:manage:update`
 - **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
@@ -10641,7 +11114,7 @@ DELETE /api/channels/:id
 #### Execution flow
 
 1. **Route registration.** `auth` service mounts this router at `/api/channels` in `services/auth/src/index.ts`; the route is declared in `services/auth/src/routes/channels.ts`.
-2. **Handler.** `services/auth/src/routes/channels.ts:1667` - inline `async (req, res)` handler.
+2. **Handler.** `services/auth/src/routes/channels.ts:1744` - inline `async (req, res)` handler.
 3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
 5. **Authorization.** Permission: `channels:manage:update`
@@ -10662,7 +11135,7 @@ DELETE /api/channels/:id
 ```text
 POST /api/channels/:id/disconnect
   → [authenticate → resolveTenant → requirePermission(channels:manage:update)]
-  → handler  services/auth/src/routes/channels.ts:1667
+  → handler  services/auth/src/routes/channels.ts:1744
       → db read   prisma.channelAccount.findFirst
       → db write  prisma.channelAccount.update
       → external  outbound HTTP (axios.delete)
@@ -10672,7 +11145,7 @@ POST /api/channels/:id/disconnect
 ### `GET /api/channels/:id/posts`
 
 - **Purpose:** Returns a normalized list of the page's own posts so flow authors can select which post a Comment Trigger should listen on, instead of pasting raw IDs. Group posts intentionally NOT supported - the Meta Groups API was deprecated April 2024; for those, the trigger UI exposes a manual post-URL paste field that the runtime later matches via the page webhook.
-- **Handler:** `services/auth/src/routes/channels.ts` line 207
+- **Handler:** `services/auth/src/routes/channels.ts` line 284
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
 - **Authorization:** Permission: `channels:manage:read`
 - **Input validation:** No body schema. Path and query parameters are read directly by the handler.
@@ -10682,7 +11155,7 @@ POST /api/channels/:id/disconnect
 #### Execution flow
 
 1. **Route registration.** `auth` service mounts this router at `/api/channels` in `services/auth/src/index.ts`; the route is declared in `services/auth/src/routes/channels.ts`.
-2. **Handler.** `services/auth/src/routes/channels.ts:207` - inline `async (req, res)` handler.
+2. **Handler.** `services/auth/src/routes/channels.ts:284` - inline `async (req, res)` handler.
 3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
 5. **Authorization.** Permission: `channels:manage:read`
@@ -10700,7 +11173,7 @@ POST /api/channels/:id/disconnect
 ```text
 GET /api/channels/:id/posts
   → [authenticate → resolveTenant → requirePermission(channels:manage:read)]
-  → handler  services/auth/src/routes/channels.ts:207
+  → handler  services/auth/src/routes/channels.ts:284
       → db read   prisma.channelAccount.findFirst
       → external  outbound HTTP (axios.get)
 ```
@@ -10708,7 +11181,7 @@ GET /api/channels/:id/posts
 ### `PATCH /api/channels/:id/response-mode`
 
 - **Purpose:** Updates the referenced response mode for the referenced channel. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/auth/src/routes/channels.ts` line 1636
+- **Handler:** `services/auth/src/routes/channels.ts` line 1713
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
 - **Authorization:** Permission: `channels:manage:update`
 - **Input validation:** `validate(responseModeSchema)` (Zod). Accepts: `responseMode`. Required: `responseMode`. `validate` reassigns `req.body` to the parsed value, so any property not named by the schema is stripped before the handler runs.
@@ -10718,7 +11191,7 @@ GET /api/channels/:id/posts
 #### Execution flow
 
 1. **Route registration.** `auth` service mounts this router at `/api/channels` in `services/auth/src/index.ts`; the route is declared in `services/auth/src/routes/channels.ts`.
-2. **Handler.** `services/auth/src/routes/channels.ts:1636` - inline `async (req, res)` handler.
+2. **Handler.** `services/auth/src/routes/channels.ts:1713` - inline `async (req, res)` handler.
 3. **Validation.** `validate(responseModeSchema)` (Zod). Accepts: `responseMode`. Required: `responseMode`. `validate` reassigns `req.body` to the parsed value, so any property not named by the schema is stripped before the handler runs.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
 5. **Authorization.** Permission: `channels:manage:update`
@@ -10737,7 +11210,7 @@ GET /api/channels/:id/posts
 ```text
 PATCH /api/channels/:id/response-mode
   → [authenticate → resolveTenant → requirePermission(channels:manage:update) → validate(responseModeSchema)]
-  → handler  services/auth/src/routes/channels.ts:1636
+  → handler  services/auth/src/routes/channels.ts:1713
       → db read   prisma.channelAccount.findFirst
       → db write  prisma.channelAccount.update
 ```
@@ -10745,7 +11218,7 @@ PATCH /api/channels/:id/response-mode
 ### `GET /api/channels/:id/status`
 
 - **Purpose:** Reads a single statu for the referenced channel. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/auth/src/routes/channels.ts` line 1800
+- **Handler:** `services/auth/src/routes/channels.ts` line 1877
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
 - **Authorization:** Permission: `channels:manage:read`
 - **Input validation:** No body schema. Path and query parameters are read directly by the handler.
@@ -10755,7 +11228,7 @@ PATCH /api/channels/:id/response-mode
 #### Execution flow
 
 1. **Route registration.** `auth` service mounts this router at `/api/channels` in `services/auth/src/index.ts`; the route is declared in `services/auth/src/routes/channels.ts`.
-2. **Handler.** `services/auth/src/routes/channels.ts:1800` - inline `async (req, res)` handler.
+2. **Handler.** `services/auth/src/routes/channels.ts:1877` - inline `async (req, res)` handler.
 3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
 5. **Authorization.** Permission: `channels:manage:read`
@@ -10776,7 +11249,7 @@ PATCH /api/channels/:id/response-mode
 ```text
 GET /api/channels/:id/status
   → [authenticate → resolveTenant → requirePermission(channels:manage:read)]
-  → handler  services/auth/src/routes/channels.ts:1800
+  → handler  services/auth/src/routes/channels.ts:1877
       → db read   prisma.channelAccount.findFirst
       → db write  prisma.channelAccount.update
       → external  outbound HTTP (axios.get)
@@ -10786,7 +11259,7 @@ GET /api/channels/:id/status
 ### `GET /api/channels/config`
 
 - **Purpose:** Lists config. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/auth/src/routes/channels.ts` line 2044
+- **Handler:** `services/auth/src/routes/channels.ts` line 2121
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
 - **Authorization:** Permission: `channels:manage:read`
 - **Input validation:** No input.
@@ -10796,7 +11269,7 @@ GET /api/channels/:id/status
 #### Execution flow
 
 1. **Route registration.** `auth` service mounts this router at `/api/channels` in `services/auth/src/index.ts`; the route is declared in `services/auth/src/routes/channels.ts`.
-2. **Handler.** `services/auth/src/routes/channels.ts:2044` - inline `async (req, res)` handler.
+2. **Handler.** `services/auth/src/routes/channels.ts:2121` - inline `async (req, res)` handler.
 3. **Validation.** No input.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
 5. **Authorization.** Permission: `channels:manage:read`
@@ -10811,14 +11284,14 @@ GET /api/channels/:id/status
 ```text
 GET /api/channels/config
   → [authenticate → resolveTenant → requirePermission(channels:manage:read)]
-  → handler  services/auth/src/routes/channels.ts:2044
+  → handler  services/auth/src/routes/channels.ts:2121
       → (responds directly; no downstream calls detected)
 ```
 
 ### `POST /api/channels/connect/email`
 
 - **Purpose:** Creates an email. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/auth/src/routes/channels.ts` line 1913
+- **Handler:** `services/auth/src/routes/channels.ts` line 1990
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
 - **Authorization:** Permission: `channels:manage:update`; Plan limit: `limit:channels`
 - **Input validation:** `validate(connectEmailSchema)` (Zod). Accepts: `emailAddress`, `displayName`, `smtpHost`, `smtpPort`, `smtpUser`, `smtpPass`, `imapHost`, `imapPort`, `imapUser`, `imapPass`. Required: `emailAddress`, `displayName`, `smtpHost`, `smtpPort`, `smtpUser`, `smtpPass`. `validate` reassigns `req.body` to the parsed value, so any property not named by the schema is stripped before the handler runs.
@@ -10828,7 +11301,7 @@ GET /api/channels/config
 #### Execution flow
 
 1. **Route registration.** `auth` service mounts this router at `/api/channels` in `services/auth/src/index.ts`; the route is declared in `services/auth/src/routes/channels.ts`.
-2. **Handler.** `services/auth/src/routes/channels.ts:1913` - inline `async (req, res)` handler.
+2. **Handler.** `services/auth/src/routes/channels.ts:1990` - inline `async (req, res)` handler.
 3. **Validation.** `validate(connectEmailSchema)` (Zod). Accepts: `emailAddress`, `displayName`, `smtpHost`, `smtpPort`, `smtpUser`, `smtpPass`, `imapHost`, `imapPort`, `imapUser`, `imapPass`. Required: `emailAddress`, `displayName`, `smtpHost`, `smtpPort`, `smtpUser`, `smtpPass`. `validate` reassigns `req.body` to the parsed value, so any property not named by the schema is stripped before the handler runs.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
 5. **Authorization.** Permission: `channels:manage:update`; Plan limit: `limit:channels`
@@ -10847,7 +11320,7 @@ GET /api/channels/config
 ```text
 POST /api/channels/connect/email
   → [authenticate → resolveTenant → requirePermission(channels:manage:update) → validate(connectEmailSchema)]
-  → handler  services/auth/src/routes/channels.ts:1913
+  → handler  services/auth/src/routes/channels.ts:1990
       → db read   prisma.channelAccount.findFirst
       → db write  prisma.channelAccount.create
 ```
@@ -10855,7 +11328,7 @@ POST /api/channels/connect/email
 ### `POST /api/channels/connect/whatsapp`
 
 - **Purpose:** Creates a whatsapp. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/auth/src/routes/channels.ts` line 301
+- **Handler:** `services/auth/src/routes/channels.ts` line 378
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
 - **Authorization:** Permission: `channels:manage:update`; Plan limit: `limit:channels`
 - **Input validation:** `validate(whatsappConnectSchema)` (Zod). Accepts: `code`, `wabaId`, `phoneNumberId`. Required: `code`. `validate` reassigns `req.body` to the parsed value, so any property not named by the schema is stripped before the handler runs.
@@ -10865,7 +11338,7 @@ POST /api/channels/connect/email
 #### Execution flow
 
 1. **Route registration.** `auth` service mounts this router at `/api/channels` in `services/auth/src/index.ts`; the route is declared in `services/auth/src/routes/channels.ts`.
-2. **Handler.** `services/auth/src/routes/channels.ts:301` - inline `async (req, res)` handler.
+2. **Handler.** `services/auth/src/routes/channels.ts:378` - inline `async (req, res)` handler.
 3. **Validation.** `validate(whatsappConnectSchema)` (Zod). Accepts: `code`, `wabaId`, `phoneNumberId`. Required: `code`. `validate` reassigns `req.body` to the parsed value, so any property not named by the schema is stripped before the handler runs.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
 5. **Authorization.** Permission: `channels:manage:update`; Plan limit: `limit:channels`
@@ -10887,7 +11360,7 @@ POST /api/channels/connect/email
 ```text
 POST /api/channels/connect/whatsapp
   → [authenticate → resolveTenant → requirePermission(channels:manage:update) → validate(whatsappConnectSchema)]
-  → handler  services/auth/src/routes/channels.ts:301
+  → handler  services/auth/src/routes/channels.ts:378
       → db read   prisma.channelAccount.findUnique
       → db write  prisma.channelAccount.update
       → db write  prisma.channelAccount.create
@@ -10898,7 +11371,7 @@ POST /api/channels/connect/whatsapp
 ### `POST /api/channels/connect/whatsapp-session`
 
 - **Purpose:** Creates a whatsapp session. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/auth/src/routes/channels.ts` line 536
+- **Handler:** `services/auth/src/routes/channels.ts` line 613
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
 - **Authorization:** Permission: `channels:manage:update`; Plan limit: `limit:channels`
 - **Input validation:** `validate(whatsappSessionSchema)` (Zod). Accepts: `wabaId`, `phoneNumberId`. Required: `wabaId`. `validate` reassigns `req.body` to the parsed value, so any property not named by the schema is stripped before the handler runs.
@@ -10908,7 +11381,7 @@ POST /api/channels/connect/whatsapp
 #### Execution flow
 
 1. **Route registration.** `auth` service mounts this router at `/api/channels` in `services/auth/src/index.ts`; the route is declared in `services/auth/src/routes/channels.ts`.
-2. **Handler.** `services/auth/src/routes/channels.ts:536` - inline `async (req, res)` handler.
+2. **Handler.** `services/auth/src/routes/channels.ts:613` - inline `async (req, res)` handler.
 3. **Validation.** `validate(whatsappSessionSchema)` (Zod). Accepts: `wabaId`, `phoneNumberId`. Required: `wabaId`. `validate` reassigns `req.body` to the parsed value, so any property not named by the schema is stripped before the handler runs.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
 5. **Authorization.** Permission: `channels:manage:update`; Plan limit: `limit:channels`
@@ -10930,7 +11403,7 @@ POST /api/channels/connect/whatsapp
 ```text
 POST /api/channels/connect/whatsapp-session
   → [authenticate → resolveTenant → requirePermission(channels:manage:update) → validate(whatsappSessionSchema)]
-  → handler  services/auth/src/routes/channels.ts:536
+  → handler  services/auth/src/routes/channels.ts:613
       → db read   prisma.channelAccount.findUnique
       → db write  prisma.channelAccount.update
       → db write  prisma.channelAccount.create
@@ -10941,7 +11414,7 @@ POST /api/channels/connect/whatsapp-session
 ### `GET /api/channels/oauth/callback`
 
 - **Purpose:** Lists callback. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/auth/src/routes/channels.ts` line 786
+- **Handler:** `services/auth/src/routes/channels.ts` line 863
 - **Authentication / tenant resolution:** **No authentication middleware.** This route is reachable without a token.
 - **Authorization:** None.
 - **Input validation:** No input.
@@ -10951,7 +11424,7 @@ POST /api/channels/connect/whatsapp-session
 #### Execution flow
 
 1. **Route registration.** `auth` service mounts this router at `/api/channels` in `services/auth/src/index.ts`; the route is declared in `services/auth/src/routes/channels.ts`.
-2. **Handler.** `services/auth/src/routes/channels.ts:786` - inline `async (req, res)` handler.
+2. **Handler.** `services/auth/src/routes/channels.ts:863` - inline `async (req, res)` handler.
 3. **Validation.** No input.
 4. **Authentication / tenant resolution.** **No authentication middleware.** This route is reachable without a token.
 5. **Authorization.** None.
@@ -10972,7 +11445,7 @@ POST /api/channels/connect/whatsapp-session
 
 ```text
 GET /api/channels/oauth/callback
-  → handler  services/auth/src/routes/channels.ts:786
+  → handler  services/auth/src/routes/channels.ts:863
       → db read   prisma.channelAccount.findUnique
       → db write  prisma.channelAccount.update
       → db write  prisma.channelAccount.create
@@ -10983,7 +11456,7 @@ GET /api/channels/oauth/callback
 ### `GET /api/channels/oauth/init`
 
 - **Purpose:** Lists init. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/auth/src/routes/channels.ts` line 625
+- **Handler:** `services/auth/src/routes/channels.ts` line 702
 - **Authentication / tenant resolution:** **No authentication middleware.** This route is reachable without a token.
 - **Authorization:** None.
 - **Input validation:** No body schema. Path and query parameters are read directly by the handler.
@@ -10993,7 +11466,7 @@ GET /api/channels/oauth/callback
 #### Execution flow
 
 1. **Route registration.** `auth` service mounts this router at `/api/channels` in `services/auth/src/index.ts`; the route is declared in `services/auth/src/routes/channels.ts`.
-2. **Handler.** `services/auth/src/routes/channels.ts:625` - inline `async (req, res)` handler.
+2. **Handler.** `services/auth/src/routes/channels.ts:702` - inline `async (req, res)` handler.
 3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
 4. **Authentication / tenant resolution.** **No authentication middleware.** This route is reachable without a token.
 5. **Authorization.** None.
@@ -11007,14 +11480,14 @@ GET /api/channels/oauth/callback
 
 ```text
 GET /api/channels/oauth/init
-  → handler  services/auth/src/routes/channels.ts:625
+  → handler  services/auth/src/routes/channels.ts:702
       → (responds directly; no downstream calls detected)
 ```
 
-### `GET /api/channels/summary`
+### `GET /api/channels/state`
 
 - **Purpose:** The Inbox/History empty states need to know WHY a list is empty ("no channel connected" vs "channel broken" vs "no conversations yet"), and agents see those pages too - the full listing above is ADMIN-only. This returns health COUNTS only: no tokens, external ids, or error details.
-- **Handler:** `services/auth/src/routes/channels.ts` line 182
+- **Handler:** `services/auth/src/routes/channels.ts` line 193
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
 - **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
 - **Input validation:** No input.
@@ -11024,7 +11497,41 @@ GET /api/channels/oauth/init
 #### Execution flow
 
 1. **Route registration.** `auth` service mounts this router at `/api/channels` in `services/auth/src/index.ts`; the route is declared in `services/auth/src/routes/channels.ts`.
-2. **Handler.** `services/auth/src/routes/channels.ts:182` - inline `async (req, res)` handler.
+2. **Handler.** `services/auth/src/routes/channels.ts:193` - inline `async (req, res)` handler.
+3. **Validation.** No input.
+4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
+5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
+6. **Service calls.** None; the handler works directly against Prisma and/or the response.
+7. **Database.** Prisma models touched (source order, not guaranteed runtime order - branches may skip some):
+   _Reads:_
+   - `channelAccount.findMany`
+8. **External integrations.** None detected in the handler body.
+9. **Background work, events and audit.** None triggered by this endpoint.
+10. **Response and error paths.** Success status not determinable from source. Error paths: `500`, answering `{ error: ... }`. `401` is returned by `authenticate()` before the handler runs.
+
+#### Call graph
+
+```text
+GET /api/channels/state
+  → [authenticate → resolveTenant]
+  → handler  services/auth/src/routes/channels.ts:193
+      → db read   prisma.channelAccount.findMany
+```
+
+### `GET /api/channels/summary`
+
+- **Purpose:** Lists summary. _(Derived from the route shape; no descriptive comment in source.)_
+- **Handler:** `services/auth/src/routes/channels.ts` line 259
+- **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
+- **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
+- **Input validation:** No input.
+- **Exposure:** Routed by the gateway (reachable from the internet).
+- **Operation type:** read
+
+#### Execution flow
+
+1. **Route registration.** `auth` service mounts this router at `/api/channels` in `services/auth/src/index.ts`; the route is declared in `services/auth/src/routes/channels.ts`.
+2. **Handler.** `services/auth/src/routes/channels.ts:259` - inline `async (req, res)` handler.
 3. **Validation.** No input.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
 5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
@@ -11041,14 +11548,14 @@ GET /api/channels/oauth/init
 ```text
 GET /api/channels/summary
   → [authenticate → resolveTenant]
-  → handler  services/auth/src/routes/channels.ts:182
+  → handler  services/auth/src/routes/channels.ts:259
       → db read   prisma.channelAccount.findMany
 ```
 
 ### `GET /api/channels/webchat/:id/settings`
 
 - **Purpose:** Reads a single setting for the referenced webchat. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/auth/src/routes/channels.ts` line 2026
+- **Handler:** `services/auth/src/routes/channels.ts` line 2103
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
 - **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
 - **Input validation:** No body schema. Path and query parameters are read directly by the handler.
@@ -11058,7 +11565,7 @@ GET /api/channels/summary
 #### Execution flow
 
 1. **Route registration.** `auth` service mounts this router at `/api/channels` in `services/auth/src/index.ts`; the route is declared in `services/auth/src/routes/channels.ts`.
-2. **Handler.** `services/auth/src/routes/channels.ts:2026` - inline `async (req, res)` handler.
+2. **Handler.** `services/auth/src/routes/channels.ts:2103` - inline `async (req, res)` handler.
 3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
 5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
@@ -11075,14 +11582,14 @@ GET /api/channels/summary
 ```text
 GET /api/channels/webchat/:id/settings
   → [authenticate → resolveTenant]
-  → handler  services/auth/src/routes/channels.ts:2026
+  → handler  services/auth/src/routes/channels.ts:2103
       → db read   prisma.channelAccount.findFirst
 ```
 
 ### `PUT /api/channels/webchat/:id/settings`
 
 - **Purpose:** Updates the referenced setting for the referenced webchat. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/auth/src/routes/channels.ts` line 1994
+- **Handler:** `services/auth/src/routes/channels.ts` line 2071
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
 - **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
 - **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
@@ -11092,7 +11599,7 @@ GET /api/channels/webchat/:id/settings
 #### Execution flow
 
 1. **Route registration.** `auth` service mounts this router at `/api/channels` in `services/auth/src/index.ts`; the route is declared in `services/auth/src/routes/channels.ts`.
-2. **Handler.** `services/auth/src/routes/channels.ts:1994` - inline `async (req, res)` handler.
+2. **Handler.** `services/auth/src/routes/channels.ts:2071` - inline `async (req, res)` handler.
 3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
 5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
@@ -11111,7 +11618,7 @@ GET /api/channels/webchat/:id/settings
 ```text
 PUT /api/channels/webchat/:id/settings
   → [authenticate → resolveTenant]
-  → handler  services/auth/src/routes/channels.ts:1994
+  → handler  services/auth/src/routes/channels.ts:2071
       → db read   prisma.channelAccount.findFirst
       → db write  prisma.channelAccount.update
 ```
@@ -11119,7 +11626,7 @@ PUT /api/channels/webchat/:id/settings
 ### `POST /api/channels/webchat/create`
 
 - **Purpose:** Creates a create. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/auth/src/routes/channels.ts` line 1954
+- **Handler:** `services/auth/src/routes/channels.ts` line 2031
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
 - **Authorization:** Permission: `channels:manage:update`; Plan limit: `limit:channels`
 - **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
@@ -11129,7 +11636,7 @@ PUT /api/channels/webchat/:id/settings
 #### Execution flow
 
 1. **Route registration.** `auth` service mounts this router at `/api/channels` in `services/auth/src/index.ts`; the route is declared in `services/auth/src/routes/channels.ts`.
-2. **Handler.** `services/auth/src/routes/channels.ts:1954` - inline `async (req, res)` handler.
+2. **Handler.** `services/auth/src/routes/channels.ts:2031` - inline `async (req, res)` handler.
 3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
 5. **Authorization.** Permission: `channels:manage:update`; Plan limit: `limit:channels`
@@ -11148,7 +11655,7 @@ PUT /api/channels/webchat/:id/settings
 ```text
 POST /api/channels/webchat/create
   → [authenticate → resolveTenant → requirePermission(channels:manage:update)]
-  → handler  services/auth/src/routes/channels.ts:1954
+  → handler  services/auth/src/routes/channels.ts:2031
       → db read   prisma.channelAccount.findFirst
       → db write  prisma.channelAccount.create
 ```
@@ -11853,7 +12360,7 @@ POST /api/identity/resolve
 
 ## Conversations
 
-49 endpoints.
+50 endpoints.
 
 ### `POST /api/audiences/preview`
 
@@ -12368,7 +12875,7 @@ POST /api/broadcasts/:id/validate
 ### `GET /api/conversations`
 
 - **Purpose:** Lists conversations. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/conversation/src/routes/conversations.ts` line 47
+- **Handler:** `services/conversation/src/routes/conversations.ts` line 69
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 - **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
 - **Input validation:** No input.
@@ -12378,7 +12885,7 @@ POST /api/broadcasts/:id/validate
 #### Execution flow
 
 1. **Route registration.** `conversation` service mounts this router at `/api/conversations` in `services/conversation/src/index.ts`; the route is declared in `services/conversation/src/routes/conversations.ts`.
-2. **Handler.** `services/conversation/src/routes/conversations.ts:47` - inline `async (req, res)` handler.
+2. **Handler.** `services/conversation/src/routes/conversations.ts:69` - inline `async (req, res)` handler.
 3. **Validation.** No input.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
@@ -12394,7 +12901,7 @@ POST /api/broadcasts/:id/validate
 ```text
 GET /api/conversations
   → [authenticate → resolveTenant → requireTenantState(ACTIVE)]
-  → handler  services/conversation/src/routes/conversations.ts:47
+  → handler  services/conversation/src/routes/conversations.ts:69
       → conversationService.list()
 ```
 
@@ -12552,7 +13059,7 @@ POST /api/conversations/:conversationId/messages/media
 ### `DELETE /api/conversations/:id`
 
 - **Purpose:** Deletes the referenced conversation. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/conversation/src/routes/conversations.ts` line 189
+- **Handler:** `services/conversation/src/routes/conversations.ts` line 211
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 - **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
 - **Input validation:** No body schema. Path and query parameters are read directly by the handler.
@@ -12562,7 +13069,7 @@ POST /api/conversations/:conversationId/messages/media
 #### Execution flow
 
 1. **Route registration.** `conversation` service mounts this router at `/api/conversations` in `services/conversation/src/index.ts`; the route is declared in `services/conversation/src/routes/conversations.ts`.
-2. **Handler.** `services/conversation/src/routes/conversations.ts:189` - inline `async (req, res)` handler.
+2. **Handler.** `services/conversation/src/routes/conversations.ts:211` - inline `async (req, res)` handler.
 3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
@@ -12582,7 +13089,7 @@ POST /api/conversations/:conversationId/messages/media
 ```text
 DELETE /api/conversations/:id
   → [authenticate → resolveTenant → requireTenantState(ACTIVE)]
-  → handler  services/conversation/src/routes/conversations.ts:189
+  → handler  services/conversation/src/routes/conversations.ts:211
       → db read   prisma.conversation.findFirst
       → db write  prisma.message.deleteMany
       → db write  prisma.conversation.delete
@@ -12591,7 +13098,7 @@ DELETE /api/conversations/:id
 ### `GET /api/conversations/:id`
 
 - **Purpose:** Reads a single conversation. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/conversation/src/routes/conversations.ts` line 102
+- **Handler:** `services/conversation/src/routes/conversations.ts` line 124
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 - **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
 - **Input validation:** No body schema. Path and query parameters are read directly by the handler.
@@ -12601,7 +13108,7 @@ DELETE /api/conversations/:id
 #### Execution flow
 
 1. **Route registration.** `conversation` service mounts this router at `/api/conversations` in `services/conversation/src/index.ts`; the route is declared in `services/conversation/src/routes/conversations.ts`.
-2. **Handler.** `services/conversation/src/routes/conversations.ts:102` - inline `async (req, res)` handler.
+2. **Handler.** `services/conversation/src/routes/conversations.ts:124` - inline `async (req, res)` handler.
 3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
@@ -12617,14 +13124,14 @@ DELETE /api/conversations/:id
 ```text
 GET /api/conversations/:id
   → [authenticate → resolveTenant → requireTenantState(ACTIVE)]
-  → handler  services/conversation/src/routes/conversations.ts:102
+  → handler  services/conversation/src/routes/conversations.ts:124
       → conversationService.getById()
 ```
 
 ### `POST /api/conversations/:id/claim`
 
 - **Purpose:** Performs the `claim` action on the referenced conversation. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/conversation/src/routes/conversations.ts` line 113
+- **Handler:** `services/conversation/src/routes/conversations.ts` line 135
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 - **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
 - **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
@@ -12634,7 +13141,7 @@ GET /api/conversations/:id
 #### Execution flow
 
 1. **Route registration.** `conversation` service mounts this router at `/api/conversations` in `services/conversation/src/index.ts`; the route is declared in `services/conversation/src/routes/conversations.ts`.
-2. **Handler.** `services/conversation/src/routes/conversations.ts:113` - inline `async (req, res)` handler.
+2. **Handler.** `services/conversation/src/routes/conversations.ts:135` - inline `async (req, res)` handler.
 3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
@@ -12650,14 +13157,14 @@ GET /api/conversations/:id
 ```text
 POST /api/conversations/:id/claim
   → [authenticate → resolveTenant → requireTenantState(ACTIVE)]
-  → handler  services/conversation/src/routes/conversations.ts:113
+  → handler  services/conversation/src/routes/conversations.ts:135
       → conversationService.claim()
 ```
 
 ### `POST /api/conversations/:id/close`
 
 - **Purpose:** Performs the `close` action on the referenced conversation. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/conversation/src/routes/conversations.ts` line 174
+- **Handler:** `services/conversation/src/routes/conversations.ts` line 196
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 - **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
 - **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
@@ -12667,7 +13174,7 @@ POST /api/conversations/:id/claim
 #### Execution flow
 
 1. **Route registration.** `conversation` service mounts this router at `/api/conversations` in `services/conversation/src/index.ts`; the route is declared in `services/conversation/src/routes/conversations.ts`.
-2. **Handler.** `services/conversation/src/routes/conversations.ts:174` - inline `async (req, res)` handler.
+2. **Handler.** `services/conversation/src/routes/conversations.ts:196` - inline `async (req, res)` handler.
 3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
@@ -12683,14 +13190,14 @@ POST /api/conversations/:id/claim
 ```text
 POST /api/conversations/:id/close
   → [authenticate → resolveTenant → requireTenantState(ACTIVE)]
-  → handler  services/conversation/src/routes/conversations.ts:174
+  → handler  services/conversation/src/routes/conversations.ts:196
       → conversationService.close()
 ```
 
 ### `GET /api/conversations/:id/notes`
 
 - **Purpose:** Reads a single note for the referenced conversation. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/conversation/src/routes/conversations.ts` line 91
+- **Handler:** `services/conversation/src/routes/conversations.ts` line 113
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 - **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
 - **Input validation:** No body schema. Path and query parameters are read directly by the handler.
@@ -12700,7 +13207,7 @@ POST /api/conversations/:id/close
 #### Execution flow
 
 1. **Route registration.** `conversation` service mounts this router at `/api/conversations` in `services/conversation/src/index.ts`; the route is declared in `services/conversation/src/routes/conversations.ts`.
-2. **Handler.** `services/conversation/src/routes/conversations.ts:91` - inline `async (req, res)` handler.
+2. **Handler.** `services/conversation/src/routes/conversations.ts:113` - inline `async (req, res)` handler.
 3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
@@ -12715,14 +13222,14 @@ POST /api/conversations/:id/close
 ```text
 GET /api/conversations/:id/notes
   → [authenticate → resolveTenant → requireTenantState(ACTIVE)]
-  → handler  services/conversation/src/routes/conversations.ts:91
+  → handler  services/conversation/src/routes/conversations.ts:113
       → (responds directly; no downstream calls detected)
 ```
 
 ### `POST /api/conversations/:id/notes`
 
 - **Purpose:** Performs the `notes` action on the referenced conversation. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/conversation/src/routes/conversations.ts` line 96
+- **Handler:** `services/conversation/src/routes/conversations.ts` line 118
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 - **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
 - **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
@@ -12732,7 +13239,7 @@ GET /api/conversations/:id/notes
 #### Execution flow
 
 1. **Route registration.** `conversation` service mounts this router at `/api/conversations` in `services/conversation/src/index.ts`; the route is declared in `services/conversation/src/routes/conversations.ts`.
-2. **Handler.** `services/conversation/src/routes/conversations.ts:96` - inline `async (req, res)` handler.
+2. **Handler.** `services/conversation/src/routes/conversations.ts:118` - inline `async (req, res)` handler.
 3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
@@ -12747,14 +13254,14 @@ GET /api/conversations/:id/notes
 ```text
 POST /api/conversations/:id/notes
   → [authenticate → resolveTenant → requireTenantState(ACTIVE)]
-  → handler  services/conversation/src/routes/conversations.ts:96
+  → handler  services/conversation/src/routes/conversations.ts:118
       → (responds directly; no downstream calls detected)
 ```
 
 ### `POST /api/conversations/:id/reassign`
 
 - **Purpose:** Allow both ADMIN and the assigned agent to transfer/reassign
-- **Handler:** `services/conversation/src/routes/conversations.ts` line 143
+- **Handler:** `services/conversation/src/routes/conversations.ts` line 165
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 - **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
 - **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
@@ -12764,7 +13271,7 @@ POST /api/conversations/:id/notes
 #### Execution flow
 
 1. **Route registration.** `conversation` service mounts this router at `/api/conversations` in `services/conversation/src/index.ts`; the route is declared in `services/conversation/src/routes/conversations.ts`.
-2. **Handler.** `services/conversation/src/routes/conversations.ts:143` - inline `async (req, res)` handler.
+2. **Handler.** `services/conversation/src/routes/conversations.ts:165` - inline `async (req, res)` handler.
 3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
@@ -12782,7 +13289,7 @@ POST /api/conversations/:id/notes
 ```text
 POST /api/conversations/:id/reassign
   → [authenticate → resolveTenant → requireTenantState(ACTIVE)]
-  → handler  services/conversation/src/routes/conversations.ts:143
+  → handler  services/conversation/src/routes/conversations.ts:165
       → conversationService.getById()
       → conversationService.transferToDepartment()
       → conversationService.reassign()
@@ -12791,7 +13298,7 @@ POST /api/conversations/:id/reassign
 ### `POST /api/conversations/:id/release`
 
 - **Purpose:** Performs the `release` action on the referenced conversation. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/conversation/src/routes/conversations.ts` line 122
+- **Handler:** `services/conversation/src/routes/conversations.ts` line 144
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 - **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
 - **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
@@ -12801,7 +13308,7 @@ POST /api/conversations/:id/reassign
 #### Execution flow
 
 1. **Route registration.** `conversation` service mounts this router at `/api/conversations` in `services/conversation/src/index.ts`; the route is declared in `services/conversation/src/routes/conversations.ts`.
-2. **Handler.** `services/conversation/src/routes/conversations.ts:122` - inline `async (req, res)` handler.
+2. **Handler.** `services/conversation/src/routes/conversations.ts:144` - inline `async (req, res)` handler.
 3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
@@ -12817,14 +13324,14 @@ POST /api/conversations/:id/reassign
 ```text
 POST /api/conversations/:id/release
   → [authenticate → resolveTenant → requireTenantState(ACTIVE)]
-  → handler  services/conversation/src/routes/conversations.ts:122
+  → handler  services/conversation/src/routes/conversations.ts:144
       → conversationService.release()
 ```
 
 ### `POST /api/conversations/:id/return-to-ai`
 
 - **Purpose:** Hand a conversation back to the AI employee (clears the one-way isHandedOver latch). 409 when no AI employee is bound.
-- **Handler:** `services/conversation/src/routes/conversations.ts` line 133
+- **Handler:** `services/conversation/src/routes/conversations.ts` line 155
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 - **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
 - **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
@@ -12834,7 +13341,7 @@ POST /api/conversations/:id/release
 #### Execution flow
 
 1. **Route registration.** `conversation` service mounts this router at `/api/conversations` in `services/conversation/src/index.ts`; the route is declared in `services/conversation/src/routes/conversations.ts`.
-2. **Handler.** `services/conversation/src/routes/conversations.ts:133` - inline `async (req, res)` handler.
+2. **Handler.** `services/conversation/src/routes/conversations.ts:155` - inline `async (req, res)` handler.
 3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
@@ -12850,14 +13357,46 @@ POST /api/conversations/:id/release
 ```text
 POST /api/conversations/:id/return-to-ai
   → [authenticate → resolveTenant → requireTenantState(ACTIVE)]
-  → handler  services/conversation/src/routes/conversations.ts:133
+  → handler  services/conversation/src/routes/conversations.ts:155
       → conversationService.returnToAi()
+```
+
+### `GET /api/conversations/handovers/latest`
+
+- **Purpose:** The tenant's most recent change of handler.
+- **Handler:** `services/conversation/src/routes/conversations.ts` line 49
+- **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
+- **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
+- **Input validation:** No input.
+- **Exposure:** Routed by the gateway (reachable from the internet).
+- **Operation type:** read
+
+#### Execution flow
+
+1. **Route registration.** `conversation` service mounts this router at `/api/conversations` in `services/conversation/src/index.ts`; the route is declared in `services/conversation/src/routes/conversations.ts`.
+2. **Handler.** `services/conversation/src/routes/conversations.ts:49` - inline `async (req, res)` handler.
+3. **Validation.** No input.
+4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
+5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
+6. **Service calls.** None; the handler works directly against Prisma and/or the response.
+7. **Database.** No direct Prisma access in the handler body. Any persistence happens inside the services listed above.
+8. **External integrations.** None detected in the handler body.
+9. **Background work, events and audit.** None triggered by this endpoint.
+10. **Response and error paths.** Success status not determinable from source. Error paths: `500`, answering `{ error: ... }`. `401` is returned by `authenticate()` before the handler runs.
+
+#### Call graph
+
+```text
+GET /api/conversations/handovers/latest
+  → [authenticate → resolveTenant → requireTenantState(ACTIVE)]
+  → handler  services/conversation/src/routes/conversations.ts:49
+      → (responds directly; no downstream calls detected)
 ```
 
 ### `GET /api/conversations/history/:customerExternalId`
 
 - **Purpose:** Reads a single history. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/conversation/src/routes/conversations.ts` line 71
+- **Handler:** `services/conversation/src/routes/conversations.ts` line 93
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 - **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
 - **Input validation:** No body schema. Path and query parameters are read directly by the handler.
@@ -12867,7 +13406,7 @@ POST /api/conversations/:id/return-to-ai
 #### Execution flow
 
 1. **Route registration.** `conversation` service mounts this router at `/api/conversations` in `services/conversation/src/index.ts`; the route is declared in `services/conversation/src/routes/conversations.ts`.
-2. **Handler.** `services/conversation/src/routes/conversations.ts:71` - inline `async (req, res)` handler.
+2. **Handler.** `services/conversation/src/routes/conversations.ts:93` - inline `async (req, res)` handler.
 3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
@@ -12883,14 +13422,14 @@ POST /api/conversations/:id/return-to-ai
 ```text
 GET /api/conversations/history/:customerExternalId
   → [authenticate → resolveTenant → requireTenantState(ACTIVE)]
-  → handler  services/conversation/src/routes/conversations.ts:71
+  → handler  services/conversation/src/routes/conversations.ts:93
       → conversationService.getHistoryByCustomerExternalId()
 ```
 
 ### `GET /api/conversations/stats/workload`
 
 - **Purpose:** Lists workload. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/conversation/src/routes/conversations.ts` line 37
+- **Handler:** `services/conversation/src/routes/conversations.ts` line 59
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 - **Authorization:** Role: `ADMIN`
 - **Input validation:** No input.
@@ -12900,7 +13439,7 @@ GET /api/conversations/history/:customerExternalId
 #### Execution flow
 
 1. **Route registration.** `conversation` service mounts this router at `/api/conversations` in `services/conversation/src/index.ts`; the route is declared in `services/conversation/src/routes/conversations.ts`.
-2. **Handler.** `services/conversation/src/routes/conversations.ts:37` - inline `async (req, res)` handler.
+2. **Handler.** `services/conversation/src/routes/conversations.ts:59` - inline `async (req, res)` handler.
 3. **Validation.** No input.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 5. **Authorization.** Role: `ADMIN`
@@ -12916,7 +13455,7 @@ GET /api/conversations/history/:customerExternalId
 ```text
 GET /api/conversations/stats/workload
   → [authenticate → resolveTenant → requireTenantState(ACTIVE) → requireRole(ADMIN)]
-  → handler  services/conversation/src/routes/conversations.ts:37
+  → handler  services/conversation/src/routes/conversations.ts:59
       → conversationService.getAgentWorkload()
 ```
 
@@ -14757,7 +15296,7 @@ GET /api/historical-imports/customers/:customerId/memory
 
 ## Integrations
 
-71 endpoints.
+72 endpoints.
 
 ### `GET /api/commerce-context/:conversationId`
 
@@ -16199,7 +16738,7 @@ GET /api/integrations
 ### `GET /api/integrations/:slug`
 
 - **Purpose:** GET /:slug - Get single catalog integration with connection status + tools
-- **Handler:** `services/ai/src/routes/integrations.ts` line 288
+- **Handler:** `services/ai/src/routes/integrations.ts` line 358
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 - **Authorization:** Gate: `canReadSystems`
 - **Input validation:** No body schema. Path and query parameters are read directly by the handler.
@@ -16209,7 +16748,7 @@ GET /api/integrations
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/integrations` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/integrations.ts`.
-2. **Handler.** `services/ai/src/routes/integrations.ts:288` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/integrations.ts:358` - inline `async (req, res)` handler.
 3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 5. **Authorization.** Gate: `canReadSystems`
@@ -16226,14 +16765,14 @@ GET /api/integrations
 ```text
 GET /api/integrations/:slug
   → [authenticate → resolveTenant → requireTenantState(PENDING_ONBOARDING or ACTIVE) → canReadSystems]
-  → handler  services/ai/src/routes/integrations.ts:288
+  → handler  services/ai/src/routes/integrations.ts:358
       → db read   prisma.integrationCatalog.findUnique
 ```
 
 ### `PUT /api/integrations/:slug/audience-config`
 
 - **Purpose:** PUT /:slug/audience-config - persist leadsBoardId / contactsBoardId.
-- **Handler:** `services/ai/src/routes/integrations.ts` line 885
+- **Handler:** `services/ai/src/routes/integrations.ts` line 955
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 - **Authorization:** Gate: `canReadSystems`, `canManageSystems`
 - **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
@@ -16243,7 +16782,7 @@ GET /api/integrations/:slug
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/integrations` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/integrations.ts`.
-2. **Handler.** `services/ai/src/routes/integrations.ts:885` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/integrations.ts:955` - inline `async (req, res)` handler.
 3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 5. **Authorization.** Gate: `canReadSystems`, `canManageSystems`
@@ -16263,7 +16802,7 @@ GET /api/integrations/:slug
 ```text
 PUT /api/integrations/:slug/audience-config
   → [authenticate → resolveTenant → requireTenantState(PENDING_ONBOARDING or ACTIVE) → canReadSystems → canManageSystems]
-  → handler  services/ai/src/routes/integrations.ts:885
+  → handler  services/ai/src/routes/integrations.ts:955
       → db read   prisma.integrationCatalog.findUnique
       → db read   prisma.tenantIntegration.findFirst
       → db write  prisma.tenantIntegration.update
@@ -16272,7 +16811,7 @@ PUT /api/integrations/:slug/audience-config
 ### `POST /api/integrations/:slug/connect`
 
 - **Purpose:** POST /:slug/connect - Connect tenant to integration (API_KEY/BASIC_AUTH path)
-- **Handler:** `services/ai/src/routes/integrations.ts` line 333
+- **Handler:** `services/ai/src/routes/integrations.ts` line 403
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 - **Authorization:** Gate: `canReadSystems`, `canConnectSystems`
 - **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
@@ -16282,7 +16821,7 @@ PUT /api/integrations/:slug/audience-config
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/integrations` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/integrations.ts`.
-2. **Handler.** `services/ai/src/routes/integrations.ts:333` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/integrations.ts:403` - inline `async (req, res)` handler.
 3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 5. **Authorization.** Gate: `canReadSystems`, `canConnectSystems`
@@ -16303,7 +16842,7 @@ PUT /api/integrations/:slug/audience-config
 ```text
 POST /api/integrations/:slug/connect
   → [authenticate → resolveTenant → requireTenantState(PENDING_ONBOARDING or ACTIVE) → canReadSystems → canConnectSystems]
-  → handler  services/ai/src/routes/integrations.ts:333
+  → handler  services/ai/src/routes/integrations.ts:403
       → db read   prisma.integrationCatalog.findUnique
       → db read   prisma.tenantIntegration.findFirst
       → db write  prisma.tenantIntegration.update
@@ -16313,7 +16852,7 @@ POST /api/integrations/:slug/connect
 ### `PUT /api/integrations/:slug/credentials`
 
 - **Purpose:** PUT /:slug/credentials - Update credentials (encrypted, in place)
-- **Handler:** `services/ai/src/routes/integrations.ts` line 607
+- **Handler:** `services/ai/src/routes/integrations.ts` line 677
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 - **Authorization:** Gate: `canReadSystems`, `canConnectSystems`
 - **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
@@ -16323,7 +16862,7 @@ POST /api/integrations/:slug/connect
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/integrations` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/integrations.ts`.
-2. **Handler.** `services/ai/src/routes/integrations.ts:607` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/integrations.ts:677` - inline `async (req, res)` handler.
 3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 5. **Authorization.** Gate: `canReadSystems`, `canConnectSystems`
@@ -16343,7 +16882,7 @@ POST /api/integrations/:slug/connect
 ```text
 PUT /api/integrations/:slug/credentials
   → [authenticate → resolveTenant → requireTenantState(PENDING_ONBOARDING or ACTIVE) → canReadSystems → canConnectSystems]
-  → handler  services/ai/src/routes/integrations.ts:607
+  → handler  services/ai/src/routes/integrations.ts:677
       → db read   prisma.integrationCatalog.findUnique
       → db read   prisma.tenantIntegration.findFirst
       → db write  prisma.tenantIntegration.update
@@ -16352,7 +16891,7 @@ PUT /api/integrations/:slug/credentials
 ### `PUT /api/integrations/:slug/crm-source`
 
 - **Purpose:** PUT /:slug/crm-source - Opt this integration in/out as the tenant's CRM source of truth. Today only Shopify supports this (it's an ECOMMERCE integration a tenant may elect as their customer system of record). Sets `config.useAsCrm` and invalidates the CRM resolver cache so the next bot turn reads customer context from Shopify instead of any CRM-category integration. Toggling OFF restores the default resolution order - it never disturbs tenants who don't opt in.
-- **Handler:** `services/ai/src/routes/integrations.ts` line 655
+- **Handler:** `services/ai/src/routes/integrations.ts` line 725
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 - **Authorization:** Gate: `canReadSystems`, `canSelectSot`
 - **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
@@ -16362,7 +16901,7 @@ PUT /api/integrations/:slug/credentials
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/integrations` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/integrations.ts`.
-2. **Handler.** `services/ai/src/routes/integrations.ts:655` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/integrations.ts:725` - inline `async (req, res)` handler.
 3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 5. **Authorization.** Gate: `canReadSystems`, `canSelectSot`
@@ -16382,7 +16921,7 @@ PUT /api/integrations/:slug/credentials
 ```text
 PUT /api/integrations/:slug/crm-source
   → [authenticate → resolveTenant → requireTenantState(PENDING_ONBOARDING or ACTIVE) → canReadSystems → canSelectSot]
-  → handler  services/ai/src/routes/integrations.ts:655
+  → handler  services/ai/src/routes/integrations.ts:725
       → db read   prisma.integrationCatalog.findUnique
       → db read   prisma.tenantIntegration.findFirst
       → db write  prisma.tenantIntegration.update
@@ -16391,7 +16930,7 @@ PUT /api/integrations/:slug/crm-source
 ### `POST /api/integrations/:slug/disconnect`
 
 - **Purpose:** POST /:slug/disconnect - Disconnect and delete tenant tools (cascade handles child rows)
-- **Handler:** `services/ai/src/routes/integrations.ts` line 559
+- **Handler:** `services/ai/src/routes/integrations.ts` line 629
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 - **Authorization:** Gate: `canReadSystems`, `canManageSystems`
 - **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
@@ -16401,7 +16940,7 @@ PUT /api/integrations/:slug/crm-source
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/integrations` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/integrations.ts`.
-2. **Handler.** `services/ai/src/routes/integrations.ts:559` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/integrations.ts:629` - inline `async (req, res)` handler.
 3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 5. **Authorization.** Gate: `canReadSystems`, `canManageSystems`
@@ -16422,7 +16961,7 @@ PUT /api/integrations/:slug/crm-source
 ```text
 POST /api/integrations/:slug/disconnect
   → [authenticate → resolveTenant → requireTenantState(PENDING_ONBOARDING or ACTIVE) → canReadSystems → canManageSystems]
-  → handler  services/ai/src/routes/integrations.ts:559
+  → handler  services/ai/src/routes/integrations.ts:629
       → db read   prisma.integrationCatalog.findUnique
       → db read   prisma.tenantIntegration.findFirst
       → db write  prisma.tenantTool.deleteMany
@@ -16432,7 +16971,7 @@ POST /api/integrations/:slug/disconnect
 ### `GET /api/integrations/:slug/monday-boards`
 
 - **Purpose:** Monday's "schema" lives on a board (columns), not on a global Lead/Contact object. The audience builder needs the operator to pick which board acts as Leads and which acts as Contacts; without these, the schema fetcher has nothing to describe and CRM-side filter rules can't run.
-- **Handler:** `services/ai/src/routes/integrations.ts` line 856
+- **Handler:** `services/ai/src/routes/integrations.ts` line 926
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 - **Authorization:** Gate: `canReadSystems`
 - **Input validation:** No body schema. Path and query parameters are read directly by the handler.
@@ -16442,7 +16981,7 @@ POST /api/integrations/:slug/disconnect
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/integrations` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/integrations.ts`.
-2. **Handler.** `services/ai/src/routes/integrations.ts:856` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/integrations.ts:926` - inline `async (req, res)` handler.
 3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 5. **Authorization.** Gate: `canReadSystems`
@@ -16457,14 +16996,14 @@ POST /api/integrations/:slug/disconnect
 ```text
 GET /api/integrations/:slug/monday-boards
   → [authenticate → resolveTenant → requireTenantState(PENDING_ONBOARDING or ACTIVE) → canReadSystems]
-  → handler  services/ai/src/routes/integrations.ts:856
+  → handler  services/ai/src/routes/integrations.ts:926
       → (responds directly; no downstream calls detected)
 ```
 
 ### `POST /api/integrations/:slug/test`
 
 - **Purpose:** POST /:slug/test - Live connection test.
-- **Handler:** `services/ai/src/routes/integrations.ts` line 411
+- **Handler:** `services/ai/src/routes/integrations.ts` line 481
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 - **Authorization:** Gate: `canReadSystems`, `canConnectSystems`
 - **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
@@ -16474,7 +17013,7 @@ GET /api/integrations/:slug/monday-boards
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/integrations` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/integrations.ts`.
-2. **Handler.** `services/ai/src/routes/integrations.ts:411` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/integrations.ts:481` - inline `async (req, res)` handler.
 3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 5. **Authorization.** Gate: `canReadSystems`, `canConnectSystems`
@@ -16494,7 +17033,7 @@ GET /api/integrations/:slug/monday-boards
 ```text
 POST /api/integrations/:slug/test
   → [authenticate → resolveTenant → requireTenantState(PENDING_ONBOARDING or ACTIVE) → canReadSystems → canConnectSystems]
-  → handler  services/ai/src/routes/integrations.ts:411
+  → handler  services/ai/src/routes/integrations.ts:481
       → db read   prisma.integrationCatalog.findUnique
       → db read   prisma.tenantIntegration.findFirst
       → db write  prisma.tenantIntegration.update
@@ -16503,7 +17042,7 @@ POST /api/integrations/:slug/test
 ### `GET /api/integrations/:slug/tools`
 
 - **Purpose:** GET /:slug/tools?aiAgentId=… - List catalog tools with tenant activation status, plus (when ?aiAgentId is passed) the per-agent permission state. Used by the IntegrationDrawer in two contexts:   - marketplace page (no aiAgentId) → toggles reflect TenantTool.isEnabled   - agent edit page (aiAgentId set) → toggles reflect     AgentToolPermission.isAllowed for that agent.
-- **Handler:** `services/ai/src/routes/integrations.ts` line 712
+- **Handler:** `services/ai/src/routes/integrations.ts` line 782
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 - **Authorization:** Gate: `canReadSystems`
 - **Input validation:** No body schema. Path and query parameters are read directly by the handler.
@@ -16513,7 +17052,7 @@ POST /api/integrations/:slug/test
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/integrations` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/integrations.ts`.
-2. **Handler.** `services/ai/src/routes/integrations.ts:712` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/integrations.ts:782` - inline `async (req, res)` handler.
 3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 5. **Authorization.** Gate: `canReadSystems`
@@ -16534,7 +17073,7 @@ POST /api/integrations/:slug/test
 ```text
 GET /api/integrations/:slug/tools
   → [authenticate → resolveTenant → requireTenantState(PENDING_ONBOARDING or ACTIVE) → canReadSystems]
-  → handler  services/ai/src/routes/integrations.ts:712
+  → handler  services/ai/src/routes/integrations.ts:782
       → db read   prisma.integrationCatalog.findUnique
       → db read   prisma.tenantIntegration.findFirst
       → db read   prisma.catalogTool.findMany
@@ -16545,7 +17084,7 @@ GET /api/integrations/:slug/tools
 ### `PUT /api/integrations/:slug/tools/:toolSlug`
 
 - **Purpose:** PUT /:slug/tools/:toolSlug - Toggle tool enabled/disabled for tenant
-- **Handler:** `services/ai/src/routes/integrations.ts` line 780
+- **Handler:** `services/ai/src/routes/integrations.ts` line 850
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 - **Authorization:** Gate: `canReadSystems`, `canManageSystems`
 - **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
@@ -16555,7 +17094,7 @@ GET /api/integrations/:slug/tools
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/integrations` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/integrations.ts`.
-2. **Handler.** `services/ai/src/routes/integrations.ts:780` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/integrations.ts:850` - inline `async (req, res)` handler.
 3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 5. **Authorization.** Gate: `canReadSystems`, `canManageSystems`
@@ -16578,7 +17117,7 @@ GET /api/integrations/:slug/tools
 ```text
 PUT /api/integrations/:slug/tools/:toolSlug
   → [authenticate → resolveTenant → requireTenantState(PENDING_ONBOARDING or ACTIVE) → canReadSystems → canManageSystems]
-  → handler  services/ai/src/routes/integrations.ts:780
+  → handler  services/ai/src/routes/integrations.ts:850
       → db read   prisma.integrationCatalog.findUnique
       → db read   prisma.tenantIntegration.findFirst
       → db read   prisma.catalogTool.findFirst
@@ -16617,6 +17156,40 @@ POST /api/integrations/calendar/disconnect
   → [authenticate → resolveTenant → requireTenantState(PENDING_ONBOARDING or ACTIVE) → requireRole(ADMIN)]
   → handler  services/ai/src/routes/calendar-oauth.ts:314
       → (responds directly; no downstream calls detected)
+```
+
+### `GET /api/integrations/commerce/capabilities`
+
+- **Purpose:** Lists capabilities. _(Derived from the route shape; no descriptive comment in source.)_
+- **Handler:** `services/ai/src/routes/integrations.ts` line 106
+- **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
+- **Authorization:** Gate: `canReadSystems`
+- **Input validation:** No input.
+- **Exposure:** Routed by the gateway (reachable from the internet).
+- **Operation type:** read
+
+#### Execution flow
+
+1. **Route registration.** `ai` service mounts this router at `/api/integrations` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/integrations.ts`.
+2. **Handler.** `services/ai/src/routes/integrations.ts:106` - inline `async (req, res)` handler.
+3. **Validation.** No input.
+4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
+5. **Authorization.** Gate: `canReadSystems`
+6. **Service calls.** None; the handler works directly against Prisma and/or the response.
+7. **Database.** Prisma models touched (source order, not guaranteed runtime order - branches may skip some):
+   _Reads:_
+   - `tenantIntegration.findFirst`
+8. **External integrations.** None detected in the handler body.
+9. **Background work, events and audit.** None triggered by this endpoint.
+10. **Response and error paths.** Success status not determinable from source. Error paths: `500`, answering `{ error: ... }`. `401` is returned by `authenticate()` before the handler runs.
+
+#### Call graph
+
+```text
+GET /api/integrations/commerce/capabilities
+  → [authenticate → resolveTenant → requireTenantState(PENDING_ONBOARDING or ACTIVE) → canReadSystems]
+  → handler  services/ai/src/routes/integrations.ts:106
+      → db read   prisma.tenantIntegration.findFirst
 ```
 
 ### `GET /api/integrations/oauth/calendly/callback`
@@ -16887,7 +17460,7 @@ GET /api/integrations/oauth/zoho_crm/init
 ### `GET /api/integrations/source-of-truth`
 
 - **Purpose:** GET /source-of-truth - the tenant's ELECTED customer system of record as the AI-side resolver actually sees it, with its truthful capability set. This is what the UI must render (never frontend guesses): which system answers "who is this customer", whether back-office writes are available, and which operations the provider genuinely supports. Registered BEFORE /:slug so the literal path wins.
-- **Handler:** `services/ai/src/routes/integrations.ts` line 87
+- **Handler:** `services/ai/src/routes/integrations.ts` line 157
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 - **Authorization:** Gate: `canReadSystems`
 - **Input validation:** No input.
@@ -16897,7 +17470,7 @@ GET /api/integrations/oauth/zoho_crm/init
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/integrations` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/integrations.ts`.
-2. **Handler.** `services/ai/src/routes/integrations.ts:87` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/integrations.ts:157` - inline `async (req, res)` handler.
 3. **Validation.** No input.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 5. **Authorization.** Gate: `canReadSystems`
@@ -16912,14 +17485,14 @@ GET /api/integrations/oauth/zoho_crm/init
 ```text
 GET /api/integrations/source-of-truth
   → [authenticate → resolveTenant → requireTenantState(PENDING_ONBOARDING or ACTIVE) → canReadSystems]
-  → handler  services/ai/src/routes/integrations.ts:87
+  → handler  services/ai/src/routes/integrations.ts:157
       → (responds directly; no downstream calls detected)
 ```
 
 ### `GET /api/integrations/source-of-truth/customers`
 
 - **Purpose:** GET /source-of-truth/customers?q= - unified, tenant-scoped customer search for outbound calling. Searches THE resolved source of truth (Shopify-as-CRM included), so the dialer offers the same identities that answer "who is this customer" everywhere else - never another tenant's data, never a free-text number promoted to an identity.
-- **Handler:** `services/ai/src/routes/integrations.ts` line 130
+- **Handler:** `services/ai/src/routes/integrations.ts` line 200
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 - **Authorization:** `crm:contacts:read` **or** role `ADMIN`; Gate: `canReadSystems`
 - **Input validation:** No body schema. Path and query parameters are read directly by the handler.
@@ -16929,7 +17502,7 @@ GET /api/integrations/source-of-truth
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/integrations` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/integrations.ts`.
-2. **Handler.** `services/ai/src/routes/integrations.ts:130` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/integrations.ts:200` - inline `async (req, res)` handler.
 3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 5. **Authorization.** `crm:contacts:read` **or** role `ADMIN`; Gate: `canReadSystems`
@@ -16944,14 +17517,14 @@ GET /api/integrations/source-of-truth
 ```text
 GET /api/integrations/source-of-truth/customers
   → [authenticate → resolveTenant → requireTenantState(PENDING_ONBOARDING or ACTIVE) → canReadSystems]
-  → handler  services/ai/src/routes/integrations.ts:130
+  → handler  services/ai/src/routes/integrations.ts:200
       → (responds directly; no downstream calls detected)
 ```
 
 ### `GET /api/integrations/source-of-truth/customers/detail`
 
 - **Purpose:** GET /source-of-truth/customers/detail?id=&kind= - full contact data for ONE explicitly selected candidate (the list above is masked). Same permission gate; the adapter resolves within the active tenant's own connection, so a foreign id can never cross tenants - it simply doesn't exist there.
-- **Handler:** `services/ai/src/routes/integrations.ts` line 250
+- **Handler:** `services/ai/src/routes/integrations.ts` line 320
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 - **Authorization:** `crm:contacts:read` **or** role `ADMIN`; Gate: `canReadSystems`
 - **Input validation:** No body schema. Path and query parameters are read directly by the handler.
@@ -16961,7 +17534,7 @@ GET /api/integrations/source-of-truth/customers
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/integrations` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/integrations.ts`.
-2. **Handler.** `services/ai/src/routes/integrations.ts:250` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/integrations.ts:320` - inline `async (req, res)` handler.
 3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 5. **Authorization.** `crm:contacts:read` **or** role `ADMIN`; Gate: `canReadSystems`
@@ -16976,7 +17549,7 @@ GET /api/integrations/source-of-truth/customers
 ```text
 GET /api/integrations/source-of-truth/customers/detail
   → [authenticate → resolveTenant → requireTenantState(PENDING_ONBOARDING or ACTIVE) → canReadSystems]
-  → handler  services/ai/src/routes/integrations.ts:250
+  → handler  services/ai/src/routes/integrations.ts:320
       → (responds directly; no downstream calls detected)
 ```
 
@@ -17142,7 +17715,7 @@ PATCH /api/scheduler/meeting-types/:id
 
 ## Internal
 
-31 endpoints.
+32 endpoints.
 
 ### `POST /api/ai-bot/execution-message`
 
@@ -18148,9 +18721,41 @@ POST /api/internal/billing/validate-paid-plan
       → (responds directly; no downstream calls detected)
 ```
 
+### `POST /api/internal/voice-sample`
+
+- **Purpose:** Creates a voice sample. _(Derived from the route shape; no descriptive comment in source.)_
+- **Handler:** `services/ai/src/routes/internal-voice-sample.ts` line 24
+- **Authentication / tenant resolution:** **Internal only.** Authenticated by the shared service secret, not a user token. Not routed by the gateway.
+- **Authorization:** None.
+- **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
+- **Exposure:** **Not** routed by the gateway; internal traffic only.
+- **Operation type:** write
+
+#### Execution flow
+
+1. **Route registration.** `ai` service mounts this router at `/api/internal` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/internal-voice-sample.ts`.
+2. **Handler.** `services/ai/src/routes/internal-voice-sample.ts:24` - inline `async (req, res)` handler.
+3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
+4. **Authentication / tenant resolution.** **Internal only.** Authenticated by the shared service secret, not a user token. Not routed by the gateway.
+5. **Authorization.** None.
+6. **Service calls.** None; the handler works directly against Prisma and/or the response.
+7. **Database.** No direct Prisma access in the handler body. Any persistence happens inside the services listed above.
+8. **External integrations.** None detected in the handler body.
+9. **Background work, events and audit.** None triggered by this endpoint.
+10. **Response and error paths.** Success status not determinable from source. Error paths: `400`, `503`, answering `{ error: ... }`.
+
+#### Call graph
+
+```text
+POST /api/internal/voice-sample
+  → [internalAuth]
+  → handler  services/ai/src/routes/internal-voice-sample.ts:24
+      → (responds directly; no downstream calls detected)
+```
+
 ## Knowledge
 
-26 endpoints.
+27 endpoints.
 
 ### `GET /api/knowledge-bases`
 
@@ -18474,6 +19079,46 @@ POST /api/knowledge-bases/:id/documents/upload
   → handler  services/ai/src/routes/knowledge.ts:298
       → db read   prisma.knowledgeBase.findFirst
       → db write  prisma.knowledgeDocument.create
+```
+
+### `GET /api/knowledge/ingest/latest`
+
+- **Purpose:** Lists latest. _(Derived from the route shape; no descriptive comment in source.)_
+- **Handler:** `services/ai/src/routes/knowledge-ingest.ts` line 26
+- **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
+- **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
+- **Input validation:** No input.
+- **Exposure:** Routed by the gateway (reachable from the internet).
+- **Operation type:** read
+
+#### Execution flow
+
+1. **Route registration.** `ai` service mounts this router at `/api/knowledge` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/knowledge-ingest.ts`.
+2. **Handler.** `services/ai/src/routes/knowledge-ingest.ts:26` - inline `async (req, res)` handler.
+3. **Validation.** No input.
+4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
+5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
+6. **Service calls.** None; the handler works directly against Prisma and/or the response.
+7. **Database.** Prisma models touched (source order, not guaranteed runtime order - branches may skip some):
+   _Reads:_
+   - `knowledgeDocument.count`
+   - `knowledgeDocument.findFirst`
+   - `knowledgeCandidate.count`
+   - `knowledgeCandidate.findMany`
+8. **External integrations.** None detected in the handler body.
+9. **Background work, events and audit.** None triggered by this endpoint.
+10. **Response and error paths.** Success status not determinable from source. Error paths: `500`, answering `{ error: ... }`. `401` is returned by `authenticate()` before the handler runs.
+
+#### Call graph
+
+```text
+GET /api/knowledge/ingest/latest
+  → [authenticate → resolveTenant → requireTenantState(PENDING_ONBOARDING or ACTIVE)]
+  → handler  services/ai/src/routes/knowledge-ingest.ts:26
+      → db read   prisma.knowledgeDocument.count
+      → db read   prisma.knowledgeDocument.findFirst
+      → db read   prisma.knowledgeCandidate.count
+      → db read   prisma.knowledgeCandidate.findMany
 ```
 
 ### `DELETE /api/knowledge/integrations/:intId`
@@ -19103,7 +19748,7 @@ GET /api/knowledge/oauth/google-drive/init
 
 ## Notifications
 
-8 endpoints.
+10 endpoints.
 
 ### `GET /api/notification-preferences`
 
@@ -19233,6 +19878,74 @@ PATCH /api/notification-preferences/:id
       → (responds directly; no downstream calls detected)
 ```
 
+### `GET /api/notification-preferences/me`
+
+- **Purpose:** Lists me. _(Derived from the route shape; no descriptive comment in source.)_
+- **Handler:** `services/notifications/src/routes/notification-preferences-me.ts` line 64
+- **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
+- **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
+- **Input validation:** No input.
+- **Exposure:** Routed by the gateway (reachable from the internet).
+- **Operation type:** read
+
+#### Execution flow
+
+1. **Route registration.** `notifications` service mounts this router at `/api/notification-preferences` in `services/notifications/src/index.ts`; the route is declared in `services/notifications/src/routes/notification-preferences-me.ts`.
+2. **Handler.** `services/notifications/src/routes/notification-preferences-me.ts:64` - inline `async (req, res)` handler.
+3. **Validation.** No input.
+4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
+5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
+6. **Service calls.** None; the handler works directly against Prisma and/or the response.
+7. **Database.** Prisma models touched (source order, not guaranteed runtime order - branches may skip some):
+   _Reads:_
+   - `userNotificationPreference.findUnique`
+8. **External integrations.** None detected in the handler body.
+9. **Background work, events and audit.** None triggered by this endpoint.
+10. **Response and error paths.** Success status not determinable from source. Error paths: `403`, `500`, answering `{ error: ... }`. `401` is returned by `authenticate()` before the handler runs.
+
+#### Call graph
+
+```text
+GET /api/notification-preferences/me
+  → [authenticate → resolveTenant → requireTenantState(ACTIVE)]
+  → handler  services/notifications/src/routes/notification-preferences-me.ts:64
+      → db read   prisma.userNotificationPreference.findUnique
+```
+
+### `PATCH /api/notification-preferences/me`
+
+- **Purpose:** Updates the referenced me. _(Derived from the route shape; no descriptive comment in source.)_
+- **Handler:** `services/notifications/src/routes/notification-preferences-me.ts` line 83
+- **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
+- **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
+- **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
+- **Exposure:** Routed by the gateway (reachable from the internet).
+- **Operation type:** write
+
+#### Execution flow
+
+1. **Route registration.** `notifications` service mounts this router at `/api/notification-preferences` in `services/notifications/src/index.ts`; the route is declared in `services/notifications/src/routes/notification-preferences-me.ts`.
+2. **Handler.** `services/notifications/src/routes/notification-preferences-me.ts:83` - inline `async (req, res)` handler.
+3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
+4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
+5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
+6. **Service calls.** None; the handler works directly against Prisma and/or the response.
+7. **Database.** Prisma models touched (source order, not guaranteed runtime order - branches may skip some):
+   _Writes:_
+   - `userNotificationPreference.upsert`
+8. **External integrations.** None detected in the handler body.
+9. **Background work, events and audit.** None triggered by this endpoint.
+10. **Response and error paths.** Success status not determinable from source. Error paths: `400`, `403`, `500`, answering `{ error: ... }`. `401` is returned by `authenticate()` before the handler runs.
+
+#### Call graph
+
+```text
+PATCH /api/notification-preferences/me
+  → [authenticate → resolveTenant → requireTenantState(ACTIVE)]
+  → handler  services/notifications/src/routes/notification-preferences-me.ts:83
+      → db write  prisma.userNotificationPreference.upsert
+```
+
 ### `GET /api/notifications`
 
 - **Purpose:** Lists notifications. _(Derived from the route shape; no descriptive comment in source.)_
@@ -19268,7 +19981,7 @@ GET /api/notifications
 ### `POST /api/notifications/:id/mark-read`
 
 - **Purpose:** Performs the `mark read` action on the referenced notification. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/notifications/src/routes/notifications.ts` line 68
+- **Handler:** `services/notifications/src/routes/notifications.ts` line 78
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 - **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
 - **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
@@ -19278,7 +19991,7 @@ GET /api/notifications
 #### Execution flow
 
 1. **Route registration.** `notifications` service mounts this router at `/api/notifications` in `services/notifications/src/index.ts`; the route is declared in `services/notifications/src/routes/notifications.ts`.
-2. **Handler.** `services/notifications/src/routes/notifications.ts:68` - inline `async (req, res)` handler.
+2. **Handler.** `services/notifications/src/routes/notifications.ts:78` - inline `async (req, res)` handler.
 3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
@@ -19293,14 +20006,14 @@ GET /api/notifications
 ```text
 POST /api/notifications/:id/mark-read
   → [authenticate → resolveTenant → requireTenantState(ACTIVE)]
-  → handler  services/notifications/src/routes/notifications.ts:68
+  → handler  services/notifications/src/routes/notifications.ts:78
       → (responds directly; no downstream calls detected)
 ```
 
 ### `POST /api/notifications/mark-all-read`
 
 - **Purpose:** Creates a mark all read. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/notifications/src/routes/notifications.ts` line 90
+- **Handler:** `services/notifications/src/routes/notifications.ts` line 100
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 - **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
 - **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
@@ -19310,7 +20023,7 @@ POST /api/notifications/:id/mark-read
 #### Execution flow
 
 1. **Route registration.** `notifications` service mounts this router at `/api/notifications` in `services/notifications/src/index.ts`; the route is declared in `services/notifications/src/routes/notifications.ts`.
-2. **Handler.** `services/notifications/src/routes/notifications.ts:90` - inline `async (req, res)` handler.
+2. **Handler.** `services/notifications/src/routes/notifications.ts:100` - inline `async (req, res)` handler.
 3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
@@ -19325,14 +20038,14 @@ POST /api/notifications/:id/mark-read
 ```text
 POST /api/notifications/mark-all-read
   → [authenticate → resolveTenant → requireTenantState(ACTIVE)]
-  → handler  services/notifications/src/routes/notifications.ts:90
+  → handler  services/notifications/src/routes/notifications.ts:100
       → (responds directly; no downstream calls detected)
 ```
 
 ### `GET /api/notifications/unread-count`
 
 - **Purpose:** Lists unread count. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/notifications/src/routes/notifications.ts` line 53
+- **Handler:** `services/notifications/src/routes/notifications.ts` line 63
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 - **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
 - **Input validation:** No input.
@@ -19342,7 +20055,7 @@ POST /api/notifications/mark-all-read
 #### Execution flow
 
 1. **Route registration.** `notifications` service mounts this router at `/api/notifications` in `services/notifications/src/index.ts`; the route is declared in `services/notifications/src/routes/notifications.ts`.
-2. **Handler.** `services/notifications/src/routes/notifications.ts:53` - inline `async (req, res)` handler.
+2. **Handler.** `services/notifications/src/routes/notifications.ts:63` - inline `async (req, res)` handler.
 3. **Validation.** No input.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
@@ -19357,7 +20070,7 @@ POST /api/notifications/mark-all-read
 ```text
 GET /api/notifications/unread-count
   → [authenticate → resolveTenant → requireTenantState(ACTIVE)]
-  → handler  services/notifications/src/routes/notifications.ts:53
+  → handler  services/notifications/src/routes/notifications.ts:63
       → (responds directly; no downstream calls detected)
 ```
 
@@ -19512,7 +20225,7 @@ GET /api/onboarding/business-profile
 - **Purpose:** Creates a business profile. _(Derived from the route shape; no descriptive comment in source.)_
 - **Handler:** `services/auth/src/routes/onboarding.ts` line 542
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
-- **Authorization:** Role: `ADMIN`
+- **Authorization:** Permission: `settings:workspace:update`
 - **Input validation:** `validate(businessProfileSchema)` (Zod). Accepts: `organizationName`, `businessDescription`, `locale`, `businessGoals`, `websiteDomain`, `industry`, `country`, `primaryLanguage`. Required: `organizationName`, `businessDescription`. `validate` reassigns `req.body` to the parsed value, so any property not named by the schema is stripped before the handler runs.
 - **Exposure:** Routed by the gateway (reachable from the internet).
 - **Operation type:** write
@@ -19523,7 +20236,7 @@ GET /api/onboarding/business-profile
 2. **Handler.** `services/auth/src/routes/onboarding.ts:542` - inline `async (req, res)` handler.
 3. **Validation.** `validate(businessProfileSchema)` (Zod). Accepts: `organizationName`, `businessDescription`, `locale`, `businessGoals`, `websiteDomain`, `industry`, `country`, `primaryLanguage`. Required: `organizationName`, `businessDescription`. `validate` reassigns `req.body` to the parsed value, so any property not named by the schema is stripped before the handler runs.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
-5. **Authorization.** Role: `ADMIN`
+5. **Authorization.** Permission: `settings:workspace:update`
 6. **Service calls.** None; the handler works directly against Prisma and/or the response.
 7. **Database.** Prisma models touched (source order, not guaranteed runtime order - branches may skip some):
    _Reads:_
@@ -19541,7 +20254,7 @@ GET /api/onboarding/business-profile
 
 ```text
 POST /api/onboarding/business-profile
-  → [authenticate → resolveTenant → requireRole(ADMIN) → validate(businessProfileSchema)]
+  → [authenticate → resolveTenant → requirePermission(settings:workspace:update) → validate(businessProfileSchema)]
   → handler  services/auth/src/routes/onboarding.ts:542
       → db read   prisma.tenant.findUnique
       → db read   prisma.businessProfile.findUnique
@@ -20525,7 +21238,7 @@ POST /api/onboarding/recommendations/:id/:decision
 - **Purpose:** GET /setup-map - the non-linear Setup Hub tiles + done flags, derived from real product signals (no manual check-offs). Tiles tagged stage:"later" (Channels, extra Integrations) are shown but excluded from the headline progress count.
 - **Handler:** `services/auth/src/routes/onboarding.ts` line 1475
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
-- **Authorization:** Role: `ADMIN`
+- **Authorization:** Permission: `analytics:workspace:read`
 - **Input validation:** No input.
 - **Exposure:** Routed by the gateway (reachable from the internet).
 - **Operation type:** read
@@ -20536,7 +21249,7 @@ POST /api/onboarding/recommendations/:id/:decision
 2. **Handler.** `services/auth/src/routes/onboarding.ts:1475` - inline `async (req, res)` handler.
 3. **Validation.** No input.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
-5. **Authorization.** Role: `ADMIN`
+5. **Authorization.** Permission: `analytics:workspace:read`
 6. **Service calls.** None; the handler works directly against Prisma and/or the response.
 7. **Database.** Prisma models touched (source order, not guaranteed runtime order - branches may skip some):
    _Reads:_
@@ -20556,7 +21269,7 @@ POST /api/onboarding/recommendations/:id/:decision
 
 ```text
 GET /api/onboarding/setup-map
-  → [authenticate → resolveTenant → requireRole(ADMIN)]
+  → [authenticate → resolveTenant → requirePermission(analytics:workspace:read)]
   → handler  services/auth/src/routes/onboarding.ts:1475
       → db read   prisma.aIAgent.findFirst({ where: { tenantId }, select: { id: true, status: true } })
       → db read   prisma.flowCanvas.findUnique({ where: { tenantId }, select: { nodes: true, edges: true } })
@@ -20573,7 +21286,7 @@ GET /api/onboarding/setup-map
 - **Purpose:** Lists status. _(Derived from the route shape; no descriptive comment in source.)_
 - **Handler:** `services/auth/src/routes/onboarding.ts` line 461
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
-- **Authorization:** Role: `ADMIN`
+- **Authorization:** Permission: `analytics:workspace:read`
 - **Input validation:** No input.
 - **Exposure:** Routed by the gateway (reachable from the internet).
 - **Operation type:** read
@@ -20584,7 +21297,7 @@ GET /api/onboarding/setup-map
 2. **Handler.** `services/auth/src/routes/onboarding.ts:461` - inline `async (req, res)` handler.
 3. **Validation.** No input.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
-5. **Authorization.** Role: `ADMIN`
+5. **Authorization.** Permission: `analytics:workspace:read`
 6. **Service calls.** None; the handler works directly against Prisma and/or the response.
 7. **Database.** Prisma models touched (source order, not guaranteed runtime order - branches may skip some):
    _Reads:_
@@ -20601,7 +21314,7 @@ GET /api/onboarding/setup-map
 
 ```text
 GET /api/onboarding/status
-  → [authenticate → resolveTenant → requireRole(ADMIN)]
+  → [authenticate → resolveTenant → requirePermission(analytics:workspace:read)]
   → handler  services/auth/src/routes/onboarding.ts:461
       → db read   prisma.tenant.findUnique
       → db read   prisma.tenantOnboarding.findUnique
@@ -20803,7 +21516,7 @@ GET /api/public/onboarding/business-profile
 - **Purpose:** Creates a business profile. _(Derived from the route shape; no descriptive comment in source.)_
 - **Handler:** `services/auth/src/routes/onboarding.ts` line 542
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
-- **Authorization:** Role: `ADMIN`
+- **Authorization:** Permission: `settings:workspace:update`
 - **Input validation:** `validate(businessProfileSchema)` (Zod). Accepts: `organizationName`, `businessDescription`, `locale`, `businessGoals`, `websiteDomain`, `industry`, `country`, `primaryLanguage`. Required: `organizationName`, `businessDescription`. `validate` reassigns `req.body` to the parsed value, so any property not named by the schema is stripped before the handler runs.
 - **Exposure:** Routed by the gateway (reachable from the internet).
 - **Operation type:** write
@@ -20814,7 +21527,7 @@ GET /api/public/onboarding/business-profile
 2. **Handler.** `services/auth/src/routes/onboarding.ts:542` - inline `async (req, res)` handler.
 3. **Validation.** `validate(businessProfileSchema)` (Zod). Accepts: `organizationName`, `businessDescription`, `locale`, `businessGoals`, `websiteDomain`, `industry`, `country`, `primaryLanguage`. Required: `organizationName`, `businessDescription`. `validate` reassigns `req.body` to the parsed value, so any property not named by the schema is stripped before the handler runs.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
-5. **Authorization.** Role: `ADMIN`
+5. **Authorization.** Permission: `settings:workspace:update`
 6. **Service calls.** None; the handler works directly against Prisma and/or the response.
 7. **Database.** Prisma models touched (source order, not guaranteed runtime order - branches may skip some):
    _Reads:_
@@ -20832,7 +21545,7 @@ GET /api/public/onboarding/business-profile
 
 ```text
 POST /api/public/onboarding/business-profile
-  → [authenticate → resolveTenant → requireRole(ADMIN) → validate(businessProfileSchema)]
+  → [authenticate → resolveTenant → requirePermission(settings:workspace:update) → validate(businessProfileSchema)]
   → handler  services/auth/src/routes/onboarding.ts:542
       → db read   prisma.tenant.findUnique
       → db read   prisma.businessProfile.findUnique
@@ -21816,7 +22529,7 @@ POST /api/public/onboarding/recommendations/:id/:decision
 - **Purpose:** GET /setup-map - the non-linear Setup Hub tiles + done flags, derived from real product signals (no manual check-offs). Tiles tagged stage:"later" (Channels, extra Integrations) are shown but excluded from the headline progress count.
 - **Handler:** `services/auth/src/routes/onboarding.ts` line 1475
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
-- **Authorization:** Role: `ADMIN`
+- **Authorization:** Permission: `analytics:workspace:read`
 - **Input validation:** No input.
 - **Exposure:** Routed by the gateway (reachable from the internet).
 - **Operation type:** read
@@ -21827,7 +22540,7 @@ POST /api/public/onboarding/recommendations/:id/:decision
 2. **Handler.** `services/auth/src/routes/onboarding.ts:1475` - inline `async (req, res)` handler.
 3. **Validation.** No input.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
-5. **Authorization.** Role: `ADMIN`
+5. **Authorization.** Permission: `analytics:workspace:read`
 6. **Service calls.** None; the handler works directly against Prisma and/or the response.
 7. **Database.** Prisma models touched (source order, not guaranteed runtime order - branches may skip some):
    _Reads:_
@@ -21847,7 +22560,7 @@ POST /api/public/onboarding/recommendations/:id/:decision
 
 ```text
 GET /api/public/onboarding/setup-map
-  → [authenticate → resolveTenant → requireRole(ADMIN)]
+  → [authenticate → resolveTenant → requirePermission(analytics:workspace:read)]
   → handler  services/auth/src/routes/onboarding.ts:1475
       → db read   prisma.aIAgent.findFirst({ where: { tenantId }, select: { id: true, status: true } })
       → db read   prisma.flowCanvas.findUnique({ where: { tenantId }, select: { nodes: true, edges: true } })
@@ -21864,7 +22577,7 @@ GET /api/public/onboarding/setup-map
 - **Purpose:** Lists status. _(Derived from the route shape; no descriptive comment in source.)_
 - **Handler:** `services/auth/src/routes/onboarding.ts` line 461
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
-- **Authorization:** Role: `ADMIN`
+- **Authorization:** Permission: `analytics:workspace:read`
 - **Input validation:** No input.
 - **Exposure:** Routed by the gateway (reachable from the internet).
 - **Operation type:** read
@@ -21875,7 +22588,7 @@ GET /api/public/onboarding/setup-map
 2. **Handler.** `services/auth/src/routes/onboarding.ts:461` - inline `async (req, res)` handler.
 3. **Validation.** No input.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
-5. **Authorization.** Role: `ADMIN`
+5. **Authorization.** Permission: `analytics:workspace:read`
 6. **Service calls.** None; the handler works directly against Prisma and/or the response.
 7. **Database.** Prisma models touched (source order, not guaranteed runtime order - branches may skip some):
    _Reads:_
@@ -21892,7 +22605,7 @@ GET /api/public/onboarding/setup-map
 
 ```text
 GET /api/public/onboarding/status
-  → [authenticate → resolveTenant → requireRole(ADMIN)]
+  → [authenticate → resolveTenant → requirePermission(analytics:workspace:read)]
   → handler  services/auth/src/routes/onboarding.ts:461
       → db read   prisma.tenant.findUnique
       → db read   prisma.tenantOnboarding.findUnique
@@ -22200,6 +22913,323 @@ GET /api/waitlist/leads/stats
   → handler  services/auth/src/routes/waitlist.ts:176
       → db read   prisma.waitlistEntry.count
       → db read   prisma.waitlistEntry.groupBy
+```
+
+## Other
+
+9 endpoints.
+
+### `POST /api/realtime/ticket`
+
+- **Purpose:** Creates a ticket. _(Derived from the route shape; no descriptive comment in source.)_
+- **Handler:** `services/auth/src/routes/realtime.ts` line 26
+- **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
+- **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
+- **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
+- **Exposure:** Routed by the gateway (reachable from the internet).
+- **Operation type:** write
+
+#### Execution flow
+
+1. **Route registration.** `auth` service mounts this router at `/api/realtime` in `services/auth/src/index.ts`; the route is declared in `services/auth/src/routes/realtime.ts`.
+2. **Handler.** `services/auth/src/routes/realtime.ts:26` - inline `async (req, res)` handler.
+3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
+4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
+5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
+6. **Service calls.** None; the handler works directly against Prisma and/or the response.
+7. **Database.** No direct Prisma access in the handler body. Any persistence happens inside the services listed above.
+8. **External integrations.** None detected in the handler body.
+9. **Background work, events and audit.** None triggered by this endpoint.
+10. **Response and error paths.** Success status not determinable from source. Error paths: `403`, `503`, answering `{ error: ... }`. `401` is returned by `authenticate()` before the handler runs.
+
+#### Call graph
+
+```text
+POST /api/realtime/ticket
+  → [authenticate → resolveTenant → requireTenantState(ACTIVE)]
+  → handler  services/auth/src/routes/realtime.ts:26
+      → (responds directly; no downstream calls detected)
+```
+
+### `GET /api/setup/state`
+
+- **Purpose:** Lists state. _(Derived from the route shape; no descriptive comment in source.)_
+- **Handler:** `services/auth/src/routes/setup-state.ts` line 30
+- **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
+- **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
+- **Input validation:** No input.
+- **Exposure:** **Not** routed by the gateway; internal traffic only.
+- **Operation type:** read
+
+#### Execution flow
+
+1. **Route registration.** `auth` service mounts this router at `/api/setup` in `services/auth/src/index.ts`; the route is declared in `services/auth/src/routes/setup-state.ts`.
+2. **Handler.** `services/auth/src/routes/setup-state.ts:30` - inline `async (req, res)` handler.
+3. **Validation.** No input.
+4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
+5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
+6. **Service calls.** None; the handler works directly against Prisma and/or the response.
+7. **Database.** Prisma models touched (source order, not guaranteed runtime order - branches may skip some):
+   _Reads:_
+   - `channelAccount.findFirst`
+   - `tenantIntegration.findFirst`
+   - `knowledgeDocument.findFirst`
+   - `aIAgent.findFirst`
+   - `businessPolicy.findUnique`
+   - `conversation.findFirst`
+   - `user.findMany`
+   - `tenant.findUnique`
+8. **External integrations.** None detected in the handler body.
+9. **Background work, events and audit.** None triggered by this endpoint.
+10. **Response and error paths.** Success status not determinable from source. Error paths: `500`, answering `{ error: ... }`. `401` is returned by `authenticate()` before the handler runs.
+
+#### Call graph
+
+```text
+GET /api/setup/state
+  → [authenticate → resolveTenant → requireTenantState(PENDING_ONBOARDING or ACTIVE)]
+  → handler  services/auth/src/routes/setup-state.ts:30
+      → db read   prisma.channelAccount.findFirst
+      → db read   prisma.tenantIntegration.findFirst
+      → db read   prisma.knowledgeDocument.findFirst
+      → db read   prisma.aIAgent.findFirst
+      → db read   prisma.businessPolicy.findUnique
+      → db read   prisma.conversation.findFirst
+      → db read   prisma.user.findMany
+      → db read   prisma.tenant.findUnique
+```
+
+### `GET /api/workspace`
+
+- **Purpose:** Lists workspace. _(Derived from the route shape; no descriptive comment in source.)_
+- **Handler:** `services/auth/src/routes/workspace.ts` line 123
+- **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
+- **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
+- **Input validation:** No input.
+- **Exposure:** **Not** routed by the gateway; internal traffic only.
+- **Operation type:** read
+
+#### Execution flow
+
+1. **Route registration.** `auth` service mounts this router at `/api/workspace` in `services/auth/src/index.ts`; the route is declared in `services/auth/src/routes/workspace.ts`.
+2. **Handler.** `services/auth/src/routes/workspace.ts:123` - inline `async (req, res)` handler.
+3. **Validation.** No input.
+4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
+5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
+6. **Service calls.** None; the handler works directly against Prisma and/or the response.
+7. **Database.** No direct Prisma access in the handler body. Any persistence happens inside the services listed above.
+8. **External integrations.** None detected in the handler body.
+9. **Background work, events and audit.** None triggered by this endpoint.
+10. **Response and error paths.** Success status not determinable from source. Error paths: `500`, answering `{ error: ... }`. `401` is returned by `authenticate()` before the handler runs.
+
+#### Call graph
+
+```text
+GET /api/workspace
+  → [authenticate → resolveTenant → requireTenantState(PENDING_ONBOARDING or ACTIVE)]
+  → handler  services/auth/src/routes/workspace.ts:123
+      → (responds directly; no downstream calls detected)
+```
+
+### `PATCH /api/workspace`
+
+- **Purpose:** Updates the referenced workspace. _(Derived from the route shape; no descriptive comment in source.)_
+- **Handler:** `services/auth/src/routes/workspace.ts` line 134
+- **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
+- **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
+- **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
+- **Exposure:** **Not** routed by the gateway; internal traffic only.
+- **Operation type:** write
+
+#### Execution flow
+
+1. **Route registration.** `auth` service mounts this router at `/api/workspace` in `services/auth/src/index.ts`; the route is declared in `services/auth/src/routes/workspace.ts`.
+2. **Handler.** `services/auth/src/routes/workspace.ts:134` - inline `async (req, res)` handler.
+3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
+4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
+5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
+6. **Service calls.** None; the handler works directly against Prisma and/or the response.
+7. **Database.** Prisma models touched (source order, not guaranteed runtime order - branches may skip some):
+   _Reads:_
+   - `businessProfile.findUnique`
+   _Writes:_
+   - `businessProfile.update`
+8. **External integrations.** None detected in the handler body.
+9. **Background work, events and audit.** None triggered by this endpoint.
+10. **Response and error paths.** Success status not determinable from source. Error paths: `409`, `422`, `500`, answering `{ error: ... }`. `401` is returned by `authenticate()` before the handler runs.
+
+#### Call graph
+
+```text
+PATCH /api/workspace
+  → [authenticate → resolveTenant → requireTenantState(PENDING_ONBOARDING or ACTIVE)]
+  → handler  services/auth/src/routes/workspace.ts:134
+      → db read   prisma.businessProfile.findUnique
+      → db write  prisma.businessProfile.update
+```
+
+### `GET /api/workspace/prohibited-claims`
+
+- **Purpose:** Lists prohibited claims. _(Derived from the route shape; no descriptive comment in source.)_
+- **Handler:** `services/auth/src/routes/workspace.ts` line 383
+- **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
+- **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
+- **Input validation:** No input.
+- **Exposure:** **Not** routed by the gateway; internal traffic only.
+- **Operation type:** read
+
+#### Execution flow
+
+1. **Route registration.** `auth` service mounts this router at `/api/workspace` in `services/auth/src/index.ts`; the route is declared in `services/auth/src/routes/workspace.ts`.
+2. **Handler.** `services/auth/src/routes/workspace.ts:383` - inline `async (req, res)` handler.
+3. **Validation.** No input.
+4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
+5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
+6. **Service calls.** None; the handler works directly against Prisma and/or the response.
+7. **Database.** No direct Prisma access in the handler body. Any persistence happens inside the services listed above.
+8. **External integrations.** None detected in the handler body.
+9. **Background work, events and audit.** None triggered by this endpoint.
+10. **Response and error paths.** Success status not determinable from source. Error paths: `500`, answering `{ error: ... }`. `401` is returned by `authenticate()` before the handler runs.
+
+#### Call graph
+
+```text
+GET /api/workspace/prohibited-claims
+  → [authenticate → resolveTenant → requireTenantState(PENDING_ONBOARDING or ACTIVE)]
+  → handler  services/auth/src/routes/workspace.ts:383
+      → (responds directly; no downstream calls detected)
+```
+
+### `PUT /api/workspace/prohibited-claims`
+
+- **Purpose:** Updates the referenced prohibited claim. _(Derived from the route shape; no descriptive comment in source.)_
+- **Handler:** `services/auth/src/routes/workspace.ts` line 393
+- **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
+- **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
+- **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
+- **Exposure:** **Not** routed by the gateway; internal traffic only.
+- **Operation type:** write
+
+#### Execution flow
+
+1. **Route registration.** `auth` service mounts this router at `/api/workspace` in `services/auth/src/index.ts`; the route is declared in `services/auth/src/routes/workspace.ts`.
+2. **Handler.** `services/auth/src/routes/workspace.ts:393` - inline `async (req, res)` handler.
+3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
+4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
+5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
+6. **Service calls.** None; the handler works directly against Prisma and/or the response.
+7. **Database.** No direct Prisma access in the handler body. Any persistence happens inside the services listed above.
+8. **External integrations.** None detected in the handler body.
+9. **Background work, events and audit.** None triggered by this endpoint.
+10. **Response and error paths.** Success status not determinable from source. Error paths: `422`, `500`, answering `{ error: ... }`. `401` is returned by `authenticate()` before the handler runs.
+
+#### Call graph
+
+```text
+PUT /api/workspace/prohibited-claims
+  → [authenticate → resolveTenant → requireTenantState(PENDING_ONBOARDING or ACTIVE)]
+  → handler  services/auth/src/routes/workspace.ts:393
+      → (responds directly; no downstream calls detected)
+```
+
+### `GET /api/workspace/voice`
+
+- **Purpose:** Lists voice. _(Derived from the route shape; no descriptive comment in source.)_
+- **Handler:** `services/auth/src/routes/workspace.ts` line 250
+- **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
+- **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
+- **Input validation:** No input.
+- **Exposure:** **Not** routed by the gateway; internal traffic only.
+- **Operation type:** read
+
+#### Execution flow
+
+1. **Route registration.** `auth` service mounts this router at `/api/workspace` in `services/auth/src/index.ts`; the route is declared in `services/auth/src/routes/workspace.ts`.
+2. **Handler.** `services/auth/src/routes/workspace.ts:250` - inline `async (req, res)` handler.
+3. **Validation.** No input.
+4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
+5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
+6. **Service calls.** None; the handler works directly against Prisma and/or the response.
+7. **Database.** Prisma models touched (source order, not guaranteed runtime order - branches may skip some):
+   _Reads:_
+   - `businessProfile.findUnique`
+8. **External integrations.** None detected in the handler body.
+9. **Background work, events and audit.** None triggered by this endpoint.
+10. **Response and error paths.** Success status not determinable from source. Error paths: `500`, answering `{ error: ... }`. `401` is returned by `authenticate()` before the handler runs.
+
+#### Call graph
+
+```text
+GET /api/workspace/voice
+  → [authenticate → resolveTenant → requireTenantState(PENDING_ONBOARDING or ACTIVE)]
+  → handler  services/auth/src/routes/workspace.ts:250
+      → db read   prisma.businessProfile.findUnique
+```
+
+### `PUT /api/workspace/voice`
+
+- **Purpose:** Updates the referenced voice. _(Derived from the route shape; no descriptive comment in source.)_
+- **Handler:** `services/auth/src/routes/workspace.ts` line 274
+- **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
+- **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
+- **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
+- **Exposure:** **Not** routed by the gateway; internal traffic only.
+- **Operation type:** write
+
+#### Execution flow
+
+1. **Route registration.** `auth` service mounts this router at `/api/workspace` in `services/auth/src/index.ts`; the route is declared in `services/auth/src/routes/workspace.ts`.
+2. **Handler.** `services/auth/src/routes/workspace.ts:274` - inline `async (req, res)` handler.
+3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
+4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
+5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
+6. **Service calls.** None; the handler works directly against Prisma and/or the response.
+7. **Database.** Prisma models touched (source order, not guaranteed runtime order - branches may skip some):
+   _Writes:_
+   - `businessProfile.update`
+8. **External integrations.** None detected in the handler body.
+9. **Background work, events and audit.** None triggered by this endpoint.
+10. **Response and error paths.** Success status not determinable from source. Error paths: `409`, `422`, `500`, answering `{ error: ... }`. `401` is returned by `authenticate()` before the handler runs.
+
+#### Call graph
+
+```text
+PUT /api/workspace/voice
+  → [authenticate → resolveTenant → requireTenantState(PENDING_ONBOARDING or ACTIVE)]
+  → handler  services/auth/src/routes/workspace.ts:274
+      → db write  prisma.businessProfile.update
+```
+
+### `POST /api/workspace/voice/sample`
+
+- **Purpose:** Creates a sample. _(Derived from the route shape; no descriptive comment in source.)_
+- **Handler:** `services/auth/src/routes/workspace.ts` line 343
+- **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
+- **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
+- **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
+- **Exposure:** **Not** routed by the gateway; internal traffic only.
+- **Operation type:** write
+
+#### Execution flow
+
+1. **Route registration.** `auth` service mounts this router at `/api/workspace` in `services/auth/src/index.ts`; the route is declared in `services/auth/src/routes/workspace.ts`.
+2. **Handler.** `services/auth/src/routes/workspace.ts:343` - inline `async (req, res)` handler.
+3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
+4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
+5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
+6. **Service calls.** None; the handler works directly against Prisma and/or the response.
+7. **Database.** No direct Prisma access in the handler body. Any persistence happens inside the services listed above.
+8. **External integrations.** None detected in the handler body.
+9. **Background work, events and audit.** None triggered by this endpoint.
+10. **Response and error paths.** Success status not determinable from source. Error paths: `422`, `503`, answering `{ error: ... }`. `401` is returned by `authenticate()` before the handler runs.
+
+#### Call graph
+
+```text
+POST /api/workspace/voice/sample
+  → [authenticate → resolveTenant → requireTenantState(PENDING_ONBOARDING or ACTIVE)]
+  → handler  services/auth/src/routes/workspace.ts:343
+      → (responds directly; no downstream calls detected)
 ```
 
 ## Platform Admin
@@ -23685,7 +24715,7 @@ POST /api/shopify-chat/conversation
 ### `POST /api/shopify-chat/events`
 
 - **Purpose:** Creates an event. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/ai/src/routes/shopify-chat-public.ts` line 860
+- **Handler:** `services/ai/src/routes/shopify-chat-public.ts` line 863
 - **Authentication / tenant resolution:** **No authentication middleware.** This route is reachable without a token.
 - **Authorization:** None.
 - **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
@@ -23695,7 +24725,7 @@ POST /api/shopify-chat/conversation
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/shopify-chat` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/shopify-chat-public.ts`.
-2. **Handler.** `services/ai/src/routes/shopify-chat-public.ts:860` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/shopify-chat-public.ts:863` - inline `async (req, res)` handler.
 3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
 4. **Authentication / tenant resolution.** **No authentication middleware.** This route is reachable without a token.
 5. **Authorization.** None.
@@ -23709,7 +24739,7 @@ POST /api/shopify-chat/conversation
 
 ```text
 POST /api/shopify-chat/events
-  → handler  services/ai/src/routes/shopify-chat-public.ts:860
+  → handler  services/ai/src/routes/shopify-chat-public.ts:863
       → (responds directly; no downstream calls detected)
 ```
 
@@ -23733,7 +24763,6 @@ POST /api/shopify-chat/events
 6. **Service calls.** None; the handler works directly against Prisma and/or the response.
 7. **Database.** Prisma models touched (source order, not guaranteed runtime order - branches may skip some):
    _Writes:_
-   - `conversation.update`
    - `message.create`
 8. **External integrations.** None detected in the handler body.
 9. **Background work, events and audit.** None triggered by this endpoint.
@@ -23744,14 +24773,13 @@ POST /api/shopify-chat/events
 ```text
 POST /api/shopify-chat/handoff
   → handler  services/ai/src/routes/shopify-chat-public.ts:735
-      → db write  prisma.conversation.update
       → db write  prisma.message.create
 ```
 
 ### `POST /api/shopify-chat/lead`
 
 - **Purpose:** Creates a lead. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/ai/src/routes/shopify-chat-public.ts` line 779
+- **Handler:** `services/ai/src/routes/shopify-chat-public.ts` line 782
 - **Authentication / tenant resolution:** **No authentication middleware.** This route is reachable without a token.
 - **Authorization:** None.
 - **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
@@ -23761,7 +24789,7 @@ POST /api/shopify-chat/handoff
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/shopify-chat` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/shopify-chat-public.ts`.
-2. **Handler.** `services/ai/src/routes/shopify-chat-public.ts:779` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/shopify-chat-public.ts:782` - inline `async (req, res)` handler.
 3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
 4. **Authentication / tenant resolution.** **No authentication middleware.** This route is reachable without a token.
 5. **Authorization.** None.
@@ -23778,7 +24806,7 @@ POST /api/shopify-chat/handoff
 
 ```text
 POST /api/shopify-chat/lead
-  → handler  services/ai/src/routes/shopify-chat-public.ts:779
+  → handler  services/ai/src/routes/shopify-chat-public.ts:782
       → db write  prisma.conversation.update
       → db write  prisma.message.create
 ```
