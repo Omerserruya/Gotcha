@@ -214,7 +214,6 @@ describe("the UI holds no pricing data of its own", () => {
     "components/pricing/VolumeConfigurator.tsx",
     "components/pricing/MilestoneBar.tsx",
     "components/pricing/ComparisonTable.tsx",
-    "components/landing/PricingSection.tsx",
   ];
 
   it.each(uiFiles)("%s contains no hardcoded price", (f) => {
@@ -259,14 +258,10 @@ describe("publication flag", () => {
     expect(code).toMatch(/if\s*\(!publicPricingEnabled\)/);
   });
 
-  it("the landing section renders nothing when the flag is off", () => {
-    const code = read("components/landing/PricingSection.tsx");
-    expect(code).toMatch(/if\s*\(!publicPricingEnabled(\s*\|\|[^)]*)?\)\s*return null/);
-  });
-
   it("every marketing pricing link is flag-gated", () => {
-    // The nav and footer are shared by every public page now, so the links
-    // that used to sit in LandingPage.tsx live in the chrome.
+    // The nav and footer are shared by every public page, so the links that
+    // used to sit in the old landing page live in the chrome. That page is
+    // gone; the marketing site is its own build now.
     const code = read("components/marketing/MarketingChrome.tsx");
     const links = Array.from(code.matchAll(/landing\.nav\.pricing/g));
     expect(links.length).toBeGreaterThanOrEqual(3); // desktop, mobile, footer
@@ -315,7 +310,6 @@ describe("public surfaces never reference private data", () => {
     "components/pricing/MilestoneBar.tsx",
     "components/pricing/ComparisonTable.tsx",
     "components/pricing/PricingSections.tsx",
-    "components/landing/PricingSection.tsx",
     "lib/api-public-pricing.ts",
   ];
 
@@ -464,7 +458,6 @@ describe("accessibility", () => {
   it("respects reduced motion", () => {
     const code = read("components/pricing/PricingPrimitives.tsx");
     expect(code).toContain("prefers-reduced-motion");
-    expect(read("components/landing/PricingSection.tsx")).toContain("prefers-reduced-motion");
   });
 
   it("offers a skip link to the plans", () => {
@@ -538,12 +531,6 @@ describe("plans read as columns on one surface", () => {
     expect(code).toMatch(/PlanSkeleton[\s\S]{0,400}gap-px/);
   });
 
-  it("the landing preview uses the same columns", () => {
-    const code = read("components/landing/PricingSection.tsx");
-    expect(code).toContain("gap-px");
-    expect(code).toContain("ring-1 ring-gray-300");
-  });
-
   it("columns stay aligned on the shared surface", () => {
     const code = read("components/pricing/PlanGrid.tsx");
     // h-full stretches every column, grow pins every CTA to the same baseline.
@@ -586,7 +573,6 @@ describe("volume adjustment bar", () => {
     // Both surfaces import the same control rather than owning a copy.
     expect(read("components/pricing/PlanGrid.tsx")).toContain('from "./MilestoneBar"');
     expect(read("components/pricing/VolumeConfigurator.tsx")).toContain('from "./MilestoneBar"');
-    expect(read("components/landing/PricingSection.tsx")).toContain("MilestoneBar");
   });
 });
 
@@ -649,49 +635,6 @@ describe("base-currency total", () => {
     expect(q.monthlyMinor).toBe(555_000);
     expect(q.isEstimatedConversion).toBe(true);
     expect(formatMinor(q.monthlyBaseMinor, q.baseCurrency)).toBe("$1,499");
-  });
-});
-
-describe("landing pricing section", () => {
-  const code = read("components/landing/PricingSection.tsx");
-
-  it("gives every plan a CTA", () => {
-    expect(code).toContain('href="/early-access"');
-    expect(code).toContain("pricing.cta.getStarted");
-  });
-
-  it("shows a feature list per plan", () => {
-    expect(code).toContain("<Check");
-    expect(code).toContain("plan.features.filter((f) => f.included)");
-  });
-
-  it("shows what a conversation costs", () => {
-    expect(code).toContain("pricing.perConversation");
-    expect(code).toContain("q.pricePerChatMinor");
-  });
-
-  it("adjusts volume in place and prices the result", () => {
-    expect(code).toContain("MilestoneBar");
-    expect(code).toContain("formatMinor(q.monthlyMinor, q.currency)");
-  });
-
-  it("keeps a chosen volume across a language switch", () => {
-    // Selections are seeded only for plans not already configured.
-    expect(code).toContain("if (!next[p.key]) next[p.key] = defaultSelection(p)");
-  });
-
-  it("turns the credit figure into a worked example", () => {
-    expect(code).toContain("landing.pricing.exampleChats");
-    expect(code).toContain("landing.pricing.exampleBoth");
-  });
-
-  it("skips the example rather than claiming zero conversations a day", () => {
-    expect(code).toContain("chatsDaily >= 1");
-  });
-
-  it("derives the example from catalog figures, never a hardcoded number", () => {
-    expect(code).toContain("q.estimatedChatsDaily");
-    expect(code).toContain("q.estimatedChatsMonthly");
   });
 });
 
