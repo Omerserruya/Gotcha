@@ -94,13 +94,29 @@ describe("no manual Shopify shop-domain entry", () => {
     expect(api).toMatch(/startShopifyInstall\(token: string, flow\?: string\)/);
   });
 
-  it("the unavailable-yet message offers no domain fallback", () => {
-    // When the App Store listing is not published, the button must say "not
-    // available yet" - never degrade to asking for the store address.
-    const code = fs.readFileSync(path.join(SRC, "lib/shopify-connect.ts"), "utf8");
-    const msg = code.slice(code.indexOf("shopify_install_not_available"));
-    const returned = msg.slice(0, msg.indexOf("shopify_not_connected"));
-    expect(stripComments(returned)).not.toMatch(/myshopify|enter your|type your|paste/i);
+  it("no connect error is translated into a request for the store address", () => {
+    // Review 132211 removed the "not available yet" refusal entirely, so the
+    // risk this guards has moved: whatever message the button shows on a
+    // failure, none of them may degrade into asking for the store address.
+    const code = stripComments(
+      fs.readFileSync(path.join(SRC, "lib/shopify-connect.ts"), "utf8"),
+    );
+    const start = code.indexOf("export function connectErrorMessage");
+    expect(start).toBeGreaterThan(-1);
+    expect(code.slice(start)).not.toMatch(/myshopify|enter your|type your|paste/i);
+  });
+
+  it("does not resurrect the refusal the App Store rejected", () => {
+    // `shopify_install_not_available` was a self-imposed block: with no App
+    // Store listing slug configured, the Connect button answered 503 and the
+    // merchant was told to contact support. The reviewer hit exactly that and
+    // failed the submission under 4.5.5. The server must never emit the code
+    // again, so nothing may handle it either.
+    const code = stripComments(
+      fs.readFileSync(path.join(SRC, "lib/shopify-connect.ts"), "utf8"),
+    );
+    expect(code).not.toMatch(/shopify_install_not_available/);
+    expect(code).not.toMatch(/still being published|aren't available just yet/i);
   });
 
   it("tells merchants Shopify picks the store, not that they should type it", () => {

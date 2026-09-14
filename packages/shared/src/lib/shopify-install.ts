@@ -231,38 +231,136 @@ export function buildShopifyAuthorizeUrl(input: {
 }
 
 /**
+ * Shopify uses the word "handle" for more than one identifier, and they are
+ * not guaranteed to be the same string. Two of them reach merchants:
+ *
+ *   SHOPIFY_APP_STORE_HANDLE   the App Store LISTING slug. Only ever appears
+ *                              in `https://apps.shopify.com/<handle>`.
+ *   SHOPIFY_APP_PRICING_HANDLE the APP handle, which appears in admin deep
+ *                              links such as the managed-pricing page
+ *                              `/store/<store>/charges/<handle>/pricing_plans`.
+ *
+ * They were one variable until App Store review 132211, and that coupling was
+ * itself the defect. The pricing handle was known and correct, the listing
+ * handle was not known, and because a single variable fed both, the only way
+ * to keep the pricing URL right was to leave the variable empty - which
+ * silently disabled the "Connect Shopify" button and produced the
+ * "not available yet" screen the reviewer hit. Splitting them means an
+ * unknown listing handle can no longer switch off a working pricing URL, or
+ * the reverse.
+ *
+ * `SHOPIFY_APP_HANDLE` stays readable as a fallback for both so an existing
+ * deployment keeps working across this change.
+ */
+function readHandle(raw: string | undefined): string | null {
+  const handle = (raw || "").trim();
+  // Shopify handles are lowercase alphanumeric with hyphens. Anything else was
+  // not copied from the dashboard, and building a URL from it would send a
+  // merchant to a 404 with no way to tell why.
+  if (!handle || !/^[a-z0-9][a-z0-9-]*$/.test(handle)) return null;
+  return handle;
+}
+
+/** The App Store listing slug, or null when it has not been configured. */
+export function resolveShopifyAppStoreHandle(
+  env: NodeJS.ProcessEnv = process.env,
+): string | null {
+  return readHandle(env.SHOPIFY_APP_STORE_HANDLE) ?? readHandle(env.SHOPIFY_APP_HANDLE);
+}
+
+/**
  * Where the merchant-facing "Connect Shopify" button sends a merchant.
  *
  * PUBLIC DISTRIBUTION ONLY. For a public app there is exactly one
  * Shopify-owned install surface, the App Store listing, and this derives it
- * from a handle read off the Partner Dashboard. There is deliberately no
- * second source:
+ * from a handle read off the Partner Dashboard listing page. There is
+ * deliberately no second source, and this was re-checked against Shopify's
+ * documentation during review 132211:
  *
- *   • A custom-distribution install link is generated per STORE (the
- *     dashboard asks for the shop's domain before it will produce one), so
- *     configuring one would hard-code a single merchant's shop into the
- *     button every other merchant presses. It also forecloses Shopify
- *     billing and App Store review, and the distribution choice is
- *     irreversible.
- *   • A guessed handle produces a listing URL that 404s, which is worse for
- *     the merchant than an honest "not available yet".
+ *   • There is no store-picker install URL. Shopify's authorization-code-grant
+ *     documentation gives exactly one authorize URL and it is per-shop
+ *     (`https://{shop}/admin/oauth/authorize?...`), and states that an install
+ *     link which does not originate from the App Store must supply `shop`
+ *     itself. So there is nothing to fall back TO that would not mean asking
+ *     the merchant to name their store - the thing requirement 2.3.1 forbids.
+ *   • The listing handle is not exposed by the Partner API either. The `App`
+ *     type carries only `apiKey`, `events`, `id` and `name`, so it cannot be
+ *     discovered at runtime and must be configured.
+ *   • A custom-distribution install link is generated per STORE, so
+ *     configuring one would hard-code a single merchant's shop into the button
+ *     every other merchant presses.
  *
  * SCOPE OF THIS FUNCTION - important. It powers ONE thing: the button. It is
- * NOT part of the install path. A merchant arriving from Shopify (Partner
- * Dashboard "Test your app", or the listing once it is live) reaches
+ * NOT part of the install path. A merchant arriving from Shopify (the App
+ * Store listing, or Partner Dashboard "Test your app") reaches
  * `application_url` directly, and the public install handler verifies that
  * request and starts OAuth without ever calling this. So a null here means
- * "no in-app button yet", never "installation is broken" - see the tests in
+ * "no in-app shortcut", never "installation is broken" - see the tests in
  * shopify-install-route.test.ts that pin exactly that.
  *
- * Returns null when unset or malformed. Null is a real, expected state
- * before the listing publishes, and callers must render it as such.
+ * Returns null when unset or malformed. Null is an ORDINARY state and callers
+ * must render it as one: it may not become a blocked button or an error.
  */
 export function resolveShopifyInstallUrl(env: NodeJS.ProcessEnv = process.env): string | null {
-  const handle = (env.SHOPIFY_APP_HANDLE || "").trim();
-  // Shopify listing handles are lowercase alphanumeric with hyphens. Anything
-  // else was not copied from the dashboard, and building a URL from it would
-  // send merchants to a 404 with no way to tell why.
-  if (!handle || !/^[a-z0-9][a-z0-9-]*$/.test(handle)) return null;
+  const handle = resolveShopifyAppStoreHandle(env);
+  if (!handle) return null;
   return `https://apps.shopify.com/${handle}`;
+}
+
+/**
+ * The name to search the App Store for when the listing slug is unknown.
+ *
+ * Configurable because the listing title is a marketing decision that can
+ * change without a deploy, and a stale search term is a worse landing than a
+ * configurable one.
+ */
+const DEFAULT_APP_STORE_SEARCH_TERM = "GOTCHA";
+
+export interface ShopifyInstallEntry {
+  /** A Shopify-owned page. Never null, and never a GOTCHA screen. */
+  url: string;
+  /**
+   * True when `url` is this app's own listing. False when it is App Store
+   * search, which lands the merchant one click further away.
+   */
+  precise: boolean;
+}
+
+/**
+ * Where "Connect Shopify" sends a merchant. ALWAYS a usable Shopify page.
+ *
+ * WHY THIS RETURNS SOMETHING RATHER THAN NULL
+ * -------------------------------------------
+ * The button used to hard-fail with a 503 and the copy "New Shopify
+ * connections aren't available just yet" whenever the listing slug was
+ * unconfigured. Shopify App Store review 132211 quoted that message back to us
+ * under requirement 4.5.5: the submitted test account could not demonstrate
+ * the feature set, because the only in-app route to connecting a store
+ * answered with a refusal. A configuration gap on our side had become a
+ * merchant-facing dead end.
+ *
+ * So the entry point degrades instead of failing. Both branches are
+ * Shopify-owned pages where Shopify identifies the store, which is what
+ * requirement 2.3.1 actually demands - it forbids asking the merchant to type
+ * their `.myshopify.com` domain, not landing them somewhere less specific:
+ *
+ *   • listing slug configured  -> the app's own App Store listing.
+ *   • not configured           -> App Store search for the app name. One extra
+ *                                 click, and still no domain typed anywhere.
+ *
+ * There is deliberately no third branch that asks for a shop domain, and there
+ * is no fallback to a guessed listing slug: a wrong slug is a 404 the merchant
+ * cannot diagnose, whereas search always resolves.
+ */
+export function resolveShopifyInstallEntry(
+  env: NodeJS.ProcessEnv = process.env,
+): ShopifyInstallEntry {
+  const listing = resolveShopifyInstallUrl(env);
+  if (listing) return { url: listing, precise: true };
+
+  const term = (env.SHOPIFY_APP_STORE_SEARCH_TERM || "").trim() || DEFAULT_APP_STORE_SEARCH_TERM;
+  return {
+    url: `https://apps.shopify.com/search?q=${encodeURIComponent(term)}`,
+    precise: false,
+  };
 }

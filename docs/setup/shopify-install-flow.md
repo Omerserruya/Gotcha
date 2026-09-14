@@ -99,7 +99,10 @@ Exact names, where they are read, and whether production has them today.
 | `SHOPIFY_API_SECRET` | same identity helper → `verifyAppEntryHmac`, `verifyOAuthCallbackHmac`, `verifyShopifyWebhookHmac`, app-proxy signatures | App **client secret**. Verifies every signature. | configured |
 | `SHOPIFY_REDIRECT_URI` | `getShopifyAppIdentity()` → `buildShopifyAuthorizeUrl` | Absolute OAuth **callback**. Must match `auth.redirect_urls` exactly. | configured |
 | `SHOPIFY_APP_URL` | `getShopifyAppIdentity()`; falls back to the origin of `SHOPIFY_REDIRECT_URI` | Public app base URL. | absent — **derived**, so not required |
-| `SHOPIFY_APP_HANDLE` | `resolveShopifyInstallUrl()` (Connect button) and `buildAppAdminLink()` (admin deep link) | **OPTIONAL.** App Store listing handle. | commented placeholder — unset by design pre-listing |
+| `SHOPIFY_APP_STORE_HANDLE` | `resolveShopifyInstallUrl()` (Connect button) | **OPTIONAL.** App Store **listing slug**, used only in `apps.shopify.com/<slug>`. Not derivable, and not exposed by the Partner API. | unset — the button degrades to App Store search |
+| `SHOPIFY_APP_PRICING_HANDLE` | `buildAppAdminLink()`, `shopifyPlanSelectionUrl()` | **APP handle**, used in admin deep links and `/charges/<handle>/pricing_plans`. `gotcha-3` for GOTCHA. | configured on `billing` |
+| `SHOPIFY_APP_STORE_SEARCH_TERM` | `resolveShopifyInstallEntry()` | What to search the App Store for when the listing slug is unknown. | default `GOTCHA` |
+| `SHOPIFY_APP_HANDLE` | fallback for BOTH of the above | Legacy single variable. Kept so existing deployments are unaffected. | see §"Two handles" below |
 | `SHOPIFY_API_VERSION` | `shopifyApiVersion()` (`packages/shared/src/lib/shopify-api-version.ts`) | Overrides the Admin API pin. | absent — default `2026-07` applies |
 | `FRONTEND_URL` | `resolveAppPublicUrl()` → post-OAuth redirects, install error page | Public app origin for redirects. | configured |
 | `DASHBOARD_URL` | `dashboardRedirect()` in `connectors-admin.ts` | Marketplace landing after connect. | configured |
@@ -109,13 +112,54 @@ Exact names, where they are read, and whether production has them today.
 `services/ai/src/services/shopify-connection-link.service.ts`, used by both
 the install handler and `oauth/init` so the two cannot disagree.
 
-### On `SHOPIFY_APP_HANDLE` being optional
+### Two handles, and why they are separate
 
-It powers exactly one thing: the merchant-facing **Connect Shopify** button.
-When it is unset that button returns `503 shopify_install_not_available` and
-the UI says new connections are not available yet.
+Shopify says "handle" for two different identifiers and they are **not**
+guaranteed to be the same string:
 
-It does **not** gate any of the following, and there are tests pinning each:
+* the App Store **listing slug**, which appears only in
+  `https://apps.shopify.com/<slug>`;
+* the **app handle**, which appears in admin deep links including
+  `/store/<store>/charges/<handle>/pricing_plans`.
+
+These were one variable, `SHOPIFY_APP_HANDLE`, until App Store review 132211 —
+and that coupling was itself the defect. The app handle was known and correct
+(`gotcha-3`, confirmed from the live pricing URL); the listing slug was not.
+Because one variable fed both, the only way to keep the pricing URL correct was
+to leave the variable **empty**, which silently disabled the Connect button.
+
+The listing slug cannot be discovered at runtime. The Partner API's `App` type
+carries only `apiKey`, `events`, `id` and `name` — verified by introspection —
+so it must be read off the Partner Dashboard listing page and configured. Open
+the resulting `apps.shopify.com` URL once before relying on it: a wrong slug is
+a 404 the merchant cannot diagnose, and guessing one is what produced this
+rejection.
+
+### The Connect button never refuses
+
+`resolveShopifyInstallEntry()` always returns a Shopify-owned page:
+
+| listing slug | where the button goes | `precise` |
+|---|---|---|
+| configured | the app's own listing | `true` |
+| unset or malformed | App Store **search** for the app name | `false` |
+
+It used to answer `503 shopify_install_not_available` in the second case, and
+the UI said new connections were not available yet. Shopify quoted that screen
+back under requirement **4.5.5**: the submitted test account could not
+demonstrate the feature set, because the only in-app route to connecting a
+store refused. A gap in our configuration had become the merchant's error
+message.
+
+There is deliberately **no** fallback that asks for a shop domain. Requirement
+2.3.1 forbids asking the merchant to name their store; it does not require the
+landing page to be the listing specifically. Shopify's own
+authorization-code-grant documentation gives exactly one authorize URL and it is
+per-shop, and states that an install link not originating from the App Store
+must supply `shop` itself — so there is nothing else to fall back to.
+
+The listing slug does **not** gate any of the following, and there are tests
+pinning each:
 
 * installation initiated from the Partner Dashboard,
 * the public install handler receiving and validating Shopify's signed request,
@@ -187,10 +231,14 @@ access token **encrypted** with the same helper used for the database.
 
 ## 7. Testing on a development store BEFORE the listing is published
 
-This is the whole point of keeping `SHOPIFY_APP_HANDLE` optional: the install
-path works today, without a listing, without a handle, and without any
-development-only bypass. Shopify itself initiates the install from the Partner
-Dashboard.
+The install path works today, without a listing, without a handle, and without
+any development-only bypass. Shopify itself initiates the install from the
+Partner Dashboard.
+
+There is no allowlist to add the store to. `SHOPIFY_BILLING_TEST_SHOPS` used to
+decide which stores entered the billing flow; review 132211 removed it as a
+gate, because a store's behaviour must not depend on whether somebody named it
+in server configuration.
 
 ### 7.1 Prerequisite (one manual change)
 

@@ -40,6 +40,8 @@ const H = vi.hoisted(() => {
     connection: { current: null as any },
     linkResult: { current: { ok: true, connectionId: "c1", reconnected: false } as any },
     linkCalls: [] as any[],
+    /** The store a connect would REPLACE. null = nothing to replace. */
+    replacing: { current: null as string | null },
     pendingCalls: [] as any[],
     exchange: v.fn(async () => ({ accessToken: "shpat_verysecret", scope: "read_orders" })),
   };
@@ -91,6 +93,10 @@ vi.mock("../services/shopify-connection-link.service", () => ({
     return H.linkResult.current;
   }),
   exchangeShopifyCode: H.exchange,
+  // Returns the store this workspace would REPLACE, or null. Defaults to null
+  // (nothing to replace) so existing cases keep the plain connect path; the
+  // multiple-store cases override H.replacing.
+  pendingStoreReplacement: vi.fn(async () => H.replacing.current),
   findShopOwner: vi.fn(async () => null),
 }));
 
@@ -166,6 +172,7 @@ beforeEach(() => {
   H.stateResult.current = WITH_INTENT;
   H.connection.current = null;
   H.linkResult.current = { ok: true, connectionId: "c1", reconnected: false };
+  H.replacing.current = null;
   H.linkCalls.length = 0;
   H.pendingCalls.length = 0;
   H.exchange.mockResolvedValue({ accessToken: "shpat_verysecret", scope: "read_orders" });

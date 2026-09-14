@@ -518,6 +518,16 @@ services:
       # distribution link is generated per store and would hard-code one
       # merchant's shop into everyone's button.
       SHOPIFY_APP_HANDLE: ${SHOPIFY_APP_HANDLE:-}
+      # Split out of SHOPIFY_APP_HANDLE in App Store review 132211. Shopify uses
+      # "handle" for two different identifiers and they are not guaranteed to
+      # match:
+      #   SHOPIFY_APP_STORE_HANDLE   the App Store LISTING slug, used only in
+      #                              https://apps.shopify.com/<slug>
+      #   SHOPIFY_APP_PRICING_HANDLE the APP handle, used in admin deep links
+      #                              such as /charges/<handle>/pricing_plans
+      # Both fall back to SHOPIFY_APP_HANDLE when unset, so this is additive.
+      SHOPIFY_APP_STORE_HANDLE: ${SHOPIFY_APP_STORE_HANDLE:-}
+      SHOPIFY_APP_PRICING_HANDLE: ${SHOPIFY_APP_PRICING_HANDLE:-}
       # ── GOTCHA Shopify CHAT app ───────────────────────────────────
       # RETIRED at the Core/Chat unification. There is ONE Shopify app now,
       # so app-proxy signatures, webhook HMACs and the Theme Editor deep
@@ -677,6 +687,16 @@ services:
       # App handle used to build Shopify's hosted plan-selection URL. Without it
       # app_pricing refuses to start rather than redirect to a broken admin URL.
       SHOPIFY_APP_HANDLE: ${SHOPIFY_APP_HANDLE:-}
+      # Split out of SHOPIFY_APP_HANDLE in App Store review 132211. Shopify uses
+      # "handle" for two different identifiers and they are not guaranteed to
+      # match:
+      #   SHOPIFY_APP_STORE_HANDLE   the App Store LISTING slug, used only in
+      #                              https://apps.shopify.com/<slug>
+      #   SHOPIFY_APP_PRICING_HANDLE the APP handle, used in admin deep links
+      #                              such as /charges/<handle>/pricing_plans
+      # Both fall back to SHOPIFY_APP_HANDLE when unset, so this is additive.
+      SHOPIFY_APP_STORE_HANDLE: ${SHOPIFY_APP_STORE_HANDLE:-}
+      SHOPIFY_APP_PRICING_HANDLE: ${SHOPIFY_APP_PRICING_HANDLE:-}
       # JSON maps. Plan handles and meter handles are CONFIGURATION and live in
       # the Partner Dashboard; prices are never defined in this repo.
       SHOPIFY_BILLING_PLAN_HANDLES: ${SHOPIFY_BILLING_PLAN_HANDLES:-}

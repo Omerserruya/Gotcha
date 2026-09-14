@@ -42,6 +42,7 @@ import {
   requirePermission,
   mintOAuthState,
   getShopifyAppIdentity,
+  resolveShopifyInstallEntry,
   shopifyApiVersion,
   resolveAppPublicUrl,
   verifyAppEntryHmac,
@@ -61,6 +62,7 @@ import {
 import {
   SHOPIFY_OAUTH_SCOPES,
   linkShopifyShopToTenant,
+  pendingStoreReplacement,
 } from "../services/shopify-connection-link.service";
 import { resolveShopifyBillingOutcome } from "../services/shopify-billing-bridge.service";
 
@@ -139,28 +141,20 @@ router.get(
   requireOnboardingOrActiveTenant(),
   canConnectSystems,
   async (req: Request, res: Response) => {
-    const identity = getShopifyAppIdentity();
-    if (!identity.installUrl) {
-      // The App Store listing is not published yet, so there is no
-      // Shopify-owned page to send this merchant to.
-      //
-      // This route ONLY is unavailable. Installation from the Partner
-      // Dashboard, the public install handler, OAuth, the callback, existing
-      // connections and reauthorization are all unaffected - none of them
-      // reads installUrl.
-      //
-      // Deliberately NOT a fallback to a shop-domain prompt. That is the
-      // thing App Store requirement 2.3.1 forbids, and re-adding it "just
-      // until the listing is live" is how it would come back permanently.
-      res.status(503).json({
-        error: "shopify_install_not_available",
-        detail:
-          "New Shopify connections are not available yet. The GOTCHA app is " +
-          "pending its Shopify App Store listing; once it is published this " +
-          "button will take you to Shopify to choose your store.",
-      });
-      return;
-    }
+    // ALWAYS resolves to a Shopify-owned page. There is no configuration this
+    // route can refuse on any more.
+    //
+    // It used to answer 503 `shopify_install_not_available` whenever the App
+    // Store listing slug was unset, and Shopify App Store review 132211 quoted
+    // the resulting screen back to us under requirement 4.5.5: the submitted
+    // test account could not demonstrate the feature, because the only in-app
+    // route to connecting a store refused. A gap in OUR configuration had
+    // become the merchant's error message.
+    //
+    // `resolveShopifyInstallEntry` degrades to App Store search instead. Still
+    // no shop domain is typed anywhere - requirement 2.3.1 is about not asking
+    // the merchant to name their store, and neither branch does.
+    const entry = resolveShopifyInstallEntry();
 
     const handle = await createInstallIntent({
       tenantId: req.tenantId!,
@@ -180,7 +174,10 @@ router.get(
       path: "/",
     });
 
-    res.json({ url: identity.installUrl });
+    // `precise` tells the UI whether this is the app's own listing or App Store
+    // search, so it can add one line of guidance in the second case rather than
+    // dropping the merchant on a search page with no explanation.
+    res.json({ url: entry.url, precise: entry.precise });
   },
 );
 
@@ -316,6 +313,35 @@ router.post(
       return;
     }
 
+    // Replacing a store this workspace already holds is the merchant's call.
+    // Asked BEFORE the handle is consumed: the handle is single-use, and
+    // spending it on a question the merchant has not answered yet would mean
+    // reinstalling from Shopify just to say "yes, replace it".
+    //
+    // `replace` is read from the body of an authenticated request whose caller
+    // already passed `canConnectSystems`. It decides nothing about which
+    // workspace or which store - both of those come from the session and from
+    // Shopify's signed install - only whether an overwrite the merchant was
+    // shown may proceed.
+    const allowReplace = req.body?.replace === true;
+    const replacing = await pendingStoreReplacement(req.tenantId!, summary.shopDomain);
+    if (replacing && !allowReplace) {
+      res.status(409).json({
+        error: "another_store_connected",
+        detail:
+          `This workspace is connected to ${replacing}. ` +
+          `Connecting ${summary.shopDomain} will disconnect it.`,
+        data: {
+          currentShopDomain: replacing,
+          incomingShopDomain: summary.shopDomain,
+          // The handle is still unspent, so the merchant's answer can be
+          // submitted straight back without another trip through Shopify.
+          handle,
+        },
+      });
+      return;
+    }
+
     const pending = await consumePendingConnection(handle);
     if (!pending) {
       // Lost the race, or already claimed. Single-use, by construction.
@@ -328,9 +354,21 @@ router.post(
       shopDomain: pending.shopDomain,
       credentials: pending.credentials as any,
       connectedBy: (req as any).user?.userId,
+      allowReplace,
     });
 
     if (!linked.ok) {
+      if (linked.reason === "another_store_connected") {
+        // Should be unreachable - the pre-consume check below answers this
+        // first, precisely so the single-use handle is not spent on a question.
+        // Kept because `linkShopifyShopToTenant` is the authority and a caller
+        // that forgets to ask must fail closed rather than overwrite a store.
+        res.status(409).json({
+          error: "another_store_connected",
+          detail: `This workspace is connected to ${linked.currentShopDomain}.`,
+        });
+        return;
+      }
       if (linked.reason === "shop_taken") {
         res.status(409).json({
           error: "shop_connected_to_another_workspace",

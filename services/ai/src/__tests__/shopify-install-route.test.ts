@@ -44,6 +44,8 @@ const H = vi.hoisted(() => {
     pendings: new Map<string, any>(),
     linkResult: { current: { ok: true, connectionId: "conn-1", reconnected: false } as any },
     linkCalls: [] as any[],
+    /** The store a connect would REPLACE. null = nothing to replace. */
+    replacing: { current: null as string | null },
   };
 });
 
@@ -104,6 +106,10 @@ vi.mock("../services/shopify-connection-link.service", () => ({
     return H.linkResult.current;
   }),
   exchangeShopifyCode: vi.fn(async () => ({ accessToken: "shpat_secret", scope: "read_orders" })),
+  // Returns the store this workspace would REPLACE, or null. Defaults to null
+  // (nothing to replace) so existing cases keep the plain connect path; the
+  // multiple-store cases override H.replacing.
+  pendingStoreReplacement: vi.fn(async () => H.replacing.current),
   findShopOwner: vi.fn(async () => null),
 }));
 
@@ -150,7 +156,12 @@ beforeEach(() => {
   H.pendings.clear();
   H.linkCalls.length = 0;
   H.linkResult.current = { ok: true, connectionId: "conn-1", reconnected: false };
+  H.replacing.current = null;
   process.env.SHOPIFY_APP_HANDLE = "gotcha";
+  // Both split variables start clear so a case that sets one is testing that
+  // one. `SHOPIFY_APP_HANDLE` above remains the compatibility fallback.
+  delete process.env.SHOPIFY_APP_STORE_HANDLE;
+  delete process.env.SHOPIFY_APP_PRICING_HANDLE;
 });
 
 // ─── The button ──────────────────────────────────────────────
@@ -184,26 +195,68 @@ describe("GET /connectors/shopify/install/start", () => {
     expect(H.intents.get(INTENT).flow).toBeUndefined();
   });
 
-  it("says installs are not available yet when the listing is unpublished", async () => {
+  it("still returns a Shopify page when the listing slug is unconfigured", async () => {
+    // THE REGRESSION THIS EXISTS FOR.
+    //
+    // This route used to answer 503 `shopify_install_not_available` whenever
+    // the App Store listing slug was unset, and the merchant was told to
+    // contact support. Shopify App Store review 132211 failed the submission
+    // under requirement 4.5.5 on exactly that screen: the test account could
+    // not demonstrate the feature, because the only in-app route to connecting
+    // a store refused. A gap in our configuration had become the merchant's
+    // error message.
     delete process.env.SHOPIFY_APP_HANDLE;
+    delete process.env.SHOPIFY_APP_STORE_HANDLE;
     const res = await request(app()).get("/api/connectors/shopify/install/start");
-    expect(res.status).toBe(503);
-    expect(res.body.error).toBe("shopify_install_not_available");
-    // No intent is minted for a flow that cannot start.
-    expect(H.intents.size).toBe(0);
+    expect(res.status).toBe(200);
+    expect(res.body.error).toBeUndefined();
+    // A Shopify-owned page, and one honest enough to say it is the imprecise
+    // branch so the UI can explain the extra click.
+    expect(new URL(res.body.url).hostname).toBe("apps.shopify.com");
+    expect(res.body.precise).toBe(false);
+    // The intent is minted, because the flow really does start here now.
+    expect(H.intents.size).toBe(1);
   });
 
-  it("never offers a shop-domain fallback when the listing is unpublished", async () => {
+  it("uses the app's own listing when the slug IS configured", async () => {
+    process.env.SHOPIFY_APP_STORE_HANDLE = "gotcha-3";
+    const res = await request(app()).get("/api/connectors/shopify/install/start");
+    expect(res.status).toBe(200);
+    expect(res.body.url).toBe("https://apps.shopify.com/gotcha-3");
+    expect(res.body.precise).toBe(true);
+  });
+
+  it("keeps the listing slug independent of the admin/pricing handle", async () => {
+    // These were ONE variable before review 132211, and the coupling was the
+    // defect: the pricing handle was known and correct, the listing slug was
+    // not, and the only way to keep the pricing URL right was to blank the
+    // variable - which silently disabled this button.
+    delete process.env.SHOPIFY_APP_STORE_HANDLE;
+    // The legacy variable too: it is a fallback for BOTH, so leaving it set
+    // would be testing the fallback rather than the independence.
+    delete process.env.SHOPIFY_APP_HANDLE;
+    process.env.SHOPIFY_APP_PRICING_HANDLE = "gotcha-3";
+    const res = await request(app()).get("/api/connectors/shopify/install/start");
+    expect(res.status).toBe(200);
+    // The pricing handle must NOT be borrowed as a listing slug: a wrong slug
+    // is a 404 the merchant cannot diagnose.
+    expect(res.body.url).not.toContain("gotcha-3");
+    expect(res.body.precise).toBe(false);
+    delete process.env.SHOPIFY_APP_PRICING_HANDLE;
+  });
+
+  it("never offers a shop-domain fallback, configured or not", async () => {
     // The failure mode this guards: someone "temporarily" restores a domain
     // prompt so merchants can still connect before the listing is live. That
     // is the exact flow App Store requirement 2.3.1 rejects, and a temporary
-    // one is never removed.
+    // one is never removed. Degrading to App Store search is allowed; asking
+    // the merchant to name their store is not.
     delete process.env.SHOPIFY_APP_HANDLE;
+    delete process.env.SHOPIFY_APP_STORE_HANDLE;
     const res = await request(app()).get("/api/connectors/shopify/install/start");
     const body = JSON.stringify(res.body);
     expect(body).not.toContain("myshopify.com");
     expect(body).not.toMatch(/enter|type|paste/i);
-    expect(res.body.url).toBeUndefined();
   });
 
   it("ignores a custom-distribution install URL if one is ever put in the env", async () => {
@@ -211,12 +264,13 @@ describe("GET /connectors/shopify/install/start", () => {
     // must not be honoured here - it would pin every merchant's button to one
     // merchant's shop.
     delete process.env.SHOPIFY_APP_HANDLE;
+    delete process.env.SHOPIFY_APP_STORE_HANDLE;
     process.env.SHOPIFY_APP_INSTALL_URL =
       "https://admin.shopify.com/oauth/install_custom_app?client_id=abc";
     try {
       const res = await request(app()).get("/api/connectors/shopify/install/start");
-      expect(res.status).toBe(503);
-      expect(res.body.error).toBe("shopify_install_not_available");
+      expect(res.body.url).not.toContain("install_custom_app");
+      expect(new URL(res.body.url).hostname).toBe("apps.shopify.com");
     } finally {
       delete process.env.SHOPIFY_APP_INSTALL_URL;
     }
@@ -335,6 +389,94 @@ describe("GET /connectors/shopify/install (public)", () => {
         .set("Cookie", cookie);
       expect(res.status, cookie).toBe(302);
       expect(res.headers.location).toContain("/admin/oauth/authorize");
+    }
+  });
+});
+
+// ─── One store per workspace, replaced only on purpose ───────
+
+describe("multiple stores", () => {
+  // A workspace holds at most one Shopify store: `tenantIntegration` is unique
+  // on (tenantId, integrationId). So connecting a second store necessarily
+  // disconnects the first, and that USED to happen silently - the row's
+  // shopDomain and token were overwritten, the old store kept the app
+  // installed on Shopify's side, and every AI answer quietly began reading a
+  // different catalogue. The merchant was shown "Connected" either way.
+
+  const OTHER = "second-store.myshopify.com";
+
+  function pend(handle: string, shop: string) {
+    H.pendings.set(handle, { shopDomain: shop, credentials: { accessToken: "t" } });
+  }
+
+  it("refuses to replace a different store that was not confirmed", async () => {
+    H.replacing.current = "first-store.myshopify.com";
+    const handle = "q".repeat(64);
+    pend(handle, OTHER);
+
+    const res = await request(app())
+      .post("/api/connectors/shopify/install/claim")
+      .send({ handle });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toBe("another_store_connected");
+    // Both stores are NAMED, so the UI can ask a real question instead of
+    // reporting that something went wrong.
+    expect(res.body.data.currentShopDomain).toBe("first-store.myshopify.com");
+    expect(res.body.data.incomingShopDomain).toBe(OTHER);
+    // Nothing was written.
+    expect(H.linkCalls).toHaveLength(0);
+  });
+
+  it("does not spend the single-use handle on the question", async () => {
+    // The check runs BEFORE the handle is consumed. Otherwise answering "yes,
+    // replace it" would require reinstalling from Shopify, because the handle
+    // is one-shot by construction.
+    H.replacing.current = "first-store.myshopify.com";
+    const handle = "r".repeat(64);
+    pend(handle, OTHER);
+
+    const first = await request(app())
+      .post("/api/connectors/shopify/install/claim")
+      .send({ handle });
+    expect(first.status).toBe(409);
+    expect(first.body.data.handle).toBe(handle);
+    expect(H.pendings.has(handle)).toBe(true);
+
+    // The merchant's answer goes straight back.
+    const second = await request(app())
+      .post("/api/connectors/shopify/install/claim")
+      .send({ handle, replace: true });
+    expect(second.status).toBe(200);
+    expect(H.linkCalls[0]).toMatchObject({ shopDomain: OTHER, allowReplace: true });
+  });
+
+  it("does not ask when the SAME store reconnects", async () => {
+    // Reinstall and reauthorization must stay a plain update. `replacing` is
+    // null for the same shop, which is what the service reports.
+    H.replacing.current = null;
+    const handle = "s".repeat(64);
+    pend(handle, SHOP);
+
+    const res = await request(app())
+      .post("/api/connectors/shopify/install/claim")
+      .send({ handle });
+    expect(res.status).toBe(200);
+    expect(H.linkCalls[0]).toMatchObject({ shopDomain: SHOP, allowReplace: false });
+  });
+
+  it("passes allowReplace only when the merchant actually said so", async () => {
+    // A truthy-ish value is not consent. Only `true` counts, so a stray
+    // `replace: "false"` or `replace: 1` cannot disconnect a store.
+    H.replacing.current = null;
+    for (const [i, value] of [undefined, "true", 1, "yes", false].entries()) {
+      H.linkCalls.length = 0;
+      const handle = String(i).repeat(64);
+      pend(handle, SHOP);
+      await request(app())
+        .post("/api/connectors/shopify/install/claim")
+        .send(value === undefined ? { handle } : { handle, replace: value });
+      expect(H.linkCalls[0].allowReplace, String(value)).toBe(false);
     }
   });
 });

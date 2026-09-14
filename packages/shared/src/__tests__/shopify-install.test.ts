@@ -20,6 +20,8 @@ import {
   isFreshAppEntryTimestamp,
   buildShopifyAuthorizeUrl,
   resolveShopifyInstallUrl,
+  resolveShopifyInstallEntry,
+  resolveShopifyAppStoreHandle,
   APP_ENTRY_MAX_AGE_SECONDS,
 } from "../lib/shopify-install";
 
@@ -299,6 +301,105 @@ describe("resolveShopifyInstallUrl", () => {
     // open redirect carrying GOTCHA's name.
     const url = resolveShopifyInstallUrl({ SHOPIFY_APP_HANDLE: "gotcha" } as NodeJS.ProcessEnv)!;
     expect(new URL(url).origin).toBe("https://apps.shopify.com");
+  });
+});
+
+describe("the two handles are separate identifiers", () => {
+  // Shopify says "handle" for two things and they are not guaranteed equal:
+  // the App Store LISTING slug (apps.shopify.com/<slug>) and the APP handle
+  // (admin deep links, /charges/<handle>/pricing_plans).
+  //
+  // They were ONE variable until App Store review 132211, and that coupling
+  // was the defect: the pricing handle was known, the listing slug was not,
+  // and because one variable fed both, keeping the pricing URL correct meant
+  // leaving it empty - which silently disabled the Connect button.
+
+  it("prefers the listing-specific variable", () => {
+    expect(
+      resolveShopifyInstallUrl({
+        SHOPIFY_APP_STORE_HANDLE: "gotcha-listing",
+        SHOPIFY_APP_HANDLE: "gotcha-legacy",
+      } as NodeJS.ProcessEnv),
+    ).toBe("https://apps.shopify.com/gotcha-listing");
+  });
+
+  it("falls back to the legacy variable so existing deployments keep working", () => {
+    expect(
+      resolveShopifyInstallUrl({ SHOPIFY_APP_HANDLE: "gotcha-legacy" } as NodeJS.ProcessEnv),
+    ).toBe("https://apps.shopify.com/gotcha-legacy");
+  });
+
+  it("NEVER borrows the pricing handle as a listing slug", () => {
+    // The decisive one. A wrong slug is a 404 the merchant cannot diagnose,
+    // and guessing one is exactly what produced review 132211. If the listing
+    // slug is unknown it stays unknown.
+    expect(
+      resolveShopifyAppStoreHandle({
+        SHOPIFY_APP_PRICING_HANDLE: "gotcha-3",
+      } as NodeJS.ProcessEnv),
+    ).toBeNull();
+    expect(
+      resolveShopifyInstallUrl({ SHOPIFY_APP_PRICING_HANDLE: "gotcha-3" } as NodeJS.ProcessEnv),
+    ).toBeNull();
+  });
+
+  it("applies the same shape check to the listing-specific variable", () => {
+    for (const bad of ["", "  ", "Has Spaces", "-leading", "UPPER", "has/slash", "a.b"]) {
+      expect(
+        resolveShopifyInstallUrl({ SHOPIFY_APP_STORE_HANDLE: bad } as NodeJS.ProcessEnv),
+        bad,
+      ).toBeNull();
+    }
+  });
+});
+
+describe("resolveShopifyInstallEntry - the button always has somewhere to go", () => {
+  // THE REGRESSION THIS EXISTS FOR.
+  //
+  // `/install/start` used to answer 503 `shopify_install_not_available` when
+  // the listing slug was unset, and the merchant was told to contact support.
+  // Shopify App Store review 132211 failed the submission under requirement
+  // 4.5.5 on that screen: the test account could not demonstrate the feature,
+  // because the only in-app route to connecting a store refused.
+
+  it("uses the app's own listing when the slug is configured", () => {
+    expect(
+      resolveShopifyInstallEntry({ SHOPIFY_APP_STORE_HANDLE: "gotcha-3" } as NodeJS.ProcessEnv),
+    ).toEqual({ url: "https://apps.shopify.com/gotcha-3", precise: true });
+  });
+
+  it("degrades to App Store search rather than refusing", () => {
+    const entry = resolveShopifyInstallEntry({} as NodeJS.ProcessEnv);
+    expect(entry.precise).toBe(false);
+    const u = new URL(entry.url);
+    expect(u.origin).toBe("https://apps.shopify.com");
+    expect(u.pathname).toBe("/search");
+    expect(u.searchParams.get("q")).toBe("GOTCHA");
+  });
+
+  it("never returns null, and never asks for a shop domain", () => {
+    // Every branch must be a Shopify-owned page. Requirement 2.3.1 forbids
+    // asking the merchant to name their store; it does not require the page to
+    // be the listing specifically.
+    for (const env of [
+      {},
+      { SHOPIFY_APP_STORE_HANDLE: "ok-slug" },
+      { SHOPIFY_APP_HANDLE: "legacy" },
+      { SHOPIFY_APP_STORE_HANDLE: "Bad Slug" },
+      { SHOPIFY_APP_PRICING_HANDLE: "gotcha-3" },
+    ] as unknown as NodeJS.ProcessEnv[]) {
+      const entry = resolveShopifyInstallEntry(env);
+      expect(entry.url, JSON.stringify(env)).toBeTruthy();
+      expect(new URL(entry.url).origin).toBe("https://apps.shopify.com");
+      expect(entry.url).not.toMatch(/myshopify/);
+    }
+  });
+
+  it("escapes the search term instead of building a broken URL", () => {
+    const entry = resolveShopifyInstallEntry({
+      SHOPIFY_APP_STORE_SEARCH_TERM: "GOTCHA AI & Co",
+    } as NodeJS.ProcessEnv);
+    expect(new URL(entry.url).searchParams.get("q")).toBe("GOTCHA AI & Co");
   });
 });
 

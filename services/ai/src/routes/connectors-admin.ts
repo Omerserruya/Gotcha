@@ -55,6 +55,7 @@ import { reconcileAgentToolPermissions } from "../services/tool-permission-recon
 import {
   SHOPIFY_OAUTH_SCOPES,
   linkShopifyShopToTenant,
+  pendingStoreReplacement,
   exchangeShopifyCode,
 } from "../services/shopify-connection-link.service";
 import {
@@ -585,6 +586,34 @@ router.get("/connectors/shopify/oauth/callback", async (req: Request, res: Respo
       });
       // Same fail-soft as the install entry point: a missing FRONTEND_URL must
       // not turn a SUCCESSFUL authorization into a 500 that loses the token.
+      let base = "";
+      try { base = resolveAppPublicUrl(process.env); } catch { base = ""; }
+      res.redirect(`${base}/settings/business-systems/shopify/finish?handle=${encodeURIComponent(handle)}`);
+      return;
+    }
+
+    // A workspace holds at most one Shopify store, so connecting a second one
+    // necessarily disconnects the first. That used to happen silently here:
+    // the merchant pressed Connect, authorized a different store, and every AI
+    // answer began reading a different catalogue while the screen said
+    // "Connected". Nobody was asked.
+    //
+    // Rather than answer the question in a redirect, park the verified install
+    // exactly as the anonymous path does and let the finish screen ask it. The
+    // claim endpoint already refuses a replacement that was not confirmed, so
+    // this reuses one decision point instead of adding a second.
+    const replacing = await pendingStoreReplacement(tenantId, shop);
+    if (replacing) {
+      const handle = await createPendingConnection({
+        shopDomain: shop,
+        credentials: creds,
+        scope: creds.scope,
+        flow: payload.flow,
+      });
+      if (typeof payload.intentHandle === "string") {
+        await consumeInstallIntent(payload.intentHandle);
+      }
+      res.clearCookie(INSTALL_INTENT_COOKIE, { path: "/" });
       let base = "";
       try { base = resolveAppPublicUrl(process.env); } catch { base = ""; }
       res.redirect(`${base}/settings/business-systems/shopify/finish?handle=${encodeURIComponent(handle)}`);

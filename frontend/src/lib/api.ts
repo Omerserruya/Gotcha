@@ -2404,7 +2404,12 @@ export function listRdsTables(token: string, opts: { engine: "postgres" | "mysql
 // cookie set on this response has to be present on Shopify's redirect back.
 
 /**
- * The Shopify-owned install page. Throws with `shopify_install_url_not_configured`.
+ * The Shopify-owned install page. ALWAYS resolves to one.
+ *
+ * `precise` is false when the server could not name the app's own listing and
+ * fell back to App Store search, so the caller can add a line of guidance. It
+ * never means the connection is unavailable: the refusal this endpoint used to
+ * return is what App Store review 132211 rejected.
  *
  * `credentials: "include"` is load-bearing, not boilerplate. The response sets
  * the HttpOnly intent cookie that carries "which workspace is installing"
@@ -2417,7 +2422,7 @@ export function listRdsTables(token: string, opts: { engine: "postgres" | "mysql
  */
 export function startShopifyInstall(token: string, flow?: string) {
   const qs = flow ? `?flow=${encodeURIComponent(flow)}` : "";
-  return apiFetch<{ url: string }>(`/api/connectors/shopify/install/start${qs}`, {
+  return apiFetch<{ url: string; precise?: boolean }>(`/api/connectors/shopify/install/start${qs}`, {
     token,
     credentials: "include",
   });
@@ -2436,11 +2441,30 @@ export function getPendingShopifyInstall(token: string, handle: string) {
 }
 
 /** Attach the pending install to the signed-in user's current workspace. */
-export function claimShopifyInstall(token: string, handle: string) {
-  return apiFetch<{ data: { shopDomain: string; reconnected: boolean; flow: string | null } }>(
-    "/api/connectors/shopify/install/claim",
-    { token, method: "POST", body: JSON.stringify({ handle }) },
-  );
+/**
+ * Bind a verified installation to the caller's workspace.
+ *
+ * `replace` is the merchant's explicit answer to "this workspace already has a
+ * store - disconnect it?". Omitted on the first attempt, so a workspace that
+ * already holds a different store gets a 409 `another_store_connected` naming
+ * it, rather than having it silently overwritten. The handle survives that
+ * refusal, so the answer can be resubmitted without reinstalling.
+ */
+export function claimShopifyInstall(token: string, handle: string, replace = false) {
+  return apiFetch<{
+    data: {
+      shopDomain: string;
+      reconnected: boolean;
+      flow: string | null;
+      billingState?: string | null;
+      planSelectionUrl?: string | null;
+      replacedShopDomain?: string | null;
+    };
+  }>("/api/connectors/shopify/install/claim", {
+    token,
+    method: "POST",
+    body: JSON.stringify(replace ? { handle, replace: true } : { handle }),
+  });
 }
 
 // ─── Shopify billing ───────────────────────────────────────────────────────

@@ -2105,11 +2105,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/billing/src/routes/shopify-billing.ts:372` (billing service).
+        Implemented at `services/billing/src/routes/shopify-billing.ts:365` (billing service).
       security:
       - bearerAuth: []
       x-service: billing
-      x-source: services/billing/src/routes/shopify-billing.ts:372
+      x-source: services/billing/src/routes/shopify-billing.ts:365
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
@@ -2162,11 +2162,11 @@ paths:
 
         Requires a valid Authentik access token.
 
-        Implemented at `services/billing/src/routes/shopify-billing.ts:333` (billing service).
+        Implemented at `services/billing/src/routes/shopify-billing.ts:326` (billing service).
       security:
       - bearerAuth: []
       x-service: billing
-      x-source: services/billing/src/routes/shopify-billing.ts:333
+      x-source: services/billing/src/routes/shopify-billing.ts:326
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -2215,11 +2215,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/billing/src/routes/shopify-billing.ts:354` (billing service).
+        Implemented at `services/billing/src/routes/shopify-billing.ts:347` (billing service).
       security:
       - bearerAuth: []
       x-service: billing
-      x-source: services/billing/src/routes/shopify-billing.ts:354
+      x-source: services/billing/src/routes/shopify-billing.ts:347
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
@@ -12719,11 +12719,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/billing/src/routes/shopify-billing.ts:215` (billing service).
+        Implemented at `services/billing/src/routes/shopify-billing.ts:211` (billing service).
       security:
       - bearerAuth: []
       x-service: billing
-      x-source: services/billing/src/routes/shopify-billing.ts:215
+      x-source: services/billing/src/routes/shopify-billing.ts:211
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
@@ -12795,11 +12795,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/billing/src/routes/shopify-billing.ts:307` (billing service).
+        Implemented at `services/billing/src/routes/shopify-billing.ts:300` (billing service).
       security:
       - bearerAuth: []
       x-service: billing
-      x-source: services/billing/src/routes/shopify-billing.ts:307
+      x-source: services/billing/src/routes/shopify-billing.ts:300
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
@@ -12851,11 +12851,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/billing/src/routes/shopify-billing.ts:129` (billing service).
+        Implemented at `services/billing/src/routes/shopify-billing.ts:128` (billing service).
       security:
       - bearerAuth: []
       x-service: billing
-      x-source: services/billing/src/routes/shopify-billing.ts:129
+      x-source: services/billing/src/routes/shopify-billing.ts:128
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
@@ -12917,11 +12917,11 @@ paths:
 
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body.
 
-        Implemented at `services/billing/src/routes/shopify-billing.ts:107` (billing service).
+        Implemented at `services/billing/src/routes/shopify-billing.ts:106` (billing service).
       security:
       - bearerAuth: []
       x-service: billing
-      x-source: services/billing/src/routes/shopify-billing.ts:107
+      x-source: services/billing/src/routes/shopify-billing.ts:106
       x-operation-type: read
       x-publicly-exposed: true
       responses:
@@ -12954,11 +12954,11 @@ paths:
 
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body.
 
-        Implemented at `services/billing/src/routes/shopify-billing.ts:95` (billing service).
+        Implemented at `services/billing/src/routes/shopify-billing.ts:94` (billing service).
       security:
       - bearerAuth: []
       x-service: billing
-      x-source: services/billing/src/routes/shopify-billing.ts:95
+      x-source: services/billing/src/routes/shopify-billing.ts:94
       x-operation-type: read
       x-publicly-exposed: true
       responses:
@@ -16986,11 +16986,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:161` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:162` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:161
+      x-source: services/ai/src/routes/connectors-admin.ts:162
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
@@ -17049,11 +17049,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:226` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:227` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:226
+      x-source: services/ai/src/routes/connectors-admin.ts:227
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
@@ -17118,11 +17118,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:147` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:148` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:147
+      x-source: services/ai/src/routes/connectors-admin.ts:148
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
@@ -17179,11 +17179,11 @@ paths:
       description: |-
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be ACTIVE.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:133` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:134` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:133
+      x-source: services/ai/src/routes/connectors-admin.ts:134
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -17236,11 +17236,11 @@ paths:
 
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:826` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:855` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:826
+      x-source: services/ai/src/routes/connectors-admin.ts:855
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -17292,11 +17292,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:853` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:882` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:853
+      x-source: services/ai/src/routes/connectors-admin.ts:882
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
@@ -17352,11 +17352,11 @@ paths:
       description: |-
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be ACTIVE.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:656` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:685` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:656
+      x-source: services/ai/src/routes/connectors-admin.ts:685
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -17404,11 +17404,11 @@ paths:
       description: |-
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be ACTIVE.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:671` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:700` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:671
+      x-source: services/ai/src/routes/connectors-admin.ts:700
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -17462,11 +17462,11 @@ paths:
       description: |-
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:784` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:813` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:784
+      x-source: services/ai/src/routes/connectors-admin.ts:813
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -17507,10 +17507,10 @@ paths:
       description: |-
         No authentication middleware is applied to this route.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:719` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:748` (ai service).
       security: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:719
+      x-source: services/ai/src/routes/connectors-admin.ts:748
       x-operation-type: read
       x-publicly-exposed: true
       responses:
@@ -17542,11 +17542,11 @@ paths:
       description: |-
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:808` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:837` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:808
+      x-source: services/ai/src/routes/connectors-admin.ts:837
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -17606,11 +17606,11 @@ paths:
 
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:694` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:723` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:694
+      x-source: services/ai/src/routes/connectors-admin.ts:723
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -17658,11 +17658,11 @@ paths:
       description: |-
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:795` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:824` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:795
+      x-source: services/ai/src/routes/connectors-admin.ts:824
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -17712,11 +17712,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:1381` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:1410` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:1381
+      x-source: services/ai/src/routes/connectors-admin.ts:1410
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
@@ -17766,10 +17766,10 @@ paths:
       description: |-
         No authentication middleware is applied to this route.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:391` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:392` (ai service).
       security: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:391
+      x-source: services/ai/src/routes/connectors-admin.ts:392
       x-operation-type: read
       x-publicly-exposed: true
       responses:
@@ -17801,11 +17801,11 @@ paths:
       description: |-
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:332` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:333` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:332
+      x-source: services/ai/src/routes/connectors-admin.ts:333
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -17853,11 +17853,11 @@ paths:
       description: |-
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be ACTIVE.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:1231` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:1260` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:1231
+      x-source: services/ai/src/routes/connectors-admin.ts:1260
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -17904,10 +17904,10 @@ paths:
       description: |-
         No authentication middleware is applied to this route.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:1167` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:1196` (ai service).
       security: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:1167
+      x-source: services/ai/src/routes/connectors-admin.ts:1196
       x-operation-type: read
       x-publicly-exposed: true
       responses:
@@ -17939,11 +17939,11 @@ paths:
       description: |-
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:1139` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:1168` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:1139
+      x-source: services/ai/src/routes/connectors-admin.ts:1168
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -17993,11 +17993,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:1320` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:1349` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:1320
+      x-source: services/ai/src/routes/connectors-admin.ts:1349
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
@@ -18049,11 +18049,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:1350` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:1379` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:1350
+      x-source: services/ai/src/routes/connectors-admin.ts:1379
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
@@ -18105,11 +18105,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:1278` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:1307` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:1278
+      x-source: services/ai/src/routes/connectors-admin.ts:1307
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
@@ -18159,10 +18159,10 @@ paths:
       description: |-
         No authentication middleware is applied to this route.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:1087` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:1116` (ai service).
       security: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:1087
+      x-source: services/ai/src/routes/connectors-admin.ts:1116
       x-operation-type: read
       x-publicly-exposed: true
       responses:
@@ -18194,11 +18194,11 @@ paths:
       description: |-
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:1062` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:1091` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:1062
+      x-source: services/ai/src/routes/connectors-admin.ts:1091
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -18269,10 +18269,10 @@ paths:
 
         No authentication middleware is applied to this route.
 
-        Implemented at `services/ai/src/routes/shopify-install.ts:201` (ai service).
+        Implemented at `services/ai/src/routes/shopify-install.ts:198` (ai service).
       security: []
       x-service: ai
-      x-source: services/ai/src/routes/shopify-install.ts:201
+      x-source: services/ai/src/routes/shopify-install.ts:198
       x-operation-type: read
       x-publicly-exposed: true
       responses:
@@ -18299,11 +18299,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/ai/src/routes/shopify-install.ts:381` (ai service).
+        Implemented at `services/ai/src/routes/shopify-install.ts:419` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/shopify-install.ts:381
+      x-source: services/ai/src/routes/shopify-install.ts:419
       x-operation-type: write
       x-publicly-exposed: true
       requestBody:
@@ -18349,11 +18349,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/ai/src/routes/shopify-install.ts:301` (ai service).
+        Implemented at `services/ai/src/routes/shopify-install.ts:298` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/shopify-install.ts:301
+      x-source: services/ai/src/routes/shopify-install.ts:298
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
@@ -18424,11 +18424,11 @@ paths:
 
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
 
-        Implemented at `services/ai/src/routes/shopify-install.ts:275` (ai service).
+        Implemented at `services/ai/src/routes/shopify-install.ts:272` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/shopify-install.ts:275
+      x-source: services/ai/src/routes/shopify-install.ts:272
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -18485,11 +18485,11 @@ paths:
 
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
 
-        Implemented at `services/ai/src/routes/shopify-install.ts:135` (ai service).
+        Implemented at `services/ai/src/routes/shopify-install.ts:137` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/shopify-install.ts:135
+      x-source: services/ai/src/routes/shopify-install.ts:137
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -18522,12 +18522,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-        "503":
-          description: Temporarily unavailable
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
   /api/connectors/shopify/oauth/callback:
     get:
       operationId: getConnectorsShopifyOauthCallback
@@ -18555,10 +18549,10 @@ paths:
 
         No authentication middleware is applied to this route.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:523` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:524` (ai service).
       security: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:523
+      x-source: services/ai/src/routes/connectors-admin.ts:524
       x-operation-type: read
       x-publicly-exposed: true
       parameters:
@@ -18621,11 +18615,11 @@ paths:
 
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:459` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:460` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:459
+      x-source: services/ai/src/routes/connectors-admin.ts:460
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -18679,10 +18673,10 @@ paths:
       description: |-
         No authentication middleware is applied to this route.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:1011` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:1040` (ai service).
       security: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:1011
+      x-source: services/ai/src/routes/connectors-admin.ts:1040
       x-operation-type: read
       x-publicly-exposed: true
       responses:
@@ -18714,11 +18708,11 @@ paths:
       description: |-
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:987` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:1016` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:987
+      x-source: services/ai/src/routes/connectors-admin.ts:1016
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -18766,10 +18760,10 @@ paths:
       description: |-
         No authentication middleware is applied to this route.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:281` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:282` (ai service).
       security: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:281
+      x-source: services/ai/src/routes/connectors-admin.ts:282
       x-operation-type: read
       x-publicly-exposed: true
       responses:
@@ -18801,11 +18795,11 @@ paths:
       description: |-
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:260` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:261` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:260
+      x-source: services/ai/src/routes/connectors-admin.ts:261
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:
@@ -18846,10 +18840,10 @@ paths:
       description: |-
         No authentication middleware is applied to this route.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:935` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:964` (ai service).
       security: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:935
+      x-source: services/ai/src/routes/connectors-admin.ts:964
       x-operation-type: read
       x-publicly-exposed: true
       responses:
@@ -18895,11 +18889,11 @@ paths:
 
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
 
-        Implemented at `services/ai/src/routes/connectors-admin.ts:915` (ai service).
+        Implemented at `services/ai/src/routes/connectors-admin.ts:944` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/connectors-admin.ts:915
+      x-source: services/ai/src/routes/connectors-admin.ts:944
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:

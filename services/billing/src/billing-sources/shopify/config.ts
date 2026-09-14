@@ -18,7 +18,9 @@
  *   SHOPIFY_ALLOW_SPLIT_BILLING    "false" - Shopify has not confirmed this
  *   SHOPIFY_ALLOW_GRANDFATHERED    "false" - never grandfather by default
  *   SHOPIFY_USAGE_BILLING_ENABLED  "false" - metered dispatch off until proven
- *   SHOPIFY_APP_HANDLE             app handle used to build the plan-select URL
+ *   SHOPIFY_APP_PRICING_HANDLE     APP handle used to build the plan-select URL
+ *                                  (falls back to SHOPIFY_APP_HANDLE). NOT the
+ *                                  App Store listing slug - see shopify-install.ts.
  *   SHOPIFY_BILLING_PLAN_HANDLES   JSON map productKey -> plan handle
  *   SHOPIFY_USAGE_METER_HANDLES    JSON map metric -> meter handle
  *   SHOPIFY_BILLING_PLAN_CATALOG   JSON plan catalog. REQUIRED for app_pricing
@@ -161,9 +163,23 @@ export function shopifyPolicyMode(): ShopifyPolicyMode | null {
   return null;
 }
 
-/** The app handle used to build Shopify's hosted plan-selection URL. */
+/**
+ * The APP handle used to build Shopify's hosted plan-selection URL.
+ *
+ * This is the handle that appears in admin deep links
+ * (`/store/<store>/charges/<handle>/pricing_plans`), NOT the App Store listing
+ * slug that appears in `apps.shopify.com/<slug>`. They were one variable until
+ * App Store review 132211; the coupling meant an unknown listing slug had to be
+ * left blank, which also blanked this and disabled the plan-selection URL. They
+ * are separate now, and both still read the original `SHOPIFY_APP_HANDLE` as a
+ * fallback so an existing deployment is unaffected.
+ */
 export function shopifyAppHandle(): string | null {
-  return process.env.SHOPIFY_APP_HANDLE?.trim() || null;
+  return (
+    process.env.SHOPIFY_APP_PRICING_HANDLE?.trim() ||
+    process.env.SHOPIFY_APP_HANDLE?.trim() ||
+    null
+  );
 }
 
 /**
@@ -200,39 +216,34 @@ export function shopifyGrandfatherDevStores(): boolean {
   return flag(process.env.SHOPIFY_GRANDFATHER_DEV_STORES, false);
 }
 
-// ─── Test-shop allowlist ──────────────────────────────────────────────────
+// ─── Test-shop list (DIAGNOSTIC ONLY - no longer a gate) ──────────────────
 
 /**
- * The stores permitted to enter the Shopify App Pricing flow while
- * `SHOPIFY_BILLING_ENV=test`.
+ * Stores an operator has noted as belonging to testing.
  *
- * WHY THIS EXISTS
- * ---------------
- * Testing happens against the PRODUCTION Partner app, on the production host,
- * beside real merchants. `test` is not an isolated environment - it is the same
- * deployment with a flag flipped, and Shopify's $0-on-development-stores rule is
- * the only thing separating a test charge from a real one.
+ * THIS IS NOT A GATE ANY MORE, AND MUST NOT BECOME ONE AGAIN.
+ * ----------------------------------------------------------
+ * It used to decide who could enter the Shopify App Pricing flow while
+ * `SHOPIFY_BILLING_ENV=test`: a store absent from the list was connected but
+ * silently excluded from billing. Shopify App Store review 132211 rejected that
+ * shape. A reviewer works from an ordinary development store that nobody added
+ * to a server-side list, so an allowlist means the reviewer - and every real
+ * merchant during the same window - takes a different code path from the one
+ * being reviewed. An app whose behaviour depends on whether the tenant was
+ * named in configuration cannot be assessed, and the finding applies to any
+ * reviewer-specific tenant, shop or workspace allowlist, not just this one.
  *
- * Without an allowlist, flipping that flag would put every connected store into
- * the plan-selection flow at once: real merchants redirected to a Shopify
- * pricing page they never asked for, during a window meant to exercise one dev
- * store. That is not a billing bug so much as an incident.
+ * So the list is retained for exactly one purpose: saying out loud, at boot,
+ * which stores an operator believes are test stores. Nothing reads it to make a
+ * decision. `shopifyBillingAppliesToShop` is gone; every connected store now
+ * follows the same path, and the protections that actually matter are the ones
+ * that were always doing the work:
  *
- * So in test mode the flow is opt-IN, per store, from server configuration.
- *
- * FAIL-CLOSED, IN THE ONLY DIRECTION THAT IS SAFE
- * -----------------------------------------------
- * An empty or missing list allows NOBODY. The failure mode of a forgotten
- * variable has to be "the test does not start", never "every merchant is
- * enrolled".
- *
- * NOT CONSULTED IN LIVE
- * ---------------------
- * `live` is the state where everyone is meant to participate. Letting an
- * allowlist survive into it would mean a stale test list silently excluding
- * paying merchants from billing - the same class of bug, pointing the other
- * way. `shopifyBillingAppliesToShop` returns true for every shop in `live` and
- * in `mock` without reading this at all.
+ *   • `SHOPIFY_BILLING_ENABLED` - the master switch.
+ *   • `SHOPIFY_BILLING_ENV` - `mock` reaches Shopify not at all.
+ *   • `SHOPIFY_ALLOW_LIVE_BILLING` - live money needs a second, explicit
+ *     acknowledgement, and that protection is untouched by this change.
+ *   • Shopify itself prices development stores at $0.
  */
 function normalizeAllowlistEntry(raw: string): string | null {
   let v = raw.trim().toLowerCase();
@@ -282,23 +293,21 @@ export function invalidTestShopEntries(): string[] {
 }
 
 /**
- * May this store enter the Shopify billing flow?
+ * Whether an operator listed this store as one of their test stores.
  *
- * The shop MUST already have been established by a verified path - the HMAC on
- * a Shopify request, or a stored `CommerceConnection`. This function is a
- * filter over an identity somebody else proved; it does not establish one, and
- * a caller passing a value that came from a query parameter or a request body
- * would be defeating the allowlist rather than using it.
+ * DIAGNOSTIC. Nothing may branch on this. It exists so a boot log and an admin
+ * read-out can say "you marked these as test stores", and it is deliberately
+ * named for what it reports rather than for a decision, so that a future
+ * `if (...)` around it reads as obviously wrong.
+ *
+ * The previous `shopifyBillingAppliesToShop` was removed in App Store review
+ * 132211: gating installation or billing on a server-side shop list means a
+ * reviewer's store follows a different code path from the one under review. See
+ * the section header above.
  */
-export function shopifyBillingAppliesToShop(shopDomain: string | null | undefined): boolean {
-  // Only `test` is gated. `live` means everybody, and `mock` reaches nothing.
-  if (shopifyBillingEnv() !== "test") return true;
-
+export function isListedShopifyTestShop(shopDomain: string | null | undefined): boolean {
   const shop = strictShopDomain(shopDomain);
-  // An unparseable domain is not on any list. A malicious suffix
-  // (`acme.myshopify.com.evil.com`) dies here rather than in the comparison.
   if (!shop) return false;
-
   return shopifyBillingTestShops().includes(shop);
 }
 
@@ -405,7 +414,8 @@ export function assertShopifyBillingConfig(): void {
   if (mode === "app_pricing") {
     if (!shopifyAppHandle()) {
       problems.push(
-        "SHOPIFY_APP_HANDLE is required for app_pricing: without it there is no plan-selection URL to send a merchant to.",
+        "SHOPIFY_APP_PRICING_HANDLE (or SHOPIFY_APP_HANDLE) is required for app_pricing: without it there is " +
+          "no plan-selection URL to send a merchant to.",
       );
     }
 
@@ -484,18 +494,13 @@ export function reportShopifyBillingConfig(): void {
       // line sits in the same boot log as configuration that is adjacent to
       // secrets. The list itself is readable from the environment by anyone who
       // needs it.
-      `testShops=${shopifyBillingEnv() === "test" ? shopifyBillingTestShops().length : "n/a"}`,
+      //
+      // `noted` rather than `allowed`: since review 132211 this list gates
+      // nothing. Every connected store follows the same path.
+      `testShopsNoted=${shopifyBillingTestShops().length}`,
   );
 
   if (shopifyBillingEnv() === "test" && shopifyBillingMode() === "app_pricing") {
-    const allowed = shopifyBillingTestShops().length;
-    if (allowed === 0) {
-      console.warn(
-        "[shopify-billing] env=test with an EMPTY SHOPIFY_BILLING_TEST_SHOPS: no store may enter the " +
-          "App Pricing flow. This is the safe default, not a failure - set the variable to opt a " +
-          "development store in.",
-      );
-    }
     const bad = invalidTestShopEntries();
     if (bad.length > 0) {
       console.warn(
