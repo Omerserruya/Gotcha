@@ -1,18 +1,13 @@
-import { getTranslations } from 'next-intl/server';
-
-import { PageContainer } from '@/shell/PageContainer';
-import { pageMetadata } from '@/shell/page-metadata';
+import { redirect } from '@/i18n/navigation';
 
 /**
- * Route placeholder.
+ * Settings has no page of its own.
  *
- * The route, its layout slot and its translated title exist so navigation is
- * real and testable. There is no product content here yet: this area is built
- * once its UX and API contract are defined.
+ * The design's first Settings screen IS Workspace - there is no landing page
+ * above the sections, and an index listing them would only repeat the sidebar
+ * standing beside it.
  */
-export default async function Page() {
-  const t = await getTranslations('navigation');
-  return <PageContainer title={t('primary.settings')} />;
+export default async function Page({ params }: { params: Promise<{ locale: string }> }) {
+  const { locale } = await params;
+  redirect({ href: '/settings/workspace', locale });
 }
-
-export const generateMetadata = pageMetadata('primary.settings');

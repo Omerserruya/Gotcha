@@ -131,7 +131,7 @@ const ANALYTICS_SECTIONS: readonly NavigationChild[] = [
  * because they are how the business teaches GOTCHA to work - not platform
  * configuration.
  */
-const SETTINGS_SECTIONS: readonly NavigationChild[] = [
+export const SETTINGS_SECTIONS: readonly NavigationChild[] = [
   { id: 'workspace', labelKey: 'settings.workspace', href: '/settings/workspace' },
   { id: 'people', labelKey: 'settings.people', href: '/settings/people' },
   {
@@ -205,19 +205,18 @@ export const PRIMARY_NAVIGATION: readonly NavigationItem[] = [
 /**
  * Pinned to the foot of the rail, beneath the seven.
  *
- * "Seven destinations in the frame rail, with Settings pinned at the bottom."
+ * NO children, and that is the design's choice rather than an omission. Inbox
+ * and Studio reveal their sections in the rail; Settings does not. Screens
+ * 11-18 draw the rail with Settings selected and nothing under it, and put the
+ * eight sections in a light sidebar inside the panel instead - see
+ * SettingsSections.
  *
- * Worth recording: the rails actually drawn in the design show the seven and
- * the account block, and never draw Settings. The concept text above is
- * explicit that it is pinned at the bottom, and Settings has to be reachable,
- * so it sits in the rail's foot above the account. If the intent was for it to
- * live inside the account menu instead, that is a one-line change. See
- * docs/api-gaps.md.
+ * The distinction holds up: a rail section is a filter over one page, while a
+ * Settings section is a page of its own, and eight of them in a dark rail
+ * beneath seven destinations would read as fifteen destinations.
  */
 export const SETTINGS_NAVIGATION: NavigationItem = {
   id: 'settings',
   href: '/settings',
   labelKey: 'primary.settings',
-  children: SETTINGS_SECTIONS,
-  childrenLabelKey: 'primary.settings',
 };

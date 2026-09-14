@@ -1,18 +1,20 @@
 import { getTranslations } from 'next-intl/server';
 
-import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
+import { SettingsSection } from '@/shell/SettingsSection';
 
 /**
- * Route placeholder.
+ * Settings · billing.
  *
- * The route, its rail entry and its translated title exist so navigation is
- * real and testable. There is no product content here yet: this section is
- * built once its UX and API contract are defined.
+ * The section's frame is real - title, description and the sidebar entry that
+ * reaches it. The content is built section by section against what the backend
+ * serves; see docs/settings-contract.md for which parts are blocked and why.
  */
 export default async function Page() {
   const t = await getTranslations('navigation');
-  return <PageContainer title={t('settings.billing')} />;
+  return (
+    <SettingsSection title={t('settings.billing')} description={t('settingsDescription.billing')} />
+  );
 }
 
 export const generateMetadata = pageMetadata('settings.billing');

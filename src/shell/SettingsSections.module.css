@@ -1,0 +1,86 @@
+@layer shell {
+  /*
+   * Settings' own sidebar, inside the work surface.
+   *
+   * Not the rail. Inbox and Studio reveal their sections in the dark rail
+   * because those are filters over one page; a Settings section is a page of
+   * its own, and eight more entries under the seven destinations would read as
+   * fifteen destinations. Screens 11-18 draw it this way.
+   */
+  .sidebar {
+    inline-size: var(--size-settings-nav);
+    flex: none;
+    border-inline-end: var(--border-width-thin) solid var(--border-subtle);
+    padding-block: var(--space-26);
+    padding-inline: var(--space-22);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    min-block-size: 0;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-heavy) transparent;
+  }
+
+  .heading {
+    font-size: var(--font-size-heading);
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: var(--letter-spacing-heading);
+    margin-block-end: var(--space-16);
+    padding-inline: var(--space-10);
+  }
+
+  .link {
+    display: flex;
+    align-items: center;
+    font-size: var(--font-size-body-sm);
+    color: var(--text-body);
+    padding-block: var(--space-9);
+    padding-inline: var(--space-11);
+    border-radius: var(--radius-item);
+    text-decoration: none;
+    /* A transparent border so the selected row does not shift its neighbours. */
+    border: var(--border-width-thin) solid transparent;
+  }
+
+  .link:hover {
+    background-color: var(--panel-inset);
+  }
+
+  .link[aria-current='page'] {
+    background-color: var(--panel-field);
+    border-color: var(--border-default);
+    color: var(--text-primary);
+    font-weight: var(--font-weight-medium);
+  }
+
+  /*
+   * Something in that section needs attention - a channel that stopped
+   * responding, a system that is not answering. Never the only carrier: the
+   * section's own page says what it is.
+   */
+  .alert {
+    margin-inline-start: auto;
+    inline-size: var(--size-dot);
+    block-size: var(--size-dot);
+    border-radius: var(--radius-round);
+    background-color: var(--intent-urgent-edge);
+    flex: none;
+  }
+
+  /* Pinned to the foot: what this page is NOT, which saves a wrong guess. */
+  .footnote {
+    margin-block-start: auto;
+    padding-block-start: var(--space-24);
+    padding-inline: var(--space-10);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-subtle);
+  }
+
+  .footnoteLink {
+    color: var(--text-primary);
+    text-decoration: none;
+    border-block-end: var(--border-width-thin) solid var(--border-emphasis);
+  }
+}

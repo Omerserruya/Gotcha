@@ -38,6 +38,8 @@
     --font-size-serif-display: 32px;
     --font-size-serif-inline: 16px;
     --font-size-lead: 16px;
+    /* A section heading inside the panel — Settings' own sidebar title. */
+    --font-size-heading: 19px;
     --font-size-body-lg: 15.5px;
     --font-size-body: 14.5px;
     --font-size-control: 14px;
@@ -74,6 +76,7 @@
     --letter-spacing-display: -0.025em;
     --letter-spacing-serif: -0.01em;
     --letter-spacing-normal: 0;
+    --letter-spacing-heading: -0.02em;
     --letter-spacing-eyebrow: 0.2em;
     /* The rail's group label runs marginally tighter than a page eyebrow. */
     --letter-spacing-eyebrow-rail: 0.18em;
@@ -145,6 +148,13 @@
     --size-avatar-lg: 30px;
     /* Fixed, so the queue's wait times form a column instead of ragging. */
     --size-wait-column: 38px;
+    /* Settings' sidebar. Fixed: it holds eight labels of known length. */
+    --size-settings-nav: 250px;
+    /*
+     * A line of explanation. Past this a sentence stops being scannable, and
+     * every Settings section opens with one.
+     */
+    --size-reading: 640px;
     --size-dot: 6px;
     /* The activity stream's status dot, smaller than a presence dot. */
     --size-dot-sm: 5px;

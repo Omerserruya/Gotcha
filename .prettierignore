@@ -7,3 +7,6 @@ test-results
 
 # Tooling state, not project source
 .omc
+
+# The design export. Read, never edited.
+design

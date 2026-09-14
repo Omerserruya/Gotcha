@@ -55,5 +55,17 @@
   },
   "groups": {
     "views": "Views"
+  },
+  "settingsFootnote": "How GOTCHA behaves lives in <studio>Studio</studio>, not here.",
+  "settingsDescription": {
+    "workspace": "The facts your AI employees quote to customers. Change one here and every channel is consistent within a minute.",
+    "people": "Humans and AI employees in one list, because operationally they are the same resource.",
+    "channels": "Where customers reach you. Everything lands in one inbox.",
+    "systems": "What GOTCHA can see and change on your behalf. Connecting a system gives your AI employees new things they can do — you decide which.",
+    "notifications": "GOTCHA never pings you for an incoming message — that's what the inbox is for. It tells you when something needs a decision or something broke.",
+    "security": "Who can get in, and a record of everything that happened — by a person or by GOTCHA.",
+    "billing": "Your plan, what the month has used, and what it bought you.",
+    "developer": "For whoever builds against GOTCHA. Nothing here affects how GOTCHA behaves.",
+    "pending": "Not built yet."
   }
 }

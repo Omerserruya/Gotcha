@@ -284,6 +284,9 @@ const eslintConfig = defineConfig([
     'playwright-report/**',
     'test-results/**',
     'next-env.d.ts',
+    // The design export: the source of truth for every screen, but a generated
+    // artefact from the Claude Design project rather than app code.
+    'design/**',
   ]),
 ]);
 
