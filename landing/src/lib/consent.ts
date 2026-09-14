@@ -5,11 +5,13 @@ import { useCallback, useEffect, useState } from 'react';
 /**
  * Cookie consent, remembered across every hostname the site answers on.
  *
- * There are two categories and only two. Strictly necessary cannot be turned
- * off - it is what makes signing in work - and analytics is off until someone
- * turns it on. Nothing here asks for "marketing" or "personalisation" consent,
- * because the site does not have either and a consent form should not imply
- * capabilities that do not exist.
+ * Three categories. Strictly necessary cannot be turned off - it is what makes
+ * signing in work. Analytics and marketing are both off until someone turns
+ * them on, and they are asked separately because they are different questions:
+ * counting page views is not the same as letting an advertising network
+ * recognise you. Nothing here asks for "personalisation", because the site does
+ * not have any and a consent form should not imply capabilities that do not
+ * exist.
  *
  * The record lives in a COOKIE, not in localStorage. localStorage is keyed by
  * origin, and this site is four origins - gotcha.co.il, help., trust. and app.
@@ -23,7 +25,14 @@ import { useCallback, useEffect, useState } from 'react';
  * yes to one question as a yes to a different one.
  */
 
-export const CONSENT_VERSION = 1;
+/**
+ * Bumped to 2 when marketing was added as its own category.
+ *
+ * Everyone who had answered was asked again, on purpose: they answered a
+ * two-category question, and treating that as consent to a third would be
+ * inventing an answer they never gave.
+ */
+export const CONSENT_VERSION = 2;
 
 /** Read by nothing but this module; named in the Cookie Policy. */
 const NAME = 'gotcha_consent';
@@ -43,6 +52,8 @@ export type Consent = {
   /** Always true. Present so a stored record is self-describing. */
   necessary: true;
   analytics: boolean;
+  /** Advertising and conversion measurement. The Meta pixel reads only this. */
+  marketing: boolean;
   /** ISO timestamp of the decision, so it can be shown back to the visitor. */
   decidedAt: string;
 };
@@ -90,7 +101,9 @@ function parse(raw: string | null): Consent | null {
   try {
     const parsed = JSON.parse(raw) as Consent;
     if (parsed?.version !== CONSENT_VERSION) return null;
-    return { ...parsed, necessary: true };
+    // Defaulting a missing category to false rather than to the record: a
+    // decision that predates a category cannot have covered it.
+    return { ...parsed, necessary: true, marketing: parsed.marketing === true };
   } catch {
     return null;
   }
@@ -133,11 +146,12 @@ function persist(record: Consent): void {
   }
 }
 
-export function writeConsent(analytics: boolean): Consent {
+export function writeConsent(analytics: boolean, marketing: boolean): Consent {
   const record: Consent = {
     version: CONSENT_VERSION,
     necessary: true,
     analytics,
+    marketing,
     decidedAt: new Date().toISOString(),
   };
   try {
@@ -155,22 +169,39 @@ export function writeConsent(analytics: boolean): Consent {
  * statically generated, so the server cannot know what this visitor chose; the
  * banner has to appear from the client or every cached page would ship with it
  * baked in.
+ *
+ * One record, shared by every caller. The card and the pixel each call this
+ * hook, and while each held its own useState the card could record a yes that
+ * the pixel never heard: it kept the answer it had read on mount and only
+ * noticed on the next page load. A module-level record with subscribers means
+ * saying yes takes effect where it was said.
  */
+
+/** undefined until the first read; null once read and found absent. */
+let current: Consent | null | undefined;
+const listeners = new Set<() => void>();
+
 export function useConsent() {
   const [consent, setConsent] = useState<Consent | null>(null);
   const [pending, setPending] = useState(false);
 
   useEffect(() => {
-    const found = readConsent();
-    if (found) setConsent(found);
-    else setPending(true);
+    if (current === undefined) current = readConsent();
+    const apply = () => {
+      setConsent(current ?? null);
+      setPending(current == null);
+    };
+    apply();
+    listeners.add(apply);
+    return () => { listeners.delete(apply); };
   }, []);
 
-  const decide = useCallback((analytics: boolean) => {
-    setConsent(writeConsent(analytics));
-    setPending(false);
+  const decide = useCallback((analytics: boolean, marketing: boolean) => {
+    current = writeConsent(analytics, marketing);
+    listeners.forEach((f) => f());
   }, []);
 
+  /** Show the card again without forgetting the stored answer. */
   const reopen = useCallback(() => setPending(true), []);
 
   return { consent, pending, decide, reopen };

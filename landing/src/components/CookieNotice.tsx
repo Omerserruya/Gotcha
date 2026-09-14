@@ -40,16 +40,110 @@ const COPY = {
     'Counts how many people opened each page, so we know which ones to write more of. No name, no email, no profile, and nothing is sent to an advertiser.',
     'סופר כמה אנשים פתחו כל עמוד, כדי שנדע על מה כדאי לכתוב עוד. בלי שם, בלי אימייל, בלי פרופיל, ושום דבר לא נשלח למפרסם.',
   ],
+  marketing: ['Measuring our ads', 'מדידת הפרסומות שלנו'],
+  marketingNote: [
+    'Lets Meta tell us which of our ads brought you here, so we stop paying for the ones that do not work. This one does send your visit to Meta, and Meta may recognise you across other sites. It is the only thing here that involves another company.',
+    'מאפשר ל-Meta לומר לנו איזו פרסומת הביאה אתכם לכאן, כדי שנפסיק לשלם על אלה שלא עובדות. זה כן שולח את הביקור שלכם ל-Meta, ו-Meta עשויה לזהות אתכם גם באתרים אחרים. זה הדבר היחיד כאן שמערב חברה אחרת.',
+  ],
   on: ['On', 'פעיל'],
   off: ['Off', 'כבוי'],
   save: ['Save', 'שמירה'],
   policy: ['Read the Cookie Policy', 'למדיניות העוגיות'],
 } as const;
 
+/**
+ * One optional category: a label, a plain-words note, and a real switch.
+ *
+ * A <button role="switch"> because the first version of this card drew two
+ * squares that looked tickable and were not controls. A consent form that
+ * ignores the thing you clicked is the pattern these rules exist to stop.
+ */
+function Optional({
+  label,
+  note,
+  on,
+  onLabel,
+  offLabel,
+  toggle,
+}: {
+  label: string;
+  note: string;
+  on: boolean;
+  onLabel: string;
+  offLabel: string;
+  toggle: () => void;
+}) {
+  return (
+    <div
+      style={{
+        marginTop: 10,
+        padding: '12px 14px',
+        background: on ? C.accentWash : C.surface,
+        borderRadius: 12,
+        transition: 'background .18s ease',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{ fontSize: 13.5, fontWeight: 600 }}>{label}</span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={on}
+          aria-label={label}
+          onClick={toggle}
+          style={{
+            marginInlineStart: 'auto',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            border: 0,
+            background: 'transparent',
+            padding: 0,
+            cursor: 'pointer',
+            font: `500 11px ${F.mono}`,
+            color: on ? C.accent : C.muted,
+          }}
+        >
+          {on ? onLabel : offLabel}
+          <span
+            aria-hidden
+            style={{
+              width: 38,
+              height: 22,
+              borderRadius: 999,
+              background: on ? C.accent : C.line,
+              position: 'relative',
+              transition: 'background .18s ease',
+              flex: 'none',
+              display: 'block',
+            }}
+          >
+            <span
+              style={{
+                position: 'absolute',
+                top: 3,
+                insetInlineStart: on ? 19 : 3,
+                width: 16,
+                height: 16,
+                borderRadius: '50%',
+                background: C.card,
+                transition: 'inset-inline-start .18s ease',
+                display: 'block',
+              }}
+            />
+          </span>
+        </button>
+      </div>
+      <p style={{ margin: '6px 0 0', fontSize: 12.5, lineHeight: 1.55, color: C.body }}>{note}</p>
+    </div>
+  );
+}
+
 export default function CookieNotice() {
   const { pending, decide } = useConsent();
   const locale = usePageLocale();
   const [analytics, setAnalytics] = useState(false);
+  const [marketing, setMarketing] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const i = isHe(locale) ? 1 : 0;
   const p = (k: keyof typeof COPY) => COPY[k][i];
@@ -59,7 +153,7 @@ export default function CookieNotice() {
   const save = () => {
     setLeaving(true);
     // Let the card fade before it goes, so the choice reads as acknowledged.
-    window.setTimeout(() => decide(analytics), 160);
+    window.setTimeout(() => decide(analytics, marketing), 160);
   };
 
   return (
@@ -114,69 +208,25 @@ export default function CookieNotice() {
         <p style={{ margin: '6px 0 0', fontSize: 12.5, lineHeight: 1.55, color: C.body }}>{p('necessaryNote')}</p>
       </div>
 
-      {/* Optional: a real switch. */}
-      <div
-        style={{
-          marginTop: 10,
-          padding: '12px 14px',
-          background: analytics ? C.accentWash : C.surface,
-          borderRadius: 12,
-          transition: 'background .18s ease',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 13.5, fontWeight: 600 }}>{p('analytics')}</span>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={analytics}
-            aria-label={p('analytics')}
-            onClick={() => setAnalytics((v) => !v)}
-            style={{
-              marginInlineStart: 'auto',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              border: 0,
-              background: 'transparent',
-              padding: 0,
-              cursor: 'pointer',
-              font: `500 11px ${F.mono}`,
-              color: analytics ? C.accent : C.muted,
-            }}
-          >
-            {analytics ? p('on') : p('off')}
-            <span
-              aria-hidden
-              style={{
-                width: 38,
-                height: 22,
-                borderRadius: 999,
-                background: analytics ? C.accent : C.line,
-                position: 'relative',
-                transition: 'background .18s ease',
-                flex: 'none',
-                display: 'block',
-              }}
-            >
-              <span
-                style={{
-                  position: 'absolute',
-                  top: 3,
-                  insetInlineStart: analytics ? 19 : 3,
-                  width: 16,
-                  height: 16,
-                  borderRadius: '50%',
-                  background: C.card,
-                  transition: 'inset-inline-start .18s ease',
-                  display: 'block',
-                }}
-              />
-            </span>
-          </button>
-        </div>
-        <p style={{ margin: '6px 0 0', fontSize: 12.5, lineHeight: 1.55, color: C.body }}>{p('analyticsNote')}</p>
-      </div>
+      {/* The two optional ones. Separate questions, separate switches: counting
+          page views and letting an ad network recognise you are not the same
+          thing, and one yes must not be read as the other. */}
+      <Optional
+        label={p('analytics')}
+        note={p('analyticsNote')}
+        on={analytics}
+        onLabel={p('on')}
+        offLabel={p('off')}
+        toggle={() => setAnalytics((v) => !v)}
+      />
+      <Optional
+        label={p('marketing')}
+        note={p('marketingNote')}
+        on={marketing}
+        onLabel={p('on')}
+        offLabel={p('off')}
+        toggle={() => setMarketing((v) => !v)}
+      />
 
       <div style={{ margin: '16px 0 0', display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         <button

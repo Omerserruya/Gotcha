@@ -489,3 +489,85 @@ describe("the landing answers in both languages", () => {
     expect(app).toMatch(/location\s+~\s+\^\/\(he\|en\)\(\/\|\$\)\s*\{\s*\n\s*return\s+301\s+https:\/\/gotcha\.co\.il\$request_uri/);
   });
 });
+
+/**
+ * The pixel is opt-in, and the documents that promise that stay true.
+ *
+ * A tracker that loads and is then told to stay quiet is not consent: the
+ * request has already been made and the other company has already seen it. So
+ * the script is injected when the switch turns on, and not before.
+ *
+ * The Cookie Policy is published at trust.gotcha.co.il in two languages and
+ * said, in as many words, that there were no social media pixels. Installing
+ * one without changing that leaves a signed document contradicting the site.
+ */
+describe("the Meta pixel is opt-in", () => {
+  const read = (rel: string) => fs.readFileSync(path.join(ROOT, rel), "utf8");
+  const pixel = () => read("landing/src/components/MetaPixel.tsx");
+  const consent = () => read("landing/src/lib/consent.ts");
+
+  it("loads nothing until the marketing switch is on", () => {
+    const src = pixel();
+    expect(src, "the script is injected from the consent branch")
+      .toMatch(/if\s*\(!allowed\)\s*return;/);
+    expect(src, "and there is no other way in").not.toMatch(/fbevents\.js[\s\S]{0,200}dangerouslySetInnerHTML/);
+    // `fbq('consent', 'revoke')` would still download the script and still show
+    // Meta the request. Gating the injection is the only refusal that refuses.
+    // Comments are stripped first: the file explains why that call is absent,
+    // and prose about a thing is not the thing.
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+    expect(code).not.toMatch(/consent['"]\s*,\s*['"]revoke/);
+  });
+
+  it("asks for marketing separately from analytics", () => {
+    // Counting page views and letting an ad network recognise you are not the
+    // same question, and one yes must not be read as the other.
+    expect(consent()).toMatch(/marketing:\s*boolean/);
+    expect(consent(), "both are written, so neither is inferred")
+      .toMatch(/writeConsent\(analytics:\s*boolean,\s*marketing:\s*boolean\)/);
+    const card = read("landing/src/components/CookieNotice.tsx");
+    expect(card, "two switches, not one").toMatch(/setMarketing/);
+    expect(card).toMatch(/decide\(analytics,\s*marketing\)/);
+  });
+
+  it("invalidates decisions taken before the category existed", () => {
+    // A yes to two questions is not a yes to three.
+    expect(consent()).toMatch(/CONSENT_VERSION\s*=\s*2/);
+    expect(consent(), "a record missing the field defaults to no, not to itself")
+      .toMatch(/marketing:\s*parsed\.marketing === true/);
+  });
+
+  it("keeps one consent record, so a yes takes effect where it is given", () => {
+    // The card and the pixel both call useConsent. While each held its own
+    // useState the card could record a yes the pixel never heard, and the
+    // pixel only noticed on the next page load.
+    expect(consent()).toMatch(/const listeners = new Set/);
+    expect(consent()).toMatch(/listeners\.forEach/);
+  });
+
+  it("reports each navigation, because the landing moves by pushState", () => {
+    const src = pixel();
+    expect(src, "pushState fires no event of its own").toMatch(/pushState/);
+    expect(src).toMatch(/popstate/);
+    expect(src, "and the same address twice is one view").toMatch(/reported\.current/);
+  });
+
+  it("is allowed by the marketing host's CSP", () => {
+    // Everything else on this site that was quietly blocked - the design's
+    // typefaces, Cloudflare's beacon - was blocked exactly this way.
+    const mkt = find("gotcha.co.il")!.body;
+    const policy = /add_header\s+Content-Security-Policy\s+"([^"]+)"/.exec(mkt);
+    expect(policy, "the marketing host must declare a policy").not.toBeNull();
+    expect(policy![1], "the pixel script would be refused without it")
+      .toMatch(/script-src[^;]*connect\.facebook\.net/);
+  });
+
+  it("is named in the Cookie Policy, in both languages", () => {
+    for (const lang of ["en", "he"]) {
+      const doc = read(`docs/legal/${lang}/cookie-policy.md`);
+      expect(doc, `${lang}: the pixel must be disclosed`).toMatch(/Meta/);
+      expect(doc, `${lang}: the old "no pixels" claim must be gone`)
+        .not.toMatch(/no social media pixels|אין פיקסלים של רשתות חברתיות/);
+    }
+  });
+});
