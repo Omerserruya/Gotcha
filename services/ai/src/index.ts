@@ -1,4 +1,5 @@
 import { createServiceApp, startService } from "@chatcenter/shared";
+import workspaceProhibitedClaimsRoutes from "./routes/workspace-prohibited-claims";
 import aiAssistRoutes from "./routes/ai-assist";
 import knowledgeRoutes from "./routes/knowledge";
 import knowledgeIngestRoutes from "./routes/knowledge-ingest";
@@ -101,6 +102,7 @@ const config = {
 };
 const app = createServiceApp(config);
 
+app.use("/api", workspaceProhibitedClaimsRoutes);
 app.use("/api/ai-assist", aiAssistRoutes);
 app.use("/api/knowledge-bases", knowledgeRoutes);
 app.use("/api", knowledgeIngestRoutes);

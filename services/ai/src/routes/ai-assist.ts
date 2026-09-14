@@ -22,7 +22,7 @@ import { getCrmAdapter } from "../services/connectors/crm-adapter-resolver";
 import { scoreAgent, getAgentScore } from "../services/agent-performance.service";
 import { generateFollowup } from "../services/followup-generator.service";
 import { buildCustomerState } from "../services/customer-state.service";
-import { getPolicy, setPolicy } from "../services/policy.service";
+import { getPolicy, setPolicy, validatePolicyPatch, PolicyValidationError } from "../services/policy.service";
 import voiceRouter from "./ai-assist-voice";
 import { buildAgentPrompt } from "../services/prompt-builder.service";
 import { computeBehaviorState } from "../services/behavior-engine.service";
@@ -811,9 +811,18 @@ router.put(
   requireRole("ADMIN"),
   async (req: Request, res: Response) => {
     try {
-      const policy = await setPolicy(req.tenantId!, req.body ?? {});
+      // Validated before it is merged. This used to spread `req.body` straight
+      // into the stored JSON, and the lists in that JSON are composed verbatim
+      // into the AI's system prompt - so an unbounded, untyped write here was
+      // arbitrary text reaching the model on every future turn.
+      const patch = validatePolicyPatch(req.body ?? {});
+      const policy = await setPolicy(req.tenantId!, patch);
       res.json({ data: policy });
     } catch (err) {
+      if (err instanceof PolicyValidationError) {
+        res.status(400).json({ error: err.message, field: err.field });
+        return;
+      }
       console.error("policy update error:", err);
       res.status(500).json({ error: "Failed to update policy" });
     }
