@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { PATH_BY_PAGE, PAGE_BY_PATH, EXTERNAL_PAGE } from '@/lib/pages';
+import { EXTERNAL_PAGE, parsePath, pathFor, type Lang } from '@/lib/pages';
 
 /**
  * Gives the design's in-page navigation a real address.
@@ -22,6 +22,11 @@ import { PATH_BY_PAGE, PAGE_BY_PATH, EXTERNAL_PAGE } from '@/lib/pages';
  * which is a real section rather than the design's placeholder hub - is a full
  * navigation instead, because it is genuinely a different document.
  *
+ * The language is part of the address too. Every page has a Hebrew path under
+ * /he, so switching language moves between /offer and /he/offer rather than
+ * changing the page under a URL that no longer describes it - and a link, in
+ * either language, opens in the language it was sent in.
+ *
  * Rendered as a component rather than patched into the logic class so it
  * survives `npm run design:sync`: the class is regenerated from the design on
  * every export, this file is not.
@@ -32,12 +37,15 @@ export default function UrlSync({
   alwaysNavigate = false,
   lang,
   onLang,
+  onUrlLang,
 }: {
   page: string;
   onNavigate: (page: string) => void;
   /** The language the chrome is in, so a section can follow its toggle. */
   lang?: string;
   onLang?: (lang: string) => void;
+  /** Back or Forward across a language boundary: the address wins. */
+  onUrlLang?: (lang: Lang) => void;
   /**
    * True when the chrome is wrapping a hand-written section. From a legal
    * document, picking "Pricing" in the header is a different document, not a
@@ -46,29 +54,37 @@ export default function UrlSync({
    */
   alwaysNavigate?: boolean;
 }) {
-  // What the address already reflects. Starts as the page the route rendered,
-  // so the first effect does not push a duplicate entry for it.
+  // What the address already reflects. Starts as the page and language the
+  // route rendered, so the first effect does not push a duplicate entry.
   const shown = useRef(page);
+  const shownLang = useRef<Lang>((lang === 'he' ? 'he' : 'en') as Lang);
 
   useEffect(() => {
-    if (page === shown.current) return;
+    const next: Lang = lang === 'he' ? 'he' : 'en';
+    if (page === shown.current && next === shownLang.current) return;
 
     const external = EXTERNAL_PAGE[page];
-    const path = PATH_BY_PAGE[page];
 
     if (external || alwaysNavigate) {
-      const to = external ?? path;
+      // A different document: the language travels with it as a path, not as
+      // state that would be lost on arrival.
+      const to = external ?? pathFor(page, next);
       if (to) window.location.assign(to);
       return;
     }
 
+    const path = pathFor(page, next);
     shown.current = page;
+    shownLang.current = next;
     if (path && window.location.pathname !== path) {
-      window.history.pushState({ page }, '', path);
+      // A language switch pushes, like any other change of address. Replacing
+      // it was tried and is worse: the URL changes under you and Back then
+      // leaves the site altogether instead of undoing what you just did.
+      window.history.pushState({ page, lang: next }, '', path);
       // The design scrolls to the top itself on every page change; doing it
       // here as well would fight it.
     }
-  }, [page, alwaysNavigate]);
+  }, [page, lang, alwaysNavigate]);
 
   // The design's footer carries the only language switch on the site. A
   // hand-written section picks its own document by language, so it has to hear
@@ -79,15 +95,16 @@ export default function UrlSync({
 
   useEffect(() => {
     const onPop = () => {
-      const path = window.location.pathname.replace(/^\/|\/$/g, '');
-      const target = PAGE_BY_PATH[path];
-      if (!target) return; // Left the landing entirely; the browser handles it.
-      shown.current = target;
-      onNavigate(target);
+      const found = parsePath(window.location.pathname);
+      if (!found) return; // Left the landing entirely; the browser handles it.
+      shown.current = found.page;
+      shownLang.current = found.lang;
+      onNavigate(found.page);
+      if (found.lang !== lang) onUrlLang?.(found.lang);
     };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
-  }, [onNavigate]);
+  }, [onNavigate, onUrlLang, lang]);
 
   return null;
 }

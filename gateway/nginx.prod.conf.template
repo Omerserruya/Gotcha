@@ -1699,6 +1699,15 @@ http {
             try_files $uri $uri/index.html $uri.html /404.html;
         }
 
+        # The old landing page, which the application build still ships at /he
+        # and /en. It was the marketing site once, and its own metadata still
+        # declares gotcha.co.il/he as its canonical address - which is now a
+        # different page entirely. Two designs answering to one name, with the
+        # older one claiming to be the newer: send them to the real thing.
+        location ~ ^/(he|en)(/|$) {
+            return 301 https://gotcha.co.il$request_uri;
+        }
+
         location / {
             try_files $uri $uri/index.html $uri.html /index.html;
         }
@@ -1843,8 +1852,36 @@ http {
         # hostname, and the two locations below send them there. Serving them
         # here as well gave every article and every legal document two working
         # addresses, and the one people arrived at was the apex one.
-        location ~ ^/(about|blog|careers|contact|offer|product|security|solutions|why-gotcha|early-access|privacy-policy|terms|en|he)(/|$) {
-            try_files $uri $uri/index.html $uri.html /404.html;
+        #
+        # `he` is the Hebrew half of every page: /he/offer is the offer page in
+        # Hebrew, prerendered, so a link opens in the language it was sent in.
+        location ~ ^/(about|blog|careers|contact|offer|product|security|solutions|why-gotcha|early-access|privacy-policy|terms|he)(/|$) {
+            # The export writes /he/offer.html, so a trailing slash matches
+            # nothing and used to fall through to the redirect below - a link
+            # with the slash on the end left the site for the application host.
+            # People type it and paste it, so it is normalised rather than lost.
+            absolute_redirect off;
+            rewrite ^(/.+)/$ $1 permanent;
+
+            # =404 rather than a fallback FILE. try_files' last argument is an
+            # internal redirect, so /404.html re-entered location matching, hit
+            # the catch-all below and 301'd to app.gotcha.co.il carrying the
+            # original path - which is how gotcha.co.il/he/ ended up showing the
+            # old landing on the application host. error_page keeps the 404 here.
+            try_files $uri $uri.html $uri/index.html =404;
+        }
+
+        # Reached only from a 404 above, never fetched directly.
+        error_page 404 /404.html;
+        location = /404.html {
+            internal;
+        }
+
+        # /en is not a second spelling of the English page - the bare path is.
+        # The old landing shipped /en and /he as a pair and links to it exist,
+        # so they are folded onto the page they name rather than 404'd.
+        location ^~ /en {
+            rewrite ^/en/?(.*)$ /$1 permanent;
         }
 
         # The Help Center is help.gotcha.co.il. The prefix is dropped on the way
