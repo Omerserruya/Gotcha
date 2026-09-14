@@ -39,53 +39,93 @@ endpoint. Those are what I build first, while the rest is being made.
 *"The facts every AI employee quotes to a customer, plus how the business
 sounds."*
 
-**Served.** `BusinessProfile` holds name, description, website, industry,
-country, language, primary system. `/api/onboarding/business-profile` reads and
-writes it.
+Re-checked 2026-09-14 against all 663 routes in the OpenAPI document and the
+live source. **Three of the four things I first called blocking already exist.**
+The section below replaces that earlier version.
 
-### Blocking
+### Already served — I was wrong
 
-1. **Hours, address, currency and timezone are not on the profile.** The screen
-   is built around six facts and four of them have nowhere to live. These are
-   the facts an AI employee quotes to a customer — an opening hour it invents
-   is worse than one it refuses to give.
+- **Opening hours.** `GET|PUT /api/agents/settings/business-hours` carries a
+  full week (`sunday`…`saturday`), a `timezone`, and more than the screen
+  draws: an outside-hours AI policy (`active` / `silent`) and a handoff
+  message. Stored as a durable setting.
+- **Time zone.** Inside the same payload.
+- **A workspace-level voice.** `BusinessProfile.observedVoice`, and it is
+  better than what the screen asks for — see below.
 
-   ```
-   PATCH /api/workspace/profile
-   { address, openingHours, currency, languages[], timezone }
-   ```
+### 11.1 · Everything here is ADMIN-only
 
-   `openingHours` as a week of ranges plus exceptions, not a string: the AI has
-   to answer "are you open now", which is a computation.
+```
+GET|POST /api/onboarding/business-profile     requireRole("ADMIN")
+GET|PUT  /api/agents/settings/business-hours  requireRole("ADMIN")
+PUT      /api/agents/settings/locale          requireRole("ADMIN")
+```
 
-2. **Tone traits and the generated sample reply.** The whole point of the
-   control is that a choice is judged by its output — *"tone is a small set of
-   traits with a live sample reply, so the choice is judged by output"*. Traits
-   stored without a sample makes it a set of checkboxes nobody can evaluate.
+The same guard problem Home had. These are *"the facts your AI employees quote
+to customers"* — an agent who cannot read the opening hours cannot tell whether
+the AI answered correctly.
 
-   ```
-   GET  /api/workspace/tone          → { traits[], sample }
-   PATCH /api/workspace/tone         → regenerates `sample`
-   ```
+**Asked for:** a permission rather than a rank. Reading the workspace facts and
+writing them are reasonably different permissions; the rank is the wrong axis
+for both.
 
-   The sample is the server's, from the same model that will write the real
-   replies. A client-side approximation would be a promise the product does not
-   keep.
+### 11.2 · "Never say" is enforced but cannot be authored
+
+`BusinessPolicy.data.blockedTopics` is already **consumed** — the prompt builder
+reads it and the AI obeys it (`system-core-builder.ts:89`). There is no route
+that writes it. The rule exists, works, and the owner cannot add one.
+
+```
+GET|PUT /api/workspace/prohibited-claims   → { claims: string[] }
+```
+
+The cheapest item in the whole of Settings: the data, the consumer and the
+enforcement all exist. Only the editor is missing.
+
+### 11.3 · The voice has no route, and the design should change
+
+`observedVoice` is derived by counting the business's own past messages, goes
+into every agent's system prompt, and is never overwritten once a human has
+edited it. Nothing reads or writes it outside the import pipeline.
+
+```
+GET|PUT /api/workspace/voice   → { guidance, source: "learned"|"edited", editedAt }
+```
+
+**But the design's control is the weaker idea**, and the backend already says
+why. Screen 11 offers five adjective chips — Warm, Brief, Formal, Playful,
+Detailed. `brand-voice.stage.ts` on what it deliberately does not produce:
+
+> *"Instructions to a writer, not a description of a brand — 'open with היי and
+> the customer's name' is usable; 'warm and approachable' is a horoscope."*
+
+Five adjectives are exactly that horoscope, and they would have to be
+translated back into guidance by something, badly. **Change the screen to show
+the learned voice as editable guidance** — which is the design's own stated
+intent, *"judged by output"*, reached by a better road.
+
+### 11.4 · The sample reply
+
+Whichever shape the voice takes, the sample has to come from the same model that
+will write the real replies. A client-side approximation is a promise the
+product does not keep.
+
+```
+POST /api/workspace/voice/sample   → { reply }
+```
+
+### 11.5 · Address and currency — not blocking
+
+No field for either. Neither breaks anything: the address appears in no AI
+answer today, and currency is already decided per plan in billing. Add them
+with the voice work or leave them out; the screen shows five of its six facts
+either way.
 
 ### Deferrable
 
-3. **Propagation status** — *"change one here and every channel is consistent
-   within a minute"*. The claim is the reassurance, and the screen states it as
-   a fact. Until something reports it, the sentence is a promise rather than a
-   status. Ship the sentence; add the status when there is a propagation
-   pipeline to report on.
-
-### Already there, unused
-
-`BusinessPolicy.data` carries `blockedTopics`. That is the **"Never say"** list
-— it already exists and needs exposing, not building.
-
----
+**Propagation status** — *"change one here and every channel is consistent
+within a minute"*. The screen states it as fact and nothing reports it. Ship the
+sentence; add a status when there is a pipeline to report on.
 
 ## 12 · People & teams
 
