@@ -1545,6 +1545,14 @@ model BusinessProfile {
   /// the company-context block, so a correct answer also sounds like them.
   /// Written by the history import's brand-voice stage; a human edit here is
   /// never overwritten by a later import (see `observedVoiceEditedAt`).
+  /// Where the business is, as one line, in whatever form the owner wrote it.
+  /// Deliberately not parsed into parts: an AI employee quotes it back, and no
+  /// reader here needs a postcode field it would then have to reassemble.
+  address                     String?
+  /// ISO-4217 for prices the AI quotes. Distinct from the BILLING currency,
+  /// which is the plan's and lives on the subscription - a shop can be billed
+  /// in USD and sell in ILS, and conflating them would misquote one of them.
+  currency                    String?
   observedVoice               String?          @map("observed_voice")
   observedVoiceEditedAt       DateTime?        @map("observed_voice_edited_at")
   createdAt                   DateTime         @default(now()) @map("created_at")

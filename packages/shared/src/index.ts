@@ -586,6 +586,19 @@ export {
   type QuietDayEffect,
   type QuietDaySource,
 } from "./lib/quiet-day-ranking";
+export {
+  DEFAULT_POLICY,
+  MAX_LIST_ITEMS,
+  MAX_ITEM_CHARS,
+  PolicyValidationError,
+  validateStringList,
+  validatePolicyPatch,
+  getPolicy,
+  getPolicyPrompt,
+  setPolicy,
+  validateAgainstPolicy,
+  type BusinessPolicy,
+} from "./lib/workspace-policy";
 export { redact, safeLogger } from "./lib/log-redact";
 export * from "./lib/tenant-access-policy";
 export {

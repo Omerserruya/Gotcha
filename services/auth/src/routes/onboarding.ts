@@ -539,7 +539,7 @@ const businessProfileSchema = z.object({
   primaryLanguage: z.string().max(10).optional(),
 });
 
-router.post("/business-profile", requireRole("ADMIN"), validate(businessProfileSchema), async (req: Request, res: Response): Promise<void> => {
+router.post("/business-profile", requirePermission("settings:workspace:update"), validate(businessProfileSchema), async (req: Request, res: Response): Promise<void> => {
   try {
     const tenant = await prisma.tenant.findUnique({
       where: { id: req.tenantId! },

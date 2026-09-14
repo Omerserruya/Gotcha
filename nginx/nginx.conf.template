@@ -639,14 +639,15 @@ http {
         }
 
         # ─── AI Service ──────────────────────────────────
-        # Prohibited claims live in the AI service, because that is what owns
-        # BusinessPolicy and composes it into the system prompt. Routed on the
-        # specific path rather than all of /api/workspace, so the workspace
-        # settings endpoints that belong to other services can be added beside
-        # it without either having to move: a longer prefix wins in nginx.
-        location /api/workspace/prohibited-claims {
+        # The workspace settings screen. One location, because auth owns
+        # every path under it - including prohibited claims, whose policy the
+        # AI service reads but the settings screen writes. The voice SAMPLE is
+        # the exception that proves it: auth serves the route and calls the AI
+        # service internally, so a new model call stays where model calls
+        # belong without splitting this prefix across two upstreams.
+        location /api/workspace {
             limit_req zone=api burst=20 nodelay;
-            proxy_pass http://ai_service;
+            proxy_pass http://auth_service;
             proxy_set_header Host $host;
             proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;

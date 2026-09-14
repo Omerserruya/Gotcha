@@ -17,7 +17,7 @@ import {
   AuditAction,
   getLastLoginBySubject,
   normalizeE164,
-  userMayApprove, readDurableSetting, writeDurableSetting } from "@chatcenter/shared";
+  userMayApprove, readDurableSetting, writeDurableSetting, requirePermission } from "@chatcenter/shared";
 import * as invitations from "../services/invitation.service";
 
 const router = Router();
@@ -558,7 +558,7 @@ const businessHoursSchema = z.object({
   }),
 });
 
-router.get("/settings/business-hours", requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.get("/settings/business-hours", requirePermission("settings:workspace:read"), async (req: Request, res: Response) => {
   try {
     const raw = await readDurableSetting(req.tenantId!, "businessHours");
     if (!raw) {
@@ -587,7 +587,7 @@ router.get("/settings/business-hours", requireRole("ADMIN"), async (req: Request
   }
 });
 
-router.put("/settings/business-hours", requireRole("ADMIN"), validate(businessHoursSchema), async (req: Request, res: Response) => {
+router.put("/settings/business-hours", requirePermission("settings:workspace:update"), validate(businessHoursSchema), async (req: Request, res: Response) => {
   try {
     await writeDurableSetting(req.tenantId!, "businessHours", JSON.stringify(req.body), req.user?.userId);
     res.json(req.body);
@@ -798,7 +798,7 @@ router.put("/me/locale", validate(localeSchema), async (req: Request, res: Respo
   }
 });
 
-router.put("/settings/locale", requireRole("ADMIN"), validate(localeSchema), async (req: Request, res: Response) => {
+router.put("/settings/locale", requirePermission("settings:workspace:update"), validate(localeSchema), async (req: Request, res: Response) => {
   try {
     const raw = (req.body as { locale?: string }).locale;
     if (!raw || !isSupportedLocale(raw)) {

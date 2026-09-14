@@ -3,6 +3,37 @@ import express from "express";
 import request from "supertest";
 
 vi.mock("@chatcenter/shared", () => ({
+  // The business policy moved into this barrel (lib/workspace-policy) so
+  // services/auth can write what services/ai reads. An exhaustive mock has to
+  // grow with it, or the routes fail to load rather than failing a test.
+  // Backed by a store so the PUT-then-read assertion still exercises a merge.
+  ...(() => {
+    const store = new Map<string, any>();
+    const DEFAULTS = {
+      maxDiscountPercent: 10,
+      refundRequiresApproval: true,
+      escalationKeywords: ["lawyer", "lawsuit", "refund", "complaint", "angry"],
+      blockedTopics: [],
+    };
+    class PolicyValidationError extends Error {
+      field: string;
+      constructor(field: string, message: string) { super(message); this.field = field; this.name = "PolicyValidationError"; }
+    }
+    return {
+      DEFAULT_POLICY: DEFAULTS,
+      PolicyValidationError,
+      getPolicy: async (t: string) => ({ ...DEFAULTS, ...(store.get(t) ?? {}) }),
+      setPolicy: async (t: string, patch: any) => {
+        const next = { ...DEFAULTS, ...(store.get(t) ?? {}), ...patch };
+        store.set(t, next);
+        return next;
+      },
+      validatePolicyPatch: (body: any) => body ?? {},
+      validateStringList: (_f: string, v: any) => v,
+      getPolicyPrompt: async () => "",
+      validateAgainstPolicy: () => ({ ok: true }),
+    };
+  })(),
   // Internal-service key gate. The Security v2 remediation removed the silent
   // fallback that let these routes run unauthenticated, and this exhaustive
   // mock never grew the export - so the suite failed to load rather than

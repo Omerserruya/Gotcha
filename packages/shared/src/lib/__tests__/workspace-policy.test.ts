@@ -5,7 +5,7 @@ import {
   PolicyValidationError,
   MAX_LIST_ITEMS,
   MAX_ITEM_CHARS,
-} from "../services/policy.service";
+} from "../workspace-policy";
 
 /**
  * These lists are composed verbatim into the AI's system prompt, and the write

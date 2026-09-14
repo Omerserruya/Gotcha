@@ -205,6 +205,17 @@ export const PERMISSIONS: readonly PermissionDef[] = [
   p("analytics:reports:export", "analytics", "runtime", true, "Export Reports", "Export analytics reports."),
 
   // ── Settings / Administration (configuration) ───────────────
+  // Read is split from update for the same reason billing's was: the facts an
+  // AI employee quotes - the business name, what it does, its hours, how it
+  // writes - are what a front-line agent needs to SEE to answer for it, and
+  // are not something they should be able to change for everybody.
+  //
+  // `scoped: false` because a workspace setting is not a per-department thing.
+  // The brief wrote `true` here with a note about reaching the agent template,
+  // but that argument is `scoped`, not `kind`, and scoping is not what puts a
+  // permission in a template - the template's own list is. The agent template
+  // grants it below, which is what was actually wanted.
+  p("settings:workspace:read", "settings", "configuration", false, "View Workspace Settings", "View the business facts AI employees quote: name, description, hours, voice."),
   p("settings:workspace:update", "settings", "configuration", false, "Manage Workspace Settings", "Edit workspace-level settings and defaults."),
   p("settings:members:manage", "settings", "configuration", false, "Manage Members", "Invite, edit, deactivate users and assign roles."),
   p("settings:roles:manage", "settings", "configuration", false, "Manage Roles", "Create and edit roles and their permissions."),
@@ -403,6 +414,7 @@ export const BUILTIN_ROLES: Record<BuiltinRoleKey, BuiltinRoleDef> = {
       "analytics:workspace:read",
       "analytics:dashboard:read",
       "analytics:reports:export",
+      "settings:workspace:read",
     ],
   },
   agent: {
@@ -420,6 +432,9 @@ export const BUILTIN_ROLES: Record<BuiltinRoleKey, BuiltinRoleDef> = {
     // narrow on purpose - it grants the queue and who is on, not the reports.
     permissions: [
       "analytics:workspace:read",
+      // The workspace facts an agent quotes back to a customer. Read only:
+      // changing what the AI may say is a management act.
+      "settings:workspace:read",
       "conversation:messages:read",
       "conversation:messages:reply",
       "conversation:messages:takeover",
