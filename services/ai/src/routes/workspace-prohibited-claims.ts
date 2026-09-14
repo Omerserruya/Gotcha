@@ -43,7 +43,12 @@ router.use("/workspace/prohibited-claims", authenticate, resolveTenant, requireO
 
 router.get(
   "/workspace/prohibited-claims",
-  requirePermission("analytics:workspace:read"),
+  // The catalog already splits seeing the tenant's AI rules from changing
+  // them, and prohibited claims are exactly that: a rule governing what the
+  // employee may say. Reusing the existing pair rather than adding a
+  // permission means a tenant that has already delegated policy reading to a
+  // finance or ops lead does not have to delegate it twice.
+  requirePermission("settings:business-policies:read"),
   async (req: Request, res: Response) => {
     try {
       const policy = await getPolicy(req.tenantId!);
@@ -59,7 +64,7 @@ router.put(
   "/workspace/prohibited-claims",
   // Writing is a management act: this changes what the AI says to every
   // customer, so it is not the same grant as being able to read the list.
-  requirePermission("settings:workspace:update"),
+  requirePermission("settings:business-policies:manage"),
   async (req: Request, res: Response) => {
     try {
       const body = (req.body ?? {}) as Record<string, unknown>;
