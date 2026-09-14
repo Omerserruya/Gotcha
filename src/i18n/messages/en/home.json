@@ -6,6 +6,7 @@
     "quiet": "Quiet morning"
   },
   "summary": "{total, plural, =0 {Nothing has come in yet today.} one {One conversation today, # handled without you.} other {# conversations today, {handled} handled without you.}}",
+  "summaryBacklog": "{waiting, plural, one {Nothing new today. # conversation is still waiting from before.} other {Nothing new today. # conversations are still waiting from before.}}",
   "command": {
     "label": "Ask GOTCHA a question, or tell it what to do",
     "placeholder": "Ask anything, or tell GOTCHA what to do…",
@@ -40,7 +41,7 @@
     "byYourTeam": "By your team",
     "needingYou": "Needing you",
     "waitingOnApproval": "Waiting on approval",
-    "whereItCameFrom": "Where it came from"
+    "whereItCameFrom": "Where it came from · last {days} days"
   },
   "needsYou": {
     "title": "Needs you now",

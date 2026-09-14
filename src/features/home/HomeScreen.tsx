@@ -88,14 +88,23 @@ export async function HomeScreen() {
           {isQuiet ? t('greeting.quiet') : t(`greeting.${partOfDay}`)}
         </Text>
         <Text role="body" tone="muted" className={styles.greetingSummary}>
+          {/*
+            Nothing new today and people still waiting is the combination that
+            reads as a contradiction: "nothing has come in" beside a queue of
+            twenty. Both are true - one counts arrivals today, the other counts
+            the backlog right now - so the sentence says both rather than
+            leaving the reader to reconcile them.
+          */}
           {!overview
             ? t('summaryUnavailable')
             : isQuiet
               ? t('summaryQuiet')
-              : t('summary', {
-                  total: overview.totalConversations,
-                  handled: overview.aiHandledCount,
-                })}
+              : overview.totalConversations === 0 && (queue?.waiting ?? 0) > 0
+                ? t('summaryBacklog', { waiting: queue?.waiting ?? 0 })
+                : t('summary', {
+                    total: overview.totalConversations,
+                    handled: overview.aiHandledCount,
+                  })}
         </Text>
       </header>
 

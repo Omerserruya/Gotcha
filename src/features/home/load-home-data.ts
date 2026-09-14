@@ -146,6 +146,28 @@ function today(): { from: string; to: string } {
   return { from: start.toISOString(), to: now.toISOString() };
 }
 
+/**
+ * How far back the channel split looks.
+ *
+ * Deliberately NOT today. A distribution over a single day is decided by
+ * whoever happened to write that morning - one wholesale customer on email
+ * swings it from "mostly WhatsApp" to "mostly email" - and on a quiet morning
+ * there is no distribution at all, which is when the strip has least to say
+ * and the bar simply vanished.
+ *
+ * A fixed window is also better than falling back to one: a bar that means
+ * "today" on a busy day and "this month" on a slow one is the same picture
+ * making two different claims, with nothing on screen to tell them apart. So
+ * it is always this window, and the label says so.
+ */
+export const CHANNEL_SPLIT_DAYS = 30;
+
+function lastDays(days: number): { from: string; to: string } {
+  const now = new Date();
+  const start = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+  return { from: start.toISOString(), to: now.toISOString() };
+}
+
 export async function loadHomeData(): Promise<HomeData> {
   const api = serverApi();
   const range = today();
@@ -192,7 +214,7 @@ export async function loadHomeData(): Promise<HomeData> {
     api
       .get({
         endpoint: analyticsEndpoints.channelPerformance(),
-        query: range,
+        query: lastDays(CHANNEL_SPLIT_DAYS),
         payload: channelPerformanceSchema,
       })
       .catch(degrade('home.channels_failed', null)),

@@ -1,7 +1,7 @@
 import { NextIntlClientProvider, hasLocale } from 'next-intl';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { notFound } from 'next/navigation';
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
 
 import '@/design-system/styles/global.css';
@@ -38,12 +38,22 @@ export async function generateMetadata({
     },
     description: t('productDescription'),
     applicationName: 'GOTCHA',
-    // The tab strip and mobile browser chrome take the frame's own ink, so the
-    // browser furniture continues the product rather than framing it.
-    themeColor: '#121212',
     robots: { index: false, follow: false },
   };
 }
+
+/**
+ * Browser chrome.
+ *
+ * `themeColor` belongs to the viewport export, not to metadata - Next warns on
+ * every page otherwise, and the value is silently ignored.
+ *
+ * The tab strip and mobile browser chrome take the frame's own ink, so the
+ * browser furniture continues the product rather than framing it.
+ */
+export const viewport: Viewport = {
+  themeColor: '#121212',
+};
 
 /**
  * The document.

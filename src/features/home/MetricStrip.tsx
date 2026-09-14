@@ -4,6 +4,7 @@ import type { AnalyticsOverview, ChannelPerformance } from '@/api/contracts/anal
 import { Text } from '@/design-system/primitives/text/Text';
 
 import styles from './Home.module.css';
+import { CHANNEL_SPLIT_DAYS } from './load-home-data';
 
 /**
  * The day in four figures, and where it came from.
@@ -74,7 +75,10 @@ export async function MetricStrip({
       />
 
       {channels && channels.length > 0 ? (
-        <ChannelSplit channels={channels} label={t('whereItCameFrom')} />
+        <ChannelSplit
+          channels={channels}
+          label={t('whereItCameFrom', { days: CHANNEL_SPLIT_DAYS })}
+        />
       ) : null}
     </div>
   );
