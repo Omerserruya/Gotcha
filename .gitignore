@@ -55,3 +55,9 @@ test-results
 
 # Local agent tooling state
 .omc/
+
+# The design export. The source of truth for every screen, but it is a large
+# generated artefact from the Claude Design project rather than app code, and
+# it is re-exported whole each time. Kept out of the history; kept on disk so
+# it survives between sessions.
+design/
