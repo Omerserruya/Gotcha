@@ -353,53 +353,68 @@ describe("the two handles are separate identifiers", () => {
   });
 });
 
-describe("resolveShopifyInstallEntry - the button always has somewhere to go", () => {
-  // THE REGRESSION THIS EXISTS FOR.
+describe("resolveShopifyInstallEntry - two honest states, never a 404", () => {
+  // WRONG TWICE, SO BOTH FAILURES ARE PINNED HERE.
   //
-  // `/install/start` used to answer 503 `shopify_install_not_available` when
-  // the listing slug was unset, and the merchant was told to contact support.
-  // Shopify App Store review 132211 failed the submission under requirement
-  // 4.5.5 on that screen: the test account could not demonstrate the feature,
-  // because the only in-app route to connecting a store refused.
+  // 1. It answered `503 shopify_install_not_available` when the slug was
+  //    unset. Review 132211 quoted that screen back under 4.5.5.
+  // 2. The fix always produced a URL, falling back to App Store search. But an
+  //    unapproved listing 404s for anyone not signed in to a Partner account,
+  //    and this app is "Limited visibility" so it never appears in App Store
+  //    search even after approval. The button stopped refusing and started
+  //    leading somewhere broken, which is harder to notice.
 
-  it("uses the app's own listing when the slug is configured", () => {
+  it("says NOT PUBLISHED while the listing is not live, even with a slug", () => {
     expect(
       resolveShopifyInstallEntry({ SHOPIFY_APP_STORE_HANDLE: "gotcha-3" } as NodeJS.ProcessEnv),
-    ).toEqual({ url: "https://apps.shopify.com/gotcha-3", precise: true });
+    ).toEqual({ mode: "not_published", url: null });
   });
 
-  it("degrades to App Store search rather than refusing", () => {
-    const entry = resolveShopifyInstallEntry({} as NodeJS.ProcessEnv);
-    expect(entry.precise).toBe(false);
-    const u = new URL(entry.url);
-    expect(u.origin).toBe("https://apps.shopify.com");
-    expect(u.pathname).toBe("/search");
-    expect(u.searchParams.get("q")).toBe("GOTCHA");
+  it("navigates to the listing once it is explicitly live", () => {
+    expect(
+      resolveShopifyInstallEntry({
+        SHOPIFY_APP_STORE_HANDLE: "gotcha-3",
+        SHOPIFY_APP_STORE_LISTING_LIVE: "true",
+      } as NodeJS.ProcessEnv),
+    ).toEqual({ mode: "listing", url: "https://apps.shopify.com/gotcha-3" });
   });
 
-  it("never returns null, and never asks for a shop domain", () => {
-    // Every branch must be a Shopify-owned page. Requirement 2.3.1 forbids
-    // asking the merchant to name their store; it does not require the page to
-    // be the listing specifically.
-    for (const env of [
-      {},
-      { SHOPIFY_APP_STORE_HANDLE: "ok-slug" },
-      { SHOPIFY_APP_HANDLE: "legacy" },
-      { SHOPIFY_APP_STORE_HANDLE: "Bad Slug" },
-      { SHOPIFY_APP_PRICING_HANDLE: "gotcha-3" },
-    ] as unknown as NodeJS.ProcessEnv[]) {
-      const entry = resolveShopifyInstallEntry(env);
-      expect(entry.url, JSON.stringify(env)).toBeTruthy();
-      expect(new URL(entry.url).origin).toBe("https://apps.shopify.com");
-      expect(entry.url).not.toMatch(/myshopify/);
+  it("will not claim a listing is live without a slug to point at", () => {
+    expect(
+      resolveShopifyInstallEntry({
+        SHOPIFY_APP_STORE_LISTING_LIVE: "true",
+      } as NodeJS.ProcessEnv),
+    ).toEqual({ mode: "not_published", url: null });
+  });
+
+  it("defaults to not-published, because the safe error is an explanation", () => {
+    // Wrong in this direction shows a sentence. Wrong in the other shows a 404.
+    expect(resolveShopifyInstallEntry({} as NodeJS.ProcessEnv).mode).toBe("not_published");
+    for (const v of ["", "false", "TRUE ", "1", "yes", "no"]) {
+      const e = resolveShopifyInstallEntry({
+        SHOPIFY_APP_STORE_HANDLE: "gotcha-3",
+        SHOPIFY_APP_STORE_LISTING_LIVE: v,
+      } as NodeJS.ProcessEnv);
+      // Only an exact "true" (after trim/lowercase) turns it on.
+      const expected = v.trim().toLowerCase() === "true" ? "listing" : "not_published";
+      expect(e.mode, JSON.stringify(v)).toBe(expected);
     }
   });
 
-  it("escapes the search term instead of building a broken URL", () => {
-    const entry = resolveShopifyInstallEntry({
-      SHOPIFY_APP_STORE_SEARCH_TERM: "GOTCHA AI & Co",
-    } as NodeJS.ProcessEnv);
-    expect(new URL(entry.url).searchParams.get("q")).toBe("GOTCHA AI & Co");
+  it("never returns a non-Shopify URL, and never a shop domain", () => {
+    for (const env of [
+      {},
+      { SHOPIFY_APP_STORE_HANDLE: "gotcha-3", SHOPIFY_APP_STORE_LISTING_LIVE: "true" },
+      { SHOPIFY_APP_HANDLE: "legacy", SHOPIFY_APP_STORE_LISTING_LIVE: "true" },
+      { SHOPIFY_APP_STORE_HANDLE: "Bad Slug", SHOPIFY_APP_STORE_LISTING_LIVE: "true" },
+      { SHOPIFY_APP_INSTALL_URL: "https://evil.test/install", SHOPIFY_APP_STORE_LISTING_LIVE: "true" },
+    ] as unknown as NodeJS.ProcessEnv[]) {
+      const e = resolveShopifyInstallEntry(env);
+      if (e.url !== null) {
+        expect(new URL(e.url).origin, JSON.stringify(env)).toBe("https://apps.shopify.com");
+      }
+      expect(JSON.stringify(e)).not.toMatch(/myshopify/);
+    }
   });
 });
 

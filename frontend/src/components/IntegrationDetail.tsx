@@ -220,6 +220,14 @@ export function IntegrationDetail({
   // The lookup needs no handle. The server recovers it from an HttpOnly cookie
   // set at the OAuth callback, so it survives the whole login round trip.
   const [pendingShop, setPendingShop] = useState<string | null>(null);
+  /**
+   * Set when the server reports that no Shopify page is reachable yet.
+   *
+   * Not an error state. It is the honest pre-publication answer, and Shopify
+   * Support confirmed the in-app button is not the reviewer's entry point
+   * before the listing goes live.
+   */
+  const [notPublished, setNotPublished] = useState(false);
   useEffect(() => {
     if (slug !== "shopify" || !token || isConnected) {
       setPendingShop(null);
@@ -559,6 +567,18 @@ export function IntegrationDetail({
                       </a>
                     </div>
                   ) : null}
+                  {notPublished && !pendingShop ? (
+                    <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                      <p className="text-sm text-gray-800">
+                        Installing GOTCHA starts on Shopify.
+                      </p>
+                      <p className="mt-1 text-sm text-gray-600">
+                        Open the GOTCHA app from Shopify and approve the permissions. You will be
+                        brought back here and your store will be ready to connect, with nothing to
+                        type.
+                      </p>
+                    </div>
+                  ) : null}
                   <p className="text-sm text-gray-500">
                     {connectHelpText(slug, Boolean(editingCreds) || isConnected)}
                   </p>
@@ -621,6 +641,14 @@ export function IntegrationDetail({
                           flow: oauthFlow || undefined,
                           params: credentials,
                         });
+                        if (!url) {
+                          // No reachable Shopify page yet. Explain it, do not
+                          // navigate: the App Store listing 404s until the app
+                          // is approved, and pointing the button at it anyway
+                          // is a dead end dressed up as a working button.
+                          setNotPublished(true);
+                          return;
+                        }
                         window.location.href = url;
                       } catch (err: any) {
                         setTestResult({ ok: false, msg: connectErrorMessage(slug, err) });

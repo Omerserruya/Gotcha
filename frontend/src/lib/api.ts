@@ -2404,12 +2404,12 @@ export function listRdsTables(token: string, opts: { engine: "postgres" | "mysql
 // cookie set on this response has to be present on Shopify's redirect back.
 
 /**
- * The Shopify-owned install page. ALWAYS resolves to one.
+ * Where the Shopify connection begins.
  *
- * `precise` is false when the server could not name the app's own listing and
- * fell back to App Store search, so the caller can add a line of guidance. It
- * never means the connection is unavailable: the refusal this endpoint used to
- * return is what App Store review 132211 rejected.
+ * `mode` is "listing" with a URL once the App Store listing is approved and
+ * live, and "not_published" with a null URL before that - in which case the
+ * caller EXPLAINS that installation starts on Shopify. Neither state is an
+ * error, and neither ever asks for a shop domain.
  *
  * `credentials: "include"` is load-bearing, not boilerplate. The response sets
  * the HttpOnly intent cookie that carries "which workspace is installing"
@@ -2422,7 +2422,7 @@ export function listRdsTables(token: string, opts: { engine: "postgres" | "mysql
  */
 export function startShopifyInstall(token: string, flow?: string) {
   const qs = flow ? `?flow=${encodeURIComponent(flow)}` : "";
-  return apiFetch<{ url: string; precise?: boolean }>(`/api/connectors/shopify/install/start${qs}`, {
+  return apiFetch<{ url: string | null; mode: "listing" | "not_published" }>(`/api/connectors/shopify/install/start${qs}`, {
     token,
     credentials: "include",
   });

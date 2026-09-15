@@ -169,12 +169,17 @@ beforeEach(() => {
   // one. `SHOPIFY_APP_HANDLE` above remains the compatibility fallback.
   delete process.env.SHOPIFY_APP_STORE_HANDLE;
   delete process.env.SHOPIFY_APP_PRICING_HANDLE;
+  // Default OFF, matching production before the listing is approved.
+  delete process.env.SHOPIFY_APP_STORE_LISTING_LIVE;
 });
 
 // ─── The button ──────────────────────────────────────────────
 
 describe("GET /connectors/shopify/install/start", () => {
   it("returns a SHOPIFY-owned URL and never asks for a shop domain", async () => {
+    // The listing has to be marked live for a URL to exist at all; before
+    // approval the honest answer is "not_published", covered separately below.
+    process.env.SHOPIFY_APP_STORE_LISTING_LIVE = "true";
     const res = await request(app()).get("/api/connectors/shopify/install/start");
     expect(res.status).toBe(200);
     expect(res.body.url).toBe("https://apps.shopify.com/gotcha");
@@ -202,35 +207,34 @@ describe("GET /connectors/shopify/install/start", () => {
     expect(H.intents.get(INTENT).flow).toBeUndefined();
   });
 
-  it("still returns a Shopify page when the listing slug is unconfigured", async () => {
-    // THE REGRESSION THIS EXISTS FOR.
+  it("does NOT send the merchant to a listing that is not live yet", async () => {
+    // THE SECOND REGRESSION, AND THE SUBTLER ONE.
     //
-    // This route used to answer 503 `shopify_install_not_available` whenever
-    // the App Store listing slug was unset, and the merchant was told to
-    // contact support. Shopify App Store review 132211 failed the submission
-    // under requirement 4.5.5 on exactly that screen: the test account could
-    // not demonstrate the feature, because the only in-app route to connecting
-    // a store refused. A gap in our configuration had become the merchant's
-    // error message.
-    delete process.env.SHOPIFY_APP_HANDLE;
-    delete process.env.SHOPIFY_APP_STORE_HANDLE;
+    // This route first answered 503 when the slug was unset, which review
+    // 132211 quoted back under 4.5.5. The fix always returned a URL - but an
+    // unapproved App Store listing 404s for anyone not signed in to a Partner
+    // account, so the button stopped refusing and started leading to a dead
+    // page. Shopify Support confirmed the in-app button is not the reviewer's
+    // entry point before publication and that no pre-publication URL is needed.
+    process.env.SHOPIFY_APP_STORE_HANDLE = "gotcha-3";
+    delete process.env.SHOPIFY_APP_STORE_LISTING_LIVE;
+
     const res = await request(app()).get("/api/connectors/shopify/install/start");
     expect(res.status).toBe(200);
     expect(res.body.error).toBeUndefined();
-    // A Shopify-owned page, and one honest enough to say it is the imprecise
-    // branch so the UI can explain the extra click.
-    expect(new URL(res.body.url).hostname).toBe("apps.shopify.com");
-    expect(res.body.precise).toBe(false);
-    // The intent is minted, because the flow really does start here now.
+    expect(res.body.mode).toBe("not_published");
+    expect(res.body.url).toBeNull();
+    // Still not an error, so the intent is still minted and the flow is intact.
     expect(H.intents.size).toBe(1);
   });
 
-  it("uses the app's own listing when the slug IS configured", async () => {
+  it("uses the listing once it is explicitly marked live", async () => {
     process.env.SHOPIFY_APP_STORE_HANDLE = "gotcha-3";
+    process.env.SHOPIFY_APP_STORE_LISTING_LIVE = "true";
     const res = await request(app()).get("/api/connectors/shopify/install/start");
     expect(res.status).toBe(200);
+    expect(res.body.mode).toBe("listing");
     expect(res.body.url).toBe("https://apps.shopify.com/gotcha-3");
-    expect(res.body.precise).toBe(true);
   });
 
   it("keeps the listing slug independent of the admin/pricing handle", async () => {
@@ -239,45 +243,42 @@ describe("GET /connectors/shopify/install/start", () => {
     // not, and the only way to keep the pricing URL right was to blank the
     // variable - which silently disabled this button.
     delete process.env.SHOPIFY_APP_STORE_HANDLE;
-    // The legacy variable too: it is a fallback for BOTH, so leaving it set
-    // would be testing the fallback rather than the independence.
     delete process.env.SHOPIFY_APP_HANDLE;
     process.env.SHOPIFY_APP_PRICING_HANDLE = "gotcha-3";
+    process.env.SHOPIFY_APP_STORE_LISTING_LIVE = "true";
+
     const res = await request(app()).get("/api/connectors/shopify/install/start");
     expect(res.status).toBe(200);
-    // The pricing handle must NOT be borrowed as a listing slug: a wrong slug
-    // is a 404 the merchant cannot diagnose.
-    expect(res.body.url).not.toContain("gotcha-3");
-    expect(res.body.precise).toBe(false);
+    // The pricing handle must NOT be borrowed as a listing slug.
+    expect(res.body.mode).toBe("not_published");
+    expect(JSON.stringify(res.body)).not.toContain("gotcha-3");
     delete process.env.SHOPIFY_APP_PRICING_HANDLE;
   });
 
-  it("never offers a shop-domain fallback, configured or not", async () => {
-    // The failure mode this guards: someone "temporarily" restores a domain
-    // prompt so merchants can still connect before the listing is live. That
-    // is the exact flow App Store requirement 2.3.1 rejects, and a temporary
-    // one is never removed. Degrading to App Store search is allowed; asking
-    // the merchant to name their store is not.
-    delete process.env.SHOPIFY_APP_HANDLE;
-    delete process.env.SHOPIFY_APP_STORE_HANDLE;
-    const res = await request(app()).get("/api/connectors/shopify/install/start");
-    const body = JSON.stringify(res.body);
-    expect(body).not.toContain("myshopify.com");
-    expect(body).not.toMatch(/enter|type|paste/i);
+  it("never offers a shop-domain fallback, in either state", async () => {
+    // Someone "temporarily" restoring a domain prompt so merchants can connect
+    // before the listing is live is the exact flow requirement 2.3.1 rejects,
+    // and a temporary one is never removed.
+    for (const live of [undefined, "true"]) {
+      if (live) process.env.SHOPIFY_APP_STORE_LISTING_LIVE = live;
+      else delete process.env.SHOPIFY_APP_STORE_LISTING_LIVE;
+      const res = await request(app()).get("/api/connectors/shopify/install/start");
+      const body = JSON.stringify(res.body);
+      expect(body, String(live)).not.toContain("myshopify.com");
+      expect(body, String(live)).not.toMatch(/enter|type|paste/i);
+    }
   });
 
   it("ignores a custom-distribution install URL if one is ever put in the env", async () => {
     // Public distribution has ONE install surface. A per-store custom link
     // must not be honoured here - it would pin every merchant's button to one
     // merchant's shop.
-    delete process.env.SHOPIFY_APP_HANDLE;
-    delete process.env.SHOPIFY_APP_STORE_HANDLE;
+    process.env.SHOPIFY_APP_STORE_LISTING_LIVE = "true";
     process.env.SHOPIFY_APP_INSTALL_URL =
       "https://admin.shopify.com/oauth/install_custom_app?client_id=abc";
     try {
       const res = await request(app()).get("/api/connectors/shopify/install/start");
-      expect(res.body.url).not.toContain("install_custom_app");
-      expect(new URL(res.body.url).hostname).toBe("apps.shopify.com");
+      expect(JSON.stringify(res.body)).not.toContain("install_custom_app");
     } finally {
       delete process.env.SHOPIFY_APP_INSTALL_URL;
     }

@@ -308,59 +308,73 @@ export function resolveShopifyInstallUrl(env: NodeJS.ProcessEnv = process.env): 
 }
 
 /**
- * The name to search the App Store for when the listing slug is unknown.
+ * Whether the App Store listing is actually reachable by a merchant.
  *
- * Configurable because the listing title is a marketing decision that can
- * change without a deploy, and a stale search term is a worse landing than a
- * configurable one.
+ * This exists because "the slug is configured" and "the page loads" are
+ * different facts, and conflating them put a 404 behind the Connect button.
+ *
+ * An App Store listing is only publicly reachable once the app is APPROVED.
+ * Before that it renders for Partner-account viewers and returns what looks
+ * like a 404 to everyone else - and an app set to "Limited visibility" never
+ * appears in App Store search at all, even after approval. So there is no URL
+ * to send a merchant to before publication, and no search page that would find
+ * us either.
+ *
+ * Off by default, because being wrong in that direction shows an honest
+ * explanation, and being wrong in the other direction shows a 404.
  */
-const DEFAULT_APP_STORE_SEARCH_TERM = "GOTCHA";
-
-export interface ShopifyInstallEntry {
-  /** A Shopify-owned page. Never null, and never a GOTCHA screen. */
-  url: string;
-  /**
-   * True when `url` is this app's own listing. False when it is App Store
-   * search, which lands the merchant one click further away.
-   */
-  precise: boolean;
+function listingIsLive(env: NodeJS.ProcessEnv): boolean {
+  return String(env.SHOPIFY_APP_STORE_LISTING_LIVE || "").toLowerCase().trim() === "true";
 }
 
 /**
- * Where "Connect Shopify" sends a merchant. ALWAYS a usable Shopify page.
+ * Where "Connect Shopify" goes, or why it cannot go anywhere yet.
  *
- * WHY THIS RETURNS SOMETHING RATHER THAN NULL
- * -------------------------------------------
- * The button used to hard-fail with a 503 and the copy "New Shopify
- * connections aren't available just yet" whenever the listing slug was
- * unconfigured. Shopify App Store review 132211 quoted that message back to us
- * under requirement 4.5.5: the submitted test account could not demonstrate
- * the feature set, because the only in-app route to connecting a store
- * answered with a refusal. A configuration gap on our side had become a
- * merchant-facing dead end.
+ * A discriminated result rather than a nullable URL: the two states need
+ * different UI, and a `null` that callers were free to interpret is how the
+ * 503 and then the 404 both happened.
+ */
+export type ShopifyInstallEntry =
+  /** The listing is live and configured. Navigate here. */
+  | { mode: "listing"; url: string }
+  /**
+   * No reachable Shopify page exists yet. The UI must EXPLAIN that
+   * installation begins on Shopify. It must not navigate, must not present
+   * this as an error, and must never ask for a shop domain.
+   */
+  | { mode: "not_published"; url: null };
+
+/**
+ * Where "Connect Shopify" sends a merchant, or why it cannot send them yet.
  *
- * So the entry point degrades instead of failing. Both branches are
- * Shopify-owned pages where Shopify identifies the store, which is what
- * requirement 2.3.1 actually demands - it forbids asking the merchant to type
- * their `.myshopify.com` domain, not landing them somewhere less specific:
+ * THE HISTORY, BECAUSE IT HAS BEEN WRONG TWICE
+ * --------------------------------------------
+ * First this route answered `503 shopify_install_not_available` whenever the
+ * listing slug was unset, and Shopify App Store review 132211 quoted the
+ * resulting screen back under requirement 4.5.5.
  *
- *   • listing slug configured  -> the app's own App Store listing.
- *   • not configured           -> App Store search for the app name. One extra
- *                                 click, and still no domain typed anywhere.
+ * The fix for that was worse in a quieter way: it always produced a URL,
+ * falling back to App Store search. But an unapproved listing 404s for anyone
+ * not signed in to a Partner account, and this app is "Limited visibility", so
+ * it will never appear in App Store search even after approval. The button
+ * stopped refusing and started leading to a dead page instead.
  *
- * There is deliberately no third branch that asks for a shop domain, and there
- * is no fallback to a guessed listing slug: a wrong slug is a 404 the merchant
- * cannot diagnose, whereas search always resolves.
+ * So the state is now explicit. Before publication there is no reachable
+ * Shopify page, and the honest answer is to say installation begins on
+ * Shopify - which is exactly what Shopify Support advised: before publication
+ * the in-app button is not the reviewer's entry point, and no special
+ * pre-publication URL is needed.
+ *
+ * Neither branch asks the merchant to type a `.myshopify.com` domain, which is
+ * what requirement 2.3.1 actually forbids.
+ *
+ * Going live is one environment variable: set SHOPIFY_APP_STORE_LISTING_LIVE
+ * once the listing is approved. No code change, no deploy.
  */
 export function resolveShopifyInstallEntry(
   env: NodeJS.ProcessEnv = process.env,
 ): ShopifyInstallEntry {
   const listing = resolveShopifyInstallUrl(env);
-  if (listing) return { url: listing, precise: true };
-
-  const term = (env.SHOPIFY_APP_STORE_SEARCH_TERM || "").trim() || DEFAULT_APP_STORE_SEARCH_TERM;
-  return {
-    url: `https://apps.shopify.com/search?q=${encodeURIComponent(term)}`,
-    precise: false,
-  };
+  if (listing && listingIsLive(env)) return { mode: "listing", url: listing };
+  return { mode: "not_published", url: null };
 }

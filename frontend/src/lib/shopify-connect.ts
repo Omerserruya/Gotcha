@@ -11,13 +11,16 @@
  * reauthorization:
  *
  *   not shopify            → the provider's authorize URL, as before.
- *   shopify, not connected → a Shopify-owned App Store page. Shopify picks the
- *                            store. The server always returns one: the app's
- *                            own listing when its slug is configured, and App
- *                            Store search otherwise. It no longer refuses -
- *                            App Store review 132211 rejected the refusal
- *                            screen that used to appear here - and in neither
- *                            case is the merchant asked for their domain.
+ *   shopify, not connected → the App Store listing once it is approved and
+ *                            live, where Shopify picks the store. Before that
+ *                            there is NO reachable Shopify page, and
+ *                            `beginConnect` returns null so the caller can
+ *                            explain that installation begins on Shopify.
+ *                            Neither state is an error and neither asks for a
+ *                            domain. Review 132211 rejected a refusal screen
+ *                            here; the fix for it then pointed the button at a
+ *                            listing that 404s until approval, which was worse
+ *                            because it looked like it worked.
  *   shopify, connected     → reauthorization. The server reads the shop from
  *                            the stored connection, so this is still a plain
  *                            authorize URL and still needs no input from the
@@ -48,12 +51,17 @@ export interface BeginConnectInput {
  * start sets an HttpOnly cookie that must be present when Shopify redirects
  * the browser back.
  */
-export async function beginConnect(input: BeginConnectInput): Promise<string> {
+export async function beginConnect(input: BeginConnectInput): Promise<string | null> {
   const { token, slug, reauthorize, flow, params } = input;
 
   if (slug === "shopify" && !reauthorize) {
+    // NULL is a real answer, not a failure. Before the App Store listing is
+    // approved there is no Shopify page to navigate to: an unapproved listing
+    // is not publicly reachable, and this app is "Limited visibility" so it
+    // never appears in App Store search either. The caller explains that
+    // installation begins on Shopify instead of navigating to a 404.
     const { url } = await startShopifyInstall(token, flow);
-    return url;
+    return url ?? null;
   }
 
   // Shopify reauthorization sends no credentials: `params` may still hold
@@ -113,8 +121,8 @@ export function connectErrorMessage(slug: string, err: any): string {
   // account could not demonstrate the feature set, because pressing Connect
   // Shopify produced a refusal rather than an installation.
   //
-  // The server no longer emits the code - `/install/start` always returns a
-  // Shopify-owned page - so there is nothing left to translate. Re-adding a
+  // The server no longer emits the code - `/install/start` answers with a
+  // mode, never a refusal - so there is nothing left to translate. Re-adding a
   // branch here would mean the block had come back on the server.
   //
   // What must never appear in its place is a shop-domain box. Falling back to

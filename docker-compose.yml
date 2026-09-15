@@ -529,6 +529,16 @@ services:
       SHOPIFY_APP_STORE_HANDLE: ${SHOPIFY_APP_STORE_HANDLE:-}
       SHOPIFY_APP_PRICING_HANDLE: ${SHOPIFY_APP_PRICING_HANDLE:-}
       SHOPIFY_APP_STORE_SEARCH_TERM: ${SHOPIFY_APP_STORE_SEARCH_TERM:-GOTCHA}
+      # Is the App Store listing APPROVED and publicly reachable?
+      #
+      # OFF until Shopify approves the listing. An unapproved listing 404s for
+      # anyone not signed in to a Partner account, and a "Limited visibility"
+      # app never appears in App Store search even after approval - so before
+      # approval there is nowhere to send a merchant, and the button explains
+      # that installation begins on Shopify instead of navigating to a 404.
+      #
+      # Flip this to "true" on approval day. No rebuild, no code change.
+      SHOPIFY_APP_STORE_LISTING_LIVE: ${SHOPIFY_APP_STORE_LISTING_LIVE:-false}
       SHOPIFY_PENDING_INSTALL_TTL_SECONDS: ${SHOPIFY_PENDING_INSTALL_TTL_SECONDS:-}
       # ── GOTCHA Shopify CHAT app ───────────────────────────────────
       # RETIRED at the Core/Chat unification. There is ONE Shopify app now,
@@ -700,6 +710,16 @@ services:
       SHOPIFY_APP_STORE_HANDLE: ${SHOPIFY_APP_STORE_HANDLE:-}
       SHOPIFY_APP_PRICING_HANDLE: ${SHOPIFY_APP_PRICING_HANDLE:-}
       SHOPIFY_APP_STORE_SEARCH_TERM: ${SHOPIFY_APP_STORE_SEARCH_TERM:-GOTCHA}
+      # Is the App Store listing APPROVED and publicly reachable?
+      #
+      # OFF until Shopify approves the listing. An unapproved listing 404s for
+      # anyone not signed in to a Partner account, and a "Limited visibility"
+      # app never appears in App Store search even after approval - so before
+      # approval there is nowhere to send a merchant, and the button explains
+      # that installation begins on Shopify instead of navigating to a 404.
+      #
+      # Flip this to "true" on approval day. No rebuild, no code change.
+      SHOPIFY_APP_STORE_LISTING_LIVE: ${SHOPIFY_APP_STORE_LISTING_LIVE:-false}
       SHOPIFY_PENDING_INSTALL_TTL_SECONDS: ${SHOPIFY_PENDING_INSTALL_TTL_SECONDS:-}
       # JSON maps. Plan handles and meter handles are CONFIGURATION and live in
       # the Partner Dashboard; prices are never defined in this repo.

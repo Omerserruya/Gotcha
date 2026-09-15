@@ -190,10 +190,14 @@ router.get(
       path: "/",
     });
 
-    // `precise` tells the UI whether this is the app's own listing or App Store
-    // search, so it can add one line of guidance in the second case rather than
-    // dropping the merchant on a search page with no explanation.
-    res.json({ url: entry.url, precise: entry.precise });
+    // `mode` tells the UI which of two honest states this is: a live listing to
+    // navigate to, or "installation begins on Shopify" to explain. It is never
+    // an error, and there is never a shop-domain prompt.
+    //
+    // Sending a URL unconditionally is what put a 404 behind this button: an
+    // unapproved listing is not publicly reachable, and a Limited-visibility
+    // app never appears in App Store search even after approval.
+    res.json({ url: entry.url, mode: entry.mode });
   },
 );
 

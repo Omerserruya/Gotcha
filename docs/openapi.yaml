@@ -18269,10 +18269,10 @@ paths:
 
         No authentication middleware is applied to this route.
 
-        Implemented at `services/ai/src/routes/shopify-install.ts:214` (ai service).
+        Implemented at `services/ai/src/routes/shopify-install.ts:218` (ai service).
       security: []
       x-service: ai
-      x-source: services/ai/src/routes/shopify-install.ts:214
+      x-source: services/ai/src/routes/shopify-install.ts:218
       x-operation-type: read
       x-publicly-exposed: true
       responses:
@@ -18299,11 +18299,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/ai/src/routes/shopify-install.ts:471` (ai service).
+        Implemented at `services/ai/src/routes/shopify-install.ts:475` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/shopify-install.ts:471
+      x-source: services/ai/src/routes/shopify-install.ts:475
       x-operation-type: write
       x-publicly-exposed: true
       requestBody:
@@ -18349,11 +18349,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/ai/src/routes/shopify-install.ts:337` (ai service).
+        Implemented at `services/ai/src/routes/shopify-install.ts:341` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/shopify-install.ts:337
+      x-source: services/ai/src/routes/shopify-install.ts:341
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
@@ -18424,11 +18424,11 @@ paths:
 
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
 
-        Implemented at `services/ai/src/routes/shopify-install.ts:288` (ai service).
+        Implemented at `services/ai/src/routes/shopify-install.ts:292` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/shopify-install.ts:288
+      x-source: services/ai/src/routes/shopify-install.ts:292
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:

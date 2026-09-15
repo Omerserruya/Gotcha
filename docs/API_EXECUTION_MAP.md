@@ -15590,7 +15590,7 @@ GET /api/connectors/salesforce/oauth/init
 ### `GET /api/connectors/shopify/install`
 
 - **Purpose:** Shopify's signed app-entry request. PUBLIC by requirement.
-- **Handler:** `services/ai/src/routes/shopify-install.ts` line 214
+- **Handler:** `services/ai/src/routes/shopify-install.ts` line 218
 - **Authentication / tenant resolution:** **No authentication middleware.** This route is reachable without a token.
 - **Authorization:** None.
 - **Input validation:** No input.
@@ -15600,7 +15600,7 @@ GET /api/connectors/salesforce/oauth/init
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/connectors` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/shopify-install.ts`.
-2. **Handler.** `services/ai/src/routes/shopify-install.ts:214` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/shopify-install.ts:218` - inline `async (req, res)` handler.
 3. **Validation.** No input.
 4. **Authentication / tenant resolution.** **No authentication middleware.** This route is reachable without a token.
 5. **Authorization.** None.
@@ -15614,14 +15614,14 @@ GET /api/connectors/salesforce/oauth/init
 
 ```text
 GET /api/connectors/shopify/install
-  → handler  services/ai/src/routes/shopify-install.ts:214
+  → handler  services/ai/src/routes/shopify-install.ts:218
       → (responds directly; no downstream calls detected)
 ```
 
 ### `POST /api/connectors/shopify/install/cancel`
 
 - **Purpose:** Abandon an intent without installing.
-- **Handler:** `services/ai/src/routes/shopify-install.ts` line 471
+- **Handler:** `services/ai/src/routes/shopify-install.ts` line 475
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 - **Authorization:** None beyond authentication. Any authenticated member of the tenant may call this.
 - **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
@@ -15631,7 +15631,7 @@ GET /api/connectors/shopify/install
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/connectors` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/shopify-install.ts`.
-2. **Handler.** `services/ai/src/routes/shopify-install.ts:471` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/shopify-install.ts:475` - inline `async (req, res)` handler.
 3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 5. **Authorization.** None beyond authentication. Any authenticated member of the tenant may call this.
@@ -15646,14 +15646,14 @@ GET /api/connectors/shopify/install
 ```text
 POST /api/connectors/shopify/install/cancel
   → [authenticate → resolveTenant → requireTenantState(PENDING_ONBOARDING or ACTIVE)]
-  → handler  services/ai/src/routes/shopify-install.ts:471
+  → handler  services/ai/src/routes/shopify-install.ts:475
       → (responds directly; no downstream calls detected)
 ```
 
 ### `POST /api/connectors/shopify/install/claim`
 
 - **Purpose:** Bind a verified-but-unclaimed installation to the caller's workspace.
-- **Handler:** `services/ai/src/routes/shopify-install.ts` line 337
+- **Handler:** `services/ai/src/routes/shopify-install.ts` line 341
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 - **Authorization:** Gate: `canConnectSystems`
 - **Input validation:** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
@@ -15663,7 +15663,7 @@ POST /api/connectors/shopify/install/cancel
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/connectors` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/shopify-install.ts`.
-2. **Handler.** `services/ai/src/routes/shopify-install.ts:337` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/shopify-install.ts:341` - inline `async (req, res)` handler.
 3. **Validation.** **No schema.** The handler reads `req.body` directly, so the accepted shape is not verifiable from source and is not enforced.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **ACTIVE**.
 5. **Authorization.** Gate: `canConnectSystems`
@@ -15678,14 +15678,14 @@ POST /api/connectors/shopify/install/cancel
 ```text
 POST /api/connectors/shopify/install/claim
   → [authenticate → resolveTenant → requireTenantState(ACTIVE) → canConnectSystems]
-  → handler  services/ai/src/routes/shopify-install.ts:337
+  → handler  services/ai/src/routes/shopify-install.ts:341
       → (responds directly; no downstream calls detected)
 ```
 
 ### `GET /api/connectors/shopify/install/pending`
 
 - **Purpose:** What is waiting for this browser to claim, if anything.
-- **Handler:** `services/ai/src/routes/shopify-install.ts` line 288
+- **Handler:** `services/ai/src/routes/shopify-install.ts` line 292
 - **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 - **Authorization:** Gate: `canConnectSystems`
 - **Input validation:** No body schema. Path and query parameters are read directly by the handler.
@@ -15695,7 +15695,7 @@ POST /api/connectors/shopify/install/claim
 #### Execution flow
 
 1. **Route registration.** `ai` service mounts this router at `/api/connectors` in `services/ai/src/index.ts`; the route is declared in `services/ai/src/routes/shopify-install.ts`.
-2. **Handler.** `services/ai/src/routes/shopify-install.ts:288` - inline `async (req, res)` handler.
+2. **Handler.** `services/ai/src/routes/shopify-install.ts:292` - inline `async (req, res)` handler.
 3. **Validation.** No body schema. Path and query parameters are read directly by the handler.
 4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body. Tenant status gate: **PENDING_ONBOARDING or ACTIVE**.
 5. **Authorization.** Gate: `canConnectSystems`
@@ -15710,7 +15710,7 @@ POST /api/connectors/shopify/install/claim
 ```text
 GET /api/connectors/shopify/install/pending
   → [authenticate → resolveTenant → requireTenantState(PENDING_ONBOARDING or ACTIVE) → canConnectSystems]
-  → handler  services/ai/src/routes/shopify-install.ts:288
+  → handler  services/ai/src/routes/shopify-install.ts:292
       → (responds directly; no downstream calls detected)
 ```
 

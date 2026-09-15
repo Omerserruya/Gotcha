@@ -647,6 +647,14 @@ function SetupContent() {
       // store. The `shop` parameter this used to build from a text box is gone
       // (App Store requirement 2.3.1).
       const url = await beginConnect({ token, slug, flow: "onboarding" });
+      if (!url) {
+        // Shopify only, and only before the App Store listing is approved:
+        // there is no reachable Shopify page to send the merchant to, so
+        // explain instead of navigating to a 404.
+        setError("Installing GOTCHA starts on Shopify. Open the GOTCHA app from Shopify and approve the permissions - you will be brought back here with your store ready to connect, and nothing to type.");
+        setConnecting(false);
+        return;
+      }
       window.location.href = url; // full OAuth redirect; we resume on /setup return
     } catch (err: any) {
       setError(connectErrorMessage(slug, err));
