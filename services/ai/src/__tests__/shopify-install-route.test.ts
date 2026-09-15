@@ -501,6 +501,35 @@ describe("pending install survives a lost URL", () => {
     ).toBe(403);
   });
 
+  it("two concurrent claims produce exactly ONE connection", async () => {
+    // The pending record is consumed with GETDEL, which is atomic, so only one
+    // caller can ever win. Asserted rather than assumed: a non-atomic read+
+    // delete here would let a double-submit create two connections for one
+    // store, and the second would silently replace the first.
+    const [a, b] = await Promise.all([
+      request(app())
+        .post("/api/connectors/shopify/install/claim")
+        .set("Cookie", `${COOKIE}=${PENDING}`)
+        .send({}),
+      request(app())
+        .post("/api/connectors/shopify/install/claim")
+        .set("Cookie", `${COOKIE}=${PENDING}`)
+        .send({}),
+    ]);
+
+    // Exactly one winner. The loser's status depends on where it lands in the
+    // race and BOTH answers are correct refusals: 404 if its peek ran after the
+    // winner consumed the record, 409 if the peek succeeded and the consume
+    // then lost. Pinning one of them would make this test fail on timing
+    // rather than on behaviour.
+    const ok = [a.status, b.status].filter((c) => c === 200);
+    const refused = [a.status, b.status].filter((c) => c === 404 || c === 409);
+    expect(ok).toHaveLength(1);
+    expect(refused).toHaveLength(1);
+    // The invariant that actually matters: one store, one connection attempt.
+    expect(H.linkCalls).toHaveLength(1);
+  });
+
   it("a forged cookie naming no real installation gets nothing", async () => {
     const res = await request(app())
       .post("/api/connectors/shopify/install/claim")

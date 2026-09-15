@@ -119,6 +119,23 @@ describe("no manual Shopify shop-domain entry", () => {
     expect(code).not.toMatch(/still being published|aren't available just yet/i);
   });
 
+  it("an authorized-but-unclaimed store outranks the generic Connect prompt", () => {
+    // Offering "Connect Shopify" to somebody who has JUST completed Shopify's
+    // OAuth is the dead end review 132211 filmed: the store existed, and
+    // nothing on the screen would admit it. The pending card has to render
+    // above the connect copy, and it has to be driven by a lookup that needs
+    // no handle - the server recovers that from an HttpOnly cookie.
+    const code = stripComments(
+      fs.readFileSync(path.join(SRC, "components/IntegrationDetail.tsx"), "utf8"),
+    );
+    expect(code).toMatch(/getPendingShopifyInstall\(\s*token\s*\)/);
+    const pendingAt = code.indexOf("pendingShop ?");
+    const helpAt = code.indexOf("connectHelpText(");
+    expect(pendingAt).toBeGreaterThan(-1);
+    expect(helpAt).toBeGreaterThan(-1);
+    expect(pendingAt).toBeLessThan(helpAt);
+  });
+
   it("the signed-out bounce preserves where the user was going", () => {
     // THE DEFECT THIS PINS.
     //
