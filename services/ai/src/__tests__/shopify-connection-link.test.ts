@@ -42,11 +42,12 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
         // store, and the replacement question would fire on a first install.
         findUnique: vi.fn(async ({ where }: any) => {
           const { tenantId, integrationId } = where.tenantId_integrationId;
-          return (
-            H.rows.find(
-              (r: any) => r.tenantId === tenantId && r.integrationId === integrationId,
-            ) ?? null
+          const row = H.rows.find(
+            (r: any) => r.tenantId === tenantId && r.integrationId === integrationId,
           );
+          // Default CONNECTED so existing cases are unchanged; a test that
+          // cares sets `status` on the row explicitly.
+          return row ? { status: "CONNECTED", ...row } : null;
         }),
       },
     },
@@ -312,6 +313,44 @@ describe("replacing the workspace's existing store", () => {
       allowReplace: true,
     });
     expect(r).toMatchObject({ ok: false, reason: "shop_taken" });
+  });
+});
+
+describe("a DISCONNECTED store is not a store this workspace holds", () => {
+  // Production has exactly this shape: the demo workspace carries a
+  // DISCONNECTED Shopify row from an old uninstall. Counting it would ask
+  // anyone connecting a store there to "replace" a store that is not
+  // connected, naming it on screen - on the page an App Store reviewer reads.
+
+  it("lets a workspace whose store was uninstalled connect a different one", async () => {
+    await linkShopifyShopToTenant({ tenantId: "t1", shopDomain: SHOP, credentials: CREDS });
+    const row = H.rows.find((r: any) => r.tenantId === "t1");
+    row.status = "DISCONNECTED";
+
+    // No replacement is pending, so no confirmation is demanded.
+    expect(await pendingStoreReplacement("t1", "brand-new.myshopify.com")).toBeNull();
+
+    const r = await linkShopifyShopToTenant({
+      tenantId: "t1",
+      shopDomain: "brand-new.myshopify.com",
+      credentials: CREDS,
+    });
+    expect(r.ok).toBe(true);
+    expect((r as any).replacedShopDomain).toBeUndefined();
+  });
+
+  it("but the shop still cannot be taken by ANOTHER workspace", async () => {
+    // Ownership is deliberately retained across an uninstall so a reinstall
+    // lands back in the same workspace. That must not be weakened by the above.
+    await linkShopifyShopToTenant({ tenantId: "t1", shopDomain: SHOP, credentials: CREDS });
+    H.rows.find((r: any) => r.tenantId === "t1").status = "DISCONNECTED";
+
+    const stolen = await linkShopifyShopToTenant({
+      tenantId: "t2",
+      shopDomain: SHOP,
+      credentials: CREDS,
+    });
+    expect(stolen).toMatchObject({ ok: false, reason: "shop_taken" });
   });
 });
 

@@ -115,9 +115,30 @@ async function currentShopForTenant(
 ): Promise<{ connectionId: string; shopDomain: string | null } | null> {
   const row = await (prisma as any).tenantIntegration.findUnique({
     where: { tenantId_integrationId: { tenantId, integrationId: catalogId } },
-    select: { id: true, config: true },
+    select: { id: true, status: true, config: true },
   });
   if (!row) return null;
+
+  // A DISCONNECTED row does NOT count as holding a store.
+  //
+  // The row survives an uninstall on purpose - it keeps tenant ownership so a
+  // reinstall lands back in the same workspace, which is what `findShopOwner`
+  // relies on. But "does this workspace already have a store?" is a different
+  // question from "who owns this shop", and answering the first one with a
+  // dead row is wrong twice over:
+  //
+  //   • a workspace that uninstalled its store does not have one, and being
+  //     told it must disconnect something it already disconnected is nonsense;
+  //   • production has exactly this shape. The demo workspace carries a
+  //     DISCONNECTED Shopify row, so anyone connecting a store there would
+  //     have been asked to replace a store that is not connected - named out
+  //     loud, on the screen an App Store reviewer would be looking at.
+  //
+  // Cross-tenant ownership is unaffected: `findShopOwner` still counts
+  // DISCONNECTED rows, so a store cannot be taken by another workspace just
+  // because it was uninstalled.
+  if (String(row.status) === "DISCONNECTED") return null;
+
   return {
     connectionId: row.id,
     shopDomain: normalizeShopifyShopDomain((row.config as any)?.shopDomain) || null,
