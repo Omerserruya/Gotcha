@@ -23,14 +23,11 @@ with **1.1.1** listed separately under "Other updates".
 
 ## 2. Root cause
 
-Nothing in the installation flow was broken. The reviewer's own app history
-proves it: on their store, `Installed` at 9:17 pm was followed by
-`Subscription charge activated` at 9:33 pm. OAuth, the store link, plan
-selection and Partner API verification all completed on a store that was not
-ours and was not on any list.
+There were **three** defects, not one. The first was the message the reviewer
+saw; the other two are why they could not have connected a store even without
+it, and they were only found after Shopify Support reframed the problem.
 
-What failed was a single in-app shortcut, and it failed for a configuration
-reason:
+### 2a. The Connect button refused on a configuration gap
 
 | Layer | Finding |
 |---|---|
@@ -42,17 +39,43 @@ reason:
 
 A missing environment variable had become the merchant's error message.
 
-Two aggravating factors sat behind it:
+Behind it sat a design fault: one variable fed two different identifiers. The
+App Store listing slug (`apps.shopify.com/<slug>`) and the app handle used in
+admin deep links (`/charges/<handle>/pricing_plans`) are not guaranteed to
+match, so keeping the pricing URL correct meant leaving the variable blank,
+which disabled the button.
 
-1. **One variable fed two different identifiers.** Shopify uses "handle" for
-   the App Store listing slug (`apps.shopify.com/<slug>`) and for the app
-   handle used in admin deep links (`/charges/<handle>/pricing_plans`). They
-   are not guaranteed to match. Because a single variable drove both, keeping
-   the pricing URL correct meant leaving it blank, which disabled the button.
-2. **A server-side shop list gated billing.** `SHOPIFY_BILLING_TEST_SHOPS`
-   decided which stores entered the App Pricing flow. A reviewer works from a
-   store nobody added to that list, so the reviewer would have travelled a
-   different code path from the one under review.
+### 2b. The sign-in redirect destroyed the parked installation
+
+This is the one that actually mattered, and the database proves it. The
+reviewer's store appears **nowhere** in our data: no `CommerceConnection`, no
+`TenantIntegration`, no subscription, no entitlement. Shopify recorded
+`Installed` and then an activated plan charge on it. OAuth succeeded and the
+installation was then unreachable.
+
+An install that begins on Shopify has no GOTCHA session, so the callback parks
+the verified installation and redirects to
+`/settings/business-systems/shopify/finish?handle=...`. That handle was the
+only reference to the authorized store.
+
+`AppLayout` sent every signed-out user to a bare `/login`. `beginLogin` then
+recorded `window.location` as the return path, but by then the location **was**
+`/login`, so the original URL was already gone. Sign in, land on the dashboard,
+Shopify reads `DISCONNECTED`, and there is no route back. Every other caller in
+the codebase passes `?next=`; the generic guard did not.
+
+### 2c. The parked installation expired too quickly
+
+`PENDING_CONNECTION_TTL_SECONDS` was 15 minutes. The reviewer installed at
+21:17, so the record expired at 21:32; Shopify logged their plan approval at
+21:33. Fifteen minutes is not enough for a first-time user to find credentials
+and complete an identity-provider flow.
+
+### 2d. A server-side shop list gated billing
+
+`SHOPIFY_BILLING_TEST_SHOPS` decided which stores entered the App Pricing flow,
+so a reviewer's store would have taken a different code path from the one under
+review.
 
 ## 3. What changed
 
@@ -67,6 +90,14 @@ Two aggravating factors sat behind it:
   is retained only as a boot-time diagnostic. It was **not** replaced with a
   reviewer-specific tenant or shop allowlist. Every connected store now follows
   the same path; what varies is the evidence, not the code path.
+- **A parked installation now survives sign-in.** The handle is additionally an
+  HttpOnly, SameSite=Lax cookie set at the OAuth callback, so it survives a full
+  OIDC round trip. The Shopify settings screen surfaces the authorized store
+  with a "Finish connecting" action instead of offering Connect to somebody who
+  has just completed Shopify's OAuth. `AppLayout` now preserves the path AND
+  query when bouncing to login.
+- **The parked installation is held for 2 hours**, configurable via
+  `SHOPIFY_PENDING_INSTALL_TTL_SECONDS` and clamped to [5m, 24h].
 - **Connecting a second store is now an explicit decision.** A workspace holds
   one Shopify store, so a second connection necessarily disconnects the first.
   That used to happen silently. The merchant is now shown which store would be
@@ -84,42 +115,55 @@ re-verified against the Partner API before any entitlement moves.
 ## 4. Notes for the reviewer (paste this)
 
 Thank you for the detailed report and the screencast. They identified the
-problem precisely.
+problem precisely, and your support team's follow-up was exactly right about
+the cause.
 
-**What was wrong.** The installation flow itself was working. The failure was a
-self-imposed block in our own application: our "Connect Shopify" button
-required an App Store listing handle that was missing from one service's
-configuration, and when it was missing the button returned an error instead of
-sending the merchant to Shopify. That error message is the one you saw. It has
-been removed, and the underlying configuration gap has been fixed.
+**What was wrong.** Our installation and OAuth flow worked; your own app
+history confirms it, showing the install and then an activated plan charge on
+your store. The failure came afterwards. When an installation begins on
+Shopify, the merchant has no GOTCHA session yet, so we park the authorized
+store and ask them to sign in. Our sign-in redirect discarded the reference to
+that parked installation, and a second defect expired it after fifteen minutes.
+So after signing in there was no way to reach the store you had just
+authorized, and the Shopify page correctly reported it as not connected.
 
-**What to test.** Sign in with the test credentials supplied with this
-submission, then go to **Settings > Business Systems > Shopify** and press
-**Connect Shopify**. You will be sent to Shopify to select and authorize your
-own store. At no point are you asked to type a shop domain.
+Both are fixed. The reference now survives the entire sign-in flow, the parked
+installation is held long enough to complete a first-time sign-in, and the
+Shopify settings page now surfaces an authorized-but-unclaimed store directly,
+with a "Finish connecting" action.
 
-**One thing to be aware of about the listing URL.** The Connect button points
-at our official App Store listing page. Because the app is still awaiting
-approval, that URL is not publicly reachable yet. It will become available to
-every merchant the moment the listing is approved, with no code change on our
-side. So that you are not blocked by this during review, you can install
-directly using the install link included with this submission, which exercises
-exactly the same OAuth flow, the same store link and the same billing path.
+**How to test.**
 
-**The test account.** The account supplied has no Shopify store attached, so
-the Connect flow starts clean. If you connect a store and later wish to connect
-a different one, the app will tell you which store would be disconnected and
-ask you to confirm, rather than replacing it silently.
+1. Start the installation from your usual App Review surface and approve the
+   requested permissions.
+2. You will arrive at GOTCHA. Sign in with the supplied test account.
+3. The store you just authorized is detected automatically and shown with a
+   **Finish connecting** action. You do not need to install again, and you are
+   never asked to type a `.myshopify.com` domain.
+4. Complete Shopify App Pricing when prompted.
+5. Shopify then shows as **CONNECTED**, and the full feature set is available.
+
+**The test account.** It belongs to a workspace created specifically for this
+review, with no Shopify store attached and no inherited state. A workspace uses
+one Shopify store at a time; if you connect a second, the app names the store
+that would be disconnected and asks you to confirm rather than replacing it
+silently.
+
+**About the "Connect Shopify" button.** It points at our App Store listing,
+which is the compliant target once the listing is public. While the app is
+still awaiting approval that URL is not publicly reachable, so please begin
+from your App Review surface as above. Nothing else in the flow depends on
+publication.
 
 **On requirement 1.1.1.** GOTCHA is not an embedded app. `embedded` is `false`
 in our app configuration, we ship no App Bridge and no session-token code, and
 our live responses send `Content-Security-Policy: frame-ancestors 'self'` and
-`X-Frame-Options: SAMEORIGIN`, so the application cannot be rendered inside the
-Shopify admin at all. It is a standalone application that authenticates through
-the authorization code grant. Your own screencast also shows the application
-running correctly in an incognito window: the session, navigation and settings
-pages all loaded there, and the only thing that stopped the flow was the
-message described above.
+`X-Frame-Options: SAMEORIGIN`, so the application cannot render inside the
+Shopify admin at all. Your screencast also shows it running correctly in a
+Chrome Incognito window. We understand the Embedded App Checks can retain a
+stale state after an app moves from embedded to non-embedded, and we would be
+grateful if you could confirm whether 1.1.1 was a substantive finding here or
+that stale signal.
 
 ---
 
