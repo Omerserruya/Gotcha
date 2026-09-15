@@ -201,6 +201,41 @@ router.get(
   },
 );
 
+/**
+ * Whether a Shopify connection can be STARTED from inside GOTCHA right now.
+ *
+ * Read-only on purpose. `/install/start` mints a server-side intent and sets a
+ * cookie, so a screen cannot call it just to decide what to render - doing so
+ * would create an install intent for every page view.
+ *
+ * The UI needs this BEFORE the button is pressed. Learning at click time that
+ * installation is not available yet means the merchant presses a button that
+ * then explains why it does nothing, which is a worse version of the refusal
+ * that failed review 132211.
+ */
+router.get(
+  "/connectors/shopify/install/availability",
+  authenticate,
+  resolveTenant,
+  requireOnboardingOrActiveTenant(),
+  canConnectSystems,
+  async (_req: Request, res: Response) => {
+    const entry = resolveShopifyInstallEntry();
+    res.json({
+      data: {
+        mode: entry.mode,
+        url: entry.url,
+        // Where an operator can point a merchant while the listing is not
+        // public - during App Store review this is the install link from the
+        // Shopify dashboard. Optional, and NEVER a substitute for the listing:
+        // it is shown as help, not as the install path, and it is not a URL
+        // this service constructs.
+        helpUrl: process.env.SHOPIFY_INSTALL_HELP_URL?.trim() || null,
+      },
+    });
+  },
+);
+
 // ─── 2. The public install handler ───────────────────────────
 
 /**

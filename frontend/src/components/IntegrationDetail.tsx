@@ -25,7 +25,7 @@ import CustomDbToolsSection from "@/components/CustomDbToolsSection";
 import { AirtableMappingCard } from "@/components/integrations/AirtableMappingCard";
 import clsx from "clsx";
 import { beginConnect, connectHelpText, connectButtonLabel, connectErrorMessage } from "@/lib/shopify-connect";
-import { getPendingShopifyInstall } from "@/lib/api";
+import { getPendingShopifyInstall, getShopifyInstallAvailability } from "@/lib/api";
 
 const RISK_BADGE: Record<string, string> = {
   LOW: "bg-green-100 text-green-700",
@@ -228,6 +228,8 @@ export function IntegrationDetail({
    * before the listing goes live.
    */
   const [notPublished, setNotPublished] = useState(false);
+  /** Where an operator points merchants while the listing is not public. */
+  const [installHelpUrl, setInstallHelpUrl] = useState<string | null>(null);
   useEffect(() => {
     if (slug !== "shopify" || !token || isConnected) {
       setPendingShop(null);
@@ -239,6 +241,18 @@ export function IntegrationDetail({
       // 404 is the ordinary case: nothing is waiting. It must never surface as
       // an error on a screen whose job is to offer a connection.
       .catch(() => { if (!cancelled) setPendingShop(null); });
+
+    // Asked BEFORE the button is rendered, not when it is pressed. Learning at
+    // click time that installation cannot start yet means the merchant presses
+    // a button that then explains why it did nothing.
+    getShopifyInstallAvailability(token)
+      .then((r) => {
+        if (cancelled) return;
+        setNotPublished(r.data.mode === "not_published");
+        setInstallHelpUrl(r.data.helpUrl);
+      })
+      .catch(() => { /* leave the button as-is rather than block on a read */ });
+
     return () => { cancelled = true; };
   }, [slug, token, isConnected]);
 
@@ -568,15 +582,31 @@ export function IntegrationDetail({
                     </div>
                   ) : null}
                   {notPublished && !pendingShop ? (
-                    <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-                      <p className="text-sm text-gray-800">
-                        Installing GOTCHA starts on Shopify.
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                      <p className="text-sm font-medium text-gray-900">
+                        GOTCHA is currently in Shopify App Store review
                       </p>
-                      <p className="mt-1 text-sm text-gray-600">
-                        Open the GOTCHA app from Shopify and approve the permissions. You will be
-                        brought back here and your store will be ready to connect, with nothing to
-                        type.
+                      <p className="mt-1 text-sm text-gray-700">
+                        Until the listing is published, installation has to start on Shopify rather
+                        than here. Open GOTCHA from Shopify and approve the permissions.
                       </p>
+                      <p className="mt-2 text-sm text-gray-700">
+                        Then come back and sign in: your store will be waiting here, ready to
+                        finish connecting. You will never be asked to type your store address.
+                      </p>
+                      {installHelpUrl ? (
+                        <a
+                          href={installHelpUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-3 inline-flex items-center gap-2 px-5 py-2.5 bg-gray-900 hover:bg-black text-white rounded-xl text-sm font-medium transition"
+                        >
+                          Start on Shopify
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                          </svg>
+                        </a>
+                      ) : null}
                     </div>
                   ) : null}
                   <p className="text-sm text-gray-500">
@@ -654,7 +684,8 @@ export function IntegrationDetail({
                         setTestResult({ ok: false, msg: connectErrorMessage(slug, err) });
                       }
                     }}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-sm font-medium transition shadow-sm"
+                    disabled={notPublished && !pendingShop && !isConnected && !editingCreds}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-sm font-medium transition shadow-sm disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-violet-600"
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />

@@ -2433,6 +2433,19 @@ export function startShopifyInstall(token: string, flow?: string) {
  * on Shopify with no GOTCHA session. Shop name only - the access token never
  * reaches the browser.
  */
+/**
+ * Can a Shopify connection be started from inside GOTCHA right now?
+ *
+ * Read-only. Deliberately NOT `startShopifyInstall`, which mints a server-side
+ * install intent and sets a cookie - calling that to decide what to render
+ * would create an intent on every page view.
+ */
+export function getShopifyInstallAvailability(token: string) {
+  return apiFetch<{
+    data: { mode: "listing" | "not_published"; url: string | null; helpUrl: string | null };
+  }>("/api/connectors/shopify/install/availability", { token });
+}
+
 export function getPendingShopifyInstall(token: string, handle?: string) {
   // `handle` is OPTIONAL, and that is the point. The server falls back to an
   // HttpOnly cookie set at the OAuth callback, so a store authorized on

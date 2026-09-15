@@ -18269,10 +18269,10 @@ paths:
 
         No authentication middleware is applied to this route.
 
-        Implemented at `services/ai/src/routes/shopify-install.ts:218` (ai service).
+        Implemented at `services/ai/src/routes/shopify-install.ts:253` (ai service).
       security: []
       x-service: ai
-      x-source: services/ai/src/routes/shopify-install.ts:218
+      x-source: services/ai/src/routes/shopify-install.ts:253
       x-operation-type: read
       x-publicly-exposed: true
       responses:
@@ -18283,6 +18283,56 @@ paths:
               schema:
                 $ref: "#/components/schemas/EnvelopeUnknown"
           x-inferred: Status inferred from Express defaults; the handler calls no explicit res.status() for success.
+  /api/connectors/shopify/install/availability:
+    get:
+      operationId: getConnectorsShopifyInstallAvailability
+      tags:
+      - Integrations
+      summary: List Availability
+      description: |-
+        Whether a Shopify connection can be STARTED from inside GOTCHA right now.
+
+        Read-only on purpose. `/install/start` mints a server-side intent and sets a
+        cookie, so a screen cannot call it just to decide what to render - doing so
+        would create an install intent for every page view.
+
+        The UI needs this BEFORE the button is pressed. Learning at click time that
+        installation is not available yet means the merchant presses a button that
+        then explains why it does nothing, which is a worse version of the refusal
+        that failed review 132211.
+
+        Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
+
+        Implemented at `services/ai/src/routes/shopify-install.ts:216` (ai service).
+      security:
+      - bearerAuth: []
+      x-service: ai
+      x-source: services/ai/src/routes/shopify-install.ts:216
+      x-operation-type: read
+      x-publicly-exposed: true
+      x-authorization:
+        gates:
+        - canConnectSystems
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeUnknown"
+          x-inferred: Status inferred from Express defaults; the handler calls no explicit res.status() for success.
+        "401":
+          description: Missing, invalid or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Authenticated, but not permitted to perform this operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /api/connectors/shopify/install/cancel:
     post:
       operationId: postConnectorsShopifyInstallCancel
@@ -18299,11 +18349,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/ai/src/routes/shopify-install.ts:475` (ai service).
+        Implemented at `services/ai/src/routes/shopify-install.ts:510` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/shopify-install.ts:475
+      x-source: services/ai/src/routes/shopify-install.ts:510
       x-operation-type: write
       x-publicly-exposed: true
       requestBody:
@@ -18349,11 +18399,11 @@ paths:
 
         This is a write operation.
 
-        Implemented at `services/ai/src/routes/shopify-install.ts:341` (ai service).
+        Implemented at `services/ai/src/routes/shopify-install.ts:376` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/shopify-install.ts:341
+      x-source: services/ai/src/routes/shopify-install.ts:376
       x-operation-type: write
       x-publicly-exposed: true
       x-authorization:
@@ -18424,11 +18474,11 @@ paths:
 
         Requires a valid Authentik access token. Tenant is resolved from the token, never from the request body. Tenant status must be PENDING_ONBOARDING or ACTIVE.
 
-        Implemented at `services/ai/src/routes/shopify-install.ts:292` (ai service).
+        Implemented at `services/ai/src/routes/shopify-install.ts:327` (ai service).
       security:
       - bearerAuth: []
       x-service: ai
-      x-source: services/ai/src/routes/shopify-install.ts:292
+      x-source: services/ai/src/routes/shopify-install.ts:327
       x-operation-type: read
       x-publicly-exposed: true
       x-authorization:

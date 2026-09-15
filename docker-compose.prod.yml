@@ -624,6 +624,11 @@ services:
       #
       # Flip this to "true" on approval day. No rebuild, no code change.
       SHOPIFY_APP_STORE_LISTING_LIVE: ${SHOPIFY_APP_STORE_LISTING_LIVE:-false}
+      # Optional. Where to point a merchant while the listing is not public -
+      # during App Store review, the install link from the Shopify dashboard.
+      # Shown as HELP beside the explanation, never as the install path, and
+      # never constructed by us. Unset is fine: the explanation stands alone.
+      SHOPIFY_INSTALL_HELP_URL: ${SHOPIFY_INSTALL_HELP_URL:-}
       # How long a verified-but-unclaimed Shopify installation is held.
       # Was a hard-coded 15 minutes, which expired before the App Store
       # reviewer finished signing in and left their authorized store
