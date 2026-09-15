@@ -71,6 +71,13 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
 vi.mock("../services/shopify-install-intent.service", () => ({
   INSTALL_INTENT_COOKIE: "gotcha_shopify_intent",
   INSTALL_INTENT_TTL_SECONDS: 1800,
+  PENDING_INSTALL_COOKIE: "gotcha_shopify_pending",
+  // Real cookie writes, so the tests assert the header the browser actually
+  // gets rather than that a helper was called.
+  setPendingInstallCookie: (res: any, handle: string) =>
+    res.cookie("gotcha_shopify_pending", handle, { httpOnly: true, sameSite: "lax", path: "/" }),
+  clearPendingInstallCookie: (res: any) =>
+    res.clearCookie("gotcha_shopify_pending", { path: "/" }),
   createInstallIntent: vi.fn(async (input: any) => {
     const handle = "i".repeat(64);
     H.intents.set(handle, { ...input });
@@ -393,6 +400,117 @@ describe("GET /connectors/shopify/install (public)", () => {
   });
 });
 
+// ─── Recovering an install after the URL handle is gone ──────
+
+describe("pending install survives a lost URL", () => {
+  // THE REGRESSION THIS EXISTS FOR.
+  //
+  // The pending handle lived only in the redirect's query string. A merchant
+  // who installs from Shopify with no GOTCHA session is bounced to /login, and
+  // that bounce discarded the URL - so the store they had just authorized
+  // became permanently unreachable. They signed in, saw Shopify as
+  // DISCONNECTED, and had no way to ask for it back. Shopify App Store review
+  // 132211 recorded exactly that and failed us under 4.5.5.
+  //
+  // The handle is now ALSO an HttpOnly cookie, set at the OAuth callback.
+
+  const COOKIE = "gotcha_shopify_pending";
+  const PENDING = "p".repeat(64);
+
+  beforeEach(() => {
+    // A verified-but-unclaimed installation, exactly as the OAuth callback
+    // would have parked it.
+    H.pendings.set(PENDING, {
+      shopDomain: SHOP,
+      credentials: { accessToken: "shpat_secret" },
+    });
+  });
+
+  it("finds the store from the cookie with NO handle in the URL", async () => {
+    const res = await request(app())
+      .get("/api/connectors/shopify/install/pending")
+      .set("Cookie", `${COOKIE}=${PENDING}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.shopDomain).toBe(SHOP);
+    // Flagged as recovered, so the UI can say "we found the store you just
+    // authorized" instead of implying the merchant navigated here on purpose.
+    expect(res.body.data.recovered).toBe(true);
+  });
+
+  it("claims from the cookie with no handle in the body", async () => {
+    const res = await request(app())
+      .post("/api/connectors/shopify/install/claim")
+      .set("Cookie", `${COOKIE}=${PENDING}`)
+      .send({});
+
+    expect(res.status).toBe(200);
+    expect(H.linkCalls[0]).toMatchObject({ shopDomain: SHOP });
+  });
+
+  it("clears the cookie once the store is connected", async () => {
+    // Otherwise the next page load would keep offering to finish an
+    // installation that is already a connection.
+    const res = await request(app())
+      .post("/api/connectors/shopify/install/claim")
+      .set("Cookie", `${COOKIE}=${PENDING}`)
+      .send({});
+
+    expect(res.status).toBe(200);
+    const setCookie = String(res.headers["set-cookie"] ?? "");
+    expect(setCookie).toContain(COOKIE);
+    // An expiry in the past is how Express clears a cookie.
+    expect(setCookie).toMatch(/Expires=Thu, 01 Jan 1970|Max-Age=0/);
+  });
+
+  it("clears a cookie pointing at an installation that is gone", async () => {
+    const res = await request(app())
+      .get("/api/connectors/shopify/install/pending")
+      .set("Cookie", `${COOKIE}=${"z".repeat(64)}`);
+
+    expect(res.status).toBe(404);
+    expect(String(res.headers["set-cookie"] ?? "")).toContain(COOKIE);
+  });
+
+  it("prefers an explicit URL handle over the cookie", async () => {
+    // A stale cookie must never win over what the merchant was actually sent
+    // to. Both resolve here, and the URL is the more specific statement.
+    const stale = "y".repeat(64);
+    H.pendings.set(stale, { shopDomain: "stale-store.myshopify.com", credentials: { accessToken: "t" } });
+    const res = await request(app())
+      .get(`/api/connectors/shopify/install/pending?handle=${PENDING}`)
+      .set("Cookie", `${COOKIE}=${stale}`);
+
+    expect(res.body.data.shopDomain).toBe(SHOP);
+    expect(res.body.data.recovered).toBe(false);
+  });
+
+  it("still requires authentication and the connect permission", async () => {
+    // The cookie proves the browser completed Shopify's OAuth. It proves
+    // nothing about WHO may attach that store to a workspace, and must never
+    // be treated as authorization on its own.
+    H.authed.yes = false;
+    expect(
+      (await request(app()).get("/api/connectors/shopify/install/pending").set("Cookie", `${COOKIE}=${PENDING}`)).status,
+    ).toBe(401);
+
+    H.authed.yes = true;
+    H.permission.granted = false;
+    expect(
+      (await request(app()).post("/api/connectors/shopify/install/claim").set("Cookie", `${COOKIE}=${PENDING}`).send({})).status,
+    ).toBe(403);
+  });
+
+  it("a forged cookie naming no real installation gets nothing", async () => {
+    const res = await request(app())
+      .post("/api/connectors/shopify/install/claim")
+      .set("Cookie", `${COOKIE}=${"f".repeat(64)}`)
+      .send({});
+    expect(res.status).toBe(404);
+    expect(H.linkCalls).toHaveLength(0);
+  });
+});
+
 // ─── One store per workspace, replaced only on purpose ───────
 
 describe("multiple stores", () => {
@@ -545,8 +663,15 @@ describe("shopify install claim", () => {
       `/api/connectors/shopify/install/pending?handle=${PENDING}`,
     );
     expect(res.status).toBe(200);
-    expect(res.body.data).toEqual({ shopDomain: SHOP });
+    // An explicit key allow-list rather than a shape snapshot: the point is
+    // that nothing SENSITIVE creeps in, and a new presentational field should
+    // not have to weaken the guard to be added.
+    expect(Object.keys(res.body.data).sort()).toEqual(["recovered", "shopDomain"]);
+    expect(res.body.data.shopDomain).toBe(SHOP);
     expect(JSON.stringify(res.body)).not.toContain("shpat_secret");
+    // The HANDLE is the key to the stored access token, so it must not be
+    // echoed back either. The browser carries it in an HttpOnly cookie.
+    expect(JSON.stringify(res.body)).not.toContain(PENDING);
   });
 
   it("peeking does not burn the claim - a page reload must be safe", async () => {

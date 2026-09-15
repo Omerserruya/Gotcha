@@ -56,8 +56,10 @@ import {
   discardInstallIntent,
   peekPendingConnection,
   consumePendingConnection,
+  clearPendingInstallCookie,
   INSTALL_INTENT_COOKIE,
   INSTALL_INTENT_TTL_SECONDS,
+  PENDING_INSTALL_COOKIE,
 } from "../services/shopify-install-intent.service";
 import {
   SHOPIFY_OAUTH_SCOPES,
@@ -117,6 +119,20 @@ function installErrorRedirect(reason: string): string {
 export function readIntentCookie(req: Request): string | null {
   try {
     return parseSessionCookie(req.headers?.cookie, INSTALL_INTENT_COOKIE);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The pending-install handle this browser is carrying, if any.
+ *
+ * Same codec and same failure posture as `readIntentCookie`: a malformed
+ * Cookie header means "no pending install", never a failed request.
+ */
+export function readPendingCookie(req: Request): string | null {
+  try {
+    return parseSessionCookie(req.headers?.cookie, PENDING_INSTALL_COOKIE);
   } catch {
     return null;
   }
@@ -276,12 +292,35 @@ router.get(
   requireOnboardingOrActiveTenant(),
   canConnectSystems,
   async (req: Request, res: Response) => {
-    const summary = await peekPendingConnection(singleValue(req.query.handle));
+    // The URL handle FIRST, the cookie as the fallback.
+    //
+    // The cookie is what makes a Shopify-originated install survivable. The
+    // handle used to live only in the redirect's query string, so the
+    // signed-out login bounce destroyed it and the authorized store became
+    // unreachable - the failure Shopify App Store review 132211 recorded.
+    const handle = singleValue(req.query.handle) || readPendingCookie(req);
+    const summary = await peekPendingConnection(handle);
     if (!summary) {
+      // Nothing to find. Drop a cookie pointing at an expired or consumed
+      // record so the Shopify screen stops offering to finish an installation
+      // that no longer exists.
+      clearPendingInstallCookie(res);
       res.status(404).json({ error: "pending_install_not_found" });
       return;
     }
-    res.json({ data: { shopDomain: summary.shopDomain } });
+    // The shop name only, and deliberately NOT the handle. The pending record
+    // also holds an access token, and the handle is the key to it; putting it
+    // back in a response body would place it where a script, a referrer header
+    // or a URL could carry it. The claim reads the same cookie instead, so the
+    // browser never needs to hold the value at all.
+    res.json({
+      data: {
+        shopDomain: summary.shopDomain,
+        // Lets the UI say "we found the store you just authorized" rather than
+        // implying the merchant navigated here on purpose.
+        recovered: !singleValue(req.query.handle),
+      },
+    });
   },
 );
 
@@ -302,7 +341,16 @@ router.post(
   requireActiveTenant(),
   canConnectSystems,
   async (req: Request, res: Response) => {
-    const handle = typeof req.body?.handle === "string" ? req.body.handle : undefined;
+    // Body first, cookie as the fallback - the same recovery the pending
+    // lookup uses, so a claim works after an OIDC round trip that dropped the
+    // URL. The handle proves only that THIS browser completed the Shopify
+    // authorization; who may claim it is decided by `authenticate`,
+    // `resolveTenant` and `canConnectSystems` above, and the shop comes from
+    // the server-side record rather than from anything the browser sent.
+    const handle =
+      (typeof req.body?.handle === "string" ? req.body.handle : undefined) ||
+      readPendingCookie(req) ||
+      undefined;
 
     // Peek first so a conflict does NOT burn the one-shot claim: a merchant who
     // hits "already connected elsewhere" must still be able to disconnect there
@@ -395,6 +443,10 @@ router.post(
       apiVersion: shopifyApiVersion(),
       acquisitionSource: "app_store",
     }).catch(() => null);
+
+    // The installation is now a connection, so the cookie must not survive to
+    // offer it again on the next page load.
+    clearPendingInstallCookie(res);
 
     res.json({
       data: {

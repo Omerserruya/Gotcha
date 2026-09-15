@@ -25,6 +25,7 @@ import CustomDbToolsSection from "@/components/CustomDbToolsSection";
 import { AirtableMappingCard } from "@/components/integrations/AirtableMappingCard";
 import clsx from "clsx";
 import { beginConnect, connectHelpText, connectButtonLabel, connectErrorMessage } from "@/lib/shopify-connect";
+import { getPendingShopifyInstall } from "@/lib/api";
 
 const RISK_BADGE: Record<string, string> = {
   LOW: "bg-green-100 text-green-700",
@@ -208,6 +209,31 @@ export function IntegrationDetail({
   // both unnecessary and forbidden by App Store requirement 2.3.1. The filter
   // is deliberately defensive: a stale catalog row must not be able to put the
   // field back.
+  // A store this browser already authorized on Shopify, waiting to be claimed.
+  //
+  // THE FAILURE THIS EXISTS FOR. A merchant who installs from Shopify with no
+  // GOTCHA session is redirected here to sign in. Until now, nothing on this
+  // screen looked for that installation: they saw Shopify as DISCONNECTED and
+  // a Connect button, with no route back to the store they had just
+  // authorized. Shopify App Store review 132211 recorded exactly that.
+  //
+  // The lookup needs no handle. The server recovers it from an HttpOnly cookie
+  // set at the OAuth callback, so it survives the whole login round trip.
+  const [pendingShop, setPendingShop] = useState<string | null>(null);
+  useEffect(() => {
+    if (slug !== "shopify" || !token || isConnected) {
+      setPendingShop(null);
+      return;
+    }
+    let cancelled = false;
+    getPendingShopifyInstall(token)
+      .then((r) => { if (!cancelled) setPendingShop(r.data.shopDomain); })
+      // 404 is the ordinary case: nothing is waiting. It must never surface as
+      // an error on a screen whose job is to offer a connection.
+      .catch(() => { if (!cancelled) setPendingShop(null); });
+    return () => { cancelled = true; };
+  }, [slug, token, isConnected]);
+
   if (slug === "shopify") {
     credFields = credFields.filter((f) => f.key !== "shop" && f.key !== "apiKey");
   }
@@ -511,6 +537,28 @@ export function IntegrationDetail({
                   catalog row is stale. */}
               {effectiveAuthType === "OAUTH2" ? (
                 <div className="space-y-3">
+                  {/* A store already authorized on Shopify takes priority over
+                      the generic Connect prompt. Offering "Connect" to someone
+                      who has JUST completed Shopify's OAuth is how review
+                      132211 dead-ended: the store existed, and nothing on this
+                      screen would admit it. */}
+                  {pendingShop ? (
+                    <div className="rounded-xl border border-violet-200 bg-violet-50 p-4">
+                      <p className="text-sm text-gray-800">
+                        <span className="font-semibold">{pendingShop}</span> is authorized on
+                        Shopify and ready to connect to this workspace.
+                      </p>
+                      <p className="mt-1 text-xs text-gray-500">
+                        You do not need to install it again.
+                      </p>
+                      <a
+                        href="/settings/business-systems/shopify/finish"
+                        className="mt-3 inline-flex items-center px-5 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-sm font-medium transition"
+                      >
+                        Finish connecting
+                      </a>
+                    </div>
+                  ) : null}
                   <p className="text-sm text-gray-500">
                     {connectHelpText(slug, Boolean(editingCreds) || isConnected)}
                   </p>

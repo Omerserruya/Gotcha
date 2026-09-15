@@ -61,6 +61,7 @@ import {
 import {
   createPendingConnection,
   consumeInstallIntent,
+  setPendingInstallCookie,
   INSTALL_INTENT_COOKIE,
 } from "../services/shopify-install-intent.service";
 import { resolveShopifyBillingOutcome } from "../services/shopify-billing-bridge.service";
@@ -584,6 +585,14 @@ router.get("/connectors/shopify/oauth/callback", async (req: Request, res: Respo
         scope: creds.scope,
         flow: payload.flow,
       });
+      // The handle goes in a cookie AS WELL AS the URL.
+      //
+      // In the URL alone it was the single reference to an authorized store,
+      // and the signed-out login bounce threw it away - which is how a
+      // Shopify-originated install became impossible to finish and how App
+      // Store review 132211 failed. The cookie survives the whole OIDC round
+      // trip, so the claim screen can still find the installation.
+      setPendingInstallCookie(res, handle);
       // Same fail-soft as the install entry point: a missing FRONTEND_URL must
       // not turn a SUCCESSFUL authorization into a 500 that loses the token.
       let base = "";
@@ -610,6 +619,7 @@ router.get("/connectors/shopify/oauth/callback", async (req: Request, res: Respo
         scope: creds.scope,
         flow: payload.flow,
       });
+      setPendingInstallCookie(res, handle);
       if (typeof payload.intentHandle === "string") {
         await consumeInstallIntent(payload.intentHandle);
       }

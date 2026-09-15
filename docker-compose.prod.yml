@@ -614,6 +614,11 @@ services:
       SHOPIFY_APP_STORE_HANDLE: ${SHOPIFY_APP_STORE_HANDLE:-}
       SHOPIFY_APP_PRICING_HANDLE: ${SHOPIFY_APP_PRICING_HANDLE:-}
       SHOPIFY_APP_STORE_SEARCH_TERM: ${SHOPIFY_APP_STORE_SEARCH_TERM:-GOTCHA}
+      # How long a verified-but-unclaimed Shopify installation is held.
+      # Was a hard-coded 15 minutes, which expired before the App Store
+      # reviewer finished signing in and left their authorized store
+      # unreachable. Defaults to 2h; clamped to [5m, 24h] in code.
+      SHOPIFY_PENDING_INSTALL_TTL_SECONDS: ${SHOPIFY_PENDING_INSTALL_TTL_SECONDS:-}
       # Empty by design in v1 - the Chat app needs no Admin API access.
       SHOPIFY_CHAT_SCOPES: ${SHOPIFY_CHAT_SCOPES:-}
       # Encrypts storefront visitor sessions. Mandatory in production:

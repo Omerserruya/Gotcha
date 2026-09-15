@@ -2433,10 +2433,18 @@ export function startShopifyInstall(token: string, flow?: string) {
  * on Shopify with no GOTCHA session. Shop name only - the access token never
  * reaches the browser.
  */
-export function getPendingShopifyInstall(token: string, handle: string) {
-  return apiFetch<{ data: { shopDomain: string } }>(
-    `/api/connectors/shopify/install/pending?handle=${encodeURIComponent(handle)}`,
-    { token },
+export function getPendingShopifyInstall(token: string, handle?: string) {
+  // `handle` is OPTIONAL, and that is the point. The server falls back to an
+  // HttpOnly cookie set at the OAuth callback, so a store authorized on
+  // Shopify can still be found after a redirect chain that dropped the URL -
+  // which is what a signed-out login bounce does, and what stranded the
+  // reviewer in App Store review 132211.
+  //
+  // `credentials: "include"` is load-bearing for exactly that reason.
+  const qs = handle ? `?handle=${encodeURIComponent(handle)}` : "";
+  return apiFetch<{ data: { shopDomain: string; recovered?: boolean } }>(
+    `/api/connectors/shopify/install/pending${qs}`,
+    { token, credentials: "include" },
   );
 }
 
@@ -2450,7 +2458,7 @@ export function getPendingShopifyInstall(token: string, handle: string) {
  * it, rather than having it silently overwritten. The handle survives that
  * refusal, so the answer can be resubmitted without reinstalling.
  */
-export function claimShopifyInstall(token: string, handle: string, replace = false) {
+export function claimShopifyInstall(token: string, handle?: string, replace = false) {
   return apiFetch<{
     data: {
       shopDomain: string;
@@ -2463,7 +2471,13 @@ export function claimShopifyInstall(token: string, handle: string, replace = fal
   }>("/api/connectors/shopify/install/claim", {
     token,
     method: "POST",
-    body: JSON.stringify(replace ? { handle, replace: true } : { handle }),
+    // `handle` is omitted when the browser is carrying the pending-install
+    // cookie instead. `credentials: "include"` is what makes that work.
+    body: JSON.stringify({
+      ...(handle ? { handle } : {}),
+      ...(replace ? { replace: true } : {}),
+    }),
+    credentials: "include",
   });
 }
 

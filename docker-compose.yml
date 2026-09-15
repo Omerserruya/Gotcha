@@ -528,6 +528,8 @@ services:
       # Both fall back to SHOPIFY_APP_HANDLE when unset, so this is additive.
       SHOPIFY_APP_STORE_HANDLE: ${SHOPIFY_APP_STORE_HANDLE:-}
       SHOPIFY_APP_PRICING_HANDLE: ${SHOPIFY_APP_PRICING_HANDLE:-}
+      SHOPIFY_APP_STORE_SEARCH_TERM: ${SHOPIFY_APP_STORE_SEARCH_TERM:-GOTCHA}
+      SHOPIFY_PENDING_INSTALL_TTL_SECONDS: ${SHOPIFY_PENDING_INSTALL_TTL_SECONDS:-}
       # ── GOTCHA Shopify CHAT app ───────────────────────────────────
       # RETIRED at the Core/Chat unification. There is ONE Shopify app now,
       # so app-proxy signatures, webhook HMACs and the Theme Editor deep
@@ -697,6 +699,8 @@ services:
       # Both fall back to SHOPIFY_APP_HANDLE when unset, so this is additive.
       SHOPIFY_APP_STORE_HANDLE: ${SHOPIFY_APP_STORE_HANDLE:-}
       SHOPIFY_APP_PRICING_HANDLE: ${SHOPIFY_APP_PRICING_HANDLE:-}
+      SHOPIFY_APP_STORE_SEARCH_TERM: ${SHOPIFY_APP_STORE_SEARCH_TERM:-GOTCHA}
+      SHOPIFY_PENDING_INSTALL_TTL_SECONDS: ${SHOPIFY_PENDING_INSTALL_TTL_SECONDS:-}
       # JSON maps. Plan handles and meter handles are CONFIGURATION and live in
       # the Partner Dashboard; prices are never defined in this repo.
       SHOPIFY_BILLING_PLAN_HANDLES: ${SHOPIFY_BILLING_PLAN_HANDLES:-}

@@ -15,6 +15,7 @@ import { CreditAlertBanner } from "./CreditAlertBanner";
 import { getOnboardingStatus } from "@/lib/api";
 import { destinationForTenantStatus } from "@/lib/payment-gate";
 import { setAnalyticsToken } from "@/lib/analytics";
+import { loginUrl } from "@/lib/marketing-origin";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, token, isLoading } = useAuth();
@@ -108,7 +109,31 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!isLoading && !user) {
-      router.replace("/login");
+      // WHERE the user was going has to survive the login, and it did not.
+      //
+      // This bounced to a bare "/login". `beginLogin` then recorded
+      // `window.location.pathname + search` as the return path - but by then
+      // the location WAS "/login", so the original URL was already gone. Every
+      // signed-out arrival landed on the dashboard afterwards, whatever they
+      // had clicked.
+      //
+      // That silently broke Shopify installation. A merchant who installs from
+      // Shopify with no GOTCHA session arrives at
+      // `/settings/business-systems/shopify/finish?handle=...`, and the handle
+      // in that query string is the ONLY reference to their authorized store.
+      // Dropping it stranded the installation: the merchant signed in, saw
+      // Shopify as DISCONNECTED, and had no way to reach the store they had
+      // just authorized. That is precisely what Shopify App Store review
+      // 132211 recorded on video.
+      //
+      // `search` is included deliberately, and `isSafeReturnPath` inside
+      // `loginUrl` rejects protocol-relative values so this cannot become an
+      // open redirect.
+      const here =
+        typeof window !== "undefined"
+          ? window.location.pathname + window.location.search
+          : pathname;
+      router.replace(loginUrl(typeof window !== "undefined" ? window.location.origin : "", here));
     }
     if (!isLoading && user?.role === "SYSTEM_ADMIN" && !pathname.startsWith("/system")) {
       router.replace("/system");

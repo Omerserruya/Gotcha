@@ -119,6 +119,30 @@ describe("no manual Shopify shop-domain entry", () => {
     expect(code).not.toMatch(/still being published|aren't available just yet/i);
   });
 
+  it("the signed-out bounce preserves where the user was going", () => {
+    // THE DEFECT THIS PINS.
+    //
+    // AppLayout bounced unauthenticated users to a bare "/login". beginLogin
+    // then recorded window.location as the return path, but by then it WAS
+    // "/login", so the original URL was already lost.
+    //
+    // For Shopify that was fatal rather than annoying. A merchant installing
+    // from Shopify with no GOTCHA session arrives at
+    // /settings/business-systems/shopify/finish?handle=... and that handle was
+    // the only reference to their authorized store. App Store review 132211
+    // filmed the result: sign in, land on the dashboard, Shopify DISCONNECTED,
+    // no route back to the store they had just authorized.
+    const code = stripComments(
+      fs.readFileSync(path.join(SRC, "components/AppLayout.tsx"), "utf8"),
+    );
+    // A bare redirect to /login must not come back.
+    expect(code).not.toMatch(/router\.replace\(\s*["'`]\/login["'`]\s*\)/);
+    // And what replaced it must carry the query string, not just the path -
+    // the handle lives there.
+    expect(code).toMatch(/window\.location\.search/);
+    expect(code).toMatch(/loginUrl\(/);
+  });
+
   it("tells merchants Shopify picks the store, not that they should type it", () => {
     const help = fs.readFileSync(path.join(SRC, "app/help/content/integrations.ts"), "utf8");
     expect(help).not.toMatch(/Enter your store's \*\*myshopify domain\*\*/);

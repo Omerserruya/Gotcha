@@ -106,9 +106,15 @@ function FinishShopifyInstall() {
   const MAX_ATTEMPTS = 2;
 
   useEffect(() => {
-    if (!handle) return;
-    // No token yet: the silent renew has not produced one. Keep waiting; this
-    // is the ordinary state for a merchant arriving straight from Shopify.
+    // NO `if (!handle) return;` any more.
+    //
+    // The handle used to be required, and it lived only in this page's query
+    // string. Anything that navigated away destroyed it - most importantly the
+    // signed-out bounce to /login, which every Shopify-originated install hit
+    // by definition. The store was authorized and permanently unreachable.
+    //
+    // The server now recovers the handle from an HttpOnly cookie set at the
+    // OAuth callback, so this page works with a bare URL.
     if (!token) return;
 
     if (settledRef.current) return;
@@ -121,7 +127,7 @@ function FinishShopifyInstall() {
     let cancelled = false;
     setPhase("loading");
 
-    getPendingShopifyInstall(token, handle)
+    getPendingShopifyInstall(token, handle || undefined)
       .then((r) => {
         if (cancelled) return;
         settledRef.current = true;
@@ -188,11 +194,12 @@ function FinishShopifyInstall() {
   }, []);
 
   async function claim(replace = false) {
-    if (!token || !handle || claiming) return;
+    // `handle` may legitimately be empty - the server reads the cookie.
+    if (!token || claiming) return;
     setClaiming(true);
     setError(null);
     try {
-      const r = await claimShopifyInstall(token, handle, replace);
+      const r = await claimShopifyInstall(token, handle || undefined, replace);
       router.push(
         r.data.flow === "onboarding"
           ? "/setup?connected=shopify"
@@ -229,16 +236,6 @@ function FinishShopifyInstall() {
       }
       setClaiming(false);
     }
-  }
-
-  if (!handle) {
-    return (
-      <Shell>
-        <p className="text-sm text-gray-600">
-          No installation to finish. Start from Business Systems, or install GOTCHA from Shopify.
-        </p>
-      </Shell>
-    );
   }
 
   if (phase === "loading" || phase === "awaiting_refresh") {
