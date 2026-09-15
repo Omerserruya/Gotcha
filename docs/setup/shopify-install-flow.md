@@ -135,6 +135,36 @@ the resulting `apps.shopify.com` URL once before relying on it: a wrong slug is
 a 404 the merchant cannot diagnose, and guessing one is what produced this
 rejection.
 
+### A Shopify-originated install must survive sign-in
+
+An install that begins on Shopify has no GOTCHA session, so the OAuth callback
+parks the verified installation and asks the merchant to sign in. Two things
+made that unsurvivable until App Store review 132211:
+
+| Defect | Effect |
+|---|---|
+| `AppLayout` bounced signed-out users to a bare `/login` | `beginLogin` recorded the return path AFTER the navigation, so the `?handle=` that referenced the authorized store was already gone |
+| `PENDING_CONNECTION_TTL_SECONDS` was 15 minutes | the record expired before a first-time user could finish signing in |
+
+Both are fixed:
+
+* the handle is additionally an **HttpOnly, SameSite=Lax cookie** set at the
+  callback, so it survives a full OIDC round trip. `GET .../install/pending`
+  and `POST .../install/claim` both accept it, and the handle is deliberately
+  never echoed back in a response body - it is the key to a stored access
+  token.
+* `AppLayout` preserves path **and query** via `loginUrl()`.
+* the TTL defaults to 2h, set by `SHOPIFY_PENDING_INSTALL_TTL_SECONDS` and
+  clamped to [5m, 24h].
+* the Shopify settings screen surfaces an authorized-but-unclaimed store with a
+  **Finish connecting** action, which takes priority over the generic
+  DISCONNECTED/Connect state.
+
+The cookie is not authorization. It proves only that this browser completed
+Shopify's OAuth; who may attach the store is still decided by `authenticate`,
+`resolveTenant` and the integration permission, and the shop still comes from
+the server-side record.
+
 ### The Connect button never refuses
 
 `resolveShopifyInstallEntry()` always returns a Shopify-owned page:
