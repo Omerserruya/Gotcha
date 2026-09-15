@@ -152,10 +152,47 @@ router.post(
   async (req: Request, res: Response) => {
     const cat = await findCatalog(req.params.slug);
     if (!cat) { res.status(404).json({ error: "unknown_provider" }); return; }
-    await (prisma as any).tenantIntegration.updateMany({
+
+    // An EXPLICIT disconnect releases the store. An uninstall does not.
+    //
+    // Those are different events and were being treated as one. Uninstalling
+    // on Shopify keeps `config.shopDomain` deliberately, so a reinstall lands
+    // back in the same workspace and no one else can grab the store in the
+    // meantime. But pressing Disconnect here is an authorized statement by
+    // this workspace that it no longer holds the store, and it was leaving the
+    // shop domain behind too.
+    //
+    // `findShopOwner` matches on that domain REGARDLESS of status, so the
+    // effect was permanent: once a shop had touched a workspace, no other
+    // workspace could ever claim it. And the refusal told the merchant
+    // "Disconnect it there first, then reconnect here" - instructions for
+    // something that could not work, which is worse than refusing plainly.
+    //
+    // Clearing the identity is what makes that sentence true. Credentials go
+    // with it: a token for a store this workspace no longer claims is only a
+    // liability.
+    const rows = await (prisma as any).tenantIntegration.findMany({
       where: { tenantId: req.tenantId, integrationId: cat.id },
-      data: { status: "DISCONNECTED" },
+      select: { id: true, config: true },
     });
+
+    for (const row of rows) {
+      const config = { ...((row.config as any) ?? {}) };
+      // Only the fields that ESTABLISH identity. Settings the merchant chose
+      // outside the OAuth flow (useAsCrm, sync toggles) survive a disconnect,
+      // because reconnecting the same store should not silently reset them.
+      delete config.shopDomain;
+      delete config.externalShopId;
+      await (prisma as any).tenantIntegration.update({
+        where: { id: row.id },
+        data: { status: "DISCONNECTED", credentials: {}, config },
+      });
+    }
+
+    console.log(
+      `[connectors] ${req.params.slug} disconnected by tenant=${req.tenantId} ` +
+        `(store identity released, ${rows.length} row(s))`,
+    );
     res.json({ ok: true });
   },
 );

@@ -110,6 +110,21 @@ export function EntitlementsSection({ tenantId, onMessage }: Props) {
   async function provisionPoc() {
     const credits = Number(pocCredits);
     if (!token || !Number.isFinite(credits) || credits <= 0) { onMessage("Set a positive credit budget", "error"); return; }
+
+    // Lowering a live budget is a real decision, not a slip. The backend
+    // upserts, so a smaller number here REPLACES the allowance rather than
+    // adding to it - and the form used to arrive pre-filled with 500, which
+    // made shrinking the easiest thing to do by accident.
+    const currentAllowance = Number(billing?.balance?.includedAllowance ?? 0);
+    if (currentAllowance > 0 && credits < currentAllowance) {
+      const ok = window.confirm(
+        `This REPLACES the allowance, it does not add to it.\n\n` +
+          `Now: ${fmtUnits(currentAllowance)} units\n` +
+          `After: ${fmtUnits(credits)} units\n\n` +
+          `Lower the budget?`,
+      );
+      if (!ok) return;
+    }
     setPocBusy(true);
     try {
       await setupSystemTenantPoc(token, tenantId, {
@@ -129,6 +144,16 @@ export function EntitlementsSection({ tenantId, onMessage }: Props) {
 
   const bal = billing?.balance;
   const sub = billing?.subscription;
+  /**
+   * Already on a POC, so this form EXTENDS rather than creates.
+   *
+   * The backend upserts the subscription, so re-provisioning has always
+   * extended an existing POC - but the form said "Set up as POC", started at a
+   * hard-coded 500 credits and a blank expiry, and never showed what the
+   * tenant currently had. Submitting it to add time would quietly cut the
+   * budget to 500.
+   */
+  const onPoc = sub?.planKey === "poc";
   const allowance = Number(bal?.includedAllowance ?? 0);
   const total = Number(bal?.total ?? 0);
   const consumedPct = allowance > 0 ? Math.min(100, Math.max(0, Math.round((1 - total / allowance) * 100))) : null;
@@ -141,10 +166,25 @@ export function EntitlementsSection({ tenantId, onMessage }: Props) {
           <p className="text-xs text-gray-500 mt-0.5">Licensed feature areas (hide/show in the tenant workspace) · AI credit wallet · POC provisioning.</p>
         </div>
         <button
-          onClick={() => setPocOpen((v) => !v)}
+          onClick={() => {
+            // Opening the form PREFILLS from the current POC. It used to start
+            // at a hard-coded 500 credits with a blank expiry, so an operator
+            // extending a pilot would submit those defaults and cut the budget
+            // instead of raising it.
+            if (!pocOpen) {
+              const allowanceNow = Number(billing?.balance?.includedAllowance ?? 0);
+              if (allowanceNow > 0) setPocCredits(String(allowanceNow));
+              const endsAt = billing?.subscription?.currentPeriodEnd;
+              if (endsAt) {
+                const d = new Date(endsAt);
+                if (!Number.isNaN(d.getTime())) setPocExpiry(d.toISOString().slice(0, 10));
+              }
+            }
+            setPocOpen((v) => !v);
+          }}
           className={clsx("text-xs font-semibold px-3 py-1.5 rounded-lg border transition", pocOpen ? "border-primary-300 bg-primary-50 text-primary-700" : "border-gray-200 text-gray-600 hover:border-primary-300")}
         >
-          {pocOpen ? "Close POC setup" : "Set up as POC"}
+          {pocOpen ? "Close" : onPoc ? "Extend POC" : "Set up as POC"}
         </button>
       </div>
 
@@ -183,7 +223,9 @@ export function EntitlementsSection({ tenantId, onMessage }: Props) {
       {/* POC form */}
       {pocOpen && (
         <div className="rounded-xl border border-primary-200 bg-primary-50/40 p-4 space-y-3">
-          <p className="text-sm font-semibold text-gray-800">POC / pilot - free, no card, credits enforced</p>
+          <p className="text-sm font-semibold text-gray-800">
+            {onPoc ? "Extend the POC - raise the budget, push the expiry, or both" : "POC / pilot - free, no card, credits enforced"}
+          </p>
           <div className="grid md:grid-cols-2 gap-3">
             <label className="block text-xs text-gray-600">
               Credit budget (AI units)
@@ -212,9 +254,14 @@ export function EntitlementsSection({ tenantId, onMessage }: Props) {
           </div>
           <button onClick={provisionPoc} disabled={pocBusy}
             className="px-4 py-2 text-sm font-semibold rounded-lg bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-50">
-            {pocBusy ? "Provisioning…" : "Provision POC"}
+            {pocBusy ? "Saving…" : onPoc ? "Update POC" : "Provision POC"}
           </button>
-          <p className="text-[11px] text-gray-500">Creates an enforced subscription (no charges, no dunning). At 80% budget the owner is alerted; at 100% AI pauses. On expiry the POC is canceled and its features lock.</p>
+          <p className="text-[11px] text-gray-500">
+            The credit budget REPLACES the current allowance, it does not add to it - to add
+            without changing the pilot, use Grant credits above. No charges and no dunning. At 80%
+            of budget the owner is alerted; at 100% AI pauses. On expiry the POC is canceled and
+            its features lock.
+          </p>
         </div>
       )}
 
