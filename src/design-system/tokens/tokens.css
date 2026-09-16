@@ -114,6 +114,7 @@
     --space-12: 12px;
     --space-13: 13px;
     --space-14: 14px;
+    --space-15: 15px;
     --space-16: 16px;
     --space-18: 18px;
     --space-20: 20px;
@@ -155,6 +156,8 @@
      * every Settings section opens with one.
      */
     --size-reading: 640px;
+    /* The label column in the workspace fact list. */
+    --size-fact-label: 190px;
     --size-dot: 6px;
     /* The activity stream's status dot, smaller than a presence dot. */
     --size-dot-sm: 5px;

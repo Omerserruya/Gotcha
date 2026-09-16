@@ -93,6 +93,20 @@ export const setupEndpoints = {
   knowledgeIngest: () => endpoint('/api/knowledge/ingest/latest'),
 } as const;
 
+/**
+ * Settings · Workspace. Screen 11.
+ *
+ * All four live in the auth service, which owns both sources the workspace is
+ * composed from. Reachable while the tenant is still onboarding, because these
+ * are the facts a workspace fills in on its way to being live.
+ */
+export const workspaceEndpoints = {
+  read: () => endpoint('/api/workspace'),
+  voice: () => endpoint('/api/workspace/voice'),
+  voiceSample: () => endpoint('/api/workspace/voice/sample'),
+  prohibitedClaims: () => endpoint('/api/workspace/prohibited-claims'),
+} as const;
+
 /** Conversation headroom for the period. Served by billing, not analytics. */
 export const usageEndpoints = {
   allowance: () => endpoint('/api/usage/allowance'),

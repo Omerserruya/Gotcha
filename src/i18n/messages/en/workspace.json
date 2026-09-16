@@ -1,0 +1,80 @@
+{
+  "title": "Workspace",
+  "description": "The facts your AI employees quote to customers. Change one here and every channel is consistent within a minute.",
+  "unavailable": "The workspace facts could not be loaded just now.",
+  "edit": "Edit",
+  "save": "Save",
+  "cancel": "Cancel",
+  "saving": "Saving…",
+  "saved": "Saved",
+  "unset": "Not set",
+  "stale": "Someone else saved this while you were editing. Reload to see their version.",
+  "reload": "Reload",
+  "noProfile": "This workspace has no business profile yet. Finish onboarding first.",
+  "failed": "That didn't save. Try again.",
+  "fact": {
+    "name": "Business name",
+    "description": "What you sell",
+    "address": "Address",
+    "hours": "Opening hours",
+    "currencyLanguage": "Currency & language",
+    "timezone": "Time zone"
+  },
+  "hours": {
+    "to": "{open}–{close}",
+    "closed": "closed {days}",
+    "none": "No opening hours set",
+    "open": "Opens",
+    "close": "Closes",
+    "openOn": "Open on {day}",
+    "never": "Not set",
+    "disabled": "Set, but switched off — GOTCHA answers at any hour"
+  },
+  "day": {
+    "sunday": "Sunday",
+    "monday": "Monday",
+    "tuesday": "Tuesday",
+    "wednesday": "Wednesday",
+    "thursday": "Thursday",
+    "friday": "Friday",
+    "saturday": "Saturday"
+  },
+  "dayShort": {
+    "sunday": "Sun",
+    "monday": "Mon",
+    "tuesday": "Tue",
+    "wednesday": "Wed",
+    "thursday": "Thu",
+    "friday": "Fri",
+    "saturday": "Sat"
+  },
+  "currency": "Currency",
+  "language": "Language",
+  "languageNote": "One language for now. A second is coming; until then this would not be kept.",
+  "voice": {
+    "title": "How GOTCHA should sound",
+    "unavailable": "The voice could not be loaded just now.",
+    "placeholder": "Open with היי and the customer's first name. Keep replies to two sentences unless they asked for detail…",
+    "help": "Instructions to whoever is writing, not adjectives. \"Open with the customer's name\" is usable; \"warm and approachable\" is not.",
+    "counter": "{count} / {max}",
+    "tooShort": "{count} / {min} minimum",
+    "sourceLearned": "Learned from your own past messages",
+    "sourceEdited": "Edited by hand · {date}",
+    "sourceNone": "Nothing learned yet",
+    "sampleTitle": "A real reply, written the way you've chosen",
+    "sampleEmpty": "Write some guidance and a sample will appear here.",
+    "sampleUnavailable": "A sample can't be generated right now. Your guidance is unaffected.",
+    "generating": "Writing a sample…",
+    "revert": "Clear and let GOTCHA learn it again",
+    "reverted": "Handed back to the learner. GOTCHA will work this out again from your own messages."
+  },
+  "claims": {
+    "title": "Never say",
+    "unavailable": "The rules could not be loaded just now.",
+    "empty": "No rules yet. These are hard limits GOTCHA will not cross.",
+    "add": "Add a rule",
+    "placeholder": "Promise a delivery date the carrier hasn't given",
+    "remove": "Remove",
+    "removed": "Removed “{claim}”"
+  }
+}

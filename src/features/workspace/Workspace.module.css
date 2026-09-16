@@ -1,0 +1,233 @@
+@layer features {
+  /*
+   * Settings · Workspace — screen 11.
+   *
+   * `padding: 15px 18px; gap: 20px; label width 190px` in the source, and the
+   * rows share one card with a hairline between them rather than each being a
+   * card, so the six facts read as one list.
+   */
+  .facts {
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    overflow: hidden;
+  }
+
+  .row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-20);
+    padding-block: var(--space-15);
+    padding-inline: var(--space-18);
+  }
+
+  .row + .row,
+  .rowEditing {
+    border-block-start: var(--border-width-thin) solid var(--panel-base);
+  }
+
+  .label {
+    inline-size: var(--size-fact-label);
+    flex: none;
+    font-size: var(--font-size-meta);
+    color: var(--text-subtle);
+  }
+
+  .value {
+    flex: 1;
+    min-inline-size: 0;
+    font-size: var(--font-size-item);
+  }
+
+  /* A fact the workspace has not filled in. Absent, never an empty string. */
+  .unset {
+    color: var(--text-faint);
+  }
+
+  .edit {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    flex: none;
+  }
+
+  .edit:hover {
+    color: var(--text-primary);
+  }
+
+  /* ── The row, while it is being edited ──────────────────────────────── */
+  .rowEditing {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-9);
+    padding-block: var(--space-15);
+    padding-inline: var(--space-18);
+    background-color: var(--panel-base);
+  }
+
+  .editFields {
+    display: flex;
+    gap: var(--space-12);
+    flex-wrap: wrap;
+  }
+
+  .editActions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+  }
+
+  /*
+   * A per-row message: the field's own validation, or the notice that someone
+   * else saved first. It sits with the row rather than at the top of the page,
+   * because that is where the thing to fix is.
+   */
+  .rowNote {
+    font-size: var(--font-size-caption);
+    color: var(--intent-urgent-text);
+  }
+
+  .rowNoteQuiet {
+    color: var(--text-subtle);
+  }
+
+  /* ── Voice ──────────────────────────────────────────────────────────── */
+  .voiceGrid {
+    display: grid;
+    grid-template-columns: 1fr minmax(0, 300px);
+    gap: var(--space-16);
+    align-items: start;
+  }
+
+  @media (width <= 900px) {
+    .voiceGrid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .voiceField {
+    inline-size: 100%;
+    min-block-size: 160px;
+    resize: block;
+    font: inherit;
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-snug);
+    color: var(--text-primary);
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-control);
+    padding: var(--space-12);
+  }
+
+  .voiceField:focus-visible {
+    outline: var(--focus-ring-width) solid var(--border-focus);
+    outline-offset: var(--focus-ring-offset);
+  }
+
+  .voiceFooter {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    margin-block-start: var(--space-9);
+    flex-wrap: wrap;
+  }
+
+  /* Counts toward the 40-character minimum, so it is caught here, not by a 422. */
+  .counter {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
+    margin-inline-start: auto;
+  }
+
+  .counterShort {
+    color: var(--intent-urgent-text);
+  }
+
+  /* The sample. A real reply, so it is set like one rather than like a field. */
+  .sample {
+    background-color: var(--panel-inset);
+    border: var(--border-width-thin) solid var(--border-subtle);
+    border-radius: var(--radius-control);
+    padding: var(--space-14);
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-snug);
+    color: var(--text-primary);
+  }
+
+  .sampleCaption {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+    margin-block-start: var(--space-7);
+  }
+
+  .sampleUnavailable {
+    color: var(--text-muted);
+  }
+
+  /* ── Never say ──────────────────────────────────────────────────────── */
+  .claims {
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    overflow: hidden;
+  }
+
+  .claim {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-18);
+    font-size: var(--font-size-meta);
+  }
+
+  .claim + .claim,
+  .claimAdd {
+    border-block-start: var(--border-width-thin) solid var(--panel-base);
+  }
+
+  .claimText {
+    flex: 1;
+    min-inline-size: 0;
+  }
+
+  .claimRemove {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    flex: none;
+  }
+
+  .claimRemove:hover {
+    color: var(--intent-urgent-text);
+  }
+
+  .claimAdd {
+    display: flex;
+    gap: var(--space-8);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-18);
+  }
+
+  .sectionTitle {
+    font-size: var(--font-size-item);
+    font-weight: var(--font-weight-semibold);
+    margin-block-end: var(--space-9);
+  }
+
+  .status {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .statusError {
+    color: var(--intent-urgent-text);
+  }
+}
