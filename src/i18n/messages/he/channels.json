@@ -1,0 +1,42 @@
+{
+  "title": "ערוצים",
+  "description": "איפה הלקוחות פונים אליכם. הכול מגיע לתיבה אחת.",
+  "unavailable": "לא הצלחנו לטעון את הערוצים כרגע.",
+  "empty": "עדיין לא חובר אף ערוץ.",
+  "openNow": "{count, plural, =0 {אין פתוחות כרגע} one {פתוחה אחת כרגע} two {שתיים פתוחות כרגע} other {# פתוחות כרגע}}",
+  "inWindow": "{count} נפתחו ב‑{days} הימים האחרונים",
+  "name": {
+    "WHATSAPP": "וואטסאפ",
+    "MESSENGER": "מסנג'ר",
+    "INSTAGRAM": "אינסטגרם",
+    "EMAIL": "אימייל",
+    "GMAIL": "Gmail",
+    "OUTLOOK": "Outlook",
+    "SLACK": "Slack",
+    "VOICE": "שיחות טלפון",
+    "WEBCHAT": "צ'אט באתר",
+    "SHOPIFY_LIVE_CHAT": "צ'אט Shopify"
+  },
+  "pitch": {
+    "WHATSAPP": "חברו את מספר ה‑WhatsApp Business שלכם",
+    "MESSENGER": "חברו את עמוד הפייסבוק שלכם",
+    "INSTAGRAM": "הודעות ותגובות לסטורי",
+    "EMAIL": "חברו תיבת דואר דרך IMAP",
+    "GMAIL": "חברו חשבון Gmail",
+    "OUTLOOK": "חברו חשבון Outlook",
+    "SLACK": "חברו סביבת Slack",
+    "WEBCHAT": "ווידג'ט צ'אט בכל עמוד",
+    "VOICE": "",
+    "SHOPIFY_LIVE_CHAT": ""
+  },
+  "status": {
+    "CONNECTED": "מחובר",
+    "PENDING": "משלים הגדרה",
+    "ERROR": "לא עובד",
+    "DISCONNECTED": "מנותק"
+  },
+  "mode": {
+    "HUMAN_WITH_COPILOT": "אדם עונה, בעזרת AI",
+    "AI_AUTO_REPLY": "ה‑AI עונה אוטומטית"
+  }
+}

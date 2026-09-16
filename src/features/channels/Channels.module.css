@@ -1,0 +1,112 @@
+@layer features {
+  /*
+   * Settings · Channels — screen 13.
+   *
+   * One card, a hairline between rows, so the channels read as one list and
+   * the list reads as a health check.
+   */
+
+  .list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    overflow: hidden;
+  }
+
+  .row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-14);
+    padding-block: var(--space-14);
+    padding-inline: var(--space-18);
+  }
+
+  .row + .row {
+    border-block-start: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  /* A channel that has stopped working. Sorted first, and marked. */
+  .rowTroubled {
+    background-color: var(--intent-urgent-surface);
+  }
+
+  .identity {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .name {
+    font-size: var(--font-size-body-sm);
+    font-weight: 500;
+  }
+
+  .detail {
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
+  }
+
+  /* The platform's own error text. */
+  .error {
+    font-size: var(--font-size-micro);
+    color: var(--intent-urgent-text);
+  }
+
+  .status {
+    flex: none;
+    font-size: var(--font-size-label);
+  }
+
+  .statusGood {
+    color: var(--intent-opportunity-text);
+  }
+
+  .statusTroubled {
+    color: var(--intent-urgent-text);
+    font-weight: 500;
+  }
+
+  /* Who answers this channel. */
+  .mode {
+    inline-size: var(--size-people-column);
+    flex: none;
+    font-size: var(--font-size-label);
+    color: var(--text-body);
+  }
+
+  @media (width <= 600px) {
+    /*
+     * The status and the mode stop being columns and sit under the identity.
+     * Three columns at this width leave the channel's own name about as much
+     * room as its status, which inverts what the row is about.
+     */
+    .row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: var(--space-4) var(--space-12);
+      align-items: start;
+    }
+
+    .identity {
+      grid-row: 1;
+      grid-column: 1 / -1;
+    }
+
+    .mode {
+      grid-row: 2;
+      grid-column: 1;
+      inline-size: auto;
+    }
+
+    .status {
+      grid-row: 2;
+      grid-column: 2;
+      text-align: end;
+    }
+  }
+}

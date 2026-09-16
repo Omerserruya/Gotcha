@@ -28,6 +28,8 @@ export const NAMESPACES = [
   'workspace',
   /** Settings · People & teams — screen 12. */
   'people',
+  /** Settings · Channels — screen 13. */
+  'channels',
 ] as const;
 
 export type Namespace = (typeof NAMESPACES)[number];

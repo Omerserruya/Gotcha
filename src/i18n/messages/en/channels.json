@@ -1,0 +1,42 @@
+{
+  "title": "Channels",
+  "description": "Where customers reach you. Everything lands in one inbox.",
+  "unavailable": "The channels could not be loaded just now.",
+  "empty": "No channels connected yet.",
+  "openNow": "{count, plural, =0 {nothing open now} one {# open now} other {# open now}}",
+  "inWindow": "{count} started in the last {days} days",
+  "name": {
+    "WHATSAPP": "WhatsApp",
+    "MESSENGER": "Messenger",
+    "INSTAGRAM": "Instagram",
+    "EMAIL": "Email",
+    "GMAIL": "Gmail",
+    "OUTLOOK": "Outlook",
+    "SLACK": "Slack",
+    "VOICE": "Phone calls",
+    "WEBCHAT": "Web chat",
+    "SHOPIFY_LIVE_CHAT": "Shopify live chat"
+  },
+  "pitch": {
+    "WHATSAPP": "Connect your WhatsApp Business number",
+    "MESSENGER": "Connect your Facebook page",
+    "INSTAGRAM": "DMs and story replies",
+    "EMAIL": "Connect a mailbox over IMAP",
+    "GMAIL": "Connect a Gmail account",
+    "OUTLOOK": "Connect an Outlook account",
+    "SLACK": "Connect a Slack workspace",
+    "WEBCHAT": "A chat widget on every page",
+    "VOICE": "",
+    "SHOPIFY_LIVE_CHAT": ""
+  },
+  "status": {
+    "CONNECTED": "Connected",
+    "PENDING": "Finishing setup",
+    "ERROR": "Not working",
+    "DISCONNECTED": "Disconnected"
+  },
+  "mode": {
+    "HUMAN_WITH_COPILOT": "A person answers, with AI help",
+    "AI_AUTO_REPLY": "AI answers automatically"
+  }
+}

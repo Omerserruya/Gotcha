@@ -210,5 +210,28 @@ export const memberEndpoints = {
     endpoint('/api/permissions/users/{userId}/roles/{roleId}', { userId, roleId }),
 } as const;
 
+/**
+ * Channels — screen 13.
+ *
+ * `disconnect` is listed but is NOT a soft local toggle: the route revokes at
+ * the platform first (deletes Meta `subscribed_apps`, stops Gmail push, drops
+ * the Microsoft Graph subscription, revokes the Slack token) before marking
+ * the record DISCONNECTED. Reconnecting means a full OAuth round trip with
+ * real platform credentials. It is not reversible from here, and no test may
+ * exercise it.
+ *
+ * `oauthInit` is a REDIRECT target, not a fetch: the browser navigates to it
+ * and the platform hands control back at `/oauth/callback`.
+ */
+export const channelEndpoints = {
+  list: () => endpoint('/api/channels'),
+  /** Health counts only. Any tenant member; carries no credentials. */
+  state: () => endpoint('/api/channels/state'),
+  oauthInit: (platform: string) =>
+    endpoint('/api/channels/oauth/init?platform={platform}', { platform }),
+  responseMode: (id: string) => endpoint('/api/channels/{id}/response-mode', { id }),
+  disconnect: (id: string) => endpoint('/api/channels/{id}/disconnect', { id }),
+} as const;
+
 export type { Endpoint as ApiEndpoint };
 export { endpoint as defineEndpoint };
