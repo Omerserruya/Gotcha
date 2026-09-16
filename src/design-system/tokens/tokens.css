@@ -163,6 +163,8 @@
     /* Settings · People: the three fixed columns beside the flexible name. */
     --size-people-column: 150px;
     --size-people-now: 120px;
+    /* An invite field, and the "add a team" card that matches a team card. */
+    --size-invite-field: 220px;
     --size-dot: 6px;
     /* The activity stream's status dot, smaller than a presence dot. */
     --size-dot-sm: 5px;

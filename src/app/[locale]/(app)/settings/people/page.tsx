@@ -1,5 +1,6 @@
 import { getTranslations } from 'next-intl/server';
 
+import { InviteForm } from '@/features/people/InviteForm';
 import { loadPeople } from '@/features/people/load-people';
 import { PeopleTable } from '@/features/people/PeopleTable';
 import { TeamCards } from '@/features/people/TeamCards';
@@ -38,6 +39,12 @@ export default async function Page() {
 
   return (
     <SettingsSection title={t('title')} description={summary ?? t('description')}>
+      {/*
+        Above the roster, because it is what an admin came here to do on a
+        tenant this empty — and it needs the teams, so a failed teams read
+        means inviting without one rather than not inviting at all.
+      */}
+      <InviteForm teams={teams ?? []} />
       {members && aiEmployees ? (
         <PeopleTable members={members} aiEmployees={aiEmployees} presence={presence} />
       ) : (

@@ -44,6 +44,34 @@
     "members": "{count, plural, =0 {No members} one {One person} other {# people}}",
     "open": "{count, plural, =0 {nothing open} one {# open} other {# open}}",
     "none": "No teams yet.",
-    "inactive": "Inactive"
+    "inactive": "Inactive",
+    "add": "Add a team",
+    "name": "Team name",
+    "description": "What this team is for",
+    "descriptionHint": "Optional. Shown on the team card.",
+    "create": "Create team",
+    "creating": "Creating…",
+    "duplicate": "A team with that name already exists.",
+    "limit": "Your plan has no room for another team.",
+    "failed": "That didn't save. Try again."
+  },
+  "cancel": "Cancel",
+  "invite": {
+    "open": "Invite someone",
+    "heading": "Invite someone",
+    "email": "Email",
+    "emailPlaceholder": "name@yourbusiness.co.il",
+    "name": "Name",
+    "nameHint": "What they will be called in GOTCHA, and how the invitation greets them.",
+    "teams": "Teams",
+    "send": "Send invite",
+    "sending": "Sending…",
+    "sent": "Invitation sent.",
+    "linkLabel": "If the email does not arrive, send them this link:",
+    "existingAccount": "They already have an account, so no setup link is needed.",
+    "duplicate": "That person is already a member of this workspace.",
+    "seatLimit": "Your plan has no seats left. Deactivating a member frees one.",
+    "forbidden": "You don't have permission to do that.",
+    "failed": "That didn't send. Try again."
   }
 }

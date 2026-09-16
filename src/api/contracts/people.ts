@@ -178,3 +178,30 @@ export const departmentSchema = z
 export const departmentsSchema = z.array(departmentSchema);
 
 export type Department = z.infer<typeof departmentSchema>;
+
+// ── Writes ──────────────────────────────────────────────────────────
+
+/**
+ * `POST /api/agents` — the invite. Answers **bare**, with no `data` envelope.
+ *
+ * The route hardcodes the role to `AGENT`; `inviteUser` accepts a role but the
+ * caller passes a literal. So an invite cannot choose one, and the form does
+ * not offer to. Role is assignable afterwards via
+ * `POST /api/permissions/users/:userId/roles/:roleId`.
+ *
+ * `setupLink` is null when the invitee's identity has signed in somewhere
+ * before — the backend withholds it deliberately, because mailing an existing
+ * user a "set your password" link reads like a phish and can lock them out.
+ * Null therefore means "they already have an account", not "something failed".
+ */
+export const inviteResultSchema = z.looseObject({
+  user: z.looseObject({
+    id: z.string().min(1),
+    email: z.string().nullable().optional(),
+    name: z.string().nullable().optional(),
+  }),
+  setupLink: z.string().nullable().optional(),
+  existingIdentity: z.boolean().optional(),
+});
+
+export type InviteResult = z.infer<typeof inviteResultSchema>;

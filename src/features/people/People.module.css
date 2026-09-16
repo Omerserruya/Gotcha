@@ -230,6 +230,134 @@
     line-height: 1.5;
   }
 
+  /* ── Invite ─────────────────────────────────────────────────────────── */
+  .inviteBar {
+    display: flex;
+  }
+
+  .invite {
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-16);
+    padding-inline: var(--space-18);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+  }
+
+  .inviteHeading {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: 600;
+  }
+
+  .inviteFields {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-12);
+  }
+
+  .inviteFields > * {
+    flex: 1 1 var(--size-invite-field);
+    min-inline-size: 0;
+  }
+
+  .inviteTeams {
+    border: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-12);
+  }
+
+  .inviteLegend {
+    padding: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .inviteTeam {
+    display: flex;
+    align-items: center;
+    gap: var(--space-6);
+    font-size: var(--font-size-meta);
+  }
+
+  .inviteActions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    flex-wrap: wrap;
+  }
+
+  .inviteNote {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--intent-urgent-text);
+  }
+
+  .inviteNote[data-note-kind='success'] {
+    color: var(--text-body);
+  }
+
+  .inviteLinkLabel {
+    margin-block: var(--space-6) 0;
+    color: var(--text-subtle);
+  }
+
+  /*
+   * The setup link, for copying to someone else.
+   *
+   * `overflow-wrap: anywhere` because a URL has no spaces to break at and
+   * would otherwise push the panel wider than the page. `user-select: all`
+   * so one click takes the whole link rather than a word of it.
+   */
+  .inviteLink {
+    display: block;
+    margin-block-start: var(--space-4);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-micro);
+    color: var(--text-primary);
+    background-color: var(--panel-inset);
+    border-radius: var(--radius-badge);
+    padding-block: var(--space-6);
+    padding-inline: var(--space-8);
+    overflow-wrap: anywhere;
+    user-select: all;
+  }
+
+  /* Shares the team cards' row, and wraps with them. */
+  .addTeamItem {
+    flex: 1 1 var(--size-invite-field);
+    min-inline-size: 0;
+    display: flex;
+  }
+
+  .addTeamItem > * {
+    flex: 1;
+  }
+
+  /* Dashed, because it is an invitation to make something, not a thing. */
+  .addTeam {
+    flex: 1 1 var(--size-invite-field);
+    min-block-size: var(--size-control);
+    background-color: var(--panel-base);
+    border: var(--border-width-thin) dashed var(--border-strong);
+    border-radius: var(--radius-card);
+    color: var(--text-faint);
+    font: inherit;
+    font-size: var(--font-size-meta);
+    cursor: pointer;
+  }
+
+  .addTeam:hover {
+    color: var(--text-body);
+    border-color: var(--border-heavy);
+  }
+
   /* ── Narrow ─────────────────────────────────────────────────────────── */
   @media (width < 768px) {
     /*

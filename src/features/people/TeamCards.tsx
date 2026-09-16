@@ -2,6 +2,7 @@ import { getTranslations } from 'next-intl/server';
 
 import type { Department } from '@/api/contracts/people';
 
+import { AddTeam } from './AddTeam';
 import styles from './People.module.css';
 
 /**
@@ -25,7 +26,20 @@ export async function TeamCards({ teams }: { readonly teams: readonly Department
   const t = await getTranslations('people');
 
   if (teams.length === 0) {
-    return <p className={styles.empty}>{t('teams.none')}</p>;
+    /*
+     * No teams yet, so the only thing to show is the way to make one. The
+     * sentence stays: an "Add a team" card alone does not say whether teams
+     * exist elsewhere and this tenant has none, or whether the list failed.
+     */
+    return (
+      <section className={styles.teams} data-testid="team-cards">
+        <h2 className={styles.teamsHeading}>{t('teams.heading')}</h2>
+        <p className={styles.empty}>{t('teams.none')}</p>
+        <div className={styles.teamList}>
+          <AddTeam />
+        </div>
+      </section>
+    );
   }
 
   return (
@@ -52,6 +66,13 @@ export async function TeamCards({ teams }: { readonly teams: readonly Department
             {team.description ? <p className={styles.teamBody}>{team.description}</p> : null}
           </li>
         ))}
+        {/*
+          Sits in the list rather than after it, so it shares the cards' row
+          and wraps with them instead of forming a second, emptier one.
+        */}
+        <li className={styles.addTeamItem}>
+          <AddTeam />
+        </li>
       </ul>
     </section>
   );

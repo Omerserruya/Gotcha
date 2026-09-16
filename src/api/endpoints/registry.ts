@@ -187,7 +187,27 @@ export const aiEmployeeEndpoints = {
 /** Teams. `Department` is the backend's name for them. */
 export const departmentEndpoints = {
   list: () => endpoint('/api/departments'),
+  /** Also the create. 402 `PLAN_LIMIT_REACHED` when the plan is out of teams. */
+  create: () => endpoint('/api/departments'),
   members: (id: string) => endpoint('/api/departments/{id}/members', { id }),
+} as const;
+
+/**
+ * Tenant members, as a collection you can add to.
+ *
+ * Named apart from `agentEndpoints`, which is the AI runtime at `/api/agent`
+ * (singular) behind Home's command surface. Two different things a character
+ * apart, so neither is spelled as a literal anywhere but here.
+ *
+ * `invite` creates the person, their identity and their team memberships in
+ * one call, and emails them. It cannot set a role: the route passes a literal
+ * `"AGENT"`. Role is assigned afterwards, through `permissionEndpoints`.
+ */
+export const memberEndpoints = {
+  invite: () => endpoint('/api/agents'),
+  loginStatus: () => endpoint('/api/permissions/users/login-status'),
+  assignRole: (userId: string, roleId: string) =>
+    endpoint('/api/permissions/users/{userId}/roles/{roleId}', { userId, roleId }),
 } as const;
 
 export type { Endpoint as ApiEndpoint };

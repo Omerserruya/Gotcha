@@ -193,6 +193,110 @@ for (const size of SIZES) {
     });
 
     /*
+     * 6 · the invite form, filled and NOT sent.
+     *
+     * Deliberately never submitted with a new address. A successful invite
+     * creates a real user, a real identity in Authentik and **emails a real
+     * person** — there is no undo for that which does not involve explaining
+     * yourself to whoever received it. The capture photographs the form; shot
+     * 7 exercises the write down a path that creates nothing.
+     *
+     * No role selector is asserted here, and its absence is the point:
+     * `POST /api/agents` passes a literal "AGENT" to `inviteUser`, so a
+     * selector would be a control the write path ignores.
+     */
+    test('6 · the invite form', async ({ page }) => {
+      await openPeople(page, 'en');
+      await page.getByTestId('invite-open').click();
+
+      const form = page.getByTestId('invite-form');
+      await expect(form).toBeVisible();
+
+      // The design draws only an email field. `name` is required by the
+      // backend, so the form asks for it rather than inventing one from the
+      // address and greeting a real person as "omerts58".
+      await form.getByLabel('Email').fill('someone@example.com');
+      await form.getByLabel('Name').fill('Someone Example');
+
+      // A role control must not exist. If one is ever added, this fails.
+      await expect(form.getByLabel(/role/i)).toHaveCount(0);
+
+      await shoot(page, `${size.name}-6-invite-form`);
+    });
+
+    /*
+     * 7 · the invite refuses someone who is already here.
+     *
+     * The one write this capture may safely perform. `inviteUser` checks for
+     * an existing member FIRST and throws before creating an identity, a user
+     * or an email, so a 409 costs nothing and leaves nothing behind. It proves
+     * the action, the BFF, the session and the error classifier all work end
+     * to end without mutating the tenant.
+     *
+     * The address is read from the roster rather than hardcoded, so this does
+     * not silently stop testing anything if the demo tenant changes.
+     */
+    test('7 · inviting an existing member is refused, and creates nothing', async ({ page }) => {
+      await openPeople(page, 'en');
+
+      const existing = (
+        await page.locator('[data-kind="person"] [data-testid^="person-sub-"]').first().innerText()
+      ).trim();
+      expect(existing, 'no member email on the roster to reuse').toContain('@');
+
+      await page.getByTestId('invite-open').click();
+      const form = page.getByTestId('invite-form');
+      await form.getByLabel('Email').fill(existing);
+      await form.getByLabel('Name').fill('Duplicate Probe');
+      await page.getByTestId('invite-send').click();
+
+      /*
+       * Asserted on KIND rather than on the exact sentence. A tenant at its
+       * seat limit answers 402 before the handler runs, which is a different
+       * message and an equally correct refusal — both create nothing, and
+       * pinning the wording would fail on a condition that is not a defect.
+       */
+      const note = page.getByTestId('invite-note');
+      await expect(note).toBeVisible({ timeout: 15_000 });
+      await expect(note).toHaveAttribute('data-note-kind', 'problem');
+
+      await shoot(page, `${size.name}-7-invite-refused`);
+    });
+
+    /*
+     * 8 · the Add a team form, opened and NOT submitted.
+     *
+     * Creating a team is permanent and there is no delete in this screen, so
+     * the capture opens the form, photographs it and cancels. A test that
+     * leaves a "Test Team" behind is the same mistake as the one that left a
+     * timestamp in the workspace description.
+     */
+    test('8 · the add-a-team form', async ({ page }) => {
+      await openPeople(page, 'en');
+
+      const teamCards = page.locator('li[data-testid^="team-"]');
+      const teamsBefore = await teamCards.count();
+
+      await page.getByTestId('team-add-open').click();
+      const form = page.getByTestId('team-add-form');
+      await expect(form).toBeVisible();
+      await form.getByLabel(/team name/i).fill('Wholesale');
+
+      // No channel field and no escalation field: nothing behind either.
+      await expect(form.getByLabel(/channel|escalat/i)).toHaveCount(0);
+
+      await shoot(page, `${size.name}-8-add-team`);
+
+      // Cancel, and prove nothing was created.
+      await form.getByRole('button', { name: 'Cancel' }).click();
+      await expect(form).toBeHidden();
+      expect(
+        await teamCards.count(),
+        'the add-a-team shot created a team — it must never do that',
+      ).toBe(teamsBefore);
+    });
+
+    /*
      * 5 · the page's own content is the first thing on screen.
      *
      * Found by capture at 390, where the Settings section list filled the

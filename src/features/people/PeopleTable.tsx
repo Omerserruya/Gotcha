@@ -144,7 +144,11 @@ export async function PeopleTable({
                   <span className={styles.name} data-testid={`person-name-${row.id}`}>
                     {row.name}
                   </span>
-                  {sub ? <span className={styles.sub}>{sub}</span> : null}
+                  {sub ? (
+                    <span className={styles.sub} data-testid={`person-sub-${row.id}`}>
+                      {sub}
+                    </span>
+                  ) : null}
                 </span>
               </div>
 
