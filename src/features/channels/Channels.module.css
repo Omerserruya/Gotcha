@@ -79,6 +79,129 @@
     color: var(--text-body);
   }
 
+  /* ── Connect ────────────────────────────────────────────────────────── */
+  .connect {
+    grid-column: 1 / -1;
+    margin-block-start: var(--space-12);
+    background-color: var(--panel-base);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-14);
+    padding-inline: var(--space-16);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+  }
+
+  .connectHead {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-11);
+  }
+
+  .connectTitle {
+    font-size: var(--font-size-meta);
+    font-weight: 600;
+  }
+
+  .connectClose {
+    margin-inline-start: auto;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    color: var(--text-subtle);
+    font-size: var(--font-size-meta);
+  }
+
+  .connectClose:hover {
+    color: var(--text-primary);
+  }
+
+  .connectFields {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-12);
+  }
+
+  .connectFields > * {
+    flex: 1 1 var(--size-invite-field);
+    min-inline-size: 0;
+  }
+
+  .whoAnswers {
+    border: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-14);
+  }
+
+  .connectLegend {
+    padding: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .whoAnswersOption {
+    display: flex;
+    align-items: center;
+    gap: var(--space-6);
+    font-size: var(--font-size-meta);
+  }
+
+  .connectActions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    flex-wrap: wrap;
+  }
+
+  /* Why this channel cannot be connected here. Not an error — a state. */
+  .connectNote {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-body);
+  }
+
+  /* What happens once it is connected. */
+  .connectThen {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .connectProblem {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--intent-urgent-text);
+  }
+
+  .connectOpen {
+    flex: none;
+    font-size: var(--font-size-label);
+    color: var(--text-primary);
+    background: none;
+    border: var(--border-width-thin) solid var(--border-strong);
+    border-radius: var(--radius-item);
+    padding-block: var(--space-6);
+    padding-inline: var(--space-12);
+    cursor: pointer;
+  }
+
+  .connectOpen:hover {
+    border-color: var(--border-heavy);
+  }
+
+  /* The connectable row becomes a grid so its panel can span the full width. */
+  .rowOpen {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+  }
+
   @media (width <= 600px) {
     /*
      * The status and the mode stop being columns and sit under the identity.

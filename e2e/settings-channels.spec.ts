@@ -24,9 +24,18 @@ import { expect, test, type Page } from '@playwright/test';
  * with real platform credentials, which no test can perform.
  *
  * So disconnect is the same class as emailing a person: exercisable once,
- * reversible never. `DELETE /:id` cascades and is worse. **This spec performs
- * NO writes at all**, and the channel it would be breaking is the demo
- * tenant's live WhatsApp number.
+ * reversible never. **This spec performs NO writes at all**, and the channel it
+ * would be breaking is the demo tenant's live WhatsApp number.
+ *
+ * ── AND NOTHING CONNECTS EITHER ──
+ * `DELETE /api/channels/:id` answers 500 for EVERY channel type — the tenant
+ * guard blocks a `Message.deleteMany` inside the delete transaction that is
+ * missing `tenantId`. That was established by running it, not by reading it.
+ *
+ * So a channel created here could not be removed again. Web chat looked like
+ * the one safe probe — it authorises nothing with any third party — and it is
+ * in fact the most dangerous button on the screen. Every connect panel is
+ * opened, photographed and closed.
  *
  * ── WHAT THIS TENANT SHOWS ──
  * Two accounts: WhatsApp (CONNECTED, healthy) and Shopify live chat
@@ -185,6 +194,73 @@ for (const size of SIZES) {
       );
 
       await shoot(page, `${size.name}-4-absent-controls`);
+    });
+
+    /*
+     * 7 · the connect flow, in all three of its shapes.
+     *
+     * ── NOTHING IS SUBMITTED, AND EVERY SHAPE HAS ITS OWN REASON ──
+     *   web chat    creatable and NOT deletable — `DELETE /api/channels/:id`
+     *               500s on a `Message.deleteMany` missing `tenantId`, proven
+     *               by running it. So it is the most dangerous button here,
+     *               not the safest.
+     *   email       stores a real mailbox password. A test that fills it in
+     *               has handed someone's credential to a system on their
+     *               behalf.
+     *   OAuth/voice cannot even start: `oauth/init` wants the access token in
+     *               a query parameter and ours is in an HttpOnly cookie.
+     *
+     * So this shot opens each panel, photographs it, and closes it.
+     */
+    test('7 · the connect panels, opened and not submitted', async ({ page }) => {
+      await openChannels(page, 'en');
+
+      // Provisioned — web chat. One optional field, then step 2.
+      await page.getByTestId('connect-open-WEBCHAT').click();
+      const webchat = page.getByTestId('connect-panel');
+      await expect(webchat).toHaveAttribute('data-shape', 'provisioned');
+      await expect(page.getByTestId('connect-who-answers')).toBeVisible();
+      await shoot(page, `${size.name}-7a-connect-webchat`);
+      await page.getByTestId('connect-close').click();
+
+      // Credentials — email. The password field must be a password field.
+      await page.getByTestId('connect-open-EMAIL').click();
+      const email = page.getByTestId('connect-panel');
+      await expect(email).toHaveAttribute('data-shape', 'credentials');
+      await expect(email.getByLabel('SMTP password')).toHaveAttribute('type', 'password');
+      await shoot(page, `${size.name}-7b-connect-email`);
+      await page.getByTestId('connect-close').click();
+
+      /*
+       * Unavailable — an OAuth platform.
+       *
+       * There must be NO button here. A Connect that 401s before the person
+       * reaches Meta is a broken control, and one that reached Meta would
+       * authorise their real account and then abandon them in a different
+       * application. The row states the situation instead, in words that tell
+       * a reader their own setup is not at fault.
+       */
+      await page.getByTestId('connect-open-MESSENGER').click();
+      const oauth = page.getByTestId('connect-panel');
+      await expect(oauth).toHaveAttribute('data-shape', 'unavailable');
+      await expect(page.getByTestId('connect-unavailable')).toBeVisible();
+      await expect(oauth.getByRole('button', { name: /connect/i })).toHaveCount(0);
+      await shoot(page, `${size.name}-7c-connect-unavailable`);
+    });
+
+    /*
+     * 8 · the promise the design asks for by name.
+     *
+     * "Says what happens afterwards, including that conversations count
+     * towards the monthly allowance." It is the same sentence for every
+     * channel because it is a fact about the product, not about the
+     * connection.
+     */
+    test('8 · the panel says what happens afterwards', async ({ page }) => {
+      await openChannels(page, 'en');
+      await page.getByTestId('connect-open-WEBCHAT').click();
+      await expect(page.getByTestId('connect-panel')).toHaveText(/monthly total/i);
+      await shoot(page, `${size.name}-8-then`);
     });
 
     /* 5 · Hebrew, selected by test id — there is no English copy to click. */

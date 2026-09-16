@@ -38,5 +38,30 @@
   "mode": {
     "HUMAN_WITH_COPILOT": "A person answers, with AI help",
     "AI_AUTO_REPLY": "AI answers automatically"
+  },
+  "connect": {
+    "heading": "Connecting {channel}",
+    "close": "Close",
+    "whoAnswers": "Who should answer it?",
+    "then": "Conversations from this channel appear in your inbox and count towards your monthly total.",
+    "webchatName": "Widget name",
+    "webchatHint": "Optional. Only you see this.",
+    "create": "Create widget",
+    "creating": "Creating…",
+    "connect": "Connect",
+    "connecting": "Connecting…",
+    "later": "Do this later",
+    "open": "Connect",
+    "emailAddress": "Email address",
+    "emailDisplayName": "Sender name",
+    "smtpHost": "SMTP server",
+    "smtpPort": "SMTP port",
+    "smtpUser": "SMTP username",
+    "smtpPass": "SMTP password",
+    "unavailable": "Authorising {channel} isn't available from here yet. Nothing is wrong with your setup.",
+    "duplicate": "That channel is already connected.",
+    "limit": "Your plan has no room for another channel.",
+    "forbidden": "You don't have permission to do that.",
+    "failed": "That didn't connect. Try again."
   }
 }

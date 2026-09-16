@@ -38,5 +38,30 @@
   "mode": {
     "HUMAN_WITH_COPILOT": "אדם עונה, בעזרת AI",
     "AI_AUTO_REPLY": "ה‑AI עונה אוטומטית"
+  },
+  "connect": {
+    "heading": "מחברים את {channel}",
+    "close": "סגירה",
+    "whoAnswers": "מי יענה על זה?",
+    "then": "שיחות מהערוץ הזה מגיעות לתיבה שלכם ונספרות במכסה החודשית.",
+    "webchatName": "שם הווידג'ט",
+    "webchatHint": "לא חובה. רק אתם רואים את זה.",
+    "create": "יצירת ווידג'ט",
+    "creating": "יוצר…",
+    "connect": "חיבור",
+    "connecting": "מחבר…",
+    "later": "אעשה את זה אחר כך",
+    "open": "חיבור",
+    "emailAddress": "כתובת אימייל",
+    "emailDisplayName": "שם השולח",
+    "smtpHost": "שרת SMTP",
+    "smtpPort": "פורט SMTP",
+    "smtpUser": "שם משתמש SMTP",
+    "smtpPass": "סיסמת SMTP",
+    "unavailable": "אישור החשבון של {channel} עדיין לא זמין מכאן. אין שום תקלה בהגדרות שלכם.",
+    "duplicate": "הערוץ הזה כבר מחובר.",
+    "limit": "אין מקום בתוכנית שלכם לערוץ נוסף.",
+    "forbidden": "אין לכם הרשאה לפעולה הזו.",
+    "failed": "החיבור נכשל. נסו שוב."
   }
 }

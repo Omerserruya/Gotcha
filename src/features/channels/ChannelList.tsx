@@ -3,6 +3,7 @@ import { getLocale, getTranslations } from 'next-intl/server';
 import type { Channel, VoiceChannel } from '@/api/contracts/channels';
 
 import styles from './Channels.module.css';
+import { ConnectableRow } from './ConnectableRow';
 import { buildChannelRows, isTroubled, type ConnectedRow } from './rows';
 
 /**
@@ -68,27 +69,8 @@ export async function ChannelList({
     <ul className={styles.list} data-testid="channel-list">
       {rows.map((row) => {
         if (row.kind === 'connectable') {
-          return (
-            <li
-              key={`connectable:${row.channel}`}
-              className={styles.row}
-              data-testid={`channel-connectable-${row.channel}`}
-              data-kind="connectable"
-            >
-              <div className={styles.identity}>
-                <span className={styles.name}>{t(`name.${row.channel}` as 'name.WHATSAPP')}</span>
-                <span className={styles.detail}>
-                  {t(`pitch.${row.channel}` as 'pitch.WHATSAPP')}
-                </span>
-              </div>
-              {/*
-                Deliberately not a button yet. The connect flow is the next
-                change; a control that opens nothing is worse than one that is
-                not there, so this row states what is possible and the action
-                arrives with the flow that fulfils it.
-              */}
-            </li>
-          );
+          // The one interactive row, and the only client component here.
+          return <ConnectableRow key={`connectable:${row.channel}`} channel={row.channel} />;
         }
 
         const troubled = isTroubled(row);

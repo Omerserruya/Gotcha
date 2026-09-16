@@ -227,8 +227,20 @@ export const channelEndpoints = {
   list: () => endpoint('/api/channels'),
   /** Health counts only. Any tenant member; carries no credentials. */
   state: () => endpoint('/api/channels/state'),
+  /**
+   * NOT callable from this app as written: it accepts the access token only as
+   * a QUERY PARAMETER, and ours lives in an HttpOnly sealed cookie the browser
+   * never sees. Supplying it would put a bearer credential in the address bar,
+   * in history, in the `Referer` sent onward to the platform, and in every
+   * proxy log on the way. Listed because the registry is the only place a URL
+   * may live; a ticket-based variant is contracted with the backend.
+   */
   oauthInit: (platform: string) =>
     endpoint('/api/channels/oauth/init?platform={platform}', { platform }),
+  /** Creates the widget as PENDING — a draft, not a connected channel. */
+  createWebChat: () => endpoint('/api/channels/webchat/create'),
+  /** SMTP/IMAP credentials. Stores real secrets; never exercised by a test. */
+  connectEmail: () => endpoint('/api/channels/connect/email'),
   responseMode: (id: string) => endpoint('/api/channels/{id}/response-mode', { id }),
   disconnect: (id: string) => endpoint('/api/channels/{id}/disconnect', { id }),
 } as const;
