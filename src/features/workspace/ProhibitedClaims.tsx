@@ -80,7 +80,7 @@ export function ProhibitedClaims({ claims }: { claims: readonly string[] }) {
     <section>
       <p className={styles.sectionTitle}>{t('title')}</p>
 
-      <div className={styles.claims}>
+      <div className={styles.claims} data-testid="claims-list">
         {list.length === 0 ? <p className={styles.claim}>{t('empty')}</p> : null}
 
         {list.map((claim, index) => (
@@ -102,7 +102,7 @@ export function ProhibitedClaims({ claims }: { claims: readonly string[] }) {
           </div>
         ))}
 
-        <div className={styles.claimAdd}>
+        <div className={styles.claimAdd} data-testid="claims-add">
           <Input
             label={t('add')}
             value={draft}

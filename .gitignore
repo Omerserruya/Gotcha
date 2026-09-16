@@ -61,3 +61,6 @@ test-results
 # it is re-exported whole each time. Kept out of the history; kept on disk so
 # it survives between sessions.
 design/
+
+# Acceptance screenshots. Produced by a run, reviewed, then superseded.
+e2e/evidence/

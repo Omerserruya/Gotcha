@@ -114,6 +114,7 @@ export function VoiceEditor({ voice }: { voice: WorkspaceVoice }) {
         <div>
           <textarea
             className={styles.voiceField}
+            data-testid="voice-field"
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             placeholder={t('placeholder')}
@@ -129,6 +130,7 @@ export function VoiceEditor({ voice }: { voice: WorkspaceVoice }) {
             <Button
               variant="primary"
               size="sm"
+              data-testid="voice-save"
               onClick={save}
               // Short-but-not-empty is the only invalid state: empty is a
               // deliberate revert, and the server treats it as one.
@@ -136,7 +138,10 @@ export function VoiceEditor({ voice }: { voice: WorkspaceVoice }) {
             >
               {isPending ? tRoot('saving') : isRevert ? t('revert') : tRoot('save')}
             </Button>
-            <span className={[styles.status, isError ? styles.statusError : ''].join(' ').trim()}>
+            <span
+              className={[styles.status, isError ? styles.statusError : ''].join(' ').trim()}
+              data-testid="voice-status"
+            >
               {status ?? sourceLine}
             </span>
             <span

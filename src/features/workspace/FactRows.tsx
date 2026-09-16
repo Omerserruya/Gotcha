@@ -51,13 +51,23 @@ export function FactRows({ workspace }: { workspace: Workspace }) {
     const message = note?.key === key ? note : null;
 
     return (
-      <div key={key} className={isOpen ? styles.rowEditing : styles.row}>
+      <div
+        key={key}
+        className={isOpen ? styles.rowEditing : styles.row}
+        data-testid={`fact-${key}`}
+      >
         {isOpen ? (
           <>
             <div className={styles.label}>{t(`fact.${key}`)}</div>
             {form}
             <div className={styles.editActions}>
-              <Button variant="primary" size="sm" onClick={() => submit(key)} disabled={isPending}>
+              <Button
+                variant="primary"
+                size="sm"
+                data-testid={`fact-save-${key}`}
+                onClick={() => submit(key)}
+                disabled={isPending}
+              >
                 {isPending ? t('saving') : t('save')}
               </Button>
               <Button
@@ -83,7 +93,10 @@ export function FactRows({ workspace }: { workspace: Workspace }) {
         ) : (
           <>
             <div className={styles.label}>{t(`fact.${key}`)}</div>
-            <div className={[styles.value, value ? '' : styles.unset].join(' ').trim()}>
+            <div
+              className={[styles.value, value ? '' : styles.unset].join(' ').trim()}
+              data-testid={`fact-value-${key}`}
+            >
               {value ?? t('unset')}
             </div>
             {message?.quiet ? <span className={styles.rowNoteQuiet}>{message.text}</span> : null}
