@@ -38,6 +38,8 @@ import { expect, test, type Page } from '@playwright/test';
 const SESSION = process.env.GOTCHA_SESSION;
 const COOKIE_NAME = process.env.SESSION_COOKIE_NAME ?? 'gotcha_session';
 const EVIDENCE = join('e2e', 'evidence', 's11');
+/** Must match APP_ORIGIN — the BFF compares against it exactly. */
+const APP_ORIGIN = process.env.E2E_BASE_URL ?? 'http://localhost:3000';
 
 const SIZES = [
   { name: '1440', width: 1440, height: 900 },
@@ -232,10 +234,28 @@ for (const size of SIZES) {
       await openWorkspace(page, 'en');
       await page.getByTestId('fact-edit-name').click();
 
-      // Someone else saves first. Through the app's own BFF, so this carries
-      // the same session the page has rather than needing a second credential.
+      /*
+       * Someone else saves first. Through the app's own BFF, so this carries
+       * the same session the page has rather than needing a second credential.
+       *
+       * `origin` is REQUIRED and is not boilerplate. The BFF rejects any
+       * state-changing request whose Origin is not this app's, and treats a
+       * MISSING Origin as hostile — every browser sends one on a cross-origin
+       * write, so its absence means the request did not come from a page of
+       * ours. Playwright's `request` fixture is not a browser context and
+       * sends none, so without this line the BFF correctly answers 403 and the
+       * test cannot produce the conflict it exists to photograph.
+       *
+       * Do not "simplify" this away: the header is what makes this request
+       * look like the app, and the check it satisfies is a real CSRF defence
+       * rather than a formality.
+       */
       const elsewhere = await request.patch('/api/bff/api/workspace', {
-        headers: { cookie: `${COOKIE_NAME}=${SESSION}`, 'content-type': 'application/json' },
+        headers: {
+          cookie: `${COOKIE_NAME}=${SESSION}`,
+          'content-type': 'application/json',
+          origin: APP_ORIGIN,
+        },
         data: { description: `Edited elsewhere at ${new Date().toISOString()}` },
       });
       expect(
