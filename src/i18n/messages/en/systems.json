@@ -1,0 +1,24 @@
+{
+  "title": "Business systems",
+  "description": "The platforms GOTCHA works with on your behalf.",
+  "unavailable": "Your business systems could not be loaded just now.",
+  "empty": "No business systems connected yet.",
+  "banner": {
+    "since": "{system} stopped responding. Last checked {date}, and the check failed.",
+    "failing": "{system} is not responding.",
+    "repairable": "Replace its credentials to get it working again.",
+    "notRepairableHere": "Reconnecting {system} means authorising it again with the provider, which isn't available from here yet. Nothing is wrong with your setup."
+  },
+  "state": {
+    "working": "Working",
+    "failing": "Not working"
+  },
+  "stance": {
+    "allow": "{count, plural, =0 {Nothing allowed} one {# thing it can do} other {# things it can do}}",
+    "ask": "{count, plural, one {# needs approval} other {# need approval}}",
+    "never": "{count, plural, one {# turned off} other {# turned off}}",
+    "askOne": "Asks first",
+    "neverOne": "Never",
+    "unknown": "We couldn't check what this system is allowed to do."
+  }
+}

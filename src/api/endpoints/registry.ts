@@ -260,5 +260,31 @@ export const voiceChannelEndpoints = {
   list: () => endpoint('/api/voice-channels'),
 } as const;
 
+/**
+ * Business systems — screen 14.
+ *
+ * `detail` is listed but NOT used: it selects and returns
+ * `TenantIntegration.credentials`, the stored integration secret, while the
+ * list route excludes it with a comment saying no list view needs it. The
+ * contract strips it either way; the screen reads the list.
+ */
+export const integrationEndpoints = {
+  list: () => endpoint('/api/integrations'),
+  detail: (slug: string) => endpoint('/api/integrations/{slug}', { slug }),
+  tools: (slug: string) => endpoint('/api/integrations/{slug}/tools', { slug }),
+} as const;
+
+/**
+ * The tenant's tool policy — AUTHORITATIVE over an integration's activation.
+ *
+ * A separate resource because it is keyed by tool NAME across every
+ * integration, not by integration. Also returns raw OAuth scopes, which this
+ * screen may never render; the contract does not name them.
+ */
+export const toolPermissionEndpoints = {
+  list: () => endpoint('/api/tool-permissions'),
+  update: (toolName: string) => endpoint('/api/tool-permissions/{toolName}', { toolName }),
+} as const;
+
 export type { Endpoint as ApiEndpoint };
 export { endpoint as defineEndpoint };

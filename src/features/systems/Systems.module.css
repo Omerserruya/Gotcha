@@ -1,0 +1,176 @@
+@layer features {
+  /*
+   * Settings · Business systems — screen 14.
+   *
+   * The banner first, because a system that stopped responding is why someone
+   * opened this screen. Then the list, failing systems at the top of it.
+   */
+
+  .screen {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+  }
+
+  /* ── The banner ─────────────────────────────────────────────────────── */
+  .banner {
+    background-color: var(--intent-urgent-surface);
+    border: var(--border-width-thin) solid var(--intent-urgent-edge);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-14);
+    padding-inline: var(--space-16);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .bannerLead {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: 500;
+    color: var(--intent-urgent-text);
+  }
+
+  /*
+   * The platform's own error text.
+   *
+   * Monospace and wrapping anywhere, because it is a machine string that can
+   * contain a URL or a fragment of HTML and must not push the panel wider than
+   * the page.
+   */
+  .bannerError {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-micro);
+    color: var(--text-body);
+    background-color: var(--panel-field);
+    border-radius: var(--radius-badge);
+    padding-block: var(--space-6);
+    padding-inline: var(--space-8);
+    overflow-wrap: anywhere;
+  }
+
+  .bannerAction {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-body);
+  }
+
+  /* ── The list ───────────────────────────────────────────────────────── */
+  .list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    overflow: hidden;
+  }
+
+  .row {
+    padding-block: var(--space-14);
+    padding-inline: var(--space-18);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .row + .row {
+    border-block-start: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .rowFailing {
+    background-color: var(--row-ai-surface);
+  }
+
+  .head {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-11);
+  }
+
+  .name {
+    font-size: var(--font-size-body-sm);
+    font-weight: 500;
+  }
+
+  .status {
+    margin-inline-start: auto;
+    font-size: var(--font-size-label);
+  }
+
+  .statusGood {
+    color: var(--intent-opportunity-text);
+  }
+
+  .statusBad {
+    color: var(--intent-urgent-text);
+    font-weight: 500;
+  }
+
+  .description {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-body);
+  }
+
+  /* ── What it can do ─────────────────────────────────────────────────── */
+  .capabilities {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-11);
+    font-size: var(--font-size-caption);
+  }
+
+  .stanceAllow {
+    color: var(--text-body);
+  }
+
+  .stanceAsk {
+    color: var(--intent-blocked-text);
+  }
+
+  .stanceNever {
+    color: var(--text-subtle);
+  }
+
+  /* The policy read failed. Not "allowed", and not "off" — unknown. */
+  .stanceUnknown {
+    color: var(--intent-blocked-text);
+  }
+
+  /*
+   * The capabilities somebody made a decision about.
+   *
+   * "Allowed" is the default expectation; "Never" and "Asks first" are choices
+   * someone made, and naming those is what makes the panel auditable rather
+   * than decorative.
+   */
+  .restricted {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    max-inline-size: var(--size-reading);
+  }
+
+  .restrictedItem {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-11);
+    font-size: var(--font-size-meta);
+  }
+
+  .restrictedStance {
+    margin-inline-start: auto;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .empty {
+    padding-block: var(--space-20);
+    font-size: var(--font-size-meta);
+    color: var(--text-subtle);
+  }
+}
