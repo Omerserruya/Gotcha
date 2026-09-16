@@ -141,29 +141,43 @@ for (const size of SIZES) {
     });
 
     /*
-     * 3 · the capability the tenant turned OFF.
+     * 3 · the capabilities that need approval, and the fact none are running.
      *
-     * The sharpest assertion on this screen. `process_refund` is
-     * `TenantTool.isEnabled = true` and `TenantToolPermission.enabled = false`:
-     * the activation and the policy DISAGREE, and the policy is authoritative.
+     * What gates an integration capability is the runtime's own tool-surface
+     * query — `tenantTool.findMany({ isEnabled: true, tenantIntegration:
+     * { status: "CONNECTED" } })` — plus an approval requirement from the
+     * tool's HITL policy. Shopify seeds 15 of its 68 tools as `always`, so the
+     * panel names those fifteen.
      *
-     * A panel built from `GET /api/integrations` alone — the obvious, easy
-     * field — renders "Process Refund: Allowed" for a refund tool the owner
-     * has switched off. This test fails if anyone ever regresses to it.
+     * And because Shopify is ERROR rather than CONNECTED, **none of the
+     * sixty-eight can run at all right now**. That is a clause in the surface
+     * query rather than an inference, and the screen says it once at the
+     * system level instead of relabelling every row.
+     *
+     * An earlier version of this test asserted "Process Refund — Never", from
+     * a `TenantToolPermission` row disabling it. That row is real and NOTHING
+     * ENFORCES IT: no execution path reads that table, and the
+     * tool-permissions route hardcodes `enabled: true` for integration tools.
+     * Asserting it would have pinned a restriction the product does not apply.
      */
-    test('3 · a policy-disabled capability is shown as off, not allowed', async ({ page }) => {
+    test('3 · approval-gated capabilities, and nothing running while it is down', async ({
+      page,
+    }) => {
       await openSystems(page, 'en');
 
       const restricted = page.getByTestId('restricted-shopify');
       await expect(restricted).toBeVisible();
-      await expect(restricted).toHaveText(/Process Refund/i);
-      await expect(restricted).toHaveText(/Never/i);
+      await expect(restricted.locator('li')).toHaveCount(15);
+      await expect(page.getByTestId('stance-ask-shopify')).toHaveText(/15/);
 
-      // Exactly one restricted capability: 68 tools, 1 policy row that disables.
-      await expect(restricted.locator('li')).toHaveCount(1);
-      await expect(page.getByTestId('stance-never-shopify')).toHaveText(/1/);
+      // 68 tools, 15 of them approval-gated, none turned off.
+      await expect(page.getByTestId('stance-allow-shopify')).toHaveText(/53/);
+      await expect(page.getByTestId('stance-never-shopify')).toHaveCount(0);
 
-      await shoot(page, `${size.name}-3-policy-beats-activation`);
+      // The system is down, so none of them run however they are configured.
+      await expect(page.getByTestId('not-running-shopify')).toBeVisible();
+
+      await shoot(page, `${size.name}-3-capabilities`);
     });
 
     /*

@@ -168,6 +168,13 @@
     color: var(--text-subtle);
   }
 
+  /* The system is down, so nothing it can do is running. */
+  .notRunning {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--intent-blocked-text);
+  }
+
   .empty {
     padding-block: var(--space-20);
     font-size: var(--font-size-meta);

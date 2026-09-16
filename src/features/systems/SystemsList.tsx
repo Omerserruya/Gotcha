@@ -119,6 +119,19 @@ function SystemEntry({
       {row.description ? <p className={styles.description}>{row.description}</p> : null}
 
       {/*
+        A capability can only run when the system is CONNECTED — that is a
+        clause in the runtime's own tool-surface query, not an inference. So a
+        broken system's capabilities are all inert however they are configured,
+        and saying so once at the system level is more honest than relabelling
+        sixty-eight rows.
+      */}
+      {!row.capabilitiesRunning ? (
+        <p className={styles.notRunning} data-testid={`not-running-${row.slug}`}>
+          {t('notRunning')}
+        </p>
+      ) : null}
+
+      {/*
         "What it can do", and the reason this screen reads a second endpoint.
 
         The stance comes from the tenant's POLICY, not from whether the tool is

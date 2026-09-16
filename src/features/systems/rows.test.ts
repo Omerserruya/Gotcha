@@ -35,13 +35,11 @@ describe('toolSlugOf', () => {
 });
 
 describe('resolveStance', () => {
-  it('lets POLICY beat ACTIVATION, which is the whole point', () => {
-    // The live case: process_refund is activated and policy-disabled. Reading
-    // the activation would say the AI may issue refunds when the owner has
-    // switched that off — wrong in the reassuring direction, on a refund tool.
-    expect(resolveStance(true, { toolName: 'x.y', enabled: false, requiresApproval: false })).toBe(
-      'never',
-    );
+  it('gates on ACTIVATION, which is what the runtime gates on', () => {
+    // `getAvailableTools` builds the AI's surface from
+    // tenantTool.findMany({ isEnabled: true, tenantIntegration: CONNECTED }).
+    expect(resolveStance(false, undefined)).toBe('never');
+    expect(resolveStance(true, undefined)).toBe('allow');
   });
 
   it('reports approval-required as its own state, not as allowed', () => {
@@ -50,34 +48,47 @@ describe('resolveStance', () => {
     );
   });
 
-  it('reports enabled policy with no approval as allowed', () => {
-    expect(resolveStance(false, { toolName: 'x.y', enabled: true, requiresApproval: false })).toBe(
+  it('IGNORES ToolPermission.enabled, which nothing enforces', () => {
+    // `TenantToolPermission` has a row disabling `integration.process_refund`,
+    // and no execution path reads that table — only routes do. The
+    // tool-permissions route even hardcodes `enabled: true` for integration
+    // tools. Rendering that row as "Never" would report a restriction the
+    // runtime does not apply: wrong in the cautious direction, which is better
+    // than the reassuring one and still a false statement about what the AI
+    // may do.
+    expect(resolveStance(true, { toolName: 'x.y', enabled: false, requiresApproval: false })).toBe(
       'allow',
     );
   });
 
-  it('falls back to the activation when no policy row exists', () => {
-    expect(resolveStance(true, undefined)).toBe('allow');
-    expect(resolveStance(false, undefined)).toBe('never');
-  });
-
-  it('never invents "ask" from an activation alone', () => {
-    // With no policy row there is no approval requirement to report. Guessing
-    // one is wrong in the cautious direction — better, and still wrong.
+  it('never invents "ask" without an approval requirement', () => {
     expect(resolveStance(true, undefined)).not.toBe('ask');
     expect(resolveStance(false, undefined)).not.toBe('ask');
   });
 });
 
 describe('buildSystemRows', () => {
-  it('resolves a capability through policy, not through the list route', () => {
+  it('marks a capability that needs approval as "ask"', () => {
     const rows = buildSystemRows(
       [integration({ catalogTools: [tool('process_refund', true)] })],
-      [{ toolName: 'integration.process_refund', enabled: false, requiresApproval: false }],
+      [{ toolName: 'integration.process_refund', enabled: true, requiresApproval: true }],
       true,
       'en',
     );
-    expect(rows[0]!.capabilities[0]!.stance).toBe('never');
+    expect(rows[0]!.capabilities[0]!.stance).toBe('ask');
+  });
+
+  it('reports that nothing runs while the system is down', () => {
+    // The surface query requires `tenantIntegration.status = CONNECTED`, so a
+    // broken system's capabilities are inert however they are configured.
+    const down = buildSystemRows(
+      [integration({ tenantConnection: { id: 'c1', status: 'ERROR' } })],
+      [],
+      true,
+      'en',
+    );
+    expect(down[0]!.capabilitiesRunning).toBe(false);
+    expect(buildSystemRows([integration()], [], true, 'en')[0]!.capabilitiesRunning).toBe(true);
   });
 
   it('leaves every stance null when the policy read failed', () => {
@@ -180,13 +191,10 @@ describe('buildSystemRows', () => {
   it('counts the three stances separately', () => {
     const rows = buildSystemRows(
       [integration({ catalogTools: [tool('a'), tool('b'), tool('c')] })],
-      [
-        { toolName: 'integration.a', enabled: true, requiresApproval: true },
-        { toolName: 'integration.b', enabled: false, requiresApproval: false },
-      ],
+      [{ toolName: 'integration.a', enabled: true, requiresApproval: true }],
       true,
       'en',
     );
-    expect(stanceCounts(rows[0]!)).toEqual({ allow: 1, ask: 1, never: 1, unknown: 0 });
+    expect(stanceCounts(rows[0]!)).toEqual({ allow: 2, ask: 1, never: 0, unknown: 0 });
   });
 });

@@ -20,5 +20,6 @@
     "askOne": "Asks first",
     "neverOne": "Never",
     "unknown": "We couldn't check what this system is allowed to do."
-  }
+  },
+  "notRunning": "While this system is down, none of these run."
 }

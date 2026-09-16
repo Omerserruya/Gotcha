@@ -215,27 +215,39 @@ export function toolSlugOf(toolName: string): string | null {
 /**
  * What a capability may actually do.
  *
- * **Policy beats activation, and on the demo tenant they disagree.**
- * `process_refund` is `TenantTool.isEnabled = true` and
- * `TenantToolPermission.enabled = false`. Reading the activation — which is
- * the field `GET /api/integrations` serves, and therefore the easy one —
- * would render *Allowed* for a refund tool the owner has switched off. Wrong
- * in the reassuring direction, on the worst possible tool.
+ * ── WHAT GATES AN INTEGRATION TOOL, ESTABLISHED FROM THE RUNTIME ──
+ * The AI's tool surface is built by exactly one query
+ * (`tool-registry.ts`, `getAvailableTools`):
  *
- * The schema settles it: `CatalogTool.hitlPolicy` is the SEED for new tenants
- * and the tenant row is *"AUTHORITATIVE: it can both tighten and loosen"*.
+ *     tenantTool.findMany({ isEnabled: true,
+ *                           tenantIntegration: { status: "CONNECTED" } })
  *
- * With no policy row there is no approval requirement to report, so the
- * fallback never invents `ask` — guessing one would be wrong in the cautious
- * direction, which is better and still wrong.
+ * So activation plus a live connection is what decides whether a capability
+ * can run at all. Approval, when required, comes from
+ * `TenantTool.configOverrides.hitlPolicy` falling back to the
+ * `CatalogTool.hitlPolicy` seed — which is what `GET /api/tool-permissions`
+ * reports as `requiresApproval`.
+ *
+ * ── THE TRAP, AND IT IS THE OPPOSITE OF WHAT IT LOOKS LIKE ──
+ * `TenantToolPermission` has a row `integration.process_refund` with
+ * `enabled = false`, and it is tempting to treat that as an owner switching a
+ * refund tool off. **Nothing enforces it for integration tools.** No execution
+ * path reads that table at all — only routes do — and
+ * `GET /api/tool-permissions` hardcodes `enabled: true` for every integration
+ * tool it returns, because the surface is already filtered by `isEnabled`.
+ *
+ * So rendering that row as *Never* would report a restriction the runtime does
+ * not apply: wrong in the CAUTIOUS direction, which is better than the
+ * reassuring one and still a false statement about what the AI may do. It is
+ * the same shape as the hand-set `tenant_features` rows on screen 13 — a table
+ * that looks authoritative and is consulted by nothing.
+ *
+ * `enabled` on a `ToolPermission` is therefore deliberately unused here.
  */
 export function resolveStance(
   activated: boolean,
   policy: ToolPermission | undefined,
 ): CapabilityStance {
-  if (policy) {
-    if (!policy.enabled) return 'never';
-    return policy.requiresApproval ? 'ask' : 'allow';
-  }
-  return activated ? 'allow' : 'never';
+  if (!activated) return 'never';
+  return policy?.requiresApproval ? 'ask' : 'allow';
 }

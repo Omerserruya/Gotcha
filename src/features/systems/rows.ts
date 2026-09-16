@@ -50,6 +50,16 @@ export interface SystemRow {
    * answer screen 13 gives for the same reason.
    */
   readonly repairableHere: boolean;
+  /**
+   * Whether ANY of this system's capabilities can run right now.
+   *
+   * The AI's tool surface requires `tenantIntegration.status === "CONNECTED"`,
+   * so while a system is broken none of its capabilities are available —
+   * however they are configured. That is a fact about the SYSTEM, kept here
+   * rather than relabelling every capability: the panel says what the policy
+   * is, and this says none of it is running.
+   */
+  readonly capabilitiesRunning: boolean;
   readonly capabilities: readonly CapabilityRow[];
 }
 
@@ -95,6 +105,7 @@ export function buildSystemRows(
         lastCheckedAt: connection?.lastTestedAt ?? null,
         lastCheckPassed: connection?.lastTestResult ?? null,
         repairableHere: integration.authType !== 'OAUTH2',
+        capabilitiesRunning: connection?.status === 'CONNECTED',
         capabilities: integration.catalogTools.map((tool) => ({
           id: tool.id,
           slug: tool.slug,
