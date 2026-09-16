@@ -233,5 +233,20 @@ export const channelEndpoints = {
   disconnect: (id: string) => endpoint('/api/channels/{id}/disconnect', { id }),
 } as const;
 
+/**
+ * Voice — a different spine from `channelEndpoints`.
+ *
+ * Served by the conversation service at `/api/voice-channels`, backed by
+ * `CommunicationChannel` → `VoiceChannel` rather than `ChannelAccount`.
+ *
+ * The router is gated on `Tenant.voiceCopilotEnabled` and answers **404
+ * `not_found`** when voice is not offered to a tenant. That 404 is an answer,
+ * not a failure: it means "this does not exist for you", and the Channels
+ * screen reads it as "do not offer a Phone calls row".
+ */
+export const voiceChannelEndpoints = {
+  list: () => endpoint('/api/voice-channels'),
+} as const;
+
 export type { Endpoint as ApiEndpoint };
 export { endpoint as defineEndpoint };

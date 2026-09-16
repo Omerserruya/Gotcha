@@ -153,3 +153,59 @@ export type Channel = z.infer<typeof channelSchema>;
  * the orphan question disappears rather than being answered. Reconciling
  * orphan volume against a tenant total is analytics' job, and a different one.
  */
+
+// ── Voice, which is a different spine entirely ──────────────────────
+
+/**
+ * `GET /api/voice-channels` — enveloped in `data`, ADMIN only.
+ *
+ * Voice is NOT a `ChannelAccount`. It is `CommunicationChannel` →
+ * `VoiceChannel`, served by the conversation service, and the two share the
+ * `ChannelType` enum and nothing else:
+ *
+ *   - status is `PENDING | ACTIVE | DISABLED | ERROR` — note `ACTIVE`, not
+ *     `CONNECTED`, and `DISABLED`, not `DISCONNECTED`. Mapped explicitly
+ *     rather than unified: one type over two enums would invent a
+ *     correspondence that does not exist.
+ *   - health is `healthStatus` + `healthCheckedAt`, not `lastError`.
+ *   - connecting is **typed-in Twilio credentials**, not an OAuth redirect.
+ *
+ * **404 is a real answer, not a failure.** The router is gated on
+ * `Tenant.voiceCopilotEnabled`, which answers `404 not_found` when voice is
+ * not offered to this tenant at all. So the Phone calls row appears only when
+ * the product says voice exists here — the product decides, not us.
+ *
+ * **`object`, not `looseObject`:** the route serialises `webhookSecret`, a
+ * per-channel HMAC used to authenticate inbound webhooks. It must not cross
+ * into a browser payload, and a loose schema would carry it there.
+ */
+export const VOICE_STATES = ['PENDING', 'ACTIVE', 'DISABLED', 'ERROR'] as const;
+export type VoiceState = (typeof VOICE_STATES)[number];
+
+export const voiceChannelSchema = z.object({
+  id: z.string().min(1),
+  friendlyName: z.string().nullable().optional(),
+  status: z.enum(VOICE_STATES).catch('PENDING'),
+  healthStatus: z.string().nullable().optional(),
+  healthCheckedAt: z.string().nullable().optional(),
+  /** Always an array from the backend, even when discovery was skipped. */
+  numbers: z.array(z.object({ phoneNumber: z.string().nullable().optional() })).default([]),
+});
+
+export const voiceChannelsSchema = z.array(voiceChannelSchema);
+export type VoiceChannel = z.infer<typeof voiceChannelSchema>;
+
+/**
+ * Voice status onto the one this screen renders.
+ *
+ * Explicit, and the two gaps are the point: voice has no `CONNECTED` and no
+ * `DISCONNECTED`. `ACTIVE` is the working state and `DISABLED` is the
+ * switched-off one, so they map onto the words this screen already uses
+ * without either enum pretending to be the other.
+ */
+export function voiceStateAsConnection(status: VoiceState): ConnectionState {
+  if (status === 'ACTIVE') return 'CONNECTED';
+  if (status === 'DISABLED') return 'DISCONNECTED';
+  if (status === 'ERROR') return 'ERROR';
+  return 'PENDING';
+}

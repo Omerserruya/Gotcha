@@ -1,6 +1,6 @@
 import { getLocale, getTranslations } from 'next-intl/server';
 
-import type { Channel } from '@/api/contracts/channels';
+import type { Channel, VoiceChannel } from '@/api/contracts/channels';
 
 import styles from './Channels.module.css';
 import { buildChannelRows, isTroubled, type ConnectedRow } from './rows';
@@ -20,14 +20,18 @@ import { buildChannelRows, isTroubled, type ConnectedRow } from './rows';
  */
 export async function ChannelList({
   channels,
+  voice,
+  voiceOffered,
   windowDays,
 }: {
   readonly channels: readonly Channel[];
+  readonly voice: readonly VoiceChannel[];
+  readonly voiceOffered: boolean;
   readonly windowDays: number;
 }) {
   const t = await getTranslations('channels');
   const locale = await getLocale();
-  const rows = buildChannelRows(channels, locale);
+  const rows = buildChannelRows(channels, voice, voiceOffered, locale);
   const number = new Intl.NumberFormat(locale);
 
   /**
@@ -130,7 +134,7 @@ export async function ChannelList({
               that was dropped — it is one the data cannot express.
             */}
             <span className={styles.mode} data-testid={`channel-mode-${row.id}`}>
-              {t(`mode.${row.responseMode}` as 'mode.AI_AUTO_REPLY')}
+              {row.responseMode ? t(`mode.${row.responseMode}` as 'mode.AI_AUTO_REPLY') : ''}
             </span>
           </li>
         );

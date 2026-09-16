@@ -18,12 +18,17 @@ import { SettingsSection } from '@/shell/SettingsSection';
  */
 export default async function Page() {
   const t = await getTranslations('channels');
-  const { channels, windowDays } = await loadChannels();
+  const { channels, voice, voiceOffered, windowDays } = await loadChannels();
 
   return (
     <SettingsSection title={t('title')} description={t('description')}>
       {channels ? (
-        <ChannelList channels={channels} windowDays={windowDays} />
+        <ChannelList
+          channels={channels}
+          voice={voice}
+          voiceOffered={voiceOffered}
+          windowDays={windowDays}
+        />
       ) : (
         <p>{t('unavailable')}</p>
       )}

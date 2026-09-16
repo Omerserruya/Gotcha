@@ -160,16 +160,23 @@ for (const size of SIZES) {
     /*
      * 4 · controls the backend cannot honour are absent.
      *
-     * Three at once, all ruled out because nothing behind them stores a value:
-     * a per-channel owner ("Customer Support AI" / "Support team"), a
-     * per-channel greeting or hours, and a Connect button for phone calls.
-     * What IS shown is `responseMode`, which is a real routing decision.
+     * Two, both ruled out because nothing behind them stores a value: a
+     * per-channel owner ("Customer Support AI" / "Support team") and a
+     * per-channel greeting or hours. What IS shown is `responseMode`, which is
+     * a real routing decision.
+     *
+     * This test used to assert that "Phone calls" was absent too, and that was
+     * WRONG — voice is connectable at `POST /api/voice-channels`, on a separate
+     * spine (`CommunicationChannel` → `VoiceChannel`) that a list driven by
+     * `ChannelAccount` cannot see. The assertion froze a mistaken conclusion
+     * into a test, where it would have survived anyone rechecking it. The
+     * claim worth testing is "no control that reaches nothing", which is a
+     * different claim from "no voice row".
      */
-    test('4 · no owner picker, no per-channel hours, no phone calls', async ({ page }) => {
+    test('4 · no owner picker and no per-channel hours', async ({ page }) => {
       await openChannels(page, 'en');
 
       const list = page.getByTestId('channel-list');
-      await expect(list).not.toHaveText(/Phone calls/i);
       await expect(list).not.toHaveText(/greeting|opening hours/i);
 
       // The mode IS rendered, and it is the honest version of "who answers".
