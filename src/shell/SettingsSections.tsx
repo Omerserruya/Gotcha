@@ -22,6 +22,11 @@ import styles from './SettingsSections.module.css';
  * A section the viewer cannot reach is absent rather than disabled - a
  * disabled row is an invitation to ask for something they may not be meant to
  * know exists.
+ *
+ * The "this is not where AI behaviour lives" footnote is a SIBLING rather than
+ * a child, in `SettingsFootnote`. It is pinned under the sections on a wide
+ * screen and falls below the page's content on a narrow one, where a sidebar
+ * is a strip along the top and has no foot to pin anything to.
  */
 export function SettingsSections({
   /** Section ids with something needing attention, e.g. a dead integration. */
@@ -55,21 +60,6 @@ export function SettingsSections({
           </Link>
         );
       })}
-
-      {/*
-        What this page is not. The design pins it to the foot because the
-        question it answers - "why can't I change how GOTCHA replies here?" -
-        is the one someone asks after reading the whole page.
-      */}
-      <p className={styles.footnote}>
-        {t.rich('settingsFootnote', {
-          studio: (chunks) => (
-            <Link href="/studio" className={styles.footnoteLink}>
-              {chunks}
-            </Link>
-          ),
-        })}
-      </p>
     </nav>
   );
 }

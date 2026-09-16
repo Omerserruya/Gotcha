@@ -5,15 +5,24 @@
    *
    * The split lives here rather than in the shell because only Settings has
    * it - the seven destinations each own their whole surface.
+   *
+   * A grid, so the three pieces can be ordered differently at different widths
+   * without the markup changing. `grid-area` names say where each one goes and
+   * the two templates below say what that means.
    */
   .split {
-    display: flex;
+    display: grid;
+    grid-template-columns: var(--size-settings-nav) 1fr;
+    grid-template-rows: 1fr auto;
+    grid-template-areas:
+      'nav page'
+      'note page';
     block-size: 100%;
     min-block-size: 0;
   }
 
   .section {
-    flex: 1;
+    grid-area: page;
     min-inline-size: 0;
     min-block-size: 0;
     overflow-y: auto;
@@ -24,10 +33,48 @@
     gap: var(--space-16);
   }
 
-  /* Below this the sidebar would leave the section too narrow to read. */
+  /* Pinned under the sections, where the design puts it. */
+  .footnote {
+    grid-area: note;
+    min-inline-size: 0;
+    padding-block-end: var(--space-26);
+    padding-inline: var(--space-32);
+    border-inline-end: var(--border-width-thin) solid var(--border-subtle);
+  }
+
+  /*
+   * Below this the sidebar would leave the section too narrow to read, so it
+   * stops being a column.
+   *
+   * It must not simply stack above the page: eight sections plus a heading
+   * fill a phone viewport on their own, and someone opening a Settings URL
+   * would meet a wall of navigation and have to scroll past it to reach the
+   * page they asked for. The sections become a single scrollable strip and
+   * THE PAGE'S OWN CONTENT IS THE FIRST THING ON SCREEN.
+   *
+   * The footnote goes to the bottom, which is where "after reading the page"
+   * actually is on a phone.
+   */
   @media (width <= 900px) {
     .split {
-      flex-direction: column;
+      grid-template-columns: 1fr;
+      grid-template-rows: auto 1fr auto;
+      grid-template-areas:
+        'nav'
+        'page'
+        'note';
+    }
+
+    .section {
+      padding-block: var(--space-22);
+      padding-inline: var(--space-20);
+    }
+
+    .footnote {
+      padding-block: var(--space-20);
+      padding-inline: var(--space-20);
+      border-inline-end: none;
+      border-block-start: var(--border-width-thin) solid var(--border-subtle);
     }
   }
 }

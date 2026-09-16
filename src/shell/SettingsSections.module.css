@@ -68,19 +68,42 @@
     flex: none;
   }
 
-  /* Pinned to the foot: what this page is NOT, which saves a wrong guess. */
-  .footnote {
-    margin-block-start: auto;
-    padding-block-start: var(--space-24);
-    padding-inline: var(--space-10);
-    font-size: var(--font-size-caption);
-    line-height: var(--line-height-snug);
-    color: var(--text-subtle);
-  }
+  /*
+   * ── Narrow: a strip, not a column ──────────────────────────────────────
+   *
+   * Eight sections stacked vertically fill a phone viewport on their own, so
+   * the page a person actually asked for would start below the fold. As one
+   * scrollable row the whole list stays reachable in about the height of a
+   * single link, and the content starts at the top of the screen where it
+   * belongs.
+   *
+   * The heading goes: `Settings` above a list of Settings sections is a label
+   * for something the page already says, and here it costs a line of a phone.
+   */
+  @media (width <= 900px) {
+    .sidebar {
+      inline-size: auto;
+      flex-direction: row;
+      align-items: center;
+      gap: var(--space-6);
+      padding-block: var(--space-10);
+      padding-inline: var(--space-16);
+      border-inline-end: none;
+      border-block-end: var(--border-width-thin) solid var(--border-subtle);
+      overflow-x: auto;
+      overflow-y: hidden;
+      /* The strip scrolls; the page underneath must not scroll with it. */
+      overscroll-behavior-inline: contain;
+      scrollbar-width: none;
+    }
 
-  .footnoteLink {
-    color: var(--text-primary);
-    text-decoration: none;
-    border-block-end: var(--border-width-thin) solid var(--border-emphasis);
+    .heading {
+      display: none;
+    }
+
+    .link {
+      flex: none;
+      white-space: nowrap;
+    }
   }
 }

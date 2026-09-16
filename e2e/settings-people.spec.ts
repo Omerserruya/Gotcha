@@ -193,6 +193,34 @@ for (const size of SIZES) {
     });
 
     /*
+     * 5 · the page's own content is the first thing on screen.
+     *
+     * Found by capture at 390, where the Settings section list filled the
+     * whole viewport and pushed the heading and the roster below the fold —
+     * someone opening a Settings URL on a phone met a wall of navigation and
+     * had to scroll past it to reach the page they asked for.
+     *
+     * Asserted at EVERY width rather than only the narrow one, because the
+     * rule is not "the phone layout is special": a navigation list is never
+     * the reason a reader cannot see the page they asked for.
+     */
+    test('5 · content starts above the fold', async ({ page }) => {
+      await openPeople(page, 'en');
+
+      const heading = page.getByRole('heading', { level: 1 });
+      const box = await heading.boundingBox();
+      expect(box, 'the page heading has no box — is it rendered?').not.toBeNull();
+
+      expect(
+        box!.y,
+        `the heading starts ${Math.round(box!.y)}px down a ${size.height}px viewport, ` +
+          'which means navigation is occupying the screen the page was asked for',
+      ).toBeLessThan(size.height / 2);
+
+      await shoot(page, `${size.name}-5-above-the-fold`);
+    });
+
+    /*
      * 4 · Hebrew.
      *
      * Selected by test id rather than by copy — a Hebrew page has no "Owner"
