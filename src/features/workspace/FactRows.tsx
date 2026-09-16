@@ -1,7 +1,7 @@
 'use client';
 
 import { useLocale, useTranslations } from 'next-intl';
-import { useState, useTransition } from 'react';
+import { Fragment, useState, useTransition } from 'react';
 
 import { DAY_KEYS, type DayKey, type Workspace } from '@/api/contracts/workspace';
 import { Button } from '@/design-system/primitives/button/Button';
@@ -31,6 +31,15 @@ export function FactRows({ workspace }: { workspace: Workspace }) {
   const t = useTranslations('workspace');
   const locale = useLocale();
   const [editing, setEditing] = useState<FactKey | null>(null);
+  /*
+   * A row's own message. `quiet` marks the one kind that is good news.
+   *
+   * It renders in TWO places, because a save that fails leaves the row open
+   * and a save that succeeds closes it — and both carry the same test id with
+   * a `data-note-kind` beside it. Without the kind, a test can assert that a
+   * message appeared but not WHICH, and "saved" and "someone else saved first"
+   * are the two outcomes it most needs to tell apart.
+   */
   const [note, setNote] = useState<{ key: FactKey; text: string; quiet?: boolean } | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -85,6 +94,8 @@ export function FactRows({ workspace }: { workspace: Workspace }) {
                   className={[styles.rowNote, message.quiet ? styles.rowNoteQuiet : '']
                     .join(' ')
                     .trim()}
+                  data-testid={`fact-note-${key}`}
+                  data-note-kind={message.quiet ? 'success' : 'problem'}
                 >
                   {message.text}
                 </span>
@@ -101,7 +112,11 @@ export function FactRows({ workspace }: { workspace: Workspace }) {
               {value ?? t('unset')}
             </div>
             {message?.quiet ? (
-              <span className={styles.rowNoteQuiet} data-testid={`fact-note-${key}`}>
+              <span
+                className={styles.rowNoteQuiet}
+                data-testid={`fact-note-${key}`}
+                data-note-kind="success"
+              >
                 {message.text}
               </span>
             ) : null}
@@ -269,38 +284,58 @@ export function FactRows({ workspace }: { workspace: Workspace }) {
         'hours',
         hoursValue,
         <div className={styles.value}>
-          {DAY_KEYS.map((day) => (
-            <div key={day} className={styles.editFields}>
-              <label>
+          {/*
+            One grid, one pair of headings, one origin per column.
+
+            Built as seven separate rows it repeated its own headings down the
+            page and the columns drifted rightward, so which pair of times
+            belonged to which day — the only thing this form has to say —
+            stopped being readable.
+
+            The inputs carry `aria-label` rather than visible labels: the
+            column headings name them for a sighted reader, and a label
+            repeated in every cell is what caused the drift.
+          */}
+          <div className={styles.hoursGrid}>
+            <span />
+            <span className={styles.hoursHeading}>{t('hours.open')}</span>
+            <span className={styles.hoursHeading}>{t('hours.close')}</span>
+
+            {DAY_KEYS.map((day) => (
+              <Fragment key={day}>
+                <label className={styles.hoursDay}>
+                  <input
+                    type="checkbox"
+                    checked={week[day].enabled}
+                    onChange={(e) =>
+                      setWeek({ ...week, [day]: { ...week[day], enabled: e.target.checked } })
+                    }
+                  />
+                  {t(`day.${day}`)}
+                </label>
                 <input
-                  type="checkbox"
-                  checked={week[day].enabled}
+                  className={styles.hoursInput}
+                  type="time"
+                  aria-label={`${t(`day.${day}`)} — ${t('hours.open')}`}
+                  value={week[day].open ?? ''}
+                  disabled={!week[day].enabled}
                   onChange={(e) =>
-                    setWeek({ ...week, [day]: { ...week[day], enabled: e.target.checked } })
+                    setWeek({ ...week, [day]: { ...week[day], open: e.target.value } })
                   }
-                />{' '}
-                {t(`day.${day}`)}
-              </label>
-              <Input
-                label={t('hours.open')}
-                type="time"
-                value={week[day].open ?? ''}
-                disabled={!week[day].enabled}
-                onChange={(e) =>
-                  setWeek({ ...week, [day]: { ...week[day], open: e.target.value } })
-                }
-              />
-              <Input
-                label={t('hours.close')}
-                type="time"
-                value={week[day].close ?? ''}
-                disabled={!week[day].enabled}
-                onChange={(e) =>
-                  setWeek({ ...week, [day]: { ...week[day], close: e.target.value } })
-                }
-              />
-            </div>
-          ))}
+                />
+                <input
+                  className={styles.hoursInput}
+                  type="time"
+                  aria-label={`${t(`day.${day}`)} — ${t('hours.close')}`}
+                  value={week[day].close ?? ''}
+                  disabled={!week[day].enabled}
+                  onChange={(e) =>
+                    setWeek({ ...week, [day]: { ...week[day], close: e.target.value } })
+                  }
+                />
+              </Fragment>
+            ))}
+          </div>
         </div>,
       )}
 

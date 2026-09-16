@@ -250,22 +250,72 @@ for (const size of SIZES) {
        * look like the app, and the check it satisfies is a real CSRF defence
        * rather than a formality.
        */
-      const elsewhere = await request.patch('/api/bff/api/workspace', {
-        headers: {
-          cookie: `${COOKIE_NAME}=${SESSION}`,
-          'content-type': 'application/json',
-          origin: APP_ORIGIN,
-        },
-        data: { description: `Edited elsewhere at ${new Date().toISOString()}` },
-      });
-      expect(
-        elsewhere.ok(),
-        'the out-of-band write must succeed for this test to mean anything',
-      ).toBe(true);
+      const headers = {
+        cookie: `${COOKIE_NAME}=${SESSION}`,
+        'content-type': 'application/json',
+        origin: APP_ORIGIN,
+      };
 
-      await page.getByTestId('fact-save-name').click();
-      await expect(page.getByTestId('fact-note-name')).toBeVisible({ timeout: 15_000 });
-      await shoot(page, `${size.name}-09-stale-write-en`);
+      /*
+       * Read the real value first, and put it back in `finally`.
+       *
+       * An earlier version wrote a timestamp into `description` and left it
+       * there. That field is the business description an AI employee quotes to
+       * a customer, so the test replaced live tenant content with its own
+       * debris — and every later capture then photographed the debris instead
+       * of the data, including the shot whose entire purpose is to show the
+       * real facts.
+       *
+       * A test that mutates shared state and does not restore it leaves
+       * someone else to find a value they cannot account for.
+       */
+      const before = await request.get('/api/bff/api/workspace', { headers });
+      expect(before.ok(), 'could not read the workspace before mutating it').toBe(true);
+      const original = ((await before.json()) as { data?: { description?: string } }).data
+        ?.description;
+
+      try {
+        const elsewhere = await request.patch('/api/bff/api/workspace', {
+          headers,
+          data: { description: `Edited elsewhere at ${new Date().toISOString()}` },
+        });
+        expect(
+          elsewhere.ok(),
+          'the out-of-band write must succeed for this test to mean anything',
+        ).toBe(true);
+
+        await page.getByTestId('fact-save-name').click();
+
+        // Not merely "a message appeared". A successful save also produces a
+        // note, so asserting on presence alone would pass if the conflict were
+        // never detected — which is the whole thing this shot exists to prove.
+        const note = page.getByTestId('fact-note-name');
+        await expect(note).toBeVisible({ timeout: 15_000 });
+        await expect(note).toHaveAttribute('data-note-kind', 'problem');
+        await shoot(page, `${size.name}-09-stale-write-en`);
+      } finally {
+        // In `finally` so a failure mid-test still puts the tenant back. The
+        // restore is deliberately not asserted: a failing restore must not
+        // mask the assertion that actually failed, so it is reported loudly
+        // and the original printed for a manual repair.
+        if (typeof original === 'string') {
+          const restored = await request.patch('/api/bff/api/workspace', {
+            headers,
+            data: { description: original },
+          });
+          if (!restored.ok()) {
+            // An annotation rather than a throw: throwing here would replace
+            // whatever assertion actually failed with a cleanup error, and
+            // hide the real result. This surfaces in the report either way.
+            test.info().annotations.push({
+              type: 'RESTORE FAILED',
+              description:
+                'The tenant still holds test data in `description`. ' +
+                `Restore it by hand to: ${original}`,
+            });
+          }
+        }
+      }
     });
 
     /* 10 · an empty state in Hebrew. "Not set" in an RTL label column is where

@@ -158,6 +158,8 @@
     --size-reading: 640px;
     /* The label column in the workspace fact list. */
     --size-fact-label: 190px;
+    /* The day column in the opening-hours grid: fits the longest weekday. */
+    --size-hours-day: 128px;
     --size-dot: 6px;
     /* The activity stream's status dot, smaller than a presence dot. */
     --size-dot-sm: 5px;

@@ -74,6 +74,61 @@
     flex-wrap: wrap;
   }
 
+  /*
+   * The week, as a table rather than seven stacked forms.
+   *
+   * It was built as seven flex rows, each carrying its own "Opens" and
+   * "Closes" labels: the headings repeated down the page and landed between
+   * rows, the columns drifted rightward, and the one thing the form exists to
+   * say - which pair of times belongs to which day - became unreadable.
+   *
+   * One grid, three columns, one set of headings. Every cell in a column
+   * shares an origin because the grid gives it one, not because each row
+   * happens to be the same width.
+   */
+  .hoursGrid {
+    display: grid;
+    grid-template-columns: minmax(var(--size-hours-day), auto) 1fr 1fr;
+    gap: var(--space-8) var(--space-12);
+    align-items: center;
+    max-inline-size: var(--size-reading);
+  }
+
+  .hoursHeading {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .hoursDay {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    font-size: var(--font-size-body-sm);
+  }
+
+  .hoursInput {
+    inline-size: 100%;
+    font: inherit;
+    font-size: var(--font-size-body-sm);
+    color: var(--text-primary);
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-item);
+    padding-block: var(--space-7);
+    padding-inline: var(--space-9);
+  }
+
+  .hoursInput:focus-visible {
+    outline: var(--focus-ring-width) solid var(--border-focus);
+    outline-offset: var(--focus-ring-offset);
+  }
+
+  /* A closed day keeps its cells, so the grid does not reflow as days toggle. */
+  .hoursInput:disabled {
+    color: var(--text-disabled);
+    background-color: var(--panel-inset);
+  }
+
   .editActions {
     display: flex;
     align-items: center;
