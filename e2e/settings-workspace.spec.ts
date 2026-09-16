@@ -135,9 +135,21 @@ for (const size of SIZES) {
       await shoot(page, `${size.name}-05-voice-too-short-en`);
     });
 
-    /* 6 · a valid draft with the sample panel. On DEV this is
-       SAMPLE_UNAVAILABLE, because the tenant is out of AI units — that is the
-       state a real user in this condition sees, so it is the state to capture. */
+    /*
+     * 6 · a valid draft with the sample panel.
+     *
+     * On DEV this captures SAMPLE_UNAVAILABLE, because the tenant is out of AI
+     * units — the state a real user in that condition sees, so it is worth
+     * photographing.
+     *
+     * THIS SHOT EVIDENCES THE STATE, NOT ITS CAUSE, and must not be read as
+     * proof that the sample path is wired. Every failure collapses to the same
+     * 503 by design (D7): out of units, model down, upstream missing, timeout.
+     * The ai service is bind-mounted from a shared checkout, so the endpoint
+     * can lose its upstream entirely and produce a screenshot identical to
+     * this one. If the reason matters at review, establish it from the backend
+     * side — the picture cannot tell you.
+     */
     test('6 · voice with the sample panel', async ({ page }) => {
       await openWorkspace(page, 'en');
       await page
