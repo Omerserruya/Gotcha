@@ -4,9 +4,9 @@ import { z } from 'zod';
  * `GET /api/analytics/agents` — enveloped in `data`.
  *
  * What the design's "Your team right now" asks for and this cannot give:
- * a presence dot, an online count, and "away until 11:00". An `AgentPresence`
- * model exists with `ONLINE | BUSY | OFFLINE`, but its only writer is the
- * voice service and no endpoint reads it, so it reflects voice activity alone.
+ * a presence dot, an online count, and "away until 11:00". Those come from
+ * `GET /api/agents/presence` instead — see `presence.ts`, which does serve
+ * `AWAY` and `awayUntil`. This route carries none of them.
  * There is no away state and no shift model anywhere.
  *
  * `avgResponseTimeMs` is real and Redis-backed, today only. It is the

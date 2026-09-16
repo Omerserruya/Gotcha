@@ -26,6 +26,8 @@ export const NAMESPACES = [
   'notifications',
   /** Settings · Workspace — screen 11. */
   'workspace',
+  /** Settings · People & teams — screen 12. */
+  'people',
 ] as const;
 
 export type Namespace = (typeof NAMESPACES)[number];

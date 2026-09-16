@@ -48,6 +48,16 @@ export const permissionEndpoints = {
   /** The full hierarchical permission catalogue, for admin surfaces. */
   catalog: () => endpoint('/api/permissions/catalog'),
   features: () => endpoint('/api/permissions/features'),
+  /**
+   * The UNIFIED member list: every tenant user except SYSTEM_ADMIN, with their
+   * assigned role and team memberships. ADMIN only.
+   *
+   * Not to be confused with `/api/agents`, which filters `role: "AGENT"` and
+   * therefore returns nothing on a tenant whose members are all admins — an
+   * empty array there is indistinguishable from an empty tenant. Settings ·
+   * People reads THIS one.
+   */
+  users: () => endpoint('/api/permissions/users'),
 } as const;
 
 /**
@@ -159,6 +169,25 @@ export const realtimeEndpoints = {
 export const agentEndpoints = {
   run: () => endpoint('/api/agent/run'),
   clear: () => endpoint('/api/agent/clear'),
+} as const;
+
+/**
+ * AI employees — the non-human half of Settings · People.
+ *
+ * `list` answers the entire `AIAgent` row, system prompts included; the
+ * contract narrows it deliberately rather than passing it through. See
+ * `aiEmployeeSchema`.
+ */
+export const aiEmployeeEndpoints = {
+  list: () => endpoint('/api/ai-agents'),
+  effectivePermissions: (id: string) =>
+    endpoint('/api/ai-agents/{id}/effective-permissions', { id }),
+} as const;
+
+/** Teams. `Department` is the backend's name for them. */
+export const departmentEndpoints = {
+  list: () => endpoint('/api/departments'),
+  members: (id: string) => endpoint('/api/departments/{id}/members', { id }),
 } as const;
 
 export type { Endpoint as ApiEndpoint };

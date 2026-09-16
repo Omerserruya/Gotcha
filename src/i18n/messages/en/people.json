@@ -1,0 +1,49 @@
+{
+  "title": "People & teams",
+  "description": "Everyone who answers customers, human and AI, in one list.",
+  "summary": "{people, plural, =0 {No people} one {One person} other {# people}}, {ai, plural, =0 {no AI employees} one {one AI employee} other {# AI employees}}, {teams, plural, =0 {no teams} one {one team} other {# teams}}.",
+  "membersUnavailable": "The member list could not be loaded just now.",
+  "aiUnavailable": "The AI employees could not be loaded just now.",
+  "teamsUnavailable": "The teams could not be loaded just now.",
+  "column": {
+    "person": "Person",
+    "canDo": "Can do",
+    "team": "Team",
+    "rightNow": "Right now"
+  },
+  "empty": "Nobody here yet. Invite someone to get started.",
+  "aiEmployee": "AI employee",
+  "noTeam": "No team",
+  "noRole": "No role assigned",
+  "role": {
+    "owner": "Owner",
+    "admin": "Admin",
+    "agent": "Agent",
+    "department_manager": "Department manager"
+  },
+  "aiRole": {
+    "customer_support": "Customer support",
+    "sales": "Sales",
+    "booking": "Booking",
+    "billing": "Billing",
+    "custom": "Custom"
+  },
+  "presence": {
+    "ONLINE": "Online",
+    "BUSY": "Busy",
+    "AWAY": "Away",
+    "OFFLINE": "Offline"
+  },
+  "awayUntil": "Away till {time}",
+  "paused": "Paused",
+  "draft": "Draft",
+  "deactivated": "Deactivated",
+  "openConversations": "{count, plural, =0 {Nothing open} one {# open} other {# open}}",
+  "teams": {
+    "heading": "Teams",
+    "members": "{count, plural, =0 {No members} one {One person} other {# people}}",
+    "open": "{count, plural, =0 {nothing open} one {# open} other {# open}}",
+    "none": "No teams yet.",
+    "inactive": "Inactive"
+  }
+}

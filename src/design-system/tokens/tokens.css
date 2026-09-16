@@ -160,6 +160,9 @@
     --size-fact-label: 190px;
     /* The day column in the opening-hours grid: fits the longest weekday. */
     --size-hours-day: 128px;
+    /* Settings · People: the three fixed columns beside the flexible name. */
+    --size-people-column: 150px;
+    --size-people-now: 120px;
     --size-dot: 6px;
     /* The activity stream's status dot, smaller than a presence dot. */
     --size-dot-sm: 5px;
@@ -319,6 +322,25 @@
 
     /* An avatar with no image falls back to initials on this. */
     --avatar-surface: #efe9df;
+    /* A deactivated colleague, or a paused AI employee. */
+    --avatar-surface-muted: #efede8;
+
+    /*
+     * An AI employee.
+     *
+     * The design distinguishes them from people by SHAPE as well as colour -
+     * a person's avatar is a circle, an employee's is a rounded square - so
+     * the two kinds stay tellable apart where colour alone would not, in
+     * greyscale or for a viewer who cannot separate the hues.
+     */
+    --ai-avatar-surface: #eae4fb;
+    --ai-avatar-text: #4b3e8e;
+    /* The faint tint behind an AI employee's row. */
+    --row-ai-surface: #fcfbf8;
+
+    /* A list's column headings, and the hairline between its rows. */
+    --table-head-surface: #f5f2ec;
+    --row-divider: #f7f5f1;
 
     /*
      * Setup, on day one.
