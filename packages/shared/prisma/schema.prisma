@@ -1094,6 +1094,11 @@ model Conversation {
   @@index([tenantId, assignedAiAgentId])
   @@index([tenantId, departmentId])
   @@index([tenantId, channel, customerExternalId])
+  // Per-ACCOUNT volume for the Channels screen. The existing
+  // (tenantId, channel, ...) index serves grouping by channel TYPE, which is
+  // why that has always been cheap; a tenant with two WhatsApp numbers needs
+  // them counted apart, and that grouping had no index at all.
+  @@index([tenantId, channelAccountId])
   @@index([flowExpiresAt])
   @@map("conversations")
 }

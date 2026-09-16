@@ -146,6 +146,29 @@ async function ensureEmailRouterRule(tenantId: string, channel: "GMAIL" | "OUTLO
 
 router.get("/", authenticate, resolveTenant, requirePermission("channels:manage:read"), async (req: Request, res: Response) => {
   try {
+    // Optional volume window. `conversationsInWindow` is OMITTED when neither
+    // bound is given, never zero: "you did not ask" must not render as "there
+    // were none". One bound is legal and leaves the other end open.
+    const rawFrom = typeof req.query.from === "string" ? req.query.from : undefined;
+    const rawTo = typeof req.query.to === "string" ? req.query.to : undefined;
+    const badDates: Array<{ field: string; message: string }> = [];
+    const parse = (v: string | undefined, field: string): Date | undefined => {
+      if (v === undefined) return undefined;
+      const d = new Date(v);
+      if (Number.isNaN(d.getTime())) {
+        badDates.push({ field, message: `${field} must be an ISO-8601 date` });
+        return undefined;
+      }
+      return d;
+    };
+    const from = parse(rawFrom, "from");
+    const to = parse(rawTo, "to");
+    if (badDates.length > 0) {
+      res.status(422).json({ error: "Invalid channel window", details: badDates });
+      return;
+    }
+    const windowed = from !== undefined || to !== undefined;
+
     const accounts = await prisma.channelAccount.findMany({
       where: { tenantId: req.tenantId! },
       select: {
@@ -167,7 +190,45 @@ router.get("/", authenticate, resolveTenant, requirePermission("channels:manage:
       },
       orderBy: { createdAt: "asc" },
     });
-    res.json({ data: accounts });
+
+    if (!windowed) {
+      res.json({ data: accounts });
+      return;
+    }
+
+    // One groupBy for every account rather than a count per row. Keyed by
+    // `createdAt`: the window counts conversations that STARTED in it, which is
+    // what "volume over a period" means - a long-running conversation belongs
+    // to the period it began, not to every period it stayed open through.
+    //
+    // Conversations whose `channelAccountId` is null are invisible here by
+    // construction, and that is the point: the relation is onDelete SetNull, so
+    // a null means either the account was deleted or one never existed, and
+    // those two are indistinguishable in the data. This surface is driven by
+    // accounts that EXIST, so it never has to label a bucket it cannot explain.
+    // Reconciling that volume is analytics' job, not this screen's.
+    const grouped = await prisma.conversation.groupBy({
+      by: ["channelAccountId"],
+      where: {
+        tenantId: req.tenantId!,
+        channelAccountId: { not: null },
+        createdAt: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) },
+      },
+      _count: { _all: true },
+    });
+    const inWindow = new Map<string, number>();
+    for (const row of grouped) {
+      if (row.channelAccountId) inWindow.set(row.channelAccountId, row._count._all);
+    }
+
+    res.json({
+      data: accounts.map((a) => ({
+        ...a,
+        // Absent from the group-by means zero, not unknown: the query covers
+        // every non-null assignment in the tenant for this window.
+        conversationsInWindow: inWindow.get(a.id) ?? 0,
+      })),
+    });
   } catch (err) {
     console.error("List channels error:", err);
     res.status(500).json({ error: "Failed to list channels" });
