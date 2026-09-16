@@ -77,5 +77,8 @@
     "remove": "הסרה",
     "removed": "״{claim}״ הוסר",
     "full": "זו התקרה — {max} כללים. הסירו אחד כדי להוסיף."
-  }
+  },
+  "currencyUnset": "לא הוגדר מטבע",
+  "languageUnset": "לא הוגדרה שפה",
+  "repliesInCustomerLanguage": "עונה בשפת הלקוח"
 }

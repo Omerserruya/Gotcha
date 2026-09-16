@@ -146,6 +146,7 @@ export function VoiceEditor({ voice }: { voice: WorkspaceVoice }) {
             </span>
             <span
               className={[styles.counter, tooShort ? styles.counterShort : ''].join(' ').trim()}
+              data-testid="voice-counter"
             >
               {tooShort
                 ? t('tooShort', { count: trimmed.length, min: VOICE_MIN })
@@ -159,6 +160,7 @@ export function VoiceEditor({ voice }: { voice: WorkspaceVoice }) {
             className={[styles.sample, shownSample ? '' : styles.sampleUnavailable]
               .join(' ')
               .trim()}
+            data-testid="voice-sample"
           >
             {shownSample ?? panelMessage}
           </div>

@@ -77,5 +77,8 @@
     "remove": "Remove",
     "removed": "Removed “{claim}”",
     "full": "That's the limit — {max} rules. Remove one to add another."
-  }
+  },
+  "currencyUnset": "No currency set",
+  "languageUnset": "No language set",
+  "repliesInCustomerLanguage": "replies in the customer's language"
 }

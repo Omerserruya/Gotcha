@@ -1,6 +1,6 @@
 'use client';
 
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { useState, useTransition } from 'react';
 
 import { DAY_KEYS, type DayKey, type Workspace } from '@/api/contracts/workspace';
@@ -29,6 +29,7 @@ type FactKey = 'name' | 'description' | 'address' | 'hours' | 'currencyLanguage'
 
 export function FactRows({ workspace }: { workspace: Workspace }) {
   const t = useTranslations('workspace');
+  const locale = useLocale();
   const [editing, setEditing] = useState<FactKey | null>(null);
   const [note, setNote] = useState<{ key: FactKey; text: string; quiet?: boolean } | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -99,10 +100,15 @@ export function FactRows({ workspace }: { workspace: Workspace }) {
             >
               {value ?? t('unset')}
             </div>
-            {message?.quiet ? <span className={styles.rowNoteQuiet}>{message.text}</span> : null}
+            {message?.quiet ? (
+              <span className={styles.rowNoteQuiet} data-testid={`fact-note-${key}`}>
+                {message.text}
+              </span>
+            ) : null}
             <button
               type="button"
               className={styles.edit}
+              data-testid={`fact-edit-${key}`}
               onClick={() => {
                 setEditing(key);
                 setNote(null);
@@ -186,7 +192,37 @@ export function FactRows({ workspace }: { workspace: Workspace }) {
               : []),
           ].join(' · ');
 
-  const languageValue = [workspace.currency, workspace.languages[0]].filter(Boolean).join(' · ');
+  /*
+   * The row is named after two facts, so it shows two.
+   *
+   * It used to render the bare code `he` and omit the currency entirely, which
+   * left a reader unable to tell an unset currency from a row that had
+   * forgotten it. Each half now says what it is, or says it is unset, the way
+   * Address does — and the language renders as a NAME. Every other value on
+   * this screen is human text; a wire format is not a fact anyone quotes.
+   *
+   * `Intl.DisplayNames` localises it, so a Hebrew reader sees עברית rather
+   * than the English word for their own language.
+   */
+  const languageName = (code: string): string => {
+    try {
+      return new Intl.DisplayNames([locale], { type: 'language' }).of(code) ?? code;
+    } catch {
+      // An unrecognised code is shown as itself rather than hidden: a value
+      // the product cannot name is still a value the owner set.
+      return code;
+    }
+  };
+
+  const currencyPart = workspace.currency ?? t('currencyUnset');
+  const storedLanguage = workspace.languages[0];
+  const languagePart = storedLanguage
+    ? `${languageName(storedLanguage)}, ${t('repliesInCustomerLanguage')}`
+    : t('languageUnset');
+  // Null only when BOTH are unset, so the row falls back to the shared
+  // "Not set" rather than saying it twice.
+  const languageValue =
+    workspace.currency || storedLanguage ? `${currencyPart} · ${languagePart}` : null;
 
   return (
     <div className={styles.facts}>
