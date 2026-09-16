@@ -300,7 +300,7 @@ export function FactRows({ workspace }: { workspace: Workspace }) {
             repeated in every cell is what caused the drift.
           */}
           <div className={styles.hoursGrid}>
-            <span />
+            <span className={styles.hoursSpacer} />
             <span className={styles.hoursHeading}>{t('hours.open')}</span>
             <span className={styles.hoursHeading}>{t('hours.close')}</span>
 

@@ -44,6 +44,17 @@ const APP_ORIGIN = process.env.E2E_BASE_URL ?? 'http://localhost:3000';
 const SIZES = [
   { name: '1440', width: 1440, height: 900 },
   { name: '1280', width: 1280, height: 800 },
+  /*
+   * A phone, permanently.
+   *
+   * This screen's criteria said "desktop and ~400px" from the start, and it
+   * was accepted on 1440 and 1280 alone. The phone layout was not subtly
+   * wrong, it was simply never looked at: the fact rows kept their desktop
+   * three-column grid, which left a 190px label and a fixed Edit button
+   * crushing the value into about five characters. Every Settings spec
+   * captures this width now.
+   */
+  { name: '390', width: 390, height: 844 },
 ] as const;
 
 test.beforeAll(() => {
@@ -325,6 +336,55 @@ for (const size of SIZES) {
       await expect(page.getByTestId('fact-hours')).toBeVisible();
       await page.getByTestId('fact-hours').scrollIntoViewIfNeeded();
       await shoot(page, `${size.name}-10-hours-empty-he`);
+    });
+
+    /*
+     * 11 · the page's own content is the first thing on screen.
+     *
+     * The Settings section list used to fill a phone viewport on its own, so
+     * the heading and the facts began below the fold. Asserted at EVERY width
+     * rather than only the narrow one: the rule is not "the phone is special",
+     * it is that a navigation list is never the reason a reader cannot see the
+     * page they asked for.
+     */
+    test('11 · content starts above the fold', async ({ page }) => {
+      await openWorkspace(page, 'en');
+
+      const box = await page.getByRole('heading', { level: 1 }).boundingBox();
+      expect(box, 'the page heading has no box — is it rendered?').not.toBeNull();
+      expect(
+        box!.y,
+        `the heading starts ${Math.round(box!.y)}px down a ${size.height}px viewport, ` +
+          'which means navigation is occupying the screen the page was asked for',
+      ).toBeLessThan(size.height / 2);
+
+      await shoot(page, `${size.name}-11-above-the-fold`);
+    });
+
+    /*
+     * 12 · a long value stays readable at this width.
+     *
+     * The defect this guards is specific and was visible only on a phone:
+     * "Urban Supply - GOTCHA Demo" rendered as five stacked lines because the
+     * value column had about five characters to work with. A value box no
+     * wider than roughly a third of the row means the label is still stealing
+     * the line instead of sitting above it.
+     */
+    test('12 · a fact value gets the width of the row', async ({ page }) => {
+      await openWorkspace(page, 'en');
+
+      const row = await page.getByTestId('fact-name').boundingBox();
+      const value = await page.getByTestId('fact-value-name').boundingBox();
+      expect(row).not.toBeNull();
+      expect(value).not.toBeNull();
+
+      expect(
+        value!.width / row!.width,
+        `the value box is ${Math.round(value!.width)}px inside a ${Math.round(row!.width)}px ` +
+          'row — the label and the Edit button are crushing it',
+      ).toBeGreaterThan(0.4);
+
+      await shoot(page, `${size.name}-12-long-value`);
     });
   });
 }

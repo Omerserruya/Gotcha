@@ -198,6 +198,72 @@
     margin-inline-start: auto;
   }
 
+  /* ── Narrow ─────────────────────────────────────────────────────────── */
+  @media (width <= 600px) {
+    /*
+     * The three columns stop being columns.
+     *
+     * A 190px label beside a fixed Edit button leaves a phone about five
+     * characters of value: "Urban Supply - GOTCHA Demo" rendered as five
+     * stacked lines, and "What you sell" became a vertical ribbon dozens of
+     * lines deep that pushed the rest of the page off the screen.
+     *
+     * The label goes above its value, which is what a label does when there is
+     * no room beside it. Placement is explicit rather than auto, because the
+     * optional "Saved" note sits between the value and the button in the DOM
+     * and auto-placement would deal it into the button's cell.
+     */
+    .row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: var(--space-4) var(--space-12);
+      align-items: start;
+    }
+
+    .row .label {
+      grid-row: 1;
+      grid-column: 1 / -1;
+      inline-size: auto;
+    }
+
+    .row .value {
+      grid-row: 2;
+      grid-column: 1;
+    }
+
+    .row .edit {
+      grid-row: 2;
+      grid-column: 2;
+    }
+
+    .row .rowNoteQuiet {
+      grid-row: 3;
+      grid-column: 1 / -1;
+    }
+
+    /*
+     * The week loses its heading row and gains a line per day.
+     *
+     * Three columns at this width squeeze both time inputs below the width a
+     * time control needs. The day now spans its own line with its two times
+     * side by side under it, and the headings go: every input already carries
+     * an `aria-label` reading "Sunday - Opens", so nothing is lost with them.
+     */
+    .hoursGrid {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .hoursSpacer,
+    .hoursHeading {
+      display: none;
+    }
+
+    .hoursDay {
+      grid-column: 1 / -1;
+      margin-block-start: var(--space-4);
+    }
+  }
+
   .counterShort {
     color: var(--intent-urgent-text);
   }
