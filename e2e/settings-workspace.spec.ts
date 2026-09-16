@@ -11,7 +11,17 @@ import { expect, test, type Page } from '@playwright/test';
  * place a screen gets accepted on a guess. The spec is the shared artefact.
  *
  * ── RUNNING IT ──
+ *   export PATH="$HOME/.local/share/node22/bin:$PATH"
  *   GOTCHA_SESSION='<cookie value>' npx playwright test e2e/settings-workspace.spec.ts
+ *
+ * The PATH line is not optional. The default `node` on this machine is 18 and
+ * Playwright needs 20+; under 18 it fails with a message that reads like it is
+ * not installed, which sends you looking in the wrong place entirely.
+ *
+ * The app must already be serving on :3000. `reuseExistingServer` means an
+ * existing one is used, but if nothing is listening the config falls back to
+ * `npm run dev` — which fails under the default Node for the same reason, and
+ * is not what this app is normally served with anyway.
  *
  * The cookie is the value of `gotcha_session` from a signed-in browser on
  * http://localhost:3000. Its name comes from SESSION_COOKIE_NAME.
