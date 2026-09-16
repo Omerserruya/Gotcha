@@ -72,16 +72,41 @@ test.beforeEach(async ({ context }) => {
 /**
  * Opens the screen and refuses to continue unless it is really the screen.
  *
- * An expired cookie redirects to sign-in and everything downstream would
- * "pass" against the wrong page, so the assertion is on content that only
- * this screen has, not on the URL — the URL survives a redirect back.
+ * Three checks, because a missing test id has three quite different causes and
+ * an earlier version of this guard blamed the wrong one. It asserted "the
+ * session is probably expired" for what was actually a stale production
+ * bundle, and sent the person running it to look at authentication for half an
+ * hour. Failing loudly is only useful if it fails ACCURATELY.
+ *
+ *   1. redirected to sign-in     → no session, or it expired
+ *   2. no section heading at all → not this route; the app may not be serving
+ *   3. heading but no test ids   → the served build predates the test ids.
+ *                                  `next start` serves `.next`, so a commit
+ *                                  that is not built is a commit that is not
+ *                                  running, however current the source looks.
  */
 async function openWorkspace(page: Page, locale: 'en' | 'he') {
   await page.goto(`/${locale}/settings/workspace`);
+
+  if (page.url().includes('/sign-in') || page.url().includes('/api/auth/login')) {
+    throw new Error(
+      `Redirected to sign-in from /${locale}/settings/workspace. The session cookie is ` +
+        'missing or expired — set GOTCHA_SESSION to a current one.',
+    );
+  }
+
+  const heading = page.getByRole('heading', { level: 1 });
+  await expect(heading, 'no page heading — is the app serving on this origin?').toBeVisible({
+    timeout: 15_000,
+  });
+
   await expect(
     page.getByTestId('fact-name'),
-    'not on the workspace screen — the session is probably expired',
+    'The screen rendered but its test ids are absent, which means the SERVED BUILD is older ' +
+      'than the commit that added them. Run `npm run build` and restart `next start`; ' +
+      '`.next/BUILD_ID` must be newer than HEAD.',
   ).toBeVisible({ timeout: 15_000 });
+
   return page;
 }
 
