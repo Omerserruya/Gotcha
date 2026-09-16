@@ -127,6 +127,12 @@ router.get("/users", ...ADMIN_ONLY, async (req: Request, res: Response): Promise
       roleAssignments: {
         select: { scope: true, role: { select: { id: true, name: true, builtinKey: true, defaultScope: true } } },
       },
+      // Same predicate as /api/agents, so the number means the same thing on
+      // both routes. `conversations` is @relation("AssignedAgent"), so this is
+      // conversations ASSIGNED TO this person - not authored or participated
+      // in. That matters because the AI-employee count on /api/ai-agents is
+      // also an assignment count, and the two are rendered in one column.
+      _count: { select: { conversations: { where: { status: { not: "CLOSED" } } } } },
     },
   });
   const data = users.map((u) => {
@@ -153,6 +159,10 @@ router.get("/users", ...ADMIN_ONLY, async (req: Request, res: Response): Promise
       roleName: assignment?.role.name ?? null,
       roleBuiltinKey: assignment?.role.builtinKey ?? null,
       scope: assignment?.scope ?? assignment?.role.defaultScope ?? null,
+      // OPEN + WAITING, i.e. "not finished". WAITING is usually awaiting the
+      // customer, so this is not a count of what the person is handling right
+      // now and must not be captioned as live activity.
+      openConversations: u._count.conversations,
     };
   });
   res.json({ data });

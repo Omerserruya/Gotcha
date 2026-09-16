@@ -79,6 +79,28 @@ router.get("/", authenticate, resolveTenant, requireActiveTenant(), requirePermi
     }).catch(() => [] as Array<{ id: string; name: string }>);
     const deptById = new Map(departments.map((d) => [d.id, d.name]));
 
+    // Open conversations per agent, in ONE query rather than one per agent.
+    // `assignedAiAgentId` is a plain column with no Prisma relation, so there
+    // is no `_count` to piggyback on and a per-agent count would have added a
+    // third sequential query to a loop that already runs two.
+    //
+    // Same predicate as the human count on /api/permissions/users: assignment,
+    // and `not CLOSED` (OPEN + WAITING). The two are rendered in one column,
+    // so they have to measure the same thing.
+    const openByAgent = new Map<string, number>();
+    const grouped = await prisma.conversation.groupBy({
+      by: ["assignedAiAgentId"],
+      where: {
+        tenantId: req.tenantId! as string,
+        assignedAiAgentId: { not: null },
+        status: { not: "CLOSED" },
+      },
+      _count: { _all: true },
+    }).catch(() => [] as Array<{ assignedAiAgentId: string | null; _count: { _all: number } }>);
+    for (const row of grouped) {
+      if (row.assignedAiAgentId) openByAgent.set(row.assignedAiAgentId, row._count._all);
+    }
+
     // Enrich with tool count, department name and when it was last tested.
     const enriched = await Promise.all(agents.map(async (agent) => {
       const toolCount = await prisma.agentToolPermission.count({
@@ -101,6 +123,9 @@ router.get("/", authenticate, resolveTenant, requireActiveTenant(), requirePermi
         toolCount,
         departmentName: agent.departmentId ? deptById.get(agent.departmentId) ?? null : null,
         lastTestedAt: sandbox ? (sandbox.lastMessageAt ?? sandbox.updatedAt) : null,
+        // Absent from the group-by means zero, not unknown: the query covers
+        // every non-null assignment in the tenant.
+        openConversations: openByAgent.get(agent.id) ?? 0,
       };
     }));
 
