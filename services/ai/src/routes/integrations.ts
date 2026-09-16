@@ -20,6 +20,27 @@ const router = Router();
 // domain's key. The router-level gate is the READ floor; mutating routes add
 // stronger per-route gates below.
 const canReadSystems = requirePermission("integrations:connections:read", "business-systems:connections:read");
+
+/**
+ * Bound what a connection row hands back.
+ *
+ * `lastError` is the platform's own text, and one of the write paths truncates
+ * it to 200 while others do not - the shopify row on dev is 255 characters and
+ * opens with `<!DOCTYPE html>`, which is a provider returning an HTML error
+ * page rather than JSON. Truncating only on write means the cap depends on
+ * which code path failed; doing it here makes the served field bounded whatever
+ * produced it, including rows written before any cap existed.
+ *
+ * Not sanitised beyond length: the text is shown to an admin as the platform
+ * said it, because a paraphrased provider error is a worse debugging aid than
+ * an ugly one.
+ */
+const LAST_ERROR_MAX = 200;
+function boundConnection<T extends { lastError?: string | null }>(row: T | undefined): T | null {
+  if (!row) return null;
+  if (typeof row.lastError !== "string" || row.lastError.length <= LAST_ERROR_MAX) return row;
+  return { ...row, lastError: row.lastError.slice(0, LAST_ERROR_MAX) };
+}
 const canConnectSystems = requirePermission("integrations:connections:connect", "business-systems:connections:connect");
 const canManageSystems = requirePermission("integrations:connections:disconnect", "business-systems:connections:manage");
 const canSelectSot = requirePermission("business-systems:sot:select");
@@ -52,7 +73,27 @@ router.get("/", async (req: Request, res: Response) => {
           // record from a plain connection: the Settings toggle rendered OFF
           // for a tenant whose config.useAsCrm was true. `credentials` stays
           // out - it is the encrypted secret and no list view needs it.
-          select: { id: true, status: true, createdAt: true, config: true },
+          //
+          // The three health columns are written by /test in six places and,
+          // until now, read by nothing: a client could learn status ERROR but
+          // never WHEN it broke or WHY. Both of those are what the failure
+          // banner says out loud.
+          //
+          // `lastTestedAt` is a CONNECTION TEST and nothing else. There is no
+          // sync concept for integrations anywhere in this system - nothing
+          // records "pulled N records at T" - so this must never be surfaced
+          // or renamed as "last synced". It would tell a customer their data
+          // is current when all that happened is a credential check passing,
+          // which is wrong in the reassuring direction.
+          select: {
+            id: true,
+            status: true,
+            createdAt: true,
+            config: true,
+            lastTestedAt: true,
+            lastTestResult: true,
+            lastError: true,
+          },
         },
       },
       orderBy: { sortOrder: "asc" },
@@ -67,7 +108,7 @@ router.get("/", async (req: Request, res: Response) => {
       })),
       authType: entry.authType,
       authSchema: entry.authSchema,
-      tenantConnection: entry.tenantConnections[0] || null,
+      tenantConnection: boundConnection(entry.tenantConnections[0]),
       tenantConnections: undefined,
     }));
 
@@ -365,7 +406,24 @@ router.get("/:slug", async (req: Request, res: Response) => {
         catalogTools: { orderBy: { name: "asc" } },
         tenantConnections: {
           where: { tenantId: req.tenantId! },
-          select: { id: true, status: true, credentials: true, config: true, createdAt: true, updatedAt: true },
+          // `credentials` was selected here and spread into the response, twelve
+          // lines from a sibling route that excludes it for the reason stated
+          // there. Nothing read it: every consumer reads `.status`, and the
+          // credential write paths take NEW values rather than the stored ones.
+          // The gate on this router is the READ permission, so a member granted
+          // only "view business systems" was receiving the encrypted secret for
+          // every connected integration - viewing a screen and holding the
+          // tenant's credentials should not be the same grant.
+          select: {
+            id: true,
+            status: true,
+            config: true,
+            createdAt: true,
+            updatedAt: true,
+            lastTestedAt: true,
+            lastTestResult: true,
+            lastError: true,
+          },
         },
       },
     });
@@ -375,7 +433,7 @@ router.get("/:slug", async (req: Request, res: Response) => {
       return;
     }
 
-    const tenantConnection = entry.tenantConnections[0] || null;
+    const tenantConnection = boundConnection(entry.tenantConnections[0]);
 
     res.json({
       data: {
