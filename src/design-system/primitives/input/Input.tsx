@@ -10,6 +10,16 @@ export interface InputProps extends Omit<
 > {
   /** Always required. A placeholder is not a label: it disappears on focus. */
   readonly label: string;
+  /**
+   * Hides the label visually while keeping it in the accessibility tree.
+   *
+   * For the case where something ELSE on screen already names the field — a
+   * row label, a column heading — and printing the name twice reads as a
+   * stutter. The label is never dropped, only moved out of sight: a field with
+   * no accessible name is the failure this prop exists to avoid, not the one
+   * it creates.
+   */
+  readonly labelHidden?: boolean;
   readonly hint?: string;
   /** Presence marks the field invalid and wires it up for announcement. */
   readonly error?: string;
@@ -29,7 +39,7 @@ export interface InputProps extends Omit<
  * still reads correctly.
  */
 export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
-  { label, hint, error, trailing, ...rest },
+  { label, labelHidden, hint, error, trailing, ...rest },
   ref,
 ) {
   const id = useId();
@@ -38,7 +48,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
 
   return (
     <div className={styles.field}>
-      <label className={styles.label} htmlFor={id}>
+      <label className={labelHidden ? 'srOnly' : styles.label} htmlFor={id}>
         {label}
       </label>
       <input

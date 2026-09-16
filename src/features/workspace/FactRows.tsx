@@ -247,6 +247,7 @@ export function FactRows({ workspace }: { workspace: Workspace }) {
         <div className={styles.value}>
           <Input
             label={t('fact.name')}
+            labelHidden
             value={text}
             onChange={(e) => setText(e.target.value)}
             maxLength={200}
@@ -260,6 +261,7 @@ export function FactRows({ workspace }: { workspace: Workspace }) {
         <div className={styles.value}>
           <Input
             label={t('fact.description')}
+            labelHidden
             value={text}
             onChange={(e) => setText(e.target.value)}
             maxLength={2000}
@@ -273,6 +275,7 @@ export function FactRows({ workspace }: { workspace: Workspace }) {
         <div className={styles.value}>
           <Input
             label={t('fact.address')}
+            labelHidden
             value={text}
             onChange={(e) => setText(e.target.value)}
             maxLength={300}
@@ -367,6 +370,7 @@ export function FactRows({ workspace }: { workspace: Workspace }) {
         <div className={styles.value}>
           <Input
             label={t('fact.timezone')}
+            labelHidden
             value={text}
             onChange={(e) => setText(e.target.value)}
           />
