@@ -19,7 +19,20 @@ import styles from './Workspace.module.css';
  * followed by one write. The list is applied optimistically and put back on
  * failure — a rule that vanished from the screen but not from the AI would be
  * the worst outcome here, so the screen never claims a removal it did not get.
+ *
+ * TWO DIFFERENT SERVER BEHAVIOURS, and conflating them was a real bug here:
+ *
+ *   - blanks and case-duplicates are dropped SILENTLY, 200 with a shorter
+ *     array. So the returned list is rendered, never the submitted one.
+ *   - 50 items and 200 characters are HARD LIMITS. Over either and the whole
+ *     save is rejected 422 with nothing written — not trimmed. So the UI
+ *     enforces both itself: a pasted 201-character rule must be stopped here,
+ *     because the server's answer is to discard the entire list.
+ *
+ * (An earlier comment recorded all four as trimming. Corrected in S11-v1.1.)
  */
+const MAX_CLAIMS = 50;
+const MAX_CLAIM_LENGTH = 200;
 export function ProhibitedClaims({ claims }: { claims: readonly string[] }) {
   const t = useTranslations('workspace.claims');
   const tRoot = useTranslations('workspace');
@@ -52,9 +65,13 @@ export function ProhibitedClaims({ claims }: { claims: readonly string[] }) {
     });
   }
 
+  const isFull = list.length >= MAX_CLAIMS;
+
   function add() {
     const value = draft.trim();
-    if (!value) return;
+    // Over either limit the server rejects the WHOLE list, so neither can be
+    // allowed to leave this function.
+    if (!value || isFull || value.length > MAX_CLAIM_LENGTH) return;
     setDraft('');
     write([...list, value], list);
   }
@@ -90,7 +107,9 @@ export function ProhibitedClaims({ claims }: { claims: readonly string[] }) {
             label={t('add')}
             value={draft}
             placeholder={t('placeholder')}
-            maxLength={200}
+            maxLength={MAX_CLAIM_LENGTH}
+            disabled={isFull}
+            hint={isFull ? t('full', { max: MAX_CLAIMS }) : undefined}
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === 'Enter') {
@@ -99,7 +118,7 @@ export function ProhibitedClaims({ claims }: { claims: readonly string[] }) {
               }
             }}
           />
-          <Button size="sm" onClick={add} disabled={isPending || !draft.trim()}>
+          <Button size="sm" onClick={add} disabled={isPending || isFull || !draft.trim()}>
             {t('add')}
           </Button>
         </div>

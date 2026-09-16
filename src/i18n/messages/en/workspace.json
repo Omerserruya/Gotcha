@@ -75,6 +75,7 @@
     "add": "Add a rule",
     "placeholder": "Promise a delivery date the carrier hasn't given",
     "remove": "Remove",
-    "removed": "Removed “{claim}”"
+    "removed": "Removed “{claim}”",
+    "full": "That's the limit — {max} rules. Remove one to add another."
   }
 }
