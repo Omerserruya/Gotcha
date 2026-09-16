@@ -25,6 +25,7 @@ import {
   isPermissionKey,
   expandPermissionPattern,
   listPermissionsByDomain,
+  getLastLoginBySubject,
 } from "@chatcenter/shared";
 
 /**
@@ -166,6 +167,42 @@ router.get("/users", ...ADMIN_ONLY, async (req: Request, res: Response): Promise
     };
   });
   res.json({ data });
+});
+
+// ─── Members: login / invite state ─────────────────────────────
+//
+// MUST stay above `/users/:userId` or that route captures "login-status" as a
+// user id and answers 404 for a path that exists.
+//
+// A SIBLING of /users rather than fields on it, and that is not a style
+// choice: the status comes from getLastLoginBySubject, which is one Authentik
+// round-trip PER USER. On the roster every row would wait on N network calls
+// before the table could paint, and an unreachable Authentik would take the
+// whole list down instead of costing one badge. Split, the table renders
+// immediately and this degrades on its own.
+//
+// The state is DERIVED, not recorded. `/api/agents` (the Settings invite path)
+// creates an Authentik identity and returns a setup link without writing any
+// invite row - only the ONBOARDING invite flow writes TenantInvite. So
+// "invited" here means an active member who has never logged in, inferred.
+// Nothing tracks that an invite was sent, by whom, or when it expires.
+router.get("/users/login-status", ...ADMIN_ONLY, async (req: Request, res: Response): Promise<void> => {
+  const tenantId = assertTenantId(req);
+  // Same member set as GET /users, so the two line up row for row.
+  const users = await prisma.user.findMany({
+    where: { tenantId, role: { not: "SYSTEM_ADMIN" } },
+    select: { id: true, isActive: true, identity: { select: { authentikSubject: true } } },
+  });
+  const entries = await Promise.all(users.map(async (u) => {
+    let lastLogin: string | null = null;
+    if (u.identity?.authentikSubject) {
+      // Best-effort: one member's unreachable record must not fail the list.
+      try { lastLogin = await getLastLoginBySubject(u.identity.authentikSubject); } catch { /* best-effort */ }
+    }
+    const status = !u.isActive ? "disabled" : lastLogin ? "active" : "invited";
+    return [u.id, { status, lastLogin }] as const;
+  }));
+  res.json({ data: Object.fromEntries(entries) });
 });
 
 // ─── User: resolved feature set ────────────────────────────────
