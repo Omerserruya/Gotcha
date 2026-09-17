@@ -91,6 +91,26 @@ describe('buildSystemRows', () => {
     expect(buildSystemRows([integration()], [], true, 'en')[0]!.capabilitiesRunning).toBe(true);
   });
 
+  it('leaves every stance unknown while the system is disconnected', () => {
+    // `GET /api/tool-permissions` builds from `getAvailableTools`, which
+    // filters status CONNECTED — so a broken system's tools are absent from
+    // that response entirely. Falling through to the activation would render
+    // them all "allowed" on approval information we were never given.
+    const rows = buildSystemRows(
+      [
+        integration({
+          catalogTools: [tool('process_refund', true)],
+          tenantConnection: { id: 'c1', status: 'ERROR' },
+        }),
+      ],
+      [],
+      true,
+      'en',
+    );
+    expect(rows[0]!.capabilities[0]!.stance).toBeNull();
+    expect(stanceCounts(rows[0]!).unknown).toBe(1);
+  });
+
   it('leaves every stance null when the policy read failed', () => {
     // Not "allow", and not "never". We do not know, and this screen must not
     // guess about whether an AI may issue a refund.

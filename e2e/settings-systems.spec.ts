@@ -141,43 +141,42 @@ for (const size of SIZES) {
     });
 
     /*
-     * 3 · the capabilities that need approval, and the fact none are running.
+     * 3 · a system that is down tells you it cannot say what it may do.
      *
-     * What gates an integration capability is the runtime's own tool-surface
-     * query — `tenantTool.findMany({ isEnabled: true, tenantIntegration:
-     * { status: "CONNECTED" } })` — plus an approval requirement from the
-     * tool's HITL policy. Shopify seeds 15 of its 68 tools as `always`, so the
-     * panel names those fifteen.
+     * Two facts, and neither is guessable:
      *
-     * And because Shopify is ERROR rather than CONNECTED, **none of the
-     * sixty-eight can run at all right now**. That is a clause in the surface
-     * query rather than an inference, and the screen says it once at the
-     * system level instead of relabelling every row.
+     * `GET /api/tool-permissions` builds its list from `getAvailableTools`,
+     * which filters `tenantIntegration: { status: "CONNECTED" }`. Shopify is
+     * ERROR, so **the route reports nothing at all about its 68 tools** — not
+     * "unrestricted", simply absent. Falling through to the activation would
+     * render all 68 as "allowed" on approval information we were never given.
      *
-     * An earlier version of this test asserted "Process Refund — Never", from
-     * a `TenantToolPermission` row disabling it. That row is real and NOTHING
-     * ENFORCES IT: no execution path reads that table, and the
-     * tool-permissions route hardcodes `enabled: true` for integration tools.
-     * Asserting it would have pinned a restriction the product does not apply.
+     * And the same CONNECTED clause gates the AI's own tool surface, so none
+     * of them can run right now however they are configured.
+     *
+     * TWO EARLIER VERSIONS OF THIS TEST WERE WRONG, in opposite directions.
+     * The first asserted "Process Refund — Never" from a
+     * `TenantToolPermission` row that nothing enforces. The second asserted 15
+     * approval-gated and 53 allowed — the right numbers for a CONNECTED
+     * Shopify, and unknowable for this one. Both would have pinned a claim the
+     * data does not support.
      */
-    test('3 · approval-gated capabilities, and nothing running while it is down', async ({
-      page,
-    }) => {
+    test('3 · a disconnected system reports unknown, not allowed', async ({ page }) => {
       await openSystems(page, 'en');
 
-      const restricted = page.getByTestId('restricted-shopify');
-      await expect(restricted).toBeVisible();
-      await expect(restricted.locator('li')).toHaveCount(15);
-      await expect(page.getByTestId('stance-ask-shopify')).toHaveText(/15/);
-
-      // 68 tools, 15 of them approval-gated, none turned off.
-      await expect(page.getByTestId('stance-allow-shopify')).toHaveText(/53/);
+      // We were told nothing about these tools, so we claim nothing.
+      await expect(page.getByTestId('stance-unknown-shopify')).toBeVisible();
+      await expect(page.getByTestId('stance-allow-shopify')).toHaveCount(0);
+      await expect(page.getByTestId('stance-ask-shopify')).toHaveCount(0);
       await expect(page.getByTestId('stance-never-shopify')).toHaveCount(0);
 
-      // The system is down, so none of them run however they are configured.
+      // No list of restricted capabilities, because none is knowable.
+      await expect(page.getByTestId('restricted-shopify')).toHaveCount(0);
+
+      // And the separate, certain fact: nothing runs while it is down.
       await expect(page.getByTestId('not-running-shopify')).toBeVisible();
 
-      await shoot(page, `${size.name}-3-capabilities`);
+      await shoot(page, `${size.name}-3-capabilities-unknown`);
     });
 
     /*

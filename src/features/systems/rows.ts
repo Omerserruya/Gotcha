@@ -106,11 +106,29 @@ export function buildSystemRows(
         lastCheckPassed: connection?.lastTestResult ?? null,
         repairableHere: integration.authType !== 'OAUTH2',
         capabilitiesRunning: connection?.status === 'CONNECTED',
+        /*
+         * A stance is only knowable while the system is CONNECTED.
+         *
+         * `GET /api/tool-permissions` builds its list from
+         * `getAvailableTools`, which filters
+         * `tenantIntegration: { status: "CONNECTED" }`. So a disconnected
+         * system's tools are absent from that response entirely — not
+         * reported as unrestricted, simply not reported.
+         *
+         * Falling through to the activation there would render every
+         * capability as "allowed" for a system whose approval requirements we
+         * were never told, and which in any case cannot run anything. Unknown
+         * is the honest answer, and the row says separately that none of it is
+         * running.
+         */
         capabilities: integration.catalogTools.map((tool) => ({
           id: tool.id,
           slug: tool.slug,
           name: tool.name,
-          stance: policyLoaded ? resolveStance(tool.enabled, policy.get(tool.slug)) : null,
+          stance:
+            policyLoaded && connection?.status === 'CONNECTED'
+              ? resolveStance(tool.enabled, policy.get(tool.slug))
+              : null,
         })),
       };
     });
