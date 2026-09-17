@@ -246,6 +246,22 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
+        # The Security screen's audit log. This file is an explicit per-path
+        # allowlist, so a route with no location here is a 404 AT THE GATEWAY
+        # however healthy the service is - see the /api/docs note above and the
+        # /api/business-policies one below, both of which are the same trap.
+        # Verifying such a route inside its container proves only that the
+        # container works.
+        location /api/audit-logs {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://auth_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
         # ─── GDPR: contact DSRs (conversation svc) - more specific prefix,
         #     matched before /api/gdpr below. ────────────────
         # ─── Account (self-service profile / sessions / security) ──

@@ -219,6 +219,20 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
+        # The Security screen's audit log. Added here at the same time as the
+        # DEV template deliberately: this file and nginx/nginx.conf.template are
+        # maintained in parallel, and a route added to only one of them is the
+        # drift that leaves an endpoint working in DEV and 404ing in production.
+        location /api/audit-logs {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://auth_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
         # ─── GDPR: contact DSRs (conversation svc) - more specific prefix,
         #     matched before /api/gdpr below. ────────────────
         # ─── Account (self-service profile / sessions / security) ──
