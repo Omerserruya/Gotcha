@@ -1,0 +1,170 @@
+@layer features {
+  /*
+   * Settings · Usage & billing — screen 17.
+   *
+   * Runway first, because "how long am I good for" is the question someone
+   * opened this screen with. Then the plan, the breakdown and the invoices.
+   */
+
+  .section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-9);
+  }
+
+  .sectionHeading {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+
+  /* ── The plan line ──────────────────────────────────────────────────── */
+  .plan {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .planLine {
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-8);
+    font-size: var(--font-size-body-sm);
+  }
+
+  .planName {
+    font-weight: 600;
+  }
+
+  .planPrice,
+  .planRenews {
+    color: var(--text-subtle);
+  }
+
+  .planNote {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--intent-blocked-text);
+  }
+
+  /* ── Runway ─────────────────────────────────────────────────────────── */
+  .runway {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-9);
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-16);
+    padding-inline: var(--space-18);
+  }
+
+  .runwayCount {
+    margin: 0;
+    font-size: var(--font-size-heading);
+    color: var(--text-subtle);
+  }
+
+  .runwayCount strong {
+    font-size: var(--font-size-title);
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .runwayNote {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-body);
+  }
+
+  /*
+   * The bar restates the two numbers above it, so it is decorative and marked
+   * `aria-hidden` in the component rather than announced twice.
+   */
+  .meter {
+    block-size: var(--size-meter);
+    background-color: var(--step-track);
+    border-radius: var(--radius-mark);
+    overflow: hidden;
+  }
+
+  .meterFill {
+    block-size: 100%;
+    background-color: var(--action-base);
+  }
+
+  /* ── Lists ──────────────────────────────────────────────────────────── */
+  .block {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-11);
+  }
+
+  .card {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-subtle);
+  }
+
+  .rows {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    overflow: hidden;
+  }
+
+  .row {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-12);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-16);
+    font-size: var(--font-size-meta);
+  }
+
+  .row + .row {
+    border-block-start: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .rowLabel {
+    flex: 1;
+    min-inline-size: 0;
+  }
+
+  .rowValue {
+    flex: none;
+    font-weight: 500;
+  }
+
+  .pdf {
+    flex: none;
+    font-size: var(--font-size-caption);
+    color: var(--text-primary);
+    text-decoration: none;
+    border-block-end: var(--border-width-thin) solid var(--border-emphasis);
+  }
+
+  /* "We could not find out" — never the same as "there is nothing". */
+  .unavailable {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    color: var(--intent-blocked-text);
+    background-color: var(--intent-blocked-surface);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-16);
+  }
+
+  .empty {
+    margin: 0;
+    padding-block: var(--space-16);
+    font-size: var(--font-size-meta);
+    color: var(--text-subtle);
+  }
+}

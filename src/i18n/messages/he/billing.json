@@ -1,0 +1,40 @@
+{
+  "title": "שימוש וחיוב",
+  "description": "מה התוכנית שלכם כוללת, ואיפה אתם עומדים בתוכה.",
+  "heading": {
+    "runway": "שיחות בתקופה הזו",
+    "breakdown": "לאן הלכה התקופה",
+    "invoices": "חשבוניות"
+  },
+  "plan": {
+    "unavailable": "לא הצלחנו לקרוא את התוכנית שלכם כרגע.",
+    "renewsOn": "מתחדשת ב‑{date}",
+    "endsOn": "מסתיימת ב‑{date}",
+    "changesAtRenewal": "תשתנה ל‑{plan} בחידוש."
+  },
+  "runway": {
+    "unavailable": "לא הצלחנו לקרוא את נתוני השימוש כרגע.",
+    "of": " מתוך {limit}",
+    "left": "נותרו {left}",
+    "leftUntil": "נותרו {left} — בקצב הנוכחי, מספיק עד {until}",
+    "usedOnly": "{used} עד כה",
+    "noAllowance": "התוכנית הזו לא מגבילה מספר שיחות, ולכן אין מה לנצל עד הסוף. התקופה הנוכחית נמשכת עד {until}."
+  },
+  "breakdown": {
+    "unavailable": "עדיין איננו יכולים להציג את הפילוח.",
+    "empty": "עדיין לא נרשם דבר בתקופה הזו.",
+    "byAi": "טופלו על ידי עובדי AI",
+    "byPeople": "טופלו על ידי הצוות שלכם",
+    "outbound": "הודעות יוצאות",
+    "voiceMinutes": "דקות שיחה",
+    "ofLimit": "{used} מתוך {limit}"
+  },
+  "invoices": {
+    "unavailable": "עדיין איננו יכולים להציג את החשבוניות שלכם.",
+    "empty": "אין עדיין חשבוניות.",
+    "card": "{brand} · {last4}",
+    "unknownBrand": "כרטיס",
+    "undated": "טרם הונפקה",
+    "pdf": "PDF"
+  }
+}

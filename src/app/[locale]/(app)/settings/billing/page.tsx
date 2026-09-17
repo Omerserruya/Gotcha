@@ -1,19 +1,50 @@
 import { getTranslations } from 'next-intl/server';
 
+import styles from '@/features/billing/Billing.module.css';
+import { Invoices, PlanLine, UsageBreakdownSection } from '@/features/billing/BillingSections';
+import { loadBilling } from '@/features/billing/load-billing';
+import { Runway } from '@/features/billing/Runway';
 import { pageMetadata } from '@/shell/page-metadata';
 import { SettingsSection } from '@/shell/SettingsSection';
 
 /**
- * Settings · billing.
+ * Settings · Usage & billing — screen 17.
  *
- * The section's frame is real - title, description and the sidebar entry that
- * reaches it. The content is built section by section against what the backend
- * serves; see docs/settings-contract.md for which parts are blocked and why.
+ * *"Usage as runway, not credits. The user should know how long they are good
+ * for, not do arithmetic."*
+ *
+ * Runway first, because that is the question someone opened this screen with.
+ * Then the plan, where the period went, and the invoices.
+ *
+ * Three things the design draws are absent, and none is softened: the value
+ * line (nothing computes hours saved or revenue attributed), the overage rate,
+ * and the spending cap. The last two have no field anywhere — writing them
+ * would be asserting billing behaviour from a mockup, which on this screen is
+ * the worst place to guess.
  */
 export default async function Page() {
-  const t = await getTranslations('navigation');
+  const t = await getTranslations('billing');
+  const { allowance, subscription, summary, breakdown } = await loadBilling();
+
   return (
-    <SettingsSection title={t('settings.billing')} description={t('settingsDescription.billing')} />
+    <SettingsSection title={t('title')} description={t('description')}>
+      <PlanLine subscription={subscription} />
+
+      <section className={styles.section} data-testid="section-runway">
+        <h2 className={styles.sectionHeading}>{t('heading.runway')}</h2>
+        <Runway allowance={allowance} />
+      </section>
+
+      <section className={styles.section} data-testid="section-breakdown">
+        <h2 className={styles.sectionHeading}>{t('heading.breakdown')}</h2>
+        <UsageBreakdownSection breakdown={breakdown} />
+      </section>
+
+      <section className={styles.section} data-testid="section-invoices">
+        <h2 className={styles.sectionHeading}>{t('heading.invoices')}</h2>
+        <Invoices summary={summary} />
+      </section>
+    </SettingsSection>
   );
 }
 

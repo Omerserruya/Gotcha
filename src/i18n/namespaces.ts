@@ -34,6 +34,8 @@ export const NAMESPACES = [
   'systems',
   /** Settings · Security — screen 16. */
   'security',
+  /** Settings · Usage & billing — screen 17. */
+  'billing',
 ] as const;
 
 export type Namespace = (typeof NAMESPACES)[number];

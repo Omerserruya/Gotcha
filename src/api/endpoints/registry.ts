@@ -117,9 +117,31 @@ export const workspaceEndpoints = {
   prohibitedClaims: () => endpoint('/api/workspace/prohibited-claims'),
 } as const;
 
-/** Conversation headroom for the period. Served by billing, not analytics. */
+/**
+ * Conversation headroom for the period. Served by billing, not analytics.
+ *
+ * `/api/usage/allowance` — path taken from the MOUNT (`usage-allowance.ts:30`),
+ * not from the filename. It is one of only three routes in the platform that
+ * split a compound name with a slash rather than a hyphen, and the same
+ * mistake on `/api/tenant/security` cost six capture runs.
+ */
 export const usageEndpoints = {
   allowance: () => endpoint('/api/usage/allowance'),
+  /** Contracted, not yet served. The "where the month went" breakdown. */
+  breakdown: () => endpoint('/api/usage/breakdown'),
+} as const;
+
+/**
+ * Plan, price, invoices and payment method — screen 17.
+ *
+ * `subscription` answers **bare `{ subscription }`**, not `{ data }`. Its
+ * siblings are enveloped; this one is not.
+ */
+export const billingEndpoints = {
+  subscription: () => endpoint('/api/billing/subscription'),
+  changePlan: () => endpoint('/api/billing/subscription/change-plan'),
+  /** Contracted, not yet served: invoices and the card on file. */
+  summary: () => endpoint('/api/billing/summary'),
 } as const;
 
 export const intelligenceReviewEndpoints = {

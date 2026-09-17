@@ -1,0 +1,40 @@
+{
+  "title": "Usage & billing",
+  "description": "What your plan covers, and how far into it you are.",
+  "heading": {
+    "runway": "Conversations this period",
+    "breakdown": "Where the period went",
+    "invoices": "Invoices"
+  },
+  "plan": {
+    "unavailable": "We couldn't read your plan just now.",
+    "renewsOn": "renews {date}",
+    "endsOn": "ends {date}",
+    "changesAtRenewal": "Changes to {plan} at renewal."
+  },
+  "runway": {
+    "unavailable": "We couldn't read your usage just now.",
+    "of": " of {limit}",
+    "left": "{left} left",
+    "leftUntil": "{left} left — at today's pace, enough until {until}",
+    "usedOnly": "{used} so far",
+    "noAllowance": "This plan doesn't cap conversations, so there's nothing to run out of. The current period runs until {until}."
+  },
+  "breakdown": {
+    "unavailable": "We can't show the breakdown yet.",
+    "empty": "Nothing recorded for this period yet.",
+    "byAi": "Handled by AI employees",
+    "byPeople": "Handled by your team",
+    "outbound": "Outbound messages",
+    "voiceMinutes": "Phone minutes",
+    "ofLimit": "{used} of {limit}"
+  },
+  "invoices": {
+    "unavailable": "We can't show your invoices yet.",
+    "empty": "No invoices yet.",
+    "card": "{brand} · {last4}",
+    "unknownBrand": "Card",
+    "undated": "Not yet issued",
+    "pdf": "PDF"
+  }
+}
