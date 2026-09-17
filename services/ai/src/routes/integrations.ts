@@ -537,6 +537,22 @@ router.post("/:slug/connect", canConnectSystems, async (req: Request, res: Respo
 //
 // Marks the integration CONNECTED on success and ERROR (with lastError) on
 // failure, so the marketplace UI reflects reality.
+/**
+ * Connection test. NOT a read - it WRITES `status`, `lastTestedAt`,
+ * `lastTestResult` and `lastError` on every call.
+ *
+ * DO NOT fire this casually against a dev tenant to "check the route works".
+ * On the shared dev database the single failing integration row is the only
+ * evidence several things rest on: it is the Business-systems failure banner's
+ * only example, the audit screen's only `succeeded: false` case, and the only
+ * `lastError` longer than 200 characters - which is the sole proof that the
+ * read-side truncation in this file does real work rather than restating a
+ * write-side cap that already existed. One call to this endpoint overwrites
+ * all three, and nothing regenerates them.
+ *
+ * Verify this route by reading it, or by rendering the notification template
+ * it emits. Label that as what it is rather than as an end-to-end check.
+ */
 router.post("/:slug/test", canConnectSystems, async (req: Request, res: Response) => {
   try {
     const slug = req.params.slug as string;
@@ -624,6 +640,21 @@ router.post("/:slug/test", canConnectSystems, async (req: Request, res: Response
       }
       // Some READ tools require args (e.g. shopify.get_order needs an order id)
       // - that's fine: an HTTP-level auth failure is what we're testing.
+      //
+      // WHAT `status: ERROR` MEANS, AND WHAT IT DOES NOT
+      // The gate below is the ONLY path in this file that writes ERROR, and it
+      // fires only when the failure looks like auth. Everything else - a
+      // timeout, a 500, an unreachable host - takes the branch under it and is
+      // recorded as CONNECTED, because "the request reached the provider".
+      //
+      // So ERROR means "the provider rejected our credentials" and NEVER
+      // "the provider is down". A genuinely unreachable Shopify is stored as
+      // healthy. Anything rendering this state must say credentials, and offer
+      // reconnect rather than wait - which is why the notification emitted
+      // below is `integration.check_failed` and not `integration.down`.
+      //
+      // It is also on demand: nothing probes on a schedule, so this state is
+      // only ever as fresh as the last time a person pressed test.
       const reason = String(r.reason || "");
       const looksLikeAuth = /401|403|invalid_token|unauthor/i.test(reason);
       if (!looksLikeAuth) {
