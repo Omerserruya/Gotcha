@@ -84,6 +84,24 @@ const TEMPLATES: Record<SystemEventType, TemplateFn> = {
     };
   },
 
+  // Worded as a CHECK, not as monitoring. The underlying write happens when
+  // someone tests the connection and the failure looked like auth, so saying
+  // "stopped responding" would claim both a watcher we do not run and an
+  // outage we did not observe.
+  "integration.check_failed": (e) => {
+    const name = safe(e.data.displayName ?? e.data.slug, "A connected system");
+    const reason = safe(e.data.reason, "");
+    return {
+      title: `${name}: connection check failed`,
+      body:
+        `We checked ${name} and it rejected our credentials, so GOTCHA cannot use it until it is reconnected.` +
+        `${reason ? ` Reported: ${reason}` : ""}\n` +
+        `\n- Hebrew -\n` +
+        `בדקנו את ${name} וההתחברות נדחתה. GOTCHA לא תוכל להשתמש בו עד לחיבור מחדש.`,
+      link: "/settings/business-systems",
+    };
+  },
+
   "refund.issued": (e) => {
     const amount = safe(e.data.amount, "");
     return {

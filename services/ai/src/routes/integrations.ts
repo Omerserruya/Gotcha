@@ -5,6 +5,7 @@ import { prisma, authenticate, resolveTenant, requireOnboardingOrActiveTenant, r
 import { executeAdapterTool, getAdapter, clearMissingScopes, capabilityStateFromConfig } from "../services/connectors/integration-framework";
 import { invalidateCrmAdapterCache, getCrmAdapter, resolveCrmVendor } from "../services/connectors/crm-adapter-resolver";
 import { maskPhone, maskEmail } from "../lib/mask";
+import { tryEmit } from "../services/notifications-emit";
 import { getSourceOfTruth, type SourceOfTruthCapability } from "../services/connectors/source-of-truth";
 
 const router = Router();
@@ -637,6 +638,17 @@ router.post("/:slug/test", canConnectSystems, async (req: Request, res: Response
       const updated = await prisma.tenantIntegration.update({
         where: { id: tenantIntegration.id },
         data: { status: "ERROR" as any, lastTestedAt: new Date(), lastTestResult: false, lastError: reason.slice(0, 200) },
+      });
+      // The only place in the product that learns a connection is unusable.
+      // Emitted HERE rather than from a prober because no prober exists: this
+      // runs when a person tests, so the event means "we checked and it was
+      // rejected", never "it went down just now". tryEmit so a notification
+      // failure cannot turn a successful diagnosis into a 500.
+      tryEmit({
+        type: "integration.check_failed",
+        tenantId: req.tenantId!,
+        data: { slug, displayName: entry.name ?? slug, reason: reason.slice(0, 200) },
+        metadata: { userId: (req as any).user?.userId },
       });
       res.status(400).json({ error: reason, data: updated });
       return;

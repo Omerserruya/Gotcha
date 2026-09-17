@@ -45,7 +45,16 @@ export type SystemEventType =
   | "credit.exhausted"
   | "credit.auto_purchase_succeeded"
   | "credit.auto_purchase_failed"
-  | "credit.auto_purchase_ceiling_reached";
+  | "credit.auto_purchase_ceiling_reached"
+  // Emitted by services/ai when POST /api/integrations/:slug/test writes
+  // status ERROR. That write is gated on the failure looking like auth, and
+  // only runs when someone tests - so this is "we checked and the credentials
+  // were rejected", NOT "the provider is down" and NOT continuous monitoring.
+  //
+  // NOTE: this union is duplicated in services/ai/src/services/notifications-emit.ts
+  // and the two have already drifted - the billing types above exist only here.
+  // A type added to one side compiles in that service and fails in the other.
+  | "integration.check_failed";
 
 export interface SystemEventMetadata {
   conversationId?: string;
