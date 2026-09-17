@@ -24,6 +24,7 @@ import rateLimit from "express-rate-limit";
 
 const config = { name: "auth-service", port: parseInt(process.env.PORT || "4001", 10) };
 import workspaceRoutes from "./routes/workspace";
+import auditLogRoutes from "./routes/audit-logs";
 const app = createServiceApp(config);
 
 // Stricter rate limit for auth endpoints
@@ -47,6 +48,7 @@ app.use("/api/waitlist", authLimiter);
 // this is inert by default.
 app.use("/api", setupStateRoutes);
 app.use("/api", workspaceRoutes);
+app.use("/api", auditLogRoutes);
 app.use("/api/auth", sessionAuthRoutes);
 // Password-setup links. PUBLIC and mounted before the authenticated auth
 // routes: the caller is someone who does not have a credential yet, which is

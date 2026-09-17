@@ -1,0 +1,186 @@
+/**
+ * /api/audit-logs - the record of what happened, including what GOTCHA did.
+ *
+ * WHY THIS EXISTS AT ALL
+ * `AuditLog` carries six indexes and 5,000+ rows on a single dev tenant, and
+ * until now had no tenant-facing reader. Its only consumers were internal -
+ * the action planner reading the AI's own history, commerce dedup, customer
+ * state. Everything was written carefully and shown to nobody.
+ *
+ * WHAT IS DELIBERATELY NOT HERE
+ *
+ *   `metadata` is NOT returned. It holds `args`, and args hold customer data:
+ *   `{"args": {"phone": "+972545680665"}, "tool": "shopify.get_customer_by_phone"}`
+ *   is a real row on the dev tenant. The screen's subject is what happened, not
+ *   who it happened to, and shipping the whole blob would put customer phone
+ *   numbers into a new surface in bulk, exportable, for every lookup the AI
+ *   ever made. `succeeded` is lifted out of it instead, because that one field
+ *   is about the event rather than the customer.
+ *
+ *   No money filter. `action` names the tool, so `action IN (<money actions>)`
+ *   would be index-served and is therefore possible - but the list is
+ *   provider-specific and every money tool added later falls silently outside
+ *   it. On a security screen a filter that quietly gets less true as the
+ *   product grows is worse than one that never existed.
+ *
+ *   No category taxonomy. The honest fix is a `significance` column written at
+ *   emit time by the code that knows whether it acted or looked something up.
+ *   That is a migration plus every emitter. Until then `/actions` serves the
+ *   real vocabulary and lets the reader narrow it themselves, which invents
+ *   nothing and cannot drift.
+ */
+import { Router, type Request, type Response } from "express";
+import {
+  prisma,
+  authenticate,
+  resolveTenant,
+  requirePermissionOrRole,
+  assertTenantId,
+} from "@chatcenter/shared";
+
+const router = Router();
+
+// Matches the Security screen's siblings (`/api/tenant-security`) rather than
+// introducing a new permission key for one read.
+const CAN_READ = requirePermissionOrRole("settings:workspace:update", "ADMIN");
+
+router.use("/audit-logs", authenticate, resolveTenant);
+
+const MAX_LIMIT = 100;
+const DEFAULT_LIMIT = 50;
+const FACET_CAP = 50;
+
+/** Shared filter builder so the list and its facet can never disagree. */
+function buildWhere(req: Request, tenantId: string, opts: { includeAction: boolean }) {
+  const where: Record<string, unknown> = { tenantId };
+  const actorType = typeof req.query.actorType === "string" ? req.query.actorType.trim() : "";
+  if (actorType) where.actorType = actorType;
+  if (opts.includeAction) {
+    const action = typeof req.query.action === "string" ? req.query.action.trim() : "";
+    if (action) where.action = action;
+  }
+  const from = typeof req.query.from === "string" ? new Date(req.query.from) : null;
+  const to = typeof req.query.to === "string" ? new Date(req.query.to) : null;
+  if ((from && !Number.isNaN(from.getTime())) || (to && !Number.isNaN(to.getTime()))) {
+    where.createdAt = {
+      ...(from && !Number.isNaN(from.getTime()) ? { gte: from } : {}),
+      ...(to && !Number.isNaN(to.getTime()) ? { lte: to } : {}),
+    };
+  }
+  return where;
+}
+
+function badDates(req: Request): Array<{ field: string; message: string }> {
+  const out: Array<{ field: string; message: string }> = [];
+  for (const field of ["from", "to"] as const) {
+    const raw = req.query[field];
+    if (typeof raw === "string" && raw && Number.isNaN(new Date(raw).getTime())) {
+      out.push({ field, message: `${field} must be an ISO-8601 date` });
+    }
+  }
+  return out;
+}
+
+// ─── Facet · the real vocabulary, with counts ─────────────────
+//
+// Mounted ABOVE nothing that could shadow it today, but kept first as a habit:
+// a later `/audit-logs/:id` would capture "actions" as an id and 404 a path
+// that exists.
+//
+// Scoped by the SAME filters as the list except `action` itself. Counts that
+// disagree with the rows in front of the reader are worse than no counts,
+// because the number is trusted over the list - and leaving `action` out is
+// what lets the facet still show what you could switch TO.
+router.get("/audit-logs/actions", CAN_READ, async (req: Request, res: Response): Promise<void> => {
+  const tenantId = assertTenantId(req);
+  const bad = badDates(req);
+  if (bad.length > 0) {
+    res.status(422).json({ error: "Invalid audit filter", details: bad });
+    return;
+  }
+  try {
+    const grouped = await prisma.auditLog.groupBy({
+      by: ["action"],
+      where: buildWhere(req, tenantId, { includeAction: false }) as never,
+      _count: { _all: true },
+      orderBy: { _count: { action: "desc" } },
+      // One more than the cap, so `truncated` is a fact rather than a guess:
+      // asking for 51 and receiving 51 proves a 52nd may exist.
+      take: FACET_CAP + 1,
+    });
+    const truncated = grouped.length > FACET_CAP;
+    res.json({
+      data: grouped.slice(0, FACET_CAP).map((g) => ({ action: g.action, count: g._count._all })),
+      truncated,
+    });
+  } catch (err) {
+    console.error("audit facet error:", err);
+    res.status(500).json({ error: "Failed to summarise the audit log" });
+  }
+});
+
+// ─── List · newest first, cursor-paginated ────────────────────
+router.get("/audit-logs", CAN_READ, async (req: Request, res: Response): Promise<void> => {
+  const tenantId = assertTenantId(req);
+  const bad = badDates(req);
+  if (bad.length > 0) {
+    res.status(422).json({ error: "Invalid audit filter", details: bad });
+    return;
+  }
+  const rawLimit = Number.parseInt(String(req.query.limit ?? ""), 10);
+  const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, MAX_LIMIT) : DEFAULT_LIMIT;
+  const cursor = typeof req.query.cursor === "string" && req.query.cursor ? req.query.cursor : null;
+
+  try {
+    const rows = await prisma.auditLog.findMany({
+      where: buildWhere(req, tenantId, { includeAction: true }) as never,
+      select: {
+        id: true,
+        actorType: true,
+        actorId: true,
+        action: true,
+        targetType: true,
+        targetId: true,
+        createdAt: true,
+        // Lifted so the caller can tell an action that worked from one that
+        // did not without receiving the blob it lives in. See the header.
+        metadata: true,
+      },
+      // `createdAt` is not unique - a burst of AI calls shares a millisecond -
+      // so `id` breaks the tie and keeps the cursor stable across pages.
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: limit + 1,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    });
+
+    const hasMore = rows.length > limit;
+    const page = hasMore ? rows.slice(0, limit) : rows;
+
+    res.json({
+      data: page.map((r) => {
+        const meta = r.metadata as Record<string, unknown> | null;
+        return {
+          id: r.id,
+          actorType: r.actorType,
+          actorId: r.actorId,
+          action: r.action,
+          // The conversation the action happened in, NOT the business object
+          // acted on - the order id lives in metadata.args and has no general
+          // shape across tools, so it is not promoted to a field here.
+          targetType: r.targetType,
+          targetId: r.targetId,
+          createdAt: r.createdAt,
+          // null when the emitter recorded no verdict, which is different from
+          // false: "we did not record whether this worked" is not "it failed".
+          succeeded: meta && typeof meta.ok === "boolean" ? meta.ok : null,
+        };
+      }),
+      nextCursor: hasMore ? (page[page.length - 1]?.id ?? null) : null,
+    });
+  } catch (err) {
+    console.error("audit list error:", err);
+    res.status(500).json({ error: "Failed to read the audit log" });
+  }
+});
+
+export default router;
