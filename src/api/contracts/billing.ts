@@ -89,6 +89,58 @@ export const subscriptionResponseSchema = z.object({
 export type Subscription = z.infer<typeof subscriptionSchema>;
 
 /**
+ * `GET /api/billing/plans` — bare `{ plans }`, like its sibling.
+ *
+ * **The subscription carries `planKey`, not a plan name.** `ai_voice` is a
+ * machine identifier and must never be the most prominent line on a billing
+ * screen — the same class of error as rendering a cuid as an object name.
+ *
+ * `Plan` carries `name` and `nameHe`, so the name is also TRANSLATABLE, which
+ * a key can never be. Resolving it here rather than asking the backend to join
+ * it is deliberate: this route already exists, is already tenant-scoped, and
+ * its own comment says it deliberately includes RETIRED plans *"so a customer
+ * still on one keeps seeing their own plan's name"* — it was built for exactly
+ * this lookup.
+ *
+ * **`object`, not `looseObject`:** the route returns whole `Plan` rows with
+ * `entitlements`, `volumeOptions` and pricing internals. A billing screen
+ * needs three fields.
+ */
+export const planSchema = z.object({
+  key: z.string().min(1),
+  name: z.string().min(1),
+  nameHe: z.string().nullable().optional(),
+});
+
+export const plansResponseSchema = z.object({
+  plans: z.array(planSchema).default([]),
+});
+
+export type Plan = z.infer<typeof planSchema>;
+
+/**
+ * The plan's name in the reader's language, falling back honestly.
+ *
+ * A plan the list does not contain returns `null` rather than its key — the
+ * caller decides whether showing a machine identifier is better than showing
+ * nothing, and on this screen it is: an unrecognised plan is still the plan
+ * they are paying for.
+ */
+export function planNameFor(
+  plans: readonly Plan[],
+  key: string | null | undefined,
+  locale: string,
+): string | null {
+  if (!key) return null;
+  const plan = plans.find((p) => p.key === key);
+  if (!plan) return null;
+  // Hebrew only when there IS a Hebrew name; an empty one falls back rather
+  // than rendering a blank where a plan name belongs.
+  if (locale.startsWith('he') && plan.nameHe?.trim()) return plan.nameHe.trim();
+  return plan.name;
+}
+
+/**
  * An invoice — **contracted, not yet served.**
  *
  * `Invoice` carries everything the design draws, including `providerPdfUrl`

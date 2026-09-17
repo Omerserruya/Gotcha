@@ -1,6 +1,12 @@
 import { getLocale, getTranslations } from 'next-intl/server';
 
-import type { BillingSummary, Subscription, UsageBreakdown } from '@/api/contracts/billing';
+import {
+  planNameFor,
+  type BillingSummary,
+  type Plan,
+  type Subscription,
+  type UsageBreakdown,
+} from '@/api/contracts/billing';
 
 import styles from './Billing.module.css';
 
@@ -16,7 +22,13 @@ import styles from './Billing.module.css';
  * because "renews on the 8th" and "ends on the 8th" are opposite facts that
  * would otherwise look identical.
  */
-export async function PlanLine({ subscription }: { readonly subscription: Subscription | null }) {
+export async function PlanLine({
+  subscription,
+  plans,
+}: {
+  readonly subscription: Subscription | null;
+  readonly plans: readonly Plan[];
+}) {
   const t = await getTranslations('billing');
   const locale = await getLocale();
 
@@ -41,7 +53,19 @@ export async function PlanLine({ subscription }: { readonly subscription: Subscr
   return (
     <div className={styles.plan} data-testid="plan">
       <p className={styles.planLine} data-testid="plan-line">
-        <span className={styles.planName}>{subscription.planKey}</span>
+        {/*
+          The plan's NAME, not its key. `ai_voice` is a machine identifier and
+          the most prominent line on a billing screen is the worst place for
+          one — the same class of error as rendering a cuid as an object name.
+          It is also translatable, which a key can never be.
+
+          Falls back to the key only when the plan is not in the list at all:
+          an unrecognised plan is still the one they are paying for, and a
+          blank where the plan name belongs would be worse.
+        */}
+        <span className={styles.planName} data-testid="plan-name">
+          {planNameFor(plans, subscription.planKey, locale) ?? subscription.planKey}
+        </span>
         {price ? <span className={styles.planPrice}>{price}</span> : null}
         {subscription.currentPeriodEnd ? (
           <span className={styles.planRenews}>
@@ -58,7 +82,12 @@ export async function PlanLine({ subscription }: { readonly subscription: Subscr
 
       {subscription.pendingChange?.targetPlanKey ? (
         <p className={styles.planNote} data-testid="plan-pending">
-          {t('plan.changesAtRenewal', { plan: subscription.pendingChange.targetPlanKey })}
+          {t('plan.changesAtRenewal', {
+            // The scheduled plan gets the same treatment as the current one.
+            plan:
+              planNameFor(plans, subscription.pendingChange.targetPlanKey, locale) ??
+              subscription.pendingChange.targetPlanKey,
+          })}
         </p>
       ) : null}
     </div>

@@ -139,6 +139,8 @@ export const usageEndpoints = {
  */
 export const billingEndpoints = {
   subscription: () => endpoint('/api/billing/subscription'),
+  /** Plan names by key — the subscription carries only the key. Bare `{ plans }`. */
+  plans: () => endpoint('/api/billing/plans'),
   changePlan: () => endpoint('/api/billing/subscription/change-plan'),
   /** Contracted, not yet served: invoices and the card on file. */
   summary: () => endpoint('/api/billing/summary'),

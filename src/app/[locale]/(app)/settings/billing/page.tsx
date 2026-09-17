@@ -24,11 +24,11 @@ import { SettingsSection } from '@/shell/SettingsSection';
  */
 export default async function Page() {
   const t = await getTranslations('billing');
-  const { allowance, subscription, summary, breakdown } = await loadBilling();
+  const { allowance, subscription, plans, summary, breakdown } = await loadBilling();
 
   return (
     <SettingsSection title={t('title')} description={t('description')}>
-      <PlanLine subscription={subscription} />
+      <PlanLine subscription={subscription} plans={plans} />
 
       <section className={styles.section} data-testid="section-runway">
         <h2 className={styles.sectionHeading}>{t('heading.runway')}</h2>

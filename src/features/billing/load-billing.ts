@@ -4,10 +4,12 @@ import { serverApi } from '@/api/client/server-api';
 import {
   allowanceSchema,
   billingSummarySchema,
+  plansResponseSchema,
   subscriptionResponseSchema,
   usageBreakdownSchema,
   type Allowance,
   type BillingSummary,
+  type Plan,
   type Subscription,
   type UsageBreakdown,
 } from '@/api/contracts/billing';
@@ -31,6 +33,12 @@ import { logger } from '@/observability/logger';
 export interface BillingData {
   readonly allowance: Allowance | null;
   readonly subscription: Subscription | null;
+  /**
+   * Plan names by key. The subscription carries `planKey` — `ai_voice` — and a
+   * machine identifier must never be the most prominent line on a billing
+   * screen. The list is also where the Hebrew name lives.
+   */
+  readonly plans: readonly Plan[];
   readonly summary: BillingSummary | null;
   readonly breakdown: UsageBreakdown | null;
 }
@@ -38,7 +46,7 @@ export interface BillingData {
 export async function loadBilling(): Promise<BillingData> {
   const api = serverApi();
 
-  const [allowance, subscription, summary, breakdown] = await Promise.all([
+  const [allowance, subscription, plans, summary, breakdown] = await Promise.all([
     api
       .get({ endpoint: usageEndpoints.allowance(), payload: allowanceSchema })
       .catch((cause: unknown) => {
@@ -54,6 +62,14 @@ export async function loadBilling(): Promise<BillingData> {
       })
       .catch((cause: unknown) => {
         logger.warn('billing.subscription_failed', { cause });
+        return null;
+      }),
+    api
+      .get({ endpoint: billingEndpoints.plans(), payload: plansResponseSchema, raw: true })
+      .catch((cause: unknown) => {
+        // Losing this costs the plan its NAME, not the screen. The line falls
+        // back to the key, which is ugly and still true.
+        logger.warn('billing.plans_failed', { cause });
         return null;
       }),
     api
@@ -73,6 +89,7 @@ export async function loadBilling(): Promise<BillingData> {
   return {
     allowance,
     subscription: subscription?.subscription ?? null,
+    plans: plans?.plans ?? [],
     summary,
     breakdown,
   };

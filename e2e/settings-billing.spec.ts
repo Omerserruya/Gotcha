@@ -116,6 +116,14 @@ for (const size of SIZES) {
 
       const plan = page.getByTestId('plan-line');
       await expect(plan).toBeVisible();
+
+      /*
+       * A NAME, never a key. `ai_voice` shipped as the most prominent line on
+       * this screen and was caught in a screenshot — the same class as
+       * rendering a cuid where an object name belongs, in a more visible
+       * place. A key is also untranslatable, which half these shots are.
+       */
+      await expect(page.getByTestId('plan-name')).not.toHaveText(/^[a-z][a-z0-9]*_[a-z0-9_]+$/);
       await expect(plan).toHaveText(/\$|US\$/);
       // Never the mockup's currency.
       await expect(plan).not.toHaveText(/₪/);
