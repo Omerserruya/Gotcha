@@ -20,11 +20,10 @@ import type { LoginEvent, SecuritySession } from '@/api/contracts/security';
  *
  * ── WHY IT IS NOT A MOCK API LAYER ──
  * It substitutes two arrays, in one file, on one screen, only when an env var
- * is set, and **never when `NODE_ENV` is `production`** — both conditions, so
- * setting the variable on a production host does nothing. Everything else on
- * the screen still reads live, including the audit log and the MFA policy, and
- * the rendering path is the same one a real person gets. No component knows
- * this file exists.
+ * is set **and the app is serving itself on a loopback address**. Everything
+ * else on the screen still reads live, including the audit log and the MFA
+ * policy, and the rendering path is the same one a real person gets. No
+ * component knows this file exists.
  *
  * The values are RFC 5737 documentation addresses, reserved so they can never
  * belong to anyone, and they are deliberately DISTINCT from each other: the
@@ -32,8 +31,61 @@ import type { LoginEvent, SecuritySession } from '@/api/contracts/security';
  * that made every row identical would pass a capture that proved nothing.
  */
 
+/**
+ * Both conditions, and the second is the one doing the work.
+ *
+ * ── WHY NOT `NODE_ENV !== 'production'` ──
+ * That was the first guard and it was broken: `next start` IS production mode,
+ * Next sets `NODE_ENV` itself, so the clause was always false and the fixtures
+ * could never engage. The capture caught it — 42 tests refused rather than
+ * photographing live data — but the intent was wrong as well as the code.
+ * Build mode describes how the bundle was compiled; it says nothing about
+ * whose machine is serving it.
+ *
+ * ── WHY THE ORIGIN ──
+ * `APP_ORIGIN` is the address this app answers on, and a host serving real
+ * people cannot be on a loopback address — a browser elsewhere could never
+ * reach it. So "am I only reachable from this machine?" is the question that
+ * actually distinguishes a capture run from a deployment, and it holds
+ * whatever `NODE_ENV` says.
+ *
+ * **Fail closed.** A missing, malformed or non-loopback origin yields `false`.
+ * Someone setting `E2E_SECURITY_FIXTURES=1` on the real app — by accident or
+ * otherwise — gets live behaviour, which is the property this guard exists to
+ * preserve.
+ */
 export function captureFixturesEnabled(): boolean {
-  return process.env.E2E_SECURITY_FIXTURES === '1' && process.env.NODE_ENV !== 'production';
+  if (process.env.E2E_SECURITY_FIXTURES !== '1') return false;
+  /*
+   * `process.env` directly rather than `serverEnv()`, because the layer rules
+   * forbid `features → config` and this is not worth an exception. It is the
+   * same source: `serverEnv()` parses `process.env`, and Next loads
+   * `.env.local` into it at runtime under `next start` as well as in dev.
+   *
+   * The value is only ever compared, never rendered, so an unvalidated read
+   * costs nothing here — and `isLoopbackOrigin` fails closed on anything it
+   * cannot parse.
+   */
+  return isLoopbackOrigin(process.env.APP_ORIGIN);
+}
+
+/** Exported for its own test: this predicate is the whole safety property. */
+export function isLoopbackOrigin(origin: string | undefined): boolean {
+  if (!origin) return false;
+  let host: string;
+  try {
+    host = new URL(origin).hostname;
+  } catch {
+    // An origin we cannot parse is not one we can vouch for.
+    return false;
+  }
+  /*
+   * `hostname` KEEPS the brackets on an IPv6 literal — `http://[::1]:3000`
+   * yields `[::1]`, not `::1`. I had that backwards in a comment and the test
+   * caught it, which is the reason this predicate has one.
+   */
+  const bare = host.startsWith('[') && host.endsWith(']') ? host.slice(1, -1) : host;
+  return bare === 'localhost' || bare === '127.0.0.1' || bare === '::1';
 }
 
 export const FIXTURE_SESSIONS: readonly SecuritySession[] = [
