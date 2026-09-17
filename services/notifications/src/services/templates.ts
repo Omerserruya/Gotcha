@@ -84,6 +84,57 @@ const TEMPLATES: Record<SystemEventType, TemplateFn> = {
     };
   },
 
+  // "Finished", not "succeeded": a broadcast completes when every recipient
+  // reaches a terminal state, and failures are terminal. Reporting only the
+  // sent count would read as success to someone whose send half failed.
+  "broadcast.completed": (e) => {
+    const name = safe(e.data.name, "Your campaign");
+    const sent = safe(e.data.sentCount, "0");
+    const failed = safe(e.data.failedCount, "0");
+    const hadFailures = String(failed) !== "0";
+    return {
+      title: `${name}: finished`,
+      body:
+        `${name} has finished sending. ${sent} delivered` +
+        `${hadFailures ? `, ${failed} failed` : ""}.\n` +
+        `\n- Hebrew -\n` +
+        `${name} סיים לשלוח. ${sent} נשלחו${hadFailures ? `, ${failed} נכשלו` : ""}.`,
+      link: "/broadcasts",
+    };
+  },
+
+  // Fires only on a transfer to a different agent. The `assignedBy` name is
+  // what makes this actionable - "a conversation was assigned to you" without
+  // saying by whom is a task with no context.
+  // Two senders reach this: a person reassigning (assignedByName), and a
+  // department transfer where the system chose by lowest workload and there is
+  // no "by" at all (departmentName). Naming the department in the second case
+  // matters - otherwise the notification cannot say why this landed on you.
+  "conversation.assigned": (e) => {
+    const by = safe(e.data.assignedByName, "");
+    const dept = safe(e.data.departmentName, "");
+    const title = by
+      ? `${by} assigned you a conversation`
+      : dept
+        ? `A conversation was routed to you in ${dept}`
+        : "A conversation was assigned to you";
+    const en = by
+      ? `${by} transferred a conversation to you.`
+      : dept
+        ? `A conversation was transferred to ${dept} and routed to you.`
+        : "A conversation was transferred to you.";
+    const he = by
+      ? `${by} העביר/ה אליך שיחה.`
+      : dept
+        ? `שיחה הועברה למחלקת ${dept} ונותבה אליך.`
+        : "שיחה הועברה אליך.";
+    return {
+      title,
+      body: `${en}\n\n- Hebrew -\n${he}`,
+      link: e.metadata.conversationId ? `/conversations/${e.metadata.conversationId}` : undefined,
+    };
+  },
+
   // Worded as a CHECK, not as monitoring. The underlying write happens when
   // someone tests the connection and the failure looked like auth, so saying
   // "stopped responding" would claim both a watcher we do not run and an

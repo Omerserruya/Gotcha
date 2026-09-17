@@ -24,6 +24,21 @@ export const channelHealthQueue = new Queue("channel-health", { connection: { ur
 export const idleConversationQueue = new Queue("idle-conversations", { connection: { url: REDIS_URL } });
 export const broadcastQueue = new Queue("broadcast-messages", { connection: { url: REDIS_URL } });
 export const scheduledMessageQueue = new Queue("scheduled-messages", { connection: { url: REDIS_URL } });
+/**
+ * System events for the notifications service.
+ *
+ * A HANDLE only - the emit helpers stay where they are. `services/ai` and
+ * `services/billing` each construct their own `Queue("notifications")`, and
+ * this does not change either of them. It exists so a service with no emit
+ * path of its own (outgoing-worker, conversation) can enqueue without either
+ * importing `bullmq` undeclared - it resolves today only by root hoisting -
+ * or adding a dependency, which this repo does not permit.
+ *
+ * Job name is "system-event" and the payload shape is
+ * `{ id, type, tenantId, data, metadata: { ..., timestamp } }`, matching what
+ * the notifications worker already consumes from billing.
+ */
+export const notificationsQueue = new Queue("notifications", { connection: { url: REDIS_URL } });
 // Delayed resume for flow Wait nodes. When a flow hits a Wait(5s), the
 // walker enqueues a job here with { delay: 5000 } and halts. The worker
 // picks it up after the delay and resumes the flow at the next node.

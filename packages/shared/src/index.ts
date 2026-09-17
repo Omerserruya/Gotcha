@@ -609,6 +609,7 @@ export {
   idleConversationQueue,
   broadcastQueue,
   scheduledMessageQueue,
+  notificationsQueue,
   flowResumeQueue,
   historicalIntelligenceQueue,
   createWorker,

@@ -1,5 +1,6 @@
 import { getInternalServiceKey, readDurableSetting, recordHandover } from "@chatcenter/shared";
-import { prisma, publishEvent, outgoingMessageQueue, withHistoricalRecords } from "@chatcenter/shared";
+import { randomUUID } from "crypto";
+import { prisma, publishEvent, outgoingMessageQueue, withHistoricalRecords, notificationsQueue } from "@chatcenter/shared";
 import { getIO } from "../lib/socket";
 import * as messageService from "./message.service";
 
@@ -166,6 +167,33 @@ export async function transferToDepartment(tenantId: string, conversationId: str
 
   emitToTenant(tenantId, "conversation:updated", updated);
 
+  // Keyed on assignedAgentId being non-null, NOT on queueMode. A ROUND_ROBIN
+  // department with no active members leaves this null and the conversation
+  // WAITING - there is nobody to tell. That is the same fact the status one
+  // line above keys off, so the two cannot disagree.
+  //
+  // This is the case that most needs telling: with a reassign a person chose
+  // you and usually says so, while here the system picked you by lowest
+  // workload and nobody is on the other end of it.
+  //
+  // Cannot double-fire with reassign(): the only callers are the two branches
+  // of one if/else in routes/conversations.ts, so a request takes exactly one.
+  if (assignedAgentId) {
+    notificationsQueue
+      .add(
+        "system-event",
+        {
+          id: randomUUID(),
+          type: "conversation.assigned",
+          tenantId,
+          data: { conversationId, departmentName: department.name, assignedToName: agentName ?? null },
+          metadata: { conversationId, userId: assignedAgentId, timestamp: new Date().toISOString() },
+        },
+        { removeOnComplete: 1000, removeOnFail: 100, attempts: 5, backoff: { type: "exponential", delay: 2_000 } },
+      )
+      .catch((err: any) => console.warn("[conversation] department assignment notify failed:", err?.message ?? err));
+  }
+
   // Auto-greeting if agent was auto-assigned via round-robin
   if (assignedAgentId) {
     await sendAutoGreeting(tenantId, conversationId, assignedAgentId, conversation);
@@ -277,6 +305,27 @@ export async function reassign(tenantId: string, conversationId: string, newAgen
 
   // System divider: conversation transferred
   await createSystemMessage(tenantId, conversationId, "agent_transferred", { fromAgentName, toAgentName });
+
+  // Screen 15's "a conversation is assigned to me". ONLY here: the other
+  // writers of assignedAgentId are self-claims (a user picking up their own
+  // conversation), and telling someone they claimed the thing they just
+  // clicked is the noise that screen exists to prevent. `userId` carries the
+  // recipient, so the dispatcher can address the person assigned rather than
+  // the tenant. Fire-and-forget - a notification outage must not undo a
+  // transfer that has already happened.
+  notificationsQueue
+    .add(
+      "system-event",
+      {
+        id: randomUUID(),
+        type: "conversation.assigned",
+        tenantId,
+        data: { conversationId, assignedByName: fromAgentName, assignedToName: toAgentName },
+        metadata: { conversationId, userId: newAgentId, timestamp: new Date().toISOString() },
+      },
+      { removeOnComplete: 1000, removeOnFail: 100, attempts: 5, backoff: { type: "exponential", delay: 2_000 } },
+    )
+    .catch((err: any) => console.warn("[conversation] assignment notify failed:", err?.message ?? err));
 
   emitToTenant(tenantId, "conversation:updated", updated);
 

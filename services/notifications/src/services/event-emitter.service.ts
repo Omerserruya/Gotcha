@@ -54,7 +54,16 @@ export type SystemEventType =
   // NOTE: this union is duplicated in services/ai/src/services/notifications-emit.ts
   // and the two have already drifted - the billing types above exist only here.
   // A type added to one side compiles in that service and fails in the other.
-  | "integration.check_failed";
+  | "integration.check_failed"
+  // Emitted by services/outgoing-worker when every recipient of a broadcast
+  // has reached a terminal state. Not "campaign succeeded" - failures count
+  // toward completion, so the body states both numbers.
+  | "broadcast.completed"
+  // Emitted by services/conversation when a conversation is REASSIGNED to a
+  // different agent. Deliberately NOT emitted for self-claims: telling someone
+  // they picked up the conversation they just clicked is the noise this screen
+  // exists to prevent.
+  | "conversation.assigned";
 
 export interface SystemEventMetadata {
   conversationId?: string;
