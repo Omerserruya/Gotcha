@@ -83,7 +83,11 @@ export const loginHistoryResponseSchema = z.object({
 export type LoginEvent = z.infer<typeof loginEventSchema>;
 
 /**
- * `GET`/`PATCH /api/tenant-security` — enveloped in `data`.
+ * `GET`/`PATCH /api/tenant/security` — enveloped in `data`.
+ *
+ * Note the slash. The route FILE is `tenant-security.ts`; the MOUNT is
+ * `/api/tenant/security`. Taking the path from the filename cost six capture
+ * runs — the fetch 404s and the section simply does not render.
  *
  * Two switches, and they are the whole of the tenant's access policy that this
  * app can read. The design also asks for **SSO / Google domain**; no field for

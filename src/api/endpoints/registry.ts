@@ -308,7 +308,22 @@ export const securityEndpoints = {
   /** Revokes every OTHER session, keeping the caller's. */
   revokeOtherSessions: () => endpoint('/api/account/sessions'),
   loginHistory: () => endpoint('/api/account/login-history'),
-  tenantSecurity: () => endpoint('/api/tenant-security'),
+  /**
+   * `/api/tenant/security` — a SLASH, and it is an exception.
+   *
+   * Compound paths in this platform are hyphenated **38 to 3**. Only
+   * `/api/tenant/security`, `/api/usage/allowance` and `/api/voice/incoming`
+   * split a compound name with a slash, and this one contradicts its own
+   * sibling: `/api/tenant-settings` hyphenates the same `tenant` prefix that
+   * `/api/tenant/security` splits.
+   *
+   * So the convention does not tell you, and neither does the route file
+   * (`routes/tenant-security.ts`, hyphenated). **Only `app.use` does.** This
+   * was wrong for six capture runs and cost nothing but time because the
+   * section now says when it cannot read its data — which is the other half of
+   * the fix.
+   */
+  tenantSecurity: () => endpoint('/api/tenant/security'),
   auditLogs: () => endpoint('/api/audit-logs'),
   /** The real action vocabulary with counts — not a taxonomy we invented. */
   auditActions: () => endpoint('/api/audit-logs/actions'),

@@ -49,16 +49,26 @@ export default async function Page() {
       </section>
 
       {/*
-        Absent rather than disabled when the policy could not be read. An
+        The switches are absent when the policy could not be read — an
         unchecked switch would assert that two-factor is NOT required, which is
-        a claim about this tenant's security that we have no basis for.
+        a claim about this tenant's security we have no basis for.
+        
+        But the SECTION stays, and says so. Rendering nothing at all is how a
+        wrong URL hid here for six capture runs: the fetch 404'd, the section
+        vanished, and a screen missing a whole control looked like a screen
+        with no control. Same principle as the rest of this screen — "we could
+        not find out" must never be silent.
       */}
-      {tenant ? (
-        <section className={styles.section} data-testid="section-mfa">
-          <h2 className={styles.sectionHeading}>{t('heading.mfa')}</h2>
+      <section className={styles.section} data-testid="section-mfa">
+        <h2 className={styles.sectionHeading}>{t('heading.mfa')}</h2>
+        {tenant ? (
           <MfaPolicy policy={tenant} />
-        </section>
-      ) : null}
+        ) : (
+          <p className={styles.unavailable} data-testid="mfa-unavailable">
+            {t('mfa.unavailable')}
+          </p>
+        )}
+      </section>
 
       <section className={styles.section} data-testid="section-audit">
         <h2 className={styles.sectionHeading}>{t('heading.audit')}</h2>

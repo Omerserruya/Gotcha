@@ -28,7 +28,8 @@
     "admins": "Require two-factor for admins",
     "everyone": "Require two-factor for everyone",
     "impliedByEveryone": "Already required, because everyone must use it.",
-    "failed": "That didn't save. Try again."
+    "failed": "That didn't save. Try again.",
+    "unavailable": "We couldn't read your two-factor settings, so they aren't shown. This doesn't mean two-factor is off."
   },
   "audit": {
     "unavailable": "We can't read the activity log yet, so this list is not available. It isn't empty — we just can't show it.",
