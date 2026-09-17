@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { resolveStance, toolSlugOf, type Integration } from '@/api/contracts/integrations';
 
-import { buildSystemRows, stanceCounts } from './rows';
+import { buildSystemRows, messageOf, stanceCounts } from './rows';
 
 const tool = (slug: string, enabled = true) => ({
   id: `t-${slug}`,
@@ -216,5 +216,34 @@ describe('buildSystemRows', () => {
       'en',
     );
     expect(stanceCounts(rows[0]!)).toEqual({ allow: 2, ask: 1, never: 0, unknown: 0 });
+  });
+});
+
+describe('messageOf', () => {
+  it('stops where the platform stopped writing prose and started returning a page', () => {
+    expect(
+      messageOf('token_refresh_failed:shopify_token_refresh_failed_401: <!DOCTYPE html><html'),
+    ).toBe('token_refresh_failed:shopify_token_refresh_failed_401:');
+  });
+
+  it('rewrites nothing — it only stops', () => {
+    // The distinction that makes this allowed rather than paraphrasing.
+    const plain = 'connection refused after 3 attempts';
+    expect(messageOf(plain)).toBe(plain);
+  });
+
+  it('leaves a less-than that is not markup alone', () => {
+    expect(messageOf('rate limit: value < 10 per second')).toBe(
+      'rate limit: value < 10 per second',
+    );
+  });
+
+  it('keeps the original when nothing readable precedes the markup', () => {
+    // A strange message still beats an empty one.
+    expect(messageOf('<!DOCTYPE html>')).toBe('<!DOCTYPE html>');
+  });
+
+  it('passes a missing error straight through', () => {
+    expect(messageOf(null)).toBeNull();
   });
 });

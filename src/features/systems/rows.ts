@@ -161,3 +161,28 @@ export function stanceCounts(row: SystemRow): {
   }
   return counts;
 }
+
+/**
+ * The readable part of a platform error.
+ *
+ * Shopify's is `token_refresh_failed:shopify_token_refresh_failed_401:` and
+ * then an entire HTML document, truncated mid-tag at 200 characters. The
+ * useful sentence is at the front; the rest is the body of a response that
+ * happened to be concatenated onto it.
+ *
+ * This is NOT paraphrasing, and the distinction is the whole reason it is
+ * allowed: not one word is rewritten. It declines to render a fragment of a
+ * markup document as if it were prose, and it stops only at `<!` or `<html`,
+ * the two unambiguous starts of one. An error that legitimately contains a
+ * `<` — "value < 10" — is untouched.
+ *
+ * If nothing readable precedes the markup, the original is returned whole: a
+ * strange message is still better than an empty one.
+ */
+export function messageOf(error: string | null): string | null {
+  if (!error) return null;
+  const markup = error.search(/<!|<html/i);
+  if (markup < 0) return error;
+  const readable = error.slice(0, markup).trim();
+  return readable.length > 0 ? readable : error;
+}

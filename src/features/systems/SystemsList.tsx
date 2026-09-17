@@ -2,7 +2,7 @@ import { getLocale, getTranslations } from 'next-intl/server';
 
 import type { Integration, ToolPermission } from '@/api/contracts/integrations';
 
-import { buildSystemRows, stanceCounts, type SystemRow } from './rows';
+import { buildSystemRows, messageOf, stanceCounts, type SystemRow } from './rows';
 import styles from './Systems.module.css';
 
 /**
@@ -64,7 +64,7 @@ export async function SystemsList({
           */}
           {row.error ? (
             <code className={styles.bannerError} data-testid={`banner-error-${row.slug}`}>
-              {row.error}
+              {messageOf(row.error)}
             </code>
           ) : null}
           {/*
@@ -75,7 +75,9 @@ export async function SystemsList({
             real and abandons the person in a different product.
           */}
           <p className={styles.bannerAction} data-testid={`banner-action-${row.slug}`}>
-            {row.repairableHere ? t('banner.repairable') : t('banner.notRepairableHere')}
+            {row.repairableHere
+              ? t('banner.repairable')
+              : t('banner.notRepairableHere', { system: row.name })}
           </p>
         </section>
       ))}

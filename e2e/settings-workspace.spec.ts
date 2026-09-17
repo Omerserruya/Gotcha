@@ -369,6 +369,15 @@ for (const size of SIZES) {
     test('11 · content starts above the fold', async ({ page }) => {
       await openWorkspace(page, 'en');
 
+      /*
+       * No ICU placeholder may survive into rendered copy.
+       *
+       * Screen 14 shipped a banner reading "Reconnecting {system} means…" and
+       * every assertion passed, because they all forbade wordings rather than
+       * requiring one. This is the cheap general guard for that whole class.
+       */
+      await expect(page.locator('main')).not.toHaveText(/\{[a-zA-Z]+\}/);
+
       const box = await page.getByRole('heading', { level: 1 }).boundingBox();
       expect(box, 'the page heading has no box — is it rendered?').not.toBeNull();
       expect(

@@ -113,10 +113,33 @@ for (const size of SIZES) {
       const banner = page.getByTestId('banner-shopify');
       await expect(banner).toBeVisible();
       await expect(banner).toHaveText(/stopped responding/i);
-      await expect(page.getByTestId('banner-error-shopify')).toHaveText(/token_refresh_failed/);
+      /*
+       * The platform's own words, stopping where it stopped writing prose:
+       * the message is followed by an entire HTML document, truncated mid-tag
+       * at 200 characters. Not one word is rewritten — the markup is simply
+       * not rendered as though it were a sentence.
+       */
+      const error = page.getByTestId('banner-error-shopify');
+      await expect(error).toHaveText(/token_refresh_failed/);
+      await expect(error).not.toHaveText(/DOCTYPE|<html/i);
 
       // No custodianship claim, in any wording.
       await expect(banner).not.toHaveText(/holding|waiting|queued/i);
+
+      /*
+       * POSITIVE assertions, because the negative ones cannot catch a message
+       * that says the wrong thing.
+       *
+       * This shot passed while the banner read "Reconnecting {system} means…"
+       * with the placeholder unreplaced: every forbidden word was absent, so
+       * every check held. A test that only forbids is the screenshot that
+       * proves nothing.
+       *
+       * So: the banner must NAME the system, and no ICU placeholder may
+       * survive into rendered copy anywhere on the page.
+       */
+      await expect(banner).toHaveText(/Shopify/);
+      await expect(page.locator('main')).not.toHaveText(/\{[a-zA-Z]+\}/);
 
       await shoot(page, `${size.name}-1-banner`);
     });
@@ -208,9 +231,10 @@ for (const size of SIZES) {
     test('5 · no button that would start something it cannot finish', async ({ page }) => {
       await openSystems(page, 'en');
 
-      await expect(page.getByTestId('banner-action-shopify')).toHaveText(
-        /isn't available from here/i,
-      );
+      const action = page.getByTestId('banner-action-shopify');
+      await expect(action).toHaveText(/isn't available from here/i);
+      // It must NAME the system it is talking about, not a placeholder.
+      await expect(action).toHaveText(/Reconnecting Shopify/);
       await expect(page.getByTestId('banner-shopify').getByRole('button')).toHaveCount(0);
 
       await shoot(page, `${size.name}-5-no-dead-action`);
