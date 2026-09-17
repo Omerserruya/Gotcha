@@ -1,0 +1,44 @@
+{
+  "title": "Security",
+  "description": "Who can get in, and the record of everything that happened — including everything GOTCHA did.",
+  "forbidden": "You don't have permission to do that.",
+  "heading": {
+    "sessions": "Where you're signed in",
+    "logins": "Recent sign-ins",
+    "mfa": "Two-factor authentication",
+    "audit": "Everything that happened"
+  },
+  "sessions": {
+    "unavailable": "We couldn't reach the identity provider, so we can't show your sessions. This doesn't mean you have none.",
+    "unknownDevice": "Unrecognised device",
+    "thisDevice": "This device",
+    "lastUsed": "last used {when}",
+    "revoke": "Sign out",
+    "revokeOthers": "{count, plural, one {Sign out the other device} other {Sign out all # other devices}}",
+    "idpDown": "The identity provider didn't answer, so nothing was signed out. Try again shortly.",
+    "revokeFailed": "That didn't sign out. Try again."
+  },
+  "logins": {
+    "unavailable": "We couldn't reach the identity provider, so we can't show recent sign-ins.",
+    "empty": "No sign-ins recorded yet.",
+    "signedIn": "Signed in",
+    "failed": "Failed sign-in"
+  },
+  "mfa": {
+    "admins": "Require two-factor for admins",
+    "everyone": "Require two-factor for everyone",
+    "impliedByEveryone": "Already required, because everyone must use it.",
+    "failed": "That didn't save. Try again."
+  },
+  "audit": {
+    "unavailable": "We can't read the activity log yet, so this list is not available. It isn't empty — we just can't show it.",
+    "empty": "Nothing recorded yet.",
+    "actor": {
+      "ai": "GOTCHA",
+      "user": "A person",
+      "system": "The system"
+    },
+    "didNotWork": "didn't work",
+    "moreActions": "More kinds of activity exist than shown here."
+  }
+}

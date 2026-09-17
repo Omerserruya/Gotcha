@@ -32,6 +32,8 @@ export const NAMESPACES = [
   'channels',
   /** Settings · Business systems — screen 14. */
   'systems',
+  /** Settings · Security — screen 16. */
+  'security',
 ] as const;
 
 export type Namespace = (typeof NAMESPACES)[number];

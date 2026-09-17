@@ -137,6 +137,14 @@ export const notificationEndpoints = {
   unreadCount: () => endpoint('/api/notifications/unread-count'),
   markRead: (id: string) => endpoint('/api/notifications/{id}/mark-read', { id }),
   markAllRead: () => endpoint('/api/notifications/mark-all-read'),
+  /**
+   * The signed-in person's own notification preferences — screen 15.
+   *
+   * Four booleans and a quiet-hours window. NOT the design's 8×3 matrix: the
+   * matrix that exists (`NotificationPreference`) is scoped to a tenant and a
+   * department and carries recipients, which is a different question.
+   */
+  preferences: () => endpoint('/api/notification-preferences/me'),
 } as const;
 
 /**
@@ -284,6 +292,26 @@ export const integrationEndpoints = {
 export const toolPermissionEndpoints = {
   list: () => endpoint('/api/tool-permissions'),
   update: (toolName: string) => endpoint('/api/tool-permissions/{toolName}', { toolName }),
+} as const;
+
+/**
+ * Security — screen 16.
+ *
+ * Sessions and login history are served from AUTHENTIK, not from our
+ * `UserSession` table, so they carry a real IP and a GeoIP city where our own
+ * column carries only a hash. Both answer `{ available, … }` and degrade to
+ * `available: false` rather than to an empty list.
+ */
+export const securityEndpoints = {
+  sessions: () => endpoint('/api/account/sessions'),
+  revokeSession: (id: string) => endpoint('/api/account/sessions/{id}', { id }),
+  /** Revokes every OTHER session, keeping the caller's. */
+  revokeOtherSessions: () => endpoint('/api/account/sessions'),
+  loginHistory: () => endpoint('/api/account/login-history'),
+  tenantSecurity: () => endpoint('/api/tenant-security'),
+  auditLogs: () => endpoint('/api/audit-logs'),
+  /** The real action vocabulary with counts — not a taxonomy we invented. */
+  auditActions: () => endpoint('/api/audit-logs/actions'),
 } as const;
 
 export type { Endpoint as ApiEndpoint };
