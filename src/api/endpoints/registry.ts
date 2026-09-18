@@ -177,6 +177,12 @@ export const notificationEndpoints = {
    * (`notification-engine.service.ts:133`). The per-user `preferences` above
    * is read by nothing but its own route, which is why screen 15 is built
    * against this one.
+   *
+   * Gateway reachability verified 2026-09-18 in BOTH nginx templates
+   * (`gateway/nginx.prod.conf.template:1150`, `nginx/nginx.conf.template:1059`):
+   * `/api/notification-preferences` proxies to `notifications_service` in each.
+   * So the remaining unknown on this screen is the RULE PAYLOAD shape, not
+   * whether the path resolves.
    */
   rules: () => endpoint('/api/notification-preferences'),
 } as const;

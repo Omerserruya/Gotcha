@@ -188,6 +188,30 @@ survives.
   from a single derivation, and never state a conclusion about a whole from a
   search whose completeness you have not tested.
 
+  **And a set comparison answers whether a name is in both lists, never
+  whether it means the same thing in both.** `/api/usage/allowance` is present
+  in both nginx templates and a `comm` of the two shows it matched and fine.
+  What that agreement does not show is that it sits eight lines above
+  `location /api/usage { proxy_pass ai_service; }` and survives only because
+  nginx picks the longest matching prefix. Delete the specific block and the
+  path still resolves — to a service that does not serve it.
+
+  That is a third failure mode, past the 404 and past the SPA-fallback 200: a
+  **200 from the wrong service**, which is the only one of the three that
+  looks like success. So when the set is a set of routes, the second
+  derivation has to resolve each one to its upstream rather than confirm the
+  name is present. Two derivations protect you from missing a member. They do
+  not protect you from agreeing about the wrong thing.
+
+- **A scripted edit must assert its result, not only its match.** Asserting
+  `count(old) == 1` before a replace catches the anchor that drifted; it says
+  nothing about what you replaced it with. Both halves have now failed here —
+  once when a Prettier-collapsed signature made the anchor stale, and once when
+  the anchor matched perfectly and the replacement silently ate two lines of the
+  comment it was meant to extend. Read the result back and assert something
+  about it. The second failure was caught by a two-line `sed -n` afterwards,
+  which costs nothing.
+
 - **Establish reversibility before exercising any write, and if you are unsure,
   ask rather than probe.** That rule has paid for itself: web chat looked like
   the one safe thing to create on screen 13 — no third party, nothing to
