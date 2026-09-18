@@ -233,6 +233,58 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
+        # ─── Present in the DEV template and absent here until now ──────────
+        #
+        # These three, plus /api/usage/allowance further down, existed only in
+        # nginx/nginx.conf.template. The symptom was NOT a 404: there is no
+        # catch-all /api location in this server block, so an unlisted /api
+        # path fell through to `location /`, which does
+        # try_files … /index.html - and the caller received the SPA shell with
+        # status 200. `res.ok` passes, then JSON.parse fails somewhere far from
+        # the cause.
+        #
+        # /api/decision-timeline was the live one: services/ai serves it and
+        # the deployed inbox renders DecisionTimelinePanel behind a UI toggle,
+        # so a user could open it in production and get HTML.
+        #
+        # Service targets verified against each app.use rather than copied
+        # from a neighbouring block: workspace and setup are auth
+        # (auth/src/index.ts:50,49), decision-timeline is ai
+        # (ai/src/index.ts:171), allowance is billing (billing/src/index.ts:53).
+        #
+        # /api/docs/ stays DEV-only on purpose - see the note in the dev
+        # template. It is the one entry the diff between these files should
+        # still contain.
+        location /api/workspace {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://auth_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location /api/setup {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://auth_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location /api/decision-timeline {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://ai_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
         # ─── GDPR: contact DSRs (conversation svc) - more specific prefix,
         #     matched before /api/gdpr below. ────────────────
         # ─── Account (self-service profile / sessions / security) ──
@@ -908,6 +960,22 @@ http {
         location /api/flow-canvas {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Conversation headroom for the period, and the projected exhaustion
+        # date Home and Settings both render. BILLING, not ai - the broader
+        # /api/usage below goes to ai_service, and nginx picks the longest
+        # matching prefix, so this must exist for the allowance to reach the
+        # right service at all. Without it the request matches /api/usage and
+        # is answered by a service that does not serve it.
+        location /api/usage/allowance {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://billing_service;
             proxy_set_header Host $host;
             proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
