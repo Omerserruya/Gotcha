@@ -77,7 +77,23 @@ router.get("/usage/allowance", async (req: Request, res: Response) => {
         tenantId,
         // The rehearsal the team ran during setup is not billable volume, and
         // showing it here would have day one start with the bar already moved.
+        //
+        // BOTH conditions are required and `isTest` alone does not achieve the
+        // sentence above: sandbox conversations are written with
+        // `isTest = false`, so filtering on it let every AI-employee test the
+        // team ran count against the plan. On the dev tenant `isTest` excludes
+        // NOTHING and the sandbox prefix excludes the only non-billable row -
+        // the guard was inert exactly where it was needed.
+        //
+        // The prefix is the product's own definition of a sandbox conversation
+        // (services/ai/.../sandbox-conversation.service.ts:114), so this cannot
+        // drift from what the test chat actually writes.
+        //
+        // Wrong in the direction that costs the customer: an over-count inflates
+        // the volume billed against the plan AND pulls projectedExhaustionAt
+        // earlier, so the runway reads shorter than it is.
         isTest: false,
+        NOT: { customerExternalId: { startsWith: "sandbox:" } },
         createdAt: { gte: periodStart, lt: periodEnd },
       },
     });
