@@ -217,6 +217,17 @@ survives.
   the one safe thing to create on screen 13 — no third party, nothing to
   authorise — and `DELETE /api/channels/:id` turns out to 500 for every channel
   type. It would have left a widget nobody could remove.
+- **A spec that writes is opt-in, runs in one project, and proves the tenant
+  was left as found.** `settings-notifications-seeded.spec.ts` is the only one,
+  because the rule list cannot be photographed on a tenant with no rules. It
+  skips entirely without `E2E_SEED_RULES=1`; it runs in `ltr` only, since two
+  projects writing to one tenant would each trip the other's "count must be 0"
+  guard and report a second writer that was us; and it writes the before/after
+  counts to `e2e/evidence/s15/seed-counts.txt` rather than a terminal, so the
+  evidence carries its own proof. A teardown failure names what is still on
+  the tenant and never retries down a second path — retrying is how D26's
+  probe became a defect.
+
 - **A test that mutates shared state must verify it did not.** Screen 11's
   stale-write shot corrupted the tenant's description twice: once by leaving
   debris, and once by a read-then-restore that raced itself six ways under
