@@ -20,18 +20,35 @@ import { expect, test, type APIResponse, type Page } from '@playwright/test';
  * consequential judgements — cannot otherwise be photographed. Authorized by
  * the supervisor on two verified claims:
  *
- *   `engine:125`  the dispatcher's own query is `enabled: true`, so a rule
- *                 created disabled cannot reach `deliverChannel` at all
- *   `DELETE`      `findFirst({id, tenantId})` then `prisma.delete({id})` —
- *                 plain and tenant-scoped, with no cascade, unlike
- *                 `DELETE /api/channels/:id` which 500s for every channel
+ *   `system.error.critical` is raised by NOTHING. It has two union
+ *   declarations, a template, a category map and a migration comment, and
+ *   zero emitters anywhere in the platform — derived twice by different
+ *   routes, and the one dynamic emit path (`ai-bot.service.ts:1979`) resolves
+ *   to refund/discount/meeting, so no `type: <variable>` hides another.
+ *
+ *   That is a stronger guarantee than `enabled: false`, which rests on a
+ *   single `where` clause in a single query. "Nothing in the codebase raises
+ *   this event" is a property of the whole repository. The rules here are
+ *   therefore created ENABLED, deliberately: it is the event that makes them
+ *   inert, not the flag, and it buys the two sentences that matter as real
+ *   evidence rather than as unit-tested assertions.
+ *
+ *   `recipients: { type: 'tenant_owner' }` on both, so that if every check any
+ *   of us made is somehow wrong, the blast radius is one email to the dev
+ *   account that owns this tenant — bounded by construction rather than by
+ *   our confidence.
+ *
+ *   `DELETE` is `findFirst({id, tenantId})` then `prisma.delete({id})` —
+ *   plain and tenant-scoped, with no cascade, unlike
+ *   `DELETE /api/channels/:id` which 500s for every channel type.
  *
  * ── THE SIX CONDITIONS, AS CODE RATHER THAN AS CARE ──
  * Every one of these is an assertion that stops the run, because the last time
  * a probe was run by hand on this project it 500'd and left a channel behind.
  *
- *   1. `enabled: false` passed as the LITERAL false — the route's check is
- *      `b.enabled !== false`, so any other falsy value would enable the rule.
+ *   1. the stored `eventType` is re-read and must be exactly
+ *      `system.error.critical`. That string IS the inertness guarantee, so if
+ *      the route stored anything else the argument is void and the run stops.
  *   2. the tenant must hold 0 rules before anything is created; if not, stop —
  *      something else wrote and this spec is no longer the only writer.
  *   3. every created id is recorded the instant it is returned, before any
@@ -42,13 +59,21 @@ import { expect, test, type APIResponse, type Page } from '@playwright/test';
  *   6. a DELETE that does not answer `{ deleted: true }` fails the run loudly
  *      and is never retried down a second path.
  *
- * ── WHAT THIS CANNOT SHOW, AND WHY ──
- * **The shadowing sentence does not appear here.** `shadowedRuleIds` excludes
- * disabled rules on both sides — correctly, because the engine's own query
- * filters `enabled: true`, so a switched-off department rule displaces
- * nothing. Condition 1 and the shadowing shot are therefore mutually
- * exclusive, and condition 1 wins. Shadowing stays asserted in
- * `rule-view.test.ts` and is not photographed.
+ * ── WHAT THIS IS FOR ──
+ * Two rules on one event, one tenant-wide and one scoped to a department, so
+ * that the screen's two most consequential sentences are in evidence rather
+ * than only in `rule-view.test.ts`:
+ *
+ *   - **"GOTCHA never raises this event, so this rule can never fire."** Which
+ *     is not hypothetical: the OLD app's notifications page offers
+ *     `system.error.critical` as a configurable event today, so a customer can
+ *     already have built exactly this rule.
+ *   - **"GOTCHA uses the team's rule instead of this one — never both."** The
+ *     tenant-wide rule is displaced by the department one, and both read as
+ *     enabled. That silent override is this screen's finding.
+ *
+ * If the tenant has no departments, the second rule cannot be created and the
+ * shadowing shot is skipped with a message saying so — never quietly dropped.
  */
 
 const SESSION = process.env.GOTCHA_SESSION;
@@ -129,7 +154,55 @@ async function listRules(page: Page): Promise<{ id: string }[]> {
   return parsed.data as { id: string }[];
 }
 
-test('1 · the rule list, with a rule in it', async ({ page }) => {
+/**
+ * The event these rules are written against, and the reason they are inert.
+ *
+ * Nothing in the platform emits it: two union declarations, one template, a
+ * category map and a migration comment, and zero emitters — derived twice by
+ * different routes. Kept as a constant so the assertion that it round-tripped
+ * intact reads against the same string that was sent.
+ */
+const INERT_EVENT = 'system.error.critical';
+
+/** Creates a rule, records its id immediately, and returns the stored row. */
+async function seedRule(page: Page, departmentId: string | null): Promise<{ id: string }> {
+  const scope = departmentId === null ? 'tenant-wide' : 'department';
+  const response = await page.request.post('/api/bff/api/notification-preferences', {
+    headers: WRITE_HEADERS,
+    data: {
+      eventType: INERT_EVENT,
+      departmentId,
+      // Bounded blast radius: the owner of this tenant is the dev test account.
+      recipients: { type: 'tenant_owner' },
+      channels: ['in_app'],
+      enabled: true,
+    },
+  });
+  expect(response.status(), `creating the ${scope} rule: ${await response.text()}`).toBe(201);
+
+  // ── condition 3 · recorded the instant it returns, before anything else ──
+  const row = (await body(response)).data as { id?: string; eventType?: string } | undefined;
+  expect(row?.id, 'the create returned no id, so teardown could not delete it').toBeTruthy();
+  created.push(row!.id!);
+
+  /*
+   * ── condition 1 · the inertness guarantee, re-read from the stored row ──
+   * The entire authorisation for this write is that nothing emits this event.
+   * If the route trimmed, defaulted or rewrote the type to anything else, that
+   * argument is void and the rule may be able to fire. Fail here — `afterAll`
+   * still deletes it, because the id was recorded above.
+   */
+  expect(
+    row!.eventType,
+    'the stored eventType is not the inert one — this rule may be able to fire, stop and report',
+  ).toBe(INERT_EVENT);
+
+  return { id: row!.id! };
+}
+
+test('1 · the rule list: an event that cannot fire, and a rule that is overridden', async ({
+  page,
+}) => {
   // ── condition 2 ────────────────────────────────────────────────────────
   countBefore = (await listRules(page)).length;
   expect(
@@ -138,48 +211,55 @@ test('1 · the rule list, with a rule in it', async ({ page }) => {
       'tenant, so this spec is no longer the only writer and must not create more. Stop and report.',
   ).toBe(0);
 
-  // ── condition 1 ────────────────────────────────────────────────────────
-  const response = await page.request.post('/api/bff/api/notification-preferences', {
-    headers: WRITE_HEADERS,
-    data: {
-      eventType: 'payment.failed',
-      departmentId: null,
-      recipients: { type: 'tenant_owner' },
-      channels: ['email', 'in_app'],
-      // The LITERAL false. `b.enabled !== false` enables the rule for any
-      // other value, including 0, '' and null.
-      enabled: false,
-    },
-  });
-  expect(response.status(), `creating the seed rule: ${await response.text()}`).toBe(201);
+  // A department to scope the second rule to. Without one there is nothing for
+  // the tenant-wide rule to be displaced BY, and that half is skipped with a
+  // note rather than quietly dropped.
+  const departmentsResponse = await page.request.get('/api/bff/api/departments');
+  expect(departmentsResponse.status(), 'reading the tenant departments').toBe(200);
+  const departments = ((await body(departmentsResponse)).data ?? []) as { id: string }[];
 
-  // ── condition 3 · recorded before anything else happens ────────────────
-  const row = (await body(response)).data as { id?: string; enabled?: boolean } | undefined;
-  expect(row?.id, 'the create returned no id, so teardown could not delete it').toBeTruthy();
-  created.push(row!.id!);
-
-  // And the row must have come back DISABLED. If the route stored it enabled,
-  // the inertness argument this whole spec rests on is void.
-  expect(
-    row!.enabled,
-    'the rule was stored ENABLED — the inertness guarantee is void, delete it and stop',
-  ).toBe(false);
+  const wide = await seedRule(page, null);
+  const scoped = departments.length > 0 ? await seedRule(page, departments[0]!.id) : null;
 
   await page.goto('/en/settings/notifications');
   await expect(page.getByTestId('rule-list')).toBeVisible({ timeout: 15_000 });
 
-  const rule = page.getByTestId(`rule-${created[0]}`);
-  await expect(rule).toBeVisible();
-  await expect(rule).toHaveAttribute('data-enabled', 'no');
+  /*
+   * Grouped under the RAW type, not a business-language name. There is no
+   * friendly name for a type the product does not raise, and the raw string is
+   * what an admin needs in order to find and remove the row.
+   */
+  const group = page.getByTestId(`group-${INERT_EVENT}`);
+  await expect(group).toBeVisible();
+  await expect(group).toHaveAttribute('data-status', 'unfiring');
+  await expect(group).toHaveText(new RegExp(INERT_EVENT.replace(/\./g, '\\.')));
 
-  // The event, in business language and grouped under its own heading.
-  await expect(page.getByTestId('group-payment.failed')).toBeVisible();
-  // Who, on what, and how far it reaches — asserted by content.
-  await expect(rule).toHaveText(/account owner/i);
-  await expect(rule).toHaveText(/email/i);
-  await expect(page.getByTestId(`scope-${created[0]}`)).toHaveText(/every team/i);
-  // And the reason it does nothing, stated as a consequence.
-  await expect(page.getByTestId(`disabled-${created[0]}`)).toHaveText(/nobody is told/i);
+  // ── the first sentence: a rule that can never fire, and says so ─────────
+  await expect(page.getByTestId(`unfiring-${INERT_EVENT}`)).toHaveText(/never raises this event/i);
+
+  const wideRule = page.getByTestId(`rule-${wide.id}`);
+  await expect(wideRule).toBeVisible();
+  // Enabled, and still useless. That is the whole point of the flag above it.
+  await expect(wideRule).toHaveAttribute('data-enabled', 'yes');
+  await expect(wideRule).toHaveText(/account owner/i);
+  await expect(page.getByTestId(`scope-${wide.id}`)).toHaveText(/every team/i);
+
+  if (scoped) {
+    // ── the second sentence: the silent override, in evidence ────────────
+    await expect(page.getByTestId(`rule-${scoped.id}`)).toBeVisible();
+    await expect(page.getByTestId(`shadowed-${wide.id}`)).toHaveText(/instead of this one/i);
+    // The rule doing the displacing is not itself marked as displaced.
+    await expect(page.getByTestId(`shadowed-${scoped.id}`)).toHaveCount(0);
+    // And a department rule must never be drawn as reaching every team.
+    await expect(page.getByTestId(`scope-${scoped.id}`)).not.toHaveText(/every team/i);
+  } else {
+    test.info().annotations.push({
+      type: 'note',
+      description:
+        'This tenant has no departments, so nothing can displace anything and the shadowing ' +
+        'sentence is not in this evidence. It stays asserted in rule-view.test.ts.',
+    });
+  }
 
   await expect(page.locator('main')).not.toHaveText(/\{[a-zA-Z]+\}/);
 
