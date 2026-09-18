@@ -78,7 +78,33 @@ function cardReturnUrl(): string | undefined {
 router.get("/billing/payment-methods", authenticate, resolveTenant, requirePermission("settings:billing:manage"), async (req, res) => {
   const link = await prisma.billableEntityTenant.findUnique({ where: { tenantId: req.tenantId! } });
   if (!link) return res.json({ paymentMethods: [] });
-  const profile = await prisma.billingProfile.findUnique({ where: { billableEntityId: link.billableEntityId }, include: { paymentMethods: { where: { status: "ACTIVE" } } } });
+  // `select`, never `include`. An include returns every column, and this row
+  // holds `token` - the encrypted payment instrument - and `tokenKeyVersion`,
+  // which says which key would decrypt it. The gate here is
+  // settings:billing:manage, a READ-shaped permission, so an include made
+  // "may look at the billing screen" and "holds the tenant's payment token"
+  // the same grant.
+  //
+  // The fields below are exactly what the client renders - verified against
+  // frontend/src/lib/api-billing.ts:316 and every field access under
+  // app/settings/billing. `provider` and `status` are deliberately NOT here:
+  // nothing reads them, and the query already filters status to ACTIVE.
+  const profile = await prisma.billingProfile.findUnique({
+    where: { billableEntityId: link.billableEntityId },
+    include: {
+      paymentMethods: {
+        where: { status: "ACTIVE" },
+        select: {
+          id: true,
+          brand: true,
+          last4: true,
+          expMonth: true,
+          expYear: true,
+          isDefault: true,
+        },
+      },
+    },
+  });
   res.json({ paymentMethods: profile?.paymentMethods ?? [] });
 });
 
