@@ -15,6 +15,12 @@ import { expect, test, type APIResponse, type Page } from '@playwright/test';
  * Without `E2E_SEED_RULES=1` every test skips. `settings-notifications.spec.ts`
  * is the read-only evidence and needs no flag.
  *
+ * `APP_ORIGIN` here must match the server's own `APP_ORIGIN`, because the BFF
+ * refuses every state-changing request whose `Origin` does not. A mismatch
+ * shows up as `{"error":"Cross-origin request rejected."}` on the create,
+ * which is a config difference between this shell and the server, not a fault
+ * in the screen.
+ *
  * ── WHY IT WRITES AT ALL ──
  * This tenant has zero rules, so the rule list — which carries this screen's
  * consequential judgements — cannot otherwise be photographed. Authorized by
@@ -97,7 +103,7 @@ let countAfter = -1;
 
 test.skip(!SEED, 'E2E_SEED_RULES is not set. This spec writes to the tenant and is opt-in.');
 
-/*
+/**
  * One project only.
  *
  * The suite runs `ltr` and `rtl` against the same tenant, so both would create
@@ -105,11 +111,26 @@ test.skip(!SEED, 'E2E_SEED_RULES is not set. This spec writes to the tenant and 
  * reporting "something else wrote" when the something else was us. The
  * read-only spec covers Hebrew; this one supplements it with a single shot,
  * and correctness of the guard matters more here than a second locale.
+ *
+ * ── WHY THE GUARD LIVES INSIDE THE TEST AND NOT AT DESCRIBE SCOPE ──
+ * The first attempt was `test.skip(({}, testInfo) => …)` here. **The
+ * describe-scope callback receives fixtures only — there is no second
+ * argument** — so `testInfo` was `undefined` and reading `.project` threw in
+ * both projects. The guard that existed to stop the two projects racing was
+ * itself running in both and crashing on the value it was meant to read.
+ *
+ * It failed safe, before any write, and the tenant was left clean. That was
+ * luck about ordering rather than design, so the guard now sits in two places
+ * that are not luck:
+ *
+ *   1. the first statement of the test, which is the earliest point a project
+ *      name is knowable — `beforeAll` only creates a directory and checks for
+ *      a cookie, so nothing can be written before it
+ *   2. inside `seedRule`, immediately before the POST — **a guard at the
+ *      write site cannot be outrun by anything**, however the file is later
+ *      rearranged
  */
-test.skip(
-  ({}, testInfo) => testInfo.project.name !== 'ltr',
-  'Seeded captures run in the ltr project only, so the two projects cannot race the rule count.',
-);
+const WRITING_PROJECT = 'ltr';
 
 test.beforeAll(() => {
   if (!SESSION) {
@@ -165,7 +186,22 @@ async function listRules(page: Page): Promise<{ id: string }[]> {
 const INERT_EVENT = 'system.error.critical';
 
 /** Creates a rule, records its id immediately, and returns the stored row. */
-async function seedRule(page: Page, departmentId: string | null): Promise<{ id: string }> {
+async function seedRule(
+  page: Page,
+  projectName: string,
+  departmentId: string | null,
+): Promise<{ id: string }> {
+  /*
+   * The guard at the write site. The skip at the top of the test should have
+   * made this unreachable — but the last version of that skip crashed instead
+   * of skipping, so "should have" is not a property worth relying on when the
+   * consequence is a row on a real tenant.
+   */
+  expect(
+    projectName,
+    'a non-writing project reached seedRule — the project guard did not hold',
+  ).toBe(WRITING_PROJECT);
+
   const scope = departmentId === null ? 'tenant-wide' : 'department';
   const response = await page.request.post('/api/bff/api/notification-preferences', {
     headers: WRITE_HEADERS,
@@ -202,7 +238,18 @@ async function seedRule(page: Page, departmentId: string | null): Promise<{ id: 
 
 test('1 · the rule list: an event that cannot fire, and a rule that is overridden', async ({
   page,
-}) => {
+}, testInfo) => {
+  /*
+   * The project guard, as the first statement of the test. `testInfo` is a
+   * real argument here — unlike in a describe-scope `test.skip` callback,
+   * which is where the previous version of this crashed.
+   */
+  test.skip(
+    testInfo.project.name !== WRITING_PROJECT,
+    `Seeded captures write to the tenant and run in the ${WRITING_PROJECT} project only, ` +
+      'so the two projects cannot race the rule count.',
+  );
+
   // ── condition 2 ────────────────────────────────────────────────────────
   countBefore = (await listRules(page)).length;
   expect(
@@ -218,8 +265,9 @@ test('1 · the rule list: an event that cannot fire, and a rule that is overridd
   expect(departmentsResponse.status(), 'reading the tenant departments').toBe(200);
   const departments = ((await body(departmentsResponse)).data ?? []) as { id: string }[];
 
-  const wide = await seedRule(page, null);
-  const scoped = departments.length > 0 ? await seedRule(page, departments[0]!.id) : null;
+  const project = testInfo.project.name;
+  const wide = await seedRule(page, project, null);
+  const scoped = departments.length > 0 ? await seedRule(page, project, departments[0]!.id) : null;
 
   await page.goto('/en/settings/notifications');
   await expect(page.getByTestId('rule-list')).toBeVisible({ timeout: 15_000 });
@@ -253,7 +301,7 @@ test('1 · the rule list: an event that cannot fire, and a rule that is overridd
     // And a department rule must never be drawn as reaching every team.
     await expect(page.getByTestId(`scope-${scoped.id}`)).not.toHaveText(/every team/i);
   } else {
-    test.info().annotations.push({
+    testInfo.annotations.push({
       type: 'note',
       description:
         'This tenant has no departments, so nothing can displace anything and the shadowing ' +
