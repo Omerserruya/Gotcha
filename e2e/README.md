@@ -165,6 +165,29 @@ survives.
 - **Diff the ids before running.** The ids a spec references against the ids the
   components emit. A scripted rename once left four `data-testid`s unwritten and
   the spec failed on the wrong thing.
+- **Derive any set twice, by different routes, and `comm` the two.** This is the
+  enumeration equivalent of the id diff, and it exists for the same reason: it
+  produces a result whether or not you are paying attention, where "be careful"
+  does not.
+
+  Screen 15 needed the list of event types a notification rule may target. Two
+  people derived it independently — one from the declared unions intersected
+  with templates, one from actual emit call sites intersected with templates —
+  and **both derivations were wrong, in different ways.** One silently dropped
+  `system.error.critical`, because the pattern assumed two dotted segments and
+  that name has three. The other counted types that are declared and templated
+  and that nothing ever raises.
+
+  Neither of us could have found our own error. The one-item disagreement
+  between the two is what exposed both, and the item turned out to be the
+  notification for the single thing an operator most wants to be woken up
+  about — which cannot fire.
+
+  So: **if the two derivations agree, that agreement is the evidence. If they
+  disagree, the disagreement is the more interesting result.** Never reason
+  from a single derivation, and never state a conclusion about a whole from a
+  search whose completeness you have not tested.
+
 - **Establish reversibility before exercising any write, and if you are unsure,
   ask rather than probe.** That rule has paid for itself: web chat looked like
   the one safe thing to create on screen 13 — no third party, nothing to

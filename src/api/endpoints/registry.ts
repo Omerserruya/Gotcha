@@ -169,6 +169,16 @@ export const notificationEndpoints = {
    * department and carries recipients, which is a different question.
    */
   preferences: () => endpoint('/api/notification-preferences/me'),
+  /**
+   * The TENANT's notification rules — event type × channels × recipients,
+   * scoped to a department. ADMIN only.
+   *
+   * This is the table the dispatcher actually reads
+   * (`notification-engine.service.ts:133`). The per-user `preferences` above
+   * is read by nothing but its own route, which is why screen 15 is built
+   * against this one.
+   */
+  rules: () => endpoint('/api/notification-preferences'),
 } as const;
 
 /**

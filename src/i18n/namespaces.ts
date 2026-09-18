@@ -36,6 +36,8 @@ export const NAMESPACES = [
   'security',
   /** Settings · Usage & billing — screen 17. */
   'billing',
+  /** Settings · Notifications — screen 15. Not `notifications`, which is 01d. */
+  'notifications-settings',
 ] as const;
 
 export type Namespace = (typeof NAMESPACES)[number];

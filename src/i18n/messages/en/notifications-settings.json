@@ -1,0 +1,73 @@
+{
+  "title": "Notifications",
+  "description": "GOTCHA never pings you for an incoming message — that's what the inbox is for. It tells you when something needs a decision or something broke.",
+  "heading": "Who hears about what",
+  "family": {
+    "work": "Work",
+    "systems": "Business systems",
+    "commerce": "Customers & campaigns",
+    "billing": "Billing"
+  },
+  "rules": {
+    "unavailable": "We couldn't read your notification rules just now.",
+    "noneLead": "No rules yet, so GOTCHA is telling nobody about anything.",
+    "noneBody": "A rule says who hears about an event, and on which channels. Here's everything GOTCHA can tell you about."
+  },
+  "event": {
+    "tool": {
+      "approval_required": "Something needs approval"
+    },
+    "conversation": {
+      "escalated": "A conversation is escalated",
+      "assigned": "A conversation is handed to someone"
+    },
+    "integration": {
+      "check_failed": "A business system's credentials were rejected"
+    },
+    "broadcast": {
+      "completed": "A campaign finishes sending"
+    },
+    "meeting": {
+      "scheduled": "A meeting is booked"
+    },
+    "discount": {
+      "applied": "A discount is applied"
+    },
+    "refund": {
+      "issued": "A refund is issued"
+    },
+    "payment": {
+      "failed": "A payment fails"
+    },
+    "invoice": {
+      "paid": "An invoice is paid"
+    },
+    "credit": {
+      "threshold": "Credits reach a threshold",
+      "exhausted": "Credits run out",
+      "auto_purchase_succeeded": "Credits top up automatically",
+      "auto_purchase_failed": "An automatic top-up fails",
+      "auto_purchase_ceiling_reached": "Automatic top-ups reach their ceiling"
+    },
+    "subscription": {
+      "activated": "The subscription starts",
+      "trial_started": "A trial starts",
+      "plan_changed": "The plan changes",
+      "past_due": "The subscription falls past due",
+      "suspended": "The subscription is suspended",
+      "resumed": "The subscription resumes",
+      "canceled": "The subscription is cancelled"
+    }
+  },
+  "caveat": {
+    "integration": {
+      "check_failed": "Fires when someone runs a connection test and the credentials are rejected — not continuous monitoring, and not \"the provider is down\"."
+    },
+    "conversation": {
+      "assigned": "Only when a conversation is handed to someone else. Never when they pick one up themselves."
+    },
+    "broadcast": {
+      "completed": "When every recipient has reached a final state — including the ones that failed."
+    }
+  }
+}

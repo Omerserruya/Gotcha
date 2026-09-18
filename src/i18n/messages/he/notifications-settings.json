@@ -1,0 +1,73 @@
+{
+  "title": "התראות",
+  "description": "GOTCHA לא מצלצל על הודעה נכנסת — בשביל זה יש תיבה. הוא מודיע כשצריך להחליט משהו או כשמשהו נשבר.",
+  "heading": "מי שומע על מה",
+  "family": {
+    "work": "עבודה",
+    "systems": "מערכות עסקיות",
+    "commerce": "לקוחות וקמפיינים",
+    "billing": "חיוב"
+  },
+  "rules": {
+    "unavailable": "לא הצלחנו לקרוא את כללי ההתראות כרגע.",
+    "noneLead": "עדיין אין כללים, ולכן GOTCHA לא מודיע לאף אחד על שום דבר.",
+    "noneBody": "כלל קובע מי שומע על אירוע, ובאילו ערוצים. הנה כל מה ש‑GOTCHA יכול לדווח עליו."
+  },
+  "event": {
+    "tool": {
+      "approval_required": "משהו מחכה לאישור"
+    },
+    "conversation": {
+      "escalated": "שיחה הוסלמה",
+      "assigned": "שיחה הועברה למישהו"
+    },
+    "integration": {
+      "check_failed": "פרטי ההתחברות של מערכת עסקית נדחו"
+    },
+    "broadcast": {
+      "completed": "קמפיין סיים להישלח"
+    },
+    "meeting": {
+      "scheduled": "נקבעה פגישה"
+    },
+    "discount": {
+      "applied": "הוחל הנחה"
+    },
+    "refund": {
+      "issued": "בוצע החזר כספי"
+    },
+    "payment": {
+      "failed": "תשלום נכשל"
+    },
+    "invoice": {
+      "paid": "חשבונית שולמה"
+    },
+    "credit": {
+      "threshold": "הקרדיטים הגיעו לסף",
+      "exhausted": "הקרדיטים נגמרו",
+      "auto_purchase_succeeded": "הקרדיטים חודשו אוטומטית",
+      "auto_purchase_failed": "חידוש אוטומטי נכשל",
+      "auto_purchase_ceiling_reached": "החידוש האוטומטי הגיע לתקרה"
+    },
+    "subscription": {
+      "activated": "המנוי הופעל",
+      "trial_started": "תקופת ניסיון החלה",
+      "plan_changed": "התוכנית השתנתה",
+      "past_due": "המנוי בפיגור תשלום",
+      "suspended": "המנוי הושעה",
+      "resumed": "המנוי חודש",
+      "canceled": "המנוי בוטל"
+    }
+  },
+  "caveat": {
+    "integration": {
+      "check_failed": "נשלח כשמישהו מריץ בדיקת חיבור והפרטים נדחים — לא ניטור רציף, ולא \"הספק נפל\"."
+    },
+    "conversation": {
+      "assigned": "רק כששיחה מועברת למישהו אחר. אף פעם לא כשהוא לוקח אותה בעצמו."
+    },
+    "broadcast": {
+      "completed": "כשכל הנמענים הגיעו למצב סופי — כולל אלה שנכשלו."
+    }
+  }
+}
