@@ -1,6 +1,11 @@
 import { getTranslations } from 'next-intl/server';
 
+import type { Department, Member } from '@/api/contracts/people';
+import type { NotificationRule } from '@/api/contracts/notification-rules';
+
 import { EVENT_FAMILIES, eventsInFamily } from './events';
+import { groupRulesByEvent } from './rule-view';
+import { RuleList } from './RuleList';
 import styles from './Notifications.module.css';
 
 /**
@@ -35,17 +40,23 @@ import styles from './Notifications.module.css';
  */
 export async function RuleTable({
   rules,
-  available,
+  departments,
+  members,
 }: {
-  /** Existing rules. Empty is the day-one state, not an error. */
-  readonly rules: readonly { id: string; eventType: string }[];
-  /** False when the rules could not be read — never the same as "none". */
-  readonly available: boolean;
+  /**
+   * Existing rules. Empty is the day-one state, not an error; `null` is a
+   * failed read, and the two must never render the same.
+   */
+  readonly rules: readonly NotificationRule[] | null;
+  /** For naming the team a rule is scoped to. `null` is a failed read. */
+  readonly departments: readonly Department[] | null;
+  /** For naming the people a `users` rule addresses. `null` is a failed read. */
+  readonly members: readonly Member[] | null;
 }) {
   // `notifications-settings`, not `notifications` — the latter is screen 01d.
   const t = await getTranslations('notifications-settings');
 
-  if (!available) {
+  if (rules === null) {
     return (
       <p className={styles.unavailable} data-testid="rules-unavailable">
         {t('rules.unavailable')}
@@ -104,14 +115,10 @@ export async function RuleTable({
     );
   }
 
-  // Rules exist. The table itself waits on the backend contract for its shape.
   return (
-    <ul className={styles.rules} data-testid="rule-list">
-      {rules.map((rule) => (
-        <li key={rule.id} className={styles.rule} data-testid={`rule-${rule.id}`}>
-          {t(`event.${rule.eventType}` as 'event.tool.approval_required')}
-        </li>
-      ))}
-    </ul>
+    <div className={styles.configured} data-testid="rule-list">
+      <h2 className={styles.listHeading}>{t('heading')}</h2>
+      <RuleList groups={groupRulesByEvent(rules, { departments, members })} />
+    </div>
   );
 }

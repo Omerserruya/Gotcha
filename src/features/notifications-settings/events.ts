@@ -100,6 +100,20 @@ export const NOTIFIABLE_EVENTS: readonly NotifiableEvent[] = [
  * Kept as data rather than a comment so the test can assert they are never
  * offered. A rule written against one of these can never fire, and an admin
  * who wrote it would believe they had configured something.
+ *
+ * ── THIS LIST IS THE ONLY VALIDATION THERE IS ──
+ * `POST /api/notification-preferences` validates `eventType` against **no set
+ * at all** — a non-empty string is the whole check, and `PATCH` does not even
+ * trim. Every other field in that payload has a closed set behind it.
+ *
+ * So `conversaton.escalated` is accepted, answers `201`, appears in the list,
+ * reads as enabled, and matches nothing for as long as it exists. Nothing at
+ * write time or read time says otherwise. **The frontend is the only place in
+ * the system where this can be caught**, which makes the vocabulary above a
+ * safety property rather than a convenience — and means the screen also has
+ * to flag the rows it did not create. See `eventStatus` in `rule-view.ts`,
+ * which separates "nothing raises this" from "no such event": different
+ * causes, different remedies, and an admin sent to the wrong one either way.
  */
 export const UNFIRING_EVENTS: readonly string[] = [
   'high_value_lead.detected',

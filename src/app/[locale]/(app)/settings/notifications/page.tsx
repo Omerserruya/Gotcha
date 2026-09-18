@@ -23,11 +23,11 @@ import { SettingsSection } from '@/shell/SettingsSection';
  */
 export default async function Page() {
   const t = await getTranslations('notifications-settings');
-  const { rules, available } = await loadRules();
+  const { rules, departments, members } = await loadRules();
 
   return (
     <SettingsSection title={t('title')} description={t('description')}>
-      <RuleTable rules={rules} available={available} />
+      <RuleTable rules={rules} departments={departments} members={members} />
     </SettingsSection>
   );
 }

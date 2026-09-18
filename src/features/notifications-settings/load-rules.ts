@@ -1,50 +1,68 @@
 import 'server-only';
 
-import { z } from 'zod';
-
+import {
+  departmentsSchema,
+  membersSchema,
+  type Department,
+  type Member,
+} from '@/api/contracts/people';
+import { rulesSchema, type NotificationRule } from '@/api/contracts/notification-rules';
 import { serverApi } from '@/api/client/server-api';
-import { notificationEndpoints } from '@/api/endpoints/registry';
+import {
+  departmentEndpoints,
+  notificationEndpoints,
+  permissionEndpoints,
+} from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 
 /**
- * The tenant's notification rules.
+ * Everything screen 15 shows.
  *
- * `GET /api/notification-preferences` — ADMIN only, `{ data }` enveloped,
- * filterable by `departmentId` and `eventType`. This is the table the
- * dispatcher at `notification-engine.service.ts:133` actually reads.
+ * `GET /api/notification-preferences` — ADMIN only, `{ data }` enveloped. This
+ * is the table the dispatcher reads; the per-user store the design drew is
+ * read by nothing but its own route.
  *
- * **The shape here is the minimum the day-one state needs.** The full rule —
- * recipients, channels, conditions, priority — is deliberately not modelled
- * yet: the backend is confirming the exact contract and whether the route is
- * reachable through both gateway templates, and committing to a shape before
- * that answer would be guessing at the one thing worth waiting for.
+ * Departments and members are fetched because a rule names neither. It stores
+ * a `departmentId` and, for `type: 'users'`, an array of user ids — so without
+ * these two reads the screen would render cuids where a team and a person
+ * belong, which is the defect that shipped `ai_voice` onto the billing screen.
  *
- * `null` means the read failed and is never conflated with an empty list. On
- * this screen the difference is stark: no rules means GOTCHA is telling nobody
- * about anything, which is a real state an admin must be able to see and act
- * on; a failed read means they learned nothing.
+ * Each read degrades on its own. A tenant whose departments will not load can
+ * still see its rules; it just cannot name the team one is scoped to, and the
+ * screen says that rather than inventing a name or hiding the rule.
+ *
+ * `rules: null` means the read failed, and is never conflated with an empty
+ * list. The difference is the whole day-one state: no rules means GOTCHA is
+ * telling nobody about anything, which is a real configuration an admin must
+ * be able to see; a failed read means they learned nothing at all.
  */
-const ruleSchema = z.object({
-  id: z.string().min(1),
-  eventType: z.string().min(1),
-});
-
-const rulesSchema = z.array(ruleSchema);
-
 export interface RulesData {
-  readonly rules: readonly z.infer<typeof ruleSchema>[];
-  readonly available: boolean;
+  readonly rules: readonly NotificationRule[] | null;
+  readonly departments: readonly Department[] | null;
+  readonly members: readonly Member[] | null;
 }
 
 export async function loadRules(): Promise<RulesData> {
-  try {
-    const rules = await serverApi().get({
-      endpoint: notificationEndpoints.rules(),
-      payload: rulesSchema,
-    });
-    return { rules, available: true };
-  } catch (cause) {
-    logger.warn('notification_rules.read_failed', { cause });
-    return { rules: [], available: false };
-  }
+  const api = serverApi();
+
+  const degrade =
+    <T>(event: string, value: T) =>
+    (cause: unknown): T => {
+      logger.warn(event, { cause });
+      return value;
+    };
+
+  const [rules, departments, members] = await Promise.all([
+    api
+      .get({ endpoint: notificationEndpoints.rules(), payload: rulesSchema })
+      .catch(degrade('notification_rules.read_failed', null)),
+    api
+      .get({ endpoint: departmentEndpoints.list(), payload: departmentsSchema })
+      .catch(degrade('notification_rules.departments_failed', null)),
+    api
+      .get({ endpoint: permissionEndpoints.users(), payload: membersSchema })
+      .catch(degrade('notification_rules.members_failed', null)),
+  ]);
+
+  return { rules, departments, members };
 }

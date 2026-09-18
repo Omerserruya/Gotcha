@@ -69,5 +69,33 @@
     "broadcast": {
       "completed": "When every recipient has reached a final state — including the ones that failed."
     }
+  },
+  "rule": {
+    "tell": "Tell {who} on {channels}."
+  },
+  "recipient": {
+    "tenant_owner": "the account owner",
+    "department_manager": "the manager of the team involved"
+  },
+  "channel": {
+    "email": "email",
+    "in_app": "in-app"
+  },
+  "scope": {
+    "allTeams": "Every team",
+    "team": "{team} only",
+    "unknownTeam": "A team we can't name — it may have been deleted"
+  },
+  "condition": {
+    "only": "Only when {conditions}"
+  },
+  "flag": {
+    "disabled": "Switched off, so nobody is told.",
+    "shadowed": "Not used for a team that has its own rule for this event. GOTCHA uses the team's rule instead of this one — never both.",
+    "unfiring": "GOTCHA never raises this event, so this rule can never fire.",
+    "unknownEvent": "GOTCHA doesn't raise an event by this name. It was accepted when it was saved, and it will never match anything.",
+    "undeliverable": "{count, plural, =1 {{channels} can be saved but is never delivered.} other {{channels} can be saved but are never delivered.}}",
+    "deliversNothing": "Every channel on this rule is one GOTCHA never delivers, so it tells nobody.",
+    "unresolvedRecipients": "{count, plural, =1 {One named person no longer has an account here.} other {# named people no longer have accounts here.}}"
   }
 }

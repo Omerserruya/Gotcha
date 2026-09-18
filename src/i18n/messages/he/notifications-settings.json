@@ -69,5 +69,33 @@
     "broadcast": {
       "completed": "כשכל הנמענים הגיעו למצב סופי — כולל אלה שנכשלו."
     }
+  },
+  "rule": {
+    "tell": "להודיע ל{who} ב{channels}."
+  },
+  "recipient": {
+    "tenant_owner": "בעל החשבון",
+    "department_manager": "מנהל הצוות הרלוונטי"
+  },
+  "channel": {
+    "email": "אימייל",
+    "in_app": "התראה במערכת"
+  },
+  "scope": {
+    "allTeams": "כל הצוותים",
+    "team": "{team} בלבד",
+    "unknownTeam": "צוות שאיננו יודעים לזהות — ייתכן שנמחק"
+  },
+  "condition": {
+    "only": "רק כאשר {conditions}"
+  },
+  "flag": {
+    "disabled": "כבוי, ולכן אף אחד לא מקבל הודעה.",
+    "shadowed": "לא בשימוש עבור צוות שיש לו כלל משלו לאירוע הזה. GOTCHA משתמשת בכלל של הצוות במקום בכלל הזה — אף פעם לא בשניהם.",
+    "unfiring": "GOTCHA אף פעם לא מרימה את האירוע הזה, ולכן הכלל הזה לא יכול לפעול.",
+    "unknownEvent": "ל-GOTCHA אין אירוע בשם הזה. הוא התקבל כשנשמר, והוא לא יתאים לשום דבר.",
+    "undeliverable": "{count, plural, one {{channels} נשמר אך לעולם אינו נשלח.} other {{channels} נשמרים אך לעולם אינם נשלחים.}}",
+    "deliversNothing": "כל הערוצים בכלל הזה הם ערוצים ש-GOTCHA לא שולחת בהם, ולכן הוא לא מודיע לאף אחד.",
+    "unresolvedRecipients": "{count, plural, one {לאדם אחד שצוין כבר אין חשבון כאן.} other {ל-# אנשים שצוינו כבר אין חשבון כאן.}}"
   }
 }

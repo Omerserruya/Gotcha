@@ -82,6 +82,49 @@
   }
 
   /* ── Rules ──────────────────────────────────────────────────────────── */
+  .configured {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+  }
+
+  .listHeading {
+    margin: 0;
+    font-size: var(--font-size-body-lg);
+    font-weight: 500;
+  }
+
+  .groups {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-20);
+  }
+
+  .group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .groupName {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: 500;
+  }
+
+  /*
+   * A problem with the EVENT, so it sits above every rule that targets it:
+   * one broken event type can hold several rules, and the reason none of them
+   * fires is the same reason for all of them.
+   */
+  .groupProblem {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--intent-blocked-text);
+  }
+
   .rules {
     list-style: none;
     margin: 0;
@@ -93,9 +136,41 @@
   }
 
   .rule {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
     padding-block: var(--space-12);
     padding-inline: var(--space-16);
     font-size: var(--font-size-meta);
+  }
+
+  /* A switched-off rule reads as present but inactive, never as missing. */
+  .rule[data-enabled='no'] .ruleSentence {
+    color: var(--text-subtle);
+  }
+
+  .ruleSentence {
+    margin: 0;
+  }
+
+  .ruleScope,
+  .ruleCondition {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /*
+   * Why this rule does less than it looks like it does. Same treatment as a
+   * broken event: this is not decoration, it is the reason nobody is told.
+   */
+  .ruleProblem {
+    margin-block: var(--space-4) 0;
+    margin-inline: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--intent-blocked-text);
   }
 
   .rule + .rule {
