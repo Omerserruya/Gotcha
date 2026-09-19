@@ -35,6 +35,7 @@ import {
   findPendingByConversation,
   publishEvent,
   outgoingMessageQueue,
+  evaluateToolGate,
 } from "@chatcenter/shared";
 
 /**
@@ -1057,10 +1058,38 @@ router.post("/:id/approve", async (req: Request, res: Response) => {
       });
     }
 
-    const effectiveParams =
-      req.body?.modifiedParams && typeof req.body.modifiedParams === "object"
-        ? (req.body.modifiedParams as Record<string, unknown>)
-        : (row.params as Record<string, unknown>);
+    // D49. `allowModification` is resolved through tool-gate for every tool and
+    // was read by nobody: an approver could edit the params of an action whose
+    // policy forbids editing, and the edit executed.
+    //
+    // Refused LOUDLY rather than ignored. Falling back to the original params
+    // would execute something the approver did not agree to while showing them
+    // the version they typed - the approval record would then disagree with
+    // what ran, which is the one thing this table exists to prevent.
+    //
+    // Fails CLOSED: an absent `approvalConfig` means no policy said editing was
+    // permitted, and the default at every resolution site in tool-gate is
+    // already `?? false`. Unknown is not permission.
+    const wantsModification =
+      req.body?.modifiedParams != null && typeof req.body.modifiedParams === "object";
+    if (wantsModification) {
+      const gate = await evaluateToolGate(tenantId, row.tool);
+      if (gate.approvalConfig?.allowModification !== true) {
+        return res.status(403).json({
+          error: "this tool's policy does not allow editing the requested action before approval",
+          code: "MODIFICATION_NOT_ALLOWED",
+          tool: row.tool,
+          setting: "allowModification",
+        });
+      }
+    }
+
+    // Reached only once the edit is permitted, so this is the params the
+    // approver actually agreed to. It is dispatched below, which is why the
+    // gate above has to run BEFORE it rather than alongside it.
+    const effectiveParams = wantsModification
+      ? (req.body.modifiedParams as Record<string, unknown>)
+      : (row.params as Record<string, unknown>);
 
     // ATOMIC CLAIM. The PENDING/expiry checks above are a fast path for good
     // error messages; THIS is the guard that matters. Two managers clicking at
