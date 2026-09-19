@@ -275,6 +275,19 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
+        # Customer detail for one approval. ai_service because the commerce
+        # facts live there; keyed on a single approval because each call is two
+        # live vendor round trips with no cache - never for a list.
+        location /api/customer-card {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://ai_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
         location /api/decision-timeline {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
