@@ -254,6 +254,70 @@
     align-self: flex-start;
   }
 
+  /* ── 03b · the moment after ──────────────────────────────────────────── */
+  /*
+   * Where the design drew a confirmation with a live Undo. There is no undo in
+   * this platform, so this panel holds the three facts that ARE knowable, and
+   * it stays until the next decision rather than fading: the interesting case
+   * is the one that did not execute, and a panel that disappears after four
+   * seconds is a panel that hides exactly that.
+   */
+  .momentAfter {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-16);
+    padding-inline: var(--space-20);
+  }
+
+  /* A dispatch that failed is not a success with a footnote. */
+  .momentAfter[data-dispatched='no'] {
+    border-color: var(--intent-blocked-edge, var(--border-emphasis));
+    background-color: var(--intent-blocked-surface);
+  }
+
+  .momentHeading {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: 600;
+  }
+
+  .momentFacts {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    margin: 0;
+    padding: 0;
+    counter-reset: moment;
+  }
+
+  .momentFact {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    font-size: var(--font-size-meta);
+    color: var(--text-body);
+  }
+
+  .momentFact[data-state='failed'] {
+    color: var(--intent-blocked-text);
+    font-weight: 500;
+  }
+
+  /* Not yet is not the same as failed: delivery may still be retried. */
+  .momentFact[data-state='pending'] {
+    color: var(--text-subtle);
+  }
+
+  .momentDetail {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
   /* ── 03c · nothing waiting ───────────────────────────────────────────── */
   /*
    * An empty queue is the delegation working. It is styled as a state of its

@@ -58,5 +58,13 @@
     "didNotRun": "אישרת את זה, אבל זה לא רץ. פתח כדי לנסות שוב.",
     "outcomeUnknown": "אושר לפני ש-GOTCHA תיעדה מה קרה אחר כך, ולכן איננו יכולים לומר אם זה רץ.",
     "incomplete": "מוצגות ההחלטות האחרונות שלך, לא כולן — GOTCHA יכולה להחזיר רק את המאה האחרונות מכל סוג."
+  },
+  "moment": {
+    "decided": "הוחלט: {summary}",
+    "factDecision": "ההחלטה שלך נרשמה.",
+    "factExecutionRan": "GOTCHA ביצעה את זה.",
+    "factExecutionFailed": "GOTCHA לא הצליחה לבצע את זה.",
+    "factCustomerTold": "הלקוח קיבל הודעה.",
+    "factCustomerNotYet": "הלקוח עוד לא קיבל הודעה."
   }
 }

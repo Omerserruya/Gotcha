@@ -13,6 +13,7 @@ import {
 } from '@/api/contracts/approvals';
 
 import { approveRequest, rejectRequest, retryExecution } from './actions';
+import { MomentAfter } from './MomentAfter';
 import styles from './Approvals.module.css';
 
 /**
@@ -91,6 +92,17 @@ export function ApprovalsScreen({
   const [busy, setBusy] = useState(false);
   /** What just happened, for the live region. Never a silent outcome. */
   const [announcement, setAnnouncement] = useState('');
+  /**
+   * Screen 03b. Held until the next decision rather than dismissed on a timer:
+   * the interesting case is a decision that did NOT execute, and a panel that
+   * fades after four seconds is a panel that hides exactly that.
+   */
+  const [moment, setMoment] = useState<{
+    summary: string;
+    dispatched: boolean | undefined;
+    dispatchError: string | null | undefined;
+    approval: Approval | undefined;
+  } | null>(null);
 
   const approveRef = useRef<HTMLButtonElement>(null);
   const reasonRef = useRef<HTMLInputElement>(null);
@@ -173,6 +185,12 @@ export function ApprovalsScreen({
         ? t('announce.approvedButFailed', { summary: selected.summary })
         : t('announce.approvedAndRan', { summary: selected.summary }),
     );
+    setMoment({
+      summary: selected.summary,
+      dispatched: result.dispatched,
+      dispatchError: result.dispatchError,
+      approval: result.approval,
+    });
     move(1);
   }
 
@@ -188,6 +206,7 @@ export function ApprovalsScreen({
       return;
     }
     setAnnouncement(t('announce.rejected', { summary: selected.summary }));
+    setMoment(null);
     setReason('');
     move(1);
   }
@@ -216,6 +235,8 @@ export function ApprovalsScreen({
       <p aria-live="polite" className={styles.liveRegion} data-testid="approvals-announcement">
         {announcement}
       </p>
+
+      {moment ? <MomentAfter outcome={moment} onRetry={onRetry} busy={busy} /> : null}
 
       <div className={styles.layout}>
         <ul

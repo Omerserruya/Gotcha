@@ -6,6 +6,7 @@ import { isApiError } from '@/api/client/api-error';
 import { serverApi } from '@/api/client/server-api';
 import {
   approveResultSchema,
+  type Approval,
   rejectResultSchema,
   retryResultSchema,
 } from '@/api/contracts/approvals';
@@ -51,6 +52,16 @@ export type ApprovalWriteResult =
        */
       readonly dispatched?: boolean;
       readonly dispatchError?: string | null;
+      /**
+       * The row as the server now holds it, on approve.
+       *
+       * 03b's third fact — **was the customer told** — is
+       * `customerNotifiedAt` on this row, and the backend uses its presence as
+       * the once-only guard for the continuation message. So it is a fact
+       * rather than an inference, and reading it from the response means the
+       * moment-after panel never has to guess or refetch.
+       */
+      readonly approval?: Approval;
     }
   /**
    * The row moved under us — already decided, or past its deadline.
@@ -94,7 +105,12 @@ export async function approveRequest(id: string): Promise<ApprovalWriteResult> {
     // A 200 means the DECISION was recorded. It says nothing on its own about
     // whether the action ran — that is what `dispatch` is for, and conflating
     // the two is the exact mistake the model was reshaped to prevent.
-    return { ok: true, dispatched: result.dispatch.ok, dispatchError: result.dispatch.error };
+    return {
+      ok: true,
+      dispatched: result.dispatch.ok,
+      dispatchError: result.dispatch.error,
+      approval: result.approval,
+    };
   } catch (cause) {
     return classify(cause, 'approvals.approve_failed');
   }
