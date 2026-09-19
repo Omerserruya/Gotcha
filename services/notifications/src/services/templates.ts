@@ -153,6 +153,29 @@ const TEMPLATES: Record<SystemEventType, TemplateFn> = {
     };
   },
 
+  // The counterpart to refund.issued / discount.applied / meeting.scheduled.
+  // Only reaches here for failure === "errored" - a refusal never emits - so
+  // the body may say the action was attempted, which a refusal could not.
+  // The provider's own reason is shown verbatim: a paraphrased vendor error is
+  // a worse debugging aid than an ugly one.
+  "tool.action_failed": (e) => {
+    const kind = safe(e.data.kind, "action");
+    const label =
+      kind === "refund" ? "A refund" : kind === "discount" ? "A discount" : kind === "meeting" ? "A meeting booking" : "An action";
+    const reason = safe(e.data.reason, "");
+    const heLabel =
+      kind === "refund" ? "החזר" : kind === "discount" ? "הנחה" : kind === "meeting" ? "קביעת פגישה" : "פעולה";
+    return {
+      title: `${label} did not go through`,
+      body:
+        `${label} was attempted and failed, so it did NOT happen.` +
+        `${reason ? ` Reported: ${reason}` : ""}\n` +
+        `\n- Hebrew -\n` +
+        `${heLabel} נוסתה ונכשלה, כך שהיא לא בוצעה.`,
+      link: e.metadata.conversationId ? `/conversations/${e.metadata.conversationId}` : undefined,
+    };
+  },
+
   "refund.issued": (e) => {
     const amount = safe(e.data.amount, "");
     return {

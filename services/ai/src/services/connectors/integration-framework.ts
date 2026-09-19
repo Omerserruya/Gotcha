@@ -789,10 +789,25 @@ export async function executeAdapterTool(opts: {
    * AI-supplied "isAuthorized" can never influence it.
    */
   accessScope?: "internal" | "customer";
-}): Promise<{ ok: true; result: unknown } | { ok: false; reason: string }> {
+}): Promise<
+  | { ok: true; result: unknown }
+  // `failure` says WHICH KIND of not-ok this is, set at each return site where
+  // the answer is already known locally: a guard knows it is refusing, a catch
+  // knows it broke. Callers cannot recover this from `reason` - the strings are
+  // free-form and a new one added later would be silently misclassified by any
+  // prefix match, which is the defect this field exists to prevent.
+  //
+  //   refused - a guard, a policy, a rate limit or a missing precondition
+  //             declined. The product working correctly.
+  //   errored - it was attempted and something broke (token refresh, provider
+  //             5xx, transport). Only this kind is worth interrupting a human.
+  //
+  // Additive: every existing caller ignores it and none needed changing.
+  | { ok: false; reason: string; failure: "refused" | "errored" }
+> {
   const start = Date.now();
   const dot = opts.toolFunctionName.indexOf(".");
-  if (dot < 0) return { ok: false, reason: `bad_tool_name:${opts.toolFunctionName}` };
+  if (dot < 0) return { ok: false, failure: "refused", reason: `bad_tool_name:${opts.toolFunctionName}` };
   const slug = opts.toolFunctionName.slice(0, dot);
   const toolName = opts.toolFunctionName.slice(dot + 1);
 
@@ -810,6 +825,7 @@ export async function executeAdapterTool(opts: {
       if (!guardIdentity || !scoped) {
         return {
           ok: false,
+          failure: "refused",
           reason:
             "access_denied: this conversation has no authenticated identity, so there is no profile to change. " +
             "Do not ask the customer to supply a customer id, phone or email as proof - it would not be accepted.",
@@ -830,7 +846,7 @@ export async function executeAdapterTool(opts: {
     if (guard.PROTECTED_SHOPIFY_TOOLS.has(toolName)) {
       guardIdentity = await guard.resolveRequesterIdentity(opts.tenantId, opts.conversationId);
       if (!guardIdentity) {
-        return { ok: false, reason: "access_denied: requester identity could not be resolved for this conversation" };
+        return { ok: false, failure: "refused", reason: "access_denied: requester identity could not be resolved for this conversation" };
       }
       const pre = guard.checkArgsAllowed(guardIdentity, toolName, opts.args as Record<string, any>);
       if (!pre.allowed) {
@@ -844,6 +860,7 @@ export async function executeAdapterTool(opts: {
         });
         return {
           ok: false,
+          failure: "refused",
           reason:
             "access_denied_cross_customer: this chat may only access the customer's own records. " +
             "Do NOT reveal any of the requested data or confirm whether it exists. Offer to send a " +
@@ -854,10 +871,10 @@ export async function executeAdapterTool(opts: {
   }
 
   const adapter = getAdapter(slug);
-  if (!adapter) return { ok: false, reason: `unknown_provider:${slug}` };
+  if (!adapter) return { ok: false, failure: "refused", reason: `unknown_provider:${slug}` };
   const toolDef = adapter.tools().find((t) => t.name === opts.toolFunctionName);
   if (!toolDef) {
-    return { ok: false, reason: `unknown_tool:${opts.toolFunctionName}` };
+    return { ok: false, failure: "refused", reason: `unknown_tool:${opts.toolFunctionName}` };
   }
 
   // Rate limit BEFORE loading the connection - denial is cheap.
@@ -869,7 +886,7 @@ export async function executeAdapterTool(opts: {
       toolFunctionName: opts.toolFunctionName, args: opts.args, ok: false, reason,
       durationMs: Date.now() - start,
     });
-    return { ok: false, reason };
+    return { ok: false, failure: "refused", reason };
   }
 
   const conn = await loadConnection({ tenantId: opts.tenantId, slug });
@@ -880,7 +897,7 @@ export async function executeAdapterTool(opts: {
       toolFunctionName: opts.toolFunctionName, args: opts.args, ok: false, reason,
       durationMs: Date.now() - start,
     });
-    return { ok: false, reason };
+    return { ok: false, failure: "refused", reason };
   }
 
   // Capability gate: a scope the merchant never granted fails identically on
@@ -893,6 +910,7 @@ export async function executeAdapterTool(opts: {
   if (blockedScopes.length) {
     return {
       ok: false,
+      failure: "refused",
       reason: `missing_scope:${blockedScopes[0]} - ${slug} connection needs re-authorization (merchant approval)`,
     };
   }
@@ -916,7 +934,7 @@ export async function executeAdapterTool(opts: {
       toolFunctionName: opts.toolFunctionName, args: opts.args, ok: false, reason,
       durationMs: Date.now() - start,
     });
-    return { ok: false, reason };
+    return { ok: false, failure: "errored", reason };
   }
 
   const runExecute = (creds: Record<string, any>) =>
@@ -993,6 +1011,7 @@ export async function executeAdapterTool(opts: {
         });
         return {
           ok: false,
+          failure: "refused",
           reason:
             "access_denied_cross_customer: the requested record belongs to a different customer. " +
             "Do NOT reveal any of its details or confirm what exists. Offer identity verification " +
@@ -1048,7 +1067,7 @@ export async function executeAdapterTool(opts: {
       toolFunctionName: opts.toolFunctionName, args: opts.args, ok: false, reason,
       durationMs: Date.now() - start,
     });
-    return { ok: false, reason };
+    return { ok: false, failure: "errored", reason };
   }
 }
 

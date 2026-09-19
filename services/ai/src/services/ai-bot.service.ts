@@ -1985,6 +1985,39 @@ async function generateAIBotReplyInner(
               },
             });
           }
+        } else {
+          // D30. This branch used to do nothing: the product notified on the
+          // SUCCESS of a money action and stayed silent when it failed, which
+          // is the inverse of what anyone wants. "A refund did not go through"
+          // is the one thing worth interrupting someone for.
+          //
+          // ONLY `errored` is emitted. A `refused` is a guard, a rate limit or
+          // a missing precondition declining - the product working correctly -
+          // and paging someone because their own cross-sell gate held would
+          // teach them to ignore the row this exists to make trustworthy.
+          //
+          // The discriminator comes from executeAdapterTool rather than from
+          // parsing `reason`: the strings are free-form, and a prefix match
+          // would silently misclassify every failure mode added later, in the
+          // direction of notifying nobody.
+          const kind = classifyToolForNotification(toolFunctionName);
+          if (kind && result.failure === "errored") {
+            tryEmit({
+              type: "tool.action_failed",
+              tenantId: opts.tenantId,
+              data: {
+                tool: toolFunctionName,
+                kind,
+                failure: result.failure,
+                reason: String(result.reason ?? "").slice(0, 200),
+                args,
+              },
+              metadata: {
+                conversationId: opts.conversationId,
+                agentId: config.id,
+              },
+            });
+          }
         }
       } catch (err: any) {
         console.warn("[ai-bot] notification emit failed:", err?.message);

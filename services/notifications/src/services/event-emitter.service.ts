@@ -63,7 +63,12 @@ export type SystemEventType =
   // different agent. Deliberately NOT emitted for self-claims: telling someone
   // they picked up the conversation they just clicked is the noise this screen
   // exists to prevent.
-  | "conversation.assigned";
+  | "conversation.assigned"
+  // A money-shaped tool ATTEMPTED and broke. Emitted only for
+  // failure === "errored"; a refusal is the product working correctly and is
+  // not worth interrupting anyone. The kind (refund/discount/meeting) rides in
+  // the payload so one type covers the family, mirroring the success side.
+  | "tool.action_failed";
 
 export interface SystemEventMetadata {
   conversationId?: string;
