@@ -369,5 +369,53 @@ export const securityEndpoints = {
   auditActions: () => endpoint('/api/audit-logs/actions'),
 } as const;
 
+/**
+ * Approvals — screen 03. `conversation_service` in both gateway templates
+ * (`gateway/…:752`, `nginx/…:636`).
+ *
+ * The route file holds seven handlers; **two of them are not ours.**
+ * `/:id/dispatch-approved` and `/:id/dispatch-rejected` sit above the
+ * `authenticate` middleware behind `requireInternalKey` — service-to-service
+ * dispatch hooks, deliberately unreachable from a browser session. They are
+ * absent here on purpose, the way the five dev-only gateway routes are.
+ *
+ * `list` takes **one** status and defaults to PENDING (`where = { tenantId,
+ * status }`), with no date filter of any kind, `take: 100`, newest first. So
+ * "what you decided today" is one call per status, narrowed on our side, and
+ * only as far back as the most recent 100 rows of each — a real ceiling on a
+ * busy tenant, and not one the screen may pretend away.
+ *
+ * `detail` answers a bare `{ approval, conversation, contact, recentMessages }`
+ * — not `{ data }`. Third envelope shape in this platform.
+ */
+export const approvalEndpoints = {
+  list: (status?: string) =>
+    status ? endpoint('/api/approvals?status={status}', { status }) : endpoint('/api/approvals'),
+  detail: (id: string) => endpoint('/api/approvals/{id}', { id }),
+  approve: (id: string) => endpoint('/api/approvals/{id}/approve', { id }),
+  reject: (id: string) => endpoint('/api/approvals/{id}/reject', { id }),
+  /**
+   * Re-runs a dispatch that ran and FAILED. It runs the action **forward** —
+   * on a refund that is the opposite of an undo, and it is the affordance the
+   * design drew an Undo in place of.
+   */
+  retryExecution: (id: string) => endpoint('/api/approvals/{id}/retry-execution', { id }),
+} as const;
+
+/**
+ * The thresholds behind "Change what needs asking".
+ *
+ * Immutable-versioned: a write creates version+1 and historical
+ * `PolicyDecision` rows keep pointing at the version that actually judged
+ * them, so changing a rule never rewrites history.
+ */
+export const businessPolicyEndpoints = {
+  list: () => endpoint('/api/business-policies'),
+  update: (actionKind: string) => endpoint('/api/business-policies/{actionKind}', { actionKind }),
+  /** Answers "what would change" before anything is applied. */
+  preview: (actionKind: string) =>
+    endpoint('/api/business-policies/{actionKind}/preview', { actionKind }),
+} as const;
+
 export type { Endpoint as ApiEndpoint };
 export { endpoint as defineEndpoint };
