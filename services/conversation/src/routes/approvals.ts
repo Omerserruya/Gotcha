@@ -962,6 +962,15 @@ router.get("/:id", async (req: Request, res: Response) => {
     // Load the surrounding context so the frontend card doesn't need
     // N extra round trips.
     const [conversation, contact, recentMessages] = await Promise.all([
+      // SAFE ONLY BECAUSE `row.conversationId` IS `null`, NEVER `undefined`.
+      // It is nullable by design - a System Copilot plan has no conversation -
+      // and Prisma treats the two differently: `id: null` matches nothing
+      // (the PK is non-nullable), while `id: undefined` DROPS THE FILTER and
+      // would return an arbitrary conversation from this tenant, presented as
+      // this approval's context. The value comes straight from the row, so it
+      // is null today; normalising nulls to undefined anywhere upstream - the
+      // kind of change that looks like tidying - turns this into a defect with
+      // no error to notice.
       prisma.conversation.findFirst({
         where: { id: row.conversationId, tenantId },
       }),
