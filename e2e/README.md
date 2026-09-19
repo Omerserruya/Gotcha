@@ -57,9 +57,26 @@ cookie was spent, not that the route rejected you.
 
 ## Gate 2 — no personal data reaches an evidence file
 
-`e2e/evidence/` is committed. Screen 16 renders a real IP address and the city
-someone signs in from, so photographing the live list would put personal data in
-the repository permanently.
+Screen 16 renders a real IP address and the city someone signs in from, so
+photographing the live list would put personal data into a file.
+
+**Correction, 2026-09-19.** This gate used to say *"`e2e/evidence/` is
+committed"*. It is not, and it never has been: the ignore rule was added in
+`6112786`, the very commit that introduced evidence, and `git log` across all
+branches shows **zero** commits touching `e2e/evidence/`. I wrote the wrong
+reason down and it stood for three days.
+
+The gate is unchanged, because the reason it exists was never really about
+git. These files are written to disk, opened by whoever runs the capture, and
+relayed between sessions and to the client. **"Not committed" is not "not
+disclosed."**
+
+And being ignored makes it *worse*, not better. A committed file has a history
+someone could purge and a review that would have seen it. An ignored one sits
+in a working directory indefinitely, invisible to every review, covered by no
+retention or deletion process at all. So the correct reading is the opposite of
+the tempting one: do not conclude from `.gitignore` that the fixtures are
+unnecessary.
 
 Network interception was the right mechanism and **is not available**: the pages
 are server components, so those calls leave the Node process and `page.route`
@@ -101,7 +118,7 @@ saying why and writes nothing.
 This is the only safety assertion on the project that has caught a real
 condition. When the `NODE_ENV` guard was broken, 42 tests failed and
 `e2e/evidence/s16` was left empty — instead of 21 screenshots of a real person's
-sign-in locations being committed.
+sign-in locations sitting on disk and being passed around.
 
 **Do not weaken a gate to make a run pass.** If it is firing, either the screen
 is wrong or the gate is; both are worth knowing, and neither is fixed by
