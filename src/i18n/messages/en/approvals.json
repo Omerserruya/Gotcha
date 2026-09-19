@@ -1,0 +1,44 @@
+{
+  "title": "Approvals",
+  "description": "GOTCHA has done the work. These are the decisions it can't take on its own.",
+  "empty": "Nothing needs a decision from you.",
+  "unavailable": "We couldn't read your approvals just now.",
+  "keys": "A approve · R reject · ↓ next",
+  "queue": {
+    "label": "Waiting for a decision",
+    "awaiting": "Waiting on you",
+    "lapsed": "Deadline passed"
+  },
+  "detail": {
+    "requestedBy": "Requested by {who}",
+    "requestedByAutomation": "Requested by an automation",
+    "reason": "Why: {reason}",
+    "policyRule": "Flagged by {rule}",
+    "lapsed": "The deadline passed, so this can no longer be decided here. GOTCHA has handed the conversation to a person.",
+    "outcomeUnknown": "This was approved before GOTCHA recorded what happened next, so we can't tell you whether it ran. It can't be retried — re-running it could repeat something that already happened."
+  },
+  "risk": {
+    "HIGH": "High risk",
+    "IRREVERSIBLE": "Can't be taken back",
+    "FINANCIAL": "Moves money"
+  },
+  "action": {
+    "approve": "Approve",
+    "reject": "Reject",
+    "rejectReasonLabel": "Why not?",
+    "retry": "Try running it again"
+  },
+  "announce": {
+    "approvedAndRan": "Approved: {summary}. It ran.",
+    "approvedButFailed": "Approved: {summary}. It did not run — you can try again.",
+    "rejected": "Rejected: {summary}.",
+    "retryWorked": "It ran this time.",
+    "retryFailedAgain": "It failed again."
+  },
+  "error": {
+    "stale": "Someone else decided this, or its deadline passed. Reloading to show where it stands.",
+    "reason_required": "Say why before rejecting — GOTCHA uses the reason to stop asking wrongly.",
+    "forbidden": "You can't decide this one.",
+    "failed": "That didn't go through."
+  }
+}

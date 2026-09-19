@@ -70,6 +70,21 @@ export type ExecutionState = (typeof EXECUTION_STATES)[number];
 /** `low | medium | high`, defaulted rather than trusted. */
 export const RISK_LEVELS = ['low', 'medium', 'high'] as const;
 
+/**
+ * The risk tags the schema names, and the only ones this app has words for.
+ *
+ * `riskTags` is a free `Json` column, so anything can be in it. A tag outside
+ * this set is rendered **as itself** rather than dropped: an unrecognised risk
+ * label is still a risk label, and silently hiding one because we have no
+ * translation for it is the wrong way round on a screen about money.
+ */
+export const KNOWN_RISK_TAGS = ['HIGH', 'IRREVERSIBLE', 'FINANCIAL'] as const;
+export type KnownRiskTag = (typeof KNOWN_RISK_TAGS)[number];
+
+export function isKnownRiskTag(tag: string): tag is KnownRiskTag {
+  return (KNOWN_RISK_TAGS as readonly string[]).includes(tag);
+}
+
 export const approvalSchema = z.object({
   id: z.string().min(1),
   /** Nullable by design: System Copilot plans are not conversation-scoped. */

@@ -41,6 +41,15 @@ export interface ApprovalsData {
   readonly aiEmployees: readonly AiEmployee[] | null;
   /** True when `decided` may be missing rows from today because of `take: 100`. */
   readonly decidedMayBeIncomplete: boolean;
+  /**
+   * Epoch ms at which this data was read.
+   *
+   * Carried with the data rather than taken in render, because "which rows had
+   * lapsed" is a fact about the moment the queue was READ, not about the
+   * moment some JSX happened to run. It also gives the client a starting clock
+   * that matches the server's exactly, so the first render cannot mismatch.
+   */
+  readonly readAt: number;
 }
 
 /** The route's own page size. Hitting it means the window may be short. */
@@ -79,6 +88,7 @@ export async function loadApprovals(): Promise<ApprovalsData> {
         );
 
   return {
+    readAt: Date.now(),
     pending,
     decided,
     aiEmployees: aiEmployees?.filter((ai) => !isBuilderDraft(ai)) ?? null,
