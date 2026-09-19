@@ -77,6 +77,16 @@ export const RISK_LEVELS = ['low', 'medium', 'high'] as const;
  * this set is rendered **as itself** rather than dropped: an unrecognised risk
  * label is still a risk label, and silently hiding one because we have no
  * translation for it is the wrong way round on a screen about money.
+ *
+ * ── THIS IS THE OPPOSITE CALL FROM `UNFIRING_EVENTS`, ON PURPOSE ──
+ * Screen 15 refuses to offer an event nothing raises. This one insists on
+ * showing a tag nothing translates. Both follow the same rule — **never let
+ * the screen be less honest than the data** — and they point in opposite
+ * directions because the risk does. There, the harm was showing something the
+ * product cannot do. Here, the harm would be hiding something the product is
+ * warning about.
+ *
+ * So: do not "tidy" this by filtering to the known set.
  */
 export const KNOWN_RISK_TAGS = ['HIGH', 'IRREVERSIBLE', 'FINANCIAL'] as const;
 export type KnownRiskTag = (typeof KNOWN_RISK_TAGS)[number];

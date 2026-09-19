@@ -253,4 +253,102 @@
   .retry {
     align-self: flex-start;
   }
+
+  /* ── 03c · nothing waiting ───────────────────────────────────────────── */
+  /*
+   * An empty queue is the delegation working. It is styled as a state of its
+   * own rather than as a message sitting in a gap, which is the difference
+   * between "the product is doing its job" and "something is missing".
+   */
+  .nothingWaiting {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-24);
+  }
+
+  .restHeader {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .restLead {
+    margin: 0;
+    font-size: var(--font-size-body-lg);
+    font-weight: 500;
+  }
+
+  .restBody {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-meta);
+    color: var(--text-body);
+  }
+
+  .decided {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+  }
+
+  .decidedHeading {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: 500;
+  }
+
+  .decidedList {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    overflow: hidden;
+  }
+
+  .decidedRow {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-16);
+  }
+
+  .decidedRow + .decidedRow {
+    border-block-start: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .decidedSummary {
+    margin: 0;
+    font-size: var(--font-size-meta);
+  }
+
+  .decidedMeta,
+  .decidedReason {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /*
+   * Approved and then it did not run. This is the one thing the design's list
+   * of green ticks could never show, and it is why the row carries the
+   * execution axis at all.
+   */
+  .decidedProblem {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--intent-blocked-text);
+  }
+
+  /* "Your most recent", never "all". The route caps at 100 per status. */
+  .decidedCaveat {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
 }

@@ -1,7 +1,6 @@
 {
   "title": "Approvals",
   "description": "GOTCHA has done the work. These are the decisions it can't take on its own.",
-  "empty": "Nothing needs a decision from you.",
   "unavailable": "We couldn't read your approvals just now.",
   "keys": "A approve · R reject · ↓ next",
   "queue": {
@@ -40,5 +39,24 @@
     "reason_required": "Say why before rejecting — GOTCHA uses the reason to stop asking wrongly.",
     "forbidden": "You can't decide this one.",
     "failed": "That didn't go through."
+  },
+  "rest": {
+    "lead": "Nothing needs a decision from you.",
+    "body": "Everything that came up was inside the limits you set. GOTCHA handled it and kept going."
+  },
+  "decided": {
+    "heading": "What you decided",
+    "none": "You haven't decided anything yet.",
+    "unavailable": "We couldn't read your past decisions just now.",
+    "approved": "Approved by {who} at {when}",
+    "rejected": "Rejected by {who} at {when}",
+    "lapsed": "Deadline passed at {when} — handed to a person",
+    "cancelled": "Cancelled at {when}",
+    "someone": "someone",
+    "askedBy": "asked by {who}",
+    "because": "Reason given: {reason}",
+    "didNotRun": "You approved this, but it didn't run. Open it to try again.",
+    "outcomeUnknown": "Approved before GOTCHA recorded what happened next, so we can't say whether it ran.",
+    "incomplete": "This shows your most recent decisions, not all of them — GOTCHA can only hand back the last hundred of each kind."
   }
 }
