@@ -111,6 +111,58 @@ export const approvalsSchema = z.array(approvalSchema);
 export type Approval = z.infer<typeof approvalSchema>;
 
 /**
+ * What `POST /:id/approve` answers — and it is better than it looks.
+ *
+ * `{ approval, dispatch }`, a bare envelope (the fourth shape in this
+ * platform), where **`dispatch` is the outcome of the attempt that was just
+ * made**. So the second of screen 03b's three facts — *did the thing actually
+ * happen* — arrives in the response to the decision itself, synchronously, with
+ * no poll and no event subscription.
+ *
+ * That is the whole reason 03b is a screen rather than a toast. A decision that
+ * dispatched cleanly and one that dispatched and failed are told apart here, at
+ * the only moment the person who decided is still looking.
+ */
+export const approveResultSchema = z.object({
+  approval: approvalSchema,
+  dispatch: z.object({
+    ok: z.boolean(),
+    /** Present when `ok` is false. The reason, in the provider's words. */
+    error: z.string().nullable().default(null),
+  }),
+});
+export type ApproveResult = z.infer<typeof approveResultSchema>;
+
+/**
+ * `POST /:id/reject` → bare `{ approval }`.
+ *
+ * **`decisionReason` is required**: the route answers 400 without one. So the
+ * design's *"rejecting asks why in one tap"* is not a nicety the screen chose,
+ * it is the contract — and the reason it gives is stored on `decisionReason`
+ * and shown back on the decided list.
+ */
+export const rejectResultSchema = z.object({ approval: approvalSchema });
+
+/**
+ * `POST /:id/retry-execution` → `{ data: { approvalId, executed, error } }`.
+ *
+ * Enveloped in `data`, unlike both of its siblings on the same route file.
+ * **Three sibling routes, three envelope shapes**: approve answers bare
+ * `{ approval, dispatch }`, reject answers bare `{ approval }`, and this one
+ * answers `{ data }`.
+ *
+ * The route refuses `LEGACY_UNVERIFIED` with a 409 of its own — *"legacy
+ * approval predates execution tracking"* — which is the server reaching the
+ * same conclusion as `isRetryable`, independently.
+ */
+export const retryResultSchema = z.object({
+  approvalId: z.string().min(1),
+  /** Whether the re-dispatch succeeded. Named `executed`, not `ok`, here. */
+  executed: z.boolean(),
+  error: z.string().nullable().default(null),
+});
+
+/**
  * Past its deadline.
  *
  * **Computed here, never read from `status`.** A sweeper does flip PENDING to
