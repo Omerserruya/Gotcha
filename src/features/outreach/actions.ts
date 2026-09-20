@@ -1,0 +1,67 @@
+'use server';
+
+import { revalidatePath } from 'next/cache';
+
+import { isApiError } from '@/api/client/api-error';
+import { serverApi } from '@/api/client/server-api';
+import { campaignSchema } from '@/api/contracts/outreach';
+import { outreachEndpoints } from '@/api/endpoints/registry';
+import { logger } from '@/observability/logger';
+
+/**
+ * The one write on screen 05, and it is destructive.
+ *
+ * ── THERE IS NO PAUSE ACTION, AND THERE WILL NOT BE ONE ──
+ * `POST /:id/cancel` is the only thing that stops a send, and it is terminal:
+ * it removes the queued jobs, marks every pending recipient `"skipped"` with
+ * the reason *"Broadcast cancelled"*, sets `completedAt`, and leaves the
+ * campaign `CANCELLED`. **No route returns it to `SENDING`.**
+ *
+ * Naming this `pauseCampaign` would be the failure this screen exists to
+ * avoid: the word promises that it halts *and* that it resumes, and only the
+ * first is true. The second is the half someone relies on when they stop a
+ * campaign for ten minutes.
+ *
+ * So the function is called what it does, and the UI confirmation names what
+ * is lost rather than asking whether the person is sure — "are you sure?"
+ * tests conviction, not understanding.
+ */
+
+export type OutreachWriteResult =
+  | { readonly ok: true }
+  /**
+   * The campaign is not in a state that can be stopped.
+   *
+   * The route accepts `SENDING` and `SCHEDULED` only and answers 400
+   * otherwise. Its own outcome because it is a race rather than a fault: a
+   * campaign that finished while the page was open is not an error, and the
+   * remedy is to show what it actually is now.
+   */
+  | { readonly ok: false; readonly reason: 'not_stoppable' }
+  | { readonly ok: false; readonly reason: 'forbidden' }
+  | { readonly ok: false; readonly reason: 'failed' };
+
+/**
+ * Stops a campaign permanently. Not a pause.
+ *
+ * Everyone still queued is marked skipped and will not receive the message,
+ * and the campaign cannot be restarted — only copied with `resend`.
+ */
+export async function stopCampaign(id: string): Promise<OutreachWriteResult> {
+  try {
+    await serverApi().post({
+      endpoint: outreachEndpoints.cancel(id),
+      payload: campaignSchema,
+      body: {},
+    });
+    revalidatePath('/[locale]/(app)/outreach', 'page');
+    return { ok: true };
+  } catch (cause) {
+    if (isApiError(cause)) {
+      if (cause.status === 400) return { ok: false, reason: 'not_stoppable' };
+      if (cause.status === 403) return { ok: false, reason: 'forbidden' };
+    }
+    logger.warn('outreach.cancel_failed', { cause });
+    return { ok: false, reason: 'failed' };
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "title": "Outreach",
+  "description": "Everything going out, and what it did when it arrived.",
+  "unavailable": "We couldn't read your campaigns just now.",
+  "none": "Nothing has gone out yet.",
+  "noneBody": "When you send a campaign it shows up here while it's sending, and stays afterwards with what it did.",
+  "heading": { "inFlight": "Going out now", "finished": "Already sent" },
+  "status": {
+    "DRAFT": "Draft",
+    "SCHEDULED": "Scheduled",
+    "SENDING": "Sending",
+    "COMPLETED": "Finished",
+    "FAILED": "Stopped by a problem",
+    "CANCELLED": "Stopped by you"
+  },
+  "counter": {
+    "sent": "Sent",
+    "delivered": "Delivered",
+    "opened": "Opened",
+    "replied": "Replied",
+    "failed": "Didn't arrive"
+  },
+  "card": {
+    "halted": "It stopped: {reason}",
+    "openedNoReply": "{count, plural, =1 {One person opened it and said nothing} other {# people opened it and said nothing}}."
+  },
+  "action": {
+    "stop": "Stop sending",
+    "stopConfirm": "Stop it",
+    "keepSending": "Keep sending"
+  },
+  "stop": {
+    "lead": "Stop sending \"{name}\"?",
+    "skipped": "Everyone still waiting will be skipped — they won't get the message.",
+    "terminal": "It can't be restarted afterwards. You'd have to send it again from the beginning."
+  },
+  "error": {
+    "not_stoppable": "It already finished, so there's nothing left to stop.",
+    "forbidden": "You can't stop this one.",
+    "failed": "That didn't go through."
+  }
+}

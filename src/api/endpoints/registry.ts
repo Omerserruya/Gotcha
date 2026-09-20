@@ -447,5 +447,30 @@ export const identityEndpoints = {
   timeline: (id: string) => endpoint('/api/identity/{id}/timeline', { id }),
 } as const;
 
+/**
+ * Outreach — screens 05 and 05b. `conversation_service` in both templates.
+ *
+ * **There is no pause and no resume.** `cancel` is the only thing that stops a
+ * send: it removes the queued jobs, marks every pending recipient `"skipped"`,
+ * sets `completedAt`, and leaves the campaign `CANCELLED` with no path back to
+ * `SENDING`. It accepts `SENDING` and `SCHEDULED` only, and answers 400
+ * otherwise.
+ *
+ * `validate` is a real pre-send check against the actual audience and channel.
+ * It is what the design drew as *"Waiting for your approval"* — a state with
+ * no field on `Broadcast`, and one that cannot borrow `ApprovalRequest`, whose
+ * own schema comment says it is exclusively the bot path.
+ */
+export const outreachEndpoints = {
+  list: () => endpoint('/api/broadcasts'),
+  detail: (id: string) => endpoint('/api/broadcasts/{id}', { id }),
+  recipients: (id: string) => endpoint('/api/broadcasts/{id}/recipients', { id }),
+  /** Answers "will this actually send?" without sending anything. */
+  validate: (id: string) => endpoint('/api/broadcasts/{id}/validate', { id }),
+  /** TERMINAL. Drains the queue and skips everyone still pending. */
+  cancel: (id: string) => endpoint('/api/broadcasts/{id}/cancel', { id }),
+  resend: (id: string) => endpoint('/api/broadcasts/{id}/resend', { id }),
+} as const;
+
 export type { Endpoint as ApiEndpoint };
 export { endpoint as defineEndpoint };

@@ -1,0 +1,229 @@
+@layer features {
+  /*
+   * Screens 05 and 05b · Outreach.
+   *
+   * Campaigns as cards rather than a table, because the interesting thing
+   * about each is a small set of numbers and one possible action — and
+   * because the action on a sending campaign is destructive, which a table row
+   * has nowhere sensible to put.
+   */
+
+  .screen {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-24);
+  }
+
+  .section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+  }
+
+  .sectionHeading {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: 500;
+  }
+
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(var(--size-reading-half), 1fr));
+    gap: var(--space-12);
+  }
+
+  .card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-16);
+    padding-inline: var(--space-18);
+  }
+
+  /* A campaign stopped by a problem is not the same as one that finished. */
+  .card[data-status='FAILED'] {
+    border-color: var(--intent-blocked-edge, var(--border-emphasis));
+  }
+
+  .cardHead {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .cardName {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: 600;
+  }
+
+  .cardMeta {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .cardError {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--intent-blocked-text);
+  }
+
+  /* ── The five numbers ────────────────────────────────────────────────── */
+  .counters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-16);
+    margin: 0;
+  }
+
+  .counter {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .counter dt {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .counter dd {
+    margin: 0;
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-6);
+    font-size: var(--font-size-body-lg);
+  }
+
+  .share {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /*
+   * `readCount − repliedCount`. A segment you can act on, out of two numbers
+   * that exist — where the design had a revenue figure with no source.
+   */
+  .silent {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    color: var(--text-body);
+  }
+
+  /* ── Stopping, which is not pausing ──────────────────────────────────── */
+  .stop {
+    align-self: flex-start;
+    font: inherit;
+    font-size: var(--font-size-caption);
+    color: var(--text-body);
+    background: none;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-control);
+    padding-block: var(--space-6);
+    padding-inline: var(--space-12);
+    cursor: pointer;
+  }
+
+  /*
+   * The confirmation names what is lost rather than asking "are you sure?".
+   * It is styled as a blocked state because that is what it describes: people
+   * who will not receive a message, and a campaign that cannot come back.
+   */
+  .confirm {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    background-color: var(--intent-blocked-surface);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-14);
+  }
+
+  .confirmLead {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: 500;
+    color: var(--intent-blocked-text);
+  }
+
+  .confirmPoints {
+    list-style: disc;
+    margin: 0;
+    padding-inline-start: var(--space-18);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-body);
+  }
+
+  .confirmError {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--intent-blocked-text);
+  }
+
+  .confirmActions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-8);
+    margin-block-start: var(--space-4);
+  }
+
+  .stopConfirm,
+  .stopCancel {
+    font: inherit;
+    font-size: var(--font-size-caption);
+    border-radius: var(--radius-control);
+    padding-block: var(--space-8);
+    padding-inline: var(--space-14);
+    cursor: pointer;
+  }
+
+  .stopConfirm {
+    color: var(--panel-base);
+    background-color: var(--intent-blocked-text);
+    border: none;
+  }
+
+  /* The safe option is the plainer one, but it is not the quieter one. */
+  .stopCancel {
+    color: var(--text-body);
+    background-color: var(--panel-base);
+    border: var(--border-width-thin) solid var(--border-default);
+  }
+
+  .stopConfirm:disabled,
+  .stopCancel:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  /* ── Nothing sent yet ────────────────────────────────────────────────── */
+  .empty {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .emptyLead {
+    margin: 0;
+    font-size: var(--font-size-body-lg);
+    font-weight: 500;
+  }
+
+  .emptyBody {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-meta);
+    color: var(--text-body);
+  }
+}
