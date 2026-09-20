@@ -1,0 +1,28 @@
+{
+  "title": "Customers",
+  "description": "Everyone who has talked to you, on whichever channel they used.",
+  "unavailable": "We couldn't read your customers just now.",
+  "search": {
+    "label": "Find someone",
+    "placeholder": "Phone or email",
+    "noneLead": "Nothing matched \"{query}\".",
+    "lookedAtPhone": "We looked at phone numbers. Searching by name isn't available yet, so a name won't match even if that person is here.",
+    "lookedAtEmail": "We looked at email addresses. Searching by name isn't available yet, so a name won't match even if that person is here."
+  },
+  "list": {
+    "count": "{count, plural, =0 {No contacts} =1 {One contact} other {# contacts}}",
+    "none": "Nobody has talked to you yet.",
+    "unnamed": "No name or handle on this contact",
+    "truncated": "Showing {shown} of {total}."
+  },
+  "channel": {
+    "WHATSAPP": "WhatsApp",
+    "INSTAGRAM": "Instagram",
+    "MESSENGER": "Messenger",
+    "EMAIL": "Email",
+    "WEBCHAT": "Web chat",
+    "VOICE": "Phone",
+    "SMS": "SMS",
+    "TELEGRAM": "Telegram"
+  }
+}

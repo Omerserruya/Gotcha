@@ -417,5 +417,35 @@ export const businessPolicyEndpoints = {
     endpoint('/api/business-policies/{actionKind}/preview', { actionKind }),
 } as const;
 
+/**
+ * Customers — screen 04. `conversation_service` in both gateway templates.
+ *
+ * **`list` is deliberately the segment route, not `GET /api/contacts`.** That
+ * one is a CRM proxy search: it requires a connected CRM *and* a non-empty
+ * query, returns `{ data: [], total: 0 }` otherwise, and its `meta.total` is
+ * `rows.length`. This tenant's only integration is Shopify (ECOMMERCE, ERROR),
+ * so it can never answer with a customer here.
+ *
+ * `segment` queries the local `Contact` table, answers a real
+ * `prisma.contact.count`, and has a `countOnly` mode. Its rule vocabulary has
+ * thirteen cases and **no name case** — searching by name is not currently
+ * possible against the local table, and is requested.
+ */
+export const customerEndpoints = {
+  /** POST. Body `{ rules?, channel?, countOnly? }`. */
+  list: () => endpoint('/api/contacts/segment'),
+  detail: (id: string) => endpoint('/api/contacts/{id}', { id }),
+} as const;
+
+/**
+ * Cross-channel identity — the merge the design shows as *suggested, never
+ * silent*. `resolve` proposes, `merge` acts, and a person confirms in between.
+ */
+export const identityEndpoints = {
+  resolve: () => endpoint('/api/identity/resolve'),
+  merge: () => endpoint('/api/identity/merge'),
+  timeline: (id: string) => endpoint('/api/identity/{id}/timeline', { id }),
+} as const;
+
 export type { Endpoint as ApiEndpoint };
 export { endpoint as defineEndpoint };

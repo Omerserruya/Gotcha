@@ -1,0 +1,156 @@
+@layer features {
+  /*
+   * Screen 04 · Customers.
+   *
+   * A list of contacts, deliberately plain. The design's row-as-a-sentence
+   * needs a "current situation" this platform does not compute, and value and
+   * order count are two live uncached Shopify calls per person — so a row here
+   * carries only what is genuinely known: who they are, and where they came in.
+   */
+
+  .list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+  }
+
+  /*
+   * "Contacts", not "people". The endpoint returns channel identities and
+   * omits the two fields that would let this collapse them into humans.
+   */
+  .count {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .rows {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    overflow: hidden;
+  }
+
+  .row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-8);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-16);
+  }
+
+  .row + .row {
+    border-block-start: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .rowName {
+    font-size: var(--font-size-meta);
+  }
+
+  /* Channel is a mark on the row, never a section — the design is right. */
+  .rowChannel {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+    background-color: var(--panel-inset);
+    border-radius: var(--radius-badge);
+    padding-block: var(--space-2);
+    padding-inline: var(--space-8);
+  }
+
+  .rowDetail {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .tags {
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-4);
+    margin: 0;
+    padding: 0;
+  }
+
+  .tag {
+    font-size: var(--font-size-caption);
+    color: var(--intent-calm-text);
+    background-color: var(--intent-calm-surface);
+    border-radius: var(--radius-badge);
+    padding-block: var(--space-2);
+    padding-inline: var(--space-8);
+  }
+
+  /* The route counts everything and returns at most 500. */
+  .truncated {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /* ── Empty and no-match ──────────────────────────────────────────────── */
+  .empty {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .emptyLead {
+    margin: 0;
+    font-size: var(--font-size-body-lg);
+    font-weight: 500;
+  }
+
+  /*
+   * Which fields were actually searched. The rule vocabulary has no name
+   * case, so a bare "no results" for a name would tell someone their customer
+   * does not exist when the truth is we never looked at that field.
+   */
+  .emptyBody {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-snug);
+    color: var(--text-body);
+  }
+
+  /* ── Search ──────────────────────────────────────────────────────────── */
+  .search {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--space-8);
+    margin-block-end: var(--space-16);
+  }
+
+  .searchLabel {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .searchInput {
+    font: inherit;
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+    background-color: var(--panel-base);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-control);
+    padding-block: var(--space-8);
+    padding-inline: var(--space-12);
+    min-inline-size: var(--size-invite-field);
+  }
+
+  .searchSubmit {
+    font: inherit;
+    font-size: var(--font-size-meta);
+    color: var(--text-body);
+    background: none;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-control);
+    padding-block: var(--space-8);
+    padding-inline: var(--space-16);
+    cursor: pointer;
+  }
+}

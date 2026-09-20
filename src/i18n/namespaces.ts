@@ -40,6 +40,8 @@ export const NAMESPACES = [
   'notifications-settings',
   /** Approvals — screen 03, with 03b and 03c. */
   'approvals',
+  /** Customers — screen 04. */
+  'customers',
 ] as const;
 
 export type Namespace = (typeof NAMESPACES)[number];
