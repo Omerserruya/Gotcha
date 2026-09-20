@@ -31,11 +31,12 @@ import { pageMetadata } from '@/shell/page-metadata';
  * all.
  *
  * ── SEARCH ──
- * Matched against phone and email only, because the rule vocabulary has
- * thirteen cases and **no name case**. The screen says which fields it looked
- * at rather than reporting a bare "no results" — telling someone their
- * customer does not exist, when we never examined the field they typed into,
- * is the worse of the two failures.
+ * Name, phone and email all work (the `name` case landed 2026-09-20). Rules
+ * are ANDed by the route, so one field is chosen from the shape of the query.
+ * **Order number is still unsearchable and always will be** — orders are not
+ * local to this platform — so the empty state names what was looked at rather
+ * than reporting a bare "no results", which would tell someone their customer
+ * does not exist when we never examined what they typed.
  */
 export default async function Page({
   searchParams,
@@ -45,7 +46,7 @@ export default async function Page({
   const t = await getTranslations('customers');
   const { q } = await searchParams;
   const query = q?.trim() ?? '';
-  const { rows, total, truncated, searchedFields } = await loadCustomers(query);
+  const { rows, total, truncated, searchedField } = await loadCustomers(query);
 
   return (
     <PageContainer title={t('title')} description={t('description')}>
@@ -80,7 +81,7 @@ export default async function Page({
           rows={rows}
           total={total}
           truncated={truncated}
-          searchedFields={searchedFields}
+          searchedField={searchedField}
           query={query}
         />
       )}

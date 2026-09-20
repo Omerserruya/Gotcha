@@ -4,16 +4,20 @@
   "unavailable": "We couldn't read your customers just now.",
   "search": {
     "label": "Find someone",
-    "placeholder": "Phone or email",
+    "placeholder": "Name, phone or email",
     "noneLead": "Nothing matched \"{query}\".",
-    "lookedAtPhone": "We looked at phone numbers. Searching by name isn't available yet, so a name won't match even if that person is here.",
-    "lookedAtEmail": "We looked at email addresses. Searching by name isn't available yet, so a name won't match even if that person is here."
+    "lookedAt": {
+      "name": "We looked at names. Order numbers aren't searchable — orders don't live in GOTCHA.",
+      "phone": "We looked at phone numbers. Order numbers aren't searchable — orders don't live in GOTCHA.",
+      "email": "We looked at email addresses. Order numbers aren't searchable — orders don't live in GOTCHA."
+    }
   },
   "list": {
-    "count": "{count, plural, =0 {No contacts} =1 {One contact} other {# contacts}}",
+    "count": "{count, plural, =0 {No one yet} =1 {One person} other {# people}}",
     "none": "Nobody has talked to you yet.",
     "unnamed": "No name or handle on this contact",
-    "truncated": "Showing {shown} of {total}."
+    "truncated": "Showing {shown} of {total}.",
+    "countApprox": "About {count} people"
   },
   "channel": {
     "WHATSAPP": "WhatsApp",

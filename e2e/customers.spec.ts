@@ -13,19 +13,28 @@ import { expect, test, type Page } from '@playwright/test';
  *
  * Shots land in e2e/evidence/s04/.
  *
- * ── WHAT THIS TENANT CAN AND CANNOT SHOW ──
- * Counted before this spec was written:
+ * ── THIS SPEC REQUIRES THE CAPTURE FIXTURES ──
+ * Start the server with `E2E_SECURITY_FIXTURES=1`. **Without it this run
+ * fails and writes nothing**, by design.
  *
- *     contacts                    2
- *     with last_interaction_at    0
- *     with last_seen_at           0
- *     with tags                   0
- *     with source                 0
+ * Screen 04 renders a name, a phone number and an email address on the same
+ * row. This tenant's two contacts are real people, so a full-page capture at
+ * three viewports would produce eighteen copies of something directly
+ * identifying *and* directly contactable — a different thing from screen 16's
+ * IP and city, not a worse degree of it. That happened once already and the
+ * files were deleted.
  *
- * **A two-row list with no tags and no dates.** That is the honest state and
- * it is not worked around — the fourth screen in a row whose real state is the
- * sparse one, which is in the reviewer's note as a pattern rather than as four
- * separate footnotes.
+ * So `openCustomers()` asserts a fixture marker is on the page **before the
+ * first screenshot**. The same guard on screen 16 is the only safety
+ * assertion on this project that has ever caught a live condition, and it
+ * earned that on exactly this failure.
+ *
+ * ── WHAT THE FIXTURES SHOW ──
+ * Three contacts, two of which share a `personId` — so the evidence exercises
+ * the thing this screen was rebuilt around: **one human on two channels
+ * collapsing to one row**, with both channels on it. The live tenant has two
+ * contacts, no tags and no dates, and that sparseness is recorded in the
+ * reviewer's note rather than dressed up here.
  *
  * `GET /api/contacts` is not used by this screen and could not answer if it
  * were: it needs a connected CRM and a non-empty query, and this tenant's only
@@ -101,6 +110,29 @@ async function openCustomers(page: Page, locale: 'en' | 'he', query = '') {
     'the customers could not be read, so this run would photograph an error panel',
   ).toHaveCount(0);
 
+  /*
+   * ── THE GATE ──
+   * Refuse to photograph real people. If the fixtures did not engage, this
+   * page is showing the tenant's actual contacts — names, phone numbers and
+   * email addresses — and the run must stop before the camera rather than
+   * after it.
+   */
+  const listed = await page.getByTestId('customer-list').count();
+  if (listed > 0) {
+    await expect(
+      page.locator('main'),
+      'the capture fixtures did not engage, so this page is showing REAL contacts. ' +
+        'Start the server with E2E_SECURITY_FIXTURES=1 and an APP_ORIGIN on localhost. ' +
+        'Nothing has been written.',
+    ).toContainText('example.com');
+  }
+  /*
+   * Keyed on whether ROWS ARE ON SCREEN, not on whether a query was typed.
+   * The first version gated only the unsearched view, which left every search
+   * that MATCHED free to photograph real people — the guard would have been
+   * bypassed by the one case it most needed to cover.
+   */
+
   return page;
 }
 
@@ -125,34 +157,46 @@ for (const size of SIZES) {
       await expect(page.getByTestId('customer-list')).toBeVisible();
       const count = page.getByTestId('customer-count');
       await expect(count).toBeVisible();
-      await expect(count).toHaveText(/contact/i);
-
-      // Contacts, never "people": the endpoint omits `personId` and
-      // `mergedIntoId`, so one human on two channels is two rows here and a
-      // merged-away row is still returned. The screen must not claim
-      // otherwise.
-      await expect(count).not.toHaveText(/\bpeople\b|\bcustomers\b/i);
+      // "People", which became true only once `personId` was returned and the
+      // route began filtering tombstones. Before that a row was a channel
+      // identity and the screen said "contacts".
+      await expect(count).toHaveText(/people|person/i);
 
       await shoot(page, `${size.name}-1-list`);
     });
 
     /*
-     * 2 · THE SHOT THAT MATTERS ON THIS TENANT.
+     * 2 · searching by name, which works as of 2026-09-20.
      *
-     * Searching a name finds nothing, because the rule vocabulary has
-     * thirteen cases and no name case. Saying only "no results" would tell
-     * someone their customer does not exist when the truth is that we never
-     * looked at the field they typed into.
+     * The `name` case landed while this screen was being built. Until it did,
+     * a name search matched nothing and the empty state had to say so.
      */
-    test('2 · a name search says which fields it looked at', async ({ page }) => {
-      await openCustomers(page, 'en', 'Dana');
+    test('2 · a name search finds the person', async ({ page }) => {
+      await openCustomers(page, 'en', 'Avery');
+
+      await expect(page.getByTestId('customer-list')).toBeVisible();
+      await expect(page.locator('main')).toContainText('Avery Stone');
+
+      await shoot(page, `${size.name}-2-name-search`);
+    });
+
+    /*
+     * 2b · a query that matches nothing still says what was searched.
+     *
+     * **Order number is the one that cannot work** — orders are not local to
+     * this platform at all. Reporting a bare "no results" would tell someone
+     * their customer does not exist, when the truth is we never looked at the
+     * field they typed into.
+     */
+    test('2b · no match names what was searched, and what cannot be', async ({ page }) => {
+      await openCustomers(page, 'en', 'Zzyzx');
 
       await expect(page.getByTestId('customers-empty')).toBeVisible();
       const fields = page.getByTestId('search-fields');
       await expect(fields).toBeVisible();
-      await expect(fields).toHaveText(/searching by name isn't available/i);
+      await expect(fields).toHaveText(/order numbers aren't searchable/i);
 
-      await shoot(page, `${size.name}-2-name-search`);
+      await shoot(page, `${size.name}-2b-no-match`);
     });
 
     /*
@@ -167,8 +211,12 @@ for (const size of SIZES) {
 
       // (a) The five segments. Three need absent sources, one needs a writer
       //     that does not run, and "wholesale" needs tags no contact carries.
+      //
+      //     Matched on the segment NAMES, not on the bare word "wholesale" —
+      //     that is also a legitimate contact tag, and an assertion that
+      //     forbade it would fail on real data rather than on a real defect.
       await expect(main).not.toHaveText(/talking to you now|unhappy lately|gone quiet/i);
-      await expect(main).not.toHaveText(/wholesale|best customers/i);
+      await expect(main).not.toHaveText(/best customers|wholesale customers/i);
 
       // (b) The list is ordered by a column nothing writes, so it has no
       //     order to claim and no control that the server would honour.

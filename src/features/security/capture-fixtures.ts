@@ -9,8 +9,17 @@ import type { LoginEvent, SecuritySession } from '@/api/contracts/security';
  * ── WHY THIS EXISTS AT ALL ──
  * Screen 16 is the first to render personal data: a real address and the city
  * a person signs in from. The acceptance capture writes full-page screenshots
- * into `e2e/evidence/`, which are committed — so photographing the live list
- * would put personal data in the repository permanently.
+ * into `e2e/evidence/`, so photographing the live list would put personal data
+ * into files.
+ *
+ * **Correction, 2026-09-20.** This used to say those screenshots "are
+ * committed". They are not, and never have been — `e2e/evidence/` has been
+ * gitignored since the commit that introduced it. The gate is unchanged
+ * because it was never about git: the files are written to disk, opened by
+ * whoever runs the capture, and relayed between sessions. *Not committed is
+ * not not disclosed*, and being ignored is worse — a committed file has a
+ * history someone could purge and a review that would have seen it. See
+ * `e2e/README.md`, gate 2.
  *
  * ── WHY IT IS HERE AND NOT IN THE TEST ──
  * I would rather have intercepted at the network layer and left this file

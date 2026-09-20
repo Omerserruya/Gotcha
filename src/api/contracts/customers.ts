@@ -23,11 +23,22 @@ import { z } from 'zod';
  * across WA/IG/Gmail/Messenger"* — and `mergedIntoId`, a soft-merge pointer
  * whose row is deliberately **kept** so webhook lookups still resolve.
  *
- * **The segment endpoint returns neither**, and its `where` does not filter
- * merged rows. So one person on two channels is two rows, and after a merge
- * the survivor *and* the tombstone both appear. Nothing here can collapse or
- * hide them, which is why this screen never claims one row is one person.
- * Requested as a one-line addition to that `select`.
+ * **Both are now returned** (requested, and landed 2026-09-20), and the route
+ * filters tombstones itself with `where: { ...where, mergedIntoId: null }`.
+ * So the design's first line is finally backed: `personId` is what lets one
+ * human on WhatsApp and Instagram collapse to one row instead of two.
+ *
+ * ── BUT THE COUNT AND THE LIST NOW DISAGREE ──
+ * The tombstone filter was added to `findMany` and **not** to the `count`
+ * above it:
+ * ```
+ * const count = await prisma.contact.count({ where });                  // tombstones INCLUDED
+ * findMany({ where: { ...where, mergedIntoId: null }, take: 500, … })   // tombstones EXCLUDED
+ * ```
+ * So on any tenant that has ever merged, `total` exceeds `data.length` with
+ * nothing truncated — and a screen that trusted `total` would report
+ * *"Showing 2 of 3"* with no third customer to show. `listedCount` below is
+ * why this screen does not.
  */
 
 /** `ChannelType`. Rendered as a mark on the row, never as a section. */
@@ -83,6 +94,13 @@ export const customerRowSchema = z.object({
    */
   lastInteractionAt: z.string().nullable().default(null),
   source: z.string().nullable().default(null),
+  /**
+   * Shared across a person's channel identities. `null` when the unifier has
+   * never found a shared identifier, in which case this row is its own person.
+   */
+  personId: z.string().nullable().default(null),
+  /** Always `null` in a list response — the route filters tombstones out. */
+  mergedIntoId: z.string().nullable().default(null),
 });
 
 export type CustomerRow = z.infer<typeof customerRowSchema>;
@@ -104,11 +122,59 @@ export const customerListSchema = z.object({
 export const SEGMENT_PAGE_SIZE = 500;
 
 /**
- * True when the list is shorter than the count, so the screen must not
- * describe what is on it as everything.
+ * Truncated only when the page was actually filled.
+ *
+ * **Not `total > shown`.** The route's `count` includes merged-away rows that
+ * its `findMany` excludes, so on a tenant that has ever merged the total
+ * exceeds the list with nothing truncated at all. Anchoring on the page size
+ * asks the question that is actually being asked — *did we hit the limit?* —
+ * and is immune to the discrepancy.
  */
-export function isTruncated(shown: number, total: number): boolean {
-  return total > shown;
+export function isTruncated(shown: number): boolean {
+  return shown >= SEGMENT_PAGE_SIZE;
+}
+
+/**
+ * The number this screen is willing to stand behind.
+ *
+ * When the page was not filled, the rows ARE the answer and their length is
+ * exact. The server's `total` is only used when the list is genuinely
+ * truncated, where it is the best available figure even though it may include
+ * tombstones — and in that case the screen says "of about", not "of".
+ */
+export function listedCount(shown: number, total: number): number {
+  return isTruncated(shown) ? total : shown;
+}
+
+/**
+ * Channel identities collapsed into people.
+ *
+ * `personId` is the platform's own cross-channel identity. A row without one
+ * is its own person — the unifier assigns it only when a shared identifier is
+ * discovered, so its absence means "not known to be the same human", never
+ * "the same as the others".
+ *
+ * The first row of each group wins for display, which is the one the route's
+ * ordering put first. Every row is kept on `channels` so the person's reach is
+ * visible without a second query.
+ */
+export function collapseToPeople(rows: readonly CustomerRow[]): readonly {
+  readonly key: string;
+  readonly primary: CustomerRow;
+  readonly channels: readonly string[];
+}[] {
+  const groups = new Map<string, CustomerRow[]>();
+  for (const row of rows) {
+    const key = row.personId ?? `row:${row.id}`;
+    const existing = groups.get(key);
+    if (existing) existing.push(row);
+    else groups.set(key, [row]);
+  }
+  return [...groups.entries()].map(([key, members]) => ({
+    key,
+    primary: members[0]!,
+    channels: [...new Set(members.map((m) => m.channel).filter(Boolean))],
+  }));
 }
 
 /**

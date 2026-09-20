@@ -1,27 +1,34 @@
 import { getTranslations } from 'next-intl/server';
 
-import { customerLabel, isKnownChannel, type CustomerRow } from '@/api/contracts/customers';
+import {
+  collapseToPeople,
+  customerLabel,
+  isKnownChannel,
+  type CustomerRow,
+} from '@/api/contracts/customers';
 
 import styles from './Customers.module.css';
 
 /**
  * Screen 04 — the customer list.
  *
- * ── WHY THIS DOES NOT SAY "PEOPLE" ──
+ * ── IT SAYS "PEOPLE" NOW, AND ONLY BECAUSE IT CAN ──
  * The design opens with *"People, not rows. One identity per human however
- * many channels they use."* **The endpoint returns rows, not people.**
+ * many channels they use."* That was unbuildable until 2026-09-20: the
+ * endpoint returned neither `personId` nor `mergedIntoId`, so one human on two
+ * channels was two rows and a merged-away row was still listed.
  *
- * `Contact` carries `personId` — *"multiple contact rows sharing the same
- * personId represent one real human across WA/IG/Gmail/Messenger"* — and
- * `mergedIntoId`, a soft-merge pointer whose row is deliberately kept so
- * webhook lookups still resolve. **The segment endpoint's `select` returns
- * neither, and its `where` does not filter merged rows.**
+ * Both fields now come back and the route filters tombstones itself, so rows
+ * collapse by `personId` and the design's first line is finally true. A row
+ * with no `personId` is its own person — the unifier assigns one only when a
+ * shared identifier is found, so its absence means *"not known to be the same
+ * human"*, never *"the same as the others"*.
  *
- * So one person on two channels is two rows here, and after a merge both the
- * survivor and the tombstone appear. Nothing on this side can collapse or hide
- * them. The screen therefore counts **contacts**, says so, and does not imply
- * a row is a human — which is the honest version until those two fields are
- * added to the select.
+ * ── THE COUNT IS NOT THE SERVER'S TOTAL ──
+ * The route's `count` still includes the merged-away rows its `findMany`
+ * excludes, so on a tenant that has ever merged `total` exceeds the list with
+ * nothing truncated. The number shown is the one this screen can stand
+ * behind: the rows themselves, unless the page was genuinely filled.
  *
  * ── AND WHY THERE IS NO SORT CONTROL ──
  * The route hardcodes `orderBy: { lastSeenAt: "desc" }` on a column nothing
@@ -32,13 +39,13 @@ export async function CustomerList({
   rows,
   total,
   truncated,
-  searchedFields,
+  searchedField,
   query,
 }: {
   readonly rows: readonly CustomerRow[];
   readonly total: number;
   readonly truncated: boolean;
-  readonly searchedFields: readonly string[];
+  readonly searchedField: 'name' | 'phone' | 'email' | null;
   readonly query: string;
 }) {
   const t = await getTranslations('customers');
@@ -55,10 +62,15 @@ export async function CustomerList({
               would be telling someone their customer does not exist when the
               truth is that we never looked at the field they typed into.
             */}
+            {/*
+              What was searched, and what still cannot be. Name, phone and
+              email all work now; **order number does not and cannot** —
+              orders are not local to this platform. Saying so beats a bare
+              "no results", which would tell someone their customer does not
+              exist when we never looked at what they typed.
+            */}
             <p className={styles.emptyBody} data-testid="search-fields">
-              {searchedFields.includes('email')
-                ? t('search.lookedAtEmail')
-                : t('search.lookedAtPhone')}
+              {t(`search.lookedAt.${searchedField ?? 'name'}` as 'search.lookedAt.name')}
             </p>
           </>
         ) : (
@@ -76,14 +88,14 @@ export async function CustomerList({
         the number on screen.
       */}
       <p className={styles.count} data-testid="customer-count">
-        {t('list.count', { count: total })}
+        {truncated ? t('list.countApprox', { count: total }) : t('list.count', { count: total })}
       </p>
 
       <ul className={styles.rows}>
-        {rows.map((row) => {
+        {collapseToPeople(rows).map(({ key, primary: row, channels }) => {
           const label = customerLabel(row);
           return (
-            <li key={row.id} className={styles.row} data-testid={`customer-${row.id}`}>
+            <li key={key} className={styles.row} data-testid={`customer-${row.id}`}>
               {/*
                 `displayName` is often null on a channel like WhatsApp, where
                 the number IS how the business knows them. Falling back to the
@@ -92,11 +104,23 @@ export async function CustomerList({
               */}
               <span className={styles.rowName}>{label ?? t('list.unnamed')}</span>
 
-              <span className={styles.rowChannel} data-testid={`channel-${row.id}`}>
-                {isKnownChannel(row.channel)
-                  ? t(`channel.${row.channel}` as 'channel.WHATSAPP')
-                  : row.channel}
-              </span>
+              {/*
+                Every channel this person reaches you on, not just the first.
+                Channel is a mark on the row and never a section — the design
+                is right about that, and collapsing by `personId` is what
+                makes it possible to show more than one.
+              */}
+              {channels.map((channel) => (
+                <span
+                  key={channel}
+                  className={styles.rowChannel}
+                  data-testid={`channel-${row.id}-${channel}`}
+                >
+                  {isKnownChannel(channel)
+                    ? t(`channel.${channel}` as 'channel.WHATSAPP')
+                    : channel}
+                </span>
+              ))}
 
               {row.email && row.email !== label ? (
                 <span className={styles.rowDetail}>{row.email}</span>

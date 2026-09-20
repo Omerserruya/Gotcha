@@ -1,9 +1,17 @@
 import 'server-only';
 
 import { serverApi } from '@/api/client/server-api';
-import { customerListSchema, SEGMENT_PAGE_SIZE, type CustomerRow } from '@/api/contracts/customers';
+import {
+  customerListSchema,
+  isTruncated,
+  listedCount,
+  SEGMENT_PAGE_SIZE,
+  type CustomerRow,
+} from '@/api/contracts/customers';
 import { customerEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
+
+import { withCaptureFixtures } from './capture-fixtures';
 
 /**
  * The customer list.
@@ -14,11 +22,21 @@ import { logger } from '@/observability/logger';
  * without a connected CRM.
  *
  * ── SEARCH ──
- * The rule vocabulary has thirteen cases and **no name case**, so a query is
- * matched against `phone` and `email` only. `name` is requested and this
- * function is written so that adding it is one line — but until it lands, a
- * search for "Dana" finds nothing and the screen has to say which fields it
- * actually looked at rather than reporting "no results".
+ * The vocabulary now has **fourteen** cases including `name`, which landed
+ * 2026-09-20 and searches `displayName` with `contains` and
+ * `mode: "insensitive"`.
+ *
+ * Rules are **ANDed** by the route (`where.AND`), so sending name, phone and
+ * email together would demand all three match. One field is chosen from the
+ * shape of the query instead. **Order number remains unsearchable** — orders
+ * are not local to this platform at all — and the screen says so rather than
+ * reporting a bare "no results".
+ *
+ * ── A RULE THE SERVER DOES NOT RECOGNISE IS DROPPED IN SILENCE ──
+ * `switch (rule.field)` has no default, so an unknown field is skipped and the
+ * query returns **more** rows, not fewer — a failed filter looks exactly like
+ * a successful broad match. `SegmentField` below makes that a compile error
+ * rather than a silent broadening, which is the only place it can be caught.
  *
  * ── ORDER ──
  * The route hardcodes `orderBy: { lastSeenAt: "desc" }` over a column nothing
@@ -33,24 +51,55 @@ export interface CustomersData {
   readonly total: number;
   /** True when the count exceeds what was returned. */
   readonly truncated: boolean;
-  /** Which fields the query was actually matched against. */
-  readonly searchedFields: readonly string[];
+  /** Which single field the query was matched against, or null for no query. */
+  readonly searchedField: 'name' | 'phone' | 'email' | null;
 }
 
-/** Rules the segment endpoint understands for a free-text query. */
-function rulesForQuery(query: string): {
-  rules: { field: string; operator: string; value: string }[];
-} {
-  const q = query.trim();
-  if (!q) return { rules: [] };
+/**
+ * The fields `switch (rule.field)` actually handles.
+ *
+ * A union rather than `string`, because an unrecognised field is silently
+ * ignored by the route and widens the result set. This turns that into a
+ * compile error.
+ */
+type SegmentField =
+  | 'name'
+  | 'phone'
+  | 'email'
+  | 'channel'
+  | 'tag'
+  | 'hasTag'
+  | 'source'
+  | 'inactiveDays'
+  | 'lastSeenAfter'
+  | 'lastInteractionAfter'
+  | 'lastInteractionBefore'
+  | 'createdAfter'
+  | 'createdBefore'
+  | 'optedOut';
 
-  // `phone` and `email` are the only text fields the vocabulary can match.
-  // A `name` case is requested; when it exists it joins this list.
-  return {
-    rules: /@/.test(q)
-      ? [{ field: 'email', operator: 'contains', value: q }]
-      : [{ field: 'phone', operator: 'contains', value: q }],
-  };
+/**
+ * Which single field a free-text query is matched against.
+ *
+ * Narrower than `SegmentField` on purpose: only three of the fourteen are
+ * reachable from a text box, and the return type says so rather than leaving
+ * the caller to handle eleven cases that cannot occur.
+ */
+export function fieldForQuery(query: string): 'name' | 'phone' | 'email' | null {
+  const q = query.trim();
+  if (!q) return null;
+  if (q.includes('@')) return 'email';
+  // Digits and phone punctuation only — anything else is treated as a name,
+  // which is the field a person reaches for first.
+  if (/^[+\d][\d\s\-()]*$/.test(q)) return 'phone';
+  return 'name';
+}
+
+function rulesForQuery(query: string): {
+  rules: { field: SegmentField; operator: string; value: string }[];
+} {
+  const field = fieldForQuery(query);
+  return field ? { rules: [{ field, operator: 'contains', value: query.trim() }] } : { rules: [] };
 }
 
 export async function loadCustomers(query = ''): Promise<CustomersData> {
@@ -65,15 +114,24 @@ export async function loadCustomers(query = ''): Promise<CustomersData> {
       raw: true,
     });
 
+    /*
+     * Capture fixtures, applied to what the real read returned — so a failed
+     * read stays a failed read. See `capture-fixtures.ts`: gated on
+     * `E2E_SECURITY_FIXTURES=1` AND a loopback origin, failing closed.
+     */
+    const rows = withCaptureFixtures(result.data, q) ?? result.data;
+
     return {
-      rows: result.data,
-      total: result.total,
-      truncated: result.total > result.data.length,
-      searchedFields: q ? (/@/.test(q) ? ['email'] : ['phone']) : [],
+      rows,
+      // Not `result.total` unless the page was actually filled — the route's
+      // count includes the merged-away rows its list excludes.
+      total: listedCount(rows.length, result.total),
+      truncated: isTruncated(rows.length),
+      searchedField: fieldForQuery(q),
     };
   } catch (cause) {
     logger.warn('customers.list_failed', { cause });
-    return { rows: null, total: 0, truncated: false, searchedFields: [] };
+    return { rows: null, total: 0, truncated: false, searchedField: null };
   }
 }
 

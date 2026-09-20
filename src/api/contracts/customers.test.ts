@@ -5,8 +5,11 @@ import {
   customerLabel,
   customerListSchema,
   customerRowSchema,
+  collapseToPeople,
   isKnownChannel,
   isTruncated,
+  listedCount,
+  type CustomerRow,
 } from './customers';
 
 /**
@@ -16,7 +19,7 @@ import {
  * exercise almost none of this. These tests are where the judgements live.
  */
 
-const row = {
+const row: CustomerRow = {
   id: 'c1',
   externalId: '+972500000000',
   displayName: 'Dana Cohen',
@@ -26,23 +29,33 @@ const row = {
   tags: [],
   lastInteractionAt: null,
   source: null,
+  personId: null,
+  mergedIntoId: null,
 };
 
 describe('the contract strips what no list needs', () => {
-  it('drops metadata, personId, mergedIntoId and opt-out state', () => {
+  it('drops metadata, opt-out state and the tenant id', () => {
     // The detail route spreads the whole Prisma row, and `metadata` is
     // arbitrary tenant-supplied JSON.
     const parsed = customerRowSchema.parse({
       ...row,
       metadata: { passport: 'X1234567' },
       optOutChannels: ['WHATSAPP'],
-      personId: 'p1',
-      mergedIntoId: 'c9',
       tenantId: 't1',
+      updatedAt: '2026-09-20T00:00:00.000Z',
     });
 
-    for (const key of ['metadata', 'optOutChannels', 'personId', 'mergedIntoId', 'tenantId'])
+    for (const key of ['metadata', 'optOutChannels', 'tenantId', 'updatedAt'])
       expect(parsed, `${key} must not survive the contract`).not.toHaveProperty(key);
+  });
+
+  it('KEEPS personId and mergedIntoId, which is what makes this a list of people', () => {
+    // These two were requested and landed 2026-09-20. Before that, one human
+    // on two channels was two rows and a merged-away row was still listed.
+    // Stripping them here would put the screen back where it was.
+    const parsed = customerRowSchema.parse({ ...row, personId: 'p1', mergedIntoId: null });
+    expect(parsed.personId).toBe('p1');
+    expect(parsed).toHaveProperty('mergedIntoId');
   });
 
   it('keeps historyByChannel on the detail, which is the cheap half of 04c', () => {
@@ -63,12 +76,23 @@ describe('the total is the count, not the page', () => {
     expect(parsed.total).toBe(812);
   });
 
-  it('knows when the list is shorter than the count', () => {
-    // The route counts everything and returns at most 500, so a screen that
-    // showed the count beside a shorter list would misdescribe it.
-    expect(isTruncated(500, 812)).toBe(true);
-    expect(isTruncated(2, 2)).toBe(false);
-    expect(isTruncated(0, 0)).toBe(false);
+  it('calls the list truncated only when the page was actually filled', () => {
+    expect(isTruncated(500)).toBe(true);
+    expect(isTruncated(2)).toBe(false);
+    expect(isTruncated(0)).toBe(false);
+  });
+
+  it('does not report truncation when the count merely includes tombstones', () => {
+    // The route's `count` has no `mergedIntoId: null` filter while its
+    // `findMany` does, so on a tenant that has ever merged the total exceeds
+    // the list with nothing truncated. Trusting `total > shown` would render
+    // "showing 2 of 3" with no third person to show.
+    expect(isTruncated(2)).toBe(false);
+    expect(listedCount(2, 3)).toBe(2);
+  });
+
+  it('falls back to the server total only once the page is full', () => {
+    expect(listedCount(500, 812)).toBe(812);
   });
 });
 
@@ -110,6 +134,46 @@ describe('an unrecognised channel still renders', () => {
     // translate its channel would hide a customer.
     expect(isKnownChannel('SIGNAL')).toBe(false);
     expect(customerRowSchema.parse({ ...row, channel: 'SIGNAL' }).channel).toBe('SIGNAL');
+  });
+});
+
+describe('collapseToPeople — the design first line, now that it is backed', () => {
+  const at = (over: Partial<typeof row>) => ({ ...row, ...over });
+
+  it('collapses one human on two channels into one person', () => {
+    const people = collapseToPeople([
+      at({ id: 'a', channel: 'WHATSAPP', personId: 'p1' }),
+      at({ id: 'b', channel: 'INSTAGRAM', personId: 'p1' }),
+    ]);
+    expect(people).toHaveLength(1);
+    expect(people[0]!.channels).toEqual(['WHATSAPP', 'INSTAGRAM']);
+  });
+
+  it('never merges rows that merely both lack a personId', () => {
+    // Absence means "not known to be the same human", never "the same as the
+    // others". Treating null as a group key would fuse every unlinked contact
+    // on the tenant into a single person.
+    const people = collapseToPeople([
+      at({ id: 'a', personId: null }),
+      at({ id: 'b', personId: null }),
+    ]);
+    expect(people).toHaveLength(2);
+  });
+
+  it('keeps the first row as the one shown', () => {
+    const people = collapseToPeople([
+      at({ id: 'a', displayName: 'Dana Cohen', personId: 'p1' }),
+      at({ id: 'b', displayName: 'dana c', personId: 'p1' }),
+    ]);
+    expect(people[0]!.primary.displayName).toBe('Dana Cohen');
+  });
+
+  it('does not repeat a channel a person uses twice', () => {
+    const people = collapseToPeople([
+      at({ id: 'a', channel: 'WHATSAPP', personId: 'p1' }),
+      at({ id: 'b', channel: 'WHATSAPP', personId: 'p1' }),
+    ]);
+    expect(people[0]!.channels).toEqual(['WHATSAPP']);
   });
 });
 
