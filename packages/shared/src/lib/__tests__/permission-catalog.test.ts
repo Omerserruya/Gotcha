@@ -100,7 +100,6 @@ describe("permission-catalog: built-in roles", () => {
     expect(admin.has("settings:billing:manage")).toBe(false);
     expect(admin.has("settings:billing:cancel")).toBe(false);
     expect(admin.has("settings:roles:manage")).toBe(false);
-    expect(admin.has("settings:api-keys:manage")).toBe(false);
   });
 
   it("cancellation is a distinct owner-only permission (not merely billing:manage)", () => {

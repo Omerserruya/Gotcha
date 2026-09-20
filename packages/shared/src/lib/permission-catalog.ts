@@ -232,7 +232,6 @@ export const PERMISSIONS: readonly PermissionDef[] = [
   // while credit purchases stay with whoever holds the budget.
   p("settings:billing:purchase", "settings", "configuration", false, "Purchase Credits", "Buy credit packages for the workspace."),
   p("settings:billing:auto-purchase", "settings", "configuration", false, "Manage Automatic Top-Up", "Enable automatic credit top-up and set its monthly spending limit."),
-  p("settings:api-keys:manage", "settings", "configuration", false, "Manage API Keys", "Create and revoke API keys."),
   // Business Rules (AI action policies): who may SEE the tenant's rules for
   // refunds/coupons/compensation, who may CHANGE them (each change appends an
   // immutable new policy version), and who may dry-run sample decisions.
@@ -373,7 +372,6 @@ const OWNER_ONLY = [
   "settings:billing:purchase",
   "settings:billing:auto-purchase",
   "settings:roles:manage",
-  "settings:api-keys:manage",
 ];
 
 export const BUILTIN_ROLES: Record<BuiltinRoleKey, BuiltinRoleDef> = {
