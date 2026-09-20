@@ -7,7 +7,8 @@
     "dev": "next dev -p 3200",
     "build": "next build",
     "start": "next start -p 3200",
-    "lint": "next lint"
+    "lint": "next lint",
+    "design:sync": "node tools/dc2jsx.mjs && node tools/build-logic.mjs"
   },
   "dependencies": {
     "next": "14.2.35",

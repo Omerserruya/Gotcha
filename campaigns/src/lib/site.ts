@@ -68,6 +68,26 @@ export const F = {
   mono: "'IBM Plex Mono', ui-monospace, monospace",
 } as const;
 
+/**
+ * The Meta pixel, when there is one.
+ *
+ * Null unless a real id is supplied at build time. The campaign's own
+ * `track()` then logs each event to the console and fires nothing, which is
+ * the honest behaviour - a placeholder id would quietly send every campaign
+ * event into a pixel that does not exist.
+ *
+ * It lives here, beside the other build-time constants, rather than being read
+ * inside the generated campaign component - so that every value the page is
+ * configured with is in one file that a person edits, instead of half of them
+ * being in a file the design compiler overwrites.
+ *
+ * On the substitution itself: Next inlines a NEXT_PUBLIC_* variable that IS set
+ * at build time, and leaves one that is not as a runtime lookup against its
+ * `process` shim, which yields undefined and falls through to the default here.
+ * Both behaviours are fine and both were checked against a real build.
+ */
+export const META_PIXEL_ID: string | null = process.env.NEXT_PUBLIC_META_PIXEL_ID || null;
+
 export type Locale = 'en' | 'he';
 
 export const dirOf = (l: Locale) => (l === 'he' ? 'rtl' : 'ltr');

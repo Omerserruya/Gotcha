@@ -2283,6 +2283,29 @@ http {
             try_files $uri =404;
         }
 
+        # The campaign form posts here, SAME-ORIGIN.
+        #
+        # This is the one hole in an otherwise entirely static host, and it is
+        # deliberately a hole rather than a cross-origin call: a campaign page
+        # posting to https://gotcha.co.il/api/waitlist would need that host to
+        # grow an Access-Control-Allow-Origin for this one, plus a preflight, to
+        # achieve exactly what proxying achieves with no browser involvement.
+        #
+        # Same endpoint, same auth service and same rate limit as the apex - the
+        # block below is that one, copied deliberately rather than shared, since
+        # the two hosts are free to diverge. `X-Internal-Key ""` matters: it
+        # strips any internal key a client tried to supply, so a request from
+        # the public internet can never arrive looking like a service call.
+        location /api/waitlist {
+            limit_req zone=api burst=10 nodelay;
+            proxy_pass http://auth_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $public_proto;
+        }
+
         # The bare host is not a campaign. Send it to the site that is.
         #
         # campaigns/src/app/page.tsx renders a page for this address too, and

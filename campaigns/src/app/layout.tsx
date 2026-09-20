@@ -45,7 +45,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         {/*
-          The same three families the marketing site loads, so a visitor who
+          The same families the marketing site loads, plus Heebo, which the
+          Hebrew campaign pages set on `body`. One stylesheet request covers all
+          of them and a browser downloads a font file only for the families the
+          rendered text actually uses, so a page pays only for what it shows.
+
+          Beyond that: the marketing families are here so a visitor who
           arrives here from an ad and continues to gotcha.co.il does not see the
           type change under them. Loaded from Google rather than self-hosted
           because that is what the marketing site does and a second, differently
@@ -53,7 +58,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           differently.
         */}
         <link
-          href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=IBM+Plex+Mono:wght@400;500&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Heebo:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=IBM+Plex+Mono:wght@400;500&display=swap"
           rel="stylesheet"
         />
       </head>

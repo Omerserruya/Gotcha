@@ -12,23 +12,104 @@ when the flight ends. Keeping those pages out of `landing/` means:
 - a mistake in a campaign page cannot take `gotcha.co.il` down
 - campaign copy never competes with the marketing site in search (see below)
 - the marketing site's design pipeline (`landing/design/*.dc.html` →
-  `npm run design:sync`) stays untouched; campaign pages are written by hand
+  `npm run design:sync`) stays untouched; this app has its own compilers for
+  its own design files, and neither can break the other
 
 The cost is that shared elements are duplicated rather than imported. That is
 deliberate. A campaign that needs the full marketing chrome is a page for
 `gotcha.co.il`, not a campaign page.
 
+## The campaigns
+
+| URL | Source | What it is |
+|-----|--------|------------|
+| `/demo` | `design/GOTCHA Campaign Landing.dc.html` | The Hebrew demo-booking campaign, compiled from the design file |
+| `/example` | `src/app/example/page.tsx` | The deploy canary and the hand-written template |
+
 ## Adding a campaign
 
+There are two ways in, and which one you use depends on where the page came
+from.
+
+**From a design file** (what `/demo` is). Put the `.dc.html` in `design/`, point
+`tools/dc2jsx.mjs` and `tools/build-logic.mjs` at it, and run:
+
 ```bash
-cd campaigns
-cp -r src/app/example src/app/<campaign-name>
-# rewrite the copy, set `metadata.title`
-npm run dev          # http://localhost:3200/<campaign-name>
+npm run design:sync    # design file -> src/generated/ + src/components/
+npm run dev            # http://localhost:3200/demo
 ```
 
-The URL is the directory name: `src/app/spring-promo/page.tsx` is served at
-`https://go.gotcha.co.il/spring-promo`.
+The generated output is committed, so `next build` never runs the compilers -
+only a person re-syncing a changed design does. **Edits belong in the design
+file, not in the generated files**, which are overwritten on the next sync.
+
+**Written by hand** (what `/example` is):
+
+```bash
+cp -r src/app/example src/app/<campaign-name>
+```
+
+Either way the URL is the directory name: `src/app/spring-promo/page.tsx` is
+served at `https://go.gotcha.co.il/spring-promo`.
+
+### The design compilers
+
+`tools/dc2jsx.mjs` turns the design's `<x-dc>` markup into `Template.jsx` and
+its `<helmet>` CSS into `src/app/campaign.css`. `tools/build-logic.mjs` turns
+its `DCLogic` class into a React component. Both are mechanical: re-running
+them reproduces the port, so the page stays a clone of the design rather than a
+transcription of it.
+
+They are close cousins of `landing/tools/*` and deliberately not shared with
+them - see the header of `tools/dc2jsx.mjs` for why. Two things to know:
+
+- They need `parse5`, which this repo has only as a transitive dependency of
+  `frontend/`. The resolver looks in several places, including the main
+  checkout when you are running from a git worktree. It is a dev-time need
+  only.
+- **Every patch `build-logic.mjs` applies to the design's source is asserted.**
+  If the design renames a config field or rewrites its submit handler, the sync
+  fails loudly instead of shipping a page whose form posts nowhere.
+
+### What the design left for us to fill in, and what was filled
+
+The design file ships its integration points as `null`, with a comment saying
+they are set before publication. `build-logic.mjs` sets them:
+
+| Field | Value | Why |
+|-------|-------|-----|
+| `leadEndpoint` | `/api/waitlist` | Same-origin, proxied to the auth service by this host's vhost. No CORS involved. |
+| `privacyUrl`, `termsUrl` | Trust Center | Both documents are published. |
+| `metaPixelId` | `NEXT_PUBLIC_META_PIXEL_ID`, else null | There is no id to hard-code; it belongs to the ad account. Left null, the design logs events and fires nothing. |
+| `offerTermsUrl`, `accessibilityUrl`, `cookiesUrl` | **still null** | These documents do not exist. The design already renders a marked non-link for a missing document, which is better than a link that goes nowhere. |
+
+The form's four fields are mapped onto the lead endpoint's names
+(`name`→`firstName`, `site`→`companyDomain`), and the leads are tagged
+`source: 'campaign-demo'`. That source matters: `early-access-form` puts the
+endpoint into a stricter mode that rejects any lead without an email address,
+and this form asks for email optionally.
+
+A duplicate (HTTP 409 - the phone or email is already on the list) is treated as
+success rather than as an error, because from the visitor's side it is. The
+`lead` conversion event is deliberately not fired a second time.
+
+## Images
+
+Campaign pages are opened from a paid click, usually on a phone, usually on
+mobile data. Weight is a conversion problem, not a nicety.
+
+The assets in `public/assets/` are the marketing site's, downscaled to roughly
+three times the size this page actually renders them at, and `founder-1` is a
+photograph so it is a JPEG rather than a PNG. Together that took `/demo` from
+3276 KB to 965 KB (~610 KB over the wire). Next preloads every one of these
+images in `<head>`, so they are spent before anything is painted.
+
+`logo/solid-icon-dark.png` is left at full resolution and is now the single
+heaviest file at 390 KB: it is the giant background mark, drawn at `230vmax`,
+already upscaled from its source. Shrinking it is a visual call, not a
+mechanical one.
+
+If you add an image, check what size it is rendered at before you commit it.
 
 ### Rules worth knowing before you write one
 
