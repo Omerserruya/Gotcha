@@ -207,6 +207,106 @@
     cursor: default;
   }
 
+  /* ── 05c · templates ─────────────────────────────────────────────────── */
+  .templates {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-14);
+  }
+
+  /*
+   * Why templates exist at all. A fact about WhatsApp, not a claim about our
+   * data — nothing in our database can make it false, which is what separates
+   * it from a promise needing a mechanism behind it.
+   */
+  .windowNote {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-snug);
+    color: var(--text-body);
+    background-color: var(--panel-inset);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-16);
+  }
+
+  .templateRows {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    overflow: hidden;
+  }
+
+  .templateRow {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    padding-block: var(--space-14);
+    padding-inline: var(--space-16);
+  }
+
+  .templateRow + .templateRow {
+    border-block-start: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .templateHead {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-8);
+  }
+
+  .templateName {
+    font-size: var(--font-size-meta);
+    font-weight: 500;
+  }
+
+  .templateLangs {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .templateBody {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-subtle);
+  }
+
+  .templateState,
+  .templateMeta {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /* Rejected is the state this screen exists for, so it reads as itself. */
+  .templateRow[data-stance='rejected'] .templateState {
+    color: var(--intent-blocked-text);
+    font-weight: 500;
+  }
+
+  .templateRow[data-stance='ready'] .templateState {
+    color: var(--intent-calm-text);
+  }
+
+  /*
+   * The provider's own words. No ETA beside it and no rewrite beneath it —
+   * neither exists, and both were drawn.
+   */
+  .templateReason {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--intent-blocked-text);
+  }
+
   /* ── Nothing sent yet ────────────────────────────────────────────────── */
   .empty {
     display: flex;

@@ -85,6 +85,29 @@ const INBOX_VIEWS: readonly NavigationChild[] = [
  * Studio's four areas, from the brief: Employees, Knowledge, Automations,
  * Capabilities. Separate screens with separate data, so separate routes.
  */
+/**
+ * Outreach's areas.
+ *
+ * Campaigns and templates are separate screens with separate data, so
+ * separate routes — the same reasoning as Studio's four. Templates is not a
+ * filter over campaigns: it is a different object with its own lifecycle, and
+ * the provider reviews it rather than the tenant sending it.
+ */
+const OUTREACH_SECTIONS: readonly NavigationChild[] = [
+  {
+    id: 'campaigns',
+    labelKey: 'outreach.campaigns',
+    href: '/outreach',
+    permission: PERMISSIONS.outbound.calls.view,
+  },
+  {
+    id: 'templates',
+    labelKey: 'outreach.templates',
+    href: '/outreach/templates',
+    permission: PERMISSIONS.outbound.calls.view,
+  },
+];
+
 const STUDIO_SECTIONS: readonly NavigationChild[] = [
   {
     id: 'employees',
@@ -183,6 +206,8 @@ export const PRIMARY_NAVIGATION: readonly NavigationItem[] = [
     href: '/outreach',
     labelKey: 'primary.outreach',
     permission: PERMISSIONS.outbound.calls.view,
+    children: OUTREACH_SECTIONS,
+    childrenLabelKey: 'primary.outreach',
   },
   {
     id: 'studio',

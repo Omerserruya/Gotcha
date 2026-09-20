@@ -67,5 +67,9 @@
     "billing": "Your plan, what the month has used, and what it bought you.",
     "developer": "For whoever builds against GOTCHA. Nothing here affects how GOTCHA behaves.",
     "pending": "Not built yet."
+  },
+  "outreach": {
+    "campaigns": "Campaigns",
+    "templates": "Templates"
   }
 }

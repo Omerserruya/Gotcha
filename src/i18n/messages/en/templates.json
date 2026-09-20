@@ -1,0 +1,17 @@
+{
+  "title": "Message templates",
+  "description": "WhatsApp checks each template before you can send it to someone who hasn't written to you first.",
+  "unavailable": "We couldn't read your templates just now.",
+  "none": "No templates yet.",
+  "noneBody": "Until you have one, you can only continue conversations other people start — never begin one.",
+  "window": "Once someone writes to you, WhatsApp lets you reply freely for 24 hours — no template needed. Templates are for reaching someone before that.",
+  "stance": {
+    "ready": "Ready to send",
+    "reviewing": "WhatsApp is reviewing it",
+    "rejected": "WhatsApp said no",
+    "unsent": "Written, not sent for review yet",
+    "exempt": "Email — no review needed"
+  },
+  "rejectedBecause": "WhatsApp's reason: {reason}",
+  "unchanged": "Unchanged since it was written."
+}

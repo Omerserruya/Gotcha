@@ -472,5 +472,22 @@ export const outreachEndpoints = {
   resend: (id: string) => endpoint('/api/broadcasts/{id}/resend', { id }),
 } as const;
 
+/**
+ * Message templates — screen 05c. ADMIN on every verb.
+ *
+ * `list` paginates properly: `{ data, total, page, limit }` with a real
+ * `prisma.messageTemplate.count`, and filters on channel, status and category.
+ *
+ * **No `include` for the `broadcasts` relation**, so usage count and reply
+ * rate are unserved rather than impossible — the join exists on the model.
+ */
+export const templateEndpoints = {
+  list: () => endpoint('/api/templates'),
+  detail: (id: string) => endpoint('/api/templates/{id}', { id }),
+  duplicate: (id: string) => endpoint('/api/templates/{id}/duplicate', { id }),
+  /** Sends it to Meta for review. The state changes; no ETA comes back. */
+  submit: (id: string) => endpoint('/api/templates/{id}/submit-to-meta', { id }),
+} as const;
+
 export type { Endpoint as ApiEndpoint };
 export { endpoint as defineEndpoint };

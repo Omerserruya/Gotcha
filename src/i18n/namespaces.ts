@@ -44,6 +44,8 @@ export const NAMESPACES = [
   'customers',
   /** Outreach — screens 05 and 05b. */
   'outreach',
+  /** Outreach · templates — screen 05c. */
+  'templates',
 ] as const;
 
 export type Namespace = (typeof NAMESPACES)[number];
