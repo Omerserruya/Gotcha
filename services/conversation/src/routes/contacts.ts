@@ -284,6 +284,14 @@ router.post("/segment", async (req: Request, res: Response) => {
             if (rule.operator === "contains") AND.push({ email: { contains: rule.value, mode: "insensitive" } });
             else AND.push({ email: { equals: rule.value, mode: "insensitive" } });
             break;
+          // The thing a human reaches for first. `displayName` was already in
+          // the select and in no rule, so the list could show Dana and not
+          // find her. Mirrors `email` rather than `phone`: both are free text
+          // where case is noise, whereas a phone prefix is meaningful.
+          case "name":
+            if (rule.operator === "contains") AND.push({ displayName: { contains: rule.value, mode: "insensitive" } });
+            else AND.push({ displayName: { equals: rule.value, mode: "insensitive" } });
+            break;
           case "lastSeenAfter":
             AND.push({ lastSeenAt: { gte: new Date(rule.value) } });
             break;
@@ -333,9 +341,23 @@ router.post("/segment", async (req: Request, res: Response) => {
     }
 
     const contacts = await prisma.contact.findMany({
-      where,
+      // Tombstones excluded. A merge is SOFT by design - the row is kept so an
+      // inbound webhook lookup still resolves through mergedIntoId - but the
+      // list never filtered it, so after any merge the same person appeared
+      // twice, once alive and once dead. Merging is the action the product
+      // offers to FIX duplicates, and it was making the list longer.
+      //
+      // Chosen deliberately rather than by default: this is a customer list,
+      // and a merged-away row is not a customer. Any consumer that needs the
+      // tombstones should ask for them explicitly rather than have every
+      // caller inherit them.
+      where: { ...where, mergedIntoId: null },
       take: 500,
-      select: { id: true, externalId: true, displayName: true, channel: true, phone: true, email: true, tags: true, lastInteractionAt: true, source: true },
+      // personId and mergedIntoId are BOTH already indexed (@@index([tenantId,
+      // personId]) and @@index([mergedIntoId])) and neither was ever selected
+      // or queried. personId is what lets one human on WhatsApp and Instagram
+      // collapse to one row instead of two.
+      select: { id: true, externalId: true, displayName: true, channel: true, phone: true, email: true, tags: true, lastInteractionAt: true, source: true, personId: true, mergedIntoId: true },
       orderBy: { lastSeenAt: "desc" },
     });
 

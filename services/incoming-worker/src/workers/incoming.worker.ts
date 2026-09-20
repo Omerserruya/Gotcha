@@ -525,6 +525,42 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
     },
   });
 
+  // Contact.lastInteractionAt - the column the customer list sorts and filters
+  // on, which until now had exactly ONE writer: the merge carry-forward at
+  // identity.ts:172, computing max(existing, existing). Nothing ever
+  // initialised it, so merging two nulls yielded null and the column was
+  // permanently empty - taking inactiveDays, lastInteractionBefore/After and
+  // lastSeenAfter down with it.
+  //
+  // Written HERE, after the message is persisted, because there is nothing to
+  // extend: the inbound path only READS the contact (resolveContactByChannelId
+  // at the top of this function), the one contact.update on this path is
+  // conditional on an avatar arriving, and Message has no relation to Contact
+  // to fold a nested write into. This is an added round trip, honestly named.
+  //
+  // Three properties, each deliberate:
+  //   updateMany, not update - a row merged away or deleted mid-flight no-ops
+  //     instead of throwing P2025.
+  //   not awaited, error caught - an inbound message that arrives and is NOT
+  //     STORED because a sort-order timestamp threw is a catastrophic trade.
+  //     Nothing here may fail the message.
+  //   guarded on savedContact - most senders have no Contact row at all
+  //     (contacts are created only when a message contains an email or phone),
+  //     so this costs nothing for the majority.
+  //
+  // lastSeenAt is deliberately NOT set. On every other model in this codebase
+  // it means "when a system last observed this row" - on CustomerProfile it is
+  // stamped with new Date() on every pipeline pass. Making Contact.lastSeenAt
+  // mean customer activity would give one name two meanings to buy a sort
+  // order. Sort on lastInteractionAt instead.
+  if (savedContact) {
+    void prisma.contact
+      .updateMany({ where: { id: savedContact.id, tenantId }, data: { lastInteractionAt: new Date() } })
+      .catch((err: any) =>
+        console.warn("[incoming] lastInteractionAt update failed:", err?.message ?? err),
+      );
+  }
+
   // First-inbound language detection - populates Conversation.detectedLocale
   // once per thread. Drives suggested-reply language so drafts match the
   // customer regardless of the agent's system-language setting. Idempotent
