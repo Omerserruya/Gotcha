@@ -2240,4 +2240,86 @@ http {
             try_files /legal$uri /legal$uri.html /legal$uri/index.html /legal.html;
         }
     }
+
+    # ── Campaign landings: go.gotcha.co.il → campaigns/out ──
+    #
+    # A THIRD static tree in this image, beside the app bundle and the marketing
+    # export, and deliberately not a section of either. Campaign pages are
+    # written for one ad flight, replaced often, and deleted afterwards; giving
+    # them their own host means a campaign can ship without rebuilding the
+    # marketing site, and a broken campaign page cannot reach gotcha.co.il.
+    #
+    # NOTE this host answers nothing until go.gotcha.co.il has BOTH a DNS record
+    # and a cloudflared ingress rule. Neither lives in this repo. Without them
+    # the name does not resolve and nginx never sees the request - it does not
+    # fall back to another vhost here, it simply never arrives.
+    server {
+        listen 80;
+        server_name go.gotcha.co.il;
+
+        root /usr/share/nginx/campaigns;
+        index index.html;
+
+        # Any redirect this host emits is RELATIVE.
+        #
+        # nginx builds an absolute Location from the request scheme, and behind
+        # cloudflared the request reaching this container is plain http - so a
+        # redirect issued here would send a browser on https to an http URL. A
+        # relative Location has no scheme to get wrong. The rest of this file
+        # solves the same problem with a $public_proto map, which is the right
+        # tool when a redirect target has to be built by hand; here there is
+        # nothing to build.
+        absolute_redirect off;
+
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header Permissions-Policy "camera=(), geolocation=(), payment=()" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https:; media-src 'self' blob:; object-src 'none'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'" always;
+
+        # Build output and images, passed through untouched.
+        location ~ ^/(_next|assets)/ {
+            try_files $uri =404;
+        }
+
+        # The bare host is not a campaign. Send it to the site that is.
+        #
+        # campaigns/src/app/page.tsx renders a page for this address too, and
+        # the two are not in conflict: that page is what `npm run dev` and any
+        # non-nginx serve of this bundle shows, and this rule means production
+        # never needs it.
+        location = / {
+            return 302 https://gotcha.co.il/;
+        }
+
+        # 404, NOT a fallback document.
+        #
+        # This is the one line that differs in spirit from the app vhost above,
+        # where an unmatched path falls through to index.html and answers 200.
+        # That is right for a single-page app and wrong here: these are separate
+        # documents, and a mistyped campaign URL that quietly rendered some
+        # other campaign's page would be invisible in the ad platform's stats
+        # and would misreport a dead link as a working one.
+        # `$uri/index.html` comes FIRST, ahead of `$uri`, and the order is the
+        # whole point.
+        #
+        # `trailingSlash: true` exports every campaign as <name>/index.html. With
+        # `$uri` first, a request for /spring-promo matched the DIRECTORY, and
+        # nginx answered with its own 301 to /spring-promo/ - an extra round trip
+        # on every single ad click, paid for and measured. Trying the index
+        # document first serves it at 200 and the redirect never happens; /nope
+        # still falls through to the 404 below, and /robots.txt still resolves as
+        # a file because `$uri` is right behind it.
+        location / {
+            try_files $uri/index.html $uri $uri.html =404;
+        }
+
+        # Next's exported 404. Paid traffic arriving at a retired campaign gets
+        # a page that points at the marketing site rather than nginx's default.
+        error_page 404 /404.html;
+        location = /404.html {
+            internal;
+        }
+    }
 }

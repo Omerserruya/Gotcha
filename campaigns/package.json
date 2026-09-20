@@ -1,0 +1,23 @@
+{
+  "name": "@chatcenter/campaigns",
+  "version": "0.1.0",
+  "private": true,
+  "description": "GOTCHA campaign landing pages (go.gotcha.co.il) - separate from the marketing site and the application.",
+  "scripts": {
+    "dev": "next dev -p 3200",
+    "build": "next build",
+    "start": "next start -p 3200",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "next": "14.2.35",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "20.19.43",
+    "@types/react": "18.3.31",
+    "@types/react-dom": "18.3.7",
+    "typescript": "5.9.3"
+  }
+}

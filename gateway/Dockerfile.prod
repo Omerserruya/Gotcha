@@ -43,6 +43,12 @@ COPY frontend/out /usr/share/nginx/html
 # assets with matching names but different contents.
 COPY landing/out /usr/share/nginx/landing
 
+# Campaign landing pages, served at go.gotcha.co.il. A third export with a
+# third root, for the same reason the marketing site got its own: it is an
+# independent Next.js build whose /_next chunk names collide with the other
+# two while the contents differ.
+COPY campaigns/out /usr/share/nginx/campaigns
+
 # Proxy config template. Rendered at container start by the entrypoint
 # script (envsubst over the variables listed in CMD, same as the dev gateway).
 COPY gateway/nginx.prod.conf.template /etc/nginx/nginx.conf.template
