@@ -80,7 +80,7 @@ they are set before publication. `build-logic.mjs` sets them:
 |-------|-------|-----|
 | `leadEndpoint` | `/api/waitlist` | Same-origin, proxied to the auth service by this host's vhost. No CORS involved. |
 | `privacyUrl`, `termsUrl` | Trust Center | Both documents are published. |
-| `metaPixelId` | `NEXT_PUBLIC_META_PIXEL_ID`, else null | There is no id to hard-code; it belongs to the ad account. Left null, the design logs events and fires nothing. |
+| `metaPixelId` | GOTCHA's pixel, `NEXT_PUBLIC_META_PIXEL_ID` to override | The same pixel the marketing site loads. Hard-coded rather than left to the environment, because "someone remembers to set a build variable" is not a mechanism and a campaign without it silently cannot report its conversions. Still gated on consent. |
 | `offerTermsUrl`, `accessibilityUrl`, `cookiesUrl` | **still null** | These documents do not exist. The design already renders a marked non-link for a missing document, which is better than a link that goes nowhere. |
 
 The form's four fields are mapped onto the lead endpoint's names
@@ -122,19 +122,36 @@ wire format between two applications rather than an implementation detail of
 either. **Change them in landing/ and change them here in the same commit**, or
 each will treat the other's record as stale and re-ask.
 
-### What is NOT verified
+### How this was verified
 
-That events actually arrive at Meta. That cannot be established from this
-machine, and the marketing site's pixel commit (`09e679f9`) recorded the same
-limit for the same integration. Headless Chrome does not work in this
-environment - even a trivial local page hangs - and the Playwright module is not
-installed, so the consent card and the script injection were **not exercised in
-a real browser here**. What is checked: the card and its Hebrew copy are in the
-bundle, the static HTML requests nothing from Meta, and a build with an id
-inlines it and emits the standard `Lead` call.
+In a real browser, against the built export served through the actual vhost,
+with Meta's `fbevents.js` replaced by a recorder that writes every `fbq()` call
+into the DOM. The browser runs in a container - the host's cached Chromium
+cannot be driven here, and the Playwright module is not installed.
 
-Confirm in a real browser and in Events Manager before spending money on a
-flight.
+| Visitor | Card | Meta's script | Calls made |
+|---|---|---|---|
+| No consent record | shown | not requested | none |
+| Allowed | hidden | loaded | `init <id>`, `track PageView` |
+| Refused | hidden | not requested | none |
+
+And the whole conversion path, by filling and submitting the form inside a
+same-origin frame, against each answer the endpoint can give:
+
+| Endpoint | Thank-you shown | `Lead` fired |
+|---|---|---|
+| 201, a new lead | yes | **yes** |
+| 409, already on the list | yes | **no** - no second conversion |
+| 500, a real failure | no, the error is shown | no |
+
+The full call sequence on a successful submit is
+`init <id> | track PageView | trackCustom form_start | trackCustom
+demo_form_submit_attempt | track Lead` - the standard `Lead` among customs,
+which is the whole point of the remap.
+
+**Still not verified, and it cannot be from here:** that Meta's own script then
+delivers those events to Meta. `09e679f9` recorded the same limit for the same
+integration. Confirm in Events Manager once a real visitor has been through.
 
 ## Images
 

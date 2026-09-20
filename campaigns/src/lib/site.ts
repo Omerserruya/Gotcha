@@ -72,12 +72,29 @@ export const F = {
 } as const;
 
 /**
+ * GOTCHA's pixel, the same one the marketing site loads.
+ *
+ * Hard-coded rather than left to the environment because a campaign that ships
+ * without it silently cannot report its own conversions, and "someone remembers
+ * to set a build variable" is not a mechanism. It is not a secret either: a
+ * pixel id is in the page's source on every site that uses one, and this exact
+ * value is already in landing/src/components/MetaPixel.tsx.
+ *
+ * A campaign measured by a different ad account overrides it with
+ * NEXT_PUBLIC_META_PIXEL_ID at build time.
+ */
+const DEFAULT_PIXEL_ID = '1366778975443279';
+
+/**
  * The Meta pixel, when there is one.
  *
- * Null unless a real id is supplied at build time. The campaign's own
- * `track()` then logs each event to the console and fires nothing, which is
- * the honest behaviour - a placeholder id would quietly send every campaign
- * event into a pixel that does not exist.
+ * Never null in practice now, but the type keeps the null case honest: an
+ * override of `NEXT_PUBLIC_META_PIXEL_ID=` to an empty string turns measurement
+ * off entirely, and `MetaPixel` then renders nothing and requests nothing.
+ *
+ * Note this alone does NOT start tracking anyone: the pixel is still gated on
+ * `consent.marketing`, and nothing is requested from Meta until a visitor says
+ * yes.
  *
  * It lives here, beside the other build-time constants, rather than being read
  * inside the generated campaign component - so that every value the page is
@@ -89,7 +106,8 @@ export const F = {
  * `process` shim, which yields undefined and falls through to the default here.
  * Both behaviours are fine and both were checked against a real build.
  */
-export const META_PIXEL_ID: string | null = process.env.NEXT_PUBLIC_META_PIXEL_ID || null;
+export const META_PIXEL_ID: string | null =
+  process.env.NEXT_PUBLIC_META_PIXEL_ID || DEFAULT_PIXEL_ID;
 
 export type Locale = 'en' | 'he';
 
