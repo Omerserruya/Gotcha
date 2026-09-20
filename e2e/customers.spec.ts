@@ -162,6 +162,31 @@ for (const size of SIZES) {
       // identity and the screen said "contacts".
       await expect(count).toHaveText(/people|person/i);
 
+      /*
+       * ── THE INVARIANT, NOT A NUMBER ──
+       * The header must equal the number of person rows rendered. It did not:
+       * the count was contact ROWS under a label reading "people", so three
+       * rows collapsed to two people and the header still said three.
+       *
+       * Asserted against the rendered rows rather than against an expected
+       * figure, so it keeps holding when the fixture changes — an assertion
+       * that hard-coded "2" would pass a screen that counted the wrong thing
+       * the moment someone added a row.
+       */
+      // `li[...]` scopes to the rows: the count itself is a <p>, and the
+      // channel badges are <span>. No exclusion needed — and `!=` is not a
+      // CSS attribute operator anyway, which cost a run on screen 12.
+      const personRows = page.locator('li[data-testid^="customer-"]');
+      await expect(personRows.first()).toBeVisible();
+      const rendered = await personRows.count();
+      const heading = (await count.textContent())?.trim() ?? '';
+      const stated = Number(heading.match(/\d+/)?.[0] ?? NaN);
+      expect(
+        stated,
+        `the header says "${heading}" but ${rendered} person rows are rendered — the count ` +
+          'is counting something other than what is on screen',
+      ).toBe(rendered);
+
       await shoot(page, `${size.name}-1-list`);
     });
 

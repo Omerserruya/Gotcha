@@ -16,8 +16,7 @@
     "count": "{count, plural, =0 {No one yet} =1 {One person} other {# people}}",
     "none": "Nobody has talked to you yet.",
     "unnamed": "No name or handle on this contact",
-    "truncated": "Showing {shown} of {total}.",
-    "countApprox": "About {count} people"
+    "truncated": "Showing the first {shown} records. There are {total} in all, and some may turn out to be the same person."
   },
   "channel": {
     "WHATSAPP": "WhatsApp",

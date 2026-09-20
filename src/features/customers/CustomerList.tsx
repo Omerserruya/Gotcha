@@ -24,11 +24,20 @@ import styles from './Customers.module.css';
  * shared identifier is found, so its absence means *"not known to be the same
  * human"*, never *"the same as the others"*.
  *
- * ── THE COUNT IS NOT THE SERVER'S TOTAL ──
- * The route's `count` still includes the merged-away rows its `findMany`
- * excludes, so on a tenant that has ever merged `total` exceeds the list with
- * nothing truncated. The number shown is the one this screen can stand
- * behind: the rows themselves, unless the page was genuinely filled.
+ * ── THE COUNT COUNTS PEOPLE, WHICH IS NOT THE SAME AS ROWS ──
+ * This screen's whole claim is *"People, not rows"*, so the header is the one
+ * place that must not confuse the two — and it is the place that did: the
+ * count was the number of contact ROWS under a label reading "people", while
+ * the list below it showed the collapsed set. Two people on screen, three in
+ * the header.
+ *
+ * So the number is now `collapseToPeople(rows).length` — it counts exactly
+ * what is rendered, and it is exact because it is derived from the same array.
+ *
+ * **The server's `total` never appears beside the word "people".** It counts
+ * rows before collapsing (and, until Backend moves the tombstone filter onto
+ * it, rows that are not customers at all). When the page is genuinely full it
+ * appears in its own sentence, called *records*, which is what it is.
  *
  * ── AND WHY THERE IS NO SORT CONTROL ──
  * The route hardcodes `orderBy: { lastSeenAt: "desc" }` on a column nothing
@@ -49,6 +58,7 @@ export async function CustomerList({
   readonly query: string;
 }) {
   const t = await getTranslations('customers');
+  const people = collapseToPeople(rows);
 
   if (rows.length === 0) {
     return (
@@ -87,12 +97,17 @@ export async function CustomerList({
         real `prisma.contact.count`, so it is the number that match rather than
         the number on screen.
       */}
+      {/*
+        People, counted from the same array that is rendered below — so the
+        header and the list cannot disagree. That is the invariant, and the
+        capture asserts it rather than asserting a number.
+      */}
       <p className={styles.count} data-testid="customer-count">
-        {truncated ? t('list.countApprox', { count: total }) : t('list.count', { count: total })}
+        {t('list.count', { count: people.length })}
       </p>
 
       <ul className={styles.rows}>
-        {collapseToPeople(rows).map(({ key, primary: row, channels }) => {
+        {people.map(({ key, primary: row, channels }) => {
           const label = customerLabel(row);
           return (
             <li key={key} className={styles.row} data-testid={`customer-${row.id}`}>
@@ -141,9 +156,9 @@ export async function CustomerList({
       </ul>
 
       {/*
-        The route counts everything and returns at most 500. A list that shows
-        fewer than it counted must say so rather than letting the count read as
-        a description of what is on screen.
+        The route returns at most 500 rows. Said in its own sentence and in
+        RECORDS, never people — `total` counts rows before collapsing, so
+        attaching it to "people" is the mismatch this screen just had.
       */}
       {truncated ? (
         <p className={styles.truncated} data-testid="customers-truncated">

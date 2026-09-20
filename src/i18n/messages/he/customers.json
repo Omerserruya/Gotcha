@@ -16,8 +16,7 @@
     "count": "{count, plural, =0 {עוד אף אחד} one {אדם אחד} other {# אנשים}}",
     "none": "עוד אף אחד לא דיבר איתכם.",
     "unnamed": "אין שם או מזהה לאיש הקשר הזה",
-    "truncated": "מוצגים {shown} מתוך {total}.",
-    "countApprox": "בערך {count} אנשים"
+    "truncated": "מוצגות {shown} הרשומות הראשונות. בסך הכול יש {total}, וייתכן שחלקן הן אותו אדם."
   },
   "channel": {
     "WHATSAPP": "וואטסאפ",

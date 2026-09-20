@@ -168,6 +168,26 @@ describe('collapseToPeople — the design first line, now that it is backed', ()
     expect(people[0]!.primary.displayName).toBe('Dana Cohen');
   });
 
+  it('is what the header must count, not the row array', () => {
+    /*
+     * The defect this replaced: the header counted contact ROWS under a label
+     * reading "people", so three rows collapsed to two people on screen and
+     * the header still said three.
+     *
+     * The real two contacts on this tenant both had distinct identities, so
+     * the count and the list agreed BY ACCIDENT. Giving two fixtures a shared
+     * `personId` — to make the collapse visible in evidence — is what exposed
+     * it. The fixture proved something nothing was asserting.
+     */
+    const rows = [
+      at({ id: 'a', channel: 'WHATSAPP', personId: 'p1' }),
+      at({ id: 'b', channel: 'INSTAGRAM', personId: 'p1' }),
+      at({ id: 'c', channel: 'EMAIL', personId: null }),
+    ];
+    expect(rows).toHaveLength(3);
+    expect(collapseToPeople(rows)).toHaveLength(2);
+  });
+
   it('does not repeat a channel a person uses twice', () => {
     const people = collapseToPeople([
       at({ id: 'a', channel: 'WHATSAPP', personId: 'p1' }),
