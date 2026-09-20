@@ -56,7 +56,11 @@ class CampaignLogic extends React.Component {
     } catch (e) {}
     const payload = { event: name, utm: utm };
     (window.dataLayer = window.dataLayer || []).push(payload);
-    if (window.fbq && this.CFG.metaPixelId) window.fbq('trackCustom', name);
+    if (window.fbq && this.CFG.metaPixelId) {
+      // 'lead' is Meta's standard Lead event; the rest are ours.
+      if (name === 'lead') window.fbq('track', 'Lead');
+      else window.fbq('trackCustom', name);
+    }
     if (!this.CFG.metaPixelId) console.info('[measurement pending pixel id]', payload);
   }
 

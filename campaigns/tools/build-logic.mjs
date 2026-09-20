@@ -93,6 +93,33 @@ patch(
   'wiring the legal links',
 );
 
+/**
+ * The lead fires Meta's STANDARD `Lead` event, not a custom one.
+ *
+ * The design sends every event through `fbq('trackCustom', name)`, which is
+ * right for `demo_click_hero` and `widget_open` - they are ours, and Meta has
+ * no opinion about them. It is wrong for the one event the ad is actually
+ * optimised against.
+ *
+ * A custom event shows up in Events Manager immediately but is NOT selectable
+ * as an optimisation goal until someone creates a Custom Conversion on it by
+ * hand. `Lead` is one of Meta's standard events: it is recognised on arrival
+ * and can be picked as the campaign objective with no further setup. Shipping
+ * the custom spelling would mean running a lead campaign whose chosen
+ * conversion event never arrives.
+ *
+ * Only the lead is remapped. Everything else stays custom, which is what it is.
+ */
+patch(
+  `    if (window.fbq && this.CFG.metaPixelId) window.fbq('trackCustom', name);`,
+  `    if (window.fbq && this.CFG.metaPixelId) {
+      // 'lead' is Meta's standard Lead event; the rest are ours.
+      if (name === 'lead') window.fbq('track', 'Lead');
+      else window.fbq('trackCustom', name);
+    }`,
+  'sending the lead as Meta\'s standard Lead event',
+);
+
 /* ─────────── the payload, and the duplicate lead ───────────
  *
  * The design posts its own four fields; the endpoint has been taking leads from

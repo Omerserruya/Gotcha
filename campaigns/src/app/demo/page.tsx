@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import CampaignLanding from '@/components/CampaignLanding';
+import MetaPixel from '@/components/MetaPixel';
 
 /*
  * Loaded HERE rather than in the root layout, and the order is the point.
@@ -34,5 +35,18 @@ export const metadata: Metadata = {
  * would be a correction to the design rather than a port of it.
  */
 export default function DemoCampaign() {
-  return <CampaignLanding />;
+  return (
+    <>
+      {/*
+        Renders nothing and requests nothing until the visitor has allowed
+        advertising measurement - the same shared `gotcha_consent` cookie the
+        marketing site writes, so someone who already said yes there is not
+        asked again. The design's own `track()` is guarded on `window.fbq`,
+        which simply does not exist until this mounts the script, so events
+        before consent are dropped rather than buffered.
+      */}
+      <MetaPixel />
+      <CampaignLanding />
+    </>
+  );
 }
