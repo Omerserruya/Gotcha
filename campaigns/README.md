@@ -93,6 +93,49 @@ A duplicate (HTTP 409 - the phone or email is already on the list) is treated as
 success rather than as an error, because from the visitor's side it is. The
 `lead` conversion event is deliberately not fired a second time.
 
+## Measurement, and the consent it depends on
+
+The lead reports to Meta as the **standard `Lead` event**, not a custom one. A
+custom event shows up in Events Manager immediately but is not selectable as an
+optimisation goal until somebody builds a Custom Conversion on it by hand, so a
+lead campaign pointed at the standard event would wait for a conversion that
+never arrives. Only `lead` is remapped; `demo_click_hero` and the rest stay
+custom, which is what they are.
+
+**Nothing is sent until the visitor allows advertising measurement.** The Cookie
+Policy says, in both languages, that "the pixel is not loaded at all until you
+turn it on: refusing means the script is never requested, not that it is loaded
+and told to stay quiet". `MetaPixel` honours that: with no consent, or with no
+`NEXT_PUBLIC_META_PIXEL_ID` at build time, it renders nothing and requests
+nothing.
+
+The consent record is the `gotcha_consent` cookie, set on `.gotcha.co.il` and
+therefore **shared with the marketing site**. Someone who already answered on
+gotcha.co.il is never shown the card here and their pixel loads on arrival.
+Campaign traffic arrives cold, though, so `CookieNotice` exists on this host
+too - without it those visitors would never be asked, the pixel would never
+load, and the campaign could not report its own conversions.
+
+`src/lib/consent.ts` is a **copy** of the marketing site's. The two apps share
+one cookie, so `CONSENT_VERSION`, the cookie name and the record's shape are a
+wire format between two applications rather than an implementation detail of
+either. **Change them in landing/ and change them here in the same commit**, or
+each will treat the other's record as stale and re-ask.
+
+### What is NOT verified
+
+That events actually arrive at Meta. That cannot be established from this
+machine, and the marketing site's pixel commit (`09e679f9`) recorded the same
+limit for the same integration. Headless Chrome does not work in this
+environment - even a trivial local page hangs - and the Playwright module is not
+installed, so the consent card and the script injection were **not exercised in
+a real browser here**. What is checked: the card and its Hebrew copy are in the
+bundle, the static HTML requests nothing from Meta, and a build with an id
+inlines it and emits the standard `Lead` call.
+
+Confirm in a real browser and in Events Manager before spending money on a
+flight.
+
 ## Images
 
 Campaign pages are opened from a paid click, usually on a phone, usually on

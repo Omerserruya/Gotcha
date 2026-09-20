@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import CampaignLanding from '@/components/CampaignLanding';
 import MetaPixel from '@/components/MetaPixel';
+import CookieNotice from '@/components/CookieNotice';
 
 /*
  * Loaded HERE rather than in the root layout, and the order is the point.
@@ -47,6 +48,15 @@ export default function DemoCampaign() {
       */}
       <MetaPixel />
       <CampaignLanding />
+      {/*
+        Last, so it sits above the page in paint order as well as in z-index,
+        and renders nothing at all for anyone who has already answered - which
+        includes every visitor who came through gotcha.co.il, since the consent
+        cookie is shared across the domain. Campaign traffic arrives cold and
+        is asked here; without that the pixel above could never load and the
+        campaign could not report its own conversions.
+      */}
+      <CookieNotice />
     </>
   );
 }
