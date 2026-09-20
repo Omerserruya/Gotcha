@@ -11,11 +11,16 @@
  * reauthorization:
  *
  *   not shopify            → the provider's authorize URL, as before.
- *   shopify, not connected → the App Store listing. Shopify picks the store.
- *                            Before the listing publishes there is no such
- *                            page, and the server answers
- *                            `shopify_install_not_available`; the merchant is
- *                            told to wait, never asked for their domain.
+ *   shopify, not connected → the App Store listing once it is approved and
+ *                            live, where Shopify picks the store. Before that
+ *                            there is NO reachable Shopify page, and
+ *                            `beginConnect` returns null so the caller can
+ *                            explain that installation begins on Shopify.
+ *                            Neither state is an error and neither asks for a
+ *                            domain. Review 132211 rejected a refusal screen
+ *                            here; the fix for it then pointed the button at a
+ *                            listing that 404s until approval, which was worse
+ *                            because it looked like it worked.
  *   shopify, connected     → reauthorization. The server reads the shop from
  *                            the stored connection, so this is still a plain
  *                            authorize URL and still needs no input from the
@@ -46,12 +51,17 @@ export interface BeginConnectInput {
  * start sets an HttpOnly cookie that must be present when Shopify redirects
  * the browser back.
  */
-export async function beginConnect(input: BeginConnectInput): Promise<string> {
+export async function beginConnect(input: BeginConnectInput): Promise<string | null> {
   const { token, slug, reauthorize, flow, params } = input;
 
   if (slug === "shopify" && !reauthorize) {
+    // NULL is a real answer, not a failure. Before the App Store listing is
+    // approved there is no Shopify page to navigate to: an unapproved listing
+    // is not publicly reachable, and this app is "Limited visibility" so it
+    // never appears in App Store search either. The caller explains that
+    // installation begins on Shopify instead of navigating to a 404.
     const { url } = await startShopifyInstall(token, flow);
-    return url;
+    return url ?? null;
   }
 
   // Shopify reauthorization sends no credentials: `params` may still hold
@@ -102,18 +112,24 @@ export function connectButtonLabel(slug: string, reauthorize: boolean): string {
  */
 export function connectErrorMessage(slug: string, err: any): string {
   const code = err?.code || err?.message;
-  if (code === "shopify_install_not_available") {
-    // TEMPORARY STATE, said plainly. The App Store listing is not published
-    // yet, so there is no Shopify page to send the merchant to.
-    //
-    // Note what this message does NOT do: offer a shop-domain box. Falling
-    // back to "just type your store address" is exactly the flow App Store
-    // requirement 2.3.1 forbids, and a fallback added "only until the listing
-    // is live" is one nobody removes afterwards. A merchant who cannot
-    // self-serve today is a support conversation; a merchant who typed their
-    // domain is a rejected submission.
-    return "New Shopify connections aren't available just yet - our Shopify App Store listing is still being published. Contact support and we'll connect your store for you.";
-  }
+  // `shopify_install_not_available` is deliberately NOT handled here any more.
+  //
+  // It used to return "New Shopify connections aren't available just yet - our
+  // Shopify App Store listing is still being published. Contact support and
+  // we'll connect your store for you." Shopify App Store review 132211 quoted
+  // that sentence back to us under requirement 4.5.5: the submitted test
+  // account could not demonstrate the feature set, because pressing Connect
+  // Shopify produced a refusal rather than an installation.
+  //
+  // The server no longer emits the code - `/install/start` answers with a
+  // mode, never a refusal - so there is nothing left to translate. Re-adding a
+  // branch here would mean the block had come back on the server.
+  //
+  // What must never appear in its place is a shop-domain box. Falling back to
+  // "just type your store address" is the flow requirement 2.3.1 forbids, and a
+  // fallback added "only until the listing is live" is one nobody removes
+  // afterwards. `frontend/src/__tests__/no-manual-shop-domain.test.ts` pins
+  // that.
   if (code === "shopify_not_connected") {
     return "This workspace has no Shopify store yet - use Connect Shopify to install it.";
   }

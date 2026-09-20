@@ -43,12 +43,18 @@ export interface ShopifyAppIdentity {
   /** Absolute OAuth callback; must match the Partner Dashboard exactly. */
   redirectUri: string;
   /**
-   * App handle for admin deep links.
+   * The APP handle, used in every `admin.shopify.com` deep link - the app's
+   * page in the merchant's admin, and the managed-pricing page at
+   * `/store/<store>/charges/<appHandle>/pricing_plans`.
    *
-   * Empty until read from the Partner Dashboard and recorded as
-   * SHOPIFY_APP_HANDLE. Deliberately not defaulted: a guessed handle produces
-   * a deep link that 404s in the merchant's admin, which is worse than
-   * offering no link and saying so.
+   * This is NOT the App Store listing slug; see `installUrl`. The two were one
+   * variable until review 132211 and are now `SHOPIFY_APP_PRICING_HANDLE` and
+   * `SHOPIFY_APP_STORE_HANDLE`, both still falling back to the original
+   * `SHOPIFY_APP_HANDLE` so an existing deployment is unaffected.
+   *
+   * Empty until read from the Partner Dashboard. Deliberately not defaulted: a
+   * guessed handle produces a deep link that 404s in the merchant's admin,
+   * which is worse than offering no link and saying so.
    */
   appHandle: string;
   extensionHandle: string;
@@ -56,10 +62,11 @@ export interface ShopifyAppIdentity {
   /**
    * The App Store listing the "Connect Shopify" button sends a merchant to,
    * where Shopify identifies or lets them pick the store. Derived from
-   * `SHOPIFY_APP_HANDLE` alone.
+   * `SHOPIFY_APP_STORE_HANDLE` (falling back to `SHOPIFY_APP_HANDLE`), and
+   * deliberately NOT from `appHandle` above - see that field.
    *
-   * Null until the listing publishes and the handle is configured, and null
-   * is an ORDINARY state, not a broken one:
+   * Null until the handle is configured, and null is an ORDINARY state, not a
+   * broken one:
    *
    *   • installation from the Partner Dashboard still works - Shopify calls
    *     `application_url` directly and the public install handler takes it
@@ -90,7 +97,10 @@ export function getShopifyAppIdentity(): ShopifyAppIdentity {
     clientSecret: process.env.SHOPIFY_API_SECRET || "",
     appUrl,
     redirectUri,
-    appHandle: process.env.SHOPIFY_APP_HANDLE || "",
+    appHandle:
+      process.env.SHOPIFY_APP_PRICING_HANDLE?.trim() ||
+      process.env.SHOPIFY_APP_HANDLE?.trim() ||
+      "",
     extensionHandle: process.env.SHOPIFY_CHAT_EXTENSION_HANDLE || DEFAULT_EXTENSION_HANDLE,
     blockHandle: process.env.SHOPIFY_CHAT_BLOCK_HANDLE || DEFAULT_BLOCK_HANDLE,
     installUrl: resolveShopifyInstallUrl(process.env),

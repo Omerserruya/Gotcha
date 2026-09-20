@@ -590,6 +590,50 @@ services:
       SHOPIFY_CHAT_BLOCK_HANDLE: ${SHOPIFY_CHAT_BLOCK_HANDLE:-gotcha_chat}
       SHOPIFY_CHAT_EXTENSION_HANDLE: ${SHOPIFY_CHAT_EXTENSION_HANDLE:-gotcha-chat}
       SHOPIFY_CHAT_APP_HANDLE: ${SHOPIFY_CHAT_APP_HANDLE:-gotcha-chat}
+      # The CORE app's handles. Absent from this service until App Store
+      # review 132211, which is why production's `ai` container reported an
+      # EMPTY SHOPIFY_APP_HANDLE: not a deliberate blank, just a variable that
+      # was declared on `billing` and never on `ai`. `resolveShopifyInstallUrl`
+      # then returned null and the "Connect Shopify" button answered 503 - the
+      # screen the reviewer failed us on.
+      #
+      # Two distinct identifiers, deliberately separate (see
+      # packages/shared/src/lib/shopify-install.ts):
+      #   SHOPIFY_APP_STORE_HANDLE   App Store LISTING slug, used ONLY in
+      #                              https://apps.shopify.com/<slug>. Read it
+      #                              off the Partner Dashboard listing page and
+      #                              open the URL once before relying on it -
+      #                              it is not derivable and not exposed by the
+      #                              Partner API (the `App` type carries only
+      #                              apiKey, events, id and name).
+      #   SHOPIFY_APP_PRICING_HANDLE APP handle, used in admin deep links and
+      #                              in /charges/<handle>/pricing_plans.
+      # Both fall back to SHOPIFY_APP_HANDLE. Leaving all three unset is SAFE:
+      # the button degrades to App Store search and never asks for a domain.
+      SHOPIFY_APP_HANDLE: ${SHOPIFY_APP_HANDLE:-}
+      SHOPIFY_APP_STORE_HANDLE: ${SHOPIFY_APP_STORE_HANDLE:-}
+      SHOPIFY_APP_PRICING_HANDLE: ${SHOPIFY_APP_PRICING_HANDLE:-}
+      SHOPIFY_APP_STORE_SEARCH_TERM: ${SHOPIFY_APP_STORE_SEARCH_TERM:-GOTCHA}
+      # Is the App Store listing APPROVED and publicly reachable?
+      #
+      # OFF until Shopify approves the listing. An unapproved listing 404s for
+      # anyone not signed in to a Partner account, and a "Limited visibility"
+      # app never appears in App Store search even after approval - so before
+      # approval there is nowhere to send a merchant, and the button explains
+      # that installation begins on Shopify instead of navigating to a 404.
+      #
+      # Flip this to "true" on approval day. No rebuild, no code change.
+      SHOPIFY_APP_STORE_LISTING_LIVE: ${SHOPIFY_APP_STORE_LISTING_LIVE:-false}
+      # Optional. Where to point a merchant while the listing is not public -
+      # during App Store review, the install link from the Shopify dashboard.
+      # Shown as HELP beside the explanation, never as the install path, and
+      # never constructed by us. Unset is fine: the explanation stands alone.
+      SHOPIFY_INSTALL_HELP_URL: ${SHOPIFY_INSTALL_HELP_URL:-}
+      # How long a verified-but-unclaimed Shopify installation is held.
+      # Was a hard-coded 15 minutes, which expired before the App Store
+      # reviewer finished signing in and left their authorized store
+      # unreachable. Defaults to 2h; clamped to [5m, 24h] in code.
+      SHOPIFY_PENDING_INSTALL_TTL_SECONDS: ${SHOPIFY_PENDING_INSTALL_TTL_SECONDS:-}
       # Empty by design in v1 - the Chat app needs no Admin API access.
       SHOPIFY_CHAT_SCOPES: ${SHOPIFY_CHAT_SCOPES:-}
       # Encrypts storefront visitor sessions. Mandatory in production:
@@ -755,6 +799,16 @@ services:
       # App handle used to build Shopify's hosted plan-selection URL. Without it
       # app_pricing refuses to start rather than redirect to a broken admin URL.
       SHOPIFY_APP_HANDLE: ${SHOPIFY_APP_HANDLE:-}
+      # Split out of SHOPIFY_APP_HANDLE in App Store review 132211. Shopify uses
+      # "handle" for two different identifiers and they are not guaranteed to
+      # match:
+      #   SHOPIFY_APP_STORE_HANDLE   the App Store LISTING slug, used only in
+      #                              https://apps.shopify.com/<slug>
+      #   SHOPIFY_APP_PRICING_HANDLE the APP handle, used in admin deep links
+      #                              such as /charges/<handle>/pricing_plans
+      # Both fall back to SHOPIFY_APP_HANDLE when unset, so this is additive.
+      SHOPIFY_APP_STORE_HANDLE: ${SHOPIFY_APP_STORE_HANDLE:-}
+      SHOPIFY_APP_PRICING_HANDLE: ${SHOPIFY_APP_PRICING_HANDLE:-}
       # JSON maps. Plan handles and meter handles are CONFIGURATION and live in
       # the Partner Dashboard; prices are never defined in this repo.
       SHOPIFY_BILLING_PLAN_HANDLES: ${SHOPIFY_BILLING_PLAN_HANDLES:-}

@@ -8,6 +8,7 @@ import Template from '@/generated/Template';
 import Chrome from '@/generated/Chrome';
 import { HE_DICT } from '@/generated/he';
 import { getLucide } from '@/lib/lucide';
+import { links } from '@/lib/site';
 import UrlSync from '@/components/UrlSync';
 
 class LandingLogic extends React.Component {
@@ -2836,6 +2837,14 @@ class LandingLogic extends React.Component {
     ];
 
     return {
+      // Where "Login" goes. It pointed at #cta, so pressing it scrolled to the
+      // book-a-demo section instead of signing anyone in - the link looked
+      // present and did the wrong thing, which is worse than being absent.
+      //
+      // `links.app()` already resolved to /login on the application host and
+      // nothing used it. On a single-host or local setup it degrades to the
+      // plain /login path, which is correct there.
+      loginUrl: links.app(),
       navItems,
       mnav,
       mnavOpen: !!st.mnav,

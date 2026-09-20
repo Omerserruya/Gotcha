@@ -781,8 +781,14 @@ export {
   verifyOAuthCallbackHmac,
   buildShopifyAuthorizeUrl,
   resolveShopifyInstallUrl,
+  resolveShopifyAppStoreHandle,
+  resolveShopifyInstallEntry,
 } from "./lib/shopify-install";
-export type { AppEntryResult, AppEntryRejection } from "./lib/shopify-install";
+export type {
+  AppEntryResult,
+  AppEntryRejection,
+  ShopifyInstallEntry,
+} from "./lib/shopify-install";
 
 // GOTCHA Shopify CHAT app - its own identity, verification and lifecycle.
 // Deliberately a separate module from the live-chat channel config above:

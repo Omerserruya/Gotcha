@@ -55,11 +55,13 @@ import { reconcileAgentToolPermissions } from "../services/tool-permission-recon
 import {
   SHOPIFY_OAUTH_SCOPES,
   linkShopifyShopToTenant,
+  pendingStoreReplacement,
   exchangeShopifyCode,
 } from "../services/shopify-connection-link.service";
 import {
   createPendingConnection,
   consumeInstallIntent,
+  setPendingInstallCookie,
   INSTALL_INTENT_COOKIE,
 } from "../services/shopify-install-intent.service";
 import { resolveShopifyBillingOutcome } from "../services/shopify-billing-bridge.service";
@@ -150,10 +152,47 @@ router.post(
   async (req: Request, res: Response) => {
     const cat = await findCatalog(req.params.slug);
     if (!cat) { res.status(404).json({ error: "unknown_provider" }); return; }
-    await (prisma as any).tenantIntegration.updateMany({
+
+    // An EXPLICIT disconnect releases the store. An uninstall does not.
+    //
+    // Those are different events and were being treated as one. Uninstalling
+    // on Shopify keeps `config.shopDomain` deliberately, so a reinstall lands
+    // back in the same workspace and no one else can grab the store in the
+    // meantime. But pressing Disconnect here is an authorized statement by
+    // this workspace that it no longer holds the store, and it was leaving the
+    // shop domain behind too.
+    //
+    // `findShopOwner` matches on that domain REGARDLESS of status, so the
+    // effect was permanent: once a shop had touched a workspace, no other
+    // workspace could ever claim it. And the refusal told the merchant
+    // "Disconnect it there first, then reconnect here" - instructions for
+    // something that could not work, which is worse than refusing plainly.
+    //
+    // Clearing the identity is what makes that sentence true. Credentials go
+    // with it: a token for a store this workspace no longer claims is only a
+    // liability.
+    const rows = await (prisma as any).tenantIntegration.findMany({
       where: { tenantId: req.tenantId, integrationId: cat.id },
-      data: { status: "DISCONNECTED" },
+      select: { id: true, config: true },
     });
+
+    for (const row of rows) {
+      const config = { ...((row.config as any) ?? {}) };
+      // Only the fields that ESTABLISH identity. Settings the merchant chose
+      // outside the OAuth flow (useAsCrm, sync toggles) survive a disconnect,
+      // because reconnecting the same store should not silently reset them.
+      delete config.shopDomain;
+      delete config.externalShopId;
+      await (prisma as any).tenantIntegration.update({
+        where: { id: row.id },
+        data: { status: "DISCONNECTED", credentials: {}, config },
+      });
+    }
+
+    console.log(
+      `[connectors] ${req.params.slug} disconnected by tenant=${req.tenantId} ` +
+        `(store identity released, ${rows.length} row(s))`,
+    );
     res.json({ ok: true });
   },
 );
@@ -583,8 +622,45 @@ router.get("/connectors/shopify/oauth/callback", async (req: Request, res: Respo
         scope: creds.scope,
         flow: payload.flow,
       });
+      // The handle goes in a cookie AS WELL AS the URL.
+      //
+      // In the URL alone it was the single reference to an authorized store,
+      // and the signed-out login bounce threw it away - which is how a
+      // Shopify-originated install became impossible to finish and how App
+      // Store review 132211 failed. The cookie survives the whole OIDC round
+      // trip, so the claim screen can still find the installation.
+      setPendingInstallCookie(res, handle);
       // Same fail-soft as the install entry point: a missing FRONTEND_URL must
       // not turn a SUCCESSFUL authorization into a 500 that loses the token.
+      let base = "";
+      try { base = resolveAppPublicUrl(process.env); } catch { base = ""; }
+      res.redirect(`${base}/settings/business-systems/shopify/finish?handle=${encodeURIComponent(handle)}`);
+      return;
+    }
+
+    // A workspace holds at most one Shopify store, so connecting a second one
+    // necessarily disconnects the first. That used to happen silently here:
+    // the merchant pressed Connect, authorized a different store, and every AI
+    // answer began reading a different catalogue while the screen said
+    // "Connected". Nobody was asked.
+    //
+    // Rather than answer the question in a redirect, park the verified install
+    // exactly as the anonymous path does and let the finish screen ask it. The
+    // claim endpoint already refuses a replacement that was not confirmed, so
+    // this reuses one decision point instead of adding a second.
+    const replacing = await pendingStoreReplacement(tenantId, shop);
+    if (replacing) {
+      const handle = await createPendingConnection({
+        shopDomain: shop,
+        credentials: creds,
+        scope: creds.scope,
+        flow: payload.flow,
+      });
+      setPendingInstallCookie(res, handle);
+      if (typeof payload.intentHandle === "string") {
+        await consumeInstallIntent(payload.intentHandle);
+      }
+      res.clearCookie(INSTALL_INTENT_COOKIE, { path: "/" });
       let base = "";
       try { base = resolveAppPublicUrl(process.env); } catch { base = ""; }
       res.redirect(`${base}/settings/business-systems/shopify/finish?handle=${encodeURIComponent(handle)}`);

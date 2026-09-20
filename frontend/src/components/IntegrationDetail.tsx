@@ -25,6 +25,7 @@ import CustomDbToolsSection from "@/components/CustomDbToolsSection";
 import { AirtableMappingCard } from "@/components/integrations/AirtableMappingCard";
 import clsx from "clsx";
 import { beginConnect, connectHelpText, connectButtonLabel, connectErrorMessage } from "@/lib/shopify-connect";
+import { getPendingShopifyInstall, getShopifyInstallAvailability } from "@/lib/api";
 
 const RISK_BADGE: Record<string, string> = {
   LOW: "bg-green-100 text-green-700",
@@ -208,6 +209,53 @@ export function IntegrationDetail({
   // both unnecessary and forbidden by App Store requirement 2.3.1. The filter
   // is deliberately defensive: a stale catalog row must not be able to put the
   // field back.
+  // A store this browser already authorized on Shopify, waiting to be claimed.
+  //
+  // THE FAILURE THIS EXISTS FOR. A merchant who installs from Shopify with no
+  // GOTCHA session is redirected here to sign in. Until now, nothing on this
+  // screen looked for that installation: they saw Shopify as DISCONNECTED and
+  // a Connect button, with no route back to the store they had just
+  // authorized. Shopify App Store review 132211 recorded exactly that.
+  //
+  // The lookup needs no handle. The server recovers it from an HttpOnly cookie
+  // set at the OAuth callback, so it survives the whole login round trip.
+  const [pendingShop, setPendingShop] = useState<string | null>(null);
+  /**
+   * Set when the server reports that no Shopify page is reachable yet.
+   *
+   * Not an error state. It is the honest pre-publication answer, and Shopify
+   * Support confirmed the in-app button is not the reviewer's entry point
+   * before the listing goes live.
+   */
+  const [notPublished, setNotPublished] = useState(false);
+  /** Where an operator points merchants while the listing is not public. */
+  const [installHelpUrl, setInstallHelpUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (slug !== "shopify" || !token || isConnected) {
+      setPendingShop(null);
+      return;
+    }
+    let cancelled = false;
+    getPendingShopifyInstall(token)
+      .then((r) => { if (!cancelled) setPendingShop(r.data.shopDomain); })
+      // 404 is the ordinary case: nothing is waiting. It must never surface as
+      // an error on a screen whose job is to offer a connection.
+      .catch(() => { if (!cancelled) setPendingShop(null); });
+
+    // Asked BEFORE the button is rendered, not when it is pressed. Learning at
+    // click time that installation cannot start yet means the merchant presses
+    // a button that then explains why it did nothing.
+    getShopifyInstallAvailability(token)
+      .then((r) => {
+        if (cancelled) return;
+        setNotPublished(r.data.mode === "not_published");
+        setInstallHelpUrl(r.data.helpUrl);
+      })
+      .catch(() => { /* leave the button as-is rather than block on a read */ });
+
+    return () => { cancelled = true; };
+  }, [slug, token, isConnected]);
+
   if (slug === "shopify") {
     credFields = credFields.filter((f) => f.key !== "shop" && f.key !== "apiKey");
   }
@@ -511,6 +559,56 @@ export function IntegrationDetail({
                   catalog row is stale. */}
               {effectiveAuthType === "OAUTH2" ? (
                 <div className="space-y-3">
+                  {/* A store already authorized on Shopify takes priority over
+                      the generic Connect prompt. Offering "Connect" to someone
+                      who has JUST completed Shopify's OAuth is how review
+                      132211 dead-ended: the store existed, and nothing on this
+                      screen would admit it. */}
+                  {pendingShop ? (
+                    <div className="rounded-xl border border-violet-200 bg-violet-50 p-4">
+                      <p className="text-sm text-gray-800">
+                        <span className="font-semibold">{pendingShop}</span> is authorized on
+                        Shopify and ready to connect to this workspace.
+                      </p>
+                      <p className="mt-1 text-xs text-gray-500">
+                        You do not need to install it again.
+                      </p>
+                      <a
+                        href="/settings/business-systems/shopify/finish"
+                        className="mt-3 inline-flex items-center px-5 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-sm font-medium transition"
+                      >
+                        Finish connecting
+                      </a>
+                    </div>
+                  ) : null}
+                  {notPublished && !pendingShop ? (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                      <p className="text-sm font-medium text-gray-900">
+                        GOTCHA is currently in Shopify App Store review
+                      </p>
+                      <p className="mt-1 text-sm text-gray-700">
+                        Until the listing is published, installation has to start on Shopify rather
+                        than here. Open GOTCHA from Shopify and approve the permissions.
+                      </p>
+                      <p className="mt-2 text-sm text-gray-700">
+                        Then come back and sign in: your store will be waiting here, ready to
+                        finish connecting. You will never be asked to type your store address.
+                      </p>
+                      {installHelpUrl ? (
+                        <a
+                          href={installHelpUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-3 inline-flex items-center gap-2 px-5 py-2.5 bg-gray-900 hover:bg-black text-white rounded-xl text-sm font-medium transition"
+                        >
+                          Start on Shopify
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                          </svg>
+                        </a>
+                      ) : null}
+                    </div>
+                  ) : null}
                   <p className="text-sm text-gray-500">
                     {connectHelpText(slug, Boolean(editingCreds) || isConnected)}
                   </p>
@@ -573,12 +671,21 @@ export function IntegrationDetail({
                           flow: oauthFlow || undefined,
                           params: credentials,
                         });
+                        if (!url) {
+                          // No reachable Shopify page yet. Explain it, do not
+                          // navigate: the App Store listing 404s until the app
+                          // is approved, and pointing the button at it anyway
+                          // is a dead end dressed up as a working button.
+                          setNotPublished(true);
+                          return;
+                        }
                         window.location.href = url;
                       } catch (err: any) {
                         setTestResult({ ok: false, msg: connectErrorMessage(slug, err) });
                       }
                     }}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-sm font-medium transition shadow-sm"
+                    disabled={notPublished && !pendingShop && !isConnected && !editingCreds}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-sm font-medium transition shadow-sm disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-violet-600"
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />

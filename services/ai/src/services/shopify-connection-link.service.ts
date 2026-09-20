@@ -88,11 +88,62 @@ export const SHOPIFY_OAUTH_SCOPES = [
 export type LinkRefusal =
   | "catalog_missing"
   | "shop_taken"
+  | "another_store_connected"
   | "shop_invalid";
 
 export type LinkResult =
-  | { ok: true; connectionId: string; reconnected: boolean }
-  | { ok: false; reason: LinkRefusal; conflictingTenantId?: string };
+  | { ok: true; connectionId: string; reconnected: boolean; replacedShopDomain?: string }
+  | {
+      ok: false;
+      reason: LinkRefusal;
+      conflictingTenantId?: string;
+      /** For `another_store_connected`: the store this workspace holds today. */
+      currentShopDomain?: string;
+    };
+
+/**
+ * The Shopify store this workspace already holds, if any.
+ *
+ * Scoped to ONE tenant - unlike `findShopOwner`, which asks the cross-tenant
+ * ownership question. Returns the row even when DISCONNECTED, for the same
+ * reason `findShopOwner` does: an uninstalled store keeps its ownership so a
+ * reinstall lands back where it belongs.
+ */
+async function currentShopForTenant(
+  tenantId: string,
+  catalogId: string,
+): Promise<{ connectionId: string; shopDomain: string | null } | null> {
+  const row = await (prisma as any).tenantIntegration.findUnique({
+    where: { tenantId_integrationId: { tenantId, integrationId: catalogId } },
+    select: { id: true, status: true, config: true },
+  });
+  if (!row) return null;
+
+  // A DISCONNECTED row does NOT count as holding a store.
+  //
+  // The row survives an uninstall on purpose - it keeps tenant ownership so a
+  // reinstall lands back in the same workspace, which is what `findShopOwner`
+  // relies on. But "does this workspace already have a store?" is a different
+  // question from "who owns this shop", and answering the first one with a
+  // dead row is wrong twice over:
+  //
+  //   • a workspace that uninstalled its store does not have one, and being
+  //     told it must disconnect something it already disconnected is nonsense;
+  //   • production has exactly this shape. The demo workspace carries a
+  //     DISCONNECTED Shopify row, so anyone connecting a store there would
+  //     have been asked to replace a store that is not connected - named out
+  //     loud, on the screen an App Store reviewer would be looking at.
+  //
+  // Cross-tenant ownership is unaffected: `findShopOwner` still counts
+  // DISCONNECTED rows, so a store cannot be taken by another workspace just
+  // because it was uninstalled.
+  if (String(row.status) === "DISCONNECTED") return null;
+
+  return {
+    connectionId: row.id,
+    shopDomain: normalizeShopifyShopDomain((row.config as any)?.shopDomain) || null,
+  };
+}
 
 /**
  * Which tenant, if any, already holds this shop.
@@ -131,6 +182,31 @@ export async function findShopOwner(shopDomain: string): Promise<{
 }
 
 /**
+ * Would connecting `shopDomain` here replace a different store? If so, which?
+ *
+ * Exists so a caller can ask BEFORE it spends something it cannot get back -
+ * the deferred-claim route holds a single-use handle, and consuming it only to
+ * discover the merchant must answer a yes/no question would force a reinstall
+ * from Shopify to answer it.
+ *
+ * Returns null when there is nothing to replace: no connection yet, or the same
+ * store reconnecting. `linkShopifyShopToTenant` repeats the check rather than
+ * trusting this one - this is a question, not a permission.
+ */
+export async function pendingStoreReplacement(
+  tenantId: string,
+  shopDomain: string,
+): Promise<string | null> {
+  const shop = normalizeShopifyShopDomain(shopDomain);
+  if (!shop) return null;
+  const cat = await findCatalog("shopify");
+  if (!cat) return null;
+  const current = await currentShopForTenant(tenantId, cat.id);
+  if (!current?.shopDomain || current.shopDomain === shop) return null;
+  return current.shopDomain;
+}
+
+/**
  * Write the verified installation into a workspace.
  *
  * `tenantId` must come from a validated session or a server-side intent.
@@ -147,6 +223,22 @@ export async function linkShopifyShopToTenant(input: {
     scope?: string;
   };
   connectedBy?: string;
+  /**
+   * Permission to REPLACE a different store this workspace already holds.
+   *
+   * Defaults to false, and the default is the point. A workspace holds at most
+   * one Shopify store - `tenantIntegration` is unique on
+   * (tenantId, integrationId) - so connecting a second one necessarily
+   * overwrites the first. That used to happen silently: the row's shopDomain
+   * and token were replaced, the old store kept the app installed on Shopify's
+   * side, and every AI answer quietly started reading a different catalogue.
+   * The merchant was told "Connected" either way.
+   *
+   * So replacement is now a decision the merchant makes, not a side effect. The
+   * caller re-submits with `allowReplace` after showing them which store they
+   * are about to disconnect.
+   */
+  allowReplace?: boolean;
 }): Promise<LinkResult> {
   const shop = normalizeShopifyShopDomain(input.shopDomain);
   if (!shop) return { ok: false, reason: "shop_invalid" };
@@ -162,6 +254,15 @@ export async function linkShopifyShopToTenant(input: {
   const owner = await findShopOwner(shop);
   if (owner && owner.tenantId !== input.tenantId) {
     return { ok: false, reason: "shop_taken", conflictingTenantId: owner.tenantId };
+  }
+
+  // The other direction: this workspace already holds a DIFFERENT store.
+  // Reconnecting the SAME store is untouched by this and stays a plain update,
+  // which is what makes reinstall and reauthorization work.
+  const current = await currentShopForTenant(input.tenantId, cat.id);
+  const replacing = current?.shopDomain && current.shopDomain !== shop ? current.shopDomain : null;
+  if (replacing && !input.allowReplace) {
+    return { ok: false, reason: "another_store_connected", currentShopDomain: replacing };
   }
 
   const row = await upsertConnection({
@@ -202,10 +303,22 @@ export async function linkShopifyShopToTenant(input: {
     })
     .catch((e: any) => console.warn("[shopify install] tool-permission reconcile failed:", e?.message));
 
+  if (replacing) {
+    // Worth a line in the log on its own: from here on, every Shopify answer
+    // this workspace gives comes from a different catalogue, and "why did the
+    // assistant start quoting the wrong products" is a question somebody will
+    // eventually ask. The shop domain is a business identifier, not a secret -
+    // no token, scope or handle is logged.
+    console.log(
+      `[shopify install] tenant=${input.tenantId} replaced store ${replacing} with ${shop}`,
+    );
+  }
+
   return {
     ok: true,
     connectionId: row.id,
     reconnected: Boolean(owner && owner.tenantId === input.tenantId),
+    ...(replacing ? { replacedShopDomain: replacing } : {}),
   };
 }
 

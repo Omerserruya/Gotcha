@@ -64,14 +64,92 @@ export const INSTALL_INTENT_TTL_SECONDS = 30 * 60;
 /**
  * How long a verified-but-unclaimed installation is held.
  *
- * Shorter than the intent, because this record DOES hold an access token.
- * Long enough to sign in (including a password reset), short enough that an
- * abandoned install stops being a secret we are storing.
+ * This record DOES hold an access token, so the window is a real cost and was
+ * deliberately short. Fifteen minutes turned out to be wrong, and Shopify App
+ * Store review 132211 is the evidence.
+ *
+ * A merchant who installs from Shopify with no GOTCHA session has to sign in
+ * BEFORE they can claim the store. That is not a fifteen-minute task for
+ * somebody meeting the product for the first time: they may have to find
+ * credentials, reset a password, or complete an IdP flow. The reviewer
+ * installed at 21:17 and this record expired at 21:32; Shopify recorded their
+ * plan approval at 21:33. The store they had authorized was already
+ * unreachable by the time they finished.
+ *
+ * Two hours is long enough to survive a real sign-in and short enough that an
+ * abandoned install stops being a secret we are storing overnight.
+ * Configurable so it can be tightened without a deploy, and clamped so a typo
+ * cannot make it unbounded.
  */
-export const PENDING_CONNECTION_TTL_SECONDS = 15 * 60;
+export const PENDING_CONNECTION_TTL_SECONDS = (() => {
+  const raw = Number(process.env.SHOPIFY_PENDING_INSTALL_TTL_SECONDS);
+  if (!Number.isFinite(raw) || raw <= 0) return 2 * 60 * 60;
+  return Math.min(Math.max(Math.floor(raw), 5 * 60), 24 * 60 * 60);
+})();
 
 /** Cookie carrying the intent handle across the Shopify round trip. */
 export const INSTALL_INTENT_COOKIE = "gotcha_shopify_intent";
+
+/**
+ * Cookie carrying the PENDING handle from the OAuth callback to the claim.
+ *
+ * The handle used to exist only in the redirect's query string, which made it
+ * the single reference to an authorized store - and anything that navigated
+ * away destroyed it. The signed-out login bounce did exactly that, so a
+ * Shopify-originated install could not be completed at all: the merchant
+ * signed in, landed on the dashboard, and the store they had just authorized
+ * was unreachable with no way to ask for it back.
+ *
+ * Holding it in an HttpOnly cookie as well means the claim screen can find the
+ * installation after any number of redirects, including a full OIDC round
+ * trip. It proves the same thing the URL handle proved - that THIS browser
+ * completed the Shopify authorization - and proves it without putting the
+ * value somewhere JavaScript, a referrer header or a log can read it.
+ *
+ * It is not authorization on its own. The claim still requires an
+ * authenticated user with permission to manage integrations, and the shop is
+ * still read from the server-side record rather than from anything the browser
+ * sent.
+ */
+export const PENDING_INSTALL_COOKIE = "gotcha_shopify_pending";
+
+/**
+ * Minimal shape of the Express response this module needs.
+ *
+ * Typed structurally rather than importing Express, so this service stays a
+ * plain module that the route layer happens to call. Both the OAuth callback
+ * and the claim route use these helpers so the cookie flags cannot drift apart
+ * between the place that sets the cookie and the place that clears it - which
+ * is exactly how a cookie ends up surviving a claim it should not survive.
+ */
+export interface CookieCarrier {
+  cookie(name: string, value: string, opts: Record<string, unknown>): unknown;
+  clearCookie(name: string, opts: Record<string, unknown>): unknown;
+}
+
+/**
+ * Hold the pending-install handle for this browser.
+ *
+ * HttpOnly so no script can read it, and SameSite=Lax so it survives the
+ * top-level GET navigations of the Shopify redirect and the OIDC round trip
+ * while staying absent from cross-site POSTs and subresource loads. Secure in
+ * production only: a dev stack on plain HTTP would drop a Secure cookie and
+ * lose the installation silently, which is the failure this exists to prevent.
+ */
+export function setPendingInstallCookie(res: CookieCarrier, handle: string): void {
+  res.cookie(PENDING_INSTALL_COOKIE, handle, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: PENDING_CONNECTION_TTL_SECONDS * 1000,
+    path: "/",
+  });
+}
+
+/** Drop it. Called once the installation is claimed, or found to be gone. */
+export function clearPendingInstallCookie(res: CookieCarrier): void {
+  res.clearCookie(PENDING_INSTALL_COOKIE, { path: "/" });
+}
 
 const intentKey = (handle: string) => `shopify:install:intent:${handle}`;
 const pendingKey = (handle: string) => `shopify:install:pending:${handle}`;

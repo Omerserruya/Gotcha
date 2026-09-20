@@ -47,7 +47,6 @@ import {
   getActiveGrandfatherGrant,
 } from "../services/shopify-grandfather.service";
 import {
-  shopifyBillingAppliesToShop,
   shopifyBillingEnabled,
   shopifyBillingEnv,
   shopifyPlanSelectionUrl,
@@ -163,15 +162,12 @@ router.post(
       return;
     }
 
-    // The allowlist, read from the CONNECTION rather than the request. A shop
-    // this deployment has not opted in must never be sent to a plan page.
-    if (!shopifyBillingAppliesToShop(connection.shopDomain)) {
-      res.status(409).json({
-        error: "shopify_billing_not_enabled_for_shop",
-        detail: "Shopify billing is not enabled for this store on this deployment.",
-      });
-      return;
-    }
+    // No per-shop allowlist here. One used to stand at this point and refuse
+    // any store an operator had not listed in `SHOPIFY_BILLING_TEST_SHOPS`,
+    // which App Store review 132211 rejected: a reviewer's development store
+    // would have been refused a plan page that every listed store was shown.
+    // The shop is still read from the CONNECTION rather than the request - that
+    // part was never the problem and has not changed.
 
     const url = shopifyPlanSelectionUrl(connection.shopDomain ?? "");
     if (!url) {
@@ -244,16 +240,13 @@ router.post(
       return;
     }
 
-    // Same gate on the return path. Without it, a shop outside the allowlist
-    // that somehow reached a Shopify plan page could still have a subscription
-    // verified and entitlements granted here.
-    if (!shopifyBillingAppliesToShop(connection.shopDomain)) {
-      res.status(409).json({
-        error: "shopify_billing_not_enabled_for_shop",
-        detail: "Shopify billing is not enabled for this store on this deployment.",
-      });
-      return;
-    }
+    // The allowlist that used to stand here is gone too, for the same reason.
+    // What guards this path is unchanged and is the part that matters: the
+    // shop-mismatch check above, and the fact that nothing below trusts the
+    // return URL. Reaching `/billing/shopify/complete` is not evidence of
+    // payment - Shopify appends `plan_handle` and `shop` to a redirect anybody
+    // can replay - so the subscription is re-verified against the Partner API
+    // before a single entitlement moves.
 
     const billableEntityId = await billableEntityIdForTenant(tenantId);
     if (!billableEntityId) {

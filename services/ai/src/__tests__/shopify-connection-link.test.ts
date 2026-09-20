@@ -35,6 +35,20 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
     prisma: {
       tenantIntegration: {
         findMany: vi.fn(async () => H.rows),
+        // The one-store-per-workspace check reads the caller's OWN row, so the
+        // mock has to model the real unique key on (tenantId, integrationId)
+        // rather than return the first Shopify row it finds - otherwise every
+        // workspace would look as though it already held some other tenant's
+        // store, and the replacement question would fire on a first install.
+        findUnique: vi.fn(async ({ where }: any) => {
+          const { tenantId, integrationId } = where.tenantId_integrationId;
+          const row = H.rows.find(
+            (r: any) => r.tenantId === tenantId && r.integrationId === integrationId,
+          );
+          // Default CONNECTED so existing cases are unchanged; a test that
+          // cares sets `status` on the row explicitly.
+          return row ? { status: "CONNECTED", ...row } : null;
+        }),
       },
     },
   };
@@ -79,6 +93,7 @@ vi.mock("../services/tool-permission-reconcile.service", () => ({
 
 import {
   linkShopifyShopToTenant,
+  pendingStoreReplacement,
   findShopOwner,
   SHOPIFY_OAUTH_SCOPES,
 } from "../services/shopify-connection-link.service";
@@ -205,5 +220,156 @@ describe("linkShopifyShopToTenant", () => {
     const r = await linkShopifyShopToTenant({ tenantId: "t1", shopDomain: "evil.com", credentials: CREDS });
     expect(r).toEqual({ ok: false, reason: "shop_invalid" });
     expect(H.upsertCalls).toHaveLength(0);
+  });
+});
+
+// ─── One store per workspace ─────────────────────────────────────────────
+
+describe("replacing the workspace's existing store", () => {
+  // `tenantIntegration` is unique on (tenantId, integrationId), so a workspace
+  // holds at most one Shopify store and connecting a second one necessarily
+  // overwrites the first.
+  //
+  // That used to be silent. The row's shopDomain and token were replaced, the
+  // old store kept the app installed on Shopify's side, and every AI answer
+  // began reading a different catalogue - while the merchant was shown
+  // "Connected" exactly as they would be for a first install. Nobody was asked,
+  // and nothing recorded which store had just been dropped.
+
+  const OTHER = "second-store.myshopify.com";
+
+  async function connectFirst() {
+    const r = await linkShopifyShopToTenant({ tenantId: "t1", shopDomain: SHOP, credentials: CREDS });
+    expect(r.ok).toBe(true);
+    H.upsertCalls.length = 0;
+  }
+
+  it("REFUSES a different store when replacement was not authorized", async () => {
+    await connectFirst();
+    const r = await linkShopifyShopToTenant({
+      tenantId: "t1",
+      shopDomain: OTHER,
+      credentials: CREDS,
+    });
+    expect(r).toEqual({
+      ok: false,
+      reason: "another_store_connected",
+      currentShopDomain: SHOP,
+    });
+    // The decisive assertion: nothing was written, so the store the workspace
+    // had is still the store it has.
+    expect(H.upsertCalls).toHaveLength(0);
+    expect(H.rows.find((r: any) => r.tenantId === "t1").config.shopDomain).toBe(SHOP);
+  });
+
+  it("replaces it when the merchant authorized that, and says which", async () => {
+    await connectFirst();
+    const r = await linkShopifyShopToTenant({
+      tenantId: "t1",
+      shopDomain: OTHER,
+      credentials: CREDS,
+      allowReplace: true,
+    });
+    expect(r.ok).toBe(true);
+    expect((r as any).replacedShopDomain).toBe(SHOP);
+    expect(H.upsertCalls).toHaveLength(1);
+    expect(H.rows.find((r: any) => r.tenantId === "t1").config.shopDomain).toBe(OTHER);
+  });
+
+  it("still makes no second row - the replacement is an update", async () => {
+    await connectFirst();
+    const before = H.rows.filter((r: any) => r.tenantId === "t1").length;
+    await linkShopifyShopToTenant({
+      tenantId: "t1",
+      shopDomain: OTHER,
+      credentials: CREDS,
+      allowReplace: true,
+    });
+    expect(H.rows.filter((r: any) => r.tenantId === "t1")).toHaveLength(before);
+  });
+
+  it("does NOT treat the same store reconnecting as a replacement", async () => {
+    // Reinstall and reauthorization must stay ordinary updates. If this
+    // regressed, every reconnect would demand a confirmation the merchant has
+    // no reason to expect.
+    await connectFirst();
+    const r = await linkShopifyShopToTenant({ tenantId: "t1", shopDomain: SHOP, credentials: CREDS });
+    expect(r.ok).toBe(true);
+    expect((r as any).replacedShopDomain).toBeUndefined();
+    expect(H.upsertCalls).toHaveLength(1);
+  });
+
+  it("checks ownership of the INCOMING store before asking about replacement", async () => {
+    // Order matters. A store held by ANOTHER workspace must report
+    // `shop_taken`, not invite this workspace to "replace" its own store with
+    // one it may not have - answering yes would then still fail, after the
+    // merchant had agreed to disconnect something.
+    await connectFirst();
+    await linkShopifyShopToTenant({ tenantId: "t2", shopDomain: OTHER, credentials: CREDS });
+    const r = await linkShopifyShopToTenant({
+      tenantId: "t1",
+      shopDomain: OTHER,
+      credentials: CREDS,
+      allowReplace: true,
+    });
+    expect(r).toMatchObject({ ok: false, reason: "shop_taken" });
+  });
+});
+
+describe("a DISCONNECTED store is not a store this workspace holds", () => {
+  // Production has exactly this shape: the demo workspace carries a
+  // DISCONNECTED Shopify row from an old uninstall. Counting it would ask
+  // anyone connecting a store there to "replace" a store that is not
+  // connected, naming it on screen - on the page an App Store reviewer reads.
+
+  it("lets a workspace whose store was uninstalled connect a different one", async () => {
+    await linkShopifyShopToTenant({ tenantId: "t1", shopDomain: SHOP, credentials: CREDS });
+    const row = H.rows.find((r: any) => r.tenantId === "t1");
+    row.status = "DISCONNECTED";
+
+    // No replacement is pending, so no confirmation is demanded.
+    expect(await pendingStoreReplacement("t1", "brand-new.myshopify.com")).toBeNull();
+
+    const r = await linkShopifyShopToTenant({
+      tenantId: "t1",
+      shopDomain: "brand-new.myshopify.com",
+      credentials: CREDS,
+    });
+    expect(r.ok).toBe(true);
+    expect((r as any).replacedShopDomain).toBeUndefined();
+  });
+
+  it("but the shop still cannot be taken by ANOTHER workspace", async () => {
+    // Ownership is deliberately retained across an uninstall so a reinstall
+    // lands back in the same workspace. That must not be weakened by the above.
+    await linkShopifyShopToTenant({ tenantId: "t1", shopDomain: SHOP, credentials: CREDS });
+    H.rows.find((r: any) => r.tenantId === "t1").status = "DISCONNECTED";
+
+    const stolen = await linkShopifyShopToTenant({
+      tenantId: "t2",
+      shopDomain: SHOP,
+      credentials: CREDS,
+    });
+    expect(stolen).toMatchObject({ ok: false, reason: "shop_taken" });
+  });
+});
+
+describe("pendingStoreReplacement", () => {
+  // The question the claim route asks BEFORE it spends its single-use handle.
+
+  it("names the store that would be replaced", async () => {
+    await linkShopifyShopToTenant({ tenantId: "t1", shopDomain: SHOP, credentials: CREDS });
+    expect(await pendingStoreReplacement("t1", "second-store.myshopify.com")).toBe(SHOP);
+  });
+
+  it("is null for the same store, and for a workspace with none", async () => {
+    await linkShopifyShopToTenant({ tenantId: "t1", shopDomain: SHOP, credentials: CREDS });
+    expect(await pendingStoreReplacement("t1", SHOP)).toBeNull();
+    expect(await pendingStoreReplacement("t-empty", SHOP)).toBeNull();
+  });
+
+  it("is null for an unparseable incoming domain rather than throwing", async () => {
+    await linkShopifyShopToTenant({ tenantId: "t1", shopDomain: SHOP, credentials: CREDS });
+    expect(await pendingStoreReplacement("t1", "evil.com")).toBeNull();
   });
 });
