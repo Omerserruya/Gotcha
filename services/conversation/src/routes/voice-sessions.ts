@@ -64,6 +64,150 @@ async function loadSessionForTenant(sessionId: string, tenantId: string) {
 }
 
 // ─── GET /active ───────────────────────────────────────────────
+/**
+ * GET / - the call history. The screen's "Recent calls" list and the stats
+ * above it.
+ *
+ * Nineteen routes existed on this router and none was a bare list: /active,
+ * /missed and /:id could answer "what is happening now", "what did we miss"
+ * and "tell me about this one", but nothing could answer "what happened".
+ * The design's four tabs - All, Incoming, Outgoing, Missed - had an endpoint
+ * for exactly one of them.
+ *
+ * WHAT IS NOT RETURNED, and why each was a decision rather than an omission:
+ *   callSid        the provider's own call identifier. Useful for support
+ *                  escalation, meaningless in a list, and a foreign key into
+ *                  someone else's system. /:id serves it.
+ *   recordingUrl   a link to a recording of a customer. A list is the wrong
+ *                  place to hand out twenty of them; the detail route is
+ *                  where someone has chosen one call to listen to.
+ *   stateHistory   the full FSM transition log. It is debugging material and
+ *                  it is unbounded.
+ *   meta           provider payload, free-form.
+ *
+ * INDEXES, stated plainly because the tabs depend on them:
+ *   @@index([tenantId, startedAt])  serves the ordering and the window.
+ *   direction and status are NOT indexed. The tabs filter on them, so a tab
+ *   is a filtered scan within the tenant's window rather than an index seek.
+ *   Fine at current volume; worth revisiting if a tenant runs call centre
+ *   traffic.
+ *   Note @@index([tenantId, state]) exists and is a DIFFERENT column -
+ *   `state` is the typed FSM (CallState), `status` is the provider's string.
+ *   Indexing one does not help the other, and the names are one letter apart.
+ */
+router.get("/", async (req: Request, res: Response) => {
+  const tenantId = req.tenantId!;
+  const bad: Array<{ field: string; message: string }> = [];
+  for (const f of ["from", "to"] as const) {
+    const raw = req.query[f];
+    if (typeof raw === "string" && raw && Number.isNaN(new Date(raw).getTime())) {
+      bad.push({ field: f, message: `${f} must be an ISO-8601 date` });
+    }
+  }
+  if (bad.length > 0) {
+    res.status(422).json({ error: "Invalid call filter", details: bad });
+    return;
+  }
+
+  const where: any = { tenantId };
+  const direction = typeof req.query.direction === "string" ? req.query.direction.trim() : "";
+  if (direction) where.direction = direction;
+  const status = typeof req.query.status === "string" ? req.query.status.trim() : "";
+  if (status) where.status = status;
+  const from = typeof req.query.from === "string" && req.query.from ? new Date(req.query.from) : null;
+  const to = typeof req.query.to === "string" && req.query.to ? new Date(req.query.to) : null;
+  if (from || to) where.startedAt = { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) };
+
+  const rawLimit = Number.parseInt(String(req.query.limit ?? ""), 10);
+  const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 100) : 50;
+  const cursor = typeof req.query.cursor === "string" && req.query.cursor ? req.query.cursor : null;
+
+  try {
+    const rows = await prisma.voiceCallSession.findMany({
+      where,
+      select: {
+        id: true, conversationId: true, direction: true, status: true,
+        customerNumber: true, customerId: true, agentId: true, assignedAgentId: true,
+        startedAt: true, answeredAt: true, endedAt: true, durationMs: true,
+        recordingStatus: true, endReason: true, state: true,
+      },
+      // startedAt is not unique, so id breaks the tie and keeps the cursor
+      // stable across pages.
+      orderBy: [{ startedAt: "desc" }, { id: "desc" }],
+      take: limit + 1,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    });
+    const hasMore = rows.length > limit;
+    const page = hasMore ? rows.slice(0, limit) : rows;
+    res.json({
+      data: page,
+      nextCursor: hasMore ? (page[page.length - 1]?.id ?? null) : null,
+      // Always echoed, bounds included when absent, so a count can never be
+      // rendered without the period it covers.
+      window: { from: from ? from.toISOString() : null, to: to ? to.toISOString() : null },
+    });
+  } catch (err) {
+    console.error("voice-sessions list error:", err);
+    res.status(500).json({ error: "Failed to read call history" });
+  }
+});
+
+/**
+ * GET /summary - the stats row: "Calls this week 124 · answered 96 · average 2m 40s".
+ *
+ * Separate from the list, matching /api/policy-decisions, because the two
+ * change on different cadences and a failure in one should not blank the
+ * other. Sharing one `where` builder with the list is what stops the counts
+ * disagreeing with the rows beneath them.
+ *
+ * `averageDurationMs` is averaged ONLY over calls that have a duration.
+ * Prisma's avg already skips nulls, and that is the behaviour we want stated
+ * rather than inherited: a call that rang out never connected, and counting
+ * it as zero would drag the average toward a length no call actually took.
+ * `durationSampleSize` ships beside it so the caller can see how many calls
+ * the average is of - an average of two is not the same claim as an average
+ * of two hundred.
+ */
+router.get("/summary", async (req: Request, res: Response) => {
+  const tenantId = req.tenantId!;
+  const from = typeof req.query.from === "string" && req.query.from ? new Date(req.query.from) : null;
+  const to = typeof req.query.to === "string" && req.query.to ? new Date(req.query.to) : null;
+  if ((from && Number.isNaN(from.getTime())) || (to && Number.isNaN(to.getTime()))) {
+    res.status(422).json({ error: "Invalid call filter", details: [{ field: "from|to", message: "must be ISO-8601" }] });
+    return;
+  }
+  const where: any = { tenantId };
+  if (from || to) where.startedAt = { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) };
+
+  try {
+    const [total, byDirection, byStatus, durationAgg] = await Promise.all([
+      prisma.voiceCallSession.count({ where }),
+      prisma.voiceCallSession.groupBy({ by: ["direction"], where, _count: { _all: true } }),
+      prisma.voiceCallSession.groupBy({ by: ["status"], where, _count: { _all: true } }),
+      prisma.voiceCallSession.aggregate({
+        where: { ...where, durationMs: { not: null } },
+        _avg: { durationMs: true },
+        _count: { durationMs: true },
+      }),
+    ]);
+    res.json({
+      data: {
+        total,
+        byDirection: byDirection.map((r) => ({ direction: r.direction, count: r._count._all })),
+        byStatus: byStatus.map((r) => ({ status: r.status, count: r._count._all })),
+        // null, never 0, when no call in the window has a duration: "no call
+        // connected" and "calls averaged zero" are different statements.
+        averageDurationMs: durationAgg._avg.durationMs ?? null,
+        durationSampleSize: durationAgg._count.durationMs,
+      },
+      window: { from: from ? from.toISOString() : null, to: to ? to.toISOString() : null },
+    });
+  } catch (err) {
+    console.error("voice-sessions summary error:", err);
+    res.status(500).json({ error: "Failed to summarise call history" });
+  }
+});
+
 router.get("/active", async (req: Request, res: Response) => {
   try {
     const states: CallState[] = ["RINGING", ...Array.from(LIVE_STATES) as CallState[]];
