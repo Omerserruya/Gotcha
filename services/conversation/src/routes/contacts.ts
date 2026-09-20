@@ -258,7 +258,25 @@ router.post("/segment", async (req: Request, res: Response) => {
   try {
     const { rules, channel, countOnly } = req.body;
 
-    const where: any = { tenantId: req.tenantId! };
+    // Tombstones excluded HERE, in the shared `where`, so every query below
+    // inherits it - the count, the countOnly short-circuit and the list.
+    //
+    // It was first written onto findMany alone, which meant `total` counted
+    // rows the list excluded: on a tenant that had ever merged, a screen would
+    // read "showing 2 of 3" with no third person to show. The predicate was
+    // correct and living in one place instead of two is what makes it stay
+    // correct.
+    //
+    // A merge is SOFT by design - the row is kept so an inbound webhook lookup
+    // still resolves through mergedIntoId - but nothing filtered it, so after
+    // any merge the same person appeared twice, once alive and once dead.
+    // Merging is the action the product offers to FIX duplicates and it was
+    // making the list longer.
+    //
+    // Chosen deliberately, not by default: this is a customer list and a
+    // merged-away row is not a customer. A consumer that needs tombstones
+    // should ask for them rather than have every caller inherit them.
+    const where: any = { tenantId: req.tenantId!, mergedIntoId: null };
     if (channel) where.channel = channel;
 
     if (Array.isArray(rules)) {
@@ -341,17 +359,7 @@ router.post("/segment", async (req: Request, res: Response) => {
     }
 
     const contacts = await prisma.contact.findMany({
-      // Tombstones excluded. A merge is SOFT by design - the row is kept so an
-      // inbound webhook lookup still resolves through mergedIntoId - but the
-      // list never filtered it, so after any merge the same person appeared
-      // twice, once alive and once dead. Merging is the action the product
-      // offers to FIX duplicates, and it was making the list longer.
-      //
-      // Chosen deliberately rather than by default: this is a customer list,
-      // and a merged-away row is not a customer. Any consumer that needs the
-      // tombstones should ask for them explicitly rather than have every
-      // caller inherit them.
-      where: { ...where, mergedIntoId: null },
+      where,
       take: 500,
       // personId and mergedIntoId are BOTH already indexed (@@index([tenantId,
       // personId]) and @@index([mergedIntoId])) and neither was ever selected
