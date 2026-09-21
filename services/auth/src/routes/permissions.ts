@@ -128,11 +128,27 @@ router.get("/users", ...ADMIN_ONLY, async (req: Request, res: Response): Promise
       roleAssignments: {
         select: { scope: true, role: { select: { id: true, name: true, builtinKey: true, defaultScope: true } } },
       },
-      // Same predicate as /api/agents, so the number means the same thing on
-      // both routes. `conversations` is @relation("AssignedAgent"), so this is
-      // conversations ASSIGNED TO this person - not authored or participated
-      // in. That matters because the AI-employee count on /api/ai-agents is
-      // also an assignment count, and the two are rendered in one column.
+      // `conversations` is @relation("AssignedAgent"), so this is conversations
+      // ASSIGNED TO this person - not authored or participated in. The
+      // AI-employee count on /api/ai-agents is also an assignment count and
+      // the two are rendered in one column.
+      //
+      // NOT THE SAME PREDICATE ANY MORE, and this comment used to claim it was.
+      // D54 narrowed the AI side to exclude the owner's sandbox test chat and
+      // `isTest` rehearsal conversations. Of those two, only `isTest` can reach
+      // THIS count - a sandbox row sets assignedAiAgentId and never
+      // assignedAgentId - so a person's total still includes setup rehearsal
+      // and an employee's no longer does.
+      //
+      // Imported history is a separate question and this count is NOT covered
+      // by the platform's guard: `applyLiveByDefault` keys on the TOP-LEVEL
+      // model, which here is User, so it never reaches a nested `_count` on
+      // conversations. Whether that matters depends on an imported conversation
+      // never carrying an assignee, which the schema states and which no row on
+      // this database can currently confirm or refute.
+      //
+      // Left as-is deliberately rather than quietly narrowed: changing what a
+      // roster number counts is a product decision, not a comment fix.
       _count: { select: { conversations: { where: { status: { not: "CLOSED" } } } } },
     },
   });
