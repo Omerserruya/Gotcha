@@ -56,7 +56,17 @@ function projectionDeliver(event: TranscriptEvent, logger: Logger): void {
   publishEvent({
     event: "voice.transcript",
     tenantId: event.tenantId,
-    data: event,
+    // `channel` names the Socket.IO room this belongs in. Without it the
+    // conversation service's bridge falls back to the tenant room, which meant
+    // every transcript of every live call was delivered to every open tab in
+    // the business - readable in any of them, whoever was on the call.
+    //
+    // The literal string rather than an import: the canonical definition is
+    // `channels.conversation` in services/ai (intelligence/events/channels.ts),
+    // which this service cannot import, and moving it to packages/shared would
+    // rebuild almost every service for one string. If a third place ever needs
+    // it, that is the moment to pay for the shared constant.
+    data: { ...event, channel: `conv:${event.conversationId}` },
   }).catch((err) => {
     logger.error({ err, conversationId: event.conversationId }, "projection: publish failed");
   });

@@ -2,6 +2,7 @@ import { getInternalServiceKey, readDurableSetting, recordHandover } from "@chat
 import { randomUUID } from "crypto";
 import { prisma, publishEvent, outgoingMessageQueue, withHistoricalRecords, notificationsQueue } from "@chatcenter/shared";
 import { getIO } from "../lib/socket";
+import { visibilityClause } from "../lib/conversation-visibility";
 import * as messageService from "./message.service";
 
 export interface ConversationFilters {
@@ -68,14 +69,12 @@ export async function list(tenantId: string, filters: ConversationFilters) {
   if (channel) where.channel = channel;
   if (departmentId) where.departmentId = departmentId;
 
-  // Scope: ADMIN sees all, agents see only unassigned + assigned to them
-  if (userRole && userRole !== "ADMIN" && userDepartmentId) {
-    where.OR = [
-      { departmentId: userDepartmentId, assignedAgentId: null },
-      { departmentId: null, assignedAgentId: null },
-      { assignedAgentId: userId },
-    ];
-  }
+  // Scope: ADMIN sees all, agents see only unassigned + assigned to them.
+  // The rule itself now lives in lib/conversation-visibility.ts so the socket
+  // room join asks the identical question - see the header there for the two
+  // holes it preserves.
+  const visibility = visibilityClause({ userId: userId!, role: userRole, departmentId: userDepartmentId });
+  if (visibility) where.OR = visibility;
 
   if (search) {
     where.AND = where.AND || [];

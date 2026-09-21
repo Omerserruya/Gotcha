@@ -1,6 +1,7 @@
 import { Server as HttpServer } from "http";
 import { Server, Socket } from "socket.io";
 import { prisma, resolvePrincipal, verifyVisitorSession, redeemRealtimeTicket } from "@chatcenter/shared";
+import { canViewConversation } from "./conversation-visibility";
 
 let io: Server;
 
@@ -108,6 +109,62 @@ export function initSocket(httpServer: HttpServer): Server {
     const user = (socket as any).user;
     socket.join(`tenant:${user.tenantId}`);
     socket.join(`user:${user.userId}`);
+    // `agent:{userId}` is the same person as `user:{userId}` under the name the
+    // event bus uses (`channels.agent`). Both are joined because the bridge now
+    // routes by the publisher's own target string, and `copilot.cues.updated`
+    // - which the cue lanes, the right panel and the replay recorder all listen
+    // to - is published at an agent target. Without this join that target
+    // resolves to an empty room and the cues go dark with the socket still
+    // connected, which is exactly the silent failure this change is about.
+    // The two names should be unified; doing it here would mean renaming a room
+    // that other code already emits to, so it is left as its own change.
+    socket.join(`agent:${user.userId}`);
+
+    // ── Per-conversation rooms ─────────────────────────────
+    //
+    // The tenant room is a broadcast to everyone logged in. Anything scoped to
+    // ONE conversation - a live call transcript above all - must not go there,
+    // so the client asks to join the conversation it is actually on and the
+    // server decides whether it may.
+    //
+    // Entitlement is evaluated HERE, once, and never per event: transcripts
+    // arrive as partials several times a second and a database round trip per
+    // syllable is not affordable. Same shape as the visitor room above, which
+    // is described in this file as "the whole isolation guarantee".
+    //
+    // The ack is deliberate. A client that silently fails to join looks exactly
+    // like a call with nothing to say, which is the failure mode this whole
+    // change exists to avoid.
+    socket.on("subscribe:conversation", async (raw: unknown, ack?: (r: unknown) => void) => {
+      const conversationId = typeof raw === "string" ? raw : String((raw as any)?.conversationId ?? "");
+      if (!conversationId) {
+        ack?.({ ok: false, reason: "conversation_required" });
+        return;
+      }
+      try {
+        const allowed = await canViewConversation(user.tenantId, conversationId, {
+          userId: user.userId,
+          role: user.role,
+          departmentId: user.departmentId,
+        });
+        if (!allowed) {
+          // Same answer for "not yours" and "does not exist". A caller must not
+          // be able to probe which conversation ids are real.
+          ack?.({ ok: false, reason: "not_permitted" });
+          return;
+        }
+        socket.join(`conv:${conversationId}`);
+        ack?.({ ok: true });
+      } catch {
+        ack?.({ ok: false, reason: "lookup_failed" });
+      }
+    });
+
+    socket.on("unsubscribe:conversation", (raw: unknown) => {
+      const conversationId = typeof raw === "string" ? raw : String((raw as any)?.conversationId ?? "");
+      if (conversationId) socket.leave(`conv:${conversationId}`);
+    });
+
     socket.on("disconnect", () => {});
   });
 

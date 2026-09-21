@@ -33,9 +33,40 @@ initSocket(httpServer);
 // This is pure projection - no side effects, no DB writes. Voice-copilot
 // writes final VOICE-channel messages directly to Postgres via its
 // StreamRouter.PersistenceSink; we only forward the events to browsers.
+//
+// ROUTING. `data.channel` names the room this event is FOR. Events that name
+// one go only there; events that do not still broadcast to the tenant.
+//
+// This bridge used to emit everything to `tenant:{id}` unconditionally, which
+// meant the routing targets that publishers had been setting since Phase 3 were
+// read by nobody. Nine events declared a conversation or agent target and every
+// one of them went to every open tab in the tenant - including `coaching.hint`,
+// which is private feedback about one person's performance. The publishers were
+// right; nothing was listening.
+//
+// Note what this means for the obvious version of this fix: moving a publisher
+// onto `channels.conversation(id)` accomplishes nothing on its own, because the
+// bus envelope has no target field - `publishConvEvent` writes the channel into
+// `data` as a hint and THIS is the only code that can honour it.
+const untargeted = new Set<string>();
 subscribeToEvents((event) => {
   try {
     const io = getIO();
+    const channel = typeof (event.data as any)?.channel === "string" ? (event.data as any).channel : null;
+    if (channel) {
+      io.to(channel).emit(event.event, event.data);
+      return;
+    }
+    // ONE line per distinct event name per process, not one per event: voice
+    // transcripts alone would make this unreadable within a single call. The
+    // point is the enumeration - which events still broadcast tenant-wide - and
+    // that is a set, not a stream. Deciding to make targets mandatory needs
+    // that list first; failing hard without it would break events nobody has
+    // identified yet, which is the silent breakage this change exists to avoid.
+    if (!untargeted.has(event.event)) {
+      untargeted.add(event.event);
+      console.log(`[socket-bridge] untargeted event broadcasts tenant-wide: ${event.event}`);
+    }
     io.to(`tenant:${event.tenantId}`).emit(event.event, event.data);
   } catch {
     // Socket not ready yet - event is dropped (acceptable per MVP spec)
