@@ -18,5 +18,15 @@
   },
   "unanswered": "אף אחד לא ענה",
   "hasRecording": "הקלטה",
-  "recordingFailed": "ההקלטה נכשלה"
+  "recordingFailed": "ההקלטה נכשלה",
+  "live": {
+    "onCall": "בשיחה",
+    "ended": "השיחה הסתיימה",
+    "transfer": "העברה",
+    "end": "סיום שיחה",
+    "listening": "מאזינים. שורות מופיעות כשכל דובר מסיים משפט.",
+    "you": "אתה",
+    "them": "הם",
+    "suggestions": "דברים שאפשר לומר"
+  }
 }

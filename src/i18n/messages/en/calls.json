@@ -18,5 +18,15 @@
   },
   "unanswered": "nobody answered",
   "hasRecording": "Recording",
-  "recordingFailed": "The recording failed"
+  "recordingFailed": "The recording failed",
+  "live": {
+    "onCall": "On the call",
+    "ended": "The call ended",
+    "transfer": "Transfer",
+    "end": "End call",
+    "listening": "Listening. Lines appear as each person finishes speaking.",
+    "you": "You",
+    "them": "Them",
+    "suggestions": "Things you could say"
+  }
 }

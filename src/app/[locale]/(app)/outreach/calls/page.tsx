@@ -2,7 +2,8 @@ import { getTranslations } from 'next-intl/server';
 
 import { CallLog } from '@/features/calls/CallLog';
 import styles from '@/features/calls/Calls.module.css';
-import { loadCalls } from '@/features/calls/load-calls';
+import { loadCalls, loadLiveCall } from '@/features/calls/load-calls';
+import { LiveCall } from '@/features/calls/LiveCall';
 import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
 
@@ -34,6 +35,11 @@ import { pageMetadata } from '@/shell/page-metadata';
 export default async function Page() {
   const t = await getTranslations('calls');
   const { voiceEnabled, calls, summary, failed } = await loadCalls();
+  // 05e lives on the same route: a call in progress is the thing you need
+  // when there is one, and the log is what you need when there is not.
+  const { call: liveCall, transcript } = voiceEnabled
+    ? await loadLiveCall()
+    : { call: null, transcript: [] };
 
   if (!voiceEnabled) {
     // A fact about the workspace, not a fault. It reads as an explanation and
@@ -56,7 +62,7 @@ export default async function Page() {
     );
   }
 
-  if (calls.length === 0) {
+  if (calls.length === 0 && !liveCall) {
     return (
       <PageContainer title={t('title')} description={t('description')}>
         <div className={styles.empty} data-testid="calls-empty">
@@ -69,6 +75,13 @@ export default async function Page() {
 
   return (
     <PageContainer title={t('title')} description={t('description')}>
+      {liveCall ? (
+        <LiveCall
+          conversationId={liveCall.conversationId}
+          customerNumber={liveCall.customerNumber}
+          initialTranscript={transcript}
+        />
+      ) : null}
       <CallLog calls={calls} summary={summary} />
     </PageContainer>
   );

@@ -93,6 +93,145 @@
     color: var(--intent-blocked-text);
   }
 
+  /* ── 05e · a live call ───────────────────────────────────────────────── */
+  .liveCall {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-14);
+  }
+
+  .liveHead {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-12);
+  }
+
+  .liveWho {
+    margin: 0;
+    font-size: var(--font-size-body-lg);
+    font-weight: 600;
+  }
+
+  .liveState {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /* TWO controls. Mute is absent, not disabled — see LiveCall.tsx. */
+  .liveActions {
+    margin-inline-start: auto;
+    display: flex;
+    gap: var(--space-8);
+  }
+
+  .liveAction,
+  .liveEnd {
+    font: inherit;
+    font-size: var(--font-size-caption);
+    border-radius: var(--radius-control);
+    padding-block: var(--space-8);
+    padding-inline: var(--space-14);
+    cursor: pointer;
+  }
+
+  .liveAction {
+    color: var(--text-body);
+    background: none;
+    border: var(--border-width-thin) solid var(--border-default);
+  }
+
+  .liveEnd {
+    color: var(--panel-base);
+    background-color: var(--intent-blocked-text);
+    border: none;
+  }
+
+  .liveAction:disabled,
+  .liveEnd:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .transcript {
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-14);
+    padding-inline: var(--space-16);
+  }
+
+  /*
+   * Before anyone has finished a sentence. Only FINAL utterances are
+   * published, so a pause here is normal rather than a fault — the copy says
+   * when a line will appear instead of implying something is wrong.
+   */
+  .transcriptWaiting {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-subtle);
+  }
+
+  .transcriptLines {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .transcriptLine {
+    display: flex;
+    gap: var(--space-8);
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-snug);
+  }
+
+  .speaker {
+    flex: none;
+    inline-size: var(--size-fact-label);
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /* The customer's words carry the weight; the agent's are context. */
+  .transcriptLine[data-speaker='customer'] .said {
+    color: var(--text-primary);
+  }
+
+  .transcriptLine[data-speaker='agent'] .said {
+    color: var(--text-body);
+  }
+
+  .suggestions {
+    background-color: var(--panel-inset);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-14);
+  }
+
+  .suggestionsLead {
+    margin: 0 0 var(--space-6);
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .suggestionList {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+  }
+
+  .suggestion {
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-snug);
+  }
+
   /* ── Voice not switched on ───────────────────────────────────────────── */
   /*
    * Not an error state. The gate 404s the whole router when the tenant has no

@@ -4,9 +4,11 @@ import { serverApi } from '@/api/client/server-api';
 import {
   callListSchema,
   callSummarySchema,
+  transcriptSchema,
   voiceAvailabilitySchema,
   type Call,
   type CallSummary,
+  type TranscriptLine,
 } from '@/api/contracts/calls';
 import { callEndpoints, tenantSettingsEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
@@ -35,6 +37,44 @@ export interface CallsData {
   readonly summary: CallSummary | null;
   /** True when voice IS on and the reads still failed — a real fault. */
   readonly failed: boolean;
+}
+
+/**
+ * The live call, if one is in progress, with whatever transcript exists.
+ *
+ * Two reads: the active session, then its persisted lines. The lines matter
+ * because a reload mid-call would otherwise start blank — every FINAL
+ * utterance is already a `Message` row, so the history is there to be read.
+ */
+export async function loadLiveCall(): Promise<{
+  readonly call: Call | null;
+  readonly transcript: readonly TranscriptLine[];
+}> {
+  const api = serverApi();
+  try {
+    const active = await api.get({
+      endpoint: callEndpoints.active(),
+      payload: callListSchema,
+      raw: true,
+    });
+    const call = active.data[0] ?? null;
+    if (!call) return { call: null, transcript: [] };
+
+    const lines = await api
+      .get({ endpoint: callEndpoints.transcript(call.id), payload: transcriptSchema, raw: true })
+      .then((page) => page.data)
+      .catch((cause) => {
+        // A call with no readable transcript is still a call. The screen
+        // shows it and says it is listening, rather than hiding the call.
+        logger.warn('calls.transcript_failed', { cause });
+        return [] as TranscriptLine[];
+      });
+
+    return { call, transcript: lines };
+  } catch (cause) {
+    logger.warn('calls.active_failed', { cause });
+    return { call: null, transcript: [] };
+  }
 }
 
 export async function loadCalls(direction?: 'inbound' | 'outbound'): Promise<CallsData> {
