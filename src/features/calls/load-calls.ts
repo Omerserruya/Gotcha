@@ -1,0 +1,96 @@
+import 'server-only';
+
+import { serverApi } from '@/api/client/server-api';
+import {
+  callListSchema,
+  callSummarySchema,
+  voiceAvailabilitySchema,
+  type Call,
+  type CallSummary,
+} from '@/api/contracts/calls';
+import { callEndpoints, tenantSettingsEndpoints } from '@/api/endpoints/registry';
+import { logger } from '@/observability/logger';
+
+/**
+ * What screen 05d reads.
+ *
+ * ── THE ORDER MATTERS ──
+ * `voiceCopilotGate` 404s the **entire** voice router when the tenant has no
+ * voice, and that 404 is byte-identical to the one a missing route gives. So
+ * availability is read FIRST, from `tenant-settings`, which is not behind the
+ * gate.
+ *
+ * With that answer in hand a failure becomes interpretable: voice off means
+ * the screen says so plainly, and voice on plus a failure is a real fault.
+ * Without it the screen would have to guess between two opposite explanations,
+ * and would eventually tell somebody their workspace lacks a feature it has.
+ *
+ * **The ambiguity is not resolved by reading the 404 more carefully. It is
+ * resolved by asking a different question.**
+ */
+export interface CallsData {
+  /** False when the tenant has no voice at all. Not a failure. */
+  readonly voiceEnabled: boolean;
+  readonly calls: readonly Call[] | null;
+  readonly summary: CallSummary | null;
+  /** True when voice IS on and the reads still failed — a real fault. */
+  readonly failed: boolean;
+}
+
+export async function loadCalls(direction?: 'inbound' | 'outbound'): Promise<CallsData> {
+  const api = serverApi();
+
+  let voiceEnabled = false;
+  try {
+    const settings = await api.get({
+      endpoint: tenantSettingsEndpoints.read(),
+      payload: voiceAvailabilitySchema,
+    });
+    voiceEnabled = settings.voiceCopilotEnabled;
+  } catch (cause) {
+    /*
+     * Not fatal, but it does mean nothing below can be interpreted. Treated as
+     * "voice off", because that is the safer of the two readings: it shows an
+     * explanation rather than an error, and a tenant that does have voice sees
+     * the real screen as soon as this call succeeds.
+     */
+    logger.warn('calls.settings_failed', { cause });
+    return { voiceEnabled: false, calls: null, summary: null, failed: false };
+  }
+
+  if (!voiceEnabled) {
+    return { voiceEnabled: false, calls: null, summary: null, failed: false };
+  }
+
+  const degrade =
+    <T>(event: string, value: T) =>
+    (cause: unknown): T => {
+      logger.warn(event, { cause });
+      return value;
+    };
+
+  const [calls, summary] = await Promise.all([
+    api
+      .get({
+        endpoint: callEndpoints.list(),
+        payload: callListSchema,
+        // `{ data, nextCursor }` side by side, so unwrapping would lose the
+        // cursor.
+        raw: true,
+        ...(direction ? { query: { direction } } : {}),
+      })
+      .then((page) => page.data)
+      .catch(degrade('calls.list_failed', null)),
+    api
+      .get({ endpoint: callEndpoints.summary(), payload: callSummarySchema })
+      .catch(degrade('calls.summary_failed', null)),
+  ]);
+
+  return {
+    voiceEnabled: true,
+    calls,
+    summary,
+    // Both failing is a fault worth naming; one failing degrades quietly.
+    failed: calls === null && summary === null,
+  };
+}

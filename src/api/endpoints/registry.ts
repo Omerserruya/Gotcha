@@ -489,5 +489,36 @@ export const templateEndpoints = {
   submit: (id: string) => endpoint('/api/templates/{id}/submit-to-meta', { id }),
 } as const;
 
+/**
+ * Phone calls — screens 05d and 05e.
+ *
+ * **Every route here is behind `voiceCopilotGate`**, which answers 404 for the
+ * whole router when `tenant.voiceCopilotEnabled` is false. A 404 from the gate
+ * is indistinguishable from a missing route, so the screen asks
+ * `tenantSettings` — which is NOT behind the gate — before interpreting one.
+ */
+export const callEndpoints = {
+  /** Cursor-paginated. Filters on `direction` and `status`. */
+  list: () => endpoint('/api/voice-sessions'),
+  /** Counts by direction and status, plus an average with its sample size. */
+  summary: () => endpoint('/api/voice-sessions/summary'),
+  active: () => endpoint('/api/voice-sessions/active'),
+  missed: () => endpoint('/api/voice-sessions/missed'),
+  detail: (id: string) => endpoint('/api/voice-sessions/{id}', { id }),
+  /** Voice MESSAGES, not a transcript column. Cursor-paginated, ≤500. */
+  transcript: (id: string) => endpoint('/api/voice-sessions/{id}/transcript', { id }),
+  context: (id: string) => endpoint('/api/voice-sessions/{id}/context', { id }),
+} as const;
+
+/**
+ * Tenant feature flags, deliberately OUTSIDE the voice gate.
+ *
+ * This is how the screen tells *"voice is not switched on here"* from *"the
+ * route is missing"* — two conditions that answer 404 identically.
+ */
+export const tenantSettingsEndpoints = {
+  read: () => endpoint('/api/tenant-settings'),
+} as const;
+
 export type { Endpoint as ApiEndpoint };
 export { endpoint as defineEndpoint };

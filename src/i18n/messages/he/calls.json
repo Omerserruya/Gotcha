@@ -1,0 +1,22 @@
+{
+  "title": "שיחות טלפון",
+  "description": "GOTCHA עונה למה שנכנס, ומתקשרת החוצה כשתבקשו.",
+  "notEnabled": "שיחות טלפון לא מופעלות בסביבת העבודה הזו.",
+  "notEnabledBody": "שום דבר כאן לא יציג שיחות עד שהקול יופעל. פנו למי שהגדיר לכם את GOTCHA.",
+  "unavailable": "לא הצלחנו לקרוא את השיחות שלך כרגע.",
+  "none": "עוד אין שיחות.",
+  "noneBody": "שיחות מופיעות כאן כשהן קורות, בין אם GOTCHA ענתה להן ובין אם אתם.",
+  "summary": {
+    "total": "שיחות",
+    "average": "אורך ממוצע",
+    "noDurations": "לאף שיחה עדיין לא נרשם אורך",
+    "fromSample": "{count, plural, one {משיחה אחת} other {מ-# שיחות}}"
+  },
+  "direction": {
+    "inbound": "הם התקשרו",
+    "outbound": "GOTCHA התקשרה"
+  },
+  "unanswered": "אף אחד לא ענה",
+  "hasRecording": "הקלטה",
+  "recordingFailed": "ההקלטה נכשלה"
+}

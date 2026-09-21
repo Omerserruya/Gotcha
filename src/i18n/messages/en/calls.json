@@ -1,0 +1,22 @@
+{
+  "title": "Phone calls",
+  "description": "GOTCHA answers what comes in, and calls out when you ask it to.",
+  "notEnabled": "Phone calls aren't switched on for this workspace.",
+  "notEnabledBody": "Nothing here will show calls until voice is enabled. Ask whoever set up GOTCHA for you.",
+  "unavailable": "We couldn't read your calls just now.",
+  "none": "No calls yet.",
+  "noneBody": "Calls appear here as they happen, whether GOTCHA answered them or you did.",
+  "summary": {
+    "total": "Calls",
+    "average": "Average length",
+    "noDurations": "No call has a length recorded yet",
+    "fromSample": "{count, plural, =1 {from one call} other {from # calls}}"
+  },
+  "direction": {
+    "inbound": "They called",
+    "outbound": "GOTCHA called"
+  },
+  "unanswered": "nobody answered",
+  "hasRecording": "Recording",
+  "recordingFailed": "The recording failed"
+}

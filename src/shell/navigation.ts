@@ -106,6 +106,12 @@ const OUTREACH_SECTIONS: readonly NavigationChild[] = [
     href: '/outreach/templates',
     permission: PERMISSIONS.outbound.calls.view,
   },
+  {
+    id: 'calls',
+    labelKey: 'outreach.calls',
+    href: '/outreach/calls',
+    permission: PERMISSIONS.outbound.calls.view,
+  },
 ];
 
 const STUDIO_SECTIONS: readonly NavigationChild[] = [

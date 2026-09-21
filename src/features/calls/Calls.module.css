@@ -1,0 +1,124 @@
+@layer features {
+  /*
+   * Screen 05d · Phone calls.
+   *
+   * A list of what happened, with the two numbers the summary route can
+   * honestly produce. The design's four-stat row is three stats and a
+   * conversion figure that does not exist.
+   */
+
+  .log {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+  }
+
+  .summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-24);
+    margin: 0;
+  }
+
+  .stat {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .stat dt {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .stat dd {
+    margin: 0;
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-8);
+    font-size: var(--font-size-body-lg);
+  }
+
+  /*
+   * An average with no sample behind it. Rendered as words rather than as
+   * `0m 00s`, which would read as calls that connected and lasted no time —
+   * the route sends null plus a sample size precisely so this is possible.
+   */
+  .statUnknown {
+    font-size: var(--font-size-meta);
+    color: var(--text-subtle);
+  }
+
+  .statSample {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .calls {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    overflow: hidden;
+  }
+
+  .call {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-8);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-16);
+  }
+
+  .call + .call {
+    border-block-start: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .callWho {
+    font-size: var(--font-size-meta);
+  }
+
+  .callMeta,
+  .callHas {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /* A recording that failed is not a recording you can play. */
+  .callProblem {
+    font-size: var(--font-size-caption);
+    color: var(--intent-blocked-text);
+  }
+
+  /* ── Voice not switched on ───────────────────────────────────────────── */
+  /*
+   * Not an error state. The gate 404s the whole router when the tenant has no
+   * voice, and that is a fact about the workspace rather than a fault — so it
+   * reads as an explanation, with the action that would change it.
+   */
+  .off,
+  .empty {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .offLead,
+  .emptyLead {
+    margin: 0;
+    font-size: var(--font-size-body-lg);
+    font-weight: 500;
+  }
+
+  .offBody,
+  .emptyBody {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-snug);
+    color: var(--text-body);
+  }
+}
