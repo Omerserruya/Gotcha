@@ -79,27 +79,82 @@ router.get("/", authenticate, resolveTenant, requireActiveTenant(), requirePermi
     }).catch(() => [] as Array<{ id: string; name: string }>);
     const deptById = new Map(departments.map((d) => [d.id, d.name]));
 
-    // Open conversations per agent, in ONE query rather than one per agent.
-    // `assignedAiAgentId` is a plain column with no Prisma relation, so there
-    // is no `_count` to piggyback on and a per-agent count would have added a
-    // third sequential query to a loop that already runs two.
+    // ── Per-employee conversation counts ───────────────────────────────────
     //
-    // Same predicate as the human count on /api/permissions/users: assignment,
-    // and `not CLOSED` (OPEN + WAITING). The two are rendered in one column,
-    // so they have to measure the same thing.
-    const openByAgent = new Map<string, number>();
-    const grouped = await prisma.conversation.groupBy({
-      by: ["assignedAiAgentId"],
-      where: {
-        tenantId: req.tenantId! as string,
-        assignedAiAgentId: { not: null },
-        status: { not: "CLOSED" },
-      },
-      _count: { _all: true },
-    }).catch(() => [] as Array<{ assignedAiAgentId: string | null; _count: { _all: number } }>);
-    for (const row of grouped) {
-      if (row.assignedAiAgentId) openByAgent.set(row.assignedAiAgentId, row._count._all);
-    }
+    // WHAT COUNTS AS THIS EMPLOYEE'S WORK. Defined ONCE and spread into every
+    // query below, because the last time a filter like this was added to one
+    // query and not its sibling, a total disagreed with the list it totalled
+    // and nothing looked wrong. Two exclusions here, each a different kind of
+    // not-a-customer, and a third the platform already applies:
+    //
+    //   sandbox:   the owner's own test chat. `ensureSandboxConversation`
+    //              writes assignedAiAgentId and status OPEN, and NOTHING ever
+    //              closes those rows - `resetSandboxConversation` wipes the
+    //              messages and leaves the conversation open - so each one is
+    //              a permanent phantom, one per person who ever clicked Test.
+    //              The prefix is the product's own definition of a sandbox
+    //              conversation (sandbox-conversation.service.ts), and this
+    //              file already queries it 25 lines below for `lastTestedAt`.
+    //   isTest:    the rehearsal the team ran during setup, from their own
+    //              numbers, before going live.
+    //
+    // `isTest` does NOT mean sandbox - they are separate flags and a sandbox
+    // row has isTest=false - which is exactly why the old count missed it.
+    //
+    // IMPORTED HISTORY IS EXCLUDED, AND NOT HERE. `applyLiveByDefault` in
+    // packages/shared/src/lib/prisma.ts injects `origin: "LIVE"` into every
+    // bulk where-operation on Conversation, groupBy included. Writing it out
+    // again would be worse than redundant: `mentionsOrigin()` treats any
+    // mention of origin as "the caller has an explicit intent" and SUPPRESSES
+    // the injection, so restating the platform's own default replaces a
+    // guarantee with a hand-written copy of it that the next edit can break.
+    // The guard's whole argument is that call sites should not have to
+    // remember. So this one does not.
+    const workloadScope = {
+      tenantId: req.tenantId! as string,
+      assignedAiAgentId: { not: null },
+      customerExternalId: { not: { startsWith: "sandbox:" } },
+      isTest: false,
+    };
+
+    // Three counts, one round trip each, all served by
+    // @@index([tenantId, assignedAiAgentId]). Grouped rather than counted per
+    // agent: `assignedAiAgentId` is a plain column with no Prisma relation, so
+    // there is no `_count` to piggyback on and per-agent counts would add
+    // 3 x N queries to a loop that already runs two per agent.
+    const tally = async (extra: Record<string, unknown>) =>
+      prisma.conversation
+        .groupBy({ by: ["assignedAiAgentId"], where: { ...workloadScope, ...extra } as never, _count: { _all: true } })
+        .catch(() => [] as Array<{ assignedAiAgentId: string | null; _count: { _all: number } }>);
+
+    const [openGrouped, handledGrouped, aloneGrouped] = await Promise.all([
+      // OPEN + WAITING. Not "being handled right now" - WAITING is usually
+      // waiting on the customer - so it must not be captioned as live activity.
+      tally({ status: { not: "CLOSED" } }),
+      // Everything ever routed here, open or finished. The denominator.
+      tally({}),
+      // Finished, and finished without a person taking over.
+      //
+      // `isHandedOver` is the right field for THIS question and the wrong one
+      // for "escalated", which is why no escalation column exists here. It has
+      // six-plus writers - escalation, a human claiming the thread, the idle
+      // sweeper, a human replying from their own phone - and they share only
+      // one meaning: a person ended up driving. That is precisely the negation
+      // of "alone", so it answers this and nothing else. The CAUSE would need
+      // ConversationHandover.reason, which holds zero rows while five
+      // conversations carry the flag, so a cause column would be a confident
+      // zero for every employee.
+      tally({ status: "CLOSED", isHandedOver: false }),
+    ]);
+
+    const byAgent = (rows: Array<{ assignedAiAgentId: string | null; _count: { _all: number } }>) => {
+      const m = new Map<string, number>();
+      for (const row of rows) if (row.assignedAiAgentId) m.set(row.assignedAiAgentId, row._count._all);
+      return m;
+    };
+    const openByAgent = byAgent(openGrouped);
+    const handledByAgent = byAgent(handledGrouped);
+    const aloneByAgent = byAgent(aloneGrouped);
 
     // Enrich with tool count, department name and when it was last tested.
     const enriched = await Promise.all(agents.map(async (agent) => {
@@ -123,9 +178,27 @@ router.get("/", authenticate, resolveTenant, requireActiveTenant(), requirePermi
         toolCount,
         departmentName: agent.departmentId ? deptById.get(agent.departmentId) ?? null : null,
         lastTestedAt: sandbox ? (sandbox.lastMessageAt ?? sandbox.updatedAt) : null,
-        // Absent from the group-by means zero, not unknown: the query covers
+        // Absent from the group-by means zero, not unknown: the queries cover
         // every non-null assignment in the tenant.
+        //
+        // NO LONGER THE SAME PREDICATE as the human count on
+        // /api/permissions/users, and both files used to say it was. That one
+        // filters on `status != CLOSED` alone. Sandbox rows cannot reach it -
+        // the test chat sets assignedAiAgentId, never assignedAgentId - but
+        // `isTest` and imported history DO count toward a person's total and
+        // no longer count toward an employee's. If the two are rendered in one
+        // column, that column is now comparing two slightly different things,
+        // and the human side is the one that is wrong.
         openConversations: openByAgent.get(agent.id) ?? 0,
+        // Lifetime, not windowed. "How much has this employee done" rather
+        // than "this week", which is the question the roster asks; a windowed
+        // version is a different field and should be named for its window
+        // rather than quietly changing what this one means.
+        handledConversations: handledByAgent.get(agent.id) ?? 0,
+        // Closed with no human ever taking over. A ratio against
+        // `handledConversations` is the honest denominator - both are drawn
+        // from the same scope, so the division means something.
+        resolvedAlone: aloneByAgent.get(agent.id) ?? 0,
       };
     }));
 
