@@ -3,6 +3,8 @@ import { join } from 'node:path';
 
 import { expect, test, type Page } from '@playwright/test';
 
+import { missingIds } from './diagnose';
+
 /**
  * Screen 17 · Settings · Usage & billing — acceptance evidence.
  *
@@ -88,8 +90,7 @@ async function openBilling(page: Page, locale: 'en' | 'he') {
 
   await expect(
     page.getByTestId('section-runway'),
-    'The screen rendered but `section-runway` is absent — the SERVED BUILD may predate this ' +
-      'screen. Run `npm run build` and restart `next start`.',
+    missingIds('an id this screen emits'),
   ).toBeVisible({ timeout: 15_000 });
 
   return page;

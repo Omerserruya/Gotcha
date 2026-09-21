@@ -3,6 +3,8 @@ import { join } from 'node:path';
 
 import { expect, test, type Page } from '@playwright/test';
 
+import { missingIds } from './diagnose';
+
 /**
  * Screen 04 · Customers — acceptance evidence.
  *
@@ -96,12 +98,10 @@ async function openCustomers(page: Page, locale: 'en' | 'he', query = '') {
   ).toBeVisible({ timeout: 15_000 });
 
   // The search form is on every state of this screen, so its absence means
-  // the served build predates it — which looks exactly like a missing session
-  // unless the message says so.
+  // something upstream failed — `missingIds` says what to check first.
   await expect(
     page.getByTestId('customer-search'),
-    'the page rendered but `customer-search` is absent — the SERVED BUILD may predate this ' +
-      'screen. Run `npm run build` and restart `next start`.',
+    missingIds('an id this screen emits'),
   ).toBeVisible({ timeout: 15_000 });
 
   // Refuse to photograph a failed read as though it were the screen.

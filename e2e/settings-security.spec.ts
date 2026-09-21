@@ -3,6 +3,8 @@ import { join } from 'node:path';
 
 import { expect, test, type Page } from '@playwright/test';
 
+import { missingIds } from './diagnose';
+
 /**
  * Screen 16 · Settings · Security — acceptance evidence.
  *
@@ -94,8 +96,7 @@ async function openSecurity(page: Page, locale: 'en' | 'he') {
 
   await expect(
     page.getByTestId('section-sessions'),
-    'The screen rendered but `section-sessions` is absent — the SERVED BUILD may predate ' +
-      'this screen. Run `npm run build` and restart `next start`.',
+    missingIds('an id this screen emits'),
   ).toBeVisible({ timeout: 15_000 });
 
   /*

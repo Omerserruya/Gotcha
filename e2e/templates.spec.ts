@@ -3,6 +3,8 @@ import { join } from 'node:path';
 
 import { expect, test, type Page } from '@playwright/test';
 
+import { missingIds } from './diagnose';
+
 /**
  * Screen 05c · Outreach · templates — acceptance evidence.
  *
@@ -83,9 +85,7 @@ async function openTemplates(page: Page, locale: 'en' | 'he') {
         return counts.reduce((a, b) => a + b, 0);
       },
       {
-        message:
-          `none of ${states.join(', ')} is present — the SERVED BUILD may predate this screen. ` +
-          'Run `npm run build` and restart `next start`.',
+        message: missingIds('an id this screen emits'),
         timeout: 15_000,
       },
     )

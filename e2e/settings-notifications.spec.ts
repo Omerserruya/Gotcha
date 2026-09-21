@@ -9,6 +9,8 @@ import {
   eventsInFamily,
 } from '../src/features/notifications-settings/events';
 
+import { missingIds } from './diagnose';
+
 /**
  * Screen 15 · Settings · Notifications — acceptance evidence.
  *
@@ -93,18 +95,17 @@ async function openNotifications(page: Page, locale: 'en' | 'he') {
   ).toBeVisible({ timeout: 15_000 });
 
   /*
-   * One of the two real states must be on screen. If neither is, the served
-   * build predates this screen — which is cause 3, and it looks exactly like
-   * a missing session unless the message says so.
+   * One of the two real states must be on screen. If neither is, something
+   * upstream went wrong — and `missingIds` orders the candidates rather than
+   * naming one, because the message used to say "stale build" and sent a
+   * reader past a rate limit to check a build that was current.
    */
   const empty = page.getByTestId('rules-empty');
   const list = page.getByTestId('rule-list');
   const unavailable = page.getByTestId('rules-unavailable');
   await expect
     .poll(async () => (await empty.count()) + (await list.count()) + (await unavailable.count()), {
-      message:
-        'The page rendered but none of `rules-empty`, `rule-list` or `rules-unavailable` is ' +
-        'present — the SERVED BUILD may predate this screen. Run `npm run build` and restart.',
+      message: missingIds('none of `rules-empty`, `rule-list` or `rules-unavailable`'),
       timeout: 15_000,
     })
     .toBeGreaterThan(0);

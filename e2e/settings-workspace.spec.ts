@@ -3,6 +3,8 @@ import { join } from 'node:path';
 
 import { expect, test, type Page } from '@playwright/test';
 
+import { missingIds } from './diagnose';
+
 /**
  * Screen 11 · Settings · Workspace — acceptance evidence.
  *
@@ -93,10 +95,12 @@ test.beforeEach(async ({ context }) => {
  *
  *   1. redirected to sign-in     → no session, or it expired
  *   2. no section heading at all → not this route; the app may not be serving
- *   3. heading but no test ids   → the served build predates the test ids.
- *                                  `next start` serves `.next`, so a commit
- *                                  that is not built is a commit that is not
- *                                  running, however current the source looks.
+ *   3. heading but no test ids   → see `missingIds`, which orders FOUR causes
+ *                                  rather than naming one. This used to say
+ *                                  "stale build", and that sent a reader to
+ *                                  check a build that was current while the
+ *                                  real cause was a 429 from running the
+ *                                  whole suite at once.
  */
 async function openWorkspace(page: Page, locale: 'en' | 'he') {
   await page.goto(`/${locale}/settings/workspace`);
@@ -113,12 +117,9 @@ async function openWorkspace(page: Page, locale: 'en' | 'he') {
     timeout: 15_000,
   });
 
-  await expect(
-    page.getByTestId('fact-name'),
-    'The screen rendered but its test ids are absent, which means the SERVED BUILD is older ' +
-      'than the commit that added them. Run `npm run build` and restart `next start`; ' +
-      '`.next/BUILD_ID` must be newer than HEAD.',
-  ).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('fact-name'), missingIds('`fact-name`')).toBeVisible({
+    timeout: 15_000,
+  });
 
   return page;
 }

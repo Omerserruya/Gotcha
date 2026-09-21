@@ -3,6 +3,8 @@ import { join } from 'node:path';
 
 import { expect, test, type Page } from '@playwright/test';
 
+import { missingIds } from './diagnose';
+
 /**
  * Screens 05 + 05b · Outreach — acceptance evidence.
  *
@@ -78,9 +80,9 @@ async function openOutreach(page: Page, locale: 'en' | 'he') {
     'no page heading — is the app serving on this origin?',
   ).toBeVisible({ timeout: 15_000 });
 
-  // One of the three real states must be present. If none is, the served
-  // build predates this screen — which looks exactly like a missing session
-  // unless the message says so.
+  // One of the real states must be present. If none is, something between
+  // the session and the build is wrong — `missingIds` orders the
+  // candidates rather than naming one.
   const states = ['outreach-empty', 'outreach-screen', 'outreach-unavailable'];
   await expect
     .poll(
@@ -89,9 +91,7 @@ async function openOutreach(page: Page, locale: 'en' | 'he') {
         return counts.reduce((a, b) => a + b, 0);
       },
       {
-        message:
-          `none of ${states.join(', ')} is present — the SERVED BUILD may predate this screen. ` +
-          'Run `npm run build` and restart `next start`.',
+        message: missingIds('an id this screen emits'),
         timeout: 15_000,
       },
     )

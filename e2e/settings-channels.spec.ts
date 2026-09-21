@@ -3,6 +3,8 @@ import { join } from 'node:path';
 
 import { expect, test, type Page } from '@playwright/test';
 
+import { missingIds } from './diagnose';
+
 /**
  * Screen 13 · Settings · Channels — acceptance evidence.
  *
@@ -96,12 +98,9 @@ async function openChannels(page: Page, locale: 'en' | 'he') {
     'no page heading — is the app serving on this origin?',
   ).toBeVisible({ timeout: 15_000 });
 
-  await expect(
-    page.getByTestId('channel-list'),
-    'The screen rendered but `channel-list` is absent. Either the list failed to load ' +
-      '(check the server log for `channels.list_failed`), or the SERVED BUILD predates this ' +
-      'screen — run `npm run build` and restart `next start`.',
-  ).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('channel-list'), missingIds('an id this screen emits')).toBeVisible(
+    { timeout: 15_000 },
+  );
 
   return page;
 }

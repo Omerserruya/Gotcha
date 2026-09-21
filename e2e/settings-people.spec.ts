@@ -3,6 +3,8 @@ import { join } from 'node:path';
 
 import { expect, test, type Page } from '@playwright/test';
 
+import { missingIds } from './diagnose';
+
 /**
  * Screen 12 · Settings · People & teams — acceptance evidence.
  *
@@ -94,12 +96,9 @@ async function openPeople(page: Page, locale: 'en' | 'he') {
     'no page heading — is the app serving on this origin?',
   ).toBeVisible({ timeout: 15_000 });
 
-  await expect(
-    page.getByTestId('people-table'),
-    'The screen rendered but `people-table` is absent. Either the member list failed to ' +
-      'load (check the server log for `people.members_failed`), or the SERVED BUILD predates ' +
-      'this screen — run `npm run build` and restart `next start`.',
-  ).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('people-table'), missingIds('an id this screen emits')).toBeVisible(
+    { timeout: 15_000 },
+  );
 
   return page;
 }
