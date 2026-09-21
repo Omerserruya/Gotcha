@@ -23,7 +23,7 @@ deliberate. A campaign that needs the full marketing chrome is a page for
 
 | URL | Source | What it is |
 |-----|--------|------------|
-| `/demo` | `design/GOTCHA Campaign Landing.dc.html` | The Hebrew demo-booking campaign, compiled from the design file |
+| `/one-dollar-offer` | `design/GOTCHA Campaign Landing.dc.html` | The Hebrew demo-booking campaign, compiled from the design file |
 | `/example` | `src/app/example/page.tsx` | The deploy canary and the hand-written template |
 
 ## Adding a campaign
@@ -31,12 +31,12 @@ deliberate. A campaign that needs the full marketing chrome is a page for
 There are two ways in, and which one you use depends on where the page came
 from.
 
-**From a design file** (what `/demo` is). Put the `.dc.html` in `design/`, point
+**From a design file** (what `/one-dollar-offer` is). Put the `.dc.html` in `design/`, point
 `tools/dc2jsx.mjs` and `tools/build-logic.mjs` at it, and run:
 
 ```bash
 npm run design:sync    # design file -> src/generated/ + src/components/
-npm run dev            # http://localhost:3200/demo
+npm run dev            # http://localhost:3200/one-dollar-offer
 ```
 
 The generated output is committed, so `next build` never runs the compilers -
@@ -85,7 +85,7 @@ they are set before publication. `build-logic.mjs` sets them:
 
 The form's four fields are mapped onto the lead endpoint's names
 (`name`→`firstName`, `site`→`companyDomain`), and the leads are tagged
-`source: 'campaign-demo'`. That source matters: `early-access-form` puts the
+`source: 'campaign-one-dollar-offer'`. That source matters: `early-access-form` puts the
 endpoint into a stricter mode that rejects any lead without an email address,
 and this form asks for email optionally.
 
@@ -160,7 +160,7 @@ mobile data. Weight is a conversion problem, not a nicety.
 
 The assets in `public/assets/` are the marketing site's, downscaled to roughly
 three times the size this page actually renders them at, and `founder-1` is a
-photograph so it is a JPEG rather than a PNG. Together that took `/demo` from
+photograph so it is a JPEG rather than a PNG. Together that took `/one-dollar-offer` from
 3276 KB to 965 KB (~610 KB over the wire). Next preloads every one of these
 images in `<head>`, so they are spent before anything is painted.
 

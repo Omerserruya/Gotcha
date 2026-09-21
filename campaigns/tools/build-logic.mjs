@@ -221,7 +221,7 @@ import { links, META_PIXEL_ID } from '@/lib/site';
  * wizard and holds to a stricter rule (email AND phone both required). This
  * form makes email optional.
  */
-const LEAD_SOURCE = 'campaign-demo';
+const LEAD_SOURCE = 'campaign-one-dollar-offer';
 
 `;
 
