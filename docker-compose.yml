@@ -1,6 +1,7 @@
 services:
   # ─── Infrastructure ──────────────────────────────────────
   db:
+    restart: unless-stopped
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
@@ -17,6 +18,7 @@ services:
       retries: 5
 
   redis:
+    restart: unless-stopped
     image: redis:7-alpine
     # Append-only persistence + a volume, matching docker-compose.prod.yml.
     #
@@ -36,6 +38,7 @@ services:
       retries: 5
 
   qdrant:
+    restart: unless-stopped
     image: qdrant/qdrant:latest
     volumes:
       - qdrant_data:/qdrant/storage
@@ -54,6 +57,7 @@ services:
   # identity data must never share a schema. GOTCHA never writes to it except
   # via the admin API (invitations).
   authentik-db:
+    restart: unless-stopped
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: ${AUTHENTIK_PG_USER:-authentik}
@@ -68,6 +72,7 @@ services:
       retries: 10
 
   authentik-server:
+    restart: unless-stopped
     image: ghcr.io/goauthentik/server:2024.10
     command: server
     environment: &authentik-env
@@ -124,6 +129,7 @@ services:
         condition: service_healthy
 
   authentik-worker:
+    restart: unless-stopped
     image: ghcr.io/goauthentik/server:2024.10
     command: worker
     environment: *authentik-env
@@ -177,6 +183,7 @@ services:
     restart: unless-stopped
 
   gateway:
+    restart: unless-stopped
     image: nginx:alpine
     ports:
       - "${GATEWAY_PORT:-80}:80"
@@ -223,6 +230,7 @@ services:
 
   # ─── Microservices ───────────────────────────────────────
   auth:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: services/auth/Dockerfile
@@ -314,6 +322,7 @@ services:
         condition: service_healthy
 
   conversation:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: services/conversation/Dockerfile
@@ -364,6 +373,7 @@ services:
         condition: service_healthy
 
   webhook:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: services/webhook/Dockerfile
@@ -404,6 +414,7 @@ services:
         condition: service_healthy
 
   analytics:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: services/analytics/Dockerfile
@@ -427,6 +438,7 @@ services:
         condition: service_healthy
 
   chatbot:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: services/chatbot/Dockerfile
@@ -456,6 +468,7 @@ services:
         condition: service_healthy
 
   ai:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: services/ai/Dockerfile
@@ -606,6 +619,7 @@ services:
 
   # ─── Notifications Service (event-driven engine + WS gateway) ────
   notifications:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: services/notifications/Dockerfile
@@ -636,6 +650,7 @@ services:
         condition: service_healthy
 
   billing:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: services/billing/Dockerfile
@@ -832,6 +847,7 @@ services:
         condition: service_healthy
 
   voice-copilot:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: services/voice-copilot/Dockerfile
@@ -876,6 +892,7 @@ services:
 
   # ─── Workers (independently scalable) ────────────────────
   incoming-worker:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: services/incoming-worker/Dockerfile
@@ -917,6 +934,7 @@ services:
       replicas: ${INCOMING_WORKER_REPLICAS:-1}
 
   outgoing-worker:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: services/outgoing-worker/Dockerfile
@@ -968,6 +986,7 @@ services:
 
   # ─── Frontend (dev: hot reload via `next dev`) ───────────
   frontend:
+    restart: unless-stopped
     build:
       context: ./frontend
       dockerfile: Dockerfile.dev
