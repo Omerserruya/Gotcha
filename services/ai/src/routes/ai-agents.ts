@@ -1135,14 +1135,67 @@ router.delete("/:id", authenticate, resolveTenant, requireActiveTenant(), requir
         WHERE tenant_id = ${tenantId} AND ai_agent_id = ${agentId}
       `;
 
+      // ── Live conversations: released, not closed and not reassigned ─────
+      //
+      // Omer's ruling, and the screen says it in these words: "14 people are
+      // mid-conversation with it. They will stop getting replies and will wait
+      // unassigned until someone claims them." That sentence is the spec, so
+      // the end state has to be one a human actually meets in the inbox.
+      //
+      // `handledBy` IS CLEARED, and nulling `assignedAiAgentId` alone would
+      // have made the sentence false. `isAiManaged()` in the frontend and
+      // `automatedOnly` in conversation.service both read
+      // (handledBy in [ai_agent, flow]) AND !isHandedOver AND !assignedAgentId
+      // - a released conversation still saying "ai_agent" satisfies all three,
+      // so it would file itself under "the AI is handling this" and sit there
+      // while nobody replied. Null puts it back in the unrouted state the
+      // worker already documents as "stays in inbox for manual pickup".
+      //
+      // `isHandedOver` is deliberately NOT set. No human has taken it - that
+      // latch is what `claim` flips, and setting it here would make the
+      // conversation look owned by someone who has not arrived.
+      //
+      // LIVE ONES ONLY. A CLOSED conversation keeps its `assignedAiAgentId`,
+      // because on a finished thread that id is the record of WHICH employee
+      // handled it - evidence, by the same rule that keeps the usage rows. It
+      // is also what the per-employee handled/resolved counts read. Releasing
+      // all 82 rather than the 14 that are live would erase the history to tidy
+      // the hazard. The origin filter is injected by applyLiveByDefault, so
+      // imported threads are excluded without being mentioned.
+      const { count: releasedConversations } = await tx.conversation.updateMany({
+        where: { tenantId, assignedAiAgentId: agentId, status: { not: "CLOSED" } },
+        data: { assignedAiAgentId: null, handledBy: null },
+      });
+
+      // ── Dead instructions elsewhere ─────────────────────────────────────
+      //
+      // Both are READ to make a live decision, which is what separates them
+      // from the history above: a dead instruction keeps acting.
+      //   Tenant.defaultAgentId   router-rules.ts uses it as the tenant-wide
+      //                           routing fallback - the canvas problem at
+      //                           tenant scope.
+      //   KnowledgeBase.scopeAgentId  knowledge.service.ts compares it to the
+      //                           asking agent to decide who may read a base;
+      //                           left dangling it makes a base invisible to
+      //                           everyone, permanently.
+      // Neither has an FK. Both are empty on this estate today, which is the
+      // condition under which every other item in this file was wrong for
+      // months - empty is untested, not safe.
+      await tx.tenant.updateMany({ where: { id: tenantId, defaultAgentId: agentId }, data: { defaultAgentId: null } });
+      await tx.knowledgeBase.updateMany({ where: { tenantId, scopeAgentId: agentId }, data: { scopeAgentId: null } });
+
       await tx.aIAgent.delete({ where: { id: agentId } });
-      return { removedRules: count, removedToolGrants };
+      return { removedRules: count, removedToolGrants, releasedConversations };
     });
 
     res.json({
       success: true,
       removedRoutingRules: removedRules.removedRules,
       removedToolGrants: removedRules.removedToolGrants,
+      // The number the confirmation dialog says out loud. Returned so the
+      // screen reports what actually happened rather than the count it
+      // predicted before the delete ran.
+      releasedConversations: removedRules.releasedConversations,
     });
   } catch (err) {
     console.error("Delete AI agent error:", err);

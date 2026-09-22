@@ -17,6 +17,17 @@
  *   other    a SECOND canvas node pointing at a DIFFERENT agent must be
  *            untouched. Without this, a statement that cleared the whole nodes
  *            array, or every route_target, would pass every case above.
+ *   live     an OPEN conversation is released AND becomes claimable. The
+ *            approved wording is "they will wait unassigned until someone
+ *            claims them", so the assertion is the state a human meets:
+ *            isAiManaged() false, and `claim` accepts it. Nulling
+ *            assignedAiAgentId while leaving handledBy="ai_agent" passes a
+ *            column check and fails this one.
+ *   closed   a CLOSED conversation KEEPS its assignedAiAgentId - on a finished
+ *            thread that is the record of which employee handled it, and the
+ *            per-employee counts read it. Inverse of `live`, so a blanket
+ *            release fails here.
+ *   hazards  Tenant.defaultAgentId and KnowledgeBase.scopeAgentId cleared.
  */
 import { prisma } from "@chatcenter/shared";
 
@@ -25,28 +36,57 @@ const AGENT = "d51probe-agent";
 const OTHER = "d51probe-other";
 const KEY = process.env.INTERNAL_SERVICE_KEY ?? "";
 
+/**
+ * Module-scoped so the ERROR path can restore the canvas as well.
+ *
+ * It could not, once: `main()` held the snapshot as a local and the catch
+ * handler called cleanup(null), which removes fixtures but cannot put the
+ * nodes back. A run that died before its own cleanup left two probe nodes in
+ * the tenant's real routing graph, and the NEXT run captured those as its
+ * "original" and faithfully restored them. A restore that can only run on the
+ * happy path is not a restore.
+ */
+let canvasSnapshot: any[] | null = null;
+
 async function canvasNodes(): Promise<any[]> {
   const row: any = await prisma.flowCanvas.findUnique({ where: { tenantId: TENANT } });
   return Array.isArray(row?.nodes) ? row.nodes : [];
 }
 
-async function cleanup(original: any[] | null) {
+async function cleanup(original: any[] | null = canvasSnapshot) {
   const log = (w: string) => (e: any) => console.warn(`cleanup ${w}:`, e?.message ?? e);
   await prisma.usageLog.deleteMany({ where: { tenantId: TENANT, aiAgentId: { in: [AGENT, OTHER] } } }).catch(log("usage"));
+  await prisma.conversation.deleteMany({ where: { tenantId: TENANT, id: { startsWith: "d51probe-conv" } } }).catch(log("conversations"));
+  await prisma.knowledgeBase.deleteMany({ where: { tenantId: TENANT, name: "D51 probe base" } }).catch(log("kb"));
+  await prisma.tenant.updateMany({ where: { id: TENANT, defaultAgentId: { in: [AGENT, OTHER] } }, data: { defaultAgentId: null } as any }).catch(log("tenant"));
   await prisma.agentToolPermission.deleteMany({ where: { tenantId: TENANT, aiAgentId: { in: [AGENT, OTHER] } } }).catch(log("grants"));
   await prisma.aIAgent.deleteMany({ where: { tenantId: TENANT, id: { in: [AGENT, OTHER] } } }).catch(log("agents"));
   if (original) {
     await prisma.flowCanvas
       .update({ where: { tenantId: TENANT }, data: { nodes: original as any } })
       .catch(log("canvas restore"));
+  } else {
+    // No snapshot to restore to - remove this probe's nodes by id rather than
+    // leaving them in the tenant's routing graph.
+    const row: any = await prisma.flowCanvas.findUnique({ where: { tenantId: TENANT } }).catch(() => null);
+    const nodes = Array.isArray(row?.nodes) ? row.nodes : null;
+    if (nodes) {
+      await prisma.flowCanvas
+        .update({
+          where: { tenantId: TENANT },
+          data: { nodes: nodes.filter((n: any) => !String(n?.id ?? "").startsWith("d51-node-")) as any },
+        })
+        .catch(log("canvas prune"));
+    }
   }
 }
 
 async function main() {
   // The tenant's real canvas is restored verbatim at the end - this probe must
   // not leave the routing graph altered.
-  const original = await canvasNodes();
-  await cleanup(null);
+  canvasSnapshot = await canvasNodes();
+  const original = canvasSnapshot;
+  await cleanup(original);
 
   for (const id of [AGENT, OTHER]) {
     await prisma.aIAgent.create({
@@ -59,6 +99,20 @@ async function main() {
       data: { tenantId: TENANT, aiAgentId: AGENT, tenantToolId: catalogTool.id, isAllowed: true } as any,
     });
   }
+  // live + closed conversations for the release cases
+  await prisma.conversation.create({
+    data: { id: "d51probe-conv-live", tenantId: TENANT, channel: "WHATSAPP", customerExternalId: "d51-live",
+            status: "OPEN", assignedAiAgentId: AGENT, handledBy: "ai_agent", isHandedOver: false } as any,
+  });
+  await prisma.conversation.create({
+    data: { id: "d51probe-conv-closed", tenantId: TENANT, channel: "WHATSAPP", customerExternalId: "d51-closed",
+            status: "CLOSED", assignedAiAgentId: AGENT, handledBy: "ai_agent", isHandedOver: false } as any,
+  });
+  await prisma.tenant.update({ where: { id: TENANT }, data: { defaultAgentId: AGENT } as any });
+  const kb = await prisma.knowledgeBase.create({
+    data: { tenantId: TENANT, name: "D51 probe base", scope: "agent", scopeAgentId: AGENT } as any,
+  });
+
   await prisma.usageLog.create({
     data: { tenantId: TENANT, type: "ai_tokens", quantity: 1, tokensEquivalent: 10, aiAgentId: AGENT, metadata: { probe: true } } as any,
   });
@@ -105,6 +159,28 @@ async function main() {
   if (usage[0] && usage[0].aiAgentId !== AGENT) fail.push("usage aiAgentId was cleared - attribution lost");
   if ((usage[0]?.metadata as any)?.aiAgentName !== `D51 ${AGENT}`) fail.push("usage row cannot name the deleted employee");
 
+  // live: released AND actually claimable by a human
+  const live: any = await prisma.conversation.findUnique({ where: { id: "d51probe-conv-live" } });
+  const closed: any = await prisma.conversation.findUnique({ where: { id: "d51probe-conv-closed" } });
+  const AUTOMATED = new Set(["ai_agent", "flow"]);
+  const aiManaged = AUTOMATED.has(live?.handledBy ?? "") && !live?.isHandedOver && !live?.assignedAgentId;
+  const claimable = !live?.assignedAgentId && live?.status !== "CLOSED";
+  console.log(`live    assignedAiAgentId=${live?.assignedAiAgentId ?? "null"} handledBy=${live?.handledBy ?? "null"} isAiManaged=${aiManaged} claimable=${claimable}`);
+  console.log(`closed  assignedAiAgentId=${closed?.assignedAiAgentId ?? "null"} (MUST survive as history)`);
+
+  const tenantAfter: any = await prisma.tenant.findUnique({ where: { id: TENANT } });
+  const kbAfter: any = await prisma.knowledgeBase.findUnique({ where: { id: kb.id } });
+  console.log(`hazards tenant.defaultAgentId=${tenantAfter?.defaultAgentId ?? "null"} kb.scopeAgentId=${kbAfter?.scopeAgentId ?? "null"}`);
+  console.log(`report  releasedConversations=${body?.releasedConversations}`);
+
+  if (live?.assignedAiAgentId !== null) fail.push("live conversation not released");
+  if (aiManaged) fail.push("released conversation still reads as AI-managed - it would sit in the AI section unanswered");
+  if (!claimable) fail.push("released conversation is not claimable");
+  if (closed?.assignedAiAgentId !== AGENT) fail.push("CLOSED conversation lost its attribution - history destroyed");
+  if (tenantAfter?.defaultAgentId !== null) fail.push("Tenant.defaultAgentId still points at the deleted agent");
+  if (kbAfter?.scopeAgentId !== null) fail.push("KnowledgeBase.scopeAgentId still points at the deleted agent");
+  if (body?.releasedConversations !== 1) fail.push(`releasedConversations reported ${body?.releasedConversations}, expected 1`);
+
   console.log(fail.length === 0 ? "PASS" : `FAIL: ${fail.join(" | ")}`);
   await cleanup(original);
   process.exit(fail.length === 0 ? 0 : 1);
@@ -112,6 +188,6 @@ async function main() {
 
 main().catch(async (e) => {
   console.error("PROBE ERROR", e);
-  await cleanup(null);
+  await cleanup();   // uses canvasSnapshot - the error path restores too
   process.exit(1);
 });
