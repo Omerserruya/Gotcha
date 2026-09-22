@@ -9,11 +9,21 @@ import { pageMetadata } from '@/shell/page-metadata';
 /**
  * Studio · AI employees — screen 07.
  *
- * ── THE FOURTH VERB ──
+ * ── THE FOURTH VERB, AND WHY THE SENTENCE GREW ──
  * The design says *"Hire, edit, pause, fire"*. `AIAgentStatus` is
  * `ACTIVE | DRAFT | PAUSED`, so **firing is not a state this platform has**.
- * The screen says so once, above the list — a missing verb in a stated list of
- * four reads as an oversight, and this one is a fact about the product.
+ *
+ * The note above the list used to say only that. Then Delete was added, and
+ * *"there is no way to retire one"* ended up sitting **directly above the most
+ * destructive control on the screen** — so a reader denied the thing they
+ * wanted would reach for the nearest thing to it. **Delete is not retirement:
+ * retiring would keep the record and stop the work; delete destroys the
+ * employee and leaves live conversations waiting for a person.**
+ *
+ * The sentence was still true and no longer sufficient. It now distinguishes
+ * all three — pause keeps it, delete removes it, neither retires it — because
+ * **what someone concludes before opening the dialog is the part the dialog
+ * cannot fix.**
  *
  * ── AND WHAT PAUSING ACTUALLY DOES ──
  * Nothing but stop replying. No handover, no reassignment, no notification —

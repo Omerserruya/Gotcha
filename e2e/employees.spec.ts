@@ -131,8 +131,15 @@ for (const size of SIZES) {
 
       const note = page.getByTestId('cannot-fire');
       await expect(note).toBeVisible();
-      await expect(note).toHaveText(/no way to retire one/i);
-      await expect(note).toHaveText(/pause an ai employee and start it again/i);
+
+      // All three states, distinguishable WITHOUT opening a dialog — which is
+      // the part a dialog cannot fix. "No retire" above a Delete button sends
+      // a reader denied retirement to the nearest destructive thing.
+      await expect(note).toHaveText(/no way to retire an employee/i);
+      await expect(note).toHaveText(/pausing stops it answering and keeps everything/i);
+      await expect(note).toHaveText(/deleting removes it for good/i);
+      // And the consequence of delete, before the dialog states it in full.
+      await expect(note).toHaveText(/left waiting for a person/i);
 
       await shoot(page, `${size.name}-2-cannot-fire`);
     });
@@ -211,8 +218,18 @@ for (const size of SIZES) {
       await expect(main).not.toHaveText(/escalat/i);
       // Neither rating nor topic coverage has a source.
       await expect(main).not.toHaveText(/rating|satisfaction|coverage by topic/i);
-      // And no "fire"/"retire" control, only the sentence saying it cannot.
-      await expect(main.getByRole('button', { name: /fire|retire|delete/i })).toHaveCount(0);
+      /*
+       * `retire` genuinely does not exist — AIAgentStatus is ACTIVE | DRAFT |
+       * PAUSED. `delete` genuinely does, and Omer authorized it. The old
+       * regex conflated the two into one absence, so it started failing the
+       * day the real control arrived.
+       *
+       * Asserted as a PRESENCE, because an absence assertion where the thing
+       * could not have appeared proves nothing — gate 4, for the fourth time
+       * this week.
+       */
+      await expect(main.getByRole('button', { name: /fire|retire/i })).toHaveCount(0);
+      await expect(page.getByTestId('cannot-fire')).toHaveText(/no way to retire an employee/i);
 
       await expect(main).not.toHaveText(/\{[a-zA-Z]+\}/);
 

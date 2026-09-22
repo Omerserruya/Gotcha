@@ -32,7 +32,7 @@
     "midConversation": "{count, plural, =1 {One person is mid-conversation with it right now. They will simply stop getting replies — nobody is told, and the conversation is not passed to anyone.} other {# people are mid-conversation with it right now. They will simply stop getting replies — nobody is told, and the conversations are not passed to anyone.}}",
     "noneOpen": "Nobody is mid-conversation right now. If someone writes in while it's paused, they'll get no reply and nobody will be told."
   },
-  "cannotFire": "You can pause an AI employee and start it again. There is no way to retire one — GOTCHA has no such setting, so a paused employee stays in this list.",
+  "cannotFire": "Two things you can do to an AI employee. Pausing stops it answering and keeps everything — its record, its settings, its place in this list — and you can start it again whenever you like. Deleting removes it for good, and anyone mid-conversation with it is left waiting for a person. There is nothing in between: GOTCHA has no way to retire an employee, no setting that keeps it on the books but off the work. So if you want it to stop, pause it.",
   "error": {
     "forbidden": "You don't have permission to change this.",
     "gone": "This employee no longer exists.",
