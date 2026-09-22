@@ -365,8 +365,29 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
   // target (personId) instead of presenting as a fresh row. Without this,
   // a merged WhatsApp contact would miss the direct lookup and downstream
   // code would see null, losing displayName/avatar continuity.
-  const { resolveContactByChannelId } = await import("@chatcenter/shared");
-  const savedContact = await resolveContactByChannelId(tenantId, channel, senderId);
+  //
+  // GET-or-create, not a second lookup. This was a read, and the read is still
+  // the first thing it does - `ensureContactForInbound` calls the same resolver
+  // and only creates when it returns null, so merged-away senders still route
+  // to their surviving target and never produce a new row.
+  //
+  // The customer never had to type an identifier for us to have one: the
+  // channel they are talking through IS a contact method. Before this, contacts
+  // existed only for senders who happened to type an email or phone into the
+  // message body - 89 conversations, 2 contacts.
+  //
+  // Safe here specifically because both of the things that must NOT become
+  // customers are already intercepted ABOVE this line: excluded senders return
+  // early, and an approval button reply is handled under a comment reading
+  // "before any contact/conversation is created - otherwise a staff phone
+  // number becomes a customer and gets handed to the bot".
+  const { ensureContactForInbound } = await import("../services/ensure-contact.service");
+  const savedContact = await ensureContactForInbound({
+    tenantId,
+    channel,
+    externalId: senderId,
+    displayName: senderDisplayName,
+  });
 
   // For Messenger/Instagram, fetch display name + avatar from Graph API if not provided
   let displayName = senderDisplayName || savedContact?.displayName || null;
