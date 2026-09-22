@@ -540,5 +540,21 @@ export const employeeEndpoints = {
   reachability: (id: string) => endpoint('/api/ai-agents/{id}/reachability', { id }),
 } as const;
 
+/**
+ * What GOTCHA knows — Studio, screen 08.
+ *
+ * `sources` returns each knowledge base with its documents, including
+ * `updatedAt`, which the route's comment says *"drives last refreshed"*.
+ *
+ * `unanswered` is the newer of two routes over the same `UnansweredQuestion`
+ * table — the other lives in analytics. Both read the same rows; this one has
+ * the naming fixes, `timesAsked` and `distinctAskers`, and filters on reason
+ * and resolved-versus-open.
+ */
+export const knowledgeEndpoints = {
+  sources: () => endpoint('/api/knowledge'),
+  unanswered: () => endpoint('/api/knowledge/unanswered-questions'),
+} as const;
+
 export type { Endpoint as ApiEndpoint };
 export { endpoint as defineEndpoint };
