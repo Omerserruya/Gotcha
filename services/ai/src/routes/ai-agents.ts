@@ -1058,11 +1058,92 @@ router.delete("/:id", authenticate, resolveTenant, requireActiveTenant(), requir
           AND vc.copilot_config->>'aiAgentId' = ${agentId}
       `;
 
+      // ── The routing canvas ──────────────────────────────────────────────
+      //
+      // THE THIRD HIDING PLACE, and the only one that keeps causing damage
+      // after the delete rather than leaving a fixed amount behind.
+      // `FlowCanvas.nodes` holds `{ targetId, routeType: "agent" }`, and
+      // flow-executor.service.ts writes that targetId straight onto
+      // `Conversation.assignedAiAgentId` for every inbound that reaches the
+      // node. Leave it pointing at a deleted employee and the canvas keeps
+      // stamping a dead id onto NEW conversations for as long as nobody looks.
+      //
+      // It hid the way the voice mirror did, one level further down. The
+      // schema comment at FlowCanvas.nodes enumerates the types as
+      // "channel"|"rule"|"flow"|"agent"|"department". The types that actually
+      // exist are `start` and `route_target`, so searching for an "agent" node
+      // - which is what that comment instructs - finds nothing and reads as
+      // proof the canvas is clean. Matched on routeType, not on node type.
+      //
+      // The node is neutralised rather than removed: deleting it would break
+      // the edges that point at it and silently reshape the tenant's routing
+      // graph, which is a bigger decision than deleting one employee.
+      await tx.$executeRaw`
+        UPDATE flow_canvas
+        SET nodes = (
+          SELECT jsonb_agg(
+            CASE
+              WHEN n->'data'->>'targetId' = ${agentId}
+               AND n->'data'->>'routeType' = 'agent'
+              THEN jsonb_set(n, '{data,targetId}', 'null'::jsonb)
+              ELSE n
+            END
+          )
+          FROM jsonb_array_elements(nodes::jsonb) n
+        )
+        WHERE tenant_id = ${tenantId}
+          AND nodes::jsonb @> ${`[{"data":{"targetId":"${agentId}","routeType":"agent"}}]`}::jsonb
+      `;
+
+      // ── Per-agent tool grants ───────────────────────────────────────────
+      //
+      // Deleted with the employee. A grant saying "this agent may call
+      // shopify.process_refund" describes an agent that no longer exists; it
+      // is configuration, not history, and `AIAgentKnowledge` already cascades
+      // for exactly this reason. No FK here, so it is done by hand.
+      const { count: removedToolGrants } = await tx.agentToolPermission.deleteMany({
+        where: { tenantId, aiAgentId: agentId },
+      });
+
+      // ── Usage history: the ids STAY DANGLING, deliberately ──────────────
+      //
+      // `UsageLog.aiAgentId` and `ConversationUsageAggregate.aiAgentId` are NOT
+      // cleared. Deleting an employee does not mean it never ran or never cost
+      // anything, and nulling those columns would erase which employee incurred
+      // which spend - the profitability ledger and the per-employee cost
+      // rollups both key on it.
+      //
+      // This codebase has already paid for that lesson once, on ToolExecution:
+      // disconnecting an integration cascaded away the audit log of everything
+      // the AI had done through it. The fix was SetNull plus a denormalised
+      // name, under the note that an audit trail a normal UI action can delete
+      // is not an audit trail. Same shape, same answer.
+      //
+      // NOT EVERY DANGLING ID IS A BUG. Some are the only remaining evidence
+      // that something happened.
+      //
+      // What those rows cannot do once the employee is gone is NAME it. The
+      // right fix is a denormalised `aiAgentName` column written at insert
+      // time, as ToolExecution has - that needs a migration, so the name is
+      // captured here instead, in the transaction that would otherwise lose it.
+      // Delete-time capture is strictly weaker than write-time: it is atomic
+      // with the delete, but nothing recovers rows if this statement is ever
+      // removed. Replace it with a real column when a migration is next open.
+      await tx.$executeRaw`
+        UPDATE usage_logs
+        SET metadata = COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify({ aiAgentName: existing.name, aiAgentDeletedAt: new Date().toISOString() })}::jsonb
+        WHERE tenant_id = ${tenantId} AND ai_agent_id = ${agentId}
+      `;
+
       await tx.aIAgent.delete({ where: { id: agentId } });
-      return count;
+      return { removedRules: count, removedToolGrants };
     });
 
-    res.json({ success: true, removedRoutingRules: removedRules });
+    res.json({
+      success: true,
+      removedRoutingRules: removedRules.removedRules,
+      removedToolGrants: removedRules.removedToolGrants,
+    });
   } catch (err) {
     console.error("Delete AI agent error:", err);
     res.status(500).json({ error: "Failed to delete AI agent" });
