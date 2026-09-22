@@ -37,6 +37,31 @@ restart that silently failed on `EADDRINUSE` and left the old process serving.
 
 ---
 
+## Gate 0 — the build must postdate the commit
+
+Run this before every capture. It costs one second and it has already cost us a run.
+
+```bash
+stat -c %y .next/BUILD_ID          # when the running build was made
+git show -s --format=%ci HEAD      # when the code being tested was committed
+```
+
+**If BUILD_ID is older than the commit, you are photographing the previous screen.** The
+capture will not say so — it produces a clean, plausible failure against code that is not
+running, and the natural next move is to debug the fix instead of the build.
+
+Measured, 2026-09-22: `BUILD_ID` 15:08:09, `next-server` started 15:08:12, the fix committed
+15:14:37. Screen 08 failed identically before and after being fixed.
+
+**The general form, which has now caught three people on this project in one day:**
+
+> **A check that runs against an artifact older than the change it is checking returns a clean
+> result and means nothing.** A restart that reloads a baked image with no source mount. An
+> unauthenticated probe against a service that authenticates before it routes. A capture
+> against a stale build. None of them announce themselves.
+
+---
+
 ## Gate 1 — the screen must be the screen
 
 Every spec's `open…()` helper refuses to photograph anything until it has
