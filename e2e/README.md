@@ -37,28 +37,37 @@ restart that silently failed on `EADDRINUSE` and left the old process serving.
 
 ---
 
-## Gate 0 — the build must postdate the commit
+## Gate 0 — no source file is newer than the running build
 
 Run this before every capture. It costs one second and it has already cost us a run.
 
 ```bash
-stat -c %y .next/BUILD_ID          # when the running build was made
-git show -s --format=%ci HEAD      # when the code being tested was committed
+find src e2e -newer .next/BUILD_ID -type f      # must print nothing
 ```
 
-**If BUILD_ID is older than the commit, you are photographing the previous screen.** The
-capture will not say so — it produces a clean, plausible failure against code that is not
-running, and the natural next move is to debug the fix instead of the build.
+**If it prints a file, that file's changes are not in the running build** and the capture
+photographs the previous screen. The capture will not say so — it produces a clean, plausible
+failure against code that is not running, and the natural next move is to debug the fix instead
+of the build.
 
-Measured, 2026-09-22: `BUILD_ID` 15:08:09, `next-server` started 15:08:12, the fix committed
-15:14:37. Screen 08 failed identically before and after being fixed.
+**The timestamp comparison is a hint, not the gate.** `stat -c %y .next/BUILD_ID` against
+`git show -s --format=%ci HEAD` will report a stale build whenever someone builds and *then*
+commits, which is the normal order — BUILD_ID ends up seconds older than HEAD while containing
+every line of it. Sending that person to rebuild a correct build is the same class of
+wrong-thing-checked this gate exists to prevent. **"Nothing in `src` is newer than the build" is
+the thing itself; the timestamp is a proxy for it.**
 
-**The general form, which has now caught three people on this project in one day:**
+When it does print something, **judge it and say so out loud** rather than silently deciding it
+did not matter. Measured 2026-09-22: it printed four `features/customers` files while the three
+Studio specs were being run. Nothing that could reach a Studio screen — but the gate had done its
+job by making that a decision instead of an assumption.
+
+**The general form, which caught three people on this project in one day:**
 
 > **A check that runs against an artifact older than the change it is checking returns a clean
-> result and means nothing.** A restart that reloads a baked image with no source mount. An
-> unauthenticated probe against a service that authenticates before it routes. A capture
-> against a stale build. None of them announce themselves.
+> result and means nothing.** A restart that reloaded a baked image with no source mount. An
+> unauthenticated probe against a service that authenticates before it routes. A capture against
+> a stale build. None of them announce themselves.
 
 ---
 
