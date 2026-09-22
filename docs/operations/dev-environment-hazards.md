@@ -130,6 +130,16 @@ nothing.**
   **both** `nginx/nginx.conf.template` and `gateway/nginx.prod.conf.template`, and check
   the longest-prefix interaction with existing blocks: a path can match a *broader*
   sibling and be answered by the wrong service.
+- **A 401 proves the upstream resolved. It does not prove the route exists.** Two
+  routers can be mounted at the same prefix, and only an *authenticated* request tells
+  them apart. Measured: `app.use("/api/knowledge-bases", knowledgeRoutes)` is the list
+  route; `app.use("/api/knowledge", knowledgeOauthRoutes)` is Confluence/Drive OAuth and
+  has no `GET "/"`. `/api/knowledge` **is** in the gateway allowlist, proxies cleanly and
+  returns 401 unauthenticated — so the reboot sweep above passes on it. Authenticated it
+  returns **404 with an HTML body**, `Cannot GET /api/knowledge`, from Express. A screen
+  wired to it reads nothing and cannot say why. This is the allowlist trap's twin: the
+  first is a *missing* `location` block answering 200 with `index.html`, this is a
+  *present* one answering 404 from the wrong router.
 - **`voiceCopilotGate` 404s the whole voice router** for a tenant without the feature. A
   404 from a gate and a 404 from a missing route are the same response. Read
   `voiceCopilotEnabled` from `GET /api/tenant-settings`, which is not behind the gate.
