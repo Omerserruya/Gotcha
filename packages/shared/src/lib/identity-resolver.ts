@@ -94,8 +94,28 @@ export async function resolveContactByChannelId(
  *     and assigns to BOTH rows so they share it
  *   - no sibling found → mints a new cuid, assigns only to this row
  *
- * Idempotent: safe to call on every inbound. Returns the resulting contact
- * (with personId populated) so callers can use it directly.
+ * READ THAT LAST LINE AGAIN BEFORE CALLING THIS. It mints a personId even when
+ * it matched NOTHING. A row that has been through here is not a row we have
+ * identified - the id means "the unifier ran", not "this is a known human", and
+ * the two are indistinguishable afterwards because both look like a populated
+ * personId. Call it on a contact with no matchable identifier and you have
+ * stamped an identity onto someone we know nothing about.
+ *
+ * THE CALLER DECIDES WHAT IS MATCHABLE, because this function will match on
+ * anything present. It reads `email` and `phone` and tests NEITHER
+ * `emailVerified` NOR `phoneVerified` - see the header for why that sentence is
+ * worth repeating. An identifier parsed out of a chat message is matched with
+ * exactly the confidence of one a staff member entered deliberately, so a
+ * caller that passes contacts carrying customer-typed identifiers is a caller
+ * that merges strangers.
+ * `ensureContactForInbound` in services/incoming-worker is the worked example:
+ * it passes only contacts whose phone came from the channel envelope, and its
+ * guard is fail-closed so the set cannot widen by accident.
+ *
+ * Idempotent in the sense that a second call is a no-op once `personId` is set
+ * - but that early return still costs a query, so "safe on every inbound" is
+ * not the same as "free on every inbound". Prefer calling it once, on create.
+ * Returns the resulting contact so callers can use it directly.
  */
 export async function unifyContact(
   tenantId: string,
