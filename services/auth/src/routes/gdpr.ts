@@ -161,10 +161,29 @@ router.get(
 );
 
 // ─── Retention policies (Art. 5(1)(e)) ─────────────────────────
+//
+// SYSTEM_ADMIN, not ADMIN - the only routes in this file gated that way while
+// still resolving a tenant, and deliberately so. Retention decides when a
+// tenant's audit trail, messages and billing events are DELETED. It is the one
+// setting whose misuse cannot be investigated afterwards: the rows are gone,
+// and a short enough `audit_logs` policy erases the record of the change that
+// set it. A tenant admin may read the audit log; only the platform decides how
+// long it continues to exist.
+//
+// `requireSystemAdmin()` is a FACTORY and must be CALLED. Passed uncalled,
+// Express receives the factory, which returns a middleware rather than calling
+// next(), and the gate silently never runs - the route stays open while
+// appearing guarded. `middleware-factories-called.test.ts` exists because that
+// has happened in this codebase before.
+//
+// `resolveTenant` is kept, so a SYSTEM_ADMIN configures retention FOR a tenant
+// they can resolve rather than globally. That also bounds it to tenants they
+// are a member of, which is a real limit on a platform-wide screen and is
+// raised separately rather than widened here.
 
 router.get(
   "/retention",
-  authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireActiveTenant(), requireSystemAdmin(),
   async (req: Request, res: Response): Promise<void> => {
     try {
       const policies = await prisma.dataRetentionPolicy.findMany({
@@ -181,7 +200,7 @@ router.get(
 
 router.put(
   "/retention",
-  authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireActiveTenant(), requireSystemAdmin(),
   async (req: Request, res: Response): Promise<void> => {
     try {
       const { category, retentionDays, enabled } = req.body ?? {};
