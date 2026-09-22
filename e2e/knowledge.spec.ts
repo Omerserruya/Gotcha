@@ -22,9 +22,20 @@ import { missingIds } from './diagnose';
  * and two documents, both last refreshed 29 July. Zero unanswered questions
  * and zero conflicts.
  *
- * So the evidence covers the two things this screen exists to get right:
- * **a date instead of a freshness verdict**, and **a name that identifies two
- * different sources**.
+ * So the evidence covers the thing this screen exists to get right: **a date
+ * instead of a freshness verdict**.
+ *
+ * ── AND ONE TEST THAT USED TO BE HERE ──
+ * A test asserting the shared-name flag was removed. It could never pass: the
+ * two same-named sources I found are **in different tenants**, and this
+ * screen queries `where: { tenantId }` with nothing else — so one row is the
+ * whole truth here and the screen can never render both at once.
+ *
+ * The flag itself is correct and stays: there is no unique index on
+ * `(tenant_id, name)`, so two same-named sources in ONE tenant are possible.
+ * It is checked in `src/features/knowledge/KnowledgeScreen.test.tsx` with two
+ * such sources in props. **A capture test asserting something this tenant
+ * cannot produce is a test that fails for being honest.**
  *
  * ── NOTHING IS WRITTEN ──
  * No `.click()` adds, edits or deletes anything.
@@ -141,28 +152,8 @@ for (const size of SIZES) {
       await shoot(page, `${size.name}-2-date-not-verdict`);
     });
 
-    /*
-     * 3 · two sources, one name.
-     *
-     * Both are called "Company Knowledge". Printing the name twice tells the
-     * reader nothing about which is which, so the screen says so.
-     */
-    test('3 · a shared name is flagged, not left ambiguous', async ({ page }) => {
-      await openKnowledge(page, 'en');
-
-      const flags = page.locator('[data-testid^="same-name-"]');
-      await expect(
-        flags.first(),
-        'no source is flagged as sharing a name — either the tenant changed or the ' +
-          'disambiguation was removed',
-      ).toBeVisible();
-      await expect(flags.first()).toHaveText(/another source has this name/i);
-
-      await shoot(page, `${size.name}-3-shared-name`);
-    });
-
-    /* 4 · THE PINNED OMISSIONS. */
-    test('4 · no topic strength, no invented counts', async ({ page }) => {
+    /* 3 · THE PINNED OMISSIONS. */
+    test('3 · no topic strength, no invented counts', async ({ page }) => {
       await openKnowledge(page, 'en');
       const main = page.locator('main');
 
@@ -175,21 +166,21 @@ for (const size of SIZES) {
 
       await expect(main).not.toHaveText(/\{[a-zA-Z]+\}/);
 
-      await shoot(page, `${size.name}-4-pinned-omissions`);
+      await shoot(page, `${size.name}-3-pinned-omissions`);
     });
 
-    /* 5 · Hebrew, right to left. */
-    test('5 · Hebrew, right to left', async ({ page }) => {
+    /* 4 · Hebrew, right to left. */
+    test('4 · Hebrew, right to left', async ({ page }) => {
       await openKnowledge(page, 'he');
 
       await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
       await expect(page.getByTestId('sources-section')).toHaveText(/[֐-׿]/);
 
-      await shoot(page, `${size.name}-5-hebrew`);
+      await shoot(page, `${size.name}-4-hebrew`);
     });
 
-    /* 6 · the two standing shell rules. */
-    test('6 · content above the fold, no placeholders', async ({ page }) => {
+    /* 5 · the two standing shell rules. */
+    test('5 · content above the fold, no placeholders', async ({ page }) => {
       await openKnowledge(page, 'en');
 
       const box = await page.getByRole('heading', { level: 1 }).boundingBox();
@@ -201,7 +192,7 @@ for (const size of SIZES) {
 
       await expect(page.locator('main')).not.toHaveText(/\{[a-zA-Z]+\}/);
 
-      await shoot(page, `${size.name}-6-above-the-fold`);
+      await shoot(page, `${size.name}-5-above-the-fold`);
     });
   });
 }

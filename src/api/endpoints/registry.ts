@@ -543,7 +543,7 @@ export const employeeEndpoints = {
 /**
  * What GOTCHA knows — Studio, screen 08.
  *
- * `sources` returns each knowledge base with its documents, including
+ * `sources` (at `/api/knowledge-bases`) returns each knowledge base with its documents, including
  * `updatedAt`, which the route's comment says *"drives last refreshed"*.
  *
  * `unanswered` is the newer of two routes over the same `UnansweredQuestion`
@@ -552,7 +552,18 @@ export const employeeEndpoints = {
  * and resolved-versus-open.
  */
 export const knowledgeEndpoints = {
-  sources: () => endpoint('/api/knowledge'),
+  /**
+   * **`/api/knowledge-bases`, not `/api/knowledge`.** Both are mounted in
+   * `services/ai/src/index.ts` — `:109` carries the list router and `:111`
+   * carries Confluence/Drive OAuth, which declares no `GET /`.
+   *
+   * Both are in the gateway allowlist, so both proxy cleanly and **both
+   * answer 401 unauthenticated**: the service authenticates before it routes.
+   * A 401 proves the upstream resolved. It does not prove the route exists,
+   * and only an authenticated request tells them apart — this one was wrong
+   * for a whole screen before a capture found it.
+   */
+  sources: () => endpoint('/api/knowledge-bases'),
   unanswered: () => endpoint('/api/knowledge/unanswered-questions'),
 } as const;
 
