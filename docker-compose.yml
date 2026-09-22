@@ -235,6 +235,27 @@ services:
       context: .
       dockerfile: services/auth/Dockerfile
     environment:
+      # ── Data retention (GDPR Art. 5(1)(e)) ──
+      #
+      # DELETE SCHEDULES. Every one of these is empty, and that is the
+      # current intent: the wiring exists and is verifiable while nothing
+      # is deleted. A value here starts removing rows for every tenant
+      # that has not set its own policy.
+      #
+      # THEY MUST BE SET ON BOTH `ai` AND `auth`, AND THE SAME.
+      # `ai` runs the purge; `auth` serves GET /api/gdpr/retention, which
+      # reports what is in force. Set one and not the other and the
+      # engine deletes while the API reports nothing configured - which
+      # is the exact defect a42d4c78 fixed, reintroduced through
+      # configuration instead of code.
+      #
+      # Read-side only: auth does not purge, it reports.
+      RETENTION_DEFAULT_MESSAGES_DAYS: ${RETENTION_DEFAULT_MESSAGES_DAYS:-}
+      RETENTION_DEFAULT_USAGE_LOGS_DAYS: ${RETENTION_DEFAULT_USAGE_LOGS_DAYS:-}
+      RETENTION_DEFAULT_AUDIT_LOGS_DAYS: ${RETENTION_DEFAULT_AUDIT_LOGS_DAYS:-}
+      RETENTION_DEFAULT_BILLING_WEBHOOK_EVENTS_DAYS: ${RETENTION_DEFAULT_BILLING_WEBHOOK_EVENTS_DAYS:-}
+      RETENTION_DEFAULT_REASONER_SHADOW_EVALS_DAYS: ${RETENTION_DEFAULT_REASONER_SHADOW_EVALS_DAYS:-}
+      RETENTION_DEFAULT_AGENT_LOOP_RUNS_DAYS: ${RETENTION_DEFAULT_AGENT_LOOP_RUNS_DAYS:-}
       DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/whatsapp_cc}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: ${NODE_ENV:-development}
@@ -475,6 +496,30 @@ services:
       args:
         BUILD_SHA: ${BUILD_SHA:-dev}
     environment:
+      # ── Data retention (GDPR Art. 5(1)(e)) ──
+      #
+      # DELETE SCHEDULES. Every one of these is empty, and that is the
+      # current intent: the wiring exists and is verifiable while nothing
+      # is deleted. A value here starts removing rows for every tenant
+      # that has not set its own policy.
+      #
+      # THEY MUST BE SET ON BOTH `ai` AND `auth`, AND THE SAME.
+      # `ai` runs the purge; `auth` serves GET /api/gdpr/retention, which
+      # reports what is in force. Set one and not the other and the
+      # engine deletes while the API reports nothing configured - which
+      # is the exact defect a42d4c78 fixed, reintroduced through
+      # configuration instead of code.
+      #
+      # `messages` and `usage_logs` are deliberately the two nobody has proposed a default for: customer conversation content and the billing ledger.
+      RETENTION_DEFAULT_MESSAGES_DAYS: ${RETENTION_DEFAULT_MESSAGES_DAYS:-}
+      RETENTION_DEFAULT_USAGE_LOGS_DAYS: ${RETENTION_DEFAULT_USAGE_LOGS_DAYS:-}
+      RETENTION_DEFAULT_AUDIT_LOGS_DAYS: ${RETENTION_DEFAULT_AUDIT_LOGS_DAYS:-}
+      RETENTION_DEFAULT_BILLING_WEBHOOK_EVENTS_DAYS: ${RETENTION_DEFAULT_BILLING_WEBHOOK_EVENTS_DAYS:-}
+      RETENTION_DEFAULT_REASONER_SHADOW_EVALS_DAYS: ${RETENTION_DEFAULT_REASONER_SHADOW_EVALS_DAYS:-}
+      RETENTION_DEFAULT_AGENT_LOOP_RUNS_DAYS: ${RETENTION_DEFAULT_AGENT_LOOP_RUNS_DAYS:-}
+      # Engine-only. Unset means the documented default: 03:30 daily, enabled.
+      RETENTION_PURGE_CRON: ${RETENTION_PURGE_CRON:-}
+      RETENTION_PURGE_ENABLED: ${RETENTION_PURGE_ENABLED:-}
       # Decides whether unpaid or suspended organizations are refused AI.
       # Undeclared means "off", which fails OPEN - so it is stated here
       # rather than left to a default nobody sees.
