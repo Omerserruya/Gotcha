@@ -1,0 +1,20 @@
+{
+  "title": "Automations",
+  "description": "When this happens, do this — without anyone watching.",
+  "unavailable": "We couldn't read your automations just now.",
+  "none": "No automations yet.",
+  "noneBody": "Every message waits for a person or an AI employee to pick it up. An automation is what handles the repetitive ones on its own.",
+  "noHistory": "GOTCHA counts how many times each automation has run, but not which times — there is no record of individual runs, so this screen can't show what happened on any one of them.",
+  "state": {
+    "on": "On",
+    "off": "Off"
+  },
+  "where": {
+    "one": "Runs on {channel}",
+    "all": "Runs on every channel"
+  },
+  "runs": {
+    "total": "Has run {count} times in total",
+    "never": "Has never run — usually that means nothing has matched its trigger yet"
+  }
+}

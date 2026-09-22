@@ -556,5 +556,23 @@ export const knowledgeEndpoints = {
   unanswered: () => endpoint('/api/knowledge/unanswered-questions'),
 } as const;
 
+/**
+ * Automations — Studio, screen 09. Served by `chatbot_service`.
+ *
+ * **`list` answers a BARE ARRAY** — the fourth response shape on this
+ * platform, so it is read with `raw`.
+ *
+ * `validate` is a real pre-flight check, the same shape that replaced the
+ * fictional approval state on screen 05. Twice now the honest answer to
+ * *"review before it happens"* has been a validate route the design did not
+ * know about.
+ */
+export const automationEndpoints = {
+  list: () => endpoint('/api/chatbot-flows'),
+  detail: (id: string) => endpoint('/api/chatbot-flows/{id}', { id }),
+  validate: (id: string) => endpoint('/api/chatbot-flows/{id}/validate', { id }),
+  activate: (id: string) => endpoint('/api/chatbot-flows/{id}/activate', { id }),
+} as const;
+
 export type { Endpoint as ApiEndpoint };
 export { endpoint as defineEndpoint };
