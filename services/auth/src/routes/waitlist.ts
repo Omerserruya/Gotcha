@@ -99,6 +99,9 @@ router.post("/", validate(waitlistSchema), async (req: Request, res: Response): 
     email: realEmail,
     phone: entry.phone,
     company: entry.company,
+    // The raw value the form sent, kept apart from `company` so Airtable's URL
+    // column never receives the /early-access industry picker.
+    website: companyDomain || null,
     role: entry.role,
     companySize: entry.companySize,
     frustration: entry.frustration,

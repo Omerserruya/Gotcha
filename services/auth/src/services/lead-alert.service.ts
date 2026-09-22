@@ -13,6 +13,7 @@
 
 import { sendTelegramNotification } from "./telegram.service";
 import { sendWhatsAppAlert } from "./whatsapp-alert.service";
+import { createAirtableLead } from "./airtable-lead.service";
 
 export interface LeadAlert {
   firstName: string;
@@ -21,6 +22,15 @@ export interface LeadAlert {
   phone?: string | null;
   /** Industry on the full form, which is what the landing CTA puts here too. */
   company?: string | null;
+  /**
+   * The business website, when the form asked for one.
+   *
+   * Separate from `company` even though the database stores both in one column:
+   * a campaign lead's `company` IS a website and an /early-access lead's is an
+   * industry label, and Airtable has a URL column that must not receive the
+   * second one.
+   */
+  website?: string | null;
   role?: string | null;
   companySize?: string | null;
   frustration?: string | null;
@@ -80,5 +90,17 @@ export async function notifyNewLead(lead: LeadAlert): Promise<void> {
   await Promise.allSettled([
     sendTelegramNotification(formatNewLeadMessage(lead)),
     sendWhatsAppAlert(formatNewLeadWhatsApp(lead)),
+    // Not a notification but the same fan-out, and on purpose: this is the
+    // one place that knows a lead arrived and what is in it. A third
+    // destination added here inherits the field list, the "never reject"
+    // contract and the single call site, rather than growing a second one.
+    createAirtableLead({
+      firstName: lead.firstName,
+      email: lead.email,
+      phone: lead.phone,
+      website: lead.website,
+      source: lead.source,
+      createdAt: lead.createdAt,
+    }),
   ]);
 }

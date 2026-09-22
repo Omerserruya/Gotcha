@@ -120,6 +120,86 @@ patch(
   'sending the lead as Meta\'s standard Lead event',
 );
 
+/* ─────────── three bugs in the design's own logic ─────────── */
+
+/**
+ * TYPING DID NOT WORK.
+ *
+ * The design's `set()` ends with `else { this.state.values[f] = v; }` - it
+ * mutates state in place and never calls setState. On the design canvas that is
+ * survivable; in React it is fatal, because the inputs are CONTROLLED
+ * (`value={form.name}`). No setState means no re-render, so the DOM input snaps
+ * straight back to the old value and the field looks dead. It only appeared to
+ * work in a field that currently held an error, because that is the one branch
+ * that does call setState.
+ *
+ * Fixed by always going through setState. `this.vals` is kept exactly as the
+ * design has it - it is what `submit()` reads - so nothing downstream changes.
+ */
+patch(
+  `    if (this.state.errors[f]) {
+      const errs = Object.assign({}, this.state.errors); delete errs[f];
+      this.setState({ errors: errs, values: this.vals });
+    } else { this.state.values[f] = v; }`,
+  `    // A controlled input needs a render to show what was typed, so this goes
+    // through setState on every keystroke, error or not.
+    const errs = Object.assign({}, this.state.errors);
+    delete errs[f];
+    this.setState({ errors: errs, values: this.vals });`,
+  'making a keystroke actually re-render the controlled input',
+);
+
+/**
+ * SUBMITTING THE BOTTOM FORM JUMPED TO THE TOP ONE.
+ *
+ * The page has two forms by design - one in the hero, one at the foot - and
+ * both render the same `data-field` names. On a validation error the design
+ * focuses `this.root().querySelector(...)`, and `root()` is the DOCUMENT, so
+ * querySelector always returns the FIRST match: the hero form. Focusing an
+ * input scrolls it into view, which is the jump.
+ *
+ * Scoped to the form that was actually submitted. The two forms still share one
+ * set of values, which is deliberate and not the bug: someone who starts typing
+ * at the top and scrolls down finds their answers already there.
+ */
+patch(
+  `  submit = (ev) => {
+    ev.preventDefault();`,
+  `  submit = (ev) => {
+    ev.preventDefault();
+    // The form that was submitted, captured before any setState, so an error is
+    // reported inside it rather than in whichever form happens to be first.
+    const submittedForm = ev && ev.currentTarget && ev.currentTarget.querySelector ? ev.currentTarget : null;`,
+  'capturing which form was submitted',
+);
+patch(
+  `      const el = this.root() && this.root().querySelector('[data-field="' + Object.keys(errs)[0] + '"] input');`,
+  `      const scope = submittedForm || this.root();
+      const el = scope && scope.querySelector('[data-field="' + Object.keys(errs)[0] + '"] input');`,
+  'reporting the error in the submitted form, not the first one on the page',
+);
+
+/**
+ * THE FLOATING WHATSAPP WIDGET KEPT VANISHING.
+ *
+ * `checkGuards` runs every animation frame and hides the widget whenever its
+ * button overlaps any `[data-guard]` element - and the page has six of them
+ * (call-to-action buttons, the offer terms, form fields). Scrolling past any one
+ * of them made the widget fade out, which reads as a bug rather than as
+ * politeness.
+ *
+ * It mattered less when the sticky bar carried its own WhatsApp button. That
+ * button is gone now, so this widget is the ONLY way to reach WhatsApp from a
+ * phone and it has to be there. The call is dropped from the frame loop, which
+ * also stops six getBoundingClientRect calls per frame on a phone. The function
+ * itself is left in place, unused, so the next design sync still recognises it.
+ */
+patch(
+  `    this.checkGuards && this.checkGuards();`,
+  `    // Deliberately not called: see build-logic.mjs. The widget stays put.`,
+  'stopping the widget from hiding itself behind the page furniture',
+);
+
 /* ─────────── the payload, and the duplicate lead ───────────
  *
  * The design posts its own four fields; the endpoint has been taking leads from

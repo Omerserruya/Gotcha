@@ -225,7 +225,7 @@ class CampaignLogic extends React.Component {
 
   frame() {
     this.fitSteps();
-    this.checkGuards && this.checkGuards();
+    // Deliberately not called: see build-logic.mjs. The widget stays put.
     this.paintBg && this.paintBg();
     this.loopDemo();
     this.placeHeadline();
@@ -340,10 +340,11 @@ class CampaignLogic extends React.Component {
     const v = e.target.value;
     this.vals = Object.assign({}, this.vals || this.state.values); this.vals[f] = v;
     this.track('form_start', true);
-    if (this.state.errors[f]) {
-      const errs = Object.assign({}, this.state.errors); delete errs[f];
-      this.setState({ errors: errs, values: this.vals });
-    } else { this.state.values[f] = v; }
+    // A controlled input needs a render to show what was typed, so this goes
+    // through setState on every keystroke, error or not.
+    const errs = Object.assign({}, this.state.errors);
+    delete errs[f];
+    this.setState({ errors: errs, values: this.vals });
   };
 
   normSite(v) {
@@ -367,11 +368,15 @@ class CampaignLogic extends React.Component {
 
   submit = (ev) => {
     ev.preventDefault();
+    // The form that was submitted, captured before any setState, so an error is
+    // reported inside it rather than in whichever form happens to be first.
+    const submittedForm = ev && ev.currentTarget && ev.currentTarget.querySelector ? ev.currentTarget : null;
     const v = Object.assign({}, this.state.values, this.vals || {});
     const errs = this.validate(v);
     if (Object.keys(errs).length) {
       this.setState({ errors: errs, values: v });
-      const el = this.root() && this.root().querySelector('[data-field="' + Object.keys(errs)[0] + '"] input');
+      const scope = submittedForm || this.root();
+      const el = scope && scope.querySelector('[data-field="' + Object.keys(errs)[0] + '"] input');
       if (el) el.focus();
       return;
     }

@@ -279,6 +279,9 @@ function styleValue(raw) {
 
 const warnings = [];
 
+/** How many times each DROPPED element was actually found, asserted after the walk. */
+const droppedCount = {};
+
 function emitText(text) {
   // support.js: walkText - whitespace-only text with no space character is
   // dropped, everything else is preserved verbatim.
@@ -315,6 +318,28 @@ function emitNode(node, indent) {
       'sc-for found. This compiler deliberately does not implement it - see the ' +
         'header. Port the loop branch from landing/tools/dc2jsx.mjs if the design starts using it.',
     );
+  }
+
+  /**
+   * Elements the port deliberately does not render.
+   *
+   * ONE entry. The mobile sticky bar shipped with a WhatsApp button beside the
+   * "book a meeting" call to action, and the page ALSO carries a floating
+   * WhatsApp widget a few pixels above it. Two buttons for the same channel,
+   * stacked in the same corner of a phone screen, is not a choice a visitor
+   * benefits from - and the widget is the better of the two, because it opens a
+   * message box rather than throwing you into another app.
+   *
+   * So the bar keeps only the meeting. Its remaining link already carries
+   * `flex:1`, so it simply fills the bar.
+   *
+   * Asserted below: if the design drops or renames this button the build fails
+   * rather than silently keeping a rule that no longer matches anything.
+   */
+  const DROPPED = { 'פנייה בוואטסאפ': 'the sticky bar\'s WhatsApp button' };
+  if (attrs['aria-label'] && DROPPED[attrs['aria-label']]) {
+    droppedCount[attrs['aria-label']] = (droppedCount[attrs['aria-label']] || 0) + 1;
+    return '';
   }
 
   /* sc-if -> ternary */
@@ -497,6 +522,13 @@ fs.writeFileSync(
     pseudoRules.join('\n') +
     '\n',
 );
+
+if (droppedCount['פנייה בוואטסאפ'] !== 1) {
+  throw new Error(
+    `expected exactly one sticky-bar WhatsApp button to drop, found ` +
+      `${droppedCount['פנייה בוואטסאפ'] || 0}. The design changed; update DROPPED in tools/dc2jsx.mjs.`,
+  );
+}
 
 for (const [from, n] of Object.entries(assetFormatHits)) {
   if (n === 0) {

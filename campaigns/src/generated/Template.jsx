@@ -1538,9 +1538,6 @@ export default function Template({ v: $v }) {
         {"קבעו דמו של 15 דק׳"}
       </a>
       {"\n    "}
-      <a href={$v?.cfg?.wa} target="_blank" rel="noopener" onClick={$v?.ev?.waBar} aria-label="פנייה בוואטסאפ" style={$st("width:50px;min-height:50px;display:flex;align-items:center;justify-content:center;border-radius:14px;border:1.5px solid #D8D3C9;background:#FFFFFF;flex:none")}>
-        <img src="/assets/icons/whatsapp.svg" alt="" width="22" height="22" style={$st("display:block")} />
-      </a>
       {"\n  "}
     </div>
     {"\n\n  "}

@@ -15,9 +15,16 @@ import CookieNotice from '@/components/CookieNotice';
 import '../campaign.css';
 
 export const metadata: Metadata = {
-  title: 'GOTCHA - עובדי AI שעונים, בודקים ומבצעים',
+  /*
+   * The title is read in the browser tab, in a WhatsApp link preview and in the
+   * Facebook feed before anyone has seen a word of the page, so it carries the
+   * OFFER rather than a description of the product. "עובדי AI שעונים, בודקים
+   * ומבצעים" explained what GOTCHA is to someone who had already decided to
+   * care; three months at a dollar gives them the reason to.
+   */
+  title: 'GOTCHA · 3 חודשים בדולר אחד',
   description:
-    'עובד AI שעונה ללקוחות שלכם בוואטסאפ, אינסטגרם ובמייל - בודק, מבצע, ומעביר לצוות רק את מה שדורש אדם.',
+    'עובד AI שעונה ללקוחות בוואטסאפ, אינסטגרם ובמייל - 3 חודשים בדולר אחד ל-50 העסקים הראשונים. 1,000 קרדיטים בחודש, בלי התחייבות.',
   // `robots` is inherited from the root layout: noindex, like every page here.
 };
 
