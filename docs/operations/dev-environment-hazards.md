@@ -87,6 +87,10 @@ through is the outcome to avoid on a shared box.
 `services/ai` bind-mounts its source and the frontend hot-reloads, so neither needs a
 rebuild for a source change.
 
+**A curl cookie jar rides the session rotation.** `gotcha_session` rotates on every BFF
+request, so a saved cookie is single-use and a sweep costs one minted session per path.
+`curl -b jar -c jar` carries each rotation forward and covers a whole sweep from one mint.
+
 **Reclaimable without touching anyone else's work:** `npm cache clean --force`, stale
 `.next/cache` directories. **Do not** delete `~/.cache/ms-playwright` — the e2e captures
 need those browsers.
@@ -130,13 +134,17 @@ nothing.**
   **both** `nginx/nginx.conf.template` and `gateway/nginx.prod.conf.template`, and check
   the longest-prefix interaction with existing blocks: a path can match a *broader*
   sibling and be answered by the wrong service.
-- **A 401 proves the upstream resolved. It does not prove the route exists.** Two
+- **A 401 proves almost nothing. The services authenticate BEFORE they route.** Two
   routers can be mounted at the same prefix, and only an *authenticated* request tells
   them apart. Measured: `app.use("/api/knowledge-bases", knowledgeRoutes)` is the list
   route; `app.use("/api/knowledge", knowledgeOauthRoutes)` is Confluence/Drive OAuth and
   has no `GET "/"`. `/api/knowledge` **is** in the gateway allowlist, proxies cleanly and
-  returns 401 unauthenticated — so the reboot sweep above passes on it. Authenticated it
-  returns **404 with an HTML body**, `Cannot GET /api/knowledge`, from Express. A screen
+  returns 401 unauthenticated — so the reboot sweep above passes on it. **Measured: all six
+  Studio paths return 401 unauthenticated, including the dead one**, because the auth
+  middleware answers before the router is consulted. Authenticated, `/api/knowledge` returns
+  **404 with an HTML body**, `Cannot GET /api/knowledge`, from Express.
+  **The static check that does work needs no session and no running stack:** resolve the
+  longest matching `app.use` prefix, then verify that router declares the remaining path. A screen
   wired to it reads nothing and cannot say why. This is the allowlist trap's twin: the
   first is a *missing* `location` block answering 200 with `index.html`, this is a
   *present* one answering 404 from the wrong router.
