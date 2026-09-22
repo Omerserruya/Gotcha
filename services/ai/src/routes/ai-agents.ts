@@ -1184,6 +1184,27 @@ router.delete("/:id", authenticate, resolveTenant, requireActiveTenant(), requir
       await tx.tenant.updateMany({ where: { id: tenantId, defaultAgentId: agentId }, data: { defaultAgentId: null } });
       await tx.knowledgeBase.updateMany({ where: { tenantId, scopeAgentId: agentId }, data: { scopeAgentId: null } });
 
+      // ── A connected calendar the employee owned: LEFT DANGLING ─────────
+      //
+      // Omer ruled option A - clear the link, leave the Google account
+      // connected. THAT CANNOT BE DONE HERE. `CalendarAccount.aiAgentId` is
+      // `String`, not `String?`, and it is half of @@unique([aiAgentId,
+      // provider]), so there is no null to write. Making it nullable is a
+      // migration, which is not available.
+      //
+      // The two things that ARE possible are worse than doing nothing:
+      // deleting the row disconnects the merchant's calendar, which is the
+      // outcome option A was chosen to avoid; and reassigning it to another
+      // employee invents an owner nobody picked.
+      //
+      // So the id is left dangling, which is the only no-migration way to keep
+      // the account connected - the row survives pointing at an employee that
+      // is gone, exactly as the usage rows do, except that this one is LIVE
+      // rather than history and a human will eventually need to re-attach it.
+      // Raised rather than patched; the fix is `aiAgentId String?` plus this
+      // updateMany, in the same migration that adds the denormalised usage
+      // name.
+
       await tx.aIAgent.delete({ where: { id: agentId } });
       return { removedRules: count, removedToolGrants, releasedConversations };
     });

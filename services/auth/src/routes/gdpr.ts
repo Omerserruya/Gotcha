@@ -177,10 +177,77 @@ router.get(
 // has happened in this codebase before.
 //
 // `resolveTenant` is kept, so a SYSTEM_ADMIN configures retention FOR a tenant
-// they can resolve rather than globally. That also bounds it to tenants they
-// are a member of, which is a real limit on a platform-wide screen and is
-// raised separately rather than widened here.
+// they can resolve rather than globally. That bounds them to tenants they are a
+// member of.
+//
+// THAT LIMIT WAS RAISED AND THE ANSWER IS TO WIDEN IT. Omer ruled that a system
+// admin should reach every tenant, and the tenant administration screen this
+// serves already exists - frontend/src/app/system/tenants/[id]. It is
+// deliberately NOT done here: widening tenant scoping is its own change, and
+// doing it inside a commit about retention would move an access boundary in a
+// diff where no reviewer would be looking for one.
+//
+// So this records a DECISION, not a doubt. The next person should implement the
+// widening rather than re-open the question - the pattern is
+// `crossTenantMiddleware` beside `requireSystemAdmin()`, as the other
+// platform-operator routes use.
 
+/**
+ * The six categories the engine can purge. MUST match DEFAULTABLE_CATEGORIES in
+ * services/ai/src/services/retention-purge.service.ts - a category in one and
+ * not the other is inert, because either the API refuses to configure it or the
+ * engine cannot purge it. `retention-categories.test.ts` asserts they agree.
+ */
+const RETENTION_CATEGORIES = [
+  "messages",
+  "usage_logs",
+  "audit_logs",
+  "billing_webhook_events",
+  "reasoner_shadow_evals",
+  "agent_loop_runs",
+] as const;
+
+/**
+ * The platform default for a category, read the same way the engine reads it.
+ *
+ * DUPLICATED FROM THE ENGINE ON PURPOSE, and the duplication is the risk worth
+ * naming: the engine lives in services/ai and this API lives in services/auth,
+ * so they are two processes reading two copies of the same environment. Set the
+ * variable on `ai` and not on `auth` and the engine deletes while this endpoint
+ * reports nothing configured - which is precisely the defect below, reintroduced
+ * through configuration instead of code. Whoever plumbs these must plumb BOTH.
+ */
+function envDefaultDays(category: string): number | null {
+  const raw = process.env[`RETENTION_DEFAULT_${category.toUpperCase()}_DAYS`];
+  if (!raw) return null;
+  const days = Number(raw);
+  return Number.isFinite(days) && days > 0 ? Math.floor(days) : null;
+}
+
+/**
+ * GET /retention - the EFFECTIVE policy, not the stored rows.
+ *
+ * It used to return `dataRetentionPolicy.findMany()` and nothing else, while the
+ * engine purges on two sources: a tenant's stored row when it is ENABLED, and a
+ * platform default from the environment for every tenant without one. So a
+ * category being deleted on the platform's schedule came back as absent, and a
+ * system admin opening this screen to find out what the retention is would read
+ * "nothing configured" while data disappeared daily.
+ *
+ * THE CASE THAT IS WORSE THAN AN ABSENT ROW: `runRetentionPurge` selects
+ * policies `where: { enabled: true }` and builds its "already covered" set from
+ * THAT list. A tenant who creates a policy and then DISABLES it is therefore not
+ * covered, and the platform default applies to them. Disabled does not mean "no
+ * deletion" - it means "fall back to the platform's number". Someone who turned
+ * retention off to stop data being deleted would have been shown their own
+ * `enabled: false` row as confirmation while the engine deleted anyway. That row
+ * is still returned, under `configured`, so the disable is visible - but
+ * `source` and `retentionDays` report what is actually in force.
+ *
+ * Every category is returned, including ones with no policy and no default, so
+ * the answer to "what happens to my messages" is never an absence the reader has
+ * to interpret.
+ */
 router.get(
   "/retention",
   authenticate, resolveTenant, requireActiveTenant(), requireSystemAdmin(),
@@ -190,7 +257,40 @@ router.get(
         where: { tenantId: req.tenantId! },
         orderBy: { category: "asc" },
       });
-      res.json({ data: policies });
+      const byCategory = new Map(policies.map((p) => [p.category, p]));
+
+      const data = RETENTION_CATEGORIES.map((category) => {
+        const row = byCategory.get(category) ?? null;
+        const fallbackDays = envDefaultDays(category);
+
+        // Mirrors the engine's own precedence: an ENABLED row wins; otherwise
+        // the platform default applies whether or not a disabled row exists.
+        const tenantWins = row != null && row.enabled;
+        const source = tenantWins ? "tenant" : fallbackDays != null ? "platform_default" : "none";
+        const retentionDays = tenantWins ? row!.retentionDays : fallbackDays;
+
+        return {
+          category,
+          // What is actually in force. Null means nothing is deleted.
+          retentionDays,
+          source,
+          // True when rows in this category are being deleted on a schedule,
+          // by either source. The one field a reader needs to answer "is my
+          // data being removed".
+          purging: retentionDays != null,
+          // The tenant's own row, when they have one, so a disable stays
+          // visible even when it is not in effect.
+          configured: row
+            ? { retentionDays: row.retentionDays, enabled: row.enabled, lastPurgeAt: row.lastPurgeAt, updatedAt: row.updatedAt }
+            : null,
+          // Set when a stored row exists but the platform default is what runs.
+          // The reader has taken an action that is not having the effect they
+          // expect, and that deserves to be stated rather than inferred.
+          overriddenByPlatformDefault: row != null && !row.enabled && fallbackDays != null,
+        };
+      });
+
+      res.json({ data });
     } catch (err: any) {
       console.error("[gdpr] retention list error:", err?.message);
       res.status(500).json({ error: "retention_list_failed" });
@@ -204,11 +304,9 @@ router.put(
   async (req: Request, res: Response): Promise<void> => {
     try {
       const { category, retentionDays, enabled } = req.body ?? {};
-      // Must match DEFAULTABLE_CATEGORIES in retention-purge.service.ts. A
-      // category present in one and not the other is inert: either the API
-      // refuses to configure it, or the engine cannot purge it.
-      // retention-categories.test.ts asserts the two agree.
-      const allowed = new Set(["messages", "usage_logs", "audit_logs", "billing_webhook_events", "reasoner_shadow_evals", "agent_loop_runs"]);
+      // One list, defined at the top of this file, so the categories this
+      // route accepts and the categories GET reports cannot drift apart.
+      const allowed = new Set<string>(RETENTION_CATEGORIES);
       if (!category || !allowed.has(String(category))) {
         res.status(400).json({ error: `category must be one of: ${[...allowed].join(", ")}` });
         return;
