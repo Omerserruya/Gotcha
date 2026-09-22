@@ -22,7 +22,10 @@
     "pause": "Pause",
     "pauseConfirm": "Pause anyway",
     "keepRunning": "Keep it working",
-    "resume": "Start it again"
+    "resume": "Start it again",
+    "delete": "Delete",
+    "deleteConfirm": "Delete it",
+    "keepIt": "Keep it"
   },
   "pause": {
     "lead": "Pause {name}?",
@@ -34,5 +37,15 @@
     "forbidden": "You don't have permission to change this.",
     "gone": "This employee no longer exists.",
     "failed": "That didn't go through."
+  },
+  "delete": {
+    "lead": "Delete {name}?",
+    "live": "{count, plural, =1 {One person is mid-conversation with it. They will stop getting replies and will wait unassigned until someone claims them.} other {# people are mid-conversation with it. They will stop getting replies and will wait unassigned until someone claims them.}}",
+    "noneLive": "Nobody is mid-conversation with it right now.",
+    "historyKept": "{count, plural, =1 {The one conversation it already finished keeps its record — deleting it doesn't unmake the work it did.} other {The # conversations it already finished keep their record — deleting it doesn't unmake the work it did.}}",
+    "routing": "New conversations will stop being sent to it."
+  },
+  "deleted": {
+    "done": "{name} is gone. {released, plural, =0 {No conversation needed releasing.} =1 {One conversation was released and is waiting for someone to claim it.} other {# conversations were released and are waiting for someone to claim them.}}"
   }
 }

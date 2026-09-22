@@ -164,6 +164,42 @@ for (const size of SIZES) {
       await expect(consequence).toHaveCount(0);
     });
 
+    /*
+     * 3b · THE DELETE DIALOG, WHICH SAYS THREE THINGS.
+     *
+     * Opened and photographed, then dismissed with "Keep it". **`delete-go`
+     * is never clicked**: it releases a live employee's conversations and
+     * deletes it, on a tenant with one employee.
+     */
+    test('3b · deleting names the people, the record and the routing', async ({ page }) => {
+      await openEmployees(page, 'en');
+
+      const del = page.locator('[data-testid^="delete-"]').first();
+      await expect(del).toBeVisible();
+      await del.click();
+
+      // The people, with the count and both halves of the consequence.
+      const live = page.locator('[data-testid^="delete-live-"]').first();
+      await expect(live).toBeVisible();
+      await expect(live).toHaveText(/stop getting replies|nobody is mid-conversation/i);
+
+      // The routing effect nobody would guess.
+      await expect(page.locator('[data-testid^="delete-routing-"]').first()).toHaveText(
+        /new conversations will stop being sent to it/i,
+      );
+
+      // And the record survives — never that it is removed.
+      await expect(page.locator('main')).not.toHaveText(
+        /history (will be )?(removed|deleted|erased)/i,
+      );
+
+      await shoot(page, `${size.name}-3b-delete-dialog`);
+
+      // Dismiss. Nothing is written by this spec.
+      await page.locator('[data-testid^="delete-back-"]').first().click();
+      await expect(live).toHaveCount(0);
+    });
+
     /* 4 · THE PINNED OMISSIONS. */
     test('4 · no escalations, no rating, no coverage', async ({ page }) => {
       await openEmployees(page, 'en');

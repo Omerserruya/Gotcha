@@ -91,6 +91,52 @@ export function aloneRate(employee: Employee): number | null {
     : null;
 }
 
+/**
+ * What `DELETE /api/ai-agents/:id` reports it actually did.
+ *
+ * A **result**, not a prediction. The dialog says what will happen; this says
+ * what happened, and where they disagree this one is the evidence.
+ */
+export const deleteResultSchema = z.object({
+  /** Routing-canvas nodes that pointed at this employee. */
+  removedRoutingRules: z.number().default(0),
+  removedToolGrants: z.number().default(0),
+  /** LIVE conversations only. Closed ones keep their attribution. */
+  releasedConversations: z.number().default(0),
+});
+
+export type DeleteResult = z.infer<typeof deleteResultSchema>;
+
+/**
+ * Conversations this employee finished, which **keep its id after deletion**.
+ *
+ * The route releases `status: { not: "CLOSED" }` only. On a finished thread
+ * that id is the record of **which employee handled it**, and it is what the
+ * "handled in total" and "finished alone" figures read. Releasing all of them
+ * would have erased the history to tidy a foreign key.
+ *
+ * So a merchant is told the record survives: **deleting an employee does not
+ * unmake the work it did**, and someone who believes otherwise will make a
+ * different decision.
+ */
+export function finishedConversations(employee: Employee): number {
+  return Math.max(0, employee.handledConversations - employee.openConversations);
+}
+
+/**
+ * ── WHY THE DIALOG'S NUMBER AND THE SERVER'S CAN DIFFER ──
+ * `openConversations` is counted with the list route's workload scope, which
+ * **excludes sandbox rows and setup rehearsals**. The delete route releases
+ * every non-closed conversation assigned to the employee, with no such
+ * exclusions.
+ *
+ * So the server can legitimately release **more** than the dialog predicted —
+ * the extra being test rows that were never anyone's customer. The dialog is
+ * the honest forecast of real people affected; the result is what the
+ * database did. Neither is wrong, and the screen shows the result afterwards
+ * rather than insisting the forecast was right.
+ */
+
 /** Only a live employee can be paused; only a paused one can be resumed. */
 export function canPause(employee: Employee): boolean {
   return employee.status === 'ACTIVE';

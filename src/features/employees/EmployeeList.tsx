@@ -3,6 +3,7 @@ import { getFormatter, getTranslations } from 'next-intl/server';
 import { aloneRate, type Employee } from '@/api/contracts/employees';
 
 import styles from './Employees.module.css';
+import { DeleteEmployee } from './DeleteEmployee';
 import { PauseEmployee } from './PauseEmployee';
 
 /**
@@ -92,12 +93,20 @@ export async function EmployeeList({ employees }: { readonly employees: readonly
               </div>
             </dl>
 
-            <PauseEmployee
-              id={employee.id}
-              name={employee.name}
-              openConversations={employee.openConversations}
-              paused={employee.status === 'PAUSED'}
-            />
+            <div className={styles.rowActions}>
+              <PauseEmployee
+                id={employee.id}
+                name={employee.name}
+                openConversations={employee.openConversations}
+                paused={employee.status === 'PAUSED'}
+              />
+              {/*
+                Delete sits beside pause because they are the two things you
+                can do to an employee — and `RETIRED` is not one of them, which
+                the note above the list says outright.
+              */}
+              <DeleteEmployee employee={employee} />
+            </div>
           </li>
         );
       })}

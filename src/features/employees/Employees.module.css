@@ -225,6 +225,57 @@
     cursor: default;
   }
 
+  /* ── Deleting ────────────────────────────────────────────────────────── */
+  .rowActions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: var(--space-8);
+    margin-block-start: auto;
+  }
+
+  .delete {
+    font: inherit;
+    font-size: var(--font-size-caption);
+    color: var(--intent-blocked-text);
+    background: none;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-control);
+    padding-block: var(--space-6);
+    padding-inline: var(--space-12);
+    cursor: pointer;
+  }
+
+  .deleteConfirm {
+    font: inherit;
+    font-size: var(--font-size-caption);
+    color: var(--panel-base);
+    background-color: var(--intent-blocked-text);
+    border: none;
+    border-radius: var(--radius-control);
+    padding-block: var(--space-8);
+    padding-inline: var(--space-14);
+    cursor: pointer;
+  }
+
+  .deleteConfirm:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  /*
+   * What actually happened, from the server — not the forecast the dialog
+   * made. The two can legitimately differ, and only one of them is evidence.
+   */
+  .deleted {
+    margin: 0;
+    margin-block-start: auto;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-body);
+  }
+
   /* ── No employees ────────────────────────────────────────────────────── */
   .empty {
     display: flex;
