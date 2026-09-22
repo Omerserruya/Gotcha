@@ -37,6 +37,29 @@ Sweep **several paths across different services** — one path proves one upstre
 
 ---
 
+## Restarting Authentik breaks the Next app until it is also restarted
+
+The app discovers Authentik's OIDC configuration at startup. If Authentik restarts
+afterwards — including because a compose change recreated it — the app holds a stale
+reference and **`GET /api/auth/login` returns 500 with an empty body**.
+
+It presents as a broken app. It is not. Restart `next start`:
+
+```bash
+pid=$(ss -ltnp | grep ':3000' | grep -oP 'pid=\K[0-9]+' | head -1)
+tr '\0' '\n' < /proc/$pid/environ | grep -E '^(E2E_|PORT|APP_ORIGIN)='   # preserve these
+kill $pid && sleep 3 && npx next start
+```
+
+**Read the environment off `/proc/<pid>/environ` before killing it.** The e2e captures
+need `E2E_SECURITY_FIXTURES=1`; without it the security and customer screens refuse to
+photograph rather than capturing real personal data, which is correct and looks like a
+broken capture.
+
+**The pass is `307` to `auth-dev.gotcha.co.il/application/o/authorize/`**, not `200`.
+
+---
+
 ## The box is shared with another team
 
 ```
