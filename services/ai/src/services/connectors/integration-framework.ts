@@ -558,6 +558,19 @@ async function auditAdapterCall(opts: {
   args: Record<string, unknown>;
   ok: boolean;
   reason?: string;
+  /**
+   * WHICH KIND of not-ok, mirroring `executeAdapterTool`'s own return type.
+   *
+   * Without it this record collapses a guard doing its job and an integration
+   * breaking into one `adapter.err`, and anything counting failures per
+   * capability then reports a working HITL policy as a broken connector. The
+   * distinction already exists at the return site; it was simply not written
+   * down, so the reader had to guess from a free-form `reason` string.
+   *
+   * Absent on rows written before this field existed. A consumer must treat
+   * missing as UNCLASSIFIED rather than assuming either kind.
+   */
+  failure?: "refused" | "errored";
   durationMs: number;
 }): Promise<void> {
   try {
@@ -574,6 +587,11 @@ async function auditAdapterCall(opts: {
           args: scrubSecrets(opts.args),
           ok: opts.ok,
           reason: opts.reason,
+          // Omitted entirely on success, and on the pre-existing rows that
+          // predate this field - `undefined` does not survive into JSON, so
+          // "absent" stays distinguishable from any value a reader might
+          // otherwise infer.
+          failure: opts.failure,
           durationMs: opts.durationMs,
           source: "integration-framework",
         },
@@ -883,7 +901,7 @@ export async function executeAdapterTool(opts: {
     const reason = `rate_limited:${slug}:retry_after_ms=${rl.retryAfterMs}`;
     await auditAdapterCall({
       tenantId: opts.tenantId, conversationId: opts.conversationId, contactId: opts.contactId,
-      toolFunctionName: opts.toolFunctionName, args: opts.args, ok: false, reason,
+      toolFunctionName: opts.toolFunctionName, args: opts.args, ok: false, reason, failure: "refused",
       durationMs: Date.now() - start,
     });
     return { ok: false, failure: "refused", reason };
@@ -894,7 +912,7 @@ export async function executeAdapterTool(opts: {
     const reason = `not_connected:${slug}`;
     await auditAdapterCall({
       tenantId: opts.tenantId, conversationId: opts.conversationId, contactId: opts.contactId,
-      toolFunctionName: opts.toolFunctionName, args: opts.args, ok: false, reason,
+      toolFunctionName: opts.toolFunctionName, args: opts.args, ok: false, reason, failure: "refused",
       durationMs: Date.now() - start,
     });
     return { ok: false, failure: "refused", reason };
@@ -931,7 +949,7 @@ export async function executeAdapterTool(opts: {
     const reason = (err?.message || "token_refresh_failed").slice(0, 240);
     await auditAdapterCall({
       tenantId: opts.tenantId, conversationId: opts.conversationId, contactId: opts.contactId,
-      toolFunctionName: opts.toolFunctionName, args: opts.args, ok: false, reason,
+      toolFunctionName: opts.toolFunctionName, args: opts.args, ok: false, reason, failure: "errored",
       durationMs: Date.now() - start,
     });
     return { ok: false, failure: "errored", reason };
@@ -1064,7 +1082,7 @@ export async function executeAdapterTool(opts: {
     const reason = message.slice(0, 240);
     await auditAdapterCall({
       tenantId: opts.tenantId, conversationId: opts.conversationId, contactId: opts.contactId,
-      toolFunctionName: opts.toolFunctionName, args: opts.args, ok: false, reason,
+      toolFunctionName: opts.toolFunctionName, args: opts.args, ok: false, reason, failure: "errored",
       durationMs: Date.now() - start,
     });
     return { ok: false, failure: "errored", reason };

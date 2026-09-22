@@ -275,42 +275,116 @@ export async function getToolUsageStats(tenantId: string, from?: string, to?: st
   const { fromDate, toDate } = parseDateRange(from, to);
   const dateFilter = { gte: fromDate, lte: toDate };
 
-  const executions = await prisma.toolExecution.findMany({
-    where: { tenantId, createdAt: dateFilter },
-    select: {
-      tenantToolId: true,
-      success: true,
-      durationMs: true,
-      tenantTool: { select: { catalogTool: { select: { name: true } } } },
-    },
-  });
+  // TWO SOURCES, because the product executes tools by two different routes and
+  // this only ever read one of them.
+  //
+  //   ToolExecution   catalog-backed HTTP tools, written by the axios executor
+  //                   in tool-execution.service.ts. Its single writer stamps
+  //                   `toolName: catalogTool.name`.
+  //   AuditLog        `adapter.*` rows written by auditAdapterCall for every
+  //                   connector tool - shopify.*, stripe.*, the dotted family.
+  //
+  // Reading only the first is why this route answered "nothing here" on a
+  // tenant with thousands of tool calls: the dev estate holds 0 ToolExecution
+  // rows and 3,475 adapter records. The connector executions were never
+  // missing; they were in the other table, and nothing joined them up.
+  //
+  // Reading rather than back-filling is deliberate. Writing ToolExecution rows
+  // from the connector path too would duplicate the same event into two tables,
+  // add a write to the AI hot path, and still show nothing until the day it
+  // shipped. This surfaces the history that already exists.
+  const [executions, adapterCalls] = await Promise.all([
+    prisma.toolExecution.findMany({
+      where: { tenantId, createdAt: dateFilter },
+      select: {
+        tenantToolId: true,
+        // The denormalised name, which this did not read. It exists precisely
+        // so a row outlives the tenant tool it ran through - disconnecting an
+        // integration nulls `tenantToolId` (SetNull), and without this the
+        // surviving audit row reported as "unknown" anyway, defeating the
+        // column that was added to save it.
+        toolName: true,
+        success: true,
+        durationMs: true,
+        tenantTool: { select: { catalogTool: { select: { name: true } } } },
+      },
+    }),
+    prisma.auditLog.findMany({
+      where: { tenantId, action: { startsWith: "adapter." }, createdAt: dateFilter },
+      select: { metadata: true },
+    }),
+  ]);
 
-  const byTool: Record<string, { toolName: string; total: number; successes: number; durations: number[] }> = {};
+  type Bucket = {
+    toolName: string;
+    total: number;
+    successes: number;
+    refused: number;
+    errored: number;
+    unclassifiedFailures: number;
+    durations: number[];
+  };
+  const byTool: Record<string, Bucket> = {};
+  const bucket = (key: string, toolName: string): Bucket =>
+    (byTool[key] ??= { toolName, total: 0, successes: 0, refused: 0, errored: 0, unclassifiedFailures: 0, durations: [] });
+
   for (const ex of executions) {
-    const toolName = ex.tenantTool?.catalogTool?.name ?? "unknown";
-    // `tenantToolId` is nullable: an execution can outlive the tenant tool it
-    // ran through, and the built-in (non-catalog) tools never had one. Indexing
-    // by it directly relied on JavaScript stringifying null into a "null" key,
-    // which happened to work and is not something to keep. Unattributable
-    // executions share the one bucket the name fallback already implies.
-    const toolId = ex.tenantToolId ?? "unknown";
-    if (!byTool[toolId]) {
-      byTool[toolId] = { toolName, total: 0, successes: 0, durations: [] };
-    }
-    byTool[toolId].total += 1;
-    if (ex.success) byTool[toolId].successes += 1;
-    if (ex.durationMs != null) byTool[toolId].durations.push(ex.durationMs);
+    // Prefer the live catalog name, fall back to the name captured at execution
+    // time, and only then admit we cannot name it.
+    const toolName = ex.tenantTool?.catalogTool?.name || ex.toolName || "unknown";
+    // KEYED BY NAME, not by `tenantToolId`. That id is null for every connector
+    // execution and for every row whose tool was disconnected, so keying on it
+    // collapsed all of them into ONE bucket labelled after whichever row
+    // happened to arrive first. Fixing the name without fixing the key would
+    // have produced a single confidently-mislabelled row.
+    const b = bucket(toolName, toolName);
+    b.total += 1;
+    if (ex.success) b.successes += 1;
+    else b.unclassifiedFailures += 1; // ToolExecution has no refused/errored split
+    if (ex.durationMs != null) b.durations.push(ex.durationMs);
   }
 
-  return Object.entries(byTool).map(([toolId, stats]) => ({
-    toolId,
-    toolName: stats.toolName,
-    executionCount: stats.total,
-    successRate: stats.total > 0 ? Math.round((stats.successes / stats.total) * 100) : 0,
-    avgDurationMs: stats.durations.length
-      ? Math.round(stats.durations.reduce((s, d) => s + d, 0) / stats.durations.length)
-      : null,
-  }));
+  for (const row of adapterCalls) {
+    const meta = (row.metadata ?? {}) as Record<string, unknown>;
+    const toolName = typeof meta.tool === "string" && meta.tool ? meta.tool : "unknown";
+    const b = bucket(toolName, toolName);
+    b.total += 1;
+    if (meta.ok === true) {
+      b.successes += 1;
+    } else if (meta.failure === "refused") {
+      b.refused += 1;
+    } else if (meta.failure === "errored") {
+      b.errored += 1;
+    } else {
+      // Written before `failure` was recorded. NOT counted as errored: a
+      // refusal is the product working correctly, and guessing would make a
+      // functioning approval policy read as a broken integration.
+      b.unclassifiedFailures += 1;
+    }
+    const ms = meta.durationMs;
+    if (typeof ms === "number" && Number.isFinite(ms)) b.durations.push(ms);
+  }
+
+  return Object.entries(byTool)
+    .map(([toolName, s]) => ({
+      toolId: toolName,
+      toolName,
+      executionCount: s.total,
+      // Attempts that SUCCEEDED over all attempts. A refusal is included in the
+      // denominator because it was an attempt, and is reported separately so a
+      // reader can tell a tool that keeps breaking from one a policy keeps
+      // stopping - the difference between fixing an integration and reviewing a
+      // rule.
+      successRate: s.total > 0 ? Math.round((s.successes / s.total) * 100) : 0,
+      successCount: s.successes,
+      refusedCount: s.refused,
+      erroredCount: s.errored,
+      unclassifiedFailureCount: s.unclassifiedFailures,
+      avgDurationMs: s.durations.length
+        ? Math.round(s.durations.reduce((sum, d) => sum + d, 0) / s.durations.length)
+        : null,
+    }))
+    .sort((a, b) => b.executionCount - a.executionCount);
 }
 
 export async function getChannelPerformance(tenantId: string, from?: string, to?: string) {
