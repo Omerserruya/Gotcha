@@ -40,9 +40,33 @@ import { captureFixturesEnabled } from '@/features/security/capture-fixtures';
  * identical would pass a capture that proved nothing about telling two people
  * apart.
  *
- * `personId` is shared by the first two so the capture exercises the thing
- * this screen was rebuilt around: one human on two channels collapsing to one
- * row, with both channels shown.
+ * ── EVERY ROW MUST BE A ROW THE PRODUCT COULD HAVE CREATED ──
+ * **If you cannot name the code path that would produce it, it does not go in
+ * the evidence.** A fixture stands in for real data and inherits the same
+ * obligation: it may hide who someone is, it may **not** manufacture an
+ * outcome the code cannot reach.
+ *
+ * This file broke that rule once and it is worth keeping the example. The
+ * first two rows used to be a WhatsApp contact and an Instagram contact
+ * sharing a `personId`, with a comment explaining that this was *"what makes
+ * the collapse visible in evidence"*. It was chosen because it was the most
+ * illustrative case — and it is the one case that **cannot happen**: the
+ * unifier matches on phone, Instagram contacts have `phone: null`, so that
+ * row can never receive that `personId`. The fixture was assigning it by
+ * hand.
+ *
+ * The evidence therefore showed a collapsed WhatsApp-plus-Instagram person
+ * directly beneath the screen's own sentence saying that join is impossible.
+ * **Green, and demonstrating something the product cannot do.**
+ *
+ * ── SO THE SHARED `personId` IS THE JOIN THAT ACTUALLY EXISTS ──
+ * Two entries carrying the **same phone number**: one that arrived over
+ * WhatsApp and one a person typed in. That is what the unifier produces, and
+ * it is worth showing.
+ *
+ * The Instagram row then stands alone, under the same name — which is the
+ * duplicate the screen's sentence describes. A reader sees both halves at
+ * once: the join that works, and the one that does not.
  */
 const FIXTURE_CONTACTS: readonly CustomerRow[] = [
   {
@@ -55,18 +79,24 @@ const FIXTURE_CONTACTS: readonly CustomerRow[] = [
     tags: ['wholesale'],
     lastInteractionAt: null,
     source: null,
-    // Same person as the Instagram row below — this is what makes the
-    // collapse visible in evidence rather than only in a unit test.
+    /*
+     * Shares a `personId` with the entry below because they carry the SAME
+     * PHONE NUMBER. That is the join the unifier actually makes — and the
+     * reason it is safe is that nothing customer-typed can reach
+     * `Contact.phone`, so phone matching cannot merge two strangers.
+     */
     personId: 'fixture-person-1',
     mergedIntoId: null,
   },
   {
     id: 'fixture-2',
-    externalId: 'ig-averystone',
+    externalId: 'avery@example.com',
     displayName: 'Avery Stone',
-    channel: 'INSTAGRAM',
-    phone: null,
-    email: null,
+    // Entered by a person rather than arriving over a channel — the second
+    // half of the only join this product performs.
+    channel: 'EMAIL',
+    phone: '+447700900123',
+    email: 'avery@example.com',
     tags: [],
     lastInteractionAt: null,
     source: null,
@@ -75,6 +105,27 @@ const FIXTURE_CONTACTS: readonly CustomerRow[] = [
   },
   {
     id: 'fixture-3',
+    externalId: 'ig-averystone',
+    displayName: 'Avery Stone',
+    channel: 'INSTAGRAM',
+    /*
+     * `phone: null`, and that is the whole point. Instagram's `externalId` is
+     * an opaque page-scoped id, so this row carries no identifier the unifier
+     * can match on and **`personId` stays null forever**.
+     *
+     * Same name as the rows above, so the evidence shows the duplicate the
+     * screen's sentence describes rather than merely asserting it.
+     */
+    phone: null,
+    email: null,
+    tags: [],
+    lastInteractionAt: null,
+    source: null,
+    personId: null,
+    mergedIntoId: null,
+  },
+  {
+    id: 'fixture-4',
     externalId: 'rowan@example.org',
     displayName: 'Rowan Pike',
     channel: 'EMAIL',

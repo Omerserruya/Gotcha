@@ -202,6 +202,16 @@ for (const size of SIZES) {
       await expect(page.getByTestId('customer-list')).toBeVisible();
       await expect(page.locator('main')).toContainText('Avery Stone');
 
+      /*
+       * And the name appears TWICE, which is the screen telling the truth
+       * rather than failing: three entries carry it — a WhatsApp one, a typed
+       * one with the same number, and an Instagram one with no number at all.
+       * The first two join; the third cannot. So a search for one person
+       * returns two rows, and the sentence above the list says why.
+       */
+      const rows = page.locator('li[data-testid^="customer-"]');
+      await expect(rows).toHaveCount(2);
+
       await shoot(page, `${size.name}-2-name-search`);
     });
 

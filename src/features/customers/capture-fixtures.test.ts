@@ -56,16 +56,49 @@ describe('withCaptureFixtures', () => {
 
   it('applies the query to the fixtures too', () => {
     enabled.mockReturnValue(true);
-    expect(withCaptureFixtures(real, 'Avery')).toHaveLength(2);
+    // Three rows for one name: a WhatsApp entry, a typed entry carrying the
+    // same number, and an Instagram entry that shares neither.
+    expect(withCaptureFixtures(real, 'Avery')).toHaveLength(3);
     expect(withCaptureFixtures(real, 'Zzyzx')).toHaveLength(0);
   });
 
-  it('carries two rows that share a personId, so the collapse is in evidence', () => {
+  it('shares a personId only between rows that carry the same phone', () => {
+    /*
+     * The join the unifier actually makes. It used to be a WhatsApp row and
+     * an Instagram row sharing a `personId` — the most illustrative case, and
+     * the one case that CANNOT happen: the unifier matches on phone and
+     * Instagram contacts have none, so that row could never receive it. The
+     * fixture was assigning it by hand, and the evidence showed a collapse
+     * directly beneath the screen's sentence saying it was impossible.
+     */
     enabled.mockReturnValue(true);
     const rows = withCaptureFixtures(real, '')!;
     const shared = rows.filter((r) => r.personId === 'fixture-person-1');
+
     expect(shared).toHaveLength(2);
-    expect(new Set(shared.map((r) => r.channel)).size).toBe(2);
+    // The property that makes it reachable, asserted rather than assumed.
+    expect(new Set(shared.map((r) => r.phone)).size).toBe(1);
+    expect(shared.every((r) => r.phone !== null)).toBe(true);
+  });
+
+  it('never gives a personId to a row the unifier could not match', () => {
+    // THE RULE THIS FILE BROKE ONCE: every fixture row must be a row the
+    // product could have created. A contact with no phone cannot be joined
+    // to anything, so it must not arrive pre-joined.
+    enabled.mockReturnValue(true);
+    for (const row of withCaptureFixtures(real, '')!) {
+      if (row.phone === null) expect(row.personId, row.id).toBeNull();
+    }
+  });
+
+  it('keeps an Instagram row that stands alone under the same name', () => {
+    // The duplicate the screen's sentence describes — shown, not asserted.
+    enabled.mockReturnValue(true);
+    const rows = withCaptureFixtures(real, '')!;
+    const instagram = rows.find((r) => r.channel === 'INSTAGRAM')!;
+    expect(instagram.personId).toBeNull();
+    expect(instagram.phone).toBeNull();
+    expect(rows.filter((r) => r.displayName === instagram.displayName).length).toBeGreaterThan(1);
   });
 
   it('uses only reserved identifiers that can never belong to anyone', () => {
