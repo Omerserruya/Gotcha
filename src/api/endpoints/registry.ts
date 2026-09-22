@@ -520,5 +520,25 @@ export const tenantSettingsEndpoints = {
   read: () => endpoint('/api/tenant-settings'),
 } as const;
 
+/**
+ * AI employees — Studio, screen 07.
+ *
+ * `list` returns each employee enriched with three conversation counts, its
+ * knowledge sources, its department and when it was last tested. The counts
+ * exclude sandbox rows and setup rehearsals; imported history is excluded by
+ * the platform's own default rather than restated.
+ *
+ * **`PATCH /:id` is how pause and resume happen** — `{ status }`. There is no
+ * retire: `AIAgentStatus` is ACTIVE | DRAFT | PAUSED.
+ */
+export const employeeEndpoints = {
+  list: () => endpoint('/api/ai-agents'),
+  detail: (id: string) => endpoint('/api/ai-agents/{id}', { id }),
+  /** Pause and resume both go through here, as `{ status }`. */
+  update: (id: string) => endpoint('/api/ai-agents/{id}', { id }),
+  /** `{ hasCanvas, reachable }` — is this employee wired into the routing? */
+  reachability: (id: string) => endpoint('/api/ai-agents/{id}/reachability', { id }),
+} as const;
+
 export type { Endpoint as ApiEndpoint };
 export { endpoint as defineEndpoint };

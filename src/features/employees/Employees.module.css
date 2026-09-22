@@ -1,0 +1,248 @@
+@layer features {
+  /*
+   * Screen 07 · Studio · AI employees.
+   *
+   * Cards, because each employee carries three numbers and one action whose
+   * confirmation needs room to say what it costs — which a table row has
+   * nowhere to put.
+   */
+
+  .screen {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+  }
+
+  /*
+   * The verb the product does not have.
+   *
+   * Stated once, above the list, rather than beside every card: it is a fact
+   * about GOTCHA and not about any one employee. Omitting it silently would
+   * read as an oversight in a design that names four verbs.
+   */
+  .cannotFire {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-snug);
+    color: var(--text-body);
+    background-color: var(--panel-inset);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-16);
+  }
+
+  .list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(var(--size-reading-half), 1fr));
+    gap: var(--space-12);
+  }
+
+  .employee {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-16);
+    padding-inline: var(--space-18);
+  }
+
+  /* A paused employee is not answering anyone. It should not look ordinary. */
+  .employee[data-status='PAUSED'] {
+    border-color: var(--intent-blocked-edge, var(--border-emphasis));
+  }
+
+  .head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-8);
+  }
+
+  .name {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: 600;
+  }
+
+  .status,
+  .dept {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .employee[data-status='PAUSED'] .status {
+    color: var(--intent-blocked-text);
+    font-weight: 500;
+  }
+
+  .channels {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .counts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-16);
+    margin: 0;
+  }
+
+  .count {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .count dt {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .count dd {
+    margin: 0;
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-6);
+    font-size: var(--font-size-body-lg);
+  }
+
+  /* Nothing routed here yet — not zero percent, which says something else. */
+  .notYet {
+    font-size: var(--font-size-meta);
+    color: var(--text-subtle);
+  }
+
+  .of {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /* ── Pausing ─────────────────────────────────────────────────────────── */
+  .controls {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    margin-block-start: auto;
+  }
+
+  .pause,
+  .resume {
+    align-self: flex-start;
+    font: inherit;
+    font-size: var(--font-size-caption);
+    color: var(--text-body);
+    background: none;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-control);
+    padding-block: var(--space-6);
+    padding-inline: var(--space-12);
+    cursor: pointer;
+  }
+
+  .controlError {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--intent-blocked-text);
+  }
+
+  /*
+   * The confirmation names what happens to the people currently talking to
+   * this employee. Styled as a blocked state because that is what it
+   * describes: customers who will stop getting replies with nobody told.
+   */
+  .confirm {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    margin-block-start: auto;
+    background-color: var(--intent-blocked-surface);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-14);
+  }
+
+  .confirmLead {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: 500;
+    color: var(--intent-blocked-text);
+  }
+
+  .confirmBody {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-body);
+  }
+
+  .confirmError {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--intent-blocked-text);
+  }
+
+  .confirmActions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-8);
+    margin-block-start: var(--space-4);
+  }
+
+  .pauseConfirm,
+  .keepRunning {
+    font: inherit;
+    font-size: var(--font-size-caption);
+    border-radius: var(--radius-control);
+    padding-block: var(--space-8);
+    padding-inline: var(--space-14);
+    cursor: pointer;
+  }
+
+  .pauseConfirm {
+    color: var(--panel-base);
+    background-color: var(--intent-blocked-text);
+    border: none;
+  }
+
+  /* The safe option is plainer, but not quieter. */
+  .keepRunning {
+    color: var(--text-body);
+    background-color: var(--panel-base);
+    border: var(--border-width-thin) solid var(--border-default);
+  }
+
+  .pauseConfirm:disabled,
+  .keepRunning:disabled,
+  .resume:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  /* ── No employees ────────────────────────────────────────────────────── */
+  .empty {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .emptyLead {
+    margin: 0;
+    font-size: var(--font-size-body-lg);
+    font-weight: 500;
+  }
+
+  .emptyBody {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-snug);
+    color: var(--text-body);
+  }
+}

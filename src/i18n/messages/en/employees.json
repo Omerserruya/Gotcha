@@ -1,0 +1,38 @@
+{
+  "title": "AI employees",
+  "description": "What each one is responsible for, and how much of it they finish on their own.",
+  "unavailable": "We couldn't read your AI employees just now.",
+  "none": "No AI employees yet.",
+  "noneBody": "Until one exists, nobody is answering automatically — every message waits for a person.",
+  "status": {
+    "ACTIVE": "Working",
+    "PAUSED": "Paused",
+    "DRAFT": "Not started yet"
+  },
+  "onChannels": "Answers on {channels}",
+  "noChannels": "Not connected to any channel, so nothing reaches it.",
+  "count": {
+    "open": "Open right now",
+    "handled": "Handled in total",
+    "alone": "Finished alone",
+    "nothingYet": "Nothing routed here yet",
+    "ofHandled": "of {count}"
+  },
+  "action": {
+    "pause": "Pause",
+    "pauseConfirm": "Pause anyway",
+    "keepRunning": "Keep it working",
+    "resume": "Start it again"
+  },
+  "pause": {
+    "lead": "Pause {name}?",
+    "midConversation": "{count, plural, =1 {One person is mid-conversation with it right now. They will simply stop getting replies — nobody is told, and the conversation is not passed to anyone.} other {# people are mid-conversation with it right now. They will simply stop getting replies — nobody is told, and the conversations are not passed to anyone.}}",
+    "noneOpen": "Nobody is mid-conversation right now. If someone writes in while it's paused, they'll get no reply and nobody will be told."
+  },
+  "cannotFire": "You can pause an AI employee and start it again. There is no way to retire one — GOTCHA has no such setting, so a paused employee stays in this list.",
+  "error": {
+    "forbidden": "You don't have permission to change this.",
+    "gone": "This employee no longer exists.",
+    "failed": "That didn't go through."
+  }
+}

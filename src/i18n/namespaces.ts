@@ -48,6 +48,8 @@ export const NAMESPACES = [
   'templates',
   /** Outreach · calls — screens 05d and 05e. */
   'calls',
+  /** Studio · employees — screen 07. */
+  'employees',
 ] as const;
 
 export type Namespace = (typeof NAMESPACES)[number];
