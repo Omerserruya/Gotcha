@@ -13,10 +13,25 @@
  *     to the surviving target. Callers get "the right contact" without
  *     knowing anything about merge history.
  *
- *   - unifyContact(): checks whether the given contact shares a verified
- *     email/phone with any OTHER contact in the same tenant and, if so,
- *     assigns them the same personId. "Same real human across channels."
+ *   - unifyContact(): checks whether the given contact shares an email/phone
+ *     with any OTHER contact in the same tenant and, if so, assigns them the
+ *     same personId. "Same real human across channels."
  *     Non-destructive - no rows deleted, no existing fields overwritten.
+ *
+ *     IT DOES NOT CHECK `emailVerified` / `phoneVerified`. This header used to
+ *     say "shares a VERIFIED email/phone", fifty-seven lines above a doc
+ *     comment on the function itself saying "verified-or-not" and ninety above
+ *     the code, which tests neither flag. Both sentences were read and believed;
+ *     the safety property of a function was stated twice, in opposite
+ *     directions, in one file. A caller MUST decide for itself what it is
+ *     willing to match on - see ensureContactForInbound in services/
+ *     incoming-worker, which passes only contacts whose identifier came from
+ *     the channel envelope.
+ *
+ *     For the record, `phoneVerified: true` means "a staff member typed it into
+ *     /identity/capture and it passed a format check". Nothing in this product
+ *     sends a code to an address or a number. There is no verification here to
+ *     gate on.
  *
  * Both are idempotent and safe to call on the hot path (webhook ingest,
  * bot engine tool execution, /identity/capture endpoint).

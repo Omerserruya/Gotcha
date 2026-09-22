@@ -41,6 +41,7 @@ const SHOP_ACCOUNT = process.env.PROBE_SHOP_ACCOUNT ?? "cms5ozp2y00167lc9xm44tag
 const WA_SENDER = "972500000941";
 const SHOP_SENDER = "d54c-shopify-visitor-941";
 const MERGED_SENDER = "972500000942";
+const SIBLING_SENDER = "972500000943";   // staff-entered contact already holds this number
 const TAG = "probe-contact-on-inbound";
 
 async function enqueue(channel: string, channelAccountId: string, senderId: string, n: number) {
@@ -65,7 +66,7 @@ async function contactsFor(externalId: string) {
 }
 
 async function cleanup() {
-  const ids = [WA_SENDER, SHOP_SENDER, MERGED_SENDER];
+  const ids = [WA_SENDER, SHOP_SENDER, MERGED_SENDER, SIBLING_SENDER, `${SIBLING_SENDER}-staff`];
   const log = (w: string) => (e: any) => console.warn(`cleanup ${w}:`, e?.message ?? e);
   await prisma.message
     .deleteMany({ where: { tenantId: TENANT, externalMessageId: { startsWith: TAG } } })
@@ -94,9 +95,19 @@ async function main() {
     } as any,
   });
 
+  // Case 5 needs a staff-entered contact holding the SAME phone on a DIFFERENT
+  // channel, created before the message arrives and carrying no personId.
+  const staffRow = await prisma.contact.create({
+    data: {
+      tenantId: TENANT, channel: "WEBCHAT", externalId: `${SIBLING_SENDER}-staff`,
+      displayName: "Entered by staff", phone: SIBLING_SENDER, phoneVerified: true,
+    } as any,
+  });
+
   await enqueue("WHATSAPP", WA_ACCOUNT, WA_SENDER, 1);
   await enqueue("SHOPIFY_LIVE_CHAT", SHOP_ACCOUNT, SHOP_SENDER, 1);
   await enqueue("WHATSAPP", WA_ACCOUNT, MERGED_SENDER, 1);
+  await enqueue("WHATSAPP", WA_ACCOUNT, SIBLING_SENDER, 1);
   // Wait for those three before sending the duplicate, so case 3 tests a
   // SECOND message against an existing row rather than two racing creates.
   await new Promise((r) => setTimeout(r, 6000));
@@ -130,11 +141,27 @@ async function main() {
   if (mg.length !== 1) fail.push(`merged sender produced ${mg.length} rows`);
   if (m?.mergedIntoId !== survivor.id) fail.push("merge pointer lost");
 
+  // 5 - the point of the whole change: a WhatsApp sender and a staff-entered
+  // contact holding the same number end up as ONE person.
+  const sib = await contactsFor(SIBLING_SENDER);
+  const staffAfter = await prisma.contact.findUnique({ where: { id: staffRow.id } });
+  const shared = !!sib[0]?.personId && sib[0]?.personId === staffAfter?.personId;
+  console.log(`5 unified    wa.personId=${sib[0]?.personId ? "set" : "null"} staff.personId=${staffAfter?.personId ? "set" : "null"} shared=${shared}`);
+  if (!sib[0]?.personId) fail.push("whatsapp sibling got no personId");
+  if (!shared) fail.push("personId not shared with the staff-entered contact");
+
+  // 6 - PHONE-BLIND CHECK. The shopify contact has no phone, so nothing may be
+  // matched and it must get NO personId. An implementation that called
+  // unifyContact unconditionally would mint one here regardless - that function
+  // assigns a fresh personId even when it finds no sibling at all.
+  console.log(`6 no-phone   shopify.personId=${s?.personId ?? "null"}`);
+  if (s?.personId) fail.push(`shopify contact got a personId (${s.personId}) with no phone to match on`);
+
   // CONTROL - the messages themselves. A probe that only counted contacts would
   // pass identically if the worker had begun dropping messages.
   const msgs = await prisma.message.count({ where: { tenantId: TENANT, externalMessageId: { startsWith: TAG } } });
-  console.log(`C control    messages persisted=${msgs} (expect 4)`);
-  if (msgs !== 4) fail.push(`messages persisted ${msgs} != 4`);
+  console.log(`C control    messages persisted=${msgs} (expect 5)`);
+  if (msgs !== 5) fail.push(`messages persisted ${msgs} != 5`);
 
   console.log(fail.length === 0 ? "PASS" : `FAIL: ${fail.join(" | ")}`);
   await cleanup();
