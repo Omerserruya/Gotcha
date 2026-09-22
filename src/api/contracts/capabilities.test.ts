@@ -3,6 +3,9 @@ import { describe, expect, it } from 'vitest';
 import {
   actsAlone,
   capabilitySchema,
+  DESCRIBED_TOOLS,
+  hasOwnWords,
+  humaniseToolName,
   capabilityStance,
   groupByCategory,
   isUniform,
@@ -141,5 +144,30 @@ describe('a capability carries nothing that could become a false claim', () => {
     // screen can SAY nobody can edit an approved action, and no control is
     // drawn for it.
     expect(capabilitySchema.parse(capability()).allowModification).toBe(false);
+  });
+});
+
+describe("the platform's own descriptions never reach the screen", () => {
+  it('has words of its own for every action this tenant has', () => {
+    // Sixteen mapped. If the route grows one, the fallback covers it — but
+    // the map is the answer and this test says how much of it is covered.
+    expect(DESCRIBED_TOOLS.length).toBeGreaterThanOrEqual(16);
+    expect(hasOwnWords('close_conversation')).toBe(true);
+  });
+
+  it('falls back to the tool name, never to the platform prose', () => {
+    /*
+     * The platform's `description` is written for whoever CALLS the tool:
+     *
+     *   "Mark the current conversation as resolved (autonomous bot only)."
+     *   "Returns a draft body; use `schedule_followup` … to actually dispatch it."
+     *
+     * Seventeen rows of that is an API reference on a merchant's screen. An
+     * unmapped tool gets its own name made readable instead — short, true,
+     * and a missing translation that looks like one.
+     */
+    expect(humaniseToolName('shopify.cancel_order')).toBe('Shopify cancel order');
+    expect(humaniseToolName('close_conversation')).toBe('Close conversation');
+    expect(hasOwnWords('some_tool_added_next_quarter')).toBe(false);
   });
 });

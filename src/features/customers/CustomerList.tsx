@@ -12,7 +12,24 @@ import styles from './Customers.module.css';
 /**
  * Screen 04 — the customer list.
  *
- * ── IT SAYS "PEOPLE" NOW, AND ONLY BECAUSE IT CAN ──
+ * ── WHAT THE COLLAPSE ACTUALLY JOINS ──
+ * **Not two channels.** The unifier that populates `personId` matches on
+ * **phone only**, and Instagram contacts have no phone: `externalId` there is
+ * an opaque page-scoped id. So a person who writes from WhatsApp and from
+ * Instagram is two rows and will stay two rows.
+ *
+ * The phone-only rule is a safety argument rather than an oversight — nothing
+ * customer-typed can reach `Contact.phone`, so phone matching structurally
+ * cannot merge two strangers, where email matching could. What it does join
+ * is a WhatsApp contact and a staff-entered contact carrying the same number,
+ * which is real and worth having.
+ *
+ * So the screen **states the limit**, because the alternative is a reader
+ * closing it believing cross-channel identity works. *"One identity per
+ * human, however many channels they use"* is a missing capability, not a bug,
+ * and the screen says what it does rather than what the design hoped.
+ *
+ * ── IT SAYS "PEOPLE", AND THAT PART IS STILL TRUE ──
  * The design opens with *"People, not rows. One identity per human however
  * many channels they use."* That was unbuildable until 2026-09-20: the
  * endpoint returned neither `personId` nor `mergedIntoId`, so one human on two
@@ -102,6 +119,15 @@ export async function CustomerList({
         header and the list cannot disagree. That is the invariant, and the
         capture asserts it rather than asserting a number.
       */}
+      {/*
+        The limit, stated before the list rather than under it. A reader who
+        sees two rows for one person needs to know why BEFORE concluding the
+        product is broken — or, worse, concluding it worked.
+      */}
+      <p className={styles.identityLimit} data-testid="identity-limit">
+        {t('identityLimit')}
+      </p>
+
       <p className={styles.count} data-testid="customer-count">
         {t('list.count', { count: people.length })}
       </p>

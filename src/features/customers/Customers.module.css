@@ -15,9 +15,25 @@
   }
 
   /*
-   * "Contacts", not "people". The endpoint returns channel identities and
-   * omits the two fields that would let this collapse them into humans.
+   * What the cross-channel collapse actually joins.
+   *
+   * The unifier matches on phone only and Instagram has no phone, so one
+   * person on two channels is two rows. Said above the list, because a reader
+   * who meets the duplicate first will draw a conclusion before reaching any
+   * explanation placed below it.
    */
+  .identityLimit {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-body);
+    background-color: var(--panel-inset);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-10);
+    padding-inline: var(--space-14);
+  }
+
   .count {
     margin: 0;
     font-size: var(--font-size-caption);

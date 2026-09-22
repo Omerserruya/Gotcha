@@ -4,6 +4,8 @@ import {
   actsAlone,
   capabilityStance,
   groupByCategory,
+  hasOwnWords,
+  humaniseToolName,
   isUniform,
   type Capability,
 } from '@/api/contracts/capabilities';
@@ -88,8 +90,18 @@ export async function CapabilityScreen({
                   data-testid={`capability-${capability.toolName}`}
                   data-stance={stance}
                 >
+                  {/*
+                    Our words, not the platform's. Its `description` is
+                    written for whoever CALLS the tool — backticks,
+                    "(autonomous bot only)", instructions to use
+                    `schedule_followup` — and seventeen rows of that is an API
+                    reference on a merchant's screen. An unmapped tool falls
+                    back to its own name rather than to that prose.
+                  */}
                   <span className={styles.what}>
-                    {capability.description || capability.toolName}
+                    {hasOwnWords(capability.toolName)
+                      ? t(`tool.${capability.toolName}` as 'tool.send_message')
+                      : humaniseToolName(capability.toolName)}
                   </span>
                   <span className={styles.stance} data-testid={`stance-${capability.toolName}`}>
                     {t(`stance.${stance}` as 'stance.ask_first')}

@@ -24,5 +24,23 @@
     "identity": "Identifying people",
     "workflow": "Workflow",
     "other": "Everything else"
+  },
+  "tool": {
+    "send_message": "Send a message to a customer",
+    "generate_followup": "Write a follow-up for a conversation that went quiet — a draft only, not sent",
+    "schedule_followup": "Send a message later, when a conversation has gone quiet",
+    "schedule_followup_template": "Send an approved WhatsApp template later, when the 24-hour window has closed",
+    "close_conversation": "Mark a conversation finished",
+    "escalate_to_human": "Hand a conversation to a person",
+    "update_contact": "Change a customer's details in your CRM",
+    "update_crm": "Change any field on a record in your CRM",
+    "create_ticket": "Open a support ticket",
+    "tag_contact": "Add a tag to a customer",
+    "create_task": "Create a task for your team to pick up",
+    "create_broadcast": "Create a campaign aimed at a group of customers",
+    "schedule_broadcast": "Schedule a campaign that already exists to go out later",
+    "create_workflow": "Create a new automation",
+    "merge_contacts": "Join two customer records into one",
+    "link_customer_identifier": "Attach another way of reaching a customer to their record"
   }
 }

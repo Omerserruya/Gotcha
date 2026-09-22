@@ -145,7 +145,11 @@ for (const size of SIZES) {
       const main = page.locator('main');
 
       // The fact is present…
-      await expect(main).toHaveText(/last refreshed \d/i);
+      // `\S`, not `\d`. The format is next-intl's business — "July 29, 2026"
+      // puts a month name where a digit was demanded, and asserting the shape
+      // of the date tests the library instead of the screen. The ruling is
+      // that a date is STATED; that is what this checks.
+      await expect(main).toHaveText(/last refreshed \S/i);
       // …and the verdict is not.
       await expect(main).not.toHaveText(/\bfresh\b|out of date|up to date|stale/i);
 

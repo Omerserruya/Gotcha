@@ -136,6 +136,48 @@ export function actsAlone(capabilities: readonly Capability[]): readonly Capabil
   return capabilities.filter((c) => capabilityStance(c) === 'on_its_own');
 }
 
+/** Tool names this app has merchant-facing words for. */
+export const DESCRIBED_TOOLS = [
+  'send_message',
+  'generate_followup',
+  'schedule_followup',
+  'schedule_followup_template',
+  'close_conversation',
+  'escalate_to_human',
+  'update_contact',
+  'update_crm',
+  'create_ticket',
+  'tag_contact',
+  'create_task',
+  'create_broadcast',
+  'schedule_broadcast',
+  'create_workflow',
+  'merge_contacts',
+  'link_customer_identifier',
+] as const;
+
+export function hasOwnWords(toolName: string): boolean {
+  return (DESCRIBED_TOOLS as readonly string[]).includes(toolName);
+}
+
+/**
+ * A readable name for a capability this app has no sentence for.
+ *
+ * **Never the platform's `description`.** Those are written for whoever calls
+ * the tool, not for the merchant reading this screen — they carry backticks,
+ * parenthetical *"(autonomous bot only)"* notes and instructions to call other
+ * tools by their function names. Seventeen rows of that reads like an API
+ * reference on a shopkeeper's screen.
+ *
+ * So an unmapped tool falls back to its own name, made readable. That is
+ * short, true, and leaks no implementation prose — and a missing translation
+ * looks like a missing translation rather than like documentation.
+ */
+export function humaniseToolName(toolName: string): string {
+  const words = toolName.replace(/[._]+/g, ' ').trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
 export interface CategoryGroup {
   readonly category: string;
   readonly capabilities: readonly Capability[];

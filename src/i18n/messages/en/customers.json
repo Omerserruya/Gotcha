@@ -27,5 +27,6 @@
     "VOICE": "Phone",
     "SMS": "SMS",
     "TELEGRAM": "Telegram"
-  }
+  },
+  "identityLimit": "If the same person writes from WhatsApp and from Instagram, they appear here twice. GOTCHA joins two entries only when it has the same phone number for both — and Instagram never provides one."
 }

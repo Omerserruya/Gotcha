@@ -24,5 +24,23 @@
     "identity": "זיהוי אנשים",
     "workflow": "תהליכי עבודה",
     "other": "כל השאר"
+  },
+  "tool": {
+    "send_message": "לשלוח הודעה ללקוח",
+    "generate_followup": "לנסח פנייה חוזרת לשיחה שנדמה — טיוטה בלבד, לא נשלחת",
+    "schedule_followup": "לשלוח הודעה מאוחר יותר, כששיחה נדמה",
+    "schedule_followup_template": "לשלוח תבנית וואטסאפ מאושרת מאוחר יותר, אחרי שחלון 24 השעות נסגר",
+    "close_conversation": "לסמן שיחה כהסתיימה",
+    "escalate_to_human": "להעביר שיחה לאדם",
+    "update_contact": "לשנות פרטי לקוח ב-CRM שלכם",
+    "update_crm": "לשנות כל שדה ברשומה ב-CRM שלכם",
+    "create_ticket": "לפתוח פנייה בתמיכה",
+    "tag_contact": "להוסיף תגית ללקוח",
+    "create_task": "ליצור משימה לצוות שלכם",
+    "create_broadcast": "ליצור קמפיין המכוון לקבוצת לקוחות",
+    "schedule_broadcast": "לתזמן קמפיין קיים לשליחה מאוחר יותר",
+    "create_workflow": "ליצור אוטומציה חדשה",
+    "merge_contacts": "לאחד שתי רשומות לקוח לאחת",
+    "link_customer_identifier": "לצרף לרשומת הלקוח דרך נוספת להשיג אותו"
   }
 }

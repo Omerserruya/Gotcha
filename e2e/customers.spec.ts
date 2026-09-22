@@ -225,6 +225,31 @@ for (const size of SIZES) {
     });
 
     /*
+     * 2c · THE LIMIT OF THE COLLAPSE, STATED.
+     *
+     * The unifier that populates `personId` matches on **phone only**, and
+     * Instagram contacts have no phone — `externalId` there is an opaque
+     * page-scoped id. So one person on two channels is two rows and will
+     * stay two rows.
+     *
+     * The design's first line is *"One identity per human, however many
+     * channels they use."* That is a missing capability, not a bug, and a
+     * reader must not close this screen believing it works.
+     */
+    test('2c · says what the collapse cannot join', async ({ page }) => {
+      await openCustomers(page, 'en');
+
+      const limit = page.getByTestId('identity-limit');
+      await expect(limit).toBeVisible();
+      await expect(limit).toHaveText(/appear here twice/i);
+      // The reason, not just the symptom — and the reason is specific.
+      await expect(limit).toHaveText(/same phone number/i);
+      await expect(limit).toHaveText(/instagram never provides one/i);
+
+      await shoot(page, `${size.name}-2c-identity-limit`);
+    });
+
+    /*
      * 3 · THE PINNED OMISSIONS.
      *
      * Each is a ruling, and a ruling survives only if something fails when it
