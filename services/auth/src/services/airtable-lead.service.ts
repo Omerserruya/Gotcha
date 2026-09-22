@@ -10,15 +10,24 @@
  * copy across by hand, and the ones that get copied are the ones somebody
  * remembered.
  *
- * WHAT IT IS WRITING INTO, AND THE MISMATCH WORTH KNOWING
- * -------------------------------------------------------
- * The table is `עסקים`, which was built for OUTBOUND prospecting: it has an
- * opening message, which channel we approached them on, what chat widget their
- * site runs. An inbound lead answers almost none of that, so most columns stay
- * empty and the ones that are filled are the contact details plus a status of
- * `ליד חדש`. That is a deliberate choice rather than an oversight - the team
- * asked for one table so that a person who raised their hand appears in the
- * same list as a person we chased, and they sort it themselves.
+ * WHICH BASE, AND WHY IT IS NOT THE PROSPECTING ONE
+ * --------------------------------------------------
+ * Two bases, split on a real distinction:
+ *
+ *   מאגר לפנייה   businesses WE approach. Bulk-imported, thousands of rows,
+ *                 most of which nobody has spoken to.
+ *   לידים פעילים  people who approached US. Few, precious, and every one of
+ *                 them is worth a phone call today.
+ *
+ * Burying the second list inside the first would have hidden a handful of warm
+ * leads among six thousand cold ones. The split is also what made this possible
+ * at all: Airtable's record cap is per BASE, the prospecting base is far past
+ * it and rejects every write, and a separate base has its own allowance.
+ *
+ * The schema is not a copy of the form. The form supplies four values; the rest
+ * of the columns - status, owner, task, due date, disqualification reason - are
+ * there so the team can WORK a lead in this table rather than copy it somewhere
+ * else to work it. That mirrors how the prospecting base is used.
  *
  * ENTIRELY OPTIONAL, LIKE EVERY OTHER CHANNEL HERE
  * -------------------------------------------------
@@ -26,11 +35,9 @@
  * delays the signup: a lead that reached the database is a success whether or
  * not a spreadsheet heard about it.
  *
- * KNOWN LIVE PROBLEM (2026-09-22): the base is AT ITS RECORD LIMIT and the API
- * answers every create with HTTP 422 "This base is or will be over its record
- * limits". Until the workspace is upgraded or records are pruned, this leg
- * fails on every lead - loudly in the log, harmlessly everywhere else. The
- * lead still reaches the database and Telegram.
+ * The prospecting base's record limit is the reason this one exists; a write to
+ * the new base was confirmed to succeed while the old one still refuses every
+ * create with HTTP 422.
  */
 
 const TOKEN = process.env.AIRTABLE_LEADS_TOKEN || "";
@@ -50,16 +57,22 @@ const TIMEOUT_MS = 6000;
  * today, which is for humans only.
  */
 const F = {
-  company: "fldHm0AuBoLT3Q1yg", // חברה  (the primary column)
-  website: "fldMiRvyj3GjP5d1V", // אתר החברה
-  status: "flddUtbE8MeCoRE1J", // סטטוס
-  contactName: "fldRp9VS2IeeNHwZp", // שם איש קשר
-  howToReach: "fldB2b7KMiVgCM8CY", // איך יוצרים איתו קשר?
-  whatsapp: "fldvnWKHrK8XDyEyO", // וואטסאפ גנרי
-  email: "fldhziOcTa8zJ9pLu", // אימייל גנרי
-  campaign: "fldXmYJIsN9EXKvbD", // קמפיין
-  notes: "fldZ9xPhI06W636cQ", // הערות
+  company: "fldAnGljXRu1xA4aQ", // חברה  (the primary column)
+  website: "fldKcYLzZZi32LT1U", // אתר
+  contactName: "fldySEpYt19xUZs7M", // שם איש קשר
+  phone: "fldwz2dpeb10qlCoO", // טלפון
+  email: "fldzaWt13VONYYpJ6", // אימייל
+  status: "fld0KzX63oeGFsJBw", // סטטוס
+  source: "fldhrUOcKtpq0dz7C", // מקור
+  arrival: "fldeqBqwuYta8Aq1A", // פרטי הגעה
 } as const;
+
+/**
+ * Columns this service deliberately leaves alone: אחראי, משימה, תאריך לביצוע
+ * המשימה, הביע עניין, סיבת פסילה, תיאור העסק, הערות. They are the team's
+ * working columns and a machine has nothing true to say in them at the moment a
+ * lead arrives. `התקבל` is a createdTime that Airtable fills itself.
+ */
 
 /** The status an inbound lead arrives with. The team sorts on it. */
 const STATUS_NEW_LEAD = "ליד חדש";
@@ -140,15 +153,14 @@ export async function createAirtableLead(lead: AirtableLead): Promise<void> {
     [F.company]: businessName(lead.website, lead.firstName),
     [F.status]: STATUS_NEW_LEAD,
     [F.contactName]: lead.firstName,
-    [F.campaign]: lead.source,
-    [F.notes]: [
-      "ליד נכנס מדף נחיתה - הם פנו אלינו, לא להפך.",
+    [F.source]: lead.source,
+    [F.arrival]: [
       `מקור: ${lead.source}`,
       `התקבל: ${lead.createdAt.toISOString().replace("T", " ").slice(0, 19)} UTC`,
+      reach ? `פרטי קשר שהושארו: ${reach}` : "לא הושארו פרטי קשר",
     ].join("\n"),
   };
-  if (reach) fields[F.howToReach] = reach;
-  if (phone) fields[F.whatsapp] = phone;
+  if (phone) fields[F.phone] = phone;
   if (email) fields[F.email] = email;
   const url = absoluteUrl(lead.website);
   if (url) fields[F.website] = url;

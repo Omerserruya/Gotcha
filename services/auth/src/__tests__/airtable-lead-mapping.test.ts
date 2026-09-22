@@ -67,7 +67,7 @@ describe("configured: what actually gets sent", () => {
 
   it("arrives as a NEW LEAD, which is what the team sorts on", async () => {
     const f = await send();
-    expect(f["flddUtbE8MeCoRE1J"]).toBe("ליד חדש");
+    expect(f["fld0KzX63oeGFsJBw"]).toBe("ליד חדש");
   });
 
   it("asks Airtable to typecast, so a status it has never seen is created", async () => {
@@ -76,46 +76,61 @@ describe("configured: what actually gets sent", () => {
   });
 
   it("names the business by its domain, without www", async () => {
-    expect((await send({ website: "https://www.shop.co.il/thanks" }))["fldHm0AuBoLT3Q1yg"]).toBe("shop.co.il");
+    expect((await send({ website: "https://www.shop.co.il/thanks" }))["fldAnGljXRu1xA4aQ"]).toBe("shop.co.il");
   });
 
   it("completes a bare host into a real URL", async () => {
-    expect((await send({ website: "shop.co.il" }))["fldMiRvyj3GjP5d1V"]).toBe("https://shop.co.il/");
+    expect((await send({ website: "shop.co.il" }))["fldKcYLzZZi32LT1U"]).toBe("https://shop.co.il/");
   });
 
   it("REFUSES an industry label as a website", async () => {
     // The /early-access form's picker, arriving in the same column.
     const f = await send({ website: "אופנה" });
-    expect(f["fldMiRvyj3GjP5d1V"]).toBeUndefined();
+    expect(f["fldKcYLzZZi32LT1U"]).toBeUndefined();
     // …and the primary column falls back to the person rather than the label.
-    expect(f["fldHm0AuBoLT3Q1yg"]).toBe("דני");
+    expect(f["fldAnGljXRu1xA4aQ"]).toBe("דני");
   });
 
   it("refuses anything without a dot in the host", async () => {
     for (const bad of ["localhost", "shop", "  ", "אופנה וטקסטיל"]) {
-      expect((await send({ website: bad }))["fldMiRvyj3GjP5d1V"]).toBeUndefined();
+      expect((await send({ website: bad }))["fldKcYLzZZi32LT1U"]).toBeUndefined();
     }
   });
 
-  it("carries the contact details a person would actually use", async () => {
+  it("carries the contact details into their own typed columns", async () => {
     const f = await send();
-    expect(f["fldRp9VS2IeeNHwZp"]).toBe("דני");
-    expect(f["fldvnWKHrK8XDyEyO"]).toBe("050-1234567");
-    expect(f["fldhziOcTa8zJ9pLu"]).toBe("danny@shop.co.il");
-    expect(f["fldB2b7KMiVgCM8CY"]).toContain("050-1234567");
-    expect(f["fldB2b7KMiVgCM8CY"]).toContain("danny@shop.co.il");
+    expect(f["fldySEpYt19xUZs7M"]).toBe("דני");
+    expect(f["fldwz2dpeb10qlCoO"]).toBe("050-1234567");
+    expect(f["fldzaWt13VONYYpJ6"]).toBe("danny@shop.co.il");
   });
 
   it("omits an empty email rather than writing a blank", async () => {
     const f = await send({ email: "" });
-    expect(f["fldhziOcTa8zJ9pLu"]).toBeUndefined();
-    expect(f["fldB2b7KMiVgCM8CY"]).toBe("טלפון: 050-1234567");
+    expect(f["fldzaWt13VONYYpJ6"]).toBeUndefined();
+    expect(f["fldeqBqwuYta8Aq1A"]).toContain("טלפון: 050-1234567");
   });
 
-  it("records the campaign and says the lead came to us", async () => {
+  it("leaves the team's own working columns untouched", async () => {
+    // אחראי, משימה, תאריך לביצוע, הביע עניין, סיבת פסילה, תיאור, הערות.
+    // A machine has nothing true to say in these the moment a lead arrives.
     const f = await send();
-    expect(f["fldXmYJIsN9EXKvbD"]).toBe("campaign-one-dollar-offer");
-    expect(f["fldZ9xPhI06W636cQ"]).toContain("הם פנו אלינו");
+    for (const working of [
+      "fld8kHBPGsQoOUk4s",
+      "fld2pXAxcwIFUermQ",
+      "fldqRNtzbf3S5AiGA",
+      "flduBaaawRQiDi9wz",
+      "fldpBUogN6qbIgAxz",
+      "fldqjeHrTjUtQ3kc8",
+      "fldhEzgx4d2q2996X",
+    ]) {
+      expect(f[working]).toBeUndefined();
+    }
+  });
+
+  it("records which page the lead came from", async () => {
+    const f = await send();
+    expect(f["fldhrUOcKtpq0dz7C"]).toBe("campaign-one-dollar-offer");
+    expect(f["fldeqBqwuYta8Aq1A"]).toContain("מקור: campaign-one-dollar-offer");
   });
 
   it("swallows a rejection - a full base must never fail a signup", async () => {
