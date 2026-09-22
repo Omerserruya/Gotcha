@@ -585,5 +585,21 @@ export const automationEndpoints = {
   activate: (id: string) => endpoint('/api/chatbot-flows/{id}/activate', { id }),
 } as const;
 
+/**
+ * What GOTCHA is allowed to do — Studio, screen 10.
+ *
+ * `list` merges adapter tool specs with the tenant's stored permissions.
+ * Seventeen rows here, every one a platform default.
+ *
+ * **`riskGroup` on those rows is a regex over the tool's NAME**, computed at
+ * response time by `riskGroupFor` — not stored, not assessed, and
+ * `create_update` is its no-match fallback.
+ */
+export const capabilityEndpoints = {
+  list: () => endpoint('/api/tool-permissions'),
+  /** PUT, ADMIN or `ai:tools:manage`. One tool at a time. */
+  update: (toolName: string) => endpoint('/api/tool-permissions/{toolName}', { toolName }),
+} as const;
+
 export type { Endpoint as ApiEndpoint };
 export { endpoint as defineEndpoint };

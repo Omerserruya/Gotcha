@@ -1,0 +1,28 @@
+{
+  "title": "What GOTCHA is allowed to do",
+  "description": "Every action it can take, and whether it asks you first.",
+  "unavailable": "We couldn't read what GOTCHA is allowed to do just now.",
+  "none": "GOTCHA has no actions available.",
+  "noneBody": "It can read and reply, but it cannot do anything to an order, a customer record or a calendar.",
+  "summary": "{alone, plural, =0 {Nothing here happens without you approving it first.} =1 {One of {total} actions happens without asking you. The rest wait for your approval.} other {# of {total} actions happen without asking you. The rest wait for your approval.}}",
+  "uniform": {
+    "allDefault": "Nothing here has been customised — every action is on the setting GOTCHA shipped with.",
+    "noEditing": "Nobody can change an action's details before approving it. You approve it as proposed, or you don't.",
+    "expiry": "An approval request expires after {minutes} minutes. After that it can't be approved, and nothing tells the customer.",
+    "noApprover": "No particular person is named as the approver — any admin can approve anything."
+  },
+  "stance": {
+    "on_its_own": "Does it",
+    "ask_first": "Asks you first",
+    "never": "Never"
+  },
+  "category": {
+    "messaging": "Messaging",
+    "crm": "Customer records",
+    "broadcast": "Campaigns",
+    "meta": "WhatsApp and Instagram",
+    "identity": "Identifying people",
+    "workflow": "Workflow",
+    "other": "Everything else"
+  }
+}

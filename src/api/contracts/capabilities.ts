@@ -3,118 +3,161 @@ import { z } from 'zod';
 /**
  * What GOTCHA is allowed to do — screen 10.
  *
- * Shapes read from `services/ai/src/routes/tool-permissions.ts`.
+ * Shapes read from `services/ai/src/routes/tool-permissions.ts`, and the
+ * values below were **measured through the endpoint with a real session**
+ * rather than read off the model: seventeen rows on this tenant.
  *
- * ── THE THIRD STATE THE DESIGN DOES NOT HAVE ──
- * The design promises *"Three settings for everything: do it, ask me first,
- * never."* The route returns a fourth condition that is none of the three:
- * **`scopeBlocked`** — a capability that is switched on and **still cannot
- * run**, because the integration behind it was connected without the OAuth
- * scope it needs.
+ * ── THE RISK GROUPING IS A REGEX OVER THE TOOL'S NAME ──
+ * ```ts
+ * export function riskGroupFor(toolName: string): RiskGroup {
+ *   if (classifyToolEffect(name) === "read") return "read_only";
+ *   if (FINANCIAL_RE.test(name)) return "financial";
+ *   if (DELETE_RE.test(name))    return "delete";
+ *   if (ADMIN_RE.test(name))     return "administrative";
+ *   if (SENSITIVE_RE.test(name)) return "sensitive_data";
+ *   return "create_update";                                  // no match
+ * }
+ * ```
+ * It is **not stored and not assessed**. `create_update` is the fallback, so
+ * *"13 capabilities are create/update risk"* is false — **13 matched no
+ * pattern at all.**
  *
- * *"Allowed"* and *"able"* are different, and a screen showing only the first
- * tells somebody a capability works when it cannot. That is this screen's
- * *"approved but never ran"*.
+ * And the consequence is in this tenant's own rows:
+ * ```
+ * update_contact  → sensitive_data     SENSITIVE_RE matches "contact"
+ * update_crm      → create_update      "crm" matches nothing
+ * ```
+ * **The same operation on the same data lands in two different groups
+ * because one name happens to contain the word "contact".** A screen
+ * rendering that as a risk assessment presents a regex miss as a judgement,
+ * so this one does not group by it.
  *
- * ── USAGE COUNTS ARE NOT AVAILABLE ──
- * The design shows *"Used 1,840 times this week · never failed"* per system
- * and *"Used 612 times"* per capability. The only usage route reads
- * `ToolExecution`, which has **zero rows on this tenant**, and would report
- * every tool as `"unknown"` anyway because it selects the catalog name and
- * never the denormalised `toolName` added to survive a disconnect.
+ * ── EVERY SETTING ON THIS TENANT IS A DEFAULT ──
+ * `isDefault`, `enabled`, `allowModification`, `expiresAfterMin` and
+ * `approverRole` are **uniform across all seventeen rows**. Nobody has ever
+ * customised a capability here. Seventeen identical toggles would paint
+ * defaults as decisions somebody made.
  *
- * The populated table is `ToolExecutionRequest` — 164 rows — and **no route
- * exposes it**. So the screen does not draw usage, and says why.
+ * Three of those uniform values are worth stating outright rather than
+ * rendering as a column of repeats:
  *
- * ── `allowModification` IS HERE, AND NOTHING READS IT ──
- * The response carries it per tool. It is the permission that governs editing
- * an action's parameters before approving, and **no code path consults it**.
- * No control is drawn for it.
+ *   `allowModification: false` everywhere — nobody can edit an approved
+ *       action before it runs, which is the permission Approvals found is
+ *       read by nothing.
+ *   `expiresAfterMin: 30` everywhere — every approval request dies after
+ *       thirty minutes, and Approvals found 13 of 27 approved actions never
+ *       executed.
+ *   `approverRole: null` everywhere — *"who approves this"* has no answer.
+ *       That is an **absent**, not an empty.
+ *
+ * ── AND THERE IS NO "WHAT IT CAN SEE" SIDE ──
+ * `kind` is `action` on all seventeen and `read_only` appears zero times, so
+ * a *"what it can see / what it can do"* split has one side and must not be
+ * drawn as two.
  */
 
-/** How a capability is treated. The design's three, and they are real. */
-export const CAPABILITY_MODES = ['allowed', 'ask_first', 'never'] as const;
-export type CapabilityMode = (typeof CAPABILITY_MODES)[number];
+/**
+ * **Ordered least to most consequential**, and that ordering is contractual —
+ * `tool-availability.ts` says the UI groups by these and *"the ordering is the
+ * display order, so it is part of the contract"*, with tests. Do not reorder.
+ */
+export const RISK_GROUPS = [
+  'read_only',
+  'create_update',
+  'delete',
+  'financial',
+  'sensitive_data',
+  'administrative',
+] as const;
+export type RiskGroup = (typeof RISK_GROUPS)[number];
 
 export const capabilitySchema = z.object({
   toolName: z.string().min(1),
-  /** `system` | `action` | `integration`. */
-  kind: z.string().default('system'),
+  /** `action` on every row here. `read_only` capabilities do not appear. */
+  kind: z.string().default('action'),
+  /** `messaging` · `crm` · `broadcast` · `meta` · `identity` · `workflow`. */
   category: z.string().default(''),
   description: z.string().default(''),
   enabled: z.boolean().default(false),
-  /** True when nobody has overridden the platform default for this tool. */
+  /** The design's "ask me first". True on 11 of 17 here. */
+  requiresApproval: z.boolean().default(false),
+  /** True when nobody has overridden the platform default. True on all 17. */
   isDefault: z.boolean().default(true),
-  /** `low` | `medium` | `high` — how much damage it can do. */
-  riskGroup: z.string().nullable().default(null),
-  /** Slug of the integration behind it, when there is one. */
-  integration: z.string().nullable().default(null),
-  integrationConnected: z.boolean().default(false),
+  /** Null on every row: "who approves this" has no answer. */
+  approverRole: z.string().nullable().default(null),
+  /** 30 on every row. How long an approval request stays answerable. */
+  expiresAfterMin: z.number().nullable().default(null),
   /**
-   * **Switched on, and unable to run.** The integration is connected but was
-   * granted without a scope this capability needs.
-   */
-  scopeBlocked: z.boolean().default(false),
-  missingScopes: z.array(z.string()).default([]),
-  /**
-   * Carried by the route and **read by nothing**. It governs editing an
-   * action's parameters before approving, and no code path consults it, so
-   * no control is drawn for it.
+   * False on every row. The permission governing editing an approved action's
+   * parameters — and **no code path reads it**, which Approvals established.
    */
   allowModification: z.boolean().default(false),
+  /**
+   * **A regex match on `toolName`, not an assessment.** `create_update` means
+   * "matched nothing". Kept because it is what the platform will act on, and
+   * never rendered as a judgement.
+   */
+  riskGroup: z.string().nullable().default(null),
+  integration: z.string().nullable().default(null),
 });
 
 export type Capability = z.infer<typeof capabilitySchema>;
 export const capabilityListSchema = z.array(capabilitySchema);
 
 /**
- * What this capability can actually do right now.
+ * What GOTCHA does when this capability comes up.
  *
- * Deliberately not a boolean. **"Off", "on", and "on but unable to run" are
- * three different answers**, and collapsing the last into either of the
- * others is how somebody learns from a customer that a refund never happened.
+ * The design promises three settings — *do it · ask me first · never* — and
+ * two of the three are real: `enabled` and `requiresApproval`. "Never" is
+ * `enabled: false`.
  */
-export type CapabilityState = 'off' | 'blocked' | 'on';
+export type CapabilityStance = 'never' | 'ask_first' | 'on_its_own';
 
-export function capabilityState(capability: Capability): CapabilityState {
-  if (!capability.enabled) return 'off';
-  // Checked BEFORE "on": a blocked capability reports as enabled, and that is
-  // exactly the reading this function exists to prevent.
-  if (capability.scopeBlocked) return 'blocked';
-  return 'on';
-}
-
-/** Capabilities that are on and cannot run. The row that matters most. */
-export function blockedCapabilities(capabilities: readonly Capability[]): readonly Capability[] {
-  return capabilities.filter((c) => capabilityState(c) === 'blocked');
+export function capabilityStance(capability: Capability): CapabilityStance {
+  if (!capability.enabled) return 'never';
+  return capability.requiresApproval ? 'ask_first' : 'on_its_own';
 }
 
 /**
- * Grouped by the system they belong to, in the design's shape.
+ * True when every row shares a value — so the screen can say it once instead
+ * of repeating it seventeen times.
  *
- * `integration` is null for built-in capabilities, which are their own group
- * rather than being hidden — GOTCHA can escalate to a human without any
- * integration connected, and that is worth seeing beside the rest.
+ * A column of identical values reads as seventeen decisions. One sentence
+ * reads as what it is: a platform default nobody has changed.
  */
-export interface CapabilityGroup {
-  readonly key: string;
-  readonly integration: string | null;
+export function isUniform<T>(rows: readonly T[], of: (row: T) => unknown): boolean {
+  if (rows.length === 0) return false;
+  const first = of(rows[0]!);
+  return rows.every((row) => of(row) === first);
+}
+
+/** Capabilities that act without asking. The ones worth reading first. */
+export function actsAlone(capabilities: readonly Capability[]): readonly Capability[] {
+  return capabilities.filter((c) => capabilityStance(c) === 'on_its_own');
+}
+
+export interface CategoryGroup {
+  readonly category: string;
   readonly capabilities: readonly Capability[];
 }
 
-export function groupBySystem(capabilities: readonly Capability[]): readonly CapabilityGroup[] {
+/**
+ * Grouped by what the capability is *about*, not by what a regex guessed
+ * about its name.
+ *
+ * `category` is a stored field with six real values here. `riskGroup` is
+ * computed from a name pattern with a catch-all fallback, and grouping by it
+ * would present that fallback as a risk finding.
+ */
+export function groupByCategory(capabilities: readonly Capability[]): readonly CategoryGroup[] {
   const groups = new Map<string, Capability[]>();
   for (const capability of capabilities) {
-    const key = capability.integration ?? '';
+    const key = capability.category || 'other';
     const existing = groups.get(key);
     if (existing) existing.push(capability);
     else groups.set(key, [capability]);
   }
   return [...groups.entries()]
-    .map(([key, items]) => ({
-      key: key || 'built-in',
-      integration: key || null,
-      capabilities: items,
-    }))
+    .map(([category, items]) => ({ category, capabilities: items }))
     .sort((a, b) => b.capabilities.length - a.capabilities.length);
 }
