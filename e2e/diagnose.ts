@@ -29,7 +29,14 @@
 export function missingIds(what: string): string {
   return (
     `${what} is absent, though the page rendered. Check in this order:\n` +
-    '  1. a 429 — run ONE spec, not the suite. 470 tests in parallel trip the rate limiter.\n' +
+    '  1. a 429 from PARALLELISM — run ONE spec, not the suite.\n' +
+    '  1b. a 429 from BUDGET, which serialising does NOT fix. The limit is\n' +
+    '      `rateLimit({ windowMs: 15*60*1000, max: 1000 })` in service-app.ts —\n' +
+    '      1,000 requests per FIFTEEN MINUTES per IP per service, shared across\n' +
+    '      every capture run in that window. A screen that fans out to six\n' +
+    '      endpoints costs six times its test count: the two billing specs are\n' +
+    '      ~600 requests for one pass of the pair. `--workers=1` does not help,\n' +
+    '      because the budget is a window and not a rate. WAIT IT OUT.\n' +
     '  2. a 401 — `gotcha_session` rotates on every BFF request, so a reused cookie is spent.\n' +
     '  3. a stale build — `stat -c %y .next/BUILD_ID` and `find src -newer .next/BUILD_ID`.\n' +
     '  3b. a stale PROCESS. Identify it by what is LISTENING — not by name, and\n' +
