@@ -62,6 +62,7 @@
       "PREPAID_ONLY": "Never buys more. GOTCHA runs on what you bought in advance and stops when it's gone.",
       "PAYG": "When it runs out: GOTCHA keeps working and the extra usage is billed at the end of the cycle."
     },
-    "capIsNotACap": "Note: with pay-as-you-go, the monthly limit stops automatic purchases — it doesn't stop the bill. Usage past zero is still charged at the end of the cycle."
+    "capIsNotACap": "Note: with pay-as-you-go, the monthly limit stops automatic purchases — it doesn't stop the bill. Usage past zero is still charged at the end of the cycle.",
+    "unsettable": "Pay-as-you-go can't be switched on or off from here — it's set up by GOTCHA for you. The other options on this page can be changed."
   }
 }

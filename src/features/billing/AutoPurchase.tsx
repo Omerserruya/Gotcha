@@ -2,6 +2,7 @@ import { getFormatter, getTranslations } from 'next-intl/server';
 
 import {
   capUsed,
+  isSettable,
   spendsPastZero,
   type AutoPurchase as Policy,
 } from '@/api/contracts/auto-purchase';
@@ -90,6 +91,18 @@ export async function AutoPurchase({
       <p className={styles.autoBehavior} data-testid="auto-behavior">
         {t(`autoPurchase.behavior.${policy.limitBehavior}` as 'autoPurchase.behavior.STOP_AI')}
       </p>
+
+      {/*
+        A behaviour the platform honours and the settings API refuses. Shown
+        as unavailable rather than hidden: the cap warning below is ABOUT
+        pay-as-you-go, and a warning about an option nobody can see is a
+        puzzle.
+      */}
+      {!isSettable(policy.limitBehavior) ? (
+        <p className={styles.autoUnsettable} data-testid="auto-unsettable">
+          {t('autoPurchase.unsettable')}
+        </p>
+      ) : null}
 
       {/*
         THE COMBINATION THAT LOOKS SAFE AND IS NOT. A cap with pay-as-you-go

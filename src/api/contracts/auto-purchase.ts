@@ -24,6 +24,11 @@ import { z } from 'zod';
  * unhelpful — the screen says what each one does to the people using GOTCHA
  * tomorrow.
  *
+ * **And only four of the five can be chosen.** The validator on
+ * `PUT /billing/auto-purchase` accepts four; `PAYG` is honoured by the
+ * runtime and rejected by the setter, so it can only have arrived by a seed,
+ * an admin path or the database.
+ *
  * ── AND THERE ARE TWO THRESHOLDS, NOT ONE ──
  * `warningThresholdPct` (80 by default) tells the owner, and
  * `thresholdPct` (10) triggers the purchase. The design draws a single cap.
@@ -32,6 +37,12 @@ import { z } from 'zod';
  * showing only one of them hides the fact that someone is told first.
  */
 
+/**
+ * Every behaviour the platform HONOURS at runtime.
+ *
+ * `PAYG` is real: `payg.service.ts` and `spend-window.ts` both branch on it,
+ * and a tenant can be in that state today.
+ */
 export const LIMIT_BEHAVIORS = [
   'STOP_AI',
   'HUMAN_ONLY',
@@ -40,6 +51,32 @@ export const LIMIT_BEHAVIORS = [
   'PAYG',
 ] as const;
 export type LimitBehavior = (typeof LIMIT_BEHAVIORS)[number];
+
+/**
+ * The behaviours `PUT /billing/auto-purchase` will actually accept.
+ *
+ * ```ts
+ * // credits.ts:241
+ * const LIMIT_BEHAVIORS = ["STOP_AI", "HUMAN_ONLY", "REQUIRE_APPROVAL", "PREPAID_ONLY"];
+ * // :268  rejects anything else
+ * ```
+ *
+ * **`PAYG` is honoured and unsettable.** Offering it would be a control that
+ * answers 400 — or worse, one a merchant believes saved. It is shown as
+ * unavailable **with the reason**, rather than hidden, because the cap
+ * warning on this screen is *about* PAYG and a warning about an invisible
+ * option is a puzzle.
+ */
+export const SETTABLE_BEHAVIORS = [
+  'STOP_AI',
+  'HUMAN_ONLY',
+  'REQUIRE_APPROVAL',
+  'PREPAID_ONLY',
+] as const;
+
+export function isSettable(behavior: LimitBehavior): boolean {
+  return (SETTABLE_BEHAVIORS as readonly string[]).includes(behavior);
+}
 
 export const autoPurchaseSchema = z.object({
   enabled: z.boolean().default(false),

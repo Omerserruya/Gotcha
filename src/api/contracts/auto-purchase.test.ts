@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import {
   aiKeepsAnswering,
+  isSettable,
+  SETTABLE_BEHAVIORS,
   autoPurchaseResponseSchema,
   autoPurchaseSchema,
   capUsed,
@@ -101,5 +103,35 @@ describe('no policy is not a policy of defaults', () => {
     // The currency still travels, so an amount can be named before anything
     // is set up.
     expect(parsed.currency).toBe('USD');
+  });
+});
+
+describe('what the settings API will actually accept', () => {
+  it('offers exactly the four the validator allows', () => {
+    /*
+     * credits.ts:241 — ["STOP_AI","HUMAN_ONLY","REQUIRE_APPROVAL","PREPAID_ONLY"],
+     * and :268 rejects anything else.
+     *
+     * Asserted against the validator's list so that the day PAYG is added
+     * there, this test fails and the screen stops lying in the OTHER
+     * direction — refusing an option the platform has started accepting.
+     */
+    expect([...SETTABLE_BEHAVIORS]).toEqual([
+      'STOP_AI',
+      'HUMAN_ONLY',
+      'REQUIRE_APPROVAL',
+      'PREPAID_ONLY',
+    ]);
+  });
+
+  it('knows PAYG is honoured and unsettable', () => {
+    // payg.service.ts and spend-window.ts both branch on it, so a tenant can
+    // BE in that state — it simply cannot be put there from this screen.
+    expect(isSettable('PAYG')).toBe(false);
+    expect(LIMIT_BEHAVIORS).toContain('PAYG');
+  });
+
+  it('treats every other behaviour as settable', () => {
+    for (const b of SETTABLE_BEHAVIORS) expect(isSettable(b), b).toBe(true);
   });
 });

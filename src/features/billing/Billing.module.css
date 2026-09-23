@@ -271,4 +271,16 @@
     padding-block: var(--space-10);
     padding-inline: var(--space-14);
   }
+
+  /*
+   * A behaviour the runtime honours and the settings API refuses. Stated
+   * rather than hidden, because the cap warning is about it.
+   */
+  .autoUnsettable {
+    margin: var(--space-6) 0 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-subtle);
+  }
 }
