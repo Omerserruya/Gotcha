@@ -55,20 +55,71 @@ resolve() {
   fi
 }
 
+# ── Routers mounted at bare /api ──────────────────────────────────────────
+# These declare their own full path, so there is no remainder to check: the
+# question is which router under the service declares it. EVERY billing router
+# mounts this way, which is why a search for an `/api/billing` mount finds
+# nothing and why `/api/billing/invoices` sat unused behind "we can't show your
+# invoices yet" while it was serving four failed charges.
+resolve_bare() {
+  local path="$1" svc_dir="$2"
+  local decl="${path#/api}"
+  local hit
+  # Slurped, because a route is often declared across two lines:
+  #
+  #     router.post(
+  #       "/billing/pricing/change",
+  #
+  # A line-oriented grep calls both `/billing/invoices` and
+  # `/billing/pricing/change` dead, and BOTH of them serve. A guard that
+  # reports a false death is worse than no guard: it teaches you to skim it.
+  hit=$(for f in "$svc_dir"/src/routes/*.ts; do
+          perl -0777 -ne "exit(!m{router\\.(?:get|post|put|patch|delete)\\(\\s*\"\Q$decl\E\"})" "$f" \
+            && { echo "$f"; break; }
+        done)
+
+  if [ -z "$hit" ]; then
+    printf '  %-42s DEAD no router declares "%s"\n' "$path" "$decl"; fail=1; return
+  fi
+
+  # Declaring it is not serving it. The router must also be mounted.
+  local base idx
+  base=$(basename "$hit" .ts)
+  idx="$svc_dir/src/index.ts"
+  if grep -q "app\.use(\"/api\"" "$idx" && grep -q "$base" "$idx"; then
+    printf '  %-42s ok   %s (bare /api)\n' "$path" "$base"
+  else
+    printf '  %-42s UNMOUNTED declared in %s\n' "$path" "$base"; fail=1
+  fi
+}
+
 echo "Resolving registry endpoints against Express mounts:"
 resolve /api/ai-agents                      "$PLATFORM/services/ai/src/index.ts"       "$PLATFORM/services/ai"
 resolve /api/knowledge-bases                "$PLATFORM/services/ai/src/index.ts"       "$PLATFORM/services/ai"
 resolve /api/tool-permissions               "$PLATFORM/services/ai/src/index.ts"       "$PLATFORM/services/ai"
 resolve /api/chatbot-flows                  "$PLATFORM/services/chatbot/src/index.ts"  "$PLATFORM/services/chatbot"
 
-# Routers mounted at bare /api declare their own full path, so they are checked
-# against that path rather than a remainder.
-if grep -q 'router.get("/knowledge/unanswered-questions"' \
-     "$PLATFORM/services/ai/src/routes/unanswered-questions.ts" 2>/dev/null &&
-   grep -q 'app.use("/api", unansweredQuestionRoutes)' "$PLATFORM/services/ai/src/index.ts"; then
-  printf '  %-42s ok   unanswered-questions (mounted at bare /api)\n' /api/knowledge/unanswered-questions
-else
-  printf '  %-42s DEAD\n' /api/knowledge/unanswered-questions; fail=1
-fi
+AI="$PLATFORM/services/ai"
+BILL="$PLATFORM/services/billing"
+
+resolve_bare /api/knowledge/unanswered-questions  "$AI"
+
+# Screen 17 — every billing endpoint in the registry, including the ones that
+# were already there. The point of a guard is that it covers what is already
+# believed to work.
+resolve_bare /api/billing/subscription            "$BILL"
+resolve_bare /api/billing/invoices                "$BILL"
+resolve_bare /api/billing/auto-purchase           "$BILL"
+resolve_bare /api/billing/profile                 "$BILL"
+resolve_bare /api/billing/payment-methods         "$BILL"
+resolve_bare /api/billing/credit-summary          "$BILL"
+
+# Screen 17b — pricing, quote and change.
+resolve_bare /api/billing/pricing                 "$BILL"
+resolve_bare /api/billing/pricing/quote           "$BILL"
+resolve_bare /api/billing/pricing/current         "$BILL"
+resolve_bare /api/billing/pricing/packages        "$BILL"
+resolve_bare /api/billing/pricing/change          "$BILL"
+resolve_bare /api/billing/subscription/change-plan "$BILL"
 
 exit $fail
