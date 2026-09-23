@@ -90,6 +90,186 @@
     color: var(--text-subtle);
   }
 
+  /* ── 12c · the permission catalogue ──────────────────────────────────── */
+  .catalog {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+  }
+
+  /*
+   * Said once, above the catalogue. A reader arriving from the mockup expects
+   * a None/View/Edit/Manage ladder and a scope per row; neither exists, and
+   * meeting sixty-three independent switches without warning reads as a
+   * missing feature rather than a different model.
+   */
+  .catalogNote {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-snug);
+    color: var(--text-body);
+    background-color: var(--panel-inset);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-16);
+  }
+
+  .domain {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .domainHeading {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: 500;
+    text-transform: capitalize;
+  }
+
+  .permissions {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    overflow: hidden;
+  }
+
+  .permission {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding-block: var(--space-10);
+    padding-inline: var(--space-16);
+  }
+
+  .permission + .permission {
+    border-block-start: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .permissionName {
+    font-size: var(--font-size-meta);
+  }
+
+  .permissionWhat {
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-subtle);
+    max-inline-size: var(--size-reading);
+  }
+
+  /*
+   * Only on permissions that declare the dimension. A disabled control on a
+   * row that has none would imply a setting exists and is turned off.
+   */
+  .permissionScoped {
+    font-size: var(--font-size-caption);
+    color: var(--intent-calm-text);
+  }
+
+  /* ── 12d · one person ────────────────────────────────────────────────── */
+  .person {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-14);
+  }
+
+  .personHead {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .personName {
+    margin: 0;
+    font-size: var(--font-size-body-lg);
+    font-weight: 600;
+  }
+
+  .personMeta,
+  .personScope {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .overrides {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-14);
+    padding-inline: var(--space-16);
+  }
+
+  .overridesHeading {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: 500;
+  }
+
+  .overridesNone,
+  .overridesLast {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-subtle);
+  }
+
+  .grantList {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+  }
+
+  .grant {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-6);
+    font-size: var(--font-size-caption);
+  }
+
+  .grantFeature {
+    font-weight: 500;
+  }
+
+  /*
+   * A removal must not read like an absence. "Cannot refund" and "refund
+   * taken away, by Maya, because…" are different facts, and only the second
+   * one tells a reader there is a decision behind it.
+   */
+  .grant[data-kind='removed'] .grantWhat {
+    color: var(--intent-blocked-text);
+    font-weight: 500;
+  }
+
+  .grant[data-kind='added'] .grantWhat {
+    color: var(--intent-calm-text);
+  }
+
+  .grantWhy {
+    color: var(--text-subtle);
+  }
+
+  /* Ours and not ours, told apart rather than made to look alike. */
+  .elsewhere {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-body);
+  }
+
   /* ── No roles of your own ────────────────────────────────────────────── */
   .empty {
     display: flex;

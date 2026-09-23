@@ -142,3 +142,98 @@ export type Grant = z.infer<typeof grantSchema>;
 export function isAddition(grant: Grant): boolean {
   return grant.granted;
 }
+
+/**
+ * One person, for screen 12d.
+ *
+ * `GET /api/permissions/users/:userId` → `{ data: { user, roles, grants,
+ * permissions, scope, features } }`. `features` is marked *legacy* in the
+ * route itself and is not read here.
+ *
+ * ── SCOPE IS PER ROLE ASSIGNMENT, NOT PER PERMISSION ──
+ * `UserRoleAssignment` carries `scope`, `assignedAt` and `assignedBy` — so a
+ * person's reach is set **when a role is given to them**. A permission only
+ * declares whether the scope dimension applies to it at all
+ * (`PermissionDef.scoped`), never what it is set to.
+ *
+ * ── AND TWO THINGS THE DESIGN ASKS FOR THAT DO NOT EXIST ──
+ * **Workload capacity and auto-assign.** *"Workload caps how many
+ * conversations the person holds at once"* has no field on `User` and none
+ * anywhere in the schema — searched across every service, where the only
+ * `maxConcurrent` is a voice-gateway socket limit read from an env var.
+ *
+ * **A grant's end date.** *"with who added them and when they end"* — the
+ * first exists as `updatedBy`, the second does not.
+ */
+export const personScopeSchema = z.enum(['own', 'team', 'department', 'workspace']).nullable();
+
+export const personSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().nullable().default(null),
+  email: z.string().default(''),
+  /** The platform-level role: ADMIN · AGENT · SYSTEM_ADMIN. */
+  role: z.string().default(''),
+  /** Tenant role assignments, each with the scope it was granted at. */
+  roles: z
+    .array(
+      z.object({
+        roleId: z.string(),
+        scope: z.string().nullable().default(null),
+      }),
+    )
+    .default([]),
+  /** Overrides — additions AND removals. See `grantSchema`. */
+  grants: z.array(grantSchema).default([]),
+  /** The effective permission keys, after role and overrides. */
+  permissions: z.array(z.string()).default([]),
+  scope: z.string().nullable().default(null),
+});
+
+export type Person = z.infer<typeof personSchema>;
+
+export const personDetailSchema = z.object({ data: z.unknown() }).transform(({ data }) => {
+  const d = (data ?? {}) as Record<string, unknown>;
+  const user = (d.user ?? {}) as Record<string, unknown>;
+  return personSchema.parse({
+    id: user.id,
+    name: user.name ?? null,
+    email: user.email ?? '',
+    role: user.role ?? '',
+    roles: d.roles ?? [],
+    grants: d.grants ?? [],
+    permissions: d.permissions ?? [],
+    scope: d.scope ?? null,
+  });
+});
+
+/**
+ * Overrides that ADD something the person's role does not give.
+ *
+ * Separated from removals because they are different facts, not two values of
+ * one. An addition is visible on its own — this person has something extra.
+ */
+export function additions(person: Person): readonly Grant[] {
+  return person.grants.filter((g) => g.granted);
+}
+
+/**
+ * Overrides that TAKE AWAY something the person's role does give.
+ *
+ * **These are invisible by construction.** The roles screen shows the Agent
+ * role allowing refunds, the person is listed as an Agent, and the person
+ * cannot refund — every screen in the chain tells the truth and the reader
+ * still ends up wrong.
+ *
+ * So they are surfaced beside the additions, and a removal must read
+ * differently from a plain absence: *"cannot refund"* and *"refund taken
+ * away, by Maya, because…"* are different facts and the second is the one
+ * somebody needs.
+ */
+export function removals(person: Person): readonly Grant[] {
+  return person.grants.filter((g) => !g.granted);
+}
+
+/** Any override at all — the number 12b must count, rather than "extras". */
+export function overrideCount(person: Person): number {
+  return person.grants.length;
+}

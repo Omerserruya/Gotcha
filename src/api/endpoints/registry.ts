@@ -49,6 +49,13 @@ export const permissionEndpoints = {
   catalog: () => endpoint('/api/permissions/catalog'),
   features: () => endpoint('/api/permissions/features'),
   /**
+   * The permission catalogue — screen 12c. 63 permissions, 29 of them scoped.
+   *
+   * `scopes` is `own · team · department · workspace`, and the VALUE lives on
+   * the role, not on a permission: `PermissionDef.scoped` is a boolean saying
+   * whether the dimension applies at all.
+   */
+  /**
    * The UNIFIED member list: every tenant user except SYSTEM_ADMIN, with their
    * assigned role and team memberships. ADMIN only.
    *
@@ -70,6 +77,9 @@ export const permissionEndpoints = {
   role: (roleId: string) => endpoint('/api/permissions/roles/{roleId}', { roleId }),
   roleFeatures: (roleId: string) =>
     endpoint('/api/permissions/roles/{roleId}/features', { roleId }),
+
+  /** One person: profile, role assignments with scope, and overrides. */
+  user: (userId: string) => endpoint('/api/permissions/users/{userId}', { userId }),
 
   /** A person's primary role — screen 12d. */
   userRole: (userId: string) => endpoint('/api/permissions/users/{userId}/role', { userId }),

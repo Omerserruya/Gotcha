@@ -13,5 +13,27 @@
   "noLimits": "Roles don't carry money limits. A role either allows refunds or it doesn't — GOTCHA has no setting for \"up to ₪1,000\", so nothing here caps an amount.",
   "noCustom": "No roles of your own yet.",
   "noCustomBody": "You can copy any built-in role and change the copy — that's how a role of your own starts.",
-  "allowsEverything": "Allows everything"
+  "allowsEverything": "Allows everything",
+  "scope": {
+    "own": "Sees only their own conversations",
+    "team": "Sees their team's conversations",
+    "department": "Sees their department's conversations",
+    "workspace": "Sees everything in the workspace",
+    "none": "No reach set — they see what their role allows by default"
+  },
+  "overrides": {
+    "heading": "Exceptions to their role",
+    "none": "No exceptions. This person has exactly what their role allows.",
+    "added": "given on top of their role",
+    "removed": "taken away from what their role allows",
+    "because": "because {reason}",
+    "noExpiry": "An exception lasts until someone removes it. GOTCHA has no end date for one."
+  },
+  "elsewhere": "Passwords and signed-in sessions live in your identity provider, not in GOTCHA — we don't hold either. Deactivating someone here keeps their history and stops them signing in.",
+  "catalog": {
+    "heading": "What a role can allow",
+    "scoped": "How far this reaches depends on the role's setting",
+    "scopeIsPerRole": "A role has one reach, and it applies to everything the role does — not to each permission separately. Choose it once for the role.",
+    "notLevels": "Each line here is its own switch. There is no \"view / edit / manage\" ladder: reading a conversation and closing one are separate permissions, and someone can have either without the other."
+  }
 }
