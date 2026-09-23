@@ -43,7 +43,7 @@ import {
  * correcting things.
  */
 
-const VoiceSchema = z.object({
+export const VoiceSchema = z.object({
   /**
    * The prompt block. Instructions to a writer, not a description of a brand -
    * "open with היי and the customer's name" is usable; "warm and approachable"
@@ -70,7 +70,7 @@ const VoiceSchema = z.object({
   closingExample: z.string().max(600).describe("One closing line in the business's own voice"),
 });
 
-const SYSTEM_PROMPT = `You are given MEASURED statistics about how one business writes to its customers: which emoji it uses and how often, how it opens and closes conversations, which phrases it repeats, and the length and rhythm of its messages. Every number was counted over the business's own sent messages.
+export const VOICE_SYSTEM_PROMPT = `You are given MEASURED statistics about how one business writes to its customers: which emoji it uses and how often, how it opens and closes conversations, which phrases it repeats, and the length and rhythm of its messages. Every number was counted over the business's own sent messages.
 
 Turn these numbers into instructions that another writer could follow to sound like this business.
 
@@ -86,7 +86,7 @@ RULES
 Reply with ONLY a JSON object: {"guidance":"- ...\\n- ...","summary":"...","emojiPalette":["..."],"greetingExample":"...","closingExample":"..."}`;
 
 /** Below this there is not enough writing to characterise anyone. */
-const MIN_MESSAGES = 50;
+export const MIN_VOICE_MESSAGES = 50;
 
 export async function runBrandVoiceStage(args: {
   tenantId: string;
@@ -132,10 +132,10 @@ export async function runBrandVoiceStage(args: {
   }));
   const stats = analyzeBrandVoice(messages, 15);
 
-  if (stats.messagesAnalyzed < MIN_MESSAGES) {
+  if (stats.messagesAnalyzed < MIN_VOICE_MESSAGES) {
     await recordEvent(importId, "BRAND_VOICE", "SKIPPED", "too little writing to characterise", {
       messagesAnalyzed: stats.messagesAnalyzed,
-      required: MIN_MESSAGES,
+      required: MIN_VOICE_MESSAGES,
     });
     return { ok: true, detail: { skipped: "too few messages", messagesAnalyzed: stats.messagesAnalyzed } };
   }
@@ -152,7 +152,7 @@ export async function runBrandVoiceStage(args: {
     tenantId,
     importId,
     schema: VoiceSchema,
-    system: SYSTEM_PROMPT + languageDirective(language),
+    system: VOICE_SYSTEM_PROMPT + languageDirective(language),
     user: renderVoiceStats(stats),
     feature: "historical_brand_voice",
     maxTokens: 2000,

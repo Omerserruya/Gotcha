@@ -262,7 +262,7 @@ router.get("/workspace/voice", READ, async (req: Request, res: Response) => {
         // each. `edited` is what the import pipeline refuses to overwrite.
         source: !guidance ? "none" : profile?.observedVoiceEditedAt ? "edited" : "learned",
         editedAt: profile?.observedVoiceEditedAt?.toISOString() ?? null,
-        basis: { messagesAnalysed: 0, importedAt: null },
+        basis: { messagesAnalysed: null, importedAt: null },
       },
     });
   } catch (err) {
@@ -295,7 +295,7 @@ router.put("/workspace/voice", WRITE, async (req: Request, res: Response) => {
           guidance: profile.observedVoice ?? null,
           source: "none",
           editedAt: null,
-          basis: { messagesAnalysed: 0, importedAt: null },
+          basis: { messagesAnalysed: null, importedAt: null },
           reverted: true,
         },
       });
@@ -325,7 +325,7 @@ router.put("/workspace/voice", WRITE, async (req: Request, res: Response) => {
         guidance: updated.observedVoice,
         source: "edited",
         editedAt: updated.observedVoiceEditedAt?.toISOString() ?? null,
-        basis: { messagesAnalysed: 0, importedAt: null },
+        basis: { messagesAnalysed: null, importedAt: null },
       },
     });
   } catch (err: any) {
@@ -375,6 +375,66 @@ router.post("/workspace/voice/sample", WRITE, async (req: Request, res: Response
   } catch (err) {
     console.error("voice sample error:", (err as Error).message);
     res.status(503).json({ error: "Could not generate a sample right now", code: "SAMPLE_UNAVAILABLE" });
+  }
+});
+
+// ─── §4b · learn ──────────────────────────────────────────────
+
+/**
+ * POST /api/workspace/voice/learn - learn the voice from what this business
+ * has already written here.
+ *
+ * Until now a voice could only be learned by importing a WhatsApp history.
+ * Most tenants never do, so for them the box could only be typed by hand.
+ *
+ * ★ IT LEARNS ONLY FROM MESSAGES A SIGNED-IN PERSON WROTE. Live outbound
+ * traffic is overwhelmingly the product's own output - on this deployment,
+ * 179 of 180 outbound messages - and learning from that would feed the model's
+ * register back into the prompt that produces it, then show the result to the
+ * customer as their own voice. `services/ai/src/services/live-voice.service.ts`
+ * holds the rule and the reasoning.
+ *
+ * Every refusal comes back 200 with a `status` and the two counts, because
+ * "your people have written 12 messages and we need 50" is a sentence the
+ * screen has to show, not an error it has to interpret.
+ */
+router.post("/workspace/voice/learn", WRITE, async (req: Request, res: Response) => {
+  try {
+    // Delegated, not reimplemented: a new model call belongs in services/ai.
+    // Generous timeout - this counts a corpus and then makes a model call,
+    // where the sample endpoint only makes the call.
+    const upstream = await fetch(`${AI_SERVICE_URL}/api/internal/voice-learn`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-internal-key": process.env.INTERNAL_SERVICE_KEY ?? "",
+      },
+      body: JSON.stringify({ tenantId: req.tenantId! }),
+      signal: AbortSignal.timeout(60_000),
+    });
+    if (!upstream.ok) {
+      res.status(503).json({ error: "Could not learn the voice right now", code: "LEARN_UNAVAILABLE" });
+      return;
+    }
+    const data = (await upstream.json().catch(() => null)) as
+      | { status?: string; humanWritten?: number; machineWritten?: number; required?: number; guidance?: string; summary?: string }
+      | null;
+    if (!data?.status) {
+      res.status(503).json({ error: "Could not learn the voice right now", code: "LEARN_UNAVAILABLE" });
+      return;
+    }
+
+    res.json({
+      data: {
+        ...data,
+        // `source` is reported the same way the GET reports it, so the screen
+        // does not need a second rule for what it is looking at after a learn.
+        source: data.status === "learned" ? "learned" : undefined,
+      },
+    });
+  } catch (err) {
+    console.error("voice learn error:", (err as Error).message);
+    res.status(503).json({ error: "Could not learn the voice right now", code: "LEARN_UNAVAILABLE" });
   }
 });
 

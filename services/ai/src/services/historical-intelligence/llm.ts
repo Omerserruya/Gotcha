@@ -26,7 +26,14 @@ export interface StructuredCallArgs<T extends z.ZodTypeAny> {
   maxTokens?: number;
   /** `metadata.type` on the usage record, so cost is attributable per stage. */
   feature: string;
-  importId: string;
+  /**
+   * The import these calls belong to, when there is one.
+   *
+   * OPTIONAL because the same count-first voice analysis now also runs outside
+   * an import, over live conversations, where no `HistoricalImport` row exists
+   * to key on. The import path is unchanged and still passes it.
+   */
+  importId?: string;
 }
 
 export async function structuredCall<T extends z.ZodTypeAny>(
@@ -67,8 +74,13 @@ export async function structuredCall<T extends z.ZodTypeAny>(
           // Grouping every call of one import under one session id lets OpenAI's
           // prefix cache do its job across thousands of per-customer calls that
           // share an identical system prompt.
-          sessionId: `historical-import:${args.importId}`,
-          metadata: { type: args.feature, importId: args.importId },
+          sessionId: args.importId
+            ? `historical-import:${args.importId}`
+            : // No import to group under. Keyed by tenant and feature so the
+              // prefix cache still works across repeat runs, and so an
+              // import-less call can never collide with an import's session.
+              `${args.feature}:${args.tenantId}`,
+          metadata: { type: args.feature, ...(args.importId ? { importId: args.importId } : {}) },
         }),
       );
       raw = res.content;
