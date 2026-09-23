@@ -353,6 +353,30 @@ export interface SiteCrawl {
   businessType: string;
   /** Every URL the crawl asked for, in order. Useful to a caller reporting progress. */
   requested: string[];
+  /**
+   * How many of `pages` carry DISTINCT text.
+   *
+   * ★ NOT cosmetic, and the reason it exists is a real site. A
+   * password-protected Shopify store answers 200 to EVERY path - including
+   * /policies/refund-policy and /pages/contact - with the same login page.
+   * `fetchPageRaw` only rejects a non-200 or a non-HTML body, so all 17 fetches
+   * "succeed" and the crawl reads one page seventeen times.
+   *
+   * Measured on the dev tenant's own store: 17 requested, 17 returned,
+   * distinctTextPages = 1, 188 characters each, reading "This store is password
+   * protected".
+   *
+   * So a caller must never say "we read 17 pages of your site" off
+   * `pages.length`. When this is 1 the honest sentence is that the site could
+   * not be read, and `businessType` will still say "ecommerce" because the
+   * Shopify markers are in the login page's own markup - a confident answer
+   * about a site nobody saw.
+   *
+   * Reported rather than acted on deliberately: deduplicating `pages` would
+   * change what onboarding sends to the model for every new tenant, and that is
+   * a behaviour change to decide on its own, not a side effect of a diagnostic.
+   */
+  distinctTextPages: number;
 }
 
 /** Which beat of the crawl is running, for callers that narrate it to a user. */
@@ -416,5 +440,13 @@ export async function crawlSite(
   // the health read and the gaps all reason about the RIGHT kind of business.
   const businessType = classifyBusinessType([home.text, ...okPages.map((p) => p.text)].join(" "), signals);
 
-  return { home, okPages, pages, signals, businessType, requested };
+  return {
+    home,
+    okPages,
+    pages,
+    signals,
+    businessType,
+    requested,
+    distinctTextPages: new Set(pages.map((p) => p.text)).size,
+  };
 }

@@ -105,6 +105,32 @@ describe("what the crawl owns, and must keep owning", () => {
     expect(crawl).toBeNull();
   });
 
+  it("★ counts DISTINCT pages, so a site that answers 200 to everything cannot look read", async () => {
+    // Measured on the dev tenant's own store: a password-protected Shopify
+    // shop answers 200 to every path - /policies/refund-policy, /pages/contact,
+    // all of them - with the same login page. 17 requested, 17 "read", one page
+    // of information. `fetchPageRaw` only rejects a non-200 or non-HTML body, so
+    // nothing upstream notices.
+    // Carries the markers a real Shopify login page carries. A `generator`
+    // meta tag alone classified as "generic", which made the first version of
+    // this test disagree with the live run - the fixture has to be faithful or
+    // the finding it pins is not the one that happens.
+    const wall = `<html><head><script src="https://cdn.shopify.com/s/files/x.js"></script></head><body>
+      <p>This store is password protected. Use the password to enter the store.</p></body></html>`;
+    const crawl = await crawlSite(ORIGIN, {
+      fetchPage: async () => ({ html: wall, text: "This store is password protected. Use the password to enter the store." }),
+    });
+
+    expect(crawl).not.toBeNull();
+    expect(crawl!.pages.length).toBe(1 + CRAWL_FETCH_CAP);
+    // The number a screen may actually quote. Saying "we read 17 pages" off
+    // pages.length would describe a site nobody could see.
+    expect(crawl!.distinctTextPages).toBe(1);
+    // And it still classifies confidently, because the Shopify markers are in
+    // the login page's own markup - which is exactly why the count is needed.
+    expect(crawl!.businessType).toBe("ecommerce");
+  });
+
   it("reports its phases in order, and a failing reporter cannot break the crawl", async () => {
     const { fetchPage } = makeFetcher();
     const seen: string[] = [];

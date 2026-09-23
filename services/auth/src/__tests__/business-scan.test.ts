@@ -12,14 +12,18 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+// Typed loosely on purpose: these stand in for Prisma delegates whose real
+// signatures are generated, and a narrow inferred type here made `tsc` reject
+// the test while vitest ran it happily - esbuild strips types without checking
+// them, so a test file can pass its suite and fail the typecheck.
 const prismaMock = vi.hoisted(() => ({
-  businessProfile: { findUnique: vi.fn(), update: vi.fn(async () => ({})) },
-  businessDiscovery: { findUnique: vi.fn(async () => null) },
+  businessProfile: { findUnique: vi.fn<(...a: any[]) => any>(), update: vi.fn<(...a: any[]) => any>() },
+  businessDiscovery: { findUnique: vi.fn<(...a: any[]) => any>() },
 }));
-const crawlMock = vi.hoisted(() => vi.fn());
+const crawlMock = vi.hoisted(() => vi.fn<(...a: any[]) => any>());
 const provenanceMock = vi.hoisted(() => ({
-  readProvenance: vi.fn(async () => ({})),
-  stampProvenance: vi.fn(async () => undefined),
+  readProvenance: vi.fn<(...a: any[]) => any>(),
+  stampProvenance: vi.fn<(...a: any[]) => any>(),
 }));
 
 vi.mock("@chatcenter/shared", () => ({ prisma: prismaMock }));
@@ -104,7 +108,7 @@ describe("what a rescan writes", () => {
     expect(outcome.ok).toBe(true);
     if (!outcome.ok) return;
     expect(outcome.applied).toEqual(["industry"]);
-    expect(prismaMock.businessProfile.update.mock.calls[0]![0].data).toEqual({ industry: "Outdoor gear" });
+    expect((prismaMock.businessProfile.update.mock.calls[0] as any[])[0].data).toEqual({ industry: "Outdoor gear" });
 
     const offered = outcome.plan.offer.map((o) => [o.field, o.because]);
     // The human-edited description is offered, not written.
