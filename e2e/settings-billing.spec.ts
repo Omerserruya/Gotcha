@@ -257,5 +257,30 @@ for (const size of SIZES) {
 
       await shoot(page, `${size.name}-invoices-failed`);
     });
+    /*
+     * ★ The two facts that belong together.
+     *
+     * Four charges failed against an entity with ZERO payment methods. A
+     * card that does not exist cannot be charged — arithmetic, not a
+     * diagnosis — and it is the only actionable thing on this page.
+     */
+    test('profile · nothing to charge, said beside the failures', async ({ page }) => {
+      await openBilling(page, 'en');
+
+      const nothing = page.getByTestId('nothing-to-charge');
+      await expect(nothing).toBeVisible();
+      await expect(nothing).toHaveText(/no payment method on file/i);
+      await expect(nothing).toHaveText(/charges have already failed/i);
+
+      // Absent and blank are different states; this tenant has no row.
+      await expect(page.getByTestId('profile-none')).toBeVisible();
+
+      // And the fields the design asks for that do not exist are named.
+      await expect(page.getByTestId('profile-absent-fields')).toHaveText(
+        /one invoice email address, not a list/i,
+      );
+
+      await shoot(page, `${size.name}-profile-nothing-to-charge`);
+    });
   });
 }

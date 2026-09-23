@@ -13,6 +13,12 @@ import {
 } from '@/api/contracts/billing';
 import { billingEndpoints, usageEndpoints } from '@/api/endpoints/registry';
 import { autoPurchaseResponseSchema } from '@/api/contracts/auto-purchase';
+import {
+  billingProfileResponseSchema,
+  paymentMethodListSchema,
+  type BillingProfile,
+  type PaymentMethod,
+} from '@/api/contracts/billing-profile';
 import { invoiceListSchema, type Invoice } from '@/api/contracts/invoices';
 import { logger } from '@/observability/logger';
 
@@ -58,12 +64,25 @@ export interface BillingData {
    * 10%" is a fact about this tenant or a guess about one.
    */
   readonly autoPurchase: AutoPurchaseData | null;
+  /** Who the bill is made out to — screen 17e. Null means no row at all. */
+  readonly profile: BillingProfile | null;
+  /** What it charges against. Empty means there is nothing to charge. */
+  readonly paymentMethods: readonly PaymentMethod[] | null;
 }
 
 export async function loadBilling(): Promise<BillingData> {
   const api = serverApi();
 
-  const [allowance, subscription, plans, invoices, breakdown, autoPurchase] = await Promise.all([
+  const [
+    allowance,
+    subscription,
+    plans,
+    invoices,
+    breakdown,
+    autoPurchase,
+    profile,
+    paymentMethods,
+  ] = await Promise.all([
     api
       .get({ endpoint: usageEndpoints.allowance(), payload: allowanceSchema })
       .catch((cause: unknown) => {
@@ -117,6 +136,27 @@ export async function loadBilling(): Promise<BillingData> {
         logger.warn('billing.auto_purchase_failed', { cause });
         return null;
       }),
+    api
+      .get({
+        endpoint: billingEndpoints.profile(),
+        payload: billingProfileResponseSchema,
+        raw: true,
+      })
+      .catch((cause: unknown) => {
+        logger.warn('billing.profile_failed', { cause });
+        return null;
+      }),
+    api
+      .get({
+        endpoint: billingEndpoints.paymentMethods(),
+        payload: paymentMethodListSchema,
+        // `{ paymentMethods }` — a sixth envelope shape.
+        raw: true,
+      })
+      .catch((cause: unknown) => {
+        logger.warn('billing.payment_methods_failed', { cause });
+        return null;
+      }),
   ]);
 
   return {
@@ -125,6 +165,8 @@ export async function loadBilling(): Promise<BillingData> {
     plans: plans?.plans ?? [],
     invoices,
     autoPurchase,
+    profile,
+    paymentMethods,
     breakdown,
   };
 }

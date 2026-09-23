@@ -5,7 +5,8 @@
     "runway": "Conversations this period",
     "breakdown": "Where the period went",
     "invoices": "Invoices",
-    "autoPurchase": "Running low"
+    "autoPurchase": "Running low",
+    "profile": "Billing details"
   },
   "plan": {
     "unavailable": "We couldn't read your plan just now.",
@@ -64,5 +65,18 @@
     },
     "capIsNotACap": "Note: with pay-as-you-go, the monthly limit stops automatic purchases — it doesn't stop the bill. Usage past zero is still charged at the end of the cycle.",
     "unsettable": "Pay-as-you-go can't be switched on or off from here — it's set up by GOTCHA for you. The other options on this page can be changed."
+  },
+  "profile": {
+    "noCard": "There's no payment method on file, so there's nothing for GOTCHA to charge.",
+    "noCardWithFailures": "{count, plural, =1 {There's no payment method on file, so there's nothing for GOTCHA to charge — and one charge has already failed.} other {There's no payment method on file, so there's nothing for GOTCHA to charge — and # charges have already failed.}}",
+    "card": "{brand} ending {last4}",
+    "unknownBrand": "Card",
+    "none": "No billing details on file yet.",
+    "blank": "A billing record exists but nothing has been filled in.",
+    "name": "Billed to",
+    "email": "Invoices go to",
+    "vatId": "Tax ID",
+    "address": "Address",
+    "absentFields": "GOTCHA holds one invoice email address, not a list — and it has no field for a PO number or a separate language for invoices."
   }
 }

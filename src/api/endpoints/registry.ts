@@ -200,6 +200,10 @@ export const billingEndpoints = {
    * when `policy` is null so an amount can be named before anything is set.
    */
   autoPurchase: () => endpoint('/api/billing/auto-purchase'),
+  /** Who the bill is made out to — screen 17e. `{ data }`, and it may be null. */
+  profile: () => endpoint('/api/billing/profile'),
+  /** What it charges against. Answers `{ paymentMethods }` — a sixth shape. */
+  paymentMethods: () => endpoint('/api/billing/payment-methods'),
 } as const;
 
 export const intelligenceReviewEndpoints = {

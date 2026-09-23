@@ -2,6 +2,7 @@ import { getTranslations } from 'next-intl/server';
 
 import styles from '@/features/billing/Billing.module.css';
 import { AutoPurchase } from '@/features/billing/AutoPurchase';
+import { BillingProfileSection } from '@/features/billing/BillingProfile';
 import { Invoices, PlanLine, UsageBreakdownSection } from '@/features/billing/BillingSections';
 import { loadBilling } from '@/features/billing/load-billing';
 import { Runway } from '@/features/billing/Runway';
@@ -29,7 +30,16 @@ import { SettingsSection } from '@/shell/SettingsSection';
  */
 export default async function Page() {
   const t = await getTranslations('billing');
-  const { allowance, subscription, plans, invoices, breakdown, autoPurchase } = await loadBilling();
+  const {
+    allowance,
+    subscription,
+    plans,
+    invoices,
+    breakdown,
+    autoPurchase,
+    profile,
+    paymentMethods,
+  } = await loadBilling();
 
   return (
     <SettingsSection title={t('title')} description={t('description')}>
@@ -50,6 +60,15 @@ export default async function Page() {
         <AutoPurchase
           policy={autoPurchase?.policy ?? null}
           currency={autoPurchase?.currency ?? 'ILS'}
+        />
+      </section>
+
+      <section className={styles.section} data-testid="section-profile">
+        <h2 className={styles.sectionHeading}>{t('heading.profile')}</h2>
+        <BillingProfileSection
+          profile={profile}
+          methods={paymentMethods}
+          failedInvoiceCount={(invoices ?? []).filter((i) => i.status === 'FAILED').length}
         />
       </section>
 

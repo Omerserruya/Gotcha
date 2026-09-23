@@ -283,4 +283,55 @@
     line-height: var(--line-height-snug);
     color: var(--text-subtle);
   }
+
+  /* ── 17e · billing details ───────────────────────────────────────────── */
+  /*
+   * Four charges failed against an entity with nothing to charge them to.
+   * Those two facts belong in one sentence, and it is the only actionable
+   * thing on the page.
+   */
+  .noCard {
+    margin: 0 0 var(--space-10);
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-snug);
+    color: var(--intent-blocked-text);
+    background-color: var(--intent-blocked-surface);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-16);
+  }
+
+  .profileNone,
+  .profileAbsent {
+    margin: var(--space-8) 0 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-subtle);
+  }
+
+  .profileFields {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+  }
+
+  .profileField {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-8);
+    font-size: var(--font-size-caption);
+  }
+
+  .profileField dt {
+    color: var(--text-subtle);
+    min-inline-size: var(--size-fact-label);
+  }
+
+  .profileField dd {
+    margin: 0;
+    font-size: var(--font-size-meta);
+  }
 }
