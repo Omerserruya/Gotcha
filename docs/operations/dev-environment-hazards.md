@@ -202,6 +202,36 @@ test run as a gate, and do not read 286 as a regression.**
 
 ---
 
+## The frontend is a second repository, and nothing links them
+
+```
+/home/ocs/projects/ChatCenter   the platform
+/home/ocs/projects/redesign     the rebrand frontend — its own repo, one directory up
+```
+
+**There is no import edge between them.** No shared build, no shared types, no test that spans
+both. **The only thing connecting them is a runtime contract**, and a runtime contract is
+invisible to every static tool either side runs.
+
+So a response-shape change here is a breaking change **with no compiler, no linter and no test
+anywhere that can see it.** Measured 2026-09-23: a field went from `0` to `null`, which is more
+truthful and cannot be expressed by `z.number().default(0)`, and a screen two repositories away
+started rendering *"could not be loaded"*. The commit message said **"no screen reads it yet"**,
+written after grepping `ChatCenter/frontend/src` — **the wrong tree.**
+
+> **"No consumer in this repo" is not "no consumer."**
+
+**Before changing a served response shape:**
+```bash
+grep -rn "<the field>" ../redesign/src/api/contracts/
+```
+
+**And the frontend's diagnosis is the one to keep**, because it says why the guard was right to
+trip on an improvement:
+> **A contract that fails closed will sometimes fail on good news.**
+
+---
+
 ## A green vitest run says nothing about types
 
 `vitest` transforms with esbuild, which **strips types without checking them**. So a file with
