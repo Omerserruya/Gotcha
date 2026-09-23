@@ -265,6 +265,33 @@ that write values they expect to be no-ops.**
 
 ---
 
+## The cache and the store disagree about encoding
+
+`writeDurableSetting` puts **exactly what you hand it** into Redis, and gives Postgres
+`JSON.parse(value)` when that parse succeeds.
+
+```
+writeDurableSetting(tenantId, key, JSON.stringify("leads"))
+  Postgres  →  leads
+  Redis     →  "leads"      with the quotes
+```
+
+**So it reads back correctly after an eviction and wrongly while cached.** An intermittent that
+resolves itself on restart is the worst shape available: **every instinct that would find it —
+reproduce, restart, retry, check tomorrow — makes it disappear.**
+
+The symptom points away from the cause. Measured 2026-09-23: **`PUT` returned 200, the value was
+in the database, and the `GET` read nothing.** Three true observations, none of them about Redis.
+
+**`businessHours` survives this by accident** — it stores an **object** and its reader parses, so
+the round trip happens to work. **A scalar must not be stringified.** Two callers of one helper,
+one safe for a reason that does not generalise.
+
+> **A cache and its store must agree about encoding, and the only way to know they do is to read
+> each back separately.** Checking the write, or checking one read, cannot see a disagreement.
+
+---
+
 ## A green vitest run says nothing about types
 
 `vitest` transforms with esbuild, which **strips types without checking them**. So a file with
