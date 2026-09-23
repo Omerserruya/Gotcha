@@ -145,6 +145,29 @@ watching it not be. Three other instances this project, all the same shape:
 
 ---
 
+## A token name is checked by nothing
+
+```css
+var(--intent-caution-surface, var(--panel-inset))   /* the first token does not exist */
+```
+
+**CSS custom properties take a fallback, so a misspelt or invented token renders the fallback
+forever.** Nothing fails: not `tsc`, not a test, not a screenshot that nobody has a reference
+for. **There is no error to notice — only a colour that is slightly wrong and that nobody can
+prove was not intended.**
+
+Measured 2026-09-23: a banner written against `--intent-caution-*` when the amber set is
+`--intent-blocked-*`. Caught only by going to confirm the token existed **before trusting the
+fallback that would have hidden it**.
+
+> **A fallback is a guard against a missing value and a silencer for a missing name.**
+
+**Confirm a token exists before relying on its fallback.** And prefer the name that is
+semantically true — here `intent-blocked` was both correct and accurate, because Meta had
+blocked the templates.
+
+---
+
 ## Gate 1 — the screen must be the screen
 
 Every spec's `open…()` helper refuses to photograph anything until it has
