@@ -32,10 +32,16 @@ export function missingIds(what: string): string {
     '  1. a 429 — run ONE spec, not the suite. 470 tests in parallel trip the rate limiter.\n' +
     '  2. a 401 — `gotcha_session` rotates on every BFF request, so a reused cookie is spent.\n' +
     '  3. a stale build — `stat -c %y .next/BUILD_ID` and `find src -newer .next/BUILD_ID`.\n' +
-    '  3b. a stale PROCESS — `ps -o lstart= -p $(pgrep -f next-server)` against that\n' +
-    '      same BUILD_ID time. A build NEWER than the running server serves the old\n' +
-    '      one, and check 3 passes: src is older than BUILD_ID, so both artefacts on\n' +
-    '      disk agree. The stale thing is neither of them.\n' +
+    '  3b. a stale PROCESS. Identify it by what is LISTENING — not by name, and\n' +
+    "      not by working directory. This machine also runs the platform's own\n" +
+    '      next-server, and a `next build` leaves workers in OUR cwd that have\n' +
+    '      already exited, so both of those return a start time for something\n' +
+    '      that is not serving the page:\n' +
+    '        ss -ltnp | grep :3000      # the one pid that can be responsible\n' +
+    '        ps -o lstart= -p <that pid>\n' +
+    '      Compare it to `stat -c %y .next/BUILD_ID`. A build NEWER than the\n' +
+    '      running server serves the OLD one, and check 3 still passes: src is\n' +
+    '      older than BUILD_ID, so both artefacts on disk agree with each other.\n' +
     '  4. a real regression, which is the least likely and the only one worth reporting.'
   );
 }
