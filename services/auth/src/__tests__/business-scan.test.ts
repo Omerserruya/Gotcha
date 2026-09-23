@@ -62,7 +62,13 @@ beforeEach(() => {
   prismaMock.businessProfile.update.mockResolvedValue({});
   prismaMock.businessDiscovery.findUnique.mockResolvedValue(null);
   provenanceMock.readProvenance.mockResolvedValue({});
-  crawlMock.mockResolvedValue({ pages: [], signals: {}, businessType: "ecommerce" });
+  crawlMock.mockResolvedValue({
+    pages: [],
+    signals: {},
+    businessType: "ecommerce",
+    requested: [],
+    distinctTextPages: 0,
+  });
 });
 
 describe("which report fields the scan may speak for", () => {
@@ -192,13 +198,82 @@ describe("when it refuses", () => {
     expect(prismaMock.businessProfile.update).not.toHaveBeenCalled();
   });
 
-  it("writes nothing when the model is unavailable", async () => {
-    // The live case on this stack: the tenant is out of AI units.
+  it("writes nothing when the model is unavailable, but STILL reports what the crawl saw", async () => {
+    // The live case on this stack: the tenant is out of AI units, so every real
+    // run ends here. Withholding `reach` would hide the more useful fact in
+    // exactly the case that needs it - an unreadable site AND a failed analysis.
+    const pages = [{ url: "https://shop.example.com", text: "password protected" }];
+    crawlMock.mockResolvedValue({
+      pages,
+      signals: {},
+      businessType: "ecommerce",
+      requested: pages.map((p) => p.url),
+      distinctTextPages: 1,
+    });
     const failing = vi.fn(async () => ({ ok: false, json: async () => ({}) }) as any);
 
     const outcome = await runProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: failing });
 
-    expect(outcome).toEqual({ ok: false, reason: "scan_failed" });
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) return;
+    expect(outcome.reason).toBe("scan_failed");
+    expect(outcome.reach?.distinctTextPages).toBe(1);
     expect(prismaMock.businessProfile.update).not.toHaveBeenCalled();
+  });
+
+  it("reports no reach when the site could not be read at all", async () => {
+    crawlMock.mockResolvedValue(null);
+
+    const outcome = await runProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: okFetch() });
+
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) return;
+    // Nothing was read, so there is nothing to report. An empty reach would
+    // claim a measurement that never happened.
+    expect(outcome.reach).toBeUndefined();
+  });
+});
+
+describe("what the crawl could see is reported to the screen", () => {
+  it("★ reports distinctTextPages so a login wall cannot look like 17 pages read", async () => {
+    // The dev tenant's own store: every path answers 200 with the same login
+    // page. pagesRead is 17 and the crawl saw ONE page.
+    const wall = Array.from({ length: 17 }, (_, i) => ({ url: `https://shop.example.com/p${i}`, text: "password protected" }));
+    crawlMock.mockResolvedValue({
+      pages: wall,
+      signals: {},
+      businessType: "ecommerce",
+      requested: wall.map((p) => p.url),
+      distinctTextPages: 1,
+    });
+
+    const outcome = await runProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: okFetch() });
+
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(outcome.reach.pagesRead).toBe(17);
+    // The number a screen may quote. Without it, 17 reads as success.
+    expect(outcome.reach.distinctTextPages).toBe(1);
+    expect(outcome.reach.coverage).toHaveLength(17);
+  });
+
+  it("reports a readable site as readable", async () => {
+    const pages = [
+      { url: "https://shop.example.com", text: "home" },
+      { url: "https://shop.example.com/about", text: "about us" },
+    ];
+    crawlMock.mockResolvedValue({
+      pages,
+      signals: {},
+      businessType: "ecommerce",
+      requested: pages.map((p) => p.url),
+      distinctTextPages: 2,
+    });
+
+    const outcome = await runProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: okFetch() });
+
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(outcome.reach.distinctTextPages).toBe(2);
   });
 });

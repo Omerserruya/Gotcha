@@ -451,7 +451,10 @@ router.post("/workspace/scan", WRITE, async (req: Request, res: Response) => {
         res.status(409).json({ error: "A scan is already running", code: "SCAN_IN_PROGRESS" });
         return;
       }
-      res.json({ data: { ok: false, reason: outcome.reason } });
+      // `reach` travels with a post-crawl failure: the measurement already
+      // exists, and "we could not read your site" is more use to the reader
+      // than "the scan failed".
+      res.json({ data: { ok: false, reason: outcome.reason, ...(outcome.reach ? { reach: outcome.reach } : {}) } });
       return;
     }
 
@@ -461,6 +464,12 @@ router.post("/workspace/scan", WRITE, async (req: Request, res: Response) => {
         // What changed by itself, and what is waiting for the owner to decide.
         applied: outcome.applied,
         offer: outcome.plan.offer,
+        // What the crawl could SEE. `reach.distinctTextPages === 1` means the
+        // site answered every request with the same page - a login wall - so the
+        // screen must say the site could not be read rather than quoting
+        // `pagesRead`. A caveat that appears because a measurement says so is
+        // information; one that is always there is wallpaper.
+        reach: outcome.reach,
         fieldSources: fieldSources(await readProvenance(req.tenantId!)),
       },
     });

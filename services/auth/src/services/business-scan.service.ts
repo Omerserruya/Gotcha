@@ -98,9 +98,50 @@ export function mapReportToProfileFields(report: any): Record<string, unknown> {
   return out;
 }
 
+/**
+ * What the crawl could actually see, reported so a screen can be honest about it.
+ *
+ * ★ `distinctTextPages` IS THE ONE THAT MATTERS. A password-protected store
+ * answers 200 to every path, so `pagesRead` can be 17 while the crawl saw one
+ * page seventeen times - measured on this deployment's own demo store, where
+ * every response was the same 188-byte "This store is password protected".
+ *
+ * A screen must never say "we read 17 pages" off `pagesRead`. When
+ * `distinctTextPages` is 1 the honest sentence is that the site could not be
+ * read, and the classification that comes back with it - "ecommerce", from
+ * Shopify markers in the login page's own markup - is a confident answer about
+ * a site nobody saw.
+ *
+ * `coverage` is the URLs that answered, which is also what the model is given
+ * as the bound on asserting absence ("only assert absence within these").
+ */
+export interface CrawlReach {
+  /** URLs requested, including the home page. */
+  requested: number;
+  /** URLs that answered with HTML. */
+  pagesRead: number;
+  /** How many of those carried DISTINCT text. 1 means the site was not readable. */
+  distinctTextPages: number;
+  coverage: string[];
+}
+
 export type RescanOutcome =
-  | { ok: true; plan: RescanPlan; applied: string[] }
-  | { ok: false; reason: "no_domain" | "fetch_failed" | "scan_failed" | "scan_in_progress" | "no_profile" };
+  | { ok: true; plan: RescanPlan; applied: string[]; reach: CrawlReach }
+  | {
+      ok: false;
+      reason: "no_domain" | "fetch_failed" | "scan_failed" | "scan_in_progress" | "no_profile";
+      /**
+       * Present when the CRAWL ran and the failure came after it.
+       *
+       * `scan_failed` means the model step failed, not the crawl - so what the
+       * crawl could see is already measured and reporting it is free. Withholding
+       * it would hide the more useful fact in the case that needs it most: a
+       * site that answered every request with a login wall AND an analysis that
+       * failed. Absent for `fetch_failed`, where nothing was read, and for the
+       * refusals that never reach a crawl.
+       */
+      reach?: CrawlReach;
+    };
 
 /** A scan flagged SCANNING but untouched for this long is treated as crashed. */
 const SCAN_STALE_MS = 3 * 60_000;
@@ -155,6 +196,13 @@ export async function runProfileRescan(args: {
   const crawl = await crawlSite(origin);
   if (!crawl) return { ok: false, reason: "fetch_failed" };
 
+  const reach: CrawlReach = {
+    requested: crawl.requested.length,
+    pagesRead: crawl.pages.length,
+    distinctTextPages: crawl.distinctTextPages,
+    coverage: crawl.pages.map((p) => p.url),
+  };
+
   const report = await callDiscoverBusiness(
     authHeader,
     {
@@ -166,7 +214,7 @@ export async function runProfileRescan(args: {
     },
     fetchWithTimeoutFn,
   );
-  if (!report) return { ok: false, reason: "scan_failed" };
+  if (!report) return { ok: false, reason: "scan_failed", reach };
 
   const provenance = await readProvenance(tenantId);
   const plan = planRescan(provenance, mapReportToProfileFields(report), {
@@ -185,5 +233,5 @@ export async function runProfileRescan(args: {
     await stampProvenance(tenantId, applied, "scan", actorId);
   }
 
-  return { ok: true, plan, applied };
+  return { ok: true, plan, applied, reach };
 }
