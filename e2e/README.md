@@ -62,6 +62,16 @@ did not matter. Measured 2026-09-22: it printed four `features/customers` files 
 Studio specs were being run. Nothing that could reach a Studio screen — but the gate had done its
 job by making that a decision instead of an assumption.
 
+**Three forms of the same trap, and Gate 0's content check only catches the first:**
+```
+source newer than build     find src e2e -newer .next/BUILD_ID   ← the content check
+build newer than PROCESS    ps -o lstart= -p <pid>  vs  stat -c %y .next/BUILD_ID
+capture against either
+```
+Measured 2026-09-23: `next-server` started 16:43:35, `BUILD_ID` 17:19:59. **The build was
+current, `src` was older than it, the content check passed — and the running process was
+thirty-six minutes behind, so a new route 404'd.** Nothing in `src` or `.next` was stale.
+
 **The general form, which caught three people on this project in one day:**
 
 > **A check that runs against an artifact older than the change it is checking returns a clean
