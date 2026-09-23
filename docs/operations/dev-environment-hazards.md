@@ -180,6 +180,28 @@ nothing.**
 
 ---
 
+## The internal-service bearer does not reach every service
+
+The smoke-test pattern — call a service with `INTERNAL_SERVICE_KEY` — works on `auth`, `billing`
+and `ai` and **fails on two services for two different reasons**:
+
+```
+analytics   compose does not pass INTERNAL_SERVICE_KEY at all
+            → "Invalid or expired token".  The endpoint is fine.
+billing      has the key, but the internal principal does not hold
+            settings:billing:manage → the route refuses it. The endpoint is fine.
+```
+
+**Neither is a defect and both look like one.** Verify those two by calling the function inside
+the container, and say in the report which method was used.
+
+**And the billing suite cannot pass on the host at all.** 286 failures, identical before and
+after any change: `PrismaClientInitializationError` and Redis refused on `127.0.0.1:6379`,
+because that suite wants a database and a Redis the host does not expose. **Do not read a billing
+test run as a gate, and do not read 286 as a regression.**
+
+---
+
 ## A green vitest run says nothing about types
 
 `vitest` transforms with esbuild, which **strips types without checking them**. So a file with
