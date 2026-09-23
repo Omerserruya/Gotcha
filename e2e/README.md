@@ -71,6 +71,29 @@ job by making that a decision instead of an assumption.
 
 ---
 
+## Gate 0b — mutate a control before you trust it
+
+**Reading a test tells you what it says. Mutating tells you what it can detect.** Those come
+apart exactly where the fixtures are too tame to reach the boundary the assertion names.
+
+Measured, 2026-09-23: a golden capture asserting *"byte-for-byte, the per-page slices are part
+of the contract"* **passed when the slice was changed from 2800 to 2000** — every fixture page
+was shorter than either bound, so the assertion described nothing. Fixed by adding pages that
+straddle both boundaries; four mutations, four failures.
+
+> **A control that cannot fail is the same failure as a template that is never emitted.** Both
+> look like coverage. Neither can produce a negative result.
+
+**It is not found by reading.** It is found by changing something you expect to be caught and
+watching it not be. Three other instances this project, all the same shape:
+
+- an absence assertion over a set where the thing could not appear (`/fire|retire|delete/` while
+  delete did not exist)
+- an assertion whose scope did not match its claim (`main` instead of the list)
+- a probe that built its fixture, matched no anchor, and printed PASS
+
+---
+
 ## Gate 1 — the screen must be the screen
 
 Every spec's `open…()` helper refuses to photograph anything until it has
