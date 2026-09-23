@@ -35,5 +35,26 @@
     "scoped": "How far this reaches depends on the role's setting",
     "scopeIsPerRole": "A role has one reach, and it applies to everything the role does — not to each permission separately. Choose it once for the role.",
     "notLevels": "Each line here is its own switch. There is no \"view / edit / manage\" ladder: reading a conversation and closing one are separate permissions, and someone can have either without the other."
+  },
+  "remove": {
+    "start": "Take this away",
+    "lead": "Take {permission} away from {name}?",
+    "where": "After this, nothing else in GOTCHA will show that it was taken away. It appears on this person's panel, and in the override count on Roles — nowhere else.",
+    "reasonLabel": "Why",
+    "reasonPlaceholder": "Pending a review, on leave, requested by finance…",
+    "reasonRequired": "Required. The person this affects will ask someone why, and this is the only place that answer lives.",
+    "confirm": "Take it away",
+    "cancel": "Leave it"
+  },
+  "add": {
+    "heading": "Give this person something extra",
+    "reasonLabel": "Why (optional)",
+    "submit": "Give it"
+  },
+  "error": {
+    "forbidden": "You don't have permission to change this.",
+    "gone": "That person or permission no longer exists.",
+    "needs_reason": "Say why first — a removal without a reason leaves nobody able to explain it.",
+    "failed": "That didn't go through."
   }
 }

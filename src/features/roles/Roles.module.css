@@ -270,6 +270,121 @@
     color: var(--text-body);
   }
 
+  /* ── 12e · taking a permission away ─────────────────────────────────── */
+  /*
+   * Deliberately NOT the same control as adding. Adding and removing have
+   * opposite visibility — an addition shows the moment it is used, a removal
+   * is invisible everywhere but the person panel — so the controls must not
+   * look comparable.
+   */
+  .removeStart {
+    align-self: flex-start;
+    font: inherit;
+    font-size: var(--font-size-caption);
+    color: var(--intent-blocked-text);
+    background: none;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-control);
+    padding-block: var(--space-6);
+    padding-inline: var(--space-12);
+    cursor: pointer;
+  }
+
+  .removeConfirm {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    background-color: var(--intent-blocked-surface);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-14);
+    padding-inline: var(--space-16);
+  }
+
+  .removeLead {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: 500;
+    color: var(--intent-blocked-text);
+  }
+
+  /*
+   * The fact an admin cannot work out from the screen: after this, they are
+   * the only person who can find it.
+   */
+  .removeWhere {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-body);
+  }
+
+  .removeReasonLabel {
+    font-size: var(--font-size-caption);
+    color: var(--text-body);
+  }
+
+  .removeReason {
+    font: inherit;
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+    background-color: var(--panel-base);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-control);
+    padding-block: var(--space-8);
+    padding-inline: var(--space-12);
+  }
+
+  /* Required here though the endpoint allows it empty. */
+  .removeReasonWhy {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-subtle);
+  }
+
+  .removeError {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--intent-blocked-text);
+  }
+
+  .removeActions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-8);
+    margin-block-start: var(--space-4);
+  }
+
+  .removeGo,
+  .removeBack {
+    font: inherit;
+    font-size: var(--font-size-caption);
+    border-radius: var(--radius-control);
+    padding-block: var(--space-8);
+    padding-inline: var(--space-14);
+    cursor: pointer;
+  }
+
+  .removeGo {
+    color: var(--panel-base);
+    background-color: var(--intent-blocked-text);
+    border: none;
+  }
+
+  .removeGo:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  /* The safe option is plainer, but not quieter. */
+  .removeBack {
+    color: var(--text-body);
+    background-color: var(--panel-base);
+    border: var(--border-width-thin) solid var(--border-default);
+  }
+
   /* ── No roles of your own ────────────────────────────────────────────── */
   .empty {
     display: flex;
