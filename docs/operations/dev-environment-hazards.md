@@ -230,6 +230,39 @@ grep -rn "<the field>" ../redesign/src/api/contracts/
 trip on an improvement:
 > **A contract that fails closed will sometimes fail on good news.**
 
+### The one shared artifact cannot see response shapes — and that is measured
+
+`docs/openapi.yaml` is **fully generated** from the routes, 700+ of them. It carries each
+route's source file and line, its auth requirement and its database calls.
+`/api/workspace/voice` is at line 50934. **`messagesAnalysed` appears zero times in the entire
+spec**, because the generator refuses to invent a shape it cannot find and marks the gap
+instead — **352 `x-documentation-gap` markers.**
+
+> **A spec that is honest about its gaps still cannot catch a change in the part it does not
+> describe.**
+
+**"352 response bodies undescribed" is a number, not a risk.** The day any one of them gets a
+schema is the day a change to it becomes catchable.
+
+### A value-neutral write is not a state-neutral write
+
+Same evening, same seam, different direction. A capture in the frontend repo does:
+```ts
+await request.patch('/api/bff/api/workspace', { data: { description: current } });
+//                                                      the SAME value, read back first
+```
+deliberately, to move `updatedAt` so an ETag conflict is real. **It was harmless for weeks.**
+Then `PATCH /workspace` gained `stampProvenance`, and that same write began marking
+`businessDescription` as human-authored **on every capture run** — breaking a later test in the
+same file that asserts nothing is attributed.
+
+> **Neither side is wrong. A side effect was added to an endpoint that an unrelated caller, in
+> another repository, had been invoking on the assumption that writing the same value changed
+> nothing.**
+
+**Before adding a side effect to a served route, ask who already calls it — including callers
+that write values they expect to be no-ops.**
+
 ---
 
 ## A green vitest run says nothing about types
