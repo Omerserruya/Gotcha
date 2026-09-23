@@ -111,6 +111,120 @@ async function buildCompliance(tenantId: string) {
 }
 
 // GET current policy + compliance. Any workspace admin may view.
+/**
+ * GET /api/tenant/security/session-policy - what Authentik is configured to do,
+ * READ-ONLY.
+ *
+ * NO CONTROL, DELIBERATELY. Session lifetime belongs to Authentik; GOTCHA
+ * implements none of it. A toggle here would either edit a global Authentik
+ * stage from a tenant screen or, worse, write a GOTCHA-side value that nothing
+ * enforces - a control that reports success while changing nothing.
+ *
+ * ★ IT IS PLATFORM-WIDE, NOT PER-TENANT, AND SAYS SO. There is one
+ * `default-authentication-login` stage for the whole deployment, so these
+ * numbers are the same for every tenant. Rendered on a tenant's Security screen
+ * without that sentence, an admin reads them as their own setting and as
+ * something they could ask to have changed for them alone.
+ *
+ * NEITHER VALUE IS AN INACTIVITY TIMEOUT, which is the thing a reader assumes a
+ * "session policy" means. Authentik measures ABSOLUTE duration:
+ *   session_duration "seconds=0"  the session ends when the browser session
+ *                                 does. It is NOT "expires immediately", which
+ *                                 is what the raw string looks like.
+ *   remember_me_offset "days=30"  how long "remember me" survives, absolute -
+ *                                 30 days whether or not anyone signs in.
+ * Both are returned raw AND described, because the raw value alone is
+ * misleading and the description alone is unverifiable.
+ *
+ * Fail-soft: Authentik unreachable returns `available: false` with the reason.
+ * A settings screen that invents a plausible default is worse than one that
+ * admits it could not ask.
+ */
+router.get(
+  "/session-policy",
+  requirePermissionOrRole("settings:workspace:update", "ADMIN"),
+  async (_req: Request, res: Response): Promise<void> => {
+    const base = process.env.AUTHENTIK_URL;
+    const token = process.env.AUTHENTIK_API_TOKEN || process.env.AUTHENTIK_BOOTSTRAP_TOKEN;
+    if (!base || !token) {
+      res.json({
+        data: {
+          available: false,
+          reason: "Authentik is not configured for this deployment, so its session policy cannot be read.",
+          scope: "platform",
+        },
+      });
+      return;
+    }
+
+    try {
+      const r = await fetch(`${base.replace(/\/$/, "")}/api/v3/stages/user_login/`, {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!r.ok) throw new Error(`authentik ${r.status}`);
+      const body: any = await r.json();
+      // The stage the dashboard login actually uses. The other two are for
+      // source-based enrolment and do not govern a normal sign-in, so reporting
+      // the first result would be right by accident and wrong when it is not.
+      const stage = (body?.results ?? []).find((x: any) => x?.name === "default-authentication-login");
+      if (!stage) throw new Error("default-authentication-login stage not found");
+
+      const sessionDuration = String(stage.session_duration ?? "");
+      const rememberMe = String(stage.remember_me_offset ?? "");
+
+      /**
+       * Authentik stores these as "days=30" / "seconds=0". Putting that token
+       * straight into a sentence produces "lasts days=30 from sign-in", which
+       * is how the first version read - correct data, unreadable to the person
+       * the sentence is for. The raw value is still returned beside it.
+       */
+      const human = (v: string): string => {
+        const m = /^(\w+)=(\d+)$/.exec(v);
+        if (!m) return v;
+        const n = Number(m[2]);
+        const unit = m[1]!.replace(/s$/, "");
+        return `${n} ${unit}${n === 1 ? "" : "s"}`;
+      };
+      res.json({
+        data: {
+          available: true,
+          scope: "platform",
+          managedBy: "authentik",
+          editableHere: false,
+          sessionDuration: {
+            raw: sessionDuration,
+            meaning:
+              sessionDuration === "seconds=0"
+                ? "The session ends when the browser session ends. It is not an inactivity timeout and does not expire while the browser stays open."
+                : `Sessions last ${human(sessionDuration)} from sign-in, regardless of activity.`,
+          },
+          rememberMe: {
+            raw: rememberMe,
+            meaning:
+              rememberMe === "seconds=0"
+                ? "Remember-me is off."
+                : `"Remember me" lasts ${human(rememberMe)} from sign-in, regardless of activity.`,
+          },
+          inactivityTimeout: {
+            supported: false,
+            meaning:
+              "Authentik measures absolute session duration, not idle time, so there is no inactivity timeout to report.",
+          },
+        },
+      });
+    } catch (err: any) {
+      res.json({
+        data: {
+          available: false,
+          scope: "platform",
+          reason: `Authentik did not answer, so the live session policy is unknown: ${err?.message ?? "unknown error"}`,
+        },
+      });
+    }
+  },
+);
+
 router.get("/", requirePermissionOrRole("settings:workspace:update", "ADMIN"), async (req: Request, res: Response): Promise<void> => {
   const tenantId = req.tenantId || req.user!.tenantId;
   const tenant = await prisma.tenant.findUnique({
