@@ -43,6 +43,7 @@ const READ = requirePermission("settings:workspace:read");
 const WRITE = requirePermission("settings:workspace:update");
 
 const AI_SERVICE_URL = (process.env.AI_SERVICE_URL || "http://ai:4006").replace(/\/$/, "");
+import { readProvenance, fieldSources, stampProvenance } from "../services/field-provenance.service";
 const VOICE_MIN = 40;
 const VOICE_MAX = 1800;
 
@@ -110,12 +111,19 @@ function newerOf(a: Date | string | null, b: Date | string | null): string | nul
 }
 
 async function loadWorkspace(tenantId: string) {
-  const [profile, hours, tenant] = await Promise.all([
+  const [profile, hours, tenant, provenance] = await Promise.all([
     prisma.businessProfile.findUnique({ where: { tenantId } }),
     readHours(tenantId),
     prisma.tenant.findUnique({ where: { id: tenantId }, select: { name: true } }),
+    readProvenance(tenantId),
   ]);
-  return composeWorkspace(profile, hours, tenant?.name ?? null);
+  return {
+    ...composeWorkspace(profile, hours, tenant?.name ?? null),
+    // Which fields came from the website scan and which a person typed, so the
+    // screen can mark them and a rescan can be honest about what it may touch.
+    // `null` means UNKNOWN, not "from website" - see field-provenance.service.
+    fieldSources: fieldSources(provenance),
+  };
 }
 
 // ─── §2 · the workspace ───────────────────────────────────────
@@ -215,6 +223,12 @@ router.patch("/workspace", WRITE, async (req: Request, res: Response) => {
         return;
       }
       await prisma.businessProfile.update({ where: { tenantId }, data: profilePatch as never });
+      // Stamped in the same request that writes the value. This is the ONLY
+      // place a person edits these fields, which is what makes one stamp site
+      // enough - and a value saved without its mark would leave the field
+      // unknown, so the next rescan would offer a change the owner already
+      // made by hand.
+      await stampProvenance(tenantId, Object.keys(profilePatch), "human", (req as any).user?.userId);
     }
 
     if ("hours" in body || "timezone" in body) {
