@@ -44,6 +44,7 @@ const WRITE = requirePermission("settings:workspace:update");
 
 const AI_SERVICE_URL = (process.env.AI_SERVICE_URL || "http://ai:4006").replace(/\/$/, "");
 import { readProvenance, fieldSources, stampProvenance } from "../services/field-provenance.service";
+import { runProfileRescan } from "../services/business-scan.service";
 const VOICE_MIN = 40;
 const VOICE_MAX = 1800;
 
@@ -389,6 +390,60 @@ router.post("/workspace/voice/sample", WRITE, async (req: Request, res: Response
   } catch (err) {
     console.error("voice sample error:", (err as Error).message);
     res.status(503).json({ error: "Could not generate a sample right now", code: "SAMPLE_UNAVAILABLE" });
+  }
+});
+
+// ─── §3b · scan again ─────────────────────────────────────────
+
+/**
+ * POST /api/workspace/scan - re-read the website and refresh what the scan owns.
+ *
+ * ★ IT ONLY WRITES FIELDS MARKED AS THE SCAN'S. Anything a person typed comes
+ * back in `offer` with what the site now says, and is NOT written - along with
+ * anything nobody ever marked, because the profile was seeded by an onboarding
+ * step that never recorded which was which. `field-provenance.service` holds
+ * the rule and the reasoning.
+ *
+ * Same crawler as onboarding (`crawlSite`) and the same model bridge, so a
+ * rescan cannot start finding different things from the scan that filled these
+ * fields in the first place.
+ *
+ * Every refusal is a 200 with a reason: "you have not told us your website yet"
+ * and "the site did not answer" are sentences the screen shows, not errors it
+ * has to decode. The exception is a scan already running, which is a 409 -
+ * that one means try again shortly, and it shares onboarding's guard because
+ * both drive the same crawl into the same row.
+ */
+router.post("/workspace/scan", WRITE, async (req: Request, res: Response) => {
+  try {
+    const outcome = await runProfileRescan({
+      tenantId: req.tenantId!,
+      authHeader: req.headers.authorization ?? "",
+      actorId: (req as any).user?.userId,
+      locale: typeof (req.body ?? {}).locale === "string" ? (req.body as any).locale : undefined,
+    });
+
+    if (!outcome.ok) {
+      if (outcome.reason === "scan_in_progress") {
+        res.status(409).json({ error: "A scan is already running", code: "SCAN_IN_PROGRESS" });
+        return;
+      }
+      res.json({ data: { ok: false, reason: outcome.reason } });
+      return;
+    }
+
+    res.json({
+      data: {
+        ok: true,
+        // What changed by itself, and what is waiting for the owner to decide.
+        applied: outcome.applied,
+        offer: outcome.plan.offer,
+        fieldSources: fieldSources(await readProvenance(req.tenantId!)),
+      },
+    });
+  } catch (err) {
+    console.error("workspace scan error:", (err as Error).message);
+    res.status(503).json({ error: "Could not scan the website right now", code: "SCAN_UNAVAILABLE" });
   }
 });
 
