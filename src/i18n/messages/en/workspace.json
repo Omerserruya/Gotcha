@@ -80,5 +80,30 @@
   },
   "currencyUnset": "No currency set",
   "languageUnset": "No language set",
-  "repliesInCustomerLanguage": "replies in the customer's language"
+  "repliesInCustomerLanguage": "replies in the customer's language",
+  "provenance": {
+    "heading": "Where these details came from",
+    "origin": {
+      "scan": "From your website",
+      "human": "You entered this",
+      "unknown": "Source not recorded"
+    },
+    "unusable": "We looked and could not read this from your site.",
+    "notSet": "Not set.",
+    "nothingAttributed": {
+      "lead": "Nothing is marked yet.",
+      "body": "These details were set up before GOTCHA recorded where each one came from, so the next scan will ask you about every change instead of applying any. After that it refreshes what it wrote itself, without asking."
+    },
+    "someAttributed": "A scan refreshes the fields marked “From your website” on its own. Anything you entered stays as you left it, and you are asked before it changes.",
+    "field": {
+      "organizationName": "Business name",
+      "businessDescription": "What you sell",
+      "industry": "Industry",
+      "country": "Country",
+      "primaryLanguage": "Reply language",
+      "address": "Address",
+      "currency": "Currency"
+    },
+    "oneLanguage": "GOTCHA holds one reply language. The AI answers in the customer's language where it can, but only this one is stored."
+  }
 }

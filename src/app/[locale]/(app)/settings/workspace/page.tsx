@@ -1,6 +1,7 @@
 import { getTranslations } from 'next-intl/server';
 
 import { FactRows } from '@/features/workspace/FactRows';
+import { FieldProvenance } from '@/features/workspace/FieldProvenance';
 import { loadWorkspace } from '@/features/workspace/load-workspace';
 import { ProhibitedClaims } from '@/features/workspace/ProhibitedClaims';
 import { VoiceEditor } from '@/features/workspace/VoiceEditor';
@@ -25,6 +26,12 @@ export default async function Page() {
   return (
     <SettingsSection title={t('title')} description={t('description')}>
       {workspace ? <FactRows workspace={workspace} /> : <p>{t('unavailable')}</p>}
+      {/*
+        Screen 11b. Below the facts, because it is ABOUT them — a reader who
+        meets the provenance badges before the values they describe has to
+        hold both in their head to make sense of either.
+      */}
+      {workspace ? <FieldProvenance workspace={workspace} /> : null}
       {voice ? <VoiceEditor voice={voice} /> : <p>{t('voice.unavailable')}</p>}
       {claims ? <ProhibitedClaims claims={claims.claims} /> : <p>{t('claims.unavailable')}</p>}
     </SettingsSection>

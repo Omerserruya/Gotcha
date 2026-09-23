@@ -74,9 +74,78 @@ export const workspaceSchema = z.looseObject({
    * writable sources would miss half the conflicts.
    */
   updatedAt: z.string().nullable().optional(),
+  /**
+   * Who last wrote each field — screen 11b.
+   *
+   * `"scan"` · `"human"` · **`null`, which means UNKNOWN and NOT "from the
+   * website"**. The route repeats that warning where it builds the map,
+   * because reading null as scan-owned is the single mistake that would make
+   * a rescan overwrite somebody's correction.
+   *
+   * Stored in `TenantSetting` under `profileFieldProvenance`, not in a column
+   * — which is why a schema search says this does not exist. It was written
+   * for this screen: *"Screen 11b's mechanic is: Scan again re-reads the site
+   * and only touches fields marked From website; anything typed stays."*
+   */
+  fieldSources: z.record(z.string(), z.enum(['scan', 'human']).nullable()).default({}),
 });
 
 export type Workspace = z.infer<typeof workspaceSchema>;
+
+/** The fields the provenance map tracks, in the service's own order. */
+export const PROVENANCED_FIELDS = [
+  'organizationName',
+  'businessDescription',
+  'primaryLanguage',
+  'industry',
+  'country',
+  'address',
+  'currency',
+] as const;
+
+export type FieldOrigin = 'scan' | 'human' | 'unknown';
+
+/**
+ * How a field should be labelled.
+ *
+ * Three states, and the third is not a missing second state. The profile is
+ * seeded by an onboarding confirm step that *"means two different things: 'the
+ * scan proposed this' and 'the human accepted or corrected it'. Same column,
+ * same statement."* So an unmarked field is genuinely unattributable, and
+ * saying *"from the website"* about one would be a guess presented as a fact.
+ */
+export function fieldOrigin(workspace: Workspace, field: string): FieldOrigin {
+  return workspace.fieldSources?.[field] ?? 'unknown';
+}
+
+/**
+ * Is anything at all marked?
+ *
+ * **Today, on every tenant in the estate, no.** `profileFieldProvenance` has
+ * zero rows across the whole database, so a rescan currently applies nothing
+ * and offers everything.
+ *
+ * The map is self-healing — once a scan writes a field through the service,
+ * that field is marked and refreshes silently forever after — so the true
+ * sentence is *"the first scan will ask about everything; after that it
+ * refreshes what it owns"*. That is a statement about a system that improves,
+ * not an apology, and it is the only honest thing to put beside a set of
+ * badges that will all be blank.
+ */
+export function anyFieldAttributed(workspace: Workspace): boolean {
+  return Object.values(workspace.fieldSources ?? {}).some((v) => v !== null);
+}
+
+/**
+ * `country` arrives as the literal string `"unknown"` on this tenant.
+ *
+ * Rendered as-is it reads as a country called "unknown". Treated as blank it
+ * reads as a field nobody filled in — which is also wrong, and differently:
+ * we DID look, and what we found was unusable.
+ */
+export function isUnusableValue(value: string | null | undefined): boolean {
+  return value == null || value.trim() === '' || value.trim().toLowerCase() === 'unknown';
+}
 
 /**
  * How the business sounds.

@@ -415,5 +415,67 @@ for (const size of SIZES) {
 
       await shoot(page, `${size.name}-12-long-value`);
     });
+
+    /*
+     * ★★ Screen 11b · the badges are all blank, and the panel says why.
+     *
+     * `tenant_settings WHERE key='profileFieldProvenance'` → ZERO ROWS,
+     * whole database. So every field on every tenant is unmarked, a rescan
+     * currently applies nothing and offers everything, and every badge on
+     * this panel says "Source not recorded".
+     *
+     * A panel of identical blank badges with no explanation reads as a broken
+     * feature. Asserted POSITIVELY: the explanation must be present and must
+     * carry BOTH halves — why the next scan asks about everything, and that
+     * it stops asking about what it writes itself. The second half is what
+     * makes it a description of a system that improves rather than an apology.
+     *
+     * Only TWO capture tests were added here on purpose. The rate limit is
+     * 1,000 requests per fifteen minutes per service, shared across every
+     * spec run in that window, and the attributed branch is unreachable on
+     * any tenant anyway — it lives in FieldProvenance.test.tsx.
+     */
+    test('13 · nothing is attributed, and the panel explains rather than shrugs', async ({
+      page,
+    }) => {
+      await openWorkspace(page, 'en');
+
+      const panel = page.getByTestId('provenance');
+      await expect(panel).toBeVisible();
+      await expect(panel).toHaveAttribute('data-attributed', 'false');
+
+      const notice = page.getByTestId('provenance-none');
+      await expect(notice).toHaveText(/nothing is marked yet/i);
+      await expect(notice).toHaveText(/ask you about every change/i);
+      await expect(notice).toHaveText(/after that it refreshes what it wrote itself/i);
+
+      /*
+       * And NO badge claims the website wrote anything. This absence can fail
+       * today — the same panel renders that label in another branch, and the
+       * test above has already proved the panel is not blank.
+       */
+      await expect(panel).not.toHaveText(/from your website/i);
+
+      await shoot(page, `${size.name}-13-provenance`);
+    });
+
+    /*
+     * ★ 11d · one reply language, stated instead of offered.
+     *
+     * `PATCH /workspace` validates up to SIX languages and then writes
+     * `primaryLanguage = languages[0]`. A multi-select would be accepted,
+     * answered 200, and silently drop everything after the first — so the
+     * screen says what is stored and draws no control that loses data.
+     */
+    test('14 · one reply language, and the screen says so', async ({ page }) => {
+      await openWorkspace(page, 'en');
+
+      const note = page.getByTestId('provenance-one-language');
+      await expect(note).toBeVisible();
+      await expect(note).toHaveText(/holds one reply language/i);
+      await expect(note).toHaveText(/only this one is stored/i);
+
+      await shoot(page, `${size.name}-14-one-language`);
+    });
   });
 }
