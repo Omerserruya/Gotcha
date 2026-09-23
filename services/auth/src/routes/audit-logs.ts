@@ -183,4 +183,108 @@ router.get("/audit-logs", CAN_READ, async (req: Request, res: Response): Promise
   }
 });
 
+/**
+ * GET /api/audit-logs/export - the same rows as the screen, as a file.
+ *
+ * SAME GATE, deliberately. Omer's ruling: "there is no difference between
+ * seeing it and exporting it." So it reuses `CAN_READ` rather than inventing a
+ * second permission - a separate export gate would imply the export shows more,
+ * and it must not.
+ *
+ * ★ AND IT SHOWS EXACTLY WHAT THE SCREEN SHOWS. `metadata` is NOT exported.
+ * The list route omits it because it carries customer phone numbers, and an
+ * export carrying it would be a data-exfiltration path with the SAME
+ * permission as a screen that does not expose it. Same rows, same columns, a
+ * different container - anything else and "no difference between seeing and
+ * exporting" stops being true in the direction that matters.
+ *
+ * `succeeded` is derived here exactly as the list derives it, including the
+ * null case: "we did not record whether this worked" is not "it failed", and a
+ * spreadsheet column that turns the first into the second would be read as
+ * fact by whoever opens it.
+ *
+ * Streamed in cursor batches rather than one findMany: 6,445 rows on the
+ * biggest tenant today, unbounded tomorrow, and the point of an export is that
+ * it does not have a page size.
+ */
+const EXPORT_BATCH = 500;
+
+/**
+ * RFC-4180 quoting, plus a leading apostrophe on anything a spreadsheet would
+ * execute. A field beginning =, +, - or @ is a formula in Excel and Sheets, so
+ * an action name or an actor id that starts with one becomes code the moment
+ * someone opens the file. Neutralised here rather than trusted not to occur.
+ */
+function csvCell(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  let s = String(value);
+  if (/^[=+\-@]/.test(s)) s = `'${s}`;
+  return `"${s.replace(/"/g, '""')}"`;
+}
+
+router.get("/audit-logs/export", CAN_READ, async (req: Request, res: Response): Promise<void> => {
+  const tenantId = assertTenantId(req);
+  const bad = badDates(req);
+  if (bad.length > 0) {
+    res.status(422).json({ error: "Invalid audit filter", details: bad });
+    return;
+  }
+
+  const stamp = new Date().toISOString().slice(0, 10);
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="audit-log-${stamp}.csv"`);
+  // The BOM is what makes Excel read this as UTF-8. Without it Hebrew actor
+  // names and tenant data arrive as mojibake, which looks like corrupted data
+  // rather than a missing byte.
+  res.write("\uFEFF");
+  res.write(["timestamp", "action", "actor_type", "actor_id", "target_type", "target_id", "succeeded"].join(",") + "\n");
+
+  let cursor: string | null = null;
+  let written = 0;
+  try {
+    for (;;) {
+      const rows: any[] = await prisma.auditLog.findMany({
+        where: buildWhere(req, tenantId, { includeAction: true }) as never,
+        select: {
+          id: true, actorType: true, actorId: true, action: true,
+          targetType: true, targetId: true, createdAt: true, metadata: true,
+        },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        take: EXPORT_BATCH,
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      });
+      if (rows.length === 0) break;
+
+      for (const r of rows) {
+        const meta = r.metadata as Record<string, unknown> | null;
+        const succeeded = meta && typeof meta.ok === "boolean" ? meta.ok : null;
+        res.write(
+          [
+            csvCell(r.createdAt.toISOString()),
+            csvCell(r.action),
+            csvCell(r.actorType),
+            csvCell(r.actorId),
+            csvCell(r.targetType),
+            csvCell(r.targetId),
+            // Blank, not "false", when nothing was recorded.
+            succeeded === null ? "" : csvCell(succeeded),
+          ].join(",") + "\n",
+        );
+      }
+      written += rows.length;
+      cursor = rows[rows.length - 1]!.id;
+      if (rows.length < EXPORT_BATCH) break;
+    }
+    res.end();
+    console.log(`[audit-export] tenant=${tenantId} rows=${written}`);
+  } catch (err) {
+    console.error("audit export error:", err);
+    // Headers are already sent, so there is no status left to change. End the
+    // stream with a marker rather than a silently short file that looks
+    // complete - a truncated audit export read as whole is worse than an error.
+    res.write("\n\"EXPORT FAILED - this file is incomplete\",,,,,,\n");
+    res.end();
+  }
+});
+
 export default router;
