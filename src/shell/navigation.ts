@@ -175,6 +175,13 @@ export const SETTINGS_SECTIONS: readonly NavigationChild[] = [
     href: '/settings/systems',
     permission: PERMISSIONS.businessSystems.connections.read,
   },
+  /*
+   * Screen 13. Its own destination because WhatsApp numbers have a lifecycle
+   * the other channels do not — health, repairs and an audit trail per number
+   * — and folding them into the channel list would flatten all of that into
+   * one connected/disconnected badge.
+   */
+  { id: 'whatsapp', labelKey: 'settings.whatsapp', href: '/settings/channels/whatsapp' },
   { id: 'notifications', labelKey: 'settings.notifications', href: '/settings/notifications' },
   { id: 'security', labelKey: 'settings.security', href: '/settings/security' },
   { id: 'billing', labelKey: 'settings.billing', href: '/settings/billing' },

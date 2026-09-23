@@ -232,4 +232,143 @@
       text-align: end;
     }
   }
+
+  /* ── Screen 13 · WhatsApp numbers ────────────────────────────────────── */
+
+  .numbers {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+  }
+
+  .number {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-16);
+    padding-inline: var(--space-16);
+  }
+
+  .numberLine {
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-8);
+  }
+
+  .numberPhone {
+    font-size: var(--font-size-body-lg);
+    font-weight: 500;
+  }
+
+  .numberName {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /*
+   * The verdict. Four values, not two — a number receiving while Meta blocks
+   * its replies is doing half its job, and the half it is doing is the one the
+   * customer's inbox depends on.
+   */
+  .delivery {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+  }
+
+  .deliveryDetail {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-body);
+  }
+
+  .checkHeading {
+    margin: 0 0 var(--space-4);
+    font-size: var(--font-size-caption);
+    font-weight: 500;
+    color: var(--text-subtle);
+  }
+
+  .checks {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+  }
+
+  .check {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    font-size: var(--font-size-meta);
+  }
+
+  .checkLabel {
+    color: var(--text-primary);
+  }
+
+  .checkDetail {
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-body);
+  }
+
+  /* Meta's own words, and set apart so they read as a quotation. */
+  .metaSolution {
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-subtle);
+    border-inline-start: var(--border-width-thick) solid var(--border-default);
+    padding-inline-start: var(--space-8);
+  }
+
+  /* The one blocked state the customer can clear from inside GOTCHA. */
+  .fixHere {
+    background-color: var(--panel-inset);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-12);
+  }
+
+  /* Problems that live in Meta. Named, never given a button. */
+  .theirs {
+    background-color: var(--panel-inset);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-12);
+  }
+
+  .repairs {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .repair {
+    font-size: var(--font-size-meta);
+    color: var(--text-body);
+  }
+
+  .lastChecked {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
 }

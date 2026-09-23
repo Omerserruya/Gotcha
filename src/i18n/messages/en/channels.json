@@ -63,5 +63,44 @@
     "limit": "Your plan has no room for another channel.",
     "forbidden": "You don't have permission to do that.",
     "failed": "That didn't connect. Try again."
+  },
+  "whatsapp": {
+    "title": "WhatsApp numbers",
+    "description": "Every WhatsApp number on this workspace, and whether it is sending and receiving.",
+    "unavailable": "We could not load your WhatsApp numbers just now. This does not mean you have none.",
+    "empty": "No WhatsApp numbers are connected to this workspace.",
+    "delivery": {
+      "working": "Sending and receiving",
+      "inbound_only": "Receiving, but not sending",
+      "outbound_only": "Sending, but not receiving",
+      "down": "Not sending or receiving",
+      "inboundOnlyDetail": "Customer messages are still arriving and your team can see them. Replies are the part that is blocked.",
+      "outboundOnlyDetail": "Replies are going out, but new customer messages are not reaching GOTCHA."
+    },
+    "blocking": "Stopping messages now",
+    "advisory": "Worth knowing",
+    "checkUnknown": "Not checked",
+    "repair": {
+      "title": "What we can try",
+      "RESUBSCRIBE_WEBHOOKS": "Re-subscribe to message notifications",
+      "REFRESH_STATUS": "Re-read this number's status from Meta",
+      "REQUEST_HISTORY_SYNC": "Ask Meta for this business's message history"
+    },
+    "register": {
+      "title": "You can fix this here",
+      "body": "This number is registered with Meta but was never activated for messaging, which is why it can receive and cannot send. Activating it takes your two-step PIN if the number has one.",
+      "action": "Activate this number"
+    },
+    "customerActions": {
+      "title": "You will need to fix this in Meta",
+      "body": "These cannot be resolved from GOTCHA. They are settings on your Meta Business account."
+    },
+    "unprofiled": {
+      "title": "Connected, with no health information",
+      "body": "This number is connected and working. It was set up before GOTCHA could check individual numbers, so there is nothing to report about its health and no repairs to offer. Reconnecting it would enable both.",
+      "status": "Connection status: {status}"
+    },
+    "lastChecked": "Last checked {date}.",
+    "neverChecked": "This number's health has not been checked yet."
   }
 }
