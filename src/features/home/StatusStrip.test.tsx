@@ -1,0 +1,56 @@
+import { render, screen } from '@testing-library/react';
+import { createTranslator } from 'next-intl';
+import { describe, expect, it, vi } from 'vitest';
+
+import messages from '@/i18n/messages/en/home.json';
+
+import { StatusStrip } from './StatusStrip';
+
+/**
+ * The first line on Home, which its own doc says "has to be true".
+ *
+ * A failed notifications read rendered as "No signals" — the reassuring
+ * answer, to a count nobody obtained. It is the same shape as the billing
+ * screen rounding an unread failure count to zero, and it is the version
+ * nobody reports, because the screen looks fine.
+ */
+
+vi.mock('next-intl/server', () => ({
+  getTranslations: async (namespace: 'home.status') =>
+    createTranslator({ locale: 'en', messages: { home: messages }, namespace }),
+}));
+
+const strip = (over: Partial<Parameters<typeof StatusStrip>[0]> = {}) =>
+  StatusStrip({ waiting: 3, signals: 0, isQuiet: false, ...over });
+
+describe('★ an unread count is not a calm one', () => {
+  it('says signals are unavailable rather than claiming there are none', async () => {
+    render(await strip({ signals: null }));
+    expect(screen.getByText(/signals unavailable/i)).toBeInTheDocument();
+    expect(screen.queryByText(/^No signals$/i)).toBeNull();
+  });
+
+  it('still says "No signals" when the count really is zero', async () => {
+    // The reassuring answer is correct here, and must not be lost to caution.
+    render(await strip({ signals: 0 }));
+    expect(screen.getByText(/^No signals$/i)).toBeInTheDocument();
+  });
+
+  it('counts them when there are some', async () => {
+    render(await strip({ signals: 4 }));
+    expect(screen.getByText(/4 signals/i)).toBeInTheDocument();
+  });
+});
+
+describe('quiet is only claimed when something checked', () => {
+  it('shows the quiet line when the queue was read and was empty', async () => {
+    // `isQuiet` is `queue !== null && queue.waiting === 0` — already correct.
+    render(await strip({ isQuiet: true }));
+    expect(screen.getByText(/nothing needs you/i)).toBeInTheDocument();
+  });
+
+  it('omits the waiting count when it failed to load', async () => {
+    render(await strip({ waiting: null }));
+    expect(screen.queryByText(/waiting on you/i)).toBeNull();
+  });
+});

@@ -35,11 +35,26 @@ export async function StatusStrip({
           .join(' ')}
       >
         <span className={styles.statusDot} aria-hidden="true" />
+        {/*
+          `signals === null` is "we could not find out", and it used to render
+          as `noSignals` — the reassuring answer, to a count nobody obtained.
+
+          This file's own opening paragraph forbids that: "it is the first
+          thing read, so it has to be true — which is why 'everything is
+          running' is only shown when something actually checked." The
+          component said the right thing and then did the other one.
+
+          Same shape as the billing screen rounding an unread failure count to
+          zero. A null collapsed into the calm value is the version nobody
+          reports, because the screen looks fine.
+        */}
         {isQuiet
           ? t('nothingNeedsYou')
-          : signals !== null && signals > 0
-            ? t('signals', { count: signals })
-            : t('noSignals')}
+          : signals === null
+            ? t('signalsUnknown')
+            : signals > 0
+              ? t('signals', { count: signals })
+              : t('noSignals')}
       </span>
 
       {waiting !== null ? (
