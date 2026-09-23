@@ -238,7 +238,19 @@ router.patch("/workspace", WRITE, async (req: Request, res: Response) => {
     if (languages !== undefined) profilePatch.primaryLanguage = languages[0] ?? null;
 
     if (Object.keys(profilePatch).length > 0) {
-      const existing = await prisma.businessProfile.findUnique({ where: { tenantId }, select: { id: true } });
+      // The stored values come back with the existence check, so comparing costs
+      // no extra query.
+      const existing = await prisma.businessProfile.findUnique({
+        where: { tenantId },
+        select: {
+          id: true,
+          organizationName: true,
+          businessDescription: true,
+          address: true,
+          currency: true,
+          primaryLanguage: true,
+        },
+      });
       if (!existing) {
         res.status(409).json({
           error: "This workspace has no business profile yet; complete onboarding first",
@@ -246,13 +258,42 @@ router.patch("/workspace", WRITE, async (req: Request, res: Response) => {
         });
         return;
       }
+
+      /**
+       * Which fields a person actually CHANGED, as opposed to submitted.
+       *
+       * ★ THE WRITE STAYS UNCONDITIONAL AND ONLY THE STAMP IS GATED, and those
+       * are different decisions. Re-writing an identical value is how a caller
+       * moves `updatedAt` on purpose - the frontend's own conflict capture
+       * PATCHes the description back unchanged so an ETag conflict is real and
+       * photographable - so skipping the write would break a legitimate caller.
+       *
+       * Stamping it would be wrong for a much more ordinary reason: a person who
+       * opens the screen and presses Save without editing anything would mark
+       * every field as theirs, and a rescan would then only ever OFFER those
+       * fields instead of refreshing them. "A human set this value" is not the
+       * same claim as "a human submitted a form containing this field".
+       *
+       * Compared against the STORED COLUMNS rather than the composed response,
+       * because the composed `name` falls back to the tenant's name when the
+       * profile has none - so a first real write of `organizationName` looks
+       * unchanged in the view while genuinely changing the column.
+       *
+       * Both directions of getting this wrong are non-destructive: an unstamped
+       * field reads as UNKNOWN, and unknown is offered rather than applied, so a
+       * missed stamp cannot let a rescan overwrite anybody's edit.
+       */
+      const changed = Object.keys(profilePatch).filter(
+        (k) => profilePatch[k] !== (existing as Record<string, unknown>)[k],
+      );
+
       await prisma.businessProfile.update({ where: { tenantId }, data: profilePatch as never });
       // Stamped in the same request that writes the value. This is the ONLY
       // place a person edits these fields, which is what makes one stamp site
       // enough - and a value saved without its mark would leave the field
       // unknown, so the next rescan would offer a change the owner already
       // made by hand.
-      await stampProvenance(tenantId, Object.keys(profilePatch), "human", (req as any).user?.userId);
+      await stampProvenance(tenantId, changed, "human", (req as any).user?.userId);
     }
 
     if ("hours" in body || "timezone" in body) {
