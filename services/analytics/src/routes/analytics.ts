@@ -179,6 +179,32 @@ router.get("/tool-usage", requirePermission("analytics:dashboard:read"), async (
   }
 });
 
+/**
+ * GET /language-share - the language mix of recent conversations.
+ *
+ * Gated on EITHER permission, deliberately. It is read by the workspace
+ * language settings screen, whose admins hold `settings:workspace:read`, and it
+ * belongs in analytics because that is what owns conversation aggregates. Gating
+ * it on the analytics permission alone would ship an endpoint the screen that
+ * needs it cannot call.
+ */
+router.get(
+  "/language-share",
+  requirePermission("settings:workspace:read", "analytics:workspace:read"),
+  async (req: Request, res: Response) => {
+    try {
+      const raw = Number(req.query.days);
+      // Bounded rather than trusted: an unbounded window turns a settings panel
+      // into a full-table scan, and a nonsense value should not decide the query.
+      const days = Number.isFinite(raw) && raw > 0 ? Math.min(365, Math.round(raw)) : 30;
+      res.json({ data: await analyticsService.getLanguageShare(req.tenantId!, days) });
+    } catch (err) {
+      console.error("Language share error:", err);
+      res.status(500).json({ error: "Failed to get language share" });
+    }
+  },
+);
+
 router.get("/channel-performance", requirePermission("analytics:workspace:read"), async (req: Request, res: Response) => {
   try {
     const from = req.query.from as string | undefined;

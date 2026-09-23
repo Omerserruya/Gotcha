@@ -42,8 +42,20 @@ describe("analytics never counts setup conversations", () => {
 
   it("every conversation and message aggregate excludes test conversations", () => {
     const unguarded = aggregateSites().filter(({ window }) => {
-      // Direct filter, the shared `where` object that carries it, or an id
-      // list derived from an already-filtered query.
+      // ★ The COMPLETE predicate, and the preferred form. `REAL_CONVERSATION`
+      // carries `isTest: false` AND the sandbox external-id prefix. It has to be
+      // accepted here, because this check previously failed on the one query
+      // that excluded sandbox rehearsals CORRECTLY - a guard rejecting the right
+      // answer because it only recognised the incomplete one.
+      if (/\.\.\.REAL_CONVERSATION/.test(window)) return false;
+      // The incomplete form, still accepted because 21 sites use it.
+      //
+      // ⚠ `isTest: false` ALONE DOES NOT EXCLUDE SANDBOX CONVERSATIONS. They are
+      // written with `isTest = false`, so every site matched by this line counts
+      // the team's setup rehearsals as business - the defect fixed in billing as
+      // bd1ddf0a and still live here. This branch is what makes those sites pass,
+      // so it is the reason the guard reads as settled while the question is
+      // open. Removing it is the real fix, and it requires changing all 21.
       if (/isTest:\s*false/.test(window)) return false;
       if (/where[,:]\s*$|where\s*\}|\(\{ where \}\)|where,\n/.test(window)) return false;
       if (/conversationId: \{ in: convIds \}/.test(window)) return false;

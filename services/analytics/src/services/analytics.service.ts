@@ -1550,3 +1550,87 @@ export async function getQuietDayList(
     data: items.slice(0, limit),
   };
 }
+
+// ─── Language share ──────────────────────────────────────────
+
+/**
+ * What a conversation has to be to count as the business's real traffic.
+ *
+ * ★ BOTH HALVES ARE REQUIRED AND `isTest` ALONE DOES NOTHING USEFUL. Sandbox
+ * conversations - the AI-employee rehearsals a team runs during setup - are
+ * written with `isTest = false`, so filtering on that flag alone lets every one
+ * of them through. The external-id prefix is the product's own definition of a
+ * sandbox conversation (`sandbox-conversation.service.ts`), so it cannot drift
+ * from what the test chat actually writes.
+ *
+ * This is the same pair that now defines a billable conversation in
+ * `usage-allowance.ts` (fixed in bd1ddf0a) and in billing's observed-usage
+ * measurement, so "what counts as a conversation" has ONE definition.
+ *
+ * ⚠ THE 21 OTHER QUERIES IN THIS FILE STILL USE `isTest: false` ALONE, so every
+ * other figure here counts setup rehearsals as business. That is a separate,
+ * unfixed defect - and `__tests__/test-conversations-excluded.test.ts` asserts
+ * the incomplete predicate is present, so it passes while the guard is half
+ * missing. Anything new should use this constant; the existing sites need a
+ * deliberate pass with that test rewritten.
+ */
+export const REAL_CONVERSATION = {
+  isTest: false,
+  NOT: { customerExternalId: { startsWith: "sandbox:" } },
+} as const;
+
+export interface LanguageShareRow {
+  /** ISO-639-1, or null for a conversation whose language was never detected. */
+  locale: string | null;
+  conversations: number;
+  /** Percentage of ALL conversations in the window, including undetected ones. */
+  share: number;
+}
+
+/**
+ * The language mix of recent conversations, for "most of your traffic is in X -
+ * do you answer in X?".
+ *
+ * `Conversation.detectedLocale` is set once per thread by
+ * `incoming-worker/src/services/locale-detect.service.ts`, so this is measured
+ * from what customers actually wrote, not from any setting.
+ *
+ * ★ UNDETECTED CONVERSATIONS ARE A ROW, NOT A DROPPED RECORD. Excluding them
+ * would divide by a smaller population and overstate every language - a panel
+ * reading "62% Hebrew" when a third of the traffic was never classified is
+ * wrong in the direction that invites a decision. Shares here always sum to
+ * 100% of the window.
+ */
+export async function getLanguageShare(
+  tenantId: string,
+  days = 30,
+): Promise<{ windowDays: number; total: number; rows: LanguageShareRow[] }> {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+  const grouped = await prisma.conversation.groupBy({
+    by: ["detectedLocale"],
+    where: { tenantId, ...REAL_CONVERSATION, createdAt: { gte: since } },
+    _count: { _all: true },
+  });
+
+  const total = grouped.reduce((sum, g) => sum + g._count._all, 0);
+  const rows: LanguageShareRow[] = grouped
+    .map((g) => ({
+      // Normalised to the language, not the tag: "he-IL" and "he" are one
+      // language to a person choosing which languages to answer in.
+      locale: g.detectedLocale ? String(g.detectedLocale).toLowerCase().slice(0, 2) : null,
+      conversations: g._count._all,
+      share: 0,
+    }))
+    // Merging after normalisation, since two tags can collapse onto one language.
+    .reduce<LanguageShareRow[]>((acc, r) => {
+      const found = acc.find((x) => x.locale === r.locale);
+      if (found) found.conversations += r.conversations;
+      else acc.push(r);
+      return acc;
+    }, [])
+    .map((r) => ({ ...r, share: total > 0 ? Math.round((r.conversations / total) * 1000) / 10 : 0 }))
+    .sort((a, b) => b.conversations - a.conversations);
+
+  return { windowDays: days, total, rows };
+}
