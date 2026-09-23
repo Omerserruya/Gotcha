@@ -132,19 +132,40 @@ for (const size of SIZES) {
   test.describe(`${size.name}px`, () => {
     test.use({ viewport: { width: size.width, height: size.height } });
 
-    /* 1 · the six facts, read-only. Includes a never-saved `hours` as "Not set". */
+    /*
+     * 1 · the facts, read-only, in the DESIGN's list.
+     *
+     * Seven rows, not six: `Website` was missing entirely, and `Language`
+     * and `Currency & time zone` are the old `Currency & language` plus
+     * `Time zone` recombined the other way. That is structural — 11d is a
+     * dedicated Edit language panel, and a row sharing a label with Currency
+     * has nothing to open it from.
+     *
+     * Includes a never-saved `hours` as "Not set".
+     */
     test('1 · facts, read-only', async ({ page }) => {
       await openWorkspace(page, 'en');
       for (const key of [
         'name',
+        'website',
         'description',
         'address',
         'hours',
-        'currencyLanguage',
-        'timezone',
+        'language',
+        'currencyTimezone',
       ]) {
         await expect(page.getByTestId(`fact-${key}`)).toBeVisible();
       }
+
+      // The header the inline badges depend on. Without it, "From website"
+      // on a row has no reason to mean anything to a reader.
+      await expect(page.getByTestId('facts-intro')).toHaveText(/only updates fields marked/i);
+
+      // And the website row states the domain WITHOUT a page count: `reach`
+      // is on the scan response only, and `pagesRead` would be 17 against a
+      // `distinctTextPages` of 1 on this tenant.
+      await expect(page.getByTestId('fact-value-website')).not.toHaveText(/pages read/i);
+
       await shoot(page, `${size.name}-01-facts-en`);
     });
 
@@ -167,12 +188,12 @@ for (const size of SIZES) {
       await shoot(page, `${size.name}-03-edit-hours-en`);
     });
 
-    /* 4 · currency and language, with the note explaining why one language. */
-    test('4 · currency and language', async ({ page }) => {
+    /* 4 · the language row, with the note explaining why one language. */
+    test('4 · language', async ({ page }) => {
       await openWorkspace(page, 'en');
-      await page.getByTestId('fact-edit-currencyLanguage').click();
-      await expect(page.getByTestId('fact-save-currencyLanguage')).toBeVisible();
-      await shoot(page, `${size.name}-04-edit-currency-language-en`);
+      await page.getByTestId('fact-edit-language').click();
+      await expect(page.getByTestId('fact-save-language')).toBeVisible();
+      await shoot(page, `${size.name}-04-edit-language-en`);
     });
 
     /* 5 · below the minimum: counter in the alert tone, Save unavailable. The

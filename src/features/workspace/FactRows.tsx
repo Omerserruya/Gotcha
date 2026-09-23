@@ -3,7 +3,7 @@
 import { useLocale, useTranslations } from 'next-intl';
 import { Fragment, useState, useTransition } from 'react';
 
-import { DAY_KEYS, type DayKey, type Workspace } from '@/api/contracts/workspace';
+import { DAY_KEYS, fieldOrigin, type DayKey, type Workspace } from '@/api/contracts/workspace';
 import { Button } from '@/design-system/primitives/button/Button';
 import { Input } from '@/design-system/primitives/input/Input';
 
@@ -25,7 +25,28 @@ import styles from './Workspace.module.css';
  * the right one, and discarding what was just typed to show it would be.
  */
 
-type FactKey = 'name' | 'description' | 'address' | 'hours' | 'currencyLanguage' | 'timezone';
+type FactKey =
+  'name' | 'website' | 'description' | 'address' | 'hours' | 'language' | 'currencyTimezone';
+
+/**
+ * Which provenance field each row stands for, where one row is one field.
+ *
+ * `hours` is deliberately absent: business hours live in `TenantSetting` and
+ * are not in `PROVENANCED_FIELDS`, so nothing records whether the scan or a
+ * person wrote them. **The design puts a "From website" badge on Opening
+ * hours and we cannot back it** — the badge would be asserting a source
+ * nobody stored.
+ *
+ * `currencyTimezone` is absent for a different reason: it is two fields, one
+ * provenanced (`currency`) and one not (timezone lives in the hours setting).
+ * A single badge over the pair would be claiming a source for both.
+ */
+const PROVENANCE_FIELD: Partial<Record<FactKey, string>> = {
+  name: 'organizationName',
+  description: 'businessDescription',
+  address: 'address',
+  language: 'primaryLanguage',
+};
 
 export function FactRows({ workspace }: { workspace: Workspace }) {
   const t = useTranslations('workspace');
@@ -56,8 +77,22 @@ export function FactRows({ workspace }: { workspace: Workspace }) {
     });
   }
 
-  const row = (key: FactKey, value: string | null, form: React.ReactNode) => {
-    const isOpen = editing === key;
+  /** The badge for a row, where the row stands for exactly one tracked field. */
+  const origin = (key: FactKey) => {
+    const field = PROVENANCE_FIELD[key];
+    return field ? fieldOrigin(workspace, field) : 'unknown';
+  };
+
+  const row = (
+    key: FactKey,
+    value: string | null,
+    form: React.ReactNode | null,
+    /** Extra line under the value — a caveat the row needs, not a second value. */
+    caveat?: string,
+  ) => {
+    // `form === null` means the field cannot be written through this screen.
+    const readOnly = form === null;
+    const isOpen = editing === key && !readOnly;
     const message = note?.key === key ? note : null;
 
     return (
@@ -110,7 +145,29 @@ export function FactRows({ workspace }: { workspace: Workspace }) {
               data-testid={`fact-value-${key}`}
             >
               {value ?? t('unset')}
+              {/*
+                The badge INLINE, where the design puts it. The separate
+                provenance panel below stays — it accounts for all seven
+                tracked fields, including ones that have no row here — but the
+                badge is what makes "Scanning again only updates fields marked
+                From website" legible at the point it applies.
+
+                Rendered only for `scan`. `human` and `unknown` say nothing
+                here: the row already shows the value, and "you typed this" on
+                every untouched row would be noise. The panel carries the full
+                three-way account.
+              */}
+              {origin(key) === 'scan' ? (
+                <span className={styles.fromWebsite} data-testid={`fact-origin-${key}`}>
+                  {t('provenance.origin.scan')}
+                </span>
+              ) : null}
             </div>
+            {caveat ? (
+              <p className={styles.rowCaveat} data-testid={`fact-caveat-${key}`}>
+                {caveat}
+              </p>
+            ) : null}
             {message?.quiet ? (
               <span
                 className={styles.rowNoteQuiet}
@@ -120,18 +177,20 @@ export function FactRows({ workspace }: { workspace: Workspace }) {
                 {message.text}
               </span>
             ) : null}
-            <button
-              type="button"
-              className={styles.edit}
-              data-testid={`fact-edit-${key}`}
-              onClick={() => {
-                setEditing(key);
-                setNote(null);
-                seed(key);
-              }}
-            >
-              {t('edit')}
-            </button>
+            {readOnly ? null : (
+              <button
+                type="button"
+                className={styles.edit}
+                data-testid={`fact-edit-${key}`}
+                onClick={() => {
+                  setEditing(key);
+                  setNote(null);
+                  seed(key);
+                }}
+              >
+                {t('edit')}
+              </button>
+            )}
           </>
         )}
       </div>
@@ -148,10 +207,10 @@ export function FactRows({ workspace }: { workspace: Workspace }) {
     if (key === 'name') setText(workspace.name ?? '');
     if (key === 'description') setText(workspace.description ?? '');
     if (key === 'address') setText(workspace.address ?? '');
-    if (key === 'timezone') setText(workspace.timezone ?? '');
-    if (key === 'currencyLanguage') {
+    if (key === 'language') setLanguage(workspace.languages[0] ?? '');
+    if (key === 'currencyTimezone') {
       setCurrency(workspace.currency ?? '');
-      setLanguage(workspace.languages[0] ?? '');
+      setText(workspace.timezone ?? '');
     }
     if (key === 'hours') setWeek(weekOf(workspace));
   }
@@ -162,13 +221,16 @@ export function FactRows({ workspace }: { workspace: Workspace }) {
     // Empty clears it: the server accepts null for an address, and a workspace
     // that removed its address is a different fact from one that never had one.
     if (key === 'address') return commit(key, { address: text.trim() || null });
-    if (key === 'timezone') return commit(key, { timezone: text.trim() });
-    if (key === 'currencyLanguage') {
+    if (key === 'language') {
+      // A single entry, deliberately. PATCH now REFUSES a longer list with a
+      // 422 rather than keeping the first and answering 200 — so two would be
+      // rejected rather than forgotten, and there is still nowhere to put it.
+      return commit(key, { languages: language.trim() ? [language.trim().toLowerCase()] : [] });
+    }
+    if (key === 'currencyTimezone') {
       return commit(key, {
         currency: currency.trim() ? currency.trim().toUpperCase() : null,
-        // A single entry, deliberately: PATCH keeps only the first, so a
-        // control that accepted two would forget one on the next reload.
-        languages: language.trim() ? [language.trim().toLowerCase()] : [],
+        timezone: text.trim(),
       });
     }
     return commit(key, { hours: hoursPatch(week, workspace.hours ?? null) });
@@ -229,18 +291,33 @@ export function FactRows({ workspace }: { workspace: Workspace }) {
     }
   };
 
-  const currencyPart = workspace.currency ?? t('currencyUnset');
   const storedLanguage = workspace.languages[0];
-  const languagePart = storedLanguage
-    ? `${languageName(storedLanguage)}, ${t('repliesInCustomerLanguage')}`
-    : t('languageUnset');
-  // Null only when BOTH are unset, so the row falls back to the shared
-  // "Not set" rather than saying it twice.
-  const languageValue =
-    workspace.currency || storedLanguage ? `${currencyPart} · ${languagePart}` : null;
 
   return (
     <div className={styles.facts}>
+      {/*
+        The design's header, above the rows it is about.
+        ══════════════════════════════════════════════════════════════════
+        It is the sentence that makes the inline badges mean something: a
+        reader who meets "From website" without it has no reason to think the
+        marking does anything.
+
+        The domain is named when we have one — "filled in from avivco.il" is
+        a verifiable claim and "filled in from your website" is not.
+
+        NO "Scan again" BUTTON YET. `POST /workspace/scan` exists and returns
+        `applied`, `offer` and `reach`, so a rescan is not one action but a
+        conversation: some fields change by themselves, others come back as
+        proposals the owner must accept, and the site may turn out to be
+        unreadable. A button that fired the scan and dropped `offer` on the
+        floor would silently discard the half the endpoint exists to produce.
+      */}
+      <p className={styles.factsIntro} data-testid="facts-intro">
+        {workspace.websiteDomain
+          ? t('intro.withSite', { domain: workspace.websiteDomain })
+          : t('intro.noSite')}
+      </p>
+
       {row(
         'name',
         workspace.name ?? null,
@@ -253,6 +330,32 @@ export function FactRows({ workspace }: { workspace: Workspace }) {
             maxLength={200}
           />
         </div>,
+      )}
+
+      {/*
+        ★ THE WEBSITE ROW, WITHOUT THE PAGE COUNT THE DESIGN SHOWS.
+        ══════════════════════════════════════════════════════════════════
+        The design's value is "avivco.il · 42 pages read, 3 days ago".
+
+        Neither number reaches this screen. `POST /workspace/scan` returns
+        `reach` — `pagesRead` AND `distinctTextPages` — but `GET /workspace`
+        does not, and nothing persists it, so on load there is no count and
+        no date to show. Rendering the domain alone is the whole of what is
+        known here.
+
+        That is the safe direction to be missing it in. `pagesRead` on this
+        tenant is 17 against `distinctTextPages` of 1 — a password-protected
+        store answering every path with the same login page — so "42 pages
+        read" is exactly the sentence the crawler's own comment forbids.
+
+        Read-only: `PATCH /workspace` has a closed allow-list and
+        `websiteDomain` is not on it. A control here would 422.
+      */}
+      {row(
+        'website',
+        workspace.websiteDomain ?? null,
+        null,
+        workspace.websiteDomain ? t('website.readOnly') : t('website.notSet'),
       )}
 
       {row(
@@ -342,9 +445,46 @@ export function FactRows({ workspace }: { workspace: Workspace }) {
         </div>,
       )}
 
+      {/*
+        Language on its own row, because 11d is a dedicated panel and a row
+        that shares a label with Currency has nothing to open it from.
+
+        Two sentences, because they are two settings the design is right to
+        separate: what customers are answered in, and what GOTCHA itself runs
+        in. Only the second is stored here — the first is decided per
+        conversation from the customer's own message, on a prompt rule marked
+        non-negotiable, and this column is never read for it.
+      */}
       {row(
-        'currencyLanguage',
-        languageValue || null,
+        'language',
+        storedLanguage
+          ? `${t('language.replies')} · ${t('language.system', { locale: languageName(storedLanguage) })}`
+          : null,
+        <div className={styles.value}>
+          <Input
+            label={t('language')}
+            value={language}
+            maxLength={8}
+            hint={t('languageNote')}
+            onChange={(e) => setLanguage(e.target.value)}
+          />
+        </div>,
+      )}
+
+      {/*
+        Currency and time zone together, as the design has them — two facts a
+        person sets once and reads as one line. They are stored apart
+        (`BusinessProfile.currency` and the hours setting), which is why the
+        row carries no provenance badge: one badge over two fields would be
+        claiming a source for both.
+      */}
+      {row(
+        'currencyTimezone',
+        workspace.currency || workspace.timezone
+          ? [workspace.currency ?? t('currencyUnset'), workspace.timezone]
+              .filter(Boolean)
+              .join(' · ')
+          : null,
         <div className={styles.value}>
           <div className={styles.editFields}>
             <Input
@@ -354,26 +494,11 @@ export function FactRows({ workspace }: { workspace: Workspace }) {
               onChange={(e) => setCurrency(e.target.value)}
             />
             <Input
-              label={t('language')}
-              value={language}
-              maxLength={8}
-              hint={t('languageNote')}
-              onChange={(e) => setLanguage(e.target.value)}
+              label={t('fact.currencyTimezone')}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
             />
           </div>
-        </div>,
-      )}
-
-      {row(
-        'timezone',
-        workspace.timezone ?? null,
-        <div className={styles.value}>
-          <Input
-            label={t('fact.timezone')}
-            labelHidden
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-          />
         </div>,
       )}
     </div>

@@ -17,8 +17,9 @@
     "description": "What you sell",
     "address": "Address",
     "hours": "Opening hours",
-    "currencyLanguage": "Currency & language",
-    "timezone": "Time zone"
+    "website": "Website",
+    "language": "Language",
+    "currencyTimezone": "Currency & time zone"
   },
   "hours": {
     "to": "{open}–{close}",
@@ -49,8 +50,11 @@
     "saturday": "Sat"
   },
   "currency": "Currency",
-  "language": "Language",
-  "languageNote": "One language for now. A second is coming; until then this would not be kept.",
+  "language": {
+    "system": "GOTCHA runs in {locale}.",
+    "replies": "Customers are answered in their own language, whichever they write in."
+  },
+  "languageNote": "One language is stored. A second has nowhere to go yet, so this is what the knowledge documents are tagged with.",
   "voice": {
     "title": "How GOTCHA should sound",
     "unavailable": "The voice could not be loaded just now.",
@@ -107,5 +111,13 @@
       "currency": "Currency"
     },
     "oneLanguage": "The AI replies in each customer's own language — that is a fixed rule, and this setting does not change it. GOTCHA stores one language here, and it is used to tag your knowledge documents."
+  },
+  "website": {
+    "notSet": "Not set. GOTCHA learned what it knows from your website, so without one there is nothing to scan.",
+    "readOnly": "Changed when you reconnect your store, not here."
+  },
+  "intro": {
+    "withSite": "Most of this was filled in from {domain} when you signed up. Scanning again only updates fields marked “From website”.",
+    "noSite": "Most of this was filled in when you signed up."
   }
 }
