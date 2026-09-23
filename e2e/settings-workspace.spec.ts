@@ -297,27 +297,48 @@ for (const size of SIZES) {
        * sequencing around it: every worker reads the same true value and
        * writes that same value, so ANY interleaving leaves the field correct.
        * There is nothing to restore, so there is no `finally` to race.
+       *
+       * ── AND WHY IT MOVED FROM `description` TO `timezone` ──
+       * All of the above stayed true and stopped being enough.
+       *
+       * Backend's `cae1d369` added `stampProvenance` to `PATCH /workspace`.
+       * This test had been calling that route all along; the endpoint grew a
+       * side effect underneath it. So a write that changed no value began
+       * recording that a HUMAN had edited the description — on Omer's live
+       * tenant, on every capture run, in the exact store screen 11b reads.
+       *
+       * **A write that is value-neutral is not therefore state-neutral**, and
+       * the difference is invisible until somebody adds a side effect to the
+       * endpoint. Nothing here was wrong and nothing there was wrong; they
+       * were only wrong together, across two repositories.
+       *
+       * `timezone` moves the same ETag — `updatedAt` is
+       * `newerOf(profile.updatedAt, hours.updatedAt)`, so the hours write
+       * advances it — and a timezone-only patch leaves `profilePatch` empty,
+       * so the route never reaches `businessProfile.update` and never stamps.
+       * Value-neutral AND provenance-neutral, with the same
+       * every-worker-writes-the-same-value property that made the description
+       * version race-free.
        */
       const before = await request.get('/api/bff/api/workspace', { headers });
       expect(before.ok(), 'could not read the workspace before the conflicting write').toBe(true);
-      const current = ((await before.json()) as { data?: { description?: string } }).data
-        ?.description;
+      const current = ((await before.json()) as { data?: { timezone?: string } }).data?.timezone;
 
       /*
-       * Guard the premise rather than assume it. If the description were
-       * absent, sending `undefined` would build an empty patch, the route
-       * would skip the update entirely, `updatedAt` would not move and the
-       * save below would SUCCEED — and this shot would quietly photograph a
-       * successful save while claiming to prove a conflict.
+       * Guard the premise rather than assume it. If the timezone were absent,
+       * sending `undefined` would build an empty patch, the hours write would
+       * not run, `updatedAt` would not move and the save below would SUCCEED
+       * — and this shot would quietly photograph a successful save while
+       * claiming to prove a conflict.
        */
       expect(
         typeof current,
-        'the workspace has no description to write back, so this test cannot move the ETag',
+        'the workspace has no timezone to write back, so this test cannot move the ETag',
       ).toBe('string');
 
       const elsewhere = await request.patch('/api/bff/api/workspace', {
         headers,
-        data: { description: current },
+        data: { timezone: current },
       });
       expect(
         elsewhere.ok(),
@@ -435,38 +456,54 @@ for (const size of SIZES) {
      * spec run in that window, and the attributed branch is unreachable on
      * any tenant anyway — it lives in FieldProvenance.test.tsx.
      */
-    test('13 · nothing is attributed, and the panel explains rather than shrugs', async ({
-      page,
-    }) => {
+    test('13 · the panel explains whichever state it is in', async ({ page }) => {
       await openWorkspace(page, 'en');
 
       const panel = page.getByTestId('provenance');
       await expect(panel).toBeVisible();
-      await expect(panel).toHaveAttribute('data-attributed', 'false');
-
-      const notice = page.getByTestId('provenance-none');
-      await expect(notice).toHaveText(/nothing is marked yet/i);
-      await expect(notice).toHaveText(/ask you about every change/i);
-      await expect(notice).toHaveText(/after that it refreshes what it wrote itself/i);
 
       /*
-       * And NO badge claims the website wrote anything. This absence can fail
-       * today — the same panel renders that label in another branch, and the
-       * test above has already proved the panel is not blank.
+       * ── WHY THIS NO LONGER ASSERTS THE TENANT IS EMPTY ──
+       * It used to assert `data-attributed="false"`, which is a claim about
+       * the TENANT rather than about the panel. That made it depend on global
+       * state anything could change — and something did: test 2's conflict
+       * write began stamping provenance when Backend added `stampProvenance`
+       * to `PATCH /workspace`. A test earlier in the same file was setting up
+       * the state this one asserted against.
+       *
+       * Ordering would have hidden it rather than fixed it. The panel's job
+       * is to explain whichever state it is in, so that is what is asserted:
+       * two outcomes, both correct, and the wrong one — a panel that shows
+       * badges with no account of them — is rejected either way.
        */
-      await expect(panel).not.toHaveText(/from your website/i);
+      const attributed = await panel.getAttribute('data-attributed');
+
+      if (attributed === 'false') {
+        const notice = page.getByTestId('provenance-none');
+        await expect(notice).toBeVisible();
+        await expect(notice).toHaveText(/nothing is marked yet/i);
+        await expect(notice).toHaveText(/ask you about every change/i);
+        // The self-healing half. Without it this is an apology.
+        await expect(notice).toHaveText(/after that it refreshes what it wrote itself/i);
+        // And no badge may claim the website wrote anything.
+        await expect(panel).not.toHaveText(/from your website/i);
+      } else {
+        await expect(page.getByTestId('provenance-some')).toHaveText(
+          /refreshes the fields marked/i,
+        );
+        // Something is marked, so at least one badge must say which.
+        await expect(panel).toHaveText(/from your website|you entered this/i);
+      }
+
+      // Either way, every field says where it stands. A row with a value and
+      // no origin is the state this panel exists to prevent.
+      const rows = page.getByTestId('provenance-row');
+      const origins = page.getByTestId('provenance-origin');
+      expect(await origins.count()).toBe(await rows.count());
 
       await shoot(page, `${size.name}-13-provenance`);
     });
 
-    /*
-     * ★ 11d · one reply language, stated instead of offered.
-     *
-     * `PATCH /workspace` validates up to SIX languages and then writes
-     * `primaryLanguage = languages[0]`. A multi-select would be accepted,
-     * answered 200, and silently drop everything after the first — so the
-     * screen says what is stored and draws no control that loses data.
-     */
     test('14 · one reply language, and the screen says so', async ({ page }) => {
       await openWorkspace(page, 'en');
 
