@@ -60,6 +60,24 @@ broken capture.
 
 ---
 
+## Dev sends REAL email, from the production sender domain
+
+```
+auth container:  SMTP_HOST=smtp.resend.com
+                 SMTP_FROM=GOTCHA <no-reply@gotcha.co.il>
+```
+
+**There is no mail sink and no catcher on this box.** Anything that triggers an email — an
+invite, a notification, a password setup link — **leaves the building, from the real domain,
+against the real sending reputation.**
+
+So a probe that exercises an invite path is not a local operation: it provisions an Authentik
+identity **and mails a stranger**. `POST /api/onboarding/invite-team` is the one to watch.
+
+**Before driving any flow that might send: check whether it sends, and ask.**
+
+---
+
 ## The box is shared with another team
 
 ```
@@ -78,7 +96,15 @@ docker ps           →  22   plus two buildkit builders, one of which is not ou
 
 ## Build cost
 
-**Measured, not estimated: ~900MB of disk per single-service rebuild.**
+**Measured, and it is a ladder rather than one number — per single service:**
+```
+~0.1 GB   a code edit, mostly cached layers
+~1.04 GB  a change inside packages/shared TypeScript
+~1.36 GB  a Prisma schema change (the regenerated client invalidates deeper layers)
+```
+**Check the SCOPE before the size.** A `CalendarAccount` schema change looked like it would cost
+~10GB and cost 1.36GB, because only one service references that model. The question *"which
+services import this?"* is worth more than the measurement.
 
 A change inside `packages/shared` rebuilds every service that imports it — most of them —
 which is roughly **10GB**. Check free space before starting one; hitting `ENOSPC` partway
