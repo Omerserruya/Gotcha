@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { grantSchema, isAddition, isEditable, roleListSchema, roleSchema } from './roles';
+import {
+  allowsEverything,
+  grantSchema,
+  isAddition,
+  isEditable,
+  roleListSchema,
+  roleSchema,
+} from './roles';
 
 /** The rulings on screen 12b, as assertions. */
 
@@ -82,5 +89,36 @@ describe('a per-person grant can also take something away', () => {
     // nothing is the reassuring-direction failure.
     const surface = Object.keys(grantSchema.parse({ feature: 'x', granted: true }));
     expect(surface.filter((k) => /expir|until|limit|cap|amount/i.test(k))).toEqual([]);
+  });
+});
+
+describe('a wildcard role says what it means, never how many rows it has', () => {
+  it('reports a role holding * as allowing everything', () => {
+    /*
+     * Owner holds exactly ONE feature row — `*` — and
+     * `permissions.ts:37` is `if (key === "*") return true`. Counting it
+     * rendered "Allows one thing" directly beneath "Full access to
+     * everything", and a reader comparing Owner's 1 to Admin's 58 concludes
+     * Owner is the NARROWER role.
+     *
+     * Arithmetically right about the row, wrong about the world. The row was
+     * counted without being read.
+     */
+    const owner = roleSchema.parse({ id: 'r1', name: 'Owner', features: ['*'] });
+    expect(allowsEverything(owner)).toBe(true);
+    expect(owner.features).toHaveLength(1);
+  });
+
+  it('does not mistake a long permission list for a wildcard', () => {
+    const admin = roleSchema.parse({
+      id: 'r2',
+      name: 'Admin',
+      features: ['billing.refund', 'conversation.read', 'permissions.manage'],
+    });
+    expect(allowsEverything(admin)).toBe(false);
+  });
+
+  it('reports an empty role as allowing nothing, not everything', () => {
+    expect(allowsEverything(roleSchema.parse({ id: 'r3', name: 'New' }))).toBe(false);
   });
 });

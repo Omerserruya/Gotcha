@@ -116,6 +116,18 @@ for (const size of SIZES) {
       await expect(page.locator('[data-testid^="builtin-"]').first()).toBeVisible();
       await expect(page.locator('main')).toHaveText(/copy it and change the copy/i);
 
+      /*
+       * A role holding `*` says what it means. Owner holds exactly one
+       * feature row — the wildcard — so counting rendered "Allows one thing"
+       * beneath "Full access to everything". Arithmetically right about the
+       * row, wrong about the world.
+       */
+      const owner = page.locator('li[data-testid^="role-"]', { hasText: /owner/i }).first();
+      if ((await owner.count()) > 0) {
+        await expect(owner).toHaveText(/allows everything/i);
+        await expect(owner).not.toHaveText(/allows one thing/i);
+      }
+
       await shoot(page, `${size.name}-1-roles`);
     });
 
@@ -135,8 +147,13 @@ for (const size of SIZES) {
       // The reason, not just the fact.
       await expect(note).toHaveText(/either allows refunds or it doesn't/i);
 
-      // And no amount appears anywhere on the screen.
-      await expect(page.locator('main')).not.toHaveText(/₪\s?\d|up to \d/i);
+      /*
+       * Scoped to the LIST, not to `main`. The note is the one place an
+       * amount legitimately appears — it quotes the limit that does not
+       * exist in order to say so. Asserting over the whole page made the
+       * disclaimer fail the assertion it was written to satisfy.
+       */
+      await expect(page.getByTestId('role-list')).not.toHaveText(/₪\s?\d|up to \d/i);
 
       await shoot(page, `${size.name}-2-no-money-limits`);
     });

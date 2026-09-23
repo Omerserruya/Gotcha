@@ -12,5 +12,6 @@
   },
   "noLimits": "Roles don't carry money limits. A role either allows refunds or it doesn't — GOTCHA has no setting for \"up to ₪1,000\", so nothing here caps an amount.",
   "noCustom": "No roles of your own yet.",
-  "noCustomBody": "You can copy any built-in role and change the copy — that's how a role of your own starts."
+  "noCustomBody": "You can copy any built-in role and change the copy — that's how a role of your own starts.",
+  "allowsEverything": "Allows everything"
 }

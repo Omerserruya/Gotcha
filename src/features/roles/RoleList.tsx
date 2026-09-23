@@ -1,6 +1,6 @@
 import { getTranslations } from 'next-intl/server';
 
-import { isEditable, type Role } from '@/api/contracts/roles';
+import { allowsEverything, isEditable, type Role } from '@/api/contracts/roles';
 
 import styles from './Roles.module.css';
 
@@ -53,8 +53,17 @@ export async function RoleList({ roles }: { readonly roles: readonly Role[] }) {
             How much it allows, counted — never "up to ₪1,000", which has no
             column behind it.
           */}
+          {/*
+            A wildcard role says what it means; only a role without one gets a
+            number. Owner holds exactly one feature row — `*` — so counting it
+            rendered "Allows one thing" beneath "Full access to everything",
+            and a reader comparing Owner's 1 to Admin's 58 concludes Owner is
+            the narrower role. The row was counted without being read.
+          */}
           <p className={styles.allows} data-testid={`allows-${role.id}`}>
-            {t('allows', { count: role.features.length })}
+            {allowsEverything(role)
+              ? t('allowsEverything')
+              : t('allows', { count: role.features.length })}
           </p>
 
           <p className={styles.members} data-testid={`members-${role.id}`}>

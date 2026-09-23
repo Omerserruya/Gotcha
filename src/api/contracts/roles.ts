@@ -92,6 +92,30 @@ export const roleListSchema = z
     ),
   );
 
+/**
+ * The feature key that means *everything*.
+ *
+ * `permissions.ts:37` — `if (key === "*") return true`. A role holding it
+ * passes every check regardless of what else it has.
+ */
+export const WILDCARD_FEATURE = '*';
+
+/**
+ * Does this role allow everything?
+ *
+ * **This exists because counting was arithmetically right and said the
+ * opposite of the truth.** Owner holds exactly one row, `*`, so the screen
+ * rendered *"Allows one thing"* directly beneath *"Full access to
+ * everything"* — and a reader comparing Owner's 1 to Admin's 58 concludes
+ * Owner is the narrower role.
+ *
+ * **The row was counted without being read.** A wildcard role says what it
+ * means; only a role without one gets a number.
+ */
+export function allowsEverything(role: Role): boolean {
+  return role.features.includes(WILDCARD_FEATURE);
+}
+
 /** Built-in roles can be copied but never edited or deleted. */
 export function isEditable(role: Role): boolean {
   return !role.isSystem;
