@@ -58,6 +58,32 @@ export const permissionEndpoints = {
    * People reads THIS one.
    */
   users: () => endpoint('/api/permissions/users'),
+
+  /**
+   * Roles — screens 12b and 12c. Every verb ADMIN only.
+   *
+   * A role is a name plus a set of feature keys. `TenantRoleFeature` is a
+   * composite key with no other columns, so **the money limits the design
+   * writes into each role's description have nowhere to live.**
+   */
+  roles: () => endpoint('/api/permissions/roles'),
+  role: (roleId: string) => endpoint('/api/permissions/roles/{roleId}', { roleId }),
+  roleFeatures: (roleId: string) =>
+    endpoint('/api/permissions/roles/{roleId}/features', { roleId }),
+
+  /** A person's primary role — screen 12d. */
+  userRole: (userId: string) => endpoint('/api/permissions/users/{userId}/role', { userId }),
+
+  /**
+   * One person's exceptions — screen 12e.
+   *
+   * `granted: true` adds a permission their role lacks; **`granted: false`
+   * takes away one their role gives.** Same endpoint, same table, opposite
+   * meanings — and the design describes only the first.
+   */
+  userGrants: (userId: string) => endpoint('/api/permissions/users/{userId}/grants', { userId }),
+  userGrant: (userId: string, feature: string) =>
+    endpoint('/api/permissions/users/{userId}/grants/{feature}', { userId, feature }),
 } as const;
 
 /**

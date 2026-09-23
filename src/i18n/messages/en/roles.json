@@ -1,0 +1,16 @@
+{
+  "title": "Roles",
+  "description": "The work hats. Each one is a set of permissions, and people wear one.",
+  "unavailable": "We couldn't read your roles just now.",
+  "builtin": "Built-in",
+  "allows": "{count, plural, =0 {Allows nothing yet} =1 {Allows one thing} other {Allows # things}}",
+  "members": "{count, plural, =1 {One person} other {# people}}",
+  "noMembers": "No one yet",
+  "action": {
+    "editable": "You can change this one",
+    "copyOnly": "Fixed — you can copy it and change the copy"
+  },
+  "noLimits": "Roles don't carry money limits. A role either allows refunds or it doesn't — GOTCHA has no setting for \"up to ₪1,000\", so nothing here caps an amount.",
+  "noCustom": "No roles of your own yet.",
+  "noCustomBody": "You can copy any built-in role and change the copy — that's how a role of your own starts."
+}

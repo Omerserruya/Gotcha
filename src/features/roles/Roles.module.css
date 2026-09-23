@@ -1,0 +1,113 @@
+@layer features {
+  /*
+   * Screen 12b · Settings · People & teams · Roles.
+   *
+   * A role is a name and a set of permission keys. The design describes each
+   * one in prose including money limits; there is no amount column anywhere,
+   * so this screen counts permissions and says outright that roles carry no
+   * limits — rather than leaving a reader to assume the cap is elsewhere.
+   */
+
+  .screen {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+  }
+
+  /*
+   * Said once, above the list. The design writes "refunds up to ₪1,000" into
+   * three role descriptions, so a reader arrives expecting a cap — and the
+   * absence of one is the thing they most need to know.
+   */
+  .noLimits {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-snug);
+    color: var(--text-body);
+    background-color: var(--panel-inset);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-16);
+  }
+
+  .roles {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(var(--size-reading-half), 1fr));
+    gap: var(--space-12);
+  }
+
+  .role {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-14);
+    padding-inline: var(--space-16);
+  }
+
+  /* A role you cannot change should not look like one you can. */
+  .role[data-builtin='yes'] {
+    background-color: var(--panel-base);
+  }
+
+  .head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-8);
+  }
+
+  .name {
+    font-size: var(--font-size-meta);
+    font-weight: 600;
+  }
+
+  .builtin {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .description {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-body);
+  }
+
+  /* Counted, never "up to ₪1,000" — no amount exists to show. */
+  .allows,
+  .members,
+  .action {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /* ── No roles of your own ────────────────────────────────────────────── */
+  .empty {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .emptyLead {
+    margin: 0;
+    font-size: var(--font-size-body-lg);
+    font-weight: 500;
+  }
+
+  .emptyBody {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-snug);
+    color: var(--text-body);
+  }
+}

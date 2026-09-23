@@ -56,6 +56,8 @@ export const NAMESPACES = [
   'automations',
   /** Studio · capabilities — screen 10. */
   'capabilities',
+  /** Settings · People & teams · Roles — screen 12b. */
+  'roles',
 ] as const;
 
 export type Namespace = (typeof NAMESPACES)[number];
