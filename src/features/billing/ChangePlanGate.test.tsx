@@ -54,6 +54,31 @@ describe('the deferred date leads, and it carries the year', () => {
   });
 });
 
+describe('★ a scheduled change can be replaced but never cleared', () => {
+  it('says so before the choice, not after it', () => {
+    /*
+     * `resumeSubscription` is the only revoke path and its cleanup is gated
+     * on `changeType: "CANCEL"`. A scheduled downgrade cannot be removed —
+     * `changePlan` upserts the same row, so another change REPLACES it, and
+     * nothing returns the subscription to having none scheduled.
+     */
+    renderGate();
+    const note = screen.getByTestId('change-irreversible');
+    expect(note).toHaveTextContent(/cannot be called off here/i);
+    // Replaceable, not merely irreversible — the distinction is the useful part.
+    expect(note).toHaveTextContent(/choosing a different plan replaces it/i);
+    // And it names the asymmetry, because a cancellation CAN be reversed.
+    expect(note).toHaveTextContent(/only a cancellation can be reversed/i);
+  });
+
+  it('is shown even with no control on the screen yet', () => {
+    // True today about a state the tenant could already be in, and not
+    // contingent on us shipping the button.
+    renderGate({ permissions: [] });
+    expect(screen.getByTestId('change-irreversible')).toBeInTheDocument();
+  });
+});
+
 describe('a missing card is named as a path, not a wall', () => {
   it('says the upgrade would be declined AND how to fix it', () => {
     renderGate({ hasPaymentMethod: false });

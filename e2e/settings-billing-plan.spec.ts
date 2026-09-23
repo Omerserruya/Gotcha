@@ -149,6 +149,20 @@ for (const size of SIZES) {
       // And it says nothing changes before then — the service's own promise.
       await expect(deferred).toHaveText(/[Nn]othing changes/);
 
+      /*
+       * And that a scheduled change cannot be called off from here.
+       *
+       * `resumeSubscription`'s cleanup is gated on `changeType: "CANCEL"`, so
+       * a scheduled DOWNGRADE has no revoke path — another change replaces
+       * the row, nothing clears it. Asserted on the same page load as the
+       * deferral, because the two sentences are one fact: the change waits
+       * eleven months AND cannot be taken back while it waits.
+       */
+      const irreversible = page.getByTestId('change-irreversible');
+      await expect(irreversible).toBeVisible();
+      await expect(irreversible).toHaveText(/cannot be called off here/i);
+      await expect(irreversible).toHaveText(/replaces it/i);
+
       await shoot(page, `${size.name}-2-deferred`);
     });
 

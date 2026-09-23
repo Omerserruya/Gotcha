@@ -64,6 +64,33 @@ export function ChangePlanGate({
         </p>
       ) : null}
 
+      {/*
+        ★ SAID BEFORE THE CHOICE, AND BEFORE THE CONTROL EXISTS.
+        ════════════════════════════════════════════════════════════════════
+        `resumeSubscription` is the only revoke path in the platform, and its
+        cleanup is gated:
+
+          deleteMany({ where: { subscriptionId, changeType: "CANCEL",
+                                appliedAt: null } })
+
+        So a scheduled CANCEL can be called off and a scheduled DOWNGRADE or
+        VOLUME_CHANGE cannot. `changePlan` upserts the same row, so choosing
+        something else REPLACES the scheduled change — but nothing returns the
+        subscription to having none.
+
+        "Cannot be undone" would be too blunt and slightly wrong. The true
+        shape is: replaceable, never clearable. Said here rather than after
+        the click, because it is not obvious, it is permanent, and it is
+        exactly the kind of thing a person discovers at the wrong moment.
+
+        Rendered even though this screen has no control yet: the sentence is
+        true today about a state the tenant could already be in, and it is not
+        contingent on us shipping the button.
+      */}
+      <p className={styles.changeNote} data-testid="change-irreversible">
+        {t('change.irreversible')}
+      </p>
+
       {!hasPaymentMethod ? (
         <p className={styles.changeNote} data-testid="change-no-card">
           {/*

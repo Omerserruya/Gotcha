@@ -113,6 +113,7 @@
     },
     "change": {
       "deferred": "A change to a cheaper plan takes effect at the end of your billing period, on {date}. Nothing changes before then.",
+      "irreversible": "Once a change is scheduled, it cannot be called off here. Choosing a different plan replaces it, but there is no way back to no change at all — only a cancellation can be reversed from this screen, and a plan change cannot.",
       "needsPermission": "Changing the plan needs the Manage billing permission. Ask whoever administers your workspace.",
       "noCard": "There is no payment method on file, so an upgrade would be declined before anything changed. Add a card first — the upgrade will work straight afterwards.",
       "addCard": "Add a payment method"
