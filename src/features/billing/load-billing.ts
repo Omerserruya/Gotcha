@@ -12,6 +12,7 @@ import {
   type UsageBreakdown,
 } from '@/api/contracts/billing';
 import { billingEndpoints, usageEndpoints } from '@/api/endpoints/registry';
+import { autoPurchaseResponseSchema } from '@/api/contracts/auto-purchase';
 import { invoiceListSchema, type Invoice } from '@/api/contracts/invoices';
 import { logger } from '@/observability/logger';
 
@@ -29,6 +30,8 @@ import { logger } from '@/observability/logger';
  * different facts, and on a billing screen the second is the one worth
  * knowing.
  */
+type AutoPurchaseData = Awaited<ReturnType<typeof autoPurchaseResponseSchema.parse>>;
+
 export interface BillingData {
   readonly allowance: Allowance | null;
   readonly subscription: Subscription | null;
@@ -47,12 +50,20 @@ export interface BillingData {
    */
   readonly invoices: readonly Invoice[] | null;
   readonly breakdown: UsageBreakdown | null;
+  /**
+   * What happens when the credit runs out — screen 17d.
+   *
+   * `null` policy means nothing has been configured, which is NOT the same
+   * as a policy of defaults: the difference decides whether "buys more at
+   * 10%" is a fact about this tenant or a guess about one.
+   */
+  readonly autoPurchase: AutoPurchaseData | null;
 }
 
 export async function loadBilling(): Promise<BillingData> {
   const api = serverApi();
 
-  const [allowance, subscription, plans, invoices, breakdown] = await Promise.all([
+  const [allowance, subscription, plans, invoices, breakdown, autoPurchase] = await Promise.all([
     api
       .get({ endpoint: usageEndpoints.allowance(), payload: allowanceSchema })
       .catch((cause: unknown) => {
@@ -96,6 +107,16 @@ export async function loadBilling(): Promise<BillingData> {
         logger.warn('billing.breakdown_failed', { cause });
         return null;
       }),
+    api
+      .get({
+        endpoint: billingEndpoints.autoPurchase(),
+        payload: autoPurchaseResponseSchema,
+        raw: true,
+      })
+      .catch((cause: unknown) => {
+        logger.warn('billing.auto_purchase_failed', { cause });
+        return null;
+      }),
   ]);
 
   return {
@@ -103,6 +124,7 @@ export async function loadBilling(): Promise<BillingData> {
     subscription: subscription?.subscription ?? null,
     plans: plans?.plans ?? [],
     invoices,
+    autoPurchase,
     breakdown,
   };
 }

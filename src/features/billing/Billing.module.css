@@ -237,4 +237,38 @@
   .invoiceReceipt {
     font-size: var(--font-size-caption);
   }
+
+  /* ── 17d · running low ───────────────────────────────────────────────── */
+  .autoState,
+  .autoWarning,
+  .autoCap,
+  .autoBehavior {
+    margin: 0 0 var(--space-6);
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-snug);
+  }
+
+  .autoWarning,
+  .autoCap {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /*
+   * A cap with pay-as-you-go stops the auto-purchase, not the bill. It is the
+   * one combination on this screen that looks safe and is not, so it does not
+   * read as a footnote.
+   */
+  .autoContradiction {
+    margin: var(--space-8) 0 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--intent-blocked-text);
+    background-color: var(--intent-blocked-surface);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-10);
+    padding-inline: var(--space-14);
+  }
 }

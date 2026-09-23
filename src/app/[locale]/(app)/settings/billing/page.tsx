@@ -1,6 +1,7 @@
 import { getTranslations } from 'next-intl/server';
 
 import styles from '@/features/billing/Billing.module.css';
+import { AutoPurchase } from '@/features/billing/AutoPurchase';
 import { Invoices, PlanLine, UsageBreakdownSection } from '@/features/billing/BillingSections';
 import { loadBilling } from '@/features/billing/load-billing';
 import { Runway } from '@/features/billing/Runway';
@@ -18,13 +19,17 @@ import { SettingsSection } from '@/shell/SettingsSection';
  *
  * Three things the design draws are absent, and none is softened: the value
  * line (nothing computes hours saved or revenue attributed), the overage rate,
- * and the spending cap. The last two have no field anywhere — writing them
- * would be asserting billing behaviour from a mockup, which on this screen is
- * the worst place to guess.
+ * and the overage RATE, which has no field.
+ *
+ * **The spending cap is no longer among them.** `AutoPurchasePolicy` carries
+ * `maxMonthlySpend`, two thresholds and five limit behaviours, and it is
+ * configured on this tenant — 500.00 with 110.00 already spent. That
+ * sentence used to say the cap had no field anywhere; it was written before
+ * anyone read that model.
  */
 export default async function Page() {
   const t = await getTranslations('billing');
-  const { allowance, subscription, plans, invoices, breakdown } = await loadBilling();
+  const { allowance, subscription, plans, invoices, breakdown, autoPurchase } = await loadBilling();
 
   return (
     <SettingsSection title={t('title')} description={t('description')}>
@@ -38,6 +43,14 @@ export default async function Page() {
       <section className={styles.section} data-testid="section-breakdown">
         <h2 className={styles.sectionHeading}>{t('heading.breakdown')}</h2>
         <UsageBreakdownSection breakdown={breakdown} />
+      </section>
+
+      <section className={styles.section} data-testid="section-auto-purchase">
+        <h2 className={styles.sectionHeading}>{t('heading.autoPurchase')}</h2>
+        <AutoPurchase
+          policy={autoPurchase?.policy ?? null}
+          currency={autoPurchase?.currency ?? 'ILS'}
+        />
       </section>
 
       <section className={styles.section} data-testid="section-invoices">

@@ -4,7 +4,8 @@
   "heading": {
     "runway": "Conversations this period",
     "breakdown": "Where the period went",
-    "invoices": "Invoices"
+    "invoices": "Invoices",
+    "autoPurchase": "Running low"
   },
   "plan": {
     "unavailable": "We couldn't read your plan just now.",
@@ -46,5 +47,21 @@
       "not_paid": "No receipt — a receipt is issued when a charge is paid, and this one wasn't.",
       "missing": "Paid, but the receipt hasn't arrived from the payment provider."
     }
+  },
+  "autoPurchase": {
+    "unset": "Nothing is set up for running low. GOTCHA will use the default: when the credit runs out, the AI stops answering.",
+    "on": "Buys more automatically when credit drops to {threshold}%.",
+    "off": "Doesn't buy more automatically.",
+    "warnsFirst": "You're told at {warn}% — before anything is bought, so there's time to decide.",
+    "noCap": "No monthly limit on automatic purchases.",
+    "cap": "Up to {cap} {currency} a month on automatic purchases. {spent} {currency} so far this cycle — {used}.",
+    "behavior": {
+      "STOP_AI": "When it runs out: the AI stops answering. People can still work.",
+      "HUMAN_ONLY": "When it runs out: the AI stops and your team carries on as normal.",
+      "REQUIRE_APPROVAL": "When it runs out: the AI keeps working, and every action waits for someone to approve it.",
+      "PREPAID_ONLY": "Never buys more. GOTCHA runs on what you bought in advance and stops when it's gone.",
+      "PAYG": "When it runs out: GOTCHA keeps working and the extra usage is billed at the end of the cycle."
+    },
+    "capIsNotACap": "Note: with pay-as-you-go, the monthly limit stops automatic purchases — it doesn't stop the bill. Usage past zero is still charged at the end of the cycle."
   }
 }

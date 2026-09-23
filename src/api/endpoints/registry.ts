@@ -193,6 +193,13 @@ export const billingEndpoints = {
    * Answers **`{ invoices }`** — a fifth envelope shape.
    */
   invoices: () => endpoint('/api/billing/invoices'),
+  /**
+   * Topping up and what happens at the limit — screen 17d.
+   *
+   * Answers `{ policy, currency, paygRate }`, and the currency travels even
+   * when `policy` is null so an amount can be named before anything is set.
+   */
+  autoPurchase: () => endpoint('/api/billing/auto-purchase'),
 } as const;
 
 export const intelligenceReviewEndpoints = {
